@@ -15,6 +15,7 @@ namespace CNA {
 
     void SpriteBatch::End() {
         // Clean up after renderring
+        SDL_RenderPresent(renderer);
     }
 
     void SpriteBatch::Draw(SDL_Texture* texture, float x, float y) {
