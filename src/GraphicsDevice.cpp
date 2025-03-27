@@ -1,5 +1,6 @@
 #include "CNA/GraphicsDevice.h"
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_render.h>
 #include <iostream>
 
 namespace CNA {
@@ -14,11 +15,21 @@ namespace CNA {
             std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
         }
 
-        renderer = SDL_CreateRenderer(window, NULL);
+        // Try creating Vulkan renderer
+        renderer = SDL_CreateRenderer(window, "vulkan");
         if (!renderer) {
-            std::cerr << "Renderer could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+            std::cerr << "Vulkan renderer could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+            // Optionally, you can try another renderer (OpenGL, default)
+            renderer = SDL_CreateRenderer(window, nullptr); // Use default renderer
+            if (!renderer) {
+                std::cerr << "Renderer could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+            }
         }
+
+        // Enable V-Sync (Double buffering should be automatic with Vulkan)
+        //SDL_SetRenderVSync(renderer, SDL_RENDERER_VSYNC_ADAPTIVE);
     }
+
 
     GraphicsDevice::~GraphicsDevice() {
         SDL_DestroyRenderer(renderer);

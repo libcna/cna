@@ -8,6 +8,7 @@ namespace CNA {
     class GraphicsDevice {
     public:
         GraphicsDevice();
+
         ~GraphicsDevice();
 
         void Clear(float r, float g, float b, float a);
