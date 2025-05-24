@@ -1,4 +1,5 @@
 #include "Microsoft/Xna/Framework/Game.h"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.h"
 #include <SDL3/SDL.h>
 #include <iostream>
 
@@ -8,8 +9,13 @@ namespace Microsoft::Xna::Framework {
 const int TARGET_FPS = 20;
 const double FRAME_TIME = 1.0 / TARGET_FPS;
 
-    Game::Game() : isRunning(true) {
+    Game::Game() :
+    isRunning(true),
+    Content([*this]() { return content; }),
+    GraphicsDevice( [this]() { return *graphicsDevice; })
+    {
     }
+
 
     Game::~Game() {
     }

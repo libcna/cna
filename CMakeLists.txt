@@ -16,6 +16,11 @@ add_library(CNA STATIC
         src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp
         src/Microsoft/Xna/Framework/Rectangle.cpp
         include/Microsoft/Xna/Framework/Rectangle.h
+        src/Microsoft/Xna/Framework/Audio/SoundEffectInstance.cpp
+        include/Microsoft/Xna/Framework/Audio/SoundEffectInstance.h
+        src/Microsoft/Xna/Framework/Audio/SoundEffect.cpp
+        include/Microsoft/Xna/Framework/Audio/SoundEffect.h
+        include/Microsoft/Xna/Framework/Audio/SoundState.h
 )
 
 target_include_directories(CNA PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

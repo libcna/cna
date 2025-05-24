@@ -5,7 +5,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    GraphicsDevice::GraphicsDevice() {
+    GraphicsDevice::GraphicsDevice():
+    Viewport([this]() { return viewport; }) {
         if (SDL_Init(SDL_INIT_VIDEO) < 0) {
             std::cerr << "SDL2 could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
         }

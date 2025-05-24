@@ -3,6 +3,10 @@
 
 #include <SDL3/SDL.h>
 
+#include "Viewport.h"
+#include "NeoSdk/Property.h"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.h"
+
 namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDevice {
@@ -14,12 +18,14 @@ namespace Microsoft::Xna::Framework::Graphics {
         void Clear(float r, float g, float b, float a);
         void Present();
         SDL_Renderer* GetRenderer();
+        NeoSdk::Property<Viewport> Viewport;
 
     protected:
 
     private:
         SDL_Window* window;
         SDL_Renderer* renderer;
+        Microsoft::Xna::Framework::Graphics::Viewport viewport;
 
     //friend class SpriteBatch;
     };

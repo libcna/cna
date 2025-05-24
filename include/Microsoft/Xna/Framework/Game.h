@@ -1,5 +1,7 @@
 #ifndef CNA_GAME_H
 #define CNA_GAME_H
+#include "Content/ContentManager.h"
+#include "NeoSdk/Property.h"
 
 namespace Microsoft::Xna::Framework {
     namespace Graphics {
@@ -9,6 +11,9 @@ namespace Microsoft::Xna::Framework {
 
     class Game {
     public:
+        NeoSdk::Property<Content::ContentManager> Content;
+        NeoSdk::Property<Graphics::GraphicsDevice> GraphicsDevice;
+
         Game();
         virtual ~Game();
 
@@ -26,6 +31,8 @@ namespace Microsoft::Xna::Framework {
 
     private:
         bool isRunning;
+        Content::ContentManager content;
+
     };
 }
 
