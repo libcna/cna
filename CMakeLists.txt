@@ -7,10 +7,10 @@ find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
 
 add_library(CNA STATIC
-    src/Game.cpp
-    src/GraphicsDevice.cpp
-    src/SpriteBatch.cpp
-    src/Texture2D.cpp
+        src/Microsoft/Xna/Framework/Game.cpp
+        src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp
+        src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp
+        src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp
 )
 
 target_include_directories(CNA PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

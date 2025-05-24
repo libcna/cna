@@ -1,8 +1,8 @@
-#include "CNA/Texture2D.h"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.h"
 #include <SDL3_image/SDL_image.h>
 #include <iostream>
 
-namespace CNA {
+namespace Microsoft::Xna::Framework::Graphics {
 
     Texture2D::Texture2D(SDL_Renderer* renderer, const char* filePath) {
         texture = IMG_LoadTexture(renderer, filePath);

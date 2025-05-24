@@ -1,7 +1,7 @@
-#include "CNA/SpriteBatch.h"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.h"
 #include <SDL3_image/SDL_image.h>
 
-namespace CNA {
+namespace Microsoft::Xna::Framework::Graphics {
 
     SpriteBatch::SpriteBatch(GraphicsDevice* graphicsDevice) {
         renderer = graphicsDevice->GetRenderer();

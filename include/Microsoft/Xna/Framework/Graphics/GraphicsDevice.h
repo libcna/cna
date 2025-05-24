@@ -3,7 +3,7 @@
 
 #include <SDL3/SDL.h>
 
-namespace CNA {
+namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDevice {
     public:

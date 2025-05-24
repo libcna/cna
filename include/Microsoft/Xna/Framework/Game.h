@@ -1,10 +1,11 @@
 #ifndef CNA_GAME_H
 #define CNA_GAME_H
 
-#include "GraphicsDevice.h"
-#include "SpriteBatch.h"
-
-namespace CNA {
+namespace Microsoft::Xna::Framework {
+    namespace Graphics {
+        class SpriteBatch;
+        class GraphicsDevice;
+    }
 
     class Game {
     public:
@@ -20,8 +21,8 @@ namespace CNA {
         virtual void Update(float deltaTime);
         virtual void Draw();
 
-        GraphicsDevice* graphicsDevice;
-        SpriteBatch* spriteBatch;
+        Graphics::GraphicsDevice* graphicsDevice;
+        Graphics::SpriteBatch* spriteBatch;
 
     private:
         bool isRunning;

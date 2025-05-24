@@ -4,7 +4,7 @@
 #include "GraphicsDevice.h"
 #include <SDL3/SDL.h>
 
-namespace CNA {
+namespace Microsoft::Xna::Framework::Graphics {
 
     class SpriteBatch {
     public:

@@ -1,9 +1,9 @@
-#include "CNA/GraphicsDevice.h"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_render.h>
 #include <iostream>
 
-namespace CNA {
+namespace Microsoft::Xna::Framework::Graphics {
 
     GraphicsDevice::GraphicsDevice() {
         if (SDL_Init(SDL_INIT_VIDEO) < 0) {

@@ -1,9 +1,9 @@
-#include "CNA/Game.h"
+#include "Microsoft/Xna/Framework/Game.h"
 #include <SDL3/SDL.h>
 #include <iostream>
 
 
-namespace CNA {
+namespace Microsoft::Xna::Framework {
 
 const int TARGET_FPS = 20;
 const double FRAME_TIME = 1.0 / TARGET_FPS;
