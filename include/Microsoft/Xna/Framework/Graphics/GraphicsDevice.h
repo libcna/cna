@@ -15,6 +15,7 @@ namespace Microsoft::Xna::Framework::Graphics {
 
         ~GraphicsDevice();
 
+        void Clear(const Color& color);
         void Clear(float r, float g, float b, float a);
         void Present();
         SDL_Renderer* GetRenderer();

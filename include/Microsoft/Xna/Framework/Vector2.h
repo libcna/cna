@@ -9,7 +9,7 @@
 namespace Microsoft::Xna::Framework {
     struct Vector2 {
         Vector2(float x, float y) : Vector2(0,0) {} // Default constructor
-
+        Vector2();
     };
 }
 
