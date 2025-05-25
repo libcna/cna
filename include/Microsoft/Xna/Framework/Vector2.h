@@ -8,8 +8,11 @@
 
 namespace Microsoft::Xna::Framework {
     struct Vector2 {
+    public:
         Vector2(float x, float y) : Vector2(0,0) {} // Default constructor
         Vector2();
+        float X;
+        float Y;
     };
 }
 

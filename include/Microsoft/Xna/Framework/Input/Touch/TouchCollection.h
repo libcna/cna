@@ -10,7 +10,14 @@
 namespace Microsoft::Xna::Framework::Input::Touch {
 struct TouchCollection {
 public:
-    TouchCollection() = default;
+    DEF_PROP_CUSTOM(bool, State, 0);
+    DEF_PROP_AUTO(int, Count, 0)
+    TouchCollection():
+    IMPL_PROP_CUSTOM_READONLY(bool, State, {return 0;}),
+    IMPL_PROP_AUTO(int, Count)
+    {
+
+    };
 
 };
 }
