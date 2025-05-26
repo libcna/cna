@@ -17,7 +17,7 @@ public:
     void Stop() { }
     //todo : remove me
     void SimulateNewValue(const AccelerometerReading& reading) {
-        RaiseCurrentValueChanged(reading);
+        //RaiseCurrentValueChanged(reading);
     }
 };
 
