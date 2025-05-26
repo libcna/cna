@@ -7,6 +7,7 @@
 #include <functional>
 #include <vector>
 
+#include "Accelerometer.h"
 #include "SensorReadingEventArgs.h"
 #include "System/EventHandler.h"
 

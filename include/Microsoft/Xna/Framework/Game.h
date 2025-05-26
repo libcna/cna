@@ -1,7 +1,9 @@
 #ifndef CNA_GAME_H
 #define CNA_GAME_H
+#include "ExitingEventArgs.h"
 #include "Content/ContentManager.h"
 #include "NeoSdk/Property.h"
+#include "System/EventHandler.h"
 
 namespace Microsoft::Xna::Framework {
     namespace Graphics {
@@ -13,7 +15,7 @@ namespace Microsoft::Xna::Framework {
     public:
         NeoSdk::Property<Content::ContentManager> Content;
         NeoSdk::Property<Graphics::GraphicsDevice> GraphicsDevice;
-
+        System::EventHandler<ExitingEventArgs> Exiting;
         Game();
         virtual ~Game();
 
