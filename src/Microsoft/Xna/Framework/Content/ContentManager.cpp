@@ -4,10 +4,16 @@
 
 #include "Microsoft/Xna/Framework/Content/ContentManager.h"
 
+#include "NeoSdk/Property.h"
+
 namespace Microsoft::Xna::Framework::Content {
     template<typename T>
     T ContentManager::Load(const std::string &assetName) {
         std::cout << "Loading asset: " << assetName << std::endl;
         return T(assetName);
+    }
+
+    ContentManager::ContentManager():
+    RootDirectory( [this]() { return RootDirectoryVVVV; } , [this](std::string v) {RootDirectoryVVVV = v; }){
     }
 }

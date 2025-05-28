@@ -4,6 +4,7 @@
 
 #ifndef MOUSE_H
 #define MOUSE_H
+#include "MouseCursor.h"
 #include "MouseState.h"
 
 
@@ -11,6 +12,8 @@ namespace Microsoft::Xna::Framework::Input {
 class Mouse {
 public:
     static MouseState GetState();
+
+    static void SetCursor(MouseCursor arrow);
 };
 }
 

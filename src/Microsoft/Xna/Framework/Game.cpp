@@ -12,7 +12,10 @@ const double FRAME_TIME = 1.0 / TARGET_FPS;
     Game::Game() :
     isRunning(true),
     Content([*this]() { return content; }),
-    GraphicsDevice( [this]() { return *graphicsDevice; })
+    GraphicsDevice( [this]() { return *graphicsDevice; }),
+    IMPL_PROP_AUTO(bool, IsMouseVisible),
+    IMPL_PROP_AUTO(System::TimeSpan, TargetElapsedTime),
+    IMPL_PROP_AUTO(System::TimeSpan, InactiveSleepTime)
     {
     }
 

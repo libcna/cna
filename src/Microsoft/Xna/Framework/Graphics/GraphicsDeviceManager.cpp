@@ -6,7 +6,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
     GraphicsDeviceManager::GraphicsDeviceManager():
-    GraphicsDevice( [this]() { return graphicsDevice; })
+    GraphicsDevice( [this]() { return graphicsDevice; }),
+    IMPL_PROP_AUTO(bool, IsFullScreen)
     {
 
     }
