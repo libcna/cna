@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include "Viewport.h"
+#include "Microsoft/Xna/Framework/Color.h"
 #include "NeoSdk/Property.h"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.h"
 
@@ -19,7 +20,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         void Clear(float r, float g, float b, float a);
         void Present();
         SDL_Renderer* GetRenderer();
-        NeoSdk::Property<Viewport> Viewport;
+        NeoSdk::Property<Microsoft::Xna::Framework::Graphics::Viewport> Viewport;
 
     protected:
 

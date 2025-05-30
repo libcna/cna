@@ -4,8 +4,8 @@
 
 #ifndef ACCELEROMETER_H
 #define ACCELEROMETER_H
-#include "AccelerometerReading.h"
-#include "SensorBase.h"
+#include "Microsoft/Devices/Sensors/AccelerometerReading.h"
+#include "Microsoft/Devices/Sensors/SensorBase.h"
 
 namespace WindowsPhoneSpeedyBlupi {
 

@@ -12,7 +12,7 @@ namespace Microsoft::Xna::Framework::Input::Touch {
 
 struct TouchLocation {
 public:
-    DEF_PROP_AUTO(TouchLocationState, State, TouchLocationState::Invalid),
+    DEF_PROP_AUTO(TouchLocationState, State, TouchLocationState::Invalid)
     DEF_PROP_AUTO(Vector2, Position, Vector2())
 
     TouchLocation():

@@ -8,9 +8,10 @@
 #include "Microsoft/Xna/Framework/Vector3.h"
 
 namespace Microsoft::Devices::Sensors {
+    using Xna::Framework::Vector3;
 
 struct AccelerometerReading {
-    using Microsoft::Xna::Framework::Vector3;
+
     DEF_PROP_AUTO(Vector3, Acceleration, Vector3())
     AccelerometerReading() : IMPL_PROP_AUTO(Vector3, Acceleration) {
     }

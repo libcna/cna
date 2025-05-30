@@ -13,8 +13,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         }
     }
 
-    Texture2D::~Texture2D():
-    Bounds( [*this]() { return Rectangle(0, 0, width, height); })
+    Texture2D::~Texture2D()
     {
         if (texture) {
             SDL_DestroyTexture(texture);

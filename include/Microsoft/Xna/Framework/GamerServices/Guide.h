@@ -4,13 +4,16 @@
 
 #ifndef GUIDE_H
 #define GUIDE_H
+#include <iostream>
+
+#include "Microsoft/Xna/Framework/PlayerIndex.h"
 
 
 namespace Microsoft::Xna::Framework::GamerServices {
     class Guide {
     public:
         static void Show(PlayerIndex playerIndex) {
-            Debug.Write("The Market Place should now be shown.");
+            std::cout << "The Market Place should now be shown.";
         }
 
         static bool IsTrialMode() {

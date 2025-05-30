@@ -9,8 +9,9 @@
 
 namespace Microsoft::Xna::Framework::Content {
     class ContentManager {
-        ContentManager();
     public:
+        ContentManager();
+
         template <typename T>
      T Load(const std::string& assetName);
 

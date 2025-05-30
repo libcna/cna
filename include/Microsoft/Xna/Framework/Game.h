@@ -5,6 +5,8 @@
 #include "ExitingEventArgs.h"
 #include "GameTime.h"
 #include "Content/ContentManager.h"
+#include "Graphics/GraphicsDevice.h"
+#include "Graphics/SpriteBatch.h"
 #include "NeoSdk/Property.h"
 #include "System/EventHandler.h"
 #include "System/TimeSpan.h"
@@ -12,8 +14,6 @@
 
 namespace Microsoft::Xna::Framework {
     namespace Graphics {
-        class SpriteBatch;
-        class GraphicsDevice;
     }
 
     class Game {
@@ -39,8 +39,8 @@ namespace Microsoft::Xna::Framework {
         virtual void OnActivated(std::any sender, System::Runtime::CompilerServices::EventArgs args);
 
 
-        virtual void Update(Microsoft::Xna::Framework::GameTime gameTime);
-        virtual void Draw(Microsoft::Xna::Framework::GameTime gameTime);
+        virtual void Update(const Microsoft::Xna::Framework::GameTime &gameTime);
+        virtual void Draw(const Microsoft::Xna::Framework::GameTime &gameTime);
 
         Graphics::GraphicsDevice* graphicsDevice;
         Graphics::SpriteBatch* spriteBatch;
@@ -49,6 +49,7 @@ namespace Microsoft::Xna::Framework {
         bool isRunning;
         Content::ContentManager content;
 
+        friend class Property;
     };
 }
 

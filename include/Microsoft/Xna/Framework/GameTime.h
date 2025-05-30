@@ -8,11 +8,11 @@
 #include "System/TimeSpan.h"
 
 namespace Microsoft::Xna::Framework {
-class GameTime {
     using System::TimeSpan;
+class GameTime {
     DEF_PROP_AUTO(TimeSpan, TotalGameTime, TimeSpan())
-    GameTime() : IMPL_PROP_AUTO(TimeSpan, TotalGameTime) {
-    }
+    DEF_PROP_AUTO(TimeSpan, ElapsedGameTime, TimeSpan())
+    GameTime();
 };
 
 }

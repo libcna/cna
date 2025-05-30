@@ -4,7 +4,6 @@
 
 #ifndef RANDOM_H
 #define RANDOM_H
-#include "WindowsPhoneSpeedyBlupi/Decor.h"
 
 namespace System {
 

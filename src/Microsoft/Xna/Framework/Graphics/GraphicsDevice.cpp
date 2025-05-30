@@ -38,6 +38,9 @@ namespace Microsoft::Xna::Framework::Graphics {
         SDL_Quit();
     }
 
+    void GraphicsDevice::Clear(const Color &color) {
+    }
+
     void GraphicsDevice::Clear(float r, float g, float b, float a) {
         SDL_SetRenderDrawColor(renderer, static_cast<Uint8>(r * 255), static_cast<Uint8>(g * 255), static_cast<Uint8>(b * 255), static_cast<Uint8>(a * 255));
         SDL_RenderClear(renderer);

@@ -16,6 +16,7 @@ namespace System {
         static TimeSpan FromTicks(long i);
 
         static TimeSpan FromSeconds(double x);
+        static TimeSpan FromMilliseconds(double value);
     };
 } // System
 

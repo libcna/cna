@@ -9,7 +9,7 @@
 namespace Microsoft::Xna::Framework {
     struct Vector3 {
     public:
-        Vector3(float x, float y ,float z) : Vector3(0,0,0) {} // Default constructor
+        Vector3(float x, float y ,float z);
         Vector3();
         float X;
         float Y;

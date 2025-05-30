@@ -6,11 +6,14 @@
 #define MOUSECURSOR_H
 
 
+namespace Microsoft::Xna::Framework::Input {
+    class MouseCursor {
+    public:
+        MouseCursor();
 
-class MouseCursor {
-public: static constexpr MouseCursor Arrow{};
-};
-
+    public: static MouseCursor Arrow;
+    };
+}
 
 
 #endif //MOUSECURSOR_H

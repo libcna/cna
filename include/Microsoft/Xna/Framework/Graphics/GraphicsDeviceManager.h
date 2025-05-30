@@ -7,9 +7,9 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDeviceManager {
     private:
-        GraphicsDevice graphicsDevice;
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice graphicsDevice;
     public:
-        NeoSdk::Property<GraphicsDevice> GraphicsDevice;
+        NeoSdk::Property<Microsoft::Xna::Framework::Graphics::GraphicsDevice> GraphicsDevice;
         DEF_PROP_AUTO(bool, IsFullScreen, false);
         GraphicsDeviceManager();
 

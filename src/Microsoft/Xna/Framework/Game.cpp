@@ -43,7 +43,8 @@ SDL_Log("But we are linking against SDL version %d.%d.%d.\n",
         int i = 0;
 
 
-
+        GameTime gameTime;
+        gameTime.ElapsedGameTime = System::TimeSpan::FromMilliseconds(50);
     double msPerFrame = 1000 / TARGET_FPS;
 
         while (isRunning) {
@@ -58,8 +59,8 @@ SDL_Log("But we are linking against SDL version %d.%d.%d.\n",
                 }
             }
 
-            Update(0.050f);
-            Draw();
+            Update(gameTime);
+            Draw(gameTime);
 
             Uint64 frameTime = SDL_GetTicks() - frameStart;
             Uint64 frameDelay = msPerFrame;
@@ -89,11 +90,11 @@ SDL_Log("But we are linking against SDL version %d.%d.%d.\n",
         // Loading content (e.g. textures)
     }
 
-    void Game::Update(float deltaTime) {
+    void Game::Update(const Microsoft::Xna::Framework::GameTime& gameTime) {
         // Main game logic
     }
 
-    void Game::Draw() {
+    void Game::Draw(const Microsoft::Xna::Framework::GameTime& gameTime) {
 
     }
 }

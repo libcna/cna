@@ -8,7 +8,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
     class BlendState {
-        public static BlendState AlphaBlend;
+        public: static BlendState AlphaBlend;
     };
 }
 
