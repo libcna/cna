@@ -8,6 +8,6 @@ namespace Microsoft::Xna::Framework {
     idata(TimeSpan, TotalGameTime, GameTime)
     idata(TimeSpan, ElapsedGameTime, GameTime)
 
-    GameTime::GameTime() {
+    GameTime::GameTime(): TotalGameTime_(0), ElapsedGameTime_(0) {
     }
 }

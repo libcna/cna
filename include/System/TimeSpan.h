@@ -74,22 +74,23 @@ namespace System {
 
         static constexpr int64 TicksPerTenthSecond = TicksPerMillisecond * 100;
 
-    public: static constexpr TimeSpan Zero = TimeSpan(0);
+    public:
+        static const TimeSpan Zero;
 
-    public: static constexpr TimeSpan MaxValue = TimeSpan(int64_max);
-    public: static constexpr TimeSpan MinValue = TimeSpan(int64_min);
+    public:
+        static const TimeSpan MaxValue;
 
-    private: const int64 ticks_internal;
+    public:
+        static const TimeSpan MinValue;
 
-    public: TimeSpan(int64 ticks):
-        ticks_internal(ticks)
-        {
-        }
+    private:
+        const int64 ticks_internal;
 
-        public: TimeSpan(int32 hours, int32 minutes, int32 seconds):
-        ticks_internal(TimeToTicks(hours, minutes, seconds))
-        {
-        }
+    public:
+        TimeSpan(int64 ticks);
+
+    public:
+        TimeSpan(int32 hours, int32 minutes, int32 seconds);
 
         /**
          * @brief Constructs a TimeSpan object using specified time components.
@@ -111,26 +112,25 @@ namespace System {
          */
     public:
         TimeSpan(int32 days, int32 hours, int32 minutes, int32 seconds, int32 milliseconds = 0,
-                 int32 microseconds = 0): ticks_internal(
-            TimeToTicks(days, hours, minutes, seconds, milliseconds, microseconds) * TicksPerMicrosecond) {
-        }
-    private: static int64 TimeToTicks(int32 days, int32 hours, int32 minutes, int32 seconds, int32 milliseconds, int32 microseconds) {
-        long totalMicroseconds = (((int64)days * 3600 * 24 + (int64)hours * 3600 + (int64)minutes * 60 + seconds) * 1000 + milliseconds) * 1000 + microseconds;
-        if (totalMicroseconds > MaxMicroSeconds || totalMicroseconds < MinMicroSeconds)
-            throw ArgumentOutOfRangeException("Time span is too long.");
-        return totalMicroseconds;
-    }
+                 int32 microseconds = 0);
 
-    public: int64 TicksProperty() {
-        return ticks_internal;
-    }
+    public: TimeSpan &operator=(const TimeSpan &);
 
+    private:
+        static int64 TimeToTicks(int32 days, int32 hours, int32 minutes, int32 seconds, int32 milliseconds,
+                                 int32 microseconds);
 
-    public: int DaysProperty () const { return (int32)(ticks_internal / TicksPerDay);}
+    public:
+        [[nodiscard]] int64 getTicks() const;
 
-    public: int HoursProperty () const {return (int32)((ticks_internal / TicksPerHour) % 24);}
+    public:
+        [[nodiscard]] int getDays() const;
 
-    public: int32 MillisecondsProperty () const {return  (int32)((ticks_internal / TicksPerMillisecond) % 1000);}
+    public:
+        [[nodiscard]] int getHours() const;
+
+    public:
+        [[nodiscard]] int32 getMilliseconds() const;
 
         /**
          * @brief Retrieves the microseconds portion of the time span.
@@ -143,7 +143,8 @@ namespace System {
          * `TotalMicroseconds` provides both whole and fractional values.
          */
 
-    public: int32 MicrosecondsProperty() const { return (int32)((ticks_internal / TicksPerMicrosecond) % 1000);}
+    public:
+        [[nodiscard]] int32 getMicroseconds() const;
 
         /**
          * @brief Retrieves the nanosecond portion of the time span.
@@ -156,28 +157,23 @@ namespace System {
          * `TotalNanoseconds` provides both complete and fractional values.
          */
 
-    public: int32 NanosecondsProperty () const { return (int32)((ticks_internal % TicksPerMicrosecond) * 100);}
+    public:
+        [[nodiscard]] int32 getNanoseconds() const;
 
-    public: int32 MinutesProperty () const { return (int32)((ticks_internal / TicksPerMinute) % 60);}
+    public:
+        [[nodiscard]] int32 getMinutes() const;
 
-    public: int32 SecondsProperty () const { return (int32)((ticks_internal / TicksPerSecond) % 60);}
+    public:
+        [[nodiscard]] int32 getSeconds() const;
 
+    public:
+        [[nodiscard]] double getTotalDays() const;
 
-    public: double TotalDaysProperty () const {return  ((double)ticks_internal) / TicksPerDay;}
+    public:
+        [[nodiscard]] double getTotalHours() const;
 
-    public: double TotalHoursProperty() const {return  (double)ticks_internal / TicksPerHour;}
-
-    public: double TotalMillisecondsProperty () const {
-
-            double temp = (double)ticks_internal / TicksPerMillisecond;
-            if (temp > MaxMilliSeconds)
-                return (double)MaxMilliSeconds;
-
-            if (temp < MinMilliSeconds)
-                return (double)MinMilliSeconds;
-
-            return temp;
-    }
+    public:
+        [[nodiscard]] double getTotalMilliseconds() const;
 
         /**
          * @brief Returns the time span value in whole and fractional microseconds.
@@ -191,7 +187,8 @@ namespace System {
          * while `Microseconds` only returns complete microseconds.
          */
 
-    public: double TotalMicrosecondsProperty () const {return  (double)ticks_internal / TicksPerMicrosecond;}
+    public:
+        [[nodiscard]] double getTotalMicroseconds() const;
 
         /**
          * @brief Returns the time span value in whole and fractional nanoseconds.
@@ -204,19 +201,25 @@ namespace System {
          * @details The `TotalNanoseconds` property provides both whole and fractional nanoseconds,
          * while `Nanoseconds` only returns complete nanoseconds.
          */
-    public: double TotalNanosecondsProperty () const {return  (double)ticks_internal * NanosecondsPerTick;}
+    public:
+        [[nodiscard]] double getTotalNanoseconds() const;
 
-    public: double TotalMinutesProperty () const {return  (double)ticks_internal / TicksPerMinute;}
-    
-    public: double TotalSecondsProperty() const {return (double)ticks_internal / TicksPerSecond;}
+    public:
+        [[nodiscard]] double getTotalMinutes() const;
+
+    public:
+        [[nodiscard]] double getTotalSeconds() const;
 
         ////
+
+    private:
+        static long TimeToTicks(int hour, int minute, int second);
 
         static TimeSpan FromTicks(long i);
 
         static TimeSpan FromSeconds(double x);
 
-        static TimeSpan FromMilliseconds(double value);
+        public: static TimeSpan FromMilliseconds(double value);
     };
 } // System
 

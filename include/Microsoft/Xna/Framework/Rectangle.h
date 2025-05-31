@@ -55,7 +55,7 @@ namespace Microsoft::Xna::Framework {
         [[nodiscard]] int getBottom() const;
 
 
-    public: static [[nodiscard]] Rectangle getEmpty();
+    public: [[nodiscard]] static Rectangle getEmpty();
     };
 }
 
