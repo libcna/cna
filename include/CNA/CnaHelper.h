@@ -1,13 +1,15 @@
 //
 // Created by robertvokac on 5/30/25.
 //
+#ifndef CNAHELPER_H
+#define CNAHELPER_H
 
-#ifndef HELPER_H
-#define HELPER_H
+
 #define int32_max std::numeric_limits<int32>::max()
 #define int32_min std::numeric_limits<int32>::min()
 #define int64_max std::numeric_limits<int64>::max()
 #define int64_min std::numeric_limits<int64>::min()
+#include <cstdint>
 
 namespace CNA {
     /**
@@ -24,4 +26,5 @@ namespace CNA {
 
 } // CNA
 
-#endif //HELPER_H
+
+#endif // CNAHELPER_H
