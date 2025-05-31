@@ -4,30 +4,23 @@
 
 #ifndef RECTANGLE_H
 #define RECTANGLE_H
-
+#include "CNA/Prop.h"
 
 
 namespace Microsoft::Xna::Framework {
     struct Rectangle {
-        Rectangle() : Rectangle(0,0,0,0) {} // Default constructor
+        Rectangle() : Rectangle(0, 0, 0, 0) {
+        } // Default constructor
 
         Rectangle(
             int x,
             int y,
             int width,
-            int height) :
-        Left( [*this]() { return this->X; }),
-        Right( [*this]() { return this->X + this->Width; }),
-        Top( [*this]() { return this->Y; }),
-        Bottom( [*this]() { return this->Y + this->Height; }),
-              X(x),
-              Y(y),
-              Width(width),
-              Height(height) {
+            int height) : X(x),
+                          Y(y),
+                          Width(width),
+                          Height(height) {
         }
-
-    private: static Rectangle emptyRectangle;
-
 
         /**
          * Represents the x-coordinate of the top-left corner of a rectangle.
@@ -49,14 +42,20 @@ namespace Microsoft::Xna::Framework {
          */
         int Height;
 
-        CNA::Property<int> Left;
-        CNA::Property<int> Right;
-        CNA::Property<int> Top;
-        CNA::Property<int> Bottom;
+    public:
+        [[nodiscard]] int getLeft() const;
 
-        static CNA::Property<Rectangle> Empty;
+    public:
+        [[nodiscard]] int getRight() const;
+
+    public:
+        [[nodiscard]] int getTop() const;
+
+    public:
+        [[nodiscard]] int getBottom() const;
 
 
+    public: static [[nodiscard]] Rectangle getEmpty();
     };
 }
 

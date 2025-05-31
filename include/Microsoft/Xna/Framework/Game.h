@@ -16,12 +16,13 @@ namespace Microsoft::Xna::Framework {
 
     class Game {
     public:
-        CNA::Property<Content::ContentManager> Content;
-        CNA::Property<Graphics::GraphicsDevice> GraphicsDevice;
+        dgetter(Content::ContentManager, Content)
+        dgetter(Graphics::GraphicsDevice, GraphicsDevice)
+        dgetter(bool, IsMouseVisible)
+        dgetter(System::TimeSpan, TargetElapsedTime)
+        dgetter(System::TimeSpan, InactiveSleepTime)
+
         System::EventHandler<ExitingEventArgs> Exiting;
-        DEF_PROP_AUTO(bool, IsMouseVisible, false);
-        DEF_PROP_AUTO(System::TimeSpan, TargetElapsedTime, System::TimeSpan());
-        DEF_PROP_AUTO(System::TimeSpan, InactiveSleepTime, System::TimeSpan());
 
         Game();
         virtual ~Game();
@@ -40,14 +41,10 @@ namespace Microsoft::Xna::Framework {
         virtual void Update(const Microsoft::Xna::Framework::GameTime &gameTime);
         virtual void Draw(const Microsoft::Xna::Framework::GameTime &gameTime);
 
-        Graphics::GraphicsDevice* graphicsDevice;
         Graphics::SpriteBatch* spriteBatch;
 
     private:
         bool isRunning;
-        Content::ContentManager content;
-
-        friend class Property;
     };
 }
 

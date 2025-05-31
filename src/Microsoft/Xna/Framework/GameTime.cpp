@@ -3,11 +3,11 @@
 //
 
 #include "Microsoft/Xna/Framework/GameTime.h"
-namespace Microsoft::Xna::Framework {
 
-    GameTime::GameTime() :
-    IMPL_PROP_AUTO(TimeSpan, TotalGameTime),
-    IMPL_PROP_AUTO(TimeSpan, ElapsedGameTime)
-    {
+namespace Microsoft::Xna::Framework {
+    idata(TimeSpan, TotalGameTime, GameTime)
+    idata(TimeSpan, ElapsedGameTime, GameTime)
+
+    GameTime::GameTime() {
     }
 }

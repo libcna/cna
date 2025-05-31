@@ -9,18 +9,12 @@
 
 namespace Microsoft::Xna::Framework::Input::Touch {
     struct TouchPanelCapabilities {
-    private:
-        bool isConnected = false;
 
     public:
         TouchPanelCapabilities();
 
-    public:
-        bool IsConnectedProperty() const;
-
-    public:
-        void IsConnectedProperty(bool v);;
-    };
+        dgetter(bool, IsConnected)
+};
 }
 
 

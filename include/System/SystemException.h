@@ -4,6 +4,7 @@
 
 #ifndef SYSTEMEXCEPTION_H
 #define SYSTEMEXCEPTION_H
+#include "Exception.h"
 
 namespace System {
     class SystemException : public System::Exception {

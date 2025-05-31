@@ -1,8 +1,9 @@
 //
 // Created by robertvokac on 5/26/25.
 //
-#ifndef ARGUMENTEXCEPTION_H
-#define ARGUMENTEXCEPTION_H
+#ifndef ARGUMENTOUTOFRANGEEXCEPTION_H
+#define ARGUMENTOUTOFRANGEEXCEPTION_H
+
 #include "System/ArgumentException.h"
 
 namespace System {
@@ -15,4 +16,4 @@ namespace System {
 } // System
 
 
-#endif // ARGUMENTEXCEPTION_H
+#endif // ARGUMENTOUTOFRANGEEXCEPTION_H

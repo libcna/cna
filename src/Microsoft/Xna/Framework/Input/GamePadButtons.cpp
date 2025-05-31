@@ -5,6 +5,5 @@
 #include "Microsoft/Xna/Framework/Input/GamePadButtons.h"
 
 namespace Microsoft::Xna::Framework::Input {
-    ButtonState GamePadButtons::BackProperty() { return BackProperty_; }
-    void GamePadButtons::BackProperty(const ButtonState v) { BackProperty_ = v; }
+    igetter(ButtonState, Back, GamePadButtons)
 }

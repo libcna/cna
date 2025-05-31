@@ -10,9 +10,8 @@
 namespace Microsoft::Xna::Framework::Input {
     struct GamePadState {
     public:
-        DEF_PROP_AUTO(GamePadButtons, Buttons, GamePadButtons())
-        GamePadState() :
-        IMPL_PROP_AUTO(GamePadButtons, Buttons){}
+        dgetter(GamePadButtons, Buttons)
+        GamePadState() {}
     };
 }
 

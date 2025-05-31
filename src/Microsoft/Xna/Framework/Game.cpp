@@ -9,13 +9,14 @@ namespace Microsoft::Xna::Framework {
 const int TARGET_FPS = 20;
 const double FRAME_TIME = 1.0 / TARGET_FPS;
 
+    igetter(Content::ContentManager, Content, Game)
+igetter(Graphics::GraphicsDevice, GraphicsDevice, Game)
+igetter(bool, IsMouseVisible, Game)
+igetter(System::TimeSpan, TargetElapsedTime, Game)
+igetter(System::TimeSpan, InactiveSleepTime, Game)
+
     Game::Game() :
-    isRunning(true),
-    Content([*this]() { return content; }),
-    GraphicsDevice( [this]() { return *graphicsDevice; }),
-    IMPL_PROP_AUTO(bool, IsMouseVisible),
-    IMPL_PROP_AUTO(System::TimeSpan, TargetElapsedTime),
-    IMPL_PROP_AUTO(System::TimeSpan, InactiveSleepTime)
+    isRunning(true)
     {
     }
 

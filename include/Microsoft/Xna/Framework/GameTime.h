@@ -5,14 +5,15 @@
 #ifndef GAMETIME_H
 #define GAMETIME_H
 
+#include "CNA/Prop.h"
 #include "System/TimeSpan.h"
 
 namespace Microsoft::Xna::Framework {
     using System::TimeSpan;
 class GameTime {
 public:
-    DEF_PROP_AUTO(TimeSpan, TotalGameTime, TimeSpan())
-    DEF_PROP_AUTO(TimeSpan, ElapsedGameTime, TimeSpan())
+    ddata(TimeSpan, TotalGameTime)
+    ddata(TimeSpan, ElapsedGameTime)
     GameTime();
 };
 

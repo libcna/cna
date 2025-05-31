@@ -7,4 +7,7 @@
 namespace Microsoft::Xna::Framework::Graphics {
     idata(int, Height, Viewport)
     idata(int, Width, Viewport)
+
+    Viewport::Viewport(): x(0), y(0), Height_(0), Width_(0), minDepth(0), maxDepth(0) {
+    }
 }

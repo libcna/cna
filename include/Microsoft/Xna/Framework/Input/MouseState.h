@@ -5,21 +5,17 @@
 #ifndef MOUSESTATE_H
 #define MOUSESTATE_H
 #include "ButtonState.h"
-
+#include "CNA/Prop.h"
 
 
 namespace Microsoft::Xna::Framework::Input {
     struct MouseState {
     public:
-        DEF_PROP_AUTO(ButtonState, LeftButton, ButtonState::Released)
-        DEF_PROP_AUTO(int, X, 0)
-        DEF_PROP_AUTO(int, Y, 0)
+        dgetter(ButtonState, LeftButton)
+        dgetter(int, X)
+        dgetter(int, Y)
 
-        MouseState():
-            IMPL_PROP_AUTO(ButtonState, LeftButton),
-            IMPL_PROP_AUTO_READONLY(int, X),
-            IMPL_PROP_AUTO_READONLY(int, Y) {
-        }
+        MouseState();
     };
 }
 

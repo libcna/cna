@@ -13,15 +13,9 @@ namespace Microsoft::Xna::Framework::Input {
     struct GamePadButtons {
     public:
     private:
-        ButtonState BackProperty_ = ButtonState::Released;
+        dgetter(ButtonState, Back)
 
-    public:
-        ButtonState BackProperty();
-
-    public:
-        void BackProperty(ButtonState v);
-
-        GamePadButtons() {
+        GamePadButtons(): Back_(Released) {
         }
     };
 }

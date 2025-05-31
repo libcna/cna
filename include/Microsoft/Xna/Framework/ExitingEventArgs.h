@@ -6,11 +6,10 @@
 #define EXITINGEVENTARGS_H
 
 
- namespace Microsoft::Xna::Framework {
-class ExitingEventArgs {
-
-};
- }
+namespace Microsoft::Xna::Framework {
+    class ExitingEventArgs {
+    };
+}
 
 
 #endif //EXITINGEVENTARGS_H

@@ -10,10 +10,6 @@ namespace Microsoft::Xna::Framework::Audio {
     idata(float, Pitch, SoundEffectInstance);
     idata(bool, IsLooped, SoundEffectInstance);
 
-    // float SoundEffectInstance::VolumeProperty() {return Volume_;}
-    // void SoundEffectInstance::VolumeProperty(float value) {Volume_ = value;}
-
-
     SoundEffectInstance::SoundEffectInstance() {
     }
 }

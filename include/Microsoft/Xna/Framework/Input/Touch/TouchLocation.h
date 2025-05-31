@@ -11,17 +11,9 @@
 
 namespace Microsoft::Xna::Framework::Input::Touch {
     struct TouchLocation {
-    dgetter(TouchLocationState, State)
-        dgetter(Vector2, PositionProperty_)
+        dgetter(TouchLocationState, State)
 
-    private:
-        Vector2 PositionProperty_ = Vector2();
-
-    public:
-        Vector2 PositionProperty() const;
-
-    public:
-        void PositionProperty(Vector2 v);
+        dgetter(Vector2, Position)
 
         TouchLocation();
     };

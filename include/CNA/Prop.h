@@ -17,31 +17,31 @@ DEF_PROP(type, name) \
 public: [[nodiscard]] type get##name() const;
 
 #define idata(type, name, class)\
-type class##::get##name() const { return name##_ ; } \
-void class##::set##name(const type& v) { name##_ = v; }
+type class::get##name() const { return name##_ ; } \
+void class::set##name(const type& v) { name##_ = v; }
 
 #define igetter(type, name, class)\
-type class##::get##name() const { return name##_ ; }
+type class::get##name() const { return name##_ ; }
 
 
 ////
 #define ddatastatic(type, name) \
 /** This is C# like property, but using getter and setter.*/ \
-public: static [[nodiscard]] type get##name(); \
+public: [[nodiscard]] static type get##name(); \
 public: static void set##name(const type& v);
 
 #define dgetterstatic(type, name) \
 /** This is C# like readonly property, but using getter.*/ \
-public: static [[nodiscard]] type get##name();
+public: [[nodiscard]] static type get##name();
 
 #define idatastatic(type, name, class, init)\
 static type name##_ = init;\
-type class##::get##name() { return name##_ ; } \
-void class##::set##name(const type& v) { name##_ = v; }
+type class::get##name() { return name##_ ; } \
+void class::set##name(const type& v) { name##_ = v; }
 
 #define igetterstatic(type, name, class, init)\
 static type name##_ = init;\
-type class##::get##name() { return name##_ ; } \
+type class::get##name() { return name##_ ; } \
 
 
 namespace CNA {

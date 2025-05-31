@@ -6,9 +6,7 @@
 
 namespace Microsoft::Xna::Framework::Input::Touch {
     igetter(TouchLocationState, State, TouchLocation)
-
-    Vector2 TouchLocation::PositionProperty() const { return PositionProperty_; }
-    void TouchLocation::PositionProperty(const Vector2 v) { PositionProperty_ = v; }
+    igetter(Vector2, Position, TouchLocation)
 
     TouchLocation::TouchLocation() {
     }
