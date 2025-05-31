@@ -4,10 +4,11 @@
 
 #ifndef EXITINGEVENTARGS_H
 #define EXITINGEVENTARGS_H
+#include "System/Runtime/CompilerServices/EventArgs.h"
 
 
 namespace Microsoft::Xna::Framework {
-    class ExitingEventArgs {
+    class ExitingEventArgs : System::Runtime::CompilerServices::EventArgs {
     };
 }
 

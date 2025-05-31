@@ -9,9 +9,9 @@ namespace Microsoft::Xna::Framework {
 
     igetter(Content::ContentManager, Content, Game)
     igetter(Graphics::GraphicsDevice, GraphicsDevice, Game)
-    igetter(bool, IsMouseVisible, Game)
-    igetter(System::TimeSpan, TargetElapsedTime, Game)
-    igetter(System::TimeSpan, InactiveSleepTime, Game)
+    idata(bool, IsMouseVisible, Game)
+    idata(System::TimeSpan, TargetElapsedTime, Game)
+    idata(System::TimeSpan, InactiveSleepTime, Game)
 
     Game::Game() : TargetElapsedTime_(TimeSpan(0)), InactiveSleepTime_(TimeSpan(0)), isRunning(true) {
     }

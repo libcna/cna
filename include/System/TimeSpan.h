@@ -214,7 +214,7 @@ namespace System {
 
     private:
         static long TimeToTicks(int hour, int minute, int second);
-
+    public:
         static TimeSpan FromTicks(long i);
 
         static TimeSpan FromSeconds(double x);

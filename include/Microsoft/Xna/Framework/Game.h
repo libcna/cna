@@ -18,9 +18,9 @@ namespace Microsoft::Xna::Framework {
     public:
         dgetter(Content::ContentManager, Content)
         dgetter(Graphics::GraphicsDevice, GraphicsDevice)
-        dgetter(bool, IsMouseVisible)
-        dgetter(System::TimeSpan, TargetElapsedTime)
-        dgetter(System::TimeSpan, InactiveSleepTime)
+        ddata(bool, IsMouseVisible)
+        ddata(System::TimeSpan, TargetElapsedTime)
+        ddata(System::TimeSpan, InactiveSleepTime)
 
         System::EventHandler<ExitingEventArgs> Exiting;
 

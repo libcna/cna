@@ -3,7 +3,7 @@
 //
 // #include <iostream>
 // #include <functional>
-// #include "../../../cna/include/CNA/Property.h"
+// #include "CNA/Property.h"
 //
 // namespace CNA {
 //     // Derived class: ReadOnlyProperty
