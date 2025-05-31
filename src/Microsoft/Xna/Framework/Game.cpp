@@ -45,7 +45,6 @@ namespace Microsoft::Xna::Framework {
         while (isRunning) {
             Uint64 frameStart = SDL_GetTicks();
 
-
             SDL_Event e;
             while (SDL_PollEvent(&e)) {
                 if (e.type == SDL_EVENT_QUIT) {

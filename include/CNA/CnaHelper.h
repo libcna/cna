@@ -4,7 +4,6 @@
 
 #ifndef HELPER_H
 #define HELPER_H
-#include <cstdint>
 #define int32_max std::numeric_limits<int32>::max()
 #define int32_min std::numeric_limits<int32>::min()
 #define int64_max std::numeric_limits<int64>::max()

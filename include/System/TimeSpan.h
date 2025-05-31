@@ -7,7 +7,7 @@
 #include <limits>
 
 #include "System/ArgumentOutOfRangeException.h"
-#include "CNA/Helper.h"
+#include "CNA/CnaHelper.h"
 
 namespace System {
     using CNA::int32;
