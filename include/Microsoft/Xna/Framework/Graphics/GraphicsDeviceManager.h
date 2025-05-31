@@ -5,22 +5,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
     class GraphicsDeviceManager {
-    private:
-        Microsoft::Xna::Framework::Graphics::GraphicsDevice graphicsDevice;
-
-    public:
-
-    public:
-        Microsoft::Xna::Framework::Graphics::GraphicsDevice GraphicsDeviceProperty();
-
-    private:
-        bool IsFullScreenProperty_ = false;
-
-    public:
-        [[nodiscard]] bool IsFullScreenProperty() const;
-
-    public:
-        void IsFullScreenProperty(bool v);;
+        dgetter(Microsoft::Xna::Framework::Graphics::GraphicsDevice, GraphicsDevice)
+        ddata(bool, IsFullScreen)
 
         GraphicsDeviceManager();
 

@@ -5,24 +5,26 @@
 #ifndef TOUCHLOCATION_H
 #define TOUCHLOCATION_H
 #include "TouchLocationState.h"
+#include "CNA/Prop.h"
 
 #include "Microsoft/Xna/Framework/Vector2.h"
 
 namespace Microsoft::Xna::Framework::Input::Touch {
+    struct TouchLocation {
+    dgetter(TouchLocationState, State)
+        dgetter(Vector2, PositionProperty_)
 
-struct TouchLocation {
-public:
-    DEF_PROP_AUTO(TouchLocationState, State, TouchLocationState::Invalid)
-    DEF_PROP_AUTO(Vector2, Position, Vector2())
+    private:
+        Vector2 PositionProperty_ = Vector2();
 
-    TouchLocation():
-    IMPL_PROP_AUTO(TouchLocationState, State),
-    IMPL_PROP_AUTO(Vector2, Position)
-    {
-    }
+    public:
+        Vector2 PositionProperty() const;
 
-};
+    public:
+        void PositionProperty(Vector2 v);
 
+        TouchLocation();
+    };
 }
 
 #endif //TOUCHLOCATION_H

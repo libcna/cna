@@ -10,14 +10,7 @@
 
 namespace Microsoft::Xna::Framework::Content {
     class ContentManager {
-    private:
-        std::string RootDirectoryProperty_ = "Content";
-
-    public:
-        std::string RootDirectoryProperty();
-
-    public:
-        void RootDirectoryProperty(const std::string &v);
+        ddata(std::string, RootDirectory);
 
     public:
         ContentManager();

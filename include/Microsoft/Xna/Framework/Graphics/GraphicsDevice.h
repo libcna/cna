@@ -18,14 +18,13 @@ namespace Microsoft::Xna::Framework::Graphics {
         void Clear(float r, float g, float b, float a);
         void Present();
         SDL_Renderer* GetRenderer();
-        Microsoft::Xna::Framework::Graphics::Viewport ViewportProperty();
+        dgetter(Microsoft::Xna::Framework::Graphics::Viewport, Viewport);
 
     protected:
 
     private:
         SDL_Window* window;
         SDL_Renderer* renderer;
-        Microsoft::Xna::Framework::Graphics::Viewport viewport;
 
     //friend class SpriteBatch;
     };

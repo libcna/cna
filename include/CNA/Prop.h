@@ -3,23 +3,46 @@
 //d like define
 //i like implement
 
-#define DEF_PROP(type, name, init) \
-    private: type name##Property_ = init;
-#define ddata(type, name, init) \
-    DEF_PROP(type, name, init) \
-    public: type name##Property(); \
-    public: void name##Property(type v);
+#define DEF_PROP(type, name) \
+    private: type name##_;
+#define ddata(type, name) \
+    DEF_PROP(type, name) \
+    /** This is C# like property, but using getter and setter.*/ \
+    public: [[nodiscard]] type get##name() const; \
+    public: void set##name(const type& v);
 
-#define dgetter(type, name, init) \
-DEF_PROP(type, name, init) \
-public: type name##Property();
+#define dgetter(type, name) \
+DEF_PROP(type, name) \
+/** This is C# like readonly property, but using getter.*/ \
+public: [[nodiscard]] type get##name() const;
 
 #define idata(type, name, class)\
-type class##::name##Property() { return name##Property_ ; } \
-void class##::name##Property(type v) { name##Property_ = v; }
+type class##::get##name() const { return name##_ ; } \
+void class##::set##name(const type& v) { name##_ = v; }
 
 #define igetter(type, name, class)\
-type class##::name##Property() { return name##Property_ ; }
+type class##::get##name() const { return name##_ ; }
+
+
+////
+#define ddatastatic(type, name) \
+/** This is C# like property, but using getter and setter.*/ \
+public: static [[nodiscard]] type get##name(); \
+public: static void set##name(const type& v);
+
+#define dgetterstatic(type, name) \
+/** This is C# like readonly property, but using getter.*/ \
+public: static [[nodiscard]] type get##name();
+
+#define idatastatic(type, name, class, init)\
+static type name##_ = init;\
+type class##::get##name() { return name##_ ; } \
+void class##::set##name(const type& v) { name##_ = v; }
+
+#define igetterstatic(type, name, class, init)\
+static type name##_ = init;\
+type class##::get##name() { return name##_ ; } \
+
 
 namespace CNA {
 }

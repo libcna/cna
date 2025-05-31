@@ -9,11 +9,7 @@
 
 namespace Microsoft::Xna::Framework::Audio {
     class SoundEffect {
-    public:
-        static float MasterVolumeProperty();
-
-    public:
-        static void MasterVolumeProperty(float value);
+        ddatastatic(float, MasterVolume);
 
     public:
         SoundEffect();

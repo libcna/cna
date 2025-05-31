@@ -6,8 +6,6 @@
 #define TOUCHPANEL_H
 #include "TouchCollection.h"
 #include "TouchPanelCapabilities.h"
-#include "../../../../../CNA/ReadonlyProperty.h"
-
 
 namespace Microsoft::Xna::Framework::Input::Touch {
     class TouchPanel {

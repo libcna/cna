@@ -4,19 +4,16 @@
 
 #ifndef SENSORREADINGEVENTARGS_H
 #define SENSORREADINGEVENTARGS_H
-
+#include "CNA/Prop.h"
 
 namespace Microsoft::Devices::Sensors {
     template<typename T>
     class SensorReadingEventArgs {
+        ddata(T, SensorReading)
 
-    private: T SensorReading_;
-    public: T SensorReadingProperty() const;
-    public: void SensorReadingProperty(T property);
-    public: SensorReadingEventArgs();
+    public:
+        SensorReadingEventArgs();
     };
-
 }
-
 
 #endif //SENSORREADINGEVENTARGS_H

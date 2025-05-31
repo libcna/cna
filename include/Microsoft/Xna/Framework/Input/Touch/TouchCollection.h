@@ -4,24 +4,17 @@
 
 #ifndef TOUCHCOLLECTION_H
 #define TOUCHCOLLECTION_H
-#include "CNA/ReadonlyProperty.h"
-
+#include "CNA/Prop.h"
 
 namespace Microsoft::Xna::Framework::Input::Touch {
-struct TouchCollection {
-public:
-    DEF_PROP_CUSTOM(bool, State);
-    DEF_PROP_AUTO(int, Count, 0)
-    TouchCollection():
-    IMPL_PROP_CUSTOM_READONLY(bool, State, {return 0;}),
-    IMPL_PROP_AUTO(int, Count)
-    {
+    struct TouchCollection {
+        dgetter(bool, State)
 
+        dgetter(int, Count)
+
+        TouchCollection();
     };
-
-};
 }
-
 
 
 #endif //TOUCHCOLLECTION_H

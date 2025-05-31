@@ -38,9 +38,8 @@ namespace Microsoft::Xna::Framework::Graphics {
         SDL_Quit();
     }
 
-    Microsoft::Xna::Framework::Graphics::Viewport GraphicsDevice::ViewportProperty() {
-        return viewport;
-    }
+    igetter(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, GraphicsDevice);
+
     void GraphicsDevice::Clear(const Color &color) {
     }
 

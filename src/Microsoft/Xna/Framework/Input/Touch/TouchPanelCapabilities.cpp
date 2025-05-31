@@ -3,8 +3,11 @@
 //
 
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanelCapabilities.h"
-namespace Microsoft::Xna::Framework::Input::Touch {
-TouchPanelCapabilities::TouchPanelCapabilities():
-    IsConnected( [&]()   {return isConnected;}){}
 
+namespace Microsoft::Xna::Framework::Input::Touch {
+    bool TouchPanelCapabilities::IsConnectedProperty() const { return isConnected; }
+    void TouchPanelCapabilities::IsConnectedProperty(const bool v) { isConnected = v; }
+
+    TouchPanelCapabilities::TouchPanelCapabilities() {
+    }
 }

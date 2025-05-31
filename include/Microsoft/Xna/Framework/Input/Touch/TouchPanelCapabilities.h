@@ -4,17 +4,22 @@
 
 #ifndef TOUCHPANELCAPABILITIES_H
 #define TOUCHPANELCAPABILITIES_H
-
+#include "CNA/Prop.h"
 
 
 namespace Microsoft::Xna::Framework::Input::Touch {
     struct TouchPanelCapabilities {
     private:
         bool isConnected = false;
+
     public:
         TouchPanelCapabilities();
-        CNA::Property<bool> IsConnected;
 
+    public:
+        bool IsConnectedProperty() const;
+
+    public:
+        void IsConnectedProperty(bool v);;
     };
 }
 
