@@ -4,5 +4,5 @@
 
 #include "Microsoft/Devices/Sensors/Accelerometer.h"
 
-namespace WindowsPhoneSpeedyBlupi {
-} // WindowsPhoneSpeedyBlupi
+namespace Microsoft::Devices::Sensors {
+} // Microsoft::Devices::Sensors

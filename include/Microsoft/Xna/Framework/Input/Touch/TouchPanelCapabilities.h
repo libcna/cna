@@ -4,7 +4,7 @@
 
 #ifndef TOUCHPANELCAPABILITIES_H
 #define TOUCHPANELCAPABILITIES_H
-#include "NeoSdk/Property.h"
+
 
 
 namespace Microsoft::Xna::Framework::Input::Touch {
@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::Input::Touch {
         bool isConnected = false;
     public:
         TouchPanelCapabilities();
-        NeoSdk::Property<bool> IsConnected;
+        CNA::Property<bool> IsConnected;
 
     };
 }

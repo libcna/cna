@@ -5,7 +5,7 @@
 #ifndef TOUCHLOCATION_H
 #define TOUCHLOCATION_H
 #include "TouchLocationState.h"
-#include "NeoSdk/Property.h"
+
 #include "Microsoft/Xna/Framework/Vector2.h"
 
 namespace Microsoft::Xna::Framework::Input::Touch {

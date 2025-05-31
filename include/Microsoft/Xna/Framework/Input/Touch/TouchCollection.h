@@ -4,7 +4,7 @@
 
 #ifndef TOUCHCOLLECTION_H
 #define TOUCHCOLLECTION_H
-#include "NeoSdk/ReadonlyProperty.h"
+#include "CNA/ReadonlyProperty.h"
 
 
 namespace Microsoft::Xna::Framework::Input::Touch {

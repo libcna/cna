@@ -5,20 +5,26 @@
 #ifndef CONTENTMANAGER_H
 #define CONTENTMANAGER_H
 #include <iostream>
-#include "NeoSdk/Property.h"
+
+#include "CNA/Prop.h"
 
 namespace Microsoft::Xna::Framework::Content {
     class ContentManager {
+    private:
+        std::string RootDirectoryProperty_ = "Content";
+
+    public:
+        std::string RootDirectoryProperty();
+
+    public:
+        void RootDirectoryProperty(const std::string &v);
+
     public:
         ContentManager();
 
-        template <typename T>
-     T Load(const std::string& assetName);
-
-        DEF_PROP_AUTO(std::string, RootDirectory, "Content");
+        template<typename T>
+        T Load(const std::string &assetName);
     };
-
-
 }
 
 

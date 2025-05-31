@@ -4,18 +4,18 @@
 
 #ifndef ACCELEROMETERREADING_H
 #define ACCELEROMETERREADING_H
-#include "NeoSdk/Property.h"
+#include "CNA/Prop.h"
 #include "Microsoft/Xna/Framework/Vector3.h"
 
 namespace Microsoft::Devices::Sensors {
     using Xna::Framework::Vector3;
 
-struct AccelerometerReading {
+    struct AccelerometerReading {
+        private: Vector3 AccelerationProperty_ = Vector3();
 
-    DEF_PROP_AUTO(Vector3, Acceleration, Vector3())
-    AccelerometerReading() : IMPL_PROP_AUTO(Vector3, Acceleration) {
-    }
-};
-
+    public:
+        [[nodiscard]] Vector3 AccelerationProperty() const;
+        AccelerometerReading();
+    };
 }
 #endif //ACCELEROMETERREADING_H

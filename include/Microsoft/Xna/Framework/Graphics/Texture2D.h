@@ -4,7 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include "Microsoft/Xna/Framework/Rectangle.h"
-#include "NeoSdk/Property.h"
+
 
 namespace Microsoft::Xna::Framework::Graphics {
 
@@ -17,7 +17,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         ~Texture2D();
 
         SDL_Texture* GetTexture() const { return texture; }
-        NeoSdk::Property<Rectangle> Bounds;
+        [[nodiscard]] Rectangle BoundsProperty() const;
     private:
         int width;
         int height;

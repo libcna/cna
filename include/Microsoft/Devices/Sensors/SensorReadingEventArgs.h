@@ -4,21 +4,18 @@
 
 #ifndef SENSORREADINGEVENTARGS_H
 #define SENSORREADINGEVENTARGS_H
-#include "NeoSdk/Property.h"
 
 
 namespace Microsoft::Devices::Sensors {
     template<typename T>
     class SensorReadingEventArgs {
 
-
-    public:
-        DEF_PROP_AUTO(T, SensorReading, T())
-
-        SensorReadingEventArgs():
-            IMPL_PROP_AUTO(T, SensorReading) {
-        }
+    private: T SensorReading_;
+    public: T SensorReadingProperty() const;
+    public: void SensorReadingProperty(T property);
+    public: SensorReadingEventArgs();
     };
+
 }
 
 

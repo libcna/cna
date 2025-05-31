@@ -2,10 +2,12 @@
 #include <SDL3_image/SDL_image.h>
 #include <iostream>
 
+#include "CNA/Prop.h"
+
 namespace Microsoft::Xna::Framework::Graphics {
 
-    Texture2D::Texture2D(SDL_Renderer* renderer, const char* filePath):
-    Bounds( [*this]() { return Rectangle(0, 0, width, height); })
+    Rectangle Texture2D::BoundsProperty() const { return {0, 0, width, height}; }
+    Texture2D::Texture2D(SDL_Renderer* renderer, const char* filePath)
 {
         texture = IMG_LoadTexture(renderer, filePath);
         if (!texture) {

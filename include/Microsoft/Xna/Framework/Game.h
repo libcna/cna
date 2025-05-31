@@ -7,19 +7,17 @@
 #include "Content/ContentManager.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/SpriteBatch.h"
-#include "NeoSdk/Property.h"
+
 #include "System/EventHandler.h"
 #include "System/TimeSpan.h"
 #include "System/Runtime/CompilerServices/EventArgs.h"
 
 namespace Microsoft::Xna::Framework {
-    namespace Graphics {
-    }
 
     class Game {
     public:
-        NeoSdk::Property<Content::ContentManager> Content;
-        NeoSdk::Property<Graphics::GraphicsDevice> GraphicsDevice;
+        CNA::Property<Content::ContentManager> Content;
+        CNA::Property<Graphics::GraphicsDevice> GraphicsDevice;
         System::EventHandler<ExitingEventArgs> Exiting;
         DEF_PROP_AUTO(bool, IsMouseVisible, false);
         DEF_PROP_AUTO(System::TimeSpan, TargetElapsedTime, System::TimeSpan());

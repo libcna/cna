@@ -3,6 +3,7 @@
 //
 #ifndef UNAUTHORIZEDACCESSEXCEPTION_H
 #define UNAUTHORIZEDACCESSEXCEPTION_H
+#include "SystemException.h"
 
 namespace System {
     class UnauthorizedAccessException : public System::SystemException {

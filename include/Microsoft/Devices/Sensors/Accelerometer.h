@@ -7,7 +7,7 @@
 #include "Microsoft/Devices/Sensors/AccelerometerReading.h"
 #include "Microsoft/Devices/Sensors/SensorBase.h"
 
-namespace WindowsPhoneSpeedyBlupi {
+namespace Microsoft::Devices::Sensors {
 
     using Microsoft::Devices::Sensors::SensorBase;
     using Microsoft::Devices::Sensors::AccelerometerReading;
@@ -21,6 +21,6 @@ public:
     }
 };
 
-} // WindowsPhoneSpeedyBlupi
+} // Microsoft::Devices::Sensors
 
 #endif //ACCELEROMETER_H

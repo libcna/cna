@@ -4,7 +4,7 @@
 
 #ifndef RECTANGLE_H
 #define RECTANGLE_H
-#include "NeoSdk/Property.h"
+
 
 
 namespace Microsoft::Xna::Framework {
@@ -49,12 +49,12 @@ namespace Microsoft::Xna::Framework {
          */
         int Height;
 
-        NeoSdk::Property<int> Left;
-        NeoSdk::Property<int> Right;
-        NeoSdk::Property<int> Top;
-        NeoSdk::Property<int> Bottom;
+        CNA::Property<int> Left;
+        CNA::Property<int> Right;
+        CNA::Property<int> Top;
+        CNA::Property<int> Bottom;
 
-        static NeoSdk::Property<Rectangle> Empty;
+        static CNA::Property<Rectangle> Empty;
 
 
     };

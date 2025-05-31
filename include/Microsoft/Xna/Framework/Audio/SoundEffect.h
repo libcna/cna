@@ -5,14 +5,17 @@
 #ifndef SOUNDEFFECT_H
 #define SOUNDEFFECT_H
 #include "SoundEffectInstance.h"
-#include "NeoSdk/Property.h"
 
 
 namespace Microsoft::Xna::Framework::Audio {
     class SoundEffect {
     public:
-        static NeoSdk::Property<float> MasterVolume;
+        static float MasterVolumeProperty();
 
+    public:
+        static void MasterVolumeProperty(float value);
+
+    public:
         SoundEffect();
 
         SoundEffectInstance &&CreateInstance();

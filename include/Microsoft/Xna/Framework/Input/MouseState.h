@@ -5,7 +5,7 @@
 #ifndef MOUSESTATE_H
 #define MOUSESTATE_H
 #include "ButtonState.h"
-#include "NeoSdk/Property.h"
+
 
 
 namespace Microsoft::Xna::Framework::Input {

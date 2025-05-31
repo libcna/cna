@@ -4,7 +4,7 @@
 
 #ifndef VIEWPORT_H
 #define VIEWPORT_H
-#include "NeoSdk/Property.h"
+#include "CNA/Prop.h"
 
 
 namespace Microsoft::Xna::Framework::Graphics {
@@ -18,8 +18,16 @@ namespace Microsoft::Xna::Framework::Graphics {
         float maxDepth;
 
     public:
-        NeoSdk::Property<int> Width;
-        NeoSdk::Property<int> Height;
+        [[nodiscard]] int WidthProperty() const;
+
+    public:
+        void WidthProperty(int v);
+
+    public:
+        [[nodiscard]] int HeightProperty() const;
+
+    public:
+        void HeightProperty(int v);
 
         Viewport();
     };

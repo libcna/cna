@@ -5,7 +5,7 @@
 #ifndef KEYBOARDSTATE_H
 #define KEYBOARDSTATE_H
 #include "Keys.h"
-#include "NeoSdk/ReadonlyProperty.h"
+#include "../../../../CNA/ReadonlyProperty.h"
 
 namespace Microsoft::Xna::Framework::Input {
 

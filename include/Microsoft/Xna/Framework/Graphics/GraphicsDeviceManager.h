@@ -4,20 +4,30 @@
 #include "Microsoft/Xna/Framework/Game.h"
 
 namespace Microsoft::Xna::Framework::Graphics {
-
     class GraphicsDeviceManager {
     private:
         Microsoft::Xna::Framework::Graphics::GraphicsDevice graphicsDevice;
+
     public:
-        NeoSdk::Property<Microsoft::Xna::Framework::Graphics::GraphicsDevice> GraphicsDevice;
-        DEF_PROP_AUTO(bool, IsFullScreen, false);
+
+    public:
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice GraphicsDeviceProperty();
+
+    private:
+        bool IsFullScreenProperty_ = false;
+
+    public:
+        [[nodiscard]] bool IsFullScreenProperty() const;
+
+    public:
+        void IsFullScreenProperty(bool v);;
+
         GraphicsDeviceManager();
 
-        explicit GraphicsDeviceManager(Game* game);
+        explicit GraphicsDeviceManager(Game *game);
 
         void ToggleFullScreen();
     };
-
 }
 
 #endif // GRAPHICSDEVICEMANAGER_H

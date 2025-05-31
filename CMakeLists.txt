@@ -6,11 +6,10 @@ set(CMAKE_CXX_STANDARD 17)
 find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
 
-add_subdirectory(../neo-sdk NEO_SDK)
-include_directories(neo-sdk/include NEO_SDK)
-
 file(GLOB_RECURSE SOURCES "src/*.cpp")
-add_library(CNA STATIC ${SOURCES})
+add_library(CNA STATIC ${SOURCES}
+        src/Microsoft/Xna/Framework/Graphics/Viewport.cpp
+)
 
 target_include_directories(CNA PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(CNA PRIVATE NEO_SDK SDL3::SDL3 SDL3_image)
+target_link_libraries(CNA PRIVATE SDL3::SDL3 SDL3_image)

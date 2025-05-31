@@ -5,6 +5,6 @@
 #include "Microsoft/Xna/Framework/Rectangle.h"
 
 namespace Microsoft::Xna::Framework {
-    NeoSdk::Property<Rectangle> Rectangle::Empty{ []() { return Rectangle::emptyRectangle; }};
+    CNA::Property<Rectangle> Rectangle::Empty{ []() { return Rectangle::emptyRectangle; }};
 
 }

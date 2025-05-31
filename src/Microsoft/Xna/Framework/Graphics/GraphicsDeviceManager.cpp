@@ -5,12 +5,13 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceManager.h"
 
 namespace Microsoft::Xna::Framework::Graphics {
-    GraphicsDeviceManager::GraphicsDeviceManager():
-    GraphicsDevice( [this]() { return graphicsDevice; }),
-    IMPL_PROP_AUTO(bool, IsFullScreen)
-    {
-
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice GraphicsDeviceManager::GraphicsDeviceProperty() {
+        return graphicsDevice;
     }
 
+    bool GraphicsDeviceManager::IsFullScreenProperty() const { return IsFullScreenProperty_; }
+    void GraphicsDeviceManager::IsFullScreenProperty(bool v) { IsFullScreenProperty_ = v; }
 
+    GraphicsDeviceManager::GraphicsDeviceManager() {
+    }
 }

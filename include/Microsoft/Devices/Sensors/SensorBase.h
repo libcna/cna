@@ -10,6 +10,7 @@
 #include "Accelerometer.h"
 #include "SensorReadingEventArgs.h"
 #include "System/EventHandler.h"
+#include "Microsoft/Devices/Sensors/SensorBase.h"
 
 namespace Microsoft::Devices::Sensors {
     template<typename TSensorReading>

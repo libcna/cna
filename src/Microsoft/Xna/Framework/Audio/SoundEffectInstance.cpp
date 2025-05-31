@@ -5,10 +5,19 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.h"
 
 namespace Microsoft::Xna::Framework::Audio {
-    SoundEffectInstance::SoundEffectInstance() : Volume([this]() { return 0.0f; }, [this](float value) {
-                                                 }),
-                                                 Pan([this]() { return 0.0f; }),
-                                                 Pitch([this]() { return 0.0f; }),
-                                                 IsLooped([this]() { return true; }) {
+    float SoundEffectInstance::VolumeProperty() const { return VolumeProperty_; }
+    void SoundEffectInstance::VolumeProperty(const float v) { VolumeProperty_ = v; }
+    float SoundEffectInstance::PanProperty() const { return PanProperty_; }
+    void SoundEffectInstance::PanProperty(float v) { PanProperty_ = v; }
+    float SoundEffectInstance::PitchProperty() const { return PitchProperty_; }
+    void SoundEffectInstance::PitchProperty(float v) { PitchProperty_ = v; }
+    bool SoundEffectInstance::IsLoopedProperty() const { return IsLoopedProperty_; }
+    void SoundEffectInstance::IsLoopedProperty(bool v) { IsLoopedProperty_ = v; }
+
+    // float SoundEffectInstance::VolumeProperty() {return Volume_;}
+    // void SoundEffectInstance::VolumeProperty(float value) {Volume_ = value;}
+
+
+    SoundEffectInstance::SoundEffectInstance() {
     }
 }

@@ -5,7 +5,7 @@
 #ifndef GAMEPADBUTTONS_H
 #define GAMEPADBUTTONS_H
 #include "ButtonState.h"
-#include "NeoSdk/Property.h"
+
 
 
 namespace Microsoft::Xna::Framework::Input {
