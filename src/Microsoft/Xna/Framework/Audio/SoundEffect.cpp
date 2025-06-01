@@ -7,6 +7,10 @@
 namespace Microsoft::Xna::Framework::Audio {
     idatastatic(float, MasterVolume, SoundEffect, 0.0f)
 
-    Audio::SoundEffect::SoundEffect() {
+    Audio::SoundEffect::SoundEffect(const std::string &assetName) {
+    }
+
+    SoundEffectInstance SoundEffect::CreateInstance() {
+        return SoundEffectInstance(this);
     }
 }

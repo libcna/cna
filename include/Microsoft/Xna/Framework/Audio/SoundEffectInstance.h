@@ -4,6 +4,7 @@
 
 #ifndef SOUNDEFFECTINSTANCE_H
 #define SOUNDEFFECTINSTANCE_H
+#include "SoundEffect.h"
 #include "SoundState.h"
 
 #include "CNA/Prop.h"
@@ -11,6 +12,8 @@
 
 namespace Microsoft::Xna::Framework::Audio {
     class SoundEffectInstance {
+
+    private: SoundEffect* soundEffect;
         ddata(float, Volume);
         ddata(float, Pan);
         ddata(float, Pitch);
@@ -18,7 +21,9 @@ namespace Microsoft::Xna::Framework::Audio {
     public:
         SoundState State = SoundState::Stopped;
 
-        SoundEffectInstance();
+    private: SoundEffectInstance::SoundEffectInstance(SoundEffect* soundEffect);
+        friend void SoundEffect::SoundEffectInstance();
+    public:
 
         void Play();
 

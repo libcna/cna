@@ -4,6 +4,8 @@
 
 #ifndef SOUNDEFFECT_H
 #define SOUNDEFFECT_H
+#include <string>
+
 #include "SoundEffectInstance.h"
 
 
@@ -12,9 +14,9 @@ namespace Microsoft::Xna::Framework::Audio {
         ddatastatic(float, MasterVolume);
 
     public:
-        SoundEffect();
+        SoundEffect(const std::string &assetName);
 
-        SoundEffectInstance &&CreateInstance();
+        SoundEffectInstance CreateInstance();
     };
 }
 
