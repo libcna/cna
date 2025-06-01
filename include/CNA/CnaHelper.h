@@ -20,6 +20,7 @@ namespace CNA {
      * int64 is 64 bits long, as C# long.
      */
     typedef int64_t int64;
+    typedef unsigned char byte;
 // class Helper {
 //
 // };
