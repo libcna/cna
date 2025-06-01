@@ -5,9 +5,10 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.h"
 
 namespace Microsoft::Xna::Framework::Input::Touch {
-    igetter(bool, State, TouchCollection)
-    igetter(int, Count, TouchCollection)
+    int TouchCollection::getCount() const { return this->touches.size() ; }
 
-    TouchCollection::TouchCollection() {
-    };
+    std::vector<TouchLocation>::iterator TouchCollection::begin() { return touches.begin(); }
+    std::vector<TouchLocation>::iterator TouchCollection::end() { return touches.end(); }
+
+    TouchCollection::TouchCollection() = default;
 }

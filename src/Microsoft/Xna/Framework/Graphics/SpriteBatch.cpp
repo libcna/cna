@@ -3,8 +3,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    SpriteBatch::SpriteBatch(GraphicsDevice* graphicsDevice) {
-        renderer = graphicsDevice->GetRenderer();
+    SpriteBatch::SpriteBatch(GraphicsDevice graphicsDevice) {
+        renderer = graphicsDevice.GetRenderer();
     }
 
     SpriteBatch::~SpriteBatch() {}

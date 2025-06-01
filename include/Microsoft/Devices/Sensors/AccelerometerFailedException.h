@@ -4,6 +4,7 @@
 
 #ifndef ACCELEROMETERFAILEDEXCEPTION_H
 #define ACCELEROMETERFAILEDEXCEPTION_H
+#include "SensorFailedException.h"
 
 namespace Microsoft::Devices::Sensors {
     class AccelerometerFailedException : public SensorFailedException {

@@ -4,14 +4,18 @@
 
 #ifndef TOUCHCOLLECTION_H
 #define TOUCHCOLLECTION_H
+#include <vector>
+
+#include "TouchLocation.h"
 #include "CNA/Prop.h"
 
 namespace Microsoft::Xna::Framework::Input::Touch {
     struct TouchCollection {
-        dgetter(bool, State)
+    private: std::vector<TouchLocation> touches;
+        public: [[nodiscard]] int getCount() const;
 
-        dgetter(int, Count)
-
+        std::vector<TouchLocation>::iterator begin();
+        std::vector<TouchLocation>::iterator end();
         TouchCollection();
     };
 }
