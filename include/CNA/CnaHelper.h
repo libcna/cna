@@ -9,6 +9,7 @@
 #define int32_min std::numeric_limits<int32>::min()
 #define int64_max std::numeric_limits<int64>::max()
 #define int64_min std::numeric_limits<int64>::min()
+#define MIGRATED_FROM_CSHARP_PROPERTY
 #include <cstdint>
 
 namespace CNA {

@@ -10,14 +10,14 @@
 #include "SensorReadingEventArgs.h"
 #include "System/EventHandler.h"
 #include "Microsoft/Devices/Sensors/SensorBase.h"
+#include "System/IDisposable.h"
 
 namespace Microsoft::Devices::Sensors {
     template<typename TSensorReading>
-    class SensorBase {
+    class SensorBase: virtual public System::IDisposable {
 
     public:
         System::EventHandler<SensorReadingEventArgs<TSensorReading>> CurrentValueChanged;
-
     };
 }
 

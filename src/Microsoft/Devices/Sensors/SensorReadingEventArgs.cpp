@@ -4,7 +4,6 @@
 
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.h"
 
-
 namespace Microsoft::Devices::Sensors {
 
     template<typename T>

@@ -10,7 +10,10 @@
 namespace Microsoft::Devices::Sensors {
 
     class SensorFailedException : public System::Exception {
+    public:
+        SensorFailedException();
 
+        explicit SensorFailedException(const char * str);
     };
 
 
