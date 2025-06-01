@@ -9,6 +9,7 @@
 namespace System {
 
 class Exception : public std::exception {
+public:
     Exception() = default;
 
     explicit Exception(const char * str);

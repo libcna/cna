@@ -14,7 +14,7 @@
 
 namespace Microsoft::Devices::Sensors {
     template<typename TSensorReading>
-    class SensorBase: virtual public System::IDisposable {
+    class SensorBase: public System::IDisposable {
 
     public:
         System::EventHandler<SensorReadingEventArgs<TSensorReading>> CurrentValueChanged;
