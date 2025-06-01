@@ -31,8 +31,6 @@ namespace Microsoft::Xna::Framework::Audio {
         Stop();
     }
 
-
-
     void SoundEffectInstance::Play() {
         if (playing) return;
 
