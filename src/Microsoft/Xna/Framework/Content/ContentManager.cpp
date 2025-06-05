@@ -6,13 +6,8 @@
 
 
 namespace Microsoft::Xna::Framework::Content {
-    idata(std::string, RootDirectory, ContentManager);
-
-    template<typename T>
-    T ContentManager::Load(const std::string &assetName) {
-        std::cout << "Loading asset: " << assetName << std::endl;
-        return T(getRootDirectoryProperty() + "/" + assetName);
-    }
+    std::string ContentManager::getRootDirectoryProperty() const { return RootDirectory_; }
+    void ContentManager::setRootDirectoryProperty(const std::string &v) { RootDirectory_ = v; };
 
     ContentManager::ContentManager() {
     }

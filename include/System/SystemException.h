@@ -8,6 +8,8 @@
 
 namespace System {
     class SystemException : public System::Exception {
+    public: SystemException(const char * str);
+
     };
 } // System
 

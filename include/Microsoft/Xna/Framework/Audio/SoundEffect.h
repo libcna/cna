@@ -24,10 +24,9 @@ namespace Microsoft::Xna::Framework::Audio {
 
         ~SoundEffect();
 
-        // Disable copy, enable move
-        SoundEffect(const SoundEffect &) = delete;
+        SoundEffect(const SoundEffect &);
 
-        SoundEffect &operator=(const SoundEffect &) = delete;
+        SoundEffect &operator=(const SoundEffect &);
 
         SoundEffect(SoundEffect &&other) noexcept;
 

@@ -23,6 +23,32 @@ namespace Microsoft::Xna::Framework::Audio {
         }
     }
 
+    // Copy constructor
+    SoundEffect::SoundEffect(const SoundEffect& other) {
+        if (other.chunk) {
+            chunk = Mix_QuickLoad_WAV(reinterpret_cast<Uint8*>(other.chunk->abuf));
+            if (!chunk) {
+                throw std::runtime_error("Failed to copy SoundEffect");
+            }
+        }
+    }
+
+    // Copy assignment operator
+    SoundEffect& SoundEffect::operator=(const SoundEffect& other) {
+        if (this != &other) {
+            if (chunk) Mix_FreeChunk(chunk);
+            chunk = nullptr;
+
+            if (other.chunk) {
+                chunk = Mix_QuickLoad_WAV(reinterpret_cast<Uint8*>(other.chunk->abuf));
+                if (!chunk) {
+                    throw std::runtime_error("Failed to copy SoundEffect");
+                }
+            }
+        }
+        return *this;
+    }
+
     // Move semantics
     SoundEffect::SoundEffect(SoundEffect&& other) noexcept : chunk(other.chunk) {
         other.chunk = nullptr;

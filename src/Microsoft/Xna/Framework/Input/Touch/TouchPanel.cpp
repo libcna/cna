@@ -5,4 +5,8 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.h"
 namespace Microsoft::Xna::Framework::Input::Touch {
     TouchPanel::TouchPanel() {}
+
+    TouchPanelCapabilities TouchPanel::GetCapabilities() {
+        return TouchPanelCapabilities();
+    }
 }

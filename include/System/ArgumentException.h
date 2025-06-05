@@ -7,6 +7,9 @@
 
 namespace System {
     class ArgumentException : public System::SystemException {
+    public:
+        explicit ArgumentException(const char * str);
+
     };
 } // System
 

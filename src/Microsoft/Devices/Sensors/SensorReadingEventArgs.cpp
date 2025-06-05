@@ -6,13 +6,4 @@
 
 namespace Microsoft::Devices::Sensors {
 
-    template<typename T>
-    T SensorReadingEventArgs<T>::getSensorReadingProperty() const { return SensorReading_; }
-
-    template<typename T>
-    void SensorReadingEventArgs<T>::setSensorReadingProperty(const T& property) { SensorReading_ = property; }
-
-    template<typename T>
-    SensorReadingEventArgs<T>::SensorReadingEventArgs() : SensorReading_{} {
-    }
 }

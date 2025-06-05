@@ -16,7 +16,10 @@ namespace Microsoft::Xna::Framework::Content {
         ContentManager();
 
         template<typename T>
-        T Load(const std::string &assetName);
+        T Load(const std::string& assetName) {
+            std::cout << "Loading asset: " << assetName << std::endl;
+            return T(getRootDirectoryProperty() + "/" + assetName);
+        }
     };
 }
 

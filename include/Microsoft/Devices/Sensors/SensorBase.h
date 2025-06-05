@@ -18,7 +18,14 @@ namespace Microsoft::Devices::Sensors {
 
     public:
         System::EventHandler<SensorReadingEventArgs<TSensorReading>> CurrentValueChanged;
+
+    void Dispose(bool disposing) {
+        }
     };
+
+
+
+
 }
 
 

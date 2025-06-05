@@ -17,6 +17,7 @@ namespace Microsoft::Devices::Sensors {
 
     ////
     int Accelerometer::instanceCount = 0;
+    std::vector<Accelerometer> Accelerometer::instances;
 
     bool Accelerometer::getIsSupportedProperty() {
         CNA::Platform currentPlatform = CNA::getCurrentPlatform();

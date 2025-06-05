@@ -5,5 +5,8 @@
 #include "Microsoft/Xna/Framework/Input/KeyboardState.h"
 
 namespace Microsoft::Xna::Framework::Input {
+    bool KeyboardState::IsKeyDown(Keys key) {
+        return false;
+    }
 
 }

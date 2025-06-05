@@ -4,6 +4,8 @@
 
 #include "System/TimeSpan.h"
 
+#include "Microsoft/Xna/Framework/GameTime.h"
+
 namespace System {
 
     const TimeSpan TimeSpan::Zero = TimeSpan(0);
@@ -116,6 +118,12 @@ namespace System {
         if (totalSeconds > MaxSeconds || totalSeconds < MinSeconds)
             throw ArgumentOutOfRangeException("Time span is too long.");
         return totalSeconds * TicksPerSecond;
+    }
+
+    TimeSpan TimeSpan::FromTicks(long i) {return 0;
+    }
+
+    TimeSpan TimeSpan::FromSeconds(double x) {return 0;
     }
 
     TimeSpan TimeSpan::FromMilliseconds(double value) {

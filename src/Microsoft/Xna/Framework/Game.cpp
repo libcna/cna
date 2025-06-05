@@ -81,6 +81,12 @@ namespace Microsoft::Xna::Framework {
         // Loading content (e.g. textures)
     }
 
+    void Game::OnDeactivated(std::any sender, System::Runtime::CompilerServices::EventArgs args) {
+    }
+
+    void Game::OnActivated(std::any sender, System::Runtime::CompilerServices::EventArgs args) {
+    }
+
     void Game::Update(const Microsoft::Xna::Framework::GameTime &gameTime) {
         // Main game logic
     }

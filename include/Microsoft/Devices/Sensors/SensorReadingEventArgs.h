@@ -9,10 +9,20 @@
 namespace Microsoft::Devices::Sensors {
     template<typename T>
     class SensorReadingEventArgs {
-        ddata(T, SensorReading)
+    private:
+        T SensorReading_;
+
 
     public:
-        SensorReadingEventArgs();
+        [[nodiscard]] T getSensorReadingProperty() const {
+            return SensorReading_;
+        }
+
+        void setSensorReadingProperty(const T &v) {
+            SensorReading_ = v;
+        }
+
+        SensorReadingEventArgs() : SensorReading_{} {}
     };
 }
 

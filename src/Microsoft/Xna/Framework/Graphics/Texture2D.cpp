@@ -18,6 +18,9 @@ namespace Microsoft::Xna::Framework::Graphics {
     Texture2D::Texture2D() {
     }
 
+    Texture2D::Texture2D(const std::string &assetName) {
+    }
+
     Texture2D::~Texture2D()
     {
         if (texture) {
