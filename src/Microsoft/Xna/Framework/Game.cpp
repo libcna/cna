@@ -81,6 +81,9 @@ namespace Microsoft::Xna::Framework {
         // Loading content (e.g. textures)
     }
 
+    void Game::UnloadContent() {
+    }
+
     void Game::OnDeactivated(std::any sender, System::Runtime::CompilerServices::EventArgs args) {
     }
 

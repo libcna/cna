@@ -33,7 +33,7 @@ namespace Microsoft::Xna::Framework {
     protected:
         virtual void Initialize();
         virtual void LoadContent();
-        virtual void UnloadContent() = 0;
+        virtual void UnloadContent();
         virtual void OnDeactivated(std::any sender, System::Runtime::CompilerServices::EventArgs args);
         virtual void OnActivated(std::any sender, System::Runtime::CompilerServices::EventArgs args);
 
