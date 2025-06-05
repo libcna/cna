@@ -39,7 +39,7 @@ namespace Microsoft::Xna::Framework {
 
 
         GameTime gameTime;
-        gameTime.setElapsedGameTime(System::TimeSpan::FromMilliseconds(50));
+        gameTime.setElapsedGameTimeProperty(System::TimeSpan::FromMilliseconds(50));
         double msPerFrame = 1000 / TARGET_FPS;
 
         while (isRunning) {

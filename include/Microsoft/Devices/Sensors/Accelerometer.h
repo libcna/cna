@@ -28,10 +28,8 @@ namespace Microsoft::Devices::Sensors {
          *
          * @return boolean
          */
-        MIGRATED_FROM_CSHARP_PROPERTY
-    public: [[nodiscard]] static bool getIsSupported();
-        MIGRATED_FROM_CSHARP_PROPERTY
-    public: [[nodiscard]] SensorState getState() const;
+    public: [[nodiscard]] static bool getIsSupportedProperty();
+    public: [[nodiscard]] SensorState getStateProperty() const;
     public: Accelerometer();
     public:
         void Start();

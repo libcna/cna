@@ -7,7 +7,7 @@
 
 #include <atomic>
 
-#include "SoundEffect.h"
+#include "SoundEffectI.h"
 #include "SoundState.h"
 
 #include "CNA/Prop.h"
@@ -15,8 +15,8 @@
 
 namespace Microsoft::Xna::Framework::Audio {
     class SoundEffectInstance {
-friend class SoundEffect;
-    private: SoundEffect* soundEffect;
+
+    private: SoundEffectI* soundEffect;
 
         int channel = -1;  // SDL_mixer channel
         std::atomic<bool> playing = false;
@@ -31,7 +31,8 @@ friend class SoundEffect;
     public:
         SoundState State = SoundState::Stopped;
 
-    private: SoundEffectInstance::SoundEffectInstance(SoundEffect* soundEffect);
+    public:
+        explicit SoundEffectInstance(Audio::SoundEffectI * sound_effect);
 
     public:
 

@@ -17,7 +17,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         ~Texture2D();
 
         SDL_Texture* GetTexture() const { return texture; }
-        [[nodiscard]] Rectangle getBounds() const;
+        [[nodiscard]] Rectangle getBoundsProperty() const;
     private:
         int width;
         int height;

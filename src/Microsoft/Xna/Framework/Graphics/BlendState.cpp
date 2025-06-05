@@ -4,6 +4,6 @@
 
 #include "Microsoft/Xna/Framework/Graphics/BlendState.h"
 namespace Microsoft::Xna::Framework::Graphics {
-    Microsoft::Xna::Framework::Graphics::BlendState AlphaBlend = BlendState();
+    Microsoft::Xna::Framework::Graphics::BlendState BlendState::AlphaBlend = BlendState();
 
 }

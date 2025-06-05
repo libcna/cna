@@ -12,7 +12,7 @@
 namespace Microsoft::Xna::Framework::Input::Touch {
     struct TouchCollection {
     private: std::vector<TouchLocation> touches;
-        public: [[nodiscard]] int getCount() const;
+        public: [[nodiscard]] int getCountProperty() const;
 
         std::vector<TouchLocation>::iterator begin();
         std::vector<TouchLocation>::iterator end();

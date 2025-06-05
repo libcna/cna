@@ -9,26 +9,24 @@
 #include <iostream>
 #include <ostream>
 #include <SDL3/SDL_log.h>
+#include <SDL3_mixer/SDL_mixer.h>
 
-#include "Microsoft/Xna/Framework/Audio/SoundEffect.h"
 
 namespace Microsoft::Xna::Framework::Audio {
-    float SoundEffectInstance::getVolume() const { return Volume_; }
+    float SoundEffectInstance::getVolumeProperty() const { return Volume_; }
 
-    float SoundEffectInstance::getPan() const { return Pan_; }
+    float SoundEffectInstance::getPanProperty() const { return Pan_; }
 
-    float SoundEffectInstance::getPitch() const { return Pitch_; }
-    void SoundEffectInstance::setPitch(const float &v) { Pitch_ = v; };
-    bool SoundEffectInstance::getIsLooped() const { return IsLooped_; }
-
-
-    SoundEffectInstance::SoundEffectInstance(SoundEffect *soundEffect): Volume_(1.0f), Pan_(0.0f), Pitch_(0.0f),
-                                                                        IsLooped_(false), soundEffect(soundEffect)
-    {
-    }
+    float SoundEffectInstance::getPitchProperty() const { return Pitch_; }
+    void SoundEffectInstance::setPitchProperty(const float &v) { Pitch_ = v; };
+    bool SoundEffectInstance::getIsLoopedProperty() const { return IsLooped_; }
 
     SoundEffectInstance::~SoundEffectInstance() {
         Stop();
+    }
+
+    SoundEffectInstance::SoundEffectInstance(Audio::SoundEffectI *sound_effect): Volume_(1.0f), Pan_(0.0f), Pitch_(0.0f),
+                                                                        IsLooped_(false), soundEffect(sound_effect) {
     }
 
     void SoundEffectInstance::Play() {
@@ -73,14 +71,14 @@ namespace Microsoft::Xna::Framework::Audio {
         State = SoundState::Stopped;
     }
 
-    void SoundEffectInstance::setVolume(const float& volume) {
+    void SoundEffectInstance::setVolumeProperty(const float& volume) {
         Volume_ = volume < 0.f ? 0.f : (volume > 1.f ? 1.f : volume);
         if (channel != -1) {
             Mix_Volume(channel, static_cast<int>(Volume_ * 128));
         }
     }
 
-    void SoundEffectInstance::setPan(const float& pan) {
+    void SoundEffectInstance::setPanProperty(const float& pan) {
         Pan_ = pan < -1.f ? -1.f : (pan > 1.f ? 1.f : pan);
         if (channel != -1) {
             Uint8 left = 255;
@@ -93,7 +91,7 @@ namespace Microsoft::Xna::Framework::Audio {
             Mix_SetPanning(channel, left, right);
         }
     }
-    void SoundEffectInstance::setIsLooped(const bool &looped)
+    void SoundEffectInstance::setIsLoopedProperty(const bool &looped)
      {
         IsLooped_ = looped;
         // Looping is set when playback starts, so you need to restart playback if you change it at runtime

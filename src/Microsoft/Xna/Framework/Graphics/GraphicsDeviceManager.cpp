@@ -8,6 +8,12 @@ namespace Microsoft::Xna::Framework::Graphics {
     igetter(Microsoft::Xna::Framework::Graphics::GraphicsDevice, GraphicsDevice, GraphicsDeviceManager)
     idata(bool, IsFullScreen, GraphicsDeviceManager)
 
-    GraphicsDeviceManager::GraphicsDeviceManager() {
+    GraphicsDeviceManager::GraphicsDeviceManager(): IsFullScreen_(false) {
+    }
+
+    GraphicsDeviceManager::GraphicsDeviceManager(Game *game): IsFullScreen_(false) {
+    }
+
+    void GraphicsDeviceManager::ToggleFullScreen() {
     }
 }

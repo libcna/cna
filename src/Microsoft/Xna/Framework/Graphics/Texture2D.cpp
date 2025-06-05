@@ -6,13 +6,16 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    Rectangle Texture2D::getBounds() const { return {0, 0, width, height}; }
+    Rectangle Texture2D::getBoundsProperty() const { return {0, 0, width, height}; }
     Texture2D::Texture2D(SDL_Renderer* renderer, const char* filePath)
 {
         texture = IMG_LoadTexture(renderer, filePath);
         if (!texture) {
             std::cerr << "Failed to load texture: " << SDL_GetError() << std::endl;
         }
+    }
+
+    Texture2D::Texture2D() {
     }
 
     Texture2D::~Texture2D()

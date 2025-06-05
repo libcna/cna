@@ -11,7 +11,7 @@ namespace Microsoft::Xna::Framework::Input {
     struct GamePadState {
     public:
         dgetter(GamePadButtons, Buttons)
-        GamePadState() {}
+        GamePadState();
     };
 }
 

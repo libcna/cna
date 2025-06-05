@@ -8,8 +8,6 @@
 
 
 namespace Microsoft::Xna::Framework::Input {
-    struct KeyboardState;
-
     class Keyboard {
     public:
         static KeyboardState GetState() { return KeyboardState(); }

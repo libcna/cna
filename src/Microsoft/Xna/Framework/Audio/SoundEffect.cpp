@@ -23,7 +23,6 @@ namespace Microsoft::Xna::Framework::Audio {
         }
     }
 
-
     // Move semantics
     SoundEffect::SoundEffect(SoundEffect&& other) noexcept : chunk(other.chunk) {
         other.chunk = nullptr;

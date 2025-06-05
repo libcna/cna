@@ -6,19 +6,17 @@
 #define GUIDE_H
 #include <iostream>
 
+#include "CNA/Prop.h"
 #include "Microsoft/Xna/Framework/PlayerIndex.h"
 
 
 namespace Microsoft::Xna::Framework::GamerServices {
     class Guide {
     public:
-        static void Show(PlayerIndex playerIndex) {
-            std::cout << "The Market Place should now be shown.";
-        }
+        static void Show(const PlayerIndex& playerIndex);
 
-        static bool IsTrialMode() {
-            return false; //todo
-        };
+        dgetterstatic(bool, IsTrialMode)
+
     };
 }
 
