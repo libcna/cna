@@ -16,17 +16,18 @@ namespace Microsoft::Xna::Framework {
         ddata(TimeSpan, TotalGameTime)
 
     private:
-        TimeSpan* ElapsedGameTime_;
+        TimeSpan ElapsedGameTime_;
 
     public:
-        [[nodiscard]] TimeSpan* getElapsedGameTimeProperty();
+        [[nodiscard]] TimeSpan& getElapsedGameTimeProperty();
 
     public:
-        void setElapsedGameTimeProperty(TimeSpan* v);
+        void setElapsedGameTimeProperty(const TimeSpan& v);
 
         ddata(bool, IsRunningSlowly);
 
         GameTime();
+        ~GameTime();
     };
 }
 

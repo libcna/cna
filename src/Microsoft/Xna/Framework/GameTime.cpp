@@ -9,13 +9,19 @@
 
 namespace Microsoft::Xna::Framework {
     idata(TimeSpan, TotalGameTime, GameTime)
-    TimeSpan* GameTime::getElapsedGameTimeProperty() { return ElapsedGameTime_; }
-    void GameTime::setElapsedGameTimeProperty(TimeSpan* v) {
+    TimeSpan& GameTime::getElapsedGameTimeProperty() {
+        return ElapsedGameTime_;
+    }
+    [[deprecated]] void GameTime::setElapsedGameTimeProperty(const TimeSpan& v) {
         ElapsedGameTime_ = v;
+
+        std::cout << "ElapsedGameTime ticks: " << getElapsedGameTimeProperty().getTicksProperty() << std::endl;
     }
     idata(bool, IsRunningSlowly, GameTime)
 
-    GameTime::GameTime(): TotalGameTime_(0), ElapsedGameTime_(0) {
+    GameTime::GameTime(): TotalGameTime_(0), ElapsedGameTime_(TimeSpan(0)), IsRunningSlowly_(false) {
     }
 
+    GameTime::~GameTime() {
+    }
 }

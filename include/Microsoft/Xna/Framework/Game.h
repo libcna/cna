@@ -27,7 +27,7 @@ namespace Microsoft::Xna::Framework {
         [[nodiscard]] System::TimeSpan* getTargetElapsedTimeProperty() const;
 
     public:
-        void setTargetElapsedTimeProperty(System::TimeSpan& v);
+        void setTargetElapsedTimeProperty(System::TimeSpan* v);
         ddata(System::TimeSpan, InactiveSleepTime)
 
         System::EventHandler<ExitingEventArgs> Exiting;
@@ -51,7 +51,7 @@ namespace Microsoft::Xna::Framework {
     private:
         bool isRunning;
 #ifdef XNA5
-    private:
+    public:
         [[nodiscard]] double getTargetFPSProperty() const;
         [[nodiscard]] double getTargetMsFrameTimeProperty() const;
         static double fpsToMillisecondsPerFrame(CNA::intcs framesPerSecond);

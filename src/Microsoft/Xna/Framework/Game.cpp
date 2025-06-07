@@ -9,10 +9,10 @@ namespace Microsoft::Xna::Framework {
     Graphics::GraphicsDevice& Game::getGraphicsDeviceProperty() { return GraphicsDevice_ ; }
     idata(bool, IsMouseVisible, Game)
     System::TimeSpan* Game::getTargetElapsedTimeProperty() const { return TargetElapsedTime_; }
-    void Game::setTargetElapsedTimeProperty(System::TimeSpan& v) { *TargetElapsedTime_ = v; }
+    void Game::setTargetElapsedTimeProperty(System::TimeSpan* v) { TargetElapsedTime_ = v; }
     idata(System::TimeSpan, InactiveSleepTime, Game)
 
-    Game::Game() : IsMouseVisible_(false), TargetElapsedTime_(new TimeSpan(166667L)),
+    Game::Game() : IsMouseVisible_(false), TargetElapsedTime_(new TimeSpan(500000L)),
                    InactiveSleepTime_(TimeSpan(0)),
                    isRunning(true) {
     }
@@ -42,8 +42,10 @@ namespace Microsoft::Xna::Framework {
         double wantedMsFrameTime = getTargetMsFrameTimeProperty();
 
         GameTime gameTime {};
-        auto elapsedGameTimeTimeSpan = TimeSpan::FromMilliseconds(wantedMsFrameTime);
-        gameTime.setElapsedGameTimeProperty(&elapsedGameTimeTimeSpan);
+
+        auto elapsedGameTimeTimeSpan = TimeSpan::FromMilliseconds(wantedMsFrameTime);;
+
+        gameTime.setElapsedGameTimeProperty(elapsedGameTimeTimeSpan);
 
         while (isRunning) {
             Uint64 frameStart = SDL_GetTicks();
@@ -69,7 +71,7 @@ namespace Microsoft::Xna::Framework {
                 SDL_Delay(wantedMsFrameTime - currentMsFrameTime);
             }
             TimeSpan newElapsedGameTime = System::TimeSpan::FromMilliseconds(currentMsFrameTime);
-            gameTime.setElapsedGameTimeProperty(&newElapsedGameTime);
+            gameTime.setElapsedGameTimeProperty(newElapsedGameTime);
             gameTime.setIsRunningSlowlyProperty(runningSlowly);
             wantedMsFrameTime = getTargetMsFrameTimeProperty();
 
