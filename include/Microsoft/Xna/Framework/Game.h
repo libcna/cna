@@ -17,7 +17,7 @@ namespace Microsoft::Xna::Framework {
     class Game {
     public:
         dgetter(Content::ContentManager, Content)
-        dgetter(Graphics::GraphicsDevice, GraphicsDevice)
+        private: Graphics::GraphicsDevice GraphicsDevice_; public: [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceProperty();
         ddata(bool, IsMouseVisible)
         ddata(System::TimeSpan, TargetElapsedTime)
         ddata(System::TimeSpan, InactiveSleepTime)

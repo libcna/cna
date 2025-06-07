@@ -17,7 +17,7 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     class SpriteBatch {
     public:
-        SpriteBatch(GraphicsDevice graphicsDevice);
+        SpriteBatch(GraphicsDevice& graphicsDevice);
 
         SpriteBatch();
 

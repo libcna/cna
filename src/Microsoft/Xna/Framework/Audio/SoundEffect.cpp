@@ -10,31 +10,39 @@ namespace Microsoft::Xna::Framework::Audio {
     idatastatic(float, MasterVolume, SoundEffect, 0.0f)
 
     Audio::SoundEffect::SoundEffect(const std::string &assetName) {
+#ifdef SOUND_ENABLED
         chunk = Mix_LoadWAV(assetName.c_str());
         if (!chunk) {
             throw std::runtime_error("Failed to load WAV file: " + assetName + " Error: " + SDL_GetError());
         }
+#endif
+
     }
 
     SoundEffect::~SoundEffect() {
+#ifdef SOUND_ENABLED
         if (chunk) {
             Mix_FreeChunk(chunk);
             chunk = nullptr;
         }
+#endif
     }
 
     // Copy constructor
     SoundEffect::SoundEffect(const SoundEffect& other) {
+#ifdef SOUND_ENABLED
         if (other.chunk) {
             chunk = Mix_QuickLoad_WAV(reinterpret_cast<Uint8*>(other.chunk->abuf));
             if (!chunk) {
                 throw std::runtime_error("Failed to copy SoundEffect");
             }
         }
+#endif
     }
 
     // Copy assignment operator
     SoundEffect& SoundEffect::operator=(const SoundEffect& other) {
+#ifdef SOUND_ENABLED
         if (this != &other) {
             if (chunk) Mix_FreeChunk(chunk);
             chunk = nullptr;
@@ -46,20 +54,25 @@ namespace Microsoft::Xna::Framework::Audio {
                 }
             }
         }
+#endif
         return *this;
     }
 
     // Move semantics
     SoundEffect::SoundEffect(SoundEffect&& other) noexcept : chunk(other.chunk) {
+#ifdef SOUND_ENABLED
         other.chunk = nullptr;
+#endif
     }
 
     SoundEffect& SoundEffect::operator=(SoundEffect&& other) noexcept {
+#ifdef SOUND_ENABLED
         if (this != &other) {
             if (chunk) Mix_FreeChunk(chunk);
             chunk = other.chunk;
             other.chunk = nullptr;
         }
+#endif
         return *this;
     }
 

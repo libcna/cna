@@ -7,13 +7,16 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     GraphicsDevice::GraphicsDevice()
      {
+        std::cout << "Starting GraphicsDevice()" << std::endl;
         if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-            std::cerr << "SDL2 could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
+            std::cerr << "SDL3 could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
+            throw "SDL3 could not initialize! SDL_Error: ";
         }
 
         window = SDL_CreateWindow("CNA Game", 800, 600, SDL_WINDOW_RESIZABLE);
         if (!window) {
             std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+            throw "Window could not be created! SDL_Error: ";
         }
 
         // Try creating Vulkan renderer
@@ -24,6 +27,7 @@ namespace Microsoft::Xna::Framework::Graphics {
             renderer = SDL_CreateRenderer(window, nullptr); // Use default renderer
             if (!renderer) {
                 std::cerr << "Renderer could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+                throw "Renderer could not be created! SDL_Error: ";
             }
         }
 
@@ -33,6 +37,7 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 
     GraphicsDevice::~GraphicsDevice() {
+        std::cout << "Calling ~GraphicsDevice()";
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();

@@ -8,7 +8,7 @@ namespace Microsoft::Xna::Framework {
     const double FRAME_TIME = 1.0 / TARGET_FPS;
 
     igetter(Content::ContentManager, Content, Game)
-    igetter(Graphics::GraphicsDevice, GraphicsDevice, Game)
+    Graphics::GraphicsDevice& Game::getGraphicsDeviceProperty() { return GraphicsDevice_ ; }
     idata(bool, IsMouseVisible, Game)
     idata(System::TimeSpan, TargetElapsedTime, Game)
     idata(System::TimeSpan, InactiveSleepTime, Game)
@@ -17,6 +17,7 @@ namespace Microsoft::Xna::Framework {
     }
 
     Game::~Game() {
+        std::cout << "Calling ~Game()" << std::endl;
     }
 
     void Game::Run() {
@@ -59,16 +60,17 @@ namespace Microsoft::Xna::Framework {
             Uint64 frameDelay = msPerFrame;
             std::cout << "frameTime=" << frameTime << std::endl;
             std::cout << "frameDelay=" << frameDelay << std::endl;
-            std::cout << "frameDelay - frameTime=" << (frameDelay - frameTime) << std::endl;
+            std::cout << "frameDelay - frameTime = " << (frameDelay - frameTime) << std::endl;
 
 
-            //            if (frameDelay > frameTime)
-            //            {
-            //                SDL_Delay(frameDelay - frameTime);
-            //            }
+            if (frameDelay > frameTime)
+            {
+                SDL_Delay(frameDelay - frameTime);
+            }
 
             i++;
             //std::cout<<"next frame"<<i;
+            //return;
         }
     }
 

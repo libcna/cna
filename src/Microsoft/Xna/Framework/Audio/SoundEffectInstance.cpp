@@ -30,6 +30,7 @@ namespace Microsoft::Xna::Framework::Audio {
     }
 
     void SoundEffectInstance::Play() {
+#ifdef SOUND_ENABLED
         if (playing) return;
 
         int loops = IsLooped_ ? -1 : 0;
@@ -57,9 +58,11 @@ namespace Microsoft::Xna::Framework::Audio {
 
         playing = true;
         State = SoundState::Playing;
+#endif
     }
 
     void SoundEffectInstance::Stop() {
+#ifdef SOUND_ENABLED
         if (!playing) return;
 
         if (channel != -1) {
@@ -69,6 +72,7 @@ namespace Microsoft::Xna::Framework::Audio {
 
         playing = false;
         State = SoundState::Stopped;
+#endif
     }
 
     void SoundEffectInstance::setVolumeProperty(const float& volume) {

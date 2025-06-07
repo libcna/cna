@@ -3,7 +3,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    SpriteBatch::SpriteBatch(GraphicsDevice graphicsDevice) {
+    SpriteBatch::SpriteBatch(GraphicsDevice& graphicsDevice) {
         renderer = graphicsDevice.GetRenderer();
     }
 
@@ -17,7 +17,7 @@ namespace Microsoft::Xna::Framework::Graphics {
     }
 
     void SpriteBatch::End() {
-        // Clean up after renderring
+        // Clean up after rendering
         SDL_RenderPresent(renderer);
     }
 
