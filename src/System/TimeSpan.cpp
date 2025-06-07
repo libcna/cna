@@ -11,7 +11,6 @@
 #include "System/OverflowException.h"
 
 namespace System {
-
     const TimeSpan TimeSpan::Zero = TimeSpan(0);
     const TimeSpan TimeSpan::MaxValue = TimeSpan(LONGCS_MAX);
 
@@ -31,8 +30,9 @@ namespace System {
     }
 
     longcs TimeSpan::TimeToTicks(intcs days, intcs hours, intcs minutes, intcs seconds, intcs milliseconds,
-                                intcs microseconds) {
-        long totalMicroseconds = (((longcs) days * 3600 * 24 + (longcs) hours * 3600 + (longcs) minutes * 60 + seconds) *
+                                 intcs microseconds) {
+        long totalMicroseconds = (((longcs) days * 3600 * 24 + (longcs) hours * 3600 + (longcs) minutes * 60 + seconds)
+                                  *
                                   1000 + milliseconds) * 1000 + microseconds;
         if (totalMicroseconds > MaxMicroSeconds || totalMicroseconds < MinMicroSeconds)
             throw ArgumentOutOfRangeException("Time span is too long.");
@@ -42,6 +42,7 @@ namespace System {
     TimeSpan &TimeSpan::operator=(const TimeSpan &) {
         return *this;
     }
+
     longcs TimeSpan::getTicksProperty() const {
         return ticks_internal;
     }
@@ -79,10 +80,14 @@ namespace System {
     }
 
 
-    [[nodiscard]] intcs TimeSpan::getMinutesProperty() const { return (intcs) ((ticks_internal / TicksPerMinute) % 60); }
+    [[nodiscard]] intcs TimeSpan::getMinutesProperty() const {
+        return (intcs) ((ticks_internal / TicksPerMinute) % 60);
+    }
 
 
-    [[nodiscard]] intcs TimeSpan::getSecondsProperty() const { return (intcs) ((ticks_internal / TicksPerSecond) % 60); }
+    [[nodiscard]] intcs TimeSpan::getSecondsProperty() const {
+        return (intcs) ((ticks_internal / TicksPerSecond) % 60);
+    }
 
 
     [[nodiscard]] double TimeSpan::getTotalDaysProperty() const { return ((double) ticks_internal) / TicksPerDay; }
@@ -107,7 +112,9 @@ namespace System {
     }
 
 
-    [[nodiscard]] double TimeSpan::getTotalNanosecondsProperty() const { return (double) ticks_internal * NanosecondsPerTick; }
+    [[nodiscard]] double TimeSpan::getTotalNanosecondsProperty() const {
+        return (double) ticks_internal * NanosecondsPerTick;
+    }
 
     [[nodiscard]] double TimeSpan::getTotalMinutesProperty() const { return (double) ticks_internal / TicksPerMinute; }
 
@@ -117,7 +124,7 @@ namespace System {
         if ((ts.ticks_internal > 0 && ticks_internal > std::numeric_limits<int64_t>::max() - ts.ticks_internal) ||
             (ts.ticks_internal < 0 && ticks_internal < std::numeric_limits<int64_t>::min() - ts.ticks_internal)) {
             throw OverflowException("TimeSpanTooLong");
-            }
+        }
 
         return {ticks_internal + ts.ticks_internal};
     }
@@ -143,7 +150,7 @@ namespace System {
     }
 
     bool TimeSpan::Equals(const TimeSpan &obj) const {
-        return Equals(*this,obj);
+        return Equals(*this, obj);
     }
 
     bool TimeSpan::Equals(const TimeSpan &t1, const TimeSpan &t2) {
@@ -163,18 +170,18 @@ namespace System {
             throw OverflowException("TimeSpanTooLong");
         if (ticks == Int64::MaxValue)
             return MaxValue;
-        return {(longcs)ticks};
+        return {(longcs) ticks};
     }
 
     TimeSpan TimeSpan::FromMilliseconds(double value) {
-            return Interval(value, TicksPerMillisecond);
+        return Interval(value, TicksPerMillisecond);
     }
 
     TimeSpan TimeSpan::FromMicroseconds(double value) {
         return Interval(value, TicksPerMicrosecond);
     }
 
-    TimeSpan TimeSpan::FromMinutes(double value)         {
+    TimeSpan TimeSpan::FromMinutes(double value) {
         return Interval(value, TicksPerMinute);
     }
 
@@ -203,23 +210,22 @@ namespace System {
         return TimeSpan(result);
     }
 
-    TimeSpan TimeSpan::Multiply(double factor) {return (*this) * factor;}
+    TimeSpan TimeSpan::Multiply(double factor) const { return (*this) * factor; }
 
-    TimeSpan TimeSpan::Divide(double divisor) {return (*this) / divisor;}
+    TimeSpan TimeSpan::Divide(double divisor) { return (*this) / divisor; }
 
-    double TimeSpan::Divide(const TimeSpan& ts) {return (*this) / ts;}
+    double TimeSpan::Divide(const TimeSpan &ts) const { return (*this) / ts; }
 
     TimeSpan TimeSpan::FromTicks(long value) {
         return TimeSpan(value);
     }
 
     long TimeSpan::TimeToTicks(int hour, int minute, int second) {
-        long totalSeconds = (long)hour * 3600 + (long)minute * 60 + (long)second;
+        long totalSeconds = (long) hour * 3600 + (long) minute * 60 + (long) second;
         if (totalSeconds > MaxSeconds || totalSeconds < MinSeconds)
             throw ArgumentOutOfRangeException("TimeSpanTooLong");
         return totalSeconds * TicksPerSecond;
     }
-
 
     std::string TimeSpan::ToString() const {
         constexpr longcs TicksPerMillisecond = 10000;
@@ -244,83 +250,66 @@ namespace System {
         if (negative) oss << '-';
 
         oss << hours << ":"
-            << std::setw(2) << std::setfill('0') << minutes << ":"
-            << std::setw(2) << std::setfill('0') << seconds << "."
-            << std::setw(7) << std::setfill('0') << ticks;
+                << std::setw(2) << std::setfill('0') << minutes << ":"
+                << std::setw(2) << std::setfill('0') << seconds << "."
+                << std::setw(7) << std::setfill('0') << ticks;
 
         return oss.str();
     }
 
 
+    TimeSpan TimeSpan::operator-() const {
+        if (ticks_internal == MinValue.ticks_internal)
+            throw OverflowException("Overflow_NegateTwosCompNum");
+        return TimeSpan(-ticks_internal);
+    }
+
+    TimeSpan TimeSpan::operator-(const TimeSpan &t2) { return Subtract(t2); }
+
+    TimeSpan TimeSpan::operator+() { return *this; };
+
+    TimeSpan TimeSpan::operator+(const TimeSpan &t2) { return Add(t2); }
 
 
+    TimeSpan TimeSpan::operator*(double factor) const {
+        double ticks;
+        ticks = std::round(getTicksProperty() * factor);
+        return IntervalFromDoubleTicks(ticks);
+    }
+
+    TimeSpan TimeSpan::operator/(double divisor) {
+        double ticks = std::round(getTicksProperty() / divisor);
+        return IntervalFromDoubleTicks(ticks);
+    }
+
+    // Performing division using floating-point arithmetic allows the result to be infinity,
+    // which makes sense when dividing a non-zero TimeSpan by TimeSpan.Zero.
+    // For example, TimeSpan.FromHours(1) / TimeSpan.Zero asks how many zero-length intervals fit into one hour,
+    // and mathematically, the answer is infinity.
+    // Dividing TimeSpan.Zero by TimeSpan.Zero returns NaN, which may be less practical,
+    // but it is no less valid than throwing an exception.
 
 
+    double TimeSpan::operator/(const TimeSpan &t2) const { return getTicksProperty() / (double) t2.getTicksProperty(); }
 
 
+    bool TimeSpan::operator==(const TimeSpan &t2) const { return ticks_internal == t2.ticks_internal; }
 
 
+    bool TimeSpan::operator!=(const TimeSpan &t2) const { return ticks_internal != t2.ticks_internal; }
 
 
-
-         TimeSpan TimeSpan::operator-() const
-        {
-            if (ticks_internal == MinValue.ticks_internal)
-                throw OverflowException("Overflow_NegateTwosCompNum");
-            return TimeSpan(-ticks_internal);
-        }
-
-         TimeSpan TimeSpan::operator-(const TimeSpan& t2) {return Subtract(t2);}
-
-         TimeSpan TimeSpan::operator+() {return *this;};
-
-         TimeSpan TimeSpan::operator+(const TimeSpan& t2) {return Add(t2);}
+    bool TimeSpan::operator<(const TimeSpan &t2) const { return ticks_internal < t2.ticks_internal; }
 
 
-         TimeSpan TimeSpan::operator*(double factor) const
-        {
-            double ticks;
-            ticks = std::round(getTicksProperty() * factor);
-            return IntervalFromDoubleTicks(ticks);
-        }
-
-         TimeSpan TimeSpan::operator/(double divisor)
-        {
-            double ticks = std::round(getTicksProperty() / divisor);
-            return IntervalFromDoubleTicks(ticks);
-        }
-
-        // Performing division using floating-point arithmetic allows the result to be infinity,
-        // which makes sense when dividing a non-zero TimeSpan by TimeSpan.Zero.
-        // For example, TimeSpan.FromHours(1) / TimeSpan.Zero asks how many zero-length intervals fit into one hour,
-        // and mathematically, the answer is infinity.
-        // Dividing TimeSpan.Zero by TimeSpan.Zero returns NaN, which may be less practical,
-        // but it is no less valid than throwing an exception.
+    bool TimeSpan::operator<=(const TimeSpan &t2) const { return ticks_internal <= t2.ticks_internal; }
 
 
-        double TimeSpan::operator/(const TimeSpan &t2) const { return getTicksProperty() / (double) t2.getTicksProperty(); }
+    bool TimeSpan::operator>(const TimeSpan &t2) const { return ticks_internal > t2.ticks_internal; }
 
 
-        bool TimeSpan::operator==(const TimeSpan &t2) const { return ticks_internal == t2.ticks_internal; }
+    bool TimeSpan::operator>=(const TimeSpan &t2) const { return ticks_internal >= t2.ticks_internal; }
 
 
-        bool TimeSpan::operator!=(const TimeSpan &t2) const { return ticks_internal != t2.ticks_internal; }
-
-
-        bool TimeSpan::operator<(const TimeSpan &t2) const { return ticks_internal < t2.ticks_internal; }
-
-
-        bool TimeSpan::operator<=(const TimeSpan &t2) const { return ticks_internal <= t2.ticks_internal; }
-
-
-        bool TimeSpan::operator>(const TimeSpan &t2) const { return ticks_internal > t2.ticks_internal; }
-
-
-        bool TimeSpan::operator>=(const TimeSpan &t2) const { return ticks_internal >= t2.ticks_internal; }
-
-
-    TimeSpan operator*(double factor, const TimeSpan& timeSpan) {return timeSpan * factor;}
-
-
-
+    TimeSpan operator*(double factor, const TimeSpan &timeSpan) { return timeSpan * factor; }
 }

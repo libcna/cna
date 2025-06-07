@@ -41,6 +41,12 @@ namespace System {
          */
         static constexpr longcs NanosecondsPerTick = 100;
 
+#ifdef XNA5
+        /**
+         * @brief Defines the number of ticks in 1 nanosecond.
+         */
+        static constexpr double TicksPerNanosecond = 0.01f;
+#endif
         /**
          * @brief Defines the number of ticks in 1 microsecond.
          */
@@ -119,11 +125,12 @@ namespace System {
         TimeSpan(intcs days, intcs hours, intcs minutes, intcs seconds, intcs milliseconds = 0,
                  intcs microseconds = 0);
 
-    public: TimeSpan &operator=(const TimeSpan &);
+    public:
+        TimeSpan &operator=(const TimeSpan &);
 
     private:
         static longcs TimeToTicks(intcs days, intcs hours, intcs minutes, intcs seconds, intcs milliseconds,
-                                 intcs microseconds);
+                                  intcs microseconds);
 
     public:
         [[nodiscard]] longcs getTicksProperty() const;
@@ -231,7 +238,8 @@ namespace System {
          * limits supported by the `TimeSpan`. If an overflow occurs during the addition,
          * an `OverflowException` is thrown.
          */
-    public: TimeSpan Add(const TimeSpan& ts) const;
+    public:
+        [[nodiscard]] TimeSpan Add(const TimeSpan &ts) const;
 
         /**
          * @brief Compares two TimeSpan instances to determine their relative values.
@@ -246,11 +254,14 @@ namespace System {
          *         - Returns -1 if t1 is less than t2.
          *         - Returns 0 if t1 is equal to t2.
          */
-    public: static intcs Compare(const TimeSpan &t1, const TimeSpan &t2);
+    public:
+        static intcs Compare(const TimeSpan &t1, const TimeSpan &t2);
 
-    public: [[nodiscard]] intcs CompareTo(const TimeSpan& value) const override;
+    public:
+        [[nodiscard]] intcs CompareTo(const TimeSpan &value) const override;
 
-    public: static TimeSpan FromDays(double value);
+    public:
+        static TimeSpan FromDays(double value);
 
         /**
          * @brief Retrieves the absolute duration of the current TimeSpan instance.
@@ -264,7 +275,8 @@ namespace System {
          * @throws OverflowException If the TimeSpan is set to its minimum value,
          * which cannot be represented as a positive value due to overflow.
          */
-    public: [[nodiscard]] TimeSpan Duration() const;
+    public:
+        [[nodiscard]] TimeSpan Duration() const;
 
         /**
          * @brief Determines whether the current TimeSpan instance is equal to another specified TimeSpan instance.
@@ -275,15 +287,20 @@ namespace System {
          * @param obj The TimeSpan instance to compare with the current instance.
          * @return True if the specified TimeSpan instance has the same tick count as the current instance; otherwise, false.
          */
-    public: [[nodiscard]] bool Equals(const TimeSpan &obj) const override;
-    public: static bool Equals(const TimeSpan& t1, const TimeSpan& t2);
-    public: static TimeSpan FromHours(double value);
+    public:
+        [[nodiscard]] bool Equals(const TimeSpan &obj) const override;
 
+    public:
+        static bool Equals(const TimeSpan &t1, const TimeSpan &t2);
 
+    public:
+        static TimeSpan FromHours(double value);
 
+    private:
+        static TimeSpan Interval(double value, double scale);
 
-    private: static TimeSpan Interval(double value, double scale);
-    private: static TimeSpan IntervalFromDoubleTicks(double ticks);
+    private:
+        static TimeSpan IntervalFromDoubleTicks(double ticks);
 
         /**
          * @brief Creates a TimeSpan object representing a specific number of milliseconds.
@@ -296,58 +313,57 @@ namespace System {
          * @details If the `value` is fractional, the fractional part is converted into ticks, as TimeSpan uses ticks
          * for internal representation. A single tick equals 100 nanoseconds, which provides precision in the conversion.
          */
-    public: static TimeSpan FromMilliseconds(double value);
+    public:
+        static TimeSpan FromMilliseconds(double value);
 
-        public: static TimeSpan FromMicroseconds(double value);
+    public:
+        static TimeSpan FromMicroseconds(double value);
 
+    public:
+        static TimeSpan FromMinutes(double value);
 
-        public: static TimeSpan FromMinutes(double value);
+    public:
+        [[nodiscard]] TimeSpan Negate() const;
 
+    public:
+        static TimeSpan FromSeconds(double value);
 
-        public: [[nodiscard]] TimeSpan Negate() const;
+    public:
+        [[nodiscard]] TimeSpan Subtract(const TimeSpan &ts) const;
 
-        public: static TimeSpan FromSeconds(double value);
-        public: [[nodiscard]] TimeSpan Subtract(const TimeSpan& ts) const;
+    public:
+        TimeSpan Multiply(double factor) const;
 
-        public: TimeSpan Multiply(double factor);
+    public:
+        TimeSpan Divide(double divisor);
 
-        public: TimeSpan Divide(double divisor);
+    public:
+        [[nodiscard]] double Divide(const TimeSpan &ts) const;
 
-        public: double Divide(const TimeSpan& ts);
-
-        public: static TimeSpan FromTicks(long value);
+    public:
+        static TimeSpan FromTicks(long value);
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private: static long TimeToTicks(int hour, int minute, int second);
+    private:
+        static long TimeToTicks(int hour, int minute, int second);
 
+    public:
+        [[nodiscard]] std::string ToString() const;
 
-        public: [[nodiscard]] std::string ToString() const;
+    public:
+        TimeSpan operator-() const;\
 
+    public:
+        TimeSpan operator-(const TimeSpan &t2);
 
+    public:
+        TimeSpan operator+();
 
+    public:
+        TimeSpan operator+(const TimeSpan &t2);
 
-
-
-
-
-
-
-
-
-
-
-
-        public: TimeSpan operator-() const;
-\
-
-        public: TimeSpan operator-(const TimeSpan& t2) ;
-
-        public: TimeSpan operator+() ;
-
-        public: TimeSpan operator+(const TimeSpan& t2) ;
-
-
-        public: TimeSpan operator*(double factor) const;
+    public:
+        TimeSpan operator*(double factor) const;
 
         TimeSpan operator/(double divisor);
 
@@ -359,34 +375,29 @@ namespace System {
         // but it is no less valid than throwing an exception.
 
     public:
-        double operator/(const TimeSpan &t2) const ;
+        double operator/(const TimeSpan &t2) const;
 
     public:
-        bool operator==(const TimeSpan &t2) const ;
+        bool operator==(const TimeSpan &t2) const;
 
     public:
-        bool operator!=(const TimeSpan &t2) const ;
+        bool operator!=(const TimeSpan &t2) const;
 
     public:
         bool operator<(const TimeSpan &t2) const;
 
     public:
-        bool operator<=(const TimeSpan &t2) const ;
+        bool operator<=(const TimeSpan &t2) const;
 
     public:
-        bool operator>(const TimeSpan &t2) const ;
+        bool operator>(const TimeSpan &t2) const;
 
     public:
-        bool operator>=(const TimeSpan &t2) const ;
-
-
-
-
-
+        bool operator>=(const TimeSpan &t2) const;
     };
 
 
-    TimeSpan operator*(double factor, const TimeSpan& timeSpan);
+    TimeSpan operator*(double factor, const TimeSpan &timeSpan);
 } // System
 
 #endif //TIMESPAN_H
