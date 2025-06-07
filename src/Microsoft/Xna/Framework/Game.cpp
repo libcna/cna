@@ -72,6 +72,8 @@ namespace Microsoft::Xna::Framework {
             //std::cout<<"next frame"<<i;
             //return;
         }
+        ExitingEventArgs exiting_event_args;
+        Exiting.RaiseCurrentValueChanged(exiting_event_args);
     }
 
     void Game::Initialize() {

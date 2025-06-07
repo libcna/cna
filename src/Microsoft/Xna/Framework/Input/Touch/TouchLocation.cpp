@@ -8,6 +8,6 @@ namespace Microsoft::Xna::Framework::Input::Touch {
     igetter(TouchLocationState, State, TouchLocation)
     igetter(Vector2, Position, TouchLocation)
 
-    TouchLocation::TouchLocation() {
+    TouchLocation::TouchLocation(): State_(Invalid), Position_(0, 0) {
     }
 }

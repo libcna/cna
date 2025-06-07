@@ -5,5 +5,8 @@
 #include "Microsoft/Devices/Sensors/SensorBase.h"
 
 namespace Microsoft::Devices::Sensors {
-
+    template<typename TSensorReading>
+    void SensorBase<TSensorReading>::Dispose(bool disposing) {
+    }
+;
 }

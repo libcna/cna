@@ -6,4 +6,6 @@
 
 namespace Microsoft::Xna::Framework::Input {
     igetter(ButtonState, Back, GamePadButtons)
+    GamePadButtons::GamePadButtons(): Back_(Released) {
+    }
 }

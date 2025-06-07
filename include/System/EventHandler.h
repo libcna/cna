@@ -21,15 +21,12 @@ namespace System {
             return *this;
         }
 
-
-
-    //     //todo : remove method RaiseCurrentValueChanged
-    // protected:
-    //     void RaiseCurrentValueChanged(const T& value) {
-    //         for (auto& handler : currentValueChangedHandlers) {
-    //             handler(value);
-    //         }
-    //     }
+    public:
+        void RaiseCurrentValueChanged(const T& value) {
+            for (auto& handler : currentValueChangedHandlers) {
+                handler(value);
+            }
+        }
     };
 
 

@@ -15,8 +15,7 @@ namespace Microsoft::Xna::Framework::Input {
     private:
         dgetter(ButtonState, Back)
 
-        GamePadButtons(): Back_(Released) {
-        }
+        GamePadButtons();
     };
 }
 

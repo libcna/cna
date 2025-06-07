@@ -7,6 +7,6 @@
 namespace Microsoft::Xna::Framework::Input::Touch {
     igetter(bool, IsConnected, TouchPanelCapabilities)
 
-    TouchPanelCapabilities::TouchPanelCapabilities() {
+    TouchPanelCapabilities::TouchPanelCapabilities(): IsConnected_(false) {
     }
 }

@@ -15,17 +15,11 @@
 namespace Microsoft::Devices::Sensors {
     template<typename TSensorReading>
     class SensorBase: public System::IDisposable {
-
     public:
         System::EventHandler<SensorReadingEventArgs<TSensorReading>> CurrentValueChanged;
 
-    void Dispose(bool disposing) {
-        }
+        void Dispose(bool disposing);
     };
-
-
-
-
 }
 
 
