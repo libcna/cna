@@ -21,14 +21,18 @@ namespace System {
             return *this;
         }
 
-        //todo : remove method RaiseCurrentValueChanged
-    protected:
-        void RaiseCurrentValueChanged(const T& value) {
-            for (auto& handler : currentValueChangedHandlers) {
-                handler(value);
-            }
-        }
+
+
+    //     //todo : remove method RaiseCurrentValueChanged
+    // protected:
+    //     void RaiseCurrentValueChanged(const T& value) {
+    //         for (auto& handler : currentValueChangedHandlers) {
+    //             handler(value);
+    //         }
+    //     }
     };
+
+
 } // System
 
 #endif //EVENTHANDLER_H

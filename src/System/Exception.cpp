@@ -7,7 +7,11 @@
 #include <iostream>
 
 namespace System {
-    Exception::Exception(const char * str) {
-        std::cerr << str;
+    Exception::Exception(const char * msg) : message(msg) {
+        std::cerr << msg;
+    }
+
+    const char * Exception::what() const noexcept {
+        return message.c_str();
     }
 } // System

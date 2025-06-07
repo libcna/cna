@@ -9,26 +9,26 @@
 namespace System {
 
     const TimeSpan TimeSpan::Zero = TimeSpan(0);
-    const TimeSpan TimeSpan::MaxValue = TimeSpan(int64_max);
+    const TimeSpan TimeSpan::MaxValue = TimeSpan(CSLONG_MAX);
 
-    const TimeSpan TimeSpan::MinValue = TimeSpan(int64_min);
+    const TimeSpan TimeSpan::MinValue = TimeSpan(CSLONG_MIN);
 
 
-    TimeSpan::TimeSpan(int64 ticks): ticks_internal(ticks) {
+    TimeSpan::TimeSpan(cslong ticks): ticks_internal(ticks) {
     }
 
-    TimeSpan::TimeSpan(int32 hours, int32 minutes, int32 seconds): ticks_internal(
+    TimeSpan::TimeSpan(csint hours, csint minutes, csint seconds): ticks_internal(
         TimeToTicks(hours, minutes, seconds)) {
     }
 
-    TimeSpan::TimeSpan(int32 days, int32 hours, int32 minutes, int32 seconds, int32 milliseconds,
-                       int32 microseconds): ticks_internal(
+    TimeSpan::TimeSpan(csint days, csint hours, csint minutes, csint seconds, csint milliseconds,
+                       csint microseconds): ticks_internal(
         TimeToTicks(days, hours, minutes, seconds, milliseconds, microseconds) * TicksPerMicrosecond) {
     }
 
-    int64 TimeSpan::TimeToTicks(int32 days, int32 hours, int32 minutes, int32 seconds, int32 milliseconds,
-                                int32 microseconds) {
-        long totalMicroseconds = (((int64) days * 3600 * 24 + (int64) hours * 3600 + (int64) minutes * 60 + seconds) *
+    cslong TimeSpan::TimeToTicks(csint days, csint hours, csint minutes, csint seconds, csint milliseconds,
+                                csint microseconds) {
+        long totalMicroseconds = (((cslong) days * 3600 * 24 + (cslong) hours * 3600 + (cslong) minutes * 60 + seconds) *
                                   1000 + milliseconds) * 1000 + microseconds;
         if (totalMicroseconds > MaxMicroSeconds || totalMicroseconds < MinMicroSeconds)
             throw ArgumentOutOfRangeException("Time span is too long.");
@@ -38,24 +38,24 @@ namespace System {
     TimeSpan &TimeSpan::operator=(const TimeSpan &) {
         return *this;
     }
-    int64 TimeSpan::getTicks() const {
+    cslong TimeSpan::getTicks() const {
         return ticks_internal;
     }
 
 
-    [[nodiscard]] int TimeSpan::getDays() const { return (int32) (ticks_internal / TicksPerDay); }
+    [[nodiscard]] int TimeSpan::getDays() const { return (csint) (ticks_internal / TicksPerDay); }
 
 
-    [[nodiscard]] int TimeSpan::getHours() const { return (int32) ((ticks_internal / TicksPerHour) % 24); }
+    [[nodiscard]] int TimeSpan::getHours() const { return (csint) ((ticks_internal / TicksPerHour) % 24); }
 
 
-    [[nodiscard]] int32 TimeSpan::getMilliseconds() const {
-        return (int32) ((ticks_internal / TicksPerMillisecond) % 1000);
+    [[nodiscard]] csint TimeSpan::getMilliseconds() const {
+        return (csint) ((ticks_internal / TicksPerMillisecond) % 1000);
     }
 
 
-    [[nodiscard]] int32 TimeSpan::getMicroseconds() const {
-        return (int32) ((ticks_internal / TicksPerMicrosecond) % 1000);
+    [[nodiscard]] csint TimeSpan::getMicroseconds() const {
+        return (csint) ((ticks_internal / TicksPerMicrosecond) % 1000);
     }
 
     /**
@@ -70,15 +70,15 @@ namespace System {
      */
 
 
-    [[nodiscard]] int32 TimeSpan::getNanoseconds() const {
-        return (int32) ((ticks_internal % TicksPerMicrosecond) * 100);
+    [[nodiscard]] csint TimeSpan::getNanoseconds() const {
+        return (csint) ((ticks_internal % TicksPerMicrosecond) * 100);
     }
 
 
-    [[nodiscard]] int32 TimeSpan::getMinutes() const { return (int32) ((ticks_internal / TicksPerMinute) % 60); }
+    [[nodiscard]] csint TimeSpan::getMinutes() const { return (csint) ((ticks_internal / TicksPerMinute) % 60); }
 
 
-    [[nodiscard]] int32 TimeSpan::getSeconds() const { return (int32) ((ticks_internal / TicksPerSecond) % 60); }
+    [[nodiscard]] csint TimeSpan::getSeconds() const { return (csint) ((ticks_internal / TicksPerSecond) % 60); }
 
 
     [[nodiscard]] double TimeSpan::getTotalDays() const { return ((double) ticks_internal) / TicksPerDay; }

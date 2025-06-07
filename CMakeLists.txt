@@ -11,8 +11,31 @@ find_package(SDL3_mixer REQUIRED)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 add_library(CNA STATIC ${SOURCES}
-        src/Microsoft/Xna/Framework/Graphics/Viewport.cpp
 )
 
 target_include_directories(CNA PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(CNA PRIVATE SDL3::SDL3 SDL3_image SDL3_mixer::SDL3_mixer)
+
+
+
+###
+add_subdirectory(vendor/googletest)
+
+enable_testing()
+
+file(GLOB_RECURSE TESTS "tests/*.cpp")
+add_executable(Tests ${TESTS})
+
+##target_include_directories(Tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+#target_include_directories(Tests PRIVATE
+#        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/googletest/googletest/include
+#        #${CMAKE_CURRENT_SOURCE_DIR}/include
+#)
+
+target_link_libraries(Tests PRIVATE CNA gtest_main)
+
+target_include_directories(Tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/googletest/googletest/include)
+
+include(GoogleTest)
+gtest_discover_tests(Tests)
+

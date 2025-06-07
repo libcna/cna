@@ -5,21 +5,21 @@
 #define CNAHELPER_H
 
 
-#define int32_max std::numeric_limits<int32>::max()
-#define int32_min std::numeric_limits<int32>::min()
-#define int64_max std::numeric_limits<int64>::max()
-#define int64_min std::numeric_limits<int64>::min()
+#define CSINT_MAX std::numeric_limits<csint>::max()
+#define CSINT_MIN std::numeric_limits<csint>::min()
+#define CSLONG_MAX std::numeric_limits<cslong>::max()
+#define CSLONG_MIN std::numeric_limits<cslong>::min()
 #include <cstdint>
 
 namespace CNA {
     /**
-     * int32 is 632 bits long, as C# long.
+     * csint is 32 bits long, as C# int.
      */
-    typedef int32_t int32;
+    typedef int32_t csint;
     /**
-     * int64 is 64 bits long, as C# long.
+     * cslong is 64 bits long, as C# long.
      */
-    typedef int64_t int64;
+    typedef int64_t cslong;
     typedef unsigned char byte;
 // class Helper {
 //

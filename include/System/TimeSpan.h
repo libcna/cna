@@ -10,8 +10,8 @@
 #include "CNA/CnaHelper.h"
 
 namespace System {
-    using CNA::int32;
-    using CNA::int64;
+    using CNA::csint;
+    using CNA::cslong;
     /**
      * @class TimeSpan
      * @brief Represents a duration of time, which can be either positive or negative.
@@ -34,45 +34,45 @@ namespace System {
         /**
          * @brief Defines the number of nanoseconds in 1 tick.
          */
-        static constexpr int64 NanosecondsPerTick = 100;
+        static constexpr cslong NanosecondsPerTick = 100;
 
         /**
          * @brief Defines the number of ticks in 1 microsecond.
          */
-        static constexpr int64 TicksPerMicrosecond = 10;
+        static constexpr cslong TicksPerMicrosecond = 10;
 
         /**
          * @brief Defines the number of ticks in 1 millisecond.
          */
-        static constexpr int64 TicksPerMillisecond = TicksPerMicrosecond * 1000; // 10,000
+        static constexpr cslong TicksPerMillisecond = TicksPerMicrosecond * 1000; // 10,000
         /**
          * @brief Defines the number of ticks in 1 second.
          */
-        static constexpr int64 TicksPerSecond = TicksPerMillisecond * 1000; // 10,000,000
+        static constexpr cslong TicksPerSecond = TicksPerMillisecond * 1000; // 10,000,000
         /**
          * @brief Defines the number of ticks in 1 minute.
          */
-        static constexpr int64 TicksPerMinute = TicksPerSecond * 60; // 600,000,000
+        static constexpr cslong TicksPerMinute = TicksPerSecond * 60; // 600,000,000
         /**
          * @brief Defines the number of ticks in 1 hour.
          */
-        static constexpr int64 TicksPerHour = TicksPerMinute * 60; // 36,000,000,000
+        static constexpr cslong TicksPerHour = TicksPerMinute * 60; // 36,000,000,000
         /**
          * @brief Defines the number of ticks in 1 day.
          */
-        static constexpr int64 TicksPerDay = TicksPerHour * 24; // 864,000,000,000
+        static constexpr cslong TicksPerDay = TicksPerHour * 24; // 864,000,000,000
 
     private:
-        static constexpr int64 MaxSeconds = int64_max / TicksPerSecond;
-        static constexpr int64 MinSeconds = int64_min / TicksPerSecond;
+        static constexpr cslong MaxSeconds = CSLONG_MAX / TicksPerSecond;
+        static constexpr cslong MinSeconds = CSLONG_MIN / TicksPerSecond;
 
-        static constexpr int64 MaxMilliSeconds = int64_max / TicksPerMillisecond;
-        static constexpr int64 MinMilliSeconds = int64_min / TicksPerMillisecond;
+        static constexpr cslong MaxMilliSeconds = CSLONG_MAX / TicksPerMillisecond;
+        static constexpr cslong MinMilliSeconds = CSLONG_MIN / TicksPerMillisecond;
 
-        static constexpr int64 MaxMicroSeconds = int64_max / TicksPerMicrosecond;
-        static constexpr int64 MinMicroSeconds = int64_min / TicksPerMicrosecond;
+        static constexpr cslong MaxMicroSeconds = CSLONG_MAX / TicksPerMicrosecond;
+        static constexpr cslong MinMicroSeconds = CSLONG_MIN / TicksPerMicrosecond;
 
-        static constexpr int64 TicksPerTenthSecond = TicksPerMillisecond * 100;
+        static constexpr cslong TicksPerTenthSecond = TicksPerMillisecond * 100;
 
     public:
         static const TimeSpan Zero;
@@ -84,13 +84,13 @@ namespace System {
         static const TimeSpan MinValue;
 
     private:
-        const int64 ticks_internal;
+        const cslong ticks_internal;
 
     public:
-        TimeSpan(int64 ticks);
+        TimeSpan(cslong ticks);
 
     public:
-        TimeSpan(int32 hours, int32 minutes, int32 seconds);
+        TimeSpan(csint hours, csint minutes, csint seconds);
 
         /**
          * @brief Constructs a TimeSpan object using specified time components.
@@ -111,17 +111,17 @@ namespace System {
          * The acceptable range is between TimeSpan at least MinValue and at most MaxValue.
          */
     public:
-        TimeSpan(int32 days, int32 hours, int32 minutes, int32 seconds, int32 milliseconds = 0,
-                 int32 microseconds = 0);
+        TimeSpan(csint days, csint hours, csint minutes, csint seconds, csint milliseconds = 0,
+                 csint microseconds = 0);
 
     public: TimeSpan &operator=(const TimeSpan &);
 
     private:
-        static int64 TimeToTicks(int32 days, int32 hours, int32 minutes, int32 seconds, int32 milliseconds,
-                                 int32 microseconds);
+        static cslong TimeToTicks(csint days, csint hours, csint minutes, csint seconds, csint milliseconds,
+                                 csint microseconds);
 
     public:
-        [[nodiscard]] int64 getTicks() const;
+        [[nodiscard]] cslong getTicks() const;
 
     public:
         [[nodiscard]] int getDays() const;
@@ -130,7 +130,7 @@ namespace System {
         [[nodiscard]] int getHours() const;
 
     public:
-        [[nodiscard]] int32 getMilliseconds() const;
+        [[nodiscard]] csint getMilliseconds() const;
 
         /**
          * @brief Retrieves the microseconds portion of the time span.
@@ -144,7 +144,7 @@ namespace System {
          */
 
     public:
-        [[nodiscard]] int32 getMicroseconds() const;
+        [[nodiscard]] csint getMicroseconds() const;
 
         /**
          * @brief Retrieves the nanosecond portion of the time span.
@@ -158,13 +158,13 @@ namespace System {
          */
 
     public:
-        [[nodiscard]] int32 getNanoseconds() const;
+        [[nodiscard]] csint getNanoseconds() const;
 
     public:
-        [[nodiscard]] int32 getMinutes() const;
+        [[nodiscard]] csint getMinutes() const;
 
     public:
-        [[nodiscard]] int32 getSeconds() const;
+        [[nodiscard]] csint getSeconds() const;
 
     public:
         [[nodiscard]] double getTotalDays() const;

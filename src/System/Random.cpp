@@ -5,9 +5,19 @@
 #include "System/Random.h"
 
 namespace System {
-    int Random::Next(int i) {return 0;}
+    Random::Random() : generator(std::random_device{}()) {
+    }
 
-    int Random::Next(int i, int i1) {return 0;}
+    csint Random::Next(const csint& maxValue) {
+        return Next(0, maxValue);
+    }
 
-    int Random::Next() {return 0;}
+    csint Random::Next(const csint& minValue, const csint& maxValue) {
+        std::uniform_int_distribution<int> distribution(minValue, maxValue - 1);
+        return distribution(generator);
+    }
+
+    csint Random::Next() {
+        return Next(0, CSINT_MAX);
+    }
 } // System
