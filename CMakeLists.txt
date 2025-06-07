@@ -19,8 +19,6 @@ add_library(CNA STATIC ${SOURCES}
 target_include_directories(CNA PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(CNA PRIVATE SDL3::SDL3 SDL3_image SDL3_mixer::SDL3_mixer)
 
-
-
 ###
 add_subdirectory(vendor/googletest)
 
