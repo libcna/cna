@@ -19,7 +19,15 @@ namespace Microsoft::Xna::Framework {
         dgetter(Content::ContentManager, Content)
         private: Graphics::GraphicsDevice GraphicsDevice_; public: [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceProperty();
         ddata(bool, IsMouseVisible)
-        ddata(System::TimeSpan, TargetElapsedTime)
+        //Default FPS is 60
+    private:
+        System::TimeSpan* TargetElapsedTime_;
+
+    public:
+        [[nodiscard]] System::TimeSpan* getTargetElapsedTimeProperty() const;
+
+    public:
+        void setTargetElapsedTimeProperty(System::TimeSpan& v);
         ddata(System::TimeSpan, InactiveSleepTime)
 
         System::EventHandler<ExitingEventArgs> Exiting;
@@ -37,14 +45,17 @@ namespace Microsoft::Xna::Framework {
         virtual void OnDeactivated(std::any sender, System::Runtime::CompilerServices::EventArgs args);
         virtual void OnActivated(std::any sender, System::Runtime::CompilerServices::EventArgs args);
 
-
-        virtual void Update(const Microsoft::Xna::Framework::GameTime &gameTime);
+        virtual void Update(Microsoft::Xna::Framework::GameTime &gameTime);
         virtual void Draw(const Microsoft::Xna::Framework::GameTime &gameTime);
-
-        Graphics::SpriteBatch* spriteBatch;
 
     private:
         bool isRunning;
+#ifdef XNA5
+    private:
+        [[nodiscard]] double getTargetFPSProperty() const;
+        [[nodiscard]] double getTargetMsFrameTimeProperty() const;
+        static double fpsToMillisecondsPerFrame(CNA::intcs framesPerSecond);
+#endif
     };
 }
 

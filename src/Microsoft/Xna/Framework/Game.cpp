@@ -4,20 +4,22 @@
 #include <iostream>
 
 namespace Microsoft::Xna::Framework {
-    const int TARGET_FPS = 20;
-    const double FRAME_TIME = 1.0 / TARGET_FPS;
 
     igetter(Content::ContentManager, Content, Game)
     Graphics::GraphicsDevice& Game::getGraphicsDeviceProperty() { return GraphicsDevice_ ; }
     idata(bool, IsMouseVisible, Game)
-    idata(System::TimeSpan, TargetElapsedTime, Game)
+    System::TimeSpan* Game::getTargetElapsedTimeProperty() const { return TargetElapsedTime_; }
+    void Game::setTargetElapsedTimeProperty(System::TimeSpan& v) { *TargetElapsedTime_ = v; }
     idata(System::TimeSpan, InactiveSleepTime, Game)
 
-    Game::Game() : TargetElapsedTime_(TimeSpan(0)), InactiveSleepTime_(TimeSpan(0)), isRunning(true) {
+    Game::Game() : IsMouseVisible_(false), TargetElapsedTime_(new TimeSpan(166667L)),
+                   InactiveSleepTime_(TimeSpan(0)),
+                   isRunning(true) {
     }
 
     Game::~Game() {
         std::cout << "Calling ~Game()" << std::endl;
+        delete TargetElapsedTime_;
     }
 
     void Game::Run() {
@@ -34,14 +36,14 @@ namespace Microsoft::Xna::Framework {
                 SDL_VERSIONNUM_MINOR(linked),
                 SDL_VERSIONNUM_MICRO(linked));
 
-
         Initialize();
         int i = 0;
 
+        double wantedMsFrameTime = getTargetMsFrameTimeProperty();
 
-        GameTime gameTime;
-        gameTime.setElapsedGameTimeProperty(System::TimeSpan::FromMilliseconds(50));
-        double msPerFrame = 1000 / TARGET_FPS;
+        GameTime gameTime {};
+        auto elapsedGameTimeTimeSpan = TimeSpan::FromMilliseconds(wantedMsFrameTime);
+        gameTime.setElapsedGameTimeProperty(&elapsedGameTimeTimeSpan);
 
         while (isRunning) {
             Uint64 frameStart = SDL_GetTicks();
@@ -56,17 +58,20 @@ namespace Microsoft::Xna::Framework {
             Update(gameTime);
             Draw(gameTime);
 
-            Uint64 frameTime = SDL_GetTicks() - frameStart;
-            Uint64 frameDelay = msPerFrame;
-            std::cout << "frameTime=" << frameTime << std::endl;
-            std::cout << "frameDelay=" << frameDelay << std::endl;
-            std::cout << "frameDelay - frameTime = " << (frameDelay - frameTime) << std::endl;
+            Uint64 currentMsFrameTime = SDL_GetTicks() - frameStart;
+            std::cout << "currentMsFrameTime=" << currentMsFrameTime << std::endl;
+            std::cout << "wantedMsFrameTime=" << wantedMsFrameTime << std::endl;
+            std::cout << "wantedMsFrameTime - currentMsFrameTime = " << (wantedMsFrameTime - currentMsFrameTime) << std::endl;
 
-
-            if (frameDelay > frameTime)
+            bool runningSlowly = wantedMsFrameTime < currentMsFrameTime;
+            if (!runningSlowly)
             {
-                SDL_Delay(frameDelay - frameTime);
+                SDL_Delay(wantedMsFrameTime - currentMsFrameTime);
             }
+            TimeSpan newElapsedGameTime = System::TimeSpan::FromMilliseconds(currentMsFrameTime);
+            gameTime.setElapsedGameTimeProperty(&newElapsedGameTime);
+            gameTime.setIsRunningSlowlyProperty(runningSlowly);
+            wantedMsFrameTime = getTargetMsFrameTimeProperty();
 
             i++;
             //std::cout<<"next frame"<<i;
@@ -94,10 +99,24 @@ namespace Microsoft::Xna::Framework {
     void Game::OnActivated(std::any sender, System::Runtime::CompilerServices::EventArgs args) {
     }
 
-    void Game::Update(const Microsoft::Xna::Framework::GameTime &gameTime) {
+    void Game::Update(Microsoft::Xna::Framework::GameTime &gameTime) {
         // Main game logic
     }
 
     void Game::Draw(const Microsoft::Xna::Framework::GameTime &gameTime) {
     }
+
+#ifdef XNA5
+    double Game::getTargetFPSProperty() const {
+        return getTargetMsFrameTimeProperty() / 1.0;
+    }
+
+    double Game::getTargetMsFrameTimeProperty() const {
+        return getTargetElapsedTimeProperty()->getTotalMillisecondsProperty();
+    }
+
+    double Game::fpsToMillisecondsPerFrame(const CNA::intcs framesPerSecond) {
+        return 1.0f/double(framesPerSecond);
+    }
+#endif
 }

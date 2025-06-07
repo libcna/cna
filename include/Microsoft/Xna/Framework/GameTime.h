@@ -10,15 +10,25 @@
 
 namespace Microsoft::Xna::Framework {
     using System::TimeSpan;
-class GameTime {
-public:
-    ddata(TimeSpan, TotalGameTime)
-    ddata(TimeSpan, ElapsedGameTime)
-    GameTime();
-};
 
+    class GameTime {
+    public:
+        ddata(TimeSpan, TotalGameTime)
+
+    private:
+        TimeSpan* ElapsedGameTime_;
+
+    public:
+        [[nodiscard]] TimeSpan* getElapsedGameTimeProperty();
+
+    public:
+        void setElapsedGameTimeProperty(TimeSpan* v);
+
+        ddata(bool, IsRunningSlowly);
+
+        GameTime();
+    };
 }
-
 
 
 #endif //GAMETIME_H
