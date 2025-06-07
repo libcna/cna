@@ -11,6 +11,7 @@ find_package(SDL3_mixer REQUIRED)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 add_library(CNA STATIC ${SOURCES}
+        include/System/IEquatable.h
 )
 
 target_include_directories(CNA PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

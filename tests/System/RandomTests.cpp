@@ -4,14 +4,14 @@
 #include "gtest/gtest.h"
 #include "System/Random.h"
 
-using CNA::csint;
+using CNA::intcs;
 TEST(RandomTests, NextWithMaxValue) {
     System::Random rng;
-    const csint max = 100;
+    const intcs max = 100;
     bool maxFound = false;
     bool maxMinusOneFound = false;
     for (int i = 0; i < 10000; ++i) {
-        csint value = rng.Next(max);
+        intcs value = rng.Next(max);
         //std::cout << value << std::endl;
         ASSERT_GE(value, 0);
         ASSERT_LT(value, max);
@@ -25,14 +25,14 @@ TEST(RandomTests, NextWithMaxValue) {
 
 TEST(RandomTests, NextWithMinAndMaxValue) {
     System::Random rng;
-    const csint min = 10;
-    const csint max = 20;
+    const intcs min = 10;
+    const intcs max = 20;
     bool minFound = false;
     bool maxFound = false;
     bool maxMinusOneFound = false;
     for (int i = 0; i < 1000; ++i) {
         //std::cout << "Run " << i << std::endl;
-        csint value = rng.Next(min, max);
+        intcs value = rng.Next(min, max);
         //std::cout << value << std::endl;
         ASSERT_GE(value, min);
         ASSERT_LT(value, max);
@@ -48,8 +48,8 @@ TEST(RandomTests, NextWithMinAndMaxValue) {
 TEST(RandomTests, NextWithoutArguments) {
     System::Random rng;
     for (int i = 0; i < 1000; ++i) {
-        csint value = rng.Next();
+        intcs value = rng.Next();
         ASSERT_GE(value, 0);
-        ASSERT_LT(value, CSINT_MAX);
+        ASSERT_LT(value, INTCS_MAX);
     }
 }

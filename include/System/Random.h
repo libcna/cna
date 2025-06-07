@@ -9,7 +9,7 @@
 #include "CNA/CnaHelper.h"
 
 namespace System {
-    using CNA::csint;
+    using CNA::intcs;
 
     /**
      * Provides methods to generate pseudo-random numbers using a Mersenne Twister
@@ -25,7 +25,19 @@ namespace System {
          * using a Mersenne Twister engine seeded with a random device.
          */
     public:
+        /// Constructs a Random object, seeded using a random device.
         Random();
+
+        /// Non-copyable to avoid unintended sharing of internal generator state
+        Random(const Random&) = delete;
+        Random& operator=(const Random&) = delete;
+
+        /// Movable if needed
+        Random(Random&&) noexcept = default;
+        Random& operator=(Random&&) noexcept = default;
+
+        /// Destructor
+        ~Random() = default;
 
         /**
          * Generates a random integer in the range [0, maxValue).
@@ -34,7 +46,7 @@ namespace System {
          *                 Must be greater than 0.
          * @return A random integer in the range [0, maxValue).
          */
-        csint Next(const csint& maxValue);
+        intcs Next(const intcs& maxValue);
 
         /**
          * Generates a random integer within the specified range [minValue, maxValue).
@@ -43,14 +55,14 @@ namespace System {
          * @param maxValue The exclusive upper limit of the range. Must be greater than minValue.
          * @return A random integer in the range [minValue, maxValue).
          */
-        csint Next(const CNA::csint& minValue, const csint& maxValue);
+        intcs Next(const CNA::intcs& minValue, const intcs& maxValue);
 
         /**
          * Generates a random integer in the range [0, CSINT_MAX).
          *
          * @return A random integer in the range [0, CSINT_MAX).
          */
-        csint Next();
+        intcs Next();
     };
 } // System
 

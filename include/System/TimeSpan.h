@@ -4,14 +4,19 @@
 
 #ifndef TIMESPAN_H
 #define TIMESPAN_H
+#include <chrono>
+#include <cmath>
 #include <limits>
 
+#include "IComparable.h"
+#include "IEquatable.h"
 #include "System/ArgumentOutOfRangeException.h"
 #include "CNA/CnaHelper.h"
 
 namespace System {
-    using CNA::csint;
-    using CNA::cslong;
+    using CNA::intcs;
+    using CNA::longcs;
+
     /**
      * @class TimeSpan
      * @brief Represents a duration of time, which can be either positive or negative.
@@ -29,50 +34,50 @@ namespace System {
      * Due to these inconsistencies, TimeSpan does not offer direct methods
      * for retrieving months or years.
      */
-    struct TimeSpan {
+    struct TimeSpan : IEquatable<TimeSpan>, IComparable<TimeSpan> {
     public:
         /**
          * @brief Defines the number of nanoseconds in 1 tick.
          */
-        static constexpr cslong NanosecondsPerTick = 100;
+        static constexpr longcs NanosecondsPerTick = 100;
 
         /**
          * @brief Defines the number of ticks in 1 microsecond.
          */
-        static constexpr cslong TicksPerMicrosecond = 10;
+        static constexpr longcs TicksPerMicrosecond = 10;
 
         /**
          * @brief Defines the number of ticks in 1 millisecond.
          */
-        static constexpr cslong TicksPerMillisecond = TicksPerMicrosecond * 1000; // 10,000
+        static constexpr longcs TicksPerMillisecond = TicksPerMicrosecond * 1000; // 10,000
         /**
          * @brief Defines the number of ticks in 1 second.
          */
-        static constexpr cslong TicksPerSecond = TicksPerMillisecond * 1000; // 10,000,000
+        static constexpr longcs TicksPerSecond = TicksPerMillisecond * 1000; // 10,000,000
         /**
          * @brief Defines the number of ticks in 1 minute.
          */
-        static constexpr cslong TicksPerMinute = TicksPerSecond * 60; // 600,000,000
+        static constexpr longcs TicksPerMinute = TicksPerSecond * 60; // 600,000,000
         /**
          * @brief Defines the number of ticks in 1 hour.
          */
-        static constexpr cslong TicksPerHour = TicksPerMinute * 60; // 36,000,000,000
+        static constexpr longcs TicksPerHour = TicksPerMinute * 60; // 36,000,000,000
         /**
          * @brief Defines the number of ticks in 1 day.
          */
-        static constexpr cslong TicksPerDay = TicksPerHour * 24; // 864,000,000,000
+        static constexpr longcs TicksPerDay = TicksPerHour * 24; // 864,000,000,000
 
     private:
-        static constexpr cslong MaxSeconds = CSLONG_MAX / TicksPerSecond;
-        static constexpr cslong MinSeconds = CSLONG_MIN / TicksPerSecond;
+        static constexpr longcs MaxSeconds = LONGCS_MAX / TicksPerSecond;
+        static constexpr longcs MinSeconds = LONGCS_MIN / TicksPerSecond;
 
-        static constexpr cslong MaxMilliSeconds = CSLONG_MAX / TicksPerMillisecond;
-        static constexpr cslong MinMilliSeconds = CSLONG_MIN / TicksPerMillisecond;
+        static constexpr longcs MaxMilliSeconds = LONGCS_MAX / TicksPerMillisecond;
+        static constexpr longcs MinMilliSeconds = LONGCS_MIN / TicksPerMillisecond;
 
-        static constexpr cslong MaxMicroSeconds = CSLONG_MAX / TicksPerMicrosecond;
-        static constexpr cslong MinMicroSeconds = CSLONG_MIN / TicksPerMicrosecond;
+        static constexpr longcs MaxMicroSeconds = LONGCS_MAX / TicksPerMicrosecond;
+        static constexpr longcs MinMicroSeconds = LONGCS_MIN / TicksPerMicrosecond;
 
-        static constexpr cslong TicksPerTenthSecond = TicksPerMillisecond * 100;
+        static constexpr longcs TicksPerTenthSecond = TicksPerMillisecond * 100;
 
     public:
         static const TimeSpan Zero;
@@ -84,13 +89,13 @@ namespace System {
         static const TimeSpan MinValue;
 
     private:
-        const cslong ticks_internal;
+        const longcs ticks_internal;
 
     public:
-        TimeSpan(cslong ticks);
+        TimeSpan(longcs ticks);
 
     public:
-        TimeSpan(csint hours, csint minutes, csint seconds);
+        TimeSpan(intcs hours, intcs minutes, intcs seconds);
 
         /**
          * @brief Constructs a TimeSpan object using specified time components.
@@ -111,26 +116,26 @@ namespace System {
          * The acceptable range is between TimeSpan at least MinValue and at most MaxValue.
          */
     public:
-        TimeSpan(csint days, csint hours, csint minutes, csint seconds, csint milliseconds = 0,
-                 csint microseconds = 0);
+        TimeSpan(intcs days, intcs hours, intcs minutes, intcs seconds, intcs milliseconds = 0,
+                 intcs microseconds = 0);
 
     public: TimeSpan &operator=(const TimeSpan &);
 
     private:
-        static cslong TimeToTicks(csint days, csint hours, csint minutes, csint seconds, csint milliseconds,
-                                 csint microseconds);
+        static longcs TimeToTicks(intcs days, intcs hours, intcs minutes, intcs seconds, intcs milliseconds,
+                                 intcs microseconds);
 
     public:
-        [[nodiscard]] cslong getTicks() const;
+        [[nodiscard]] longcs getTicksProperty() const;
 
     public:
-        [[nodiscard]] int getDays() const;
+        [[nodiscard]] int getDaysProperty() const;
 
     public:
-        [[nodiscard]] int getHours() const;
+        [[nodiscard]] int getHoursProperty() const;
 
     public:
-        [[nodiscard]] csint getMilliseconds() const;
+        [[nodiscard]] intcs getMillisecondsProperty() const;
 
         /**
          * @brief Retrieves the microseconds portion of the time span.
@@ -144,7 +149,7 @@ namespace System {
          */
 
     public:
-        [[nodiscard]] csint getMicroseconds() const;
+        [[nodiscard]] intcs getMicrosecondsProperty() const;
 
         /**
          * @brief Retrieves the nanosecond portion of the time span.
@@ -158,22 +163,22 @@ namespace System {
          */
 
     public:
-        [[nodiscard]] csint getNanoseconds() const;
+        [[nodiscard]] intcs getNanosecondsProperty() const;
 
     public:
-        [[nodiscard]] csint getMinutes() const;
+        [[nodiscard]] intcs getMinutesProperty() const;
 
     public:
-        [[nodiscard]] csint getSeconds() const;
+        [[nodiscard]] intcs getSecondsProperty() const;
 
     public:
-        [[nodiscard]] double getTotalDays() const;
+        [[nodiscard]] double getTotalDaysProperty() const;
 
     public:
-        [[nodiscard]] double getTotalHours() const;
+        [[nodiscard]] double getTotalHoursProperty() const;
 
     public:
-        [[nodiscard]] double getTotalMilliseconds() const;
+        [[nodiscard]] double getTotalMillisecondsProperty() const;
 
         /**
          * @brief Returns the time span value in whole and fractional microseconds.
@@ -188,7 +193,7 @@ namespace System {
          */
 
     public:
-        [[nodiscard]] double getTotalMicroseconds() const;
+        [[nodiscard]] double getTotalMicrosecondsProperty() const;
 
         /**
          * @brief Returns the time span value in whole and fractional nanoseconds.
@@ -202,25 +207,186 @@ namespace System {
          * while `Nanoseconds` only returns complete nanoseconds.
          */
     public:
-        [[nodiscard]] double getTotalNanoseconds() const;
+        [[nodiscard]] double getTotalNanosecondsProperty() const;
 
     public:
-        [[nodiscard]] double getTotalMinutes() const;
+        [[nodiscard]] double getTotalMinutesProperty() const;
 
     public:
-        [[nodiscard]] double getTotalSeconds() const;
+        [[nodiscard]] double getTotalSecondsProperty() const;
 
-        ////
+        /**
+         * @brief Adds the specified TimeSpan to the current TimeSpan instance.
+         *
+         * Combines the time duration of the current instance with that of the specified
+         * `TimeSpan` parameter, producing a new `TimeSpan` that represents their sum.
+         *
+         * @param ts A reference to the `TimeSpan` object to be added.
+         *
+         * @return A new `TimeSpan` representing the combined duration of the two instances.
+         *
+         * @throws OverflowException If the resulting time span exceeds the valid range for a `TimeSpan`.
+         *
+         * @details This method ensures that the resulting time span does not exceed the
+         * limits supported by the `TimeSpan`. If an overflow occurs during the addition,
+         * an `OverflowException` is thrown.
+         */
+    public: TimeSpan Add(const TimeSpan& ts) const;
 
-    private:
-        static long TimeToTicks(int hour, int minute, int second);
+        /**
+         * @brief Compares two TimeSpan instances to determine their relative values.
+         *
+         * Determines whether the first TimeSpan is shorter than, equal to, or longer than
+         * the second TimeSpan, based on their internal tick counts.
+         *
+         * @param t1 The first TimeSpan instance to compare.
+         * @param t2 The second TimeSpan instance to compare.
+         * @return An integer representing the comparison result:
+         *         - Returns 1 if t1 is greater than t2.
+         *         - Returns -1 if t1 is less than t2.
+         *         - Returns 0 if t1 is equal to t2.
+         */
+    public: static intcs Compare(const TimeSpan &t1, const TimeSpan &t2);
+
+    public: [[nodiscard]] intcs CompareTo(const TimeSpan& value) const override;
+
+    public: static TimeSpan FromDays(double value);
+
+        /**
+         * @brief Retrieves the absolute duration of the current TimeSpan instance.
+         *
+         * This method calculates and returns a new TimeSpan instance representing
+         * the absolute value of the current TimeSpan's duration. If the TimeSpan
+         * represents a negative duration, it is converted to its corresponding positive value.
+         *
+         * @return A TimeSpan instance representing the absolute duration.
+         *
+         * @throws OverflowException If the TimeSpan is set to its minimum value,
+         * which cannot be represented as a positive value due to overflow.
+         */
+    public: [[nodiscard]] TimeSpan Duration() const;
+
+        /**
+         * @brief Determines whether the current TimeSpan instance is equal to another specified TimeSpan instance.
+         *
+         * Compares the internal tick count of two TimeSpan objects to determine equality.
+         * Two TimeSpan instances are considered equal if their internal tick values are the same.
+         *
+         * @param obj The TimeSpan instance to compare with the current instance.
+         * @return True if the specified TimeSpan instance has the same tick count as the current instance; otherwise, false.
+         */
+    public: [[nodiscard]] bool Equals(const TimeSpan &obj) const override;
+    public: static bool Equals(const TimeSpan& t1, const TimeSpan& t2);
+    public: static TimeSpan FromHours(double value);
+
+
+
+
+    private: static TimeSpan Interval(double value, double scale);
+    private: static TimeSpan IntervalFromDoubleTicks(double ticks);
+
+        /**
+         * @brief Creates a TimeSpan object representing a specific number of milliseconds.
+         *
+         * Converts the given value, representing a time duration in milliseconds, into a TimeSpan instance.
+         *
+         * @param value The number of milliseconds to be represented as a TimeSpan. This can be positive or negative.
+         * @return A TimeSpan object corresponding to the provided number of milliseconds.
+         *
+         * @details If the `value` is fractional, the fractional part is converted into ticks, as TimeSpan uses ticks
+         * for internal representation. A single tick equals 100 nanoseconds, which provides precision in the conversion.
+         */
+    public: static TimeSpan FromMilliseconds(double value);
+
+        public: static TimeSpan FromMicroseconds(double value);
+
+
+        public: static TimeSpan FromMinutes(double value);
+
+
+        public: [[nodiscard]] TimeSpan Negate() const;
+
+        public: static TimeSpan FromSeconds(double value);
+        public: [[nodiscard]] TimeSpan Subtract(const TimeSpan& ts) const;
+
+        public: TimeSpan Multiply(double factor);
+
+        public: TimeSpan Divide(double divisor);
+
+        public: double Divide(const TimeSpan& ts);
+
+        public: static TimeSpan FromTicks(long value);
+
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private: static long TimeToTicks(int hour, int minute, int second);
+
+
+        public: [[nodiscard]] std::string ToString() const;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        public: TimeSpan operator-() const;
+\
+
+        public: TimeSpan operator-(const TimeSpan& t2) ;
+
+        public: TimeSpan operator+() ;
+
+        public: TimeSpan operator+(const TimeSpan& t2) ;
+
+
+        public: TimeSpan operator*(double factor) const;
+
+        TimeSpan operator/(double divisor);
+
+        // Performing division using floating-point arithmetic allows the result to be infinity,
+        // which makes sense when dividing a non-zero TimeSpan by TimeSpan.Zero.
+        // For example, TimeSpan.FromHours(1) / TimeSpan.Zero asks how many zero-length intervals fit into one hour,
+        // and mathematically, the answer is infinity.
+        // Dividing TimeSpan.Zero by TimeSpan.Zero returns NaN, which may be less practical,
+        // but it is no less valid than throwing an exception.
+
     public:
-        static TimeSpan FromTicks(long i);
+        double operator/(const TimeSpan &t2) const ;
 
-        static TimeSpan FromSeconds(double x);
+    public:
+        bool operator==(const TimeSpan &t2) const ;
 
-        public: static TimeSpan FromMilliseconds(double value);
+    public:
+        bool operator!=(const TimeSpan &t2) const ;
+
+    public:
+        bool operator<(const TimeSpan &t2) const;
+
+    public:
+        bool operator<=(const TimeSpan &t2) const ;
+
+    public:
+        bool operator>(const TimeSpan &t2) const ;
+
+    public:
+        bool operator>=(const TimeSpan &t2) const ;
+
+
+
+
+
     };
+
+
+    TimeSpan operator*(double factor, const TimeSpan& timeSpan);
 } // System
 
 #endif //TIMESPAN_H
