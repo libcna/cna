@@ -5,5 +5,5 @@
 #include "Microsoft/Devices/Sensors/AccelerometerReading.h"
 
 namespace Microsoft::Devices::Sensors {
-    igetter(Vector3, Acceleration, AccelerometerReading)
+    const Vector3& AccelerometerReading::getAccelerationProperty() const { return Acceleration_ ; }
 }

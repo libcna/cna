@@ -19,12 +19,13 @@ namespace Microsoft::Devices::Sensors {
     int Accelerometer::instanceCount = 0;
     std::vector<Accelerometer> Accelerometer::instances;
 
-    bool Accelerometer::getIsSupportedProperty() {
+    //impl_prop(bool, IsSupported, getter1, setter0, member0, static1, constret0, ref0, constmet0, Accelerometer,)
+     bool Accelerometer::getIsSupportedProperty() {
         CNA::Platform currentPlatform = CNA::getCurrentPlatform();
         return currentPlatform == CNA::Android || currentPlatform == CNA::iOS ;
         //TODO: Implement this.
     }
-
+    //impl_prop(SensorState, State, getter1, setter0, member0, static0, constret0, ref0, constmet1, Accelerometer, )
     [[nodiscard]] SensorState Accelerometer::getStateProperty() const {
         if (!SDL_WasInit(SDL_INIT_SENSOR)) {
             return SensorState::NotSupported;

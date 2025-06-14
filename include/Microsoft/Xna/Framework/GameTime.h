@@ -23,6 +23,7 @@ namespace Microsoft::Xna::Framework {
 
     public:
         void setElapsedGameTimeProperty(const TimeSpan& v);
+        void setElapsedGameTimeProperty(TimeSpan&& v);
 
         ddata(bool, IsRunningSlowly);
 

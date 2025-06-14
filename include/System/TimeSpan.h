@@ -35,6 +35,17 @@ namespace System {
      * for retrieving months or years.
      */
     struct TimeSpan : IEquatable<TimeSpan>, IComparable<TimeSpan> {
+    private:
+        static int copy_count;
+        static int move_count;
+
+    public:
+        static int getCopyCount();
+        static int getMoveCount();
+
+        static void resetCopyCount();
+        static void resetMoveCount();
+
     public:
         /**
          * @brief Defines the number of nanoseconds in 1 tick.
@@ -95,7 +106,7 @@ namespace System {
         static const TimeSpan MinValue;
 
     private:
-        const longcs ticks_internal;
+        longcs ticks_internal;
 
     public:
         TimeSpan(longcs ticks);
@@ -127,6 +138,12 @@ namespace System {
 
     public:
         TimeSpan &operator=(const TimeSpan &);
+
+        TimeSpan(const TimeSpan& other);
+
+        TimeSpan(TimeSpan&& other) noexcept;
+
+        TimeSpan& operator=(TimeSpan&& other) noexcept;
 
     private:
         static longcs TimeToTicks(intcs days, intcs hours, intcs minutes, intcs seconds, intcs milliseconds,

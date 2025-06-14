@@ -28,8 +28,16 @@ namespace Microsoft::Devices::Sensors {
          *
          * @return boolean
          */
-    public: [[nodiscard]] static bool getIsSupportedProperty();
-    public: [[nodiscard]] SensorState getStateProperty() const;
+        def_prop(bool, IsSupported, getter1, setter0, member0, static1, constret0, ref0, constmet0)
+        def_prop(SensorState, State, getter1, setter0, member0, static0, constret0, ref0, constmet1)
+
+
+        def_prop(
+float, Speed,
+getter1, setter1, member1,
+static0, constret1, ref0, constmet1,
+)
+
     public: Accelerometer();
     public:
         void Start();
@@ -37,7 +45,6 @@ namespace Microsoft::Devices::Sensors {
         void Stop();
 
         void Dispose(bool disposing) override;
-
 
         //todo : remove me
         // void SimulateNewValue(const AccelerometerReading& reading) {

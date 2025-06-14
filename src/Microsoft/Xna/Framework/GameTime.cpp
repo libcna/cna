@@ -12,10 +12,13 @@ namespace Microsoft::Xna::Framework {
     TimeSpan& GameTime::getElapsedGameTimeProperty() {
         return ElapsedGameTime_;
     }
-    [[deprecated]] void GameTime::setElapsedGameTimeProperty(const TimeSpan& v) {
+    void GameTime::setElapsedGameTimeProperty(const TimeSpan& v) {
         ElapsedGameTime_ = v;
+    }
 
-        std::cout << "ElapsedGameTime ticks: " << getElapsedGameTimeProperty().getTicksProperty() << std::endl;
+    void GameTime::setElapsedGameTimeProperty(TimeSpan&& v)
+    {
+        ElapsedGameTime_ = std::move(v);  // Uses move semantics to avoid unnecessary copy
     }
     idata(bool, IsRunningSlowly, GameTime)
 

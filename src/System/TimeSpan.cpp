@@ -11,6 +11,21 @@
 #include "System/OverflowException.h"
 
 namespace System {
+
+    int TimeSpan::copy_count = 0;
+    int TimeSpan::move_count = 0;
+
+    int TimeSpan::getCopyCount() { return copy_count; }
+    int TimeSpan::getMoveCount() { return move_count; }
+
+    void TimeSpan::resetCopyCount() {
+        copy_count = 0;
+        move_count = 0;
+    }
+
+    void TimeSpan::resetMoveCount() {
+    }
+
     const TimeSpan TimeSpan::Zero = TimeSpan(0);
     const TimeSpan TimeSpan::MaxValue = TimeSpan(LONGCS_MAX);
 
@@ -29,6 +44,14 @@ namespace System {
         TimeToTicks(days, hours, minutes, seconds, milliseconds, microseconds) * TicksPerMicrosecond) {
     }
 
+    TimeSpan::TimeSpan(const TimeSpan& other) : ticks_internal(other.ticks_internal) {
+        copy_count++;
+    }
+
+    TimeSpan::TimeSpan(TimeSpan&& other) noexcept : ticks_internal(other.ticks_internal) {
+        move_count++;
+    }
+
     longcs TimeSpan::TimeToTicks(intcs days, intcs hours, intcs minutes, intcs seconds, intcs milliseconds,
                                  intcs microseconds) {
         long totalMicroseconds = (((longcs) days * 3600 * 24 + (longcs) hours * 3600 + (longcs) minutes * 60 + seconds)
@@ -39,7 +62,18 @@ namespace System {
         return totalMicroseconds;
     }
 
-    TimeSpan &TimeSpan::operator=(const TimeSpan &) {
+    TimeSpan &TimeSpan::operator=(const TimeSpan &other) {
+        if (this != &other) {  // Prevent self-assignment
+            ticks_internal = other.ticks_internal;  // Copy internal data
+        }
+        return *this;
+    }
+
+    TimeSpan& TimeSpan::operator=(TimeSpan&& other) noexcept {
+        if (this != &other) {  // Prevent self-assignment
+            ticks_internal = other.ticks_internal;  // Transfer ownership
+            move_count++;
+        }
         return *this;
     }
 

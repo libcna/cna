@@ -11,7 +11,12 @@ namespace Microsoft::Devices::Sensors {
     using Xna::Framework::Vector3;
 
     struct AccelerometerReading {
-        dgetter(Vector3, Acceleration)
+    private:
+        Vector3 Acceleration_;
+
+    public:
+        [[nodiscard]] const Vector3& getAccelerationProperty() const;
+
     };
 }
 #endif //ACCELEROMETERREADING_H
