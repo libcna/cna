@@ -3,47 +3,47 @@
 //d like define
 //i like implement
 
-#define DEF_PROP(type, name) \
+#define DEF_MEMBER(type, name) \
     private: type name##_;
 
-#define ddata(type, name) \
-    DEF_PROP(type, name) \
-    /** This is C# like property, but using getter and setter.*/ \
-    public: [[nodiscard]] type get##name##Property() const; \
-    public: void set##name##Property(const type& v);
-
-#define dgetter(type, name) \
-DEF_PROP(type, name) \
-/** This is C# like readonly property, but using getter.*/ \
-public: [[nodiscard]] type get##name##Property() const;
-
-#define idata(type, name, class)\
-type class::get##name##Property() const { return name##_ ; } \
-void class::set##name##Property(const type& v) { name##_ = v; }
-
-#define igetter(type, name, class)\
-type class::get##name##Property() const { return name##_ ; }
-
-
-////
-#define ddatastatic(type, name) \
-/** This is C# like property, but using getter and setter.*/ \
-public: [[nodiscard]] static type get##name##Property(); \
-public: static void set##name##Property(const type& v);
-
-#define dgetterstatic(type, name) \
-/** This is C# like readonly property, but using getter.*/ \
-public: [[nodiscard]] static type get##name##Property();
-
-#define idatastatic(type, name, class, init)\
-static type name##_ = init;\
-type class::get##name##Property() { return name##_ ; } \
-void class::set##name##Property(const type& v) { name##_ = v; }
-
-#define igetterstatic(type, name, class, init)\
-static type name##_ = init;\
-type class::get##name##Property() { return name##_ ; }
-
+// #define ddata(type, name) \
+//     DEF_PROP(type, name) \
+//     /** This is C# like property, but using getter and setter.*/ \
+//     public: [[nodiscard]] type get##name##Property() const; \
+//     public: void set##name##Property(const type& v);
+//
+// #define dgetter(type, name) \
+// DEF_PROP(type, name) \
+// /** This is C# like readonly property, but using getter.*/ \
+// public: [[nodiscard]] type get##name##Property() const;
+//
+// #define idata(type, name, class)\
+// type class::get##name##Property() const { return name##_ ; } \
+// void class::set##name##Property(const type& v) { name##_ = v; }
+//
+// #define igetter(type, name, class)\
+// type class::get##name##Property() const { return name##_ ; }
+//
+//
+// ////
+// #define ddatastatic(type, name) \
+// /** This is C# like property, but using getter and setter.*/ \
+// public: [[nodiscard]] static type get##name##Property(); \
+// public: static void set##name##Property(const type& v);
+//
+// #define dgetterstatic(type, name) \
+// /** This is C# like readonly property, but using getter.*/ \
+// public: [[nodiscard]] static type get##name##Property();
+//
+// #define idatastatic(type, name, class, init)\
+// static type name##_ = init;\
+// type class::get##name##Property() { return name##_ ; } \
+// void class::set##name##Property(const type& v) { name##_ = v; }
+//
+// #define igetterstatic(type, name, class, init)\
+// static type name##_ = init;\
+// type class::get##name##Property() { return name##_ ; }
+//
 
 
 
@@ -58,7 +58,7 @@ type class::get##name##Property() { return name##_ ; }
 
 #define static1 static
 #define constret1 const
-#define ref1 (&)
+#define ref1 &
 #define constmet1 const
 #define static0
 #define constret0
@@ -80,9 +80,10 @@ type class::get##name##Property() { return name##_ ; }
  * @param static_keyword static or empty
  * @param const_return_qualifier  const or empty
  * @param ref_return_qualifier & or empty
- * @parem const_method_qualifier const or empty
+ * @param const_method_qualifier const or empty
+ * @example def_prop(Vector3, Acceleration, getter1, setter0, member1, static0, constret1, ref1, constmet1)
  */
-#define def_prop(type, name, getter, setter, member, static_keyword, const_return_qualifier, ref_return_qualifier, const_method_qualifier) \
+#define DEF_PROP(type, name, getter, setter, member, static_keyword, const_return_qualifier, ref_return_qualifier, const_method_qualifier) \
 IF_YES(property, member, DEF_PROP(type, name)) \
 IF_YES(property, getter, public: [[nodiscard]] static_keyword const_return_qualifier type ref_return_qualifier get##name##Property() const_method_qualifier;) \
 IF_YES(property, setter, public: static_keyword void set##name##Property(const type& v);) \
@@ -108,10 +109,11 @@ IF_YES(property, setter, public: static_keyword void set##name##Property(type&& 
  * @param const_return_qualifier  const or empty
  * @param ref_return_qualifier & or empty
  * @parem const_method_qualifier const or empty
+ * @example IMPL_PROP(Vector3, Acceleration, getter1, setter0, member0, static0, constret1, ref1, constmet1, AccelerometerReading)
  */
-#define impl_prop(\
-type, name, getter, setter, member, static_keyword, const_return_qualifier, \
-ref_return_qualifier, const_method_qualifier, clazz, member_static_init\
+#define IMPL_PROP(\
+    type, name, getter, setter, member, static_keyword, const_return_qualifier, \
+    ref_return_qualifier, const_method_qualifier, clazz, member_static_init\
 ) \
 IF_YES(property, member, static_keyword type clazz::name##_ = member_static_init;) \
 IF_YES(property, getter, \

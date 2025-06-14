@@ -28,15 +28,8 @@ namespace Microsoft::Devices::Sensors {
          *
          * @return boolean
          */
-        def_prop(bool, IsSupported, getter1, setter0, member0, static1, constret0, ref0, constmet0)
-        def_prop(SensorState, State, getter1, setter0, member0, static0, constret0, ref0, constmet1)
-
-
-        def_prop(
-float, Speed,
-getter1, setter1, member1,
-static0, constret1, ref0, constmet1,
-)
+        DEF_PROP(bool, IsSupported, getter1, setter0, member0, static1, constret0, ref0, constmet0)
+        DEF_PROP(SensorState, State, getter1, setter0, member0, static0, constret0, ref0, constmet1)
 
     public: Accelerometer();
     public:

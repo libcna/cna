@@ -5,5 +5,7 @@
 #include "Microsoft/Devices/Sensors/AccelerometerReading.h"
 
 namespace Microsoft::Devices::Sensors {
-    const Vector3& AccelerometerReading::getAccelerationProperty() const { return Acceleration_ ; }
+    IMPL_PROP(Vector3, Acceleration, getter1, setter0, member0, static0, constret1, ref1, constmet1, AccelerometerReading)
+
+
 }
