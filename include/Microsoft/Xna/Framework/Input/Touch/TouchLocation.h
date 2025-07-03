@@ -11,9 +11,9 @@
 
 namespace Microsoft::Xna::Framework::Input::Touch {
     struct TouchLocation {
-        dgetter(TouchLocationState, State)
+        DEF_PROP(TouchLocationState, State, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        DEF_PROP(Vector2, Position, getter1, setter0, member1, static0, constret1, ref1, constmet1)
 
-        dgetter(Vector2, Position)
 
         TouchLocation();
     };

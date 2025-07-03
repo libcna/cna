@@ -12,8 +12,7 @@ namespace Microsoft::Xna::Framework::Input::Touch {
 
     public:
         TouchPanelCapabilities();
-
-        dgetter(bool, IsConnected)
+        DEF_PROP(bool, IsConnected, getter1, setter0, member1, static0, constret1, ref1, constmet1)
 };
 }
 

@@ -5,7 +5,9 @@
 #include "Microsoft/Xna/Framework/Input/GamePadButtons.h"
 
 namespace Microsoft::Xna::Framework::Input {
-    igetter(ButtonState, Back, GamePadButtons)
+
+    IMPL_PROP(ButtonState, Back, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons)
+
     GamePadButtons::GamePadButtons(): Back_(Released) {
     }
 }

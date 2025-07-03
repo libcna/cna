@@ -13,7 +13,8 @@ namespace Microsoft::Xna::Framework::Input {
     struct GamePadButtons {
     public:
     private:
-        dgetter(ButtonState, Back)
+        DEF_PROP(ButtonState, Back, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+
 
         GamePadButtons();
     };
