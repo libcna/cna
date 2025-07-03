@@ -57,12 +57,12 @@
 #define IF_YES(prefix, cond, code) IF_##cond(prefix, code)
 
 #define static1 static
-#define constret1 const
-#define ref1 &
-#define constmet1 const
 #define static0
+#define constret1 const
 #define constret0
+#define ref1 &
 #define ref0
+#define constmet1 const
 #define constmet0
 #define getter1 1
 #define getter0 0
@@ -81,18 +81,20 @@
  * @param const_return_qualifier  const or empty
  * @param ref_return_qualifier & or empty
  * @param const_method_qualifier const or empty
- * @example def_prop(Vector3, Acceleration, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+ * @example DEF_PROP(Vector3, Acceleration, getter1, setter0, member1, static0, constret1, ref1, constmet1)
  */
 #define DEF_PROP(type, name, getter, setter, member, static_keyword, const_return_qualifier, ref_return_qualifier, const_method_qualifier) \
-IF_YES(property, member, DEF_PROP(type, name)) \
+IF_YES(property, member, DEF_MEMBER(type, name)) \
 IF_YES(property, getter, public: [[nodiscard]] static_keyword const_return_qualifier type ref_return_qualifier get##name##Property() const_method_qualifier;) \
 IF_YES(property, setter, public: static_keyword void set##name##Property(const type& v);) \
 IF_YES(property, setter, public: static_keyword void set##name##Property(type&& v);)
 
 //def_prop(int, Test, 1, 1, 1, , , &)
 
-
-
+/**
+DEF_PROP(Vector3, Acceleration, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+IMPL_PROP(Vector3, Acceleration, getter1, setter0, member0, static0, constret1, ref1, constmet1, AccelerometerReading)
+ */
 #define HAS_BODY_IMPL(...) GET_5TH_ARG(__VA_ARGS__, 1, 1, 1, 1, 0)
 #define GET_5TH_ARG(_1, _2, _3, _4, _5, ...) _5
 
@@ -115,7 +117,7 @@ IF_YES(property, setter, public: static_keyword void set##name##Property(type&& 
     type, name, getter, setter, member, static_keyword, const_return_qualifier, \
     ref_return_qualifier, const_method_qualifier, clazz, member_static_init\
 ) \
-IF_YES(property, member, static_keyword type clazz::name##_ = member_static_init;) \
+IF_YES(property, member, static_keyword type name##_ = member_static_init;) \
 IF_YES(property, getter, \
 const_return_qualifier type ref_return_qualifier clazz::get##name##Property() const_method_qualifier { \
 return name##_; \

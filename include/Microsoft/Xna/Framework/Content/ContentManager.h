@@ -13,11 +13,7 @@ namespace Microsoft::Xna::Framework::Content {
     private:
         std::string RootDirectory_ = "Content";
 
-    public:
-        [[nodiscard]] std::string getRootDirectoryProperty() const;
-
-    public:
-        void setRootDirectoryProperty(const std::string &v);;
+        DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret0, ref1, constmet0)
 
     public:
         ContentManager();

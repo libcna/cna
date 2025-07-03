@@ -5,8 +5,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceManager.h"
 
 namespace Microsoft::Xna::Framework::Graphics {
-    igetter(Microsoft::Xna::Framework::Graphics::GraphicsDevice, GraphicsDevice, GraphicsDeviceManager)
-    idata(bool, IsFullScreen, GraphicsDeviceManager)
+
+    IMPL_PROP(Microsoft::Xna::Framework::Graphics::GraphicsDevice, GraphicsDevice, getter1, setter0, member0, static0, constret1, ref1, constmet1, GraphicsDeviceManager)
+    IMPL_PROP(bool, IsFullScreen, getter1, setter1, member0, static0, constret1, ref1, constmet1, GraphicsDeviceManager)
 
     GraphicsDeviceManager::GraphicsDeviceManager(): IsFullScreen_(false) {
     }

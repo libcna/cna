@@ -14,7 +14,7 @@
 namespace Microsoft::Xna::Framework::Audio {
     class SoundEffect : public SoundEffectI {
         friend class SoundEffectInstance;
-        ddatastatic(float, MasterVolume);
+        DEF_PROP(float, MasterVolume, getter1, setter1, member0, static1, constret1, ref0, constmet0)
 
     private:
         Mix_Chunk *chunk = nullptr;

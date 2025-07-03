@@ -13,13 +13,11 @@
 
 
 namespace Microsoft::Xna::Framework::Audio {
-    float SoundEffectInstance::getVolumeProperty() const { return Volume_; }
 
-    float SoundEffectInstance::getPanProperty() const { return Pan_; }
-
-    float SoundEffectInstance::getPitchProperty() const { return Pitch_; }
-    void SoundEffectInstance::setPitchProperty(const float &v) { Pitch_ = v; };
-    bool SoundEffectInstance::getIsLoopedProperty() const { return IsLooped_; }
+    IMPL_PROP(float, Volume, getter1, setter0, member0, static0, constret1, ref1, constmet1, SoundEffectInstance)
+    IMPL_PROP(float, Pan, getter1, setter0, member0, static0, constret1, ref1, constmet1, SoundEffectInstance)
+    IMPL_PROP(float, Pitch, getter1, setter1, member0, static0, constret1, ref1, constmet1, SoundEffectInstance)
+    IMPL_PROP(bool, IsLooped, getter1, setter0, member0, static0, constret1, ref1, constmet1, SoundEffectInstance)
 
     SoundEffectInstance::~SoundEffectInstance() {
         Stop();

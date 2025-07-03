@@ -21,10 +21,10 @@ namespace Microsoft::Xna::Framework::Audio {
         int channel = -1;  // SDL_mixer channel
         std::atomic<bool> playing = false;
 
-        ddata(float, Volume);
-        ddata(float, Pan);
-        ddata(float, Pitch);
-        ddata(bool, IsLooped);
+        DEF_PROP(float, Volume, getter1, setter1, member1, static0, constret1, ref1, constmet1)
+        DEF_PROP(float, Pan, getter1, setter1, member1, static0, constret1, ref1, constmet1)
+        DEF_PROP(float, Pitch, getter1, setter1, member1, static0, constret1, ref1, constmet1)
+        DEF_PROP(bool, IsLooped, getter1, setter1, member1, static0, constret1, ref1, constmet1)
 
     private: bool IsPlaying() const { return playing; }
 

@@ -8,5 +8,5 @@ namespace Microsoft::Xna::Framework::GamerServices {
         std::cout << "The Market Place should now be shown.";
     }
 
-    igetterstatic(bool, IsTrialMode, Guide ,false);
+    IMPL_PROP(bool, IsTrialMode, getter1, setter0, member1, static1, constret1, ref1, constmet0, Guide, false)
 }

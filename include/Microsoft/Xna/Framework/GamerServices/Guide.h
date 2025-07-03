@@ -14,8 +14,7 @@ namespace Microsoft::Xna::Framework::GamerServices {
     class Guide {
     public:
         static void Show(const PlayerIndex& playerIndex);
-
-        dgetterstatic(bool, IsTrialMode)
+        DEF_PROP(bool, IsTrialMode, getter1, setter0, member0, static1, constret1, ref1, constmet0)
 
     };
 }

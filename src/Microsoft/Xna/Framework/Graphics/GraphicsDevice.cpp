@@ -5,8 +5,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    GraphicsDevice::GraphicsDevice()
-     {
+    GraphicsDevice::GraphicsDevice(): Viewport_() {
         std::cout << "Starting GraphicsDevice()" << std::endl;
         if (SDL_Init(SDL_INIT_VIDEO) < 0) {
             std::cerr << "SDL3 could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
@@ -43,7 +42,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         SDL_Quit();
     }
 
-    igetter(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, GraphicsDevice);
+    IMPL_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret1, ref1, constmet1, GraphicsDevice)
 
     void GraphicsDevice::Clear(const Color &color) {
     }

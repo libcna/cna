@@ -7,7 +7,7 @@
 #include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Audio {
-    idatastatic(float, MasterVolume, SoundEffect, 0.0f)
+    IMPL_PROP(float, MasterVolume, getter1, setter1, member1, static0, constret1, ref0, constmet0, SoundEffect, 0.0f)
 
     Audio::SoundEffect::SoundEffect(const std::string &assetName) {
 #ifdef SOUND_ENABLED

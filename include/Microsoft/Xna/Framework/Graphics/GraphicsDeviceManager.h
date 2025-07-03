@@ -5,8 +5,10 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
     class GraphicsDeviceManager {
-        dgetter(Microsoft::Xna::Framework::Graphics::GraphicsDevice, GraphicsDevice)
-        ddata(bool, IsFullScreen)
+
+        DEF_PROP(Microsoft::Xna::Framework::Graphics::GraphicsDevice, GraphicsDevice, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        DEF_PROP(bool, IsFullScreen, getter1, setter1, member1, static0, constret1, ref1, constmet1)
+
 
         GraphicsDeviceManager();
 

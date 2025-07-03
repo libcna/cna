@@ -6,7 +6,7 @@
 
 
 namespace Microsoft::Xna::Framework::Content {
-    std::string ContentManager::getRootDirectoryProperty() const { return RootDirectory_; }
+    std::string &ContentManager::getRootDirectoryProperty() { return RootDirectory_; }
     void ContentManager::setRootDirectoryProperty(const std::string &v) { RootDirectory_ = v; };
 
     ContentManager::ContentManager() {
