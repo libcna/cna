@@ -13,7 +13,7 @@ namespace Microsoft::Devices::Sensors {
     class SensorReadingEventArgs {
     private:
         DEF_MEMBER(T,SensorReading)
-
+    public:
         SensorReadingEventArgs() : SensorReading_{} {}
         //IMPL_PROP(T, SensorReading, getter1, setter1, member0, static0, constret1, ref1, constmet1, SensorReadingEventArgs, nothing)
         const T &getSensorReadingProperty() const { return SensorReading_; }

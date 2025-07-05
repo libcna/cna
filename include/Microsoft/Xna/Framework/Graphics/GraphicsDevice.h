@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         void Clear(float r, float g, float b, float a);
         void Present();
         SDL_Renderer* GetRenderer();
-        DEF_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        DEF_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member1, static0, constret0, ref1, constmet0)
 
     protected:
 

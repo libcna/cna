@@ -22,7 +22,7 @@ namespace Microsoft::Xna::Framework {
         ElapsedGameTime_ = std::move(v);  // Uses move semantics to avoid unnecessary copy
     }
 
-    IMPL_PROP(bool, IsRunningSlowly, getter1, setter0, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
+    IMPL_PROP(bool, IsRunningSlowly, getter1, setter1, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
 
     GameTime::GameTime(): TotalGameTime_(0), ElapsedGameTime_(TimeSpan(0)), IsRunningSlowly_(false) {
     }

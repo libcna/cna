@@ -6,48 +6,6 @@
 #define DEF_MEMBER(type, name) \
     private: type name##_;
 
-// #define ddata(type, name) \
-//     DEF_PROP(type, name) \
-//     /** This is C# like property, but using getter and setter.*/ \
-//     public: [[nodiscard]] type get##name##Property() const; \
-//     public: void set##name##Property(const type& v);
-//
-// #define dgetter(type, name) \
-// DEF_PROP(type, name) \
-// /** This is C# like readonly property, but using getter.*/ \
-// public: [[nodiscard]] type get##name##Property() const;
-//
-// #define idata(type, name, class)\
-// type class::get##name##Property() const { return name##_ ; } \
-// void class::set##name##Property(const type& v) { name##_ = v; }
-//
-// #define igetter(type, name, class)\
-// type class::get##name##Property() const { return name##_ ; }
-//
-//
-// ////
-// #define ddatastatic(type, name) \
-// /** This is C# like property, but using getter and setter.*/ \
-// public: [[nodiscard]] static type get##name##Property(); \
-// public: static void set##name##Property(const type& v);
-//
-// #define dgetterstatic(type, name) \
-// /** This is C# like readonly property, but using getter.*/ \
-// public: [[nodiscard]] static type get##name##Property();
-//
-// #define idatastatic(type, name, class, init)\
-// static type name##_ = init;\
-// type class::get##name##Property() { return name##_ ; } \
-// void class::set##name##Property(const type& v) { name##_ = v; }
-//
-// #define igetterstatic(type, name, class, init)\
-// static type name##_ = init;\
-// type class::get##name##Property() { return name##_ ; }
-//
-
-
-
-
 #define IF_1(prefix, code) IF_1_##prefix(code)
 #define IF_0(prefix, code) IF_0_##prefix(code)
 
@@ -56,6 +14,8 @@
 
 #define IF_YES(prefix, cond, code) IF_##cond(prefix, code)
 
+#define YES 1
+#define NO 0
 #define static1 static
 #define static0
 #define constret1 const
@@ -64,12 +24,12 @@
 #define ref0
 #define constmet1 const
 #define constmet0
-#define getter1 1
-#define getter0 0
-#define setter1 1
-#define setter0 0
-#define member1 1
-#define member0 0
+#define getter1 YES
+#define getter0 NO
+#define setter1 YES
+#define setter0 NO
+#define member1 YES
+#define member0 NO
 #define nothing
 /**
  *
@@ -90,7 +50,14 @@ IF_YES(property, getter, public: [[nodiscard]] static_keyword const_return_quali
 IF_YES(property, setter, public: static_keyword void set##name##Property(const type& v);) \
 IF_YES(property, setter, public: static_keyword void set##name##Property(type&& v);)
 
-//def_prop(int, Test, 1, 1, 1, , , &)
+#define DDATA(type, name) \
+DEF_PROP(type, name, getter1, setter1, member1, static0, constret1, ref1, constmet1)
+
+#define DGETTER(type, name) \
+DEF_PROP(type, name, getter1, setter0, member1, static0, constret1, ref1, constmet0)
+
+#define DGETTERSTATIC(type, name) \
+DEF_PROP(type, name, getter1, setter0, member1, static1, constret1, ref1, constmet0)
 
 /**
 DEF_PROP(Vector3, Acceleration, getter1, setter0, member1, static0, constret1, ref1, constmet1)
@@ -131,6 +98,15 @@ IF_YES(property, setter, \
 void clazz::set##name##Property(type&& v) { \
 name##_ = std::move(v); \
 })
+
+#define IDATA(type, name, clazz) \
+IMPL_PROP(type, name, getter1, setter1, member0, static0, constret1, ref1, constmet1, clazz, nothing)
+
+#define IGETTER(type, name, clazz) \
+IMPL_PROP(type, name, getter1, setter0, member0, static0, constret1, ref1, constmet1, clazz, nothing)
+
+#define IGETTERSTATIC(type, name, clazz, init) \
+IMPL_PROP(type, name, getter1, setter0, member0, static1, constret1, ref1, constmet1, clazz, nothing)
 
 
 

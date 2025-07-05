@@ -5,7 +5,7 @@
 
 namespace Microsoft::Xna::Framework {
 
-    IMPL_PROP(Content::ContentManager, Content, getter1, setter0, member0, static0, constret1, ref1, constmet1, Game, nothing)
+    IMPL_PROP(Content::ContentManager, Content, getter1, setter0, member0, static0, constret0, ref1, constmet0, Game, nothing)
 
     Graphics::GraphicsDevice& Game::getGraphicsDeviceProperty() { return GraphicsDevice_ ; }
 

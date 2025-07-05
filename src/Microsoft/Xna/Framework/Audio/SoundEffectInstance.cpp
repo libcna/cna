@@ -80,6 +80,10 @@ namespace Microsoft::Xna::Framework::Audio {
         }
     }
 
+    void SoundEffectInstance::setVolumeProperty(float&&) {
+        throw std::runtime_error("setVolumeProperty(float&&) not implemented");
+    }
+
     void SoundEffectInstance::setPanProperty(const float& pan) {
         Pan_ = pan < -1.f ? -1.f : (pan > 1.f ? 1.f : pan);
         if (channel != -1) {
@@ -92,6 +96,9 @@ namespace Microsoft::Xna::Framework::Audio {
             }
             Mix_SetPanning(channel, left, right);
         }
+    }
+    void SoundEffectInstance::setPanProperty(float&&) {
+        throw std::runtime_error("setPanProperty(float&&) not implemented");
     }
     void SoundEffectInstance::setIsLoopedProperty(const bool &looped)
      {

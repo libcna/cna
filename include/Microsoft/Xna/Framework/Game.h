@@ -16,7 +16,7 @@ namespace Microsoft::Xna::Framework {
 
     class Game {
     public:
-        DEF_PROP(Content::ContentManager, Content, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        DEF_PROP(Content::ContentManager, Content, getter1, setter0, member1, static0, constret0, ref1, constmet0)
 
         private: Graphics::GraphicsDevice GraphicsDevice_; public: [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceProperty();
 
