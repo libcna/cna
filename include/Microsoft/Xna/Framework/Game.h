@@ -16,9 +16,12 @@ namespace Microsoft::Xna::Framework {
 
     class Game {
     public:
-        dgetter(Content::ContentManager, Content)
+        DEF_PROP(Content::ContentManager, Content, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+
         private: Graphics::GraphicsDevice GraphicsDevice_; public: [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceProperty();
-        ddata(bool, IsMouseVisible)
+
+        DEF_PROP(bool, IsMouseVisible, getter1, setter1, member1, static0, constret1, ref1, constmet1)
+
         //Default FPS is 60
     private:
         System::TimeSpan* TargetElapsedTime_;
@@ -28,7 +31,8 @@ namespace Microsoft::Xna::Framework {
 
     public:
         void setTargetElapsedTimeProperty(System::TimeSpan* v);
-        ddata(System::TimeSpan, InactiveSleepTime)
+        DEF_PROP(System::TimeSpan, InactiveSleepTime, getter1, setter1, member1, static0, constret1, ref1, constmet1)
+
 
         System::EventHandler<ExitingEventArgs> Exiting;
 

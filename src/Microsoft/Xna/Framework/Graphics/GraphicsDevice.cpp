@@ -42,7 +42,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         SDL_Quit();
     }
 
-    IMPL_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret1, ref1, constmet1, GraphicsDevice)
+    IMPL_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret1, ref1, constmet1, GraphicsDevice, nothing)
 
     void GraphicsDevice::Clear(const Color &color) {
     }

@@ -8,7 +8,8 @@
 #include <bits/ostream.tcc>
 
 namespace Microsoft::Xna::Framework {
-    idata(TimeSpan, TotalGameTime, GameTime)
+    IMPL_PROP(TimeSpan, TotalGameTime, getter1, setter1, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
+
     TimeSpan& GameTime::getElapsedGameTimeProperty() {
         return ElapsedGameTime_;
     }
@@ -20,7 +21,8 @@ namespace Microsoft::Xna::Framework {
     {
         ElapsedGameTime_ = std::move(v);  // Uses move semantics to avoid unnecessary copy
     }
-    idata(bool, IsRunningSlowly, GameTime)
+
+    IMPL_PROP(bool, IsRunningSlowly, getter1, setter0, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
 
     GameTime::GameTime(): TotalGameTime_(0), ElapsedGameTime_(TimeSpan(0)), IsRunningSlowly_(false) {
     }

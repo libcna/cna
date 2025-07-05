@@ -13,7 +13,8 @@ namespace Microsoft::Xna::Framework {
 
     class GameTime {
     public:
-        ddata(TimeSpan, TotalGameTime)
+        DEF_PROP(TimeSpan, TotalGameTime, getter1, setter1, member1, static0, constret1, ref1, constmet1)
+
 
     private:
         TimeSpan ElapsedGameTime_;
@@ -25,7 +26,8 @@ namespace Microsoft::Xna::Framework {
         void setElapsedGameTimeProperty(const TimeSpan& v);
         void setElapsedGameTimeProperty(TimeSpan&& v);
 
-        ddata(bool, IsRunningSlowly);
+        DEF_PROP(bool, IsRunningSlowly, getter1, setter1, member1, static0, constret1, ref1, constmet1)
+
 
         GameTime();
         ~GameTime();

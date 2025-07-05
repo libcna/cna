@@ -5,9 +5,9 @@
 #include "Microsoft/Xna/Framework/Input/MouseState.h"
 
 namespace Microsoft::Xna::Framework::Input {
-    igetter(ButtonState, LeftButton, MouseState)
-    igetter(int, X, MouseState)
-    igetter(int, Y, MouseState)
+    IMPL_PROP(ButtonState, LeftButton, getter1, setter0, member0, static0, constret1, ref1, constmet1, MouseState, nothing)
+    IMPL_PROP(int, X, getter1, setter0, member0, static0, constret1, ref1, constmet1, MouseState, nothing)
+    IMPL_PROP(int, Y, getter1, setter0, member0, static0, constret1, ref1, constmet1, MouseState, nothing)
 
     MouseState::MouseState(): LeftButton_(Released), X_(0), Y_(0) {
     }

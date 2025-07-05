@@ -10,11 +10,11 @@
 namespace Microsoft::Xna::Framework::Input {
     struct GamePadState {
     public:
-        dgetter(GamePadButtons, Buttons)
+        DEF_PROP(GamePadButtons, Buttons, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+
         GamePadState();
     };
 }
-
 
 
 #endif //GAMEPADSTATE_H

@@ -70,6 +70,7 @@
 #define setter0 0
 #define member1 1
 #define member0 0
+#define nothing
 /**
  *
  * @param type

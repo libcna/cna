@@ -5,12 +5,15 @@
 
 namespace Microsoft::Xna::Framework {
 
-    igetter(Content::ContentManager, Content, Game)
+    IMPL_PROP(Content::ContentManager, Content, getter1, setter0, member0, static0, constret1, ref1, constmet1, Game, nothing)
+
     Graphics::GraphicsDevice& Game::getGraphicsDeviceProperty() { return GraphicsDevice_ ; }
-    idata(bool, IsMouseVisible, Game)
+
+    IMPL_PROP(bool, IsMouseVisible, getter1, setter1, member0, static0, constret1, ref1, constmet1, Game, nothing)
+
     System::TimeSpan* Game::getTargetElapsedTimeProperty() const { return TargetElapsedTime_; }
     void Game::setTargetElapsedTimeProperty(System::TimeSpan* v) { TargetElapsedTime_ = v; }
-    idata(System::TimeSpan, InactiveSleepTime, Game)
+    IMPL_PROP(System::TimeSpan, InactiveSleepTime, getter1, setter1, member0, static0, constret1, ref1, constmet1, Game, nothing)
 
     Game::Game() : IsMouseVisible_(false), TargetElapsedTime_(new TimeSpan(500000L)),
                    InactiveSleepTime_(TimeSpan(0)),

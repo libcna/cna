@@ -14,10 +14,10 @@
 
 namespace Microsoft::Xna::Framework::Audio {
 
-    IMPL_PROP(float, Volume, getter1, setter0, member0, static0, constret1, ref1, constmet1, SoundEffectInstance)
-    IMPL_PROP(float, Pan, getter1, setter0, member0, static0, constret1, ref1, constmet1, SoundEffectInstance)
-    IMPL_PROP(float, Pitch, getter1, setter1, member0, static0, constret1, ref1, constmet1, SoundEffectInstance)
-    IMPL_PROP(bool, IsLooped, getter1, setter0, member0, static0, constret1, ref1, constmet1, SoundEffectInstance)
+    IMPL_PROP(float, Volume, getter1, setter0, member0, static0, constret1, ref1, constmet1, SoundEffectInstance, nothing)
+    IMPL_PROP(float, Pan, getter1, setter0, member0, static0, constret1, ref1, constmet1, SoundEffectInstance, nothing)
+    IMPL_PROP(float, Pitch, getter1, setter1, member0, static0, constret1, ref1, constmet1, SoundEffectInstance, nothing)
+    IMPL_PROP(bool, IsLooped, getter1, setter0, member0, static0, constret1, ref1, constmet1, SoundEffectInstance, nothing)
 
     SoundEffectInstance::~SoundEffectInstance() {
         Stop();
