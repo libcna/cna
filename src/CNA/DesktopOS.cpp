@@ -8,11 +8,21 @@
 #include "CNA/Platform.hpp"
 
 namespace CNA {
+
     DesktopOS getCurrentDesktopOS() {
         if (getCurrentPlatform() != Platform::Desktop) {
-            throw System::CNAException("Not a desktop platform.");
+            throw CNAException("Current platform is not desktop.");
         }
-        return DesktopOS::Linux;//TODO: Implement this.
+
+#if defined(_WIN32)
+        return DesktopOS::Windows;
+#elif defined(__linux__)
+        return DesktopOS::Linux;
+#elif defined(__APPLE__)
+        return DesktopOS::MacOSX;
+#else
+        return DesktopOS::Other;
+#endif
     }
 
 } // CNA

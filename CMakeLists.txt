@@ -12,6 +12,7 @@ find_package(SDL3_mixer REQUIRED)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 add_library(CNA STATIC ${SOURCES}
+        Doxyfile
 )
 
 target_include_directories(CNA PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

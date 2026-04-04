@@ -1,10 +1,17 @@
 #pragma once
 
-#include <iostream>
-#include <functional>
-#include "CNA/Property.hpp"
+/**
+ * @brief Experimental property wrapper.
+ * @note Status: Stub
+ * @note This type is experimental and is not used by the current CNA design.
+ * Prop.hpp is preferred because it expands to ordinary members and methods
+ * without per-instance std::function-based indirection.
+ */
 
-namespace CNA {
+#include <functional>
+#include "Property.hpp"
+
+namespace CNA::Experimental {
     // Derived class: ReadOnlyProperty
     template <typename T>
     class ReadOnlyProperty : public Property<T> {
@@ -15,7 +22,6 @@ namespace CNA {
         // Delete setter to enforce read-only
         T& operator=(const T& value) = delete;
     };
-
 
 }
 

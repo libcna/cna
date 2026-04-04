@@ -1,16 +1,32 @@
-//
-// Created by robertvokac on 5/26/25.
-//
 #pragma once
 
-
 #include "System/Exception.hpp"
+#include <string>
 
-namespace System {
+namespace CNA {
+
+    /**
+     * @brief Exception type used by the CNA namespace.
+     *
+     * This class extends @c System::Exception and represents
+     * errors related to CNA-specific functionality.
+     * @note Status: Verified
+     */
     class CNAException : public System::Exception {
-    public: CNAException(const char * str);
+    public:
+        /**
+         * @brief Constructs an exception from a C-style string message.
+         *
+         * @param msg Pointer to a null-terminated error message.
+         */
+        explicit CNAException(const char* msg);
 
+        /**
+         * @brief Constructs an exception from a standard string message.
+         *
+         * @param msg Error message text.
+         */
+        explicit CNAException(const std::string& msg);
     };
-} // System
 
-
+} // CNA

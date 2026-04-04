@@ -1,5 +1,12 @@
 #pragma once
 
+/**
+ * @brief Experimental property wrapper.
+ * @note Status: Stub
+ * @note This type is experimental and is not used by the current CNA design.
+ * Prop.hpp is preferred because it expands to ordinary members and methods
+ * without per-instance std::function-based indirection.
+ */
 #include <iostream>
 #include <functional>
 
@@ -22,7 +29,7 @@ name( [this]() customGetter, [this](type v) customSetter)
 #define IMPL_PROP_CUSTOM_READONLY(type, name, customGetter)\
 name( [this]() customGetter )
 
-namespace CNA {
+namespace CNA::Experimental {
     // Template for Property
     template <typename T>
     class Property {

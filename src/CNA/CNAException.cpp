@@ -1,13 +1,13 @@
-//
-// Created by robertvokac on 6/5/25.
-//
-
 #include "CNA/CNAException.hpp"
 
-#include <iostream>
+namespace CNA {
 
-namespace System {
-    CNAException::CNAException(const char * str): Exception(str) {
-        std::cerr << str;
+    CNAException::CNAException(const char* msg)
+        : System::Exception(msg) {
     }
-} // System
+
+    CNAException::CNAException(const std::string& msg)
+        : System::Exception(msg) {
+    }
+
+} // CNA
