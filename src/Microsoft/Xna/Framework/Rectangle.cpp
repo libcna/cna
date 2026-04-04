@@ -2,7 +2,7 @@
 // Created by robertvokac on 5/24/25.
 //
 
-#include "Microsoft/Xna/Framework/Rectangle.h"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 namespace Microsoft::Xna::Framework {
     static Rectangle emptyRectangle = {0,0,0,0};

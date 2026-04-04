@@ -2,15 +2,15 @@
 // Created by robertvokac on 5/25/25.
 //
 
-#include "Microsoft/Devices/Sensors/Accelerometer.h"
+#include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_sensor.h>
 #include <SDL3/SDL.h>
 
-#include "CNA/Platform.h"
-#include "Microsoft/Devices/Sensors/AccelerometerFailedException.h"
-#include "Microsoft/Devices/Sensors/SensorFailedException.h"
+#include "CNA/Platform.hpp"
+#include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
+#include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 
 namespace Microsoft::Devices::Sensors {
     SDL_Sensor* Accelerometer::g_sensor = nullptr;
@@ -22,7 +22,7 @@ namespace Microsoft::Devices::Sensors {
     //impl_prop(bool, IsSupported, getter1, setter0, member0, static1, constret0, ref0, constmet0, Accelerometer,)
      bool Accelerometer::getIsSupportedProperty() {
         CNA::Platform currentPlatform = CNA::getCurrentPlatform();
-        return currentPlatform == CNA::Android || currentPlatform == CNA::iOS ;
+        return currentPlatform == CNA::Platform::Android || currentPlatform == CNA::Platform::iOS ;
         //TODO: Implement this.
     }
     //impl_prop(SensorState, State, getter1, setter0, member0, static0, constret0, ref0, constmet1, Accelerometer, )

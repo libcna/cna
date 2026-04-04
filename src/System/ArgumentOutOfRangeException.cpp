@@ -2,7 +2,7 @@
 // Created by robertvokac on 6/5/25.
 //
 
-#include "System/ArgumentOutOfRangeException.h"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <iostream>
 

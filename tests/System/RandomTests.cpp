@@ -2,7 +2,7 @@
 #include <bits/ostream.tcc>
 
 #include "gtest/gtest.h"
-#include "System/Random.h"
+#include "System/Random.hpp"
 
 using CNA::intcs;
 TEST(RandomTests, NextWithMaxValue) {

@@ -2,9 +2,9 @@
 // Created by robertvokac on 5/24/25.
 //
 
-#include "Microsoft/Xna/Framework/Color.h"
+#include "Microsoft/Xna/Framework/Color.hpp"
 
-#include "CNA/CnaHelper.h"
+#include "CNA/CnaHelper.hpp"
 #include <limits>
 
 namespace Microsoft::Xna::Framework {

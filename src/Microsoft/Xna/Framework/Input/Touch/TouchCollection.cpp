@@ -2,7 +2,7 @@
 // Created by robertvokac on 5/25/25.
 //
 
-#include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.h"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch {
     int TouchCollection::getCountProperty() { return this->touches.size(); }

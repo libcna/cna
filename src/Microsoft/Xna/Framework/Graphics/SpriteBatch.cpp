@@ -1,4 +1,4 @@
-#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.h"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include <SDL3_image/SDL_image.h>
 
 namespace Microsoft::Xna::Framework::Graphics {

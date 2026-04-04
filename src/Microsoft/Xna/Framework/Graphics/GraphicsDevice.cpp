@@ -1,4 +1,4 @@
-#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.h"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_render.h>
 #include <iostream>

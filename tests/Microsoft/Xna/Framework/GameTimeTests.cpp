@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "Microsoft/Xna/Framework/GameTime.h"
+#include "Microsoft/Xna/Framework/GameTime.hpp"
 
 using namespace Microsoft::Xna::Framework;
 

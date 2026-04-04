@@ -1,8 +1,8 @@
-#include "Microsoft/Xna/Framework/Graphics/Texture2D.h"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include <SDL3_image/SDL_image.h>
 #include <iostream>
 
-#include "CNA/Prop.h"
+#include "CNA/Prop.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics {
 

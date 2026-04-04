@@ -2,13 +2,13 @@
 // Created by robertvokac on 5/30/25.
 //
 
-#include "System/TimeSpan.h"
+#include "System/TimeSpan.hpp"
 
 #include <iomanip>
 
-#include "Microsoft/Xna/Framework/GameTime.h"
-#include "System/Int64.h"
-#include "System/OverflowException.h"
+#include "Microsoft/Xna/Framework/GameTime.hpp"
+#include "System/Int64.hpp"
+#include "System/OverflowException.hpp"
 
 namespace System {
 

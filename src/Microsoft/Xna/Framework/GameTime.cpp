@@ -2,7 +2,7 @@
 // Created by robertvokac on 5/28/25.
 //
 
-#include "Microsoft/Xna/Framework/GameTime.h"
+#include "Microsoft/Xna/Framework/GameTime.hpp"
 
 #include <iostream>
 #include <bits/ostream.tcc>

@@ -2,17 +2,17 @@
 // Created by robertvokac on 6/1/25.
 //
 
-#include "CNA/DesktopOS.h"
+#include "CNA/DesktopOS.hpp"
 
-#include "CNA/CNAException.h"
-#include "CNA/Platform.h"
+#include "CNA/CNAException.hpp"
+#include "CNA/Platform.hpp"
 
 namespace CNA {
     DesktopOS getCurrentDesktopOS() {
-        if (getCurrentPlatform() != Desktop) {
+        if (getCurrentPlatform() != Platform::Desktop) {
             throw System::CNAException("Not a desktop platform.");
         }
-        return Linux;//TODO: Implement this.
+        return DesktopOS::Linux;//TODO: Implement this.
     }
 
 } // CNA

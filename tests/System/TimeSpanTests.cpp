@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "System/OverflowException.h"
-#include "System/TimeSpan.h"
+#include "System/OverflowException.hpp"
+#include "System/TimeSpan.hpp"
 
 using System::TimeSpan;
 using CNA::longcs;

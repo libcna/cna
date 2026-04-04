@@ -2,7 +2,7 @@
 // Created by robertvokac on 6/5/25.
 //
 
-#include "System/ArithmeticException.h"
+#include "System/ArithmeticException.hpp"
 
 #include <iostream>
 

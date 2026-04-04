@@ -2,7 +2,7 @@
 // Created by robertvokac on 5/24/25.
 //
 
-#include "Microsoft/Xna/Framework/Content/ContentManager.h"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 
 
 namespace Microsoft::Xna::Framework::Content {

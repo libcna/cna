@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "Microsoft/Xna/Framework/MathHelper.h"
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 
 using Microsoft::Xna::Framework::MathHelper;
 TEST(MathHelperTest, ReturnsValueWhenWithinRange) {

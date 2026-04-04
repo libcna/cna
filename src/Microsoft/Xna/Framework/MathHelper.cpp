@@ -2,7 +2,7 @@
 // Created by robertvokac on 6/7/25.
 //
 
-#include "Microsoft/Xna/Framework/MathHelper.h"
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 
 namespace Microsoft::Xna::Framework {
     int MathHelper::Clamp(int value, const int& min, const int& max)

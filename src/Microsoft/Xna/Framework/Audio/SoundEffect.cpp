@@ -2,8 +2,8 @@
 // Created by robertvokac on 5/24/25.
 //
 
-#include "Microsoft/Xna/Framework/Audio/SoundEffect.h"
-#include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.h"
+#include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Audio {

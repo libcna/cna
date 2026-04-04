@@ -2,7 +2,7 @@
 // Created by robertvokac on 6/5/25.
 //
 
-#include "CNA/CNAException.h"
+#include "CNA/CNAException.hpp"
 
 #include <iostream>
 

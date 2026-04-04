@@ -2,9 +2,9 @@
 // Created by robertvokac on 5/28/25.
 //
 
-#include "System/Random.h"
+#include "System/Random.hpp"
 
-#include "System/ArgumentOutOfRangeException.h"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace System {
     Random::Random() : generator(std::random_device{}()) {

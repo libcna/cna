@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 #include <string>
-#include "System/EventHandler.h"
+#include "System/EventHandler.hpp"
 
 using System::EventHandler;
 

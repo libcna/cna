@@ -2,7 +2,7 @@
 // Created by robertvokac on 5/28/25.
 //
 
-#include "Microsoft/Xna/Framework/Input/GamePad.h"
+#include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 namespace Microsoft::Xna::Framework::Input {
 
     GamePadState GamePad::GetState(PlayerIndex playerIndex) {

@@ -1,5 +1,5 @@
-#include "Microsoft/Xna/Framework/Game.h"
-#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.h"
+#include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include <SDL3/SDL.h>
 #include <iostream>
 
