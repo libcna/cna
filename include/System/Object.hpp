@@ -7,6 +7,14 @@
 #include <string>
 #include <cstddef>
 
+#define GetTypeNameHPP() [[nodiscard]] virtual const std::string& GetTypeName() const override;
+#define GetTypeNameCPP(CLASS, NAME) \
+const std::string& CLASS ::GetTypeName() const\
+        {\
+            const static std::string type_name = #NAME;\
+            return type_name;\
+        }
+
 namespace System
 {
     class Object
