@@ -27,7 +27,7 @@ namespace System
         /// Returns a string that represents the current object.
         /// Default implementation returns the runtime type name.
         /// </summary>
-        virtual std::string ToString() const;
+        [[nodiscard]] virtual std::string ToString() const;
 
         /// <summary>
         /// Determines whether the specified object is equal to the current object.
@@ -49,8 +49,8 @@ namespace System
         /// Serves as the default hash function.
         /// Default implementation hashes object identity (address).
         /// </summary>
-        virtual int GetHashCode() const;
+        [[nodiscard]] virtual int GetHashCode() const;
 
-        virtual const std::string& GetTypeName() const = 0;
+        [[nodiscard]] virtual const std::string& GetTypeName() const = 0;
     };
 }
