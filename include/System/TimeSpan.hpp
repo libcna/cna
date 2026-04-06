@@ -6,6 +6,8 @@
 #include <chrono>
 #include <cmath>
 #include <limits>
+#include <sstream>
+#include <string>
 
 #include "IComparable.hpp"
 #include "IEquatable.hpp"
@@ -32,6 +34,7 @@ namespace System {
      *
      * Due to these inconsistencies, TimeSpan does not offer direct methods
      * for retrieving months or years.
+     * @note Status: Partial
      */
     struct TimeSpan : IEquatable<TimeSpan>, IComparable<TimeSpan> {
     private:
@@ -108,9 +111,27 @@ namespace System {
         longcs ticks_internal;
 
     public:
+        /**
+         * @brief Initializes a new instance of the TimeSpan structure to zero ticks.
+         */
+        TimeSpan();
+
+    public:
+        /**
+         * @brief Initializes a new instance of the TimeSpan structure to a specified number of ticks.
+         *
+         * @param ticks A time period expressed in 100-nanosecond units.
+         */
         TimeSpan(longcs ticks);
 
     public:
+        /**
+         * @brief Initializes a new instance of the TimeSpan structure to a specified number of hours, minutes, and seconds.
+         *
+         * @param hours Number of hours.
+         * @param minutes Number of minutes.
+         * @param seconds Number of seconds.
+         */
         TimeSpan(intcs hours, intcs minutes, intcs seconds);
 
         /**
@@ -351,37 +372,37 @@ namespace System {
         TimeSpan Multiply(double factor) const;
 
     public:
-        TimeSpan Divide(double divisor);
+        TimeSpan Divide(double divisor) const;
 
     public:
         [[nodiscard]] double Divide(const TimeSpan &ts) const;
 
     public:
-        static TimeSpan FromTicks(long value);
+        static TimeSpan FromTicks(longcs value);
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
     private:
-        static long TimeToTicks(int hour, int minute, int second);
+        static longcs TimeToTicks(intcs hour, intcs minute, intcs second);
 
     public:
         [[nodiscard]] std::string ToString() const;
 
     public:
-        TimeSpan operator-() const;\
+        TimeSpan operator-() const;
 
     public:
-        TimeSpan operator-(const TimeSpan &t2);
+        TimeSpan operator-(const TimeSpan &t2) const;
 
     public:
-        TimeSpan operator+();
+        TimeSpan operator+() const;
 
     public:
-        TimeSpan operator+(const TimeSpan &t2);
+        TimeSpan operator+(const TimeSpan &t2) const;
 
     public:
         TimeSpan operator*(double factor) const;
 
-        TimeSpan operator/(double divisor);
+        TimeSpan operator/(double divisor) const;
 
         // Performing division using floating-point arithmetic allows the result to be infinity,
         // which makes sense when dividing a non-zero TimeSpan by TimeSpan.Zero.

@@ -20,10 +20,10 @@ namespace System {
 
     void TimeSpan::resetCopyCount() {
         copy_count = 0;
-        move_count = 0;
     }
 
     void TimeSpan::resetMoveCount() {
+        move_count = 0;
     }
 
     const TimeSpan TimeSpan::Zero = TimeSpan(0);
@@ -31,6 +31,9 @@ namespace System {
 
     const TimeSpan TimeSpan::MinValue = TimeSpan(CNA::LONGCS_MIN);
 
+
+    TimeSpan::TimeSpan() : ticks_internal(0) {
+    }
 
     TimeSpan::TimeSpan(longcs ticks): ticks_internal(ticks) {
     }
@@ -196,11 +199,14 @@ namespace System {
     }
 
     TimeSpan TimeSpan::Interval(double value, double scale) {
+        if (std::isnan(value)) {
+            throw ArgumentOutOfRangeException("value cannot be NaN");
+        }
         return IntervalFromDoubleTicks(value * scale);
     }
 
     TimeSpan TimeSpan::IntervalFromDoubleTicks(double ticks) {
-        if ((ticks > CNA::LONGCS_MAX) || (ticks < CNA::LONGCS_MIN))
+        if (std::isnan(ticks) || (ticks > CNA::LONGCS_MAX) || (ticks < CNA::LONGCS_MIN))
             throw OverflowException("TimeSpanTooLong");
         if (ticks == Int64::MaxValue)
             return MaxValue;
@@ -246,47 +252,56 @@ namespace System {
 
     TimeSpan TimeSpan::Multiply(double factor) const { return (*this) * factor; }
 
-    TimeSpan TimeSpan::Divide(double divisor) { return (*this) / divisor; }
+    TimeSpan TimeSpan::Divide(double divisor) const { return (*this) / divisor; }
 
     double TimeSpan::Divide(const TimeSpan &ts) const { return (*this) / ts; }
 
-    TimeSpan TimeSpan::FromTicks(long value) {
+    TimeSpan TimeSpan::FromTicks(longcs value) {
         return TimeSpan(value);
     }
 
-    long TimeSpan::TimeToTicks(int hour, int minute, int second) {
-        long totalSeconds = (long) hour * 3600 + (long) minute * 60 + (long) second;
+    longcs TimeSpan::TimeToTicks(intcs hour, intcs minute, intcs second) {
+        longcs totalSeconds = (longcs) hour * 3600 + (longcs) minute * 60 + (longcs) second;
         if (totalSeconds > MaxSeconds || totalSeconds < MinSeconds)
             throw ArgumentOutOfRangeException("TimeSpanTooLong");
         return totalSeconds * TicksPerSecond;
     }
 
     std::string TimeSpan::ToString() const {
-        constexpr longcs TicksPerMillisecond = 10000;
-        constexpr longcs TicksPerSecond = TicksPerMillisecond * 1000;
-        constexpr longcs TicksPerMinute = TicksPerSecond * 60;
-        constexpr longcs TicksPerHour = TicksPerMinute * 60;
-
         longcs ticks = ticks_internal;
         bool negative = ticks < 0;
-        if (negative) ticks = -ticks;
 
-        longcs hours = ticks / TicksPerHour;
-        ticks -= hours * TicksPerHour;
+        std::uint64_t magnitude;
+        if (negative) {
+            magnitude = static_cast<std::uint64_t>(-(ticks + 1)) + 1;
+        } else {
+            magnitude = static_cast<std::uint64_t>(ticks);
+        }
 
-        longcs minutes = ticks / TicksPerMinute;
-        ticks -= minutes * TicksPerMinute;
+        const std::uint64_t days = magnitude / static_cast<std::uint64_t>(TicksPerDay);
+        magnitude %= static_cast<std::uint64_t>(TicksPerDay);
 
-        longcs seconds = ticks / TicksPerSecond;
-        ticks -= seconds * TicksPerSecond;
+        const std::uint64_t hours = magnitude / static_cast<std::uint64_t>(TicksPerHour);
+        magnitude %= static_cast<std::uint64_t>(TicksPerHour);
+
+        const std::uint64_t minutes = magnitude / static_cast<std::uint64_t>(TicksPerMinute);
+        magnitude %= static_cast<std::uint64_t>(TicksPerMinute);
+
+        const std::uint64_t seconds = magnitude / static_cast<std::uint64_t>(TicksPerSecond);
+        magnitude %= static_cast<std::uint64_t>(TicksPerSecond);
 
         std::ostringstream oss;
-        if (negative) oss << '-';
+        if (negative) {
+            oss << '-';
+        }
+        if (days != 0) {
+            oss << days << '.';
+        }
 
         oss << hours << ":"
-                << std::setw(2) << std::setfill('0') << minutes << ":"
-                << std::setw(2) << std::setfill('0') << seconds << "."
-                << std::setw(7) << std::setfill('0') << ticks;
+            << std::setw(2) << std::setfill('0') << minutes << ":"
+            << std::setw(2) << std::setfill('0') << seconds << "."
+            << std::setw(7) << std::setfill('0') << magnitude;
 
         return oss.str();
     }
@@ -298,21 +313,26 @@ namespace System {
         return TimeSpan(-ticks_internal);
     }
 
-    TimeSpan TimeSpan::operator-(const TimeSpan &t2) { return Subtract(t2); }
+    TimeSpan TimeSpan::operator-(const TimeSpan &t2) const { return Subtract(t2); }
 
-    TimeSpan TimeSpan::operator+() { return *this; };
+    TimeSpan TimeSpan::operator+() const { return *this; }
 
-    TimeSpan TimeSpan::operator+(const TimeSpan &t2) { return Add(t2); }
+    TimeSpan TimeSpan::operator+(const TimeSpan &t2) const { return Add(t2); }
 
 
     TimeSpan TimeSpan::operator*(double factor) const {
-        double ticks;
-        ticks = std::round(getTicksProperty() * factor);
+        if (std::isnan(factor)) {
+            throw ArgumentOutOfRangeException("factor cannot be NaN");
+        }
+        const double ticks = std::round(getTicksProperty() * factor);
         return IntervalFromDoubleTicks(ticks);
     }
 
-    TimeSpan TimeSpan::operator/(double divisor) {
-        double ticks = std::round(getTicksProperty() / divisor);
+    TimeSpan TimeSpan::operator/(double divisor) const {
+        if (std::isnan(divisor)) {
+            throw ArgumentOutOfRangeException("divisor cannot be NaN");
+        }
+        const double ticks = std::round(getTicksProperty() / divisor);
         return IntervalFromDoubleTicks(ticks);
     }
 
