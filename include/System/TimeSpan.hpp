@@ -84,14 +84,14 @@ namespace System {
         static constexpr longcs TicksPerDay = TicksPerHour * 24; // 864,000,000,000
 
     private:
-        static constexpr longcs MaxSeconds = LONGCS_MAX / TicksPerSecond;
-        static constexpr longcs MinSeconds = LONGCS_MIN / TicksPerSecond;
+        static constexpr longcs MaxSeconds = CNA::LONGCS_MAX / TicksPerSecond;
+        static constexpr longcs MinSeconds = CNA::LONGCS_MIN / TicksPerSecond;
 
-        static constexpr longcs MaxMilliSeconds = LONGCS_MAX / TicksPerMillisecond;
-        static constexpr longcs MinMilliSeconds = LONGCS_MIN / TicksPerMillisecond;
+        static constexpr longcs MaxMilliSeconds = CNA::LONGCS_MAX / TicksPerMillisecond;
+        static constexpr longcs MinMilliSeconds = CNA::LONGCS_MIN / TicksPerMillisecond;
 
-        static constexpr longcs MaxMicroSeconds = LONGCS_MAX / TicksPerMicrosecond;
-        static constexpr longcs MinMicroSeconds = LONGCS_MIN / TicksPerMicrosecond;
+        static constexpr longcs MaxMicroSeconds = CNA::LONGCS_MAX / TicksPerMicrosecond;
+        static constexpr longcs MinMicroSeconds = CNA::LONGCS_MIN / TicksPerMicrosecond;
 
         static constexpr longcs TicksPerTenthSecond = TicksPerMillisecond * 100;
 

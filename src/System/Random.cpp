@@ -3,25 +3,48 @@
 //
 
 #include "System/Random.hpp"
-
 #include "System/ArgumentOutOfRangeException.hpp"
 
 namespace System {
-    Random::Random() : generator(std::random_device{}()) {
+
+    Random::Random()
+        : generator(std::random_device{}()) {
     }
 
-    intcs Random::Next(const intcs& maxValue) {
+    intcs Random::Next()
+    {
+        return Next(0, CNA::INTCS_MAX);
+    }
+
+    intcs Random::Next(intcs maxValue)
+    {
+        if (maxValue < 0)
+        {
+            throw ArgumentOutOfRangeException("maxValue must be >= 0");
+        }
+
+        if (maxValue == 0)
+        {
+            return 0;
+        }
+
         return Next(0, maxValue);
     }
 
-    intcs Random::Next(const intcs& minValue, const intcs& maxValue) {
-        if (minValue >= maxValue)
-            throw ArgumentOutOfRangeException("minValue must be < maxValue");
-        std::uniform_int_distribution<int> distribution(minValue, maxValue - 1);
+    intcs Random::Next(intcs minValue, intcs maxValue)
+    {
+        if (minValue > maxValue)
+        {
+            throw ArgumentOutOfRangeException("minValue must be <= maxValue");
+        }
+
+        if (minValue == maxValue)
+        {
+            return minValue;
+        }
+
+        std::uniform_int_distribution<intcs> distribution(minValue, maxValue - 1);
         return distribution(generator);
     }
 
-    intcs Random::Next() {
-        return Next(0, INTCS_MAX);
-    }
-} // System
+} // namespace System

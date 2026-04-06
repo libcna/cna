@@ -4,10 +4,32 @@
 
 #include "System/ArithmeticException.hpp"
 
-#include <iostream>
-
 namespace System {
-    ArithmeticException::ArithmeticException(const char * str): SystemException(str) {
-        std::cerr << str;
+
+    /**
+     * \brief Initializes a new instance of the ArithmeticException class
+     * with an empty message.
+     */
+    ArithmeticException::ArithmeticException()
+        : SystemException() {
     }
-} // System
+
+    /**
+     * \brief Initializes a new instance of the ArithmeticException class
+     * with the specified error message.
+     * \param str A null-terminated character string that describes the error.
+     */
+    ArithmeticException::ArithmeticException(const char* str)
+        : SystemException(str) {
+    }
+
+    /**
+     * \brief Initializes a new instance of the ArithmeticException class
+     * with the specified error message.
+     * \param str A string that describes the error.
+     */
+    ArithmeticException::ArithmeticException(const std::string& str)
+        : SystemException(str) {
+    }
+
+} // namespace System

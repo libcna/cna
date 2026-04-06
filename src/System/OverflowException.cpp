@@ -4,10 +4,10 @@
 
 #include "System/OverflowException.hpp"
 
-#include <iostream>
-
 namespace System {
-    OverflowException::OverflowException(const char * str): ArithmeticException(str) {
-        std::cerr << str;
+
+    OverflowException::OverflowException(const char* str)
+        : ArithmeticException(str) {
     }
-} // System
+
+} // namespace System

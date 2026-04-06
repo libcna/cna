@@ -3,65 +3,68 @@
 //
 
 #pragma once
-#include <random>
 
+#include <random>
 #include "CNA/CnaHelper.hpp"
 
 namespace System {
+
     using CNA::intcs;
 
     /**
-     * Provides methods to generate pseudo-random numbers using a Mersenne Twister
-     * engine. The class includes methods for producing random integers within specified
-     * ranges or using default bounds.
+     * @brief Represents a pseudo-random number generator.
+     *
+     * This is a simplified C++ counterpart of the .NET System::Random class.
+     * It provides methods for generating pseudo-random 32-bit signed integers.
+     * @note Status: Partial
      */
     class Random {
     private:
         std::mt19937 generator;
 
-        /**
-         * Constructs a new Random object, initializing the random number generator
-         * using a Mersenne Twister engine seeded with a random device.
-         */
     public:
-        /// Constructs a Random object, seeded using a random device.
+        /**
+         * @brief Initializes a new instance of the Random class using a random seed.
+         */
         Random();
 
-        /// Non-copyable to avoid unintended sharing of internal generator state
         Random(const Random&) = delete;
         Random& operator=(const Random&) = delete;
 
-        /// Movable if needed
         Random(Random&&) noexcept = default;
         Random& operator=(Random&&) noexcept = default;
 
-        /// Destructor
         ~Random() = default;
 
         /**
-         * Generates a random integer in the range [0, maxValue).
+         * @brief Returns a non-negative random integer.
          *
-         * @param maxValue The exclusive upper limit of the random number to generate.
-         *                 Must be greater than 0.
-         * @return A random integer in the range [0, maxValue).
-         */
-        intcs Next(const intcs& maxValue);
-
-        /**
-         * Generates a random integer within the specified range [minValue, maxValue).
-         *
-         * @param minValue The inclusive lower limit of the range.
-         * @param maxValue The exclusive upper limit of the range. Must be greater than minValue.
-         * @return A random integer in the range [minValue, maxValue).
-         */
-        intcs Next(const CNA::intcs& minValue, const intcs& maxValue);
-
-        /**
-         * Generates a random integer in the range [0, CSINT_MAX).
-         *
-         * @return A random integer in the range [0, CSINT_MAX).
+         * @return A 32-bit signed integer greater than or equal to 0
+         *         and less than INTCS_MAX.
          */
         intcs Next();
-    };
-} // System
 
+        /**
+         * @brief Returns a non-negative random integer less than the specified maximum.
+         *
+         * @param maxValue The exclusive upper bound of the random number to be generated.
+         *                 Must be greater than or equal to 0.
+         * @return A 32-bit signed integer greater than or equal to 0 and less than maxValue.
+         *         If maxValue is 0, returns 0.
+         */
+        intcs Next(intcs maxValue);
+
+        /**
+         * @brief Returns a random integer within a specified range.
+         *
+         * @param minValue The inclusive lower bound of the random number returned.
+         * @param maxValue The exclusive upper bound of the random number returned.
+         *                 Must be greater than or equal to minValue.
+         * @return A 32-bit signed integer greater than or equal to minValue
+         *         and less than maxValue.
+         *         If minValue equals maxValue, returns minValue.
+         */
+        intcs Next(intcs minValue, intcs maxValue);
+    };
+
+} // namespace System

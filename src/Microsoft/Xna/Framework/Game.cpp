@@ -83,7 +83,7 @@ namespace Microsoft::Xna::Framework {
             //return;
         }
         ExitingEventArgs exiting_event_args;
-        Exiting.RaiseCurrentValueChanged(exiting_event_args);
+        Exiting.Raise(this, exiting_event_args);
     }
 
     void Game::Initialize() {
@@ -98,10 +98,10 @@ namespace Microsoft::Xna::Framework {
     void Game::UnloadContent() {
     }
 
-    void Game::OnDeactivated(std::any sender, System::Runtime::CompilerServices::EventArgs args) {
+    void Game::OnDeactivated(std::any sender, System::EventArgs args) {
     }
 
-    void Game::OnActivated(std::any sender, System::Runtime::CompilerServices::EventArgs args) {
+    void Game::OnActivated(std::any sender, System::EventArgs args) {
     }
 
     void Game::Update(Microsoft::Xna::Framework::GameTime &gameTime) {

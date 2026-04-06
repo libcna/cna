@@ -6,12 +6,23 @@
 
 namespace System {
 
-class IDisposable {
-protected:
-    virtual ~IDisposable() = default;
-    virtual void Dispose(bool disposing) = 0;
+    /**
+     * @brief Defines a mechanism for explicitly releasing resources.
+     *
+     * This is the C++ counterpart of the .NET IDisposable interface.
+     * In .NET, IDisposable declares only the Dispose() method.
+     */
+    class IDisposable {
+    public:
+        /**
+         * @brief Releases the resources used by the current object.
+         */
+        virtual void Dispose(bool disposing = true) = 0;
 
-};
+        /**
+         * @brief Virtual destructor for safe polymorphic destruction.
+         */
+        virtual ~IDisposable() = default;
+    };
 
-} // System
-
+} // namespace System

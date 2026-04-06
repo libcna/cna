@@ -9,11 +9,11 @@
 
 #include "System/EventHandler.hpp"
 #include "System/TimeSpan.hpp"
-#include "System/Runtime/CompilerServices/EventArgs.hpp"
+#include "../../../System/EventArgs.hpp"
 
 namespace Microsoft::Xna::Framework {
 
-    class Game {
+    class Game : public System::Object{
     public:
         DEF_PROP(Content::ContentManager, Content, getter1, setter0, member1, static0, constret0, ref1, constmet0)
 
@@ -45,8 +45,8 @@ namespace Microsoft::Xna::Framework {
         virtual void Initialize();
         virtual void LoadContent();
         virtual void UnloadContent();
-        virtual void OnDeactivated(std::any sender, System::Runtime::CompilerServices::EventArgs args);
-        virtual void OnActivated(std::any sender, System::Runtime::CompilerServices::EventArgs args);
+        virtual void OnDeactivated(std::any sender, System::EventArgs args);
+        virtual void OnActivated(std::any sender, System::EventArgs args);
 
         virtual void Update(Microsoft::Xna::Framework::GameTime &gameTime);
         virtual void Draw(const Microsoft::Xna::Framework::GameTime &gameTime);

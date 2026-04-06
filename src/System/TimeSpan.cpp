@@ -27,9 +27,9 @@ namespace System {
     }
 
     const TimeSpan TimeSpan::Zero = TimeSpan(0);
-    const TimeSpan TimeSpan::MaxValue = TimeSpan(LONGCS_MAX);
+    const TimeSpan TimeSpan::MaxValue = TimeSpan(CNA::LONGCS_MAX);
 
-    const TimeSpan TimeSpan::MinValue = TimeSpan(LONGCS_MIN);
+    const TimeSpan TimeSpan::MinValue = TimeSpan(CNA::LONGCS_MIN);
 
 
     TimeSpan::TimeSpan(longcs ticks): ticks_internal(ticks) {
@@ -200,7 +200,7 @@ namespace System {
     }
 
     TimeSpan TimeSpan::IntervalFromDoubleTicks(double ticks) {
-        if ((ticks > LONGCS_MAX) || (ticks < LONGCS_MIN))
+        if ((ticks > CNA::LONGCS_MAX) || (ticks < CNA::LONGCS_MIN))
             throw OverflowException("TimeSpanTooLong");
         if (ticks == Int64::MaxValue)
             return MaxValue;

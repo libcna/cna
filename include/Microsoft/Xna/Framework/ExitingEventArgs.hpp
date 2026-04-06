@@ -3,11 +3,11 @@
 //
 
 #pragma once
-#include "System/Runtime/CompilerServices/EventArgs.hpp"
+#include "../../../System/EventArgs.hpp"
 
 
 namespace Microsoft::Xna::Framework {
-    class ExitingEventArgs : System::Runtime::CompilerServices::EventArgs {
+    class ExitingEventArgs : System::EventArgs {
     };
 }
 

@@ -7,10 +7,16 @@
 namespace System {
 
     /**
-     * @brief Interface for types that define a custom ordering or sorting logic.
+     * @brief Defines a generalized comparison method for objects of the same type.
      *
-     * This template allows a type to specify how it should be compared to another instance of the same type
-     * in terms of relative order (less than, equal to, greater than).
+     * This template is a C++ counterpart of the .NET IComparable<T> interface.
+     * It allows a type to define its relative ordering with another instance
+     * of the same type.
+     *
+     * The return value follows the usual .NET-style convention:
+     * - negative value: this instance is less than @p other
+     * - zero: this instance is equal to @p other
+     * - positive value: this instance is greater than @p other
      *
      * @tparam T The type of object to compare with.
      */
@@ -18,14 +24,18 @@ namespace System {
     class IComparable {
     public:
         /**
-         * @brief Compares the current object with another object of the same type.
+         * @brief Compares the current instance with another instance of the same type.
          *
-         * @param other Pointer to another object to compare with.
-         * @return A negative value if this is less than other, 0 if equal, or a positive value if greater.
+         * @param other Another object to compare with.
+         * @return A negative value if this instance is less than @p other,
+         *         0 if they are equal,
+         *         or a positive value if this instance is greater than @p other.
          */
         virtual int CompareTo(const T& other) const = 0;
 
-        /// Virtual destructor to support proper destruction via base class pointers.
+        /**
+         * @brief Virtual destructor for safe polymorphic destruction.
+         */
         virtual ~IComparable() = default;
     };
 

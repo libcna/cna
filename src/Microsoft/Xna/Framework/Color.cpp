@@ -9,7 +9,7 @@
 
 namespace Microsoft::Xna::Framework {
     Color Color::FromNonPremultiplied(int r, int g, int b, int a) {
-        return Color(r * a / (int) BYTE_MAX, g * a / (int) BYTE_MAX, b * a / (int) BYTE_MAX, a);
+        return Color(r * a / (int)CNA::BYTE_MAX, g * a / (int)CNA::BYTE_MAX, b * a / (int)CNA::BYTE_MAX, a);
     }
 
 }
