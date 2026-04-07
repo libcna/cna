@@ -45,12 +45,6 @@ namespace System {
          */
         explicit InvalidOperationException(const std::string& message);
 
-        /**
-         * @brief Gets the exception message.
-         *
-         * @return Exception message text.
-         */
-        [[nodiscard]] const std::string& getMessageProperty() const override;
     };
 
 } // namespace System
