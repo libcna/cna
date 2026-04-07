@@ -50,6 +50,6 @@ TEST(RandomTests, NextWithoutArguments) {
     for (int i = 0; i < 1000; ++i) {
         intcs value = rng.Next();
         ASSERT_GE(value, 0);
-        ASSERT_LT(value, INTCS_MAX);
+        ASSERT_LT(value, CNA::INTCS_MAX);
     }
 }

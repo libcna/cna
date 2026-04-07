@@ -1,39 +1,29 @@
+//
+// Created by robertvokac on 6/5/25.
+//
+
 #include "System/Exception.hpp"
-#include <SDL3/SDL_log.h>
 
 namespace System {
 
-    /**
-     * \brief Initializes a new instance of the Exception class with the specified message.
-     * \param msg A null-terminated character string that describes the error.
-     *
-     * If \p msg is null, an empty message is stored instead.
-     * The message is also written to the SDL application error log.
-     */
+    Exception::Exception()
+        : message_("") {
+    }
+
     Exception::Exception(const char* msg)
-        : message(msg ? msg : "")
-    {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", message.c_str());
+        : message_(msg ? msg : "") {
     }
 
-    /**
-     * \brief Initializes a new instance of the Exception class with the specified message.
-     * \param msg A string that describes the error.
-     *
-     * The message is also written to the SDL application error log.
-     */
     Exception::Exception(const std::string& msg)
-        : message(msg)
-    {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", message.c_str());
+        : message_(msg) {
     }
 
-    /**
-     * \brief Returns the explanatory message associated with this exception.
-     * \return A pointer to a null-terminated character sequence describing the error.
-     */
+    const std::string& Exception::getMessageProperty() const {
+        return message_;
+    }
+
     const char* Exception::what() const noexcept {
-        return message.c_str();
+        return message_.c_str();
     }
 
 } // namespace System

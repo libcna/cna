@@ -5,7 +5,33 @@
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
 
 namespace Microsoft::Devices::Sensors {
-    IMPL_PROP(Vector3, Acceleration, getter1, setter0, member0, static0, constret1, ref1, constmet1, AccelerometerReading,)
 
+    AccelerometerReading::AccelerometerReading()
+        : Timestamp_(System::DateTimeOffset()),
+          Acceleration_(Vector3()) {
+    }
 
-}
+    AccelerometerReading::AccelerometerReading(
+        const System::DateTimeOffset& timestamp,
+        const Vector3& acceleration)
+        : Timestamp_(timestamp),
+          Acceleration_(acceleration) {
+    }
+
+    const System::DateTimeOffset& AccelerometerReading::getTimestampProperty() const {
+        return Timestamp_;
+    }
+
+    void AccelerometerReading::setTimestampProperty(const System::DateTimeOffset& value) {
+        Timestamp_ = value;
+    }
+
+    const Vector3& AccelerometerReading::getAccelerationProperty() const {
+        return Acceleration_;
+    }
+
+    void AccelerometerReading::setAccelerationProperty(const Vector3& value) {
+        Acceleration_ = value;
+    }
+
+} // namespace Microsoft::Devices::Sensors

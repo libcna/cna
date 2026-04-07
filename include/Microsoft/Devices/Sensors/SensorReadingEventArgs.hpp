@@ -1,25 +1,88 @@
 //
 // Created by robertvokac on 5/25/25.
 //
-#pragma once
-#include <algorithm>
 
+#pragma once
+
+#include <type_traits>
+#include <utility>
+
+#include "System/EventArgs.hpp"
+#include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "CNA/Prop.hpp"
 
 namespace Microsoft::Devices::Sensors {
-    template<typename T>
-    class SensorReadingEventArgs {
-    private:
-        DEF_MEMBER(T,SensorReading)
-    public:
-        SensorReadingEventArgs() : SensorReading_{} {}
-        //IMPL_PROP(T, SensorReading, getter1, setter1, member0, static0, constret1, ref1, constmet1, SensorReadingEventArgs, nothing)
-        const T &getSensorReadingProperty() const { return SensorReading_; }
-        void setSensorReadingProperty(const T &v) { SensorReading_ = v; }
-        void setSensorReadingProperty(T &&v) { SensorReading_ = std::move(v); }
 
+    /**
+     * @brief Provides data for a sensor reading event.
+     *
+     * This is a C++ counterpart of the .NET
+     * Microsoft.Devices.Sensors.SensorReadingEventArgs<T> class.
+     *
+     * @tparam T Type of sensor reading payload.
+     *
+     * @note Status: Partial.
+     */
+    template<typename T>
+    class SensorReadingEventArgs : public System::EventArgs {
+        static_assert(std::is_base_of_v<ISensorReading, T>,
+                      "T must derive from ISensorReading");
+
+    private:
+        DEF_MEMBER(T, SensorReading)
+
+    public:
+        /**
+         * @brief Initializes a new instance with a default-constructed sensor reading.
+         */
+        SensorReadingEventArgs()
+            : SensorReading_{} {
+        }
+
+        /**
+         * @brief Initializes a new instance with the specified sensor reading.
+         *
+         * @param sensorReading Sensor reading value.
+         */
+        explicit SensorReadingEventArgs(const T& sensorReading)
+            : SensorReading_(sensorReading) {
+        }
+
+        /**
+         * @brief Initializes a new instance with the specified sensor reading.
+         *
+         * @param sensorReading Sensor reading value to move.
+         */
+        explicit SensorReadingEventArgs(T&& sensorReading)
+            : SensorReading_(std::move(sensorReading)) {
+        }
+
+        /**
+         * @brief Gets the sensor reading associated with this event.
+         *
+         * @return Sensor reading value.
+         */
+        [[nodiscard]] const T& getSensorReadingProperty() const {
+            return SensorReading_;
+        }
+
+        /**
+         * @brief Sets the sensor reading associated with this event.
+         *
+         * @param v New sensor reading value.
+         */
+        void setSensorReadingProperty(const T& v) {
+            SensorReading_ = v;
+        }
+
+        /**
+         * @brief Sets the sensor reading associated with this event.
+         *
+         * @param v New sensor reading value to move.
+         */
+        void setSensorReadingProperty(T&& v) {
+            SensorReading_ = std::move(v);
+        }
     };
 
-
-}
-
+} // namespace Microsoft::Devices::Sensors

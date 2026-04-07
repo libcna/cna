@@ -1,11 +1,20 @@
 //
-// Created by robertvokac on 6/1/25.
+// Created by robertvokac on 6/7/25.
 //
 
 #pragma once
 
 namespace Microsoft::Devices::Sensors {
-    enum SensorState {
+
+    /**
+     * @brief Specifies the current state of a sensor.
+     *
+     * This is a C++ counterpart of the .NET
+     * Microsoft.Devices.Sensors.SensorState enumeration.
+     *
+     * @note Status: Partial.
+     */
+    enum class SensorState {
         NotSupported,
         Ready,
         Initializing,
@@ -13,4 +22,5 @@ namespace Microsoft::Devices::Sensors {
         NoPermissions,
         Disabled,
     };
-}
+
+} // namespace Microsoft::Devices::Sensors

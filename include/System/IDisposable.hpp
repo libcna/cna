@@ -17,7 +17,7 @@ namespace System {
         /**
          * @brief Releases the resources used by the current object.
          */
-        virtual void Dispose(bool disposing = true) = 0;
+        virtual void Dispose() = 0;
 
         /**
          * @brief Virtual destructor for safe polymorphic destruction.

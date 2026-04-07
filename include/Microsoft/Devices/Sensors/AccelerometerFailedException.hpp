@@ -7,6 +7,10 @@
 
 namespace Microsoft::Devices::Sensors {
     class AccelerometerFailedException : public SensorFailedException {
+    public:
+        AccelerometerFailedException();
+
+        explicit AccelerometerFailedException(const char * str);
     };
 };
 
