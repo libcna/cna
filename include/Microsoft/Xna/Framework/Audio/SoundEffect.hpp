@@ -1,42 +1,37 @@
-//
-// Created by robertvokac on 5/24/25.
-//
-
 #pragma once
+
+#include <memory>
 #include <string>
-#include <SDL3_mixer/SDL_mixer.h>
 
 #include "SoundEffectI.hpp"
 #include "SoundEffectInstance.hpp"
 
-
 namespace Microsoft::Xna::Framework::Audio {
     class SoundEffect : public SoundEffectI {
         friend class SoundEffectInstance;
-        DEF_PROP(float, MasterVolume, getter1, setter1, member0, static1, constret1, ref0, constmet0)
 
     private:
-        Mix_Chunk *chunk = nullptr;
+        class Impl;
+        std::shared_ptr<Impl> impl_;
+
+        static float MasterVolume_;
+
+    private:
+        [[nodiscard]] void* getNativeChunkHandle() const;
 
     public:
-        SoundEffect(const std::string &assetName);
+        explicit SoundEffect(const std::string& assetName);
+        ~SoundEffect() override;
 
-        ~SoundEffect();
+        SoundEffect(const SoundEffect&) = default;
+        SoundEffect& operator=(const SoundEffect&) = default;
+        SoundEffect(SoundEffect&&) noexcept = default;
+        SoundEffect& operator=(SoundEffect&&) noexcept = default;
 
-        SoundEffect(const SoundEffect &);
+        [[nodiscard]] static float getMasterVolumeProperty();
+        static void setMasterVolumeProperty(const float& v);
+        static void setMasterVolumeProperty(float&& v);
 
-        SoundEffect &operator=(const SoundEffect &);
-
-        SoundEffect(SoundEffect &&other) noexcept;
-
-        SoundEffect &operator=(SoundEffect &&other) noexcept;
-
-        SoundEffectInstance CreateInstance();
-
-    private:
-
-    private:
-        Mix_Chunk *GetChunk() const { return chunk; }
+        [[nodiscard]] SoundEffectInstance CreateInstance() const override;
     };
 }
-

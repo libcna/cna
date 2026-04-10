@@ -14,7 +14,6 @@ namespace Microsoft::Xna::Framework::Input::Touch {
 
         DEF_PROP(int, Count, getter1, setter0, member0, static0, constret0, ref0, constmet0)
 
-
         std::vector<TouchLocation>::iterator begin();
         std::vector<TouchLocation>::iterator end();
         TouchCollection();

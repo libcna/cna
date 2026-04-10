@@ -1,44 +1,46 @@
-//
-// Created by robertvokac on 5/24/25.
-//
-
 #pragma once
 
-#include <atomic>
-
-#include "SoundEffectI.hpp"
 #include "SoundState.hpp"
 
-#include "CNA/Prop.hpp"
-
-
 namespace Microsoft::Xna::Framework::Audio {
+    class SoundEffect;
+
     class SoundEffectInstance {
-
-    private: SoundEffectI* soundEffect;
-
-        int channel = -1;  // SDL_mixer channel
-        std::atomic<bool> playing = false;
-
-        DEF_PROP(float, Volume, getter1, setter1, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(float, Pan, getter1, setter1, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(float, Pitch, getter1, setter1, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(bool, IsLooped, getter1, setter1, member1, static0, constret1, ref1, constmet1)
-
-    private: bool IsPlaying() const { return playing; }
+    private:
+        const SoundEffect* soundEffect_ = nullptr;
+        int channel_ = -1;
+        bool playing_ = false;
+        float Volume_ = 1.0f;
+        float Pan_ = 0.0f;
+        float Pitch_ = 0.0f;
+        bool IsLooped_ = false;
+        SoundState State_ = SoundState::Stopped;
 
     public:
-        SoundState State = SoundState::Stopped;
-
-    public:
-        explicit SoundEffectInstance(Audio::SoundEffectI * sound_effect);
-
-    public:
+        explicit SoundEffectInstance(const SoundEffect& soundEffect);
+        ~SoundEffectInstance();
 
         void Play();
-
         void Stop();
-        ~SoundEffectInstance();
+        void Pause();
+        void Resume();
+
+        [[nodiscard]] float getVolumeProperty() const;
+        void setVolumeProperty(const float& volume);
+        void setVolumeProperty(float&& volume);
+
+        [[nodiscard]] float getPanProperty() const;
+        void setPanProperty(const float& pan);
+        void setPanProperty(float&& pan);
+
+        [[nodiscard]] float getPitchProperty() const;
+        void setPitchProperty(const float& pitch);
+        void setPitchProperty(float&& pitch);
+
+        [[nodiscard]] bool getIsLoopedProperty() const;
+        void setIsLoopedProperty(const bool& looped);
+        void setIsLoopedProperty(bool&& looped);
+
+        [[nodiscard]] SoundState getStateProperty() const;
     };
 }
-

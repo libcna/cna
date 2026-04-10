@@ -1,82 +1,75 @@
-//
-// Created by robertvokac on 5/24/25.
-//
-
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
-#include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
+
 #include <stdexcept>
 
+#ifdef SOUND_ENABLED
+#include <SDL3/SDL.h>
+#include <SDL3_mixer/SDL_mixer.h>
+#endif
+
 namespace Microsoft::Xna::Framework::Audio {
-    IMPL_PROP(float, MasterVolume, getter1, setter1, member1, static0, constret1, ref0, constmet0, SoundEffect, 0.0f)
 
-    Audio::SoundEffect::SoundEffect(const std::string &assetName) {
+    class SoundEffect::Impl {
+    public:
 #ifdef SOUND_ENABLED
-        chunk = Mix_LoadWAV(assetName.c_str());
-        if (!chunk) {
-            throw std::runtime_error("Failed to load WAV file: " + assetName + " Error: " + SDL_GetError());
-        }
+        std::shared_ptr<Mix_Chunk> chunk{};
 #endif
+    };
 
+    float SoundEffect::MasterVolume_ = 1.0f;
+
+    float SoundEffect::getMasterVolumeProperty()
+    {
+        return MasterVolume_;
     }
 
-    SoundEffect::~SoundEffect() {
-#ifdef SOUND_ENABLED
-        if (chunk) {
-            Mix_FreeChunk(chunk);
-            chunk = nullptr;
-        }
-#endif
+    void SoundEffect::setMasterVolumeProperty(const float& v)
+    {
+        MasterVolume_ = (v < 0.0f) ? 0.0f : ((v > 1.0f) ? 1.0f : v);
     }
 
-    // Copy constructor
-    SoundEffect::SoundEffect(const SoundEffect& other) {
-#ifdef SOUND_ENABLED
-        if (other.chunk) {
-            chunk = Mix_QuickLoad_WAV(reinterpret_cast<Uint8*>(other.chunk->abuf));
-            if (!chunk) {
-                throw std::runtime_error("Failed to copy SoundEffect");
-            }
-        }
-#endif
+    void SoundEffect::setMasterVolumeProperty(float&& v)
+    {
+        setMasterVolumeProperty(v);
     }
 
-    // Copy assignment operator
-    SoundEffect& SoundEffect::operator=(const SoundEffect& other) {
+    SoundEffect::SoundEffect(const std::string& assetName)
+        : impl_(std::make_shared<Impl>())
+    {
 #ifdef SOUND_ENABLED
-        if (this != &other) {
-            if (chunk) Mix_FreeChunk(chunk);
-            chunk = nullptr;
+        Mix_Chunk* rawChunk = Mix_LoadWAV(assetName.c_str());
+        if (!rawChunk) {
+            throw std::runtime_error("Failed to load sound: " + assetName + " Error: " + SDL_GetError());
+        }
 
-            if (other.chunk) {
-                chunk = Mix_QuickLoad_WAV(reinterpret_cast<Uint8*>(other.chunk->abuf));
-                if (!chunk) {
-                    throw std::runtime_error("Failed to copy SoundEffect");
+        impl_->chunk = std::shared_ptr<Mix_Chunk>(
+            rawChunk,
+            [](Mix_Chunk* ptr) {
+                if (ptr) {
+                    Mix_FreeChunk(ptr);
                 }
-            }
-        }
+            });
+#else
+        (void)assetName;
 #endif
-        return *this;
     }
 
-    // Move semantics
-    SoundEffect::SoundEffect(SoundEffect&& other) noexcept : chunk(other.chunk) {
+    SoundEffect::~SoundEffect() = default;
+
+    void* SoundEffect::getNativeChunkHandle() const
+    {
 #ifdef SOUND_ENABLED
-        other.chunk = nullptr;
-#endif
-    }
-
-    SoundEffect& SoundEffect::operator=(SoundEffect&& other) noexcept {
-#ifdef SOUND_ENABLED
-        if (this != &other) {
-            if (chunk) Mix_FreeChunk(chunk);
-            chunk = other.chunk;
-            other.chunk = nullptr;
+        if (!impl_ || !impl_->chunk) {
+            return nullptr;
         }
+        return impl_->chunk.get();
+#else
+        return nullptr;
 #endif
-        return *this;
     }
 
-    SoundEffectInstance SoundEffect::CreateInstance() {
-        return SoundEffectInstance(this);
+    SoundEffectInstance SoundEffect::CreateInstance() const
+    {
+        return SoundEffectInstance(*this);
     }
 }

@@ -2,12 +2,13 @@
 // Created by robertvokac on 5/28/25.
 //
 #pragma once
-#include <iostream>
 
 #include "CNA/Prop.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
-
+/**
+ * @note Status: Stub
+ */
 namespace Microsoft::Xna::Framework::GamerServices {
     class Guide {
     public:

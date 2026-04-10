@@ -3,7 +3,7 @@ project(CNA)
 
 set(CMAKE_CXX_STANDARD 17)
 
-#add_compile_definitions(SOUND_ENABLED)
+add_compile_definitions(SOUND_ENABLED)
 add_compile_definitions(XNA5)
 
 find_package(SDL3 REQUIRED)

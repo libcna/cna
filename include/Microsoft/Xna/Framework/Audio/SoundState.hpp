@@ -6,7 +6,7 @@
 
 
 namespace Microsoft::Xna::Framework::Audio {
-    enum SoundState
+    enum class SoundState
     {
         Playing,
 

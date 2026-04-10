@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include <SDL3/SDL.h>
 #include <iostream>
+#include <SDL3_mixer/SDL_mixer.h>
 
 namespace Microsoft::Xna::Framework {
 
@@ -15,14 +16,33 @@ namespace Microsoft::Xna::Framework {
     void Game::setTargetElapsedTimeProperty(System::TimeSpan* v) { TargetElapsedTime_ = v; }
     IMPL_PROP(System::TimeSpan, InactiveSleepTime, getter1, setter1, member0, static0, constret1, ref1, constmet1, Game, nothing)
 
+    void InitAudio()
+    {
+        if (!SDL_Init(SDL_INIT_AUDIO)) {
+            throw std::runtime_error("SDL_Init failed");
+        }
+
+        if (!Mix_OpenAudio(0, nullptr)) {
+            throw std::runtime_error("Mix_OpenAudio failed");
+        }
+    }
+    void ShutdownAudio()
+    {
+        Mix_CloseAudio();
+        SDL_Quit();
+    }
+
     Game::Game() : IsMouseVisible_(false), TargetElapsedTime_(new TimeSpan(500000L)),
                    InactiveSleepTime_(TimeSpan(0)),
                    isRunning(true) {
+
+        InitAudio();
     }
 
     Game::~Game() {
         std::cout << "Calling ~Game()" << std::endl;
         delete TargetElapsedTime_;
+        ShutdownAudio();
     }
 
     void Game::Run() {
