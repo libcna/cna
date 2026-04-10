@@ -3,13 +3,16 @@
 //
 
 #pragma once
-
+#include "CNA/CnaHelper.hpp"
 
 namespace Microsoft::Xna::Framework {
+    using CNA::intcs;
+
     //static class
     class MathHelper {
+
     public:
-        static int Clamp(int value, const int& min, const int& max);
+        static intcs Clamp(intcs value, intcs min, intcs max);
     };
 }
 

@@ -3,58 +3,51 @@
 //
 
 #pragma once
-#include "CNA/Prop.hpp"
-
+#include "CNA/CnaHelper.hpp"
 
 namespace Microsoft::Xna::Framework {
+    using CNA::intcs;
     struct Rectangle {
-        Rectangle() : Rectangle(0, 0, 0, 0) {
-        } // Default constructor
+        Rectangle(); // Default constructor
 
         Rectangle(
-            int x,
-            int y,
-            int width,
-            int height) : X(x),
-                          Y(y),
-                          Width(width),
-                          Height(height) {
-        }
+            intcs x,
+            intcs y,
+            intcs width,
+            intcs height);
 
         /**
          * Represents the x-coordinate of the top-left corner of a rectangle.
          */
-    public:
-        int X;
+        intcs X;
         /**
          * Represents the Y-coordinate of the rectangle's top-left corner.
          */
-        int Y;
+        intcs Y;
         /**
          * Represents the width of the rectangle.
          * Defines the horizontal size of the rectangle.
          */
-        int Width;
+        intcs Width;
         /**
          * Represents the height of the rectangle.
          * Determines the vertical size of the rectangle.
          */
-        int Height;
+        intcs Height;
+
+    private:
+        static Rectangle emptyRectangle;
 
     public:
-        [[nodiscard]] int getLeft() const;
+        [[nodiscard]] intcs getLeftProperty() const;
 
-    public:
-        [[nodiscard]] int getRight() const;
+        [[nodiscard]] intcs getRightProperty() const;
 
-    public:
-        [[nodiscard]] int getTop() const;
+        [[nodiscard]] intcs getTopProperty() const;
 
-    public:
-        [[nodiscard]] int getBottom() const;
+        [[nodiscard]] intcs getBottomProperty() const;
 
-
-    public: [[nodiscard]] static Rectangle getEmpty();
+        [[nodiscard]] static Rectangle getEmptyProperty();
     };
 }
 

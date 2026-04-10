@@ -27,7 +27,7 @@ namespace CNA
     /**
      * @brief 8-bit unsigned byte type compatible with C# @c byte.
      */
-    using byte = unsigned char;
+    using byte = uint8_t;
 
     /**
      * @brief Maximum value of @c CNA::intcs.

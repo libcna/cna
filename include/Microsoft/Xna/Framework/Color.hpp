@@ -4,38 +4,28 @@
 
 #pragma once
 #include "CNA/CnaHelper.hpp"
-#include <limits>
 
-#include "MathHelper.hpp"
-
-
-namespace Microsoft::Xna::Framework {
+namespace Microsoft::Xna::Framework
+{
     using CNA::uintcs;
-    struct Color {
+    using CNA::intcs;
+
+    /**
+     * @note Status: Partial
+     */
+    struct Color
+    {
     private:
         CNA::uintcs packedValue;
 
-
     public:
-        Color(CNA::uintcs packedValue) : packedValue(packedValue){
+        explicit Color(CNA::uintcs packedValue);
 
-        }
-        Color(int r, int g, int b, int alpha) {
-            if (((long) (r | g | b | alpha) & 4294967040L) != 0L)
-            {
-                uintcs num1 = (uintcs) MathHelper::Clamp(r, 0, (int)CNA::BYTE_MAX);
-                uintcs num2 = (uintcs) MathHelper::Clamp(g, 0, (int)CNA::BYTE_MAX);
-                uintcs num3 = (uintcs) MathHelper::Clamp(b, 0, (int)CNA::BYTE_MAX);
-                this->packedValue = (uintcs) (MathHelper::Clamp(alpha, 0, (int)CNA::BYTE_MAX) << 24 | (int) num3 << 16 /*0x10*/ | (int) num2 << 8) | num1;
-            }
-            else
-                this->packedValue = (uintcs) (alpha << 24 | b << 16 /*0x10*/ | g << 8 | r);
-        }
+        Color(intcs r, intcs g, intcs b, intcs alpha);
 
-        static Color FromNonPremultiplied(int i, int i1, int i2, int i3);
+        static Color FromNonPremultiplied(intcs r, intcs g, intcs b, intcs a);
     };
 
     const Color CornflowerBlue = Color(4293760356U);
     const Color White = Color(0, 0, 0, 0);
 }
-

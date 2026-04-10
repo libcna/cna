@@ -3,7 +3,6 @@
 //
 #pragma once
 
-
 namespace Microsoft::Xna::Framework {
     struct Vector3 {
     public:

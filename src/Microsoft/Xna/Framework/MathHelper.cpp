@@ -5,11 +5,14 @@
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 
 namespace Microsoft::Xna::Framework {
-    int MathHelper::Clamp(int value, const int& min, const int& max)
+    intcs MathHelper::Clamp(const intcs value, const intcs min, const intcs max)
     {
-        value = value > max ? max : value;
-        value = value < min ? min : value;
+        if (value > max) {
+            return max;
+        }
+        if (value < min) {
+            return min;
+        }
         return value;
     }
 }
-

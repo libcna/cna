@@ -4,29 +4,47 @@
 
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 
-#include <iostream>
-#include <bits/ostream.tcc>
+#include <utility>
 
 namespace Microsoft::Xna::Framework {
-    IMPL_PROP(TimeSpan, TotalGameTime, getter1, setter1, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
 
-    TimeSpan& GameTime::getElapsedGameTimeProperty() {
+    IMPL_PROP(TimeSpan, TotalGameTime, getter1, setter1, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
+    IMPL_PROP(bool, IsRunningSlowly, getter1, setter1, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
+
+    const TimeSpan& GameTime::getElapsedGameTimeProperty() const
+    {
         return ElapsedGameTime_;
     }
-    void GameTime::setElapsedGameTimeProperty(const TimeSpan& v) {
+
+    void GameTime::setElapsedGameTimeProperty(const TimeSpan& v)
+    {
         ElapsedGameTime_ = v;
     }
 
     void GameTime::setElapsedGameTimeProperty(TimeSpan&& v)
     {
-        ElapsedGameTime_ = std::move(v);  // Uses move semantics to avoid unnecessary copy
+        ElapsedGameTime_ = std::move(v);
     }
 
-    IMPL_PROP(bool, IsRunningSlowly, getter1, setter1, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
-
-    GameTime::GameTime(): TotalGameTime_(0), ElapsedGameTime_(TimeSpan(0)), IsRunningSlowly_(false) {
+    GameTime::GameTime()
+        : TotalGameTime_(TimeSpan::Zero),
+          ElapsedGameTime_(TimeSpan::Zero),
+          IsRunningSlowly_(false)
+    {
     }
 
-    GameTime::~GameTime() {
+    GameTime::GameTime(TimeSpan totalGameTime, TimeSpan elapsedGameTime)
+        : TotalGameTime_(std::move(totalGameTime)),
+          ElapsedGameTime_(std::move(elapsedGameTime)),
+          IsRunningSlowly_(false)
+    {
     }
-}
+
+    GameTime::GameTime(TimeSpan totalGameTime, TimeSpan elapsedGameTime, bool isRunningSlowly)
+        : TotalGameTime_(std::move(totalGameTime)),
+          ElapsedGameTime_(std::move(elapsedGameTime)),
+          IsRunningSlowly_(isRunningSlowly)
+    {
+    }
+
+} // namespace Microsoft::Xna::Framework

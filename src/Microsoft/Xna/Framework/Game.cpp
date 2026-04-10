@@ -64,9 +64,9 @@ namespace Microsoft::Xna::Framework {
             Draw(gameTime);
 
             Uint64 currentMsFrameTime = SDL_GetTicks() - frameStart;
-            std::cout << "currentMsFrameTime=" << currentMsFrameTime << std::endl;
-            std::cout << "wantedMsFrameTime=" << wantedMsFrameTime << std::endl;
-            std::cout << "wantedMsFrameTime - currentMsFrameTime = " << (wantedMsFrameTime - currentMsFrameTime) << std::endl;
+            // std::cout << "currentMsFrameTime=" << currentMsFrameTime << std::endl;
+            // std::cout << "wantedMsFrameTime=" << wantedMsFrameTime << std::endl;
+            // std::cout << "wantedMsFrameTime - currentMsFrameTime = " << (wantedMsFrameTime - currentMsFrameTime) << std::endl;
 
             bool runningSlowly = wantedMsFrameTime < currentMsFrameTime;
             if (!runningSlowly)
