@@ -14,39 +14,42 @@ namespace Microsoft::Xna::Framework::Graphics {
         SDL_Renderer* renderer = nullptr;
     };
 
+    IMPL_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0, GraphicsDevice, nothing)
+
     GraphicsDevice::GraphicsDevice()
         : impl_(std::make_unique<Impl>()),
           Viewport_()
     {
         std::cout << "Starting GraphicsDevice()" << std::endl;
 
-        if (!SDL_WasInit(SDL_INIT_VIDEO)) {
-            if (!SDL_Init(SDL_INIT_VIDEO)) {
-                throw std::runtime_error(std::string("SDL video initialization failed: ") + SDL_GetError());
-            }
+        if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) {
+            throw std::runtime_error(
+                std::string("SDL video subsystem initialization failed: ") + SDL_GetError()
+            );
         }
 
         impl_->window = SDL_CreateWindow("CNA Game", 800, 600, SDL_WINDOW_RESIZABLE);
         if (!impl_->window) {
-            throw std::runtime_error(std::string("Window creation failed: ") + SDL_GetError());
+            throw std::runtime_error(
+                std::string("SDL_CreateWindow failed: ") + SDL_GetError()
+            );
         }
 
         impl_->renderer = SDL_CreateRenderer(impl_->window, nullptr);
         if (!impl_->renderer) {
             SDL_DestroyWindow(impl_->window);
             impl_->window = nullptr;
-            throw std::runtime_error(std::string("Renderer creation failed: ") + SDL_GetError());
+
+            throw std::runtime_error(
+                std::string("SDL_CreateRenderer failed: ") + SDL_GetError()
+            );
         }
 
         if (!SDL_SetRenderVSync(impl_->renderer, 1)) {
             std::cerr << "Warning: SDL_SetRenderVSync failed: " << SDL_GetError() << std::endl;
         }
 
-        int width = 0;
-        int height = 0;
-        SDL_GetWindowSize(impl_->window, &width, &height);
-        Viewport_.setWidthProperty(width);
-        Viewport_.setHeightProperty(height);
+        UpdateViewportFromWindow();
     }
 
     GraphicsDevice::~GraphicsDevice()
@@ -65,42 +68,71 @@ namespace Microsoft::Xna::Framework::Graphics {
             }
         }
 
-        if (SDL_WasInit(SDL_INIT_VIDEO)) {
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        }
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
     }
 
-    IMPL_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0, GraphicsDevice, nothing)
+    void GraphicsDevice::UpdateViewportFromWindow()
+    {
+        int width = 800;
+        int height = 600;
+
+        if (impl_ && impl_->window) {
+            SDL_GetWindowSize(impl_->window, &width, &height);
+        }
+
+        Viewport_.x = 0;
+        Viewport_.y = 0;
+        Viewport_.minDepth = 0.0f;
+        Viewport_.maxDepth = 1.0f;
+        Viewport_.setWidthProperty(width);
+        Viewport_.setHeightProperty(height);
+    }
 
     void GraphicsDevice::Clear(const Color& color)
     {
         Clear(
-            color.getRProperty(),
-            color.getGProperty(),
-            color.getBProperty(),
-            color.getAProperty()
+            static_cast<float>(color.getRProperty()) / 255.0f,
+            static_cast<float>(color.getGProperty()) / 255.0f,
+            static_cast<float>(color.getBProperty()) / 255.0f,
+            static_cast<float>(color.getAProperty()) / 255.0f
         );
     }
 
     void GraphicsDevice::Clear(float r, float g, float b, float a)
     {
+        SDL_Renderer* renderer = GetRendererInternal();
+        if (!renderer) {
+            throw std::runtime_error("GraphicsDevice::Clear failed: renderer is null.");
+        }
+
         SDL_SetRenderDrawColor(
-            impl_->renderer,
+            renderer,
             static_cast<Uint8>(r * 255.0f),
             static_cast<Uint8>(g * 255.0f),
             static_cast<Uint8>(b * 255.0f),
             static_cast<Uint8>(a * 255.0f)
         );
-        SDL_RenderClear(impl_->renderer);
+        SDL_RenderClear(renderer);
     }
 
     void GraphicsDevice::Present()
     {
-        SDL_RenderPresent(impl_->renderer);
+        SDL_Renderer* renderer = GetRendererInternal();
+        if (!renderer) {
+            throw std::runtime_error("GraphicsDevice::Present failed: renderer is null.");
+        }
+
+        UpdateViewportFromWindow();
+        SDL_RenderPresent(renderer);
     }
 
     SDL_Renderer* GraphicsDevice::GetRendererInternal() const
     {
         return impl_ ? impl_->renderer : nullptr;
+    }
+
+    SDL_Window* GraphicsDevice::GetWindowInternal() const
+    {
+        return impl_ ? impl_->window : nullptr;
     }
 }

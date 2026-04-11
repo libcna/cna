@@ -17,8 +17,9 @@ namespace Microsoft::Xna::Framework::Graphics {
      */
     class GraphicsDeviceManager {
     private:
+        Microsoft::Xna::Framework::Game* game_ = nullptr;
         GraphicsDevice* GraphicsDevice_ = nullptr;
-        bool IsFullScreen_;
+        bool IsFullScreen_ = false;
 
     public:
         DEF_PROP(Microsoft::Xna::Framework::Graphics::GraphicsDevice*, GraphicsDevice, getter1, setter0, member0, static0, constret0, ref1, constmet0)

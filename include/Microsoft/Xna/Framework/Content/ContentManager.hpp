@@ -1,15 +1,13 @@
-//
-// Created by robertvokac on 5/24/25.
-//
-
 #pragma once
 
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 
 #include "CNA/Logger.hpp"
 #include "CNA/Prop.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 namespace Microsoft::Xna::Framework::Content {
@@ -30,6 +28,7 @@ namespace Microsoft::Xna::Framework::Content {
     class ContentManager {
     private:
         std::string RootDirectory_ = "Content";
+        Graphics::GraphicsDevice* graphicsDevice_ = nullptr;
 
         DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret1, ref1, constmet1)
 
@@ -42,14 +41,14 @@ namespace Microsoft::Xna::Framework::Content {
          */
         [[nodiscard]] std::string BuildAssetPath(const std::string& assetName) const;
 
-        Graphics::GraphicsDevice* graphicsDevice_ = nullptr;
-
     public:
         /**
          * @brief Constructs a content manager.
          */
 
         ContentManager();
+
+        void setGraphicsDevice(Graphics::GraphicsDevice& graphicsDevice);
 
         /**
          * @brief Loads an asset of type T from the content root.
@@ -68,6 +67,9 @@ namespace Microsoft::Xna::Framework::Content {
             log::Debug(std::string("Loading asset: ") + fullPath);
 
             if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Graphics::Texture2D>) {
+                if (graphicsDevice_ == nullptr) {
+                    throw std::runtime_error("ContentManager::Load<Texture2D>() failed: GraphicsDevice is null.");
+                }
                 return T(fullPath, *graphicsDevice_);
             } else if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Audio::SoundEffect>) {
                 return T(fullPath);
@@ -79,6 +81,5 @@ namespace Microsoft::Xna::Framework::Content {
                 );
             }
         }
-    void setGraphicsDevice(Graphics::GraphicsDevice& graphics_device);
     };
 }

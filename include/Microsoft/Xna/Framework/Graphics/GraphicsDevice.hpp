@@ -11,6 +11,8 @@ struct SDL_Renderer;
 
 namespace Microsoft::Xna::Framework::Graphics {
 
+    class GraphicsDeviceManager;
+
     /**
      * @brief Represents the main graphics device used by the game.
      *
@@ -39,6 +41,8 @@ namespace Microsoft::Xna::Framework::Graphics {
 
         GraphicsDevice(const GraphicsDevice&) = delete;
         GraphicsDevice& operator=(const GraphicsDevice&) = delete;
+        GraphicsDevice(GraphicsDevice&&) = delete;
+        GraphicsDevice& operator=(GraphicsDevice&&) = delete;
 
         /**
          * @brief Clears the current back buffer with the specified color.
@@ -72,8 +76,12 @@ namespace Microsoft::Xna::Framework::Graphics {
          * through the public graphics API.
          */
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const;
+        [[nodiscard]] SDL_Window* GetWindowInternal() const;
+
+        void UpdateViewportFromWindow();
 
         friend class Texture2D;
         friend class SpriteBatch;
+        friend class GraphicsDeviceManager;
     };
 }

@@ -15,13 +15,9 @@ namespace Microsoft::Xna::Framework::Graphics {
         SDL_Texture* texture = nullptr;
     };
 
-    Rectangle Texture2D::getBoundsProperty() const
-    {
-        return {0, 0, width, height};
-    }
-
     Texture2D::Texture2D()
-        : impl_(std::make_shared<Impl>()) {
+        : impl_(std::make_shared<Impl>())
+    {
     }
 
     Texture2D::Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)
@@ -57,6 +53,11 @@ namespace Microsoft::Xna::Framework::Graphics {
             SDL_DestroyTexture(impl_->texture);
             impl_->texture = nullptr;
         }
+    }
+
+    Rectangle Texture2D::getBoundsProperty() const
+    {
+        return {0, 0, width, height};
     }
 
     SDL_Texture* Texture2D::GetNativeTextureInternal() const

@@ -5,8 +5,7 @@ namespace Microsoft::Xna::Framework::Graphics {
     /**
      * @brief Represents a sprite blending configuration.
      *
-     * This is currently only a lightweight placeholder for the subset
-     * needed by the game.
+     * This is currently a minimal XNA-like subset.
      */
     class BlendState {
     public:

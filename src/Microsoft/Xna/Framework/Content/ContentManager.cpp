@@ -1,7 +1,3 @@
-//
-// Created by robertvokac on 5/24/25.
-//
-
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 
 namespace Microsoft::Xna::Framework::Content {
@@ -18,9 +14,9 @@ namespace Microsoft::Xna::Framework::Content {
 
     ContentManager::ContentManager() = default;
 
-    void ContentManager::setGraphicsDevice(Graphics::GraphicsDevice& graphics_device)
+    void ContentManager::setGraphicsDevice(Graphics::GraphicsDevice& graphicsDevice)
     {
-        graphicsDevice_ = &graphics_device;
+        graphicsDevice_ = &graphicsDevice;
     }
 
     std::string ContentManager::BuildAssetPath(const std::string& assetName) const

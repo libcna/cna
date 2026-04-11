@@ -24,6 +24,7 @@ namespace Microsoft::Xna::Framework::Graphics {
     class SpriteBatch {
     private:
         SDL_Renderer* renderer = nullptr;
+        bool begun = false;
 
     public:
         /**
@@ -71,17 +72,17 @@ namespace Microsoft::Xna::Framework::Graphics {
         void Draw(const Texture2D& texture, float x, float y);
 
         void Draw(const std::optional<Texture2D>::value_type& value,
-                  const Rectangle& x,
-                  const Rectangle& y,
+                  const Rectangle& sourceRectangle,
+                  const Rectangle& destinationRectangle,
                   Color color);
 
         void Draw(const std::optional<Texture2D>& value,
-                  const Rectangle& x,
-                  const Rectangle& y,
+                  const Rectangle& sourceRectangle,
+                  const Rectangle& destinationRectangle,
                   Color color,
                   float rotation_rad,
                   Vector2 origin,
                   SpriteEffects effect,
-                  float x1);
+                  float layerDepth);
     };
 }
