@@ -49,7 +49,7 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     Texture2D::~Texture2D()
     {
-        if (impl_ && impl_->texture) {
+        if (impl_ && impl_.use_count() == 1 && impl_->texture) {
             SDL_DestroyTexture(impl_->texture);
             impl_->texture = nullptr;
         }

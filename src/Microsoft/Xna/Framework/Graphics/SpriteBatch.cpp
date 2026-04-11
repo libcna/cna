@@ -50,6 +50,8 @@ namespace Microsoft::Xna::Framework::Graphics {
             throw std::runtime_error("SpriteBatch::Begin failed: renderer is null.");
         }
         begun = true;
+
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     }
 
     void SpriteBatch::Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state)
@@ -114,6 +116,7 @@ namespace Microsoft::Xna::Framework::Graphics {
             color.getBProperty()
         );
         SDL_SetTextureAlphaMod(nativeTexture, color.getAProperty());
+        SDL_SetTextureBlendMode(nativeTexture, SDL_BLENDMODE_BLEND);
 
         const SDL_FRect src {
             static_cast<float>(sourceRectangle.X),
@@ -167,6 +170,7 @@ namespace Microsoft::Xna::Framework::Graphics {
             color.getBProperty()
         );
         SDL_SetTextureAlphaMod(nativeTexture, color.getAProperty());
+        SDL_SetTextureBlendMode(nativeTexture, SDL_BLENDMODE_BLEND);
 
         const SDL_FRect src {
             static_cast<float>(sourceRectangle.X),
@@ -182,15 +186,15 @@ namespace Microsoft::Xna::Framework::Graphics {
             static_cast<float>(destinationRectangle.Height)
         };
 
-        const SDL_FPoint center {
-            origin.X,
-            origin.Y
+        const SDL_FPoint sdlCenter {
+            (origin.X / src.w) * dst.w,
+            (origin.Y / src.h) * dst.h
         };
 
         const double rotationDeg = static_cast<double>(rotation_rad) * 180.0 / 3.14159265358979323846;
         const SDL_FlipMode flipMode = ToSdlFlip(effect);
 
-        if (!SDL_RenderTextureRotated(renderer, nativeTexture, &src, &dst, rotationDeg, &center, flipMode)) {
+        if (!SDL_RenderTextureRotated(renderer, nativeTexture, &src, &dst, rotationDeg, &sdlCenter, flipMode)) {
             throw std::runtime_error(
                 std::string("SDL_RenderTextureRotated failed: ") + SDL_GetError()
             );

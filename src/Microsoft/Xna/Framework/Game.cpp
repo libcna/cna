@@ -102,7 +102,7 @@ namespace Microsoft::Xna::Framework {
             const Uint64 workMs = SDL_GetTicks() - frameStart;
             const bool runningSlowly = static_cast<double>(workMs) > wantedMsFrameTime;
 
-            if (!runningSlowly && false) {
+            if (!runningSlowly) {
                 const double remainingMs = wantedMsFrameTime - static_cast<double>(workMs);
                 if (remainingMs > 0.0) {
                     SDL_Delay(static_cast<Uint32>(remainingMs));
