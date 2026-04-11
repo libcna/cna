@@ -24,15 +24,14 @@ namespace Microsoft::Xna::Framework::Graphics {
         : impl_(std::make_shared<Impl>()) {
     }
 
-    Texture2D::Texture2D(const std::string& assetName, void* graphicsDevice)
+    Texture2D::Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)
         : impl_(std::make_shared<Impl>())
     {
         if (assetName.empty()) {
             return;
         }
 
-        GraphicsDevice* gd =static_cast<GraphicsDevice*>(graphicsDevice);
-        SDL_Renderer* renderer = gd->GetRendererInternal();
+        SDL_Renderer* renderer = graphicsDevice.GetRendererInternal();
         if (!renderer) {
             throw std::runtime_error("Texture2D load failed: GraphicsDevice has no renderer.");
         }

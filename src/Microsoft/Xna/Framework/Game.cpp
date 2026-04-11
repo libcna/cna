@@ -52,7 +52,7 @@ namespace Microsoft::Xna::Framework {
           InactiveSleepTime_(TimeSpan(0)),
           isRunning(true)
     {
-        Content_.setGraphicsDevice(&GraphicsDevice_);
+        Content_.setGraphicsDevice(GraphicsDevice_);
         InitAudio();
     }
 

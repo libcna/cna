@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::Content {
 
     ContentManager::ContentManager() = default;
 
-    void ContentManager::setGraphicsDevice(void* graphics_device)
+    void ContentManager::setGraphicsDevice(Graphics::GraphicsDevice& graphics_device)
     {
         graphicsDevice_ = &graphics_device;
     }
