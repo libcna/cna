@@ -3,9 +3,12 @@
 //
 
 #pragma once
-
+/**
+ * @brief Specifies how sprites are sorted during a SpriteBatch.
+ * Only Deferred is currently implemented as a no-op batching mode.
+ */
 namespace Microsoft::Xna::Framework::Graphics {
-    enum SpriteSortMode {
+    enum class SpriteSortMode {
         Deferred,
 
         Immediate,

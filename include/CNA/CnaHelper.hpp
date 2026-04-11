@@ -27,7 +27,7 @@ namespace CNA
     /**
      * @brief 8-bit unsigned byte type compatible with C# @c byte.
      */
-    using byte = uint8_t;
+    using bytecs = uint8_t;
 
     /**
      * @brief Maximum value of @c CNA::intcs.
@@ -62,10 +62,10 @@ namespace CNA
     /**
      * @brief Maximum value of @c CNA::byte.
      */
-    inline constexpr byte BYTE_MAX = std::numeric_limits<byte>::max();
+    inline constexpr bytecs BYTE_MAX = std::numeric_limits<bytecs>::max();
 
     /**
      * @brief Minimum value of @c CNA::byte.
      */
-    inline constexpr byte BYTE_MIN = std::numeric_limits<byte>::min();
+    inline constexpr bytecs BYTE_MIN = std::numeric_limits<bytecs>::min();
 } // namespace CNA

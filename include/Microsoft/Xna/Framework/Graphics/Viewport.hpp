@@ -1,23 +1,33 @@
 //
-// Created by robertvokac on 5/24/25.
+// Created by robertvokac on 5/31/25.
 //
 
 #pragma once
+
 #include "CNA/Prop.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics {
-    struct Viewport {
+
+    /**
+     * @brief Describes the drawable area of the render target.
+     */
+    class Viewport {
     private:
+        int Height_;
+        int Width_;
+
+    public:
         int x;
         int y;
-
-        DEF_PROP(int, Height, getter1, setter1, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(int, Width, getter1, setter1, member1, static0, constret1, ref1, constmet1)
-
         float minDepth;
         float maxDepth;
 
+        DEF_PROP(int, Height, getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        DEF_PROP(int, Width, getter1, setter1, member0, static0, constret1, ref1, constmet1)
+
+        /**
+         * @brief Constructs an empty viewport.
+         */
         Viewport();
     };
 }
-

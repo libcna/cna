@@ -1,30 +1,68 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
-#include <SDL3_image/SDL_image.h>
-#include <iostream>
 
-#include "CNA/Prop.hpp"
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_render.h>
+#include <SDL3_image/SDL_image.h>
+
+#include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    Rectangle Texture2D::getBoundsProperty() const { return {0, 0, width, height}; }
-    Texture2D::Texture2D(SDL_Renderer* renderer, const char* filePath)
-{
-        texture = IMG_LoadTexture(renderer, filePath);
-        if (!texture) {
-            std::cerr << "Failed to load texture: " << SDL_GetError() << std::endl;
+    class Texture2D::Impl {
+    public:
+        SDL_Texture* texture = nullptr;
+    };
+
+    Rectangle Texture2D::getBoundsProperty() const
+    {
+        return {0, 0, width, height};
+    }
+
+    Texture2D::Texture2D()
+        : impl_(std::make_shared<Impl>()) {
+    }
+
+    Texture2D::Texture2D(const std::string& assetName)
+        : impl_(std::make_shared<Impl>()) {
+        if (assetName.empty()) {
+            return;
         }
-    }
 
-    Texture2D::Texture2D() {
-    }
+        SDL_Window* window = SDL_GetKeyboardFocus();
+        if (!window) {
+            throw std::runtime_error("Texture2D load failed: no active SDL window.");
+        }
 
-    Texture2D::Texture2D(const std::string &assetName) {
+        SDL_Renderer* renderer = SDL_GetRenderer(window);
+        if (!renderer) {
+            throw std::runtime_error("Texture2D load failed: no SDL renderer available.");
+        }
+
+        impl_->texture = IMG_LoadTexture(renderer, assetName.c_str());
+        if (!impl_->texture) {
+            throw std::runtime_error(
+                "Failed to load texture: " + assetName + " Error: " + SDL_GetError()
+            );
+        }
+
+        float w = 0.0f;
+        float h = 0.0f;
+        if (SDL_GetTextureSize(impl_->texture, &w, &h)) {
+            width = static_cast<int>(w);
+            height = static_cast<int>(h);
+        }
     }
 
     Texture2D::~Texture2D()
     {
-        if (texture) {
-            SDL_DestroyTexture(texture);
+        if (impl_ && impl_->texture) {
+            SDL_DestroyTexture(impl_->texture);
+            impl_->texture = nullptr;
         }
+    }
+
+    SDL_Texture* Texture2D::GetNativeTextureInternal() const
+    {
+        return impl_ ? impl_->texture : nullptr;
     }
 }

@@ -1,39 +1,87 @@
 #pragma once
+
 #include <optional>
 
-#include "GraphicsDevice.hpp"
-#include <SDL3/SDL.h>
-
-#include "BlendState.hpp"
-#include "SpriteEffects.hpp"
-#include "SpriteSortMode.hpp"
-#include "Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+
+struct SDL_Renderer;
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    class SpriteBatch {
-    public:
-        SpriteBatch(GraphicsDevice& graphicsDevice);
+    class GraphicsDevice;
 
+    /**
+     * @brief Provides simple batched sprite drawing.
+     *
+     * This class exposes CNA/XNA-like methods while using SDL renderer internally.
+     */
+    class SpriteBatch {
+    private:
+        SDL_Renderer* renderer = nullptr;
+
+    public:
+        /**
+         * @brief Creates a sprite batch bound to a graphics device.
+         *
+         * @param graphicsDevice Graphics device used for rendering.
+         */
+        explicit SpriteBatch(GraphicsDevice& graphicsDevice);
+
+        /**
+         * @brief Creates an empty sprite batch.
+         */
         SpriteBatch();
 
+        /**
+         * @brief Destroys the sprite batch.
+         */
         ~SpriteBatch();
 
+        /**
+         * @brief Begins a sprite batch with default settings.
+         */
         void Begin();
-        void End();
-        void Draw(SDL_Texture* texture, float x, float y);
 
+        /**
+         * @brief Begins a sprite batch with explicit settings.
+         *
+         * @param sprite_sort_mode Sprite sort mode.
+         * @param blend_state Blend state.
+         */
         void Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state);
 
-        void Draw(const std::optional<Texture2D>::value_type & value, const Rectangle & x, const Rectangle & y, Color color);
+        /**
+         * @brief Ends the current sprite batch.
+         */
+        void End();
 
-        void Draw(const std::optional<Texture2D> & value, const Rectangle & x, const Rectangle & y, Color color, float rotation_rad, Vector2 origin,
-                 SpriteEffects effect,
-                 float x1);
+        /**
+         * @brief Draws a texture at the given position.
+         *
+         * @param texture Texture to draw.
+         * @param x X coordinate.
+         * @param y Y coordinate.
+         */
+        void Draw(const Texture2D& texture, float x, float y);
 
-    private:
-        SDL_Renderer* renderer;
+        void Draw(const std::optional<Texture2D>::value_type& value,
+                  const Rectangle& x,
+                  const Rectangle& y,
+                  Color color);
+
+        void Draw(const std::optional<Texture2D>& value,
+                  const Rectangle& x,
+                  const Rectangle& y,
+                  Color color,
+                  float rotation_rad,
+                  Vector2 origin,
+                  SpriteEffects effect,
+                  float x1);
     };
 }

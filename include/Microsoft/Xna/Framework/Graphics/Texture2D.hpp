@@ -1,31 +1,66 @@
 #pragma once
 
+#include <memory>
 #include <string>
-#include <SDL3/SDL.h>
 
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
+struct SDL_Texture;
 
 namespace Microsoft::Xna::Framework::Graphics {
 
+    class GraphicsDevice;
+
+    /**
+     * @brief Represents a 2D texture loaded from an image file.
+     *
+     * SDL is hidden internally; the public API exposes only CNA/XNA-like types.
+     */
     class Texture2D {
+    private:
+        class Impl;
+        std::shared_ptr<Impl> impl_;
+
+        int width = 0;
+        int height = 0;
+
     public:
-        Texture2D(SDL_Renderer* renderer, const char* filePath);
-
+        /**
+         * @brief Creates an empty texture.
+         */
         Texture2D();
-        Texture2D(const std::string &assetName);
 
+        /**
+         * @brief Loads a texture from a file path using the active graphics device.
+         *
+         * @param assetName Full path to the image file.
+         */
+        explicit Texture2D(const std::string& assetName);
 
+        /**
+         * @brief Destroys the texture wrapper.
+         */
         ~Texture2D();
 
-        SDL_Texture* GetTexture() const { return texture; }
+        Texture2D(const Texture2D&) = default;
+        Texture2D& operator=(const Texture2D&) = default;
+        Texture2D(Texture2D&&) noexcept = default;
+        Texture2D& operator=(Texture2D&&) noexcept = default;
+
+        /**
+         * @brief Returns the bounds of the texture.
+         *
+         * @return Texture bounds in pixels.
+         */
         [[nodiscard]] Rectangle getBoundsProperty() const;
-    private:
-        int width;
-        int height;
-
 
     private:
-        SDL_Texture* texture;
+        /**
+         * @brief Returns the internal SDL texture for engine-internal use.
+         */
+        [[nodiscard]] SDL_Texture* GetNativeTextureInternal() const;
+
+        friend class SpriteBatch;
+        friend class GraphicsDevice;
     };
 }

@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework {
     {
     }
 
-    Color::Color(intcs r, intcs g, intcs b, intcs alpha)
+    Color::Color(bytecs r, bytecs g, bytecs b, bytecs alpha)
     {
         if ((static_cast<uintcs>(r | g | b | alpha) & ~uintcs{0xFF}) != uintcs{0})
         {
@@ -30,13 +30,33 @@ namespace Microsoft::Xna::Framework {
             static_cast<uintcs>(r);
     }
 
+    bytecs Color::getRProperty() const
+    {
+        return static_cast<bytecs>(packedValue & uintcs{0xFF});
+    }
+
+    bytecs Color::getGProperty() const
+    {
+        return static_cast<bytecs>((packedValue >> 8) & uintcs{0xFF});
+    }
+
+    bytecs Color::getBProperty() const
+    {
+        return static_cast<bytecs>((packedValue >> 16) & uintcs{0xFF});
+    }
+
+    bytecs Color::getAProperty() const
+    {
+        return static_cast<bytecs>((packedValue >> 24) & uintcs{0xFF});
+    }
+
     Color Color::FromNonPremultiplied(intcs r, intcs g, intcs b, intcs a)
     {
         return {
-            r * a / static_cast<intcs>(CNA::BYTE_MAX),
-            g * a / static_cast<intcs>(CNA::BYTE_MAX),
-            b * a / static_cast<intcs>(CNA::BYTE_MAX),
-            a
+            static_cast<bytecs>(r * a / static_cast<bytecs>(CNA::BYTE_MAX)),
+            static_cast<bytecs>(g * a / static_cast<bytecs>(CNA::BYTE_MAX)),
+            static_cast<bytecs>(b * a / static_cast<bytecs>(CNA::BYTE_MAX)),
+            static_cast<bytecs>(a)
         };
     }
 

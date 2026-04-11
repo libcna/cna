@@ -37,7 +37,7 @@ namespace Microsoft::Devices::Sensors {
         static bool eventWatchRegistered_;
         static std::vector<Accelerometer*> startedInstances_;
 
-        static constexpr CNA::byte MaxSensorCount = 10;
+        static constexpr CNA::bytecs MaxSensorCount = 10;
 
         SensorState state_;
         bool started_;

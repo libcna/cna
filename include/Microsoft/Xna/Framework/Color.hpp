@@ -8,6 +8,7 @@
 namespace Microsoft::Xna::Framework
 {
     using CNA::uintcs;
+    using CNA::bytecs;
     using CNA::intcs;
 
     /**
@@ -21,7 +22,12 @@ namespace Microsoft::Xna::Framework
     public:
         explicit Color(CNA::uintcs packedValue);
 
-        Color(intcs r, intcs g, intcs b, intcs alpha);
+        Color(bytecs r, bytecs g, bytecs b, bytecs alpha);
+
+        [[nodiscard]] bytecs getRProperty() const;
+        [[nodiscard]] bytecs getGProperty() const;
+        [[nodiscard]] bytecs getBProperty() const;
+        [[nodiscard]] bytecs getAProperty() const;
 
         static Color FromNonPremultiplied(intcs r, intcs g, intcs b, intcs a);
     };
