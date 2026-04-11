@@ -23,13 +23,13 @@ namespace Microsoft::Xna::Framework {
 
         //Default FPS is 60
     private:
-        System::TimeSpan* TargetElapsedTime_;
+        System::TimeSpan TargetElapsedTime_;
 
     public:
-        [[nodiscard]] System::TimeSpan* getTargetElapsedTimeProperty() const;
+        [[nodiscard]] const System::TimeSpan& getTargetElapsedTimeProperty() const;
 
     public:
-        void setTargetElapsedTimeProperty(System::TimeSpan* v);
+        void setTargetElapsedTimeProperty(const System::TimeSpan& v);
         DEF_PROP(System::TimeSpan, InactiveSleepTime, getter1, setter1, member1, static0, constret1, ref1, constmet1)
 
         System::EventHandler<ExitingEventArgs> Exiting;

@@ -18,12 +18,12 @@ namespace Microsoft::Xna::Framework {
 
     IMPL_PROP(bool, IsMouseVisible, getter1, setter1, member0, static0, constret1, ref1, constmet1, Game, nothing)
 
-    System::TimeSpan* Game::getTargetElapsedTimeProperty() const
+    const System::TimeSpan& Game::getTargetElapsedTimeProperty() const
     {
         return TargetElapsedTime_;
     }
 
-    void Game::setTargetElapsedTimeProperty(System::TimeSpan* v)
+    void Game::setTargetElapsedTimeProperty(const System::TimeSpan& v)
     {
         TargetElapsedTime_ = v;
     }
@@ -48,7 +48,7 @@ namespace Microsoft::Xna::Framework {
 
     Game::Game()
         : IsMouseVisible_(false),
-          TargetElapsedTime_(new TimeSpan(500000L)),
+          TargetElapsedTime_(TimeSpan(500000L)),
           InactiveSleepTime_(TimeSpan(0)),
           isRunning(true)
     {
@@ -59,7 +59,6 @@ namespace Microsoft::Xna::Framework {
     Game::~Game()
     {
         std::cout << "Calling ~Game()" << std::endl;
-        delete TargetElapsedTime_;
         ShutdownAudio();
     }
 
@@ -164,7 +163,7 @@ namespace Microsoft::Xna::Framework {
 
     double Game::getTargetMsFrameTimeProperty() const
     {
-        return getTargetElapsedTimeProperty()->getTotalMillisecondsProperty();
+        return getTargetElapsedTimeProperty().getTotalMillisecondsProperty();
     }
 
     double Game::fpsToMillisecondsPerFrame(const CNA::intcs framesPerSecond)

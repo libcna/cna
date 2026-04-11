@@ -22,7 +22,7 @@ namespace Microsoft::Xna::Framework::Graphics {
     {
         std::cout << "Starting GraphicsDevice()" << std::endl;
 
-        if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) {
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
             throw std::runtime_error(
                 std::string("SDL video subsystem initialization failed: ") + SDL_GetError()
             );

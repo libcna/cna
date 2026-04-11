@@ -70,6 +70,14 @@ namespace Microsoft::Xna::Framework::Content {
                 if (graphicsDevice_ == nullptr) {
                     throw std::runtime_error("ContentManager::Load<Texture2D>() failed: GraphicsDevice is null.");
                 }
+                if (!assetName.contains("."))
+                {
+                    const static std::string DOT_PNG = ".png";
+                    std::string tmp_string = fullPath;
+                    tmp_string += DOT_PNG;
+                    return T(tmp_string, *graphicsDevice_);
+
+                }
                 return T(fullPath, *graphicsDevice_);
             } else if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Audio::SoundEffect>) {
                 return T(fullPath);

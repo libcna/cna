@@ -1,11 +1,14 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <filesystem>
+#include <iostream>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_render.h>
 #include <SDL3_image/SDL_image.h>
 
 #include <stdexcept>
 
+#include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics {
@@ -34,6 +37,9 @@ namespace Microsoft::Xna::Framework::Graphics {
 
         impl_->texture = IMG_LoadTexture(renderer, assetName.c_str());
         if (!impl_->texture) {
+            std::string path = std::filesystem::current_path();
+            CNA::Logger::Debug("Current path is " + path);
+            std::cout << "Current path is " << path << std::endl;
             throw std::runtime_error(
                 "Failed to load texture: " + assetName + " Error: " + SDL_GetError()
             );
