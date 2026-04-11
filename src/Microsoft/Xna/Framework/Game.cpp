@@ -1,19 +1,33 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+
 #include <SDL3/SDL.h>
-#include <iostream>
 #include <SDL3_mixer/SDL_mixer.h>
+
+#include <iostream>
+#include <stdexcept>
 
 namespace Microsoft::Xna::Framework {
 
     IMPL_PROP(Content::ContentManager, Content, getter1, setter0, member0, static0, constret0, ref1, constmet0, Game, nothing)
 
-    Graphics::GraphicsDevice& Game::getGraphicsDeviceProperty() { return GraphicsDevice_ ; }
+    Graphics::GraphicsDevice& Game::getGraphicsDeviceProperty()
+    {
+        return GraphicsDevice_;
+    }
 
     IMPL_PROP(bool, IsMouseVisible, getter1, setter1, member0, static0, constret1, ref1, constmet1, Game, nothing)
 
-    System::TimeSpan* Game::getTargetElapsedTimeProperty() const { return TargetElapsedTime_; }
-    void Game::setTargetElapsedTimeProperty(System::TimeSpan* v) { TargetElapsedTime_ = v; }
+    System::TimeSpan* Game::getTargetElapsedTimeProperty() const
+    {
+        return TargetElapsedTime_;
+    }
+
+    void Game::setTargetElapsedTimeProperty(System::TimeSpan* v)
+    {
+        TargetElapsedTime_ = v;
+    }
+
     IMPL_PROP(System::TimeSpan, InactiveSleepTime, getter1, setter1, member0, static0, constret1, ref1, constmet1, Game, nothing)
 
     void InitAudio()
@@ -32,23 +46,26 @@ namespace Microsoft::Xna::Framework {
 #endif
     }
 
-
-    Game::Game() : IsMouseVisible_(false), TargetElapsedTime_(new TimeSpan(500000L)),
-                   InactiveSleepTime_(TimeSpan(0)),
-                   isRunning(true) {
-
+    Game::Game()
+        : IsMouseVisible_(false),
+          TargetElapsedTime_(new TimeSpan(500000L)),
+          InactiveSleepTime_(TimeSpan(0)),
+          isRunning(true)
+    {
         InitAudio();
     }
 
-    Game::~Game() {
+    Game::~Game()
+    {
         std::cout << "Calling ~Game()" << std::endl;
         delete TargetElapsedTime_;
         ShutdownAudio();
     }
 
-    void Game::Run() {
-        const int compiled = SDL_VERSION; /* hardcoded number from SDL headers */
-        const int linked = SDL_GetVersion(); /* reported by linked SDL library */
+    void Game::Run()
+    {
+        const int compiled = SDL_VERSION;
+        const int linked = SDL_GetVersion();
 
         SDL_Log("We compiled against SDL version %d.%d.%d ...\n",
                 SDL_VERSIONNUM_MAJOR(compiled),
@@ -61,18 +78,15 @@ namespace Microsoft::Xna::Framework {
                 SDL_VERSIONNUM_MICRO(linked));
 
         Initialize();
-        int i = 0;
 
         double wantedMsFrameTime = getTargetMsFrameTimeProperty();
 
-        GameTime gameTime {};
-
-        auto elapsedGameTimeTimeSpan = TimeSpan::FromMilliseconds(wantedMsFrameTime);;
-
-        gameTime.setElapsedGameTimeProperty(elapsedGameTimeTimeSpan);
+        GameTime gameTime{};
+        gameTime.setElapsedGameTimeProperty(TimeSpan::FromMilliseconds(wantedMsFrameTime));
+        gameTime.setIsRunningSlowlyProperty(false);
 
         while (isRunning) {
-            Uint64 frameStart = SDL_GetTicks();
+            const Uint64 frameStart = SDL_GetTicks();
 
             SDL_Event e;
             while (SDL_PollEvent(&e)) {
@@ -84,65 +98,80 @@ namespace Microsoft::Xna::Framework {
             Update(gameTime);
             Draw(gameTime);
 
-            Uint64 currentMsFrameTime = SDL_GetTicks() - frameStart;
-            // std::cout << "currentMsFrameTime=" << currentMsFrameTime << std::endl;
-            // std::cout << "wantedMsFrameTime=" << wantedMsFrameTime << std::endl;
-            // std::cout << "wantedMsFrameTime - currentMsFrameTime = " << (wantedMsFrameTime - currentMsFrameTime) << std::endl;
+            const Uint64 workMs = SDL_GetTicks() - frameStart;
+            const bool runningSlowly = static_cast<double>(workMs) > wantedMsFrameTime;
 
-            bool runningSlowly = wantedMsFrameTime < currentMsFrameTime;
-            if (!runningSlowly)
-            {
-                SDL_Delay(wantedMsFrameTime - currentMsFrameTime);
+            if (!runningSlowly && false) {
+                const double remainingMs = wantedMsFrameTime - static_cast<double>(workMs);
+                if (remainingMs > 0.0) {
+                    SDL_Delay(static_cast<Uint32>(remainingMs));
+                }
             }
-            TimeSpan newElapsedGameTime = System::TimeSpan::FromMilliseconds(currentMsFrameTime);
-            gameTime.setElapsedGameTimeProperty(newElapsedGameTime);
-            gameTime.setIsRunningSlowlyProperty(runningSlowly);
-            wantedMsFrameTime = getTargetMsFrameTimeProperty();
 
-            i++;
-            //std::cout<<"next frame"<<i;
-            //return;
+            const Uint64 fullFrameMs = SDL_GetTicks() - frameStart;
+
+            gameTime.setElapsedGameTimeProperty(
+                System::TimeSpan::FromMilliseconds(static_cast<double>(fullFrameMs))
+            );
+            gameTime.setIsRunningSlowlyProperty(runningSlowly);
+
+            wantedMsFrameTime = getTargetMsFrameTimeProperty();
         }
+
         ExitingEventArgs exiting_event_args;
         Exiting.Raise(this, exiting_event_args);
     }
 
-    void Game::Initialize() {
-        // Initialize game resources
+    void Game::Initialize()
+    {
         LoadContent();
     }
 
-    void Game::LoadContent() {
-        // Loading content (e.g. textures)
+    void Game::LoadContent()
+    {
     }
 
-    void Game::UnloadContent() {
+    void Game::UnloadContent()
+    {
     }
 
-    void Game::OnDeactivated(std::any sender, System::EventArgs args) {
+    void Game::OnDeactivated(std::any sender, System::EventArgs args)
+    {
     }
 
-    void Game::OnActivated(std::any sender, System::EventArgs args) {
+    void Game::OnActivated(std::any sender, System::EventArgs args)
+    {
     }
 
-    void Game::Update(Microsoft::Xna::Framework::GameTime &gameTime) {
-        // Main game logic
+    void Game::Update(Microsoft::Xna::Framework::GameTime& gameTime)
+    {
     }
 
-    void Game::Draw(const Microsoft::Xna::Framework::GameTime &gameTime) {
+    void Game::Draw(const Microsoft::Xna::Framework::GameTime& gameTime)
+    {
     }
 
 #ifdef XNA5
-    double Game::getTargetFPSProperty() const {
-        return getTargetMsFrameTimeProperty() / 1.0;
+    double Game::getTargetFPSProperty() const
+    {
+        const double msPerFrame = getTargetMsFrameTimeProperty();
+        if (msPerFrame <= 0.0) {
+            return 0.0;
+        }
+        return 1000.0 / msPerFrame;
     }
 
-    double Game::getTargetMsFrameTimeProperty() const {
+    double Game::getTargetMsFrameTimeProperty() const
+    {
         return getTargetElapsedTimeProperty()->getTotalMillisecondsProperty();
     }
 
-    double Game::fpsToMillisecondsPerFrame(const CNA::intcs framesPerSecond) {
-        return 1.0f/double(framesPerSecond);
+    double Game::fpsToMillisecondsPerFrame(const CNA::intcs framesPerSecond)
+    {
+        if (framesPerSecond <= 0) {
+            return 0.0;
+        }
+        return 1000.0 / static_cast<double>(framesPerSecond);
     }
 #endif
 }

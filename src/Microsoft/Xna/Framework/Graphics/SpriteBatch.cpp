@@ -3,37 +3,62 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    SpriteBatch::SpriteBatch(GraphicsDevice& graphicsDevice) {
+    SpriteBatch::SpriteBatch(GraphicsDevice& graphicsDevice)
+    {
         renderer = graphicsDevice.GetRenderer();
     }
 
-    SpriteBatch::SpriteBatch() {
+    SpriteBatch::SpriteBatch()
+        : renderer(nullptr)
+    {
     }
 
-    SpriteBatch::~SpriteBatch() {}
-
-    void SpriteBatch::Begin() {
-        // Setting before rendering, for example blend mode
+    SpriteBatch::~SpriteBatch()
+    {
     }
 
-    void SpriteBatch::End() {
-        // Clean up after rendering
-        SDL_RenderPresent(renderer);
+    void SpriteBatch::Begin()
+    {
+        // Optional future setup before rendering.
     }
 
-    void SpriteBatch::Draw(SDL_Texture* texture, float x, float y) {
-        SDL_FRect dstFRect = { static_cast<float>(x), static_cast<float>(y), 100.0f, 100.0f };  // 100x100 is the size of the image
+    void SpriteBatch::End()
+    {
+        // Do not call SDL_RenderPresent here.
+        // Presentation must happen exactly once per frame,
+        // typically through GraphicsDevice::Present().
+    }
+
+    void SpriteBatch::Draw(SDL_Texture* texture, float x, float y)
+    {
+        SDL_FRect dstFRect = {
+            static_cast<float>(x),
+            static_cast<float>(y),
+            100.0f,
+            100.0f
+        };
         SDL_RenderTexture(renderer, texture, nullptr, &dstFRect);
     }
 
-    void SpriteBatch::Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state) {
+    void SpriteBatch::Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state)
+    {
     }
 
-    void SpriteBatch::Draw(const std::optional<Texture2D>::value_type &value, const Rectangle &x, const Rectangle &y,
-        Color color) {
+    void SpriteBatch::Draw(const std::optional<Texture2D>::value_type& value,
+                           const Rectangle& x,
+                           const Rectangle& y,
+                           Color color)
+    {
     }
 
-    void SpriteBatch::Draw(const std::optional<Texture2D> &value, const Rectangle &x, const Rectangle &y, Color color,
-        float rotation_rad, Vector2 origin, SpriteEffects effect, float x1) {
+    void SpriteBatch::Draw(const std::optional<Texture2D>& value,
+                           const Rectangle& x,
+                           const Rectangle& y,
+                           Color color,
+                           float rotation_rad,
+                           Vector2 origin,
+                           SpriteEffects effect,
+                           float x1)
+    {
     }
 }
