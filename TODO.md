@@ -171,3 +171,91 @@ Only implement if needed.
 ➡️ Functional (partial)  
 ➡️ Ready for extension  
 ➡️ Awaiting Android runtime validation
+
+## Sound️ Current State (Temporary)
+
+The current SDL3_mixer integration **can work**, but it is not a good long-term design.
+
+Problems:
+- `SoundEffect` depends on an already created mixer
+- Mixer lifetime is not clearly managed
+- SDL3_mixer types (`MIX_*`) leak into engine code
+- Harder to extend (music, categories, global volume, device reset, etc.)
+
+👉 This is a **good transition state**, but not a final architecture.
+
+---
+
+# 🎯 Introduce AudioManager (SDL3_mixer Integration)
+
+After the SDL3_mixer migration is stable and builds successfully, the next step is to design a proper audio layer abstraction.
+
+### 🔧 Goal
+
+Create an `AudioManager` for CNA that:
+
+- Owns and manages the `MIX_Mixer` instance
+- Handles audio system initialization and shutdown
+- Encapsulates all SDL3_mixer-specific logic
+- Prevents SDL3_mixer types (`MIX_*`) from leaking into public engine APIs
+
+---
+
+### 🧱 Responsibilities
+
+#### 1. Mixer Lifetime Management
+- Create and store a single global/shared `MIX_Mixer`
+- Ensure it is initialized exactly once
+
+#### 2. Initialization / Shutdown
+- Initialize SDL3_mixer (`MIX_Init`)
+- Create mixer (`MIX_CreateMixerDevice`)
+- Shutdown cleanly (`MIX_DestroyMixer`, `MIX_Quit`)
+
+#### 3. Engine Isolation
+- Hide SDL3_mixer behind CNA abstractions:
+  - `SoundEffect`
+  - `SoundEffectInstance`
+- No SDL headers in public `.hpp`
+
+---
+
+### 🧠 Why This Is Needed
+
+SDL3_mixer changed the model:
+
+- No global audio system
+- Everything is tied to `MIX_Mixer`
+- Track-based playback (`MIX_Track`)
+
+➡️ Central manager is **required**, not optional.
+
+---
+
+### 🧩 Suggested Structure
+
+```cpp
+class AudioManager {
+public:
+    static void Initialize();
+    static void Shutdown();
+
+    static MIX_Mixer* GetMixer();
+
+private:
+    static MIX_Mixer* mixer_;
+};
+````
+
+---
+
+### 🚀 Result
+
+Move CNA from:
+
+> “it works”
+
+to:
+
+> “proper engine architecture”
+
