@@ -3,22 +3,22 @@
 //
 
 #pragma once
+
 #include "TouchLocationState.hpp"
 #include "CNA/Prop.hpp"
-
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch {
     struct TouchLocation {
+        // Minimal API required by current game port.
         DEF_PROP(TouchLocationState, State, getter1, setter0, member1, static0, constret1, ref1, constmet1)
         DEF_PROP(Vector2, Position, getter1, setter0, member1, static0, constret1, ref1, constmet1)
 
-
+    public:
         TouchLocation();
+        TouchLocation(TouchLocationState state, const Vector2& position);
     };
 }
-
-
 
 // #include <SDL3/SDL.h>
 //

@@ -32,7 +32,6 @@ namespace Microsoft::Xna::Framework {
         void setTargetElapsedTimeProperty(System::TimeSpan* v);
         DEF_PROP(System::TimeSpan, InactiveSleepTime, getter1, setter1, member1, static0, constret1, ref1, constmet1)
 
-
         System::EventHandler<ExitingEventArgs> Exiting;
 
         Game();

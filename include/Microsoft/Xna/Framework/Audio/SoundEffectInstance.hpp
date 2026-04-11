@@ -8,7 +8,7 @@ namespace Microsoft::Xna::Framework::Audio {
     class SoundEffectInstance {
     private:
         const SoundEffect* soundEffect_ = nullptr;
-        int channel_ = -1;
+        void* track_ = nullptr;
         bool playing_ = false;
         float Volume_ = 1.0f;
         float Pan_ = 0.0f;
@@ -19,6 +19,11 @@ namespace Microsoft::Xna::Framework::Audio {
     public:
         explicit SoundEffectInstance(const SoundEffect& soundEffect);
         ~SoundEffectInstance();
+
+        SoundEffectInstance(const SoundEffectInstance&) = delete;
+        SoundEffectInstance& operator=(const SoundEffectInstance&) = delete;
+        SoundEffectInstance(SoundEffectInstance&& other) noexcept;
+        SoundEffectInstance& operator=(SoundEffectInstance&& other) noexcept;
 
         void Play();
         void Stop();

@@ -5,339 +5,519 @@
 #pragma once
 
 namespace Microsoft::Xna::Framework::Input {
-    enum Keys {
+
+    /**
+     * @brief Defines the keys on a keyboard.
+     *
+     * This enumeration mirrors the XNA / MonoGame keyboard key definitions.
+     * Numeric values correspond to the original key codes used by the framework.
+     * @note Status: Verified
+     */
+    enum class Keys {
+        /** @brief Reserved. */
         None = 0,
 
+        /** @brief BACKSPACE key. */
         Back = 8,
 
+        /** @brief TAB key. */
         Tab = 9,
 
-        Enter = 13, // 0x0000000D
+        /** @brief ENTER key. */
+        Enter = 13,
 
-        Pause = 19, // 0x00000013
+        /** @brief PAUSE key. */
+        Pause = 19,
 
-        CapsLock = 20, // 0x00000014
+        /** @brief CAPS LOCK key. */
+        CapsLock = 20,
 
-        Kana = 21, // 0x00000015
+        /** @brief Kana key on Japanese keyboards. */
+        Kana = 21,
 
-        Kanji = 25, // 0x00000019
+        /** @brief Kanji key on Japanese keyboards. */
+        Kanji = 25,
 
-        Escape = 27, // 0x0000001B
+        /** @brief ESC key. */
+        Escape = 27,
 
-        ImeConvert = 28, // 0x0000001C
+        /** @brief IME Convert key. */
+        ImeConvert = 28,
 
-        ImeNoConvert = 29, // 0x0000001D
+        /** @brief IME NoConvert key. */
+        ImeNoConvert = 29,
 
-        Space = 32, // 0x00000020
+        /** @brief SPACEBAR key. */
+        Space = 32,
 
-        PageUp = 33, // 0x00000021
+        /** @brief PAGE UP key. */
+        PageUp = 33,
 
-        PageDown = 34, // 0x00000022
+        /** @brief PAGE DOWN key. */
+        PageDown = 34,
 
-        End = 35, // 0x00000023
+        /** @brief END key. */
+        End = 35,
 
-        Home = 36, // 0x00000024
+        /** @brief HOME key. */
+        Home = 36,
 
-        Left = 37, // 0x00000025
+        /** @brief LEFT ARROW key. */
+        Left = 37,
 
-        Up = 38, // 0x00000026
+        /** @brief UP ARROW key. */
+        Up = 38,
 
-        Right = 39, // 0x00000027
+        /** @brief RIGHT ARROW key. */
+        Right = 39,
 
-        Down = 40, // 0x00000028
+        /** @brief DOWN ARROW key. */
+        Down = 40,
 
-        Select = 41, // 0x00000029
+        /** @brief SELECT key. */
+        Select = 41,
 
-        Print = 42, // 0x0000002A
+        /** @brief PRINT key. */
+        Print = 42,
 
-        Execute = 43, // 0x0000002B
+        /** @brief EXECUTE key. */
+        Execute = 43,
 
-        PrintScreen = 44, // 0x0000002C
+        /** @brief PRINT SCREEN key. */
+        PrintScreen = 44,
 
-        Insert = 45, // 0x0000002D
+        /** @brief INS key. */
+        Insert = 45,
 
-        Delete = 46, // 0x0000002E
+        /** @brief DEL key. */
+        Delete = 46,
 
-        Help = 47, // 0x0000002F
+        /** @brief HELP key. */
+        Help = 47,
 
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D0 = 48,
 
-        D0 = 48, // 0x00000030
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D1 = 49,
 
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D2 = 50,
 
-        D1 = 49, // 0x00000031
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D3 = 51,
 
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D4 = 52,
 
-        D2 = 50, // 0x00000032
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D5 = 53,
 
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D6 = 54,
 
-        D3 = 51, // 0x00000033
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D7 = 55,
 
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D8 = 56,
 
-        D4 = 52, // 0x00000034
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        D9 = 57,
 
+        /** @brief A key. */
+        A = 65,
 
-        D5 = 53, // 0x00000035
+        /** @brief B key. */
+        B = 66,
 
+        /** @brief C key. */
+        C = 67,
 
-        D6 = 54, // 0x00000036
+        /** @brief D key. */
+        D = 68,
 
+        /** @brief E key. */
+        E = 69,
 
-        D7 = 55, // 0x00000037
+        /** @brief F key. */
+        F = 70,
 
+        /** @brief G key. */
+        G = 71,
 
-        D8 = 56, // 0x00000038
+        /** @brief H key. */
+        H = 72,
 
+        /** @brief I key. */
+        I = 73,
 
-        D9 = 57, // 0x00000039
+        /** @brief J key. */
+        J = 74,
 
-        A = 65, // 0x00000041
+        /** @brief K key. */
+        K = 75,
 
-        B = 66, // 0x00000042
+        /** @brief L key. */
+        L = 76,
 
-        C = 67, // 0x00000043
+        /** @brief M key. */
+        M = 77,
 
-        D = 68, // 0x00000044
+        /** @brief N key. */
+        N = 78,
 
-        E = 69, // 0x00000045
+        /** @brief O key. */
+        O = 79,
 
-        F = 70, // 0x00000046
+        /** @brief P key. */
+        P = 80,
 
-        G = 71, // 0x00000047
+        /** @brief Q key. */
+        Q = 81,
 
-        H = 72, // 0x00000048
+        /** @brief R key. */
+        R = 82,
 
-        I = 73, // 0x00000049
+        /** @brief S key. */
+        S = 83,
 
-        J = 74, // 0x0000004A
+        /** @brief T key. */
+        T = 84,
 
-        K = 75, // 0x0000004B
+        /** @brief U key. */
+        U = 85,
 
-        L = 76, // 0x0000004C
+        /** @brief V key. */
+        V = 86,
 
-        M = 77, // 0x0000004D
+        /** @brief W key. */
+        W = 87,
 
-        N = 78, // 0x0000004E
+        /** @brief X key. */
+        X = 88,
 
-        O = 79, // 0x0000004F
+        /** @brief Y key. */
+        Y = 89,
 
-        P = 80, // 0x00000050
+        /** @brief Z key. */
+        Z = 90,
 
-        Q = 81, // 0x00000051
+        /** @brief Left Windows key. */
+        LeftWindows = 91,
 
-        R = 82, // 0x00000052
+        /** @brief Right Windows key. */
+        RightWindows = 92,
 
-        S = 83, // 0x00000053
+        /** @brief Applications key. */
+        Apps = 93,
 
-        T = 84, // 0x00000054
+        /** @brief Computer Sleep key. */
+        Sleep = 95,
 
-        U = 85, // 0x00000055
+        /** @brief Numeric keypad 0 key. */
+        NumPad0 = 96,
 
-        V = 86, // 0x00000056
+        /** @brief Numeric keypad 1 key. */
+        NumPad1 = 97,
 
-        W = 87, // 0x00000057
+        /** @brief Numeric keypad 2 key. */
+        NumPad2 = 98,
 
-        X = 88, // 0x00000058
+        /** @brief Numeric keypad 3 key. */
+        NumPad3 = 99,
 
-        Y = 89, // 0x00000059
+        /** @brief Numeric keypad 4 key. */
+        NumPad4 = 100,
 
-        Z = 90, // 0x0000005A
+        /** @brief Numeric keypad 5 key. */
+        NumPad5 = 101,
 
-        LeftWindows = 91, // 0x0000005B
+        /** @brief Numeric keypad 6 key. */
+        NumPad6 = 102,
 
-        RightWindows = 92, // 0x0000005C
+        /** @brief Numeric keypad 7 key. */
+        NumPad7 = 103,
 
-        Apps = 93, // 0x0000005D
+        /** @brief Numeric keypad 8 key. */
+        NumPad8 = 104,
 
-        Sleep = 95, // 0x0000005F
+        /** @brief Numeric keypad 9 key. */
+        NumPad9 = 105,
 
-        NumPad0 = 96, // 0x00000060
+        /** @brief Multiply key. */
+        Multiply = 106,
 
-        NumPad1 = 97, // 0x00000061
+        /** @brief Add key. */
+        Add = 107,
 
-        NumPad2 = 98, // 0x00000062
+        /** @brief Separator key. */
+        Separator = 108,
 
-        NumPad3 = 99, // 0x00000063
+        /** @brief Subtract key. */
+        Subtract = 109,
 
-        NumPad4 = 100, // 0x00000064
+        /** @brief Decimal key. */
+        Decimal = 110,
 
-        NumPad5 = 101, // 0x00000065
+        /** @brief Divide key. */
+        Divide = 111,
 
-        NumPad6 = 102, // 0x00000066
+        /** @brief F1 key. */
+        F1 = 112,
 
-        NumPad7 = 103, // 0x00000067
+        /** @brief F2 key. */
+        F2 = 113,
 
-        NumPad8 = 104, // 0x00000068
+        /** @brief F3 key. */
+        F3 = 114,
 
-        NumPad9 = 105, // 0x00000069
+        /** @brief F4 key. */
+        F4 = 115,
 
-        Multiply = 106, // 0x0000006A
+        /** @brief F5 key. */
+        F5 = 116,
 
-        Add = 107, // 0x0000006B
+        /** @brief F6 key. */
+        F6 = 117,
 
-        Separator = 108, // 0x0000006C
+        /** @brief F7 key. */
+        F7 = 118,
 
-        Subtract = 109, // 0x0000006D
+        /** @brief F8 key. */
+        F8 = 119,
 
-        Decimal = 110, // 0x0000006E
+        /** @brief F9 key. */
+        F9 = 120,
 
-        Divide = 111, // 0x0000006F
+        /** @brief F10 key. */
+        F10 = 121,
 
-        F1 = 112, // 0x00000070
+        /** @brief F11 key. */
+        F11 = 122,
 
-        F2 = 113, // 0x00000071
+        /** @brief F12 key. */
+        F12 = 123,
 
-        F3 = 114, // 0x00000072
+        /** @brief F13 key. */
+        F13 = 124,
 
-        F4 = 115, // 0x00000073
+        /** @brief F14 key. */
+        F14 = 125,
 
-        F5 = 116, // 0x00000074
+        /** @brief F15 key. */
+        F15 = 126,
 
-        F6 = 117, // 0x00000075
+        /** @brief F16 key. */
+        F16 = 127,
 
-        F7 = 118, // 0x00000076
+        /** @brief F17 key. */
+        F17 = 128,
 
-        F8 = 119, // 0x00000077
+        /** @brief F18 key. */
+        F18 = 129,
 
-        F9 = 120, // 0x00000078
+        /** @brief F19 key. */
+        F19 = 130,
 
-        F10 = 121, // 0x00000079
+        /** @brief F20 key. */
+        F20 = 131,
 
-        F11 = 122, // 0x0000007A
+        /** @brief F21 key. */
+        F21 = 132,
 
-        F12 = 123, // 0x0000007B
+        /** @brief F22 key. */
+        F22 = 133,
 
-        F13 = 124, // 0x0000007C
+        /** @brief F23 key. */
+        F23 = 134,
 
-        F14 = 125, // 0x0000007D
+        /** @brief F24 key. */
+        F24 = 135,
 
-        F15 = 126, // 0x0000007E
+        /** @brief NUM LOCK key. */
+        NumLock = 144,
 
-        F16 = 127, // 0x0000007F
+        /** @brief SCROLL LOCK key. */
+        Scroll = 145,
 
-        F17 = 128, // 0x00000080
+        /** @brief Left SHIFT key. */
+        LeftShift = 160,
 
-        F18 = 129, // 0x00000081
+        /** @brief Right SHIFT key. */
+        RightShift = 161,
 
-        F19 = 130, // 0x00000082
+        /** @brief Left CONTROL key. */
+        LeftControl = 162,
 
-        F20 = 131, // 0x00000083
+        /** @brief Right CONTROL key. */
+        RightControl = 163,
 
-        F21 = 132, // 0x00000084
+        /** @brief Left ALT key. */
+        LeftAlt = 164,
 
-        F22 = 133, // 0x00000085
+        /** @brief Right ALT key. */
+        RightAlt = 165,
 
-        F23 = 134, // 0x00000086
+        /** @brief Browser Back key. */
+        BrowserBack = 166,
 
-        F24 = 135, // 0x00000087
+        /** @brief Browser Forward key. */
+        BrowserForward = 167,
 
-        NumLock = 144, // 0x00000090
+        /** @brief Browser Refresh key. */
+        BrowserRefresh = 168,
 
-        Scroll = 145, // 0x00000091
+        /** @brief Browser Stop key. */
+        BrowserStop = 169,
 
-        LeftShift = 160, // 0x000000A0
+        /** @brief Browser Search key. */
+        BrowserSearch = 170,
 
-        RightShift = 161, // 0x000000A1
+        /** @brief Browser Favorites key. */
+        BrowserFavorites = 171,
 
-        LeftControl = 162, // 0x000000A2
+        /** @brief Browser Start and Home key. */
+        BrowserHome = 172,
 
-        RightControl = 163, // 0x000000A3
+        /** @brief Volume Mute key. */
+        VolumeMute = 173,
 
-        LeftAlt = 164, // 0x000000A4
+        /** @brief Volume Down key. */
+        VolumeDown = 174,
 
-        RightAlt = 165, // 0x000000A5
+        /** @brief Volume Up key. */
+        VolumeUp = 175,
 
-        BrowserBack = 166, // 0x000000A6
+        /** @brief Next Track key. */
+        MediaNextTrack = 176,
 
-        BrowserForward = 167, // 0x000000A7
+        /** @brief Previous Track key. */
+        MediaPreviousTrack = 177,
 
-        BrowserRefresh = 168, // 0x000000A8
+        /** @brief Stop Media key. */
+        MediaStop = 178,
 
-        BrowserStop = 169, // 0x000000A9
+        /** @brief Play/Pause Media key. */
+        MediaPlayPause = 179,
 
-        BrowserSearch = 170, // 0x000000AA
+        /** @brief Start Mail key. */
+        LaunchMail = 180,
 
-        BrowserFavorites = 171, // 0x000000AB
+        /** @brief Select Media key. */
+        SelectMedia = 181,
 
-        BrowserHome = 172, // 0x000000AC
+        /** @brief Start Application 1 key. */
+        LaunchApplication1 = 182,
 
-        VolumeMute = 173, // 0x000000AD
+        /** @brief Start Application 2 key. */
+        LaunchApplication2 = 183,
 
-        VolumeDown = 174, // 0x000000AE
+        /** @brief The OEM Semicolon key on a US standard keyboard. */
+        OemSemicolon = 186,
 
-        VolumeUp = 175, // 0x000000AF
+        /** @brief For any country/region, the '+' key. */
+        OemPlus = 187,
 
-        MediaNextTrack = 176, // 0x000000B0
+        /** @brief For any country/region, the ',' key. */
+        OemComma = 188,
 
-        MediaPreviousTrack = 177, // 0x000000B1
+        /** @brief For any country/region, the '-' key. */
+        OemMinus = 189,
 
-        MediaStop = 178, // 0x000000B2
+        /** @brief For any country/region, the '.' key. */
+        OemPeriod = 190,
 
-        MediaPlayPause = 179, // 0x000000B3
+        /** @brief The OEM question mark key on a US standard keyboard. */
+        OemQuestion = 191,
 
-        LaunchMail = 180, // 0x000000B4
+        /** @brief The OEM tilde key on a US standard keyboard. */
+        OemTilde = 192,
 
-        SelectMedia = 181, // 0x000000B5
+        /** @brief Green ChatPad key. */
+        ChatPadGreen = 202,
 
-        LaunchApplication1 = 182, // 0x000000B6
+        /** @brief Orange ChatPad key. */
+        ChatPadOrange = 203,
 
-        LaunchApplication2 = 183, // 0x000000B7
+        /** @brief The OEM open bracket key on a US standard keyboard. */
+        OemOpenBrackets = 219,
 
-        OemSemicolon = 186, // 0x000000BA
+        /** @brief The OEM pipe key on a US standard keyboard. */
+        OemPipe = 220,
 
-        OemPlus = 187, // 0x000000BB
+        /** @brief The OEM close bracket key on a US standard keyboard. */
+        OemCloseBrackets = 221,
 
-        OemComma = 188, // 0x000000BC
+        /**
+         * @brief The OEM single/double quote key on a US standard keyboard.
+         */
+        OemQuotes = 222,
 
-        OemMinus = 189, // 0x000000BD
+        /**
+         * @brief Used for miscellaneous characters; it can vary by keyboard.
+         */
+        Oem8 = 223,
 
-        OemPeriod = 190, // 0x000000BE
+        /**
+         * @brief The OEM angle bracket or backslash key on the RT 102 key keyboard.
+         */
+        OemBackslash = 226,
 
-        OemQuestion = 191, // 0x000000BF
+        /** @brief IME PROCESS key. */
+        ProcessKey = 229,
 
-        OemTilde = 192, // 0x000000C0
+        /** @brief OEM Copy key. */
+        OemCopy = 242,
 
-        ChatPadGreen = 202, // 0x000000CA
+        /** @brief OEM Auto key. */
+        OemAuto = 243,
 
-        ChatPadOrange = 203, // 0x000000CB
+        /** @brief OEM Enlarge Window key. */
+        OemEnlW = 244,
 
-        OemOpenBrackets = 219, // 0x000000DB
+        /** @brief Attn key. */
+        Attn = 246,
 
-        OemPipe = 220, // 0x000000DC
+        /** @brief CrSel key. */
+        Crsel = 247,
 
-        OemCloseBrackets = 221, // 0x000000DD
+        /** @brief ExSel key. */
+        Exsel = 248,
 
+        /** @brief Erase EOF key. */
+        EraseEof = 249,
 
-        OemQuotes = 222, // 0x000000DE
+        /** @brief Play key. */
+        Play = 250,
 
+        /** @brief Zoom key. */
+        Zoom = 251,
 
-        Oem8 = 223, // 0x000000DF
+        /** @brief PA1 key. */
+        Pa1 = 253,
 
-
-        OemBackslash = 226, // 0x000000E2
-
-        ProcessKey = 229, // 0x000000E5
-
-        OemCopy = 242, // 0x000000F2
-
-        OemAuto = 243, // 0x000000F3
-
-        OemEnlW = 244, // 0x000000F4
-
-        Attn = 246, // 0x000000F6
-
-        Crsel = 247, // 0x000000F7
-
-        Exsel = 248, // 0x000000F8
-
-        EraseEof = 249, // 0x000000F9
-
-        Play = 250, // 0x000000FA
-
-        Zoom = 251, // 0x000000FB
-
-        Pa1 = 253, // 0x000000FD
-
-        OemClear = 254, // 0x000000FE
+        /** @brief CLEAR key. */
+        OemClear = 254
     };
 }
-

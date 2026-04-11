@@ -4,13 +4,13 @@
 
 #pragma once
 
-
-namespace Microsoft::Xna::Framework::Input {
-    class MouseCursor {
+namespace Microsoft::Xna::Framework::Input
+{
+    class MouseCursor
+    {
     public:
         MouseCursor();
 
-    public: static MouseCursor Arrow;
+        static MouseCursor Arrow;
     };
 }
-

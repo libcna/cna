@@ -4,9 +4,8 @@
 
 #pragma once
 
-
 namespace Microsoft::Xna::Framework::Input::Touch {
-    enum TouchLocationState {
+    enum class TouchLocationState {
 
         Invalid,
 

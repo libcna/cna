@@ -18,19 +18,20 @@ namespace Microsoft::Xna::Framework {
 
     void InitAudio()
     {
-        if (!SDL_Init(SDL_INIT_AUDIO)) {
-            throw std::runtime_error("SDL_Init failed");
+#ifdef SOUND_ENABLED
+        if (!MIX_Init()) {
+            throw std::runtime_error(std::string("MIX_Init failed: ") + SDL_GetError());
         }
-
-        if (!Mix_OpenAudio(0, nullptr)) {
-            throw std::runtime_error("Mix_OpenAudio failed");
-        }
+#endif
     }
+
     void ShutdownAudio()
     {
-        Mix_CloseAudio();
-        SDL_Quit();
+#ifdef SOUND_ENABLED
+        MIX_Quit();
+#endif
     }
+
 
     Game::Game() : IsMouseVisible_(false), TargetElapsedTime_(new TimeSpan(500000L)),
                    InactiveSleepTime_(TimeSpan(0)),

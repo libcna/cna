@@ -8,11 +8,36 @@
 #endif
 
 namespace Microsoft::Xna::Framework::Audio {
+#ifdef SOUND_ENABLED
+    namespace {
+        MIX_Mixer* g_mixer = nullptr;
 
+        MIX_Mixer* GetMixer()
+        {
+            if (!g_mixer) {
+                if (!MIX_Init()) {
+                    throw std::runtime_error(std::string("MIX_Init failed: ") + SDL_GetError());
+                }
+
+                SDL_AudioSpec spec{};
+                spec.format = SDL_AUDIO_S16;
+                spec.channels = 2;
+                spec.freq = 44100;
+
+                g_mixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
+                if (!g_mixer) {
+                    throw std::runtime_error(std::string("MIX_CreateMixerDevice failed: ") + SDL_GetError());
+                }
+            }
+
+            return g_mixer;
+        }
+    }
+#endif
     class SoundEffect::Impl {
     public:
 #ifdef SOUND_ENABLED
-        std::shared_ptr<Mix_Chunk> chunk{};
+        std::shared_ptr<MIX_Audio> audio{};
 #endif
     };
 
@@ -37,18 +62,24 @@ namespace Microsoft::Xna::Framework::Audio {
         : impl_(std::make_shared<Impl>())
     {
 #ifdef SOUND_ENABLED
-        Mix_Chunk* rawChunk = Mix_LoadWAV(assetName.c_str());
-        if (!rawChunk) {
-            throw std::runtime_error("Failed to load sound: " + assetName + " Error: " + SDL_GetError());
+        MIX_Mixer* mixer = GetMixer();
+
+        MIX_Audio* rawAudio = MIX_LoadAudio(mixer, assetName.c_str(), true);
+
+        if (!rawAudio) {
+            throw std::runtime_error(
+                "Failed to load sound: " + assetName + " Error: " + SDL_GetError()
+            );
         }
 
-        impl_->chunk = std::shared_ptr<Mix_Chunk>(
-            rawChunk,
-            [](Mix_Chunk* ptr) {
+        impl_->audio = std::shared_ptr<MIX_Audio>(
+            rawAudio,
+            [](MIX_Audio* ptr) {
                 if (ptr) {
-                    Mix_FreeChunk(ptr);
+                    MIX_DestroyAudio(ptr);
                 }
-            });
+            }
+        );
 #else
         (void)assetName;
 #endif
@@ -56,13 +87,13 @@ namespace Microsoft::Xna::Framework::Audio {
 
     SoundEffect::~SoundEffect() = default;
 
-    void* SoundEffect::getNativeChunkHandle() const
+    void* SoundEffect::getNativeAudioHandle() const
     {
 #ifdef SOUND_ENABLED
-        if (!impl_ || !impl_->chunk) {
+        if (!impl_ || !impl_->audio) {
             return nullptr;
         }
-        return impl_->chunk.get();
+        return impl_->audio.get();
 #else
         return nullptr;
 #endif

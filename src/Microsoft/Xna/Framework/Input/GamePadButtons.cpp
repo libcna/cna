@@ -8,6 +8,6 @@ namespace Microsoft::Xna::Framework::Input {
 
     IMPL_PROP(ButtonState, Back, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
 
-    GamePadButtons::GamePadButtons(): Back_(Released) {
+    GamePadButtons::GamePadButtons(): Back_(ButtonState::Released) {
     }
 }

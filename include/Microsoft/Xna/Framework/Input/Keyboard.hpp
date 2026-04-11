@@ -5,11 +5,10 @@
 #pragma once
 #include "KeyboardState.hpp"
 
-
 namespace Microsoft::Xna::Framework::Input {
     class Keyboard {
     public:
-        static KeyboardState GetState() { return KeyboardState(); }
+        static KeyboardState GetState();
     };
 }
 

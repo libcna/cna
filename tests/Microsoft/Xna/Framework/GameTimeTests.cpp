@@ -33,7 +33,7 @@ TEST(GameTimeTest, GetterReturnsCorrectReference) {
 
     gameTime.setElapsedGameTimeProperty(t);
 
-    TimeSpan& elapsedTimeRef = gameTime.getElapsedGameTimeProperty();
+    const TimeSpan& elapsedTimeRef = gameTime.getElapsedGameTimeProperty();
 
     EXPECT_EQ(elapsedTimeRef.getTicksProperty(), 150);
     EXPECT_EQ(&elapsedTimeRef, &gameTime.getElapsedGameTimeProperty());
@@ -57,7 +57,7 @@ TEST(GameTimeTest, GetterReturnsCorrectReference2) {
 
     gameTime.setElapsedGameTimeProperty(t);
 
-    TimeSpan& elapsedTimeRef = gameTime.getElapsedGameTimeProperty();
+    const TimeSpan& elapsedTimeRef = gameTime.getElapsedGameTimeProperty();
 
     EXPECT_EQ(elapsedTimeRef.getTicksProperty(), 150);
     EXPECT_EQ(&elapsedTimeRef, &gameTime.getElapsedGameTimeProperty());

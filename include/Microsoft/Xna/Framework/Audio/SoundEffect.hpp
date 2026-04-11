@@ -17,7 +17,7 @@ namespace Microsoft::Xna::Framework::Audio {
         static float MasterVolume_;
 
     private:
-        [[nodiscard]] void* getNativeChunkHandle() const;
+        [[nodiscard]] void* getNativeAudioHandle() const;
 
     public:
         explicit SoundEffect(const std::string& assetName);
