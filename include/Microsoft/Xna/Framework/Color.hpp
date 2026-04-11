@@ -32,6 +32,7 @@ namespace Microsoft::Xna::Framework
         static Color FromNonPremultiplied(intcs r, intcs g, intcs b, intcs a);
     };
 
+    // todo: shhould be static and part of the Color class
     const Color CornflowerBlue = Color(4293760356U);
-    const Color White = Color(0, 0, 0, 0);
+    const Color White = Color(255, 255, 255, 255);
 }

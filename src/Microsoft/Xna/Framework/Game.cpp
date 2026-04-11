@@ -97,6 +97,7 @@ namespace Microsoft::Xna::Framework {
 
             Update(gameTime);
             Draw(gameTime);
+            GraphicsDevice_.Present();
 
             const Uint64 workMs = SDL_GetTicks() - frameStart;
             const bool runningSlowly = static_cast<double>(workMs) > wantedMsFrameTime;
