@@ -6,7 +6,13 @@
 
 namespace CNA
 {
-    LogLevel Logger::minimumLevel_ = LogLevel::INFO;
+#ifdef NDEBUG
+    static constexpr LogLevel defaultLevel = LogLevel::INFO;
+#else
+    static constexpr LogLevel defaultLevel = LogLevel::TRACE;
+#endif
+
+    LogLevel Logger::minimumLevel_ = defaultLevel;
 
     void Logger::Log(
         LogLevel level,

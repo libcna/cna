@@ -61,6 +61,7 @@ namespace Microsoft::Xna::Framework::Audio {
     SoundEffect::SoundEffect(const std::string& assetName)
         : impl_(std::make_shared<Impl>())
     {
+        if (assetName.empty()) return;
 #ifdef SOUND_ENABLED
         MIX_Mixer* mixer = GetMixer();
 
