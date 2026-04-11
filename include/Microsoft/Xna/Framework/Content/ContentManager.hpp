@@ -4,10 +4,13 @@
 
 #pragma once
 #include <iostream>
+#include <SDL3/SDL_log.h>
 
+#include "CNA/Logger.hpp"
 #include "CNA/Prop.hpp"
 
 namespace Microsoft::Xna::Framework::Content {
+    using log = CNA::Logger;
     class ContentManager {
     private:
         std::string RootDirectory_ = "Content";
@@ -19,7 +22,7 @@ namespace Microsoft::Xna::Framework::Content {
 
         template<typename T>
         T Load(const std::string& assetName) {
-            std::cout << "Loading asset: " << assetName << std::endl;
+            log::Debug(std::string("Loading asset: ") + assetName);
             return T(getRootDirectoryProperty() + "/" + assetName);
         }
     };
