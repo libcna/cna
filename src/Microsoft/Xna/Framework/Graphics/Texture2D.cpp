@@ -6,6 +6,8 @@
 
 #include <stdexcept>
 
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics {
 
     class Texture2D::Impl {
@@ -22,20 +24,17 @@ namespace Microsoft::Xna::Framework::Graphics {
         : impl_(std::make_shared<Impl>()) {
     }
 
-    Texture2D::Texture2D(const std::string& assetName)
-        : impl_(std::make_shared<Impl>()) {
+    Texture2D::Texture2D(const std::string& assetName, void* graphicsDevice)
+        : impl_(std::make_shared<Impl>())
+    {
         if (assetName.empty()) {
             return;
         }
 
-        SDL_Window* window = SDL_GetKeyboardFocus();
-        if (!window) {
-            throw std::runtime_error("Texture2D load failed: no active SDL window.");
-        }
-
-        SDL_Renderer* renderer = SDL_GetRenderer(window);
+        GraphicsDevice* gd =static_cast<GraphicsDevice*>(graphicsDevice);
+        SDL_Renderer* renderer = gd->GetRendererInternal();
         if (!renderer) {
-            throw std::runtime_error("Texture2D load failed: no SDL renderer available.");
+            throw std::runtime_error("Texture2D load failed: GraphicsDevice has no renderer.");
         }
 
         impl_->texture = IMG_LoadTexture(renderer, assetName.c_str());

@@ -42,10 +42,13 @@ namespace Microsoft::Xna::Framework::Content {
          */
         [[nodiscard]] std::string BuildAssetPath(const std::string& assetName) const;
 
+        void* graphicsDevice_ = nullptr;
+
     public:
         /**
          * @brief Constructs a content manager.
          */
+
         ContentManager();
 
         /**
@@ -65,7 +68,7 @@ namespace Microsoft::Xna::Framework::Content {
             log::Debug(std::string("Loading asset: ") + fullPath);
 
             if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Graphics::Texture2D>) {
-                return T(fullPath);
+                return T(fullPath, graphicsDevice_);
             } else if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Audio::SoundEffect>) {
                 return T(fullPath);
             } else {
@@ -76,5 +79,6 @@ namespace Microsoft::Xna::Framework::Content {
                 );
             }
         }
+    void setGraphicsDevice(void* graphics_device);
     };
 }

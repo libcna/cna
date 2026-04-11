@@ -16,8 +16,11 @@ namespace Microsoft::Xna::Framework::Content {
         RootDirectory_ = v;
     }
 
-    ContentManager::ContentManager()
+    ContentManager::ContentManager() = default;
+
+    void ContentManager::setGraphicsDevice(void* graphics_device)
     {
+        graphicsDevice_ = &graphics_device;
     }
 
     std::string ContentManager::BuildAssetPath(const std::string& assetName) const

@@ -36,6 +36,7 @@ namespace Microsoft::Xna::Framework::Graphics {
          * @param assetName Full path to the image file.
          */
         explicit Texture2D(const std::string& assetName);
+        Texture2D(const std::string& assetName, void* graphicsDevice);
 
         /**
          * @brief Destroys the texture wrapper.
