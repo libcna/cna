@@ -300,7 +300,7 @@ namespace Microsoft::Devices::Sensors {
             accelerometerReading.setAccelerationProperty(acceleration);
 
             const Uint64 nowNs = SDL_GetTicksNS();
-            const CNA::longcs ticks = static_cast<CNA::longcs>(nowNs / 100);
+            const CppDotNet::longcs ticks = static_cast<CppDotNet::longcs>(nowNs / 100);
 
             System::DateTime dateTime(ticks);
             System::DateTimeOffset timestamp(dateTime, System::TimeSpan::Zero);

@@ -3,13 +3,13 @@
 //
 
 #pragma once
-#include "CNA/CnaHelper.hpp"
+#include "CppDotNet/CppDotNetHelper.hpp"
 
 namespace Microsoft::Xna::Framework
 {
-    using CNA::uintcs;
-    using CNA::bytecs;
-    using CNA::intcs;
+    using CppDotNet::uintcs;
+    using CppDotNet::bytecs;
+    using CppDotNet::intcs;
 
     /**
      * @note Status: Partial
@@ -17,10 +17,10 @@ namespace Microsoft::Xna::Framework
     struct Color
     {
     private:
-        CNA::uintcs packedValue;
+        CppDotNet::uintcs packedValue;
 
     public:
-        explicit Color(CNA::uintcs packedValue);
+        explicit Color(CppDotNet::uintcs packedValue);
 
         Color(bytecs r, bytecs g, bytecs b, bytecs alpha);
 
@@ -32,7 +32,7 @@ namespace Microsoft::Xna::Framework
         static Color FromNonPremultiplied(intcs r, intcs g, intcs b, intcs a);
     };
 
-    // todo: shhould be static and part of the Color class
+    // todo: should be static and part of the Color class
     const Color CornflowerBlue = Color(4293760356U);
     const Color White = Color(255, 255, 255, 255);
 }

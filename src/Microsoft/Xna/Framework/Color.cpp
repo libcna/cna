@@ -4,12 +4,12 @@
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 
-#include "CNA/CnaHelper.hpp"
+#include "CppDotNet/CppDotNetHelper.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 
 namespace Microsoft::Xna::Framework {
 
-    Color::Color(CNA::uintcs packedValue) : packedValue(packedValue)
+    Color::Color(CppDotNet::uintcs packedValue) : packedValue(packedValue)
     {
     }
 
@@ -17,10 +17,10 @@ namespace Microsoft::Xna::Framework {
     {
         if ((static_cast<uintcs>(r | g | b | alpha) & ~uintcs{0xFF}) != uintcs{0})
         {
-            r = MathHelper::Clamp(r, 0, CNA::BYTE_MAX);
-            g = MathHelper::Clamp(g, 0, CNA::BYTE_MAX);
-            b = MathHelper::Clamp(b, 0, CNA::BYTE_MAX);
-            alpha = MathHelper::Clamp(alpha, 0, CNA::BYTE_MAX);
+            r = MathHelper::Clamp(r, 0, CppDotNet::BYTE_MAX);
+            g = MathHelper::Clamp(g, 0, CppDotNet::BYTE_MAX);
+            b = MathHelper::Clamp(b, 0, CppDotNet::BYTE_MAX);
+            alpha = MathHelper::Clamp(alpha, 0, CppDotNet::BYTE_MAX);
         }
 
         this->packedValue =
@@ -53,9 +53,9 @@ namespace Microsoft::Xna::Framework {
     Color Color::FromNonPremultiplied(intcs r, intcs g, intcs b, intcs a)
     {
         return {
-            static_cast<bytecs>(r * a / static_cast<bytecs>(CNA::BYTE_MAX)),
-            static_cast<bytecs>(g * a / static_cast<bytecs>(CNA::BYTE_MAX)),
-            static_cast<bytecs>(b * a / static_cast<bytecs>(CNA::BYTE_MAX)),
+            static_cast<bytecs>(r * a / static_cast<bytecs>(CppDotNet::BYTE_MAX)),
+            static_cast<bytecs>(g * a / static_cast<bytecs>(CppDotNet::BYTE_MAX)),
+            static_cast<bytecs>(b * a / static_cast<bytecs>(CppDotNet::BYTE_MAX)),
             static_cast<bytecs>(a)
         };
     }

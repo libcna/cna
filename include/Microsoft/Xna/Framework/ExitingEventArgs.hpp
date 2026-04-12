@@ -3,8 +3,8 @@
 //
 
 #pragma once
-#include "../../../System/EventArgs.hpp"
-#include "CNA/Prop.hpp"
+#include "System/EventArgs.hpp"
+#include "CppDotNet/Prop.hpp"
 
 namespace Microsoft::Xna::Framework {
     class ExitingEventArgs : System::EventArgs {

@@ -3,11 +3,11 @@
 #include <vector>
 
 #include "TouchLocation.hpp"
-#include "CNA/Prop.hpp"
-#include "CNA/CnaHelper.hpp"
+#include "CppDotNet/Prop.hpp"
+#include "CppDotNet/CppDotNetHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch {
-    using CNA::intcs;
+    using CppDotNet::intcs;
 
     struct TouchCollection {
     private:

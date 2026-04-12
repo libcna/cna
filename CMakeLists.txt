@@ -6,17 +6,22 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(CNA_BUILD_TESTS "Build CNA tests" ON)
+
+set(CPP_DOTNET_BUILD_TESTS OFF CACHE BOOL "Build cpp-dotnet tests" FORCE)
+add_subdirectory(../cpp-dotnet CPP_DOTNET)
+
 find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
 find_package(SDL3_mixer REQUIRED)
 find_package(SDL3_ttf REQUIRED)
 
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
+file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
         "src/*.cpp"
 )
 
 add_library(CNA STATIC
-        ${SOURCES}
+        ${CNA_SOURCES}
 )
 
 target_include_directories(CNA
@@ -31,6 +36,8 @@ target_compile_definitions(CNA
 )
 
 target_link_libraries(CNA
+        PUBLIC
+        CPP_DOTNET
         PRIVATE
         SDL3::SDL3
         SDL3_image::SDL3_image
@@ -38,28 +45,26 @@ target_link_libraries(CNA
         SDL3_ttf::SDL3_ttf
 )
 
-add_subdirectory(vendor/googletest)
+if(CNA_BUILD_TESTS)
+    add_subdirectory(vendor/googletest)
 
-enable_testing()
+    enable_testing()
 
-file(GLOB_RECURSE TESTS CONFIGURE_DEPENDS
-        "tests/*.cpp"
-)
+    file(GLOB_RECURSE CNA_TEST_SOURCES CONFIGURE_DEPENDS
+            "tests/*.cpp"
+    )
 
-add_executable(Tests
-        ${TESTS}
-)
+    add_executable(CnaTests
+            ${CNA_TEST_SOURCES}
+    )
 
-target_include_directories(Tests
-        PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/googletest/googletest/include
-)
+    target_link_libraries(CnaTests
+            PRIVATE
+            CNA
+            CPP_DOTNET
+            gtest_main
+    )
 
-target_link_libraries(Tests
-        PRIVATE
-        CNA
-        gtest_main
-)
-
-include(GoogleTest)
-gtest_discover_tests(Tests)
+    include(GoogleTest)
+    gtest_discover_tests(CnaTests)
+endif()

@@ -9,7 +9,7 @@
 
 #include "System/EventArgs.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
-#include "CNA/Prop.hpp"
+#include "CppDotNet/Prop.hpp"
 
 namespace Microsoft::Devices::Sensors {
 

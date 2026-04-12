@@ -167,7 +167,7 @@ namespace Microsoft::Xna::Framework {
         return getTargetElapsedTimeProperty().getTotalMillisecondsProperty();
     }
 
-    double Game::fpsToMillisecondsPerFrame(const CNA::intcs framesPerSecond)
+    double Game::fpsToMillisecondsPerFrame(const CppDotNet::intcs framesPerSecond)
     {
         if (framesPerSecond <= 0) {
             return 0.0;

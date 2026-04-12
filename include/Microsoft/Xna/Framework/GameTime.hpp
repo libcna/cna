@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "CNA/Prop.hpp"
+#include "CppDotNet/Prop.hpp"
 #include "System/TimeSpan.hpp"
 
 namespace Microsoft::Xna::Framework {

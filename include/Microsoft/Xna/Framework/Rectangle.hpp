@@ -3,10 +3,10 @@
 //
 
 #pragma once
-#include "CNA/CnaHelper.hpp"
+#include "CppDotNet/CppDotNetHelper.hpp"
 
 namespace Microsoft::Xna::Framework {
-    using CNA::intcs;
+    using CppDotNet::intcs;
     struct Rectangle {
         Rectangle(); // Default constructor
 

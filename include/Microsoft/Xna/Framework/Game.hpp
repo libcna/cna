@@ -9,7 +9,7 @@
 
 #include "System/EventHandler.hpp"
 #include "System/TimeSpan.hpp"
-#include "../../../System/EventArgs.hpp"
+#include "System/EventArgs.hpp"
 
 namespace Microsoft::Xna::Framework {
 
@@ -56,7 +56,7 @@ namespace Microsoft::Xna::Framework {
     public:
         [[nodiscard]] double getTargetFPSProperty() const;
         [[nodiscard]] double getTargetMsFrameTimeProperty() const;
-        static double fpsToMillisecondsPerFrame(CNA::intcs framesPerSecond);
+        static double fpsToMillisecondsPerFrame(CppDotNet::intcs framesPerSecond);
 #endif
     };
 }

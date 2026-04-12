@@ -1,6 +1,6 @@
 #pragma once
 
-#include "CNA/Prop.hpp"
+#include "CppDotNet/Prop.hpp"
 
 namespace Microsoft::Xna::Framework {
     class Game;

@@ -5,7 +5,7 @@
 #pragma once
 #include "ButtonState.hpp"
 #include "Keys.hpp"
-#include "CNA/Prop.hpp"
+#include "CppDotNet/Prop.hpp"
 
 
 namespace Microsoft::Xna::Framework::Input {

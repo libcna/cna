@@ -9,7 +9,7 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_sensor.h>
 
-#include "CNA/CnaHelper.hpp"
+#include "CppDotNet/CppDotNetHelper.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorBase.hpp"
@@ -37,7 +37,7 @@ namespace Microsoft::Devices::Sensors {
         static bool eventWatchRegistered_;
         static std::vector<Accelerometer*> startedInstances_;
 
-        static constexpr CNA::bytecs MaxSensorCount = 10;
+        static constexpr CppDotNet::bytecs MaxSensorCount = 10;
 
         SensorState state_;
         bool started_;

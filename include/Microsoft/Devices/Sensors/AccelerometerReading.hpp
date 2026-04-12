@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "CNA/Prop.hpp"
+#include "CppDotNet/Prop.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"

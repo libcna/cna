@@ -3,7 +3,7 @@
 //
 #pragma once
 
-#include "CNA/Prop.hpp"
+#include "CppDotNet/Prop.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
 /**
