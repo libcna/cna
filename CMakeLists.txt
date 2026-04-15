@@ -10,6 +10,7 @@ option(CNA_BUILD_TESTS "Build CNA tests" ON)
 
 set(CPP_DOTNET_BUILD_TESTS OFF CACHE BOOL "Build cpp-dotnet tests" FORCE)
 add_subdirectory(../cpp-dotnet CPP_DOTNET)
+add_subdirectory(../easy-gl easy-gl)
 
 find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
@@ -17,17 +18,19 @@ find_package(SDL3_mixer REQUIRED)
 find_package(SDL3_ttf REQUIRED)
 
 # --- Graphics Backend Selection ---
-set(CNA_GRAPHICS_BACKEND "SDL_RENDERER" CACHE STRING "Graphics backend to use (SDL_RENDERER or EASYGL)")
+set(CNA_GRAPHICS_BACKEND "EASYGL" CACHE STRING "Graphics backend to use (SDL_RENDERER or EASYGL)")
 set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL")
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
     message(STATUS "CNA: Using SDL_RENDERER graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/SdlRenderer")
     set(BACKEND_TARGET "cna_backend_graphics_sdl_renderer")
+    add_compile_definitions(CNA_BACKEND_SDL_RENDERER)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     message(STATUS "CNA: Using EASYGL graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/EasyGL")
     set(BACKEND_TARGET "cna_backend_graphics_easygl")
+    add_compile_definitions(CNA_BACKEND_EASYGL)
 else()
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
 endif()
@@ -46,7 +49,9 @@ target_link_libraries(${BACKEND_TARGET} PUBLIC cna_backend_graphics_common CPP_D
 target_include_directories(${BACKEND_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
-    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 SDL3_image::SDL3_image)
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE easy-gl SDL3::SDL3)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -75,6 +80,7 @@ target_compile_definitions(CNA
 target_link_libraries(CNA
         PUBLIC
         CPP_DOTNET
+        easy-gl
         ${BACKEND_TARGET}
         PRIVATE
         SDL3::SDL3
@@ -100,6 +106,7 @@ if(CNA_BUILD_TESTS)
             PRIVATE
             CNA
             CPP_DOTNET
+            easy-gl
             gtest_main
     )
 

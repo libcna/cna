@@ -29,6 +29,7 @@ namespace Microsoft::Xna::Framework::Graphics {
      */
     class GraphicsDevice {
     private:
+        SDL_Window* window_;
         std::unique_ptr<IGraphicsBackend> backend_;
         Viewport Viewport_;
 

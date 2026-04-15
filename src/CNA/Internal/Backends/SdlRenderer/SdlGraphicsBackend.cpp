@@ -12,20 +12,19 @@ namespace CNA::Internal::Backends::SdlRenderer {
 
     // --- SdlTextureBackend ---
 
-    SdlTextureBackend::SdlTextureBackend(SDL_Renderer* renderer, const std::string& assetName) {
-        if (assetName.empty()) return;
+    SdlTextureBackend::SdlTextureBackend(SDL_Renderer* renderer, const ImageData& data) {
+        width = data.width;
+        height = data.height;
 
-        texture = IMG_LoadTexture(renderer, assetName.c_str());
+        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, width, height);
         if (!texture) {
-            std::string path = std::filesystem::current_path();
-            std::cout << "DEBUG: Current path is " << path << std::endl;
-            throw std::runtime_error("Failed to load texture: " + assetName + " Error: " + SDL_GetError());
+            throw std::runtime_error(std::string("Failed to create SDL texture: ") + SDL_GetError());
         }
 
-        float w, h;
-        if (SDL_GetTextureSize(texture, &w, &h)) {
-            width = static_cast<int>(w);
-            height = static_cast<int>(h);
+        if (!SDL_UpdateTexture(texture, nullptr, data.pixels.data(), width * 4)) {
+            SDL_DestroyTexture(texture);
+            texture = nullptr;
+            throw std::runtime_error(std::string("Failed to update SDL texture: ") + SDL_GetError());
         }
     }
 
@@ -129,16 +128,14 @@ namespace CNA::Internal::Backends::SdlRenderer {
 
     // --- SdlGraphicsBackend ---
 
-    SdlGraphicsBackend::SdlGraphicsBackend() {
-        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-            throw std::runtime_error(std::string("SDL video subsystem initialization failed: ") + SDL_GetError());
+    SdlGraphicsBackend::SdlGraphicsBackend(SDL_Window* window) : window(window) {
+        if (!window) throw std::runtime_error("SdlGraphicsBackend initialized with null window.");
 
-        window = SDL_CreateWindow("CNA Game", 800, 600, SDL_WINDOW_RESIZABLE);
-        if (!window) throw std::runtime_error(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
+        // NOTE: SDL_Window is NOT owned by the backend.
+        // It is owned by GraphicsDevice or higher level platform layer.
 
         renderer = SDL_CreateRenderer(window, nullptr);
         if (!renderer) {
-            SDL_DestroyWindow(window);
             throw std::runtime_error(std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
         }
         if (!SDL_SetRenderVSync(renderer, 1)) {
@@ -174,8 +171,8 @@ namespace CNA::Internal::Backends::SdlRenderer {
 
     SdlGraphicsBackend::~SdlGraphicsBackend() {
         if (renderer) SDL_DestroyRenderer(renderer);
-        if (window) SDL_DestroyWindow(window);
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        // window is NOT owned by the backend.
+        // No SDL_Quit or subsystem shutdown here - managed centrally.
     }
 
     void SdlGraphicsBackend::Clear(float r, float g, float b, float a) {
@@ -199,8 +196,8 @@ namespace CNA::Internal::Backends::SdlRenderer {
         }
     }
 
-    std::unique_ptr<ITextureBackend> SdlGraphicsBackend::CreateTexture(const std::string& assetName) {
-        return std::make_unique<SdlTextureBackend>(renderer, assetName);
+    std::unique_ptr<ITextureBackend> SdlGraphicsBackend::CreateTexture(const ImageData& data) {
+        return std::make_unique<SdlTextureBackend>(renderer, data);
     }
 
     std::unique_ptr<ISpriteBatchBackend> SdlGraphicsBackend::CreateSpriteBatch() {
@@ -210,7 +207,9 @@ namespace CNA::Internal::Backends::SdlRenderer {
 }
 
 namespace CNA::Internal::Backends {
-    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend() {
-        return std::make_unique<SdlRenderer::SdlGraphicsBackend>();
+#ifdef CNA_BACKEND_SDL_RENDERER
+    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args) {
+        return std::make_unique<SdlRenderer::SdlGraphicsBackend>(args.window);
     }
+#endif
 }

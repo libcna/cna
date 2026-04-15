@@ -1,5 +1,6 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include <SDL3/SDL.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -11,16 +12,42 @@ namespace Microsoft::Xna::Framework::Graphics {
     IMPL_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0, GraphicsDevice, nothing)
 
     GraphicsDevice::GraphicsDevice()
-        : backend_(CreateGraphicsBackend()),
+        : window_(nullptr),
+          backend_(nullptr),
           Viewport_()
     {
         std::cout << "Starting GraphicsDevice()" << std::endl;
+
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
+            throw std::runtime_error(std::string("SDL video subsystem initialization failed: ") + SDL_GetError());
+        }
+
+        uint32_t window_flags = SDL_WINDOW_RESIZABLE;
+#ifdef CNA_BACKEND_EASYGL
+        window_flags |= SDL_WINDOW_OPENGL;
+#endif
+
+        window_ = SDL_CreateWindow("CNA Game", 800, 600, window_flags);
+        if (!window_) {
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+            throw std::runtime_error(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
+        }
+
+        GraphicsBackendCreateArgs args;
+        args.window = window_;
+        backend_ = CreateGraphicsBackend(args);
         UpdateViewportFromWindow();
     }
 
     GraphicsDevice::~GraphicsDevice()
     {
         std::cout << "Calling ~GraphicsDevice()" << std::endl;
+        backend_.reset();
+        if (window_) {
+            SDL_DestroyWindow(window_);
+            window_ = nullptr;
+        }
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
     }
 
     void GraphicsDevice::UpdateViewportFromWindow()

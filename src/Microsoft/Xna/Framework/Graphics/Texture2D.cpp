@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "CNA/Logger.hpp"
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
@@ -17,8 +18,10 @@ namespace Microsoft::Xna::Framework::Graphics {
     }
 
     Texture2D::Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)
-        : backend_(graphicsDevice.GetBackend().CreateTexture(assetName))
     {
+        using namespace CNA::Internal::Graphics;
+        ImageData data = ImageLoader::Load(assetName);
+        backend_ = graphicsDevice.GetBackend().CreateTexture(data);
         if (backend_) {
             width = backend_->GetWidth();
             height = backend_->GetHeight();

@@ -3,7 +3,6 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_render.h>
-#include <SDL3_image/SDL_image.h>
 
 namespace CNA::Internal::Backends::SdlRenderer {
 
@@ -13,7 +12,7 @@ namespace CNA::Internal::Backends::SdlRenderer {
         int width = 0;
         int height = 0;
 
-        SdlTextureBackend(SDL_Renderer* renderer, const std::string& assetName);
+        SdlTextureBackend(SDL_Renderer* renderer, const ImageData& data);
         ~SdlTextureBackend() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
@@ -49,7 +48,7 @@ namespace CNA::Internal::Backends::SdlRenderer {
         SDL_Window* window = nullptr;
         SDL_Renderer* renderer = nullptr;
 
-        SdlGraphicsBackend();
+        explicit SdlGraphicsBackend(SDL_Window* window);
         ~SdlGraphicsBackend() override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
@@ -57,7 +56,7 @@ namespace CNA::Internal::Backends::SdlRenderer {
         SDL_Window* GetWindowInternal() const override { return window; }
         SDL_Renderer* GetRendererInternal() const override { return renderer; }
 
-        std::unique_ptr<ITextureBackend> CreateTexture(const std::string& assetName) override;
+        std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
     };
 
