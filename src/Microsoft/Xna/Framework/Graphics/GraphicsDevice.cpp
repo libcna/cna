@@ -26,6 +26,9 @@ namespace Microsoft::Xna::Framework::Graphics {
 #ifdef CNA_BACKEND_EASYGL
         window_flags |= SDL_WINDOW_OPENGL;
 #endif
+#ifdef CNA_BACKEND_VULKAN
+        window_flags |= SDL_WINDOW_VULKAN;
+#endif
 
         window_ = SDL_CreateWindow("CNA Game", 800, 600, window_flags);
         if (!window_) {
