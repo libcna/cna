@@ -12,7 +12,14 @@ struct SDL_Renderer;
 namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDeviceManager;
+}
+
+namespace CNA::Internal::Backends {
     class IGraphicsBackend;
+}
+
+namespace Microsoft::Xna::Framework::Graphics {
+    using namespace CNA::Internal::Backends;
 
     /**
      * @brief Represents the main graphics device used by the game.

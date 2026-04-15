@@ -1,10 +1,14 @@
-#include "SdlGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <filesystem>
 #include <SDL3/SDL_gpu.h>
 
-namespace Microsoft::Xna::Framework::Graphics {
+namespace CNA::Internal::Backends::SdlRenderer {
+
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using namespace CNA::Internal::Backends;
 
     // --- SdlTextureBackend ---
 
@@ -203,8 +207,10 @@ namespace Microsoft::Xna::Framework::Graphics {
         return std::make_unique<SdlSpriteBatchBackend>(renderer);
     }
 
-    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend() {
-        return std::make_unique<SdlGraphicsBackend>();
-    }
+}
 
+namespace CNA::Internal::Backends {
+    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend() {
+        return std::make_unique<SdlRenderer::SdlGraphicsBackend>();
+    }
 }

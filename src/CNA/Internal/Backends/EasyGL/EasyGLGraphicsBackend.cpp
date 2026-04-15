@@ -1,8 +1,12 @@
-#include "EasyGLGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp"
 #include <iostream>
 #include <stdexcept>
 
-namespace Microsoft::Xna::Framework::Graphics {
+namespace CNA::Internal::Backends::EasyGL {
+
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using namespace CNA::Internal::Backends;
 
     // --- EasyGLTextureBackend ---
 
@@ -75,8 +79,10 @@ namespace Microsoft::Xna::Framework::Graphics {
         return std::make_unique<EasyGLSpriteBatchBackend>();
     }
 
-    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend() {
-        return std::make_unique<EasyGLGraphicsBackend>();
-    }
+}
 
+namespace CNA::Internal::Backends {
+    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend() {
+        return std::make_unique<EasyGL::EasyGLGraphicsBackend>();
+    }
 }

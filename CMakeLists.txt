@@ -22,11 +22,11 @@ set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL"
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
     message(STATUS "CNA: Using SDL_RENDERER graphics backend")
-    set(BACKEND_DIR "src/backends/graphics/sdl_renderer")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/SdlRenderer")
     set(BACKEND_TARGET "cna_backend_graphics_sdl_renderer")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     message(STATUS "CNA: Using EASYGL graphics backend")
-    set(BACKEND_DIR "src/backends/graphics/easygl")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/EasyGL")
     set(BACKEND_TARGET "cna_backend_graphics_easygl")
 else()
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -53,7 +53,7 @@ file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
         "src/*.cpp"
 )
 # Exclude backend sources from main CNA library to avoid double compilation and conflicts
-list(FILTER CNA_SOURCES EXCLUDE REGEX "src/backends/graphics/.*")
+list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/Backends/.*")
 
 add_library(CNA STATIC
         ${CNA_SOURCES}

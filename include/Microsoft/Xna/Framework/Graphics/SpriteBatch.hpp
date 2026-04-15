@@ -15,7 +15,14 @@ struct SDL_Renderer;
 namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDevice;
+}
+
+namespace CNA::Internal::Backends {
     class ISpriteBatchBackend;
+}
+
+namespace Microsoft::Xna::Framework::Graphics {
+    using namespace CNA::Internal::Backends;
 
     /**
      * @brief Provides simple batched sprite drawing.

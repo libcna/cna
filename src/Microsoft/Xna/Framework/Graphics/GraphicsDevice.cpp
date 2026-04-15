@@ -1,10 +1,12 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "backends/graphics/common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <iostream>
 #include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Graphics {
+
+    using namespace CNA::Internal::Backends;
 
     IMPL_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0, GraphicsDevice, nothing)
 

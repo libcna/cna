@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../common/IGraphicsBackend.hpp"
+#include "../Common/IGraphicsBackend.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
+namespace CNA::Internal::Backends::EasyGL {
 
     class EasyGLTextureBackend : public ITextureBackend {
     public:

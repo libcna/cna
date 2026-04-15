@@ -12,7 +12,12 @@ struct SDL_Window;
 struct SDL_Renderer;
 struct SDL_Texture;
 
-namespace Microsoft::Xna::Framework::Graphics {
+namespace CNA::Internal::Backends {
+
+    using Color = Microsoft::Xna::Framework::Color;
+    using Rectangle = Microsoft::Xna::Framework::Rectangle;
+    using Vector2 = Microsoft::Xna::Framework::Vector2;
+    using SpriteEffects = Microsoft::Xna::Framework::Graphics::SpriteEffects;
 
     class ITextureBackend {
     public:

@@ -10,7 +10,14 @@ struct SDL_Texture;
 namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDevice;
+}
+
+namespace CNA::Internal::Backends {
     class ITextureBackend;
+}
+
+namespace Microsoft::Xna::Framework::Graphics {
+    using namespace CNA::Internal::Backends;
 
     /**
      * @brief Represents a 2D texture loaded from an image file.

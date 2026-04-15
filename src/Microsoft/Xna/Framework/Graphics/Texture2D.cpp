@@ -6,9 +6,11 @@
 
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "backends/graphics/common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics {
+
+    using namespace CNA::Internal::Backends;
 
     Texture2D::Texture2D()
     {

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../common/IGraphicsBackend.hpp"
+#include "../Common/IGraphicsBackend.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_render.h>
 #include <SDL3_image/SDL_image.h>
 
-namespace Microsoft::Xna::Framework::Graphics {
+namespace CNA::Internal::Backends::SdlRenderer {
 
     class SdlTextureBackend : public ITextureBackend {
     public:
