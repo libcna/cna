@@ -49,6 +49,29 @@ namespace Microsoft::Xna::Framework::Graphics {
             std::cerr << "Warning: SDL_SetRenderVSync failed: " << SDL_GetError() << std::endl;
         }
 
+
+
+        const char* name = SDL_GetRendererName(GetRendererInternal());
+
+        if (!name) {
+            SDL_Log("SDL_GetRendererName failed: %s", SDL_GetError());
+        } else if (SDL_strcmp(name, "opengl") == 0) {
+            SDL_Log("SDL_Renderer uses OpenGL");
+        } else if (SDL_strcmp(name, "gpu") == 0) {
+            SDL_GPUDevice* device = SDL_GetGPURendererDevice(GetRendererInternal());
+            if (device) {
+                const char* gpuDriver = SDL_GetGPUDeviceDriver(device);
+                SDL_Log("SDL_Renderer = gpu, current backend = %s",
+                        gpuDriver ? gpuDriver : "unknown");
+            } else {
+                SDL_Log("Renderer is gpu, but GPU device could not be find out: %s", SDL_GetError());
+            }
+        } else {
+            SDL_Log("Other SDL_Renderer backend: %s", name);
+        }
+
+
+
         UpdateViewportFromWindow();
     }
 
