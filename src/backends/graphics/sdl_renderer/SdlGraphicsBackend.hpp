@@ -17,6 +17,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         ~SdlTextureBackend() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
+        SDL_Texture* GetNativeTexture() const override { return texture; }
     };
 
     class SdlSpriteBatchBackend : public ISpriteBatchBackend {
@@ -53,6 +54,8 @@ namespace Microsoft::Xna::Framework::Graphics {
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        SDL_Window* GetWindowInternal() const override { return window; }
+        SDL_Renderer* GetRendererInternal() const override { return renderer; }
 
         std::unique_ptr<ITextureBackend> CreateTexture(const std::string& assetName) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;

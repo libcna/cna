@@ -34,6 +34,6 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     SDL_Texture* Texture2D::GetNativeTextureInternal() const
     {
-        return nullptr;
+        return backend_ ? backend_->GetNativeTexture() : nullptr;
     }
 }

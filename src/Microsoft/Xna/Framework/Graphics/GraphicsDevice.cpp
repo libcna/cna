@@ -12,10 +12,14 @@ namespace Microsoft::Xna::Framework::Graphics {
         : backend_(CreateGraphicsBackend()),
           Viewport_()
     {
+        std::cout << "Starting GraphicsDevice()" << std::endl;
         UpdateViewportFromWindow();
     }
 
-    GraphicsDevice::~GraphicsDevice() = default;
+    GraphicsDevice::~GraphicsDevice()
+    {
+        std::cout << "Calling ~GraphicsDevice()" << std::endl;
+    }
 
     void GraphicsDevice::UpdateViewportFromWindow()
     {
@@ -61,11 +65,11 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     SDL_Renderer* GraphicsDevice::GetRendererInternal() const
     {
-        return nullptr;
+        return backend_ ? backend_->GetRendererInternal() : nullptr;
     }
 
     SDL_Window* GraphicsDevice::GetWindowInternal() const
     {
-        return nullptr;
+        return backend_ ? backend_->GetWindowInternal() : nullptr;
     }
 }

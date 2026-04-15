@@ -8,6 +8,10 @@
 #include <string>
 #include <memory>
 
+struct SDL_Window;
+struct SDL_Renderer;
+struct SDL_Texture;
+
 namespace Microsoft::Xna::Framework::Graphics {
 
     class ITextureBackend {
@@ -15,6 +19,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         virtual ~ITextureBackend() = default;
         virtual int GetWidth() const = 0;
         virtual int GetHeight() const = 0;
+        virtual SDL_Texture* GetNativeTexture() const = 0;
     };
 
     class ISpriteBatchBackend {
@@ -43,6 +48,8 @@ namespace Microsoft::Xna::Framework::Graphics {
         virtual void Clear(float r, float g, float b, float a) = 0;
         virtual void Present() = 0;
         virtual void GetViewportSize(int& width, int& height) = 0;
+        virtual SDL_Window* GetWindowInternal() const = 0;
+        virtual SDL_Renderer* GetRendererInternal() const = 0;
 
         virtual std::unique_ptr<ITextureBackend> CreateTexture(const std::string& assetName) = 0;
         virtual std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() = 0;
