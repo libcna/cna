@@ -16,9 +16,44 @@ find_package(SDL3_image REQUIRED)
 find_package(SDL3_mixer REQUIRED)
 find_package(SDL3_ttf REQUIRED)
 
+# --- Graphics Backend Selection ---
+set(CNA_GRAPHICS_BACKEND "SDL_RENDERER" CACHE STRING "Graphics backend to use (SDL_RENDERER or EASYGL)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL")
+
+if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
+    message(STATUS "CNA: Using SDL_RENDERER graphics backend")
+    set(BACKEND_DIR "src/backends/graphics/sdl_renderer")
+    set(BACKEND_TARGET "cna_backend_graphics_sdl_renderer")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
+    message(STATUS "CNA: Using EASYGL graphics backend")
+    set(BACKEND_DIR "src/backends/graphics/easygl")
+    set(BACKEND_TARGET "cna_backend_graphics_easygl")
+else()
+    message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
+endif()
+
+# Common backend interfaces
+add_library(cna_backend_graphics_common INTERFACE)
+target_include_directories(cna_backend_graphics_common INTERFACE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+# Backend target
+file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
+add_library(${BACKEND_TARGET} STATIC ${BACKEND_SOURCES})
+target_link_libraries(${BACKEND_TARGET} PUBLIC cna_backend_graphics_common CPP_DOTNET)
+target_include_directories(${BACKEND_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 SDL3_image::SDL3_image)
+endif()
+
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
         "src/*.cpp"
 )
+# Exclude backend sources from main CNA library to avoid double compilation and conflicts
+list(FILTER CNA_SOURCES EXCLUDE REGEX "src/backends/graphics/.*")
 
 add_library(CNA STATIC
         ${CNA_SOURCES}
@@ -27,6 +62,8 @@ add_library(CNA STATIC
 target_include_directories(CNA
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_compile_definitions(CNA
@@ -38,6 +75,7 @@ target_compile_definitions(CNA
 target_link_libraries(CNA
         PUBLIC
         CPP_DOTNET
+        ${BACKEND_TARGET}
         PRIVATE
         SDL3::SDL3
         SDL3_image::SDL3_image

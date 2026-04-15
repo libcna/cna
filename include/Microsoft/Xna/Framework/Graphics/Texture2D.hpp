@@ -10,16 +10,16 @@ struct SDL_Texture;
 namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDevice;
+    class ITextureBackend;
 
     /**
      * @brief Represents a 2D texture loaded from an image file.
      *
-     * SDL is hidden internally; the public API exposes only CNA/XNA-like types.
+     * The actual rendering backend is hidden behind an internal interface.
      */
     class Texture2D {
     private:
-        class Impl;
-        std::shared_ptr<Impl> impl_;
+        std::shared_ptr<ITextureBackend> backend_;
 
         int width = 0;
         int height = 0;
@@ -54,6 +54,8 @@ namespace Microsoft::Xna::Framework::Graphics {
          * @return Texture bounds in pixels.
          */
         [[nodiscard]] Rectangle getBoundsProperty() const;
+
+        ITextureBackend& GetBackend() const { return *backend_; }
 
     private:
         /**

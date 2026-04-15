@@ -1,44 +1,19 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_render.h>
-
 #include <stdexcept>
-
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "backends/graphics/common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    namespace {
-        SDL_FlipMode ToSdlFlip(const SpriteEffects effect)
-        {
-            const bool flipH =
-                (static_cast<int>(effect) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0;
-            const bool flipV =
-                (static_cast<int>(effect) & static_cast<int>(SpriteEffects::FlipVertically)) != 0;
-
-            if (flipH && flipV) {
-                return SDL_FLIP_HORIZONTAL_AND_VERTICAL;
-            }
-            if (flipH) {
-                return SDL_FLIP_HORIZONTAL;
-            }
-            if (flipV) {
-                return SDL_FLIP_VERTICAL;
-            }
-            return SDL_FLIP_NONE;
-        }
-    }
-
     SpriteBatch::SpriteBatch(GraphicsDevice& graphicsDevice)
-        : renderer(graphicsDevice.GetRendererInternal()),
+        : backend_(graphicsDevice.GetBackend().CreateSpriteBatch()),
           begun(false)
     {
     }
 
     SpriteBatch::SpriteBatch()
-        : renderer(nullptr),
-          begun(false)
+        : begun(false)
     {
     }
 
@@ -46,12 +21,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     void SpriteBatch::Begin()
     {
-        if (!renderer) {
-            throw std::runtime_error("SpriteBatch::Begin failed: renderer is null.");
+        if (backend_) {
+            backend_->Begin();
+            begun = true;
         }
-        begun = true;
-
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     }
 
     void SpriteBatch::Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state)
@@ -63,36 +36,16 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     void SpriteBatch::End()
     {
-        if (!begun) {
-            return;
+        if (backend_) {
+            backend_->End();
+            begun = false;
         }
-        begun = false;
     }
 
     void SpriteBatch::Draw(const Texture2D& texture, float x, float y)
     {
-        if (!begun) {
-            throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        }
-
-        SDL_Texture* nativeTexture = texture.GetNativeTextureInternal();
-        if (!nativeTexture) {
-            return;
-        }
-
-        const Rectangle bounds = texture.getBoundsProperty();
-        SDL_FRect dst {
-            x,
-            y,
-            static_cast<float>(bounds.Width),
-            static_cast<float>(bounds.Height)
-        };
-
-        if (!SDL_RenderTexture(renderer, nativeTexture, nullptr, &dst)) {
-            throw std::runtime_error(
-                std::string("SDL_RenderTexture failed: ") + SDL_GetError()
-            );
-        }
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (backend_) backend_->Draw(texture.GetBackend(), x, y);
     }
 
     void SpriteBatch::Draw(const std::optional<Texture2D>::value_type& value,
@@ -100,43 +53,8 @@ namespace Microsoft::Xna::Framework::Graphics {
                            const Rectangle& destinationRectangle,
                            Color color)
     {
-        if (!begun) {
-            throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        }
-
-        SDL_Texture* nativeTexture = value.GetNativeTextureInternal();
-        if (!nativeTexture) {
-            return;
-        }
-
-        SDL_SetTextureColorMod(
-            nativeTexture,
-            color.getRProperty(),
-            color.getGProperty(),
-            color.getBProperty()
-        );
-        SDL_SetTextureAlphaMod(nativeTexture, color.getAProperty());
-        SDL_SetTextureBlendMode(nativeTexture, SDL_BLENDMODE_BLEND);
-
-        const SDL_FRect src {
-            static_cast<float>(sourceRectangle.X),
-            static_cast<float>(sourceRectangle.Y),
-            static_cast<float>(sourceRectangle.Width),
-            static_cast<float>(sourceRectangle.Height)
-        };
-
-        const SDL_FRect dst {
-            static_cast<float>(destinationRectangle.X),
-            static_cast<float>(destinationRectangle.Y),
-            static_cast<float>(destinationRectangle.Width),
-            static_cast<float>(destinationRectangle.Height)
-        };
-
-        if (!SDL_RenderTexture(renderer, nativeTexture, &src, &dst)) {
-            throw std::runtime_error(
-                std::string("SDL_RenderTexture failed: ") + SDL_GetError()
-            );
-        }
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (backend_) backend_->Draw(value.GetBackend(), sourceRectangle, destinationRectangle, color);
     }
 
     void SpriteBatch::Draw(const std::optional<Texture2D>& value,
@@ -148,56 +66,9 @@ namespace Microsoft::Xna::Framework::Graphics {
                            SpriteEffects effect,
                            float layerDepth)
     {
-        (void)layerDepth;
-
-        if (!begun) {
-            throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        }
-
-        if (!value.has_value()) {
-            return;
-        }
-
-        SDL_Texture* nativeTexture = value->GetNativeTextureInternal();
-        if (!nativeTexture) {
-            return;
-        }
-
-        SDL_SetTextureColorMod(
-            nativeTexture,
-            color.getRProperty(),
-            color.getGProperty(),
-            color.getBProperty()
-        );
-        SDL_SetTextureAlphaMod(nativeTexture, color.getAProperty());
-        SDL_SetTextureBlendMode(nativeTexture, SDL_BLENDMODE_BLEND);
-
-        const SDL_FRect src {
-            static_cast<float>(sourceRectangle.X),
-            static_cast<float>(sourceRectangle.Y),
-            static_cast<float>(sourceRectangle.Width),
-            static_cast<float>(sourceRectangle.Height)
-        };
-
-        const SDL_FRect dst {
-            static_cast<float>(destinationRectangle.X),
-            static_cast<float>(destinationRectangle.Y),
-            static_cast<float>(destinationRectangle.Width),
-            static_cast<float>(destinationRectangle.Height)
-        };
-
-        const SDL_FPoint sdlCenter {
-            (origin.X / src.w) * dst.w,
-            (origin.Y / src.h) * dst.h
-        };
-
-        const double rotationDeg = static_cast<double>(rotation_rad) * 180.0 / 3.14159265358979323846;
-        const SDL_FlipMode flipMode = ToSdlFlip(effect);
-
-        if (!SDL_RenderTextureRotated(renderer, nativeTexture, &src, &dst, rotationDeg, &sdlCenter, flipMode)) {
-            throw std::runtime_error(
-                std::string("SDL_RenderTextureRotated failed: ") + SDL_GetError()
-            );
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (backend_ && value.has_value()) {
+            backend_->Draw(value->GetBackend(), sourceRectangle, destinationRectangle, color, rotation_rad, origin, effect, layerDepth);
         }
     }
 }

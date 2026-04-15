@@ -15,15 +15,17 @@ struct SDL_Renderer;
 namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDevice;
+    class ISpriteBatchBackend;
 
     /**
      * @brief Provides simple batched sprite drawing.
      *
-     * This class exposes CNA/XNA-like methods while using SDL renderer internally.
+     * This class uses a backend abstraction to handle the actual rendering,
+     * such as SDL_Renderer or EasyGL.
      */
     class SpriteBatch {
     private:
-        SDL_Renderer* renderer = nullptr;
+        std::unique_ptr<ISpriteBatchBackend> backend_;
         bool begun = false;
 
     public:

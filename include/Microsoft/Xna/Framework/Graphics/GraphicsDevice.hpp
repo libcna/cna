@@ -12,25 +12,24 @@ struct SDL_Renderer;
 namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDeviceManager;
+    class IGraphicsBackend;
 
     /**
      * @brief Represents the main graphics device used by the game.
      *
-     * This class owns the SDL window and SDL renderer internally,
-     * but does not expose SDL types through the public gameplay-facing API.
+     * This class uses a backend abstraction to handle the actual rendering,
+     * such as SDL_Renderer or EasyGL.
      */
     class GraphicsDevice {
     private:
-        class Impl;
-        std::unique_ptr<Impl> impl_;
-
+        std::unique_ptr<IGraphicsBackend> backend_;
         Viewport Viewport_;
 
     public:
         DEF_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0)
 
         /**
-         * @brief Creates the graphics device, window, and renderer.
+         * @brief Creates the graphics device.
          */
         GraphicsDevice();
 
@@ -67,6 +66,8 @@ namespace Microsoft::Xna::Framework::Graphics {
          * @brief Presents the rendered frame to the screen.
          */
         void Present();
+
+        IGraphicsBackend& GetBackend() const { return *backend_; }
 
     private:
         /**

@@ -2,63 +2,29 @@
 
 #include <filesystem>
 #include <iostream>
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_render.h>
-#include <SDL3_image/SDL_image.h>
-
 #include <stdexcept>
 
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "backends/graphics/common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics {
 
-    class Texture2D::Impl {
-    public:
-        SDL_Texture* texture = nullptr;
-    };
-
     Texture2D::Texture2D()
-        : impl_(std::make_shared<Impl>())
     {
     }
 
     Texture2D::Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)
-        : impl_(std::make_shared<Impl>())
+        : backend_(graphicsDevice.GetBackend().CreateTexture(assetName))
     {
-        if (assetName.empty()) {
-            return;
-        }
-
-        SDL_Renderer* renderer = graphicsDevice.GetRendererInternal();
-        if (!renderer) {
-            throw std::runtime_error("Texture2D load failed: GraphicsDevice has no renderer.");
-        }
-
-        impl_->texture = IMG_LoadTexture(renderer, assetName.c_str());
-        if (!impl_->texture) {
-            std::string path = std::filesystem::current_path();
-            CNA::Logger::Debug("Current path is " + path);
-            std::cout << "Current path is " << path << std::endl;
-            throw std::runtime_error(
-                "Failed to load texture: " + assetName + " Error: " + SDL_GetError()
-            );
-        }
-
-        float w = 0.0f;
-        float h = 0.0f;
-        if (SDL_GetTextureSize(impl_->texture, &w, &h)) {
-            width = static_cast<int>(w);
-            height = static_cast<int>(h);
+        if (backend_) {
+            width = backend_->GetWidth();
+            height = backend_->GetHeight();
         }
     }
 
     Texture2D::~Texture2D()
     {
-        if (impl_ && impl_.use_count() == 1 && impl_->texture) {
-            SDL_DestroyTexture(impl_->texture);
-            impl_->texture = nullptr;
-        }
     }
 
     Rectangle Texture2D::getBoundsProperty() const
@@ -68,6 +34,6 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     SDL_Texture* Texture2D::GetNativeTextureInternal() const
     {
-        return impl_ ? impl_->texture : nullptr;
+        return nullptr;
     }
 }
