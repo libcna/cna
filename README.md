@@ -259,6 +259,4 @@ int main()
 
 ## 12. 📜 License
 
-No top-level project license file is currently present in this repository.
-
-Until an explicit license is added, standard copyright defaults apply (all rights reserved).
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
