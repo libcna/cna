@@ -8,9 +8,25 @@ It is a framework/runtime and abstraction layer—not a game—designed to prese
 
 **CNA demonstrates engine-level C++ architecture, graphics abstraction design, and backend-oriented systems engineering.**
 
+### Quick Start
+
+```bash
+cmake -S . -B build -DCNA_GRAPHICS_BACKEND=EASYGL
+cmake --build build --target CNA CnaTests
+ctest --test-dir build --output-on-failure
+```
+
+### Project Status
+
+- **Overall maturity:** Active, incremental framework development; XNA API coverage is partial and expanding.
+- **`SDL_RENDERER` backend:** Implemented path focused on practical 2D rendering workflows.
+- **`EASYGL` backend:** Implemented OpenGL-based path through `easy-gl`, used for backend-level rendering control.
+- **`VULKAN` backend:** Architecture scaffold present, but implementation is currently incomplete.
+
 ## 2. 🎯 Goals
 
 - Recreate the XNA developer experience in native C++.
+- Provide a native C++ path for teams that like the XNA/MonoGame model but need non-managed runtime/toolchain control.
 - Mirror core XNA namespaces and API patterns while implementing them incrementally.
 - Decouple gameplay-facing API from rendering backend implementation details.
 - Enable one high-level API surface across different rendering technologies.
@@ -94,7 +110,7 @@ This keeps game code stable while allowing backend-specific optimizations in SDL
 
 ## 6. 🔌 Backend System
 
-CNA currently supports build-time backend selection via `CNA_GRAPHICS_BACKEND`:
+CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose one backend per build configuration):
 
 - `SDL_RENDERER`
 - `EASYGL`
@@ -152,9 +168,9 @@ cmake -S . -B build -DCNA_GRAPHICS_BACKEND=VULKAN
 
 ### Run Demo / Verification
 
-Current repository state does not expose a dedicated CNA game demo executable by default.
+This repository intentionally prioritizes framework/runtime development over shipping a bundled game demo executable.
 
-Use these commands to validate the setup:
+Use these commands for quick environment and rendering-path verification:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -243,4 +259,6 @@ int main()
 
 ## 12. 📜 License
 
-See repository license metadata/files for current license terms.
+No top-level project license file is currently present in this repository.
+
+Until an explicit license is added, standard copyright defaults apply (all rights reserved).
