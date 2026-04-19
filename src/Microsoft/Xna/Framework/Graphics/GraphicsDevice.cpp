@@ -1,5 +1,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#ifdef CNA_BACKEND_BGFX
+#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#endif
 #include <SDL3/SDL.h>
 
 #include <iostream>
@@ -28,6 +31,21 @@ namespace Microsoft::Xna::Framework::Graphics {
 #endif
 #ifdef CNA_BACKEND_VULKAN
         window_flags |= SDL_WINDOW_VULKAN;
+#endif
+#ifdef CNA_BACKEND_BGFX
+        const auto rendererType = CNA::Internal::Backends::Bgfx::Detail::ResolveRendererType(SDL_getenv("CNA_BGFX_RENDERER"));
+        switch (rendererType) {
+            case bgfx::RendererType::Vulkan:
+                window_flags |= SDL_WINDOW_VULKAN;
+                break;
+            case bgfx::RendererType::OpenGL:
+            case bgfx::RendererType::OpenGLES:
+            case bgfx::RendererType::Count:
+                window_flags |= SDL_WINDOW_OPENGL;
+                break;
+            default:
+                break;
+        }
 #endif
 
         window_ = SDL_CreateWindow("CNA Game", 800, 600, window_flags);

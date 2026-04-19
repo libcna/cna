@@ -18,8 +18,8 @@ find_package(SDL3_mixer REQUIRED)
 find_package(SDL3_ttf REQUIRED)
 
 # --- Graphics Backend Selection ---
-set(CNA_GRAPHICS_BACKEND "EASYGL" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, or VULKAN)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "VULKAN")
+set(CNA_GRAPHICS_BACKEND "BGFX" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, or VULKAN)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN")
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
     message(STATUS "CNA: Using SDL_RENDERER graphics backend")
@@ -31,6 +31,29 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     set(BACKEND_DIR "src/CNA/Internal/Backends/EasyGL")
     set(BACKEND_TARGET "cna_backend_graphics_easygl")
     add_compile_definitions(CNA_BACKEND_EASYGL)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
+    message(STATUS "CNA: Using BGFX graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Bgfx")
+    set(BACKEND_TARGET "cna_backend_graphics_bgfx")
+    add_compile_definitions(CNA_BACKEND_BGFX)
+
+    include(FetchContent)
+    set(BGFX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BGFX_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    set(BGFX_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(BGFX_INSTALL OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        bgfx_cmake
+        GIT_REPOSITORY https://github.com/bkaradzic/bgfx.cmake.git
+        GIT_TAG master
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+        GIT_SUBMODULES_RECURSE TRUE
+    )
+    FetchContent_MakeAvailable(bgfx_cmake)
+
+    set(CNA_BGFX_SHADER_INCLUDE_DIR "${bgfx_cmake_SOURCE_DIR}/bgfx/examples/common/imgui")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
     message(STATUS "CNA: Using VULKAN graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Vulkan")
@@ -57,6 +80,10 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     target_link_libraries(${BACKEND_TARGET} PRIVATE easy-gl SDL3::SDL3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
+    target_link_libraries(${BACKEND_TARGET} PUBLIC bgfx bx)
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+    target_include_directories(${BACKEND_TARGET} PRIVATE ${CNA_BGFX_SHADER_INCLUDE_DIR})
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 endif()

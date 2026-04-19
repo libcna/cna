@@ -114,6 +114,7 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 
 - `SDL_RENDERER`
 - `EASYGL`
+- `BGFX`
 - `VULKAN`
 
 ### Tradeoffs
@@ -125,6 +126,12 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - **EasyGL backend (OpenGL-based path through `easy-gl`)**
     - Custom shader-driven rendering path.
     - Better control over rendering behavior and extensibility than fixed SDL renderer usage.
+
+- **BGFX backend**
+    - Dedicated backend option with the same public rendering API coverage as other backends.
+    - Integrates through CNA backend abstraction and can be selected via `CNA_GRAPHICS_BACKEND=BGFX`.
+    - Uses native `bgfx` API (window/platform init, texture creation, sprite draws, frame submission), not `SDL_Renderer` rendering.
+    - `bgfx` is integrated in CMake for this backend via `FetchContent` (`bgfx.cmake`).
 
 - **Vulkan backend**
     - Present as an architecture target/scaffold.
@@ -162,6 +169,8 @@ Change backend as needed:
 
 ```bash
 cmake -S . -B build -DCNA_GRAPHICS_BACKEND=SDL_RENDERER
+# or
+cmake -S . -B build -DCNA_GRAPHICS_BACKEND=BGFX
 # or
 cmake -S . -B build -DCNA_GRAPHICS_BACKEND=VULKAN
 ```
