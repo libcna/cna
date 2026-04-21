@@ -70,7 +70,7 @@ namespace Microsoft::Xna::Framework::Content {
                 if (graphicsDevice_ == nullptr) {
                     throw std::runtime_error("ContentManager::Load<Texture2D>() failed: GraphicsDevice is null.");
                 }
-                if (!assetName.contains("."))
+                if (!CONTAINS(assetName,"."))
                 {
                     const static std::string DOT_PNG = ".png";
                     std::string tmp_string = fullPath;
