@@ -89,6 +89,13 @@ namespace CNA::Internal::Backends::EasyGL {
             std::cerr << "Shader program linking failed:\n" << program_.info_log() << std::endl;
         }
 
+        program_.use();
+        const int textureLocation = program_.uniform_location("texture1");
+        if (textureLocation >= 0)
+        {
+            program_.set_uniform(textureLocation, 0);
+        }
+
         vbo_.create();
         ibo_.create();
         vao_.create();
@@ -154,6 +161,11 @@ namespace CNA::Internal::Backends::EasyGL {
         float v1 = (float)sourceRectangle.Y / (float)glTex.height;
         float u2 = (float)(sourceRectangle.X + sourceRectangle.Width) / (float)glTex.width;
         float v2 = (float)(sourceRectangle.Y + sourceRectangle.Height) / (float)glTex.height;
+
+        u1 = std::clamp(u1, 0.0f, 1.0f);
+        v1 = std::clamp(v1, 0.0f, 1.0f);
+        u2 = std::clamp(u2, 0.0f, 1.0f);
+        v2 = std::clamp(v2, 0.0f, 1.0f);
 
         if ((int)effects & (int)SpriteEffects::FlipHorizontally) std::swap(u1, u2);
         if ((int)effects & (int)SpriteEffects::FlipVertically) std::swap(v1, v2);
@@ -266,6 +278,9 @@ namespace CNA::Internal::Backends::EasyGL {
     }
 
     void EasyGLGraphicsBackend::Clear(float r, float g, float b, float a) {
+        int width, height;
+        SDL_GetWindowSize(window, &width, &height);
+        device.set_viewport(0, 0, width, height);
         device.set_clear_color(r, g, b, a);
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
     }
