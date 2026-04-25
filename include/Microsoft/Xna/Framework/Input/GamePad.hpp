@@ -7,8 +7,19 @@
 
 
 namespace Microsoft::Xna::Framework::Input {
-class GamePad {
-public: static GamePadState GetState(PlayerIndex playerIndex);
-};
+    /**
+     * @brief Provides access to gamepad input snapshots.
+     *
+     * @note Status: PARTIAL
+     */
+    class GamePad {
+    public:
+        /**
+         * @brief Returns a snapshot of the current gamepad state for a player.
+         *
+         * @note Status: PARTIAL
+         */
+        static GamePadState GetState(PlayerIndex playerIndex);
+    };
 }
 

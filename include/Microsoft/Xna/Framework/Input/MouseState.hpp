@@ -6,13 +6,15 @@
 #include "ButtonState.hpp"
 #include "CppDotNet/Prop.hpp"
 
-namespace Microsoft::Xna::Framework::Input {
+namespace Microsoft::Xna::Framework::Input
+{
     /**
-     * @brief Snapshot aktuálního stavu myši.
+     * @brief Snapshot of the current mouse state.
      *
      * @note Status: IMPLEMENTED
      */
-    struct MouseState {
+    struct MouseState
+    {
     public:
         DEF_PROP(ButtonState, LeftButton, getter1, setter0, member1, static0, constret1, ref1, constmet1)
         DEF_PROP(ButtonState, RightButton, getter1, setter0, member1, static0, constret1, ref1, constmet1)

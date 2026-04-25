@@ -8,7 +8,7 @@ namespace CNA::Internal::Input {
      *
      * This bridge knows SDL types, but exposes them only internally.
      *
-     * Currently supports Mouse, basic Keyboard and basic TouchPanel state propagation.
+     * Currently supports Mouse, basic Keyboard, basic TouchPanel and basic GamePad state propagation.
      *
      * @note Status: PARTIAL
      */

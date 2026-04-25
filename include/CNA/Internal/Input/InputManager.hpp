@@ -1,10 +1,12 @@
 #pragma once
 
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
+#include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
 namespace CNA::Internal::Input {
@@ -20,12 +22,48 @@ namespace CNA::Internal::Input {
     };
 
     /**
+     * @brief Internal identification of supported gamepad buttons.
+     *
+     * @note Status: PARTIAL
+     */
+    enum class GamePadButton {
+        A,
+        B,
+        X,
+        Y,
+        Back,
+        Start,
+        LeftShoulder,
+        RightShoulder,
+        LeftStick,
+        RightStick,
+        DPadUp,
+        DPadDown,
+        DPadLeft,
+        DPadRight,
+    };
+
+    /**
+     * @brief Internal identification of supported gamepad axes.
+     *
+     * @note Status: PARTIAL
+     */
+    enum class GamePadAxis {
+        LeftThumbstickX,
+        LeftThumbstickY,
+        RightThumbstickX,
+        RightThumbstickY,
+        LeftTrigger,
+        RightTrigger,
+    };
+
+    /**
      * @brief Internal CNA input state manager.
      *
      * Keeps current input state and provides snapshots for the public
      * XNA-like API.
      *
-     * Currently supports Mouse, basic Keyboard and basic TouchPanel state.
+     * Currently supports Mouse, basic Keyboard, basic TouchPanel and basic GamePad state.
      *
      * @note Status: PARTIAL
      */
@@ -64,6 +102,29 @@ namespace CNA::Internal::Input {
         );
 
         /**
+         * @brief Marks one gamepad player slot as connected/disconnected.
+         */
+        static void SetGamePadConnection(Microsoft::Xna::Framework::PlayerIndex playerIndex, bool isConnected);
+
+        /**
+         * @brief Updates selected gamepad button state.
+         */
+        static void SetGamePadButtonState(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex,
+            GamePadButton button,
+            Microsoft::Xna::Framework::Input::ButtonState state
+        );
+
+        /**
+         * @brief Updates selected gamepad axis/trigger value.
+         */
+        static void SetGamePadAxisValue(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex,
+            GamePadAxis axis,
+            float value
+        );
+
+        /**
          * @brief Returns a snapshot of current mouse state.
          */
         static Microsoft::Xna::Framework::Input::MouseState GetMouseState();
@@ -77,5 +138,12 @@ namespace CNA::Internal::Input {
          * @brief Returns a snapshot of current touch state.
          */
         static Microsoft::Xna::Framework::Input::Touch::TouchCollection GetTouchState();
+
+        /**
+         * @brief Returns a snapshot of current gamepad state for one player.
+         */
+        static Microsoft::Xna::Framework::Input::GamePadState GetGamePadState(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex
+        );
     };
 }

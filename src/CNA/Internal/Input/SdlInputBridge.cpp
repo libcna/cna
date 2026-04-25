@@ -2,11 +2,134 @@
 
 #include "CNA/Internal/Input/InputManager.hpp"
 
+#include <algorithm>
+#include <array>
 #include <optional>
 #include <unordered_map>
 
 namespace {
+    using CNA::Internal::Input::GamePadAxis;
+    using CNA::Internal::Input::GamePadButton;
+    using Microsoft::Xna::Framework::PlayerIndex;
+    using Microsoft::Xna::Framework::Input::ButtonState;
     using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
+
+    constexpr std::size_t MaxSupportedGamePads = 4;
+
+    std::array<SDL_Gamepad*, MaxSupportedGamePads>& get_opened_gamepads() {
+        static std::array<SDL_Gamepad*, MaxSupportedGamePads> openedGamePads{};
+        return openedGamePads;
+    }
+
+    std::unordered_map<SDL_JoystickID, PlayerIndex>& get_gamepad_to_player_index_map() {
+        static std::unordered_map<SDL_JoystickID, PlayerIndex> gamepadToPlayerIndex;
+        return gamepadToPlayerIndex;
+    }
+
+    PlayerIndex slot_to_player_index(const std::size_t slot) {
+        switch (slot) {
+            case 0:
+                return PlayerIndex::One;
+            case 1:
+                return PlayerIndex::Two;
+            case 2:
+                return PlayerIndex::Three;
+            default:
+                return PlayerIndex::Four;
+        }
+    }
+
+    std::optional<std::size_t> try_get_slot_for_player_index(const PlayerIndex playerIndex) {
+        const int slot = static_cast<int>(playerIndex);
+        if (slot < 0 || slot >= static_cast<int>(MaxSupportedGamePads)) {
+            return std::nullopt;
+        }
+        return static_cast<std::size_t>(slot);
+    }
+
+    std::optional<std::size_t> try_find_free_gamepad_slot() {
+        const auto& openedGamePads = get_opened_gamepads();
+        for (std::size_t slot = 0; slot < openedGamePads.size(); ++slot) {
+            if (openedGamePads[slot] == nullptr) {
+                return slot;
+            }
+        }
+        return std::nullopt;
+    }
+
+    std::optional<PlayerIndex> try_get_player_index_for_gamepad_id(const SDL_JoystickID gamePadId) {
+        const auto& gamepadToPlayerIndex = get_gamepad_to_player_index_map();
+        const auto item = gamepadToPlayerIndex.find(gamePadId);
+        if (item == gamepadToPlayerIndex.end()) {
+            return std::nullopt;
+        }
+        return item->second;
+    }
+
+    std::optional<GamePadButton> try_convert_sdl_gamepad_button(const SDL_GamepadButton button) {
+        switch (button) {
+            case SDL_GAMEPAD_BUTTON_SOUTH:
+                return GamePadButton::A;
+            case SDL_GAMEPAD_BUTTON_EAST:
+                return GamePadButton::B;
+            case SDL_GAMEPAD_BUTTON_WEST:
+                return GamePadButton::X;
+            case SDL_GAMEPAD_BUTTON_NORTH:
+                return GamePadButton::Y;
+            case SDL_GAMEPAD_BUTTON_BACK:
+                return GamePadButton::Back;
+            case SDL_GAMEPAD_BUTTON_START:
+                return GamePadButton::Start;
+            case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
+                return GamePadButton::LeftShoulder;
+            case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
+                return GamePadButton::RightShoulder;
+            case SDL_GAMEPAD_BUTTON_LEFT_STICK:
+                return GamePadButton::LeftStick;
+            case SDL_GAMEPAD_BUTTON_RIGHT_STICK:
+                return GamePadButton::RightStick;
+            case SDL_GAMEPAD_BUTTON_DPAD_UP:
+                return GamePadButton::DPadUp;
+            case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+                return GamePadButton::DPadDown;
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+                return GamePadButton::DPadLeft;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+                return GamePadButton::DPadRight;
+            default:
+                return std::nullopt;
+        }
+    }
+
+    std::optional<GamePadAxis> try_convert_sdl_gamepad_axis(const SDL_GamepadAxis axis) {
+        switch (axis) {
+            case SDL_GAMEPAD_AXIS_LEFTX:
+                return GamePadAxis::LeftThumbstickX;
+            case SDL_GAMEPAD_AXIS_LEFTY:
+                return GamePadAxis::LeftThumbstickY;
+            case SDL_GAMEPAD_AXIS_RIGHTX:
+                return GamePadAxis::RightThumbstickX;
+            case SDL_GAMEPAD_AXIS_RIGHTY:
+                return GamePadAxis::RightThumbstickY;
+            case SDL_GAMEPAD_AXIS_LEFT_TRIGGER:
+                return GamePadAxis::LeftTrigger;
+            case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER:
+                return GamePadAxis::RightTrigger;
+            default:
+                return std::nullopt;
+        }
+    }
+
+    float normalize_stick_axis(const Sint16 value) {
+        if (value >= 0) {
+            return std::clamp(static_cast<float>(value) / 32767.0f, 0.0f, 1.0f);
+        }
+        return std::clamp(static_cast<float>(value) / 32768.0f, -1.0f, 0.0f);
+    }
+
+    float normalize_trigger_axis(const Sint16 value) {
+        return std::clamp(static_cast<float>(value) / 32767.0f, 0.0f, 1.0f);
+    }
 
     std::unordered_map<SDL_FingerID, int>& get_finger_id_to_touch_id_map() {
         static std::unordered_map<SDL_FingerID, int> fingerIdToTouchId;
@@ -219,6 +342,105 @@ namespace CNA::Internal::Input {
                     to_touch_pixel_position(event.tfinger)
                 );
                 release_touch_id_mapping(event.tfinger.fingerID);
+                break;
+            }
+            case SDL_EVENT_GAMEPAD_ADDED: {
+                if (!SDL_IsGamepad(event.gdevice.which)) {
+                    break;
+                }
+
+                auto& gamepadToPlayerIndex = get_gamepad_to_player_index_map();
+                if (gamepadToPlayerIndex.contains(event.gdevice.which)) {
+                    break;
+                }
+
+                const auto freeSlot = try_find_free_gamepad_slot();
+                if (!freeSlot.has_value()) {
+                    break;
+                }
+
+                SDL_Gamepad* gamepad = SDL_OpenGamepad(event.gdevice.which);
+                if (gamepad == nullptr) {
+                    break;
+                }
+
+                const PlayerIndex playerIndex = slot_to_player_index(freeSlot.value());
+                get_opened_gamepads()[freeSlot.value()] = gamepad;
+                gamepadToPlayerIndex[event.gdevice.which] = playerIndex;
+                InputManager::SetGamePadConnection(playerIndex, true);
+                break;
+            }
+            case SDL_EVENT_GAMEPAD_REMOVED: {
+                auto& gamepadToPlayerIndex = get_gamepad_to_player_index_map();
+                const auto playerIndex = try_get_player_index_for_gamepad_id(event.gdevice.which);
+                if (!playerIndex.has_value()) {
+                    break;
+                }
+
+                const auto slot = try_get_slot_for_player_index(playerIndex.value());
+                if (slot.has_value()) {
+                    auto& openedGamePad = get_opened_gamepads()[slot.value()];
+                    if (openedGamePad != nullptr) {
+                        SDL_CloseGamepad(openedGamePad);
+                        openedGamePad = nullptr;
+                    }
+                }
+
+                gamepadToPlayerIndex.erase(event.gdevice.which);
+                InputManager::SetGamePadConnection(playerIndex.value(), false);
+                break;
+            }
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+            case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+                const auto playerIndex = try_get_player_index_for_gamepad_id(event.gbutton.which);
+                if (!playerIndex.has_value()) {
+                    break;
+                }
+
+                const auto button = try_convert_sdl_gamepad_button(
+                    static_cast<SDL_GamepadButton>(event.gbutton.button)
+                );
+                if (!button.has_value()) {
+                    break;
+                }
+
+                const auto state = event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN
+                                       ? ButtonState::Pressed
+                                       : ButtonState::Released;
+
+                InputManager::SetGamePadButtonState(playerIndex.value(), button.value(), state);
+                break;
+            }
+            case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
+                const auto playerIndex = try_get_player_index_for_gamepad_id(event.gaxis.which);
+                if (!playerIndex.has_value()) {
+                    break;
+                }
+
+                const auto axis = try_convert_sdl_gamepad_axis(
+                    static_cast<SDL_GamepadAxis>(event.gaxis.axis)
+                );
+                if (!axis.has_value()) {
+                    break;
+                }
+
+                float value = 0.0f;
+                switch (axis.value()) {
+                    case GamePadAxis::LeftThumbstickX:
+                    case GamePadAxis::RightThumbstickX:
+                        value = normalize_stick_axis(event.gaxis.value);
+                        break;
+                    case GamePadAxis::LeftThumbstickY:
+                    case GamePadAxis::RightThumbstickY:
+                        value = -normalize_stick_axis(event.gaxis.value);
+                        break;
+                    case GamePadAxis::LeftTrigger:
+                    case GamePadAxis::RightTrigger:
+                        value = normalize_trigger_axis(event.gaxis.value);
+                        break;
+                }
+
+                InputManager::SetGamePadAxisValue(playerIndex.value(), axis.value(), value);
                 break;
             }
             default:
