@@ -1,6 +1,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Input/SdlInputBridge.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
@@ -97,6 +98,7 @@ namespace Microsoft::Xna::Framework {
 
             SDL_Event e;
             while (SDL_PollEvent(&e)) {
+                CNA::Internal::Input::SdlInputBridge::ProcessEvent(e);
                 if (e.type == SDL_EVENT_QUIT) {
                     isRunning = false;
                 }

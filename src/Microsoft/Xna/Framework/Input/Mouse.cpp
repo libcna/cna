@@ -3,9 +3,11 @@
 //
 
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "CNA/Internal/Input/InputManager.hpp"
+
 namespace Microsoft::Xna::Framework::Input {
     MouseState Mouse::GetState() {
-        return MouseState();
+        return CNA::Internal::Input::InputManager::GetMouseState();
 
     }
 
