@@ -117,10 +117,11 @@ namespace CNA
                 return SDL_LOG_PRIORITY_WARN;
             case LogLevel::INFO:
                 return SDL_LOG_PRIORITY_INFO;
-            case LogLevel::DEBUG:
-            case LogLevel::TRACE:
-            case LogLevel::EXPERIMENT:
-                return SDL_LOG_PRIORITY_DEBUG;
+            //todo
+            // case LogLevel::DEBUG:
+            // case LogLevel::TRACE:
+            // case LogLevel::EXPERIMENT:
+            //     return SDL_LOG_PRIORITY_DEBUG;
             default:
                 return SDL_LOG_PRIORITY_INFO;
         }

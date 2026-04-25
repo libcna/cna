@@ -111,9 +111,9 @@ namespace Microsoft::Xna::Framework {
 
             const Uint64 fullFrameMs = SDL_GetTicks() - frameStart;
 
-            gameTime.setElapsedGameTimeProperty(
-                System::TimeSpan::FromMilliseconds(static_cast<double>(fullFrameMs))
-            );
+            const auto elapsed = System::TimeSpan::FromMilliseconds(static_cast<double>(fullFrameMs));
+            gameTime.setElapsedGameTimeProperty(elapsed);
+            gameTime.setTotalGameTimeProperty(gameTime.getTotalGameTimeProperty() + elapsed);
             gameTime.setIsRunningSlowlyProperty(runningSlowly);
 
             wantedMsFrameTime = getTargetMsFrameTimeProperty();

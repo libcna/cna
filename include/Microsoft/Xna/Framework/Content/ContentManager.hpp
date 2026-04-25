@@ -80,6 +80,14 @@ namespace Microsoft::Xna::Framework::Content {
                 }
                 return T(fullPath, *graphicsDevice_);
             } else if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Audio::SoundEffect>) {
+                if (!CONTAINS(assetName,"."))
+                {
+                    const static std::string DOT_WAV = ".wav";
+                    std::string tmp_string = fullPath;
+                    tmp_string += DOT_WAV;
+                    return T(tmp_string);
+
+                }
                 return T(fullPath);
             } else {
                 static_assert(
