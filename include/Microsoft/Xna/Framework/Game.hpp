@@ -3,6 +3,7 @@
 
 #include "ExitingEventArgs.hpp"
 #include "GameTime.hpp"
+#include "GameWindow.hpp"
 #include "Content/ContentManager.hpp"
 #include "Graphics/GraphicsDevice.hpp"
 #include "Graphics/SpriteBatch.hpp"
@@ -18,6 +19,7 @@ namespace Microsoft::Xna::Framework {
         DEF_PROP(Content::ContentManager, Content, getter1, setter0, member1, static0, constret0, ref1, constmet0)
 
         private: Graphics::GraphicsDevice GraphicsDevice_; public: [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceProperty();
+        private: GameWindow Window_; public: [[nodiscard]] GameWindow& getWindowProperty();
 
         DEF_PROP(bool, IsMouseVisible, getter1, setter1, member1, static0, constret1, ref1, constmet1)
 

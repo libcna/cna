@@ -35,4 +35,5 @@ namespace Microsoft::Xna::Framework
     // todo: should be static and part of the Color class
     const Color CornflowerBlue = Color(4293760356U);
     const Color White = Color(255, 255, 255, 255);
+    const Color Green = Color(4278222848U);
 }

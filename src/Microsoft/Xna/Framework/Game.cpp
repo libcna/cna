@@ -1,5 +1,6 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
@@ -14,6 +15,11 @@ namespace Microsoft::Xna::Framework {
     Graphics::GraphicsDevice& Game::getGraphicsDeviceProperty()
     {
         return GraphicsDevice_;
+    }
+
+    GameWindow& Game::getWindowProperty()
+    {
+        return Window_;
     }
 
     IMPL_PROP(bool, IsMouseVisible, getter1, setter1, member0, static0, constret1, ref1, constmet1, Game, nothing)
@@ -52,6 +58,7 @@ namespace Microsoft::Xna::Framework {
           InactiveSleepTime_(TimeSpan(0)),
           isRunning(true)
     {
+        Window_.setWindowInternal(GraphicsDevice_.GetBackend().GetWindowInternal());
         Content_.setGraphicsDevice(GraphicsDevice_);
         InitAudio();
     }
