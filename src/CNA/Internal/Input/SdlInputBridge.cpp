@@ -3,8 +3,80 @@
 #include "CNA/Internal/Input/InputManager.hpp"
 
 #include <optional>
+#include <unordered_map>
 
 namespace {
+    using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
+
+    std::unordered_map<SDL_FingerID, int>& get_finger_id_to_touch_id_map() {
+        static std::unordered_map<SDL_FingerID, int> fingerIdToTouchId;
+        return fingerIdToTouchId;
+    }
+
+    int& get_next_touch_id() {
+        static int nextTouchId = 1;
+        return nextTouchId;
+    }
+
+    int get_or_create_touch_id(const SDL_FingerID fingerId) {
+        auto& fingerIdToTouchId = get_finger_id_to_touch_id_map();
+        const auto existing = fingerIdToTouchId.find(fingerId);
+        if (existing != fingerIdToTouchId.end()) {
+            return existing->second;
+        }
+
+        const int touchId = get_next_touch_id();
+        get_next_touch_id() += 1;
+        fingerIdToTouchId[fingerId] = touchId;
+        return touchId;
+    }
+
+    std::optional<int> try_get_touch_id(const SDL_FingerID fingerId) {
+        const auto& fingerIdToTouchId = get_finger_id_to_touch_id_map();
+        const auto existing = fingerIdToTouchId.find(fingerId);
+        if (existing == fingerIdToTouchId.end()) {
+            return std::nullopt;
+        }
+        return existing->second;
+    }
+
+    void release_touch_id_mapping(const SDL_FingerID fingerId) {
+        auto& fingerIdToTouchId = get_finger_id_to_touch_id_map();
+        fingerIdToTouchId.erase(fingerId);
+    }
+
+    Microsoft::Xna::Framework::Vector2 to_touch_pixel_position(const SDL_TouchFingerEvent& touchEvent) {
+        int width = 1;
+        int height = 1;
+
+        SDL_Window* window = nullptr;
+        if (touchEvent.windowID != 0) {
+            window = SDL_GetWindowFromID(touchEvent.windowID);
+        }
+        if (window == nullptr) {
+            window = SDL_GetMouseFocus();
+        }
+
+        if (window != nullptr) {
+            int queriedWidth = 0;
+            int queriedHeight = 0;
+            if (SDL_GetWindowSizeInPixels(window, &queriedWidth, &queriedHeight)
+                || SDL_GetWindowSize(window, &queriedWidth, &queriedHeight)) {
+                if (queriedWidth > 0) {
+                    width = queriedWidth;
+                }
+                if (queriedHeight > 0) {
+                    height = queriedHeight;
+                }
+            }
+        }
+
+        return Microsoft::Xna::Framework::Vector2(
+            touchEvent.x * static_cast<float>(width),
+            touchEvent.y * static_cast<float>(height)
+        );
+    }
+
     std::optional<Microsoft::Xna::Framework::Input::Keys> try_convert_sdl_key(const SDL_Keycode keycode) {
         using Microsoft::Xna::Framework::Input::Keys;
         switch (keycode) {
@@ -116,6 +188,37 @@ namespace CNA::Internal::Input {
 
                 const bool pressed = event.type == SDL_EVENT_KEY_DOWN;
                 InputManager::SetKeyState(key.value(), pressed);
+                break;
+            }
+            case SDL_EVENT_FINGER_DOWN: {
+                const int touchId = get_or_create_touch_id(event.tfinger.fingerID);
+                InputManager::SetTouchState(
+                    touchId,
+                    TouchLocationState::Pressed,
+                    to_touch_pixel_position(event.tfinger)
+                );
+                break;
+            }
+            case SDL_EVENT_FINGER_MOTION: {
+                const int touchId = get_or_create_touch_id(event.tfinger.fingerID);
+                InputManager::SetTouchState(
+                    touchId,
+                    TouchLocationState::Moved,
+                    to_touch_pixel_position(event.tfinger)
+                );
+                break;
+            }
+            case SDL_EVENT_FINGER_UP: {
+                const int touchId = try_get_touch_id(event.tfinger.fingerID).value_or(
+                    get_or_create_touch_id(event.tfinger.fingerID)
+                );
+
+                InputManager::SetTouchState(
+                    touchId,
+                    TouchLocationState::Released,
+                    to_touch_pixel_position(event.tfinger)
+                );
+                release_touch_id_mapping(event.tfinger.fingerID);
                 break;
             }
             default:

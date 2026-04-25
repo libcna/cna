@@ -3,6 +3,9 @@
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 
 namespace CNA::Internal::Input {
     /**
@@ -22,7 +25,7 @@ namespace CNA::Internal::Input {
      * Keeps current input state and provides snapshots for the public
      * XNA-like API.
      *
-     * Currently supports Mouse and basic Keyboard state.
+     * Currently supports Mouse, basic Keyboard and basic TouchPanel state.
      *
      * @note Status: PARTIAL
      */
@@ -52,6 +55,15 @@ namespace CNA::Internal::Input {
         static void SetKeyState(Microsoft::Xna::Framework::Input::Keys key, bool pressed);
 
         /**
+         * @brief Updates one touch point in the internal touch state.
+         */
+        static void SetTouchState(
+            int touchId,
+            Microsoft::Xna::Framework::Input::Touch::TouchLocationState state,
+            const Microsoft::Xna::Framework::Vector2& position
+        );
+
+        /**
          * @brief Returns a snapshot of current mouse state.
          */
         static Microsoft::Xna::Framework::Input::MouseState GetMouseState();
@@ -60,5 +72,10 @@ namespace CNA::Internal::Input {
          * @brief Returns a snapshot of current keyboard state.
          */
         static Microsoft::Xna::Framework::Input::KeyboardState GetKeyboardState();
+
+        /**
+         * @brief Returns a snapshot of current touch state.
+         */
+        static Microsoft::Xna::Framework::Input::Touch::TouchCollection GetTouchState();
     };
 }

@@ -9,13 +9,29 @@
 namespace Microsoft::Xna::Framework::Input::Touch {
     using CppDotNet::intcs;
 
+    /**
+     * @brief Immutable snapshot-like collection of current touch locations.
+     *
+     * @note Status: PARTIAL
+     */
     struct TouchCollection {
     private:
         std::vector<TouchLocation> touches;
 
     public:
+        /**
+         * @brief Initializes an empty touch collection.
+         */
         TouchCollection();
+
+        /**
+         * @brief Initializes touch collection from an existing vector.
+         */
         explicit TouchCollection(const std::vector<TouchLocation>& touches);
+
+        /**
+         * @brief Initializes touch collection by moving an existing vector.
+         */
         explicit TouchCollection(std::vector<TouchLocation>&& touches);
 
         DEF_PROP(intcs, Count, getter1, setter0, member0, static0, constret0, ref0, constmet1)
