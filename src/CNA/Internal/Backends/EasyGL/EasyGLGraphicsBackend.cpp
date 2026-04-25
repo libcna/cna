@@ -122,14 +122,14 @@ namespace CNA::Internal::Backends::EasyGL {
 
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y) {
         auto& glTex = static_cast<const EasyGLTextureBackend&>(texture);
-        Draw(texture, Rectangle(0, 0, glTex.width, glTex.height), Rectangle((int)x, (int)y, glTex.width, glTex.height), Microsoft::Xna::Framework::White);
+        Draw(texture, Rectangle((int)x, (int)y, glTex.width, glTex.height), Rectangle(0, 0, glTex.width, glTex.height), Microsoft::Xna::Framework::White);
     }
 
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                       const Rectangle& sourceRectangle,
                                        const Rectangle& destinationRectangle,
+                                       const Rectangle& sourceRectangle,
                                        const Color& color) {
-        Draw(texture, sourceRectangle, destinationRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+        Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
     }
 
     struct Vertex {
@@ -139,8 +139,8 @@ namespace CNA::Internal::Backends::EasyGL {
     };
 
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                       const Rectangle& sourceRectangle,
                                        const Rectangle& destinationRectangle,
+                                       const Rectangle& sourceRectangle,
                                        const Color& color,
                                        float rotation,
                                        const Vector2& origin,

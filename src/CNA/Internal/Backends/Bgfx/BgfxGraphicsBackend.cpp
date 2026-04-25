@@ -215,22 +215,22 @@ namespace CNA::Internal::Backends::Bgfx {
         const auto& bgfxTex = static_cast<const BgfxTextureBackend&>(texture);
         Draw(
             texture,
-            Rectangle(0, 0, bgfxTex.width, bgfxTex.height),
             Rectangle(static_cast<int>(x), static_cast<int>(y), bgfxTex.width, bgfxTex.height),
+            Rectangle(0, 0, bgfxTex.width, bgfxTex.height),
             Microsoft::Xna::Framework::White
         );
     }
 
     void BgfxSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                      const Rectangle& sourceRectangle,
                                       const Rectangle& destinationRectangle,
+                                      const Rectangle& sourceRectangle,
                                       const Color& color) {
-        Draw(texture, sourceRectangle, destinationRectangle, color, 0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, 0.0f);
+        Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, 0.0f);
     }
 
     void BgfxSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                      const Rectangle& sourceRectangle,
                                       const Rectangle& destinationRectangle,
+                                      const Rectangle& sourceRectangle,
                                       const Color& color,
                                       float rotation,
                                       const Vector2& origin,
@@ -241,7 +241,7 @@ namespace CNA::Internal::Backends::Bgfx {
         }
 
         const auto& bgfxTex = static_cast<const BgfxTextureBackend&>(texture);
-        graphicsBackend.SubmitSprite(bgfxTex, sourceRectangle, destinationRectangle, color, rotation, origin, effects, layerDepth);
+        graphicsBackend.SubmitSprite(bgfxTex, destinationRectangle, sourceRectangle, color, rotation, origin, effects, layerDepth);
     }
 
     BgfxGraphicsBackend::BgfxGraphicsBackend(SDL_Window* window) : window(window) {
@@ -381,8 +381,8 @@ namespace CNA::Internal::Backends::Bgfx {
     }
 
     void BgfxGraphicsBackend::SubmitSprite(const BgfxTextureBackend& texture,
-                                           const Rectangle& sourceRectangle,
                                            const Rectangle& destinationRectangle,
+                                           const Rectangle& sourceRectangle,
                                            const Color& color,
                                            float rotation,
                                            const Vector2& origin,

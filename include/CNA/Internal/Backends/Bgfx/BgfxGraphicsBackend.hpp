@@ -39,12 +39,12 @@ namespace CNA::Internal::Backends::Bgfx {
         void End() override;
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,
-                  const Rectangle& sourceRectangle,
                   const Rectangle& destinationRectangle,
+                  const Rectangle& sourceRectangle,
                   const Color& color) override;
         void Draw(const ITextureBackend& texture,
-                  const Rectangle& sourceRectangle,
                   const Rectangle& destinationRectangle,
+                  const Rectangle& sourceRectangle,
                   const Color& color,
                   float rotation,
                   const Vector2& origin,
@@ -75,8 +75,8 @@ namespace CNA::Internal::Backends::Bgfx {
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
         void SubmitSprite(const BgfxTextureBackend& texture,
-                          const Rectangle& sourceRectangle,
                           const Rectangle& destinationRectangle,
+                          const Rectangle& sourceRectangle,
                           const Color& color,
                           float rotation,
                           const Vector2& origin,

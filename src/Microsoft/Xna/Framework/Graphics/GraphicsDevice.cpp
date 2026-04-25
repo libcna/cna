@@ -48,7 +48,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         }
 #endif
 
-        window_ = SDL_CreateWindow("CNA Game", 800, 600, window_flags);
+        window_ = SDL_CreateWindow("Game", 800, 480, window_flags);
         if (!window_) {
             SDL_QuitSubSystem(SDL_INIT_VIDEO);
             throw std::runtime_error(std::string("SDL_CreateWindow failed: ") + SDL_GetError());

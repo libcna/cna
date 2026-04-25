@@ -37,12 +37,12 @@ namespace CNA::Internal::Backends {
         virtual void End() = 0;
         virtual void Draw(const ITextureBackend& texture, float x, float y) = 0;
         virtual void Draw(const ITextureBackend& texture,
-                          const Rectangle& sourceRectangle,
                           const Rectangle& destinationRectangle,
+                          const Rectangle& sourceRectangle,
                           const Color& color) = 0;
         virtual void Draw(const ITextureBackend& texture,
-                          const Rectangle& sourceRectangle,
                           const Rectangle& destinationRectangle,
+                          const Rectangle& sourceRectangle,
                           const Color& color,
                           float rotation,
                           const Vector2& origin,

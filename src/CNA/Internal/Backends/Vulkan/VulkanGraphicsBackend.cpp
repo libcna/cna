@@ -38,15 +38,15 @@ namespace CNA::Internal::Backends::Vulkan {
     }
 
     void VulkanSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                        const Rectangle& sourceRectangle,
                                         const Rectangle& destinationRectangle,
+                                        const Rectangle& sourceRectangle,
                                         const Color& color) {
         // TODO: Implement Draw
     }
 
     void VulkanSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                        const Rectangle& sourceRectangle,
                                         const Rectangle& destinationRectangle,
+                                        const Rectangle& sourceRectangle,
                                         const Color& color,
                                         float rotation,
                                         const Vector2& origin,

@@ -81,13 +81,13 @@ namespace Microsoft::Xna::Framework::Graphics {
         void Draw(const Texture2D& texture, float x, float y);
 
         void Draw(const std::optional<Texture2D>::value_type& value,
-                  const Rectangle& sourceRectangle,
                   const Rectangle& destinationRectangle,
+                  const Rectangle& sourceRectangle,
                   Color color);
 
         void Draw(const std::optional<Texture2D>& value,
-                  const Rectangle& sourceRectangle,
                   const Rectangle& destinationRectangle,
+                  const Rectangle& sourceRectangle,
                   Color color,
                   float rotation_rad,
                   Vector2 origin,

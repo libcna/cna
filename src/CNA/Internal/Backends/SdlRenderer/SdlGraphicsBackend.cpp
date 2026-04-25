@@ -62,8 +62,8 @@ namespace CNA::Internal::Backends::SdlRenderer {
     }
 
     void SdlSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                    const Rectangle& sourceRectangle,
                                     const Rectangle& destinationRectangle,
+                                    const Rectangle& sourceRectangle,
                                     const Color& color) {
         if (!begun) throw std::runtime_error("SdlSpriteBatchBackend::Draw called before Begin().");
         auto& sdlTex = static_cast<const SdlTextureBackend&>(texture);
@@ -87,8 +87,8 @@ namespace CNA::Internal::Backends::SdlRenderer {
     }
 
     void SdlSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                    const Rectangle& sourceRectangle,
                                     const Rectangle& destinationRectangle,
+                                    const Rectangle& sourceRectangle,
                                     const Color& color,
                                     float rotation,
                                     const Vector2& origin,

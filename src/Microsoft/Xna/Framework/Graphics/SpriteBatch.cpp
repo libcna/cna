@@ -51,17 +51,17 @@ namespace Microsoft::Xna::Framework::Graphics {
     }
 
     void SpriteBatch::Draw(const std::optional<Texture2D>::value_type& value,
-                           const Rectangle& sourceRectangle,
                            const Rectangle& destinationRectangle,
+                           const Rectangle& sourceRectangle,
                            Color color)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (backend_) backend_->Draw(value.GetBackend(), sourceRectangle, destinationRectangle, color);
+        if (backend_) backend_->Draw(value.GetBackend(), destinationRectangle, sourceRectangle, color);
     }
 
     void SpriteBatch::Draw(const std::optional<Texture2D>& value,
-                           const Rectangle& sourceRectangle,
                            const Rectangle& destinationRectangle,
+                           const Rectangle& sourceRectangle,
                            Color color,
                            float rotation_rad,
                            Vector2 origin,
@@ -70,7 +70,7 @@ namespace Microsoft::Xna::Framework::Graphics {
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (backend_ && value.has_value()) {
-            backend_->Draw(value->GetBackend(), sourceRectangle, destinationRectangle, color, rotation_rad, origin, effect, layerDepth);
+            backend_->Draw(value->GetBackend(), destinationRectangle, sourceRectangle, color, rotation_rad, origin, effect, layerDepth);
         }
     }
 }

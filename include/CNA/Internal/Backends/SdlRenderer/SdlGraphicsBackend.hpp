@@ -30,12 +30,12 @@ namespace CNA::Internal::Backends::SdlRenderer {
         void End() override;
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,
-                  const Rectangle& sourceRectangle,
                   const Rectangle& destinationRectangle,
+                  const Rectangle& sourceRectangle,
                   const Color& color) override;
         void Draw(const ITextureBackend& texture,
-                  const Rectangle& sourceRectangle,
                   const Rectangle& destinationRectangle,
+                  const Rectangle& sourceRectangle,
                   const Color& color,
                   float rotation,
                   const Vector2& origin,
