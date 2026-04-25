@@ -10,7 +10,6 @@ option(CNA_BUILD_TESTS "Build CNA tests" ON)
 
 set(CPP_DOTNET_BUILD_TESTS OFF CACHE BOOL "Build cpp-dotnet tests" FORCE)
 add_subdirectory(../cpp-dotnet CPP_DOTNET)
-add_subdirectory(../easy-gl easy-gl)
 
 find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
@@ -20,6 +19,50 @@ find_package(SDL3_ttf REQUIRED)
 # --- Graphics Backend Selection ---
 set(CNA_GRAPHICS_BACKEND "SDL_RENDERER" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, or VULKAN)")
 set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN")
+
+option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
+option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
+option(CNA_BACKEND_BGFX "Enable bgfx graphics backend" OFF)
+option(CNA_BACKEND_VULKAN "Enable Vulkan graphics backend" OFF)
+
+set(_cna_explicit_backend_selection OFF)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN)
+    set(_cna_explicit_backend_selection ON)
+endif()
+
+if(_cna_explicit_backend_selection)
+    set(_cna_enabled_backends)
+    if(CNA_BACKEND_SDL_RENDERER)
+        list(APPEND _cna_enabled_backends "SDL_RENDERER")
+    endif()
+    if(CNA_BACKEND_EASY_GL)
+        list(APPEND _cna_enabled_backends "EASYGL")
+    endif()
+    if(CNA_BACKEND_BGFX)
+        list(APPEND _cna_enabled_backends "BGFX")
+    endif()
+    if(CNA_BACKEND_VULKAN)
+        list(APPEND _cna_enabled_backends "VULKAN")
+    endif()
+
+    list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
+    if(NOT _cna_enabled_backends_count EQUAL 1)
+        message(FATAL_ERROR "CNA: Exactly one backend option must be ON when using CNA_BACKEND_* options.")
+    endif()
+
+    list(GET _cna_enabled_backends 0 CNA_GRAPHICS_BACKEND)
+endif()
+
+if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "CNA: EASYGL backend is currently supported only on Linux.")
+    endif()
+    add_subdirectory(../easy-gl easy-gl)
+endif()
+
+if(CNA_GRAPHICS_BACKEND STREQUAL "BGFX" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "CNA: BGFX backend is currently supported only on Linux.")
+endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
     message(STATUS "CNA: Using SDL_RENDERER graphics backend")
@@ -114,7 +157,6 @@ target_compile_definitions(CNA
 target_link_libraries(CNA
         PUBLIC
         CPP_DOTNET
-        easy-gl
         ${BACKEND_TARGET}
         PRIVATE
         SDL3::SDL3
@@ -140,9 +182,12 @@ if(CNA_BUILD_TESTS)
             PRIVATE
             CNA
             CPP_DOTNET
-            easy-gl
             gtest_main
     )
+
+    if(TARGET easy-gl)
+        target_link_libraries(CnaTests PRIVATE easy-gl)
+    endif()
 
     include(GoogleTest)
     gtest_discover_tests(CnaTests)
