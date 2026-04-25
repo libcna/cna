@@ -1,5 +1,7 @@
 #include "CNA/Internal/Input/InputManager.hpp"
 
+#include <unordered_set>
+
 namespace CNA::Internal::Input {
     namespace {
         struct InternalMouseState {
@@ -11,14 +13,19 @@ namespace CNA::Internal::Input {
             Microsoft::Xna::Framework::Input::ButtonState MiddleButton = Microsoft::Xna::Framework::Input::ButtonState::Released;
         };
 
-        InternalMouseState& getInternalMouseState() {
-            static InternalMouseState state{};
+        struct InternalInputState {
+            InternalMouseState Mouse;
+            std::unordered_set<Microsoft::Xna::Framework::Input::Keys> PressedKeys;
+        };
+
+        InternalInputState& getInternalInputState() {
+            static InternalInputState state{};
             return state;
         }
     }
 
     void InputManager::SetMousePosition(const int x, const int y) {
-        auto& mouseState = getInternalMouseState();
+        auto& mouseState = getInternalInputState().Mouse;
         mouseState.X = x;
         mouseState.Y = y;
     }
@@ -27,7 +34,7 @@ namespace CNA::Internal::Input {
         const MouseButton button,
         const Microsoft::Xna::Framework::Input::ButtonState state
     ) {
-        auto& mouseState = getInternalMouseState();
+        auto& mouseState = getInternalInputState().Mouse;
         switch (button) {
             case MouseButton::Left:
                 mouseState.LeftButton = state;
@@ -42,12 +49,24 @@ namespace CNA::Internal::Input {
     }
 
     void InputManager::AddScrollWheelDelta(const int delta) {
-        auto& mouseState = getInternalMouseState();
+        auto& mouseState = getInternalInputState().Mouse;
         mouseState.ScrollWheelValue += delta;
     }
 
+    void InputManager::SetKeyState(
+        const Microsoft::Xna::Framework::Input::Keys key,
+        const bool pressed
+    ) {
+        auto& pressedKeys = getInternalInputState().PressedKeys;
+        if (pressed) {
+            pressedKeys.insert(key);
+            return;
+        }
+        pressedKeys.erase(key);
+    }
+
     Microsoft::Xna::Framework::Input::MouseState InputManager::GetMouseState() {
-        const auto& mouseState = getInternalMouseState();
+        const auto& mouseState = getInternalInputState().Mouse;
         return Microsoft::Xna::Framework::Input::MouseState(
             mouseState.X,
             mouseState.Y,
@@ -56,5 +75,10 @@ namespace CNA::Internal::Input {
             mouseState.MiddleButton,
             mouseState.ScrollWheelValue
         );
+    }
+
+    Microsoft::Xna::Framework::Input::KeyboardState InputManager::GetKeyboardState() {
+        const auto& pressedKeys = getInternalInputState().PressedKeys;
+        return Microsoft::Xna::Framework::Input::KeyboardState(pressedKeys);
     }
 }

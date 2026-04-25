@@ -4,16 +4,18 @@
 
 namespace CNA::Internal::Input {
     /**
-     * @brief Bridge mezi SDL3 eventy a interním vstupním stavem CNA.
+     * @brief Bridge between SDL3 events and CNA internal input state.
      *
-     * Tento bridge zná SDL typy, ale vystavuje je pouze interně.
+     * This bridge knows SDL types, but exposes them only internally.
      *
-     * @note Status: PARTIAL (zatím implementována pouze myš)
+     * Currently supports Mouse and basic Keyboard state propagation.
+     *
+     * @note Status: PARTIAL
      */
     class SdlInputBridge {
     public:
         /**
-         * @brief Zpracuje jeden SDL event a promítne relevantní změny do InputManageru.
+         * @brief Processes one SDL event and propagates relevant changes to InputManager.
          */
         static void ProcessEvent(const SDL_Event& event);
     };

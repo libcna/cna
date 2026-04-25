@@ -1,11 +1,12 @@
 #pragma once
 
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
+#include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 
 namespace CNA::Internal::Input {
     /**
-     * @brief Interní identifikace podporovaných tlačítek myši.
+     * @brief Internal identification of supported mouse buttons.
      *
      * @note Status: IMPLEMENTED
      */
@@ -16,22 +17,24 @@ namespace CNA::Internal::Input {
     };
 
     /**
-     * @brief Interní správce vstupního stavu CNA.
+     * @brief Internal CNA input state manager.
      *
-     * Aktuálně udržuje pouze stav myši a poskytuje snapshot pro veřejné
-     * XNA-like API (`Microsoft::Xna::Framework::Input::Mouse`).
+     * Keeps current input state and provides snapshots for the public
+     * XNA-like API.
      *
-     * @note Status: PARTIAL (zatím implementována pouze myš)
+     * Currently supports Mouse and basic Keyboard state.
+     *
+     * @note Status: PARTIAL
      */
     class InputManager {
     public:
         /**
-         * @brief Aktualizuje pozici kurzoru myši.
+         * @brief Updates mouse cursor position.
          */
         static void SetMousePosition(int x, int y);
 
         /**
-         * @brief Aktualizuje stav vybraného tlačítka myši.
+         * @brief Updates selected mouse button state.
          */
         static void SetMouseButtonState(
             MouseButton button,
@@ -39,13 +42,23 @@ namespace CNA::Internal::Input {
         );
 
         /**
-         * @brief Přičte delta hodnotu kolečka myši do interního stavu.
+         * @brief Adds mouse wheel delta to internal state.
          */
         static void AddScrollWheelDelta(int delta);
 
         /**
-         * @brief Vrátí snapshot aktuálního stavu myši.
+         * @brief Sets pressed/released state for one keyboard key.
+         */
+        static void SetKeyState(Microsoft::Xna::Framework::Input::Keys key, bool pressed);
+
+        /**
+         * @brief Returns a snapshot of current mouse state.
          */
         static Microsoft::Xna::Framework::Input::MouseState GetMouseState();
+
+        /**
+         * @brief Returns a snapshot of current keyboard state.
+         */
+        static Microsoft::Xna::Framework::Input::KeyboardState GetKeyboardState();
     };
 }
