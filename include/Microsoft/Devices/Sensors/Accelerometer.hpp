@@ -4,10 +4,8 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
-
-#include <SDL3/SDL_events.h>
-#include <SDL3/SDL_sensor.h>
 
 #include "CppDotNet/CppDotNetHelper.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
@@ -31,8 +29,8 @@ namespace Microsoft::Devices::Sensors {
      */
     class Accelerometer final : public SensorBase<AccelerometerReading> {
     private:
-        static SDL_Sensor* g_sensor_;
-        static SDL_SensorID g_sensorId_;
+        static void* g_sensor_;
+        static std::int64_t g_sensorId_;
         static int instanceCount_;
         static bool eventWatchRegistered_;
         static std::vector<Accelerometer*> startedInstances_;
@@ -44,14 +42,20 @@ namespace Microsoft::Devices::Sensors {
 
     private:
         static bool EnsureSensorSubsystemInitialized();
-        static SDL_Sensor* OpenDefaultAccelerometer();
+        static void* OpenDefaultAccelerometer();
 
         static void RegisterEventWatchIfNeeded();
         static void UnregisterEventWatchIfNeeded();
 
-        static bool SDLCALL SensorEventWatch(void* userdata, SDL_Event* event);
+        static bool SensorEventWatch(void* userdata, void* eventData);
 
-        void ProcessSensorUpdateEvent(const SDL_Event& e);
+        void ProcessSensorUpdateEvent(
+            std::int64_t sensorId,
+            float x,
+            float y,
+            float z,
+            std::uint64_t timestampNs
+        );
 
     public:
         /**

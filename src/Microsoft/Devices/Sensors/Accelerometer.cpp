@@ -19,8 +19,8 @@
 
 namespace Microsoft::Devices::Sensors {
 
-    SDL_Sensor* Accelerometer::g_sensor_ = nullptr;
-    SDL_SensorID Accelerometer::g_sensorId_ = 0;
+    void* Accelerometer::g_sensor_ = nullptr;
+    std::int64_t Accelerometer::g_sensorId_ = 0;
     int Accelerometer::instanceCount_ = 0;
     bool Accelerometer::eventWatchRegistered_ = false;
     std::vector<Accelerometer*> Accelerometer::startedInstances_;
@@ -34,7 +34,7 @@ namespace Microsoft::Devices::Sensors {
         return SDL_InitSubSystem(SDL_INIT_SENSOR);
     }
 
-    SDL_Sensor* Accelerometer::OpenDefaultAccelerometer()
+    void* Accelerometer::OpenDefaultAccelerometer()
     {
         int sensorCount = 0;
         SDL_SensorID* sensors = SDL_GetSensors(&sensorCount);
@@ -69,16 +69,18 @@ namespace Microsoft::Devices::Sensors {
         SDL_free(sensors);
 
         if (openedSensor != nullptr) {
-            g_sensorId_ = openedSensorId;
+            g_sensorId_ = static_cast<std::int64_t>(openedSensorId);
         }
 
-        return openedSensor;
+        return static_cast<void*>(openedSensor);
     }
 
     void Accelerometer::RegisterEventWatchIfNeeded()
     {
         if (!eventWatchRegistered_) {
-            SDL_AddEventWatch(&Accelerometer::SensorEventWatch, nullptr);
+            const SDL_EventFilter eventFilter =
+                reinterpret_cast<SDL_EventFilter>(&Accelerometer::SensorEventWatch);
+            SDL_AddEventWatch(eventFilter, nullptr);
             eventWatchRegistered_ = true;
         }
     }
@@ -86,14 +88,18 @@ namespace Microsoft::Devices::Sensors {
     void Accelerometer::UnregisterEventWatchIfNeeded()
     {
         if (eventWatchRegistered_ && startedInstances_.empty()) {
-            SDL_RemoveEventWatch(&Accelerometer::SensorEventWatch, nullptr);
+            const SDL_EventFilter eventFilter =
+                reinterpret_cast<SDL_EventFilter>(&Accelerometer::SensorEventWatch);
+            SDL_RemoveEventWatch(eventFilter, nullptr);
             eventWatchRegistered_ = false;
         }
     }
 
-    bool SDLCALL Accelerometer::SensorEventWatch(void* userdata, SDL_Event* event)
+    bool Accelerometer::SensorEventWatch(void* userdata, void* eventData)
     {
         (void)userdata;
+
+        SDL_Event* event = static_cast<SDL_Event*>(eventData);
 
         if (event == nullptr) {
             return true;
@@ -103,9 +109,18 @@ namespace Microsoft::Devices::Sensors {
             return true;
         }
 
+        const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
+        const std::uint64_t timestampNs = static_cast<std::uint64_t>(SDL_GetTicksNS());
+
         for (Accelerometer* accelerometer : startedInstances_) {
             if (accelerometer != nullptr) {
-                accelerometer->ProcessSensorUpdateEvent(*event);
+                accelerometer->ProcessSensorUpdateEvent(
+                    sensorId,
+                    event->sensor.data[0],
+                    event->sensor.data[1],
+                    event->sensor.data[2],
+                    timestampNs
+                );
             }
         }
 
@@ -176,7 +191,12 @@ namespace Microsoft::Devices::Sensors {
         state_ = getIsSupportedProperty() ? SensorState::Initializing : SensorState::NotSupported;
     }
 
-    Accelerometer::~Accelerometer() = default;
+    Accelerometer::~Accelerometer()
+    {
+        if (!getIsDisposedProperty()) {
+            Dispose(true);
+        }
+    }
 
     void Accelerometer::Start()
     {
@@ -247,7 +267,7 @@ namespace Microsoft::Devices::Sensors {
                 UnregisterEventWatchIfNeeded();
 
                 if (g_sensor_ != nullptr) {
-                    SDL_CloseSensor(g_sensor_);
+                    SDL_CloseSensor(static_cast<SDL_Sensor*>(g_sensor_));
                     g_sensor_ = nullptr;
                     g_sensorId_ = 0;
                 }
@@ -261,7 +281,12 @@ namespace Microsoft::Devices::Sensors {
         SensorBase<AccelerometerReading>::Dispose(disposing);
     }
 
-    void Accelerometer::ProcessSensorUpdateEvent(const SDL_Event& e)
+    void Accelerometer::ProcessSensorUpdateEvent(
+        std::int64_t sensorId,
+        float x,
+        float y,
+        float z,
+        std::uint64_t timestampNs)
     {
         if (!started_) {
             return;
@@ -271,15 +296,11 @@ namespace Microsoft::Devices::Sensors {
             return;
         }
 
-        if (e.type != SDL_EVENT_SENSOR_UPDATE) {
-            return;
-        }
-
         if (g_sensor_ == nullptr) {
             return;
         }
 
-        if (e.sensor.which != g_sensorId_) {
+        if (sensorId != g_sensorId_) {
             return;
         }
 
@@ -292,15 +313,14 @@ namespace Microsoft::Devices::Sensors {
 
         if (getIsDataValidProperty()) {
             Microsoft::Xna::Framework::Vector3 acceleration(
-                e.sensor.data[0] / StandardGravity,
-                e.sensor.data[1] / StandardGravity,
-                e.sensor.data[2] / StandardGravity
+                x / StandardGravity,
+                y / StandardGravity,
+                z / StandardGravity
             );
 
             accelerometerReading.setAccelerationProperty(acceleration);
 
-            const Uint64 nowNs = SDL_GetTicksNS();
-            const CppDotNet::longcs ticks = static_cast<CppDotNet::longcs>(nowNs / 100);
+            const CppDotNet::longcs ticks = static_cast<CppDotNet::longcs>(timestampNs / 100);
 
             System::DateTime dateTime(ticks);
             System::DateTimeOffset timestamp(dateTime, System::TimeSpan::Zero);
