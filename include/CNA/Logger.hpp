@@ -26,7 +26,8 @@ namespace CNA
         static void Log(
             LogLevel level,
             std::string_view message,
-            LogCategory category = LogCategory::APPLICATION
+            LogCategory category = LogCategory::APPLICATION,
+            bool condition = true
         );
 
         /**
@@ -105,7 +106,82 @@ namespace CNA
             std::string_view message,
             LogCategory category = LogCategory::APPLICATION
         );
+        /**
+         * @brief Logs a fatal message if the condition is true.
+         *
+         * @param message Message text.
+         * @param condition Condition that must be true for the message to be logged.
+         */
+        static void FatalIf(
+            std::string_view message,
+            bool condition
+        );
 
+        /**
+         * @brief Logs an error message if the condition is true.
+         *
+         * @param message Message text.
+         * @param condition Condition that must be true for the message to be logged.
+         */
+        static void ErrorIf(
+            std::string_view message,
+            bool condition
+        );
+
+        /**
+         * @brief Logs a warning message if the condition is true.
+         *
+         * @param message Message text.
+         * @param condition Condition that must be true for the message to be logged.
+         */
+        static void WarnIf(
+            std::string_view message,
+            bool condition
+        );
+
+        /**
+         * @brief Logs an informational message if the condition is true.
+         *
+         * @param message Message text.
+         * @param condition Condition that must be true for the message to be logged.
+         */
+        static void InfoIf(
+            std::string_view message,
+            bool condition
+        );
+
+        /**
+         * @brief Logs a debug message if the condition is true.
+         *
+         * @param message Message text.
+         * @param condition Condition that must be true for the message to be logged.
+         */
+        static void DebugIf(
+            std::string_view message,
+            bool condition
+        );
+
+        /**
+         * @brief Logs a trace message if the condition is true.
+         *
+         * @param message Message text.
+         * @param condition Condition that must be true for the message to be logged.
+         */
+        static void TraceIf(
+            std::string_view message,
+            bool condition
+        );
+
+        /**
+         * @brief Logs an experimental message if the condition is true.
+         *
+         * @param message Message text.
+         * @param condition Condition that must be true for the message to be logged.
+         */
+        static void ExperimentIf(
+            std::string_view message,
+            bool condition
+        );
         /**
          * @brief Sets the minimum enabled log level.
          *

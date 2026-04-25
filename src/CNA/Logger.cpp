@@ -17,9 +17,14 @@ namespace CNA
     void Logger::Log(
         LogLevel level,
         std::string_view message,
-        LogCategory category
+        LogCategory category,
+        bool condition
     )
     {
+        if (!condition)
+        {
+            return;
+        }
         if (!IsEnabled(level))
         {
             return;
@@ -93,6 +98,62 @@ namespace CNA
     )
     {
         Log(LogLevel::EXPERIMENT, message, category);
+    }
+
+    void Logger::FatalIf(
+    std::string_view message,
+    bool condition
+)
+    {
+        Log(LogLevel::FATAL, message, LogCategory::APPLICATION, condition);
+    }
+
+    void Logger::ErrorIf(
+        std::string_view message,
+        bool condition
+    )
+    {
+        Log(LogLevel::ERROR, message, LogCategory::APPLICATION, condition);
+    }
+
+    void Logger::WarnIf(
+        std::string_view message,
+        bool condition
+    )
+    {
+        Log(LogLevel::WARN, message, LogCategory::APPLICATION, condition);
+    }
+
+    void Logger::InfoIf(
+        std::string_view message,
+        bool condition
+    )
+    {
+        Log(LogLevel::INFO, message, LogCategory::APPLICATION, condition);
+    }
+
+    void Logger::DebugIf(
+        std::string_view message,
+        bool condition
+    )
+    {
+        Log(LogLevel::DEBUG, message, LogCategory::APPLICATION, condition);
+    }
+
+    void Logger::TraceIf(
+        std::string_view message,
+        bool condition
+    )
+    {
+        Log(LogLevel::TRACE, message, LogCategory::APPLICATION, condition);
+    }
+
+    void Logger::ExperimentIf(
+        std::string_view message,
+        bool condition
+    )
+    {
+        Log(LogLevel::EXPERIMENT, message, LogCategory::APPLICATION, condition);
     }
 
     void Logger::SetMinimumLevel(LogLevel level)
