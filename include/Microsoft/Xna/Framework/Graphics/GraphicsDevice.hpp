@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "CppDotNet/Prop.hpp"
+#include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 

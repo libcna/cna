@@ -3,10 +3,10 @@
 //
 
 #pragma once
-#include "CppDotNet/CppDotNetHelper.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework {
-    using CppDotNet::intcs;
+    using SharpRuntime::intcs;
     struct Rectangle {
         Rectangle(); // Default constructor
 

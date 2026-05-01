@@ -5,7 +5,7 @@
 #pragma once
 
 #include "TouchLocationState.hpp"
-#include "CppDotNet/Prop.hpp"
+#include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch {

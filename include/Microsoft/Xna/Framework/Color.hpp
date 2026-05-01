@@ -3,13 +3,13 @@
 //
 
 #pragma once
-#include "CppDotNet/CppDotNetHelper.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework
 {
-    using CppDotNet::uintcs;
-    using CppDotNet::bytecs;
-    using CppDotNet::intcs;
+    using SharpRuntime::uintcs;
+    using SharpRuntime::bytecs;
+    using SharpRuntime::intcs;
 
     /**
      * @note Status: Partial
@@ -17,10 +17,10 @@ namespace Microsoft::Xna::Framework
     struct Color
     {
     private:
-        CppDotNet::uintcs packedValue;
+        SharpRuntime::uintcs packedValue;
 
     public:
-        explicit Color(CppDotNet::uintcs packedValue);
+        explicit Color(SharpRuntime::uintcs packedValue);
 
         Color(bytecs r, bytecs g, bytecs b, bytecs alpha);
 

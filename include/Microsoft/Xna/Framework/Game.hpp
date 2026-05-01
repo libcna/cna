@@ -58,7 +58,7 @@ namespace Microsoft::Xna::Framework {
     public:
         [[nodiscard]] double getTargetFPSProperty() const;
         [[nodiscard]] double getTargetMsFrameTimeProperty() const;
-        static double fpsToMillisecondsPerFrame(CppDotNet::intcs framesPerSecond);
+        static double fpsToMillisecondsPerFrame(SharpRuntime::intcs framesPerSecond);
 #endif
     };
 }

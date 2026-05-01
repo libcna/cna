@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "CppDotNet/CppDotNetHelper.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorBase.hpp"
@@ -35,7 +35,7 @@ namespace Microsoft::Devices::Sensors {
         static bool eventWatchRegistered_;
         static std::vector<Accelerometer*> startedInstances_;
 
-        static constexpr CppDotNet::bytecs MaxSensorCount = 10;
+        static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
 
         SensorState state_;
         bool started_;

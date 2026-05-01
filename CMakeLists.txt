@@ -8,8 +8,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
 
-set(CPP_DOTNET_BUILD_TESTS OFF CACHE BOOL "Build cpp-dotnet tests" FORCE)
-add_subdirectory(../cpp-dotnet CPP_DOTNET)
+set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
+add_subdirectory(../sharp-runtime SHARP_RUNTIME)
 
 find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
@@ -116,7 +116,7 @@ target_include_directories(cna_backend_graphics_common INTERFACE
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
 add_library(${BACKEND_TARGET} STATIC ${BACKEND_SOURCES})
-target_link_libraries(${BACKEND_TARGET} PUBLIC cna_backend_graphics_common CPP_DOTNET)
+target_link_libraries(${BACKEND_TARGET} PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
 target_include_directories(${BACKEND_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
@@ -156,7 +156,7 @@ target_compile_definitions(CNA
 
 target_link_libraries(CNA
         PUBLIC
-        CPP_DOTNET
+        SHARP_RUNTIME
         ${BACKEND_TARGET}
         PRIVATE
         SDL3::SDL3
@@ -181,7 +181,7 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(CnaTests
             PRIVATE
             CNA
-            CPP_DOTNET
+            SHARP_RUNTIME
             gtest_main
     )
 

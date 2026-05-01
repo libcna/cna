@@ -3,11 +3,11 @@
 #include <vector>
 
 #include "TouchLocation.hpp"
-#include "CppDotNet/Prop.hpp"
-#include "CppDotNet/CppDotNetHelper.hpp"
+#include "SharpRuntime/Prop.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch {
-    using CppDotNet::intcs;
+    using SharpRuntime::intcs;
 
     /**
      * @brief Immutable snapshot-like collection of current touch locations.

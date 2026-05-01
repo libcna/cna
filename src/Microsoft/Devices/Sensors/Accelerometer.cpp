@@ -320,7 +320,7 @@ namespace Microsoft::Devices::Sensors {
 
             accelerometerReading.setAccelerationProperty(acceleration);
 
-            const CppDotNet::longcs ticks = static_cast<CppDotNet::longcs>(timestampNs / 100);
+            const SharpRuntime::longcs ticks = static_cast<SharpRuntime::longcs>(timestampNs / 100);
 
             System::DateTime dateTime(ticks);
             System::DateTimeOffset timestamp(dateTime, System::TimeSpan::Zero);

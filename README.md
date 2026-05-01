@@ -143,7 +143,7 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - **Core platform/runtime library:** SDL3
 - **Media integration:** `SDL3_image`, `SDL3_mixer`, `SDL3_ttf`
 - **Graphics dependency:** `easy-gl` (for `EASYGL` backend)
-- **Utility/runtime layer:** `cpp-dotnet`
+- **Utility/runtime layer:** `sharp-runtime`
 - **Build system:** CMake
 - **Tests:** GoogleTest (`CnaTests` target)
 
@@ -155,7 +155,7 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - C++23-capable compiler
 - SDL3 + SDL3_image + SDL3_mixer + SDL3_ttf development packages
 - Dependency directories available to CMake:
-    - `../cpp-dotnet`
+    - `../sharp-runtime`
     - `../easy-gl`
 
 ### Build
