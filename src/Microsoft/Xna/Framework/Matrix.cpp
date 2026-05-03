@@ -138,10 +138,23 @@ namespace Microsoft::Xna::Framework {
     Matrix Matrix::operator*(const Matrix& rhs) const { return Multiply(*this, rhs); }
 
     void Matrix::ToColumnMajor(float out[16]) const {
-        // XNA stores rows: (M11..M14)=row0. GL expects column-major.
-        out[0]  = M11; out[1]  = M21; out[2]  = M31; out[3]  = M41;
-        out[4]  = M12; out[5]  = M22; out[6]  = M32; out[7]  = M42;
-        out[8]  = M13; out[9]  = M23; out[10] = M33; out[11] = M43;
-        out[12] = M14; out[13] = M24; out[14] = M34; out[15] = M44;
+        // XNA stores its matrices in row-vector convention: a point/vector is
+        // a row vector and is multiplied on the LEFT of the matrix
+        //     v_row * M_xna
+        // The numeric layout (M11..M14)=row0 reflects that convention.
+        //
+        // OpenGL/GLSL uses column-vector convention:
+        //     M_gl * v_col
+        // and reads `glUniformMatrix4fv` data as column-major *for the GL
+        // matrix*. To get an equivalent transformation in the shader, the
+        // matrix uploaded must be the TRANSPOSE of the XNA matrix:
+        //     M_gl = M_xna^T
+        // Writing `out[c*4 + r] = M_xna[c][r]` (i.e. taking row c of the XNA
+        // matrix and storing it as column c in GL memory) achieves exactly
+        // that transposition.
+        out[0]  = M11; out[1]  = M12; out[2]  = M13; out[3]  = M14;
+        out[4]  = M21; out[5]  = M22; out[6]  = M23; out[7]  = M24;
+        out[8]  = M31; out[9]  = M32; out[10] = M33; out[11] = M34;
+        out[12] = M41; out[13] = M42; out[14] = M43; out[15] = M44;
     }
 }

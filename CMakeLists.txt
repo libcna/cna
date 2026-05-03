@@ -17,7 +17,7 @@ find_package(SDL3_mixer REQUIRED)
 #find_package(SDL3_ttf REQUIRED)
 
 # --- Graphics Backend Selection ---
-set(CNA_GRAPHICS_BACKEND "SDL_RENDERER" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, or VULKAN)")
+set(CNA_GRAPHICS_BACKEND "EASYGL" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, or VULKAN)")
 set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)

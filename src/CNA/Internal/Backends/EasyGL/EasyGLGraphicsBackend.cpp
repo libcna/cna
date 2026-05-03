@@ -1,5 +1,14 @@
 #include "CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp"
 #include <iostream>
+
+// Verbose 3D rendering trace. Define `CNA_DEBUG_RENDERING` (e.g. via
+// -DCNA_DEBUG_RENDERING) to enable. By default these logs are silent so the
+// 3D pipeline does not spam the console every frame.
+#if defined(CNA_DEBUG_RENDERING)
+#define CNA_RENDER_LOG(msg) do { std::cerr << "[CNA EasyGL 3D] " << msg << std::endl; } while (0)
+#else
+#define CNA_RENDER_LOG(msg) do { } while (0)
+#endif
 #include <stdexcept>
 #include <algorithm>
 #include <memory>
@@ -318,23 +327,28 @@ namespace CNA::Internal::Backends::EasyGL {
         vao.enable_attribute(1);
         vao.set_attribute_pointer(1, 4, ::easygl::DataType::UnsignedByte, true,  16, (void*)12);
         vao.unbind();
+        CNA_RENDER_LOG("VertexBuffer created: capacity=" << capacity << " stride=16");
     }
 
     void EasyGLVertexBufferBackend::SetData(const void* data, int count, std::size_t stride_in_bytes) {
         vertex_count = count;
         vbo.bind(::easygl::BufferTarget::Array);
         vbo.set_data(::easygl::BufferTarget::Array, data, static_cast<std::size_t>(count) * stride_in_bytes);
+        CNA_RENDER_LOG("VertexBuffer SetData: count=" << count << " stride=" << stride_in_bytes
+                       << " bytes=" << (static_cast<std::size_t>(count) * stride_in_bytes));
     }
 
     EasyGLIndexBufferBackend::EasyGLIndexBufferBackend(int index_capacity)
         : capacity(index_capacity) {
         ibo.create();
+        CNA_RENDER_LOG("IndexBuffer created: capacity=" << capacity);
     }
 
     void EasyGLIndexBufferBackend::SetData16(const void* data, int count) {
         index_count = count;
         ibo.bind(::easygl::BufferTarget::ElementArray);
         ibo.set_data(::easygl::BufferTarget::ElementArray, data, static_cast<std::size_t>(count) * sizeof(std::uint16_t));
+        CNA_RENDER_LOG("IndexBuffer SetData16: count=" << count);
     }
 
     void EasyGLGraphicsBackend::EnsureColored3DProgram() {
@@ -383,6 +397,8 @@ namespace CNA::Internal::Backends::EasyGL {
 
         loc_world_view_projection_ = program3d_.uniform_location("uWorldViewProjection");
         program3d_ready_ = true;
+        CNA_RENDER_LOG("3D program ready: linked=" << program3d_.is_linked()
+                       << " loc(uWorldViewProjection)=" << loc_world_view_projection_);
     }
 
     void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth) {
@@ -441,8 +457,10 @@ namespace CNA::Internal::Backends::EasyGL {
         EnsureColored3DProgram();
         const auto& vb = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
 
-        // Combined matrix uploaded as column-major to GL.
-        const Matrix wvp = projection * view * world;
+        // XNA convention is row-vector: v_row * (W * V * P). Combined with the
+        // transposing pack in `Matrix::ToColumnMajor`, this produces the
+        // correct column-major matrix expected by the GLSL shader.
+        const Matrix wvp = world * view * projection;
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
 
@@ -451,8 +469,12 @@ namespace CNA::Internal::Backends::EasyGL {
             program3d_.set_uniform_matrix4(loc_world_view_projection_, wvp_col);
         }
 
+        const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
+        CNA_RENDER_LOG("DrawColoredPrimitives: primitive=" << static_cast<int>(primitive)
+                       << " count=" << primitiveCount << " vertices=" << vertex_count);
+
         vb.vao.bind();
-        device.draw_arrays(ToEasyGl(primitive), 0, VertexCountForPrimitives(primitive, primitiveCount));
+        device.draw_arrays(ToEasyGl(primitive), 0, vertex_count);
         vb.vao.unbind();
     }
 
@@ -467,7 +489,8 @@ namespace CNA::Internal::Backends::EasyGL {
         const auto& vb = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
 
-        const Matrix wvp = projection * view * world;
+        // XNA convention is row-vector: v_row * (W * V * P).
+        const Matrix wvp = world * view * projection;
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
 
@@ -476,11 +499,15 @@ namespace CNA::Internal::Backends::EasyGL {
             program3d_.set_uniform_matrix4(loc_world_view_projection_, wvp_col);
         }
 
+        const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
+        CNA_RENDER_LOG("DrawIndexedColoredPrimitives: primitive=" << static_cast<int>(primitive)
+                       << " count=" << primitiveCount << " indices=" << index_count);
+
         vb.vao.bind();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         device.draw_elements(
             ToEasyGl(primitive),
-            VertexCountForPrimitives(primitive, primitiveCount),
+            index_count,
             ::easygl::DataType::UnsignedShort,
             nullptr
         );
