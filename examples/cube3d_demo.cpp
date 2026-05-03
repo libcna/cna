@@ -115,24 +115,30 @@ protected:
             kPiOver4, aspect, 0.1f, 200.0f);
 
         effect_->World = Matrix::Identity();
-        // XNA-style draw flow:
-        //   1. Apply the effect so the device captures its W/V/P matrices.
-        //   2. Bind the vertex/index buffers via SetVertexBuffer / SetIndexBuffer.
-        //   3. Issue DrawIndexedPrimitives with the full XNA 4.0 signature.
-        effect_->Apply();
-        for (const auto& m : meshes_) {
-            device.SetVertexBuffer(m.vb.get());
-            device.SetIndexBuffer(m.ib.get());
-            const int numVertices = m.vb->VertexCount();
-            const int indexCount  = m.primitiveCount * 3; // TriangleList
-            device.DrawIndexedPrimitives(
-                PrimitiveType::TriangleList,
-                /*baseVertex=*/0,
-                /*minVertexIndex=*/0,
-                /*numVertices=*/numVertices,
-                /*startIndex=*/0,
-                /*primitiveCount=*/m.primitiveCount);
-            (void)indexCount;
+
+        // XNA 4.0-style draw flow:
+        //   foreach (var pass in effect.CurrentTechnique.Passes) {
+        //       pass.Apply();
+        //       foreach (var mesh in meshes) {
+        //           graphicsDevice.SetVertexBuffer(mesh.vb);
+        //           graphicsDevice.Indices = mesh.ib;
+        //           graphicsDevice.DrawIndexedPrimitives(...);
+        //       }
+        //   }
+        for (auto& pass : effect_->CurrentTechnique().Passes()) {
+            pass.Apply();
+            for (const auto& m : meshes_) {
+                device.SetVertexBuffer(m.vb.get());
+                device.Indices(m.ib.get()); // XNA: graphicsDevice.Indices = ...
+                const int numVertices = m.vb->VertexCount();
+                device.DrawIndexedPrimitives(
+                    PrimitiveType::TriangleList,
+                    /*baseVertex=*/0,
+                    /*minVertexIndex=*/0,
+                    /*numVertices=*/numVertices,
+                    /*startIndex=*/0,
+                    /*primitiveCount=*/m.primitiveCount);
+            }
         }
     }
 

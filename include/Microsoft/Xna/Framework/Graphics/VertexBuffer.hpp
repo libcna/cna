@@ -4,6 +4,8 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 namespace CNA::Internal::Backends {
     class IVertexBufferBackend;
@@ -28,8 +30,36 @@ namespace Microsoft::Xna::Framework::Graphics {
         /**
          * @brief Creates an empty vertex buffer with capacity for
          *        `vertexCount` `VertexPositionColor` vertices.
+         *
+         * @note Status: IMPLEMENTED. CNA-only convenience overload kept for
+         *       compatibility with earlier code; the EasyGL backend always
+         *       interprets the storage as `VertexPositionColor`.
          */
         VertexBuffer(GraphicsDevice& device, int vertexCount);
+
+        /**
+         * @brief XNA 4.0-shaped constructor.
+         *
+         * Mirrors `VertexBuffer(GraphicsDevice, VertexDeclaration,
+         * int vertexCount, BufferUsage)`.
+         *
+         * @param device         Owning graphics device.
+         * @param vertexDeclaration Layout description (currently only used
+         *                       for source-level XNA compatibility — the
+         *                       EasyGL backend interprets the buffer as
+         *                       `VertexPositionColor`).
+         * @param vertexCount    Number of vertices the buffer can hold.
+         * @param bufferUsage    Usage hint (ignored by the current backend).
+         *
+         * @note Status: PARTIAL. Only the `VertexPositionColor` declaration
+         *       is honored at draw time; the `BufferUsage` hint is stored
+         *       but otherwise ignored.
+         */
+        VertexBuffer(GraphicsDevice& device,
+                     const VertexDeclaration& vertexDeclaration,
+                     int vertexCount,
+                     BufferUsage bufferUsage);
+
         ~VertexBuffer();
 
         VertexBuffer(const VertexBuffer&) = delete;

@@ -122,6 +122,53 @@ namespace Microsoft::Xna::Framework::Graphics {
         [[nodiscard]] const IndexBuffer* GetIndexBuffer() const { return currentIndexBuffer_; }
 
         /**
+         * @brief XNA-style getter for the `Indices` property.
+         *
+         * Equivalent to `GraphicsDevice.Indices` in XNA 4.0. Returns a
+         * pointer to the currently bound index buffer, or `nullptr`.
+         *
+         * @note Status: IMPLEMENTED.
+         */
+        [[nodiscard]] const IndexBuffer* Indices() const { return currentIndexBuffer_; }
+
+        /**
+         * @brief XNA-style setter for the `Indices` property.
+         *
+         * Equivalent to `GraphicsDevice.Indices = indexBuffer;` in XNA 4.0.
+         * Forwards to `SetIndexBuffer(...)`. Pass `nullptr` to clear.
+         *
+         * @note Status: IMPLEMENTED.
+         */
+        void Indices(const IndexBuffer* indexBuffer) { SetIndexBuffer(indexBuffer); }
+
+        /**
+         * @brief XNA-shaped `DrawUserPrimitives` (data supplied by the caller).
+         *
+         * @note Status: STUB. Always throws `std::runtime_error` with a
+         *       clear message. Use `SetVertexBuffer` + `DrawPrimitives`
+         *       instead in CNA 3D for now.
+         */
+        void DrawUserPrimitives(PrimitiveType primitiveType,
+                                const void* vertexData,
+                                int vertexOffset,
+                                int primitiveCount);
+
+        /**
+         * @brief XNA-shaped `DrawUserIndexedPrimitives`.
+         *
+         * @note Status: STUB. Always throws `std::runtime_error` with a
+         *       clear message. Use `SetVertexBuffer` + `SetIndexBuffer` +
+         *       `DrawIndexedPrimitives` instead in CNA 3D for now.
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const void* vertexData,
+                                       int vertexOffset,
+                                       int numVertices,
+                                       const void* indexData,
+                                       int indexOffset,
+                                       int primitiveCount);
+
+        /**
          * @brief Draws non-indexed primitives from the currently bound
          *        vertex buffer using the currently applied effect.
          *

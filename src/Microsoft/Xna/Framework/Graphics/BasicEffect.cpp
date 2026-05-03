@@ -4,9 +4,9 @@
 namespace Microsoft::Xna::Framework::Graphics {
 
     BasicEffect::BasicEffect(GraphicsDevice& device)
-        : device_(&device) {}
+        : Effect(device) {}
 
-    void BasicEffect::Apply() {
+    void BasicEffect::OnApply() {
         if (device_) {
             device_->SetCurrentEffect(this);
         }

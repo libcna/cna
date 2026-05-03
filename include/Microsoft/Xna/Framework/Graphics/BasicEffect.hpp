@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics {
 
@@ -14,12 +15,20 @@ namespace Microsoft::Xna::Framework::Graphics {
      * directly when a draw is issued and forwards them to the backend's
      * built-in colored shader.
      *
-     * @note Status: PARTIAL. Lighting, fog, textures and the
-     *       `CurrentTechnique`/`EffectPass`/`Apply` infrastructure of XNA's
-     *       full `Effect` system are intentionally not provided. `Apply()`
-     *       is a no-op kept only for source-level compatibility.
+     * Inherits from `Effect`, so the standard XNA flow is also supported:
+     * @code
+     *   foreach (var pass in effect.CurrentTechnique.Passes) {
+     *       pass.Apply();
+     *       // ...
+     *   }
+     * @endcode
+     *
+     * @note Status: PARTIAL. Lighting, fog, textures and full multi-pass
+     *       technique infrastructure are intentionally not provided. The
+     *       single default technique exposes one pass which simply
+     *       re-binds this effect on the device.
      */
-    class BasicEffect {
+    class BasicEffect : public Effect {
     public:
         explicit BasicEffect(GraphicsDevice& device);
 
@@ -39,20 +48,15 @@ namespace Microsoft::Xna::Framework::Graphics {
          */
         bool VertexColorEnabled = true;
 
+    protected:
         /**
          * @brief Activates this effect on its `GraphicsDevice` so the next
-         *        `DrawPrimitives`/`DrawIndexedPrimitives` call uses its
+         *        `DrawPrimitives` / `DrawIndexedPrimitives` call uses its
          *        `World`/`View`/`Projection` matrices.
          *
-         * In real XNA `BasicEffect.CurrentTechnique.Passes[0].Apply()` is
-         * what binds the shader and uniforms. CNA collapses that into a
-         * single `BasicEffect::Apply()` shortcut while keeping the
-         * underlying intent the same: after `Apply()` returns, this effect
-         * is the "current" effect on the device.
+         * Invoked through `Effect::Apply()` and through
+         * `CurrentTechnique.Passes[i].Apply()`.
          */
-        void Apply();
-
-    private:
-        GraphicsDevice* device_;
+        void OnApply() override;
     };
 }

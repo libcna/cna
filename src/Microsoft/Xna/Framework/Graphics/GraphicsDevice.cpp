@@ -252,10 +252,15 @@ namespace Microsoft::Xna::Framework::Graphics {
                 "GraphicsDevice::DrawIndexedPrimitives: no effect applied. "
                 "Call BasicEffect::Apply() before DrawIndexedPrimitives.");
         }
-        if (baseVertex != 0 || startIndex != 0) {
+        if (baseVertex != 0) {
             throw std::runtime_error(
-                "GraphicsDevice::DrawIndexedPrimitives: non-zero baseVertex/"
-                "startIndex is not yet supported by the CNA backend.");
+                "GraphicsDevice::DrawIndexedPrimitives: non-zero 'baseVertex' "
+                "is not yet supported by the CNA backend (PARTIAL).");
+        }
+        if (startIndex != 0) {
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitives: non-zero 'startIndex' "
+                "is not yet supported by the CNA backend (PARTIAL).");
         }
         backend_->DrawIndexedColoredPrimitives(
             currentVertexBuffer_->GetBackend(),
@@ -263,6 +268,31 @@ namespace Microsoft::Xna::Framework::Graphics {
             currentEffect_->World, currentEffect_->View, currentEffect_->Projection,
             primitiveType, primitiveCount
         );
+    }
+
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType /*primitiveType*/,
+                                            const void* /*vertexData*/,
+                                            int /*vertexOffset*/,
+                                            int /*primitiveCount*/)
+    {
+        throw std::runtime_error(
+            "GraphicsDevice::DrawUserPrimitives is not implemented yet "
+            "in the CNA 3D subset (STUB). Use SetVertexBuffer + "
+            "DrawPrimitives instead.");
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType /*primitiveType*/,
+                                                   const void* /*vertexData*/,
+                                                   int /*vertexOffset*/,
+                                                   int /*numVertices*/,
+                                                   const void* /*indexData*/,
+                                                   int /*indexOffset*/,
+                                                   int /*primitiveCount*/)
+    {
+        throw std::runtime_error(
+            "GraphicsDevice::DrawUserIndexedPrimitives is not implemented "
+            "yet in the CNA 3D subset (STUB). Use SetVertexBuffer + "
+            "SetIndexBuffer + DrawIndexedPrimitives instead.");
     }
 
     SDL_Renderer* GraphicsDevice::GetRendererInternal() const

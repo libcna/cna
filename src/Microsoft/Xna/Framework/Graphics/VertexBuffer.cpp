@@ -7,6 +7,12 @@ namespace Microsoft::Xna::Framework::Graphics {
     VertexBuffer::VertexBuffer(GraphicsDevice& device, int vertexCount)
         : backend_(device.GetBackend().CreateVertexBuffer(vertexCount)) {}
 
+    VertexBuffer::VertexBuffer(GraphicsDevice& device,
+                               const VertexDeclaration& /*vertexDeclaration*/,
+                               int vertexCount,
+                               BufferUsage /*bufferUsage*/)
+        : backend_(device.GetBackend().CreateVertexBuffer(vertexCount)) {}
+
     VertexBuffer::~VertexBuffer() = default;
 
     void VertexBuffer::SetData(const VertexPositionColor* vertices, int count) {
