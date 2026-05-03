@@ -58,6 +58,20 @@ namespace CNA::Internal::Backends::SdlRenderer {
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+
+        // 3D pipeline: NOT supported by the SDL_Renderer backend.
+        // @note Status: STUB. Every entry point throws std::runtime_error.
+        void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
+        void SetDepthTestEnabled(bool enabled) override;
+        std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
+        std::unique_ptr<IIndexBufferBackend>  CreateIndexBuffer16(int index_capacity) override;
+        void DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                   const Matrix& world, const Matrix& view, const Matrix& projection,
+                                   PrimitiveType primitive, int primitiveCount) override;
+        void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
+                                          const IIndexBufferBackend& ib,
+                                          const Matrix& world, const Matrix& view, const Matrix& projection,
+                                          PrimitiveType primitive, int primitiveCount) override;
     };
 
 }

@@ -301,6 +301,192 @@ namespace CNA::Internal::Backends::EasyGL {
         return std::make_unique<EasyGLSpriteBatchBackend>(device);
     }
 
+    // -------------------------------------------------------------------------
+    // 3D pipeline
+    // -------------------------------------------------------------------------
+
+    EasyGLVertexBufferBackend::EasyGLVertexBufferBackend(int vertex_capacity)
+        : capacity(vertex_capacity) {
+        vbo.create();
+        vao.create();
+        // Layout for VertexPositionColor: vec3 position (offset 0) + 4xUByte color (offset 12).
+        // Total stride is 16 bytes (sizeof(VertexPositionColor)).
+        vao.bind();
+        vbo.bind(::easygl::BufferTarget::Array);
+        vao.enable_attribute(0);
+        vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float,        false, 16, (void*)0);
+        vao.enable_attribute(1);
+        vao.set_attribute_pointer(1, 4, ::easygl::DataType::UnsignedByte, true,  16, (void*)12);
+        vao.unbind();
+    }
+
+    void EasyGLVertexBufferBackend::SetData(const void* data, int count, std::size_t stride_in_bytes) {
+        vertex_count = count;
+        vbo.bind(::easygl::BufferTarget::Array);
+        vbo.set_data(::easygl::BufferTarget::Array, data, static_cast<std::size_t>(count) * stride_in_bytes);
+    }
+
+    EasyGLIndexBufferBackend::EasyGLIndexBufferBackend(int index_capacity)
+        : capacity(index_capacity) {
+        ibo.create();
+    }
+
+    void EasyGLIndexBufferBackend::SetData16(const void* data, int count) {
+        index_count = count;
+        ibo.bind(::easygl::BufferTarget::ElementArray);
+        ibo.set_data(::easygl::BufferTarget::ElementArray, data, static_cast<std::size_t>(count) * sizeof(std::uint16_t));
+    }
+
+    void EasyGLGraphicsBackend::EnsureColored3DProgram() {
+        if (program3d_ready_) return;
+
+        const char* vsrc = R"(
+            #version 330 core
+            layout (location = 0) in vec3 aPos;
+            layout (location = 1) in vec4 aColor;
+            uniform mat4 uWorldViewProjection;
+            out vec4 vColor;
+            void main() {
+                gl_Position = uWorldViewProjection * vec4(aPos, 1.0);
+                vColor = aColor;
+            }
+        )";
+        const char* fsrc = R"(
+            #version 330 core
+            in vec4 vColor;
+            out vec4 FragColor;
+            void main() {
+                FragColor = vColor;
+            }
+        )";
+
+        ::easygl::Shader vs(::easygl::ShaderStage::Vertex);
+        vs.create();
+        vs.compile_from_source(vsrc);
+        if (!vs.is_compiled()) {
+            std::cerr << "[CNA EasyGL 3D] vertex shader compile failed:\n" << vs.info_log() << std::endl;
+        }
+        ::easygl::Shader fs(::easygl::ShaderStage::Fragment);
+        fs.create();
+        fs.compile_from_source(fsrc);
+        if (!fs.is_compiled()) {
+            std::cerr << "[CNA EasyGL 3D] fragment shader compile failed:\n" << fs.info_log() << std::endl;
+        }
+
+        program3d_.create();
+        program3d_.attach(vs);
+        program3d_.attach(fs);
+        program3d_.link();
+        if (!program3d_.is_linked()) {
+            std::cerr << "[CNA EasyGL 3D] program link failed:\n" << program3d_.info_log() << std::endl;
+        }
+
+        loc_world_view_projection_ = program3d_.uniform_location("uWorldViewProjection");
+        program3d_ready_ = true;
+    }
+
+    void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth) {
+        int width, height;
+        SDL_GetWindowSize(window, &width, &height);
+        device.set_viewport(0, 0, width, height);
+        device.set_clear_color(r, g, b, a);
+        device.set_clear_depth(depth);
+        device.set_depth_mask(true);
+        device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
+    }
+
+    void EasyGLGraphicsBackend::SetDepthTestEnabled(bool enabled) {
+        device.set_depth_test_enabled(enabled);
+        if (enabled) {
+            device.set_depth_func(::easygl::CompareFunc::LessEqual);
+            device.set_depth_mask(true);
+        }
+    }
+
+    std::unique_ptr<IVertexBufferBackend> EasyGLGraphicsBackend::CreateVertexBuffer(int vertex_capacity) {
+        return std::make_unique<EasyGLVertexBufferBackend>(vertex_capacity);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> EasyGLGraphicsBackend::CreateIndexBuffer16(int index_capacity) {
+        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity);
+    }
+
+    namespace {
+        ::easygl::PrimitiveType ToEasyGl(PrimitiveType pt) {
+            switch (pt) {
+                case PrimitiveType::TriangleList:  return ::easygl::PrimitiveType::Triangles;
+                case PrimitiveType::TriangleStrip: return ::easygl::PrimitiveType::TriangleStrip;
+                case PrimitiveType::LineList:      return ::easygl::PrimitiveType::Lines;
+                case PrimitiveType::LineStrip:     return ::easygl::PrimitiveType::LineStrip;
+            }
+            return ::easygl::PrimitiveType::Triangles;
+        }
+        int VertexCountForPrimitives(PrimitiveType pt, int primitiveCount) {
+            switch (pt) {
+                case PrimitiveType::TriangleList:  return primitiveCount * 3;
+                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+                case PrimitiveType::LineList:      return primitiveCount * 2;
+                case PrimitiveType::LineStrip:     return primitiveCount + 1;
+            }
+            return 0;
+        }
+    }
+
+    void EasyGLGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb_in,
+                                                     const Matrix& world,
+                                                     const Matrix& view,
+                                                     const Matrix& projection,
+                                                     PrimitiveType primitive,
+                                                     int primitiveCount) {
+        EnsureColored3DProgram();
+        const auto& vb = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
+
+        // Combined matrix uploaded as column-major to GL.
+        const Matrix wvp = projection * view * world;
+        float wvp_col[16];
+        wvp.ToColumnMajor(wvp_col);
+
+        program3d_.use();
+        if (loc_world_view_projection_ >= 0) {
+            program3d_.set_uniform_matrix4(loc_world_view_projection_, wvp_col);
+        }
+
+        vb.vao.bind();
+        device.draw_arrays(ToEasyGl(primitive), 0, VertexCountForPrimitives(primitive, primitiveCount));
+        vb.vao.unbind();
+    }
+
+    void EasyGLGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb_in,
+                                                             const IIndexBufferBackend& ib_in,
+                                                             const Matrix& world,
+                                                             const Matrix& view,
+                                                             const Matrix& projection,
+                                                             PrimitiveType primitive,
+                                                             int primitiveCount) {
+        EnsureColored3DProgram();
+        const auto& vb = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
+        const auto& ib = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
+
+        const Matrix wvp = projection * view * world;
+        float wvp_col[16];
+        wvp.ToColumnMajor(wvp_col);
+
+        program3d_.use();
+        if (loc_world_view_projection_ >= 0) {
+            program3d_.set_uniform_matrix4(loc_world_view_projection_, wvp_col);
+        }
+
+        vb.vao.bind();
+        ib.ibo.bind(::easygl::BufferTarget::ElementArray);
+        device.draw_elements(
+            ToEasyGl(primitive),
+            VertexCountForPrimitives(primitive, primitiveCount),
+            ::easygl::DataType::UnsignedShort,
+            nullptr
+        );
+        vb.vao.unbind();
+    }
+
 }
 
 namespace CNA::Internal::Backends {

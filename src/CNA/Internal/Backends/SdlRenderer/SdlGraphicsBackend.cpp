@@ -204,6 +204,23 @@ namespace CNA::Internal::Backends::SdlRenderer {
         return std::make_unique<SdlSpriteBatchBackend>(renderer);
     }
 
+    // ---- 3D: explicit STUB. SDL_Renderer cannot do 3D. ----
+    static void ThrowNo3D() {
+        throw std::runtime_error(
+            "SDL_Renderer backend: 3D rendering is not supported by this backend yet. "
+            "Use the EasyGL backend for 3D.");
+    }
+    void SdlGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D(); }
+    void SdlGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D(); }
+    std::unique_ptr<IVertexBufferBackend> SdlGraphicsBackend::CreateVertexBuffer(int) { ThrowNo3D(); return nullptr; }
+    std::unique_ptr<IIndexBufferBackend>  SdlGraphicsBackend::CreateIndexBuffer16(int) { ThrowNo3D(); return nullptr; }
+    void SdlGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
+                                                   const Matrix&, const Matrix&, const Matrix&,
+                                                   PrimitiveType, int) { ThrowNo3D(); }
+    void SdlGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
+                                                          const IIndexBufferBackend&,
+                                                          const Matrix&, const Matrix&, const Matrix&,
+                                                          PrimitiveType, int) { ThrowNo3D(); }
 }
 
 namespace CNA::Internal::Backends {

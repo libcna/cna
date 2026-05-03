@@ -165,6 +165,25 @@ target_link_libraries(CNA
 #        SDL3_ttf::SDL3_ttf
 )
 
+# --- Examples ---
+# The 3D cube demo exercises the EasyGL 3D pipeline. Other backends
+# explicitly throw "3D not supported" from any 3D entry point, so the
+# demo target is only enabled with the EASYGL backend.
+option(CNA_BUILD_EXAMPLES "Build CNA example applications (cube3d demo, ...)" ON)
+if(CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
+    add_executable(cna_cube3d_demo examples/cube3d_demo.cpp)
+    # The CNA library and the EasyGL backend static lib have circular symbol
+    # references (backend uses Color/Rectangle from CNA, CNA uses backend
+    # interfaces); wrap them in a linker group so GNU ld resolves both.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_link_libraries(cna_cube3d_demo PRIVATE
+            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+            SHARP_RUNTIME)
+    else()
+        target_link_libraries(cna_cube3d_demo PRIVATE CNA SHARP_RUNTIME)
+    endif()
+endif()
+
 if(CNA_BUILD_TESTS)
     add_subdirectory(vendor/googletest)
 

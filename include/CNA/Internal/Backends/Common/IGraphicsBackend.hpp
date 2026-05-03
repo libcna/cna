@@ -3,8 +3,11 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include <cstddef>
 #include <string>
 #include <memory>
 #include "CNA/Internal/Graphics/ImageData.hpp"
@@ -19,7 +22,50 @@ namespace CNA::Internal::Backends {
     using Rectangle = Microsoft::Xna::Framework::Rectangle;
     using Vector2 = Microsoft::Xna::Framework::Vector2;
     using SpriteEffects = Microsoft::Xna::Framework::Graphics::SpriteEffects;
+    using PrimitiveType = Microsoft::Xna::Framework::Graphics::PrimitiveType;
+    using Matrix = Microsoft::Xna::Framework::Matrix;
     using ImageData = CNA::Internal::Graphics::ImageData;
+
+    /**
+     * @brief Backend handle for a vertex buffer of `VertexPositionColor` data.
+     *
+     * Owned by `Microsoft::Xna::Framework::Graphics::VertexBuffer`. The
+     * concrete type is backend-specific (e.g. an OpenGL VBO+VAO pair) and
+     * intentionally hidden from the public XNA-like API.
+     *
+     * @note Status: PARTIAL. Only vertex layouts compatible with
+     *       `VertexPositionColor` are supported.
+     */
+    class IVertexBufferBackend {
+    public:
+        virtual ~IVertexBufferBackend() = default;
+        /**
+         * @brief Uploads `vertex_count` `VertexPositionColor` vertices.
+         *
+         * @param data         Pointer to a contiguous array of vertices,
+         *                     each of size `stride_in_bytes`.
+         * @param vertex_count Number of vertices.
+         * @param stride_in_bytes Size of one vertex in bytes.
+         */
+        virtual void SetData(const void* data,
+                             int vertex_count,
+                             std::size_t stride_in_bytes) = 0;
+        [[nodiscard]] virtual int GetVertexCount() const = 0;
+    };
+
+    /**
+     * @brief Backend handle for a 16- or 32-bit index buffer.
+     *
+     * @note Status: PARTIAL. The minimal CNA 3D pipeline currently only
+     *       calls `IGraphicsBackend::DrawIndexedColoredPrimitives` with
+     *       16-bit indices.
+     */
+    class IIndexBufferBackend {
+    public:
+        virtual ~IIndexBufferBackend() = default;
+        virtual void SetData16(const void* data, int index_count) = 0;
+        [[nodiscard]] virtual int GetIndexCount() const = 0;
+    };
 
     class ITextureBackend {
     public:
@@ -62,6 +108,67 @@ namespace CNA::Internal::Backends {
 
         virtual std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) = 0;
         virtual std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() = 0;
+
+        // ---- 3D pipeline ----
+
+        /**
+         * @brief Clears color and depth buffers in a single call.
+         *
+         * @param r,g,b,a    Clear color in range 0..1.
+         * @param depth      Depth value to clear with (0..1).
+         */
+        virtual void ClearColorAndDepth(float r, float g, float b, float a, float depth) = 0;
+
+        /**
+         * @brief Enables or disables depth testing.
+         *
+         * @note Status: PARTIAL. Only the EasyGL backend honors this; other
+         *       backends throw on first 3D usage.
+         */
+        virtual void SetDepthTestEnabled(bool enabled) = 0;
+
+        /**
+         * @brief Creates a backend-specific vertex buffer for
+         *        `VertexPositionColor` data.
+         */
+        virtual std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) = 0;
+
+        /**
+         * @brief Creates a backend-specific 16-bit index buffer.
+         */
+        virtual std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) = 0;
+
+        /**
+         * @brief Draws colored primitives from `vb` using the supplied transform.
+         *
+         * The backend internally applies a basic colored-vertex shader
+         * (equivalent to `BasicEffect` with `VertexColorEnabled = true`).
+         *
+         * @param vb            Vertex buffer to read from.
+         * @param world,view,projection Per-draw transform matrices (XNA
+         *                              row-major). The combined matrix
+         *                              uploaded to the GPU is
+         *                              `projection * view * world`.
+         * @param primitive     Primitive topology.
+         * @param primitiveCount Number of primitives (NOT vertices).
+         */
+        virtual void DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                           const Matrix& world,
+                                           const Matrix& view,
+                                           const Matrix& projection,
+                                           PrimitiveType primitive,
+                                           int primitiveCount) = 0;
+
+        /**
+         * @brief Indexed counterpart of `DrawColoredPrimitives`.
+         */
+        virtual void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
+                                                  const IIndexBufferBackend& ib,
+                                                  const Matrix& world,
+                                                  const Matrix& view,
+                                                  const Matrix& projection,
+                                                  PrimitiveType primitive,
+                                                  int primitiveCount) = 0;
     };
 
     /**

@@ -52,11 +52,56 @@ namespace CNA::Internal::Backends::EasyGL {
         void InitializeResources();
     };
 
+    /**
+     * @brief EasyGL-backed `VertexPositionColor` vertex buffer.
+     *
+     * Owns a `::easygl::Buffer` (GL VBO) and a `::easygl::VertexArray`
+     * pre-configured for the position+color layout.
+     *
+     * @note Status: IMPLEMENTED for `VertexPositionColor`.
+     */
+    class EasyGLVertexBufferBackend : public IVertexBufferBackend {
+    public:
+        ::easygl::Buffer vbo;
+        ::easygl::VertexArray vao;
+        int vertex_count = 0;
+        int capacity = 0;
+
+        explicit EasyGLVertexBufferBackend(int vertex_capacity);
+        ~EasyGLVertexBufferBackend() override = default;
+        void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        int GetVertexCount() const override { return vertex_count; }
+    };
+
+    /**
+     * @brief EasyGL-backed 16-bit index buffer (GL IBO).
+     *
+     * @note Status: IMPLEMENTED.
+     */
+    class EasyGLIndexBufferBackend : public IIndexBufferBackend {
+    public:
+        ::easygl::Buffer ibo;
+        int index_count = 0;
+        int capacity = 0;
+
+        explicit EasyGLIndexBufferBackend(int index_capacity);
+        ~EasyGLIndexBufferBackend() override = default;
+        void SetData16(const void* data, int index_count) override;
+        int GetIndexCount() const override { return index_count; }
+    };
+
     class EasyGLGraphicsBackend : public IGraphicsBackend {
     private:
         SDL_Window* window = nullptr;
         SDL_GLContext gl_context = nullptr;
         ::easygl::Device device;
+
+        // 3D pipeline state
+        ::easygl::Program program3d_;
+        int loc_world_view_projection_ = -1;
+        bool program3d_ready_ = false;
+
+        void EnsureColored3DProgram();
 
     public:
         explicit EasyGLGraphicsBackend(SDL_Window* window);
@@ -69,6 +114,19 @@ namespace CNA::Internal::Backends::EasyGL {
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+
+        // ---- 3D: IMPLEMENTED ----
+        void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
+        void SetDepthTestEnabled(bool enabled) override;
+        std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
+        std::unique_ptr<IIndexBufferBackend>  CreateIndexBuffer16(int index_capacity) override;
+        void DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                   const Matrix& world, const Matrix& view, const Matrix& projection,
+                                   PrimitiveType primitive, int primitiveCount) override;
+        void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
+                                          const IIndexBufferBackend& ib,
+                                          const Matrix& world, const Matrix& view, const Matrix& projection,
+                                          PrimitiveType primitive, int primitiveCount) override;
     };
 
 }

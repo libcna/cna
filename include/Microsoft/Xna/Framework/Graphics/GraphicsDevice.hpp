@@ -5,6 +5,7 @@
 #include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -12,6 +13,9 @@ struct SDL_Renderer;
 namespace Microsoft::Xna::Framework::Graphics {
 
     class GraphicsDeviceManager;
+    class VertexBuffer;
+    class IndexBuffer;
+    class BasicEffect;
 }
 
 namespace CNA::Internal::Backends {
@@ -75,7 +79,40 @@ namespace Microsoft::Xna::Framework::Graphics {
          */
         void Present();
 
-        IGraphicsBackend& GetBackend() const { return *backend_; }
+        // ---- 3D pipeline (XNA-like minimal subset) ----
+
+        /**
+         * @brief Clears color and depth buffers in one call.
+         *
+         * @note Status: PARTIAL. Only the EasyGL backend honors this; other
+         *       backends throw "3D not supported".
+         */
+        void Clear(const Color& color, float depth);
+
+        /**
+         * @brief Enables or disables the 3D depth test.
+         */
+        void SetDepthTestEnabled(bool enabled);
+
+        /**
+         * @brief Draws a colored, non-indexed primitive sequence using the
+         *        matrices currently set on `effect`.
+         */
+        void DrawPrimitives(BasicEffect& effect,
+                            const VertexBuffer& vertexBuffer,
+                            PrimitiveType primitiveType,
+                            int primitiveCount);
+
+        /**
+         * @brief Indexed counterpart of `DrawPrimitives`.
+         */
+        void DrawIndexedPrimitives(BasicEffect& effect,
+                                   const VertexBuffer& vertexBuffer,
+                                   const IndexBuffer& indexBuffer,
+                                   PrimitiveType primitiveType,
+                                   int primitiveCount);
+
+        [[nodiscard]] IGraphicsBackend& GetBackend() const { return *backend_; }
 
     private:
         /**

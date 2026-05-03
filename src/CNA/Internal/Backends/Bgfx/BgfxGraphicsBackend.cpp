@@ -478,6 +478,24 @@ namespace CNA::Internal::Backends::Bgfx {
         bgfx::submit(spriteViewId, spriteProgram);
     }
 
+    // ---- 3D: explicit STUB. Bgfx backend has no 3D path implemented yet. ----
+    static void ThrowNo3D() {
+        throw std::runtime_error(
+            "Bgfx backend: 3D rendering is not supported by this backend yet. "
+            "Use the EasyGL backend for 3D.");
+    }
+    void BgfxGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D(); }
+    void BgfxGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D(); }
+    std::unique_ptr<IVertexBufferBackend> BgfxGraphicsBackend::CreateVertexBuffer(int) { ThrowNo3D(); return nullptr; }
+    std::unique_ptr<IIndexBufferBackend>  BgfxGraphicsBackend::CreateIndexBuffer16(int) { ThrowNo3D(); return nullptr; }
+    void BgfxGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
+                                                    const Matrix&, const Matrix&, const Matrix&,
+                                                    PrimitiveType, int) { ThrowNo3D(); }
+    void BgfxGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
+                                                           const IIndexBufferBackend&,
+                                                           const Matrix&, const Matrix&, const Matrix&,
+                                                           PrimitiveType, int) { ThrowNo3D(); }
+
 }
 
 namespace CNA::Internal::Backends {

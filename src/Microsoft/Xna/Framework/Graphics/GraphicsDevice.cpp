@@ -1,4 +1,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #ifdef CNA_BACKEND_BGFX
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
@@ -170,6 +173,51 @@ namespace Microsoft::Xna::Framework::Graphics {
             UpdateViewportFromWindow();
             backend_->Present();
         }
+    }
+
+    void GraphicsDevice::Clear(const Color& color, float depth)
+    {
+        if (!backend_) return;
+        backend_->ClearColorAndDepth(
+            static_cast<float>(color.getRProperty()) / 255.0f,
+            static_cast<float>(color.getGProperty()) / 255.0f,
+            static_cast<float>(color.getBProperty()) / 255.0f,
+            static_cast<float>(color.getAProperty()) / 255.0f,
+            depth
+        );
+    }
+
+    void GraphicsDevice::SetDepthTestEnabled(bool enabled)
+    {
+        if (backend_) backend_->SetDepthTestEnabled(enabled);
+    }
+
+    void GraphicsDevice::DrawPrimitives(BasicEffect& effect,
+                                        const VertexBuffer& vertexBuffer,
+                                        PrimitiveType primitiveType,
+                                        int primitiveCount)
+    {
+        if (!backend_) return;
+        backend_->DrawColoredPrimitives(
+            vertexBuffer.GetBackend(),
+            effect.World, effect.View, effect.Projection,
+            primitiveType, primitiveCount
+        );
+    }
+
+    void GraphicsDevice::DrawIndexedPrimitives(BasicEffect& effect,
+                                               const VertexBuffer& vertexBuffer,
+                                               const IndexBuffer& indexBuffer,
+                                               PrimitiveType primitiveType,
+                                               int primitiveCount)
+    {
+        if (!backend_) return;
+        backend_->DrawIndexedColoredPrimitives(
+            vertexBuffer.GetBackend(),
+            indexBuffer.GetBackend(),
+            effect.World, effect.View, effect.Projection,
+            primitiveType, primitiveCount
+        );
     }
 
     SDL_Renderer* GraphicsDevice::GetRendererInternal() const
