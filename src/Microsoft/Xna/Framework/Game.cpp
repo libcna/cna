@@ -85,6 +85,12 @@ namespace Microsoft::Xna::Framework {
                 SDL_VERSIONNUM_MINOR(linked),
                 SDL_VERSIONNUM_MICRO(linked));
 
+        const char* envDriver = SDL_getenv("SDL_VIDEODRIVER");
+        const char* currentDriver = SDL_GetCurrentVideoDriver();
+        SDL_Log("SDL_VIDEODRIVER=%s; current SDL video driver=%s",
+                envDriver ? envDriver : "(null)",
+                currentDriver ? currentDriver : "(null)");
+
         Initialize();
 
         double wantedMsFrameTime = getTargetMsFrameTimeProperty();

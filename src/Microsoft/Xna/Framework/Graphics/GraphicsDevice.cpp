@@ -12,6 +12,40 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     using namespace CNA::Internal::Backends;
 
+    namespace
+    {
+        void LogWindowDebugState(SDL_Window* window, const char* context)
+        {
+            if (!window) {
+                SDL_Log("[WindowDebug] %s: window=null", context);
+                return;
+            }
+            const Uint64 flags = SDL_GetWindowFlags(window);
+            const bool borderless = (flags & SDL_WINDOW_BORDERLESS) != 0;
+            const bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+            int top = 0;
+            int left = 0;
+            int bottom = 0;
+            int right = 0;
+            const bool bordersSizeOk = SDL_GetWindowBordersSize(window, &top, &left, &bottom, &right);
+            const char* driver = SDL_GetCurrentVideoDriver();
+            SDL_Log(
+                "[WindowDebug] %s: driver=%s flags=0x%llx borderless=%s bordered=%s fullscreen=%s borders_size_ok=%s borders=(t:%d l:%d b:%d r:%d)",
+                context,
+                driver ? driver : "(null)",
+                static_cast<unsigned long long>(flags),
+                borderless ? "true" : "false",
+                borderless ? "false" : "true",
+                fullscreen ? "true" : "false",
+                bordersSizeOk ? "true" : "false",
+                top,
+                left,
+                bottom,
+                right
+            );
+        }
+    }
+
     IMPL_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0, GraphicsDevice, nothing)
 
     GraphicsDevice::GraphicsDevice()
@@ -24,6 +58,13 @@ namespace Microsoft::Xna::Framework::Graphics {
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
             throw std::runtime_error(std::string("SDL video subsystem initialization failed: ") + SDL_GetError());
         }
+        const char* envDriver = SDL_getenv("SDL_VIDEODRIVER");
+        const char* activeDriverAfterInit = SDL_GetCurrentVideoDriver();
+        SDL_Log(
+            "[WindowDebug] SDL_VIDEODRIVER=%s active_video_driver_after_init=%s",
+            envDriver ? envDriver : "(null)",
+            activeDriverAfterInit ? activeDriverAfterInit : "(null)"
+        );
 
         uint32_t window_flags = SDL_WINDOW_RESIZABLE;
 #ifdef CNA_BACKEND_EASYGL
@@ -48,11 +89,29 @@ namespace Microsoft::Xna::Framework::Graphics {
         }
 #endif
 
+        SDL_Log(
+            "[WindowDebug] Creating window with flags=0x%llx (borderless_requested=%s)",
+            static_cast<unsigned long long>(window_flags),
+            (window_flags & SDL_WINDOW_BORDERLESS) != 0 ? "true" : "false"
+        );
         window_ = SDL_CreateWindow("Game", 800, 480, window_flags);
         if (!window_) {
             SDL_QuitSubSystem(SDL_INIT_VIDEO);
             throw std::runtime_error(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
         }
+        LogWindowDebugState(window_, "after SDL_CreateWindow");
+
+        SDL_Log("[WindowDebug] Calling SDL_SetWindowBordered(window, true)");
+        if (!SDL_SetWindowBordered(window_, true)) {
+            SDL_Log("[WindowDebug] SDL_SetWindowBordered(true) failed: %s", SDL_GetError());
+        } else {
+            SDL_Log("[WindowDebug] SDL_SetWindowBordered(true) succeeded");
+        }
+        LogWindowDebugState(window_, "after SDL_SetWindowBordered(true)");
+
+        SDL_Log("[WindowDebug] Calling SDL_SetWindowResizable(window, true)");
+        SDL_SetWindowResizable(window_, true);
+        LogWindowDebugState(window_, "after SDL_SetWindowResizable(true)");
 
         GraphicsBackendCreateArgs args;
         args.window = window_;

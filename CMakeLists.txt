@@ -14,7 +14,7 @@ add_subdirectory(../sharp-runtime SHARP_RUNTIME)
 find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
 find_package(SDL3_mixer REQUIRED)
-find_package(SDL3_ttf REQUIRED)
+#find_package(SDL3_ttf REQUIRED)
 
 # --- Graphics Backend Selection ---
 set(CNA_GRAPHICS_BACKEND "SDL_RENDERER" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, or VULKAN)")
@@ -162,7 +162,7 @@ target_link_libraries(CNA
         SDL3::SDL3
         SDL3_image::SDL3_image
         SDL3_mixer::SDL3_mixer
-        SDL3_ttf::SDL3_ttf
+#        SDL3_ttf::SDL3_ttf
 )
 
 if(CNA_BUILD_TESTS)

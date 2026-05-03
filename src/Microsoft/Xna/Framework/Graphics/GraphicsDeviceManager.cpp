@@ -8,6 +8,28 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
 
+    namespace
+    {
+        void LogWindowDebugState(SDL_Window* window, const char* context)
+        {
+            if (!window) {
+                SDL_Log("[WindowDebug] %s: window=null", context);
+                return;
+            }
+            const Uint64 flags = SDL_GetWindowFlags(window);
+            const bool borderless = (flags & SDL_WINDOW_BORDERLESS) != 0;
+            const bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+            SDL_Log(
+                "[WindowDebug] %s: flags=0x%llx borderless=%s bordered=%s fullscreen=%s",
+                context,
+                static_cast<unsigned long long>(flags),
+                borderless ? "true" : "false",
+                borderless ? "false" : "true",
+                fullscreen ? "true" : "false"
+            );
+        }
+    }
+
     IMPL_PROP(Microsoft::Xna::Framework::Graphics::GraphicsDevice*, GraphicsDevice, getter1, setter0, member0, static0, constret0, ref1, constmet0, GraphicsDeviceManager, nothing)
     IMPL_PROP(bool, IsFullScreen, getter1, setter1, member0, static0, constret1, ref1, constmet1, GraphicsDeviceManager, nothing)
 
@@ -37,6 +59,11 @@ namespace Microsoft::Xna::Framework::Graphics {
         }
 
         IsFullScreen_ = !IsFullScreen_;
+        SDL_Log(
+            "[WindowDebug] ToggleFullScreen requested -> target_fullscreen=%s",
+            IsFullScreen_ ? "true" : "false"
+        );
+        LogWindowDebugState(window, "before SDL_SetWindowFullscreen");
 
         if (IsFullScreen_) {
             if (!SDL_SetWindowFullscreen(window, true)) {
@@ -44,12 +71,14 @@ namespace Microsoft::Xna::Framework::Graphics {
                     std::string("SDL_SetWindowFullscreen(true) failed: ") + SDL_GetError()
                 );
             }
+            LogWindowDebugState(window, "after SDL_SetWindowFullscreen(true)");
         } else {
             if (!SDL_SetWindowFullscreen(window, false)) {
                 throw std::runtime_error(
                     std::string("SDL_SetWindowFullscreen(false) failed: ") + SDL_GetError()
                 );
             }
+            LogWindowDebugState(window, "after SDL_SetWindowFullscreen(false)");
         }
 
         GraphicsDevice_->UpdateViewportFromWindow();
