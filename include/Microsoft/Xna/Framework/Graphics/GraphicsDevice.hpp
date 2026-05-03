@@ -36,6 +36,9 @@ namespace Microsoft::Xna::Framework::Graphics {
         SDL_Window* window_;
         std::unique_ptr<IGraphicsBackend> backend_;
         Viewport Viewport_;
+        const VertexBuffer* currentVertexBuffer_ = nullptr;
+        const IndexBuffer*  currentIndexBuffer_  = nullptr;
+        BasicEffect*        currentEffect_       = nullptr;
 
     public:
         DEF_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0)
@@ -95,24 +98,78 @@ namespace Microsoft::Xna::Framework::Graphics {
         void SetDepthTestEnabled(bool enabled);
 
         /**
-         * @brief Draws a colored, non-indexed primitive sequence using the
-         *        matrices currently set on `effect`.
+         * @brief Binds a vertex buffer as the current vertex source.
+         *
+         * Mirrors `GraphicsDevice.SetVertexBuffer` from XNA 4.0. Pass
+         * `nullptr` to clear the binding.
+         *
+         * The buffer is **not** owned by the device; the caller must keep
+         * it alive while it remains bound.
          */
-        void DrawPrimitives(BasicEffect& effect,
-                            const VertexBuffer& vertexBuffer,
-                            PrimitiveType primitiveType,
+        void SetVertexBuffer(const VertexBuffer* vertexBuffer);
+
+        /**
+         * @brief Binds an index buffer as the current index source.
+         *
+         * XNA-equivalent of assigning `GraphicsDevice.Indices`. Pass
+         * `nullptr` to clear the binding.
+         */
+        void SetIndexBuffer(const IndexBuffer* indexBuffer);
+
+        /** Currently bound vertex buffer, or nullptr. */
+        [[nodiscard]] const VertexBuffer* GetVertexBuffer() const { return currentVertexBuffer_; }
+        /** Currently bound index buffer, or nullptr. XNA name: `Indices`. */
+        [[nodiscard]] const IndexBuffer* GetIndexBuffer() const { return currentIndexBuffer_; }
+
+        /**
+         * @brief Draws non-indexed primitives from the currently bound
+         *        vertex buffer using the currently applied effect.
+         *
+         * XNA 4.0 signature equivalent. Call `BasicEffect::Apply()` and
+         * `SetVertexBuffer(...)` before this method.
+         *
+         * @param primitiveType Topology.
+         * @param vertexStart   First vertex to read (XNA: `startVertex`).
+         *                      Must be 0 in the current CNA backend.
+         * @param primitiveCount Number of primitives.
+         */
+        void DrawPrimitives(PrimitiveType primitiveType,
+                            int vertexStart,
                             int primitiveCount);
 
         /**
-         * @brief Indexed counterpart of `DrawPrimitives`.
+         * @brief Draws indexed primitives from the currently bound vertex
+         *        and index buffers using the currently applied effect.
+         *
+         * Matches the XNA 4.0 `DrawIndexedPrimitives` signature.
+         *
+         * @param primitiveType   Topology.
+         * @param baseVertex      Offset added to every index. Must be 0 in
+         *                        the current CNA backend.
+         * @param minVertexIndex  Minimum index value (driver hint, ignored
+         *                        by the current CNA backend).
+         * @param numVertices     Number of vertices that will be referenced
+         *                        (driver hint, ignored).
+         * @param startIndex      First index to read. Must be 0 in the
+         *                        current CNA backend.
+         * @param primitiveCount  Number of primitives to draw.
          */
-        void DrawIndexedPrimitives(BasicEffect& effect,
-                                   const VertexBuffer& vertexBuffer,
-                                   const IndexBuffer& indexBuffer,
-                                   PrimitiveType primitiveType,
+        void DrawIndexedPrimitives(PrimitiveType primitiveType,
+                                   int baseVertex,
+                                   int minVertexIndex,
+                                   int numVertices,
+                                   int startIndex,
                                    int primitiveCount);
 
         [[nodiscard]] IGraphicsBackend& GetBackend() const { return *backend_; }
+
+        /**
+         * @brief Internal hook used by `BasicEffect::Apply` to register
+         *        itself as the active effect for the next draw call.
+         *
+         * Not part of the public XNA API.
+         */
+        void SetCurrentEffect(BasicEffect* effect) { currentEffect_ = effect; }
 
     private:
         /**

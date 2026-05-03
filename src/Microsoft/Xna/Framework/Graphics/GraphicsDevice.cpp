@@ -192,30 +192,75 @@ namespace Microsoft::Xna::Framework::Graphics {
         if (backend_) backend_->SetDepthTestEnabled(enabled);
     }
 
-    void GraphicsDevice::DrawPrimitives(BasicEffect& effect,
-                                        const VertexBuffer& vertexBuffer,
-                                        PrimitiveType primitiveType,
+    void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer)
+    {
+        currentVertexBuffer_ = vertexBuffer;
+    }
+
+    void GraphicsDevice::SetIndexBuffer(const IndexBuffer* indexBuffer)
+    {
+        currentIndexBuffer_ = indexBuffer;
+    }
+
+    void GraphicsDevice::DrawPrimitives(PrimitiveType primitiveType,
+                                        int vertexStart,
                                         int primitiveCount)
     {
         if (!backend_) return;
+        if (!currentVertexBuffer_) {
+            throw std::runtime_error(
+                "GraphicsDevice::DrawPrimitives: no vertex buffer is bound. "
+                "Call SetVertexBuffer(...) before DrawPrimitives.");
+        }
+        if (!currentEffect_) {
+            throw std::runtime_error(
+                "GraphicsDevice::DrawPrimitives: no effect applied. "
+                "Call BasicEffect::Apply() before DrawPrimitives.");
+        }
+        if (vertexStart != 0) {
+            throw std::runtime_error(
+                "GraphicsDevice::DrawPrimitives: non-zero vertexStart is not "
+                "yet supported by the CNA backend.");
+        }
         backend_->DrawColoredPrimitives(
-            vertexBuffer.GetBackend(),
-            effect.World, effect.View, effect.Projection,
+            currentVertexBuffer_->GetBackend(),
+            currentEffect_->World, currentEffect_->View, currentEffect_->Projection,
             primitiveType, primitiveCount
         );
     }
 
-    void GraphicsDevice::DrawIndexedPrimitives(BasicEffect& effect,
-                                               const VertexBuffer& vertexBuffer,
-                                               const IndexBuffer& indexBuffer,
-                                               PrimitiveType primitiveType,
+    void GraphicsDevice::DrawIndexedPrimitives(PrimitiveType primitiveType,
+                                               int baseVertex,
+                                               int /*minVertexIndex*/,
+                                               int /*numVertices*/,
+                                               int startIndex,
                                                int primitiveCount)
     {
         if (!backend_) return;
+        if (!currentVertexBuffer_) {
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound. "
+                "Call SetVertexBuffer(...) before DrawIndexedPrimitives.");
+        }
+        if (!currentIndexBuffer_) {
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound. "
+                "Call SetIndexBuffer(...) before DrawIndexedPrimitives.");
+        }
+        if (!currentEffect_) {
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitives: no effect applied. "
+                "Call BasicEffect::Apply() before DrawIndexedPrimitives.");
+        }
+        if (baseVertex != 0 || startIndex != 0) {
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitives: non-zero baseVertex/"
+                "startIndex is not yet supported by the CNA backend.");
+        }
         backend_->DrawIndexedColoredPrimitives(
-            vertexBuffer.GetBackend(),
-            indexBuffer.GetBackend(),
-            effect.World, effect.View, effect.Projection,
+            currentVertexBuffer_->GetBackend(),
+            currentIndexBuffer_->GetBackend(),
+            currentEffect_->World, currentEffect_->View, currentEffect_->Projection,
             primitiveType, primitiveCount
         );
     }

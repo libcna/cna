@@ -40,14 +40,17 @@ namespace Microsoft::Xna::Framework::Graphics {
         bool VertexColorEnabled = true;
 
         /**
-         * @brief Source-level compatibility no-op.
+         * @brief Activates this effect on its `GraphicsDevice` so the next
+         *        `DrawPrimitives`/`DrawIndexedPrimitives` call uses its
+         *        `World`/`View`/`Projection` matrices.
          *
-         * In real XNA `BasicEffect.CurrentTechnique.Passes[0].Apply()` binds
-         * shader and uniforms. In CNA the backend reads the matrices/flags
-         * straight off the effect at draw time, so nothing has to happen
-         * here.
+         * In real XNA `BasicEffect.CurrentTechnique.Passes[0].Apply()` is
+         * what binds the shader and uniforms. CNA collapses that into a
+         * single `BasicEffect::Apply()` shortcut while keeping the
+         * underlying intent the same: after `Apply()` returns, this effect
+         * is the "current" effect on the device.
          */
-        void Apply() {}
+        void Apply();
 
     private:
         GraphicsDevice* device_;

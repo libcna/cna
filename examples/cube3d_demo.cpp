@@ -115,10 +115,24 @@ protected:
             kPiOver4, aspect, 0.1f, 200.0f);
 
         effect_->World = Matrix::Identity();
+        // XNA-style draw flow:
+        //   1. Apply the effect so the device captures its W/V/P matrices.
+        //   2. Bind the vertex/index buffers via SetVertexBuffer / SetIndexBuffer.
+        //   3. Issue DrawIndexedPrimitives with the full XNA 4.0 signature.
+        effect_->Apply();
         for (const auto& m : meshes_) {
-            device.DrawIndexedPrimitives(*effect_, *m.vb, *m.ib,
-                                         PrimitiveType::TriangleList,
-                                         m.primitiveCount);
+            device.SetVertexBuffer(m.vb.get());
+            device.SetIndexBuffer(m.ib.get());
+            const int numVertices = m.vb->VertexCount();
+            const int indexCount  = m.primitiveCount * 3; // TriangleList
+            device.DrawIndexedPrimitives(
+                PrimitiveType::TriangleList,
+                /*baseVertex=*/0,
+                /*minVertexIndex=*/0,
+                /*numVertices=*/numVertices,
+                /*startIndex=*/0,
+                /*primitiveCount=*/m.primitiveCount);
+            (void)indexCount;
         }
     }
 
