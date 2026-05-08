@@ -168,6 +168,20 @@ protected:
                     /*startIndex=*/0,
                     /*primitiveCount=*/m.primitiveCount);
             }
+            // Overlay black wireframe edges so individual boxes remain readable
+            // even when neighbouring boxes share the same fill colour.
+            for (const auto& m : edgeMeshes_) {
+                device.SetVertexBuffer(m.vb.get());
+                device.Indices(m.ib.get());
+                const int numVertices = m.vb->VertexCount();
+                device.DrawIndexedPrimitives(
+                    PrimitiveType::LineList,
+                    /*baseVertex=*/0,
+                    /*minVertexIndex=*/0,
+                    /*numVertices=*/numVertices,
+                    /*startIndex=*/0,
+                    /*primitiveCount=*/m.primitiveCount);
+            }
         }
     }
 
@@ -288,6 +302,42 @@ private:
         mesh.ib->SetData(indices, 36);
         mesh.primitiveCount = 12;
         meshes_.push_back(std::move(mesh));
+
+        AddBoxEdges(device, x0, y0, z0, x1, y1, z1);
+    }
+
+    /**
+     * @brief Builds a black wireframe (12 edges) overlay for an axis-aligned
+     *        box, pushed into @ref edgeMeshes_.
+     */
+    void AddBoxEdges(GraphicsDevice& device,
+                     float x0, float y0, float z0,
+                     float x1, float y1, float z1) {
+        const Color edge(0, 0, 0, 255);
+        VertexPositionColor verts[8] = {
+            { Vector3(x0, y0, z0), edge },
+            { Vector3(x1, y0, z0), edge },
+            { Vector3(x1, y0, z1), edge },
+            { Vector3(x0, y0, z1), edge },
+            { Vector3(x0, y1, z0), edge },
+            { Vector3(x1, y1, z0), edge },
+            { Vector3(x1, y1, z1), edge },
+            { Vector3(x0, y1, z1), edge },
+        };
+        // 12 edges => 24 indices (line list).
+        std::uint16_t indices[24] = {
+            0,1, 1,2, 2,3, 3,0,   // bottom
+            4,5, 5,6, 6,7, 7,4,   // top
+            0,4, 1,5, 2,6, 3,7    // verticals
+        };
+
+        Mesh mesh;
+        mesh.vb = std::make_unique<VertexBuffer>(device, 8);
+        mesh.vb->SetData(verts, 8);
+        mesh.ib = std::make_unique<IndexBuffer>(device, 24);
+        mesh.ib->SetData(indices, 24);
+        mesh.primitiveCount = 12; // 12 line segments
+        edgeMeshes_.push_back(std::move(mesh));
     }
 
     /** @brief Adds a flat colored ground quad on the Y = 0 plane. */
@@ -744,6 +794,7 @@ private:
 
     std::unique_ptr<BasicEffect> effect_;
     std::vector<Mesh>            meshes_;
+    std::vector<Mesh>            edgeMeshes_;
     std::vector<Collider>        colliders_;
 
     Vector3 cameraPosition_{0.0f, 1.7f, 9.0f};
