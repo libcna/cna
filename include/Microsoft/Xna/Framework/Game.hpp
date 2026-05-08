@@ -60,5 +60,14 @@ namespace Microsoft::Xna::Framework {
         [[nodiscard]] double getTargetMsFrameTimeProperty() const;
         static double fpsToMillisecondsPerFrame(SharpRuntime::intcs framesPerSecond);
 #endif
+#if defined(__EMSCRIPTEN__)
+    private:
+        // Emscripten non-blocking main loop support.
+        // The callback is a static C-compatible function passed to
+        // emscripten_set_main_loop(); it reads/writes s_emLoopState.
+        struct EmscriptenLoopState;
+        static EmscriptenLoopState s_emLoopState;
+        static void EmscriptenMainLoopCallback();
+#endif
     };
 }

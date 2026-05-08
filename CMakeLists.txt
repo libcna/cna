@@ -216,6 +216,7 @@ if(CNA_BUILD_TESTS)
             CNA
             SHARP_RUNTIME
             gtest_main
+            SDL3::SDL3
     )
 
     if(TARGET easy-gl)

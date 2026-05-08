@@ -9,6 +9,11 @@
 #include <iostream>
 #include <stdexcept>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#endif
+
 namespace Microsoft::Xna::Framework {
 
     IMPL_PROP(Content::ContentManager, Content, getter1, setter0, member0, static0, constret0, ref1, constmet0, Game, nothing)
@@ -70,6 +75,81 @@ namespace Microsoft::Xna::Framework {
         ShutdownAudio();
     }
 
+#if defined(__EMSCRIPTEN__)
+    // Per-frame state shared with the Emscripten main-loop callback.
+    //
+    // Timing model: the browser fires the callback via requestAnimationFrame
+    // (typically ~60 fps).  Inside the callback we accumulate the real elapsed
+    // wall-clock time and call Update() only for each full TargetElapsedTime
+    // slice, then Draw() once.  This keeps gameplay speed identical to the
+    // native SDL_Delay loop which also fires Update() every TargetElapsedTime.
+    //
+    // We cap the single-frame delta at 250 ms to avoid a runaway catch-up
+    // burst when the browser tab was hidden for a while.
+    struct Game::EmscriptenLoopState {
+        Game*    game          = nullptr;
+        GameTime gameTime;
+        Uint64   lastTickMs    = 0;   // SDL_GetTicks() at end of previous callback
+        double   accumulatorMs = 0.0; // accumulated unprocessed milliseconds
+    };
+
+    Game::EmscriptenLoopState Game::s_emLoopState;
+
+    void Game::EmscriptenMainLoopCallback()
+    {
+        EmscriptenLoopState& s = s_emLoopState;
+
+        // --- pump events ---
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            CNA::Internal::Input::SdlInputBridge::ProcessEvent(e);
+            if (e.type == SDL_EVENT_QUIT) {
+                s.game->isRunning = false;
+                emscripten_cancel_main_loop();
+                ExitingEventArgs exiting_event_args;
+                s.game->Exiting.Raise(s.game, exiting_event_args);
+                return;
+            }
+        }
+
+        // --- accumulate real elapsed time ---
+        const Uint64 nowMs = SDL_GetTicks();
+        if (s.lastTickMs == 0) {
+            // First callback: treat as one target-step so the game starts immediately.
+            s.lastTickMs = nowMs;
+        }
+        double deltaMs = static_cast<double>(nowMs - s.lastTickMs);
+        s.lastTickMs = nowMs;
+
+        // Cap to 250 ms to prevent spiral-of-death after tab was hidden.
+        if (deltaMs > 250.0) deltaMs = 250.0;
+        s.accumulatorMs += deltaMs;
+
+        const double targetMs = s.game->getTargetMsFrameTimeProperty();
+        const auto   stepSpan = System::TimeSpan::FromMilliseconds(targetMs);
+
+        // --- fire Update() for each full target-step in the accumulator ---
+        bool updated = false;
+        while (s.accumulatorMs >= targetMs) {
+            s.accumulatorMs -= targetMs;
+
+            s.gameTime.setElapsedGameTimeProperty(stepSpan);
+            s.gameTime.setTotalGameTimeProperty(
+                s.gameTime.getTotalGameTimeProperty() + stepSpan);
+            s.gameTime.setIsRunningSlowlyProperty(false);
+
+            s.game->Update(s.gameTime);
+            updated = true;
+        }
+
+        // --- Draw once per browser frame (regardless of update count) ---
+        if (updated) {
+            s.game->Draw(s.gameTime);
+            s.game->getGraphicsDeviceProperty().Present();
+        }
+    }
+#endif // __EMSCRIPTEN__
+
     void Game::Run()
     {
         const int compiled = SDL_VERSION;
@@ -93,12 +173,25 @@ namespace Microsoft::Xna::Framework {
 
         Initialize();
 
-        double wantedMsFrameTime = getTargetMsFrameTimeProperty();
+        const double wantedMsFrameTime = getTargetMsFrameTimeProperty();
 
         GameTime gameTime{};
         gameTime.setElapsedGameTimeProperty(TimeSpan::FromMilliseconds(wantedMsFrameTime));
         gameTime.setIsRunningSlowlyProperty(false);
 
+#if defined(__EMSCRIPTEN__)
+        // Browser: hand control back to the JS event loop via emscripten_set_main_loop.
+        // A blocking while-loop would freeze the browser tab.
+        //
+        // fps=0 → the browser drives the callback via requestAnimationFrame (~60 fps).
+        // Correct game speed is maintained by the fixed-timestep accumulator inside
+        // EmscriptenMainLoopCallback(): Update() fires only when >= TargetElapsedTime
+        // has accumulated, so it runs at exactly 20 fps (= 1000/50ms) regardless of
+        // the browser frame rate.
+        s_emLoopState.game = this;
+        s_emLoopState.gameTime = gameTime;
+        emscripten_set_main_loop(EmscriptenMainLoopCallback, 0, 1);
+#else
         while (isRunning) {
             const Uint64 frameStart = SDL_GetTicks();
 
@@ -130,12 +223,11 @@ namespace Microsoft::Xna::Framework {
             gameTime.setElapsedGameTimeProperty(elapsed);
             gameTime.setTotalGameTimeProperty(gameTime.getTotalGameTimeProperty() + elapsed);
             gameTime.setIsRunningSlowlyProperty(runningSlowly);
-
-            wantedMsFrameTime = getTargetMsFrameTimeProperty();
         }
 
         ExitingEventArgs exiting_event_args;
         Exiting.Raise(this, exiting_event_args);
+#endif // __EMSCRIPTEN__
     }
 
     void Game::Initialize()
