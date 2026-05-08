@@ -17,7 +17,14 @@ find_package(SDL3_mixer REQUIRED)
 #find_package(SDL3_ttf REQUIRED)
 
 # --- Graphics Backend Selection ---
-set(CNA_GRAPHICS_BACKEND "EASYGL" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, or VULKAN)")
+# On non-Linux platforms SDL_RENDERER is the default because EASYGL requires OpenGL
+# extensions that may not be available or easily configured on Windows.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(_cna_default_backend "EASYGL")
+else()
+    set(_cna_default_backend "SDL_RENDERER")
+endif()
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, or VULKAN)")
 set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
@@ -55,13 +62,13 @@ endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        message(FATAL_ERROR "CNA: EASYGL backend is currently supported only on Linux.")
+        message(WARNING "CNA: EASYGL backend is primarily tested on Linux. Other platforms may require additional setup.")
     endif()
     add_subdirectory(../easy-gl easy-gl)
 endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "BGFX" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    message(FATAL_ERROR "CNA: BGFX backend is currently supported only on Linux.")
+    message(WARNING "CNA: BGFX backend is primarily tested on Linux. Other platforms may require additional setup.")
 endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
@@ -175,12 +182,24 @@ if(CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     # The CNA library and the EasyGL backend static lib have circular symbol
     # references (backend uses Color/Rectangle from CNA, CNA uses backend
     # interfaces); wrap them in a linker group so GNU ld resolves both.
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
         target_link_libraries(cna_cube3d_demo PRIVATE
             -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
             SHARP_RUNTIME)
     else()
         target_link_libraries(cna_cube3d_demo PRIVATE CNA SHARP_RUNTIME)
+    endif()
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_cube3d_demo PRIVATE SDL3::SDL3main)
+    endif()
+    if(WIN32)
+        set_target_properties(cna_cube3d_demo PROPERTIES WIN32_EXECUTABLE TRUE)
+        add_custom_command(TARGET cna_cube3d_demo POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:cna_cube3d_demo>
+            $<TARGET_FILE_DIR:cna_cube3d_demo>
+            COMMAND_EXPAND_LISTS
+            COMMENT "Copying runtime DLL dependencies for cna_cube3d_demo")
     endif()
 endif()
 

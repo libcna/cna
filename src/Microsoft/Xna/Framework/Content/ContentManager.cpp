@@ -1,4 +1,5 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include <filesystem>
 
 namespace Microsoft::Xna::Framework::Content {
 
@@ -29,6 +30,7 @@ namespace Microsoft::Xna::Framework::Content {
             return assetName;
         }
 
-        return getRootDirectoryProperty() + "/" + assetName;
+        namespace fs = std::filesystem;
+        return (fs::path(getRootDirectoryProperty()) / assetName).string();
     }
 }

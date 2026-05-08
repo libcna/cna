@@ -50,6 +50,9 @@ ctest --test-dir build --output-on-failure
 
 - SDL3-based platform foundation for windowing/input/audio integration.
 - Backend abstraction supports targeting multiple rendering paths from one API layer.
+- **Windows support** via the `SDL_RENDERER` backend (MSVC, clang-cl, or MinGW-w64).
+- Linux support via `EASYGL` (OpenGL) or `SDL_RENDERER`.
+- Architecture is future-friendly for Android and Web (Emscripten) targets.
 
 ### Performance / C++ Advantages
 
@@ -149,29 +152,70 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 
 ## 8. ⚡ Getting Started
 
-### Prerequisites
+### Prerequisites (Linux)
 
 - CMake 3.20+
-- C++23-capable compiler
-- SDL3 + SDL3_image + SDL3_mixer + SDL3_ttf development packages
+- C++23-capable compiler (GCC 12+ or Clang 15+)
+- SDL3 + SDL3_image + SDL3_mixer development packages
 - Dependency directories available to CMake:
     - `../sharp-runtime`
-    - `../easy-gl`
+    - `../easy-gl` (only needed for `EASYGL` backend)
 
-### Build
+### Prerequisites (Windows)
+
+- CMake 3.20+
+- One of:
+    - **MSVC 2022** (Visual Studio 2022, v17.8+, with C++20/23 support)
+    - **clang-cl** (LLVM for Windows, targeting MSVC ABI)
+    - **MinGW-w64** (either natively on Windows or cross-compiled from Linux)
+- SDL3 for Windows (pre-built binaries from https://github.com/libsdl-org/SDL/releases):
+    - `SDL3-devel-*-VC.zip` for MSVC/clang-cl
+    - `SDL3-devel-*-mingw.zip` for MinGW
+    - Same for SDL3_image and SDL3_mixer
+- Dependency directories:
+    - `../sharp-runtime` (no external dependencies — builds cleanly on Windows)
+
+### Build (Linux — EASYGL backend, default)
 
 ```bash
 cmake -S . -B build -DCNA_GRAPHICS_BACKEND=EASYGL
 cmake --build build --target CNA CnaTests
 ```
 
-Change backend as needed:
+### Build (Linux or Windows — SDL_RENDERER backend)
 
 ```bash
-cmake -S . -B build -DCNA_GRAPHICS_BACKEND=SDL_RENDERER
-# or
+# Linux
+cmake -S . -B build-sdlrenderer -DCNA_GRAPHICS_BACKEND=SDL_RENDERER
+cmake --build build-sdlrenderer --target CNA CnaTests
+
+# Windows (MSVC), with SDL3 installed/extracted to C:\SDL3
+cmake -S . -B build-win -DCNA_GRAPHICS_BACKEND=SDL_RENDERER \
+      -DCMAKE_PREFIX_PATH="C:/SDL3;C:/SDL3_image;C:/SDL3_mixer"
+cmake --build build-win --target CNA CnaTests
+```
+
+On Windows the `SDL_RENDERER` backend is selected automatically when no backend is
+explicitly specified, so `-DCNA_GRAPHICS_BACKEND=SDL_RENDERER` is optional.
+
+### Build (Linux → Windows cross-compilation with MinGW-w64)
+
+```bash
+# Install cross toolchain
+sudo apt install mingw-w64
+
+# Download and extract SDL3 MinGW builds to e.g. /opt/sdl3-windows
+cmake -S . -B build-windows \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
+      -DCMAKE_PREFIX_PATH="/opt/sdl3-windows;/opt/sdl3-image-windows;/opt/sdl3-mixer-windows" \
+      -DCNA_GRAPHICS_BACKEND=SDL_RENDERER
+cmake --build build-windows --target CNA CnaTests
+```
+
+### Other backends
+
+```bash
 cmake -S . -B build -DCNA_GRAPHICS_BACKEND=BGFX
-# or
 cmake -S . -B build -DCNA_GRAPHICS_BACKEND=VULKAN
 ```
 
@@ -185,6 +229,16 @@ Use these commands for quick environment and rendering-path verification:
 ctest --test-dir build --output-on-failure
 cmake --build build --target hello-triangle-sdl
 ```
+
+### Tested Compilers
+
+| Platform | Compiler | Backend | Status |
+|----------|----------|---------|--------|
+| Linux x86_64 | GCC 12+ | EASYGL, SDL_RENDERER | ✅ |
+| Linux x86_64 | Clang 15+ | EASYGL, SDL_RENDERER | ✅ |
+| Windows x86_64 | MSVC 2022 | SDL_RENDERER | ✅ planned |
+| Windows x86_64 | MinGW-w64 | SDL_RENDERER | ✅ planned |
+| Linux → Windows | MinGW-w64 (cross) | SDL_RENDERER | ✅ planned |
 
 ## 9. 📖 Usage Example
 
