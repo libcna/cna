@@ -11,6 +11,7 @@ It is a framework/runtime and abstraction layer—not a game—designed to prese
 ### Quick Start
 
 ```bash
+git submodule update --init --recursive
 cmake -S . -B build -DCNA_GRAPHICS_BACKEND=EASYGL
 cmake --build build --target CNA CnaTests
 ctest --test-dir build --output-on-failure
@@ -143,8 +144,8 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 ## 7. 🧰 Technology Stack
 
 - **Language:** C++23
-- **Core platform/runtime library:** SDL3
-- **Media integration:** `SDL3_image`, `SDL3_mixer`, `SDL3_ttf`
+- **Core platform/runtime library:** SDL3 (vendored via Git submodule at `third_party/SDL`)
+- **Media integration:** `SDL3_image`, `SDL3_mixer` (vendored via Git submodules)
 - **Graphics dependency:** `easy-gl` (for `EASYGL` backend)
 - **Utility/runtime layer:** `sharp-runtime`
 - **Build system:** CMake
@@ -156,10 +157,10 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 
 - CMake 3.20+
 - C++23-capable compiler (GCC 12+ or Clang 15+)
-- SDL3 + SDL3_image + SDL3_mixer development packages
 - Dependency directories available to CMake:
     - `../sharp-runtime`
     - `../easy-gl` (only needed for `EASYGL` backend)
+- SDL3, SDL3_image, and SDL3_mixer are built from vendored submodules by default — no system SDL packages required.
 
 ### Prerequisites (Windows)
 
@@ -168,35 +169,48 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
     - **MSVC 2022** (Visual Studio 2022, v17.8+, with C++20/23 support)
     - **clang-cl** (LLVM for Windows, targeting MSVC ABI)
     - **MinGW-w64** (either natively on Windows or cross-compiled from Linux)
-- SDL3 for Windows (pre-built binaries from https://github.com/libsdl-org/SDL/releases):
-    - `SDL3-devel-*-VC.zip` for MSVC/clang-cl
-    - `SDL3-devel-*-mingw.zip` for MinGW
-    - Same for SDL3_image and SDL3_mixer
 - Dependency directories:
     - `../sharp-runtime` (no external dependencies — builds cleanly on Windows)
+- SDL3, SDL3_image, and SDL3_mixer are built from vendored submodules by default — no pre-built SDL binaries or `CMAKE_PREFIX_PATH` configuration required.
+
+### Initialise Submodules
+
+Before the first build, initialise the vendored SDL submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
+This populates `third_party/SDL`, `third_party/SDL_image`, and `third_party/SDL_mixer`.
+After that, no system SDL packages are required.
 
 ### Build (Linux — EASYGL backend, default)
 
 ```bash
+git submodule update --init --recursive
 cmake -S . -B build -DCNA_GRAPHICS_BACKEND=EASYGL
 cmake --build build --target CNA CnaTests
 ```
 
-### Build (Linux or Windows — SDL_RENDERER backend)
+### Build (Linux — SDL_RENDERER backend)
 
 ```bash
-# Linux
+git submodule update --init --recursive
 cmake -S . -B build-sdlrenderer -DCNA_GRAPHICS_BACKEND=SDL_RENDERER
 cmake --build build-sdlrenderer --target CNA CnaTests
-
-# Windows (MSVC), with SDL3 installed/extracted to C:\SDL3
-cmake -S . -B build-win -DCNA_GRAPHICS_BACKEND=SDL_RENDERER \
-      -DCMAKE_PREFIX_PATH="C:/SDL3;C:/SDL3_image;C:/SDL3_mixer"
-cmake --build build-win --target CNA CnaTests
 ```
 
+### Build (Windows — SDL_RENDERER backend, vendored SDL)
+
 On Windows the `SDL_RENDERER` backend is selected automatically when no backend is
-explicitly specified, so `-DCNA_GRAPHICS_BACKEND=SDL_RENDERER` is optional.
+explicitly specified. SDL is built from the vendored submodule — no pre-built SDL
+binaries or `CMAKE_PREFIX_PATH` needed.
+
+```bash
+git submodule update --init --recursive
+cmake -S . -B build-win -DCNA_GRAPHICS_BACKEND=SDL_RENDERER
+cmake --build build-win --target CNA CnaTests
+```
 
 ### Build (Linux → Windows cross-compilation with MinGW-w64)
 
@@ -204,13 +218,26 @@ explicitly specified, so `-DCNA_GRAPHICS_BACKEND=SDL_RENDERER` is optional.
 # Install cross toolchain
 sudo apt install mingw-w64
 
-# Download and extract SDL3 MinGW builds to e.g. /opt/sdl3-windows
+git submodule update --init --recursive
 cmake -S . -B build-windows \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-      -DCMAKE_PREFIX_PATH="/opt/sdl3-windows;/opt/sdl3-image-windows;/opt/sdl3-mixer-windows" \
       -DCNA_GRAPHICS_BACKEND=SDL_RENDERER
 cmake --build build-windows --target CNA CnaTests
 ```
+
+### Optional: use system-installed SDL
+
+If you prefer to link against system-installed SDL3 packages instead of the
+vendored submodules, pass `-DCNA_USE_SYSTEM_SDL=ON`:
+
+```bash
+cmake -S . -B build -DCNA_USE_SYSTEM_SDL=ON -DCNA_GRAPHICS_BACKEND=SDL_RENDERER
+cmake --build build --target CNA CnaTests
+```
+
+This calls `find_package(SDL3 REQUIRED)`, `find_package(SDL3_image REQUIRED)`,
+and `find_package(SDL3_mixer REQUIRED)` and requires those packages to be present
+on the system (e.g. installed via your package manager).
 
 ### Other backends
 

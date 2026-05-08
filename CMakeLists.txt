@@ -8,12 +8,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
 
+include(cmake/ThirdPartySDL.cmake)
+cna_configure_vendored_sdl()
+
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
 add_subdirectory(../sharp-runtime SHARP_RUNTIME)
 
-find_package(SDL3 REQUIRED)
-find_package(SDL3_image REQUIRED)
-find_package(SDL3_mixer REQUIRED)
 #find_package(SDL3_ttf REQUIRED)
 
 # --- Graphics Backend Selection ---
@@ -194,12 +194,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     endif()
     if(WIN32)
         set_target_properties(cna_cube3d_demo PROPERTIES WIN32_EXECUTABLE TRUE)
-        add_custom_command(TARGET cna_cube3d_demo POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:cna_cube3d_demo>
-            $<TARGET_FILE_DIR:cna_cube3d_demo>
-            COMMAND_EXPAND_LISTS
-            COMMENT "Copying runtime DLL dependencies for cna_cube3d_demo")
+        cna_copy_sdl_runtime(cna_cube3d_demo)
     endif()
 endif()
 
