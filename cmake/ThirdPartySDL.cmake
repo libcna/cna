@@ -25,8 +25,13 @@ function(cna_configure_vendored_sdl)
         endif()
     endforeach()
 
-    if(EMSCRIPTEN)
-        # Emscripten requires static linking; shared libraries are not supported.
+    if(ANDROID)
+        # Android requires libSDL3.so to be packaged inside the APK so the
+        # Java SDL activity can load it via System.loadLibrary("SDL3").
+        set(SDL_SHARED ON  CACHE BOOL "Build SDL as shared" FORCE)
+        set(SDL_STATIC OFF CACHE BOOL "Build SDL as static" FORCE)
+    elseif(EMSCRIPTEN)
+        # Emscripten only supports static / WASM output.
         set(SDL_SHARED OFF CACHE BOOL "Build SDL as shared" FORCE)
         set(SDL_STATIC ON  CACHE BOOL "Build SDL as static" FORCE)
     else()
@@ -63,14 +68,31 @@ function(cna_configure_vendored_sdl)
     set(SDLMIXER_FLAC_LIBFLAC    OFF CACHE BOOL "Disable libFLAC backend"       FORCE)
 
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL       EXCLUDE_FROM_ALL)
+
+    # After SDL3 has been configured via add_subdirectory, point SDL3_DIR at
+    # its build-tree location so that SDL_image's internal find_package(SDL3)
+    # finds the vendored copy instead of searching for a system-installed package.
+    set(SDL3_DIR "${CMAKE_CURRENT_BINARY_DIR}/third_party/SDL" CACHE PATH "" FORCE)
+
+    # On Emscripten SDL is built as static-only (SDL_STATIC=ON, SDL_SHARED=OFF).
+    # SDL_image uses BUILD_SHARED_LIBS to decide whether to look for
+    # SDL3::SDL3-shared or SDL3::SDL3. Force it to OFF so SDL_image picks the
+    # static path (SDL3::SDL3 → SDL3-static) which already exists.
+    if(EMSCRIPTEN)
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    endif()
+
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL_image EXCLUDE_FROM_ALL)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL_mixer EXCLUDE_FROM_ALL)
 endfunction()
 
 # Copy SDL shared libraries next to the target executable on Windows.
-# No-op on Emscripten (static wasm) and non-Windows platforms.
+# No-op on Emscripten (static wasm), Android (APK packaging), and non-Windows platforms.
 function(cna_copy_sdl_runtime target_name)
     if(EMSCRIPTEN)
+        return()
+    endif()
+    if(ANDROID)
         return()
     endif()
     if(NOT WIN32)

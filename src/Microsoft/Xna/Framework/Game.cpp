@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Logger.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
@@ -171,7 +172,9 @@ namespace Microsoft::Xna::Framework {
                 envDriver ? envDriver : "(null)",
                 currentDriver ? currentDriver : "(null)");
 
+        CNA::Logger::Info("SpeedyBlupi: before Initialize()");
         Initialize();
+        CNA::Logger::Info("SpeedyBlupi: after Initialize(), entering game loop");
 
         const double wantedMsFrameTime = getTargetMsFrameTimeProperty();
 
@@ -192,6 +195,10 @@ namespace Microsoft::Xna::Framework {
         s_emLoopState.gameTime = gameTime;
         emscripten_set_main_loop(EmscriptenMainLoopCallback, 0, 1);
 #else
+        // isAppPaused tracks Android background/foreground state.
+        // When paused we stop rendering and sleep to avoid busy-looping.
+        bool isAppPaused = false;
+
         while (isRunning) {
             const Uint64 frameStart = SDL_GetTicks();
 
@@ -200,7 +207,25 @@ namespace Microsoft::Xna::Framework {
                 CNA::Internal::Input::SdlInputBridge::ProcessEvent(e);
                 if (e.type == SDL_EVENT_QUIT) {
                     isRunning = false;
+                } else if (e.type == SDL_EVENT_WILL_ENTER_BACKGROUND) {
+                    // Android / mobile: app is being sent to background.
+                    // SDL3 handles audio focus automatically at the platform layer.
+                    // We stop rendering and signal deactivation to the game.
+                    isAppPaused = true;
+                    System::EventArgs deactivated_args;
+                    OnDeactivated(this, deactivated_args);
+                } else if (e.type == SDL_EVENT_DID_ENTER_FOREGROUND) {
+                    // Android / mobile: app returned to foreground.
+                    isAppPaused = false;
+                    System::EventArgs activated_args;
+                    OnActivated(this, activated_args);
                 }
+            }
+
+            if (isAppPaused) {
+                // Do not render while backgrounded; sleep to avoid CPU busy-loop.
+                SDL_Delay(16);
+                continue;
             }
 
             Update(gameTime);
@@ -225,14 +250,18 @@ namespace Microsoft::Xna::Framework {
             gameTime.setIsRunningSlowlyProperty(runningSlowly);
         }
 
+        CNA::Logger::Info("SpeedyBlupi: game loop exited, raising Exiting event");
         ExitingEventArgs exiting_event_args;
         Exiting.Raise(this, exiting_event_args);
+        CNA::Logger::Info("SpeedyBlupi: Run() completed");
 #endif // __EMSCRIPTEN__
     }
 
     void Game::Initialize()
     {
+        CNA::Logger::Info("SpeedyBlupi: Game::Initialize entered");
         LoadContent();
+        CNA::Logger::Info("SpeedyBlupi: Game::Initialize done (LoadContent returned)");
     }
 
     void Game::LoadContent()
