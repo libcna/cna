@@ -114,6 +114,23 @@ namespace CNA::Internal::Backends::Vulkan {
         return std::make_unique<VulkanSpriteBatchBackend>();
     }
 
+    // ---- 3D pipeline stubs ----
+    static void ThrowNo3DVulkan() {
+        throw std::runtime_error(
+            "Vulkan backend: 3D rendering is not implemented yet.");
+    }
+    void VulkanGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3DVulkan(); }
+    void VulkanGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3DVulkan(); }
+    std::unique_ptr<IVertexBufferBackend> VulkanGraphicsBackend::CreateVertexBuffer(int) { ThrowNo3DVulkan(); return nullptr; }
+    std::unique_ptr<IIndexBufferBackend>  VulkanGraphicsBackend::CreateIndexBuffer16(int) { ThrowNo3DVulkan(); return nullptr; }
+    void VulkanGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
+                                                      const Matrix&, const Matrix&, const Matrix&,
+                                                      PrimitiveType, int) { ThrowNo3DVulkan(); }
+    void VulkanGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
+                                                             const IIndexBufferBackend&,
+                                                             const Matrix&, const Matrix&, const Matrix&,
+                                                             PrimitiveType, int) { ThrowNo3DVulkan(); }
+
 }
 
 namespace CNA::Internal::Backends {

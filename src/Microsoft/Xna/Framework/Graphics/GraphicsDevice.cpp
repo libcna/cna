@@ -58,6 +58,11 @@ namespace Microsoft::Xna::Framework::Graphics {
     {
         std::cout << "Starting GraphicsDevice()" << std::endl;
 
+#ifdef __ANDROID__
+        // Trap the Android Back button so it arrives as SDL_EVENT_KEY_DOWN/UP
+        // (SDLK_AC_BACK) instead of being silently converted to SDL_EVENT_QUIT.
+        SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+#endif
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
             throw std::runtime_error(std::string("SDL video subsystem initialization failed: ") + SDL_GetError());
         }
@@ -118,6 +123,12 @@ namespace Microsoft::Xna::Framework::Graphics {
 
         GraphicsBackendCreateArgs args;
         args.window = window_;
+        // Use the stored virtual resolution (set once from SDL_CreateWindow dims).
+        // GraphicsDeviceManager::ApplyChanges() may later call SetVirtualResolution()
+        // to override this with PreferredBackBufferWidth/Height from the game.
+        args.virtualWidth  = virtualWidth_;
+        args.virtualHeight = virtualHeight_;
+        SDL_Log("[WindowDebug] Backend virtual size: width=%d height=%d", args.virtualWidth, args.virtualHeight);
         backend_ = CreateGraphicsBackend(args);
         UpdateViewportFromWindow();
     }
@@ -148,6 +159,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         Viewport_.maxDepth = 1.0f;
         Viewport_.setWidthProperty(width);
         Viewport_.setHeightProperty(height);
+        SDL_Log("[Viewport] Updated viewport: x=0 y=0 w=%d h=%d", width, height);
     }
 
     void GraphicsDevice::Clear(const Color& color)
@@ -303,5 +315,28 @@ namespace Microsoft::Xna::Framework::Graphics {
     SDL_Window* GraphicsDevice::GetWindowInternal() const
     {
         return backend_ ? backend_->GetWindowInternal() : nullptr;
+    }
+
+    void GraphicsDevice::SetVirtualResolution(int width, int height)
+    {
+        if (width <= 0 || height <= 0) {
+            SDL_Log("[Viewport] SetVirtualResolution: ignoring invalid size %dx%d", width, height);
+            return;
+        }
+        virtualWidth_  = width;
+        virtualHeight_ = height;
+        SDL_Log("[Viewport] SetVirtualResolution: %dx%d", width, height);
+        if (backend_) {
+            backend_->SetVirtualResolution(width, height);
+        }
+        UpdateViewportFromWindow();
+    }
+
+    void GraphicsDevice::SetPresentationMode(int mode)
+    {
+        SDL_Log("[Presentation] GraphicsDevice::SetPresentationMode: mode=%d", mode);
+        if (backend_) {
+            backend_->SetPresentationMode(mode);
+        }
     }
 }

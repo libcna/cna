@@ -128,7 +128,52 @@ namespace CNA::Internal::Backends::SdlRenderer {
 
     // --- SdlGraphicsBackend ---
 
-    SdlGraphicsBackend::SdlGraphicsBackend(SDL_Window* window) : window(window) {
+    static SDL_RendererLogicalPresentation toSdlPresentationMode(CnaPresentationMode mode) {
+        switch (mode) {
+            case CnaPresentationMode::Letterbox:             return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+            case CnaPresentationMode::Overscan:              return SDL_LOGICAL_PRESENTATION_OVERSCAN;
+            case CnaPresentationMode::Stretch:               return SDL_LOGICAL_PRESENTATION_STRETCH;
+            case CnaPresentationMode::NativeBackBuffer:      return SDL_LOGICAL_PRESENTATION_DISABLED;
+            case CnaPresentationMode::FixedHeightDynamicWidth: return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+            default:                                         return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+        }
+    }
+    static const char* presentationModeName(CnaPresentationMode mode) {
+        switch (mode) {
+            case CnaPresentationMode::Letterbox:             return "LETTERBOX";
+            case CnaPresentationMode::Overscan:              return "OVERSCAN";
+            case CnaPresentationMode::Stretch:               return "STRETCH";
+            case CnaPresentationMode::NativeBackBuffer:      return "NATIVE_BACKBUFFER";
+            case CnaPresentationMode::FixedHeightDynamicWidth: return "FIXED_HEIGHT_DYNAMIC_WIDTH";
+            default:                                         return "UNKNOWN";
+        }
+    }
+    /// When mode is FixedHeightDynamicWidth, derive logicalW from the actual
+    /// renderer output size so the canvas exactly matches the surface AR.
+    static void applyLogicalPresentation(SDL_Renderer* renderer,
+                                         int& logicalWidth, int& logicalHeight,
+                                         CnaPresentationMode mode) {
+        if (mode == CnaPresentationMode::FixedHeightDynamicWidth) {
+            int outputW = 0, outputH = 0;
+            SDL_GetRenderOutputSize(renderer, &outputW, &outputH);
+            if (outputH > 0 && logicalHeight > 0) {
+                logicalWidth = (int)((double)outputW * logicalHeight / outputH + 0.5);
+            }
+            SDL_Log("[Renderer] FixedHeightDynamicWidth: outputSize=%dx%d logicalSize=%dx%d",
+                    outputW, outputH, logicalWidth, logicalHeight);
+        }
+        SDL_RendererLogicalPresentation sdlMode = toSdlPresentationMode(mode);
+        if (!SDL_SetRenderLogicalPresentation(renderer, logicalWidth, logicalHeight, sdlMode)) {
+            SDL_Log("[Renderer] WARNING: SDL_SetRenderLogicalPresentation failed: %s", SDL_GetError());
+        } else {
+            SDL_Log("[Renderer] SDL_SetRenderLogicalPresentation set to %dx%d %s",
+                    logicalWidth, logicalHeight, presentationModeName(mode));
+        }
+    }
+
+    SdlGraphicsBackend::SdlGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
+                                           CnaPresentationMode mode)
+        : window(window), logicalWidth(virtualWidth), logicalHeight(virtualHeight), presentationMode_(mode) {
         if (!window) throw std::runtime_error("SdlGraphicsBackend initialized with null window.");
 
         // NOTE: SDL_Window is NOT owned by the backend.
@@ -140,6 +185,24 @@ namespace CNA::Internal::Backends::SdlRenderer {
         }
         if (!SDL_SetRenderVSync(renderer, 1)) {
             std::cerr << "Warning: SDL_SetRenderVSync failed: " << SDL_GetError() << std::endl;
+        }
+
+        // Log physical output size vs. requested virtual size, then configure
+        // SDL logical presentation so the game's virtual coordinate space is
+        // scaled / letterboxed to fit the real surface on every platform.
+        {
+            int outputW = 0, outputH = 0;
+            SDL_GetRenderOutputSize(renderer, &outputW, &outputH);
+            int winW = 0, winH = 0;
+            SDL_GetWindowSize(window, &winW, &winH);
+            SDL_Log("[Renderer] virtualSize=%dx%d windowSize=%dx%d rendererOutputSize=%dx%d",
+                    virtualWidth, virtualHeight, winW, winH, outputW, outputH);
+
+            if (virtualWidth > 0 && virtualHeight > 0) {
+                applyLogicalPresentation(renderer, logicalWidth, logicalHeight, mode);
+            } else {
+                SDL_Log("[Renderer] No logical presentation set (virtualSize not provided)");
+            }
         }
 
         const char* name = SDL_GetRendererName(renderer);
@@ -190,10 +253,28 @@ namespace CNA::Internal::Backends::SdlRenderer {
         }
     }
 
-    void SdlGraphicsBackend::GetViewportSize(int& width, int& height) {
-        if (!SDL_GetWindowSize(window, &width, &height)) {
-            throw std::runtime_error(std::string("SDL_GetWindowSize failed: ") + SDL_GetError());
+    void SdlGraphicsBackend::SetVirtualResolution(int width, int height) {
+        logicalWidth  = width;
+        logicalHeight = height;
+        if (renderer && (logicalWidth > 0 || logicalHeight > 0)) {
+            applyLogicalPresentation(renderer, logicalWidth, logicalHeight, presentationMode_);
         }
+    }
+
+    void SdlGraphicsBackend::SetPresentationMode(int mode) {
+        presentationMode_ = static_cast<CnaPresentationMode>(mode);
+        SDL_Log("[Renderer] SetPresentationMode: %s", presentationModeName(presentationMode_));
+        if (renderer && (logicalWidth > 0 || logicalHeight > 0)) {
+            applyLogicalPresentation(renderer, logicalWidth, logicalHeight, presentationMode_);
+        }
+    }
+
+    void SdlGraphicsBackend::GetViewportSize(int& width, int& height) {
+        // Return the logical (virtual) resolution, not the physical surface size.
+        // SDL_SetRenderLogicalPresentation handles the physical-to-logical mapping,
+        // so the game always works in its own coordinate space.
+        width  = logicalWidth;
+        height = logicalHeight;
     }
 
     std::unique_ptr<ITextureBackend> SdlGraphicsBackend::CreateTexture(const ImageData& data) {
@@ -226,7 +307,8 @@ namespace CNA::Internal::Backends::SdlRenderer {
 namespace CNA::Internal::Backends {
 #ifdef CNA_BACKEND_SDL_RENDERER
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args) {
-        return std::make_unique<SdlRenderer::SdlGraphicsBackend>(args.window);
+        return std::make_unique<SdlRenderer::SdlGraphicsBackend>(args.window, args.virtualWidth, args.virtualHeight,
+                                                                 args.presentationMode);
     }
 #endif
 }

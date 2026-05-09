@@ -32,6 +32,9 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     IMPL_PROP(Microsoft::Xna::Framework::Graphics::GraphicsDevice*, GraphicsDevice, getter1, setter0, member0, static0, constret0, ref1, constmet0, GraphicsDeviceManager, nothing)
     IMPL_PROP(bool, IsFullScreen, getter1, setter1, member0, static0, constret1, ref1, constmet1, GraphicsDeviceManager, nothing)
+    IMPL_PROP(int, PreferredBackBufferWidth,  getter1, setter1, member0, static0, constret1, ref0, constmet1, GraphicsDeviceManager, nothing)
+    IMPL_PROP(int, PreferredBackBufferHeight, getter1, setter1, member0, static0, constret1, ref0, constmet1, GraphicsDeviceManager, nothing)
+    IMPL_PROP(PresentationMode, PreferredPresentationMode, getter1, setter1, member0, static0, constret1, ref0, constmet1, GraphicsDeviceManager, nothing)
 
     GraphicsDeviceManager::GraphicsDeviceManager()
         : game_(nullptr),
@@ -45,6 +48,19 @@ namespace Microsoft::Xna::Framework::Graphics {
           GraphicsDevice_(game ? &game->getGraphicsDeviceProperty() : nullptr),
           IsFullScreen_(false)
     {
+    }
+
+    void GraphicsDeviceManager::ApplyChanges()
+    {
+        if (!GraphicsDevice_) {
+            SDL_Log("[WindowDebug] ApplyChanges: GraphicsDevice is null, skipping");
+            return;
+        }
+        SDL_Log("[Presentation] ApplyChanges: PreferredBackBufferWidth=%d PreferredBackBufferHeight=%d PresentationMode=%d",
+                PreferredBackBufferWidth_, PreferredBackBufferHeight_,
+                static_cast<int>(PreferredPresentationMode_));
+        GraphicsDevice_->SetPresentationMode(static_cast<int>(PreferredPresentationMode_));
+        GraphicsDevice_->SetVirtualResolution(PreferredBackBufferWidth_, PreferredBackBufferHeight_);
     }
 
     void GraphicsDeviceManager::ToggleFullScreen()

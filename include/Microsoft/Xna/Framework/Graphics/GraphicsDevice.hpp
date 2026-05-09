@@ -39,6 +39,11 @@ namespace Microsoft::Xna::Framework::Graphics {
         const VertexBuffer* currentVertexBuffer_ = nullptr;
         const IndexBuffer*  currentIndexBuffer_  = nullptr;
         BasicEffect*        currentEffect_       = nullptr;
+        /// The game's virtual (logical) resolution in pixels.
+        /// Derived from the SDL_CreateWindow request so it is set in one
+        /// place only; never re-hardcoded elsewhere in the backend layer.
+        int virtualWidth_  = 800;
+        int virtualHeight_ = 480;
 
     public:
         DEF_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0)
@@ -229,6 +234,15 @@ namespace Microsoft::Xna::Framework::Graphics {
         [[nodiscard]] SDL_Window* GetWindowInternal() const;
 
         void UpdateViewportFromWindow();
+
+        /// Called by GraphicsDeviceManager::ApplyChanges() to propagate
+        /// PreferredBackBufferWidth/Height into the backend logical presentation.
+        void SetVirtualResolution(int width, int height);
+
+        /// Called by GraphicsDeviceManager::ApplyChanges() to propagate
+        /// PreferredPresentationMode into the backend.
+        /// mode is the int value of PresentationMode / CnaPresentationMode.
+        void SetPresentationMode(int mode);
 
         friend class Texture2D;
         friend class SpriteBatch;

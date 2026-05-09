@@ -3,6 +3,7 @@
 #include "CNA/Internal/Input/InputManager.hpp"
 
 #include <algorithm>
+#include <string>
 #include <array>
 #include <optional>
 #include <unordered_map>
@@ -168,10 +169,26 @@ namespace {
         fingerIdToTouchId.erase(fingerId);
     }
 
-    Microsoft::Xna::Framework::Vector2 to_touch_pixel_position(const SDL_TouchFingerEvent& touchEvent) {
-        int width = 1;
-        int height = 1;
+    /// Converts window-space coordinates to logical (renderer) coordinates.
+    /// When SDL_SetRenderLogicalPresentation is active (letterbox on Android),
+    /// this maps physical coords into the game's virtual coordinate space.
+    /// Falls back to the raw coords if no renderer is available.
+    Microsoft::Xna::Framework::Vector2 to_logical_position(SDL_Window* window, float windowX, float windowY) {
+        if (window != nullptr) {
+            SDL_Renderer* renderer = SDL_GetRenderer(window);
+            if (renderer != nullptr) {
+                float logX = windowX, logY = windowY;
+                if (SDL_RenderCoordinatesFromWindow(renderer, windowX, windowY, &logX, &logY)) {
+                    SDL_Log("[Input] to_logical_position: window=(%.1f,%.1f) -> logical=(%.1f,%.1f)",
+                            windowX, windowY, logX, logY);
+                    return Microsoft::Xna::Framework::Vector2(logX, logY);
+                }
+            }
+        }
+        return Microsoft::Xna::Framework::Vector2(windowX, windowY);
+    }
 
+    Microsoft::Xna::Framework::Vector2 to_touch_pixel_position(const SDL_TouchFingerEvent& touchEvent) {
         SDL_Window* window = nullptr;
         if (touchEvent.windowID != 0) {
             window = SDL_GetWindowFromID(touchEvent.windowID);
@@ -180,29 +197,22 @@ namespace {
             window = SDL_GetMouseFocus();
         }
 
+        // SDL touch coords are normalized 0..1 relative to the window in points.
+        // Convert to window-point coordinates first, then map to logical coords.
+        int winW = 1, winH = 1;
         if (window != nullptr) {
-            int queriedWidth = 0;
-            int queriedHeight = 0;
-            if (SDL_GetWindowSizeInPixels(window, &queriedWidth, &queriedHeight)
-                || SDL_GetWindowSize(window, &queriedWidth, &queriedHeight)) {
-                if (queriedWidth > 0) {
-                    width = queriedWidth;
-                }
-                if (queriedHeight > 0) {
-                    height = queriedHeight;
-                }
-            }
+            SDL_GetWindowSize(window, &winW, &winH);
         }
+        const float windowX = touchEvent.x * static_cast<float>(winW);
+        const float windowY = touchEvent.y * static_cast<float>(winH);
 
-        return Microsoft::Xna::Framework::Vector2(
-            touchEvent.x * static_cast<float>(width),
-            touchEvent.y * static_cast<float>(height)
-        );
+        return to_logical_position(window, windowX, windowY);
     }
 
     std::optional<Microsoft::Xna::Framework::Input::Keys> try_convert_sdl_key(const SDL_Keycode keycode) {
         using Microsoft::Xna::Framework::Input::Keys;
         switch (keycode) {
+            case SDLK_AC_BACK: return Keys::Escape;
             case SDLK_LEFT: return Keys::Left;
             case SDLK_RIGHT: return Keys::Right;
             case SDLK_UP: return Keys::Up;
@@ -259,12 +269,13 @@ namespace {
 namespace CNA::Internal::Input {
     void SdlInputBridge::ProcessEvent(const SDL_Event& event) {
         switch (event.type) {
-            case SDL_EVENT_MOUSE_MOTION:
-                InputManager::SetMousePosition(
-                    static_cast<int>(event.motion.x),
-                    static_cast<int>(event.motion.y)
-                );
+            case SDL_EVENT_MOUSE_MOTION: {
+                SDL_Window* win = (event.motion.windowID != 0)
+                    ? SDL_GetWindowFromID(event.motion.windowID) : SDL_GetMouseFocus();
+                const auto pos = to_logical_position(win, event.motion.x, event.motion.y);
+                InputManager::SetMousePosition(static_cast<int>(pos.X), static_cast<int>(pos.Y));
                 break;
+            }
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
             case SDL_EVENT_MOUSE_BUTTON_UP: {
                 const auto state =
@@ -286,11 +297,12 @@ namespace CNA::Internal::Input {
                         break;
                 }
 
-                InputManager::SetMousePosition(
-                    static_cast<int>(event.button.x),
-                    static_cast<int>(event.button.y)
-                );
-
+                {
+                    SDL_Window* win = (event.button.windowID != 0)
+                        ? SDL_GetWindowFromID(event.button.windowID) : SDL_GetMouseFocus();
+                    const auto pos = to_logical_position(win, event.button.x, event.button.y);
+                    InputManager::SetMousePosition(static_cast<int>(pos.X), static_cast<int>(pos.Y));
+                }
                 break;
             }
             case SDL_EVENT_MOUSE_WHEEL:
@@ -305,12 +317,55 @@ namespace CNA::Internal::Input {
                 }
 
                 const auto key = try_convert_sdl_key(event.key.key);
+
+#ifdef __ANDROID__
+                {
+                    const char* evtName = (event.type == SDL_EVENT_KEY_DOWN) ? "KEY_DOWN" : "KEY_UP";
+                    const char* keyName = SDL_GetKeyName(event.key.key);
+                    if (key.has_value()) {
+                        SDL_Log("[Keyboard] SDL_%s scancode=%d keycode=%d (0x%x) keyname='%s' mod=0x%x -> XNA Keys=%d",
+                                evtName,
+                                static_cast<int>(event.key.scancode),
+                                static_cast<int>(event.key.key),
+                                static_cast<unsigned>(event.key.key),
+                                keyName ? keyName : "?",
+                                static_cast<unsigned>(event.key.mod),
+                                static_cast<int>(key.value()));
+                    } else {
+                        SDL_Log("[Keyboard] SDL_%s scancode=%d keycode=%d (0x%x) keyname='%s' mod=0x%x -> unmapped",
+                                evtName,
+                                static_cast<int>(event.key.scancode),
+                                static_cast<int>(event.key.key),
+                                static_cast<unsigned>(event.key.key),
+                                keyName ? keyName : "?",
+                                static_cast<unsigned>(event.key.mod));
+                    }
+                }
+#endif
+
                 if (!key.has_value()) {
                     break;
                 }
 
                 const bool pressed = event.type == SDL_EVENT_KEY_DOWN;
                 InputManager::SetKeyState(key.value(), pressed);
+
+#ifdef __ANDROID__
+                {
+                    const auto snapshot = CNA::Internal::Input::InputManager::GetKeyboardState();
+                    const auto allPressed = snapshot.GetPressedKeys();
+                    std::string keyList;
+                    for (const auto k : allPressed) {
+                        keyList += std::to_string(static_cast<int>(k));
+                        keyList += ' ';
+                    }
+                    SDL_Log("[Keyboard] KeyboardState updated: XNA Keys=%d pressed=%s | total pressed=%zu [%s]",
+                            static_cast<int>(key.value()),
+                            pressed ? "true" : "false",
+                            allPressed.size(),
+                            keyList.c_str());
+                }
+#endif
                 break;
             }
             case SDL_EVENT_FINGER_DOWN: {

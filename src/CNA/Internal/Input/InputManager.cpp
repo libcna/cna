@@ -3,9 +3,14 @@
 #include <algorithm>
 #include <array>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#ifdef __ANDROID__
+#include <SDL3/SDL.h>
+#endif
 
 namespace CNA::Internal::Input {
     namespace {
@@ -259,6 +264,17 @@ namespace CNA::Internal::Input {
 
     Microsoft::Xna::Framework::Input::KeyboardState InputManager::GetKeyboardState() {
         const auto& pressedKeys = getInternalInputState().PressedKeys;
+#ifdef __ANDROID__
+        if (!pressedKeys.empty()) {
+            std::string keyList;
+            for (const auto k : pressedKeys) {
+                keyList += std::to_string(static_cast<int>(k));
+                keyList += ' ';
+            }
+            SDL_Log("[Keyboard] GetKeyboardState: pressed=%zu [%s]",
+                    pressedKeys.size(), keyList.c_str());
+        }
+#endif
         return Microsoft::Xna::Framework::Input::KeyboardState(pressedKeys);
     }
 

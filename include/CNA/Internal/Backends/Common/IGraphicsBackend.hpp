@@ -102,6 +102,14 @@ namespace CNA::Internal::Backends {
         virtual void Clear(float r, float g, float b, float a) = 0;
         virtual void Present() = 0;
         virtual void GetViewportSize(int& width, int& height) = 0;
+        /// Updates the backend logical presentation size at runtime.
+        /// Called by GraphicsDevice::SetVirtualResolution() when
+        /// GraphicsDeviceManager::ApplyChanges() propagates a new
+        /// PreferredBackBufferWidth/Height from the game.
+        virtual void SetVirtualResolution(int width, int height) = 0;
+        /// Updates the backend presentation/scaling mode at runtime.
+        /// Called by GraphicsDevice when GraphicsDeviceManager::ApplyChanges() is used.
+        virtual void SetPresentationMode(int mode) = 0;
         // TODO: SDL dependency should be abstracted later
         virtual SDL_Window* GetWindowInternal() const = 0;
         virtual SDL_Renderer* GetRendererInternal() const = 0;
@@ -172,12 +180,50 @@ namespace CNA::Internal::Backends {
     };
 
     /**
+     * @brief Presentation/scaling policy used when the virtual (game-logic)
+     *        resolution differs from the physical surface size.
+     *
+     * Matches XNA/Windows Phone semantics:
+     * - Letterbox            – scale = min(surfW/virtW, surfH/virtH); adds bars.
+     * - Overscan             – scale = max(surfW/virtW, surfH/virtH); crops edges.
+     * - Stretch              – stretches to fill without preserving aspect ratio.
+     * - NativeBackBuffer     – no scaling; game draws at its requested size.
+     * - FixedHeightDynamicWidth – keeps the game's preferred height as the
+     *                            logical height and computes logical width from
+     *                            the actual surface aspect ratio:
+     *                              logicalW = round(outputW * preferredH / outputH)
+     *                            Then applies LETTERBOX so the computed canvas
+     *                            fills the surface perfectly (no bars, no crop).
+     *                            This matches XNA/Windows Phone behaviour where
+     *                            height=480 is fixed and wider devices simply
+     *                            show more horizontal content.
+     */
+    enum class CnaPresentationMode {
+        Letterbox             = 0,
+        Overscan              = 1,
+        Stretch               = 2,
+        NativeBackBuffer      = 3,
+        FixedHeightDynamicWidth = 4
+    };
+
+    /**
      * @brief Arguments for creating a graphics backend.
      * Currently minimal, but allows for easier extension.
      */
     struct GraphicsBackendCreateArgs {
         // TODO: SDL dependency should be abstracted later
         SDL_Window* window = nullptr;
+        /// Virtual (game-logic) resolution the backend should present at.
+        /// SDL_SetRenderLogicalPresentation will be set to this size so that
+        /// the game always draws in its own coordinate space and the backend
+        /// scales to the real surface automatically.
+        /// 0 means "unset"; the backend should ignore logical presentation.
+        int virtualWidth  = 0;
+        int virtualHeight = 0;
+        /// Presentation/scaling policy. Default is FixedHeightDynamicWidth:
+        /// keeps preferred height fixed and derives logical width from the
+        /// actual surface aspect ratio, matching XNA/Windows Phone behaviour.
+        CnaPresentationMode presentationMode = CnaPresentationMode::FixedHeightDynamicWidth;
     };
 
     // Factory function to be implemented by each backend

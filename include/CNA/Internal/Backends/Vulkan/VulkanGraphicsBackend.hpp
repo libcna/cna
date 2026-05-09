@@ -55,12 +55,28 @@ namespace CNA::Internal::Backends::Vulkan {
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
-        
+        void SetVirtualResolution(int width, int height) override {} // no-op: Vulkan uses physical viewport
+        void SetPresentationMode(int /*mode*/) override {}           // no-op: Vulkan has no logical presentation
+
         SDL_Window* GetWindowInternal() const override { return window; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+
+        // 3D pipeline: NOT supported by the Vulkan backend yet.
+        // @note Status: STUB. Every entry point throws std::runtime_error.
+        void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
+        void SetDepthTestEnabled(bool enabled) override;
+        std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
+        std::unique_ptr<IIndexBufferBackend>  CreateIndexBuffer16(int index_capacity) override;
+        void DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                   const Matrix& world, const Matrix& view, const Matrix& projection,
+                                   PrimitiveType primitive, int primitiveCount) override;
+        void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
+                                          const IIndexBufferBackend& ib,
+                                          const Matrix& world, const Matrix& view, const Matrix& projection,
+                                          PrimitiveType primitive, int primitiveCount) override;
 
     private:
         SDL_Window* window;

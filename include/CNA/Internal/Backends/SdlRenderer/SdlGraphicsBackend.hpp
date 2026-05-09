@@ -47,12 +47,18 @@ namespace CNA::Internal::Backends::SdlRenderer {
     public:
         SDL_Window* window = nullptr;
         SDL_Renderer* renderer = nullptr;
+        int logicalWidth  = 0;
+        int logicalHeight = 0;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Overscan;
 
-        explicit SdlGraphicsBackend(SDL_Window* window);
+        SdlGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
+                           CnaPresentationMode mode = CnaPresentationMode::Overscan);
         ~SdlGraphicsBackend() override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void SetVirtualResolution(int width, int height) override;
+        void SetPresentationMode(int mode) override;
         SDL_Window* GetWindowInternal() const override { return window; }
         SDL_Renderer* GetRendererInternal() const override { return renderer; }
 
