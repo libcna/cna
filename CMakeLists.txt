@@ -224,5 +224,26 @@ if(CNA_BUILD_TESTS)
     endif()
 
     include(GoogleTest)
-    gtest_discover_tests(CnaTests)
+    gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)
+
+    if(MINGW)
+        # Statically link MinGW runtime into the test binary too, so it can
+        # run outside CLion without libgcc_s_seh-1.dll / libstdc++-6.dll.
+        target_link_options(CnaTests PRIVATE -static-libgcc -static-libstdc++)
+        # libwinpthread-1.dll cannot be statically linked; copy it next to the exe.
+        cna_copy_mingw_runtime(CnaTests)
+    endif()
+
+    if(WIN32)
+        cna_copy_sdl_runtime(CnaTests)
+        foreach(_gtest_target IN ITEMS gtest gtest_main gmock gmock_main)
+            if(TARGET ${_gtest_target})
+                add_custom_command(TARGET CnaTests POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        $<TARGET_FILE:${_gtest_target}>
+                        $<TARGET_FILE_DIR:CnaTests>
+                    VERBATIM)
+            endif()
+        endforeach()
+    endif()
 endif()

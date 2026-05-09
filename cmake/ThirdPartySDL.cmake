@@ -86,6 +86,58 @@ function(cna_configure_vendored_sdl)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL_mixer EXCLUDE_FROM_ALL)
 endfunction()
 
+# Copy the MinGW threading runtime DLL (libwinpthread-1.dll) next to a target
+# executable on Windows/MinGW builds.  libgcc_s_seh-1.dll and libstdc++-6.dll
+# are handled by passing -static-libgcc / -static-libstdc++ at link time.
+# No-op on non-MinGW / non-Windows / Emscripten / Android.
+function(cna_copy_mingw_runtime target_name)
+    if(NOT MINGW)
+        return()
+    endif()
+    if(EMSCRIPTEN OR ANDROID)
+        return()
+    endif()
+
+    # Ask GCC where it stores libwinpthread-1.dll at configure time.
+    execute_process(
+        COMMAND "${CMAKE_C_COMPILER}" -print-file-name=libwinpthread-1.dll
+        OUTPUT_VARIABLE _pthread_dll
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+
+    # gcc returns just the bare name when it cannot find the file (no path separator).
+    if(_pthread_dll AND _pthread_dll MATCHES "[/\\\\]")
+        # Normalise to CMake path (forward slashes).
+        file(TO_CMAKE_PATH "${_pthread_dll}" _pthread_dll)
+        if(EXISTS "${_pthread_dll}")
+            add_custom_command(TARGET ${target_name} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_pthread_dll}"
+                    $<TARGET_FILE_DIR:${target_name}>
+                COMMENT "Copying libwinpthread-1.dll next to ${target_name}"
+                VERBATIM)
+        endif()
+    else()
+        # Fallback: search common MinGW bin directories relative to the compiler.
+        get_filename_component(_mingw_bin "${CMAKE_C_COMPILER}" DIRECTORY)
+        set(_pthread_fallback "${_mingw_bin}/libwinpthread-1.dll")
+        if(EXISTS "${_pthread_fallback}")
+            add_custom_command(TARGET ${target_name} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_pthread_fallback}"
+                    $<TARGET_FILE_DIR:${target_name}>
+                COMMENT "Copying libwinpthread-1.dll (fallback) next to ${target_name}"
+                VERBATIM)
+        else()
+            message(WARNING
+                "cna_copy_mingw_runtime: could not locate libwinpthread-1.dll. "
+                "Searched: '${_pthread_dll}' and '${_pthread_fallback}'. "
+                "The executable may fail to run on machines without MinGW installed.")
+        endif()
+    endif()
+endfunction()
+
 # Copy SDL shared libraries next to the target executable on Windows.
 # No-op on Emscripten (static wasm), Android (APK packaging), and non-Windows platforms.
 function(cna_copy_sdl_runtime target_name)
