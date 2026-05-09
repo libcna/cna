@@ -281,6 +281,83 @@ namespace Microsoft::Devices::Sensors {
         SensorBase<AccelerometerReading>::Dispose(disposing);
     }
 
+#ifdef __ANDROID__
+    /**
+     * Converts raw SDL3 accelerometer data (portrait device frame) to the XNA Windows
+     * Phone landscape coordinate convention expected by the game, for both allowed
+     * landscape rotations (sensorLandscape = ROTATION_90 or ROTATION_270).
+     *
+     * --- SDL3 / Android raw sensor coordinate system ---
+     * SDL3 on Android always delivers accelerometer values in the device's NATURAL
+     * (portrait) orientation, regardless of the current display rotation:
+     *   +X  right edge of device (portrait)
+     *   +Y  top  edge of device (portrait)
+     *   +Z  out of screen (toward the user)
+     * Values are already normalised to fractions of g before this function is called.
+     *
+     * --- sensorLandscape display orientation ---
+     * AndroidManifest.xml uses android:screenOrientation="sensorLandscape", which
+     * allows two rotations:
+     *
+     *   ROTATION_90  (SDL_ORIENTATION_LANDSCAPE):
+     *     Device rotated 90° CCW from portrait — portrait-top points landscape-LEFT.
+     *       Portrait +X → landscape DOWN,  Portrait +Y → landscape LEFT
+     *     Tilt right in landscape → portrait-Y goes down → rawY more negative.
+     *     To match WP7 (right tilt → xnaY > 0): xnaX = rawX, xnaY = -rawY, xnaZ = rawZ.
+     *
+     *   ROTATION_270 (SDL_ORIENTATION_LANDSCAPE_FLIPPED):
+     *     Device rotated 270° CCW from portrait — portrait-top points landscape-RIGHT.
+     *       Portrait +X → landscape UP,   Portrait +Y → landscape RIGHT
+     *     Tilt right in landscape → portrait-Y goes down → rawY more positive.
+     *     To match WP7 (right tilt → xnaY > 0): xnaX = -rawX, xnaY = rawY, xnaZ = rawZ.
+     *
+     * --- XNA / Windows Phone 7 expected coordinate system ---
+     *   Acceleration.Y > 0  →  tilt RIGHT (landscape screen right goes down)
+     *   Acceleration.Y < 0  →  tilt LEFT  (landscape screen left  goes down)
+     *   Acceleration.X      →  tilt forward/backward (landscape up/down)
+     *   Acceleration.Z      →  perpendicular to screen
+     *
+     * To fix a reversed tilt direction, adjust only the signs here — NOT in game code.
+     *
+     * @param rawX  SDL accelerometer X normalised to g.
+     * @param rawY  SDL accelerometer Y normalised to g.
+     * @param rawZ  SDL accelerometer Z normalised to g.
+     * @return      Acceleration vector in XNA landscape coordinate convention.
+     */
+    static Microsoft::Xna::Framework::Vector3 ConvertAndroidAccelerometerToXnaLandscape(
+        float rawX, float rawY, float rawZ)
+    {
+        const SDL_DisplayOrientation orient =
+            SDL_GetCurrentDisplayOrientation(SDL_GetPrimaryDisplay());
+
+        float xnaX, xnaY, xnaZ;
+
+        if (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED) {
+            // ROTATION_270: portrait-top → landscape-RIGHT.
+            // Tilt right → rawY positive; negate X to keep forward/back consistent.
+            xnaX = -rawX;
+            xnaY =  rawY;
+            xnaZ =  rawZ;
+        } else {
+            // ROTATION_90 (default / fallback): portrait-top → landscape-LEFT.
+            // Tilt right → rawY negative; negate Y to match WP7 convention.
+            xnaX =  rawX;
+            xnaY = -rawY;
+            xnaZ =  rawZ;
+        }
+
+#ifndef NDEBUG
+        const char* orientName =
+            (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED) ? "LANDSCAPE_FLIPPED(ROTATION_270)"
+                                                          : "LANDSCAPE(ROTATION_90)";
+        SDL_Log("[SpeedyBlupi][Accelerometer] displayRotation=%s raw=(%.3f,%.3f,%.3f) converted=(%.3f,%.3f,%.3f) orientation=sensorLandscape",
+                orientName, rawX, rawY, rawZ, xnaX, xnaY, xnaZ);
+#endif
+
+        return {xnaX, xnaY, xnaZ};
+    }
+#endif // __ANDROID__
+
     void Accelerometer::ProcessSensorUpdateEvent(
         std::int64_t sensorId,
         float x,
@@ -312,11 +389,20 @@ namespace Microsoft::Devices::Sensors {
         setIsDataValidProperty(valid);
 
         if (getIsDataValidProperty()) {
-            Microsoft::Xna::Framework::Vector3 acceleration(
+#ifdef __ANDROID__
+            // On Android, remap raw SDL portrait-frame axes to the XNA landscape
+            // convention so that the game layer remains platform-agnostic.
+            const Microsoft::Xna::Framework::Vector3 acceleration =
+                ConvertAndroidAccelerometerToXnaLandscape(
+                    x / StandardGravity,
+                    y / StandardGravity,
+                    z / StandardGravity);
+#else
+            const Microsoft::Xna::Framework::Vector3 acceleration(
                 x / StandardGravity,
                 y / StandardGravity,
-                z / StandardGravity
-            );
+                z / StandardGravity);
+#endif
 
             accelerometerReading.setAccelerationProperty(acceleration);
 
