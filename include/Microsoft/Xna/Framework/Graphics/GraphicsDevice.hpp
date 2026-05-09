@@ -40,10 +40,12 @@ namespace Microsoft::Xna::Framework::Graphics {
         const IndexBuffer*  currentIndexBuffer_  = nullptr;
         BasicEffect*        currentEffect_       = nullptr;
         /// The game's virtual (logical) resolution in pixels.
-        /// Derived from the SDL_CreateWindow request so it is set in one
-        /// place only; never re-hardcoded elsewhere in the backend layer.
-        int virtualWidth_  = 800;
-        int virtualHeight_ = 480;
+        /// Initialized to 0 (unspecified). The authoritative values come from
+        /// GraphicsDeviceManager::PreferredBackBufferWidth/Height propagated
+        /// via ApplyChanges() → SetVirtualResolution(). The SDL backend then
+        /// derives a physical-to-logical scale from these XNA-layer values.
+        int virtualWidth_  = 0;
+        int virtualHeight_ = 0;
 
     public:
         DEF_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0)

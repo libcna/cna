@@ -123,9 +123,11 @@ namespace Microsoft::Xna::Framework::Graphics {
 
         GraphicsBackendCreateArgs args;
         args.window = window_;
-        // Use the stored virtual resolution (set once from SDL_CreateWindow dims).
-        // GraphicsDeviceManager::ApplyChanges() may later call SetVirtualResolution()
-        // to override this with PreferredBackBufferWidth/Height from the game.
+        // Pass the current virtual resolution (XNA-layer state) to the backend.
+        // The authoritative source is GraphicsDeviceManager::PreferredBackBufferWidth/Height
+        // propagated via ApplyChanges() -> SetVirtualResolution(). At construction time
+        // virtualWidth_/virtualHeight_ are 0 (unspecified); the SDL backend handles 0
+        // by deferring logical presentation until SetVirtualResolution() is called.
         args.virtualWidth  = virtualWidth_;
         args.virtualHeight = virtualHeight_;
         SDL_Log("[WindowDebug] Backend virtual size: width=%d height=%d", args.virtualWidth, args.virtualHeight);
@@ -146,11 +148,23 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     void GraphicsDevice::UpdateViewportFromWindow()
     {
-        int width = 800;
-        int height = 600;
+        int width = 0;
+        int height = 0;
 
         if (backend_) {
             backend_->GetViewportSize(width, height);
+        }
+
+        if (width <= 0 || height <= 0) {
+            SDL_Log("[Viewport] Skipping zero-size viewport update (w=%d h=%d); keeping previous w=%d h=%d",
+                    width, height,
+                    Viewport_.getWidthProperty(), Viewport_.getHeightProperty());
+            return;
+        }
+
+        // Avoid log spam: only log and update when size actually changes.
+        if (width == Viewport_.getWidthProperty() && height == Viewport_.getHeightProperty()) {
+            return;
         }
 
         Viewport_.x = 0;
@@ -182,8 +196,10 @@ namespace Microsoft::Xna::Framework::Graphics {
     void GraphicsDevice::Present()
     {
         if (backend_) {
-            UpdateViewportFromWindow();
+            // Present first; the backend may re-apply logical presentation
+            // (e.g. on Android surface resize), then read the updated viewport.
             backend_->Present();
+            UpdateViewportFromWindow();
         }
     }
 

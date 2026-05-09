@@ -248,6 +248,21 @@ namespace CNA::Internal::Backends::SdlRenderer {
     }
 
     void SdlGraphicsBackend::Present() {
+        // Re-apply logical presentation whenever the physical output size changes.
+        // On Android the surface may be 0x0 at construction time; by re-checking
+        // here we pick up the valid size as soon as it becomes available.
+        if (renderer && logicalHeight > 0) {
+            int outputW = 0, outputH = 0;
+            SDL_GetRenderOutputSize(renderer, &outputW, &outputH);
+            if (outputW > 0 && outputH > 0 &&
+                (outputW != lastOutputW_ || outputH != lastOutputH_)) {
+                SDL_Log("[Renderer] Output size changed: %dx%d -> %dx%d, re-applying logical presentation",
+                        lastOutputW_, lastOutputH_, outputW, outputH);
+                lastOutputW_ = outputW;
+                lastOutputH_ = outputH;
+                applyLogicalPresentation(renderer, logicalWidth, logicalHeight, presentationMode_);
+            }
+        }
         if (!SDL_RenderPresent(renderer)) {
             throw std::runtime_error(std::string("SDL_RenderPresent failed: ") + SDL_GetError());
         }
@@ -270,6 +285,19 @@ namespace CNA::Internal::Backends::SdlRenderer {
     }
 
     void SdlGraphicsBackend::GetViewportSize(int& width, int& height) {
+        // If virtual resolution was never configured, fall back to the physical
+        // output size so the game at least gets a valid non-zero viewport.
+        if ((logicalWidth <= 0 || logicalHeight <= 0) && renderer) {
+            int outputW = 0, outputH = 0;
+            SDL_GetRenderOutputSize(renderer, &outputW, &outputH);
+            if (outputW > 0 && outputH > 0) {
+                SDL_Log("[Renderer] GetViewportSize: virtual size unset, falling back to physical %dx%d",
+                        outputW, outputH);
+                width  = outputW;
+                height = outputH;
+                return;
+            }
+        }
         // Return the logical (virtual) resolution, not the physical surface size.
         // SDL_SetRenderLogicalPresentation handles the physical-to-logical mapping,
         // so the game always works in its own coordinate space.

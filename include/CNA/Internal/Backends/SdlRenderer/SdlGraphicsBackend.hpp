@@ -49,6 +49,8 @@ namespace CNA::Internal::Backends::SdlRenderer {
         SDL_Renderer* renderer = nullptr;
         int logicalWidth  = 0;
         int logicalHeight = 0;
+        int lastOutputW_  = 0;  ///< last known renderer output width; used to detect Android surface resize
+        int lastOutputH_  = 0;  ///< last known renderer output height
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Overscan;
 
         SdlGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,

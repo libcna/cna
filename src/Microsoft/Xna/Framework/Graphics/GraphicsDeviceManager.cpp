@@ -48,6 +48,12 @@ namespace Microsoft::Xna::Framework::Graphics {
           GraphicsDevice_(game ? &game->getGraphicsDeviceProperty() : nullptr),
           IsFullScreen_(false)
     {
+        // Apply default preferred settings (backbuffer size, presentation mode)
+        // immediately so the backend has a valid logical resolution from the start.
+        // In XNA, GraphicsDeviceManager owns device creation and applies settings
+        // automatically; games should not need to call ApplyChanges() manually
+        // just to get a working initial viewport.
+        ApplyChanges();
     }
 
     void GraphicsDeviceManager::ApplyChanges()
