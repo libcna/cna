@@ -179,8 +179,7 @@ namespace {
             if (renderer != nullptr) {
                 float logX = windowX, logY = windowY;
                 if (SDL_RenderCoordinatesFromWindow(renderer, windowX, windowY, &logX, &logY)) {
-                    SDL_Log("[Input] to_logical_position: window=(%.1f,%.1f) -> logical=(%.1f,%.1f)",
-                            windowX, windowY, logX, logY);
+                    //SDL_Log("[Input] to_logical_position: window=(%.1f,%.1f) -> logical=(%.1f,%.1f)", windowX, windowY, logX, logY);
                     return Microsoft::Xna::Framework::Vector2(logX, logY);
                 }
             }
@@ -260,6 +259,11 @@ namespace {
             case SDLK_7: return Keys::D7;
             case SDLK_8: return Keys::D8;
             case SDLK_9: return Keys::D9;
+            case SDLK_F5: return Keys::F5;
+            case SDLK_F6: return Keys::F6;
+            case SDLK_F7: return Keys::F7;
+            case SDLK_F8: return Keys::F8;
+            case SDLK_F12: return Keys::F12;
             case SDLK_F11: return Keys::F11;
             default: return std::nullopt;
         }
