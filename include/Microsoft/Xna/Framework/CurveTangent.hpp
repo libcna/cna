@@ -2,16 +2,16 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Defines how tangents are computed for curve keys.
+    /// Defines how tangents are calculated for CurveKey points.
     enum class CurveTangent
     {
         /// Tangent is always zero.
         Flat,
 
-        /// Tangent is based on the value difference to a neighboring key.
+        /// Tangent is based on the neighboring key value difference.
         Linear,
 
-        /// Tangent is smoothed using the values and positions of neighboring keys.
+        /// Tangent is smoothed using the neighboring keys.
         Smooth
     };
 }

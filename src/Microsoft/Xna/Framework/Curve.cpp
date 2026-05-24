@@ -4,102 +4,99 @@
 #include <limits>
 #include <stdexcept>
 
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
+
 namespace Microsoft::Xna::Framework
 {
-    namespace
+    bool Curve::getIsConstantProperty() const
     {
-        float MachineEpsilonFloat()
-        {
-            static const float epsilon = []()
-            {
-                float machineEpsilon = 1.0f;
-                float comparison = 0.0f;
-                do
-                {
-                    machineEpsilon *= 0.5f;
-                    comparison = 1.0f + machineEpsilon;
-                }
-                while (comparison > 1.0f);
-                return machineEpsilon;
-            }();
-            return epsilon;
-        }
+        return keys.getCountProperty() <= 1;
+    }
 
-        bool WithinEpsilon(float a, float b)
-        {
-            return std::fabs(a - b) < MachineEpsilonFloat();
-        }
+    CurveKeyCollection& Curve::getKeysProperty()
+    {
+        return keys;
+    }
 
-        bool WithinSingleEpsilon(float value)
-        {
-            return std::fabs(value) < std::numeric_limits<float>::denorm_min();
-        }
+    const CurveKeyCollection& Curve::getKeysProperty() const
+    {
+        return keys;
+    }
+
+    CurveLoopType Curve::getPostLoopProperty() const
+    {
+        return postLoop;
+    }
+
+    void Curve::setPostLoopProperty(CurveLoopType value)
+    {
+        postLoop = value;
+    }
+
+    CurveLoopType Curve::getPreLoopProperty() const
+    {
+        return preLoop;
+    }
+
+    void Curve::setPreLoopProperty(CurveLoopType value)
+    {
+        preLoop = value;
     }
 
     Curve::Curve()
-        : Keys(), PostLoop(CurveLoopType::Constant), PreLoop(CurveLoopType::Constant)
+        : keys(), postLoop(CurveLoopType::Constant), preLoop(CurveLoopType::Constant)
     {
     }
 
     Curve::Curve(const CurveKeyCollection& keys)
-        : Keys(keys), PostLoop(CurveLoopType::Constant), PreLoop(CurveLoopType::Constant)
+        : keys(keys), postLoop(CurveLoopType::Constant), preLoop(CurveLoopType::Constant)
     {
-    }
-
-    bool Curve::IsConstant() const
-    {
-        return Keys.Count() <= 1;
-    }
-
-    bool Curve::getIsConstantProperty() const
-    {
-        return IsConstant();
     }
 
     Curve Curve::Clone() const
     {
-        Curve curve(Keys.Clone());
-        curve.PreLoop = PreLoop;
-        curve.PostLoop = PostLoop;
+        Curve curve(keys.Clone());
+        curve.setPreLoopProperty(preLoop);
+        curve.setPostLoopProperty(postLoop);
         return curve;
     }
 
     float Curve::Evaluate(float position) const
     {
-        if (Keys.Count() == 0)
+        if (keys.getCountProperty() == 0)
         {
             return 0.0f;
         }
-        if (Keys.Count() == 1)
+        if (keys.getCountProperty() == 1)
         {
-            return Keys[0].Value;
+            return keys.getItemProperty(0).getValueProperty();
         }
 
-        const CurveKey& first = Keys[0];
-        const CurveKey& last = Keys[Keys.Count() - 1];
+        const CurveKey& first = keys.getItemProperty(0);
+        const CurveKey& last = keys.getItemProperty(keys.getCountProperty() - 1);
 
-        if (position < first.Position)
+        if (position < first.getPositionProperty())
         {
-            switch (PreLoop)
+            switch (preLoop)
             {
                 case CurveLoopType::Constant:
-                    return first.Value;
+                    return first.getValueProperty();
 
                 case CurveLoopType::Linear:
-                    return first.Value - first.TangentIn * (first.Position - position);
+                    return first.getValueProperty() - first.getTangentInProperty() * (first.getPositionProperty() - position);
 
                 case CurveLoopType::Cycle:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    const float virtualPos = position - (cycle * (last.Position - first.Position));
+                    const float virtualPos = position - (cycle * (last.getPositionProperty() - first.getPositionProperty()));
                     return GetCurvePosition(virtualPos);
                 }
 
                 case CurveLoopType::CycleOffset:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    const float virtualPos = position - (cycle * (last.Position - first.Position));
-                    return GetCurvePosition(virtualPos) + cycle * (last.Value - first.Value);
+                    const float virtualPos = position - (cycle * (last.getPositionProperty() - first.getPositionProperty()));
+                    return GetCurvePosition(virtualPos) + cycle * (last.getValueProperty() - first.getValueProperty());
                 }
 
                 case CurveLoopType::Oscillate:
@@ -108,47 +105,47 @@ namespace Microsoft::Xna::Framework
                     float virtualPos = 0.0f;
                     if (cycle % 2 == 0)
                     {
-                        virtualPos = position - (cycle * (last.Position - first.Position));
+                        virtualPos = position - (cycle * (last.getPositionProperty() - first.getPositionProperty()));
                     }
                     else
                     {
-                        virtualPos = last.Position - position + first.Position + (cycle * (last.Position - first.Position));
+                        virtualPos = last.getPositionProperty() - position + first.getPositionProperty() + (cycle * (last.getPositionProperty() - first.getPositionProperty()));
                     }
                     return GetCurvePosition(virtualPos);
                 }
             }
         }
-        else if (position > last.Position)
+        else if (position > last.getPositionProperty())
         {
-            switch (PostLoop)
+            switch (postLoop)
             {
                 case CurveLoopType::Constant:
-                    return last.Value;
+                    return last.getValueProperty();
 
                 case CurveLoopType::Linear:
-                    return last.Value + first.TangentOut * (position - last.Position);
+                    return last.getValueProperty() + first.getTangentOutProperty() * (position - last.getPositionProperty());
 
                 case CurveLoopType::Cycle:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    const float virtualPos = position - (cycle * (last.Position - first.Position));
+                    const float virtualPos = position - (cycle * (last.getPositionProperty() - first.getPositionProperty()));
                     return GetCurvePosition(virtualPos);
                 }
 
                 case CurveLoopType::CycleOffset:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    const float virtualPos = position - (cycle * (last.Position - first.Position));
-                    return GetCurvePosition(virtualPos) + cycle * (last.Value - first.Value);
+                    const float virtualPos = position - (cycle * (last.getPositionProperty() - first.getPositionProperty()));
+                    return GetCurvePosition(virtualPos) + cycle * (last.getValueProperty() - first.getValueProperty());
                 }
 
                 case CurveLoopType::Oscillate:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    float virtualPos = position - (cycle * (last.Position - first.Position));
+                    float virtualPos = position - (cycle * (last.getPositionProperty() - first.getPositionProperty()));
                     if (cycle % 2 != 0)
                     {
-                        virtualPos = last.Position - position + first.Position + (cycle * (last.Position - first.Position));
+                        virtualPos = last.getPositionProperty() - position + first.getPositionProperty() + (cycle * (last.getPositionProperty() - first.getPositionProperty()));
                     }
                     return GetCurvePosition(virtualPos);
                 }
@@ -165,7 +162,7 @@ namespace Microsoft::Xna::Framework
 
     void Curve::ComputeTangents(CurveTangent tangentInType, CurveTangent tangentOutType)
     {
-        for (int i = 0; i < Keys.Count(); i += 1)
+        for (int i = 0; i < keys.getCountProperty(); i += 1)
         {
             ComputeTangent(i, tangentInType, tangentOutType);
         }
@@ -178,53 +175,53 @@ namespace Microsoft::Xna::Framework
 
     void Curve::ComputeTangent(int keyIndex, CurveTangent tangentInType, CurveTangent tangentOutType)
     {
-        if (keyIndex < 0 || keyIndex >= Keys.Count())
+        if (keyIndex < 0 || keyIndex >= keys.getCountProperty())
         {
             throw std::out_of_range("Curve keyIndex is out of range");
         }
 
-        CurveKey& key = Keys[keyIndex];
+        CurveKey& key = keys.getItemProperty(keyIndex);
 
-        float p0 = key.Position;
-        float p = key.Position;
-        float p1 = key.Position;
+        float p0 = key.getPositionProperty();
+        float p = key.getPositionProperty();
+        float p1 = key.getPositionProperty();
 
-        float v0 = key.Value;
-        float v = key.Value;
-        float v1 = key.Value;
+        float v0 = key.getValueProperty();
+        float v = key.getValueProperty();
+        float v1 = key.getValueProperty();
 
         if (keyIndex > 0)
         {
-            p0 = Keys[keyIndex - 1].Position;
-            v0 = Keys[keyIndex - 1].Value;
+            p0 = keys.getItemProperty(keyIndex - 1).getPositionProperty();
+            v0 = keys.getItemProperty(keyIndex - 1).getValueProperty();
         }
 
-        if (keyIndex < Keys.Count() - 1)
+        if (keyIndex < keys.getCountProperty() - 1)
         {
-            p1 = Keys[keyIndex + 1].Position;
-            v1 = Keys[keyIndex + 1].Value;
+            p1 = keys.getItemProperty(keyIndex + 1).getPositionProperty();
+            v1 = keys.getItemProperty(keyIndex + 1).getValueProperty();
         }
 
         switch (tangentInType)
         {
             case CurveTangent::Flat:
-                key.TangentIn = 0.0f;
+                key.setTangentInProperty(0.0f);
                 break;
 
             case CurveTangent::Linear:
-                key.TangentIn = v - v0;
+                key.setTangentInProperty(v - v0);
                 break;
 
             case CurveTangent::Smooth:
             {
                 const float pn = p1 - p0;
-                if (WithinEpsilon(pn, 0.0f))
+                if (MathHelper::WithinEpsilon(pn, 0.0f))
                 {
-                    key.TangentIn = 0.0f;
+                    key.setTangentInProperty(0.0f);
                 }
                 else
                 {
-                    key.TangentIn = (v1 - v0) * ((p - p0) / pn);
+                    key.setTangentInProperty((v1 - v0) * ((p - p0) / pn));
                 }
                 break;
             }
@@ -233,23 +230,23 @@ namespace Microsoft::Xna::Framework
         switch (tangentOutType)
         {
             case CurveTangent::Flat:
-                key.TangentOut = 0.0f;
+                key.setTangentOutProperty(0.0f);
                 break;
 
             case CurveTangent::Linear:
-                key.TangentOut = v1 - v;
+                key.setTangentOutProperty(v1 - v);
                 break;
 
             case CurveTangent::Smooth:
             {
                 const float pn = p1 - p0;
-                if (WithinSingleEpsilon(pn))
+                if (std::fabs(pn) < std::numeric_limits<float>::denorm_min())
                 {
-                    key.TangentOut = 0.0f;
+                    key.setTangentOutProperty(0.0f);
                 }
                 else
                 {
-                    key.TangentOut = (v1 - v0) * ((p1 - p) / pn);
+                    key.setTangentOutProperty((v1 - v0) * ((p1 - p) / pn));
                 }
                 break;
             }
@@ -258,8 +255,9 @@ namespace Microsoft::Xna::Framework
 
     int Curve::GetNumberOfCycle(float position) const
     {
-        float cycle = (position - Keys[0].Position) /
-            (Keys[Keys.Count() - 1].Position - Keys[0].Position);
+        const CurveKey& first = keys.getItemProperty(0);
+        const CurveKey& last = keys.getItemProperty(keys.getCountProperty() - 1);
+        float cycle = (position - first.getPositionProperty()) / (last.getPositionProperty() - first.getPositionProperty());
         if (cycle < 0.0f)
         {
             cycle -= 1.0f;
@@ -269,29 +267,29 @@ namespace Microsoft::Xna::Framework
 
     float Curve::GetCurvePosition(float position) const
     {
-        CurveKey prev = Keys[0];
-        for (int i = 1; i < Keys.Count(); i += 1)
+        CurveKey prev = keys.getItemProperty(0);
+        for (int i = 1; i < keys.getCountProperty(); i += 1)
         {
-            const CurveKey& next = Keys[i];
-            if (next.Position >= position)
+            CurveKey next = keys.getItemProperty(i);
+            if (next.getPositionProperty() >= position)
             {
-                if (prev.Continuity == CurveContinuity::Step)
+                if (prev.getContinuityProperty() == CurveContinuity::Step)
                 {
                     if (position >= 1.0f)
                     {
-                        return next.Value;
+                        return next.getValueProperty();
                     }
-                    return prev.Value;
+                    return prev.getValueProperty();
                 }
 
-                const float t = (position - prev.Position) / (next.Position - prev.Position);
+                const float t = (position - prev.getPositionProperty()) / (next.getPositionProperty() - prev.getPositionProperty());
                 const float ts = t * t;
                 const float tss = ts * t;
 
-                return ((2.0f * tss - 3.0f * ts + 1.0f) * prev.Value) +
-                       ((tss - 2.0f * ts + t) * prev.TangentOut) +
-                       ((3.0f * ts - 2.0f * tss) * next.Value) +
-                       ((tss - ts) * next.TangentIn);
+                return (2.0f * tss - 3.0f * ts + 1.0f) * prev.getValueProperty() +
+                       (tss - 2.0f * ts + t) * prev.getTangentOutProperty() +
+                       (3.0f * ts - 2.0f * tss) * next.getValueProperty() +
+                       (tss - ts) * next.getTangentInProperty();
             }
             prev = next;
         }

@@ -6,25 +6,27 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// A collection of CurveKey control points that can be evaluated as a one-dimensional curve.
+    /// Collection of CurveKey points that can be evaluated as a curve.
     class Curve
     {
     public:
-        /// The collection of keys that define this curve.
-        CurveKeyCollection Keys;
+        /// Gets true when this curve has zero or one keys.
+        [[nodiscard]] bool getIsConstantProperty() const;
 
-        /// Loop behavior for positions after the last key.
-        CurveLoopType PostLoop;
+        /// Gets the collection of curve keys.
+        [[nodiscard]] CurveKeyCollection& getKeysProperty();
+        [[nodiscard]] const CurveKeyCollection& getKeysProperty() const;
 
-        /// Loop behavior for positions before the first key.
-        CurveLoopType PreLoop;
+        /// Gets or sets how values after the last control point are handled.
+        [[nodiscard]] CurveLoopType getPostLoopProperty() const;
+        void setPostLoopProperty(CurveLoopType value);
+
+        /// Gets or sets how values before the first control point are handled.
+        [[nodiscard]] CurveLoopType getPreLoopProperty() const;
+        void setPreLoopProperty(CurveLoopType value);
 
         /// Constructs an empty curve.
         Curve();
-
-        /// Returns true when the curve has zero or one key.
-        [[nodiscard]] bool IsConstant() const;
-        [[nodiscard]] bool getIsConstantProperty() const;
 
         /// Creates a copy of this curve.
         [[nodiscard]] Curve Clone() const;
@@ -32,16 +34,16 @@ namespace Microsoft::Xna::Framework
         /// Evaluates the curve value at the given position.
         [[nodiscard]] float Evaluate(float position) const;
 
-        /// Computes matching in/out tangents for every key.
+        /// Computes matching in/out tangents for all keys.
         void ComputeTangents(CurveTangent tangentType);
 
-        /// Computes in/out tangents for every key using separate tangent modes.
+        /// Computes separate in/out tangents for all keys.
         void ComputeTangents(CurveTangent tangentInType, CurveTangent tangentOutType);
 
         /// Computes matching in/out tangents for a single key.
         void ComputeTangent(int keyIndex, CurveTangent tangentType);
 
-        /// Computes in/out tangents for a single key using separate tangent modes.
+        /// Computes separate in/out tangents for a single key.
         void ComputeTangent(int keyIndex, CurveTangent tangentInType, CurveTangent tangentOutType);
 
     private:
@@ -49,5 +51,9 @@ namespace Microsoft::Xna::Framework
 
         [[nodiscard]] int GetNumberOfCycle(float position) const;
         [[nodiscard]] float GetCurvePosition(float position) const;
+
+        CurveKeyCollection keys;
+        CurveLoopType postLoop;
+        CurveLoopType preLoop;
     };
 }

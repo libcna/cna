@@ -1,29 +1,31 @@
 #pragma once
 
-#include <string>
-
 #include "Microsoft/Xna/Framework/CurveContinuity.hpp"
 
 namespace Microsoft::Xna::Framework
 {
-    /// Represents one control point on a Curve.
+    /// Key point on a Curve.
     class CurveKey
     {
     public:
-        /// Position of this key on the curve.
-        float Position;
+        /// Gets or sets whether the segment between this key and the next key is smooth or stepped.
+        [[nodiscard]] CurveContinuity getContinuityProperty() const;
+        void setContinuityProperty(CurveContinuity value);
 
-        /// Value stored at this key.
-        float Value;
+        /// Gets the position of this key on the curve.
+        [[nodiscard]] float getPositionProperty() const;
 
-        /// Tangent used when approaching this key from the previous key.
-        float TangentIn;
+        /// Gets or sets the tangent used when approaching this key from the previous key.
+        [[nodiscard]] float getTangentInProperty() const;
+        void setTangentInProperty(float value);
 
-        /// Tangent used when leaving this key toward the next key.
-        float TangentOut;
+        /// Gets or sets the tangent used when leaving this key toward the next key.
+        [[nodiscard]] float getTangentOutProperty() const;
+        void setTangentOutProperty(float value);
 
-        /// Determines whether the segment after this key is smooth or stepped.
-        CurveContinuity Continuity;
+        /// Gets or sets the value of this key.
+        [[nodiscard]] float getValueProperty() const;
+        void setValueProperty(float value);
 
         /// Creates a key with zero tangents and smooth continuity.
         CurveKey(float position, float value);
@@ -37,16 +39,23 @@ namespace Microsoft::Xna::Framework
         /// Creates a copy of this key.
         [[nodiscard]] CurveKey Clone() const;
 
-        /// Compares this key's position with another key's position.
+        /// Compares this key position with another key position.
         [[nodiscard]] int CompareTo(const CurveKey& other) const;
 
         /// Compares this key with another key.
         [[nodiscard]] bool Equals(const CurveKey& other) const;
 
-        /// Returns a hash code based on this key's fields.
+        /// Gets a hash code from the key fields.
         [[nodiscard]] int GetHashCode() const;
 
         friend bool operator==(const CurveKey& a, const CurveKey& b);
         friend bool operator!=(const CurveKey& a, const CurveKey& b);
+
+    private:
+        float position;
+        float value;
+        float tangentIn;
+        float tangentOut;
+        CurveContinuity continuity;
     };
 }

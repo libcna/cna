@@ -6,7 +6,7 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Ordered collection of CurveKey values used by Curve.
+    /// Collection of CurveKey elements used by Curve.
     class CurveKeyCollection
     {
     public:
@@ -14,28 +14,30 @@ namespace Microsoft::Xna::Framework
         using iterator = container_type::iterator;
         using const_iterator = container_type::const_iterator;
 
-        /// Creates an empty key collection.
-        CurveKeyCollection();
-
-        /// Returns the number of keys in the collection.
-        [[nodiscard]] int Count() const;
+        /// Gets the number of keys in the collection.
         [[nodiscard]] int getCountProperty() const;
 
-        /// Returns whether the collection is read-only.
-        [[nodiscard]] bool IsReadOnly() const;
+        /// Gets whether the collection is read-only.
         [[nodiscard]] bool getIsReadOnlyProperty() const;
 
-        /// Accesses a key by index.
+        /// Gets a key by index.
+        [[nodiscard]] CurveKey& getItemProperty(int index);
+        [[nodiscard]] const CurveKey& getItemProperty(int index) const;
+
+        /// Sets a key by index while preserving position ordering.
+        void setItemProperty(int index, const CurveKey& value);
+
+        /// C++ indexer equivalent for the C# collection indexer.
         [[nodiscard]] CurveKey& operator[](int index);
         [[nodiscard]] const CurveKey& operator[](int index) const;
 
-        /// Replaces a key and keeps the collection ordered by position.
-        void Set(int index, const CurveKey& value);
+        /// Creates an empty key collection.
+        CurveKeyCollection();
 
-        /// Adds a key while preserving ascending Position order.
+        /// Adds a key while preserving ascending position order.
         void Add(const CurveKey& item);
 
-        /// Removes all keys.
+        /// Removes all keys from the collection.
         void Clear();
 
         /// Creates a copy of this collection.
@@ -44,10 +46,10 @@ namespace Microsoft::Xna::Framework
         /// Returns true if the collection contains the given key.
         [[nodiscard]] bool Contains(const CurveKey& item) const;
 
-        /// Copies keys into an existing vector starting at arrayIndex.
+        /// Copies keys into an existing vector starting at the specified array index.
         void CopyTo(std::vector<CurveKey>& array, int arrayIndex) const;
 
-        /// Returns the index of the key, or -1 if it is not present.
+        /// Finds a key and returns its index, or -1 when it is not present.
         [[nodiscard]] int IndexOf(const CurveKey& item) const;
 
         /// Removes the first matching key.

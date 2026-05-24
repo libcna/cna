@@ -1,91 +1,51 @@
 #include "Microsoft/Xna/Framework/CurveKeyCollection.hpp"
 
 #include <algorithm>
-#include <cmath>
-#include <limits>
 #include <stdexcept>
+
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 
 namespace Microsoft::Xna::Framework
 {
-    namespace
-    {
-        float MachineEpsilonFloat()
-        {
-            static const float epsilon = []()
-            {
-                float machineEpsilon = 1.0f;
-                float comparison = 0.0f;
-                do
-                {
-                    machineEpsilon *= 0.5f;
-                    comparison = 1.0f + machineEpsilon;
-                }
-                while (comparison > 1.0f);
-                return machineEpsilon;
-            }();
-            return epsilon;
-        }
-
-        bool WithinEpsilon(float a, float b)
-        {
-            return std::fabs(a - b) < MachineEpsilonFloat();
-        }
-    }
-
-    CurveKeyCollection::CurveKeyCollection()
-        : isReadOnly(false), innerlist()
-    {
-    }
-
-    int CurveKeyCollection::Count() const
+    int CurveKeyCollection::getCountProperty() const
     {
         return static_cast<int>(innerlist.size());
     }
 
-    int CurveKeyCollection::getCountProperty() const
-    {
-        return Count();
-    }
-
-    bool CurveKeyCollection::IsReadOnly() const
+    bool CurveKeyCollection::getIsReadOnlyProperty() const
     {
         return isReadOnly;
     }
 
-    bool CurveKeyCollection::getIsReadOnlyProperty() const
+    CurveKey& CurveKeyCollection::getItemProperty(int index)
     {
-        return IsReadOnly();
-    }
-
-    CurveKey& CurveKeyCollection::operator[](int index)
-    {
-        if (index < 0 || index >= Count())
+        if (index < 0 || index >= getCountProperty())
         {
             throw std::out_of_range("CurveKeyCollection index is out of range");
         }
         return innerlist[static_cast<std::size_t>(index)];
     }
 
-    const CurveKey& CurveKeyCollection::operator[](int index) const
+    const CurveKey& CurveKeyCollection::getItemProperty(int index) const
     {
-        if (index < 0 || index >= Count())
+        if (index < 0 || index >= getCountProperty())
         {
             throw std::out_of_range("CurveKeyCollection index is out of range");
         }
         return innerlist[static_cast<std::size_t>(index)];
     }
 
-    void CurveKeyCollection::Set(int index, const CurveKey& value)
+    void CurveKeyCollection::setItemProperty(int index, const CurveKey& value)
     {
-        if (index < 0 || index >= Count())
+        if (index < 0 || index >= getCountProperty())
         {
             throw std::out_of_range("CurveKeyCollection index is out of range");
         }
 
-        const std::size_t sizeIndex = static_cast<std::size_t>(index);
-        if (WithinEpsilon(innerlist[sizeIndex].Position, value.Position))
+        auto position = innerlist[static_cast<std::size_t>(index)].getPositionProperty();
+        if (MathHelper::WithinEpsilon(position, value.getPositionProperty()))
         {
-            innerlist[sizeIndex] = value;
+            innerlist[static_cast<std::size_t>(index)] = value;
         }
         else
         {
@@ -94,17 +54,39 @@ namespace Microsoft::Xna::Framework
         }
     }
 
+    CurveKey& CurveKeyCollection::operator[](int index)
+    {
+        return getItemProperty(index);
+    }
+
+    const CurveKey& CurveKeyCollection::operator[](int index) const
+    {
+        return getItemProperty(index);
+    }
+
+    CurveKeyCollection::CurveKeyCollection()
+        : isReadOnly(false), innerlist()
+    {
+    }
+
     void CurveKeyCollection::Add(const CurveKey& item)
     {
-        auto insertPosition = std::find_if(
-            innerlist.begin(),
-            innerlist.end(),
-            [&item](const CurveKey& key)
+        if (innerlist.empty())
+        {
+            innerlist.push_back(item);
+            return;
+        }
+
+        for (auto it = innerlist.begin(); it != innerlist.end(); ++it)
+        {
+            if (item.getPositionProperty() < it->getPositionProperty())
             {
-                return item.Position < key.Position;
+                innerlist.insert(it, item);
+                return;
             }
-        );
-        innerlist.insert(insertPosition, item);
+        }
+
+        innerlist.push_back(item);
     }
 
     void CurveKeyCollection::Clear()
@@ -114,12 +96,12 @@ namespace Microsoft::Xna::Framework
 
     CurveKeyCollection CurveKeyCollection::Clone() const
     {
-        CurveKeyCollection result;
+        CurveKeyCollection ckc;
         for (const CurveKey& key : innerlist)
         {
-            result.Add(key);
+            ckc.Add(key);
         }
-        return result;
+        return ckc;
     }
 
     bool CurveKeyCollection::Contains(const CurveKey& item) const
@@ -131,13 +113,14 @@ namespace Microsoft::Xna::Framework
     {
         if (arrayIndex < 0)
         {
-            throw std::out_of_range("arrayIndex cannot be negative");
+            throw std::out_of_range("arrayIndex is out of range");
         }
 
-        const std::size_t start = static_cast<std::size_t>(arrayIndex);
-        if (array.size() < start + innerlist.size())
+        const auto start = static_cast<std::size_t>(arrayIndex);
+        const auto requiredSize = start + innerlist.size();
+        if (array.size() < requiredSize)
         {
-            throw std::out_of_range("Destination vector is too small");
+            throw std::out_of_range("Destination array is too small");
         }
 
         std::copy(innerlist.begin(), innerlist.end(), array.begin() + arrayIndex);
@@ -145,7 +128,7 @@ namespace Microsoft::Xna::Framework
 
     int CurveKeyCollection::IndexOf(const CurveKey& item) const
     {
-        auto it = std::find(innerlist.begin(), innerlist.end(), item);
+        const auto it = std::find(innerlist.begin(), innerlist.end(), item);
         if (it == innerlist.end())
         {
             return -1;
@@ -155,7 +138,7 @@ namespace Microsoft::Xna::Framework
 
     bool CurveKeyCollection::Remove(const CurveKey& item)
     {
-        auto it = std::find(innerlist.begin(), innerlist.end(), item);
+        const auto it = std::find(innerlist.begin(), innerlist.end(), item);
         if (it == innerlist.end())
         {
             return false;
@@ -166,7 +149,7 @@ namespace Microsoft::Xna::Framework
 
     void CurveKeyCollection::RemoveAt(int index)
     {
-        if (index < 0 || index >= Count())
+        if (index < 0 || index >= getCountProperty())
         {
             throw std::out_of_range("CurveKeyCollection index is out of range");
         }

@@ -2,13 +2,13 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Defines whether interpolation is used between two curve keys.
+    /// Defines whether a curve segment is interpolated or stepped.
     enum class CurveContinuity
     {
-        /// Interpolation may be used between this key and the next one.
+        /// Values between this key and the next key are interpolated.
         Smooth,
 
-        /// Interpolation is disabled; values stay on the current key until the next key is reached.
+        /// Values between this key and the next key stay on the current key until the next key is reached.
         Step
     };
 }
