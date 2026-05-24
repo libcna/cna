@@ -54,7 +54,7 @@ namespace Microsoft::Xna::Framework
             return static_cast<bytecs>(ClampToByteInt(value));
         }
 
-        // Scale a unit float using MathHelper::Clamp, matching FNA Color(Vector4) ctor.
+        // Scale a unit float in [0,1] to a byte value in [0,255].
         [[nodiscard]] bytecs ToByteFromUnitClamped(float value)
         {
             return static_cast<bytecs>(
@@ -68,7 +68,7 @@ namespace Microsoft::Xna::Framework
     }
 
     // ------------------------------------------------------------------
-    // Static color definitions  (values match FNA static Color() ctor)
+    // Static color definitions
     // ------------------------------------------------------------------
 
     const Color Color::Transparent      (UInt32{0x00000000U});
@@ -225,7 +225,6 @@ namespace Microsoft::Xna::Framework
     Color::Color(const Vector4& color)
         : packedValue(0)
     {
-        // Mirrors FNA: (byte) MathHelper.Clamp(component * 255, Byte.MinValue, Byte.MaxValue)
         setRProperty(ToByteFromUnitClamped(color.X));
         setGProperty(ToByteFromUnitClamped(color.Y));
         setBProperty(ToByteFromUnitClamped(color.Z));
@@ -235,7 +234,6 @@ namespace Microsoft::Xna::Framework
     Color::Color(const Vector3& color)
         : packedValue(0)
     {
-        // Mirrors FNA: (byte) MathHelper.Clamp(component * 255, Byte.MinValue, Byte.MaxValue)
         setRProperty(ToByteFromUnitClamped(color.X));
         setGProperty(ToByteFromUnitClamped(color.Y));
         setBProperty(ToByteFromUnitClamped(color.Z));
@@ -396,7 +394,6 @@ namespace Microsoft::Xna::Framework
 
     Color Color::Lerp(const Color& value1, const Color& value2, float amount)
     {
-        // Mirrors FNA: amount = MathHelper.Clamp(amount, 0f, 1f), then MathHelper.Lerp per component.
         amount = MathHelper::Clamp(amount, 0.0f, 1.0f);
         return Color(
             static_cast<intcs>(MathHelper::Lerp(
@@ -415,7 +412,6 @@ namespace Microsoft::Xna::Framework
 
     Color Color::FromNonPremultiplied(const Vector4& vector)
     {
-        // Mirrors FNA: Color(X*W, Y*W, Z*W, W) using float ctor.
         return Color(
             vector.X * vector.W,
             vector.Y * vector.W,
@@ -425,7 +421,6 @@ namespace Microsoft::Xna::Framework
 
     Color Color::FromNonPremultiplied(intcs r, intcs g, intcs b, intcs a)
     {
-        // Mirrors FNA: Color(r*a/255, g*a/255, b*a/255, a)
         return Color(
             static_cast<intcs>(r * a / ByteMax),
             static_cast<intcs>(g * a / ByteMax),
@@ -435,7 +430,6 @@ namespace Microsoft::Xna::Framework
 
     Color Color::Multiply(const Color& value, float scale)
     {
-        // Mirrors FNA: Color((int)(R*scale), ...) using int ctor.
         return Color(
             static_cast<intcs>(static_cast<float>(ToInt(value.getRProperty())) * scale),
             static_cast<intcs>(static_cast<float>(ToInt(value.getGProperty())) * scale),
@@ -449,7 +443,6 @@ namespace Microsoft::Xna::Framework
 
     void Color::PackFromVector4(const Vector4& vector)
     {
-        // Mirrors FNA IPackedVector.PackFromVector4: (byte)(component * 255.0f)
         setRProperty(static_cast<bytecs>(vector.X * 255.0f));
         setGProperty(static_cast<bytecs>(vector.Y * 255.0f));
         setBProperty(static_cast<bytecs>(vector.Z * 255.0f));

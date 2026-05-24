@@ -38,9 +38,7 @@ namespace Microsoft::Xna::Framework
     using SharpRuntime::UInt32;
 
     /**
-     * @brief Packed 32-bit RGBA color value.
-     *
-     * Mirrors @c Microsoft.Xna.Framework.Color from XNA 4.0
+     * @brief Describes a 32-bit packed color.
      *
      * The packed layout stores R in bits 0–7, G in bits 8–15, B in bits 16–23,
      * and A in bits 24–31 (i.e. the numeric packed value reads AABBGGRR).
@@ -49,59 +47,58 @@ namespace Microsoft::Xna::Framework
      *
      * Implements both @c IPackedVector (non-generic, for runtime polymorphism)
      * and @c IPackedVectorT<UInt32> (generic variant that exposes PackedValue
-     * typed as UInt32), mirroring the FNA declaration
-     * @code
-     *   public struct Color : IEquatable<Color>, IPackedVector, IPackedVector<uint>
-     * @endcode
+     * typed as UInt32).
      *
-     * @note Color is a value type in C#.  The virtual dispatch overhead from the
-     *       IPackedVector base can be avoided by using concrete @c Color objects
-     *       directly; use @c IPackedVector* only when runtime polymorphism is needed.
+     * @note The virtual dispatch overhead from the IPackedVector base can be
+     *       avoided by using concrete @c Color objects directly; use
+     *       @c IPackedVector* only when runtime polymorphism is needed.
      */
     struct Color : public Graphics::PackedVector::IPackedVectorT<UInt32>
     {
         // ------------------------------------------------------------------
-        // Public component properties  (mirrors C# R, G, B, A)
+        // Public component properties
         // ------------------------------------------------------------------
 
-        /** Returns the red component (0–255). Mirrors C# @c R { get }. */
+        /** Gets the red component (0–255). */
         [[nodiscard]] bytecs getRProperty() const;
-        /** Sets the red component. Mirrors C# @c R { set }. */
+        /** Sets the red component (0–255). */
         void setRProperty(bytecs value);
 
-        /** Returns the green component (0–255). Mirrors C# @c G { get }. */
+        /** Gets the green component (0–255). */
         [[nodiscard]] bytecs getGProperty() const;
-        /** Sets the green component. Mirrors C# @c G { set }. */
+        /** Sets the green component (0–255). */
         void setGProperty(bytecs value);
 
-        /** Returns the blue component (0–255). Mirrors C# @c B { get }. */
+        /** Gets the blue component (0–255). */
         [[nodiscard]] bytecs getBProperty() const;
-        /** Sets the blue component. Mirrors C# @c B { set }. */
+        /** Sets the blue component (0–255). */
         void setBProperty(bytecs value);
 
-        /** Returns the alpha component (0–255). Mirrors C# @c A { get }. */
+        /** Gets the alpha component (0–255). */
         [[nodiscard]] bytecs getAProperty() const;
-        /** Sets the alpha component. Mirrors C# @c A { set }. */
+        /** Sets the alpha component (0–255). */
         void setAProperty(bytecs value);
 
         // ------------------------------------------------------------------
-        // PackedValue property  (IPackedVector<uint> / FNA UInt32 PackedValue)
+        // PackedValue property
         // ------------------------------------------------------------------
 
         /**
-         * @brief Returns the raw packed AABBGGRR value.
+         * @brief Gets or sets the packed value of this Color.
          *
-         * Mirrors C# @c public UInt32 PackedValue { get; set; } from FNA.
+         * @return The raw packed AABBGGRR value.
          */
         [[nodiscard]] UInt32 getPackedValueProperty() const override;
 
         /**
-         * @brief Sets the raw packed AABBGGRR value.
+         * @brief Sets the packed value of this Color.
+         *
+         * @param value The raw packed AABBGGRR value.
          */
         void setPackedValueProperty(UInt32 value) override;
 
         // ------------------------------------------------------------------
-        // Static named colors  (mirrors FNA static Color properties)
+        // Static named colors
         // ------------------------------------------------------------------
 
         /** Transparent color (R:0, G:0, B:0, A:0). */
@@ -393,60 +390,93 @@ namespace Microsoft::Xna::Framework
 
         /**
          * @brief Returns a debug string @c "R G B A" for display purposes.
-         * Mirrors the internal C# @c DebugDisplayString property in FNA.
          */
         [[nodiscard]] INTERNAL std::string getDebugDisplayStringProperty() const;
 
         // ------------------------------------------------------------------
-        // Constructors  (FNA order: Vector4, Vector3, floats, ints)
+        // Constructors
         // ------------------------------------------------------------------
 
         /**
-         * @brief Constructs a Color from a normalized RGBA Vector4.
+         * @brief Constructs an RGBA color from the XYZW unit length components of a vector.
          *
          * Each component is clamped to [0,1] then scaled to [0,255].
-         * Mirrors FNA @code public Color(Vector4 color) @endcode.
+         *
+         * @param color A Vector4 representing a color.
          */
         explicit Color(const Vector4& color);
 
         /**
-         * @brief Constructs an opaque Color from a normalized RGB Vector3.
+         * @brief Constructs an RGBA color from the XYZ unit length components of a vector.
          *
-         * Alpha is set to 255. Mirrors FNA @code public Color(Vector3 color) @endcode.
+         * Alpha is set to 255 (fully opaque).
+         *
+         * @param color A Vector3 representing a color.
          */
         explicit Color(const Vector3& color);
 
         /**
-         * @brief Constructs an opaque Color from normalized [0,1] float components.
-         * Mirrors FNA @code public Color(float r, float g, float b) @endcode.
+         * @brief Constructs an RGBA color from scalars representing red, green and blue values.
+         *
+         * Alpha value will be opaque (255).
+         *
+         * @param r Red component value from 0.0f to 1.0f.
+         * @param g Green component value from 0.0f to 1.0f.
+         * @param b Blue component value from 0.0f to 1.0f.
          */
         Color(float r, float g, float b);
 
         /**
-         * @brief Constructs a Color from normalized [0,1] float components including alpha.
-         * Mirrors FNA @code public Color(float r, float g, float b, float alpha) @endcode.
+         * @brief Constructs an RGBA color from scalars representing red, green, blue and alpha values.
+         *
+         * @param r Red component value from 0.0f to 1.0f.
+         * @param g Green component value from 0.0f to 1.0f.
+         * @param b Blue component value from 0.0f to 1.0f.
+         * @param alpha Alpha component value from 0.0f to 1.0f.
          */
         Color(float r, float g, float b, float alpha);
 
         /**
-         * @brief Constructs an opaque Color from integer [0,255] components.
-         * Values are clamped to [0,255]. Mirrors FNA @code public Color(int r, int g, int b) @endcode.
+         * @brief Constructs an RGBA color from scalars representing red, green and blue values.
+         *
+         * Alpha value will be opaque (255). Values are clamped to [0,255].
+         *
+         * @param r Red component value from 0 to 255.
+         * @param g Green component value from 0 to 255.
+         * @param b Blue component value from 0 to 255.
          */
         Color(intcs r, intcs g, intcs b);
 
         /**
-         * @brief Constructs a Color from integer [0,255] components including alpha.
-         * Values are clamped to [0,255]. Mirrors FNA @code public Color(int r, int g, int b, int alpha) @endcode.
+         * @brief Constructs an RGBA color from scalars representing red, green, blue and alpha values.
+         *
+         * Values are clamped to [0,255].
+         *
+         * @param r Red component value from 0 to 255.
+         * @param g Green component value from 0 to 255.
+         * @param b Blue component value from 0 to 255.
+         * @param alpha Alpha component value from 0 to 255.
          */
         Color(intcs r, intcs g, intcs b, intcs alpha);
 
         /**
-         * @brief Constructs an opaque Color from 8-bit byte components.
+         * @brief Constructs an RGBA color from 8-bit byte components.
+         *
+         * Alpha value will be opaque (255).
+         *
+         * @param r Red component value from 0 to 255.
+         * @param g Green component value from 0 to 255.
+         * @param b Blue component value from 0 to 255.
          */
         Color(bytecs r, bytecs g, bytecs b);
 
         /**
-         * @brief Constructs a Color from 8-bit byte components including alpha.
+         * @brief Constructs an RGBA color from 8-bit byte components including alpha.
+         *
+         * @param r Red component value from 0 to 255.
+         * @param g Green component value from 0 to 255.
+         * @param b Blue component value from 0 to 255.
+         * @param alpha Alpha component value from 0 to 255.
          */
         Color(bytecs r, bytecs g, bytecs b, bytecs alpha);
 
@@ -454,30 +484,40 @@ namespace Microsoft::Xna::Framework
         // Public instance methods
         // ------------------------------------------------------------------
 
-        /** Returns @c true if both colors have the same packed value. */
+        /**
+         * @brief Compares whether current instance is equal to specified Color.
+         *
+         * @param other The Color to compare.
+         * @return @c true if the instances are equal; @c false otherwise.
+         */
         [[nodiscard]] bool Equals(const Color& other) const;
 
         /**
-         * @brief Converts this color to a Vector3 using normalized RGB.
-         * Mirrors FNA @code public Vector3 ToVector3() @endcode.
+         * @brief Gets a Vector3 representation for this object.
+         *
+         * @return A Vector3 representation for this object.
          */
         [[nodiscard]] Vector3 ToVector3() const;
 
         /**
-         * @brief Converts this color to a Vector4 using normalized RGBA.
-         * Mirrors FNA @code public Vector4 ToVector4() @endcode.
+         * @brief Gets a Vector4 representation for this object.
+         *
+         * @return A Vector4 representation for this object.
          */
         [[nodiscard]] Vector4 ToVector4() const;
 
         /**
-         * @brief Returns a hash code based on the packed color value.
-         * Mirrors FNA @code public override int GetHashCode() @endcode.
+         * @brief Gets the hash code of this Color.
+         *
+         * @return Hash code of this Color.
          */
         [[nodiscard]] intcs GetHashCode() const;
 
         /**
-         * @brief Returns a string in the form @c {R:r G:g B:b A:a}.
-         * Mirrors FNA @code public override string ToString() @endcode.
+         * @brief Returns a string representation of this Color in the format:
+         * {R:[red] G:[green] B:[blue] A:[alpha]}
+         *
+         * @return String representation of this Color.
          */
         [[nodiscard]] std::string ToString() const;
 
@@ -486,29 +526,42 @@ namespace Microsoft::Xna::Framework
         // ------------------------------------------------------------------
 
         /**
-         * @brief Linearly interpolates between two Colors.
+         * @brief Performs linear interpolation of Color.
          *
          * The @p amount is clamped to [0,1].
-         * Uses FNA @c MathHelper.Lerp for each component.
-         * Mirrors FNA @code public static Color Lerp(Color value1, Color value2, float amount) @endcode.
+         *
+         * @param value1 Source Color.
+         * @param value2 Destination Color.
+         * @param amount Interpolation factor.
+         * @return Interpolated Color.
          */
         static Color Lerp(const Color& value1, const Color& value2, float amount);
 
         /**
-         * @brief Translates non-premultiplied Vector4 RGBA into premultiplied-alpha Color.
-         * Mirrors FNA @code public static Color FromNonPremultiplied(Vector4 vector) @endcode.
+         * @brief Translates a non-premultiplied alpha Color to a Color that contains premultiplied alpha.
+         *
+         * @param vector A Vector4 representing color.
+         * @return A Color which contains premultiplied alpha data.
          */
         static Color FromNonPremultiplied(const Vector4& vector);
 
         /**
-         * @brief Translates non-premultiplied integer RGBA into premultiplied-alpha Color.
-         * Mirrors FNA @code public static Color FromNonPremultiplied(int r, int g, int b, int a) @endcode.
+         * @brief Translates a non-premultiplied alpha Color to a Color that contains premultiplied alpha.
+         *
+         * @param r Red component value.
+         * @param g Green component value.
+         * @param b Blue component value.
+         * @param a Alpha component value.
+         * @return A Color which contains premultiplied alpha data.
          */
         static Color FromNonPremultiplied(intcs r, intcs g, intcs b, intcs a);
 
         /**
-         * @brief Multiplies every component by the given scale factor.
-         * Mirrors FNA @code public static Color Multiply(Color value, float scale) @endcode.
+         * @brief Multiplies a Color by a scalar value.
+         *
+         * @param value Source Color.
+         * @param scale Multiplicator.
+         * @return Multiplication result.
          */
         static Color Multiply(const Color& value, float scale);
 
@@ -517,15 +570,15 @@ namespace Microsoft::Xna::Framework
         // ------------------------------------------------------------------
 
         /**
-         * @brief Packs normalized RGBA from @p vector into this Color.
+         * @brief Packs a four-component color from a vector format into the format of a color object.
          *
          * Implements the non-generic @c IPackedVector.PackFromVector4.
-         * Mirrors FNA @code void IPackedVector.PackFromVector4(Vector4 vector) @endcode.
+         *
+         * @param vector A four-component color.
          */
         void PackFromVector4(const Vector4& vector) override;
 
     private:
-        // ARGB packed layout (kept private matching FNA private uint packedValue).
         // R stored in bits 0-7, G in 8-15, B in 16-23, A in 24-31 (value = AABBGGRR).
         uintcs packedValue;
 
@@ -534,19 +587,43 @@ namespace Microsoft::Xna::Framework
     };
 
     // ------------------------------------------------------------------
-    // Operators (outside struct, mirrors FNA static operator declarations)
+    // Operators
     // ------------------------------------------------------------------
 
-    /** Returns @c true if both Colors have the same packed value. */
+    /**
+     * @brief Compares whether two Color instances are equal.
+     *
+     * @param a Color instance on the left of the equal sign.
+     * @param b Color instance on the right of the equal sign.
+     * @return @c true if the instances are equal; @c false otherwise.
+     */
     [[nodiscard]] bool operator==(const Color& a, const Color& b);
 
-    /** Returns @c true if the Colors have different packed values. */
+    /**
+     * @brief Compares whether two Color instances are not equal.
+     *
+     * @param a Color instance on the left of the not equal sign.
+     * @param b Color instance on the right of the not equal sign.
+     * @return @c true if the instances are not equal; @c false otherwise.
+     */
     [[nodiscard]] bool operator!=(const Color& a, const Color& b);
 
-    /** Multiplies every component of @p value by @p scale. */
+    /**
+     * @brief Multiplies a Color by a scalar value.
+     *
+     * @param value Source Color.
+     * @param scale Multiplicator.
+     * @return Multiplication result.
+     */
     [[nodiscard]] Color operator*(const Color& value, float scale);
 
-    /** Multiplies every component of @p value by @p scale. */
+    /**
+     * @brief Multiplies a Color by a scalar value.
+     *
+     * @param scale Multiplicator.
+     * @param value Source Color.
+     * @return Multiplication result.
+     */
     [[nodiscard]] Color operator*(float scale, const Color& value);
 
 } // namespace Microsoft::Xna::Framework
