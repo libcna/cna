@@ -223,6 +223,7 @@ namespace {
             case SDLK_RCTRL: return Keys::RightControl;
             case SDLK_LSHIFT: return Keys::LeftShift;
             case SDLK_RSHIFT: return Keys::RightShift;
+            case SDLK_TAB: return Keys::Tab;
             case SDLK_A: return Keys::A;
             case SDLK_B: return Keys::B;
             case SDLK_C: return Keys::C;
