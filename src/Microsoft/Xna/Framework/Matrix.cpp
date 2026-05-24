@@ -13,12 +13,16 @@
 
 namespace Microsoft::Xna::Framework
 {
-    const Matrix Matrix::Identity(
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    );
+    const Matrix Matrix::getIdentityProperty()
+    {
+        static const Matrix identity = Matrix(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+        return identity;
+    }
 
     namespace
     {
@@ -592,7 +596,7 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::CreateRotationX(float radians, Matrix& result)
     {
-        result = Matrix::Identity;
+        result = Matrix::getIdentityProperty();
         const float val1 = std::cos(radians);
         const float val2 = std::sin(radians);
         result.M22 = val1;
@@ -610,7 +614,7 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::CreateRotationY(float radians, Matrix& result)
     {
-        result = Matrix::Identity;
+        result = Matrix::getIdentityProperty();
         const float val1 = std::cos(radians);
         const float val2 = std::sin(radians);
         result.M11 = val1;
@@ -628,7 +632,7 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::CreateRotationZ(float radians, Matrix& result)
     {
-        result = Matrix::Identity;
+        result = Matrix::getIdentityProperty();
         const float val1 = std::cos(radians);
         const float val2 = std::sin(radians);
         result.M11 = val1;

@@ -33,11 +33,11 @@ namespace Microsoft::Xna::Framework::Graphics {
         explicit BasicEffect(GraphicsDevice& device);
 
         /** World transform (model -> world). */
-        Matrix World      = Matrix::Identity();
+        Matrix World      = Matrix::getIdentityProperty();
         /** View transform (world -> camera). */
-        Matrix View       = Matrix::Identity();
+        Matrix View       = Matrix::getIdentityProperty();
         /** Projection transform (camera -> clip). */
-        Matrix Projection = Matrix::Identity();
+        Matrix Projection = Matrix::getIdentityProperty();
 
         /**
          * @brief When true, the per-vertex color channel is used for output.

@@ -15,7 +15,7 @@ namespace Microsoft::Xna::Framework
     struct Matrix
     {
         /// Returns the identity matrix.
-        static const Matrix Identity;
+        static const Matrix getIdentityProperty();
 
         /// A first row and first column value.
         float M11;
