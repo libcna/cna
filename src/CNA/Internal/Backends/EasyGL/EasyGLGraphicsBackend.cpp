@@ -73,7 +73,7 @@ namespace CNA::Internal::Backends::EasyGL {
             }
         )";
 
-        ::easygl::Shader vertexShader(::easygl::ShaderStage::Vertex);
+        ::easygl::Shader vertexShader(::easygl::ShaderType::Vertex);
         vertexShader.create();
         vertexShader.compile_from_source(vertexShaderSource);
 
@@ -81,7 +81,7 @@ namespace CNA::Internal::Backends::EasyGL {
             std::cerr << "Vertex shader compilation failed:\n" << vertexShader.info_log() << std::endl;
         }
 
-        ::easygl::Shader fragmentShader(::easygl::ShaderStage::Fragment);
+        ::easygl::Shader fragmentShader(::easygl::ShaderType::Fragment);
         fragmentShader.create();
         fragmentShader.compile_from_source(fragmentShaderSource);
 
@@ -138,7 +138,7 @@ namespace CNA::Internal::Backends::EasyGL {
 
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y) {
         auto& glTex = static_cast<const EasyGLTextureBackend&>(texture);
-        Draw(texture, Rectangle((int)x, (int)y, glTex.width, glTex.height), Rectangle(0, 0, glTex.width, glTex.height), Microsoft::Xna::Framework::White);
+        Draw(texture, Rectangle((int)x, (int)y, glTex.width, glTex.height), Rectangle(0, 0, glTex.width, glTex.height), Microsoft::Xna::Framework::Color::White);
     }
 
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture,
@@ -374,13 +374,13 @@ namespace CNA::Internal::Backends::EasyGL {
             }
         )";
 
-        ::easygl::Shader vs(::easygl::ShaderStage::Vertex);
+        ::easygl::Shader vs(::easygl::ShaderType::Vertex);
         vs.create();
         vs.compile_from_source(vsrc);
         if (!vs.is_compiled()) {
             std::cerr << "[CNA EasyGL 3D] vertex shader compile failed:\n" << vs.info_log() << std::endl;
         }
-        ::easygl::Shader fs(::easygl::ShaderStage::Fragment);
+        ::easygl::Shader fs(::easygl::ShaderType::Fragment);
         fs.create();
         fs.compile_from_source(fsrc);
         if (!fs.is_compiled()) {
