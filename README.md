@@ -349,4 +349,6 @@ int main()
 
 ## 12. 📜 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+CNA is licensed under the Microsoft Public License (Ms-PL). See the [LICENSE](LICENSE) file for details.
+
+Portions of CNA are derived from or based on FNA, which is also licensed under the Microsoft Public License (Ms-PL).
