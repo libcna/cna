@@ -16,8 +16,11 @@ namespace Microsoft::Xna::Framework {
     class Game;
 
     /// Represents the game window and exposes its platform-backed window state.
+    class GraphicsDeviceManager;
+
     class GameWindow : public System::Object {
         friend class Game;
+        friend class GraphicsDeviceManager;
 
     public:
         using String = SharpRuntime::String;

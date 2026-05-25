@@ -64,7 +64,6 @@ namespace Microsoft::Xna::Framework {
          */
         [[nodiscard]] bool getIsRunningSlowlyProperty() const;
 
-    private:
         void setTotalGameTimeProperty(const TimeSpan& value);
         void setTotalGameTimeProperty(TimeSpan&& value);
 
@@ -72,6 +71,8 @@ namespace Microsoft::Xna::Framework {
         void setElapsedGameTimeProperty(TimeSpan&& value);
 
         void setIsRunningSlowlyProperty(bool value);
+
+    private:
 
         TimeSpan TotalGameTime_;
         TimeSpan ElapsedGameTime_;

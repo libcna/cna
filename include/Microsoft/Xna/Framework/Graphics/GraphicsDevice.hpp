@@ -1,256 +1,205 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
-#include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
-#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/EventArgs.hpp"
+#include "System/EventHandler.hpp"
+#include "System/IDisposable.hpp"
+#include "System/Object.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
 
-namespace Microsoft::Xna::Framework {
+namespace Microsoft::Xna::Framework
+{
+    class GameWindow;
     class GraphicsDeviceManager;
 }
 
-namespace Microsoft::Xna::Framework::Graphics {
-
-    class VertexBuffer;
-    class IndexBuffer;
+namespace Microsoft::Xna::Framework::Graphics
+{
     class BasicEffect;
 }
 
-namespace CNA::Internal::Backends {
+namespace CNA::Internal::Backends
+{
     class IGraphicsBackend;
 }
 
-namespace Microsoft::Xna::Framework::Graphics {
-    using namespace CNA::Internal::Backends;
-
-    /**
-     * @brief Represents the main graphics device used by the game.
-     *
-     * This class uses a backend abstraction to handle the actual rendering,
-     * such as SDL_Renderer or EasyGL.
-     */
-    class GraphicsDevice {
-    private:
-        SDL_Window* window_;
-        std::unique_ptr<IGraphicsBackend> backend_;
-        Viewport Viewport_;
-        const VertexBuffer* currentVertexBuffer_ = nullptr;
-        const IndexBuffer*  currentIndexBuffer_  = nullptr;
-        BasicEffect*        currentEffect_       = nullptr;
-        /// The game's virtual (logical) resolution in pixels.
-        /// Initialized to 0 (unspecified). The authoritative values come from
-        /// GraphicsDeviceManager::PreferredBackBufferWidth/Height propagated
-        /// via ApplyChanges() → SetVirtualResolution(). The SDL backend then
-        /// derives a physical-to-logical scale from these XNA-layer values.
-        int virtualWidth_  = 0;
-        int virtualHeight_ = 0;
-
+namespace Microsoft::Xna::Framework::Graphics
+{
+    /// Main graphics device used for clearing, presenting and drawing primitives.
+    class GraphicsDevice : public System::Object, public System::IDisposable
+    {
     public:
-        DEF_PROP(Microsoft::Xna::Framework::Graphics::Viewport, Viewport, getter1, setter0, member0, static0, constret0, ref1, constmet0)
+        /// Raised before the device is disposed.
+        System::EventHandler<System::EventArgs> Disposing;
 
-        /**
-         * @brief Creates the graphics device.
-         */
+        /// Raised after the device has been reset.
+        System::EventHandler<System::EventArgs> DeviceReset;
+
+        /// Raised before the device is reset.
+        System::EventHandler<System::EventArgs> DeviceResetting;
+
+        /// Creates a graphics device using default adapter and presentation parameters.
         GraphicsDevice();
 
-        /**
-         * @brief Destroys the graphics device and releases native resources.
-         */
-        ~GraphicsDevice();
+        /// Creates a graphics device using explicit adapter, profile and presentation parameters.
+        GraphicsDevice(GraphicsAdapter& adapter, GraphicsProfile graphicsProfile, const PresentationParameters& presentationParameters);
+
+        ~GraphicsDevice() override;
 
         GraphicsDevice(const GraphicsDevice&) = delete;
         GraphicsDevice& operator=(const GraphicsDevice&) = delete;
         GraphicsDevice(GraphicsDevice&&) = delete;
         GraphicsDevice& operator=(GraphicsDevice&&) = delete;
 
-        /**
-         * @brief Clears the current back buffer with the specified color.
-         *
-         * @param color Color used for clearing.
-         */
+        /// Gets the adapter used by this graphics device.
+        [[nodiscard]] GraphicsAdapter& getAdapterProperty() const;
+
+        /// Gets the requested graphics profile.
+        [[nodiscard]] GraphicsProfile getGraphicsProfileProperty() const;
+
+        /// Gets the active presentation parameters.
+        [[nodiscard]] PresentationParameters& getPresentationParametersProperty();
+
+        /// Gets the active presentation parameters.
+        [[nodiscard]] const PresentationParameters& getPresentationParametersProperty() const;
+
+        /// Gets the current viewport.
+        [[nodiscard]] const Viewport& getViewportProperty() const;
+
+        /// Sets the current viewport.
+        void setViewportProperty(const Viewport& value);
+
+        /// Gets the currently bound index buffer.
+        [[nodiscard]] const IndexBuffer* getIndicesProperty() const;
+
+        /// Sets the currently bound index buffer.
+        void setIndicesProperty(const IndexBuffer* indexBuffer);
+
+        /// Gets whether this graphics device has been disposed.
+        [[nodiscard]] bool getIsDisposedProperty() const;
+
+        /// Clears the color buffer with the specified color.
         void Clear(const Color& color);
 
-        /**
-         * @brief Clears the current back buffer with RGBA float components.
-         *
-         * Each component is expected in the range 0.0f to 1.0f.
-         *
-         * @param r Red component.
-         * @param g Green component.
-         * @param b Blue component.
-         * @param a Alpha component.
-         */
+        /// Clears the color buffer with the specified RGBA components in the range 0..1.
         void Clear(float r, float g, float b, float a);
 
-        /**
-         * @brief Presents the rendered frame to the screen.
-         */
-        void Present();
+        /// Clears the selected buffers.
+        void Clear(ClearOptions options, const Color& color, float depth, int stencil);
 
-        // ---- 3D pipeline (XNA-like minimal subset) ----
-
-        /**
-         * @brief Clears color and depth buffers in one call.
-         *
-         * @note Status: PARTIAL. Only the EasyGL backend honors this; other
-         *       backends throw "3D not supported".
-         */
+        /// Clears the color and depth buffers.
         void Clear(const Color& color, float depth);
 
-        /**
-         * @brief Enables or disables the 3D depth test.
-         */
+        /// Presents the rendered frame.
+        void Present();
+
+        /// Resets this device with new presentation parameters and adapter.
+        void Reset(const PresentationParameters& presentationParameters, GraphicsAdapter& adapter);
+
+        /// Resets this device with new presentation parameters and optional adapter.
+        void Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter);
+
+        /// Releases the device resources.
+        void Dispose() override;
+
+        /// Enables or disables depth testing in the backend.
         void SetDepthTestEnabled(bool enabled);
 
-        /**
-         * @brief Binds a vertex buffer as the current vertex source.
-         *
-         * Mirrors `GraphicsDevice.SetVertexBuffer` from XNA 4.0. Pass
-         * `nullptr` to clear the binding.
-         *
-         * The buffer is **not** owned by the device; the caller must keep
-         * it alive while it remains bound.
-         */
+        /// Binds a vertex buffer.
         void SetVertexBuffer(const VertexBuffer* vertexBuffer);
 
-        /**
-         * @brief Binds an index buffer as the current index source.
-         *
-         * XNA-equivalent of assigning `GraphicsDevice.Indices`. Pass
-         * `nullptr` to clear the binding.
-         */
+        /// Binds an index buffer.
         void SetIndexBuffer(const IndexBuffer* indexBuffer);
 
-        /** Currently bound vertex buffer, or nullptr. */
-        [[nodiscard]] const VertexBuffer* GetVertexBuffer() const { return currentVertexBuffer_; }
-        /** Currently bound index buffer, or nullptr. XNA name: `Indices`. */
-        [[nodiscard]] const IndexBuffer* GetIndexBuffer() const { return currentIndexBuffer_; }
+        /// Gets the currently bound vertex buffer.
+        [[nodiscard]] const VertexBuffer* GetVertexBuffer() const;
 
-        /**
-         * @brief XNA-style getter for the `Indices` property.
-         *
-         * Equivalent to `GraphicsDevice.Indices` in XNA 4.0. Returns a
-         * pointer to the currently bound index buffer, or `nullptr`.
-         *
-         * @note Status: IMPLEMENTED.
-         */
-        [[nodiscard]] const IndexBuffer* Indices() const { return currentIndexBuffer_; }
+        /// Gets the currently bound index buffer.
+        [[nodiscard]] const IndexBuffer* GetIndexBuffer() const;
 
-        /**
-         * @brief XNA-style setter for the `Indices` property.
-         *
-         * Equivalent to `GraphicsDevice.Indices = indexBuffer;` in XNA 4.0.
-         * Forwards to `SetIndexBuffer(...)`. Pass `nullptr` to clear.
-         *
-         * @note Status: IMPLEMENTED.
-         */
-        void Indices(const IndexBuffer* indexBuffer) { SetIndexBuffer(indexBuffer); }
+        /// Backward-compatible XNA-shaped getter used by older CNA code.
+        [[nodiscard]] const IndexBuffer* Indices() const;
 
-        /**
-         * @brief XNA-shaped `DrawUserPrimitives` (data supplied by the caller).
-         *
-         * @note Status: STUB. Always throws `std::runtime_error` with a
-         *       clear message. Use `SetVertexBuffer` + `DrawPrimitives`
-         *       instead in CNA 3D for now.
-         */
-        void DrawUserPrimitives(PrimitiveType primitiveType,
-                                const void* vertexData,
-                                int vertexOffset,
-                                int primitiveCount);
+        /// Backward-compatible XNA-shaped setter used by older CNA code.
+        void Indices(const IndexBuffer* indexBuffer);
 
-        /**
-         * @brief XNA-shaped `DrawUserIndexedPrimitives`.
-         *
-         * @note Status: STUB. Always throws `std::runtime_error` with a
-         *       clear message. Use `SetVertexBuffer` + `SetIndexBuffer` +
-         *       `DrawIndexedPrimitives` instead in CNA 3D for now.
-         */
-        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
-                                       const void* vertexData,
-                                       int vertexOffset,
-                                       int numVertices,
-                                       const void* indexData,
-                                       int indexOffset,
-                                       int primitiveCount);
+        /// Draws non-indexed primitives from the current vertex buffer.
+        void DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount);
 
-        /**
-         * @brief Draws non-indexed primitives from the currently bound
-         *        vertex buffer using the currently applied effect.
-         *
-         * XNA 4.0 signature equivalent. Call `BasicEffect::Apply()` and
-         * `SetVertexBuffer(...)` before this method.
-         *
-         * @param primitiveType Topology.
-         * @param vertexStart   First vertex to read (XNA: `startVertex`).
-         *                      Must be 0 in the current CNA backend.
-         * @param primitiveCount Number of primitives.
-         */
-        void DrawPrimitives(PrimitiveType primitiveType,
-                            int vertexStart,
-                            int primitiveCount);
+        /// Draws indexed primitives from the current vertex and index buffers.
+        void DrawIndexedPrimitives(
+            PrimitiveType primitiveType,
+            int baseVertex,
+            int minVertexIndex,
+            int numVertices,
+            int startIndex,
+            int primitiveCount
+        );
 
-        /**
-         * @brief Draws indexed primitives from the currently bound vertex
-         *        and index buffers using the currently applied effect.
-         *
-         * Matches the XNA 4.0 `DrawIndexedPrimitives` signature.
-         *
-         * @param primitiveType   Topology.
-         * @param baseVertex      Offset added to every index. Must be 0 in
-         *                        the current CNA backend.
-         * @param minVertexIndex  Minimum index value (driver hint, ignored
-         *                        by the current CNA backend).
-         * @param numVertices     Number of vertices that will be referenced
-         *                        (driver hint, ignored).
-         * @param startIndex      First index to read. Must be 0 in the
-         *                        current CNA backend.
-         * @param primitiveCount  Number of primitives to draw.
-         */
-        void DrawIndexedPrimitives(PrimitiveType primitiveType,
-                                   int baseVertex,
-                                   int minVertexIndex,
-                                   int numVertices,
-                                   int startIndex,
-                                   int primitiveCount);
+        /// Draws user-provided vertex data. This overload is present but awaits backend support.
+        void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData, int vertexOffset, int primitiveCount);
 
-        [[nodiscard]] IGraphicsBackend& GetBackend() const { return *backend_; }
+        /// Draws user-provided indexed vertex data. This overload is present but awaits backend support.
+        void DrawUserIndexedPrimitives(
+            PrimitiveType primitiveType,
+            const void* vertexData,
+            int vertexOffset,
+            int numVertices,
+            const void* indexData,
+            int indexOffset,
+            int primitiveCount
+        );
 
-        /**
-         * @brief Internal hook used by `BasicEffect::Apply` to register
-         *        itself as the active effect for the next draw call.
-         *
-         * Not part of the public XNA API.
-         */
-        void SetCurrentEffect(BasicEffect* effect) { currentEffect_ = effect; }
+        /// Gets the active backend. Throws if the backend is not available.
+        [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
+
+        /// Internal hook used by BasicEffect::Apply.
+        void SetCurrentEffect(BasicEffect* effect);
+
+        [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
-        /**
-         * @brief Returns the internal SDL renderer for engine-internal use.
-         *
-         * This method is intentionally private to avoid exposing SDL
-         * through the public graphics API.
-         */
+        SDL_Window* window_;
+        bool ownsWindow_;
+        std::unique_ptr<CNA::Internal::Backends::IGraphicsBackend> backend_;
+        Viewport viewport_;
+        const VertexBuffer* currentVertexBuffer_;
+        const IndexBuffer* currentIndexBuffer_;
+        BasicEffect* currentEffect_;
+        int virtualWidth_;
+        int virtualHeight_;
+        GraphicsAdapter* adapter_;
+        GraphicsProfile graphicsProfile_;
+        PresentationParameters presentationParameters_;
+        bool isDisposed_;
+
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const;
         [[nodiscard]] SDL_Window* GetWindowInternal() const;
 
+        void createOrAttachWindow();
+        void createBackend();
+        void destroyNativeResources();
         void UpdateViewportFromWindow();
-
-        /// Called by GraphicsDeviceManager::ApplyChanges() to propagate
-        /// PreferredBackBufferWidth/Height into the backend logical presentation.
         void SetVirtualResolution(int width, int height);
-
-        /// Called by GraphicsDeviceManager::ApplyChanges() to propagate
-        /// PreferredPresentationMode into the backend.
-        /// mode is the int value of PresentationMode / CnaPresentationMode.
         void SetPresentationMode(int mode);
+        void applyPresentationParametersToWindow();
 
         friend class Texture2D;
         friend class SpriteBatch;
+        friend class Microsoft::Xna::Framework::GameWindow;
         friend class Microsoft::Xna::Framework::GraphicsDeviceManager;
     };
 }
