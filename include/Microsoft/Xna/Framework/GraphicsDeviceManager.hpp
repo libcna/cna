@@ -6,9 +6,12 @@ namespace Microsoft::Xna::Framework {
     class Game;
 }
 
-namespace Microsoft::Xna::Framework::Graphics {
+namespace Microsoft::Xna::Framework {
 
-    class GraphicsDevice;
+    namespace Graphics
+    {
+        class GraphicsDevice;
+    }
 
     /**
      * @brief Presentation/scaling policy for the CNA rendering backend.
@@ -39,7 +42,7 @@ namespace Microsoft::Xna::Framework::Graphics {
     class GraphicsDeviceManager {
     private:
         Microsoft::Xna::Framework::Game* game_ = nullptr;
-        GraphicsDevice* GraphicsDevice_ = nullptr;
+        Graphics::GraphicsDevice* GraphicsDevice_ = nullptr;
         bool IsFullScreen_ = false;
         /// XNA-compatible preferred back buffer dimensions.
         /// Defaults match the SDL_CreateWindow request in GraphicsDevice (800x480).

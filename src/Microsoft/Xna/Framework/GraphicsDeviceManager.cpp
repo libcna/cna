@@ -1,4 +1,4 @@
-#include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
 #include <SDL3/SDL.h>
 #include <stdexcept>
@@ -6,7 +6,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
+namespace Microsoft::Xna::Framework {
 
     namespace
     {

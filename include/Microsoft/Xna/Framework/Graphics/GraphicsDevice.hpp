@@ -10,9 +10,12 @@
 struct SDL_Window;
 struct SDL_Renderer;
 
+namespace Microsoft::Xna::Framework {
+    class GraphicsDeviceManager;
+}
+
 namespace Microsoft::Xna::Framework::Graphics {
 
-    class GraphicsDeviceManager;
     class VertexBuffer;
     class IndexBuffer;
     class BasicEffect;
@@ -248,6 +251,6 @@ namespace Microsoft::Xna::Framework::Graphics {
 
         friend class Texture2D;
         friend class SpriteBatch;
-        friend class GraphicsDeviceManager;
+        friend class Microsoft::Xna::Framework::GraphicsDeviceManager;
     };
 }
