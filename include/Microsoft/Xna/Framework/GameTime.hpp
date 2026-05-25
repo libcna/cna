@@ -4,70 +4,29 @@
 
 #pragma once
 
-#include "SharpRuntime/Prop.hpp"
 #include "System/TimeSpan.hpp"
 
 namespace Microsoft::Xna::Framework {
 
+    class Game;
+
     using System::TimeSpan;
 
     /**
-     * @brief Holds the time state of a Game.
+     * @brief Stores timing information for the current game update.
      *
-     * This is a C++ counterpart of the MonoGame/XNA
-     * Microsoft.Xna.Framework.GameTime class.
+     * GameTime stores the total game time, elapsed time since the previous
+     * update, and whether the game loop is currently running slowly.
      *
-     * GameTime stores:
-     * - total time since the start of the game
-     * - elapsed time since the last update
-     * - whether the game is currently running slowly
-     *
-     * @note Status: Implemented.
+     * @note Property setters are intentionally not public. In XNA these setters
+     * are internal; in CNA the Game class updates them.
      */
     class GameTime {
-    public:
-        /**
-         * @brief Gets or sets the total game time since the start of the game.
-         */
-        DEF_PROP(TimeSpan, TotalGameTime, getter1, setter1, member1, static0, constret1, ref1, constmet1)
-
-    private:
-        TimeSpan ElapsedGameTime_;
+        friend class Game;
 
     public:
         /**
-         * @brief Gets the elapsed game time since the last update.
-         *
-         * @return Time elapsed since the last update.
-         */
-        [[nodiscard]] const TimeSpan& getElapsedGameTimeProperty() const;
-
-        /**
-         * @brief Sets the elapsed game time since the last update.
-         *
-         * @param v New elapsed game time.
-         */
-        void setElapsedGameTimeProperty(const TimeSpan& v);
-
-        /**
-         * @brief Sets the elapsed game time since the last update using move semantics.
-         *
-         * @param v New elapsed game time.
-         */
-        void setElapsedGameTimeProperty(TimeSpan&& v);
-
-        /**
-         * @brief Gets or sets whether the game is running slowly.
-         *
-         * This flag is typically used when the game loop falls behind its target timing.
-         */
-        DEF_PROP(bool, IsRunningSlowly, getter1, setter1, member1, static0, constret1, ref1, constmet1)
-
-    public:
-        /**
-         * @brief Initializes a new instance with TotalGameTime and ElapsedGameTime set to zero.
-         *
-         * IsRunningSlowly is initialized to false.
+         * @brief Initializes TotalGameTime and ElapsedGameTime to zero and IsRunningSlowly to false.
          */
         GameTime();
 
@@ -75,23 +34,48 @@ namespace Microsoft::Xna::Framework {
          * @brief Initializes a new instance with the specified total and elapsed game time.
          *
          * @param totalGameTime Total time since the start of the game.
-         * @param elapsedGameTime Time elapsed since the last update.
+         * @param elapsedGameTime Time elapsed since the previous update.
          */
         GameTime(TimeSpan totalGameTime, TimeSpan elapsedGameTime);
 
         /**
-         * @brief Initializes a new instance with the specified total and elapsed game time.
+         * @brief Initializes a new instance with the specified time values and slow-running flag.
          *
          * @param totalGameTime Total time since the start of the game.
-         * @param elapsedGameTime Time elapsed since the last update.
-         * @param isRunningSlowly Indicates whether the game is running slowly.
+         * @param elapsedGameTime Time elapsed since the previous update.
+         * @param isRunningSlowly Indicates whether the game loop is running slowly.
          */
         GameTime(TimeSpan totalGameTime, TimeSpan elapsedGameTime, bool isRunningSlowly);
 
-        /**
-         * @brief Destroys the GameTime instance.
-         */
         ~GameTime() = default;
+
+        /**
+         * @brief Gets the total game time since the start of the game.
+         */
+        [[nodiscard]] const TimeSpan& getTotalGameTimeProperty() const;
+
+        /**
+         * @brief Gets the elapsed game time since the previous update.
+         */
+        [[nodiscard]] const TimeSpan& getElapsedGameTimeProperty() const;
+
+        /**
+         * @brief Gets whether the game loop is currently running slowly.
+         */
+        [[nodiscard]] bool getIsRunningSlowlyProperty() const;
+
+    private:
+        void setTotalGameTimeProperty(const TimeSpan& value);
+        void setTotalGameTimeProperty(TimeSpan&& value);
+
+        void setElapsedGameTimeProperty(const TimeSpan& value);
+        void setElapsedGameTimeProperty(TimeSpan&& value);
+
+        void setIsRunningSlowlyProperty(bool value);
+
+        TimeSpan TotalGameTime_;
+        TimeSpan ElapsedGameTime_;
+        bool IsRunningSlowly_;
     };
 
 } // namespace Microsoft::Xna::Framework

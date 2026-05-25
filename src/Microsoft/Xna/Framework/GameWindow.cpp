@@ -3,37 +3,382 @@
 #include <SDL3/SDL.h>
 
 #include <stdexcept>
+#include <string>
 
 namespace Microsoft::Xna::Framework {
 
-    GameWindow::GameWindow(SDL_Window* window)
-        : window_(window)
-    {
-    }
-
-    std::string GameWindow::getTitleProperty() const
-    {
-        if (!window_) {
-            return "";
+    namespace {
+        std::runtime_error makeSdlError(const char* operation)
+        {
+            return std::runtime_error(std::string(operation) + " failed: " + SDL_GetError());
         }
 
-        const char* title = SDL_GetWindowTitle(window_);
-        return title ? std::string(title) : "";
+        bool hasFlag(DisplayOrientation value, DisplayOrientation flag)
+        {
+            return (static_cast<int>(value) & static_cast<int>(flag)) != 0;
+        }
     }
 
-    void GameWindow::setTitleProperty(const std::string& title)
+    GameWindow::GameWindow()
+        : window_(nullptr),
+          title_(),
+          screenDeviceName_(),
+          clientBounds_(),
+          currentOrientation_(DisplayOrientation::Default),
+          supportedOrientations_(
+              DisplayOrientation::LandscapeLeft |
+              DisplayOrientation::LandscapeRight |
+              DisplayOrientation::Portrait
+          ),
+          allowUserResizing_(false),
+          isBorderless_(false),
+          pendingFullScreen_(false),
+          hasPendingScreenDeviceChange_(false)
     {
-        if (!window_) {
+    }
+
+    GameWindow::GameWindow(SDL_Window* window)
+        : GameWindow()
+    {
+        setWindowInternal(window);
+    }
+
+    bool GameWindow::getAllowUserResizingProperty() const
+    {
+        if (window_ != nullptr)
+        {
+            return (SDL_GetWindowFlags(window_) & SDL_WINDOW_RESIZABLE) != 0;
+        }
+
+        return allowUserResizing_;
+    }
+
+    void GameWindow::setAllowUserResizingProperty(bool value)
+    {
+        allowUserResizing_ = value;
+
+        if (window_ != nullptr)
+        {
+            if (!SDL_SetWindowResizable(window_, value))
+            {
+                throw makeSdlError("SDL_SetWindowResizable");
+            }
+        }
+    }
+
+    Rectangle GameWindow::getClientBoundsProperty() const
+    {
+        if (window_ != nullptr)
+        {
+            return queryClientBoundsFromSDL();
+        }
+
+        return clientBounds_;
+    }
+
+    DisplayOrientation GameWindow::getCurrentOrientationProperty() const
+    {
+        return currentOrientation_;
+    }
+
+    SharpRuntime::IntPtr GameWindow::getHandleProperty() const
+    {
+        return reinterpret_cast<SharpRuntime::IntPtr>(window_);
+    }
+
+    const GameWindow::String& GameWindow::getScreenDeviceNameProperty() const
+    {
+        return screenDeviceName_;
+    }
+
+    const GameWindow::String& GameWindow::getTitleProperty() const
+    {
+        return title_;
+    }
+
+    void GameWindow::setTitleProperty(const String& title)
+    {
+        if (title_ != title)
+        {
+            SetTitle(title);
+            title_ = title;
+        }
+    }
+
+    bool GameWindow::getIsBorderlessEXTProperty() const
+    {
+        if (window_ != nullptr)
+        {
+            return (SDL_GetWindowFlags(window_) & SDL_WINDOW_BORDERLESS) != 0;
+        }
+
+        return isBorderless_;
+    }
+
+    void GameWindow::setIsBorderlessEXTProperty(bool value)
+    {
+        isBorderless_ = value;
+
+        if (window_ != nullptr)
+        {
+            if (!SDL_SetWindowBordered(window_, !value))
+            {
+                throw makeSdlError("SDL_SetWindowBordered");
+            }
+        }
+    }
+
+    void GameWindow::BeginScreenDeviceChange(bool willBeFullScreen)
+    {
+        pendingFullScreen_ = willBeFullScreen;
+        hasPendingScreenDeviceChange_ = true;
+    }
+
+    void GameWindow::EndScreenDeviceChange(const String& screenDeviceName, intcs clientWidth, intcs clientHeight)
+    {
+        const Rectangle oldBounds = clientBounds_;
+        const String oldScreenDeviceName = screenDeviceName_;
+
+        if (window_ != nullptr)
+        {
+            if (clientWidth > 0 && clientHeight > 0)
+            {
+                if (!SDL_SetWindowSize(window_, clientWidth, clientHeight))
+                {
+                    throw makeSdlError("SDL_SetWindowSize");
+                }
+            }
+
+            if (hasPendingScreenDeviceChange_)
+            {
+                if (!SDL_SetWindowFullscreen(window_, pendingFullScreen_))
+                {
+                    throw makeSdlError("SDL_SetWindowFullscreen");
+                }
+            }
+        }
+
+        screenDeviceName_ = screenDeviceName;
+        hasPendingScreenDeviceChange_ = false;
+
+        refreshCachedSDLState(false);
+
+        if (oldBounds.Width != clientBounds_.Width || oldBounds.Height != clientBounds_.Height)
+        {
+            OnClientSizeChanged();
+        }
+
+        if (oldScreenDeviceName != screenDeviceName_)
+        {
+            OnScreenDeviceNameChanged();
+        }
+    }
+
+    void GameWindow::EndScreenDeviceChange(const String& screenDeviceName)
+    {
+        const Rectangle bounds = getClientBoundsProperty();
+        EndScreenDeviceChange(screenDeviceName, bounds.Width, bounds.Height);
+    }
+
+    const GameWindow::String& GameWindow::GetTypeName() const
+    {
+        static const String typeName = "Microsoft.Xna.Framework.GameWindow";
+        return typeName;
+    }
+
+    void GameWindow::OnActivated()
+    {
+    }
+
+    void GameWindow::OnClientSizeChanged()
+    {
+        ClientSizeChanged.Raise(this, System::EventArgs::Empty);
+    }
+
+    void GameWindow::OnDeactivated()
+    {
+    }
+
+    void GameWindow::OnOrientationChanged()
+    {
+        OrientationChanged.Raise(this, System::EventArgs::Empty);
+    }
+
+    void GameWindow::OnPaint()
+    {
+    }
+
+    void GameWindow::OnScreenDeviceNameChanged()
+    {
+        ScreenDeviceNameChanged.Raise(this, System::EventArgs::Empty);
+    }
+
+    void GameWindow::SetSupportedOrientations(DisplayOrientation orientations)
+    {
+        supportedOrientations_ = orientations;
+
+        if (!orientationIsSupported(currentOrientation_))
+        {
+            if (orientationIsSupported(DisplayOrientation::Portrait))
+            {
+                setCurrentOrientationProperty(DisplayOrientation::Portrait);
+            }
+            else if (orientationIsSupported(DisplayOrientation::LandscapeLeft))
+            {
+                setCurrentOrientationProperty(DisplayOrientation::LandscapeLeft);
+            }
+            else if (orientationIsSupported(DisplayOrientation::LandscapeRight))
+            {
+                setCurrentOrientationProperty(DisplayOrientation::LandscapeRight);
+            }
+            else
+            {
+                setCurrentOrientationProperty(DisplayOrientation::Default);
+            }
+        }
+    }
+
+    void GameWindow::SetTitle(const String& title)
+    {
+        if (window_ == nullptr)
+        {
             return;
         }
 
-        if (!SDL_SetWindowTitle(window_, title.c_str())) {
-            throw std::runtime_error(std::string("SDL_SetWindowTitle failed: ") + SDL_GetError());
+        if (!SDL_SetWindowTitle(window_, title.c_str()))
+        {
+            throw makeSdlError("SDL_SetWindowTitle");
         }
     }
 
     void GameWindow::setWindowInternal(SDL_Window* window)
     {
         window_ = window;
+
+        if (window_ != nullptr)
+        {
+            const char* nativeTitle = SDL_GetWindowTitle(window_);
+            title_ = nativeTitle != nullptr ? String(nativeTitle) : String();
+            allowUserResizing_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_RESIZABLE) != 0;
+            isBorderless_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_BORDERLESS) != 0;
+        }
+
+        refreshCachedSDLState(false);
     }
-}
+
+    void GameWindow::setCurrentOrientationProperty(DisplayOrientation value)
+    {
+        if (currentOrientation_ != value)
+        {
+            currentOrientation_ = value;
+            OnOrientationChanged();
+        }
+    }
+
+    void GameWindow::updateFromSDL()
+    {
+        refreshCachedSDLState(true);
+    }
+
+    void GameWindow::refreshCachedSDLState(bool raiseEvents)
+    {
+        const Rectangle oldBounds = clientBounds_;
+        const String oldScreenDeviceName = screenDeviceName_;
+        const DisplayOrientation oldOrientation = currentOrientation_;
+
+        clientBounds_ = queryClientBoundsFromSDL();
+
+        const String queriedScreenDeviceName = queryScreenDeviceNameFromSDL();
+        if (!queriedScreenDeviceName.empty())
+        {
+            screenDeviceName_ = queriedScreenDeviceName;
+        }
+
+        const DisplayOrientation newOrientation = orientationFromBounds(clientBounds_);
+        if (orientationIsSupported(newOrientation))
+        {
+            currentOrientation_ = newOrientation;
+        }
+
+        if (!raiseEvents)
+        {
+            return;
+        }
+
+        if (oldBounds.Width != clientBounds_.Width || oldBounds.Height != clientBounds_.Height)
+        {
+            OnClientSizeChanged();
+        }
+
+        if (oldScreenDeviceName != screenDeviceName_)
+        {
+            OnScreenDeviceNameChanged();
+        }
+
+        if (oldOrientation != currentOrientation_)
+        {
+            OnOrientationChanged();
+        }
+    }
+
+    Rectangle GameWindow::queryClientBoundsFromSDL() const
+    {
+        if (window_ == nullptr)
+        {
+            return clientBounds_;
+        }
+
+        int width = clientBounds_.Width;
+        int height = clientBounds_.Height;
+
+        if (!SDL_GetWindowSize(window_, &width, &height))
+        {
+            throw makeSdlError("SDL_GetWindowSize");
+        }
+
+        return Rectangle(0, 0, width, height);
+    }
+
+    GameWindow::String GameWindow::queryScreenDeviceNameFromSDL() const
+    {
+        if (window_ == nullptr)
+        {
+            return screenDeviceName_;
+        }
+
+        const SDL_DisplayID displayId = SDL_GetDisplayForWindow(window_);
+        if (displayId == 0)
+        {
+            return screenDeviceName_;
+        }
+
+        const char* displayName = SDL_GetDisplayName(displayId);
+        return displayName != nullptr ? String(displayName) : String();
+    }
+
+    DisplayOrientation GameWindow::orientationFromBounds(const Rectangle& bounds) const
+    {
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return DisplayOrientation::Default;
+        }
+
+        if (bounds.Height > bounds.Width)
+        {
+            return DisplayOrientation::Portrait;
+        }
+
+        return DisplayOrientation::LandscapeLeft;
+    }
+
+    bool GameWindow::orientationIsSupported(DisplayOrientation orientation) const
+    {
+        if (orientation == DisplayOrientation::Default)
+        {
+            return true;
+        }
+
+        return hasFlag(supportedOrientations_, orientation);
+    }
+
+} // namespace Microsoft::Xna::Framework

@@ -8,24 +8,6 @@
 
 namespace Microsoft::Xna::Framework {
 
-    IMPL_PROP(TimeSpan, TotalGameTime, getter1, setter1, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
-    IMPL_PROP(bool, IsRunningSlowly, getter1, setter1, member0, static0, constret1, ref1, constmet1, GameTime, nothing)
-
-    const TimeSpan& GameTime::getElapsedGameTimeProperty() const
-    {
-        return ElapsedGameTime_;
-    }
-
-    void GameTime::setElapsedGameTimeProperty(const TimeSpan& v)
-    {
-        ElapsedGameTime_ = v;
-    }
-
-    void GameTime::setElapsedGameTimeProperty(TimeSpan&& v)
-    {
-        ElapsedGameTime_ = std::move(v);
-    }
-
     GameTime::GameTime()
         : TotalGameTime_(TimeSpan::Zero),
           ElapsedGameTime_(TimeSpan::Zero),
@@ -45,6 +27,46 @@ namespace Microsoft::Xna::Framework {
           ElapsedGameTime_(std::move(elapsedGameTime)),
           IsRunningSlowly_(isRunningSlowly)
     {
+    }
+
+    const TimeSpan& GameTime::getTotalGameTimeProperty() const
+    {
+        return TotalGameTime_;
+    }
+
+    const TimeSpan& GameTime::getElapsedGameTimeProperty() const
+    {
+        return ElapsedGameTime_;
+    }
+
+    bool GameTime::getIsRunningSlowlyProperty() const
+    {
+        return IsRunningSlowly_;
+    }
+
+    void GameTime::setTotalGameTimeProperty(const TimeSpan& value)
+    {
+        TotalGameTime_ = value;
+    }
+
+    void GameTime::setTotalGameTimeProperty(TimeSpan&& value)
+    {
+        TotalGameTime_ = std::move(value);
+    }
+
+    void GameTime::setElapsedGameTimeProperty(const TimeSpan& value)
+    {
+        ElapsedGameTime_ = value;
+    }
+
+    void GameTime::setElapsedGameTimeProperty(TimeSpan&& value)
+    {
+        ElapsedGameTime_ = std::move(value);
+    }
+
+    void GameTime::setIsRunningSlowlyProperty(bool value)
+    {
+        IsRunningSlowly_ = value;
     }
 
 } // namespace Microsoft::Xna::Framework
