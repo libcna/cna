@@ -71,6 +71,11 @@ namespace Microsoft::Xna::Framework::Audio {
     }
 #endif
 
+    SoundEffectInstance::SoundEffectInstance()
+        : soundEffect_(nullptr)
+    {
+    }
+
     SoundEffectInstance::SoundEffectInstance(const SoundEffect& soundEffect)
         : soundEffect_(&soundEffect)
     {
@@ -342,4 +347,6 @@ namespace Microsoft::Xna::Framework::Audio {
         return State_;
 #endif
     }
+
+    GetTypeNameCPP(SoundEffectInstance, SoundEffectInstance)
 }

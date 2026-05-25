@@ -1,19 +1,246 @@
-//
-// Created by robertvokac on 5/24/25.
-//
-
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
 
 #include "CNA/Internal/Input/InputManager.hpp"
 
-namespace Microsoft::Xna::Framework::Input::Touch {
-    TouchPanel::TouchPanel() {}
+namespace Microsoft::Xna::Framework::Input::Touch
+{
+    using Microsoft::Xna::Framework::DisplayOrientation;
+    using Microsoft::Xna::Framework::Vector2;
 
-    TouchPanelCapabilities TouchPanel::GetCapabilities() {
-        return TouchPanelCapabilities();
+    TouchPanel::intcs TouchPanel::displayWidth_ = 0;
+    TouchPanel::intcs TouchPanel::displayHeight_ = 0;
+    DisplayOrientation TouchPanel::displayOrientation_ = DisplayOrientation::Default;
+    GestureType TouchPanel::enabledGestures_ = GestureType::None;
+    std::uintptr_t TouchPanel::windowHandle_ = 0;
+    bool TouchPanel::touchDeviceExists_ = false;
+
+    std::queue<GestureSample> TouchPanel::gestures_;
+    std::array<TouchLocation, TouchPanel::MAX_TOUCHES> TouchPanel::touches_{};
+    std::array<TouchLocation, TouchPanel::MAX_TOUCHES> TouchPanel::previousTouches_{};
+    std::vector<TouchLocation> TouchPanel::validTouches_;
+
+    TouchPanel::intcs TouchPanel::getDisplayWidthProperty()
+    {
+        return displayWidth_;
     }
 
-    TouchCollection TouchPanel::GetState() {
+    void TouchPanel::setDisplayWidthProperty(intcs value)
+    {
+        displayWidth_ = value;
+    }
+
+    TouchPanel::intcs TouchPanel::getDisplayHeightProperty()
+    {
+        return displayHeight_;
+    }
+
+    void TouchPanel::setDisplayHeightProperty(intcs value)
+    {
+        displayHeight_ = value;
+    }
+
+    DisplayOrientation TouchPanel::getDisplayOrientationProperty()
+    {
+        return displayOrientation_;
+    }
+
+    void TouchPanel::setDisplayOrientationProperty(DisplayOrientation value)
+    {
+        displayOrientation_ = value;
+    }
+
+    GestureType TouchPanel::getEnabledGesturesProperty()
+    {
+        return enabledGestures_;
+    }
+
+    void TouchPanel::setEnabledGesturesProperty(GestureType value)
+    {
+        enabledGestures_ = value;
+    }
+
+    bool TouchPanel::getIsGestureAvailableProperty()
+    {
+        return !gestures_.empty();
+    }
+
+    std::uintptr_t TouchPanel::getWindowHandleProperty()
+    {
+        return windowHandle_;
+    }
+
+    void TouchPanel::setWindowHandleProperty(std::uintptr_t value)
+    {
+        windowHandle_ = value;
+    }
+
+    bool TouchPanel::getTouchDeviceExistsProperty()
+    {
+        return touchDeviceExists_;
+    }
+
+    void TouchPanel::setTouchDeviceExistsProperty(bool value)
+    {
+        touchDeviceExists_ = value;
+    }
+
+    TouchPanelCapabilities TouchPanel::GetCapabilities()
+    {
+        if (touchDeviceExists_)
+        {
+            return TouchPanelCapabilities(true);
+        }
+
+        const TouchCollection state = CNA::Internal::Input::InputManager::GetTouchState();
+        return TouchPanelCapabilities(!state.empty());
+    }
+
+    TouchCollection TouchPanel::GetState()
+    {
+        validTouches_.clear();
+
+        for (const TouchLocation& touch : touches_)
+        {
+            if (touch.getStateProperty() != TouchLocationState::Invalid)
+            {
+                validTouches_.push_back(touch);
+            }
+        }
+
+        if (!validTouches_.empty())
+        {
+            return TouchCollection(validTouches_);
+        }
+
         return CNA::Internal::Input::InputManager::GetTouchState();
+    }
+
+    GestureSample TouchPanel::ReadGesture()
+    {
+        if (gestures_.empty())
+        {
+            throw std::logic_error("No gesture is available.");
+        }
+
+        GestureSample result = gestures_.front();
+        gestures_.pop();
+        return result;
+    }
+
+    void TouchPanel::EnqueueGesture(const GestureSample& gesture)
+    {
+        gestures_.push(gesture);
+    }
+
+    void TouchPanel::INTERNAL_onTouchEvent(
+        intcs fingerId,
+        TouchLocationState state,
+        float x,
+        float y,
+        float dx,
+        float dy
+    ) {
+        const Vector2 touchPos(
+            std::round(x * static_cast<float>(displayWidth_)),
+            std::round(y * static_cast<float>(displayHeight_))
+        );
+
+        const Vector2 delta(
+            std::round(dx * static_cast<float>(displayWidth_)),
+            std::round(dy * static_cast<float>(displayHeight_))
+        );
+
+        (void) fingerId;
+        (void) state;
+        (void) touchPos;
+        (void) delta;
+
+        // Gesture recognition is intentionally left for the future GestureDetector port.
+        // Gesture samples can still be queued through EnqueueGesture.
+    }
+
+    void TouchPanel::SetFinger(intcs index, intcs fingerId, const Vector2& fingerPos)
+    {
+        if (index < 0 || index >= MAX_TOUCHES)
+        {
+            throw std::out_of_range("index");
+        }
+
+        const auto slot = static_cast<std::size_t>(index);
+        const TouchLocation& previous = previousTouches_[slot];
+
+        if (fingerId == NO_FINGER)
+        {
+            if (previous.getStateProperty() != TouchLocationState::Invalid &&
+                previous.getStateProperty() != TouchLocationState::Released)
+            {
+                touches_[slot] = TouchLocation(
+                    previous.getIdProperty(),
+                    TouchLocationState::Released,
+                    previous.getPositionProperty()
+                );
+
+                updateInputManagerTouch(
+                    previous.getIdProperty(),
+                    TouchLocationState::Released,
+                    previous.getPositionProperty()
+                );
+            }
+            else
+            {
+                touches_[slot] = TouchLocation(
+                    NO_FINGER,
+                    TouchLocationState::Invalid,
+                    Vector2::Zero
+                );
+            }
+
+            return;
+        }
+
+        if (previous.getStateProperty() == TouchLocationState::Invalid)
+        {
+            touches_[slot] = TouchLocation(
+                fingerId,
+                TouchLocationState::Pressed,
+                fingerPos
+            );
+
+            updateInputManagerTouch(fingerId, TouchLocationState::Pressed, fingerPos);
+        }
+        else
+        {
+            touches_[slot] = TouchLocation(
+                fingerId,
+                TouchLocationState::Moved,
+                fingerPos
+            );
+
+            updateInputManagerTouch(fingerId, TouchLocationState::Moved, fingerPos);
+        }
+
+        touchDeviceExists_ = true;
+    }
+
+    void TouchPanel::Update()
+    {
+        previousTouches_ = touches_;
+
+        // Platform-specific polling should update touch slots via SetFinger().
+        // Existing CNA backends may also update CNA::Internal::Input::InputManager directly.
+    }
+
+    void TouchPanel::updateInputManagerTouch(intcs fingerId, TouchLocationState state, const Vector2& position)
+    {
+        if (fingerId == NO_FINGER)
+        {
+            return;
+        }
+
+        CNA::Internal::Input::InputManager::SetTouchState(fingerId, state, position);
     }
 }
