@@ -616,10 +616,13 @@ namespace Microsoft::Xna::Framework::Graphics
         const int height = presentationParameters_.getBackBufferHeightProperty();
         if (width > 0 && height > 0)
         {
+#ifndef __ANDROID__
+
             if (!SDL_SetWindowSize(window_, width, height))
             {
                 throw makeSdlError("SDL_SetWindowSize");
             }
+#endif
         }
     }
 }

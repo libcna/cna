@@ -143,10 +143,12 @@ namespace Microsoft::Xna::Framework {
         {
             if (clientWidth > 0 && clientHeight > 0)
             {
+#ifndef __ANDROID__
                 if (!SDL_SetWindowSize(window_, clientWidth, clientHeight))
                 {
                     throw makeSdlError("SDL_SetWindowSize");
                 }
+#endif
             }
 
             if (hasPendingScreenDeviceChange_)

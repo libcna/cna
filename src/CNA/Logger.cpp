@@ -159,6 +159,7 @@ namespace CNA
     void Logger::SetMinimumLevel(LogLevel level)
     {
         minimumLevel_ = level;
+        SDL_SetLogPriorities(static_cast<SDL_LogPriority>(ToSDLPriority(level)));
     }
 
     LogLevel Logger::GetMinimumLevel()
@@ -170,19 +171,20 @@ namespace CNA
     {
         switch (level)
         {
-            case LogLevel::FATAL:
-                return SDL_LOG_PRIORITY_CRITICAL;
-            case LogLevel::ERROR:
-                return SDL_LOG_PRIORITY_ERROR;
-            case LogLevel::WARN:
-                return SDL_LOG_PRIORITY_WARN;
-            case LogLevel::INFO:
-                return SDL_LOG_PRIORITY_INFO;
+            // case LogLevel::FATAL:
+            //     return SDL_LOG_PRIORITY_CRITICAL;
+            // case LogLevel::ERROR:
+            //     return SDL_LOG_PRIORITY_ERROR;
+            // case LogLevel::WARN:
+            //     return SDL_LOG_PRIORITY_WARN;
+            // case LogLevel::INFO:
+            //     return SDL_LOG_PRIORITY_INFO;
+
             //todo
-            // case LogLevel::DEBUG:
-            // case LogLevel::TRACE:
-            // case LogLevel::EXPERIMENT:
-            //     return SDL_LOG_PRIORITY_DEBUG;
+            case LogLevel::DEBUG:
+            case LogLevel::TRACE:
+            case LogLevel::EXPERIMENT:
+                return SDL_LOG_PRIORITY_DEBUG;
             default:
                 return SDL_LOG_PRIORITY_INFO;
         }

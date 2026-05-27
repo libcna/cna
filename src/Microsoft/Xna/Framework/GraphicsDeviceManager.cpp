@@ -504,10 +504,12 @@ namespace Microsoft::Xna::Framework
 
             if (pp.getBackBufferWidthProperty() > 0 && pp.getBackBufferHeightProperty() > 0)
             {
+#ifndef __ANDROID__
                 if (!SDL_SetWindowSize(window, pp.getBackBufferWidthProperty(), pp.getBackBufferHeightProperty()))
                 {
                     throw makeSdlError("SDL_SetWindowSize");
                 }
+#endif
             }
         }
 
