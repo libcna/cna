@@ -414,7 +414,7 @@ namespace CNA::Internal::Backends::EasyGL {
     void EasyGLGraphicsBackend::SetDepthTestEnabled(bool enabled) {
         device.set_depth_test_enabled(enabled);
         if (enabled) {
-            device.set_depth_func(::easygl::CompareFunc::LessEqual);
+            device.set_depth_func(::easygl::CompareFunc::Lequal);
             device.set_depth_mask(true);
         }
     }
