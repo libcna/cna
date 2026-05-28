@@ -151,7 +151,7 @@ protected:
 
         effect_->View       = Matrix::CreateLookAt(cameraPosition_, cameraTarget_, Vector3::Up);
         effect_->Projection = Matrix::CreatePerspectiveFieldOfView(kPiOver4, aspect, 0.1f, 300.0f);
-        effect_->World      = Matrix::Identity();
+        effect_->World      = Matrix::getIdentityProperty();
 
         // XNA 4.0-style draw flow.
         for (auto& pass : effect_->CurrentTechnique().Passes()) {

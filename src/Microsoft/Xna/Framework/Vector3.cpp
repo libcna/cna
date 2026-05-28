@@ -105,6 +105,23 @@ namespace Microsoft::Xna::Framework
     float Vector3::LengthSquared() const { return (X * X) + (Y * Y) + (Z * Z); }
     void Vector3::Normalize() { const float factor = 1.0f / std::sqrt((X * X) + (Y * Y) + (Z * Z)); X *= factor; Y *= factor; Z *= factor; }
     std::string Vector3::ToString() const { std::ostringstream s; s << "{X:" << X << " Y:" << Y << " Z:" << Z << "}"; return s.str(); }
+
+    Vector3& Vector3::operator+=(const Vector3& vector3)
+    {
+        X += vector3.X;
+        Y += vector3.Y;
+        Z += vector3.Z;
+        return *this;
+    }
+
+    Vector3& Vector3::operator-=(const Vector3& vector3)
+    {
+        X -= vector3.X;
+        Y -= vector3.Y;
+        Z -= vector3.Z;
+        return *this;
+    }
+
     std::string Vector3::getDebugDisplayStringProperty() const { std::ostringstream s; s << X << " " << Y << " " << Z; return s.str(); }
     void Vector3::CheckForNaNs() const { if (std::isnan(X) || std::isnan(Y) || std::isnan(Z)) throw std::logic_error("Vector3 contains NaNs!"); }
 

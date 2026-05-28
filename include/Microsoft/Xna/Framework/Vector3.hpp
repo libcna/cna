@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -52,6 +53,8 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] float LengthSquared() const;
         void Normalize();
         [[nodiscard]] std::string ToString() const;
+        NOXNA Vector3& operator+=(const Vector3& vector3);
+        NOXNA Vector3& operator-=(const Vector3& vector3);
 
         [[nodiscard]] static Vector3 Add(Vector3 value1, Vector3 value2);
         static void Add(const Vector3& value1, const Vector3& value2, Vector3& result);
