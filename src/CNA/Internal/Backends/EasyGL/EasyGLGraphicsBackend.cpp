@@ -420,6 +420,13 @@ void main()
         //    no GL calls made). Context is still valid here for proper cleanup.
         metagl::NotifyContextLost();
 
+        // program3d_ is not tracked by ResourceRegistry (it is recreated lazily
+        // by EnsureColored3DProgram). Reset its handle now so that create() in
+        // EnsureColored3DProgram() allocates a fresh program instead of reusing
+        // the stale handle from the destroyed context.
+        program3d_.reset_handle_no_gl();
+        program3d_ready_ = false;
+
         // 2. Destroy and recreate the SDL GL context.
         if (gl_context)
         {
@@ -434,7 +441,6 @@ void main()
 
         // 3. Reload GL function pointers and increment context generation.
         device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
-        program3d_ready_ = false;
 
         // 4. Notify listeners that context is restored. ResourceRegistry calls
         //    recreate_gl_resource() on every tracked resource (shaders, textures, buffers, VAOs).
