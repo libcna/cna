@@ -1,8 +1,8 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include <filesystem>
 
-namespace Microsoft::Xna::Framework::Content {
-
+namespace Microsoft::Xna::Framework::Content
+{
     const std::string& ContentManager::getRootDirectoryProperty() const
     {
         return RootDirectory_;
@@ -22,11 +22,13 @@ namespace Microsoft::Xna::Framework::Content {
 
     std::string ContentManager::BuildAssetPath(const std::string& assetName) const
     {
-        if (assetName.empty()) {
+        if (assetName.empty())
+        {
             return getRootDirectoryProperty();
         }
 
-        if (getRootDirectoryProperty().empty()) {
+        if (getRootDirectoryProperty().empty())
+        {
             return assetName;
         }
 

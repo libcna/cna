@@ -7,14 +7,15 @@
 #  include <TargetConditionals.h>
 #endif
 
-namespace CNA {
-
+namespace CNA
+{
     /**
      * @brief Represents a target platform supported by CNA.
      *
      * @note Status: Implemented
      */
-    enum class Platform {
+    enum class Platform
+    {
         Desktop,
         Android,
         iOS,
@@ -31,7 +32,8 @@ namespace CNA {
      *
      * @note Status: Implemented
      */
-    constexpr Platform getCurrentPlatform() {
+    constexpr Platform getCurrentPlatform()
+    {
 #if defined(__EMSCRIPTEN__)
         return Platform::Web;
 #elif defined(__ANDROID__)
@@ -46,6 +48,4 @@ namespace CNA {
         return Platform::Desktop;
 #endif
     }
-
-
 } // CNA

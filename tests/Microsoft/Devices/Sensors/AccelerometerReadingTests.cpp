@@ -3,4 +3,3 @@
 
 using Microsoft::Devices::Sensors::AccelerometerReading;
 using Microsoft::Xna::Framework::Vector3;
-

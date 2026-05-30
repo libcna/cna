@@ -118,25 +118,67 @@ namespace Microsoft::Xna::Framework
     }
 
     Vector3 Matrix::getBackwardProperty() const { return Vector3(M31, M32, M33); }
-    void Matrix::setBackwardProperty(Vector3 value) { M31 = value.X; M32 = value.Y; M33 = value.Z; }
+
+    void Matrix::setBackwardProperty(Vector3 value)
+    {
+        M31 = value.X;
+        M32 = value.Y;
+        M33 = value.Z;
+    }
 
     Vector3 Matrix::getDownProperty() const { return Vector3(-M21, -M22, -M23); }
-    void Matrix::setDownProperty(Vector3 value) { M21 = -value.X; M22 = -value.Y; M23 = -value.Z; }
+
+    void Matrix::setDownProperty(Vector3 value)
+    {
+        M21 = -value.X;
+        M22 = -value.Y;
+        M23 = -value.Z;
+    }
 
     Vector3 Matrix::getForwardProperty() const { return Vector3(-M31, -M32, -M33); }
-    void Matrix::setForwardProperty(Vector3 value) { M31 = -value.X; M32 = -value.Y; M33 = -value.Z; }
+
+    void Matrix::setForwardProperty(Vector3 value)
+    {
+        M31 = -value.X;
+        M32 = -value.Y;
+        M33 = -value.Z;
+    }
 
     Vector3 Matrix::getLeftProperty() const { return Vector3(-M11, -M12, -M13); }
-    void Matrix::setLeftProperty(Vector3 value) { M11 = -value.X; M12 = -value.Y; M13 = -value.Z; }
+
+    void Matrix::setLeftProperty(Vector3 value)
+    {
+        M11 = -value.X;
+        M12 = -value.Y;
+        M13 = -value.Z;
+    }
 
     Vector3 Matrix::getRightProperty() const { return Vector3(M11, M12, M13); }
-    void Matrix::setRightProperty(Vector3 value) { M11 = value.X; M12 = value.Y; M13 = value.Z; }
+
+    void Matrix::setRightProperty(Vector3 value)
+    {
+        M11 = value.X;
+        M12 = value.Y;
+        M13 = value.Z;
+    }
 
     Vector3 Matrix::getTranslationProperty() const { return Vector3(M41, M42, M43); }
-    void Matrix::setTranslationProperty(Vector3 value) { M41 = value.X; M42 = value.Y; M43 = value.Z; }
+
+    void Matrix::setTranslationProperty(Vector3 value)
+    {
+        M41 = value.X;
+        M42 = value.Y;
+        M43 = value.Z;
+    }
 
     Vector3 Matrix::getUpProperty() const { return Vector3(M21, M22, M23); }
-    void Matrix::setUpProperty(Vector3 value) { M21 = value.X; M22 = value.Y; M23 = value.Z; }
+
+    void Matrix::setUpProperty(Vector3 value)
+    {
+        M21 = value.X;
+        M22 = value.Y;
+        M23 = value.Z;
+    }
 
     bool Matrix::Decompose(Vector3& scale, Quaternion& rotation, Vector3& translation) const
     {
@@ -180,34 +222,34 @@ namespace Microsoft::Xna::Framework
         const float num14 = (M31 * M43) - (M33 * M41);
         const float num13 = (M31 * M42) - (M32 * M41);
         return (((M11 * (((M22 * num18) - (M23 * num17)) + (M24 * num16))) -
-                 (M12 * (((M21 * num18) - (M23 * num15)) + (M24 * num14)))) +
+                    (M12 * (((M21 * num18) - (M23 * num15)) + (M24 * num14)))) +
                 (M13 * (((M21 * num17) - (M22 * num15)) + (M24 * num13)))) -
-               (M14 * (((M21 * num16) - (M22 * num14)) + (M23 * num13)));
+            (M14 * (((M21 * num16) - (M22 * num14)) + (M23 * num13)));
     }
 
     bool Matrix::Equals(const Matrix& other) const
     {
         return M11 == other.M11 && M12 == other.M12 && M13 == other.M13 && M14 == other.M14 &&
-               M21 == other.M21 && M22 == other.M22 && M23 == other.M23 && M24 == other.M24 &&
-               M31 == other.M31 && M32 == other.M32 && M33 == other.M33 && M34 == other.M34 &&
-               M41 == other.M41 && M42 == other.M42 && M43 == other.M43 && M44 == other.M44;
+            M21 == other.M21 && M22 == other.M22 && M23 == other.M23 && M24 == other.M24 &&
+            M31 == other.M31 && M32 == other.M32 && M33 == other.M33 && M34 == other.M34 &&
+            M41 == other.M41 && M42 == other.M42 && M43 == other.M43 && M44 == other.M44;
     }
 
     int Matrix::GetHashCode() const
     {
         return FloatHash(M11) + FloatHash(M12) + FloatHash(M13) + FloatHash(M14) +
-               FloatHash(M21) + FloatHash(M22) + FloatHash(M23) + FloatHash(M24) +
-               FloatHash(M31) + FloatHash(M32) + FloatHash(M33) + FloatHash(M34) +
-               FloatHash(M41) + FloatHash(M42) + FloatHash(M43) + FloatHash(M44);
+            FloatHash(M21) + FloatHash(M22) + FloatHash(M23) + FloatHash(M24) +
+            FloatHash(M31) + FloatHash(M32) + FloatHash(M33) + FloatHash(M34) +
+            FloatHash(M41) + FloatHash(M42) + FloatHash(M43) + FloatHash(M44);
     }
 
     std::string Matrix::ToString() const
     {
         std::ostringstream stream;
         stream << "{M11:" << M11 << " M12:" << M12 << " M13:" << M13 << " M14:" << M14
-               << "} {M21:" << M21 << " M22:" << M22 << " M23:" << M23 << " M24:" << M24
-               << "} {M31:" << M31 << " M32:" << M32 << " M33:" << M33 << " M34:" << M34
-               << "} {M41:" << M41 << " M42:" << M42 << " M43:" << M43 << " M44:" << M44 << "}";
+            << "} {M21:" << M21 << " M22:" << M22 << " M23:" << M23 << " M24:" << M24
+            << "} {M31:" << M31 << " M32:" << M32 << " M33:" << M33 << " M34:" << M34
+            << "} {M41:" << M41 << " M42:" << M42 << " M43:" << M43 << " M44:" << M44 << "}";
         return stream.str();
     }
 
@@ -215,9 +257,9 @@ namespace Microsoft::Xna::Framework
     {
         std::ostringstream stream;
         stream << "( " << M11 << " " << M12 << " " << M13 << " " << M14 << " ) \r\n"
-               << "( " << M21 << " " << M22 << " " << M23 << " " << M24 << " ) \r\n"
-               << "( " << M31 << " " << M32 << " " << M33 << " " << M34 << " ) \r\n"
-               << "( " << M41 << " " << M42 << " " << M43 << " " << M44 << " )";
+            << "( " << M21 << " " << M22 << " " << M23 << " " << M24 << " ) \r\n"
+            << "( " << M31 << " " << M32 << " " << M33 << " " << M34 << " ) \r\n"
+            << "( " << M41 << " " << M42 << " " << M43 << " " << M44 << " )";
         return stream.str();
     }
 
@@ -260,14 +302,17 @@ namespace Microsoft::Xna::Framework
         result.M44 = matrix1.M44 + matrix2.M44;
     }
 
-    Matrix Matrix::CreateBillboard(Vector3 objectPosition, Vector3 cameraPosition, Vector3 cameraUpVector, std::optional<Vector3> cameraForwardVector)
+    Matrix Matrix::CreateBillboard(Vector3 objectPosition, Vector3 cameraPosition, Vector3 cameraUpVector,
+                                   std::optional<Vector3> cameraForwardVector)
     {
         Matrix result;
         CreateBillboard(objectPosition, cameraPosition, cameraUpVector, cameraForwardVector, result);
         return result;
     }
 
-    void Matrix::CreateBillboard(const Vector3& objectPosition, const Vector3& cameraPosition, const Vector3& cameraUpVector, std::optional<Vector3> cameraForwardVector, Matrix& result)
+    void Matrix::CreateBillboard(const Vector3& objectPosition, const Vector3& cameraPosition,
+                                 const Vector3& cameraUpVector, std::optional<Vector3> cameraForwardVector,
+                                 Matrix& result)
     {
         Vector3 cameraDir = Sub3(objectPosition, cameraPosition);
         const float num = LengthSquared3(cameraDir);
@@ -283,23 +328,37 @@ namespace Microsoft::Xna::Framework
         const Vector3 right = Normalize3(Cross3(cameraUpVector, cameraDir));
         const Vector3 up = Cross3(cameraDir, right);
 
-        result.M11 = right.X;     result.M12 = right.Y;     result.M13 = right.Z;     result.M14 = 0.0f;
-        result.M21 = up.X;        result.M22 = up.Y;        result.M23 = up.Z;        result.M24 = 0.0f;
-        result.M31 = cameraDir.X; result.M32 = cameraDir.Y; result.M33 = cameraDir.Z; result.M34 = 0.0f;
+        result.M11 = right.X;
+        result.M12 = right.Y;
+        result.M13 = right.Z;
+        result.M14 = 0.0f;
+        result.M21 = up.X;
+        result.M22 = up.Y;
+        result.M23 = up.Z;
+        result.M24 = 0.0f;
+        result.M31 = cameraDir.X;
+        result.M32 = cameraDir.Y;
+        result.M33 = cameraDir.Z;
+        result.M34 = 0.0f;
         result.M41 = objectPosition.X;
         result.M42 = objectPosition.Y;
         result.M43 = objectPosition.Z;
         result.M44 = 1.0f;
     }
 
-    Matrix Matrix::CreateConstrainedBillboard(Vector3 objectPosition, Vector3 cameraPosition, Vector3 rotateAxis, std::optional<Vector3> cameraForwardVector, std::optional<Vector3> objectForwardVector)
+    Matrix Matrix::CreateConstrainedBillboard(Vector3 objectPosition, Vector3 cameraPosition, Vector3 rotateAxis,
+                                              std::optional<Vector3> cameraForwardVector,
+                                              std::optional<Vector3> objectForwardVector)
     {
         Matrix result;
-        CreateConstrainedBillboard(objectPosition, cameraPosition, rotateAxis, cameraForwardVector, objectForwardVector, result);
+        CreateConstrainedBillboard(objectPosition, cameraPosition, rotateAxis, cameraForwardVector, objectForwardVector,
+                                   result);
         return result;
     }
 
-    void Matrix::CreateConstrainedBillboard(const Vector3& objectPosition, const Vector3& cameraPosition, const Vector3& rotateAxis, std::optional<Vector3> cameraForwardVector, std::optional<Vector3> objectForwardVector, Matrix& result)
+    void Matrix::CreateConstrainedBillboard(const Vector3& objectPosition, const Vector3& cameraPosition,
+                                            const Vector3& rotateAxis, std::optional<Vector3> cameraForwardVector,
+                                            std::optional<Vector3> objectForwardVector, Matrix& result)
     {
         float num;
         Vector3 vector;
@@ -349,9 +408,18 @@ namespace Microsoft::Xna::Framework
             vector = Normalize3(vector);
         }
 
-        result.M11 = vector3.X; result.M12 = vector3.Y; result.M13 = vector3.Z; result.M14 = 0.0f;
-        result.M21 = vector4.X; result.M22 = vector4.Y; result.M23 = vector4.Z; result.M24 = 0.0f;
-        result.M31 = vector.X;  result.M32 = vector.Y;  result.M33 = vector.Z;  result.M34 = 0.0f;
+        result.M11 = vector3.X;
+        result.M12 = vector3.Y;
+        result.M13 = vector3.Z;
+        result.M14 = 0.0f;
+        result.M21 = vector4.X;
+        result.M22 = vector4.Y;
+        result.M23 = vector4.Z;
+        result.M24 = 0.0f;
+        result.M31 = vector.X;
+        result.M32 = vector.Y;
+        result.M33 = vector.Z;
+        result.M34 = 0.0f;
         result.M41 = objectPosition.X;
         result.M42 = objectPosition.Y;
         result.M43 = objectPosition.Z;
@@ -454,15 +522,25 @@ namespace Microsoft::Xna::Framework
         return result;
     }
 
-    void Matrix::CreateLookAt(const Vector3& cameraPosition, const Vector3& cameraTarget, const Vector3& cameraUpVector, Matrix& result)
+    void Matrix::CreateLookAt(const Vector3& cameraPosition, const Vector3& cameraTarget, const Vector3& cameraUpVector,
+                              Matrix& result)
     {
         const Vector3 vectorA = Normalize3(Sub3(cameraPosition, cameraTarget));
         const Vector3 vectorB = Normalize3(Cross3(cameraUpVector, vectorA));
         const Vector3 vectorC = Cross3(vectorA, vectorB);
 
-        result.M11 = vectorB.X; result.M12 = vectorC.X; result.M13 = vectorA.X; result.M14 = 0.0f;
-        result.M21 = vectorB.Y; result.M22 = vectorC.Y; result.M23 = vectorA.Y; result.M24 = 0.0f;
-        result.M31 = vectorB.Z; result.M32 = vectorC.Z; result.M33 = vectorA.Z; result.M34 = 0.0f;
+        result.M11 = vectorB.X;
+        result.M12 = vectorC.X;
+        result.M13 = vectorA.X;
+        result.M14 = 0.0f;
+        result.M21 = vectorB.Y;
+        result.M22 = vectorC.Y;
+        result.M23 = vectorA.Y;
+        result.M24 = 0.0f;
+        result.M31 = vectorB.Z;
+        result.M32 = vectorC.Z;
+        result.M33 = vectorA.Z;
+        result.M34 = 0.0f;
         result.M41 = -Dot3(vectorB, cameraPosition);
         result.M42 = -Dot3(vectorC, cameraPosition);
         result.M43 = -Dot3(vectorA, cameraPosition);
@@ -489,14 +567,16 @@ namespace Microsoft::Xna::Framework
         result.M44 = 1.0f;
     }
 
-    Matrix Matrix::CreateOrthographicOffCenter(float left, float right, float bottom, float top, float zNearPlane, float zFarPlane)
+    Matrix Matrix::CreateOrthographicOffCenter(float left, float right, float bottom, float top, float zNearPlane,
+                                               float zFarPlane)
     {
         Matrix result;
         CreateOrthographicOffCenter(left, right, bottom, top, zNearPlane, zFarPlane, result);
         return result;
     }
 
-    void Matrix::CreateOrthographicOffCenter(float left, float right, float bottom, float top, float zNearPlane, float zFarPlane, Matrix& result)
+    void Matrix::CreateOrthographicOffCenter(float left, float right, float bottom, float top, float zNearPlane,
+                                             float zFarPlane, Matrix& result)
     {
         result.M11 = 2.0f / (right - left);
         result.M12 = result.M13 = result.M14 = 0.0f;
@@ -517,7 +597,8 @@ namespace Microsoft::Xna::Framework
         return result;
     }
 
-    void Matrix::CreatePerspective(float width, float height, float nearPlaneDistance, float farPlaneDistance, Matrix& result)
+    void Matrix::CreatePerspective(float width, float height, float nearPlaneDistance, float farPlaneDistance,
+                                   Matrix& result)
     {
         if (nearPlaneDistance <= 0.0f) throw std::invalid_argument("nearPlaneDistance <= 0");
         if (farPlaneDistance <= 0.0f) throw std::invalid_argument("farPlaneDistance <= 0");
@@ -534,14 +615,16 @@ namespace Microsoft::Xna::Framework
         result.M43 = (nearPlaneDistance * farPlaneDistance) / (nearPlaneDistance - farPlaneDistance);
     }
 
-    Matrix Matrix::CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance, float farPlaneDistance)
+    Matrix Matrix::CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance,
+                                                float farPlaneDistance)
     {
         Matrix result;
         CreatePerspectiveFieldOfView(fieldOfView, aspectRatio, nearPlaneDistance, farPlaneDistance, result);
         return result;
     }
 
-    void Matrix::CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance, float farPlaneDistance, Matrix& result)
+    void Matrix::CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance,
+                                              float farPlaneDistance, Matrix& result)
     {
         if (fieldOfView <= 0.0f || fieldOfView >= 3.141593f) throw std::invalid_argument("fieldOfView <= 0 or >= PI");
         if (nearPlaneDistance <= 0.0f) throw std::invalid_argument("nearPlaneDistance <= 0");
@@ -562,14 +645,16 @@ namespace Microsoft::Xna::Framework
         result.M43 = (nearPlaneDistance * farPlaneDistance) / (nearPlaneDistance - farPlaneDistance);
     }
 
-    Matrix Matrix::CreatePerspectiveOffCenter(float left, float right, float bottom, float top, float nearPlaneDistance, float farPlaneDistance)
+    Matrix Matrix::CreatePerspectiveOffCenter(float left, float right, float bottom, float top, float nearPlaneDistance,
+                                              float farPlaneDistance)
     {
         Matrix result;
         CreatePerspectiveOffCenter(left, right, bottom, top, nearPlaneDistance, farPlaneDistance, result);
         return result;
     }
 
-    void Matrix::CreatePerspectiveOffCenter(float left, float right, float bottom, float top, float nearPlaneDistance, float farPlaneDistance, Matrix& result)
+    void Matrix::CreatePerspectiveOffCenter(float left, float right, float bottom, float top, float nearPlaneDistance,
+                                            float farPlaneDistance, Matrix& result)
     {
         if (nearPlaneDistance <= 0.0f) throw std::invalid_argument("nearPlaneDistance <= 0");
         if (farPlaneDistance <= 0.0f) throw std::invalid_argument("farPlaneDistance <= 0");
@@ -740,9 +825,18 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::CreateTranslation(float xPosition, float yPosition, float zPosition, Matrix& result)
     {
-        result.M11 = 1.0f; result.M12 = 0.0f; result.M13 = 0.0f; result.M14 = 0.0f;
-        result.M21 = 0.0f; result.M22 = 1.0f; result.M23 = 0.0f; result.M24 = 0.0f;
-        result.M31 = 0.0f; result.M32 = 0.0f; result.M33 = 1.0f; result.M34 = 0.0f;
+        result.M11 = 1.0f;
+        result.M12 = 0.0f;
+        result.M13 = 0.0f;
+        result.M14 = 0.0f;
+        result.M21 = 0.0f;
+        result.M22 = 1.0f;
+        result.M23 = 0.0f;
+        result.M24 = 0.0f;
+        result.M31 = 0.0f;
+        result.M32 = 0.0f;
+        result.M33 = 1.0f;
+        result.M34 = 0.0f;
         result.M41 = xPosition;
         result.M42 = yPosition;
         result.M43 = zPosition;
@@ -815,10 +909,22 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Divide(const Matrix& matrix1, const Matrix& matrix2, Matrix& result)
     {
-        result.M11 = matrix1.M11 / matrix2.M11; result.M12 = matrix1.M12 / matrix2.M12; result.M13 = matrix1.M13 / matrix2.M13; result.M14 = matrix1.M14 / matrix2.M14;
-        result.M21 = matrix1.M21 / matrix2.M21; result.M22 = matrix1.M22 / matrix2.M22; result.M23 = matrix1.M23 / matrix2.M23; result.M24 = matrix1.M24 / matrix2.M24;
-        result.M31 = matrix1.M31 / matrix2.M31; result.M32 = matrix1.M32 / matrix2.M32; result.M33 = matrix1.M33 / matrix2.M33; result.M34 = matrix1.M34 / matrix2.M34;
-        result.M41 = matrix1.M41 / matrix2.M41; result.M42 = matrix1.M42 / matrix2.M42; result.M43 = matrix1.M43 / matrix2.M43; result.M44 = matrix1.M44 / matrix2.M44;
+        result.M11 = matrix1.M11 / matrix2.M11;
+        result.M12 = matrix1.M12 / matrix2.M12;
+        result.M13 = matrix1.M13 / matrix2.M13;
+        result.M14 = matrix1.M14 / matrix2.M14;
+        result.M21 = matrix1.M21 / matrix2.M21;
+        result.M22 = matrix1.M22 / matrix2.M22;
+        result.M23 = matrix1.M23 / matrix2.M23;
+        result.M24 = matrix1.M24 / matrix2.M24;
+        result.M31 = matrix1.M31 / matrix2.M31;
+        result.M32 = matrix1.M32 / matrix2.M32;
+        result.M33 = matrix1.M33 / matrix2.M33;
+        result.M34 = matrix1.M34 / matrix2.M34;
+        result.M41 = matrix1.M41 / matrix2.M41;
+        result.M42 = matrix1.M42 / matrix2.M42;
+        result.M43 = matrix1.M43 / matrix2.M43;
+        result.M44 = matrix1.M44 / matrix2.M44;
     }
 
     Matrix Matrix::Divide(Matrix matrix1, float divider)
@@ -829,10 +935,22 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Divide(const Matrix& matrix1, float divider, Matrix& result)
     {
-        result.M11 = matrix1.M11 / divider; result.M12 = matrix1.M12 / divider; result.M13 = matrix1.M13 / divider; result.M14 = matrix1.M14 / divider;
-        result.M21 = matrix1.M21 / divider; result.M22 = matrix1.M22 / divider; result.M23 = matrix1.M23 / divider; result.M24 = matrix1.M24 / divider;
-        result.M31 = matrix1.M31 / divider; result.M32 = matrix1.M32 / divider; result.M33 = matrix1.M33 / divider; result.M34 = matrix1.M34 / divider;
-        result.M41 = matrix1.M41 / divider; result.M42 = matrix1.M42 / divider; result.M43 = matrix1.M43 / divider; result.M44 = matrix1.M44 / divider;
+        result.M11 = matrix1.M11 / divider;
+        result.M12 = matrix1.M12 / divider;
+        result.M13 = matrix1.M13 / divider;
+        result.M14 = matrix1.M14 / divider;
+        result.M21 = matrix1.M21 / divider;
+        result.M22 = matrix1.M22 / divider;
+        result.M23 = matrix1.M23 / divider;
+        result.M24 = matrix1.M24 / divider;
+        result.M31 = matrix1.M31 / divider;
+        result.M32 = matrix1.M32 / divider;
+        result.M33 = matrix1.M33 / divider;
+        result.M34 = matrix1.M34 / divider;
+        result.M41 = matrix1.M41 / divider;
+        result.M42 = matrix1.M42 / divider;
+        result.M43 = matrix1.M43 / divider;
+        result.M44 = matrix1.M44 / divider;
     }
 
     Matrix Matrix::Invert(Matrix matrix)
@@ -943,25 +1061,41 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Multiply(const Matrix& matrix1, const Matrix& matrix2, Matrix& result)
     {
-        result.M11 = matrix1.M11 * matrix2.M11 + matrix1.M12 * matrix2.M21 + matrix1.M13 * matrix2.M31 + matrix1.M14 * matrix2.M41;
-        result.M12 = matrix1.M11 * matrix2.M12 + matrix1.M12 * matrix2.M22 + matrix1.M13 * matrix2.M32 + matrix1.M14 * matrix2.M42;
-        result.M13 = matrix1.M11 * matrix2.M13 + matrix1.M12 * matrix2.M23 + matrix1.M13 * matrix2.M33 + matrix1.M14 * matrix2.M43;
-        result.M14 = matrix1.M11 * matrix2.M14 + matrix1.M12 * matrix2.M24 + matrix1.M13 * matrix2.M34 + matrix1.M14 * matrix2.M44;
+        result.M11 = matrix1.M11 * matrix2.M11 + matrix1.M12 * matrix2.M21 + matrix1.M13 * matrix2.M31 + matrix1.M14 *
+            matrix2.M41;
+        result.M12 = matrix1.M11 * matrix2.M12 + matrix1.M12 * matrix2.M22 + matrix1.M13 * matrix2.M32 + matrix1.M14 *
+            matrix2.M42;
+        result.M13 = matrix1.M11 * matrix2.M13 + matrix1.M12 * matrix2.M23 + matrix1.M13 * matrix2.M33 + matrix1.M14 *
+            matrix2.M43;
+        result.M14 = matrix1.M11 * matrix2.M14 + matrix1.M12 * matrix2.M24 + matrix1.M13 * matrix2.M34 + matrix1.M14 *
+            matrix2.M44;
 
-        result.M21 = matrix1.M21 * matrix2.M11 + matrix1.M22 * matrix2.M21 + matrix1.M23 * matrix2.M31 + matrix1.M24 * matrix2.M41;
-        result.M22 = matrix1.M21 * matrix2.M12 + matrix1.M22 * matrix2.M22 + matrix1.M23 * matrix2.M32 + matrix1.M24 * matrix2.M42;
-        result.M23 = matrix1.M21 * matrix2.M13 + matrix1.M22 * matrix2.M23 + matrix1.M23 * matrix2.M33 + matrix1.M24 * matrix2.M43;
-        result.M24 = matrix1.M21 * matrix2.M14 + matrix1.M22 * matrix2.M24 + matrix1.M23 * matrix2.M34 + matrix1.M24 * matrix2.M44;
+        result.M21 = matrix1.M21 * matrix2.M11 + matrix1.M22 * matrix2.M21 + matrix1.M23 * matrix2.M31 + matrix1.M24 *
+            matrix2.M41;
+        result.M22 = matrix1.M21 * matrix2.M12 + matrix1.M22 * matrix2.M22 + matrix1.M23 * matrix2.M32 + matrix1.M24 *
+            matrix2.M42;
+        result.M23 = matrix1.M21 * matrix2.M13 + matrix1.M22 * matrix2.M23 + matrix1.M23 * matrix2.M33 + matrix1.M24 *
+            matrix2.M43;
+        result.M24 = matrix1.M21 * matrix2.M14 + matrix1.M22 * matrix2.M24 + matrix1.M23 * matrix2.M34 + matrix1.M24 *
+            matrix2.M44;
 
-        result.M31 = matrix1.M31 * matrix2.M11 + matrix1.M32 * matrix2.M21 + matrix1.M33 * matrix2.M31 + matrix1.M34 * matrix2.M41;
-        result.M32 = matrix1.M31 * matrix2.M12 + matrix1.M32 * matrix2.M22 + matrix1.M33 * matrix2.M32 + matrix1.M34 * matrix2.M42;
-        result.M33 = matrix1.M31 * matrix2.M13 + matrix1.M32 * matrix2.M23 + matrix1.M33 * matrix2.M33 + matrix1.M34 * matrix2.M43;
-        result.M34 = matrix1.M31 * matrix2.M14 + matrix1.M32 * matrix2.M24 + matrix1.M33 * matrix2.M34 + matrix1.M34 * matrix2.M44;
+        result.M31 = matrix1.M31 * matrix2.M11 + matrix1.M32 * matrix2.M21 + matrix1.M33 * matrix2.M31 + matrix1.M34 *
+            matrix2.M41;
+        result.M32 = matrix1.M31 * matrix2.M12 + matrix1.M32 * matrix2.M22 + matrix1.M33 * matrix2.M32 + matrix1.M34 *
+            matrix2.M42;
+        result.M33 = matrix1.M31 * matrix2.M13 + matrix1.M32 * matrix2.M23 + matrix1.M33 * matrix2.M33 + matrix1.M34 *
+            matrix2.M43;
+        result.M34 = matrix1.M31 * matrix2.M14 + matrix1.M32 * matrix2.M24 + matrix1.M33 * matrix2.M34 + matrix1.M34 *
+            matrix2.M44;
 
-        result.M41 = matrix1.M41 * matrix2.M11 + matrix1.M42 * matrix2.M21 + matrix1.M43 * matrix2.M31 + matrix1.M44 * matrix2.M41;
-        result.M42 = matrix1.M41 * matrix2.M12 + matrix1.M42 * matrix2.M22 + matrix1.M43 * matrix2.M32 + matrix1.M44 * matrix2.M42;
-        result.M43 = matrix1.M41 * matrix2.M13 + matrix1.M42 * matrix2.M23 + matrix1.M43 * matrix2.M33 + matrix1.M44 * matrix2.M43;
-        result.M44 = matrix1.M41 * matrix2.M14 + matrix1.M42 * matrix2.M24 + matrix1.M43 * matrix2.M34 + matrix1.M44 * matrix2.M44;
+        result.M41 = matrix1.M41 * matrix2.M11 + matrix1.M42 * matrix2.M21 + matrix1.M43 * matrix2.M31 + matrix1.M44 *
+            matrix2.M41;
+        result.M42 = matrix1.M41 * matrix2.M12 + matrix1.M42 * matrix2.M22 + matrix1.M43 * matrix2.M32 + matrix1.M44 *
+            matrix2.M42;
+        result.M43 = matrix1.M41 * matrix2.M13 + matrix1.M42 * matrix2.M23 + matrix1.M43 * matrix2.M33 + matrix1.M44 *
+            matrix2.M43;
+        result.M44 = matrix1.M41 * matrix2.M14 + matrix1.M42 * matrix2.M24 + matrix1.M43 * matrix2.M34 + matrix1.M44 *
+            matrix2.M44;
     }
 
     Matrix Matrix::Multiply(Matrix matrix1, float scaleFactor)
@@ -973,10 +1107,22 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Multiply(const Matrix& matrix1, float scaleFactor, Matrix& result)
     {
-        result.M11 = matrix1.M11 * scaleFactor; result.M12 = matrix1.M12 * scaleFactor; result.M13 = matrix1.M13 * scaleFactor; result.M14 = matrix1.M14 * scaleFactor;
-        result.M21 = matrix1.M21 * scaleFactor; result.M22 = matrix1.M22 * scaleFactor; result.M23 = matrix1.M23 * scaleFactor; result.M24 = matrix1.M24 * scaleFactor;
-        result.M31 = matrix1.M31 * scaleFactor; result.M32 = matrix1.M32 * scaleFactor; result.M33 = matrix1.M33 * scaleFactor; result.M34 = matrix1.M34 * scaleFactor;
-        result.M41 = matrix1.M41 * scaleFactor; result.M42 = matrix1.M42 * scaleFactor; result.M43 = matrix1.M43 * scaleFactor; result.M44 = matrix1.M44 * scaleFactor;
+        result.M11 = matrix1.M11 * scaleFactor;
+        result.M12 = matrix1.M12 * scaleFactor;
+        result.M13 = matrix1.M13 * scaleFactor;
+        result.M14 = matrix1.M14 * scaleFactor;
+        result.M21 = matrix1.M21 * scaleFactor;
+        result.M22 = matrix1.M22 * scaleFactor;
+        result.M23 = matrix1.M23 * scaleFactor;
+        result.M24 = matrix1.M24 * scaleFactor;
+        result.M31 = matrix1.M31 * scaleFactor;
+        result.M32 = matrix1.M32 * scaleFactor;
+        result.M33 = matrix1.M33 * scaleFactor;
+        result.M34 = matrix1.M34 * scaleFactor;
+        result.M41 = matrix1.M41 * scaleFactor;
+        result.M42 = matrix1.M42 * scaleFactor;
+        result.M43 = matrix1.M43 * scaleFactor;
+        result.M44 = matrix1.M44 * scaleFactor;
     }
 
     Matrix Matrix::Negate(Matrix matrix)
@@ -1000,10 +1146,22 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Subtract(const Matrix& matrix1, const Matrix& matrix2, Matrix& result)
     {
-        result.M11 = matrix1.M11 - matrix2.M11; result.M12 = matrix1.M12 - matrix2.M12; result.M13 = matrix1.M13 - matrix2.M13; result.M14 = matrix1.M14 - matrix2.M14;
-        result.M21 = matrix1.M21 - matrix2.M21; result.M22 = matrix1.M22 - matrix2.M22; result.M23 = matrix1.M23 - matrix2.M23; result.M24 = matrix1.M24 - matrix2.M24;
-        result.M31 = matrix1.M31 - matrix2.M31; result.M32 = matrix1.M32 - matrix2.M32; result.M33 = matrix1.M33 - matrix2.M33; result.M34 = matrix1.M34 - matrix2.M34;
-        result.M41 = matrix1.M41 - matrix2.M41; result.M42 = matrix1.M42 - matrix2.M42; result.M43 = matrix1.M43 - matrix2.M43; result.M44 = matrix1.M44 - matrix2.M44;
+        result.M11 = matrix1.M11 - matrix2.M11;
+        result.M12 = matrix1.M12 - matrix2.M12;
+        result.M13 = matrix1.M13 - matrix2.M13;
+        result.M14 = matrix1.M14 - matrix2.M14;
+        result.M21 = matrix1.M21 - matrix2.M21;
+        result.M22 = matrix1.M22 - matrix2.M22;
+        result.M23 = matrix1.M23 - matrix2.M23;
+        result.M24 = matrix1.M24 - matrix2.M24;
+        result.M31 = matrix1.M31 - matrix2.M31;
+        result.M32 = matrix1.M32 - matrix2.M32;
+        result.M33 = matrix1.M33 - matrix2.M33;
+        result.M34 = matrix1.M34 - matrix2.M34;
+        result.M41 = matrix1.M41 - matrix2.M41;
+        result.M42 = matrix1.M42 - matrix2.M42;
+        result.M43 = matrix1.M43 - matrix2.M43;
+        result.M44 = matrix1.M44 - matrix2.M44;
     }
 
     Matrix Matrix::Transpose(Matrix matrix)
@@ -1058,9 +1216,21 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::ToColumnMajor(float out[16]) const
     {
-        out[0]  = M11; out[1]  = M12; out[2]  = M13; out[3]  = M14;
-        out[4]  = M21; out[5]  = M22; out[6]  = M23; out[7]  = M24;
-        out[8]  = M31; out[9]  = M32; out[10] = M33; out[11] = M34;
-        out[12] = M41; out[13] = M42; out[14] = M43; out[15] = M44;
+        out[0] = M11;
+        out[1] = M12;
+        out[2] = M13;
+        out[3] = M14;
+        out[4] = M21;
+        out[5] = M22;
+        out[6] = M23;
+        out[7] = M24;
+        out[8] = M31;
+        out[9] = M32;
+        out[10] = M33;
+        out[11] = M34;
+        out[12] = M41;
+        out[13] = M42;
+        out[14] = M43;
+        out[15] = M44;
     }
 }

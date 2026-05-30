@@ -7,8 +7,10 @@
  * @brief Specifies how sprites are sorted during a SpriteBatch.
  * Only Deferred is currently implemented as a no-op batching mode.
  */
-namespace Microsoft::Xna::Framework::Graphics {
-    enum class SpriteSortMode {
+namespace Microsoft::Xna::Framework::Graphics
+{
+    enum class SpriteSortMode
+    {
         Deferred,
 
         Immediate,
@@ -17,4 +19,3 @@ namespace Microsoft::Xna::Framework::Graphics {
         FrontToBack,
     };
 }
-

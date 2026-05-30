@@ -6,10 +6,13 @@
 using Microsoft::Xna::Framework::Vector2;
 using namespace Microsoft::Xna::Framework::Input::Touch;
 
-namespace {
-    void ResetTouchState() {
+namespace
+{
+    void ResetTouchState()
+    {
         const auto currentSnapshot = CNA::Internal::Input::InputManager::GetTouchState();
-        for (const auto& touchLocation : currentSnapshot) {
+        for (const auto& touchLocation : currentSnapshot)
+        {
             CNA::Internal::Input::InputManager::SetTouchState(
                 touchLocation.getIdProperty(),
                 TouchLocationState::Released,
@@ -17,12 +20,13 @@ namespace {
             );
         }
 
-        (void) TouchPanel::GetState();
-        (void) TouchPanel::GetState();
+        (void)TouchPanel::GetState();
+        (void)TouchPanel::GetState();
     }
 }
 
-TEST(TouchInputTest, GetStateReflectsCurrentTouchSnapshot) {
+TEST(TouchInputTest, GetStateReflectsCurrentTouchSnapshot)
+{
     ResetTouchState();
 
     CNA::Internal::Input::InputManager::SetTouchState(11, TouchLocationState::Pressed, Vector2(100.5f, 200.25f));
@@ -44,11 +48,12 @@ TEST(TouchInputTest, GetStateReflectsCurrentTouchSnapshot) {
     ResetTouchState();
 }
 
-TEST(TouchInputTest, ReleasedTouchIsReturnedOnceAndThenRemoved) {
+TEST(TouchInputTest, ReleasedTouchIsReturnedOnceAndThenRemoved)
+{
     ResetTouchState();
 
     CNA::Internal::Input::InputManager::SetTouchState(21, TouchLocationState::Pressed, Vector2(30.0f, 40.0f));
-    (void) TouchPanel::GetState();
+    (void)TouchPanel::GetState();
 
     CNA::Internal::Input::InputManager::SetTouchState(21, TouchLocationState::Released, Vector2(35.0f, 45.0f));
 
@@ -63,7 +68,8 @@ TEST(TouchInputTest, ReleasedTouchIsReturnedOnceAndThenRemoved) {
     ResetTouchState();
 }
 
-TEST(TouchInputTest, GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder) {
+TEST(TouchInputTest, GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder)
+{
     ResetTouchState();
 
     CNA::Internal::Input::InputManager::SetTouchState(42, TouchLocationState::Moved, Vector2(400.0f, 500.0f));

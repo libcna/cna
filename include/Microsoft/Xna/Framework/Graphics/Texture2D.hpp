@@ -7,16 +7,18 @@
 
 struct SDL_Texture;
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     class GraphicsDevice;
 }
 
-namespace CNA::Internal::Backends {
+namespace CNA::Internal::Backends
+{
     class ITextureBackend;
 }
 
-namespace Microsoft::Xna::Framework::Graphics {
+namespace Microsoft::Xna::Framework::Graphics
+{
     using namespace CNA::Internal::Backends;
 
     /**
@@ -24,7 +26,8 @@ namespace Microsoft::Xna::Framework::Graphics {
      *
      * The actual rendering backend is hidden behind an internal interface.
      */
-    class Texture2D {
+    class Texture2D
+    {
     private:
         std::shared_ptr<ITextureBackend> backend_;
 

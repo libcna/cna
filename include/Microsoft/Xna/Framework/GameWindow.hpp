@@ -11,14 +11,15 @@
 
 struct SDL_Window;
 
-namespace Microsoft::Xna::Framework {
-
+namespace Microsoft::Xna::Framework
+{
     class Game;
 
     /// Represents the game window and exposes its platform-backed window state.
     class GraphicsDeviceManager;
 
-    class GameWindow : public System::Object {
+    class GameWindow : public System::Object
+    {
         friend class Game;
         friend class GraphicsDeviceManager;
 
@@ -130,5 +131,4 @@ namespace Microsoft::Xna::Framework {
         [[nodiscard]] DisplayOrientation orientationFromBounds(const Rectangle& bounds) const;
         [[nodiscard]] bool orientationIsSupported(DisplayOrientation orientation) const;
     };
-
 } // namespace Microsoft::Xna::Framework

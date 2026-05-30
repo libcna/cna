@@ -7,8 +7,10 @@
 
 #include "CNA/Logger.hpp"
 
-namespace Microsoft::Xna::Framework::GamerServices {
-    void Guide::Show(const PlayerIndex& playerIndex) {
+namespace Microsoft::Xna::Framework::GamerServices
+{
+    void Guide::Show(const PlayerIndex& playerIndex)
+    {
         CNA::Logger::Warn("The Market Place is not yet implemented.");
     }
 

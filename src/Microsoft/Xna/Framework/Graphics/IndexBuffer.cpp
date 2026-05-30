@@ -4,10 +4,12 @@
 
 #include <stdexcept>
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     IndexBuffer::IndexBuffer(GraphicsDevice& device, int indexCount)
-        : backend_(device.GetBackend().CreateIndexBuffer16(indexCount)) {}
+        : backend_(device.GetBackend().CreateIndexBuffer16(indexCount))
+    {
+    }
 
     IndexBuffer::IndexBuffer(GraphicsDevice& device,
                              IndexElementSize indexElementSize,
@@ -15,7 +17,8 @@ namespace Microsoft::Xna::Framework::Graphics {
                              BufferUsage /*bufferUsage*/)
         : backend_(nullptr)
     {
-        if (indexElementSize != IndexElementSize::SixteenBits) {
+        if (indexElementSize != IndexElementSize::SixteenBits)
+        {
             throw std::runtime_error(
                 "IndexBuffer: IndexElementSize::ThirtyTwoBits is not "
                 "implemented yet in the CNA 3D subset (PARTIAL). Use "
@@ -26,11 +29,13 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     IndexBuffer::~IndexBuffer() = default;
 
-    void IndexBuffer::SetData(const std::uint16_t* indices, int count) {
+    void IndexBuffer::SetData(const std::uint16_t* indices, int count)
+    {
         backend_->SetData16(indices, count);
     }
 
-    int IndexBuffer::IndexCount() const {
+    int IndexBuffer::IndexCount() const
+    {
         return backend_->GetIndexCount();
     }
 }

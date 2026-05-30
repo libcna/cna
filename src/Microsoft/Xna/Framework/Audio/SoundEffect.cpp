@@ -7,15 +7,19 @@
 #include <SDL3_mixer/SDL_mixer.h>
 #endif
 
-namespace Microsoft::Xna::Framework::Audio {
+namespace Microsoft::Xna::Framework::Audio
+{
 #ifdef SOUND_ENABLED
-    namespace {
+    namespace
+    {
         MIX_Mixer* g_mixer = nullptr;
 
         MIX_Mixer* GetMixer()
         {
-            if (!g_mixer) {
-                if (!MIX_Init()) {
+            if (!g_mixer)
+            {
+                if (!MIX_Init())
+                {
                     throw std::runtime_error(std::string("MIX_Init failed: ") + SDL_GetError());
                 }
 
@@ -25,7 +29,8 @@ namespace Microsoft::Xna::Framework::Audio {
                 spec.freq = 44100;
 
                 g_mixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
-                if (!g_mixer) {
+                if (!g_mixer)
+                {
                     throw std::runtime_error(std::string("MIX_CreateMixerDevice failed: ") + SDL_GetError());
                 }
             }
@@ -34,7 +39,8 @@ namespace Microsoft::Xna::Framework::Audio {
         }
     }
 #endif
-    class SoundEffect::Impl {
+    class SoundEffect::Impl
+    {
     public:
 #ifdef SOUND_ENABLED
         std::shared_ptr<MIX_Audio> audio{};
@@ -67,7 +73,8 @@ namespace Microsoft::Xna::Framework::Audio {
 
         MIX_Audio* rawAudio = MIX_LoadAudio(mixer, assetName.c_str(), true);
 
-        if (!rawAudio) {
+        if (!rawAudio)
+        {
             throw std::runtime_error(
                 "Failed to load sound: " + assetName + " Error: " + SDL_GetError()
             );
@@ -75,8 +82,10 @@ namespace Microsoft::Xna::Framework::Audio {
 
         impl_->audio = std::shared_ptr<MIX_Audio>(
             rawAudio,
-            [](MIX_Audio* ptr) {
-                if (ptr) {
+            [](MIX_Audio* ptr)
+            {
+                if (ptr)
+                {
                     MIX_DestroyAudio(ptr);
                 }
             }
@@ -91,7 +100,8 @@ namespace Microsoft::Xna::Framework::Audio {
     void* SoundEffect::getNativeAudioHandle() const
     {
 #ifdef SOUND_ENABLED
-        if (!impl_ || !impl_->audio) {
+        if (!impl_ || !impl_->audio)
+        {
             return nullptr;
         }
         return impl_->audio.get();

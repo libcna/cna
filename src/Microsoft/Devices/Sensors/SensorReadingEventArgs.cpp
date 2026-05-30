@@ -4,6 +4,6 @@
 
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 
-namespace Microsoft::Devices::Sensors {
-
+namespace Microsoft::Devices::Sensors
+{
 }

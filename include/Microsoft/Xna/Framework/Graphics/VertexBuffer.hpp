@@ -7,12 +7,13 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
-namespace CNA::Internal::Backends {
+namespace CNA::Internal::Backends
+{
     class IVertexBufferBackend;
 }
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     class GraphicsDevice;
 
     /**
@@ -25,7 +26,8 @@ namespace Microsoft::Xna::Framework::Graphics {
      *       generic `VertexDeclaration`/`SetData<T>` from XNA is not
      *       reproduced. Backed by EasyGL only; other backends throw.
      */
-    class VertexBuffer {
+    class VertexBuffer
+    {
     public:
         /**
          * @brief Creates an empty vertex buffer with capacity for

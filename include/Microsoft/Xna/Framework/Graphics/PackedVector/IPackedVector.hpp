@@ -25,7 +25,10 @@
 
 // Forward declaration – Color.hpp (and anything else that includes this)
 // will pull in Vector4 separately.
-namespace Microsoft::Xna::Framework { struct Vector4; }
+namespace Microsoft::Xna::Framework
+{
+    struct Vector4;
+}
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
@@ -55,7 +58,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
      * Inherits the non-generic @c IPackedVector so a @c Color* is implicitly an
      * @c IPackedVector* as well.
      */
-    template<typename T>
+    template <typename T>
     struct IPackedVectorT : public IPackedVector
     {
         /**
@@ -69,5 +72,4 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
          */
         virtual void setPackedValueProperty(T value) = 0;
     };
-
 } // namespace Microsoft::Xna::Framework::Graphics::PackedVector

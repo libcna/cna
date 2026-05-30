@@ -143,7 +143,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
         float y,
         float dx,
         float dy
-    ) {
+    )
+    {
         const Vector2 touchPos(
             std::round(x * static_cast<float>(displayWidth_)),
             std::round(y * static_cast<float>(displayHeight_))
@@ -154,10 +155,10 @@ namespace Microsoft::Xna::Framework::Input::Touch
             std::round(dy * static_cast<float>(displayHeight_))
         );
 
-        (void) fingerId;
-        (void) state;
-        (void) touchPos;
-        (void) delta;
+        (void)fingerId;
+        (void)state;
+        (void)touchPos;
+        (void)delta;
 
         // Gesture recognition is intentionally left for the future GestureDetector port.
         // Gesture samples can still be queued through EnqueueGesture.

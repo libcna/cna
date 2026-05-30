@@ -4,6 +4,6 @@
 
 #include "CNA/Platform.hpp"
 
-namespace CNA {
-
+namespace CNA
+{
 } // CNA

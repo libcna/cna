@@ -5,7 +5,8 @@
 #pragma once
 
 
-namespace Microsoft::Xna::Framework::Audio {
+namespace Microsoft::Xna::Framework::Audio
+{
     enum class SoundState
     {
         Playing,
@@ -13,6 +14,5 @@ namespace Microsoft::Xna::Framework::Audio {
         Paused,
 
         Stopped,
-      };
+    };
 }
-

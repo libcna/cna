@@ -14,8 +14,8 @@
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 
-namespace Microsoft::Devices::Sensors {
-
+namespace Microsoft::Devices::Sensors
+{
     /**
      * @brief Provides access to the device accelerometer sensor.
      *
@@ -27,7 +27,8 @@ namespace Microsoft::Devices::Sensors {
      * SDL3 event processing is kept internal.
      * @note Runtime behavior is expected to be validated primarily on Android devices.
      */
-    class Accelerometer final : public SensorBase<AccelerometerReading> {
+    class Accelerometer final : public SensorBase<AccelerometerReading>
+    {
     private:
         static void* g_sensor_;
         static std::int64_t g_sensorId_;
@@ -109,5 +110,4 @@ namespace Microsoft::Devices::Sensors {
 
         GetTypeNameHPP()
     };
-
 } // namespace Microsoft::Devices::Sensors

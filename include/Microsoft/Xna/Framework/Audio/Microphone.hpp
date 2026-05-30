@@ -52,7 +52,8 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs GetData(std::vector<SharpRuntime::bytecs>& buffer);
 
         /// Reads captured sample bytes into a range of a buffer.
-        SharpRuntime::intcs GetData(std::vector<SharpRuntime::bytecs>& buffer, SharpRuntime::intcs offset, SharpRuntime::intcs count);
+        SharpRuntime::intcs GetData(std::vector<SharpRuntime::bytecs>& buffer, SharpRuntime::intcs offset,
+                                    SharpRuntime::intcs count);
 
         /// Converts a byte count to its duration for this microphone format.
         [[nodiscard]] System::TimeSpan GetSampleDuration(SharpRuntime::intcs sizeInBytes) const;

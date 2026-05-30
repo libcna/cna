@@ -2,8 +2,8 @@
 
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     class GraphicsDevice;
 
     /**
@@ -18,11 +18,14 @@ namespace Microsoft::Xna::Framework::Graphics {
      *       `BasicEffect` and the cube3d demo is implemented: a single
      *       `CurrentTechnique` containing a single `EffectPass`.
      */
-    class Effect {
+    class Effect
+    {
     public:
         explicit Effect(GraphicsDevice& device)
             : device_(&device),
-              currentTechnique_(this, "Default") {}
+              currentTechnique_(this, "Default")
+        {
+        }
 
         virtual ~Effect() = default;
 

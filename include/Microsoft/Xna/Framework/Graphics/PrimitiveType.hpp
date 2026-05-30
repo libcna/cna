@@ -1,7 +1,7 @@
 #pragma once
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     /**
      * @brief Primitive topology accepted by `GraphicsDevice::DrawUserPrimitives`
      *        and similar 3D draw entry points.
@@ -12,7 +12,8 @@ namespace Microsoft::Xna::Framework::Graphics {
      *       and `LineStrip` are honored by the EasyGL backend; other backends
      *       reject 3D draws entirely.
      */
-    enum class PrimitiveType {
+    enum class PrimitiveType
+    {
         TriangleList = 0,
         TriangleStrip = 1,
         LineList = 2,

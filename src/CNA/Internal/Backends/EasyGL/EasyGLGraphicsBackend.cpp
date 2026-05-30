@@ -1,6 +1,8 @@
 #include "CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp"
 #include <iostream>
 
+#include "CNA/Platform.hpp"
+
 // Verbose 3D rendering trace. Define `CNA_DEBUG_RENDERING` (e.g. via
 // -DCNA_DEBUG_RENDERING) to enable. By default these logs are silent so the
 // 3D pipeline does not spam the console every frame.
@@ -17,15 +19,16 @@
 #include <SDL3/SDL.h>
 #include "Microsoft/Xna/Framework/Color.hpp"
 
-namespace CNA::Internal::Backends::EasyGL {
-
+namespace CNA::Internal::Backends::EasyGL
+{
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     using namespace CNA::Internal::Backends;
 
     // --- EasyGLTextureBackend ---
-    
-    EasyGLTextureBackend::EasyGLTextureBackend(const ImageData& data) {
+
+    EasyGLTextureBackend::EasyGLTextureBackend(const ImageData& data)
+    {
         width = data.width;
         height = data.height;
 
@@ -41,43 +44,50 @@ namespace CNA::Internal::Backends::EasyGL {
         InitializeResources();
     }
 
-    void EasyGLSpriteBatchBackend::InitializeResources() {
-        const char* vertexShaderSource = R"(
-            #version 330 core
-            layout (location = 0) in vec2 aPos;
-            layout (location = 1) in vec2 aTexCoord;
-            layout (location = 2) in vec4 aColor;
-            
-            out vec2 TexCoord;
-            out vec4 Color;
-            
-            uniform mat4 projection;
-            
-            void main() {
-                gl_Position = projection * vec4(aPos, 0.0, 1.0);
-                TexCoord = aTexCoord;
-                Color = aColor;
-            }
-        )";
+    void EasyGLSpriteBatchBackend::InitializeResources()
+    {
+        const char* vertexShaderSource = R"(#version 300 es
+precision highp float;
 
-        const char* fragmentShaderSource = R"(
-            #version 330 core
-            in vec2 TexCoord;
-            in vec4 Color;
-            out vec4 FragColor;
-            
-            uniform sampler2D texture1;
-            
-            void main() {
-                FragColor = texture(texture1, TexCoord) * Color;
-            }
-        )";
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aTexCoord;
+layout(location = 2) in vec4 aColor;
+
+out vec2 TexCoord;
+out vec4 Color;
+
+uniform mat4 projection;
+
+void main()
+{
+    gl_Position = projection * vec4(aPos, 0.0, 1.0);
+    TexCoord = aTexCoord;
+    Color = aColor;
+}
+)";
+
+        const char* fragmentShaderSource = R"(#version 300 es
+precision mediump float;
+
+in vec2 TexCoord;
+in vec4 Color;
+
+out vec4 FragColor;
+
+uniform sampler2D texture1;
+
+void main()
+{
+    FragColor = texture(texture1, TexCoord) * Color;
+}
+)";
 
         ::easygl::Shader vertexShader(::easygl::ShaderType::Vertex);
         vertexShader.create();
         vertexShader.compile_from_source(vertexShaderSource);
 
-        if (!vertexShader.is_compiled()) {
+        if (!vertexShader.is_compiled())
+        {
             std::cerr << "Vertex shader compilation failed:\n" << vertexShader.info_log() << std::endl;
         }
 
@@ -85,7 +95,8 @@ namespace CNA::Internal::Backends::EasyGL {
         fragmentShader.create();
         fragmentShader.compile_from_source(fragmentShaderSource);
 
-        if (!fragmentShader.is_compiled()) {
+        if (!fragmentShader.is_compiled())
+        {
             std::cerr << "Fragment shader compilation failed:\n" << fragmentShader.info_log() << std::endl;
         }
 
@@ -94,7 +105,8 @@ namespace CNA::Internal::Backends::EasyGL {
         program_.attach(fragmentShader);
         program_.link();
 
-        if (!program_.is_linked()) {
+        if (!program_.is_linked())
+        {
             std::cerr << "Shader program linking failed:\n" << program_.info_log() << std::endl;
         }
 
@@ -108,64 +120,73 @@ namespace CNA::Internal::Backends::EasyGL {
         vbo_.create();
         ibo_.create();
         vao_.create();
-        
+
         vao_.bind();
         vbo_.bind(::easygl::BufferTarget::Array);
-        
+
         // Position (0), TexCoord (1), Color (2)
         vao_.enable_attribute(0);
         vao_.set_attribute_pointer(0, 2, ::easygl::DataType::Float, false, 8 * sizeof(float), (void*)0);
-        
+
         vao_.enable_attribute(1);
-        vao_.set_attribute_pointer(1, 2, ::easygl::DataType::Float, false, 8 * sizeof(float), (void*)(2 * sizeof(float)));
-        
+        vao_.set_attribute_pointer(1, 2, ::easygl::DataType::Float, false, 8 * sizeof(float),
+                                   (void*)(2 * sizeof(float)));
+
         vao_.enable_attribute(2);
-        vao_.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, 8 * sizeof(float), (void*)(4 * sizeof(float)));
+        vao_.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, 8 * sizeof(float),
+                                   (void*)(4 * sizeof(float)));
 
         ibo_.bind(::easygl::BufferTarget::ElementArray);
         vao_.unbind();
     }
 
-    void EasyGLSpriteBatchBackend::Begin() {
+    void EasyGLSpriteBatchBackend::Begin()
+    {
         begun = true;
         device_.set_blend_enabled(true);
         device_.set_blend_func(::easygl::BlendFactor::SrcAlpha, ::easygl::BlendFactor::OneMinusSrcAlpha);
     }
 
-    void EasyGLSpriteBatchBackend::End() {
+    void EasyGLSpriteBatchBackend::End()
+    {
         begun = false;
     }
 
-    void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y) {
+    void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
+    {
         auto& glTex = static_cast<const EasyGLTextureBackend&>(texture);
-        Draw(texture, Rectangle((int)x, (int)y, glTex.width, glTex.height), Rectangle(0, 0, glTex.width, glTex.height), Microsoft::Xna::Framework::Color::White);
+        Draw(texture, Rectangle((int)x, (int)y, glTex.width, glTex.height), Rectangle(0, 0, glTex.width, glTex.height),
+             Microsoft::Xna::Framework::Color::White);
     }
 
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                       const Rectangle& destinationRectangle,
-                                       const Rectangle& sourceRectangle,
-                                       const Color& color) {
+                                        const Rectangle& destinationRectangle,
+                                        const Rectangle& sourceRectangle,
+                                        const Color& color)
+    {
         Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
     }
 
-    struct Vertex {
+    struct Vertex
+    {
         float x, y;
         float u, v;
         float r, g, b, a;
     };
 
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture,
-                                       const Rectangle& destinationRectangle,
-                                       const Rectangle& sourceRectangle,
-                                       const Color& color,
-                                       float rotation,
-                                       const Vector2& origin,
-                                       SpriteEffects effects,
-                                       float layerDepth) {
+                                        const Rectangle& destinationRectangle,
+                                        const Rectangle& sourceRectangle,
+                                        const Color& color,
+                                        float rotation,
+                                        const Vector2& origin,
+                                        SpriteEffects effects,
+                                        float layerDepth)
+    {
         if (!begun) throw std::runtime_error("Draw called before Begin()");
 
         auto& glTex = static_cast<const EasyGLTextureBackend&>(texture);
-        
+
         float u1 = (float)sourceRectangle.X / (float)glTex.width;
         float v1 = (float)sourceRectangle.Y / (float)glTex.height;
         float u2 = (float)(sourceRectangle.X + sourceRectangle.Width) / (float)glTex.width;
@@ -212,7 +233,8 @@ namespace CNA::Internal::Backends::EasyGL {
         float cosR = std::cos(rotation);
         float sinR = std::sin(rotation);
 
-        auto rotateAndTranslate = [&](float x, float y, float& rx, float& ry) {
+        auto rotateAndTranslate = [&](float x, float y, float& rx, float& ry)
+        {
             rx = dx + x * cosR - y * sinR;
             ry = dy + x * sinR + y * cosR;
         };
@@ -224,22 +246,22 @@ namespace CNA::Internal::Backends::EasyGL {
         rotateAndTranslate(p3x, p3y, v3x, v3y);
 
         Vertex vertices[4] = {
-            { v0x, v0y, u1, v1, r, g, b, a },
-            { v1x, v1y, u2, v1, r, g, b, a },
-            { v2x, v2y, u2, v2, r, g, b, a },
-            { v3x, v3y, u1, v2, r, g, b, a }
+            {v0x, v0y, u1, v1, r, g, b, a},
+            {v1x, v1y, u2, v1, r, g, b, a},
+            {v2x, v2y, u2, v2, r, g, b, a},
+            {v3x, v3y, u1, v2, r, g, b, a}
         };
 
-        uint16_t indices[6] = { 0, 1, 2, 2, 3, 0 };
+        uint16_t indices[6] = {0, 1, 2, 2, 3, 0};
 
         program_.use();
-        
+
         int vx, vy, vw, vh;
         device_.get_viewport(vx, vy, vw, vh);
-        
+
         float ortho[16] = {
-            2.0f/vw, 0, 0, 0,
-            0, -2.0f/vh, 0, 0,
+            2.0f / vw, 0, 0, 0,
+            0, -2.0f / vh, 0, 0,
             0, 0, -1, 0,
             -1, 1, 0, 1
         };
@@ -248,45 +270,67 @@ namespace CNA::Internal::Backends::EasyGL {
         program_.set_uniform_matrix4(projLoc, ortho);
 
         glTex.texture.bind(::easygl::TextureTarget::Texture2D);
-        
-        vbo_.set_data(vertices, sizeof(vertices));
-        ibo_.set_data(indices, sizeof(indices));
+
+        vbo_.bind(::easygl::BufferTarget::Array);
+        vbo_.set_data(
+            ::easygl::BufferTarget::Array,
+            vertices,
+            sizeof(vertices)
+        );
 
         vao_.bind();
-        device_.draw_elements(::easygl::PrimitiveType::Triangles, 6, ::easygl::DataType::UnsignedShort, nullptr);
+
+        ibo_.bind(::easygl::BufferTarget::ElementArray);
+        ibo_.set_data(
+            ::easygl::BufferTarget::ElementArray,
+            indices,
+            sizeof(indices)
+        );
+
+        device_.draw_elements(
+            ::easygl::PrimitiveType::Triangles,
+            6,
+            ::easygl::DataType::UnsignedShort,
+            nullptr
+        );
+
         vao_.unbind();
     }
 
     // --- EasyGLGraphicsBackend ---
 
-    EasyGLGraphicsBackend::EasyGLGraphicsBackend(SDL_Window* window) : window(window) {
+    EasyGLGraphicsBackend::EasyGLGraphicsBackend(SDL_Window* window) : window(window)
+    {
         if (!window) throw std::runtime_error("EasyGLGraphicsBackend initialized with null window.");
 
         // NOTE: SDL_Window is NOT owned by EasyGL backend.
         // It is owned by GraphicsDevice or higher level platform layer.
 
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
 
         // NOTE: GL context IS owned by EasyGL backend.
         gl_context = SDL_GL_CreateContext(window);
-        if (!gl_context) {
+        if (!gl_context)
+        {
             throw std::runtime_error(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
         }
 
         device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
-        std::cout << "EasyGLGraphicsBackend initialized with OpenGL " 
-                  << device.capabilities().context_info().version_string << std::endl;
+        std::cout << "EasyGLGraphicsBackend initialized with OpenGL "
+            << device.capabilities().context_info().version_string << std::endl;
     }
 
-    EasyGLGraphicsBackend::~EasyGLGraphicsBackend() {
+    EasyGLGraphicsBackend::~EasyGLGraphicsBackend()
+    {
         if (gl_context) SDL_GL_DestroyContext(gl_context);
         // window is NOT owned by the backend.
         // No SDL_Quit or subsystem shutdown here - managed centrally.
     }
 
-    void EasyGLGraphicsBackend::Clear(float r, float g, float b, float a) {
+    void EasyGLGraphicsBackend::Clear(float r, float g, float b, float a)
+    {
         int width, height;
         SDL_GetWindowSize(window, &width, &height);
         device.set_viewport(0, 0, width, height);
@@ -294,19 +338,23 @@ namespace CNA::Internal::Backends::EasyGL {
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
     }
 
-    void EasyGLGraphicsBackend::Present() {
+    void EasyGLGraphicsBackend::Present()
+    {
         SDL_GL_SwapWindow(window);
     }
 
-    void EasyGLGraphicsBackend::GetViewportSize(int& width, int& height) {
+    void EasyGLGraphicsBackend::GetViewportSize(int& width, int& height)
+    {
         SDL_GetWindowSize(window, &width, &height);
     }
 
-    std::unique_ptr<ITextureBackend> EasyGLGraphicsBackend::CreateTexture(const ImageData& data) {
+    std::unique_ptr<ITextureBackend> EasyGLGraphicsBackend::CreateTexture(const ImageData& data)
+    {
         return std::make_unique<EasyGLTextureBackend>(data);
     }
 
-    std::unique_ptr<ISpriteBatchBackend> EasyGLGraphicsBackend::CreateSpriteBatch() {
+    std::unique_ptr<ISpriteBatchBackend> EasyGLGraphicsBackend::CreateSpriteBatch()
+    {
         return std::make_unique<EasyGLSpriteBatchBackend>(device);
     }
 
@@ -315,7 +363,8 @@ namespace CNA::Internal::Backends::EasyGL {
     // -------------------------------------------------------------------------
 
     EasyGLVertexBufferBackend::EasyGLVertexBufferBackend(int vertex_capacity)
-        : capacity(vertex_capacity) {
+        : capacity(vertex_capacity)
+    {
         vbo.create();
         vao.create();
         // Layout for VertexPositionColor: vec3 position (offset 0) + 4xUByte color (offset 12).
@@ -323,39 +372,45 @@ namespace CNA::Internal::Backends::EasyGL {
         vao.bind();
         vbo.bind(::easygl::BufferTarget::Array);
         vao.enable_attribute(0);
-        vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float,        false, 16, (void*)0);
+        vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, 16, (void*)0);
         vao.enable_attribute(1);
-        vao.set_attribute_pointer(1, 4, ::easygl::DataType::UnsignedByte, true,  16, (void*)12);
+        vao.set_attribute_pointer(1, 4, ::easygl::DataType::UnsignedByte, true, 16, (void*)12);
         vao.unbind();
         CNA_RENDER_LOG("VertexBuffer created: capacity=" << capacity << " stride=16");
     }
 
-    void EasyGLVertexBufferBackend::SetData(const void* data, int count, std::size_t stride_in_bytes) {
+    void EasyGLVertexBufferBackend::SetData(const void* data, int count, std::size_t stride_in_bytes)
+    {
         vertex_count = count;
         vbo.bind(::easygl::BufferTarget::Array);
         vbo.set_data(::easygl::BufferTarget::Array, data, static_cast<std::size_t>(count) * stride_in_bytes);
         CNA_RENDER_LOG("VertexBuffer SetData: count=" << count << " stride=" << stride_in_bytes
-                       << " bytes=" << (static_cast<std::size_t>(count) * stride_in_bytes));
+            << " bytes=" << (static_cast<std::size_t>(count) * stride_in_bytes));
     }
 
     EasyGLIndexBufferBackend::EasyGLIndexBufferBackend(int index_capacity)
-        : capacity(index_capacity) {
+        : capacity(index_capacity)
+    {
         ibo.create();
         CNA_RENDER_LOG("IndexBuffer created: capacity=" << capacity);
     }
 
-    void EasyGLIndexBufferBackend::SetData16(const void* data, int count) {
+    void EasyGLIndexBufferBackend::SetData16(const void* data, int count)
+    {
         index_count = count;
         ibo.bind(::easygl::BufferTarget::ElementArray);
-        ibo.set_data(::easygl::BufferTarget::ElementArray, data, static_cast<std::size_t>(count) * sizeof(std::uint16_t));
+        ibo.set_data(::easygl::BufferTarget::ElementArray, data,
+                     static_cast<std::size_t>(count) * sizeof(std::uint16_t));
         CNA_RENDER_LOG("IndexBuffer SetData16: count=" << count);
     }
 
-    void EasyGLGraphicsBackend::EnsureColored3DProgram() {
+    void EasyGLGraphicsBackend::EnsureColored3DProgram()
+    {
         if (program3d_ready_) return;
 
         const char* vsrc = R"(
-            #version 330 core
+            #version 300 es
+            precision highp float;
             layout (location = 0) in vec3 aPos;
             layout (location = 1) in vec4 aColor;
             uniform mat4 uWorldViewProjection;
@@ -366,7 +421,8 @@ namespace CNA::Internal::Backends::EasyGL {
             }
         )";
         const char* fsrc = R"(
-            #version 330 core
+            #version 300 es
+            precision mediump float;
             in vec4 vColor;
             out vec4 FragColor;
             void main() {
@@ -377,13 +433,15 @@ namespace CNA::Internal::Backends::EasyGL {
         ::easygl::Shader vs(::easygl::ShaderType::Vertex);
         vs.create();
         vs.compile_from_source(vsrc);
-        if (!vs.is_compiled()) {
+        if (!vs.is_compiled())
+        {
             std::cerr << "[CNA EasyGL 3D] vertex shader compile failed:\n" << vs.info_log() << std::endl;
         }
         ::easygl::Shader fs(::easygl::ShaderType::Fragment);
         fs.create();
         fs.compile_from_source(fsrc);
-        if (!fs.is_compiled()) {
+        if (!fs.is_compiled())
+        {
             std::cerr << "[CNA EasyGL 3D] fragment shader compile failed:\n" << fs.info_log() << std::endl;
         }
 
@@ -391,17 +449,19 @@ namespace CNA::Internal::Backends::EasyGL {
         program3d_.attach(vs);
         program3d_.attach(fs);
         program3d_.link();
-        if (!program3d_.is_linked()) {
+        if (!program3d_.is_linked())
+        {
             std::cerr << "[CNA EasyGL 3D] program link failed:\n" << program3d_.info_log() << std::endl;
         }
 
         loc_world_view_projection_ = program3d_.uniform_location("uWorldViewProjection");
         program3d_ready_ = true;
         CNA_RENDER_LOG("3D program ready: linked=" << program3d_.is_linked()
-                       << " loc(uWorldViewProjection)=" << loc_world_view_projection_);
+            << " loc(uWorldViewProjection)=" << loc_world_view_projection_);
     }
 
-    void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth) {
+    void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
+    {
         int width, height;
         SDL_GetWindowSize(window, &width, &height);
         device.set_viewport(0, 0, width, height);
@@ -411,49 +471,60 @@ namespace CNA::Internal::Backends::EasyGL {
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
     }
 
-    void EasyGLGraphicsBackend::SetDepthTestEnabled(bool enabled) {
+    void EasyGLGraphicsBackend::SetDepthTestEnabled(bool enabled)
+    {
         device.set_depth_test_enabled(enabled);
-        if (enabled) {
+        if (enabled)
+        {
             device.set_depth_func(::easygl::CompareFunc::Lequal);
             device.set_depth_mask(true);
         }
     }
 
-    std::unique_ptr<IVertexBufferBackend> EasyGLGraphicsBackend::CreateVertexBuffer(int vertex_capacity) {
+    std::unique_ptr<IVertexBufferBackend> EasyGLGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
+    {
         return std::make_unique<EasyGLVertexBufferBackend>(vertex_capacity);
     }
 
-    std::unique_ptr<IIndexBufferBackend> EasyGLGraphicsBackend::CreateIndexBuffer16(int index_capacity) {
+    std::unique_ptr<IIndexBufferBackend> EasyGLGraphicsBackend::CreateIndexBuffer16(int index_capacity)
+    {
         return std::make_unique<EasyGLIndexBufferBackend>(index_capacity);
     }
 
-    namespace {
-        ::easygl::PrimitiveType ToEasyGl(PrimitiveType pt) {
-            switch (pt) {
-                case PrimitiveType::TriangleList:  return ::easygl::PrimitiveType::Triangles;
-                case PrimitiveType::TriangleStrip: return ::easygl::PrimitiveType::TriangleStrip;
-                case PrimitiveType::LineList:      return ::easygl::PrimitiveType::Lines;
-                case PrimitiveType::LineStrip:     return ::easygl::PrimitiveType::LineStrip;
+    namespace
+    {
+        ::easygl::PrimitiveType ToEasyGl(PrimitiveType pt)
+        {
+            switch (pt)
+            {
+            case PrimitiveType::TriangleList: return ::easygl::PrimitiveType::Triangles;
+            case PrimitiveType::TriangleStrip: return ::easygl::PrimitiveType::TriangleStrip;
+            case PrimitiveType::LineList: return ::easygl::PrimitiveType::Lines;
+            case PrimitiveType::LineStrip: return ::easygl::PrimitiveType::LineStrip;
             }
             return ::easygl::PrimitiveType::Triangles;
         }
-        int VertexCountForPrimitives(PrimitiveType pt, int primitiveCount) {
-            switch (pt) {
-                case PrimitiveType::TriangleList:  return primitiveCount * 3;
-                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
-                case PrimitiveType::LineList:      return primitiveCount * 2;
-                case PrimitiveType::LineStrip:     return primitiveCount + 1;
+
+        int VertexCountForPrimitives(PrimitiveType pt, int primitiveCount)
+        {
+            switch (pt)
+            {
+            case PrimitiveType::TriangleList: return primitiveCount * 3;
+            case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+            case PrimitiveType::LineList: return primitiveCount * 2;
+            case PrimitiveType::LineStrip: return primitiveCount + 1;
             }
             return 0;
         }
     }
 
     void EasyGLGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb_in,
-                                                     const Matrix& world,
-                                                     const Matrix& view,
-                                                     const Matrix& projection,
-                                                     PrimitiveType primitive,
-                                                     int primitiveCount) {
+                                                      const Matrix& world,
+                                                      const Matrix& view,
+                                                      const Matrix& projection,
+                                                      PrimitiveType primitive,
+                                                      int primitiveCount)
+    {
         EnsureColored3DProgram();
         const auto& vb = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
 
@@ -465,13 +536,14 @@ namespace CNA::Internal::Backends::EasyGL {
         wvp.ToColumnMajor(wvp_col);
 
         program3d_.use();
-        if (loc_world_view_projection_ >= 0) {
+        if (loc_world_view_projection_ >= 0)
+        {
             program3d_.set_uniform_matrix4(loc_world_view_projection_, wvp_col);
         }
 
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawColoredPrimitives: primitive=" << static_cast<int>(primitive)
-                       << " count=" << primitiveCount << " vertices=" << vertex_count);
+            << " count=" << primitiveCount << " vertices=" << vertex_count);
 
         vb.vao.bind();
         device.draw_arrays(ToEasyGl(primitive), 0, vertex_count);
@@ -484,7 +556,8 @@ namespace CNA::Internal::Backends::EasyGL {
                                                              const Matrix& view,
                                                              const Matrix& projection,
                                                              PrimitiveType primitive,
-                                                             int primitiveCount) {
+                                                             int primitiveCount)
+    {
         EnsureColored3DProgram();
         const auto& vb = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
@@ -495,13 +568,14 @@ namespace CNA::Internal::Backends::EasyGL {
         wvp.ToColumnMajor(wvp_col);
 
         program3d_.use();
-        if (loc_world_view_projection_ >= 0) {
+        if (loc_world_view_projection_ >= 0)
+        {
             program3d_.set_uniform_matrix4(loc_world_view_projection_, wvp_col);
         }
 
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedColoredPrimitives: primitive=" << static_cast<int>(primitive)
-                       << " count=" << primitiveCount << " indices=" << index_count);
+            << " count=" << primitiveCount << " indices=" << index_count);
 
         vb.vao.bind();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
@@ -513,12 +587,13 @@ namespace CNA::Internal::Backends::EasyGL {
         );
         vb.vao.unbind();
     }
-
 }
 
-namespace CNA::Internal::Backends {
+namespace CNA::Internal::Backends
+{
 #ifdef CNA_BACKEND_EASYGL
-    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args) {
+    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
+    {
         return std::make_unique<EasyGL::EasyGLGraphicsBackend>(args.window);
     }
 #endif

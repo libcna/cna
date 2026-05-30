@@ -63,7 +63,7 @@ namespace Microsoft::Xna::Framework
 
     void GameComponent::Update(GameTime& gameTime)
     {
-        (void) gameTime;
+        (void)gameTime;
     }
 
     SharpRuntime::intcs GameComponent::CompareTo(const GameComponent& other) const
@@ -79,14 +79,14 @@ namespace Microsoft::Xna::Framework
 
     void GameComponent::OnUpdateOrderChanged(System::Object* sender, const System::EventArgs& args)
     {
-        (void) sender;
-        (void) args;
+        (void)sender;
+        (void)args;
     }
 
     void GameComponent::OnEnabledChanged(System::Object* sender, const System::EventArgs& args)
     {
-        (void) sender;
-        (void) args;
+        (void)sender;
+        (void)args;
     }
 
     void GameComponent::Dispose(bool disposing)

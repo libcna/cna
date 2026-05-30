@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-namespace Microsoft::Xna::Framework {
-
+namespace Microsoft::Xna::Framework
+{
     enum class ContainmentType;
     enum class PlaneIntersectionType;
 
@@ -20,7 +20,8 @@ namespace Microsoft::Xna::Framework {
     struct Ray;
 
     /// Axis-aligned box represented by its minimum and maximum 3D corners.
-    struct BoundingBox {
+    struct BoundingBox
+    {
     public:
         /// The corner with the smallest X, Y and Z coordinates.
         Vector3 Min;
@@ -112,5 +113,4 @@ namespace Microsoft::Xna::Framework {
 
     bool operator==(const BoundingBox& a, const BoundingBox& b);
     bool operator!=(const BoundingBox& a, const BoundingBox& b);
-
 }

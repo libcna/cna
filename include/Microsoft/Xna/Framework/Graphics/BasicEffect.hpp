@@ -3,8 +3,8 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     class GraphicsDevice;
 
     /**
@@ -28,14 +28,15 @@ namespace Microsoft::Xna::Framework::Graphics {
      *       single default technique exposes one pass which simply
      *       re-binds this effect on the device.
      */
-    class BasicEffect : public Effect {
+    class BasicEffect : public Effect
+    {
     public:
         explicit BasicEffect(GraphicsDevice& device);
 
         /** World transform (model -> world). */
-        Matrix World      = Matrix::getIdentityProperty();
+        Matrix World = Matrix::getIdentityProperty();
         /** View transform (world -> camera). */
-        Matrix View       = Matrix::getIdentityProperty();
+        Matrix View = Matrix::getIdentityProperty();
         /** Projection transform (camera -> clip). */
         Matrix Projection = Matrix::getIdentityProperty();
 

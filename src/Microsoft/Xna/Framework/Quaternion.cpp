@@ -41,9 +41,9 @@ namespace Microsoft::Xna::Framework
     bool Quaternion::Equals(const Quaternion& other) const
     {
         return X == other.X &&
-               Y == other.Y &&
-               Z == other.Z &&
-               W == other.W;
+            Y == other.Y &&
+            Z == other.Z &&
+            W == other.W;
     }
 
     int Quaternion::GetHashCode() const
@@ -266,9 +266,9 @@ namespace Microsoft::Xna::Framework
         const float w = quaternion1.W;
 
         const float num14 = (quaternion2.X * quaternion2.X) +
-                            (quaternion2.Y * quaternion2.Y) +
-                            (quaternion2.Z * quaternion2.Z) +
-                            (quaternion2.W * quaternion2.W);
+            (quaternion2.Y * quaternion2.Y) +
+            (quaternion2.Z * quaternion2.Z) +
+            (quaternion2.W * quaternion2.W);
         const float num5 = 1.0f / num14;
         const float num4 = -quaternion2.X * num5;
         const float num3 = -quaternion2.Y * num5;
@@ -288,9 +288,9 @@ namespace Microsoft::Xna::Framework
     float Quaternion::Dot(Quaternion quaternion1, Quaternion quaternion2)
     {
         return (quaternion1.X * quaternion2.X) +
-               (quaternion1.Y * quaternion2.Y) +
-               (quaternion1.Z * quaternion2.Z) +
-               (quaternion1.W * quaternion2.W);
+            (quaternion1.Y * quaternion2.Y) +
+            (quaternion1.Z * quaternion2.Z) +
+            (quaternion1.W * quaternion2.W);
     }
 
     void Quaternion::Dot(const Quaternion& quaternion1, const Quaternion& quaternion2, float& result)
@@ -308,9 +308,9 @@ namespace Microsoft::Xna::Framework
     void Quaternion::Inverse(const Quaternion& quaternion, Quaternion& result)
     {
         const float num2 = (quaternion.X * quaternion.X) +
-                           (quaternion.Y * quaternion.Y) +
-                           (quaternion.Z * quaternion.Z) +
-                           (quaternion.W * quaternion.W);
+            (quaternion.Y * quaternion.Y) +
+            (quaternion.Z * quaternion.Z) +
+            (quaternion.W * quaternion.W);
         const float num = 1.0f / num2;
         result.X = -quaternion.X * num;
         result.Y = -quaternion.Y * num;
@@ -325,14 +325,15 @@ namespace Microsoft::Xna::Framework
         return result;
     }
 
-    void Quaternion::Lerp(const Quaternion& quaternion1, const Quaternion& quaternion2, float amount, Quaternion& result)
+    void Quaternion::Lerp(const Quaternion& quaternion1, const Quaternion& quaternion2, float amount,
+                          Quaternion& result)
     {
         const float num = amount;
         const float num2 = 1.0f - num;
         const float num5 = (quaternion1.X * quaternion2.X) +
-                           (quaternion1.Y * quaternion2.Y) +
-                           (quaternion1.Z * quaternion2.Z) +
-                           (quaternion1.W * quaternion2.W);
+            (quaternion1.Y * quaternion2.Y) +
+            (quaternion1.Z * quaternion2.Z) +
+            (quaternion1.W * quaternion2.W);
 
         if (num5 >= 0.0f)
         {
@@ -350,9 +351,9 @@ namespace Microsoft::Xna::Framework
         }
 
         const float num4 = (result.X * result.X) +
-                           (result.Y * result.Y) +
-                           (result.Z * result.Z) +
-                           (result.W * result.W);
+            (result.Y * result.Y) +
+            (result.Z * result.Z) +
+            (result.W * result.W);
         const float num3 = 1.0f / std::sqrt(num4);
         result.X *= num3;
         result.Y *= num3;
@@ -367,15 +368,16 @@ namespace Microsoft::Xna::Framework
         return result;
     }
 
-    void Quaternion::Slerp(const Quaternion& quaternion1, const Quaternion& quaternion2, float amount, Quaternion& result)
+    void Quaternion::Slerp(const Quaternion& quaternion1, const Quaternion& quaternion2, float amount,
+                           Quaternion& result)
     {
         float num2;
         float num3;
         const float num = amount;
         float num4 = (quaternion1.X * quaternion2.X) +
-                     (quaternion1.Y * quaternion2.Y) +
-                     (quaternion1.Z * quaternion2.Z) +
-                     (quaternion1.W * quaternion2.W);
+            (quaternion1.Y * quaternion2.Y) +
+            (quaternion1.Z * quaternion2.Z) +
+            (quaternion1.W * quaternion2.W);
         float flag = 1.0f;
 
         if (num4 < 0.0f)

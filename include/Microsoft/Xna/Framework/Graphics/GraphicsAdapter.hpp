@@ -108,7 +108,8 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         friend class GraphicsAdapterFactory;
 
-        GraphicsAdapter(SharpRuntime::intcs displayIndex, DisplayModeCollection modes, std::string name, std::string description);
+        GraphicsAdapter(SharpRuntime::intcs displayIndex, DisplayModeCollection modes, std::string name,
+                        std::string description);
 
         SharpRuntime::intcs displayIndex_;
         DisplayModeCollection supportedDisplayModes_;

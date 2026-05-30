@@ -7,17 +7,21 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
 
-namespace Microsoft::Xna::Framework::Input {
+namespace Microsoft::Xna::Framework::Input
+{
     /**
      * @brief Snapshot of one gamepad state.
      *
      * @note Status: PARTIAL
      */
-    struct GamePadState {
+    struct GamePadState
+    {
     public:
         DEF_PROP(GamePadButtons, Buttons, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(Microsoft::Xna::Framework::Vector2, LeftThumbstick, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(Microsoft::Xna::Framework::Vector2, RightThumbstick, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        DEF_PROP(Microsoft::Xna::Framework::Vector2, LeftThumbstick, getter1, setter0, member1, static0, constret1,
+                 ref1, constmet1)
+        DEF_PROP(Microsoft::Xna::Framework::Vector2, RightThumbstick, getter1, setter0, member1, static0, constret1,
+                 ref1, constmet1)
         DEF_PROP(float, LeftTrigger, getter1, setter0, member1, static0, constret1, ref1, constmet1)
         DEF_PROP(float, RightTrigger, getter1, setter0, member1, static0, constret1, ref1, constmet1)
         DEF_PROP(bool, IsConnected, getter1, setter0, member1, static0, constret1, ref1, constmet1)
@@ -40,4 +44,3 @@ namespace Microsoft::Xna::Framework::Input {
         );
     };
 }
-

@@ -1,8 +1,8 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include <stdexcept>
 
-namespace Microsoft::Xna::Framework::Input::Touch {
-
+namespace Microsoft::Xna::Framework::Input::Touch
+{
     TouchCollection::TouchCollection() = default;
 
     TouchCollection::TouchCollection(const std::vector<TouchLocation>& touches)
@@ -42,7 +42,8 @@ namespace Microsoft::Xna::Framework::Input::Touch {
 
     const TouchLocation& TouchCollection::operator[](std::size_t index) const
     {
-        if (index >= touches.size()) {
+        if (index >= touches.size())
+        {
             throw std::out_of_range("TouchCollection index out of range");
         }
         return touches[index];

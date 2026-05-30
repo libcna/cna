@@ -6,8 +6,8 @@
 
 #include <utility>
 
-namespace Microsoft::Xna::Framework {
-
+namespace Microsoft::Xna::Framework
+{
     GameTime::GameTime()
         : TotalGameTime_(TimeSpan::Zero),
           ElapsedGameTime_(TimeSpan::Zero),
@@ -68,5 +68,4 @@ namespace Microsoft::Xna::Framework {
     {
         IsRunningSlowly_ = value;
     }
-
 } // namespace Microsoft::Xna::Framework

@@ -70,14 +70,14 @@ namespace Microsoft::Xna::Framework
 
     void DrawableGameComponent::OnDeviceCreated(System::Object* sender, const System::EventArgs& args)
     {
-        (void) sender;
-        (void) args;
+        (void)sender;
+        (void)args;
         LoadContent();
     }
 
     void DrawableGameComponent::Draw(const GameTime& gameTime)
     {
-        (void) gameTime;
+        (void)gameTime;
     }
 
     void DrawableGameComponent::LoadContent()
@@ -90,13 +90,13 @@ namespace Microsoft::Xna::Framework
 
     void DrawableGameComponent::OnVisibleChanged(System::Object* sender, const System::EventArgs& args)
     {
-        (void) sender;
-        (void) args;
+        (void)sender;
+        (void)args;
     }
 
     void DrawableGameComponent::OnDrawOrderChanged(System::Object* sender, const System::EventArgs& args)
     {
-        (void) sender;
-        (void) args;
+        (void)sender;
+        (void)args;
     }
 }

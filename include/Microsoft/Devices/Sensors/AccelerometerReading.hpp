@@ -9,8 +9,8 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
 
-namespace Microsoft::Devices::Sensors {
-
+namespace Microsoft::Devices::Sensors
+{
     using Xna::Framework::Vector3;
 
     /**
@@ -21,7 +21,8 @@ namespace Microsoft::Devices::Sensors {
      *
      * @note Status: Partial.
      */
-    class AccelerometerReading : public ISensorReading {
+    class AccelerometerReading : public ISensorReading
+    {
     private:
         DEF_MEMBER(System::DateTimeOffset, Timestamp)
         DEF_MEMBER(Vector3, Acceleration)
@@ -68,5 +69,4 @@ namespace Microsoft::Devices::Sensors {
          */
         void setAccelerationProperty(const Vector3& value);
     };
-
 } // namespace Microsoft::Devices::Sensors

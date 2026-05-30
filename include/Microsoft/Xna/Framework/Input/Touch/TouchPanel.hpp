@@ -111,6 +111,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
         static std::array<TouchLocation, MAX_TOUCHES> previousTouches_;
         static std::vector<TouchLocation> validTouches_;
 
-        static void updateInputManagerTouch(intcs fingerId, TouchLocationState state, const Microsoft::Xna::Framework::Vector2& position);
+        static void updateInputManagerTouch(intcs fingerId, TouchLocationState state,
+                                            const Microsoft::Xna::Framework::Vector2& position);
     };
 }

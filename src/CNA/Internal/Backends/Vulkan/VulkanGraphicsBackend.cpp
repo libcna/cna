@@ -2,45 +2,53 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-namespace CNA::Internal::Backends::Vulkan {
-
+namespace CNA::Internal::Backends::Vulkan
+{
     // --- VulkanTextureBackend ---
 
     VulkanTextureBackend::VulkanTextureBackend(const ImageData& data)
-        : width(data.width), height(data.height) {
+        : width(data.width), height(data.height)
+    {
         // TODO: Create Vulkan Image, Allocate memory, Transition layout, Upload pixels
     }
 
-    VulkanTextureBackend::~VulkanTextureBackend() {
+    VulkanTextureBackend::~VulkanTextureBackend()
+    {
         // TODO: Destroy Vulkan Image/ImageView
     }
 
     // --- VulkanSpriteBatchBackend ---
 
-    VulkanSpriteBatchBackend::VulkanSpriteBatchBackend() {
+    VulkanSpriteBatchBackend::VulkanSpriteBatchBackend()
+    {
         // TODO: Initialize shaders, pipelines, and buffers
     }
 
-    VulkanSpriteBatchBackend::~VulkanSpriteBatchBackend() {
+    VulkanSpriteBatchBackend::~VulkanSpriteBatchBackend()
+    {
         // TODO: Cleanup pipelines and buffers
     }
 
-    void VulkanSpriteBatchBackend::Begin() {
+    void VulkanSpriteBatchBackend::Begin()
+    {
         // TODO: Start command recording if not handled at higher level
     }
 
-    void VulkanSpriteBatchBackend::End() {
+    void VulkanSpriteBatchBackend::End()
+    {
         // TODO: Submit command buffers
     }
 
-    void VulkanSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y) {
+    void VulkanSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
+    {
         // TODO: Implement Draw
     }
 
     void VulkanSpriteBatchBackend::Draw(const ITextureBackend& texture,
                                         const Rectangle& destinationRectangle,
                                         const Rectangle& sourceRectangle,
-                                        const Color& color) {
+                                        const Color& color)
+    {
         // TODO: Implement Draw
     }
 
@@ -51,24 +59,28 @@ namespace CNA::Internal::Backends::Vulkan {
                                         float rotation,
                                         const Vector2& origin,
                                         SpriteEffects effects,
-                                        float layerDepth) {
+                                        float layerDepth)
+    {
         // TODO: Implement Draw
     }
 
     // --- VulkanGraphicsBackend ---
 
-    VulkanGraphicsBackend::VulkanGraphicsBackend(SDL_Window* window) : window(window) {
+    VulkanGraphicsBackend::VulkanGraphicsBackend(SDL_Window* window) : window(window)
+    {
         if (!window) throw std::runtime_error("VulkanGraphicsBackend initialized with null window.");
 
         // NOTE: SDL_Window is NOT owned by the backend.
         InitVulkan();
     }
 
-    VulkanGraphicsBackend::~VulkanGraphicsBackend() {
+    VulkanGraphicsBackend::~VulkanGraphicsBackend()
+    {
         CleanupVulkan();
     }
 
-    void VulkanGraphicsBackend::InitVulkan() {
+    void VulkanGraphicsBackend::InitVulkan()
+    {
         std::cout << "VulkanGraphicsBackend::InitVulkan() - Placeholder initialization" << std::endl;
 
         // Step 1: Create Vulkan Instance
@@ -90,52 +102,73 @@ namespace CNA::Internal::Backends::Vulkan {
         // TODO: vkCreateCommandPool, vkCreateSemaphore, vkCreateFence
     }
 
-    void VulkanGraphicsBackend::CleanupVulkan() {
+    void VulkanGraphicsBackend::CleanupVulkan()
+    {
         // TODO: Destroy all Vulkan handles in reverse order
     }
 
-    void VulkanGraphicsBackend::Clear(float r, float g, float b, float a) {
+    void VulkanGraphicsBackend::Clear(float r, float g, float b, float a)
+    {
         // TODO: Begin render pass, set clear values, vkCmdClearAttachments or use render pass clear op
     }
 
-    void VulkanGraphicsBackend::Present() {
+    void VulkanGraphicsBackend::Present()
+    {
         // TODO: vkQueuePresentKHR
     }
 
-    void VulkanGraphicsBackend::GetViewportSize(int& width, int& height) {
+    void VulkanGraphicsBackend::GetViewportSize(int& width, int& height)
+    {
         SDL_GetWindowSize(window, &width, &height);
     }
 
-    std::unique_ptr<ITextureBackend> VulkanGraphicsBackend::CreateTexture(const ImageData& data) {
+    std::unique_ptr<ITextureBackend> VulkanGraphicsBackend::CreateTexture(const ImageData& data)
+    {
         return std::make_unique<VulkanTextureBackend>(data);
     }
 
-    std::unique_ptr<ISpriteBatchBackend> VulkanGraphicsBackend::CreateSpriteBatch() {
+    std::unique_ptr<ISpriteBatchBackend> VulkanGraphicsBackend::CreateSpriteBatch()
+    {
         return std::make_unique<VulkanSpriteBatchBackend>();
     }
 
     // ---- 3D pipeline stubs ----
-    static void ThrowNo3DVulkan() {
+    static void ThrowNo3DVulkan()
+    {
         throw std::runtime_error(
             "Vulkan backend: 3D rendering is not implemented yet.");
     }
+
     void VulkanGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3DVulkan(); }
     void VulkanGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3DVulkan(); }
-    std::unique_ptr<IVertexBufferBackend> VulkanGraphicsBackend::CreateVertexBuffer(int) { ThrowNo3DVulkan(); return nullptr; }
-    std::unique_ptr<IIndexBufferBackend>  VulkanGraphicsBackend::CreateIndexBuffer16(int) { ThrowNo3DVulkan(); return nullptr; }
+
+    std::unique_ptr<IVertexBufferBackend> VulkanGraphicsBackend::CreateVertexBuffer(int)
+    {
+        ThrowNo3DVulkan();
+        return nullptr;
+    }
+
+    std::unique_ptr<IIndexBufferBackend> VulkanGraphicsBackend::CreateIndexBuffer16(int)
+    {
+        ThrowNo3DVulkan();
+        return nullptr;
+    }
+
     void VulkanGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
                                                       const Matrix&, const Matrix&, const Matrix&,
                                                       PrimitiveType, int) { ThrowNo3DVulkan(); }
+
     void VulkanGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
                                                              const IIndexBufferBackend&,
                                                              const Matrix&, const Matrix&, const Matrix&,
                                                              PrimitiveType, int) { ThrowNo3DVulkan(); }
-
 }
 
-namespace CNA::Internal::Backends {
+namespace CNA::Internal::Backends
+{
 #ifdef CNA_BACKEND_VULKAN
-    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args) {
+    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
+    {
         return std::make_unique<Vulkan::VulkanGraphicsBackend>(args.window);
     }
 #endif

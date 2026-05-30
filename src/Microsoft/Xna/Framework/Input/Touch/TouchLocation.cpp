@@ -1,9 +1,10 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp"
 
-namespace Microsoft::Xna::Framework::Input::Touch {
-
+namespace Microsoft::Xna::Framework::Input::Touch
+{
     IMPL_PROP(int, Id, getter1, setter0, member0, static0, constret1, ref1, constmet1, TouchLocation, nothing)
-    IMPL_PROP(TouchLocationState, State, getter1, setter0, member0, static0, constret1, ref1, constmet1, TouchLocation, nothing)
+    IMPL_PROP(TouchLocationState, State, getter1, setter0, member0, static0, constret1, ref1, constmet1, TouchLocation,
+              nothing)
     IMPL_PROP(Vector2, Position, getter1, setter0, member0, static0, constret1, ref1, constmet1, TouchLocation, nothing)
 
     TouchLocation::TouchLocation()

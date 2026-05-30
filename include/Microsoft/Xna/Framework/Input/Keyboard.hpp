@@ -5,13 +5,15 @@
 #pragma once
 #include "KeyboardState.hpp"
 
-namespace Microsoft::Xna::Framework::Input {
+namespace Microsoft::Xna::Framework::Input
+{
     /**
      * @brief Provides keyboard input snapshots.
      *
      * @note Status: PARTIAL
      */
-    class Keyboard {
+    class Keyboard
+    {
     public:
         /**
          * @brief Returns a snapshot of current keyboard state.
@@ -21,4 +23,3 @@ namespace Microsoft::Xna::Framework::Input {
         static KeyboardState GetState();
     };
 }
-

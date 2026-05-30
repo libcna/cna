@@ -61,12 +61,16 @@ namespace Microsoft::Xna::Framework
         static void Add(const Vector2& value1, const Vector2& value2, Vector2& result);
 
         /// Converts barycentric coordinates to a vector inside a triangle.
-        [[nodiscard]] static Vector2 Barycentric(Vector2 value1, Vector2 value2, Vector2 value3, float amount1, float amount2);
-        static void Barycentric(const Vector2& value1, const Vector2& value2, const Vector2& value3, float amount1, float amount2, Vector2& result);
+        [[nodiscard]] static Vector2 Barycentric(Vector2 value1, Vector2 value2, Vector2 value3, float amount1,
+                                                 float amount2);
+        static void Barycentric(const Vector2& value1, const Vector2& value2, const Vector2& value3, float amount1,
+                                float amount2, Vector2& result);
 
         /// Performs Catmull-Rom interpolation between vectors.
-        [[nodiscard]] static Vector2 CatmullRom(Vector2 value1, Vector2 value2, Vector2 value3, Vector2 value4, float amount);
-        static void CatmullRom(const Vector2& value1, const Vector2& value2, const Vector2& value3, const Vector2& value4, float amount, Vector2& result);
+        [[nodiscard]] static Vector2 CatmullRom(Vector2 value1, Vector2 value2, Vector2 value3, Vector2 value4,
+                                                float amount);
+        static void CatmullRom(const Vector2& value1, const Vector2& value2, const Vector2& value3,
+                               const Vector2& value4, float amount, Vector2& result);
 
         /// Clamps each component between the matching minimum and maximum component.
         [[nodiscard]] static Vector2 Clamp(Vector2 value1, Vector2 min, Vector2 max);
@@ -93,8 +97,10 @@ namespace Microsoft::Xna::Framework
         static void Dot(const Vector2& value1, const Vector2& value2, float& result);
 
         /// Performs Hermite spline interpolation.
-        [[nodiscard]] static Vector2 Hermite(Vector2 value1, Vector2 tangent1, Vector2 value2, Vector2 tangent2, float amount);
-        static void Hermite(const Vector2& value1, const Vector2& tangent1, const Vector2& value2, const Vector2& tangent2, float amount, Vector2& result);
+        [[nodiscard]] static Vector2 Hermite(Vector2 value1, Vector2 tangent1, Vector2 value2, Vector2 tangent2,
+                                             float amount);
+        static void Hermite(const Vector2& value1, const Vector2& tangent1, const Vector2& value2,
+                            const Vector2& tangent2, float amount, Vector2& result);
 
         /// Linearly interpolates between two vectors.
         [[nodiscard]] static Vector2 Lerp(Vector2 value1, Vector2 value2, float amount);
@@ -139,20 +145,26 @@ namespace Microsoft::Xna::Framework
         /// Transforms a position by a matrix.
         [[nodiscard]] static Vector2 Transform(Vector2 position, const Matrix& matrix);
         static void Transform(const Vector2& position, const Matrix& matrix, Vector2& result);
-        static void Transform(const std::vector<Vector2>& sourceArray, const Matrix& matrix, std::vector<Vector2>& destinationArray);
-        static void Transform(const std::vector<Vector2>& sourceArray, int sourceIndex, const Matrix& matrix, std::vector<Vector2>& destinationArray, int destinationIndex, int length);
+        static void Transform(const std::vector<Vector2>& sourceArray, const Matrix& matrix,
+                              std::vector<Vector2>& destinationArray);
+        static void Transform(const std::vector<Vector2>& sourceArray, int sourceIndex, const Matrix& matrix,
+                              std::vector<Vector2>& destinationArray, int destinationIndex, int length);
 
         /// Transforms a vector by a quaternion rotation.
         [[nodiscard]] static Vector2 Transform(Vector2 value, const Quaternion& rotation);
         static void Transform(const Vector2& value, const Quaternion& rotation, Vector2& result);
-        static void Transform(const std::vector<Vector2>& sourceArray, const Quaternion& rotation, std::vector<Vector2>& destinationArray);
-        static void Transform(const std::vector<Vector2>& sourceArray, int sourceIndex, const Quaternion& rotation, std::vector<Vector2>& destinationArray, int destinationIndex, int length);
+        static void Transform(const std::vector<Vector2>& sourceArray, const Quaternion& rotation,
+                              std::vector<Vector2>& destinationArray);
+        static void Transform(const std::vector<Vector2>& sourceArray, int sourceIndex, const Quaternion& rotation,
+                              std::vector<Vector2>& destinationArray, int destinationIndex, int length);
 
         /// Transforms a normal by a matrix without applying translation.
         [[nodiscard]] static Vector2 TransformNormal(Vector2 normal, const Matrix& matrix);
         static void TransformNormal(const Vector2& normal, const Matrix& matrix, Vector2& result);
-        static void TransformNormal(const std::vector<Vector2>& sourceArray, const Matrix& matrix, std::vector<Vector2>& destinationArray);
-        static void TransformNormal(const std::vector<Vector2>& sourceArray, int sourceIndex, const Matrix& matrix, std::vector<Vector2>& destinationArray, int destinationIndex, int length);
+        static void TransformNormal(const std::vector<Vector2>& sourceArray, const Matrix& matrix,
+                                    std::vector<Vector2>& destinationArray);
+        static void TransformNormal(const std::vector<Vector2>& sourceArray, int sourceIndex, const Matrix& matrix,
+                                    std::vector<Vector2>& destinationArray, int destinationIndex, int length);
 
         friend Vector2 operator-(Vector2 value);
         friend bool operator==(Vector2 value1, Vector2 value2);

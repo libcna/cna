@@ -4,8 +4,8 @@
 
 #pragma once
 
-namespace Microsoft::Xna::Framework::Input {
-
+namespace Microsoft::Xna::Framework::Input
+{
     /**
      * @brief Defines the keys on a keyboard.
      *
@@ -13,7 +13,8 @@ namespace Microsoft::Xna::Framework::Input {
      * Numeric values correspond to the original key codes used by the framework.
      * @note Status: Verified
      */
-    enum class Keys {
+    enum class Keys
+    {
         /** @brief Reserved. */
         None = 0,
 

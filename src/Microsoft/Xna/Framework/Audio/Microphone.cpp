@@ -90,7 +90,8 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<SharpRuntime::bytecs>& buffer,
         SharpRuntime::intcs offset,
         SharpRuntime::intcs count
-    ) {
+    )
+    {
         if (offset < 0 || offset > static_cast<SharpRuntime::intcs>(buffer.size()))
         {
             throw std::out_of_range("offset");
@@ -101,7 +102,7 @@ namespace Microsoft::Xna::Framework::Audio
             throw std::out_of_range("count");
         }
 
-        (void) handle_;
+        (void)handle_;
 
         // Platform capture should fill the requested buffer range and return bytes read.
         // For now no capture backend is connected, so no bytes are available.

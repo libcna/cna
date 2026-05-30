@@ -58,13 +58,15 @@ namespace Microsoft::Xna::Framework::Audio
         void SubmitBuffer(const std::vector<SharpRuntime::bytecs>& buffer);
 
         /// Submits a range from a 16-bit PCM byte buffer.
-        void SubmitBuffer(const std::vector<SharpRuntime::bytecs>& buffer, SharpRuntime::intcs offset, SharpRuntime::intcs count);
+        void SubmitBuffer(const std::vector<SharpRuntime::bytecs>& buffer, SharpRuntime::intcs offset,
+                          SharpRuntime::intcs count);
 
         /// Submits a full floating-point sample buffer.
         void SubmitFloatBufferEXT(const std::vector<float>& buffer);
 
         /// Submits a range from a floating-point sample buffer.
-        void SubmitFloatBufferEXT(const std::vector<float>& buffer, SharpRuntime::intcs offset, SharpRuntime::intcs count);
+        void SubmitFloatBufferEXT(const std::vector<float>& buffer, SharpRuntime::intcs offset,
+                                  SharpRuntime::intcs count);
 
         /// Queues buffers submitted while stopped.
         void QueueInitialBuffers();

@@ -24,7 +24,7 @@ namespace Microsoft::Xna::Framework
         GameServiceContainer& operator=(GameServiceContainer&&) = default;
 
         /// Adds a service provider for the specified service type.
-        template<typename TService>
+        template <typename TService>
         void AddService(TService* provider)
         {
             if (provider == nullptr)
@@ -39,7 +39,7 @@ namespace Microsoft::Xna::Framework
         void AddService(const std::type_info& type, void* provider);
 
         /// Gets a service provider for the specified service type.
-        template<typename TService>
+        template <typename TService>
         [[nodiscard]] TService* GetService() const
         {
             return static_cast<TService*>(GetService(typeid(TService)));
@@ -49,7 +49,7 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] void* GetService(const std::type_info& type) const override;
 
         /// Removes the service registered for the specified service type.
-        template<typename TService>
+        template <typename TService>
         void RemoveService()
         {
             RemoveService(typeid(TService));

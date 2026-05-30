@@ -12,14 +12,24 @@
 #include "System/TimeSpan.hpp"
 #include "System/EventArgs.hpp"
 
-namespace Microsoft::Xna::Framework {
-
-    class Game : public System::Object{
+namespace Microsoft::Xna::Framework
+{
+    class Game : public System::Object
+    {
     public:
         DEF_PROP(Content::ContentManager, Content, getter1, setter0, member1, static0, constret0, ref1, constmet0)
 
-        private: Graphics::GraphicsDevice GraphicsDevice_; public: [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceProperty();
-        private: GameWindow Window_; public: [[nodiscard]] GameWindow& getWindowProperty();
+    private:
+        Graphics::GraphicsDevice GraphicsDevice_;
+
+    public:
+        [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceProperty();
+
+    private:
+        GameWindow Window_;
+
+    public:
+        [[nodiscard]] GameWindow& getWindowProperty();
 
         DEF_PROP(bool, IsMouseVisible, getter1, setter1, member1, static0, constret1, ref1, constmet1)
 
@@ -49,12 +59,13 @@ namespace Microsoft::Xna::Framework {
         virtual void OnDeactivated(std::any sender, System::EventArgs args);
         virtual void OnActivated(std::any sender, System::EventArgs args);
 
-        virtual void Update(Microsoft::Xna::Framework::GameTime &gameTime);
-        virtual void Draw(const Microsoft::Xna::Framework::GameTime &gameTime);
+        virtual void Update(Microsoft::Xna::Framework::GameTime& gameTime);
+        virtual void Draw(const Microsoft::Xna::Framework::GameTime& gameTime);
 
     private:
         bool isRunning;
 #ifdef XNA5
+
     public:
         [[nodiscard]] double getTargetFPSProperty() const;
         [[nodiscard]] double getTargetMsFrameTimeProperty() const;

@@ -4,13 +4,14 @@
 
 #pragma once
 
-namespace CNA {
-
+namespace CNA
+{
     /**
      * @brief Represents a desktop operating system.
      * @note Status: Verified
      */
-    enum class DesktopOS {
+    enum class DesktopOS
+    {
         /**
          * @brief Microsoft Windows.
          */
@@ -44,5 +45,4 @@ namespace CNA {
      * @throws CNAException Thrown when the current platform is not desktop.
      */
     DesktopOS getCurrentDesktopOS();
-
 } // CNA

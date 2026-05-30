@@ -4,17 +4,20 @@
 #include <stdexcept>
 #include <string>
 
-namespace CNA::Internal::Graphics {
-
-    ImageData ImageLoader::Load(const std::string& assetName) {
+namespace CNA::Internal::Graphics
+{
+    ImageData ImageLoader::Load(const std::string& assetName)
+    {
         SDL_Surface* surface = IMG_Load(assetName.c_str());
-        if (!surface) {
+        if (!surface)
+        {
             throw std::runtime_error("Failed to load image: " + assetName + " Error: " + SDL_GetError());
         }
 
         // Convert to RGBA32
         SDL_Surface* converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
-        if (!converted) {
+        if (!converted)
+        {
             SDL_DestroySurface(surface);
             throw std::runtime_error("Failed to convert image to RGBA: " + assetName);
         }
@@ -32,5 +35,4 @@ namespace CNA::Internal::Graphics {
 
         return data;
     }
-
 }

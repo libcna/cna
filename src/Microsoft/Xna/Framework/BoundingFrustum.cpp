@@ -81,14 +81,14 @@ namespace Microsoft::Xna::Framework
 
             switch (planeIntersectionType)
             {
-                case PlaneIntersectionType::Front:
-                    result = ContainmentType::Disjoint;
-                    return;
-                case PlaneIntersectionType::Intersecting:
-                    intersects = true;
-                    break;
-                case PlaneIntersectionType::Back:
-                    break;
+            case PlaneIntersectionType::Front:
+                result = ContainmentType::Disjoint;
+                return;
+            case PlaneIntersectionType::Intersecting:
+                intersects = true;
+                break;
+            case PlaneIntersectionType::Back:
+                break;
             }
         }
 
@@ -113,14 +113,14 @@ namespace Microsoft::Xna::Framework
 
             switch (planeIntersectionType)
             {
-                case PlaneIntersectionType::Front:
-                    result = ContainmentType::Disjoint;
-                    return;
-                case PlaneIntersectionType::Intersecting:
-                    intersects = true;
-                    break;
-                case PlaneIntersectionType::Back:
-                    break;
+            case PlaneIntersectionType::Front:
+                result = ContainmentType::Disjoint;
+                return;
+            case PlaneIntersectionType::Intersecting:
+                intersects = true;
+                break;
+            case PlaneIntersectionType::Back:
+                break;
             }
         }
 
@@ -141,9 +141,9 @@ namespace Microsoft::Xna::Framework
         for (int i = 0; i < PlaneCount; i += 1)
         {
             float classifyPoint = (point.X * planes[i].Normal.X) +
-                                  (point.Y * planes[i].Normal.Y) +
-                                  (point.Z * planes[i].Normal.Z) +
-                                  planes[i].D;
+                (point.Y * planes[i].Normal.Y) +
+                (point.Z * planes[i].Normal.Z) +
+                planes[i].D;
 
             if (classifyPoint > 0.0f)
             {
@@ -277,11 +277,16 @@ namespace Microsoft::Xna::Framework
     void BoundingFrustum::CreatePlanes()
     {
         planes[0] = Plane(-matrix.M13, -matrix.M23, -matrix.M33, -matrix.M43);
-        planes[1] = Plane(matrix.M13 - matrix.M14, matrix.M23 - matrix.M24, matrix.M33 - matrix.M34, matrix.M43 - matrix.M44);
-        planes[2] = Plane(-matrix.M14 - matrix.M11, -matrix.M24 - matrix.M21, -matrix.M34 - matrix.M31, -matrix.M44 - matrix.M41);
-        planes[3] = Plane(matrix.M11 - matrix.M14, matrix.M21 - matrix.M24, matrix.M31 - matrix.M34, matrix.M41 - matrix.M44);
-        planes[4] = Plane(matrix.M12 - matrix.M14, matrix.M22 - matrix.M24, matrix.M32 - matrix.M34, matrix.M42 - matrix.M44);
-        planes[5] = Plane(-matrix.M14 - matrix.M12, -matrix.M24 - matrix.M22, -matrix.M34 - matrix.M32, -matrix.M44 - matrix.M42);
+        planes[1] = Plane(matrix.M13 - matrix.M14, matrix.M23 - matrix.M24, matrix.M33 - matrix.M34,
+                          matrix.M43 - matrix.M44);
+        planes[2] = Plane(-matrix.M14 - matrix.M11, -matrix.M24 - matrix.M21, -matrix.M34 - matrix.M31,
+                          -matrix.M44 - matrix.M41);
+        planes[3] = Plane(matrix.M11 - matrix.M14, matrix.M21 - matrix.M24, matrix.M31 - matrix.M34,
+                          matrix.M41 - matrix.M44);
+        planes[4] = Plane(matrix.M12 - matrix.M14, matrix.M22 - matrix.M24, matrix.M32 - matrix.M34,
+                          matrix.M42 - matrix.M44);
+        planes[5] = Plane(-matrix.M14 - matrix.M12, -matrix.M24 - matrix.M22, -matrix.M34 - matrix.M32,
+                          -matrix.M44 - matrix.M42);
 
         for (Plane& plane : planes)
         {
@@ -334,11 +339,11 @@ namespace Microsoft::Xna::Framework
     {
         std::ostringstream ss;
         ss << "Near( " << planes[0].ToString() << " ) \r\n"
-           << "Far( " << planes[1].ToString() << " ) \r\n"
-           << "Left( " << planes[2].ToString() << " ) \r\n"
-           << "Right( " << planes[3].ToString() << " ) \r\n"
-           << "Top( " << planes[4].ToString() << " ) \r\n"
-           << "Bottom( " << planes[5].ToString() << " ) ";
+            << "Far( " << planes[1].ToString() << " ) \r\n"
+            << "Left( " << planes[2].ToString() << " ) \r\n"
+            << "Right( " << planes[3].ToString() << " ) \r\n"
+            << "Top( " << planes[4].ToString() << " ) \r\n"
+            << "Bottom( " << planes[5].ToString() << " ) ";
         return ss.str();
     }
 
@@ -351,12 +356,12 @@ namespace Microsoft::Xna::Framework
     {
         std::ostringstream ss;
         ss << "{Near:" << planes[0].ToString()
-           << " Far:" << planes[1].ToString()
-           << " Left:" << planes[2].ToString()
-           << " Right:" << planes[3].ToString()
-           << " Top:" << planes[4].ToString()
-           << " Bottom:" << planes[5].ToString()
-           << "}";
+            << " Far:" << planes[1].ToString()
+            << " Left:" << planes[2].ToString()
+            << " Right:" << planes[3].ToString()
+            << " Top:" << planes[4].ToString()
+            << " Bottom:" << planes[5].ToString()
+            << "}";
         return ss.str();
     }
 

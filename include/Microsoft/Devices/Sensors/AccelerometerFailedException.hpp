@@ -5,12 +5,13 @@
 #pragma once
 #include "SensorFailedException.hpp"
 
-namespace Microsoft::Devices::Sensors {
-    class AccelerometerFailedException : public SensorFailedException {
+namespace Microsoft::Devices::Sensors
+{
+    class AccelerometerFailedException : public SensorFailedException
+    {
     public:
         AccelerometerFailedException();
 
-        explicit AccelerometerFailedException(const char * str);
+        explicit AccelerometerFailedException(const char* str);
     };
 };
-

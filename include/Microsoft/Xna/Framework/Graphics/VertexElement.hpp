@@ -3,8 +3,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     /**
      * @brief XNA 4.0 `VertexElement`.
      *
@@ -15,15 +15,16 @@ namespace Microsoft::Xna::Framework::Graphics {
      *       compatibility; the EasyGL backend currently still routes
      *       through hard-coded layouts for the built-in vertex types.
      */
-    struct VertexElement {
+    struct VertexElement
+    {
         /** Byte offset from the start of the vertex. */
-        int                  Offset = 0;
+        int Offset = 0;
         /** Component type / count of this attribute. */
-        VertexElementFormat  VertexElementFormatValue = VertexElementFormat::Single;
+        VertexElementFormat VertexElementFormatValue = VertexElementFormat::Single;
         /** Semantic channel of this attribute. */
-        VertexElementUsage   VertexElementUsageValue  = VertexElementUsage::Position;
+        VertexElementUsage VertexElementUsageValue = VertexElementUsage::Position;
         /** Index for repeated semantics (e.g. multiple texcoords). */
-        int                  UsageIndex = 0;
+        int UsageIndex = 0;
 
         VertexElement() = default;
 
@@ -34,6 +35,8 @@ namespace Microsoft::Xna::Framework::Graphics {
             : Offset(offset),
               VertexElementFormatValue(format),
               VertexElementUsageValue(usage),
-              UsageIndex(usageIndex) {}
+              UsageIndex(usageIndex)
+        {
+        }
     };
 }

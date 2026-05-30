@@ -103,7 +103,7 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::setIsVisualizationEnabledProperty(bool value)
     {
-        (void) value;
+        (void)value;
         // Backend hook: enable or disable visualization.
     }
 
@@ -201,7 +201,7 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::GetVisualizationData(VisualizationData& data)
     {
-        (void) data;
+        (void)data;
         // Backend hook: fill frequency/sample visualization arrays.
     }
 

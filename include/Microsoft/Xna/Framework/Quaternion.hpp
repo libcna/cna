@@ -110,13 +110,15 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] static Quaternion Lerp(Quaternion quaternion1, Quaternion quaternion2, float amount);
 
         /// Performs normalized linear interpolation and stores the result in an output parameter.
-        static void Lerp(const Quaternion& quaternion1, const Quaternion& quaternion2, float amount, Quaternion& result);
+        static void Lerp(const Quaternion& quaternion1, const Quaternion& quaternion2, float amount,
+                         Quaternion& result);
 
         /// Performs spherical linear interpolation between two quaternions.
         [[nodiscard]] static Quaternion Slerp(Quaternion quaternion1, Quaternion quaternion2, float amount);
 
         /// Performs spherical linear interpolation and stores the result in an output parameter.
-        static void Slerp(const Quaternion& quaternion1, const Quaternion& quaternion2, float amount, Quaternion& result);
+        static void Slerp(const Quaternion& quaternion1, const Quaternion& quaternion2, float amount,
+                          Quaternion& result);
 
         /// Subtracts one quaternion from another.
         [[nodiscard]] static Quaternion Subtract(Quaternion quaternion1, Quaternion quaternion2);

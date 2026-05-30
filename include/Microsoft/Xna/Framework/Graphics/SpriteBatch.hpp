@@ -12,16 +12,18 @@
 
 struct SDL_Renderer;
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     class GraphicsDevice;
 }
 
-namespace CNA::Internal::Backends {
+namespace CNA::Internal::Backends
+{
     class ISpriteBatchBackend;
 }
 
-namespace Microsoft::Xna::Framework::Graphics {
+namespace Microsoft::Xna::Framework::Graphics
+{
     using namespace CNA::Internal::Backends;
 
     /**
@@ -39,7 +41,8 @@ namespace Microsoft::Xna::Framework::Graphics {
      * This class uses a backend abstraction to handle the actual rendering,
      * such as SDL_Renderer or EasyGL.
      */
-    class SpriteBatch {
+    class SpriteBatch
+    {
     private:
         std::unique_ptr<ISpriteBatchBackend> backend_;
         bool begun = false;

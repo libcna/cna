@@ -15,9 +15,10 @@
 #include <emscripten/html5.h>
 #endif
 
-namespace Microsoft::Xna::Framework {
-
-    IMPL_PROP(Content::ContentManager, Content, getter1, setter0, member0, static0, constret0, ref1, constmet0, Game, nothing)
+namespace Microsoft::Xna::Framework
+{
+    IMPL_PROP(Content::ContentManager, Content, getter1, setter0, member0, static0, constret0, ref1, constmet0, Game,
+              nothing)
 
     Graphics::GraphicsDevice& Game::getGraphicsDeviceProperty()
     {
@@ -41,12 +42,14 @@ namespace Microsoft::Xna::Framework {
         TargetElapsedTime_ = v;
     }
 
-    IMPL_PROP(System::TimeSpan, InactiveSleepTime, getter1, setter1, member0, static0, constret1, ref1, constmet1, Game, nothing)
+    IMPL_PROP(System::TimeSpan, InactiveSleepTime, getter1, setter1, member0, static0, constret1, ref1, constmet1, Game,
+              nothing)
 
     void InitAudio()
     {
 #ifdef SOUND_ENABLED
-        if (!MIX_Init()) {
+        if (!MIX_Init())
+        {
             throw std::runtime_error(std::string("MIX_Init failed: ") + SDL_GetError());
         }
 #endif
@@ -87,11 +90,12 @@ namespace Microsoft::Xna::Framework {
     //
     // We cap the single-frame delta at 250 ms to avoid a runaway catch-up
     // burst when the browser tab was hidden for a while.
-    struct Game::EmscriptenLoopState {
-        Game*    game          = nullptr;
+    struct Game::EmscriptenLoopState
+    {
+        Game* game = nullptr;
         GameTime gameTime;
-        Uint64   lastTickMs    = 0;   // SDL_GetTicks() at end of previous callback
-        double   accumulatorMs = 0.0; // accumulated unprocessed milliseconds
+        Uint64 lastTickMs = 0; // SDL_GetTicks() at end of previous callback
+        double accumulatorMs = 0.0; // accumulated unprocessed milliseconds
     };
 
     Game::EmscriptenLoopState Game::s_emLoopState;
@@ -102,9 +106,11 @@ namespace Microsoft::Xna::Framework {
 
         // --- pump events ---
         SDL_Event e;
-        while (SDL_PollEvent(&e)) {
+        while (SDL_PollEvent(&e))
+        {
             CNA::Internal::Input::SdlInputBridge::ProcessEvent(e);
-            if (e.type == SDL_EVENT_QUIT) {
+            if (e.type == SDL_EVENT_QUIT)
+            {
                 s.game->isRunning = false;
                 emscripten_cancel_main_loop();
                 ExitingEventArgs exiting_event_args;
@@ -115,7 +121,8 @@ namespace Microsoft::Xna::Framework {
 
         // --- accumulate real elapsed time ---
         const Uint64 nowMs = SDL_GetTicks();
-        if (s.lastTickMs == 0) {
+        if (s.lastTickMs == 0)
+        {
             // First callback: treat as one target-step so the game starts immediately.
             s.lastTickMs = nowMs;
         }
@@ -127,11 +134,12 @@ namespace Microsoft::Xna::Framework {
         s.accumulatorMs += deltaMs;
 
         const double targetMs = s.game->getTargetMsFrameTimeProperty();
-        const auto   stepSpan = System::TimeSpan::FromMilliseconds(targetMs);
+        const auto stepSpan = System::TimeSpan::FromMilliseconds(targetMs);
 
         // --- fire Update() for each full target-step in the accumulator ---
         bool updated = false;
-        while (s.accumulatorMs >= targetMs) {
+        while (s.accumulatorMs >= targetMs)
+        {
             s.accumulatorMs -= targetMs;
 
             s.gameTime.setElapsedGameTimeProperty(stepSpan);
@@ -144,7 +152,8 @@ namespace Microsoft::Xna::Framework {
         }
 
         // --- Draw once per browser frame (regardless of update count) ---
-        if (updated) {
+        if (updated)
+        {
             s.game->Draw(s.gameTime);
             s.game->getGraphicsDeviceProperty().Present();
         }
@@ -199,22 +208,29 @@ namespace Microsoft::Xna::Framework {
         // When paused we stop rendering and sleep to avoid busy-looping.
         bool isAppPaused = false;
 
-        while (isRunning) {
+        while (isRunning)
+        {
             const Uint64 frameStart = SDL_GetTicks();
 
             SDL_Event e;
-            while (SDL_PollEvent(&e)) {
+            while (SDL_PollEvent(&e))
+            {
                 CNA::Internal::Input::SdlInputBridge::ProcessEvent(e);
-                if (e.type == SDL_EVENT_QUIT) {
+                if (e.type == SDL_EVENT_QUIT)
+                {
                     isRunning = false;
-                } else if (e.type == SDL_EVENT_WILL_ENTER_BACKGROUND) {
+                }
+                else if (e.type == SDL_EVENT_WILL_ENTER_BACKGROUND)
+                {
                     // Android / mobile: app is being sent to background.
                     // SDL3 handles audio focus automatically at the platform layer.
                     // We stop rendering and signal deactivation to the game.
                     isAppPaused = true;
                     System::EventArgs deactivated_args;
                     OnDeactivated(this, deactivated_args);
-                } else if (e.type == SDL_EVENT_DID_ENTER_FOREGROUND) {
+                }
+                else if (e.type == SDL_EVENT_DID_ENTER_FOREGROUND)
+                {
                     // Android / mobile: app returned to foreground.
                     isAppPaused = false;
                     System::EventArgs activated_args;
@@ -222,7 +238,8 @@ namespace Microsoft::Xna::Framework {
                 }
             }
 
-            if (isAppPaused) {
+            if (isAppPaused)
+            {
                 // Do not render while backgrounded; sleep to avoid CPU busy-loop.
                 SDL_Delay(16);
                 continue;
@@ -235,9 +252,11 @@ namespace Microsoft::Xna::Framework {
             const Uint64 workMs = SDL_GetTicks() - frameStart;
             const bool runningSlowly = static_cast<double>(workMs) > wantedMsFrameTime;
 
-            if (!runningSlowly) {
+            if (!runningSlowly)
+            {
                 const double remainingMs = wantedMsFrameTime - static_cast<double>(workMs);
-                if (remainingMs > 0.0) {
+                if (remainingMs > 0.0)
+                {
                     SDL_Delay(static_cast<Uint32>(remainingMs));
                 }
             }
@@ -292,7 +311,8 @@ namespace Microsoft::Xna::Framework {
     double Game::getTargetFPSProperty() const
     {
         const double msPerFrame = getTargetMsFrameTimeProperty();
-        if (msPerFrame <= 0.0) {
+        if (msPerFrame <= 0.0)
+        {
             return 0.0;
         }
         return 1000.0 / msPerFrame;
@@ -305,7 +325,8 @@ namespace Microsoft::Xna::Framework {
 
     double Game::fpsToMillisecondsPerFrame(const SharpRuntime::intcs framesPerSecond)
     {
-        if (framesPerSecond <= 0) {
+        if (framesPerSecond <= 0)
+        {
             return 0.0;
         }
         return 1000.0 / static_cast<double>(framesPerSecond);

@@ -4,8 +4,8 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     /**
      * @brief Vertex with `Position` and `Color` channels.
      *
@@ -17,18 +17,23 @@ namespace Microsoft::Xna::Framework::Graphics {
      *       from XNA are not exposed; the EasyGL backend special-cases this
      *       layout for the early 3D pipeline.
      */
-    struct VertexPositionColor {
+    struct VertexPositionColor
+    {
         /** Position in object space. */
         Microsoft::Xna::Framework::Vector3 Position;
         /** Per-vertex color. */
-        Microsoft::Xna::Framework::Color   Color;
+        Microsoft::Xna::Framework::Color Color;
 
         VertexPositionColor()
-            : Position(0, 0, 0), Color(255, 255, 255, 255) {}
+            : Position(0, 0, 0), Color(255, 255, 255, 255)
+        {
+        }
 
         VertexPositionColor(const Microsoft::Xna::Framework::Vector3& position,
                             const Microsoft::Xna::Framework::Color& color)
-            : Position(position), Color(color) {}
+            : Position(position), Color(color)
+        {
+        }
 
         /**
          * @brief Returns the XNA-style `VertexDeclaration` for this vertex
@@ -41,7 +46,8 @@ namespace Microsoft::Xna::Framework::Graphics {
          *       layout for this built-in vertex type. The element list and
          *       stride still match the actual memory layout.
          */
-        static const ::Microsoft::Xna::Framework::Graphics::VertexDeclaration& VertexDeclaration() {
+        static const ::Microsoft::Xna::Framework::Graphics::VertexDeclaration& VertexDeclaration()
+        {
             using ::Microsoft::Xna::Framework::Graphics::VertexElement;
             using ::Microsoft::Xna::Framework::Graphics::VertexElementFormat;
             using ::Microsoft::Xna::Framework::Graphics::VertexElementUsage;

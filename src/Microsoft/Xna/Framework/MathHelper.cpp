@@ -12,7 +12,8 @@ namespace Microsoft::Xna::Framework
         float value3,
         float amount1,
         float amount2
-    ) {
+    )
+    {
         return value1 + (value2 - value1) * amount1 + (value3 - value1) * amount2;
     }
 
@@ -22,7 +23,8 @@ namespace Microsoft::Xna::Framework
         float value3,
         float value4,
         float amount
-    ) {
+    )
+    {
         const double amountSquared = static_cast<double>(amount) * amount;
         const double amountCubed = amountSquared * amount;
 
@@ -54,7 +56,8 @@ namespace Microsoft::Xna::Framework
         float value2,
         float tangent2,
         float amount
-    ) {
+    )
+    {
         const double v1 = value1;
         const double v2 = value2;
         const double t1 = tangent1;

@@ -4,12 +4,13 @@
 
 #pragma once
 
-namespace Microsoft::Xna::Framework {
-    enum PlayerIndex {
+namespace Microsoft::Xna::Framework
+{
+    enum PlayerIndex
+    {
         One,
         Two,
         Three,
         Four
     };
 }
-

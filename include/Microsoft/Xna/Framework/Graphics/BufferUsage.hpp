@@ -1,7 +1,7 @@
 #pragma once
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     /**
      * @brief XNA 4.0 `BufferUsage` enum.
      *
@@ -12,7 +12,8 @@ namespace Microsoft::Xna::Framework::Graphics {
      *       same; the enum exists for API-shape compatibility with XNA 4.0
      *       sample code.
      */
-    enum class BufferUsage {
+    enum class BufferUsage
+    {
         /** Default usage; both reads and writes are allowed. */
         None = 0,
         /** Hint that the application will only write to the buffer. */

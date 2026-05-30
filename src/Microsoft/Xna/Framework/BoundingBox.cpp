@@ -15,8 +15,8 @@
 #include <limits>
 #include <sstream>
 
-namespace Microsoft::Xna::Framework {
-
+namespace Microsoft::Xna::Framework
+{
     const Vector3 BoundingBox::MaxVector3(
         std::numeric_limits<float>::max(),
         std::numeric_limits<float>::max(),
@@ -449,11 +449,11 @@ namespace Microsoft::Xna::Framework {
     bool BoundingBox::Equals(const BoundingBox& other) const
     {
         return Min.X == other.Min.X &&
-               Min.Y == other.Min.Y &&
-               Min.Z == other.Min.Z &&
-               Max.X == other.Max.X &&
-               Max.Y == other.Max.Y &&
-               Max.Z == other.Max.Z;
+            Min.Y == other.Min.Y &&
+            Min.Z == other.Min.Z &&
+            Max.X == other.Max.X &&
+            Max.Y == other.Max.Y &&
+            Max.Z == other.Max.Z;
     }
 
     BoundingBox BoundingBox::CreateFromPoints(const std::vector<Vector3>& points)
@@ -514,7 +514,8 @@ namespace Microsoft::Xna::Framework {
 
     std::size_t BoundingBox::GetHashCode() const
     {
-        auto combine = [](std::size_t seed, float value) {
+        auto combine = [](std::size_t seed, float value)
+        {
             const std::size_t hashed = std::hash<float>{}(value);
             return seed ^ (hashed + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U));
         };
@@ -548,5 +549,4 @@ namespace Microsoft::Xna::Framework {
     {
         return !a.Equals(b);
     }
-
 }

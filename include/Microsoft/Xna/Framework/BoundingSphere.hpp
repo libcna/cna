@@ -62,7 +62,8 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] static BoundingSphere CreateMerged(BoundingSphere original, BoundingSphere additional);
 
         /// Creates the smallest sphere that contains two spheres.
-        static void CreateMerged(const BoundingSphere& original, const BoundingSphere& additional, BoundingSphere& result);
+        static void CreateMerged(const BoundingSphere& original, const BoundingSphere& additional,
+                                 BoundingSphere& result);
 
         [[nodiscard]] bool Intersects(BoundingBox box) const;
         void Intersects(const BoundingBox& box, bool& result) const;

@@ -4,14 +4,16 @@
 using namespace Microsoft::Xna::Framework;
 
 // Test default constructor
-TEST(GameTimeTest, DefaultConstructor) {
+TEST(GameTimeTest, DefaultConstructor)
+{
     GameTime gameTime;
     EXPECT_EQ(gameTime.getElapsedGameTimeProperty().getTicksProperty(), 0);
     EXPECT_FALSE(gameTime.getIsRunningSlowlyProperty());
 }
 
 // Test setter with lvalue
-TEST(GameTimeTest, SetElapsedGameTime_LValue) {
+TEST(GameTimeTest, SetElapsedGameTime_LValue)
+{
     GameTime gameTime;
     TimeSpan t(100);
 
@@ -20,14 +22,16 @@ TEST(GameTimeTest, SetElapsedGameTime_LValue) {
 }
 
 // Test setter with rvalue
-TEST(GameTimeTest, SetElapsedGameTime_RValue) {
+TEST(GameTimeTest, SetElapsedGameTime_RValue)
+{
     GameTime gameTime;
     gameTime.setElapsedGameTimeProperty(TimeSpan(200));
 
     EXPECT_EQ(gameTime.getElapsedGameTimeProperty().getTicksProperty(), 200);
 }
 
-TEST(GameTimeTest, GetterReturnsCorrectReference) {
+TEST(GameTimeTest, GetterReturnsCorrectReference)
+{
     GameTime gameTime;
     TimeSpan t(150);
 
@@ -39,7 +43,8 @@ TEST(GameTimeTest, GetterReturnsCorrectReference) {
     EXPECT_EQ(&elapsedTimeRef, &gameTime.getElapsedGameTimeProperty());
 }
 
-TEST(GameTimeTest, SetElapsedGameTime_RValue_NoCopy) {
+TEST(GameTimeTest, SetElapsedGameTime_RValue_NoCopy)
+{
     GameTime gameTime;
 
     TimeSpan::resetCopyCount();
@@ -51,7 +56,8 @@ TEST(GameTimeTest, SetElapsedGameTime_RValue_NoCopy) {
     EXPECT_GT(TimeSpan::getMoveCount(), 0);
 }
 
-TEST(GameTimeTest, GetterReturnsCorrectReference2) {
+TEST(GameTimeTest, GetterReturnsCorrectReference2)
+{
     GameTime gameTime;
     TimeSpan t(150);
 
@@ -62,6 +68,3 @@ TEST(GameTimeTest, GetterReturnsCorrectReference2) {
     EXPECT_EQ(elapsedTimeRef.getTicksProperty(), 150);
     EXPECT_EQ(&elapsedTimeRef, &gameTime.getElapsedGameTimeProperty());
 }
-
-
-

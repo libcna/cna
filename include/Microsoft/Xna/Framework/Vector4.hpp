@@ -41,10 +41,14 @@ namespace Microsoft::Xna::Framework
 
         [[nodiscard]] static Vector4 Add(Vector4 value1, Vector4 value2);
         static void Add(const Vector4& value1, const Vector4& value2, Vector4& result);
-        [[nodiscard]] static Vector4 Barycentric(Vector4 value1, Vector4 value2, Vector4 value3, float amount1, float amount2);
-        static void Barycentric(const Vector4& value1, const Vector4& value2, const Vector4& value3, float amount1, float amount2, Vector4& result);
-        [[nodiscard]] static Vector4 CatmullRom(Vector4 value1, Vector4 value2, Vector4 value3, Vector4 value4, float amount);
-        static void CatmullRom(const Vector4& value1, const Vector4& value2, const Vector4& value3, const Vector4& value4, float amount, Vector4& result);
+        [[nodiscard]] static Vector4 Barycentric(Vector4 value1, Vector4 value2, Vector4 value3, float amount1,
+                                                 float amount2);
+        static void Barycentric(const Vector4& value1, const Vector4& value2, const Vector4& value3, float amount1,
+                                float amount2, Vector4& result);
+        [[nodiscard]] static Vector4 CatmullRom(Vector4 value1, Vector4 value2, Vector4 value3, Vector4 value4,
+                                                float amount);
+        static void CatmullRom(const Vector4& value1, const Vector4& value2, const Vector4& value3,
+                               const Vector4& value4, float amount, Vector4& result);
         [[nodiscard]] static Vector4 Clamp(Vector4 value1, Vector4 min, Vector4 max);
         static void Clamp(const Vector4& value1, const Vector4& min, const Vector4& max, Vector4& result);
         [[nodiscard]] static float Distance(Vector4 value1, Vector4 value2);
@@ -57,8 +61,10 @@ namespace Microsoft::Xna::Framework
         static void Divide(const Vector4& value1, float divider, Vector4& result);
         [[nodiscard]] static float Dot(Vector4 value1, Vector4 value2);
         static void Dot(const Vector4& value1, const Vector4& value2, float& result);
-        [[nodiscard]] static Vector4 Hermite(Vector4 value1, Vector4 tangent1, Vector4 value2, Vector4 tangent2, float amount);
-        static void Hermite(const Vector4& value1, const Vector4& tangent1, const Vector4& value2, const Vector4& tangent2, float amount, Vector4& result);
+        [[nodiscard]] static Vector4 Hermite(Vector4 value1, Vector4 tangent1, Vector4 value2, Vector4 tangent2,
+                                             float amount);
+        static void Hermite(const Vector4& value1, const Vector4& tangent1, const Vector4& value2,
+                            const Vector4& tangent2, float amount, Vector4& result);
         [[nodiscard]] static Vector4 Lerp(Vector4 value1, Vector4 value2, float amount);
         static void Lerp(const Vector4& value1, const Vector4& value2, float amount, Vector4& result);
         [[nodiscard]] static Vector4 Max(Vector4 value1, Vector4 value2);
@@ -84,8 +90,10 @@ namespace Microsoft::Xna::Framework
         static void Transform(const Vector2& position, const Matrix& matrix, Vector4& result);
         static void Transform(const Vector3& position, const Matrix& matrix, Vector4& result);
         static void Transform(const Vector4& vector, const Matrix& matrix, Vector4& result);
-        static void Transform(const std::vector<Vector4>& sourceArray, const Matrix& matrix, std::vector<Vector4>& destinationArray);
-        static void Transform(const std::vector<Vector4>& sourceArray, int sourceIndex, const Matrix& matrix, std::vector<Vector4>& destinationArray, int destinationIndex, int length);
+        static void Transform(const std::vector<Vector4>& sourceArray, const Matrix& matrix,
+                              std::vector<Vector4>& destinationArray);
+        static void Transform(const std::vector<Vector4>& sourceArray, int sourceIndex, const Matrix& matrix,
+                              std::vector<Vector4>& destinationArray, int destinationIndex, int length);
 
         [[nodiscard]] static Vector4 Transform(Vector2 value, const Quaternion& rotation);
         [[nodiscard]] static Vector4 Transform(Vector3 value, const Quaternion& rotation);
@@ -93,8 +101,10 @@ namespace Microsoft::Xna::Framework
         static void Transform(const Vector2& value, const Quaternion& rotation, Vector4& result);
         static void Transform(const Vector3& value, const Quaternion& rotation, Vector4& result);
         static void Transform(const Vector4& value, const Quaternion& rotation, Vector4& result);
-        static void Transform(const std::vector<Vector4>& sourceArray, const Quaternion& rotation, std::vector<Vector4>& destinationArray);
-        static void Transform(const std::vector<Vector4>& sourceArray, int sourceIndex, const Quaternion& rotation, std::vector<Vector4>& destinationArray, int destinationIndex, int length);
+        static void Transform(const std::vector<Vector4>& sourceArray, const Quaternion& rotation,
+                              std::vector<Vector4>& destinationArray);
+        static void Transform(const std::vector<Vector4>& sourceArray, int sourceIndex, const Quaternion& rotation,
+                              std::vector<Vector4>& destinationArray, int destinationIndex, int length);
 
         friend Vector4 operator-(Vector4 value);
         friend bool operator==(Vector4 value1, Vector4 value2);

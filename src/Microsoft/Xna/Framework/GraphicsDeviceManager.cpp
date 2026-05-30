@@ -253,7 +253,8 @@ namespace Microsoft::Xna::Framework
 
         if (graphicsDevice_ == nullptr)
         {
-            throw std::runtime_error("GraphicsDeviceManager cannot create a GraphicsDevice without a Game-owned device in this CNA backend.");
+            throw std::runtime_error(
+                "GraphicsDeviceManager cannot create a GraphicsDevice without a Game-owned device in this CNA backend.");
         }
 
         GraphicsDeviceInformation gdi;
@@ -356,20 +357,21 @@ namespace Microsoft::Xna::Framework
         DeviceResetting.Raise(sender, args);
     }
 
-    void GraphicsDeviceManager::OnPreparingDeviceSettings(System::Object* sender, PreparingDeviceSettingsEventArgs& args)
+    void GraphicsDeviceManager::OnPreparingDeviceSettings(System::Object* sender,
+                                                          PreparingDeviceSettingsEventArgs& args)
     {
         PreparingDeviceSettings.Raise(sender, args);
     }
 
     bool GraphicsDeviceManager::CanResetDevice(const GraphicsDeviceInformation& newDeviceInfo)
     {
-        (void) newDeviceInfo;
+        (void)newDeviceInfo;
         return graphicsDevice_ != nullptr;
     }
 
     GraphicsDeviceInformation GraphicsDeviceManager::FindBestDevice(bool anySuitableDevice)
     {
-        (void) anySuitableDevice;
+        (void)anySuitableDevice;
 
         GraphicsDeviceInformation gdi;
         gdi.setAdapterProperty(&Graphics::GraphicsAdapter::DefaultAdapter);
@@ -380,12 +382,12 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::RankDevices(std::vector<GraphicsDeviceInformation>& foundDevices)
     {
-        (void) foundDevices;
+        (void)foundDevices;
     }
 
     void GraphicsDeviceManager::INTERNAL_OnClientSizeChanged(System::Object* sender, const System::EventArgs& args)
     {
-        (void) args;
+        (void)args;
 
         auto* window = dynamic_cast<GameWindow*>(sender);
         if (window == nullptr)
@@ -439,9 +441,7 @@ namespace Microsoft::Xna::Framework
         pp.setDepthStencilFormatProperty(preferredDepthStencilFormat_);
         pp.setIsFullScreenProperty(isFullScreen_);
         pp.setPresentationIntervalProperty(
-            synchronizeWithVerticalRetrace_ ?
-                Graphics::PresentInterval::One :
-                Graphics::PresentInterval::Immediate
+            synchronizeWithVerticalRetrace_ ? Graphics::PresentInterval::One : Graphics::PresentInterval::Immediate
         );
 
         if (!preferMultiSampling_)

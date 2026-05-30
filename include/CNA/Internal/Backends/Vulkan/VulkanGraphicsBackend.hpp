@@ -5,9 +5,10 @@
 #include <stdexcept>
 #include <vector>
 
-namespace CNA::Internal::Backends::Vulkan {
-
-    class VulkanTextureBackend : public ITextureBackend {
+namespace CNA::Internal::Backends::Vulkan
+{
+    class VulkanTextureBackend : public ITextureBackend
+    {
     public:
         explicit VulkanTextureBackend(const ImageData& data);
         ~VulkanTextureBackend() override;
@@ -22,7 +23,8 @@ namespace CNA::Internal::Backends::Vulkan {
         // TODO: Add Vulkan Image/ImageView/Sampler handles
     };
 
-    class VulkanSpriteBatchBackend : public ISpriteBatchBackend {
+    class VulkanSpriteBatchBackend : public ISpriteBatchBackend
+    {
     public:
         VulkanSpriteBatchBackend();
         ~VulkanSpriteBatchBackend() override;
@@ -47,7 +49,8 @@ namespace CNA::Internal::Backends::Vulkan {
         // TODO: Add Vulkan Pipeline, Descriptor Sets, Buffers for quad rendering
     };
 
-    class VulkanGraphicsBackend : public IGraphicsBackend {
+    class VulkanGraphicsBackend : public IGraphicsBackend
+    {
     public:
         explicit VulkanGraphicsBackend(SDL_Window* window);
         ~VulkanGraphicsBackend() override;
@@ -55,8 +58,13 @@ namespace CNA::Internal::Backends::Vulkan {
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
-        void SetVirtualResolution(int width, int height) override {} // no-op: Vulkan uses physical viewport
-        void SetPresentationMode(int /*mode*/) override {}           // no-op: Vulkan has no logical presentation
+
+        void SetVirtualResolution(int width, int height) override
+        {
+        } // no-op: Vulkan uses physical viewport
+        void SetPresentationMode(int /*mode*/) override
+        {
+        } // no-op: Vulkan has no logical presentation
 
         SDL_Window* GetWindowInternal() const override { return window; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
@@ -69,7 +77,7 @@ namespace CNA::Internal::Backends::Vulkan {
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void SetDepthTestEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
-        std::unique_ptr<IIndexBufferBackend>  CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
@@ -81,9 +89,8 @@ namespace CNA::Internal::Backends::Vulkan {
     private:
         SDL_Window* window;
         // TODO: Add Vulkan Instance, Physical Device, Device, Surface, Swapchain, RenderPass, CommandPool, etc.
-        
+
         void InitVulkan();
         void CleanupVulkan();
     };
-
 }

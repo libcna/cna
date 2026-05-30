@@ -3,8 +3,8 @@
 #include "System/Exception.hpp"
 #include <string>
 
-namespace CNA {
-
+namespace CNA
+{
     /**
      * @brief Exception type used by the CNA namespace.
      *
@@ -12,7 +12,8 @@ namespace CNA {
      * errors related to CNA-specific functionality.
      * @note Status: Verified
      */
-    class CNAException : public System::Exception {
+    class CNAException : public System::Exception
+    {
     public:
         /**
          * @brief Constructs an exception from a C-style string message.
@@ -28,5 +29,4 @@ namespace CNA {
          */
         explicit CNAException(const std::string& msg);
     };
-
 } // CNA

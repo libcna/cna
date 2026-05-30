@@ -64,21 +64,22 @@ namespace Microsoft::Xna::Framework::Graphics
 #endif
 
 #ifdef CNA_BACKEND_BGFX
-            const auto rendererType = CNA::Internal::Backends::Bgfx::Detail::ResolveRendererType(SDL_getenv("CNA_BGFX_RENDERER"));
+            const auto rendererType = CNA::Internal::Backends::Bgfx::Detail::ResolveRendererType(
+                SDL_getenv("CNA_BGFX_RENDERER"));
             switch (rendererType)
             {
-                case bgfx::RendererType::Vulkan:
-                    windowFlags |= SDL_WINDOW_VULKAN;
-                    break;
+            case bgfx::RendererType::Vulkan:
+                windowFlags |= SDL_WINDOW_VULKAN;
+                break;
 
-                case bgfx::RendererType::OpenGL:
-                case bgfx::RendererType::OpenGLES:
-                case bgfx::RendererType::Count:
-                    windowFlags |= SDL_WINDOW_OPENGL;
-                    break;
+            case bgfx::RendererType::OpenGL:
+            case bgfx::RendererType::OpenGLES:
+            case bgfx::RendererType::Count:
+                windowFlags |= SDL_WINDOW_OPENGL;
+                break;
 
-                default:
-                    break;
+            default:
+                break;
             }
 #endif
 
@@ -199,7 +200,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)
     {
-        (void) stencil;
+        (void)stencil;
 
         if (backend_ == nullptr)
         {
@@ -343,7 +344,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (vertexStart != 0)
         {
-            throw std::runtime_error("GraphicsDevice::DrawPrimitives: non-zero vertexStart is not supported by the current backend.");
+            throw std::runtime_error(
+                "GraphicsDevice::DrawPrimitives: non-zero vertexStart is not supported by the current backend.");
         }
 
         backend_->DrawColoredPrimitives(
@@ -363,9 +365,10 @@ namespace Microsoft::Xna::Framework::Graphics
         int numVertices,
         int startIndex,
         int primitiveCount
-    ) {
-        (void) minVertexIndex;
-        (void) numVertices;
+    )
+    {
+        (void)minVertexIndex;
+        (void)numVertices;
 
         if (backend_ == nullptr)
         {
@@ -389,12 +392,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (baseVertex != 0)
         {
-            throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: non-zero baseVertex is not supported by the current backend.");
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitives: non-zero baseVertex is not supported by the current backend.");
         }
 
         if (startIndex != 0)
         {
-            throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: non-zero startIndex is not supported by the current backend.");
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitives: non-zero startIndex is not supported by the current backend.");
         }
 
         backend_->DrawIndexedColoredPrimitives(
@@ -413,11 +418,12 @@ namespace Microsoft::Xna::Framework::Graphics
         const void* vertexData,
         int vertexOffset,
         int primitiveCount
-    ) {
-        (void) primitiveType;
-        (void) vertexData;
-        (void) vertexOffset;
-        (void) primitiveCount;
+    )
+    {
+        (void)primitiveType;
+        (void)vertexData;
+        (void)vertexOffset;
+        (void)primitiveCount;
 
         throw std::runtime_error(
             "GraphicsDevice::DrawUserPrimitives is not implemented yet by the current CNA backend."
@@ -432,14 +438,15 @@ namespace Microsoft::Xna::Framework::Graphics
         const void* indexData,
         int indexOffset,
         int primitiveCount
-    ) {
-        (void) primitiveType;
-        (void) vertexData;
-        (void) vertexOffset;
-        (void) numVertices;
-        (void) indexData;
-        (void) indexOffset;
-        (void) primitiveCount;
+    )
+    {
+        (void)primitiveType;
+        (void)vertexData;
+        (void)vertexOffset;
+        (void)numVertices;
+        (void)indexData;
+        (void)indexOffset;
+        (void)primitiveCount;
 
         throw std::runtime_error(
             "GraphicsDevice::DrawUserIndexedPrimitives is not implemented yet by the current CNA backend."
@@ -489,13 +496,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
         SDL_WindowFlags windowFlags = getBackendWindowFlags();
 
-        const int width = presentationParameters_.getBackBufferWidthProperty() > 0 ?
-            presentationParameters_.getBackBufferWidthProperty() :
-            800;
+        const int width = presentationParameters_.getBackBufferWidthProperty() > 0
+                              ? presentationParameters_.getBackBufferWidthProperty()
+                              : 800;
 
-        const int height = presentationParameters_.getBackBufferHeightProperty() > 0 ?
-            presentationParameters_.getBackBufferHeightProperty() :
-            480;
+        const int height = presentationParameters_.getBackBufferHeightProperty() > 0
+                               ? presentationParameters_.getBackBufferHeightProperty()
+                               : 480;
 
         window_ = SDL_CreateWindow("Game", width, height, windowFlags);
         if (window_ == nullptr)
@@ -504,7 +511,8 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         ownsWindow_ = true;
-        presentationParameters_.setDeviceWindowHandleProperty(reinterpret_cast<PresentationParameters::IntPtr>(window_));
+        presentationParameters_.
+            setDeviceWindowHandleProperty(reinterpret_cast<PresentationParameters::IntPtr>(window_));
 
         LogWindowDebugState(window_, "after SDL_CreateWindow");
     }

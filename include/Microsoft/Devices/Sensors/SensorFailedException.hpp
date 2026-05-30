@@ -6,15 +6,13 @@
 #include "System/Exception.hpp"
 
 
-namespace Microsoft::Devices::Sensors {
-
-    class SensorFailedException : public System::Exception {
+namespace Microsoft::Devices::Sensors
+{
+    class SensorFailedException : public System::Exception
+    {
     public:
         SensorFailedException();
 
-        explicit SensorFailedException(const char * str);
+        explicit SensorFailedException(const char* str);
     };
-
-
 }
-

@@ -4,9 +4,10 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_render.h>
 
-namespace CNA::Internal::Backends::SdlRenderer {
-
-    class SdlTextureBackend : public ITextureBackend {
+namespace CNA::Internal::Backends::SdlRenderer
+{
+    class SdlTextureBackend : public ITextureBackend
+    {
     public:
         SDL_Texture* texture = nullptr;
         int width = 0;
@@ -19,7 +20,8 @@ namespace CNA::Internal::Backends::SdlRenderer {
         SDL_Texture* GetNativeTexture() const override { return texture; }
     };
 
-    class SdlSpriteBatchBackend : public ISpriteBatchBackend {
+    class SdlSpriteBatchBackend : public ISpriteBatchBackend
+    {
     public:
         SDL_Renderer* renderer;
         bool begun = false;
@@ -43,14 +45,15 @@ namespace CNA::Internal::Backends::SdlRenderer {
                   float layerDepth) override;
     };
 
-    class SdlGraphicsBackend : public IGraphicsBackend {
+    class SdlGraphicsBackend : public IGraphicsBackend
+    {
     public:
         SDL_Window* window = nullptr;
         SDL_Renderer* renderer = nullptr;
-        int logicalWidth  = 0;
+        int logicalWidth = 0;
         int logicalHeight = 0;
-        int lastOutputW_  = 0;  ///< last known renderer output width; used to detect Android surface resize
-        int lastOutputH_  = 0;  ///< last known renderer output height
+        int lastOutputW_ = 0; ///< last known renderer output width; used to detect Android surface resize
+        int lastOutputH_ = 0; ///< last known renderer output height
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Overscan;
 
         SdlGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
@@ -72,7 +75,7 @@ namespace CNA::Internal::Backends::SdlRenderer {
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void SetDepthTestEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
-        std::unique_ptr<IIndexBufferBackend>  CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
@@ -81,5 +84,4 @@ namespace CNA::Internal::Backends::SdlRenderer {
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
     };
-
 }

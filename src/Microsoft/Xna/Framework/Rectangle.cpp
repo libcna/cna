@@ -69,25 +69,25 @@ namespace Microsoft::Xna::Framework
     bool Rectangle::Contains(intcs x, intcs y) const
     {
         return X <= x &&
-               x < X + Width &&
-               Y <= y &&
-               y < Y + Height;
+            x < X + Width &&
+            Y <= y &&
+            y < Y + Height;
     }
 
     bool Rectangle::Contains(Point value) const
     {
         return X <= value.X &&
-               value.X < X + Width &&
-               Y <= value.Y &&
-               value.Y < Y + Height;
+            value.X < X + Width &&
+            Y <= value.Y &&
+            value.Y < Y + Height;
     }
 
     bool Rectangle::Contains(Rectangle value) const
     {
         return X <= value.X &&
-               value.X + value.Width <= X + Width &&
-               Y <= value.Y &&
-               value.Y + value.Height <= Y + Height;
+            value.X + value.Width <= X + Width &&
+            Y <= value.Y &&
+            value.Y + value.Height <= Y + Height;
     }
 
     void Rectangle::Contains(const Point& value, bool& result) const
@@ -140,9 +140,9 @@ namespace Microsoft::Xna::Framework
     bool Rectangle::Intersects(Rectangle value) const
     {
         return value.getLeftProperty() < getRightProperty() &&
-               getLeftProperty() < value.getRightProperty() &&
-               value.getTopProperty() < getBottomProperty() &&
-               getTopProperty() < value.getBottomProperty();
+            getLeftProperty() < value.getRightProperty() &&
+            value.getTopProperty() < getBottomProperty() &&
+            getTopProperty() < value.getBottomProperty();
     }
 
     void Rectangle::Intersects(const Rectangle& value, bool& result) const
@@ -210,9 +210,9 @@ namespace Microsoft::Xna::Framework
     bool operator==(Rectangle value1, Rectangle value2)
     {
         return value1.X == value2.X &&
-               value1.Y == value2.Y &&
-               value1.Width == value2.Width &&
-               value1.Height == value2.Height;
+            value1.Y == value2.Y &&
+            value1.Width == value2.Width &&
+            value1.Height == value2.Height;
     }
 
     bool operator!=(Rectangle value1, Rectangle value2)

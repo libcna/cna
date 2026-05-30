@@ -6,8 +6,8 @@
 
 #include "System/DateTimeOffset.hpp"
 
-namespace Microsoft::Devices::Sensors {
-
+namespace Microsoft::Devices::Sensors
+{
     /**
      * @brief Defines the common interface for sensor reading types.
      *
@@ -16,7 +16,8 @@ namespace Microsoft::Devices::Sensors {
      *
      * @note Status: Partial.
      */
-    class ISensorReading {
+    class ISensorReading
+    {
     public:
         /**
          * @brief Gets the timestamp of the sensor reading.
@@ -30,5 +31,4 @@ namespace Microsoft::Devices::Sensors {
          */
         virtual ~ISensorReading() = default;
     };
-
 } // namespace Microsoft::Devices::Sensors

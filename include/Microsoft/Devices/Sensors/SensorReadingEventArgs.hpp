@@ -11,8 +11,8 @@
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "SharpRuntime/Prop.hpp"
 
-namespace Microsoft::Devices::Sensors {
-
+namespace Microsoft::Devices::Sensors
+{
     /**
      * @brief Provides data for a sensor reading event.
      *
@@ -23,8 +23,9 @@ namespace Microsoft::Devices::Sensors {
      *
      * @note Status: Partial.
      */
-    template<typename T>
-    class SensorReadingEventArgs : public System::EventArgs {
+    template <typename T>
+    class SensorReadingEventArgs : public System::EventArgs
+    {
         static_assert(std::is_base_of_v<ISensorReading, T>,
                       "T must derive from ISensorReading");
 
@@ -36,7 +37,8 @@ namespace Microsoft::Devices::Sensors {
          * @brief Initializes a new instance with a default-constructed sensor reading.
          */
         SensorReadingEventArgs()
-            : SensorReading_{} {
+            : SensorReading_{}
+        {
         }
 
         /**
@@ -45,7 +47,8 @@ namespace Microsoft::Devices::Sensors {
          * @param sensorReading Sensor reading value.
          */
         explicit SensorReadingEventArgs(const T& sensorReading)
-            : SensorReading_(sensorReading) {
+            : SensorReading_(sensorReading)
+        {
         }
 
         /**
@@ -54,7 +57,8 @@ namespace Microsoft::Devices::Sensors {
          * @param sensorReading Sensor reading value to move.
          */
         explicit SensorReadingEventArgs(T&& sensorReading)
-            : SensorReading_(std::move(sensorReading)) {
+            : SensorReading_(std::move(sensorReading))
+        {
         }
 
         /**
@@ -62,7 +66,8 @@ namespace Microsoft::Devices::Sensors {
          *
          * @return Sensor reading value.
          */
-        [[nodiscard]] const T& getSensorReadingProperty() const {
+        [[nodiscard]] const T& getSensorReadingProperty() const
+        {
             return SensorReading_;
         }
 
@@ -71,7 +76,8 @@ namespace Microsoft::Devices::Sensors {
          *
          * @param v New sensor reading value.
          */
-        void setSensorReadingProperty(const T& v) {
+        void setSensorReadingProperty(const T& v)
+        {
             SensorReading_ = v;
         }
 
@@ -80,9 +86,9 @@ namespace Microsoft::Devices::Sensors {
          *
          * @param v New sensor reading value to move.
          */
-        void setSensorReadingProperty(T&& v) {
+        void setSensorReadingProperty(T&& v)
+        {
             SensorReading_ = std::move(v);
         }
     };
-
 } // namespace Microsoft::Devices::Sensors

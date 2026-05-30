@@ -3,7 +3,12 @@
 //
 
 #include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
-namespace Microsoft::Xna::Framework::Input {
-    MouseCursor::MouseCursor() {}
+
+namespace Microsoft::Xna::Framework::Input
+{
+    MouseCursor::MouseCursor()
+    {
+    }
+
     MouseCursor MouseCursor::Arrow = MouseCursor();
 }

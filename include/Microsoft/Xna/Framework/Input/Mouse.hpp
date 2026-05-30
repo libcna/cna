@@ -27,5 +27,3 @@ namespace Microsoft::Xna::Framework::Input
         static void SetCursor(MouseCursor arrow);
     };
 }
-
-

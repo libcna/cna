@@ -9,13 +9,15 @@
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
-namespace CNA::Internal::Input {
+namespace CNA::Internal::Input
+{
     /**
      * @brief Internal identification of supported mouse buttons.
      *
      * @note Status: IMPLEMENTED
      */
-    enum class MouseButton {
+    enum class MouseButton
+    {
         Left,
         Right,
         Middle,
@@ -26,7 +28,8 @@ namespace CNA::Internal::Input {
      *
      * @note Status: PARTIAL
      */
-    enum class GamePadButton {
+    enum class GamePadButton
+    {
         A,
         B,
         X,
@@ -48,7 +51,8 @@ namespace CNA::Internal::Input {
      *
      * @note Status: PARTIAL
      */
-    enum class GamePadAxis {
+    enum class GamePadAxis
+    {
         LeftThumbstickX,
         LeftThumbstickY,
         RightThumbstickX,
@@ -67,7 +71,8 @@ namespace CNA::Internal::Input {
      *
      * @note Status: PARTIAL
      */
-    class InputManager {
+    class InputManager
+    {
     public:
         /**
          * @brief Updates mouse cursor position.

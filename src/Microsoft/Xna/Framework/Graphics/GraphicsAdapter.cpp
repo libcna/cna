@@ -44,16 +44,16 @@ namespace Microsoft::Xna::Framework::Graphics
         bool isSupportedRenderTargetFormat(SurfaceFormat format)
         {
             return format == SurfaceFormat::Color ||
-                   format == SurfaceFormat::Rgba1010102 ||
-                   format == SurfaceFormat::Rg32 ||
-                   format == SurfaceFormat::Rgba64 ||
-                   format == SurfaceFormat::Single ||
-                   format == SurfaceFormat::Vector2 ||
-                   format == SurfaceFormat::Vector4 ||
-                   format == SurfaceFormat::HalfSingle ||
-                   format == SurfaceFormat::HalfVector2 ||
-                   format == SurfaceFormat::HalfVector4 ||
-                   format == SurfaceFormat::HdrBlendable;
+                format == SurfaceFormat::Rgba1010102 ||
+                format == SurfaceFormat::Rg32 ||
+                format == SurfaceFormat::Rgba64 ||
+                format == SurfaceFormat::Single ||
+                format == SurfaceFormat::Vector2 ||
+                format == SurfaceFormat::Vector4 ||
+                format == SurfaceFormat::HalfSingle ||
+                format == SurfaceFormat::HalfVector2 ||
+                format == SurfaceFormat::HalfVector4 ||
+                format == SurfaceFormat::HdrBlendable;
         }
     }
 
@@ -174,7 +174,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsAdapter::IsProfileSupported(GraphicsProfile graphicsProfile) const
     {
-        (void) graphicsProfile;
+        (void)graphicsProfile;
         return true;
     }
 
@@ -186,16 +186,17 @@ namespace Microsoft::Xna::Framework::Graphics
         SurfaceFormat& selectedFormat,
         DepthFormat& selectedDepthFormat,
         SharpRuntime::intcs& selectedMultiSampleCount
-    ) const {
-        (void) graphicsProfile;
+    ) const
+    {
+        (void)graphicsProfile;
 
         selectedFormat = isSupportedRenderTargetFormat(format) ? format : SurfaceFormat::Color;
         selectedDepthFormat = depthFormat;
         selectedMultiSampleCount = 0;
 
         return format == selectedFormat &&
-               depthFormat == selectedDepthFormat &&
-               multiSampleCount == selectedMultiSampleCount;
+            depthFormat == selectedDepthFormat &&
+            multiSampleCount == selectedMultiSampleCount;
     }
 
     bool GraphicsAdapter::QueryBackBufferFormat(
@@ -206,16 +207,17 @@ namespace Microsoft::Xna::Framework::Graphics
         SurfaceFormat& selectedFormat,
         DepthFormat& selectedDepthFormat,
         SharpRuntime::intcs& selectedMultiSampleCount
-    ) const {
-        (void) graphicsProfile;
+    ) const
+    {
+        (void)graphicsProfile;
 
         selectedFormat = SurfaceFormat::Color;
         selectedDepthFormat = depthFormat;
         selectedMultiSampleCount = 0;
 
         return format == selectedFormat &&
-               depthFormat == selectedDepthFormat &&
-               multiSampleCount == selectedMultiSampleCount;
+            depthFormat == selectedDepthFormat &&
+            multiSampleCount == selectedMultiSampleCount;
     }
 
     void GraphicsAdapter::AdaptersChanged()
@@ -230,7 +232,7 @@ namespace Microsoft::Xna::Framework::Graphics
             adapters_.push_back(std::unique_ptr<GraphicsAdapter>(
                 new GraphicsAdapter(
                     0,
-                    DisplayModeCollection({ DisplayMode(800, 480, SurfaceFormat::Color) }),
+                    DisplayModeCollection({DisplayMode(800, 480, SurfaceFormat::Color)}),
                     "Default Display",
                     "Default Display"
                 )

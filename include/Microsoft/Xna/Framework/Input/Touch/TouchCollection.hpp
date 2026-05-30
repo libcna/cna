@@ -6,7 +6,8 @@
 #include "SharpRuntime/Prop.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
-namespace Microsoft::Xna::Framework::Input::Touch {
+namespace Microsoft::Xna::Framework::Input::Touch
+{
     using SharpRuntime::intcs;
 
     /**
@@ -14,7 +15,8 @@ namespace Microsoft::Xna::Framework::Input::Touch {
      *
      * @note Status: PARTIAL
      */
-    struct TouchCollection {
+    struct TouchCollection
+    {
     private:
         std::vector<TouchLocation> touches;
 

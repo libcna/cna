@@ -42,7 +42,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     void DynamicSoundEffectInstance::setIsLoopedProperty(bool value)
     {
-        (void) value;
+        (void)value;
     }
 
     bool DynamicSoundEffectInstance::getIsDisposedProperty() const
@@ -88,7 +88,8 @@ namespace Microsoft::Xna::Framework::Audio
         const std::vector<SharpRuntime::bytecs>& buffer,
         SharpRuntime::intcs offset,
         SharpRuntime::intcs count
-    ) {
+    )
+    {
         if (offset < 0 || count < 0 || offset > static_cast<SharpRuntime::intcs>(buffer.size()) ||
             offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
         {
@@ -114,7 +115,8 @@ namespace Microsoft::Xna::Framework::Audio
         const std::vector<float>& buffer,
         SharpRuntime::intcs offset,
         SharpRuntime::intcs count
-    ) {
+    )
+    {
         if (getStateProperty() != SoundState::Stopped && format_.wFormatTag == 1)
         {
             throw std::logic_error("Submit a float buffer before Playing!");
@@ -165,7 +167,8 @@ namespace Microsoft::Xna::Framework::Audio
             SharpRuntime::intcs i = MINIMUM_BUFFER_CHECK - getPendingBufferCountProperty();
             (i > 0) && !BufferNeeded.Empty();
             --i
-        ) {
+        )
+        {
             BufferNeeded.Raise(this, System::EventArgs::Empty);
         }
     }
@@ -173,7 +176,7 @@ namespace Microsoft::Xna::Framework::Audio
     SharpRuntime::intcs DynamicSoundEffectInstance::getBytesPerSampleFrame() const
     {
         return static_cast<SharpRuntime::intcs>(channels_) *
-               static_cast<SharpRuntime::intcs>(format_.wBitsPerSample / 8);
+            static_cast<SharpRuntime::intcs>(format_.wBitsPerSample / 8);
     }
 
     GetTypeNameCPP(DynamicSoundEffectInstance, DynamicSoundEffectInstance)

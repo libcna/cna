@@ -1,7 +1,7 @@
 #pragma once
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     /**
      * @brief XNA 4.0 `IndexElementSize` enum.
      *
@@ -12,7 +12,8 @@ namespace Microsoft::Xna::Framework::Graphics {
      *       and currently rejected by `IndexBuffer` at construction time
      *       with a clear message.
      */
-    enum class IndexElementSize {
+    enum class IndexElementSize
+    {
         /** 16-bit indices (`std::uint16_t`). Fully supported. */
         SixteenBits = 16,
         /** 32-bit indices (`std::uint32_t`). TODO: not yet implemented. */

@@ -2,8 +2,10 @@
 
 #include "SharpRuntime/Prop.hpp"
 
-namespace Microsoft::Xna::Framework::Input::Touch {
-    struct TouchPanelCapabilities {
+namespace Microsoft::Xna::Framework::Input::Touch
+{
+    struct TouchPanelCapabilities
+    {
     public:
         TouchPanelCapabilities();
         explicit TouchPanelCapabilities(bool isConnected);

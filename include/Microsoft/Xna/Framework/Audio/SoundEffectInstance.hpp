@@ -4,10 +4,12 @@
 #include "System/Object.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
-namespace Microsoft::Xna::Framework::Audio {
+namespace Microsoft::Xna::Framework::Audio
+{
     class SoundEffect;
 
-    class SoundEffectInstance : public System::Object {
+    class SoundEffectInstance : public System::Object
+    {
     protected:
         /// Default constructor for use by derived classes (e.g. DynamicSoundEffectInstance).
         SoundEffectInstance();

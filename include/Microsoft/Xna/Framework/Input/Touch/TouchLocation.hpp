@@ -8,7 +8,8 @@
 #include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
-namespace Microsoft::Xna::Framework::Input::Touch {
+namespace Microsoft::Xna::Framework::Input::Touch
+{
     /**
      * @brief Represents one touch point snapshot.
      *
@@ -16,7 +17,8 @@ namespace Microsoft::Xna::Framework::Input::Touch {
      *
      * @note Status: PARTIAL
      */
-    struct TouchLocation {
+    struct TouchLocation
+    {
         DEF_PROP(int, Id, getter1, setter0, member1, static0, constret1, ref1, constmet1)
         DEF_PROP(TouchLocationState, State, getter1, setter0, member1, static0, constret1, ref1, constmet1)
         DEF_PROP(Vector2, Position, getter1, setter0, member1, static0, constret1, ref1, constmet1)

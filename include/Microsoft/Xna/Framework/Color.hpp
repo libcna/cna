@@ -604,5 +604,4 @@ namespace Microsoft::Xna::Framework
      * @return Multiplication result.
      */
     [[nodiscard]] Color operator*(float scale, const Color& value);
-
 } // namespace Microsoft::Xna::Framework

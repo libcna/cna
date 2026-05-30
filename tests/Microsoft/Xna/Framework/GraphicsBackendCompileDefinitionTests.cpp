@@ -6,7 +6,8 @@
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
 #endif
 
-TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected) {
+TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
+{
     int enabled = 0;
 
 #ifdef CNA_BACKEND_SDL_RENDERER
@@ -26,21 +27,24 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 }
 
 #ifdef CNA_TEST_BGFX_AVAILABLE
-TEST(GraphicsBackendCompileDefinitionsTest, BgfxApiIsLinkedForBgfxBackend) {
+TEST(GraphicsBackendCompileDefinitionsTest, BgfxApiIsLinkedForBgfxBackend)
+{
     const bgfx::TextureHandle invalidTexture = BGFX_INVALID_HANDLE;
     EXPECT_FALSE(bgfx::isValid(invalidTexture));
 }
 
-TEST(GraphicsBackendCompileDefinitionsTest, BgfxRendererTypeDefaultIsSafeForPlatform) {
+TEST(GraphicsBackendCompileDefinitionsTest, BgfxRendererTypeDefaultIsSafeForPlatform)
+{
     const auto renderer = CNA::Internal::Backends::Bgfx::Detail::GetDefaultRendererType();
 #if defined(__linux__)
-    EXPECT_EQ(renderer, bgfx::RendererType::OpenGL);
+EXPECT_EQ(renderer, bgfx::RendererType::OpenGL);
 #else
-    EXPECT_EQ(renderer, bgfx::RendererType::Count);
+EXPECT_EQ(renderer, bgfx::RendererType::Count);
 #endif
 }
 
-TEST(GraphicsBackendCompileDefinitionsTest, BgfxRendererTypeOverrideParsingWorks) {
+TEST(GraphicsBackendCompileDefinitionsTest, BgfxRendererTypeOverrideParsingWorks)
+{
     EXPECT_EQ(
         CNA::Internal::Backends::Bgfx::Detail::ParseRendererTypeOverride("vulkan"),
         bgfx::RendererType::Vulkan
@@ -55,7 +59,8 @@ TEST(GraphicsBackendCompileDefinitionsTest, BgfxRendererTypeOverrideParsingWorks
     );
 }
 
-TEST(GraphicsBackendCompileDefinitionsTest, BgfxRendererTypeOverrideRejectsInvalidValue) {
+TEST(GraphicsBackendCompileDefinitionsTest, BgfxRendererTypeOverrideRejectsInvalidValue)
+{
     EXPECT_THROW(
         CNA::Internal::Backends::Bgfx::Detail::ParseRendererTypeOverride("invalid-renderer"),
         std::runtime_error

@@ -4,8 +4,8 @@
 
 #pragma once
 
-namespace Microsoft::Devices::Sensors {
-
+namespace Microsoft::Devices::Sensors
+{
     /**
      * @brief Specifies the current state of a sensor.
      *
@@ -14,7 +14,8 @@ namespace Microsoft::Devices::Sensors {
      *
      * @note Status: Partial.
      */
-    enum class SensorState {
+    enum class SensorState
+    {
         NotSupported,
         Ready,
         Initializing,
@@ -22,5 +23,4 @@ namespace Microsoft::Devices::Sensors {
         NoPermissions,
         Disabled,
     };
-
 } // namespace Microsoft::Devices::Sensors

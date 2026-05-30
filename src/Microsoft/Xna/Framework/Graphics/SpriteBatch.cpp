@@ -4,8 +4,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     using namespace CNA::Internal::Backends;
 
     SpriteBatch::SpriteBatch(GraphicsDevice& graphicsDevice)
@@ -23,7 +23,8 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     void SpriteBatch::Begin()
     {
-        if (backend_) {
+        if (backend_)
+        {
             backend_->Begin();
             begun = true;
         }
@@ -38,7 +39,8 @@ namespace Microsoft::Xna::Framework::Graphics {
 
     void SpriteBatch::End()
     {
-        if (backend_) {
+        if (backend_)
+        {
             backend_->End();
             begun = false;
         }
@@ -69,8 +71,10 @@ namespace Microsoft::Xna::Framework::Graphics {
                            float layerDepth)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (backend_ && value.has_value()) {
-            backend_->Draw(value->GetBackend(), destinationRectangle, sourceRectangle, color, rotation_rad, origin, effect, layerDepth);
+        if (backend_ && value.has_value())
+        {
+            backend_->Draw(value->GetBackend(), destinationRectangle, sourceRectangle, color, rotation_rad, origin,
+                           effect, layerDepth);
         }
     }
 }

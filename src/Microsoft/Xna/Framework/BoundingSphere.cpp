@@ -202,7 +202,8 @@ namespace Microsoft::Xna::Framework
             throw std::invalid_argument("points must contain at least one point");
         }
 
-        Vector3 minx(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+        Vector3 minx(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max());
         Vector3 maxx = -minx;
         Vector3 miny = minx;
         Vector3 maxy = -minx;
@@ -266,7 +267,8 @@ namespace Microsoft::Xna::Framework
         return result;
     }
 
-    void BoundingSphere::CreateMerged(const BoundingSphere& original, const BoundingSphere& additional, BoundingSphere& result)
+    void BoundingSphere::CreateMerged(const BoundingSphere& original, const BoundingSphere& additional,
+                                      BoundingSphere& result)
     {
         Vector3 ocenterToaCenter = Vector3::Subtract(additional.Center, original.Center);
         float distance = ocenterToaCenter.Length();

@@ -55,7 +55,8 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice();
 
         /// Creates a graphics device using explicit adapter, profile and presentation parameters.
-        GraphicsDevice(GraphicsAdapter& adapter, GraphicsProfile graphicsProfile, const PresentationParameters& presentationParameters);
+        GraphicsDevice(GraphicsAdapter& adapter, GraphicsProfile graphicsProfile,
+                       const PresentationParameters& presentationParameters);
 
         ~GraphicsDevice() override;
 
@@ -150,7 +151,8 @@ namespace Microsoft::Xna::Framework::Graphics
         );
 
         /// Draws user-provided vertex data. This overload is present but awaits backend support.
-        void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData, int vertexOffset, int primitiveCount);
+        void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData, int vertexOffset,
+                                int primitiveCount);
 
         /// Draws user-provided indexed vertex data. This overload is present but awaits backend support.
         void DrawUserIndexedPrimitives(

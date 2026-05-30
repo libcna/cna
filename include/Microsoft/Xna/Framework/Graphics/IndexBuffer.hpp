@@ -6,12 +6,13 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
-namespace CNA::Internal::Backends {
+namespace CNA::Internal::Backends
+{
     class IIndexBufferBackend;
 }
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     class GraphicsDevice;
 
     /**
@@ -22,7 +23,8 @@ namespace Microsoft::Xna::Framework::Graphics {
      * @note Status: PARTIAL. Only 16-bit indices are supported in the early
      *       CNA 3D pipeline.
      */
-    class IndexBuffer {
+    class IndexBuffer
+    {
     public:
         /**
          * @brief Creates an empty index buffer with capacity for

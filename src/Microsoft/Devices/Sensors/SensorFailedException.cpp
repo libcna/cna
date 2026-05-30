@@ -3,12 +3,14 @@
 //
 
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
-namespace Microsoft::Devices::Sensors {
 
-    SensorFailedException::SensorFailedException() : Exception() {
+namespace Microsoft::Devices::Sensors
+{
+    SensorFailedException::SensorFailedException() : Exception()
+    {
     }
 
-    SensorFailedException::SensorFailedException(const char * str) : System::Exception(str) {
-
+    SensorFailedException::SensorFailedException(const char* str) : System::Exception(str)
+    {
     }
 }

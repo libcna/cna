@@ -101,9 +101,9 @@ namespace CNA
     }
 
     void Logger::FatalIf(
-    std::string_view message,
-    bool condition
-)
+        std::string_view message,
+        bool condition
+    )
     {
         Log(LogLevel::FATAL, message, LogCategory::APPLICATION, condition);
     }
@@ -171,22 +171,22 @@ namespace CNA
     {
         switch (level)
         {
-            // case LogLevel::FATAL:
-            //     return SDL_LOG_PRIORITY_CRITICAL;
-            // case LogLevel::ERROR:
-            //     return SDL_LOG_PRIORITY_ERROR;
-            // case LogLevel::WARN:
-            //     return SDL_LOG_PRIORITY_WARN;
-            // case LogLevel::INFO:
-            //     return SDL_LOG_PRIORITY_INFO;
+        // case LogLevel::FATAL:
+        //     return SDL_LOG_PRIORITY_CRITICAL;
+        // case LogLevel::ERROR:
+        //     return SDL_LOG_PRIORITY_ERROR;
+        // case LogLevel::WARN:
+        //     return SDL_LOG_PRIORITY_WARN;
+        // case LogLevel::INFO:
+        //     return SDL_LOG_PRIORITY_INFO;
 
-            //todo
-            case LogLevel::DEBUG:
-            case LogLevel::TRACE:
-            case LogLevel::EXPERIMENT:
-                return SDL_LOG_PRIORITY_DEBUG;
-            default:
-                return SDL_LOG_PRIORITY_INFO;
+        //todo
+        case LogLevel::DEBUG:
+        case LogLevel::TRACE:
+        case LogLevel::EXPERIMENT:
+            return SDL_LOG_PRIORITY_DEBUG;
+        default:
+            return SDL_LOG_PRIORITY_INFO;
         }
     }
 
@@ -194,26 +194,26 @@ namespace CNA
     {
         switch (category)
         {
-            case LogCategory::APPLICATION:
-                return SDL_LOG_CATEGORY_APPLICATION;
-            case LogCategory::ERROR:
-                return SDL_LOG_CATEGORY_ERROR;
-            case LogCategory::SYSTEM:
-                return SDL_LOG_CATEGORY_SYSTEM;
-            case LogCategory::AUDIO:
-                return SDL_LOG_CATEGORY_AUDIO;
-            case LogCategory::VIDEO:
-                return SDL_LOG_CATEGORY_VIDEO;
-            case LogCategory::RENDER:
-                return SDL_LOG_CATEGORY_RENDER;
-            case LogCategory::INPUT:
-                return SDL_LOG_CATEGORY_INPUT;
-            case LogCategory::TEST:
-                return SDL_LOG_CATEGORY_TEST;
-            case LogCategory::GPU:
-                return SDL_LOG_CATEGORY_GPU;
-            default:
-                return SDL_LOG_CATEGORY_APPLICATION;
+        case LogCategory::APPLICATION:
+            return SDL_LOG_CATEGORY_APPLICATION;
+        case LogCategory::ERROR:
+            return SDL_LOG_CATEGORY_ERROR;
+        case LogCategory::SYSTEM:
+            return SDL_LOG_CATEGORY_SYSTEM;
+        case LogCategory::AUDIO:
+            return SDL_LOG_CATEGORY_AUDIO;
+        case LogCategory::VIDEO:
+            return SDL_LOG_CATEGORY_VIDEO;
+        case LogCategory::RENDER:
+            return SDL_LOG_CATEGORY_RENDER;
+        case LogCategory::INPUT:
+            return SDL_LOG_CATEGORY_INPUT;
+        case LogCategory::TEST:
+            return SDL_LOG_CATEGORY_TEST;
+        case LogCategory::GPU:
+            return SDL_LOG_CATEGORY_GPU;
+        default:
+            return SDL_LOG_CATEGORY_APPLICATION;
         }
     }
 
@@ -226,22 +226,22 @@ namespace CNA
     {
         switch (level)
         {
-            case LogLevel::FATAL:
-                return "FATAL";
-            case LogLevel::ERROR:
-                return "ERROR";
-            case LogLevel::WARN:
-                return "WARN";
-            case LogLevel::INFO:
-                return "INFO";
-            case LogLevel::DEBUG:
-                return "DEBUG";
-            case LogLevel::TRACE:
-                return "TRACE";
-            case LogLevel::EXPERIMENT:
-                return "EXPERIMENT";
-            default:
-                return "UNKNOWN";
+        case LogLevel::FATAL:
+            return "FATAL";
+        case LogLevel::ERROR:
+            return "ERROR";
+        case LogLevel::WARN:
+            return "WARN";
+        case LogLevel::INFO:
+            return "INFO";
+        case LogLevel::DEBUG:
+            return "DEBUG";
+        case LogLevel::TRACE:
+            return "TRACE";
+        case LogLevel::EXPERIMENT:
+            return "EXPERIMENT";
+        default:
+            return "UNKNOWN";
         }
     }
 
@@ -249,26 +249,26 @@ namespace CNA
     {
         switch (category)
         {
-            case LogCategory::APPLICATION:
-                return "APPLICATION";
-            case LogCategory::ERROR:
-                return "ERROR";
-            case LogCategory::SYSTEM:
-                return "SYSTEM";
-            case LogCategory::AUDIO:
-                return "AUDIO";
-            case LogCategory::VIDEO:
-                return "VIDEO";
-            case LogCategory::RENDER:
-                return "RENDER";
-            case LogCategory::INPUT:
-                return "INPUT";
-            case LogCategory::TEST:
-                return "TEST";
-            case LogCategory::GPU:
-                return "GPU";
-            default:
-                return "UNKNOWN";
+        case LogCategory::APPLICATION:
+            return "APPLICATION";
+        case LogCategory::ERROR:
+            return "ERROR";
+        case LogCategory::SYSTEM:
+            return "SYSTEM";
+        case LogCategory::AUDIO:
+            return "AUDIO";
+        case LogCategory::VIDEO:
+            return "VIDEO";
+        case LogCategory::RENDER:
+            return "RENDER";
+        case LogCategory::INPUT:
+            return "INPUT";
+        case LogCategory::TEST:
+            return "TEST";
+        case LogCategory::GPU:
+            return "GPU";
+        default:
+            return "UNKNOWN";
         }
     }
 }

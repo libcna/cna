@@ -4,23 +4,33 @@
 
 #include "Microsoft/Xna/Framework/Input/GamePadButtons.hpp"
 
-namespace Microsoft::Xna::Framework::Input {
-
+namespace Microsoft::Xna::Framework::Input
+{
     IMPL_PROP(ButtonState, A, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
     IMPL_PROP(ButtonState, B, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
     IMPL_PROP(ButtonState, X, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
     IMPL_PROP(ButtonState, Y, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
 
-    IMPL_PROP(ButtonState, Back, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, Start, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, LeftShoulder, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, RightShoulder, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, LeftStick, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, RightStick, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, DPadUp, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, DPadDown, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, DPadLeft, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, DPadRight, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
+    IMPL_PROP(ButtonState, Back, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
+              nothing)
+    IMPL_PROP(ButtonState, Start, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
+              nothing)
+    IMPL_PROP(ButtonState, LeftShoulder, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
+              nothing)
+    IMPL_PROP(ButtonState, RightShoulder, getter1, setter0, member0, static0, constret1, ref1, constmet1,
+              GamePadButtons, nothing)
+    IMPL_PROP(ButtonState, LeftStick, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
+              nothing)
+    IMPL_PROP(ButtonState, RightStick, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
+              nothing)
+    IMPL_PROP(ButtonState, DPadUp, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
+              nothing)
+    IMPL_PROP(ButtonState, DPadDown, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
+              nothing)
+    IMPL_PROP(ButtonState, DPadLeft, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
+              nothing)
+    IMPL_PROP(ButtonState, DPadRight, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
+              nothing)
 
     GamePadButtons::GamePadButtons()
         : A_(ButtonState::Released),
@@ -36,7 +46,8 @@ namespace Microsoft::Xna::Framework::Input {
           DPadUp_(ButtonState::Released),
           DPadDown_(ButtonState::Released),
           DPadLeft_(ButtonState::Released),
-          DPadRight_(ButtonState::Released) {
+          DPadRight_(ButtonState::Released)
+    {
     }
 
     GamePadButtons::GamePadButtons(
@@ -68,6 +79,7 @@ namespace Microsoft::Xna::Framework::Input {
           DPadUp_(dPadUp),
           DPadDown_(dPadDown),
           DPadLeft_(dPadLeft),
-          DPadRight_(dPadRight) {
+          DPadRight_(dPadRight)
+    {
     }
 }

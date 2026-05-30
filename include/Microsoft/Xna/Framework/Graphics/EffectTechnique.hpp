@@ -5,8 +5,8 @@
 
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     class Effect;
 
     /**
@@ -18,12 +18,14 @@ namespace Microsoft::Xna::Framework::Graphics {
      * @note Status: PARTIAL. Multi-technique / multi-pass effects are not
      *       implemented yet; the type exists for API-shape compatibility.
      */
-    class EffectTechnique {
+    class EffectTechnique
+    {
     public:
         EffectTechnique() = default;
 
         EffectTechnique(Effect* owner, std::string name)
-            : name_(std::move(name)) {
+            : name_(std::move(name))
+        {
             // Default: a single "Default" pass that re-applies the owning
             // effect's parameters on the device. Matches what XNA's
             // BasicEffect ships with for the colored / textured passes.
@@ -38,7 +40,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         [[nodiscard]] const std::vector<EffectPass>& Passes() const { return passes_; }
 
     private:
-        std::string              name_;
-        std::vector<EffectPass>  passes_;
+        std::string name_;
+        std::vector<EffectPass> passes_;
     };
 }

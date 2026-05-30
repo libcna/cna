@@ -173,7 +173,8 @@ namespace Microsoft::Xna::Framework
         /// Creates a right-handed view matrix.
         [[nodiscard]] static Matrix CreateLookAt(Vector3 cameraPosition, Vector3 cameraTarget, Vector3 cameraUpVector);
         /// Creates a right-handed view matrix in an output parameter.
-        static void CreateLookAt(const Vector3& cameraPosition, const Vector3& cameraTarget, const Vector3& cameraUpVector, Matrix& result);
+        static void CreateLookAt(const Vector3& cameraPosition, const Vector3& cameraTarget,
+                                 const Vector3& cameraUpVector, Matrix& result);
 
         /// Creates an orthographic projection matrix.
         [[nodiscard]] static Matrix CreateOrthographic(float width, float height, float zNearPlane, float zFarPlane);
@@ -181,24 +182,32 @@ namespace Microsoft::Xna::Framework
         static void CreateOrthographic(float width, float height, float zNearPlane, float zFarPlane, Matrix& result);
 
         /// Creates an off-center orthographic projection matrix.
-        [[nodiscard]] static Matrix CreateOrthographicOffCenter(float left, float right, float bottom, float top, float zNearPlane, float zFarPlane);
+        [[nodiscard]] static Matrix CreateOrthographicOffCenter(float left, float right, float bottom, float top,
+                                                                float zNearPlane, float zFarPlane);
         /// Creates an off-center orthographic projection matrix in an output parameter.
-        static void CreateOrthographicOffCenter(float left, float right, float bottom, float top, float zNearPlane, float zFarPlane, Matrix& result);
+        static void CreateOrthographicOffCenter(float left, float right, float bottom, float top, float zNearPlane,
+                                                float zFarPlane, Matrix& result);
 
         /// Creates a perspective projection matrix.
-        [[nodiscard]] static Matrix CreatePerspective(float width, float height, float nearPlaneDistance, float farPlaneDistance);
+        [[nodiscard]] static Matrix CreatePerspective(float width, float height, float nearPlaneDistance,
+                                                      float farPlaneDistance);
         /// Creates a perspective projection matrix in an output parameter.
-        static void CreatePerspective(float width, float height, float nearPlaneDistance, float farPlaneDistance, Matrix& result);
+        static void CreatePerspective(float width, float height, float nearPlaneDistance, float farPlaneDistance,
+                                      Matrix& result);
 
         /// Creates a perspective projection matrix using a field of view.
-        [[nodiscard]] static Matrix CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance, float farPlaneDistance);
+        [[nodiscard]] static Matrix CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio,
+                                                                 float nearPlaneDistance, float farPlaneDistance);
         /// Creates a perspective projection matrix using a field of view in an output parameter.
-        static void CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance, float farPlaneDistance, Matrix& result);
+        static void CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance,
+                                                 float farPlaneDistance, Matrix& result);
 
         /// Creates an off-center perspective projection matrix.
-        [[nodiscard]] static Matrix CreatePerspectiveOffCenter(float left, float right, float bottom, float top, float nearPlaneDistance, float farPlaneDistance);
+        [[nodiscard]] static Matrix CreatePerspectiveOffCenter(float left, float right, float bottom, float top,
+                                                               float nearPlaneDistance, float farPlaneDistance);
         /// Creates an off-center perspective projection matrix in an output parameter.
-        static void CreatePerspectiveOffCenter(float left, float right, float bottom, float top, float nearPlaneDistance, float farPlaneDistance, Matrix& result);
+        static void CreatePerspectiveOffCenter(float left, float right, float bottom, float top,
+                                               float nearPlaneDistance, float farPlaneDistance, Matrix& result);
 
         /// Creates a rotation matrix around the X axis.
         [[nodiscard]] static Matrix CreateRotationX(float radians);

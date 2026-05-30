@@ -5,9 +5,10 @@
 #include <SDL3/SDL.h>
 #include <cstdint>
 
-namespace CNA::Internal::Backends::Bgfx {
-
-    namespace Detail {
+namespace CNA::Internal::Backends::Bgfx
+{
+    namespace Detail
+    {
         bgfx::RendererType::Enum GetDefaultRendererType();
         bgfx::RendererType::Enum ParseRendererTypeOverride(const char* value);
         bgfx::RendererType::Enum ResolveRendererType(const char* value);
@@ -15,7 +16,8 @@ namespace CNA::Internal::Backends::Bgfx {
 
     class BgfxGraphicsBackend;
 
-    class BgfxTextureBackend : public ITextureBackend {
+    class BgfxTextureBackend : public ITextureBackend
+    {
     public:
         bgfx::TextureHandle textureHandle = BGFX_INVALID_HANDLE;
         int width = 0;
@@ -28,7 +30,8 @@ namespace CNA::Internal::Backends::Bgfx {
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
     };
 
-    class BgfxSpriteBatchBackend : public ISpriteBatchBackend {
+    class BgfxSpriteBatchBackend : public ISpriteBatchBackend
+    {
     public:
         BgfxGraphicsBackend& graphicsBackend;
         bool begun = false;
@@ -52,7 +55,8 @@ namespace CNA::Internal::Backends::Bgfx {
                   float layerDepth) override;
     };
 
-    class BgfxGraphicsBackend : public IGraphicsBackend {
+    class BgfxGraphicsBackend : public IGraphicsBackend
+    {
     public:
         SDL_Window* window = nullptr;
         bgfx::ProgramHandle spriteProgram = BGFX_INVALID_HANDLE;
@@ -68,8 +72,13 @@ namespace CNA::Internal::Backends::Bgfx {
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
-        void SetVirtualResolution(int width, int height) override {} // no-op: Bgfx uses physical viewport
-        void SetPresentationMode(int /*mode*/) override {}           // no-op: Bgfx has no logical presentation
+
+        void SetVirtualResolution(int width, int height) override
+        {
+        } // no-op: Bgfx uses physical viewport
+        void SetPresentationMode(int /*mode*/) override
+        {
+        } // no-op: Bgfx has no logical presentation
         SDL_Window* GetWindowInternal() const override { return window; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
@@ -81,7 +90,7 @@ namespace CNA::Internal::Backends::Bgfx {
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void SetDepthTestEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
-        std::unique_ptr<IIndexBufferBackend>  CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
@@ -102,5 +111,4 @@ namespace CNA::Internal::Backends::Bgfx {
     private:
         void EnsureViewState();
     };
-
 }

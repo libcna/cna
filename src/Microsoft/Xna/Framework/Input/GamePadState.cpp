@@ -3,12 +3,18 @@
 //
 
 #include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
-namespace Microsoft::Xna::Framework::Input {
-    IMPL_PROP(GamePadButtons, Buttons, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadState, nothing)
-    IMPL_PROP(Microsoft::Xna::Framework::Vector2, LeftThumbstick, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadState, nothing)
-    IMPL_PROP(Microsoft::Xna::Framework::Vector2, RightThumbstick, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadState, nothing)
+
+namespace Microsoft::Xna::Framework::Input
+{
+    IMPL_PROP(GamePadButtons, Buttons, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadState,
+              nothing)
+    IMPL_PROP(Microsoft::Xna::Framework::Vector2, LeftThumbstick, getter1, setter0, member0, static0, constret1, ref1,
+              constmet1, GamePadState, nothing)
+    IMPL_PROP(Microsoft::Xna::Framework::Vector2, RightThumbstick, getter1, setter0, member0, static0, constret1, ref1,
+              constmet1, GamePadState, nothing)
     IMPL_PROP(float, LeftTrigger, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadState, nothing)
-    IMPL_PROP(float, RightTrigger, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadState, nothing)
+    IMPL_PROP(float, RightTrigger, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadState,
+              nothing)
     IMPL_PROP(bool, IsConnected, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadState, nothing)
 
     GamePadState::GamePadState()
@@ -17,7 +23,8 @@ namespace Microsoft::Xna::Framework::Input {
           RightThumbstick_(0.0f, 0.0f),
           LeftTrigger_(0.0f),
           RightTrigger_(0.0f),
-          IsConnected_(false) {
+          IsConnected_(false)
+    {
     }
 
     GamePadState::GamePadState(
@@ -33,6 +40,7 @@ namespace Microsoft::Xna::Framework::Input {
           RightThumbstick_(rightThumbstick),
           LeftTrigger_(leftTrigger),
           RightTrigger_(rightTrigger),
-          IsConnected_(isConnected) {
+          IsConnected_(isConnected)
+    {
     }
 }

@@ -142,8 +142,8 @@ namespace Microsoft::Xna::Framework
 
     void GameComponentCollection::SetItem(size_type index, IGameComponent* item)
     {
-        (void) index;
-        (void) item;
+        (void)index;
+        (void)item;
         throw std::logic_error("SetItem is not supported.");
     }
 

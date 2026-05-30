@@ -6,13 +6,15 @@
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
 
-namespace Microsoft::Xna::Framework::Input {
+namespace Microsoft::Xna::Framework::Input
+{
     /**
      * @brief Provides access to gamepad input snapshots.
      *
      * @note Status: PARTIAL
      */
-    class GamePad {
+    class GamePad
+    {
     public:
         /**
          * @brief Returns a snapshot of the current gamepad state for a player.
@@ -22,4 +24,3 @@ namespace Microsoft::Xna::Framework::Input {
         static GamePadState GetState(PlayerIndex playerIndex);
     };
 }
-

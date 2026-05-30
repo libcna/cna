@@ -106,19 +106,19 @@ namespace Microsoft::Xna::Framework
     int CurveKey::GetHashCode() const
     {
         return FloatHash(position) ^
-               FloatHash(value) ^
-               FloatHash(tangentIn) ^
-               FloatHash(tangentOut) ^
-               static_cast<int>(continuity);
+            FloatHash(value) ^
+            FloatHash(tangentIn) ^
+            FloatHash(tangentOut) ^
+            static_cast<int>(continuity);
     }
 
     bool operator==(const CurveKey& a, const CurveKey& b)
     {
         return a.position == b.position &&
-               a.value == b.value &&
-               a.tangentIn == b.tangentIn &&
-               a.tangentOut == b.tangentOut &&
-               a.continuity == b.continuity;
+            a.value == b.value &&
+            a.tangentIn == b.tangentIn &&
+            a.tangentOut == b.tangentOut &&
+            a.continuity == b.continuity;
     }
 
     bool operator!=(const CurveKey& a, const CurveKey& b)

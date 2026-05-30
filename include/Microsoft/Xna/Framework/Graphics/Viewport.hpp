@@ -6,12 +6,13 @@
 
 #include "SharpRuntime/Prop.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     /**
      * @brief Describes the drawable area of the render target.
      */
-    class Viewport {
+    class Viewport
+    {
     private:
         int Height_;
         int Width_;

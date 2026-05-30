@@ -4,10 +4,11 @@
 
 #pragma once
 
-namespace Microsoft::Xna::Framework::Input {
-    enum class ButtonState {
+namespace Microsoft::Xna::Framework::Input
+{
+    enum class ButtonState
+    {
         Released,
         Pressed,
     };
 }
-

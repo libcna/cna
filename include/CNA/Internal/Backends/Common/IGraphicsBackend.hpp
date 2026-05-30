@@ -16,8 +16,8 @@ struct SDL_Window;
 struct SDL_Renderer;
 struct SDL_Texture;
 
-namespace CNA::Internal::Backends {
-
+namespace CNA::Internal::Backends
+{
     using Color = Microsoft::Xna::Framework::Color;
     using Rectangle = Microsoft::Xna::Framework::Rectangle;
     using Vector2 = Microsoft::Xna::Framework::Vector2;
@@ -36,7 +36,8 @@ namespace CNA::Internal::Backends {
      * @note Status: PARTIAL. Only vertex layouts compatible with
      *       `VertexPositionColor` are supported.
      */
-    class IVertexBufferBackend {
+    class IVertexBufferBackend
+    {
     public:
         virtual ~IVertexBufferBackend() = default;
         /**
@@ -60,14 +61,16 @@ namespace CNA::Internal::Backends {
      *       calls `IGraphicsBackend::DrawIndexedColoredPrimitives` with
      *       16-bit indices.
      */
-    class IIndexBufferBackend {
+    class IIndexBufferBackend
+    {
     public:
         virtual ~IIndexBufferBackend() = default;
         virtual void SetData16(const void* data, int index_count) = 0;
         [[nodiscard]] virtual int GetIndexCount() const = 0;
     };
 
-    class ITextureBackend {
+    class ITextureBackend
+    {
     public:
         virtual ~ITextureBackend() = default;
         virtual int GetWidth() const = 0;
@@ -76,7 +79,8 @@ namespace CNA::Internal::Backends {
         virtual SDL_Texture* GetNativeTexture() const = 0;
     };
 
-    class ISpriteBatchBackend {
+    class ISpriteBatchBackend
+    {
     public:
         virtual ~ISpriteBatchBackend() = default;
         virtual void Begin() = 0;
@@ -96,7 +100,8 @@ namespace CNA::Internal::Backends {
                           float layerDepth) = 0;
     };
 
-    class IGraphicsBackend {
+    class IGraphicsBackend
+    {
     public:
         virtual ~IGraphicsBackend() = default;
         virtual void Clear(float r, float g, float b, float a) = 0;
@@ -198,11 +203,12 @@ namespace CNA::Internal::Backends {
      *                            height=480 is fixed and wider devices simply
      *                            show more horizontal content.
      */
-    enum class CnaPresentationMode {
-        Letterbox             = 0,
-        Overscan              = 1,
-        Stretch               = 2,
-        NativeBackBuffer      = 3,
+    enum class CnaPresentationMode
+    {
+        Letterbox = 0,
+        Overscan = 1,
+        Stretch = 2,
+        NativeBackBuffer = 3,
         FixedHeightDynamicWidth = 4
     };
 
@@ -210,7 +216,8 @@ namespace CNA::Internal::Backends {
      * @brief Arguments for creating a graphics backend.
      * Currently minimal, but allows for easier extension.
      */
-    struct GraphicsBackendCreateArgs {
+    struct GraphicsBackendCreateArgs
+    {
         // TODO: SDL dependency should be abstracted later
         SDL_Window* window = nullptr;
         /// Virtual (game-logic) resolution the backend should present at.
@@ -218,7 +225,7 @@ namespace CNA::Internal::Backends {
         /// the game always draws in its own coordinate space and the backend
         /// scales to the real surface automatically.
         /// 0 means "unset"; the backend should ignore logical presentation.
-        int virtualWidth  = 0;
+        int virtualWidth = 0;
         int virtualHeight = 0;
         /// Presentation/scaling policy. Default is FixedHeightDynamicWidth:
         /// keeps preferred height fixed and derives logical width from the
@@ -229,5 +236,4 @@ namespace CNA::Internal::Backends {
     // Factory function to be implemented by each backend
     // INTERNAL API - SDL dependency should be abstracted later
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args);
-
 }

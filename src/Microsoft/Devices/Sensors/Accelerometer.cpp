@@ -17,8 +17,8 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
 
-namespace Microsoft::Devices::Sensors {
-
+namespace Microsoft::Devices::Sensors
+{
     void* Accelerometer::g_sensor_ = nullptr;
     std::int64_t Accelerometer::g_sensorId_ = 0;
     int Accelerometer::instanceCount_ = 0;
@@ -27,7 +27,8 @@ namespace Microsoft::Devices::Sensors {
 
     bool Accelerometer::EnsureSensorSubsystemInitialized()
     {
-        if (SDL_WasInit(SDL_INIT_SENSOR)) {
+        if (SDL_WasInit(SDL_INIT_SENSOR))
+        {
             return true;
         }
 
@@ -39,8 +40,10 @@ namespace Microsoft::Devices::Sensors {
         int sensorCount = 0;
         SDL_SensorID* sensors = SDL_GetSensors(&sensorCount);
 
-        if (sensors == nullptr || sensorCount <= 0) {
-            if (sensors != nullptr) {
+        if (sensors == nullptr || sensorCount <= 0)
+        {
+            if (sensors != nullptr)
+            {
                 SDL_free(sensors);
             }
             return nullptr;
@@ -49,15 +52,18 @@ namespace Microsoft::Devices::Sensors {
         SDL_Sensor* openedSensor = nullptr;
         SDL_SensorID openedSensorId = 0;
 
-        for (int i = 0; i < sensorCount; ++i) {
+        for (int i = 0; i < sensorCount; ++i)
+        {
             const SDL_SensorID sensorId = sensors[i];
 
             SDL_Sensor* sensor = SDL_OpenSensor(sensorId);
-            if (!sensor) {
+            if (!sensor)
+            {
                 continue;
             }
 
-            if (SDL_GetSensorType(sensor) == SDL_SENSOR_ACCEL) {
+            if (SDL_GetSensorType(sensor) == SDL_SENSOR_ACCEL)
+            {
                 openedSensor = sensor;
                 openedSensorId = sensorId;
                 break;
@@ -68,7 +74,8 @@ namespace Microsoft::Devices::Sensors {
 
         SDL_free(sensors);
 
-        if (openedSensor != nullptr) {
+        if (openedSensor != nullptr)
+        {
             g_sensorId_ = static_cast<std::int64_t>(openedSensorId);
         }
 
@@ -77,7 +84,8 @@ namespace Microsoft::Devices::Sensors {
 
     void Accelerometer::RegisterEventWatchIfNeeded()
     {
-        if (!eventWatchRegistered_) {
+        if (!eventWatchRegistered_)
+        {
             const SDL_EventFilter eventFilter =
                 reinterpret_cast<SDL_EventFilter>(&Accelerometer::SensorEventWatch);
             SDL_AddEventWatch(eventFilter, nullptr);
@@ -87,7 +95,8 @@ namespace Microsoft::Devices::Sensors {
 
     void Accelerometer::UnregisterEventWatchIfNeeded()
     {
-        if (eventWatchRegistered_ && startedInstances_.empty()) {
+        if (eventWatchRegistered_ && startedInstances_.empty())
+        {
             const SDL_EventFilter eventFilter =
                 reinterpret_cast<SDL_EventFilter>(&Accelerometer::SensorEventWatch);
             SDL_RemoveEventWatch(eventFilter, nullptr);
@@ -101,19 +110,23 @@ namespace Microsoft::Devices::Sensors {
 
         SDL_Event* event = static_cast<SDL_Event*>(eventData);
 
-        if (event == nullptr) {
+        if (event == nullptr)
+        {
             return true;
         }
 
-        if (event->type != SDL_EVENT_SENSOR_UPDATE) {
+        if (event->type != SDL_EVENT_SENSOR_UPDATE)
+        {
             return true;
         }
 
         const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
         const std::uint64_t timestampNs = static_cast<std::uint64_t>(SDL_GetTicksNS());
 
-        for (Accelerometer* accelerometer : startedInstances_) {
-            if (accelerometer != nullptr) {
+        for (Accelerometer* accelerometer : startedInstances_)
+        {
+            if (accelerometer != nullptr)
+            {
                 accelerometer->ProcessSensorUpdateEvent(
                     sensorId,
                     event->sensor.data[0],
@@ -132,20 +145,24 @@ namespace Microsoft::Devices::Sensors {
         const CNA::Platform currentPlatform = CNA::getCurrentPlatform();
 
         if (!(currentPlatform == CNA::Platform::Android ||
-              currentPlatform == CNA::Platform::iOS ||
-              currentPlatform == CNA::Platform::Desktop)) {
+            currentPlatform == CNA::Platform::iOS ||
+            currentPlatform == CNA::Platform::Desktop))
+        {
             return false;
         }
 
-        if (!EnsureSensorSubsystemInitialized()) {
+        if (!EnsureSensorSubsystemInitialized())
+        {
             return false;
         }
 
         int sensorCount = 0;
         SDL_SensorID* sensors = SDL_GetSensors(&sensorCount);
 
-        if (sensors == nullptr || sensorCount <= 0) {
-            if (sensors != nullptr) {
+        if (sensors == nullptr || sensorCount <= 0)
+        {
+            if (sensors != nullptr)
+            {
                 SDL_free(sensors);
             }
             return false;
@@ -153,13 +170,16 @@ namespace Microsoft::Devices::Sensors {
 
         bool supported = false;
 
-        for (int i = 0; i < sensorCount; ++i) {
+        for (int i = 0; i < sensorCount; ++i)
+        {
             SDL_Sensor* sensor = SDL_OpenSensor(sensors[i]);
-            if (!sensor) {
+            if (!sensor)
+            {
                 continue;
             }
 
-            if (SDL_GetSensorType(sensor) == SDL_SENSOR_ACCEL) {
+            if (SDL_GetSensorType(sensor) == SDL_SENSOR_ACCEL)
+            {
                 supported = true;
                 SDL_CloseSensor(sensor);
                 break;
@@ -182,7 +202,8 @@ namespace Microsoft::Devices::Sensors {
         : state_(SensorState::NotSupported),
           started_(false)
     {
-        if (instanceCount_ >= MaxSensorCount) {
+        if (instanceCount_ >= MaxSensorCount)
+        {
             throw SensorFailedException(
                 "The limit of 10 simultaneous instances of the Accelerometer class per application has been exceeded.");
         }
@@ -193,7 +214,8 @@ namespace Microsoft::Devices::Sensors {
 
     Accelerometer::~Accelerometer()
     {
-        if (!getIsDisposedProperty()) {
+        if (!getIsDisposedProperty())
+        {
             Dispose(true);
         }
     }
@@ -202,22 +224,26 @@ namespace Microsoft::Devices::Sensors {
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Accelerometer");
 
-        if (started_) {
+        if (started_)
+        {
             throw AccelerometerFailedException(
                 "Failed to start accelerometer data acquisition. Data acquisition already started.");
         }
 
-        if (!EnsureSensorSubsystemInitialized()) {
+        if (!EnsureSensorSubsystemInitialized())
+        {
             state_ = SensorState::NotSupported;
             throw AccelerometerFailedException(
                 "Failed to start accelerometer data acquisition. SDL sensor subsystem initialization failed.");
         }
 
-        if (g_sensor_ == nullptr) {
+        if (g_sensor_ == nullptr)
+        {
             g_sensor_ = OpenDefaultAccelerometer();
         }
 
-        if (g_sensor_ == nullptr) {
+        if (g_sensor_ == nullptr)
+        {
             state_ = SensorState::NotSupported;
             throw AccelerometerFailedException(
                 "Failed to start accelerometer data acquisition. No default sensor found.");
@@ -226,7 +252,8 @@ namespace Microsoft::Devices::Sensors {
         started_ = true;
         state_ = SensorState::Ready;
 
-        if (std::find(startedInstances_.begin(), startedInstances_.end(), this) == startedInstances_.end()) {
+        if (std::find(startedInstances_.begin(), startedInstances_.end(), this) == startedInstances_.end())
+        {
             startedInstances_.push_back(this);
         }
 
@@ -237,9 +264,11 @@ namespace Microsoft::Devices::Sensors {
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Accelerometer");
 
-        if (started_) {
+        if (started_)
+        {
             auto it = std::find(startedInstances_.begin(), startedInstances_.end(), this);
-            if (it != startedInstances_.end()) {
+            if (it != startedInstances_.end())
+            {
                 startedInstances_.erase(it);
             }
         }
@@ -252,27 +281,33 @@ namespace Microsoft::Devices::Sensors {
 
     void Accelerometer::Dispose(bool disposing)
     {
-        if (!getIsDisposedProperty() && disposing) {
-            if (started_) {
+        if (!getIsDisposedProperty() && disposing)
+        {
+            if (started_)
+            {
                 Stop();
             }
 
             --instanceCount_;
-            if (instanceCount_ < 0) {
+            if (instanceCount_ < 0)
+            {
                 instanceCount_ = 0;
             }
 
-            if (instanceCount_ == 0) {
+            if (instanceCount_ == 0)
+            {
                 startedInstances_.clear();
                 UnregisterEventWatchIfNeeded();
 
-                if (g_sensor_ != nullptr) {
+                if (g_sensor_ != nullptr)
+                {
                     SDL_CloseSensor(static_cast<SDL_Sensor*>(g_sensor_));
                     g_sensor_ = nullptr;
                     g_sensorId_ = 0;
                 }
 
-                if (SDL_WasInit(SDL_INIT_SENSOR)) {
+                if (SDL_WasInit(SDL_INIT_SENSOR))
+                {
                     SDL_QuitSubSystem(SDL_INIT_SENSOR);
                 }
             }
@@ -332,29 +367,34 @@ namespace Microsoft::Devices::Sensors {
 
         float xnaX, xnaY, xnaZ;
 
-        if (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED) {
+        if (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
+        {
             // ROTATION_270: portrait-top → landscape-RIGHT.
             // Tilt right → rawY positive; negate X to keep forward/back consistent.
             xnaX = -rawX;
-            xnaY =  rawY;
-            xnaZ =  rawZ;
-        } else {
+            xnaY = rawY;
+            xnaZ = rawZ;
+        }
+        else
+        {
             // ROTATION_90 (default / fallback): portrait-top → landscape-LEFT.
             // Tilt right → rawY negative; negate Y to match WP7 convention.
-            xnaX =  rawX;
+            xnaX = rawX;
             xnaY = -rawY;
-            xnaZ =  rawZ;
+            xnaZ = rawZ;
         }
 
 #ifndef NDEBUG
-        const char* orientName =
-            (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED) ? "LANDSCAPE_FLIPPED(ROTATION_270)"
-                                                          : "LANDSCAPE(ROTATION_90)";
-        SDL_Log("[SpeedyBlupi][Accelerometer] displayRotation=%s raw=(%.3f,%.3f,%.3f) converted=(%.3f,%.3f,%.3f) orientation=sensorLandscape",
-                orientName, rawX, rawY, rawZ, xnaX, xnaY, xnaZ);
+    const char* orientName =
+        (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
+            ? "LANDSCAPE_FLIPPED(ROTATION_270)"
+            : "LANDSCAPE(ROTATION_90)";
+    SDL_Log (
+"[SpeedyBlupi][Accelerometer] displayRotation=%s raw=(%.3f,%.3f,%.3f) converted=(%.3f,%.3f,%.3f) orientation=sensorLandscape",
+    orientName, rawX, rawY, rawZ, xnaX, xnaY, xnaZ);
 #endif
 
-        return {xnaX, xnaY, xnaZ};
+    return {xnaX, xnaY, xnaZ};
     }
 #endif // __ANDROID__
 
@@ -365,19 +405,23 @@ namespace Microsoft::Devices::Sensors {
         float z,
         std::uint64_t timestampNs)
     {
-        if (!started_) {
+        if (!started_)
+        {
             return;
         }
 
-        if (getIsDisposedProperty()) {
+        if (getIsDisposedProperty())
+        {
             return;
         }
 
-        if (g_sensor_ == nullptr) {
+        if (g_sensor_ == nullptr)
+        {
             return;
         }
 
-        if (sensorId != g_sensorId_) {
+        if (sensorId != g_sensorId_)
+        {
             return;
         }
 
@@ -388,7 +432,8 @@ namespace Microsoft::Devices::Sensors {
         const bool valid = true;
         setIsDataValidProperty(valid);
 
-        if (getIsDataValidProperty()) {
+        if (getIsDataValidProperty())
+        {
 #ifdef __ANDROID__
             // On Android, remap raw SDL portrait-frame axes to the XNA landscape
             // convention so that the game layer remains platform-agnostic.
@@ -417,5 +462,4 @@ namespace Microsoft::Devices::Sensors {
     }
 
     GetTypeNameCPP(Accelerometer, "Microsoft::Devices::Sensors::Accelerometer")
-
 } // namespace Microsoft::Devices::Sensors

@@ -5,9 +5,10 @@
 #include <stdexcept>
 #include <string>
 
-namespace Microsoft::Xna::Framework {
-
-    namespace {
+namespace Microsoft::Xna::Framework
+{
+    namespace
+    {
         std::runtime_error makeSdlError(const char* operation)
         {
             return std::runtime_error(std::string(operation) + " failed: " + SDL_GetError());
@@ -382,5 +383,4 @@ namespace Microsoft::Xna::Framework {
 
         return hasFlag(supportedOrientations_, orientation);
     }
-
 } // namespace Microsoft::Xna::Framework

@@ -37,7 +37,8 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] bytecs ToByteFromUnitClamped(float value)
         {
             return static_cast<bytecs>(
-                static_cast<intcs>(MathHelper::Clamp(value * 255.0f, static_cast<float>(SharpRuntime::BYTE_MIN), static_cast<float>(SharpRuntime::BYTE_MAX))));
+                static_cast<intcs>(MathHelper::Clamp(value * 255.0f, static_cast<float>(SharpRuntime::BYTE_MIN),
+                                                     static_cast<float>(SharpRuntime::BYTE_MAX))));
         }
 
         [[nodiscard]] int ToInt(bytecs value)
@@ -50,147 +51,147 @@ namespace Microsoft::Xna::Framework
     // Static color definitions
     // ------------------------------------------------------------------
 
-    const Color Color::Transparent      (UInt32{0x00000000U});
-    const Color Color::AliceBlue        (UInt32{0xfffff8f0U});
-    const Color Color::AntiqueWhite     (UInt32{0xffd7ebfaU});
-    const Color Color::Aqua             (UInt32{0xffffff00U});
-    const Color Color::Aquamarine       (UInt32{0xffd4ff7fU});
-    const Color Color::Azure            (UInt32{0xfffffff0U});
-    const Color Color::Beige            (UInt32{0xffdcf5f5U});
-    const Color Color::Bisque           (UInt32{0xffc4e4ffU});
-    const Color Color::Black            (UInt32{0xff000000U});
-    const Color Color::BlanchedAlmond   (UInt32{0xffcdebffU});
-    const Color Color::Blue             (UInt32{0xffff0000U});
-    const Color Color::BlueViolet       (UInt32{0xffe22b8aU});
-    const Color Color::Brown            (UInt32{0xff2a2aa5U});
-    const Color Color::BurlyWood        (UInt32{0xff87b8deU});
-    const Color Color::CadetBlue        (UInt32{0xffa09e5fU});
-    const Color Color::Chartreuse       (UInt32{0xff00ff7fU});
-    const Color Color::Chocolate        (UInt32{0xff1e69d2U});
-    const Color Color::Coral            (UInt32{0xff507fffU});
-    const Color Color::CornflowerBlue   (UInt32{0xffed9564U});
-    const Color Color::Cornsilk         (UInt32{0xffdcf8ffU});
-    const Color Color::Crimson          (UInt32{0xff3c14dcU});
-    const Color Color::Cyan             (UInt32{0xffffff00U});
-    const Color Color::DarkBlue         (UInt32{0xff8b0000U});
-    const Color Color::DarkCyan         (UInt32{0xff8b8b00U});
-    const Color Color::DarkGoldenrod    (UInt32{0xff0b86b8U});
-    const Color Color::DarkGray         (UInt32{0xffa9a9a9U});
-    const Color Color::DarkGreen        (UInt32{0xff006400U});
-    const Color Color::DarkKhaki        (UInt32{0xff6bb7bdU});
-    const Color Color::DarkMagenta      (UInt32{0xff8b008bU});
-    const Color Color::DarkOliveGreen   (UInt32{0xff2f6b55U});
-    const Color Color::DarkOrange       (UInt32{0xff008cffU});
-    const Color Color::DarkOrchid       (UInt32{0xffcc3299U});
-    const Color Color::DarkRed          (UInt32{0xff00008bU});
-    const Color Color::DarkSalmon       (UInt32{0xff7a96e9U});
-    const Color Color::DarkSeaGreen     (UInt32{0xff8bbc8fU});
-    const Color Color::DarkSlateBlue    (UInt32{0xff8b3d48U});
-    const Color Color::DarkSlateGray    (UInt32{0xff4f4f2fU});
-    const Color Color::DarkTurquoise    (UInt32{0xffd1ce00U});
-    const Color Color::DarkViolet       (UInt32{0xffd30094U});
-    const Color Color::DeepPink         (UInt32{0xff9314ffU});
-    const Color Color::DeepSkyBlue      (UInt32{0xffffbf00U});
-    const Color Color::DimGray          (UInt32{0xff696969U});
-    const Color Color::DodgerBlue       (UInt32{0xffff901eU});
-    const Color Color::Firebrick        (UInt32{0xff2222b2U});
-    const Color Color::FloralWhite      (UInt32{0xfff0faffU});
-    const Color Color::ForestGreen      (UInt32{0xff228b22U});
-    const Color Color::Fuchsia          (UInt32{0xffff00ffU});
-    const Color Color::Gainsboro        (UInt32{0xffdcdcdcU});
-    const Color Color::GhostWhite       (UInt32{0xfffff8f8U});
-    const Color Color::Gold             (UInt32{0xff00d7ffU});
-    const Color Color::Goldenrod        (UInt32{0xff20a5daU});
-    const Color Color::Gray             (UInt32{0xff808080U});
-    const Color Color::Green            (UInt32{0xff008000U});
-    const Color Color::GreenYellow      (UInt32{0xff2fffadU});
-    const Color Color::Honeydew         (UInt32{0xfff0fff0U});
-    const Color Color::HotPink          (UInt32{0xffb469ffU});
-    const Color Color::IndianRed        (UInt32{0xff5c5ccdU});
-    const Color Color::Indigo           (UInt32{0xff82004bU});
-    const Color Color::Ivory            (UInt32{0xfff0ffffU});
-    const Color Color::Khaki            (UInt32{0xff8ce6f0U});
-    const Color Color::Lavender         (UInt32{0xfffae6e6U});
-    const Color Color::LavenderBlush    (UInt32{0xfff5f0ffU});
-    const Color Color::LawnGreen        (UInt32{0xff00fc7cU});
-    const Color Color::LemonChiffon     (UInt32{0xffcdfaffU});
-    const Color Color::LightBlue        (UInt32{0xffe6d8adU});
-    const Color Color::LightCoral       (UInt32{0xff8080f0U});
-    const Color Color::LightCyan        (UInt32{0xffffffe0U});
-    const Color Color::LightGoldenrodYellow (UInt32{0xffd2fafaU});
-    const Color Color::LightGray        (UInt32{0xffd3d3d3U});
-    const Color Color::LightGreen       (UInt32{0xff90ee90U});
-    const Color Color::LightPink        (UInt32{0xffc1b6ffU});
-    const Color Color::LightSalmon      (UInt32{0xff7aa0ffU});
-    const Color Color::LightSeaGreen    (UInt32{0xffaab220U});
-    const Color Color::LightSkyBlue     (UInt32{0xffface87U});
-    const Color Color::LightSlateGray   (UInt32{0xff998877U});
-    const Color Color::LightSteelBlue   (UInt32{0xffdec4b0U});
-    const Color Color::LightYellow      (UInt32{0xffe0ffffU});
-    const Color Color::Lime             (UInt32{0xff00ff00U});
-    const Color Color::LimeGreen        (UInt32{0xff32cd32U});
-    const Color Color::Linen            (UInt32{0xffe6f0faU});
-    const Color Color::Magenta          (UInt32{0xffff00ffU});
-    const Color Color::Maroon           (UInt32{0xff000080U});
-    const Color Color::MediumAquamarine (UInt32{0xffaacd66U});
-    const Color Color::MediumBlue       (UInt32{0xffcd0000U});
-    const Color Color::MediumOrchid     (UInt32{0xffd355baU});
-    const Color Color::MediumPurple     (UInt32{0xffdb7093U});
-    const Color Color::MediumSeaGreen   (UInt32{0xff71b33cU});
-    const Color Color::MediumSlateBlue  (UInt32{0xffee687bU});
-    const Color Color::MediumSpringGreen (UInt32{0xff9afa00U});
-    const Color Color::MediumTurquoise  (UInt32{0xffccd148U});
-    const Color Color::MediumVioletRed  (UInt32{0xff8515c7U});
-    const Color Color::MidnightBlue     (UInt32{0xff701919U});
-    const Color Color::MintCream        (UInt32{0xfffafff5U});
-    const Color Color::MistyRose        (UInt32{0xffe1e4ffU});
-    const Color Color::Moccasin         (UInt32{0xffb5e4ffU});
-    const Color Color::NavajoWhite      (UInt32{0xffaddeffU});
-    const Color Color::Navy             (UInt32{0xff800000U});
-    const Color Color::OldLace          (UInt32{0xffe6f5fdU});
-    const Color Color::Olive            (UInt32{0xff008080U});
-    const Color Color::OliveDrab        (UInt32{0xff238e6bU});
-    const Color Color::Orange           (UInt32{0xff00a5ffU});
-    const Color Color::OrangeRed        (UInt32{0xff0045ffU});
-    const Color Color::Orchid           (UInt32{0xffd670daU});
-    const Color Color::PaleGoldenrod    (UInt32{0xffaae8eeU});
-    const Color Color::PaleGreen        (UInt32{0xff98fb98U});
-    const Color Color::PaleTurquoise    (UInt32{0xffeeeeafU});
-    const Color Color::PaleVioletRed    (UInt32{0xff9370dbU});
-    const Color Color::PapayaWhip       (UInt32{0xffd5efffU});
-    const Color Color::PeachPuff        (UInt32{0xffb9daffU});
-    const Color Color::Peru             (UInt32{0xff3f85cdU});
-    const Color Color::Pink             (UInt32{0xffcbc0ffU});
-    const Color Color::Plum             (UInt32{0xffdda0ddU});
-    const Color Color::PowderBlue       (UInt32{0xffe6e0b0U});
-    const Color Color::Purple           (UInt32{0xff800080U});
-    const Color Color::Red              (UInt32{0xff0000ffU});
-    const Color Color::RosyBrown        (UInt32{0xff8f8fbcU});
-    const Color Color::RoyalBlue        (UInt32{0xffe16941U});
-    const Color Color::SaddleBrown      (UInt32{0xff13458bU});
-    const Color Color::Salmon           (UInt32{0xff7280faU});
-    const Color Color::SandyBrown       (UInt32{0xff60a4f4U});
-    const Color Color::SeaGreen         (UInt32{0xff578b2eU});
-    const Color Color::SeaShell         (UInt32{0xffeef5ffU});
-    const Color Color::Sienna           (UInt32{0xff2d52a0U});
-    const Color Color::Silver           (UInt32{0xffc0c0c0U});
-    const Color Color::SkyBlue          (UInt32{0xffebce87U});
-    const Color Color::SlateBlue        (UInt32{0xffcd5a6aU});
-    const Color Color::SlateGray        (UInt32{0xff908070U});
-    const Color Color::Snow             (UInt32{0xfffafaffU});
-    const Color Color::SpringGreen      (UInt32{0xff7fff00U});
-    const Color Color::SteelBlue        (UInt32{0xffb48246U});
-    const Color Color::Tan              (UInt32{0xff8cb4d2U});
-    const Color Color::Teal             (UInt32{0xff808000U});
-    const Color Color::Thistle          (UInt32{0xffd8bfd8U});
-    const Color Color::Tomato           (UInt32{0xff4763ffU});
-    const Color Color::Turquoise        (UInt32{0xffd0e040U});
-    const Color Color::Violet           (UInt32{0xffee82eeU});
-    const Color Color::Wheat            (UInt32{0xffb3def5U});
-    const Color Color::White            (UInt32{0xffffffffU});
-    const Color Color::WhiteSmoke       (UInt32{0xfff5f5f5U});
-    const Color Color::Yellow           (UInt32{0xff00ffffU});
-    const Color Color::YellowGreen      (UInt32{0xff32cd9aU});
+    const Color Color::Transparent(UInt32{0x00000000U});
+    const Color Color::AliceBlue(UInt32{0xfffff8f0U});
+    const Color Color::AntiqueWhite(UInt32{0xffd7ebfaU});
+    const Color Color::Aqua(UInt32{0xffffff00U});
+    const Color Color::Aquamarine(UInt32{0xffd4ff7fU});
+    const Color Color::Azure(UInt32{0xfffffff0U});
+    const Color Color::Beige(UInt32{0xffdcf5f5U});
+    const Color Color::Bisque(UInt32{0xffc4e4ffU});
+    const Color Color::Black(UInt32{0xff000000U});
+    const Color Color::BlanchedAlmond(UInt32{0xffcdebffU});
+    const Color Color::Blue(UInt32{0xffff0000U});
+    const Color Color::BlueViolet(UInt32{0xffe22b8aU});
+    const Color Color::Brown(UInt32{0xff2a2aa5U});
+    const Color Color::BurlyWood(UInt32{0xff87b8deU});
+    const Color Color::CadetBlue(UInt32{0xffa09e5fU});
+    const Color Color::Chartreuse(UInt32{0xff00ff7fU});
+    const Color Color::Chocolate(UInt32{0xff1e69d2U});
+    const Color Color::Coral(UInt32{0xff507fffU});
+    const Color Color::CornflowerBlue(UInt32{0xffed9564U});
+    const Color Color::Cornsilk(UInt32{0xffdcf8ffU});
+    const Color Color::Crimson(UInt32{0xff3c14dcU});
+    const Color Color::Cyan(UInt32{0xffffff00U});
+    const Color Color::DarkBlue(UInt32{0xff8b0000U});
+    const Color Color::DarkCyan(UInt32{0xff8b8b00U});
+    const Color Color::DarkGoldenrod(UInt32{0xff0b86b8U});
+    const Color Color::DarkGray(UInt32{0xffa9a9a9U});
+    const Color Color::DarkGreen(UInt32{0xff006400U});
+    const Color Color::DarkKhaki(UInt32{0xff6bb7bdU});
+    const Color Color::DarkMagenta(UInt32{0xff8b008bU});
+    const Color Color::DarkOliveGreen(UInt32{0xff2f6b55U});
+    const Color Color::DarkOrange(UInt32{0xff008cffU});
+    const Color Color::DarkOrchid(UInt32{0xffcc3299U});
+    const Color Color::DarkRed(UInt32{0xff00008bU});
+    const Color Color::DarkSalmon(UInt32{0xff7a96e9U});
+    const Color Color::DarkSeaGreen(UInt32{0xff8bbc8fU});
+    const Color Color::DarkSlateBlue(UInt32{0xff8b3d48U});
+    const Color Color::DarkSlateGray(UInt32{0xff4f4f2fU});
+    const Color Color::DarkTurquoise(UInt32{0xffd1ce00U});
+    const Color Color::DarkViolet(UInt32{0xffd30094U});
+    const Color Color::DeepPink(UInt32{0xff9314ffU});
+    const Color Color::DeepSkyBlue(UInt32{0xffffbf00U});
+    const Color Color::DimGray(UInt32{0xff696969U});
+    const Color Color::DodgerBlue(UInt32{0xffff901eU});
+    const Color Color::Firebrick(UInt32{0xff2222b2U});
+    const Color Color::FloralWhite(UInt32{0xfff0faffU});
+    const Color Color::ForestGreen(UInt32{0xff228b22U});
+    const Color Color::Fuchsia(UInt32{0xffff00ffU});
+    const Color Color::Gainsboro(UInt32{0xffdcdcdcU});
+    const Color Color::GhostWhite(UInt32{0xfffff8f8U});
+    const Color Color::Gold(UInt32{0xff00d7ffU});
+    const Color Color::Goldenrod(UInt32{0xff20a5daU});
+    const Color Color::Gray(UInt32{0xff808080U});
+    const Color Color::Green(UInt32{0xff008000U});
+    const Color Color::GreenYellow(UInt32{0xff2fffadU});
+    const Color Color::Honeydew(UInt32{0xfff0fff0U});
+    const Color Color::HotPink(UInt32{0xffb469ffU});
+    const Color Color::IndianRed(UInt32{0xff5c5ccdU});
+    const Color Color::Indigo(UInt32{0xff82004bU});
+    const Color Color::Ivory(UInt32{0xfff0ffffU});
+    const Color Color::Khaki(UInt32{0xff8ce6f0U});
+    const Color Color::Lavender(UInt32{0xfffae6e6U});
+    const Color Color::LavenderBlush(UInt32{0xfff5f0ffU});
+    const Color Color::LawnGreen(UInt32{0xff00fc7cU});
+    const Color Color::LemonChiffon(UInt32{0xffcdfaffU});
+    const Color Color::LightBlue(UInt32{0xffe6d8adU});
+    const Color Color::LightCoral(UInt32{0xff8080f0U});
+    const Color Color::LightCyan(UInt32{0xffffffe0U});
+    const Color Color::LightGoldenrodYellow(UInt32{0xffd2fafaU});
+    const Color Color::LightGray(UInt32{0xffd3d3d3U});
+    const Color Color::LightGreen(UInt32{0xff90ee90U});
+    const Color Color::LightPink(UInt32{0xffc1b6ffU});
+    const Color Color::LightSalmon(UInt32{0xff7aa0ffU});
+    const Color Color::LightSeaGreen(UInt32{0xffaab220U});
+    const Color Color::LightSkyBlue(UInt32{0xffface87U});
+    const Color Color::LightSlateGray(UInt32{0xff998877U});
+    const Color Color::LightSteelBlue(UInt32{0xffdec4b0U});
+    const Color Color::LightYellow(UInt32{0xffe0ffffU});
+    const Color Color::Lime(UInt32{0xff00ff00U});
+    const Color Color::LimeGreen(UInt32{0xff32cd32U});
+    const Color Color::Linen(UInt32{0xffe6f0faU});
+    const Color Color::Magenta(UInt32{0xffff00ffU});
+    const Color Color::Maroon(UInt32{0xff000080U});
+    const Color Color::MediumAquamarine(UInt32{0xffaacd66U});
+    const Color Color::MediumBlue(UInt32{0xffcd0000U});
+    const Color Color::MediumOrchid(UInt32{0xffd355baU});
+    const Color Color::MediumPurple(UInt32{0xffdb7093U});
+    const Color Color::MediumSeaGreen(UInt32{0xff71b33cU});
+    const Color Color::MediumSlateBlue(UInt32{0xffee687bU});
+    const Color Color::MediumSpringGreen(UInt32{0xff9afa00U});
+    const Color Color::MediumTurquoise(UInt32{0xffccd148U});
+    const Color Color::MediumVioletRed(UInt32{0xff8515c7U});
+    const Color Color::MidnightBlue(UInt32{0xff701919U});
+    const Color Color::MintCream(UInt32{0xfffafff5U});
+    const Color Color::MistyRose(UInt32{0xffe1e4ffU});
+    const Color Color::Moccasin(UInt32{0xffb5e4ffU});
+    const Color Color::NavajoWhite(UInt32{0xffaddeffU});
+    const Color Color::Navy(UInt32{0xff800000U});
+    const Color Color::OldLace(UInt32{0xffe6f5fdU});
+    const Color Color::Olive(UInt32{0xff008080U});
+    const Color Color::OliveDrab(UInt32{0xff238e6bU});
+    const Color Color::Orange(UInt32{0xff00a5ffU});
+    const Color Color::OrangeRed(UInt32{0xff0045ffU});
+    const Color Color::Orchid(UInt32{0xffd670daU});
+    const Color Color::PaleGoldenrod(UInt32{0xffaae8eeU});
+    const Color Color::PaleGreen(UInt32{0xff98fb98U});
+    const Color Color::PaleTurquoise(UInt32{0xffeeeeafU});
+    const Color Color::PaleVioletRed(UInt32{0xff9370dbU});
+    const Color Color::PapayaWhip(UInt32{0xffd5efffU});
+    const Color Color::PeachPuff(UInt32{0xffb9daffU});
+    const Color Color::Peru(UInt32{0xff3f85cdU});
+    const Color Color::Pink(UInt32{0xffcbc0ffU});
+    const Color Color::Plum(UInt32{0xffdda0ddU});
+    const Color Color::PowderBlue(UInt32{0xffe6e0b0U});
+    const Color Color::Purple(UInt32{0xff800080U});
+    const Color Color::Red(UInt32{0xff0000ffU});
+    const Color Color::RosyBrown(UInt32{0xff8f8fbcU});
+    const Color Color::RoyalBlue(UInt32{0xffe16941U});
+    const Color Color::SaddleBrown(UInt32{0xff13458bU});
+    const Color Color::Salmon(UInt32{0xff7280faU});
+    const Color Color::SandyBrown(UInt32{0xff60a4f4U});
+    const Color Color::SeaGreen(UInt32{0xff578b2eU});
+    const Color Color::SeaShell(UInt32{0xffeef5ffU});
+    const Color Color::Sienna(UInt32{0xff2d52a0U});
+    const Color Color::Silver(UInt32{0xffc0c0c0U});
+    const Color Color::SkyBlue(UInt32{0xffebce87U});
+    const Color Color::SlateBlue(UInt32{0xffcd5a6aU});
+    const Color Color::SlateGray(UInt32{0xff908070U});
+    const Color Color::Snow(UInt32{0xfffafaffU});
+    const Color Color::SpringGreen(UInt32{0xff7fff00U});
+    const Color Color::SteelBlue(UInt32{0xffb48246U});
+    const Color Color::Tan(UInt32{0xff8cb4d2U});
+    const Color Color::Teal(UInt32{0xff808000U});
+    const Color Color::Thistle(UInt32{0xffd8bfd8U});
+    const Color Color::Tomato(UInt32{0xff4763ffU});
+    const Color Color::Turquoise(UInt32{0xffd0e040U});
+    const Color Color::Violet(UInt32{0xffee82eeU});
+    const Color Color::Wheat(UInt32{0xffb3def5U});
+    const Color Color::White(UInt32{0xffffffffU});
+    const Color Color::WhiteSmoke(UInt32{0xfff5f5f5U});
+    const Color Color::Yellow(UInt32{0xff00ffffU});
+    const Color Color::YellowGreen(UInt32{0xff32cd9aU});
 
     // ------------------------------------------------------------------
     // Constructors
@@ -225,7 +226,8 @@ namespace Microsoft::Xna::Framework
     }
 
     Color::Color(float r, float g, float b, float alpha)
-        : Color(ToByteFromUnitClamped(r), ToByteFromUnitClamped(g), ToByteFromUnitClamped(b), ToByteFromUnitClamped(alpha))
+        : Color(ToByteFromUnitClamped(r), ToByteFromUnitClamped(g), ToByteFromUnitClamped(b),
+                ToByteFromUnitClamped(alpha))
     {
     }
 
@@ -246,10 +248,10 @@ namespace Microsoft::Xna::Framework
 
     Color::Color(bytecs r, bytecs g, bytecs b, bytecs alpha)
         : packedValue(
-              (ToPackedComponent(alpha) << 24U) |
-              (ToPackedComponent(b)     << 16U) |
-              (ToPackedComponent(g)     <<  8U) |
-               ToPackedComponent(r))
+            (ToPackedComponent(alpha) << 24U) |
+            (ToPackedComponent(b) << 16U) |
+            (ToPackedComponent(g) << 8U) |
+            ToPackedComponent(r))
     {
     }
 
@@ -319,9 +321,9 @@ namespace Microsoft::Xna::Framework
     {
         std::ostringstream stream;
         stream << ToInt(getRProperty()) << ' '
-               << ToInt(getGProperty()) << ' '
-               << ToInt(getBProperty()) << ' '
-               << ToInt(getAProperty());
+            << ToInt(getGProperty()) << ' '
+            << ToInt(getBProperty()) << ' '
+            << ToInt(getAProperty());
         return stream.str();
     }
 
@@ -360,10 +362,10 @@ namespace Microsoft::Xna::Framework
     {
         std::ostringstream stream;
         stream << "{R:" << ToInt(getRProperty())
-               << " G:" << ToInt(getGProperty())
-               << " B:" << ToInt(getBProperty())
-               << " A:" << ToInt(getAProperty())
-               << "}";
+            << " G:" << ToInt(getGProperty())
+            << " B:" << ToInt(getBProperty())
+            << " A:" << ToInt(getAProperty())
+            << "}";
         return stream.str();
     }
 
@@ -451,5 +453,4 @@ namespace Microsoft::Xna::Framework
     {
         return Color::Multiply(value, scale);
     }
-
 } // namespace Microsoft::Xna::Framework

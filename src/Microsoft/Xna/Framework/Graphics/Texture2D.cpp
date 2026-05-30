@@ -9,8 +9,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     using namespace CNA::Internal::Backends;
 
     Texture2D::Texture2D()
@@ -22,7 +22,8 @@ namespace Microsoft::Xna::Framework::Graphics {
         using namespace CNA::Internal::Graphics;
         ImageData data = ImageLoader::Load(assetName);
         backend_ = graphicsDevice.GetBackend().CreateTexture(data);
-        if (backend_) {
+        if (backend_)
+        {
             width = backend_->GetWidth();
             height = backend_->GetHeight();
         }

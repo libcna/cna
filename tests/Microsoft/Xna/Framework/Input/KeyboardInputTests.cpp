@@ -5,8 +5,10 @@
 
 using namespace Microsoft::Xna::Framework::Input;
 
-namespace {
-    void ResetKeyboardState() {
+namespace
+{
+    void ResetKeyboardState()
+    {
         const Keys keysToReset[] = {
             Keys::Left,
             Keys::Right,
@@ -25,13 +27,15 @@ namespace {
             Keys::S,
         };
 
-        for (const auto key : keysToReset) {
+        for (const auto key : keysToReset)
+        {
             CNA::Internal::Input::InputManager::SetKeyState(key, false);
         }
     }
 }
 
-TEST(KeyboardInputTest, GetStateReflectsPressedAndReleasedKeys) {
+TEST(KeyboardInputTest, GetStateReflectsPressedAndReleasedKeys)
+{
     ResetKeyboardState();
 
     CNA::Internal::Input::InputManager::SetKeyState(Keys::Left, true);
@@ -46,7 +50,8 @@ TEST(KeyboardInputTest, GetStateReflectsPressedAndReleasedKeys) {
     ResetKeyboardState();
 }
 
-TEST(KeyboardInputTest, SnapshotDoesNotChangeAfterInternalStateMutation) {
+TEST(KeyboardInputTest, SnapshotDoesNotChangeAfterInternalStateMutation)
+{
     ResetKeyboardState();
 
     CNA::Internal::Input::InputManager::SetKeyState(Keys::A, true);
@@ -65,7 +70,8 @@ TEST(KeyboardInputTest, SnapshotDoesNotChangeAfterInternalStateMutation) {
     ResetKeyboardState();
 }
 
-TEST(KeyboardInputTest, GetPressedKeysContainsOnlyPressedKeys) {
+TEST(KeyboardInputTest, GetPressedKeysContainsOnlyPressedKeys)
+{
     ResetKeyboardState();
 
     CNA::Internal::Input::InputManager::SetKeyState(Keys::W, true);

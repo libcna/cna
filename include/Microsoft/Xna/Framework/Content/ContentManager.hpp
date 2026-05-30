@@ -10,8 +10,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-namespace Microsoft::Xna::Framework::Content {
-
+namespace Microsoft::Xna::Framework::Content
+{
     using log = CNA::Logger;
 
     /**
@@ -25,7 +25,8 @@ namespace Microsoft::Xna::Framework::Content {
      * It does not use XNB files and does not cache assets.
      * Assets are loaded directly from files under RootDirectory.
      */
-    class ContentManager {
+    class ContentManager
+    {
     private:
         std::string RootDirectory_ = "Content";
         Graphics::GraphicsDevice* graphicsDevice_ = nullptr;
@@ -61,35 +62,40 @@ namespace Microsoft::Xna::Framework::Content {
          * @param assetName Relative file path inside the content root.
          * @return Loaded asset instance.
          */
-        template<typename T>
-        [[nodiscard]] T Load(const std::string& assetName) {
+        template <typename T>
+        [[nodiscard]] T Load(const std::string& assetName)
+        {
             const std::string fullPath = BuildAssetPath(assetName);
             log::Debug(std::string("Loading asset: ") + fullPath);
 
-            if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Graphics::Texture2D>) {
-                if (graphicsDevice_ == nullptr) {
+            if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Graphics::Texture2D>)
+            {
+                if (graphicsDevice_ == nullptr)
+                {
                     throw std::runtime_error("ContentManager::Load<Texture2D>() failed: GraphicsDevice is null.");
                 }
-                if (!CONTAINS(assetName,"."))
+                if (!CONTAINS(assetName, "."))
                 {
                     const static std::string DOT_PNG = ".png";
                     std::string tmp_string = fullPath;
                     tmp_string += DOT_PNG;
                     return T(tmp_string, *graphicsDevice_);
-
                 }
                 return T(fullPath, *graphicsDevice_);
-            } else if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Audio::SoundEffect>) {
-                if (!CONTAINS(assetName,"."))
+            }
+            else if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Audio::SoundEffect>)
+            {
+                if (!CONTAINS(assetName, "."))
                 {
                     const static std::string DOT_WAV = ".wav";
                     std::string tmp_string = fullPath;
                     tmp_string += DOT_WAV;
                     return T(tmp_string);
-
                 }
                 return T(fullPath);
-            } else {
+            }
+            else
+            {
                 static_assert(
                     std::is_same_v<T, Microsoft::Xna::Framework::Graphics::Texture2D> ||
                     std::is_same_v<T, Microsoft::Xna::Framework::Audio::SoundEffect>,

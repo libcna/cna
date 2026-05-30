@@ -16,8 +16,8 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
 
-namespace Microsoft::Devices::Sensors {
-
+namespace Microsoft::Devices::Sensors
+{
     /**
      * @brief Provides the base implementation for sensor types.
      *
@@ -42,8 +42,9 @@ namespace Microsoft::Devices::Sensors {
      * @note TSensorReading must derive from ISensorReading.
      * @note The .NET finalizer semantics cannot be reproduced exactly in C++.
      */
-    template<typename TSensorReading>
-    class SensorBase : public System::Object, public System::IDisposable {
+    template <typename TSensorReading>
+    class SensorBase : public System::Object, public System::IDisposable
+    {
         static_assert(std::is_base_of_v<ISensorReading, TSensorReading>,
                       "TSensorReading must derive from ISensorReading");
 
@@ -67,7 +68,8 @@ namespace Microsoft::Devices::Sensors {
          *
          * @return true if disposed; otherwise false.
          */
-        [[nodiscard]] bool getIsDisposedProperty() const {
+        [[nodiscard]] bool getIsDisposedProperty() const
+        {
             return disposed_;
         }
 
@@ -79,10 +81,12 @@ namespace Microsoft::Devices::Sensors {
          *
          * @param value New sensor reading.
          */
-        void setCurrentValueProperty(const TSensorReading& value) {
+        void setCurrentValueProperty(const TSensorReading& value)
+        {
             currentValue_ = value;
 
-            if (!CurrentValueChanged.Empty()) {
+            if (!CurrentValueChanged.Empty())
+            {
                 eventArgs_.setSensorReadingProperty(value);
                 CurrentValueChanged.Raise(static_cast<System::Object*>(this), eventArgs_);
             }
@@ -93,10 +97,12 @@ namespace Microsoft::Devices::Sensors {
          *
          * @param value New sensor reading to move.
          */
-        void setCurrentValueProperty(TSensorReading&& value) {
+        void setCurrentValueProperty(TSensorReading&& value)
+        {
             currentValue_ = std::move(value);
 
-            if (!CurrentValueChanged.Empty()) {
+            if (!CurrentValueChanged.Empty())
+            {
                 eventArgs_.setSensorReadingProperty(currentValue_);
                 CurrentValueChanged.Raise(static_cast<System::Object*>(this), eventArgs_);
             }
@@ -107,7 +113,8 @@ namespace Microsoft::Devices::Sensors {
          *
          * @param value New validity flag.
          */
-        void setIsDataValidProperty(bool value) {
+        void setIsDataValidProperty(bool value)
+        {
             isDataValid_ = value;
         }
 
@@ -121,7 +128,8 @@ namespace Microsoft::Devices::Sensors {
          * @note This mirrors the .NET pattern, but C++ destructor behavior is
          * not identical to .NET finalization.
          */
-        virtual void Dispose(bool disposing) {
+        virtual void Dispose(bool disposing)
+        {
             (void)disposing;
             disposed_ = true;
         }
@@ -145,7 +153,8 @@ namespace Microsoft::Devices::Sensors {
               isDataValid_(false),
               timeBetweenUpdates_(System::TimeSpan::Zero),
               currentValue_(),
-              eventArgs_(TSensorReading()) {
+              eventArgs_(TSensorReading())
+        {
             setTimeBetweenUpdatesProperty(System::TimeSpan::FromMilliseconds(2.0));
         }
 
@@ -158,8 +167,10 @@ namespace Microsoft::Devices::Sensors {
          * @note Unlike .NET, virtual dispatch from destructors in C++ does not behave
          * the same way for derived classes.
          */
-        virtual ~SensorBase() {
-            if (!disposed_) {
+        virtual ~SensorBase()
+        {
+            if (!disposed_)
+            {
                 Dispose(false);
             }
         }
@@ -169,7 +180,8 @@ namespace Microsoft::Devices::Sensors {
          *
          * @return Current sensor reading.
          */
-        [[nodiscard]] const TSensorReading& getCurrentValueProperty() const {
+        [[nodiscard]] const TSensorReading& getCurrentValueProperty() const
+        {
             return currentValue_;
         }
 
@@ -178,7 +190,8 @@ namespace Microsoft::Devices::Sensors {
          *
          * @return true if valid; otherwise false.
          */
-        [[nodiscard]] bool getIsDataValidProperty() const {
+        [[nodiscard]] bool getIsDataValidProperty() const
+        {
             return isDataValid_;
         }
 
@@ -187,7 +200,8 @@ namespace Microsoft::Devices::Sensors {
          *
          * @return Time between updates.
          */
-        [[nodiscard]] const System::TimeSpan& getTimeBetweenUpdatesProperty() const {
+        [[nodiscard]] const System::TimeSpan& getTimeBetweenUpdatesProperty() const
+        {
             return timeBetweenUpdates_;
         }
 
@@ -198,14 +212,17 @@ namespace Microsoft::Devices::Sensors {
          *
          * @param value New update interval.
          */
-        void setTimeBetweenUpdatesProperty(const System::TimeSpan& value) {
-            if (!(timeBetweenUpdates_ != value)) {
+        void setTimeBetweenUpdatesProperty(const System::TimeSpan& value)
+        {
+            if (!(timeBetweenUpdates_ != value))
+            {
                 return;
             }
 
             timeBetweenUpdates_ = value;
 
-            if (!TimeBetweenUpdatesChanged.Empty()) {
+            if (!TimeBetweenUpdatesChanged.Empty())
+            {
                 System::EventArgs args;
                 TimeBetweenUpdatesChanged.Raise(static_cast<System::Object*>(this), args);
             }
@@ -217,8 +234,10 @@ namespace Microsoft::Devices::Sensors {
          * Mirrors the .NET Dispose() method. Calling Dispose() more than once
          * throws ObjectDisposedException, just like the decompiled source.
          */
-        void Dispose() override {
-            if (disposed_) {
+        void Dispose() override
+        {
+            if (disposed_)
+            {
                 throw System::ObjectDisposedException("SensorBase");
             }
 
@@ -235,5 +254,4 @@ namespace Microsoft::Devices::Sensors {
          */
         virtual void Stop() = 0;
     };
-
 } // namespace Microsoft::Devices::Sensors

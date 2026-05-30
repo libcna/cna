@@ -2,8 +2,8 @@
 
 #include <string>
 
-namespace Microsoft::Xna::Framework::Graphics {
-
+namespace Microsoft::Xna::Framework::Graphics
+{
     class Effect;
 
     /**
@@ -16,10 +16,13 @@ namespace Microsoft::Xna::Framework::Graphics {
      * @note Status: PARTIAL. The CNA effect system currently exposes a
      *       single pass per effect; multi-pass shaders are not implemented.
      */
-    class EffectPass {
+    class EffectPass
+    {
     public:
         EffectPass(Effect* owner, std::string name)
-            : owner_(owner), name_(std::move(name)) {}
+            : owner_(owner), name_(std::move(name))
+        {
+        }
 
         /** Pass name (XNA: `EffectPass.Name`). */
         [[nodiscard]] const std::string& Name() const { return name_; }
@@ -32,7 +35,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         void Apply();
 
     private:
-        Effect*     owner_;
+        Effect* owner_;
         std::string name_;
     };
 }

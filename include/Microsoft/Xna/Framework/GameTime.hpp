@@ -6,8 +6,8 @@
 
 #include "System/TimeSpan.hpp"
 
-namespace Microsoft::Xna::Framework {
-
+namespace Microsoft::Xna::Framework
+{
     class Game;
 
     using System::TimeSpan;
@@ -21,7 +21,8 @@ namespace Microsoft::Xna::Framework {
      * @note Property setters are intentionally not public. In XNA these setters
      * are internal; in CNA the Game class updates them.
      */
-    class GameTime {
+    class GameTime
+    {
         friend class Game;
 
     public:
@@ -73,10 +74,8 @@ namespace Microsoft::Xna::Framework {
         void setIsRunningSlowlyProperty(bool value);
 
     private:
-
         TimeSpan TotalGameTime_;
         TimeSpan ElapsedGameTime_;
         bool IsRunningSlowly_;
     };
-
 } // namespace Microsoft::Xna::Framework

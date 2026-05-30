@@ -6,8 +6,8 @@
 #include "SoundEffectI.hpp"
 #include "SoundEffectInstance.hpp"
 
-namespace Microsoft::Xna::Framework::Audio {
-
+namespace Microsoft::Xna::Framework::Audio
+{
     /**
      * @brief Represents a loaded sound effect asset.
      *
@@ -17,7 +17,8 @@ namespace Microsoft::Xna::Framework::Audio {
      *
      * The class uses shared internal state, so copying SoundEffect objects is cheap.
      */
-    class SoundEffect : public SoundEffectI {
+    class SoundEffect : public SoundEffectI
+    {
         friend class SoundEffectInstance;
 
     private:

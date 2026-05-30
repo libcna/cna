@@ -2,7 +2,8 @@
 
 #include <SDL3/SDL.h>
 
-namespace CNA::Internal::Input {
+namespace CNA::Internal::Input
+{
     /**
      * @brief Bridge between SDL3 events and CNA internal input state.
      *
@@ -12,7 +13,8 @@ namespace CNA::Internal::Input {
      *
      * @note Status: PARTIAL
      */
-    class SdlInputBridge {
+    class SdlInputBridge
+    {
     public:
         /**
          * @brief Processes one SDL event and propagates relevant changes to InputManager.

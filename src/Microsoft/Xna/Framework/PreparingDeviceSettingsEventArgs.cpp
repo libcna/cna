@@ -2,7 +2,8 @@
 
 namespace Microsoft::Xna::Framework
 {
-    PreparingDeviceSettingsEventArgs::PreparingDeviceSettingsEventArgs(GraphicsDeviceInformation& graphicsDeviceInformation)
+    PreparingDeviceSettingsEventArgs::PreparingDeviceSettingsEventArgs(
+        GraphicsDeviceInformation& graphicsDeviceInformation)
         : graphicsDeviceInformation_(&graphicsDeviceInformation)
     {
     }
