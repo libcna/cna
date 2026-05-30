@@ -4,6 +4,8 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include <SDL3/SDL.h>
 #include <easygl/easygl.hpp>
+#include <cstdint>
+#include <vector>
 
 namespace CNA::Internal::Backends::EasyGL
 {
@@ -95,6 +97,8 @@ namespace CNA::Internal::Backends::EasyGL
     private:
         void InitializeLayout();
         ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::vector<uint8_t> cpu_data_;
+        std::size_t stride_in_bytes_ = 0;
     };
 
     /**
@@ -119,6 +123,7 @@ namespace CNA::Internal::Backends::EasyGL
 
     private:
         ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::vector<uint8_t> cpu_data_;
     };
 
     class EasyGLGraphicsBackend : public IGraphicsBackend

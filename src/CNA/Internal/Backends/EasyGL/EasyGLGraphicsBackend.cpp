@@ -535,15 +535,24 @@ void main()
     void EasyGLVertexBufferBackend::recreate_gl_resource()
     {
         InitializeLayout();
+        if (!cpu_data_.empty() && stride_in_bytes_ > 0)
+        {
+            vbo.bind(::easygl::BufferTarget::Array);
+            vbo.set_data(::easygl::BufferTarget::Array, cpu_data_.data(), cpu_data_.size());
+        }
     }
 
     void EasyGLVertexBufferBackend::SetData(const void* data, int count, std::size_t stride_in_bytes)
     {
         vertex_count = count;
+        stride_in_bytes_ = stride_in_bytes;
+        const std::size_t byte_count = static_cast<std::size_t>(count) * stride_in_bytes;
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        cpu_data_.assign(bytes, bytes + byte_count);
         vbo.bind(::easygl::BufferTarget::Array);
-        vbo.set_data(::easygl::BufferTarget::Array, data, static_cast<std::size_t>(count) * stride_in_bytes);
+        vbo.set_data(::easygl::BufferTarget::Array, data, byte_count);
         CNA_RENDER_LOG("VertexBuffer SetData: count=" << count << " stride=" << stride_in_bytes
-            << " bytes=" << (static_cast<std::size_t>(count) * stride_in_bytes));
+            << " bytes=" << byte_count);
     }
 
     EasyGLIndexBufferBackend::EasyGLIndexBufferBackend(int index_capacity, ::easygl::ResourceRegistry* registry)
@@ -568,14 +577,21 @@ void main()
     void EasyGLIndexBufferBackend::recreate_gl_resource()
     {
         ibo.create();
+        if (!cpu_data_.empty())
+        {
+            ibo.bind(::easygl::BufferTarget::ElementArray);
+            ibo.set_data(::easygl::BufferTarget::ElementArray, cpu_data_.data(), cpu_data_.size());
+        }
     }
 
     void EasyGLIndexBufferBackend::SetData16(const void* data, int count)
     {
         index_count = count;
+        const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint16_t);
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        cpu_data_.assign(bytes, bytes + byte_count);
         ibo.bind(::easygl::BufferTarget::ElementArray);
-        ibo.set_data(::easygl::BufferTarget::ElementArray, data,
-                     static_cast<std::size_t>(count) * sizeof(std::uint16_t));
+        ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count);
         CNA_RENDER_LOG("IndexBuffer SetData16: count=" << count);
     }
 
