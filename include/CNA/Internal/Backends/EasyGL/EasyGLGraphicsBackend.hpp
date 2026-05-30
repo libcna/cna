@@ -38,6 +38,19 @@ namespace CNA::Internal::Backends::EasyGL
     // quads from Begin() to End() into a single CPU-side vertex buffer and flush
     // it with one draw_elements() call in End(). This can reduce GL call count
     // by 50-100x and is important for performance on mobile/web targets.
+    //
+    // Implementation estimate: medium difficulty, ~2-4 hours, ~100 lines changed
+    // in this file only. What needs to change:
+    //   1. Add CPU-side buffers: std::vector<Vertex> pending_vertices_ and
+    //      std::vector<uint16_t> pending_indices_ as members.
+    //   2. Draw() appends the quad to those vectors instead of uploading immediately.
+    //      The vertex/index math is already correct, just move it to a push_back.
+    //   3. End() flushes: one set_data() + one draw_elements(), then clears vectors.
+    //   4. Texture changes require a flush: track current_texture_ and flush the
+    //      pending batch whenever the texture changes between Draw() calls.
+    //      Without a texture atlas this is the only real complication.
+    //      A texture atlas would eliminate mid-batch flushes but is significantly
+    //      more complex to implement.
     class EasyGLSpriteBatchBackend : public ISpriteBatchBackend, public ::easygl::RecoverableResource
     {
     private:
