@@ -408,27 +408,25 @@ void main()
     {
         if (program3d_ready_) return;
 
-        const char* vsrc = R"(
-            #version 300 es
-            precision highp float;
-            layout (location = 0) in vec3 aPos;
-            layout (location = 1) in vec4 aColor;
-            uniform mat4 uWorldViewProjection;
-            out vec4 vColor;
-            void main() {
-                gl_Position = uWorldViewProjection * vec4(aPos, 1.0);
-                vColor = aColor;
-            }
-        )";
-        const char* fsrc = R"(
-            #version 300 es
-            precision mediump float;
-            in vec4 vColor;
-            out vec4 FragColor;
-            void main() {
-                FragColor = vColor;
-            }
-        )";
+        const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location = 0) in vec3 aPos;\n"
+"layout(location = 1) in vec4 aColor;\n"
+"uniform mat4 uWorldViewProjection;\n"
+"out vec4 vColor;\n"
+"void main() {\n"
+"    gl_Position = uWorldViewProjection * vec4(aPos, 1.0);\n"
+"    vColor = aColor;\n"
+"}\n";
+        const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec4 vColor;\n"
+"out vec4 FragColor;\n"
+"void main() {\n"
+"    FragColor = vColor;\n"
+"}\n";
 
         ::easygl::Shader vs(::easygl::ShaderType::Vertex);
         vs.create();

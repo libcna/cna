@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "web",
+      "displayName": "Emscripten (WebAssembly / house3d_demo)",
+      "description": "Builds house3d_demo as a self-contained HTML page via Emscripten. Requires EMSDK to be active (source emsdk_env.sh). Run with: emcmake cmake --preset web",
+      "binaryDir": "${sourceDir}/cmake-build-web",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":        "Release",
+        "CNA_GRAPHICS_BACKEND":    "EASYGL",
+        "CNA_BACKEND_EASY_GL":     "ON",
+        "CNA_BUILD_TESTS":         "OFF",
+        "CNA_BUILD_EXAMPLES":      "ON",
+        "EASYGL_BUILD_EXAMPLES":   "OFF",
+        "EASYGL_BUILD_TESTS":      "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "web",
+      "displayName": "Build house3d_demo for web",
+      "configurePreset": "web",
+      "targets": ["cna_house3d_demo"]
+    }
+  ]
+}

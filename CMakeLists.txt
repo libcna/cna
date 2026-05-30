@@ -17,9 +17,9 @@ add_subdirectory(../sharp-runtime SHARP_RUNTIME)
 #find_package(SDL3_ttf REQUIRED)
 
 # --- Graphics Backend Selection ---
-# On non-Linux platforms SDL_RENDERER is the default because EASYGL requires OpenGL
-# extensions that may not be available or easily configured on Windows.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+# EasyGL is the default on Linux and Emscripten (WebGL 2 = OpenGL ES 3.0).
+# Other platforms default to SDL_RENDERER.
+if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(_cna_default_backend "EASYGL")
 else()
     set(_cna_default_backend "SDL_RENDERER")
@@ -173,28 +173,48 @@ target_link_libraries(CNA
 )
 
 # --- Examples ---
-# The 3D house demo exercises the EasyGL 3D pipeline. Other backends
-# explicitly throw "3D not supported" from any 3D entry point, so the
-# demo target is only enabled with the EASYGL backend.
+# The 3D house demo exercises the EasyGL 3D pipeline. Other backends throw
+# "3D not supported", so the target is only enabled with the EASYGL backend.
+# Emscripten uses WebGL 2 (= OpenGL ES 3.0), which the EasyGL backend targets.
 option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, ...)" ON)
 if(CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     add_executable(cna_house3d_demo examples/house3d_demo.cpp)
-    # The CNA library and the EasyGL backend static lib have circular symbol
-    # references (backend uses Color/Rectangle from CNA, CNA uses backend
-    # interfaces); wrap them in a linker group so GNU ld resolves both.
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+
+    if(EMSCRIPTEN)
+        # ---- Emscripten / WebAssembly ----------------------------------------
+        # Produce a self-contained HTML page. The scene is fully procedural so
+        # no asset preloading is required.
+        set_target_properties(cna_house3d_demo PROPERTIES SUFFIX ".html")
+        # wasm-ld resolves circular static-lib references without linker groups.
         target_link_libraries(cna_house3d_demo PRIVATE
-            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-            SHARP_RUNTIME)
+            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+        target_link_options(cna_house3d_demo PRIVATE
+            -sALLOW_MEMORY_GROWTH=1
+            -sSTACK_SIZE=1048576
+            -sINITIAL_MEMORY=67108864       # 64 MB — enough for a procedural scene
+            -sFORCE_FILESYSTEM=1
+            "-sMIN_WEBGL_VERSION=2"         # WebGL 2 = OpenGL ES 3.0
+            "-sMAX_WEBGL_VERSION=2"
+        )
     else()
-        target_link_libraries(cna_house3d_demo PRIVATE CNA SHARP_RUNTIME)
-    endif()
-    if(TARGET SDL3::SDL3main)
-        target_link_libraries(cna_house3d_demo PRIVATE SDL3::SDL3main)
-    endif()
-    if(WIN32)
-        set_target_properties(cna_house3d_demo PROPERTIES WIN32_EXECUTABLE TRUE)
-        cna_copy_sdl_runtime(cna_house3d_demo)
+        # ---- Native desktop --------------------------------------------------
+        # The CNA library and the EasyGL backend static lib have circular symbol
+        # references (backend uses Color/Rectangle from CNA, CNA uses backend
+        # interfaces); wrap them in a linker group so GNU ld resolves both.
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_house3d_demo PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_house3d_demo PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_house3d_demo PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_house3d_demo PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_house3d_demo)
+        endif()
     endif()
 endif()
 
