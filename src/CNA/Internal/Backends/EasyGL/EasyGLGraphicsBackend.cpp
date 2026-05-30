@@ -3,6 +3,10 @@
 
 #include "CNA/Platform.hpp"
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 // Verbose 3D rendering trace. Define `CNA_DEBUG_RENDERING` (e.g. via
 // -DCNA_DEBUG_RENDERING) to enable. By default these logs are silent so the
 // 3D pipeline does not spam the console every frame.
@@ -18,6 +22,30 @@
 #include <cmath>
 #include <SDL3/SDL.h>
 #include "Microsoft/Xna/Framework/Color.hpp"
+
+#if defined(__EMSCRIPTEN__)
+EM_JS(void, CNA_DebugLoseWebGLContext, (), {
+    const canvas = Module['canvas'] || document.querySelector('canvas');
+    if (!canvas) { console.error('[CNA] loseContext: canvas not found'); return; }
+    const gl = Module['ctx'] || canvas.getContext('webgl2') || canvas.getContext('webgl');
+    if (!gl) { console.error('[CNA] loseContext: WebGL context not found'); return; }
+    const ext = gl.getExtension('WEBGL_lose_context');
+    if (!ext) { console.error('[CNA] WEBGL_lose_context extension not available'); return; }
+    console.warn('[CNA] Simulating WebGL context loss');
+    ext.loseContext();
+});
+
+EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
+    const canvas = Module['canvas'] || document.querySelector('canvas');
+    if (!canvas) { console.error('[CNA] restoreContext: canvas not found'); return; }
+    const gl = Module['ctx'] || canvas.getContext('webgl2') || canvas.getContext('webgl');
+    if (!gl) { console.error('[CNA] restoreContext: WebGL context not found'); return; }
+    const ext = gl.getExtension('WEBGL_lose_context');
+    if (!ext) { console.error('[CNA] WEBGL_lose_context extension not available'); return; }
+    console.warn('[CNA] Simulating WebGL context restore');
+    ext.restoreContext();
+});
+#endif
 
 namespace CNA::Internal::Backends::EasyGL
 {
@@ -327,6 +355,38 @@ void main()
         if (gl_context) SDL_GL_DestroyContext(gl_context);
         // window is NOT owned by the backend.
         // No SDL_Quit or subsystem shutdown here - managed centrally.
+    }
+
+    void EasyGLGraphicsBackend::DebugSimulateContextLoss()
+    {
+#if defined(__EMSCRIPTEN__)
+        CNA_DebugLoseWebGLContext();
+#else
+        std::cerr << "[CNA] Simulating desktop GL context loss + immediate recreate" << std::endl;
+        if (gl_context)
+        {
+            SDL_GL_MakeCurrent(window, nullptr);
+            SDL_GL_DestroyContext(gl_context);
+            gl_context = nullptr;
+        }
+        gl_context = SDL_GL_CreateContext(window);
+        if (!gl_context)
+            throw std::runtime_error(std::string("SDL_GL_CreateContext failed during debug context loss: ") + SDL_GetError());
+        SDL_GL_MakeCurrent(window, gl_context);
+        device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
+        program3d_ready_ = false;
+        std::cerr << "[CNA] Desktop GL context recreated" << std::endl;
+#endif
+    }
+
+    void EasyGLGraphicsBackend::DebugRestoreContext()
+    {
+#if defined(__EMSCRIPTEN__)
+        CNA_DebugRestoreWebGLContext();
+#else
+        // On desktop the context is already recreated inside DebugSimulateContextLoss().
+        DebugSimulateContextLoss();
+#endif
     }
 
     void EasyGLGraphicsBackend::Clear(float r, float g, float b, float a)

@@ -127,6 +127,9 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
+        void DebugSimulateContextLoss() override;
+        void DebugRestoreContext() override;
+
         // ---- 3D: IMPLEMENTED ----
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void SetDepthTestEnabled(bool enabled) override;

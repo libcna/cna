@@ -117,6 +117,13 @@ namespace Microsoft::Xna::Framework
                 s.game->Exiting.Raise(s.game, exiting_event_args);
                 return;
             }
+            else if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat)
+            {
+                if (e.key.key == SDLK_F9)
+                    s.game->GraphicsDevice_.GetBackend().DebugSimulateContextLoss();
+                else if (e.key.key == SDLK_F10)
+                    s.game->GraphicsDevice_.GetBackend().DebugRestoreContext();
+            }
         }
 
         // --- accumulate real elapsed time ---
@@ -219,6 +226,13 @@ namespace Microsoft::Xna::Framework
                 if (e.type == SDL_EVENT_QUIT)
                 {
                     isRunning = false;
+                }
+                else if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat)
+                {
+                    if (e.key.key == SDLK_F9)
+                        GraphicsDevice_.GetBackend().DebugSimulateContextLoss();
+                    else if (e.key.key == SDLK_F10)
+                        GraphicsDevice_.GetBackend().DebugRestoreContext();
                 }
                 else if (e.type == SDL_EVENT_WILL_ENTER_BACKGROUND)
                 {

@@ -184,6 +184,19 @@ namespace CNA::Internal::Backends
                                                   const Matrix& projection,
                                                   PrimitiveType primitive,
                                                   int primitiveCount) = 0;
+
+        // ---- Debug / testing ----
+
+        /// Simulates an OpenGL context loss.
+        /// On Web (Emscripten): triggers WEBGL_lose_context.loseContext().
+        /// On desktop: destroys the SDL GL context and immediately recreates it,
+        /// forcing all GPU resources to be re-initialised.
+        virtual void DebugSimulateContextLoss() {}
+
+        /// Simulates an OpenGL context restore after a previous DebugSimulateContextLoss().
+        /// On Web: triggers WEBGL_lose_context.restoreContext().
+        /// On desktop: equivalent to DebugSimulateContextLoss() (destroy + recreate).
+        virtual void DebugRestoreContext() {}
     };
 
     /**
