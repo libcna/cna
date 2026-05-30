@@ -112,6 +112,9 @@ namespace CNA::Internal::Backends::EasyGL
 
     void EasyGLSpriteBatchBackend::recreate_gl_resource()
     {
+        pending_vertices_.clear();
+        pending_indices_.clear();
+        current_texture_ = nullptr;
         InitializeResources();
     }
 
@@ -220,7 +223,52 @@ void main()
 
     void EasyGLSpriteBatchBackend::End()
     {
+        FlushBatch();
         begun = false;
+    }
+
+    void EasyGLSpriteBatchBackend::FlushBatch()
+    {
+        if (pending_vertices_.empty()) return;
+
+        program_.use();
+
+        int vx, vy, vw, vh;
+        device_.get_viewport(vx, vy, vw, vh);
+        float ortho[16] = {
+            2.0f / vw, 0, 0, 0,
+            0, -2.0f / vh, 0, 0,
+            0, 0, -1, 0,
+            -1, 1, 0, 1
+        };
+        program_.set_uniform_matrix4(program_.uniform_location("projection"), ortho);
+
+        current_texture_->texture.bind(::easygl::TextureTarget::Texture2D);
+
+        vbo_.bind(::easygl::BufferTarget::Array);
+        vbo_.set_data(::easygl::BufferTarget::Array,
+                      pending_vertices_.data(),
+                      pending_vertices_.size() * sizeof(Vertex));
+
+        vao_.bind();
+
+        ibo_.bind(::easygl::BufferTarget::ElementArray);
+        ibo_.set_data(::easygl::BufferTarget::ElementArray,
+                      pending_indices_.data(),
+                      pending_indices_.size() * sizeof(uint16_t));
+
+        device_.draw_elements(
+            ::easygl::PrimitiveType::Triangles,
+            static_cast<int>(pending_indices_.size()),
+            ::easygl::DataType::UnsignedShort,
+            nullptr
+        );
+
+        vao_.unbind();
+
+        pending_vertices_.clear();
+        pending_indices_.clear();
+        current_texture_ = nullptr;
     }
 
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
@@ -238,13 +286,6 @@ void main()
         Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
     }
 
-    struct Vertex
-    {
-        float x, y;
-        float u, v;
-        float r, g, b, a;
-    };
-
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture,
                                         const Rectangle& destinationRectangle,
                                         const Rectangle& sourceRectangle,
@@ -257,6 +298,11 @@ void main()
         if (!begun) throw std::runtime_error("Draw called before Begin()");
 
         auto& glTex = static_cast<const EasyGLTextureBackend&>(texture);
+
+        // Flush pending batch if texture changes
+        if (current_texture_ != nullptr && current_texture_ != &glTex)
+            FlushBatch();
+        current_texture_ = &glTex;
 
         float u1 = (float)sourceRectangle.X / (float)glTex.width;
         float v1 = (float)sourceRectangle.Y / (float)glTex.height;
@@ -287,27 +333,21 @@ void main()
         float ox = origin.X;
         float oy = origin.Y;
 
-        // Scaling factor relative to source rectangle
         float scaleX = dw / sw;
         float scaleY = dh / sh;
 
-        // Local coordinates after scaling, before rotation and translation
-        float p0x = (0.0f - ox) * scaleX;
-        float p0y = (0.0f - oy) * scaleY;
-        float p1x = (sw - ox) * scaleX;
-        float p1y = (0.0f - oy) * scaleY;
-        float p2x = (sw - ox) * scaleX;
-        float p2y = (sh - oy) * scaleY;
-        float p3x = (0.0f - ox) * scaleX;
-        float p3y = (sh - oy) * scaleY;
+        float p0x = (0.0f - ox) * scaleX,  p0y = (0.0f - oy) * scaleY;
+        float p1x = (sw   - ox) * scaleX,  p1y = (0.0f - oy) * scaleY;
+        float p2x = (sw   - ox) * scaleX,  p2y = (sh   - oy) * scaleY;
+        float p3x = (0.0f - ox) * scaleX,  p3y = (sh   - oy) * scaleY;
 
         float cosR = std::cos(rotation);
         float sinR = std::sin(rotation);
 
-        auto rotateAndTranslate = [&](float x, float y, float& rx, float& ry)
+        auto rotateAndTranslate = [&](float px, float py, float& rx, float& ry)
         {
-            rx = dx + x * cosR - y * sinR;
-            ry = dy + x * sinR + y * cosR;
+            rx = dx + px * cosR - py * sinR;
+            ry = dy + px * sinR + py * cosR;
         };
 
         float v0x, v0y, v1x, v1y, v2x, v2y, v3x, v3y;
@@ -316,56 +356,19 @@ void main()
         rotateAndTranslate(p2x, p2y, v2x, v2y);
         rotateAndTranslate(p3x, p3y, v3x, v3y);
 
-        Vertex vertices[4] = {
-            {v0x, v0y, u1, v1, r, g, b, a},
-            {v1x, v1y, u2, v1, r, g, b, a},
-            {v2x, v2y, u2, v2, r, g, b, a},
-            {v3x, v3y, u1, v2, r, g, b, a}
-        };
+        const auto base = static_cast<uint16_t>(pending_vertices_.size());
 
-        uint16_t indices[6] = {0, 1, 2, 2, 3, 0};
+        pending_vertices_.push_back({v0x, v0y, u1, v1, r, g, b, a});
+        pending_vertices_.push_back({v1x, v1y, u2, v1, r, g, b, a});
+        pending_vertices_.push_back({v2x, v2y, u2, v2, r, g, b, a});
+        pending_vertices_.push_back({v3x, v3y, u1, v2, r, g, b, a});
 
-        program_.use();
-
-        int vx, vy, vw, vh;
-        device_.get_viewport(vx, vy, vw, vh);
-
-        float ortho[16] = {
-            2.0f / vw, 0, 0, 0,
-            0, -2.0f / vh, 0, 0,
-            0, 0, -1, 0,
-            -1, 1, 0, 1
-        };
-
-        int projLoc = program_.uniform_location("projection");
-        program_.set_uniform_matrix4(projLoc, ortho);
-
-        glTex.texture.bind(::easygl::TextureTarget::Texture2D);
-
-        vbo_.bind(::easygl::BufferTarget::Array);
-        vbo_.set_data(
-            ::easygl::BufferTarget::Array,
-            vertices,
-            sizeof(vertices)
-        );
-
-        vao_.bind();
-
-        ibo_.bind(::easygl::BufferTarget::ElementArray);
-        ibo_.set_data(
-            ::easygl::BufferTarget::ElementArray,
-            indices,
-            sizeof(indices)
-        );
-
-        device_.draw_elements(
-            ::easygl::PrimitiveType::Triangles,
-            6,
-            ::easygl::DataType::UnsignedShort,
-            nullptr
-        );
-
-        vao_.unbind();
+        pending_indices_.push_back(base + 0);
+        pending_indices_.push_back(base + 1);
+        pending_indices_.push_back(base + 2);
+        pending_indices_.push_back(base + 2);
+        pending_indices_.push_back(base + 3);
+        pending_indices_.push_back(base + 0);
     }
 
     // --- EasyGLGraphicsBackend ---

@@ -32,27 +32,11 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
-    // TODO: EasyGLSpriteBatchBackend does not implement batching. Every Draw()
-    // call uploads a fresh VBO/IBO and issues its own draw_elements(), resulting
-    // in ~9 GL calls per sprite. A proper implementation would accumulate all
-    // quads from Begin() to End() into a single CPU-side vertex buffer and flush
-    // it with one draw_elements() call in End(). This can reduce GL call count
-    // by 50-100x and is important for performance on mobile/web targets.
-    //
-    // Implementation estimate: medium difficulty, ~2-4 hours, ~100 lines changed
-    // in this file only. What needs to change:
-    //   1. Add CPU-side buffers: std::vector<Vertex> pending_vertices_ and
-    //      std::vector<uint16_t> pending_indices_ as members.
-    //   2. Draw() appends the quad to those vectors instead of uploading immediately.
-    //      The vertex/index math is already correct, just move it to a push_back.
-    //   3. End() flushes: one set_data() + one draw_elements(), then clears vectors.
-    //   4. Texture changes require a flush: track current_texture_ and flush the
-    //      pending batch whenever the texture changes between Draw() calls.
-    //      Without a texture atlas this is the only real complication.
-    //      A texture atlas would eliminate mid-batch flushes but is significantly
-    //      more complex to implement.
     class EasyGLSpriteBatchBackend : public ISpriteBatchBackend, public ::easygl::RecoverableResource
     {
+    public:
+        struct Vertex { float x, y, u, v, r, g, b, a; };
+
     private:
         ::easygl::Device& device_;
         ::easygl::Program program_;
@@ -61,6 +45,12 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Buffer ibo_;
         bool begun = false;
         ::easygl::ResourceRegistry* registry_ = nullptr;
+
+        // Batching state: quads are accumulated between Begin()/End() and
+        // flushed in one draw call. A flush also occurs when the texture changes.
+        std::vector<Vertex>   pending_vertices_;
+        std::vector<uint16_t> pending_indices_;
+        const EasyGLTextureBackend* current_texture_ = nullptr;
 
     public:
         explicit EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry);
@@ -87,6 +77,7 @@ namespace CNA::Internal::Backends::EasyGL
 
     private:
         void InitializeResources();
+        void FlushBatch();
     };
 
     /**
