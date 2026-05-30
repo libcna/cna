@@ -32,6 +32,12 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
+    // TODO: EasyGLSpriteBatchBackend does not implement batching. Every Draw()
+    // call uploads a fresh VBO/IBO and issues its own draw_elements(), resulting
+    // in ~9 GL calls per sprite. A proper implementation would accumulate all
+    // quads from Begin() to End() into a single CPU-side vertex buffer and flush
+    // it with one draw_elements() call in End(). This can reduce GL call count
+    // by 50-100x and is important for performance on mobile/web targets.
     class EasyGLSpriteBatchBackend : public ISpriteBatchBackend, public ::easygl::RecoverableResource
     {
     private:
