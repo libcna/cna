@@ -5,7 +5,10 @@
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
+#include <metagl/Emscripten.hpp>
 #endif
+#include <metagl/Context.hpp>
+#include <metagl/ContextEvents.hpp>
 
 // Verbose 3D rendering trace. Define `CNA_DEBUG_RENDERING` (e.g. via
 // -DCNA_DEBUG_RENDERING) to enable. By default these logs are silent so the
@@ -55,19 +58,59 @@ namespace CNA::Internal::Backends::EasyGL
 
     // --- EasyGLTextureBackend ---
 
-    EasyGLTextureBackend::EasyGLTextureBackend(const ImageData& data)
+    EasyGLTextureBackend::EasyGLTextureBackend(const ImageData& data, ::easygl::ResourceRegistry* registry)
+        : image_data_(data)
+        , registry_(registry)
     {
         width = data.width;
         height = data.height;
-
         texture.create();
         texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, data.pixels.data());
+        if (registry_) registry_->add(this);
+    }
+
+    EasyGLTextureBackend::~EasyGLTextureBackend()
+    {
+        if (registry_) registry_->remove(this);
+    }
+
+    void EasyGLTextureBackend::release_gl_handle_only()
+    {
+        texture.reset_handle_no_gl();
+    }
+
+    void EasyGLTextureBackend::recreate_gl_resource()
+    {
+        texture.create();
+        texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                             image_data_.width, image_data_.height,
+                             image_data_.pixels.data());
     }
 
     // --- EasyGLSpriteBatchBackend ---
 
-    EasyGLSpriteBatchBackend::EasyGLSpriteBatchBackend(::easygl::Device& device)
+    EasyGLSpriteBatchBackend::EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry)
         : device_(device)
+        , registry_(registry)
+    {
+        InitializeResources();
+        if (registry_) registry_->add(this);
+    }
+
+    EasyGLSpriteBatchBackend::~EasyGLSpriteBatchBackend()
+    {
+        if (registry_) registry_->remove(this);
+    }
+
+    void EasyGLSpriteBatchBackend::release_gl_handle_only()
+    {
+        program_.reset_handle_no_gl();
+        vao_.reset_handle_no_gl();
+        vbo_.reset_handle_no_gl();
+        ibo_.reset_handle_no_gl();
+    }
+
+    void EasyGLSpriteBatchBackend::recreate_gl_resource()
     {
         InitializeResources();
     }
@@ -348,6 +391,12 @@ void main()
         device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
         std::cout << "EasyGLGraphicsBackend initialized with OpenGL "
             << device.capabilities().context_info().version_string << std::endl;
+
+        registry_.register_with_meta_gl();
+
+#if defined(__EMSCRIPTEN__)
+        metagl::InstallEmscriptenContextLossCallbacks();
+#endif
     }
 
     EasyGLGraphicsBackend::~EasyGLGraphicsBackend()
@@ -361,8 +410,17 @@ void main()
     {
 #if defined(__EMSCRIPTEN__)
         CNA_DebugLoseWebGLContext();
+        // The webglcontextlost canvas event fires asynchronously and triggers
+        // metagl::NotifyContextLost() via InstallEmscriptenContextLossCallbacks().
 #else
         std::cerr << "[CNA] Simulating desktop GL context loss + immediate recreate" << std::endl;
+
+        // 1. Notify listeners that context is lost. ResourceRegistry calls
+        //    release_gl_handle_only() on every tracked resource (zeros handles,
+        //    no GL calls made). Context is still valid here for proper cleanup.
+        metagl::NotifyContextLost();
+
+        // 2. Destroy and recreate the SDL GL context.
         if (gl_context)
         {
             SDL_GL_MakeCurrent(window, nullptr);
@@ -373,9 +431,16 @@ void main()
         if (!gl_context)
             throw std::runtime_error(std::string("SDL_GL_CreateContext failed during debug context loss: ") + SDL_GetError());
         SDL_GL_MakeCurrent(window, gl_context);
+
+        // 3. Reload GL function pointers and increment context generation.
         device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
         program3d_ready_ = false;
-        std::cerr << "[CNA] Desktop GL context recreated" << std::endl;
+
+        // 4. Notify listeners that context is restored. ResourceRegistry calls
+        //    recreate_gl_resource() on every tracked resource (shaders, textures, buffers, VAOs).
+        metagl::NotifyContextRestored();
+
+        std::cerr << "[CNA] Desktop GL context recreated and all resources restored" << std::endl;
 #endif
     }
 
@@ -383,14 +448,17 @@ void main()
     {
 #if defined(__EMSCRIPTEN__)
         CNA_DebugRestoreWebGLContext();
+        // The webglcontextrestored canvas event fires asynchronously and triggers
+        // metagl::NotifyContextRestored() via InstallEmscriptenContextLossCallbacks().
 #else
-        // On desktop the context is already recreated inside DebugSimulateContextLoss().
+        // On desktop, loss+restore is a single atomic operation.
         DebugSimulateContextLoss();
 #endif
     }
 
     void EasyGLGraphicsBackend::Clear(float r, float g, float b, float a)
     {
+        if (metagl::IsContextLost()) return;
         int width, height;
         SDL_GetWindowSize(window, &width, &height);
         device.set_viewport(0, 0, width, height);
@@ -400,6 +468,7 @@ void main()
 
     void EasyGLGraphicsBackend::Present()
     {
+        if (metagl::IsContextLost()) return;
         SDL_GL_SwapWindow(window);
     }
 
@@ -410,20 +479,19 @@ void main()
 
     std::unique_ptr<ITextureBackend> EasyGLGraphicsBackend::CreateTexture(const ImageData& data)
     {
-        return std::make_unique<EasyGLTextureBackend>(data);
+        return std::make_unique<EasyGLTextureBackend>(data, &registry_);
     }
 
     std::unique_ptr<ISpriteBatchBackend> EasyGLGraphicsBackend::CreateSpriteBatch()
     {
-        return std::make_unique<EasyGLSpriteBatchBackend>(device);
+        return std::make_unique<EasyGLSpriteBatchBackend>(device, &registry_);
     }
 
     // -------------------------------------------------------------------------
     // 3D pipeline
     // -------------------------------------------------------------------------
 
-    EasyGLVertexBufferBackend::EasyGLVertexBufferBackend(int vertex_capacity)
-        : capacity(vertex_capacity)
+    void EasyGLVertexBufferBackend::InitializeLayout()
     {
         vbo.create();
         vao.create();
@@ -436,7 +504,31 @@ void main()
         vao.enable_attribute(1);
         vao.set_attribute_pointer(1, 4, ::easygl::DataType::UnsignedByte, true, 16, (void*)12);
         vao.unbind();
+    }
+
+    EasyGLVertexBufferBackend::EasyGLVertexBufferBackend(int vertex_capacity, ::easygl::ResourceRegistry* registry)
+        : capacity(vertex_capacity)
+        , registry_(registry)
+    {
+        InitializeLayout();
+        if (registry_) registry_->add(this);
         CNA_RENDER_LOG("VertexBuffer created: capacity=" << capacity << " stride=16");
+    }
+
+    EasyGLVertexBufferBackend::~EasyGLVertexBufferBackend()
+    {
+        if (registry_) registry_->remove(this);
+    }
+
+    void EasyGLVertexBufferBackend::release_gl_handle_only()
+    {
+        vbo.reset_handle_no_gl();
+        vao.reset_handle_no_gl();
+    }
+
+    void EasyGLVertexBufferBackend::recreate_gl_resource()
+    {
+        InitializeLayout();
     }
 
     void EasyGLVertexBufferBackend::SetData(const void* data, int count, std::size_t stride_in_bytes)
@@ -448,11 +540,28 @@ void main()
             << " bytes=" << (static_cast<std::size_t>(count) * stride_in_bytes));
     }
 
-    EasyGLIndexBufferBackend::EasyGLIndexBufferBackend(int index_capacity)
+    EasyGLIndexBufferBackend::EasyGLIndexBufferBackend(int index_capacity, ::easygl::ResourceRegistry* registry)
         : capacity(index_capacity)
+        , registry_(registry)
     {
         ibo.create();
+        if (registry_) registry_->add(this);
         CNA_RENDER_LOG("IndexBuffer created: capacity=" << capacity);
+    }
+
+    EasyGLIndexBufferBackend::~EasyGLIndexBufferBackend()
+    {
+        if (registry_) registry_->remove(this);
+    }
+
+    void EasyGLIndexBufferBackend::release_gl_handle_only()
+    {
+        ibo.reset_handle_no_gl();
+    }
+
+    void EasyGLIndexBufferBackend::recreate_gl_resource()
+    {
+        ibo.create();
     }
 
     void EasyGLIndexBufferBackend::SetData16(const void* data, int count)
@@ -520,6 +629,7 @@ void main()
 
     void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
+        if (metagl::IsContextLost()) return;
         int width, height;
         SDL_GetWindowSize(window, &width, &height);
         device.set_viewport(0, 0, width, height);
@@ -554,12 +664,12 @@ void main()
 
     std::unique_ptr<IVertexBufferBackend> EasyGLGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
-        return std::make_unique<EasyGLVertexBufferBackend>(vertex_capacity);
+        return std::make_unique<EasyGLVertexBufferBackend>(vertex_capacity, &registry_);
     }
 
     std::unique_ptr<IIndexBufferBackend> EasyGLGraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity);
+        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, &registry_);
     }
 
     namespace

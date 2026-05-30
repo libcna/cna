@@ -1,26 +1,36 @@
 #pragma once
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/ImageData.hpp"
 #include <SDL3/SDL.h>
 #include <easygl/easygl.hpp>
 
 namespace CNA::Internal::Backends::EasyGL
 {
-    class EasyGLTextureBackend : public ITextureBackend
+    class EasyGLGraphicsBackend;
+
+    class EasyGLTextureBackend : public ITextureBackend, public ::easygl::RecoverableResource
     {
     public:
         ::easygl::Texture texture;
         int width = 0;
         int height = 0;
 
-        EasyGLTextureBackend(const ImageData& data);
-        ~EasyGLTextureBackend() override = default;
+        EasyGLTextureBackend(const ImageData& data, ::easygl::ResourceRegistry* registry);
+        ~EasyGLTextureBackend() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
+        void release_gl_handle_only() override;
+        void recreate_gl_resource() override;
+
+    private:
+        ImageData image_data_;
+        ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
-    class EasyGLSpriteBatchBackend : public ISpriteBatchBackend
+    class EasyGLSpriteBatchBackend : public ISpriteBatchBackend, public ::easygl::RecoverableResource
     {
     private:
         ::easygl::Device& device_;
@@ -29,10 +39,11 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Buffer vbo_;
         ::easygl::Buffer ibo_;
         bool begun = false;
+        ::easygl::ResourceRegistry* registry_ = nullptr;
 
     public:
-        explicit EasyGLSpriteBatchBackend(::easygl::Device& device);
-        ~EasyGLSpriteBatchBackend() override = default;
+        explicit EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry);
+        ~EasyGLSpriteBatchBackend() override;
 
         void Begin() override;
         void End() override;
@@ -50,6 +61,9 @@ namespace CNA::Internal::Backends::EasyGL
                   SpriteEffects effects,
                   float layerDepth) override;
 
+        void release_gl_handle_only() override;
+        void recreate_gl_resource() override;
+
     private:
         void InitializeResources();
     };
@@ -62,7 +76,7 @@ namespace CNA::Internal::Backends::EasyGL
      *
      * @note Status: IMPLEMENTED for `VertexPositionColor`.
      */
-    class EasyGLVertexBufferBackend : public IVertexBufferBackend
+    class EasyGLVertexBufferBackend : public IVertexBufferBackend, public ::easygl::RecoverableResource
     {
     public:
         ::easygl::Buffer vbo;
@@ -70,10 +84,17 @@ namespace CNA::Internal::Backends::EasyGL
         int vertex_count = 0;
         int capacity = 0;
 
-        explicit EasyGLVertexBufferBackend(int vertex_capacity);
-        ~EasyGLVertexBufferBackend() override = default;
+        explicit EasyGLVertexBufferBackend(int vertex_capacity, ::easygl::ResourceRegistry* registry);
+        ~EasyGLVertexBufferBackend() override;
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         int GetVertexCount() const override { return vertex_count; }
+
+        void release_gl_handle_only() override;
+        void recreate_gl_resource() override;
+
+    private:
+        void InitializeLayout();
+        ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
     /**
@@ -81,17 +102,23 @@ namespace CNA::Internal::Backends::EasyGL
      *
      * @note Status: IMPLEMENTED.
      */
-    class EasyGLIndexBufferBackend : public IIndexBufferBackend
+    class EasyGLIndexBufferBackend : public IIndexBufferBackend, public ::easygl::RecoverableResource
     {
     public:
         ::easygl::Buffer ibo;
         int index_count = 0;
         int capacity = 0;
 
-        explicit EasyGLIndexBufferBackend(int index_capacity);
-        ~EasyGLIndexBufferBackend() override = default;
+        explicit EasyGLIndexBufferBackend(int index_capacity, ::easygl::ResourceRegistry* registry);
+        ~EasyGLIndexBufferBackend() override;
         void SetData16(const void* data, int index_count) override;
         int GetIndexCount() const override { return index_count; }
+
+        void release_gl_handle_only() override;
+        void recreate_gl_resource() override;
+
+    private:
+        ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
     class EasyGLGraphicsBackend : public IGraphicsBackend
@@ -100,6 +127,7 @@ namespace CNA::Internal::Backends::EasyGL
         SDL_Window* window = nullptr;
         SDL_GLContext gl_context = nullptr;
         ::easygl::Device device;
+        ::easygl::ResourceRegistry registry_;
 
         // 3D pipeline state
         ::easygl::Program program3d_;
