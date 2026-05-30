@@ -479,6 +479,19 @@ void main()
         }
     }
 
+    void EasyGLGraphicsBackend::SetBlendEnabled(bool enabled)
+    {
+        device.set_blend_enabled(enabled);
+        if (enabled)
+            device.set_blend_func(::easygl::BlendFactor::SrcAlpha,
+                                  ::easygl::BlendFactor::OneMinusSrcAlpha);
+    }
+
+    void EasyGLGraphicsBackend::SetDepthWriteEnabled(bool enabled)
+    {
+        device.set_depth_mask(enabled);
+    }
+
     std::unique_ptr<IVertexBufferBackend> EasyGLGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
         return std::make_unique<EasyGLVertexBufferBackend>(vertex_capacity);

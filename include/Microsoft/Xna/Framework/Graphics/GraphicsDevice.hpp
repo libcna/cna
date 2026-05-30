@@ -16,6 +16,7 @@
 #include "System/EventHandler.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
+#include "CNA/CNAHelper.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -117,7 +118,13 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose() override;
 
         /// Enables or disables depth testing in the backend.
-        void SetDepthTestEnabled(bool enabled);
+        NOXNA void SetDepthTestEnabled(bool enabled);
+        /// Enables or disables alpha blending (SRC_ALPHA / ONE_MINUS_SRC_ALPHA).
+        /// @note Not in XNA 4.0 — use GraphicsDevice.BlendState in XNA.
+        NOXNA void SetBlendEnabled(bool enabled);
+        /// Enables or disables writes to the depth buffer.
+        /// @note Not in XNA 4.0 — use GraphicsDevice.DepthStencilState in XNA.
+        NOXNA void SetDepthWriteEnabled(bool enabled);
 
         /// Binds a vertex buffer.
         void SetVertexBuffer(const VertexBuffer* vertexBuffer);

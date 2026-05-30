@@ -564,7 +564,9 @@ namespace CNA::Internal::Backends::Bgfx
     }
 
     void BgfxGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D(); }
-    void BgfxGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D(); }
+    void BgfxGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D(); }
+    void BgfxGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D(); }
+    void BgfxGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D(); }
 
     std::unique_ptr<IVertexBufferBackend> BgfxGraphicsBackend::CreateVertexBuffer(int)
     {

@@ -406,7 +406,9 @@ namespace CNA::Internal::Backends::SdlRenderer
     }
 
     void SdlGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D(); }
-    void SdlGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D(); }
+    void SdlGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D(); }
+    void SdlGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D(); }
+    void SdlGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D(); }
 
     std::unique_ptr<IVertexBufferBackend> SdlGraphicsBackend::CreateVertexBuffer(int)
     {

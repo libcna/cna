@@ -289,10 +289,17 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetDepthTestEnabled(bool enabled)
     {
-        if (backend_ != nullptr)
-        {
-            backend_->SetDepthTestEnabled(enabled);
-        }
+        if (backend_ != nullptr) backend_->SetDepthTestEnabled(enabled);
+    }
+
+    void GraphicsDevice::SetBlendEnabled(bool enabled)
+    {
+        if (backend_ != nullptr) backend_->SetBlendEnabled(enabled);
+    }
+
+    void GraphicsDevice::SetDepthWriteEnabled(bool enabled)
+    {
+        if (backend_ != nullptr) backend_->SetDepthWriteEnabled(enabled);
     }
 
     void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer)

@@ -140,7 +140,9 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     void VulkanGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3DVulkan(); }
-    void VulkanGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3DVulkan(); }
+    void VulkanGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3DVulkan(); }
+    void VulkanGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3DVulkan(); }
+    void VulkanGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3DVulkan(); }
 
     std::unique_ptr<IVertexBufferBackend> VulkanGraphicsBackend::CreateVertexBuffer(int)
     {

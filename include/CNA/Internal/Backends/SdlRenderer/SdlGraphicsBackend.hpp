@@ -74,6 +74,8 @@ namespace CNA::Internal::Backends::SdlRenderer
         // @note Status: STUB. Every entry point throws std::runtime_error.
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void SetDepthTestEnabled(bool enabled) override;
+        void SetBlendEnabled(bool enabled) override;
+        void SetDepthWriteEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,

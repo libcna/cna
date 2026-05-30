@@ -139,6 +139,8 @@ namespace CNA::Internal::Backends
          *       backends throw on first 3D usage.
          */
         virtual void SetDepthTestEnabled(bool enabled) = 0;
+        virtual void SetBlendEnabled(bool enabled) = 0;
+        virtual void SetDepthWriteEnabled(bool enabled) = 0;
 
         /**
          * @brief Creates a backend-specific vertex buffer for

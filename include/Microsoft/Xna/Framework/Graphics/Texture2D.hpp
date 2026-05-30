@@ -1,8 +1,12 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 struct SDL_Texture;
@@ -22,35 +26,26 @@ namespace Microsoft::Xna::Framework::Graphics
     using namespace CNA::Internal::Backends;
 
     /**
-     * @brief Represents a 2D texture loaded from an image file.
-     *
-     * The actual rendering backend is hidden behind an internal interface.
+     * @brief Represents a 2D texture. Mirrors XNA 4.0 Texture2D.
      */
     class Texture2D
     {
     private:
         std::shared_ptr<ITextureBackend> backend_;
-
-        int width = 0;
+        GraphicsDevice* device_ = nullptr; // non-owning; set by the (device,w,h) constructor
+        int width  = 0;
         int height = 0;
 
     public:
-        /**
-         * @brief Creates an empty texture.
-         */
         Texture2D();
 
-        /**
-         * @brief Loads a texture from a file path using the active graphics device.
-         *
-         * @param assetName Full path to the image file.
-         */
+        /// XNA 4.0: Texture2D(GraphicsDevice, string assetName) — loads from file.
         explicit Texture2D(const std::string& assetName);
         Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice);
 
-        /**
-         * @brief Destroys the texture wrapper.
-         */
+        /// XNA 4.0: Texture2D(GraphicsDevice, int width, int height) — creates empty texture.
+        Texture2D(GraphicsDevice& graphicsDevice, int width, int height);
+
         ~Texture2D();
 
         Texture2D(const Texture2D&) = default;
@@ -58,19 +53,20 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture2D(Texture2D&&) noexcept = default;
         Texture2D& operator=(Texture2D&&) noexcept = default;
 
-        /**
-         * @brief Returns the bounds of the texture.
-         *
-         * @return Texture bounds in pixels.
-         */
+        /// XNA 4.0: Texture2D.Bounds
         [[nodiscard]] Rectangle getBoundsProperty() const;
+
+        /// XNA 4.0: Texture2D.SetData<Color>(Color[] data)
+        void SetData(const Color* data, int elementCount);
 
         ITextureBackend& GetBackend() const { return *backend_; }
 
+        /// @note Not in XNA 4.0 — prefer the Texture2D(device,w,h)+SetData pattern.
+        NOXNA static Texture2D CreateFromPixels(GraphicsDevice& device,
+                                                int w, int h,
+                                                const std::vector<std::uint8_t>& rgba);
+
     private:
-        /**
-         * @brief Returns the internal SDL texture for engine-internal use.
-         */
         [[nodiscard]] SDL_Texture* GetNativeTextureInternal() const;
 
         friend class SpriteBatch;
