@@ -207,7 +207,7 @@ class House3DDemo final : public Game {
 public:
     House3DDemo()
     {
-        Game::setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(static_cast<long>(500000L * 20 / 60)));
+        Game::setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(static_cast<long>(500000L * 20 / 1)));
     };
 
     const std::string& GetTypeName() const override {
@@ -683,13 +683,7 @@ private:
             indices[f * 6 + 5] = static_cast<std::uint16_t>(b + 3);
         }
 
-        Mesh mesh;
-        mesh.vb = std::make_unique<VertexBuffer>(device, 24);
-        mesh.vb->SetData(verts, 24);
-        mesh.ib = std::make_unique<IndexBuffer>(device, 36);
-        mesh.ib->SetData(indices, 36);
-        mesh.primitiveCount = 12;
-        meshes_.push_back(std::move(mesh));
+        solid_builder_.append(verts, 24, indices, 36, 12);
 
         AddBoxEdges(device, x0, y0, z0, x1, y1, z1);
     }
@@ -719,13 +713,7 @@ private:
             0,4, 1,5, 2,6, 3,7    // verticals
         };
 
-        Mesh mesh;
-        mesh.vb = std::make_unique<VertexBuffer>(device, 8);
-        mesh.vb->SetData(verts, 8);
-        mesh.ib = std::make_unique<IndexBuffer>(device, 24);
-        mesh.ib->SetData(indices, 24);
-        mesh.primitiveCount = 12; // 12 line segments
-        edgeMeshes_.push_back(std::move(mesh));
+        edge_builder_.append(verts, 8, indices, 24, 12);
     }
 
     /** @brief Adds a flat colored ground quad on the Y = 0 plane. */
@@ -739,13 +727,7 @@ private:
         };
         std::uint16_t indices[6] = { 0, 2, 1, 0, 3, 2 };
 
-        Mesh mesh;
-        mesh.vb = std::make_unique<VertexBuffer>(device, 4);
-        mesh.vb->SetData(verts, 4);
-        mesh.ib = std::make_unique<IndexBuffer>(device, 6);
-        mesh.ib->SetData(indices, 6);
-        mesh.primitiveCount = 2;
-        meshes_.push_back(std::move(mesh));
+        solid_builder_.append(verts, 4, indices, 6, 2);
     }
 
     /** @brief Adds a fence: a row of thin posts between two endpoints. */
@@ -1185,6 +1167,53 @@ private:
         AddBush(device, Vector3( 4.0f, 0.0f, 7.0f), 0.7f);
         AddBush(device, Vector3(-5.5f, 0.0f, 5.0f), 0.5f);
         AddBush(device, Vector3( 5.5f, 0.0f, 5.5f), 0.6f);
+
+        // Merge all accumulated geometry into one VBO/IBO per category.
+        FinalizeBuilders(device);
+    }
+
+    // CPU-side geometry accumulator used during BuildScene().
+    // All AddBox/AddGround/... calls append here; FinalizeBuilders() then
+    // uploads exactly one VertexBuffer+IndexBuffer per category to the GPU.
+    struct MeshBuilder
+    {
+        std::vector<VertexPositionColor> verts;
+        std::vector<std::uint16_t>       indices;
+        int prim_count = 0;
+
+        void append(const VertexPositionColor* v, int vc,
+                    const std::uint16_t* idx,    int ic, int pc)
+        {
+            const auto base = static_cast<std::uint16_t>(verts.size());
+            for (int i = 0; i < vc; ++i) verts.push_back(v[i]);
+            for (int i = 0; i < ic; ++i) indices.push_back(idx[i] + base);
+            prim_count += pc;
+        }
+
+        [[nodiscard]] bool empty() const { return verts.empty(); }
+    };
+
+    MeshBuilder solid_builder_;
+    MeshBuilder edge_builder_;
+    MeshBuilder glass_builder_;
+
+    void FinalizeBuilders(GraphicsDevice& device)
+    {
+        auto upload = [&](MeshBuilder& b, std::vector<Mesh>& out)
+        {
+            if (b.empty()) return;
+            Mesh m;
+            m.vb = std::make_unique<VertexBuffer>(device, static_cast<int>(b.verts.size()));
+            m.vb->SetData(b.verts.data(), static_cast<int>(b.verts.size()));
+            m.ib = std::make_unique<IndexBuffer>(device, static_cast<int>(b.indices.size()));
+            m.ib->SetData(b.indices.data(), static_cast<int>(b.indices.size()));
+            m.primitiveCount = b.prim_count;
+            out.push_back(std::move(m));
+            b = {};  // free CPU memory
+        };
+        upload(solid_builder_, meshes_);
+        upload(edge_builder_,  edgeMeshes_);
+        upload(glass_builder_, glassMeshes_);
     }
 
     std::unique_ptr<BasicEffect> effect_;
