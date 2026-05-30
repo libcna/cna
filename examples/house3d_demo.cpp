@@ -1,5 +1,5 @@
 /**
- * @file cube3d_demo.cpp
+ * @file house3d_demo.cpp
  * @brief CNA 3D demo: walkable colored-box scene with first-person camera.
  *
  * Exercises the XNA-like 3D subset (Vector3 / Matrix / VertexPositionColor /
@@ -56,12 +56,12 @@ constexpr float kPiOver4  = kPi * 0.25f;
 constexpr float kDeg2Rad  = kPi / 180.0f;
 } // namespace
 
-class Cube3DDemo final : public Game {
+class House3DDemo final : public Game {
 public:
-    Cube3DDemo() = default;
+    House3DDemo() = default;
 
     const std::string& GetTypeName() const override {
-        static const std::string name = "Cube3DDemo";
+        static const std::string name = "House3DDemo";
         return name;
     }
 
@@ -95,8 +95,8 @@ protected:
 
         // --- Rotation (arrow-key fallback; mouse not wired through CNA yet). --
         const float rotSpeed = 1.6f * dt; // rad/s
-        if (kb.IsKeyDown(Keys::Left))  yaw_   += rotSpeed;
-        if (kb.IsKeyDown(Keys::Right)) yaw_   -= rotSpeed;
+        if (kb.IsKeyDown(Keys::Left))  yaw_   -= rotSpeed;
+        if (kb.IsKeyDown(Keys::Right)) yaw_   += rotSpeed;
         if (kb.IsKeyDown(Keys::Up))    pitch_ += rotSpeed;
         if (kb.IsKeyDown(Keys::Down))  pitch_ -= rotSpeed;
 
@@ -804,7 +804,7 @@ private:
 };
 
 int main() {
-    Cube3DDemo game;
+    House3DDemo game;
     game.Run();
     return 0;
 }
