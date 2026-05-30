@@ -10,20 +10,32 @@
  * demo-local AddBox / AddGround / AddFence / AddTree / AddPath helpers. No
  * textures, no lighting, no model loading.
  *
- * Controls:
- *  - W / S            : move forward / backward
+ * Two camera / physics modes, toggled with Tab:
+ *
+ * Game mode (default):
+ *  - W / Up arrow     : move forward (horizontal)
+ *  - S / Down arrow   : move backward (horizontal)
  *  - A / D            : strafe left / right
- *  - Q / E            : move down / up
- *  - Left/Right arrow : yaw   (look left / right)
- *  - Up/Down arrow    : pitch (look up   / down)
+ *  - Left/Right arrow : yaw (look left / right)
+ *  - Page Up/Down     : pitch (look up / down)
+ *  - Space            : jump
+ *  - Tab              : switch to Fly mode
  *  - Esc              : quit
  *
- * @note Simple AABB collision is implemented for horizontal movement only:
- *       solid AddBox calls register colliders, decorative pieces (windows,
- *       paths, door panels, balcony platform, foundation, ceilings, tree
- *       crowns, etc.) are flagged non-solid. Vertical Q/E movement is free
- *       so the player can climb to the second floor / balcony / basement
- *       without needing real stair physics.
+ * Fly mode:
+ *  - W / S            : move forward / backward (full 3-D, follows pitch)
+ *  - A / D            : strafe left / right
+ *  - Q / E            : move down / up
+ *  - Left/Right arrow : yaw (look left / right)
+ *  - Up/Down arrow    : pitch (look up / down)
+ *  - Tab              : switch to Game mode
+ *  - Esc              : quit
+ *
+ * @note AABB collision against solid boxes prevents walking through walls in
+ *       both modes. In Game mode, gravity and a ground-plane floor are also
+ *       applied. Decorative pieces (windows, paths, balcony, ceilings, tree
+ *       crowns …) are non-solid; the foundation slab and inner walls carry
+ *       solid colliders.
  */
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -51,9 +63,13 @@ using Microsoft::Xna::Framework::Input::Keyboard;
 using Microsoft::Xna::Framework::Input::Keys;
 
 namespace {
-constexpr float kPi       = 3.14159265358979323846f;
-constexpr float kPiOver4  = kPi * 0.25f;
-constexpr float kDeg2Rad  = kPi / 180.0f;
+constexpr float kPi         = 3.14159265358979323846f;
+constexpr float kPiOver4    = kPi * 0.25f;
+constexpr float kDeg2Rad    = kPi / 180.0f;
+constexpr float kGravity       = 25.0f; // m/s² downward acceleration (game mode)
+constexpr float kJumpSpeed     =  7.0f; // m/s initial upward velocity on jump
+constexpr float kGroundEyeY    =  1.70f; // camera Y when standing on Y=0 ground
+constexpr float kMaxStepHeight =  0.55f; // max height player can step up in one move
 } // namespace
 
 class House3DDemo final : public Game {
@@ -78,8 +94,8 @@ protected:
         BuildScene(device);
 
         // Start outside the house, looking at the front door.
-        cameraPosition_ = Vector3(0.0f, 1.7f, 9.0f);
-        yaw_   = kPi;          // facing -Z (toward the house)
+        cameraPosition_ = Vector3(0.0f, kGroundEyeY, 9.0f);
+        yaw_   = 0.0f;  // facing -Z (toward the house)
         pitch_ = -5.0f * kDeg2Rad;
         UpdateCameraTarget();
     }
@@ -93,47 +109,132 @@ protected:
         const auto kb = Keyboard::GetState();
         if (kb.IsKeyDown(Keys::Escape)) { Exit(); }
 
-        // --- Rotation (arrow-key fallback; mouse not wired through CNA yet). --
-        const float rotSpeed = 1.6f * dt; // rad/s
-        if (kb.IsKeyDown(Keys::Left))  yaw_   -= rotSpeed;
-        if (kb.IsKeyDown(Keys::Right)) yaw_   += rotSpeed;
-        if (kb.IsKeyDown(Keys::Up))    pitch_ += rotSpeed;
-        if (kb.IsKeyDown(Keys::Down))  pitch_ -= rotSpeed;
+        // --- Tab: toggle game / fly mode (edge-triggered) ---------------------
+        const bool tabDown = kb.IsKeyDown(Keys::Tab);
+        if (tabDown && !tabWasDown_) {
+            gameMode_ = !gameMode_;
+            if (gameMode_) {
+                velocityY_ = 0.0f; // shed any accumulated vertical speed
+            }
+        }
+        tabWasDown_ = tabDown;
 
-        // Clamp pitch to avoid gimbal flip.
+        // --- Yaw: same in both modes ------------------------------------------
+        const float rotSpeed = 1.6f * dt;
+        if (kb.IsKeyDown(Keys::Left))  yaw_ -= rotSpeed;
+        if (kb.IsKeyDown(Keys::Right)) yaw_ += rotSpeed;
+
+        // --- Pitch: Page Up/Down in game mode, Up/Down arrows in fly mode -----
+        if (gameMode_) {
+            if (kb.IsKeyDown(Keys::PageUp))   pitch_ += rotSpeed;
+            if (kb.IsKeyDown(Keys::PageDown)) pitch_ -= rotSpeed;
+        } else {
+            if (kb.IsKeyDown(Keys::Up))   pitch_ += rotSpeed;
+            if (kb.IsKeyDown(Keys::Down)) pitch_ -= rotSpeed;
+        }
         const float pitchLimit = 80.0f * kDeg2Rad;
         if (pitch_ >  pitchLimit) pitch_ =  pitchLimit;
         if (pitch_ < -pitchLimit) pitch_ = -pitchLimit;
 
-        // Forward / right derived from yaw+pitch (right-handed, Y-up).
+        // Camera vectors derived from current yaw + pitch.
         const float cp = std::cos(pitch_);
         const float sp = std::sin(pitch_);
         const float cy = std::cos(yaw_);
         const float sy = std::sin(yaw_);
-        const Vector3 forward(cp * sy, sp, cp * cy * -1.0f);
-        Vector3 right = Vector3::Normalize(Vector3::Cross(forward, Vector3::Up));
+        const Vector3 forward(cp * sy, sp, -cp * cy);
+        const Vector3 right = Vector3::Normalize(Vector3::Cross(forward, Vector3::Up));
 
-        // --- Movement ---------------------------------------------------------
         const float speed = 5.0f * dt;
-        Vector3 move(0, 0, 0);
-        if (kb.IsKeyDown(Keys::W)) move += forward * speed;
-        if (kb.IsKeyDown(Keys::S)) move -= forward * speed;
-        if (kb.IsKeyDown(Keys::D)) move += right   * speed;
-        if (kb.IsKeyDown(Keys::A)) move -= right   * speed;
-        if (kb.IsKeyDown(Keys::E)) move += Vector3::Up * speed;
-        if (kb.IsKeyDown(Keys::Q)) move -= Vector3::Up * speed;
 
-        // Axis-separated AABB collision against solid colliders. Vertical
-        // movement is left unconstrained so Q/E can be used like a tiny
-        // elevator to reach 2nd floor / balcony / basement without needing
-        // real stair physics.
-        Vector3 candidate = cameraPosition_;
-        candidate.X += move.X;
-        if (CollidesWithSolid(candidate)) candidate.X = cameraPosition_.X;
-        candidate.Z += move.Z;
-        if (CollidesWithSolid(candidate)) candidate.Z = cameraPosition_.Z;
-        candidate.Y += move.Y;
-        cameraPosition_ = candidate;
+        if (gameMode_) {
+            // ---- Game mode: gravity + jump + step-up stair climbing ----------
+            // Horizontal movement vectors (yaw only, no pitch influence).
+            // forwardH = (sin(yaw), 0, -cos(yaw)),  rightH = (cos(yaw), 0, sin(yaw))
+            const Vector3 forwardH(sy, 0.0f, -cy);
+            const Vector3 rightH  (cy, 0.0f,  sy);
+
+            Vector3 move(0.0f, 0.0f, 0.0f);
+            if (kb.IsKeyDown(Keys::W) || kb.IsKeyDown(Keys::Up))   move += forwardH * speed;
+            if (kb.IsKeyDown(Keys::S) || kb.IsKeyDown(Keys::Down)) move -= forwardH * speed;
+            if (kb.IsKeyDown(Keys::D)) move += rightH * speed;
+            if (kb.IsKeyDown(Keys::A)) move -= rightH * speed;
+
+            // Jump (only when on solid ground or step).
+            if (kb.IsKeyDown(Keys::Space) && onGround_) {
+                velocityY_ = kJumpSpeed;
+                onGround_  = false;
+            }
+
+            // Gravity — only when airborne to avoid oscillation on flat surfaces.
+            if (!onGround_) {
+                velocityY_ -= kGravity * dt;
+            }
+
+            // --- Axis-separated horizontal movement with step-up --------------
+            Vector3 candidate = cameraPosition_;
+
+            // X axis
+            candidate.X += move.X;
+            if (CollidesWithSolid(candidate)) {
+                const float stepTop    = GetBlockingColliderTopY(candidate);
+                const float stepEyeY   = stepTop + kPlayerEyeToBottom;
+                if (stepTop >= 0.0f && stepEyeY <= cameraPosition_.Y + kMaxStepHeight) {
+                    candidate.Y = stepEyeY;  // step up
+                    velocityY_  = 0.0f;
+                    onGround_   = true;
+                } else {
+                    candidate.X = cameraPosition_.X;  // wall, blocked
+                }
+            }
+
+            // Z axis
+            candidate.Z += move.Z;
+            if (CollidesWithSolid(candidate)) {
+                const float stepTop  = GetBlockingColliderTopY(candidate);
+                const float stepEyeY = stepTop + kPlayerEyeToBottom;
+                if (stepTop >= 0.0f && stepEyeY <= candidate.Y + kMaxStepHeight) {
+                    candidate.Y = std::max(candidate.Y, stepEyeY);
+                    velocityY_  = 0.0f;
+                    onGround_   = true;
+                } else {
+                    candidate.Z = cameraPosition_.Z;  // wall, blocked
+                }
+            }
+
+            // --- Vertical physics ---------------------------------------------
+            candidate.Y += velocityY_ * dt;
+
+            // Floor: highest solid surface (stair step or ground) below feet.
+            const float floorEyeY = GetFloorEyeY(candidate);
+            if (candidate.Y <= floorEyeY) {
+                candidate.Y = floorEyeY;
+                velocityY_  = 0.0f;
+                onGround_   = true;
+            } else {
+                onGround_ = false;
+            }
+
+            cameraPosition_ = candidate;
+
+        } else {
+            // ---- Fly mode: original free-camera movement ---------------------
+            Vector3 move(0.0f, 0.0f, 0.0f);
+            if (kb.IsKeyDown(Keys::W)) move += forward * speed;
+            if (kb.IsKeyDown(Keys::S)) move -= forward * speed;
+            if (kb.IsKeyDown(Keys::D)) move += right   * speed;
+            if (kb.IsKeyDown(Keys::A)) move -= right   * speed;
+            if (kb.IsKeyDown(Keys::E)) move += Vector3::Up * speed;
+            if (kb.IsKeyDown(Keys::Q)) move -= Vector3::Up * speed;
+
+            Vector3 candidate = cameraPosition_;
+            candidate.X += move.X;
+            if (CollidesWithSolid(candidate)) candidate.X = cameraPosition_.X;
+            candidate.Z += move.Z;
+            if (CollidesWithSolid(candidate)) candidate.Z = cameraPosition_.Z;
+            candidate.Y += move.Y;
+            cameraPosition_ = candidate;
+        }
+
         UpdateCameraTarget();
     }
 
@@ -231,6 +332,59 @@ private:
             }
         }
         return false;
+    }
+
+    // Returns the highest top-Y of any solid collider that the player AABB
+    // at `eye` overlaps. Used for step-up: tells us how high to lift the player.
+    // Returns -1 if there is no overlap.
+    float GetBlockingColliderTopY(const Vector3& eye) const {
+        const float pxMin = eye.X - kPlayerHalfX;
+        const float pxMax = eye.X + kPlayerHalfX;
+        const float pyMin = eye.Y - kPlayerEyeToBottom;
+        const float pyMax = eye.Y + kPlayerEyeToTop;
+        const float pzMin = eye.Z - kPlayerHalfZ;
+        const float pzMax = eye.Z + kPlayerHalfZ;
+        float best = -1.0f;
+        for (const auto& c : colliders_) {
+            const float cxMin = c.center.X - c.halfSize.X;
+            const float cxMax = c.center.X + c.halfSize.X;
+            const float cyMin = c.center.Y - c.halfSize.Y;
+            const float cyMax = c.center.Y + c.halfSize.Y;
+            const float czMin = c.center.Z - c.halfSize.Z;
+            const float czMax = c.center.Z + c.halfSize.Z;
+            if (pxMax > cxMin && pxMin < cxMax &&
+                pyMax > cyMin && pyMin < cyMax &&
+                pzMax > czMin && pzMin < czMax) {
+                if (cyMax > best) best = cyMax;
+            }
+        }
+        return best;
+    }
+
+    // Returns the eye Y at which the player would stand on the highest solid
+    // surface at `eye`'s XZ position (surfaces at or just below feet level).
+    // Falls back to kGroundEyeY (Y=0 ground plane) when no solid surface found.
+    float GetFloorEyeY(const Vector3& eye) const {
+        const float pxMin  = eye.X - kPlayerHalfX;
+        const float pxMax  = eye.X + kPlayerHalfX;
+        const float pzMin  = eye.Z - kPlayerHalfZ;
+        const float pzMax  = eye.Z + kPlayerHalfZ;
+        const float feetY  = eye.Y - kPlayerEyeToBottom;
+        float best = 0.0f; // absolute ground at Y=0
+        for (const auto& c : colliders_) {
+            const float cyMax = c.center.Y + c.halfSize.Y;
+            if (cyMax <= feetY + 0.05f && cyMax > best) {
+                const float cxMin = c.center.X - c.halfSize.X;
+                const float cxMax = c.center.X + c.halfSize.X;
+                const float czMin = c.center.Z - c.halfSize.Z;
+                const float czMax = c.center.Z + c.halfSize.Z;
+                if (pxMax > cxMin && pxMin < cxMax &&
+                    pzMax > czMin && pzMin < czMax) {
+                    best = cyMax;
+                }
+            }
+        }
+        return best + kPlayerEyeToBottom;
     }
 
     void UpdateCameraTarget() {
@@ -489,9 +643,10 @@ private:
     }
 
     /**
-     * @brief Adds a door visual: outer frame strips + door panel + handle.
-     *        The opening itself remains passable (no collider on panel/frame).
-     *        Frame is offset slightly outward to avoid z-fighting with wall.
+     * @brief Adds a door visual: outer frame strips + open door panel + handle.
+     *        The door is rendered swung fully open (hinged on the left side,
+     *        opening outward), so the doorway is passable. The open panel is
+     *        solid so the player cannot walk through it.
      */
     void AddDoor(GraphicsDevice& device,
                  float wallZ, float sign,
@@ -514,11 +669,16 @@ private:
                Vector3(frameW, h, frameT), frame, false);
         AddBox(device, Vector3(cx + w * 0.5f + frameW * 0.5f, cy, zOuter),
                Vector3(frameW, h, frameT), frame, false);
-        // Door panel (slightly recessed inward).
-        AddBox(device, Vector3(cx, cy, wallZ - sign * 0.02f),
-               Vector3(w * 0.95f, h * 0.97f, panelT), door, false);
-        // Handle.
-        AddBox(device, Vector3(cx + w * 0.30f, cyBase + h * 0.45f, zOuter + sign * 0.01f),
+
+        // Door panel swung open on the left hinge (outward, toward +Z for sign=+1).
+        // When open, the panel lies flat against the wall beside the frame.
+        const float hingeX  = cx - w * 0.5f;           // left edge of door opening
+        const float panelCZ = wallZ + sign * w * 0.5f; // panel extends outward
+        AddBox(device, Vector3(hingeX, cy, panelCZ),
+               Vector3(panelT, h * 0.97f, w * 0.95f), door, /*solid=*/true);
+
+        // Handle near the free edge of the open door.
+        AddBox(device, Vector3(hingeX, cyBase + h * 0.45f, wallZ + sign * (w - 0.15f)),
                Vector3(0.08f, 0.08f, 0.08f), handle, false);
     }
 
@@ -651,20 +811,22 @@ private:
                innerWall, /*solid=*/true);
 
         // ---- Floor between 1st and 2nd story (with stair hole) ----------
-        // We split the ceiling into pieces around the stairwell at X=2..3.5, Z=-2..-0.5.
-        // For simplicity build it as 4 surrounding slabs.
-        const float fT = 0.10f; // floor thickness
+        // Split into 4 solid slabs around the stairwell opening at X=2..3.5, Z=-2..-0.5.
+        // Solid so the player can stand on the 2nd floor without falling through.
+        const float fT = 0.10f; // floor/ceiling slab thickness
         const float ceilCY = ceilY + fT * 0.5f;
-        // Ceilings/floors are decorative (free-Y movement avoids the need for solid ones).
-        AddBox(device, Vector3(0.0f, ceilCY, ( -0.5f + D * 0.5f) * 0.5f),
-               Vector3(W, fT, D * 0.5f - (-0.5f)), floorColor, /*solid=*/false);
-        AddBox(device, Vector3(0.0f, ceilCY, (-2.0f + (-D * 0.5f)) * 0.5f),
-               Vector3(W, fT, (-D * 0.5f) - (-2.0f) * -1.0f * 0.0f + ( -2.0f + D * 0.5f )),
-               floorColor, /*solid=*/false);
-        AddBox(device, Vector3((2.0f + (-W * 0.5f)) * 0.5f, ceilCY, -1.25f),
-               Vector3(2.0f - (-W * 0.5f), fT, 1.5f), floorColor, /*solid=*/false);
+        // Front slab: covers Z from -0.5 to +D/2 (in front of stairwell).
+        AddBox(device, Vector3(0.0f, ceilCY, (-0.5f + D * 0.5f) * 0.5f),
+               Vector3(W, fT, D * 0.5f + 0.5f), floorColor, /*solid=*/true);
+        // Back slab: covers Z from -D/2 to -2.0 (behind stairwell).
+        AddBox(device, Vector3(0.0f, ceilCY, (-D * 0.5f + (-2.0f)) * 0.5f),
+               Vector3(W, fT, D * 0.5f - 2.0f), floorColor, /*solid=*/true);
+        // Left slab: covers X from -W/2 to 2.0, Z in stairwell column (-2..-0.5).
+        AddBox(device, Vector3((-W * 0.5f + 2.0f) * 0.5f, ceilCY, -1.25f),
+               Vector3(W * 0.5f + 2.0f, fT, 1.5f), floorColor, /*solid=*/true);
+        // Right slab: covers X from 3.5 to +W/2, Z in stairwell column.
         AddBox(device, Vector3((3.5f + W * 0.5f) * 0.5f, ceilCY, -1.25f),
-               Vector3(W * 0.5f - 3.5f, fT, 1.5f), floorColor, /*solid=*/false);
+               Vector3(W * 0.5f - 3.5f, fT, 1.5f), floorColor, /*solid=*/true);
 
         // ---- Stairs to 2nd floor (stacked boxes) -------------------------
         // 8 steps from y=baseH up to y=ceilY, at X around 2.75, Z descending.
@@ -674,9 +836,8 @@ private:
         for (int i = 0; i < stepCount; ++i) {
             const float sy = baseH + stepRise * (static_cast<float>(i) + 0.5f);
             const float sz = -0.5f - stepRun * (static_cast<float>(i) + 0.5f);
-            // Indoor stairs are visual only; free-Y Q/E lets the player ascend.
             AddBox(device, Vector3(2.75f, sy, sz),
-                   Vector3(1.5f, stepRise, stepRun), stoneColor, /*solid=*/false);
+                   Vector3(1.5f, stepRise, stepRun), stoneColor, /*solid=*/true);
         }
 
         // ---- 2nd-floor outer walls ---------------------------------------
@@ -733,7 +894,7 @@ private:
         const float balPlatY = baseH + floorH; // sits on top of 1st-floor ceiling
         AddBox(device,
                Vector3(balCX, balPlatY + 0.05f, frontZ + 0.6f),
-               Vector3(2.5f, 0.10f, 1.2f), stoneColor, /*solid=*/false);
+               Vector3(2.5f, 0.10f, 1.2f), stoneColor, /*solid=*/true);
         // Top + lower rail + corner posts.
         AddBox(device, Vector3(balCX, balPlatY + 0.85f, frontZ + 1.2f),
                Vector3(2.6f, 0.10f, 0.10f), wallColor);
@@ -797,10 +958,16 @@ private:
     std::vector<Mesh>            edgeMeshes_;
     std::vector<Collider>        colliders_;
 
-    Vector3 cameraPosition_{0.0f, 1.7f, 9.0f};
+    Vector3 cameraPosition_{0.0f, kGroundEyeY, 9.0f};
     Vector3 cameraTarget_  {0.0f, 1.0f, 0.0f};
-    float   yaw_   = 3.14159265f; // radians, 0 = looking toward -Z is convention-dependent
+    float   yaw_   = 0.0f;  // 0 = facing -Z (toward the house)
     float   pitch_ = 0.0f;
+
+    // Mode state
+    bool  gameMode_   = true;   // true = game mode, false = fly mode
+    bool  tabWasDown_ = false;
+    float velocityY_  = 0.0f;
+    bool  onGround_   = true;
 };
 
 int main() {

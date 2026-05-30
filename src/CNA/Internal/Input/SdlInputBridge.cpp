@@ -302,6 +302,12 @@ namespace
         case SDLK_F8: return Keys::F8;
         case SDLK_F12: return Keys::F12;
         case SDLK_F11: return Keys::F11;
+        case SDLK_PAGEUP:   return Keys::PageUp;
+        case SDLK_PAGEDOWN: return Keys::PageDown;
+        case SDLK_HOME:     return Keys::Home;
+        case SDLK_END:      return Keys::End;
+        case SDLK_INSERT:   return Keys::Insert;
+        case SDLK_DELETE:   return Keys::Delete;
         default: return std::nullopt;
         }
     }
