@@ -176,8 +176,53 @@ target_link_libraries(CNA
 # The 3D house demo exercises the EasyGL 3D pipeline. Other backends throw
 # "3D not supported", so the target is only enabled with the EASYGL backend.
 # Emscripten uses WebGL 2 (= OpenGL ES 3.0), which the EasyGL backend targets.
-option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, ...)" ON)
+option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, demo_2d, ...)" ON)
+if(CNA_BUILD_EXAMPLES)
+    # ---- 2D sprite demo (works with all backends) ----------------------------
+    add_executable(cna_demo_2d
+        examples/demo_2d/src/Main.cpp
+        examples/demo_2d/src/Game1.cpp
+    )
+    target_include_directories(cna_demo_2d PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_2d/src
+    )
+
+    if(EMSCRIPTEN)
+        set_target_properties(cna_demo_2d PROPERTIES SUFFIX ".html")
+        target_link_libraries(cna_demo_2d PRIVATE
+            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+        target_link_options(cna_demo_2d PRIVATE
+            -sALLOW_MEMORY_GROWTH=1
+            -sSTACK_SIZE=1048576
+            -sINITIAL_MEMORY=134217728
+            -sFORCE_FILESYSTEM=1
+            "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_2d/Content@/Content"
+        )
+    else()
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_2d PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_2d PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_2d PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_2d POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_2d/Content"
+                "$<TARGET_FILE_DIR:cna_demo_2d>/Content"
+            COMMENT "Copying Content next to cna_demo_2d executable")
+        if(WIN32)
+            set_target_properties(cna_demo_2d PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_2d)
+        endif()
+    endif()
+endif()
+
 if(CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
+    # ---- 3D house demo (EasyGL only) -----------------------------------------
     add_executable(cna_house3d_demo examples/house3d_demo.cpp)
 
     if(EMSCRIPTEN)
