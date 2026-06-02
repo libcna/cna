@@ -207,7 +207,8 @@ class House3DDemo final : public Game {
 public:
     House3DDemo()
     {
-        Game::setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(static_cast<long>(500000L * 20 / 60)));
+        static constexpr int FPS = 60;
+        Game::setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(static_cast<long>(500000L * 20 / FPS)));
     };
 
     const std::string& GetTypeName() const override {
