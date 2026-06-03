@@ -23,6 +23,7 @@ struct SDL_Renderer;
 
 namespace Microsoft::Xna::Framework
 {
+    class Game;
     class GameWindow;
     class GraphicsDeviceManager;
 }
@@ -210,5 +211,6 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class SpriteBatch;
         friend class Microsoft::Xna::Framework::GameWindow;
         friend class Microsoft::Xna::Framework::GraphicsDeviceManager;
+        friend class Microsoft::Xna::Framework::Game;
     };
 }

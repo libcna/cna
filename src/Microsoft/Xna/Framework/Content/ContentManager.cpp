@@ -20,6 +20,10 @@ namespace Microsoft::Xna::Framework::Content
         graphicsDevice_ = &graphicsDevice;
     }
 
+    void ContentManager::Dispose()
+    {
+    }
+
     std::string ContentManager::BuildAssetPath(const std::string& assetName) const
     {
         if (assetName.empty())

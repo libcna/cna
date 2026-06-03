@@ -207,7 +207,7 @@ class House3DDemo final : public Game {
 public:
     House3DDemo()
     {
-        static constexpr int FPS = 60;
+        static constexpr int FPS = 144;
         Game::setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(static_cast<long>(500000L * 20 / FPS)));
     };
 

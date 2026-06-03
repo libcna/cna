@@ -32,6 +32,7 @@ namespace Microsoft::Xna::Framework::Content
         Graphics::GraphicsDevice* graphicsDevice_ = nullptr;
 
         DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        void Dispose();
 
     private:
         /**
