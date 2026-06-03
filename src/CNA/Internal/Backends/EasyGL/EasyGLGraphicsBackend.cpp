@@ -235,10 +235,22 @@ void main()
 
         program_.use();
 
-        int vx, vy, vw, vh;
-        device_.get_viewport(vx, vy, vw, vh);
-        int logW = vw, logH = vh;
-        if (graphicsBackend_) graphicsBackend_->getLogicalSize(logW, logH);
+        int logW = 0, logH = 0;
+        if (graphicsBackend_)
+        {
+            int physW = 0, physH = 0;
+            graphicsBackend_->getPhysicalSize(physW, physH);
+            if (physW > 0 && physH > 0)
+                device_.set_viewport(0, 0, physW, physH);
+            graphicsBackend_->getLogicalSize(logW, logH);
+        }
+        if (logW <= 0 || logH <= 0)
+        {
+            int vx, vy, vw, vh;
+            device_.get_viewport(vx, vy, vw, vh);
+            logW = vw;
+            logH = vh;
+        }
         float ortho[16] = {
             2.0f / logW, 0, 0, 0,
             0, -2.0f / logH, 0, 0,
@@ -515,6 +527,11 @@ void main()
             width = static_cast<int>((double)physW * virtualHeight_ / physH + 0.5);
         else
             width = virtualWidth_ > 0 ? virtualWidth_ : physW;
+    }
+
+    void EasyGLGraphicsBackend::getPhysicalSize(int& width, int& height) const
+    {
+        SDL_GetWindowSize(window, &width, &height);
     }
 
     void EasyGLGraphicsBackend::GetViewportSize(int& width, int& height)
