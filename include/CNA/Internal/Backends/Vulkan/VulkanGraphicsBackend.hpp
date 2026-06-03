@@ -216,6 +216,12 @@ namespace CNA::Internal::Backends::Vulkan
         VkRenderPass               renderPass_ = VK_NULL_HANDLE;
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
+        // --- Depth buffer (recreated with swapchain) ---
+        VkFormat        depthFormat_    = VK_FORMAT_UNDEFINED;
+        VkImage         depthImage_     = VK_NULL_HANDLE;
+        VkDeviceMemory  depthMemory_    = VK_NULL_HANDLE;
+        VkImageView     depthImageView_ = VK_NULL_HANDLE;
+
         // --- Pipeline resources (permanent) ---
         VkSampler             defaultSampler_        = VK_NULL_HANDLE;
         VkDescriptorSetLayout descriptorSetLayout_   = VK_NULL_HANDLE;
@@ -223,7 +229,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineLayout      pipelineLayout2D_      = VK_NULL_HANDLE;
         VkPipeline            pipeline2D_            = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayout3D_      = VK_NULL_HANDLE;
-        std::unordered_map<VkPrimitiveTopology, VkPipeline> pipelines3D_;
+        std::unordered_map<uint32_t, VkPipeline>             pipelines3D_;
 
         // --- Sprite batch GPU buffers (host-visible, one per frame-in-flight) ---
         std::array<VkBuffer,       MaxFramesInFlight> spriteVB_    = {};
@@ -240,6 +246,9 @@ namespace CNA::Internal::Backends::Vulkan
             VkPrimitiveTopology topology;
             uint32_t            drawCount;   // vertex or index count
             float               mvp[16];
+            bool                depthTest;
+            bool                depthWrite;
+            bool                blend;
         };
         std::vector<Pending3DDraw>                    pending3D_;
         std::vector<VulkanSpriteBatchBackend*>        activeBatches_;
@@ -247,7 +256,10 @@ namespace CNA::Internal::Backends::Vulkan
         // --- Frame state ---
         uint32_t currentFrame_ = 0;
         float    clearR_ = 0.f, clearG_ = 0.f, clearB_ = 0.f, clearA_ = 1.f;
-        bool     initialized_ = false;
+        bool     initialized_       = false;
+        bool     depthTestEnabled_  = true;
+        bool     depthWriteEnabled_ = true;
+        bool     blendEnabled_      = false;
 
         // ---- Init helpers ----
         void CreateInstance();
@@ -266,7 +278,10 @@ namespace CNA::Internal::Backends::Vulkan
         void CreateDescriptorSetLayout();
         void CreateDescriptorPool();
         void CreatePipeline2D();
-        void CreatePipelines3D();
+        VkFormat   FindDepthFormat() const;
+        void       CreateDepthResources();
+        void       CleanupDepthResources();
+        VkPipeline GetOrCreatePipeline3D(VkPrimitiveTopology, bool depthTest, bool depthWrite, bool blend);
         void CreateSpriteBuffers();
 
         // ---- Swapchain lifecycle ----

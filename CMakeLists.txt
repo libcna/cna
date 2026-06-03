@@ -20,7 +20,7 @@ add_subdirectory(../sharp-runtime SHARP_RUNTIME)
 # EasyGL is the default on Linux and Emscripten (WebGL 2 = OpenGL ES 3.0).
 # Other platforms default to SDL_RENDERER.
 if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set(_cna_default_backend "EASYGL")
+    set(_cna_default_backend "VULKAN")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
@@ -222,8 +222,8 @@ if(CNA_BUILD_EXAMPLES)
     endif()
 endif()
 
-if(CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
-    # ---- 3D house demo (EasyGL only) -----------------------------------------
+if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHICS_BACKEND STREQUAL "VULKAN"))
+    # ---- 3D house demo (EasyGL and Vulkan) -----------------------------------
     add_executable(cna_house3d_demo examples/house3d_demo.cpp)
 
     if(EMSCRIPTEN)

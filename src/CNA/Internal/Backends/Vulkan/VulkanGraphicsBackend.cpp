@@ -371,6 +371,7 @@ namespace CNA::Internal::Backends::Vulkan
         CreateLogicalDevice();
         CreateSwapchain();
         CreateImageViews();
+        CreateDepthResources();
         CreateRenderPass();
         CreateFramebuffers();
         CreateCommandPool();
@@ -380,7 +381,6 @@ namespace CNA::Internal::Backends::Vulkan
         CreateDescriptorSetLayout();
         CreateDescriptorPool();
         CreatePipeline2D();
-        CreatePipelines3D();
         CreateSpriteBuffers();
         initialized_ = true;
         SDL_Log("[Vulkan] Backend initialised");
@@ -415,6 +415,7 @@ namespace CNA::Internal::Backends::Vulkan
         if (defaultSampler_)      vkDestroySampler(device_, defaultSampler_, nullptr);
 
         CleanupSwapchain();
+        CleanupDepthResources();
 
         if (renderPass_ != VK_NULL_HANDLE) {
             vkDestroyRenderPass(device_, renderPass_, nullptr);
@@ -693,32 +694,49 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::CreateRenderPass()
     {
-        VkAttachmentDescription att{};
-        att.format  = swapchainFormat_;
-        att.samples = VK_SAMPLE_COUNT_1_BIT;
-        att.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        att.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        att.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-        att.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        VkAttachmentDescription colorAtt{};
+        colorAtt.format  = swapchainFormat_;
+        colorAtt.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAtt.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAtt.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAtt.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-        VkAttachmentReference ref{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        VkAttachmentDescription depthAtt{};
+        depthAtt.format  = depthFormat_;
+        depthAtt.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAtt.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAtt.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference colorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        VkAttachmentReference depthRef{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
         VkSubpassDescription sub{};
-        sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        sub.colorAttachmentCount = 1;
-        sub.pColorAttachments = &ref;
+        sub.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        sub.colorAttachmentCount    = 1;
+        sub.pColorAttachments       = &colorRef;
+        sub.pDepthStencilAttachment = &depthRef;
 
         VkSubpassDependency dep{};
-        dep.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dep.dstSubpass = 0;
-        dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dep.srcSubpass    = VK_SUBPASS_EXTERNAL;
+        dep.dstSubpass    = 0;
+        dep.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dep.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
+        VkAttachmentDescription atts[] = { colorAtt, depthAtt };
         VkRenderPassCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        ci.attachmentCount = 1; ci.pAttachments = &att;
+        ci.attachmentCount = 2; ci.pAttachments = atts;
         ci.subpassCount    = 1; ci.pSubpasses   = &sub;
         ci.dependencyCount = 1; ci.pDependencies = &dep;
         if (vkCreateRenderPass(device_, &ci, nullptr, &renderPass_) != VK_SUCCESS)
@@ -729,11 +747,12 @@ namespace CNA::Internal::Backends::Vulkan
     {
         swapchainFramebuffers_.resize(swapchainImageViews_.size());
         for (size_t i = 0; i < swapchainImageViews_.size(); ++i) {
+            VkImageView atts[] = { swapchainImageViews_[i], depthImageView_ };
             VkFramebufferCreateInfo ci{};
             ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            ci.renderPass = renderPass_;
-            ci.attachmentCount = 1;
-            ci.pAttachments = &swapchainImageViews_[i];
+            ci.renderPass      = renderPass_;
+            ci.attachmentCount = 2;
+            ci.pAttachments    = atts;
             ci.width  = swapchainExtent_.width;
             ci.height = swapchainExtent_.height;
             ci.layers = 1;
@@ -761,9 +780,11 @@ namespace CNA::Internal::Backends::Vulkan
         if (w == 0 || h == 0) return;
         vkDeviceWaitIdle(device_);
         CleanupSwapchain();
+        CleanupDepthResources();
         CreateSwapchain();
         CreateImageViews();
-        CreateFramebuffers(); // reuses permanent renderPass_
+        CreateDepthResources();
+        CreateFramebuffers();
     }
 
     // =========================================================================
@@ -961,6 +982,12 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayout2D_) != VK_SUCCESS)
             throw std::runtime_error("vkCreatePipelineLayout (2D) failed");
 
+        // Depth stencil: disabled for sprites, but required because render pass has depth attachment
+        VkPipelineDepthStencilStateCreateInfo ds2d{};
+        ds2d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds2d.depthTestEnable  = VK_FALSE;
+        ds2d.depthWriteEnable = VK_FALSE;
+
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pci.stageCount          = 2; pci.pStages = stages;
@@ -969,6 +996,7 @@ namespace CNA::Internal::Backends::Vulkan
         pci.pViewportState      = &vs;
         pci.pRasterizationState = &rs;
         pci.pMultisampleState   = &ms;
+        pci.pDepthStencilState  = &ds2d;
         pci.pColorBlendState    = &cbs;
         pci.pDynamicState       = &dyn;
         pci.layout              = pipelineLayout2D_;
@@ -983,21 +1011,116 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     // =========================================================================
-    // 3D Colored-primitive pipelines (one per topology)
+    // Depth buffer resources
     // =========================================================================
 
-    void VulkanGraphicsBackend::CreatePipelines3D()
+    VkFormat VulkanGraphicsBackend::FindDepthFormat() const
     {
-        using namespace Shaders;
+        for (VkFormat fmt : { VK_FORMAT_D32_SFLOAT,
+                              VK_FORMAT_D32_SFLOAT_S8_UINT,
+                              VK_FORMAT_D24_UNORM_S8_UINT }) {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(physicalDevice_, fmt, &props);
+            if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                return fmt;
+        }
+        throw std::runtime_error("Vulkan: no suitable depth format");
+    }
 
+    void VulkanGraphicsBackend::CreateDepthResources()
+    {
+        depthFormat_ = FindDepthFormat();
+
+        VkImageCreateInfo imgInfo{};
+        imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imgInfo.imageType     = VK_IMAGE_TYPE_2D;
+        imgInfo.format        = depthFormat_;
+        imgInfo.extent        = { swapchainExtent_.width, swapchainExtent_.height, 1 };
+        imgInfo.mipLevels     = 1;
+        imgInfo.arrayLayers   = 1;
+        imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        imgInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(device_, &imgInfo, nullptr, &depthImage_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImage (depth) failed");
+
+        VkMemoryRequirements memReq;
+        vkGetImageMemoryRequirements(device_, depthImage_, &memReq);
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize  = memReq.size;
+        allocInfo.memoryTypeIndex = FindMemoryType(memReq.memoryTypeBits,
+                                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (vkAllocateMemory(device_, &allocInfo, nullptr, &depthMemory_) != VK_SUCCESS)
+            throw std::runtime_error("vkAllocateMemory (depth) failed");
+        vkBindImageMemory(device_, depthImage_, depthMemory_, 0);
+
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image    = depthImage_;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format   = depthFormat_;
+        viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+        viewInfo.subresourceRange.baseMipLevel   = 0;
+        viewInfo.subresourceRange.levelCount     = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount     = 1;
+        if (vkCreateImageView(device_, &viewInfo, nullptr, &depthImageView_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImageView (depth) failed");
+    }
+
+    void VulkanGraphicsBackend::CleanupDepthResources()
+    {
+        if (depthImageView_) { vkDestroyImageView(device_, depthImageView_, nullptr); depthImageView_ = VK_NULL_HANDLE; }
+        if (depthImage_)     { vkDestroyImage(device_, depthImage_, nullptr);         depthImage_     = VK_NULL_HANDLE; }
+        if (depthMemory_)    { vkFreeMemory(device_, depthMemory_, nullptr);           depthMemory_    = VK_NULL_HANDLE; }
+    }
+
+    // =========================================================================
+    // 3D pipeline layout + per-variant pipeline (lazily created)
+    // =========================================================================
+
+    // Encode (topology × depthTest × depthWrite × blend) into a single uint32_t key.
+    static uint32_t Make3DKey(VkPrimitiveTopology topo, bool depthTest, bool depthWrite, bool blend)
+    {
+        uint32_t t = 0;
+        switch (topo) {
+        case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:  t = 0; break;
+        case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP: t = 1; break;
+        case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:      t = 2; break;
+        default:                                   t = 3; break;
+        }
+        return t | (depthTest ? 4u : 0u) | (depthWrite ? 8u : 0u) | (blend ? 16u : 0u);
+    }
+
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline3D(VkPrimitiveTopology topo,
+                                                             bool depthTest, bool depthWrite,
+                                                             bool blend)
+    {
+        // Create layout once
+        if (pipelineLayout3D_ == VK_NULL_HANDLE) {
+            VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT, 0, 64 };
+            VkPipelineLayoutCreateInfo pli{};
+            pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+            pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
+            if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayout3D_) != VK_SUCCESS)
+                throw std::runtime_error("vkCreatePipelineLayout (3D) failed");
+        }
+
+        uint32_t key = Make3DKey(topo, depthTest, depthWrite, blend);
+        auto it = pipelines3D_.find(key);
+        if (it != pipelines3D_.end()) return it->second;
+
+        using namespace Shaders;
         VkShaderModule vert = CreateShaderModule(kColored3dVertSpv, kColored3dVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kColored3dFragSpv, kColored3dFragSpv_size);
 
-        // VertexPositionColor: vec3 position (12 bytes) + 4×UByte color (4 bytes) = stride 16
         VkVertexInputBindingDescription bind{ 0, 16, VK_VERTEX_INPUT_RATE_VERTEX };
         VkVertexInputAttributeDescription attrs[2]{};
-        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  }; // Position
-        attrs[1] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12 }; // Color (normalized UByte4)
+        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };
+        attrs[1] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12 };
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -1006,84 +1129,81 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-                      VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr };
+                      VK_SHADER_STAGE_VERTEX_BIT,   vert, "main", nullptr };
         stages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
                       VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr };
 
-        VkPipelineViewportStateCreateInfo vs{};
-        vs.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        vs.viewportCount = 1; vs.scissorCount = 1;
+        VkPipelineInputAssemblyStateCreateInfo ias{};
+        ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ias.topology = topo;
+
+        VkPipelineViewportStateCreateInfo vpst{};
+        vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vpst.viewportCount = 1; vpst.scissorCount = 1;
 
         VkPipelineRasterizationStateCreateInfo rs{};
-        rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rs.polygonMode = VK_POLYGON_MODE_FILL;
         rs.cullMode    = VK_CULL_MODE_NONE;
         rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
         rs.lineWidth   = 1.f;
 
         VkPipelineMultisampleStateCreateInfo ms{};
-        ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
-        ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        // No depth buffer yet — leave depth test disabled
+        ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
+        ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
+        ds.depthCompareOp   = VK_COMPARE_OP_LESS;
 
         VkPipelineColorBlendAttachmentState cba{};
-        cba.blendEnable    = VK_FALSE;
+        if (blend) {
+            cba.blendEnable         = VK_TRUE;
+            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            cba.colorBlendOp        = VK_BLEND_OP_ADD;
+            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
+        }
         cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
         VkPipelineColorBlendStateCreateInfo cbs{};
-        cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = 1; cbs.pAttachments = &cba;
 
         VkDynamicState dynStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
         VkPipelineDynamicStateCreateInfo dyn{};
-        dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
 
-        // Push constant: mat4 mvp (64 bytes)
-        VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT, 0, 64 };
-        VkPipelineLayoutCreateInfo pli{};
-        pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
-        if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayout3D_) != VK_SUCCESS)
-            throw std::runtime_error("vkCreatePipelineLayout (3D) failed");
+        VkGraphicsPipelineCreateInfo pci{};
+        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pci.stageCount          = 2; pci.pStages = stages;
+        pci.pVertexInputState   = &vis;
+        pci.pInputAssemblyState = &ias;
+        pci.pViewportState      = &vpst;
+        pci.pRasterizationState = &rs;
+        pci.pMultisampleState   = &ms;
+        pci.pDepthStencilState  = &ds;
+        pci.pColorBlendState    = &cbs;
+        pci.pDynamicState       = &dyn;
+        pci.layout              = pipelineLayout3D_;
+        pci.renderPass          = renderPass_;
+        pci.subpass             = 0;
 
-        static const VkPrimitiveTopology kTopologies[] = {
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
-            VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
-            VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
-        };
-        for (auto topo : kTopologies) {
-            VkPipelineInputAssemblyStateCreateInfo ias{};
-            ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-            ias.topology = topo;
-
-            VkGraphicsPipelineCreateInfo pci{};
-            pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-            pci.stageCount          = 2; pci.pStages = stages;
-            pci.pVertexInputState   = &vis;
-            pci.pInputAssemblyState = &ias;
-            pci.pViewportState      = &vs;
-            pci.pRasterizationState = &rs;
-            pci.pMultisampleState   = &ms;
-            pci.pDepthStencilState  = &ds;
-            pci.pColorBlendState    = &cbs;
-            pci.pDynamicState       = &dyn;
-            pci.layout              = pipelineLayout3D_;
-            pci.renderPass          = renderPass_;
-            pci.subpass             = 0;
-
-            VkPipeline p = VK_NULL_HANDLE;
-            if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &p) != VK_SUCCESS)
-                throw std::runtime_error("vkCreateGraphicsPipelines (3D) failed");
-            pipelines3D_[topo] = p;
-        }
+        VkPipeline p = VK_NULL_HANDLE;
+        if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &p) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateGraphicsPipelines (3D variant) failed");
 
         vkDestroyShaderModule(device_, vert, nullptr);
         vkDestroyShaderModule(device_, frag, nullptr);
+
+        pipelines3D_[key] = p;
+        return p;
     }
 
     // =========================================================================
@@ -1236,15 +1356,16 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkBeginCommandBuffer(cb, &bi) != VK_SUCCESS)
             throw std::runtime_error("vkBeginCommandBuffer failed");
 
-        VkClearValue cv{};
-        cv.color = { { clearR_, clearG_, clearB_, clearA_ } };
+        VkClearValue cv[2]{};
+        cv[0].color          = { { clearR_, clearG_, clearB_, clearA_ } };
+        cv[1].depthStencil   = { 1.0f, 0 };
         VkRenderPassBeginInfo rp{};
         rp.sType       = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         rp.renderPass  = renderPass_;
         rp.framebuffer = swapchainFramebuffers_[imageIndex];
         rp.renderArea  = { {0,0}, swapchainExtent_ };
-        rp.clearValueCount = 1;
-        rp.pClearValues    = &cv;
+        rp.clearValueCount = 2;
+        rp.pClearValues    = cv;
         vkCmdBeginRenderPass(cb, &rp, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport vp{};
@@ -1292,11 +1413,11 @@ namespace CNA::Internal::Backends::Vulkan
         // ----- 3D draws -----
         VkPipeline lastPipeline3D = VK_NULL_HANDLE;
         for (const auto& draw : pending3D_) {
-            auto it = pipelines3D_.find(draw.topology);
-            if (it == pipelines3D_.end()) continue;
-            if (it->second != lastPipeline3D) {
-                vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
-                lastPipeline3D = it->second;
+            VkPipeline pipe = GetOrCreatePipeline3D(draw.topology,
+                                                    draw.depthTest, draw.depthWrite, draw.blend);
+            if (pipe != lastPipeline3D) {
+                vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+                lastPipeline3D = pipe;
             }
             vkCmdPushConstants(cb, pipelineLayout3D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, draw.mvp);
             VkDeviceSize off = 0;
@@ -1392,9 +1513,9 @@ namespace CNA::Internal::Backends::Vulkan
         // TODO: depth buffer support
     }
 
-    void VulkanGraphicsBackend::SetDepthTestEnabled(bool)  { /* TODO */ }
-    void VulkanGraphicsBackend::SetBlendEnabled(bool)      { /* TODO */ }
-    void VulkanGraphicsBackend::SetDepthWriteEnabled(bool) { /* TODO */ }
+    void VulkanGraphicsBackend::SetDepthTestEnabled(bool v)  { depthTestEnabled_  = v; }
+    void VulkanGraphicsBackend::SetBlendEnabled(bool v)      { blendEnabled_      = v; }
+    void VulkanGraphicsBackend::SetDepthWriteEnabled(bool v) { depthWriteEnabled_ = v; }
 
     void VulkanGraphicsBackend::DrawColoredPrimitives(
         const IVertexBufferBackend& vb,
@@ -1404,10 +1525,13 @@ namespace CNA::Internal::Backends::Vulkan
         const Matrix wvp = world * view * projection;
         Pending3DDraw d{};
         wvp.ToColumnMajor(d.mvp);
-        d.vb        = static_cast<const VulkanVertexBufferBackend&>(vb).GetBuffer();
-        d.ib        = VK_NULL_HANDLE;
-        d.topology  = ToVkTopology(primitive);
-        d.drawCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        d.vb         = static_cast<const VulkanVertexBufferBackend&>(vb).GetBuffer();
+        d.ib         = VK_NULL_HANDLE;
+        d.topology   = ToVkTopology(primitive);
+        d.drawCount  = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        d.depthTest  = depthTestEnabled_;
+        d.depthWrite = depthWriteEnabled_;
+        d.blend      = blendEnabled_;
         pending3D_.push_back(d);
     }
 
@@ -1419,10 +1543,13 @@ namespace CNA::Internal::Backends::Vulkan
         const Matrix wvp = world * view * projection;
         Pending3DDraw d{};
         wvp.ToColumnMajor(d.mvp);
-        d.vb        = static_cast<const VulkanVertexBufferBackend&>(vb).GetBuffer();
-        d.ib        = static_cast<const VulkanIndexBufferBackend&>(ib).GetBuffer();
-        d.topology  = ToVkTopology(primitive);
-        d.drawCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        d.vb         = static_cast<const VulkanVertexBufferBackend&>(vb).GetBuffer();
+        d.ib         = static_cast<const VulkanIndexBufferBackend&>(ib).GetBuffer();
+        d.topology   = ToVkTopology(primitive);
+        d.drawCount  = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        d.depthTest  = depthTestEnabled_;
+        d.depthWrite = depthWriteEnabled_;
+        d.blend      = blendEnabled_;
         pending3D_.push_back(d);
     }
 
