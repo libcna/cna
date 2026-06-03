@@ -20,10 +20,12 @@ namespace CNA::Internal::Backends::Vulkan
     static const char* const kValidationLayers[] = { "VK_LAYER_KHRONOS_validation" };
     static const char* const kDeviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
+// Validation is desired in debug builds but requires the Khronos layer.
+// Checked at runtime in CreateInstance(); flipped to false if unavailable.
 #ifdef NDEBUG
-    static constexpr bool kEnableValidation = false;
+    static bool sEnableValidation = false;
 #else
-    static constexpr bool kEnableValidation = true;
+    static bool sEnableValidation = true;
 #endif
 
     // =========================================================================
@@ -363,7 +365,7 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("VulkanGraphicsBackend: null window");
 
         CreateInstance();
-        if (kEnableValidation) SetupDebugMessenger();
+        if (sEnableValidation) SetupDebugMessenger();
         CreateSurface();
         PickPhysicalDevice();
         CreateLogicalDevice();
@@ -431,7 +433,7 @@ namespace CNA::Internal::Backends::Vulkan
         if (commandPool_) vkDestroyCommandPool(device_, commandPool_, nullptr);
         if (device_)      vkDestroyDevice(device_, nullptr);
 
-        if (kEnableValidation && debugMessenger_) {
+        if (sEnableValidation && debugMessenger_) {
             auto fn = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
                 vkGetInstanceProcAddr(instance_, "vkDestroyDebugUtilsMessengerEXT"));
             if (fn) fn(instance_, debugMessenger_, nullptr);
@@ -447,7 +449,7 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::CreateInstance()
     {
-        if (kEnableValidation) {
+        if (sEnableValidation) {
             uint32_t n = 0;
             vkEnumerateInstanceLayerProperties(&n, nullptr);
             std::vector<VkLayerProperties> layers(n);
@@ -455,7 +457,11 @@ namespace CNA::Internal::Backends::Vulkan
             for (const char* name : kValidationLayers) {
                 bool found = false;
                 for (const auto& l : layers) if (std::strcmp(l.layerName, name) == 0) { found = true; break; }
-                if (!found) throw std::runtime_error(std::string("Vulkan layer not found: ") + name);
+                if (!found) {
+                    SDL_Log("[Vulkan] Validation layer '%s' not available — running without validation", name);
+                    sEnableValidation = false;
+                    break;
+                }
             }
         }
 
@@ -470,14 +476,14 @@ namespace CNA::Internal::Backends::Vulkan
         uint32_t sdlN = 0;
         const char* const* sdlExts = SDL_Vulkan_GetInstanceExtensions(&sdlN);
         std::vector<const char*> exts(sdlExts, sdlExts + sdlN);
-        if (kEnableValidation) exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        if (sEnableValidation) exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
         VkInstanceCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         ci.pApplicationInfo = &app;
         ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         ci.ppEnabledExtensionNames = exts.data();
-        if (kEnableValidation) {
+        if (sEnableValidation) {
             ci.enabledLayerCount = static_cast<uint32_t>(std::size(kValidationLayers));
             ci.ppEnabledLayerNames = kValidationLayers;
         }
@@ -588,7 +594,7 @@ namespace CNA::Internal::Backends::Vulkan
         ci.pEnabledFeatures = &feat;
         ci.enabledExtensionCount = static_cast<uint32_t>(std::size(kDeviceExtensions));
         ci.ppEnabledExtensionNames = kDeviceExtensions;
-        if (kEnableValidation) {
+        if (sEnableValidation) {
             ci.enabledLayerCount = static_cast<uint32_t>(std::size(kValidationLayers));
             ci.ppEnabledLayerNames = kValidationLayers;
         }
