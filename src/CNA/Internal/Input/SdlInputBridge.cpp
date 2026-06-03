@@ -1,5 +1,6 @@
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 
 #include <algorithm>
@@ -203,15 +204,23 @@ namespace
     {
         if (window != nullptr)
         {
+            // SDL_renderer backend: use SDL's built-in logical-presentation transform.
             SDL_Renderer* renderer = SDL_GetRenderer(window);
             if (renderer != nullptr)
             {
                 float logX = windowX, logY = windowY;
                 if (SDL_RenderCoordinatesFromWindow(renderer, windowX, windowY, &logX, &logY))
                 {
-                    //SDL_Log("[Input] to_logical_position: window=(%.1f,%.1f) -> logical=(%.1f,%.1f)", windowX, windowY, logX, logY);
                     return Microsoft::Xna::Framework::Vector2(logX, logY);
                 }
+            }
+            // Other backends (e.g. EasyGL): use the backend's own transform if registered.
+            auto* backend = CNA::Internal::Backends::IGraphicsBackend::GetForWindow(window);
+            if (backend != nullptr)
+            {
+                float logX = windowX, logY = windowY;
+                if (backend->TransformWindowToLogical(windowX, windowY, logX, logY))
+                    return Microsoft::Xna::Framework::Vector2(logX, logY);
             }
         }
         return Microsoft::Xna::Framework::Vector2(windowX, windowY);

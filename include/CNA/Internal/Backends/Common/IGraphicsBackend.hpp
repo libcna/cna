@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <string>
 #include <memory>
+#include <unordered_map>
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 struct SDL_Window;
@@ -115,6 +116,10 @@ namespace CNA::Internal::Backends
         /// Updates the backend presentation/scaling mode at runtime.
         /// Called by GraphicsDevice when GraphicsDeviceManager::ApplyChanges() is used.
         virtual void SetPresentationMode(int mode) = 0;
+        /// Converts a point from physical window coordinates to logical (virtual)
+        /// game coordinates. Returns true on success. Default: no-op (returns false).
+        virtual bool TransformWindowToLogical(float windowX, float windowY,
+                                              float& logX, float& logY) const { return false; }
         // TODO: SDL dependency should be abstracted later
         virtual SDL_Window* GetWindowInternal() const = 0;
         virtual SDL_Renderer* GetRendererInternal() const = 0;
@@ -197,6 +202,33 @@ namespace CNA::Internal::Backends
         /// On Web: triggers WEBGL_lose_context.restoreContext().
         /// On desktop: equivalent to DebugSimulateContextLoss() (destroy + recreate).
         virtual void DebugRestoreContext() {}
+
+        // ---- Window → backend registry ----
+        // Backends that implement TransformWindowToLogical register themselves here
+        // so that SdlInputBridge can map physical mouse coordinates to logical ones
+        // even for backends that have no SDL_Renderer (e.g. EasyGL).
+
+        static void RegisterForWindow(SDL_Window* window, IGraphicsBackend* backend)
+        {
+            windowRegistry()[window] = backend;
+        }
+        static void UnregisterForWindow(SDL_Window* window)
+        {
+            windowRegistry().erase(window);
+        }
+        static IGraphicsBackend* GetForWindow(SDL_Window* window)
+        {
+            auto& reg = windowRegistry();
+            auto it = reg.find(window);
+            return it != reg.end() ? it->second : nullptr;
+        }
+
+    private:
+        static std::unordered_map<SDL_Window*, IGraphicsBackend*>& windowRegistry()
+        {
+            static std::unordered_map<SDL_Window*, IGraphicsBackend*> reg;
+            return reg;
+        }
     };
 
     /**

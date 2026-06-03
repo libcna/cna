@@ -167,6 +167,8 @@ namespace CNA::Internal::Backends::EasyGL
         void GetViewportSize(int& width, int& height) override;
         void getLogicalSize(int& width, int& height) const;
         void getPhysicalSize(int& width, int& height) const;
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
 
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;

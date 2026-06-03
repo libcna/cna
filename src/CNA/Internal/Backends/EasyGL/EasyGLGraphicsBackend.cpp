@@ -398,6 +398,10 @@ void main()
     {
         if (!window) throw std::runtime_error("EasyGLGraphicsBackend initialized with null window.");
 
+        // Register this backend so SdlInputBridge can apply the same
+        // physical→logical coordinate transform for mouse/touch input.
+        IGraphicsBackend::RegisterForWindow(window, this);
+
         // NOTE: SDL_Window is NOT owned by EasyGL backend.
         // It is owned by GraphicsDevice or higher level platform layer.
 
@@ -425,6 +429,7 @@ void main()
 
     EasyGLGraphicsBackend::~EasyGLGraphicsBackend()
     {
+        if (window) IGraphicsBackend::UnregisterForWindow(window);
         if (gl_context) SDL_GL_DestroyContext(gl_context);
         // window is NOT owned by the backend.
         // No SDL_Quit or subsystem shutdown here - managed centrally.
@@ -532,6 +537,19 @@ void main()
     void EasyGLGraphicsBackend::getPhysicalSize(int& width, int& height) const
     {
         SDL_GetWindowSize(window, &width, &height);
+    }
+
+    bool EasyGLGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
+                                                          float& logX, float& logY) const
+    {
+        if (virtualHeight_ <= 0) return false;
+        int physW, physH;
+        SDL_GetWindowSize(window, &physW, &physH);
+        if (physH <= 0) return false;
+        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
+        logX = windowX * scale;
+        logY = windowY * scale;
+        return true;
     }
 
     void EasyGLGraphicsBackend::GetViewportSize(int& width, int& height)
