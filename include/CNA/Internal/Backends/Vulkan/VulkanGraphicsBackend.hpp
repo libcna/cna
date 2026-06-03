@@ -1,9 +1,9 @@
 #pragma once
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
-#include <iostream>
-#include <stdexcept>
+#include <vulkan/vulkan.h>
 #include <vector>
+#include <stdexcept>
 
 namespace CNA::Internal::Backends::Vulkan
 {
@@ -13,40 +13,29 @@ namespace CNA::Internal::Backends::Vulkan
         explicit VulkanTextureBackend(const ImageData& data);
         ~VulkanTextureBackend() override;
 
-        int GetWidth() const override { return width; }
-        int GetHeight() const override { return height; }
+        int GetWidth() const override { return width_; }
+        int GetHeight() const override { return height_; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
     private:
-        int width;
-        int height;
-        // TODO: Add Vulkan Image/ImageView/Sampler handles
+        int width_ = 0;
+        int height_ = 0;
+        // TODO: VkImage, VkDeviceMemory, VkImageView, VkSampler
     };
 
     class VulkanSpriteBatchBackend : public ISpriteBatchBackend
     {
     public:
-        VulkanSpriteBatchBackend();
-        ~VulkanSpriteBatchBackend() override;
+        VulkanSpriteBatchBackend() = default;
+        ~VulkanSpriteBatchBackend() override = default;
 
-        void Begin() override;
-        void End() override;
-        void Draw(const ITextureBackend& texture, float x, float y) override;
-        void Draw(const ITextureBackend& texture,
-                  const Rectangle& destinationRectangle,
-                  const Rectangle& sourceRectangle,
-                  const Color& color) override;
-        void Draw(const ITextureBackend& texture,
-                  const Rectangle& destinationRectangle,
-                  const Rectangle& sourceRectangle,
-                  const Color& color,
-                  float rotation,
-                  const Vector2& origin,
-                  SpriteEffects effects,
-                  float layerDepth) override;
-
-    private:
-        // TODO: Add Vulkan Pipeline, Descriptor Sets, Buffers for quad rendering
+        void Begin() override {}
+        void End() override {}
+        void Draw(const ITextureBackend&, float, float) override {}
+        void Draw(const ITextureBackend&, const Rectangle&, const Rectangle&, const Color&) override {}
+        void Draw(const ITextureBackend&, const Rectangle&, const Rectangle&, const Color&,
+                  float, const Vector2&, SpriteEffects, float) override {}
+        // TODO: Implement SpriteBatch with Vulkan pipeline and descriptor sets
     };
 
     class VulkanGraphicsBackend : public IGraphicsBackend
@@ -59,40 +48,84 @@ namespace CNA::Internal::Backends::Vulkan
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
 
-        void SetVirtualResolution(int width, int height) override
-        {
-        } // no-op: Vulkan uses physical viewport
-        void SetPresentationMode(int /*mode*/) override
-        {
-        } // no-op: Vulkan has no logical presentation
+        void SetVirtualResolution(int, int) override {}
+        void SetPresentationMode(int) override {}
 
-        SDL_Window* GetWindowInternal() const override { return window; }
+        SDL_Window* GetWindowInternal() const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
-        // 3D pipeline: NOT supported by the Vulkan backend yet.
-        // @note Status: STUB. Every entry point throws std::runtime_error.
-        void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
-        void SetDepthTestEnabled(bool enabled) override;
-        void SetBlendEnabled(bool enabled) override;
-        void SetDepthWriteEnabled(bool enabled) override;
-        std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
-        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
-        void DrawColoredPrimitives(const IVertexBufferBackend& vb,
-                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                   PrimitiveType primitive, int primitiveCount) override;
-        void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
-                                          const IIndexBufferBackend& ib,
-                                          const Matrix& world, const Matrix& view, const Matrix& projection,
-                                          PrimitiveType primitive, int primitiveCount) override;
+        // 3D pipeline: not yet implemented — every entry throws std::runtime_error.
+        void ClearColorAndDepth(float, float, float, float, float) override;
+        void SetDepthTestEnabled(bool) override;
+        void SetBlendEnabled(bool) override;
+        void SetDepthWriteEnabled(bool) override;
+        std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int) override;
+        void DrawColoredPrimitives(const IVertexBufferBackend&, const Matrix&, const Matrix&,
+                                   const Matrix&, PrimitiveType, int) override;
+        void DrawIndexedColoredPrimitives(const IVertexBufferBackend&, const IIndexBufferBackend&,
+                                          const Matrix&, const Matrix&, const Matrix&,
+                                          PrimitiveType, int) override;
 
     private:
-        SDL_Window* window;
-        // TODO: Add Vulkan Instance, Physical Device, Device, Surface, Swapchain, RenderPass, CommandPool, etc.
+        static constexpr int MaxFramesInFlight = 2;
 
-        void InitVulkan();
-        void CleanupVulkan();
+        SDL_Window* window_ = nullptr;
+
+        VkInstance       instance_        = VK_NULL_HANDLE;
+        VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
+        VkSurfaceKHR     surface_         = VK_NULL_HANDLE;
+        VkPhysicalDevice physicalDevice_  = VK_NULL_HANDLE;
+        VkDevice         device_          = VK_NULL_HANDLE;
+
+        uint32_t graphicsQueueFamily_ = 0;
+        uint32_t presentQueueFamily_  = 0;
+        VkQueue  graphicsQueue_       = VK_NULL_HANDLE;
+        VkQueue  presentQueue_        = VK_NULL_HANDLE;
+
+        VkSwapchainKHR         swapchain_      = VK_NULL_HANDLE;
+        VkFormat               swapchainFormat_ = VK_FORMAT_UNDEFINED;
+        VkExtent2D             swapchainExtent_ = {};
+        std::vector<VkImage>   swapchainImages_;
+        std::vector<VkImageView> swapchainImageViews_;
+
+        VkRenderPass                renderPass_          = VK_NULL_HANDLE;
+        std::vector<VkFramebuffer>  swapchainFramebuffers_;
+
+        VkCommandPool                commandPool_    = VK_NULL_HANDLE;
+        std::vector<VkCommandBuffer> commandBuffers_;
+
+        std::vector<VkSemaphore> imageAvailableSemaphores_;
+        std::vector<VkSemaphore> renderFinishedSemaphores_;
+        std::vector<VkFence>     inFlightFences_;
+
+        uint32_t currentFrame_ = 0;
+        float clearR_ = 0.f, clearG_ = 0.f, clearB_ = 0.f, clearA_ = 1.f;
+        bool initialized_ = false;
+
+        void CreateInstance();
+        void SetupDebugMessenger();
+        void CreateSurface();
+        void PickPhysicalDevice();
+        void CreateLogicalDevice();
+        void CreateSwapchain();
+        void CreateImageViews();
+        void CreateRenderPass();
+        void CreateFramebuffers();
+        void CreateCommandPool();
+        void AllocateCommandBuffers();
+        void CreateSyncObjects();
+        void RecreateSwapchain();
+        void CleanupSwapchain();
+        void RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex);
+
+        static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
+            VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+            VkDebugUtilsMessageTypeFlagsEXT type,
+            const VkDebugUtilsMessengerCallbackDataEXT* data,
+            void* userData);
     };
 }
