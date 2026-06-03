@@ -45,6 +45,7 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Buffer ibo_;
         bool begun = false;
         ::easygl::ResourceRegistry* registry_ = nullptr;
+        EasyGLGraphicsBackend* graphicsBackend_ = nullptr;
 
         // Batching state: quads are accumulated between Begin()/End() and
         // flushed in one draw call. A flush also occurs when the texture changes.
@@ -53,7 +54,8 @@ namespace CNA::Internal::Backends::EasyGL
         const EasyGLTextureBackend* current_texture_ = nullptr;
 
     public:
-        explicit EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry);
+        explicit EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry,
+                                          EasyGLGraphicsBackend* backend = nullptr);
         ~EasyGLSpriteBatchBackend() override;
 
         void Begin() override;
@@ -144,6 +146,10 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Device device;
         ::easygl::ResourceRegistry registry_;
 
+        int virtualWidth_ = 0;
+        int virtualHeight_ = 0;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+
         // 3D pipeline state
         ::easygl::Program program3d_;
         int loc_world_view_projection_ = -1;
@@ -152,18 +158,17 @@ namespace CNA::Internal::Backends::EasyGL
         void EnsureColored3DProgram();
 
     public:
-        explicit EasyGLGraphicsBackend(SDL_Window* window);
+        explicit EasyGLGraphicsBackend(SDL_Window* window,
+                                       int virtualWidth = 0, int virtualHeight = 0,
+                                       CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth);
         ~EasyGLGraphicsBackend() override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void getLogicalSize(int& width, int& height) const;
 
-        void SetVirtualResolution(int width, int height) override
-        {
-        } // no-op: EasyGL uses physical viewport
-        void SetPresentationMode(int /*mode*/) override
-        {
-        } // no-op: EasyGL has no logical presentation
+        void SetVirtualResolution(int width, int height) override;
+        void SetPresentationMode(int mode) override;
         SDL_Window* GetWindowInternal() const override { return window; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 

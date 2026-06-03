@@ -89,9 +89,11 @@ namespace CNA::Internal::Backends::EasyGL
 
     // --- EasyGLSpriteBatchBackend ---
 
-    EasyGLSpriteBatchBackend::EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry)
+    EasyGLSpriteBatchBackend::EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry,
+                                                       EasyGLGraphicsBackend* backend)
         : device_(device)
         , registry_(registry)
+        , graphicsBackend_(backend)
     {
         InitializeResources();
         if (registry_) registry_->add(this);
@@ -235,9 +237,11 @@ void main()
 
         int vx, vy, vw, vh;
         device_.get_viewport(vx, vy, vw, vh);
+        int logW = vw, logH = vh;
+        if (graphicsBackend_) graphicsBackend_->getLogicalSize(logW, logH);
         float ortho[16] = {
-            2.0f / vw, 0, 0, 0,
-            0, -2.0f / vh, 0, 0,
+            2.0f / logW, 0, 0, 0,
+            0, -2.0f / logH, 0, 0,
             0, 0, -1, 0,
             -1, 1, 0, 1
         };
@@ -373,7 +377,12 @@ void main()
 
     // --- EasyGLGraphicsBackend ---
 
-    EasyGLGraphicsBackend::EasyGLGraphicsBackend(SDL_Window* window) : window(window)
+    EasyGLGraphicsBackend::EasyGLGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
+                                                  CnaPresentationMode mode)
+        : window(window)
+        , virtualWidth_(virtualWidth)
+        , virtualHeight_(virtualHeight)
+        , presentationMode_(mode)
     {
         if (!window) throw std::runtime_error("EasyGLGraphicsBackend initialized with null window.");
 
@@ -481,9 +490,36 @@ void main()
         SDL_GL_SwapWindow(window);
     }
 
+    void EasyGLGraphicsBackend::SetVirtualResolution(int width, int height)
+    {
+        virtualWidth_ = width;
+        virtualHeight_ = height;
+    }
+
+    void EasyGLGraphicsBackend::SetPresentationMode(int mode)
+    {
+        presentationMode_ = static_cast<CnaPresentationMode>(mode);
+    }
+
+    void EasyGLGraphicsBackend::getLogicalSize(int& width, int& height) const
+    {
+        if (virtualHeight_ <= 0)
+        {
+            SDL_GetWindowSize(window, &width, &height);
+            return;
+        }
+        int physW, physH;
+        SDL_GetWindowSize(window, &physW, &physH);
+        height = virtualHeight_;
+        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physH > 0)
+            width = static_cast<int>((double)physW * virtualHeight_ / physH + 0.5);
+        else
+            width = virtualWidth_ > 0 ? virtualWidth_ : physW;
+    }
+
     void EasyGLGraphicsBackend::GetViewportSize(int& width, int& height)
     {
-        SDL_GetWindowSize(window, &width, &height);
+        getLogicalSize(width, height);
     }
 
     std::unique_ptr<ITextureBackend> EasyGLGraphicsBackend::CreateTexture(const ImageData& data)
@@ -493,7 +529,7 @@ void main()
 
     std::unique_ptr<ISpriteBatchBackend> EasyGLGraphicsBackend::CreateSpriteBatch()
     {
-        return std::make_unique<EasyGLSpriteBatchBackend>(device, &registry_);
+        return std::make_unique<EasyGLSpriteBatchBackend>(device, &registry_, this);
     }
 
     // -------------------------------------------------------------------------
@@ -800,7 +836,8 @@ namespace CNA::Internal::Backends
 #ifdef CNA_BACKEND_EASYGL
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
-        return std::make_unique<EasyGL::EasyGLGraphicsBackend>(args.window);
+        return std::make_unique<EasyGL::EasyGLGraphicsBackend>(
+            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
     }
 #endif
 }
