@@ -2,16 +2,16 @@
 
 namespace Microsoft::Xna::Framework::Input::Touch
 {
-    IMPL_PROP(bool, IsConnected, getter1, setter0, member0, static0, constret1, ref1, constmet1, TouchPanelCapabilities,
-              nothing)
-
     TouchPanelCapabilities::TouchPanelCapabilities()
-        : IsConnected_(false)
+        : isConnected_(false), maximumTouchCount_(0)
     {
     }
 
-    TouchPanelCapabilities::TouchPanelCapabilities(bool isConnected)
-        : IsConnected_(isConnected)
+    TouchPanelCapabilities::TouchPanelCapabilities(bool isConnected, int maximumTouchCount)
+        : isConnected_(isConnected), maximumTouchCount_(maximumTouchCount)
     {
     }
+
+    bool TouchPanelCapabilities::getIsConnectedProperty()      const { return isConnected_; }
+    int  TouchPanelCapabilities::getMaximumTouchCountProperty() const { return maximumTouchCount_; }
 }

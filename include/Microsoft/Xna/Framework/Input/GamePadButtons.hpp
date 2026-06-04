@@ -1,60 +1,51 @@
-//
-// Created by robertvokac on 5/28/25.
-//
-
 #pragma once
-#include "ButtonState.hpp"
-#include "SharpRuntime/Prop.hpp"
 
+#include "Microsoft/Xna/Framework/Input/Buttons.hpp"
+#include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
+#include "CNA/CNAHelper.hpp"
+
+#include <initializer_list>
 
 namespace Microsoft::Xna::Framework::Input
 {
-    /**
-     * @brief Snapshot of digital gamepad buttons.
-     *
-     * @note Status: PARTIAL
-     */
+    struct GamePadState;
+
+    /// Represents the state of the digital buttons on a gamepad.
     struct GamePadButtons
     {
-    public:
-        DEF_PROP(ButtonState, A, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, B, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, X, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, Y, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, Back, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, Start, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, LeftShoulder, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, RightShoulder, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, LeftStick, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, RightStick, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, DPadUp, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, DPadDown, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, DPadLeft, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, DPadRight, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        [[nodiscard]] ButtonState getAProperty() const;
+        [[nodiscard]] ButtonState getBProperty() const;
+        [[nodiscard]] ButtonState getBackProperty() const;
+        [[nodiscard]] ButtonState getXProperty() const;
+        [[nodiscard]] ButtonState getYProperty() const;
+        [[nodiscard]] ButtonState getStartProperty() const;
+        [[nodiscard]] ButtonState getLeftShoulderProperty() const;
+        [[nodiscard]] ButtonState getLeftStickProperty() const;
+        [[nodiscard]] ButtonState getRightShoulderProperty() const;
+        [[nodiscard]] ButtonState getRightStickProperty() const;
+        [[nodiscard]] ButtonState getBigButtonProperty() const;
 
-        /**
-         * @brief Initializes all gamepad buttons as released.
-         */
+        /// Constructs with no buttons pressed.
         GamePadButtons();
 
-        /**
-         * @brief Initializes all mapped gamepad buttons.
-         */
-        GamePadButtons(
-            ButtonState a,
-            ButtonState b,
-            ButtonState x,
-            ButtonState y,
-            ButtonState back,
-            ButtonState start,
-            ButtonState leftShoulder,
-            ButtonState rightShoulder,
-            ButtonState leftStick,
-            ButtonState rightStick,
-            ButtonState dPadUp,
-            ButtonState dPadDown,
-            ButtonState dPadLeft,
-            ButtonState dPadRight
-        );
+        /// Constructs from a combined Buttons flags value.
+        explicit GamePadButtons(Buttons buttons);
+
+        [[nodiscard]] bool Equals(const GamePadButtons& other) const;
+        [[nodiscard]] int GetHashCode() const;
+
+        friend bool operator==(const GamePadButtons& left, const GamePadButtons& right);
+        friend bool operator!=(const GamePadButtons& left, const GamePadButtons& right);
+
+        /// Derives a GamePadButtons from a list of Buttons flags values.
+        static GamePadButtons FromButtons(std::initializer_list<Buttons> btns);
+
+        /// Packed button flags. For internal library use only.
+        NOXNA Buttons buttons_;
+
+    private:
+        [[nodiscard]] ButtonState ButtonStateFromFlag(Buttons flag) const;
+
+        friend struct GamePadState;
     };
 }

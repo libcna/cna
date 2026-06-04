@@ -1,36 +1,46 @@
-//
-// Created by robertvokac on 5/25/25.
-//
-
 #pragma once
-#include "ButtonState.hpp"
-#include "SharpRuntime/Prop.hpp"
+
+#include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
+
+#include <string>
 
 namespace Microsoft::Xna::Framework::Input
 {
-    /**
-     * @brief Snapshot of the current mouse state.
-     *
-     * @note Status: IMPLEMENTED
-     */
+    /// Represents a mouse state with cursor position and button press information.
     struct MouseState
     {
-    public:
-        DEF_PROP(ButtonState, LeftButton, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, RightButton, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(ButtonState, MiddleButton, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(int, X, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(int, Y, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(int, ScrollWheelValue, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        [[nodiscard]] int getXProperty() const;
+        [[nodiscard]] int getYProperty() const;
+        [[nodiscard]] ButtonState getLeftButtonProperty() const;
+        [[nodiscard]] ButtonState getRightButtonProperty() const;
+        [[nodiscard]] ButtonState getMiddleButtonProperty() const;
+        [[nodiscard]] ButtonState getXButton1Property() const;
+        [[nodiscard]] ButtonState getXButton2Property() const;
+        [[nodiscard]] int getScrollWheelValueProperty() const;
 
         MouseState();
-        MouseState(
-            int x,
-            int y,
-            ButtonState leftButton,
-            ButtonState rightButton,
-            ButtonState middleButton,
-            int scrollWheelValue
-        );
+
+        /// Constructs a MouseState with all pointer and button values.
+        MouseState(int x, int y, int scrollWheel,
+                   ButtonState leftButton, ButtonState middleButton,
+                   ButtonState rightButton,
+                   ButtonState xButton1, ButtonState xButton2);
+
+        [[nodiscard]] bool Equals(const MouseState& other) const;
+        [[nodiscard]] int GetHashCode() const;
+        [[nodiscard]] std::string ToString() const;
+
+        friend bool operator==(const MouseState& left, const MouseState& right);
+        friend bool operator!=(const MouseState& left, const MouseState& right);
+
+    private:
+        int x_;
+        int y_;
+        ButtonState leftButton_;
+        ButtonState rightButton_;
+        ButtonState middleButton_;
+        ButtonState xButton1_;
+        ButtonState xButton2_;
+        int scrollWheelValue_;
     };
 }

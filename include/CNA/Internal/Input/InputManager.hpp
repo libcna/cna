@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
@@ -11,6 +12,20 @@
 
 namespace CNA::Internal::Input
 {
+    /// Raw gamepad values read directly from the SDL layer, before dead-zone processing.
+    struct RawGamePadState
+    {
+        bool isConnected = false;
+        Microsoft::Xna::Framework::Input::Buttons buttons =
+            static_cast<Microsoft::Xna::Framework::Input::Buttons>(0);
+        float leftX       = 0.0f;
+        float leftY       = 0.0f;
+        float rightX      = 0.0f;
+        float rightY      = 0.0f;
+        float leftTrigger  = 0.0f;
+        float rightTrigger = 0.0f;
+    };
+
     /**
      * @brief Internal identification of supported mouse buttons.
      *
@@ -148,6 +163,15 @@ namespace CNA::Internal::Input
          * @brief Returns a snapshot of current gamepad state for one player.
          */
         static Microsoft::Xna::Framework::Input::GamePadState GetGamePadState(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex
+        );
+
+        /**
+         * @brief Returns raw gamepad values (no dead-zone applied) for one player.
+         *
+         * Used by GamePad::GetState() to apply dead-zone processing at the XNA layer.
+         */
+        static RawGamePadState GetRawGamePadState(
             Microsoft::Xna::Framework::PlayerIndex playerIndex
         );
     };

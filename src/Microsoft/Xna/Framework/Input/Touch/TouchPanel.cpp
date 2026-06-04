@@ -92,11 +92,11 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
         if (touchDeviceExists_)
         {
-            return TouchPanelCapabilities(true);
+            return TouchPanelCapabilities(true, MAX_TOUCHES);
         }
 
         const TouchCollection state = CNA::Internal::Input::InputManager::GetTouchState();
-        return TouchPanelCapabilities(!state.empty());
+        return TouchPanelCapabilities(!state.empty(), MAX_TOUCHES);
     }
 
     TouchCollection TouchPanel::GetState()

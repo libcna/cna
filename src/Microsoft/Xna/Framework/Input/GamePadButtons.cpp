@@ -1,85 +1,59 @@
-//
-// Created by robertvokac on 5/28/25.
-//
-
 #include "Microsoft/Xna/Framework/Input/GamePadButtons.hpp"
 
 namespace Microsoft::Xna::Framework::Input
 {
-    IMPL_PROP(ButtonState, A, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, B, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, X, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, Y, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons, nothing)
-
-    IMPL_PROP(ButtonState, Back, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
-              nothing)
-    IMPL_PROP(ButtonState, Start, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
-              nothing)
-    IMPL_PROP(ButtonState, LeftShoulder, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
-              nothing)
-    IMPL_PROP(ButtonState, RightShoulder, getter1, setter0, member0, static0, constret1, ref1, constmet1,
-              GamePadButtons, nothing)
-    IMPL_PROP(ButtonState, LeftStick, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
-              nothing)
-    IMPL_PROP(ButtonState, RightStick, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
-              nothing)
-    IMPL_PROP(ButtonState, DPadUp, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
-              nothing)
-    IMPL_PROP(ButtonState, DPadDown, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
-              nothing)
-    IMPL_PROP(ButtonState, DPadLeft, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
-              nothing)
-    IMPL_PROP(ButtonState, DPadRight, getter1, setter0, member0, static0, constret1, ref1, constmet1, GamePadButtons,
-              nothing)
-
     GamePadButtons::GamePadButtons()
-        : A_(ButtonState::Released),
-          B_(ButtonState::Released),
-          X_(ButtonState::Released),
-          Y_(ButtonState::Released),
-          Back_(ButtonState::Released),
-          Start_(ButtonState::Released),
-          LeftShoulder_(ButtonState::Released),
-          RightShoulder_(ButtonState::Released),
-          LeftStick_(ButtonState::Released),
-          RightStick_(ButtonState::Released),
-          DPadUp_(ButtonState::Released),
-          DPadDown_(ButtonState::Released),
-          DPadLeft_(ButtonState::Released),
-          DPadRight_(ButtonState::Released)
+        : buttons_(static_cast<Buttons>(0))
     {
     }
 
-    GamePadButtons::GamePadButtons(
-        const ButtonState a,
-        const ButtonState b,
-        const ButtonState x,
-        const ButtonState y,
-        const ButtonState back,
-        const ButtonState start,
-        const ButtonState leftShoulder,
-        const ButtonState rightShoulder,
-        const ButtonState leftStick,
-        const ButtonState rightStick,
-        const ButtonState dPadUp,
-        const ButtonState dPadDown,
-        const ButtonState dPadLeft,
-        const ButtonState dPadRight
-    )
-        : A_(a),
-          B_(b),
-          X_(x),
-          Y_(y),
-          Back_(back),
-          Start_(start),
-          LeftShoulder_(leftShoulder),
-          RightShoulder_(rightShoulder),
-          LeftStick_(leftStick),
-          RightStick_(rightStick),
-          DPadUp_(dPadUp),
-          DPadDown_(dPadDown),
-          DPadLeft_(dPadLeft),
-          DPadRight_(dPadRight)
+    GamePadButtons::GamePadButtons(Buttons buttons)
+        : buttons_(buttons)
     {
+    }
+
+    GamePadButtons GamePadButtons::FromButtons(std::initializer_list<Buttons> btns)
+    {
+        Buttons mask = static_cast<Buttons>(0);
+        for (Buttons b : btns)
+            mask |= b;
+        return GamePadButtons(mask);
+    }
+
+    ButtonState GamePadButtons::ButtonStateFromFlag(Buttons flag) const
+    {
+        return (buttons_ & flag) == flag ? ButtonState::Pressed : ButtonState::Released;
+    }
+
+    ButtonState GamePadButtons::getAProperty() const             { return ButtonStateFromFlag(Buttons::A); }
+    ButtonState GamePadButtons::getBProperty() const             { return ButtonStateFromFlag(Buttons::B); }
+    ButtonState GamePadButtons::getBackProperty() const          { return ButtonStateFromFlag(Buttons::Back); }
+    ButtonState GamePadButtons::getXProperty() const             { return ButtonStateFromFlag(Buttons::X); }
+    ButtonState GamePadButtons::getYProperty() const             { return ButtonStateFromFlag(Buttons::Y); }
+    ButtonState GamePadButtons::getStartProperty() const         { return ButtonStateFromFlag(Buttons::Start); }
+    ButtonState GamePadButtons::getLeftShoulderProperty() const  { return ButtonStateFromFlag(Buttons::LeftShoulder); }
+    ButtonState GamePadButtons::getLeftStickProperty() const     { return ButtonStateFromFlag(Buttons::LeftStick); }
+    ButtonState GamePadButtons::getRightShoulderProperty() const { return ButtonStateFromFlag(Buttons::RightShoulder); }
+    ButtonState GamePadButtons::getRightStickProperty() const    { return ButtonStateFromFlag(Buttons::RightStick); }
+    ButtonState GamePadButtons::getBigButtonProperty() const     { return ButtonStateFromFlag(Buttons::BigButton); }
+
+    bool GamePadButtons::Equals(const GamePadButtons& other) const
+    {
+        return buttons_ == other.buttons_;
+    }
+
+    int GamePadButtons::GetHashCode() const
+    {
+        return static_cast<int>(static_cast<uint32_t>(buttons_));
+    }
+
+    bool operator==(const GamePadButtons& left, const GamePadButtons& right)
+    {
+        return left.Equals(right);
+    }
+
+    bool operator!=(const GamePadButtons& left, const GamePadButtons& right)
+    {
+        return !(left == right);
     }
 }

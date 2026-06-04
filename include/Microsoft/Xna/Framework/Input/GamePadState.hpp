@@ -1,46 +1,78 @@
-//
-// Created by robertvokac on 5/28/25.
-//
-
 #pragma once
-#include "GamePadButtons.hpp"
+
+#include "Microsoft/Xna/Framework/Input/Buttons.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadButtons.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadDPad.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadTriggers.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
+#include <initializer_list>
+#include <string>
 
 namespace Microsoft::Xna::Framework::Input
 {
-    /**
-     * @brief Snapshot of one gamepad state.
-     *
-     * @note Status: PARTIAL
-     */
+    /// Represents the current state of a gamepad controller.
     struct GamePadState
     {
-    public:
-        DEF_PROP(GamePadButtons, Buttons, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(Microsoft::Xna::Framework::Vector2, LeftThumbstick, getter1, setter0, member1, static0, constret1,
-                 ref1, constmet1)
-        DEF_PROP(Microsoft::Xna::Framework::Vector2, RightThumbstick, getter1, setter0, member1, static0, constret1,
-                 ref1, constmet1)
-        DEF_PROP(float, LeftTrigger, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(float, RightTrigger, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(bool, IsConnected, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        /// Gets whether the controller is connected.
+        [[nodiscard]] bool getIsConnectedProperty() const;
 
-        /**
-         * @brief Initializes a disconnected gamepad snapshot.
-         */
+        /// Gets the packet number associated with this state.
+        [[nodiscard]] int getPacketNumberProperty() const;
+
+        /// Gets the digital button states.
+        [[nodiscard]] const GamePadButtons& getButtonsProperty() const;
+
+        /// Gets the directional pad state.
+        [[nodiscard]] const GamePadDPad& getDPadProperty() const;
+
+        /// Gets the thumbstick positions.
+        [[nodiscard]] const GamePadThumbSticks& getThumbSticksProperty() const;
+
+        /// Gets the trigger positions.
+        [[nodiscard]] const GamePadTriggers& getTriggersProperty() const;
+
+        /// Constructs a disconnected state (all values at rest).
         GamePadState();
 
-        /**
-         * @brief Initializes a full gamepad snapshot.
-         */
-        GamePadState(
-            const GamePadButtons& buttons,
-            const Microsoft::Xna::Framework::Vector2& leftThumbstick,
-            const Microsoft::Xna::Framework::Vector2& rightThumbstick,
-            float leftTrigger,
-            float rightTrigger,
-            bool isConnected
-        );
+        /// Constructs a fully specified connected state.
+        GamePadState(const GamePadThumbSticks& thumbSticks,
+                     const GamePadTriggers& triggers,
+                     const GamePadButtons& buttons,
+                     const GamePadDPad& dPad);
+
+        /// Constructs from raw stick, trigger, and button flag values.
+        GamePadState(const Microsoft::Xna::Framework::Vector2& leftThumbStick,
+                     const Microsoft::Xna::Framework::Vector2& rightThumbStick,
+                     float leftTrigger,
+                     float rightTrigger,
+                     std::initializer_list<Buttons> buttons);
+
+        /// Returns true if the specified button(s) are pressed.
+        [[nodiscard]] bool IsButtonDown(Buttons button) const;
+
+        /// Returns true if the specified button(s) are not pressed.
+        [[nodiscard]] bool IsButtonUp(Buttons button) const;
+
+        [[nodiscard]] bool Equals(const GamePadState& other) const;
+        [[nodiscard]] int GetHashCode() const;
+        [[nodiscard]] std::string ToString() const;
+
+        friend bool operator==(const GamePadState& left, const GamePadState& right);
+        friend bool operator!=(const GamePadState& left, const GamePadState& right);
+
+    private:
+        bool isConnected_;
+        int packetNumber_;
+        GamePadButtons buttons_;
+        GamePadDPad dPad_;
+        GamePadThumbSticks thumbSticks_;
+        GamePadTriggers triggers_;
+
+        static Buttons StickToButtons(const Microsoft::Xna::Framework::Vector2& stick,
+                                      Buttons left, Buttons right,
+                                      Buttons up, Buttons down,
+                                      float deadZoneSize);
     };
 }

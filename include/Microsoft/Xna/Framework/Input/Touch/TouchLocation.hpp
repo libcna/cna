@@ -1,44 +1,47 @@
-//
-// Created by robertvokac on 5/25/25.
-//
-
 #pragma once
 
-#include "TouchLocationState.hpp"
-#include "SharpRuntime/Prop.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+
+#include <string>
 
 namespace Microsoft::Xna::Framework::Input::Touch
 {
-    /**
-     * @brief Represents one touch point snapshot.
-     *
-     * Includes public touch id, touch state and touch position in pixels.
-     *
-     * @note Status: PARTIAL
-     */
+    /// Represents one touch point snapshot, including an optional previous location.
     struct TouchLocation
     {
-        DEF_PROP(int, Id, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(TouchLocationState, State, getter1, setter0, member1, static0, constret1, ref1, constmet1)
-        DEF_PROP(Vector2, Position, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        [[nodiscard]] int getIdProperty() const;
+        [[nodiscard]] TouchLocationState getStateProperty() const;
+        [[nodiscard]] const Microsoft::Xna::Framework::Vector2& getPositionProperty() const;
 
-    public:
-        /**
-         * @brief Initializes an invalid touch location.
-         */
+        /// Constructs an invalid touch location.
         TouchLocation();
 
-        /**
-         * @brief Initializes touch location without explicit id.
-         *
-         * @note Status: PARTIAL
-         */
-        TouchLocation(TouchLocationState state, const Vector2& position);
+        /// Constructs with id, state, and position. Previous state is Invalid.
+        TouchLocation(int id, TouchLocationState state,
+                      const Microsoft::Xna::Framework::Vector2& position);
 
-        /**
-         * @brief Initializes touch location with id, state and position.
-         */
-        TouchLocation(int id, TouchLocationState state, const Vector2& position);
+        /// Constructs with full previous location information.
+        TouchLocation(int id, TouchLocationState state,
+                      const Microsoft::Xna::Framework::Vector2& position,
+                      TouchLocationState previousState,
+                      const Microsoft::Xna::Framework::Vector2& previousPosition);
+
+        /// Tries to retrieve the previous location. Returns false if previous state is Invalid.
+        bool TryGetPreviousLocation(TouchLocation& previousLocation) const;
+
+        [[nodiscard]] bool Equals(const TouchLocation& other) const;
+        [[nodiscard]] int GetHashCode() const;
+        [[nodiscard]] std::string ToString() const;
+
+        friend bool operator==(const TouchLocation& value1, const TouchLocation& value2);
+        friend bool operator!=(const TouchLocation& value1, const TouchLocation& value2);
+
+    private:
+        int id_;
+        TouchLocationState state_;
+        Microsoft::Xna::Framework::Vector2 position_;
+        TouchLocationState prevState_;
+        Microsoft::Xna::Framework::Vector2 prevPosition_;
     };
 }

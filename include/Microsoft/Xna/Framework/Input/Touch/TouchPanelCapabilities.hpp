@@ -1,15 +1,21 @@
 #pragma once
 
-#include "SharpRuntime/Prop.hpp"
-
 namespace Microsoft::Xna::Framework::Input::Touch
 {
+    /// Describes the capabilities of the touch panel device.
     struct TouchPanelCapabilities
     {
-    public:
-        TouchPanelCapabilities();
-        explicit TouchPanelCapabilities(bool isConnected);
+        [[nodiscard]] bool getIsConnectedProperty() const;
+        [[nodiscard]] int getMaximumTouchCountProperty() const;
 
-        DEF_PROP(bool, IsConnected, getter1, setter0, member1, static0, constret1, ref1, constmet1)
+        /// Constructs disconnected capabilities with zero touch count.
+        TouchPanelCapabilities();
+
+        /// Constructs with explicit connected state and maximum touch count.
+        TouchPanelCapabilities(bool isConnected, int maximumTouchCount);
+
+    private:
+        bool isConnected_;
+        int maximumTouchCount_;
     };
 }

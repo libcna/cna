@@ -1,4 +1,5 @@
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 
 #include <algorithm>
 #include <array>
@@ -17,7 +18,6 @@ namespace CNA::Internal::Input
     namespace
     {
         using Microsoft::Xna::Framework::Input::ButtonState;
-        using Microsoft::Xna::Framework::Input::GamePadButtons;
         using Microsoft::Xna::Framework::Input::GamePadState;
         using Microsoft::Xna::Framework::PlayerIndex;
         using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
@@ -32,31 +32,19 @@ namespace CNA::Internal::Input
             ButtonState MiddleButton = ButtonState::Released;
         };
 
+        using Microsoft::Xna::Framework::Input::Buttons;
+
         struct InternalGamePadState
         {
             bool IsConnected = false;
+            Buttons Buttons_ = static_cast<Buttons>(0);
 
-            ButtonState A = ButtonState::Released;
-            ButtonState B = ButtonState::Released;
-            ButtonState X = ButtonState::Released;
-            ButtonState Y = ButtonState::Released;
-            ButtonState Back = ButtonState::Released;
-            ButtonState Start = ButtonState::Released;
-            ButtonState LeftShoulder = ButtonState::Released;
-            ButtonState RightShoulder = ButtonState::Released;
-            ButtonState LeftStick = ButtonState::Released;
-            ButtonState RightStick = ButtonState::Released;
-            ButtonState DPadUp = ButtonState::Released;
-            ButtonState DPadDown = ButtonState::Released;
-            ButtonState DPadLeft = ButtonState::Released;
-            ButtonState DPadRight = ButtonState::Released;
-
-            float LeftThumbstickX = 0.0f;
-            float LeftThumbstickY = 0.0f;
+            float LeftThumbstickX  = 0.0f;
+            float LeftThumbstickY  = 0.0f;
             float RightThumbstickX = 0.0f;
             float RightThumbstickY = 0.0f;
-            float LeftTrigger = 0.0f;
-            float RightTrigger = 0.0f;
+            float LeftTrigger      = 0.0f;
+            float RightTrigger     = 0.0f;
         };
 
         struct InternalTouchLocationState
@@ -194,50 +182,31 @@ namespace CNA::Internal::Input
         }
 
         auto& gamePadState = getInternalInputState().GamePads[slot.value()];
+        const bool pressed = (state == Microsoft::Xna::Framework::Input::ButtonState::Pressed);
+
+        auto setFlag = [&](Buttons flag) {
+            if (pressed)
+                gamePadState.Buttons_ |= flag;
+            else
+                gamePadState.Buttons_ &= ~flag;
+        };
+
         switch (button)
         {
-        case GamePadButton::A:
-            gamePadState.A = state;
-            break;
-        case GamePadButton::B:
-            gamePadState.B = state;
-            break;
-        case GamePadButton::X:
-            gamePadState.X = state;
-            break;
-        case GamePadButton::Y:
-            gamePadState.Y = state;
-            break;
-        case GamePadButton::Back:
-            gamePadState.Back = state;
-            break;
-        case GamePadButton::Start:
-            gamePadState.Start = state;
-            break;
-        case GamePadButton::LeftShoulder:
-            gamePadState.LeftShoulder = state;
-            break;
-        case GamePadButton::RightShoulder:
-            gamePadState.RightShoulder = state;
-            break;
-        case GamePadButton::LeftStick:
-            gamePadState.LeftStick = state;
-            break;
-        case GamePadButton::RightStick:
-            gamePadState.RightStick = state;
-            break;
-        case GamePadButton::DPadUp:
-            gamePadState.DPadUp = state;
-            break;
-        case GamePadButton::DPadDown:
-            gamePadState.DPadDown = state;
-            break;
-        case GamePadButton::DPadLeft:
-            gamePadState.DPadLeft = state;
-            break;
-        case GamePadButton::DPadRight:
-            gamePadState.DPadRight = state;
-            break;
+        case GamePadButton::A:            setFlag(Buttons::A);            break;
+        case GamePadButton::B:            setFlag(Buttons::B);            break;
+        case GamePadButton::X:            setFlag(Buttons::X);            break;
+        case GamePadButton::Y:            setFlag(Buttons::Y);            break;
+        case GamePadButton::Back:         setFlag(Buttons::Back);         break;
+        case GamePadButton::Start:        setFlag(Buttons::Start);        break;
+        case GamePadButton::LeftShoulder: setFlag(Buttons::LeftShoulder); break;
+        case GamePadButton::RightShoulder:setFlag(Buttons::RightShoulder);break;
+        case GamePadButton::LeftStick:    setFlag(Buttons::LeftStick);    break;
+        case GamePadButton::RightStick:   setFlag(Buttons::RightStick);   break;
+        case GamePadButton::DPadUp:       setFlag(Buttons::DPadUp);       break;
+        case GamePadButton::DPadDown:     setFlag(Buttons::DPadDown);     break;
+        case GamePadButton::DPadLeft:     setFlag(Buttons::DPadLeft);     break;
+        case GamePadButton::DPadRight:    setFlag(Buttons::DPadRight);    break;
         }
     }
 
@@ -279,14 +248,17 @@ namespace CNA::Internal::Input
 
     Microsoft::Xna::Framework::Input::MouseState InputManager::GetMouseState()
     {
+        using Microsoft::Xna::Framework::Input::ButtonState;
         const auto& mouseState = getInternalInputState().Mouse;
         return Microsoft::Xna::Framework::Input::MouseState(
             mouseState.X,
             mouseState.Y,
+            mouseState.ScrollWheelValue,
             mouseState.LeftButton,
-            mouseState.RightButton,
             mouseState.MiddleButton,
-            mouseState.ScrollWheelValue
+            mouseState.RightButton,
+            ButtonState::Released,
+            ButtonState::Released
         );
     }
 
@@ -358,40 +330,25 @@ namespace CNA::Internal::Input
 
     GamePadState InputManager::GetGamePadState(const PlayerIndex playerIndex)
     {
+        return Microsoft::Xna::Framework::Input::GamePad::GetState(playerIndex);
+    }
+
+    RawGamePadState InputManager::GetRawGamePadState(const PlayerIndex playerIndex)
+    {
         const auto slot = try_get_player_slot(playerIndex);
+        RawGamePadState raw{};
         if (!slot.has_value())
-        {
-            return GamePadState();
-        }
+            return raw;
 
-        const auto& gamePadState = getInternalInputState().GamePads[slot.value()];
-        if (!gamePadState.IsConnected)
-        {
-            return GamePadState();
-        }
-
-        return GamePadState(
-            GamePadButtons(
-                gamePadState.A,
-                gamePadState.B,
-                gamePadState.X,
-                gamePadState.Y,
-                gamePadState.Back,
-                gamePadState.Start,
-                gamePadState.LeftShoulder,
-                gamePadState.RightShoulder,
-                gamePadState.LeftStick,
-                gamePadState.RightStick,
-                gamePadState.DPadUp,
-                gamePadState.DPadDown,
-                gamePadState.DPadLeft,
-                gamePadState.DPadRight
-            ),
-            Microsoft::Xna::Framework::Vector2(gamePadState.LeftThumbstickX, gamePadState.LeftThumbstickY),
-            Microsoft::Xna::Framework::Vector2(gamePadState.RightThumbstickX, gamePadState.RightThumbstickY),
-            gamePadState.LeftTrigger,
-            gamePadState.RightTrigger,
-            true
-        );
+        const auto& g = getInternalInputState().GamePads[slot.value()];
+        raw.isConnected  = g.IsConnected;
+        raw.buttons      = g.Buttons_;
+        raw.leftX        = g.LeftThumbstickX;
+        raw.leftY        = g.LeftThumbstickY;
+        raw.rightX       = g.RightThumbstickX;
+        raw.rightY       = g.RightThumbstickY;
+        raw.leftTrigger  = g.LeftTrigger;
+        raw.rightTrigger = g.RightTrigger;
+        return raw;
     }
 }
