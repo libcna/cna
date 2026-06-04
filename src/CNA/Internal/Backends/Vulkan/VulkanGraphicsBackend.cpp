@@ -157,6 +157,7 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanTextureBackend::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
+        vkDeviceWaitIdle(owner_->device_);
         VkDevice dev = owner_->device_;
         if (descriptorSet_ != VK_NULL_HANDLE) {
             vkFreeDescriptorSets(dev, owner_->descriptorPool_, 1, &descriptorSet_);
@@ -332,6 +333,7 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanVertexBufferBackend::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
+        vkDeviceWaitIdle(owner_->device_);
         VkDevice dev = owner_->device_;
         if (buffer_ != VK_NULL_HANDLE) {
             vkDestroyBuffer(dev, buffer_, nullptr);
@@ -377,6 +379,7 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanIndexBufferBackend::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
+        vkDeviceWaitIdle(owner_->device_);
         VkDevice dev = owner_->device_;
         if (buffer_ != VK_NULL_HANDLE) {
             vkDestroyBuffer(dev, buffer_, nullptr);
@@ -441,56 +444,56 @@ namespace CNA::Internal::Backends::Vulkan
 
     VulkanGraphicsBackend::~VulkanGraphicsBackend()
     {
-        if (device_ != VK_NULL_HANDLE)
-            vkDeviceWaitIdle(device_);
+        if (device_ == VK_NULL_HANDLE) {
+            if (surface_  != VK_NULL_HANDLE) { SDL_Vulkan_DestroySurface(instance_, surface_, nullptr); surface_  = VK_NULL_HANDLE; }
+            if (instance_ != VK_NULL_HANDLE) { vkDestroyInstance(instance_, nullptr);                   instance_ = VK_NULL_HANDLE; }
+            return;
+        }
 
-        // Release Vulkan resources of all externally-owned objects before device destruction.
-        // Their C++ destructors may fire after ours; DisconnectOwner() prevents dangling use.
-        for (auto* tex : liveTextures_) {
-            tex->ReleaseVulkanResources();
-            tex->DisconnectOwner();
-        }
-        liveTextures_.clear();
-        for (auto* vb : liveVertexBuffers_) {
-            vb->ReleaseVulkanResources();
-            vb->DisconnectOwner();
-        }
+        // Step 1: wait for all in-flight GPU work to complete.
+        vkDeviceWaitIdle(device_);
+
+        // Step 2: destroy buffers and memory.
+        // Externally-owned vertex/index buffers (C++ objects may outlive this destructor).
+        for (auto* vb : liveVertexBuffers_) { vb->ReleaseVulkanResources(); vb->DisconnectOwner(); }
         liveVertexBuffers_.clear();
-        for (auto* ib : liveIndexBuffers_) {
-            ib->ReleaseVulkanResources();
-            ib->DisconnectOwner();
-        }
+        for (auto* ib : liveIndexBuffers_)  { ib->ReleaseVulkanResources(); ib->DisconnectOwner(); }
         liveIndexBuffers_.clear();
-
-        // Sprite GPU buffers
+        // Backend-owned sprite buffers.
         for (int i = 0; i < MaxFramesInFlight; ++i) {
-            if (spriteVB_[i])    { vkDestroyBuffer(device_, spriteVB_[i], nullptr);    spriteVB_[i]    = VK_NULL_HANDLE; }
-            if (spriteVBMem_[i]) { vkFreeMemory(device_, spriteVBMem_[i], nullptr);    spriteVBMem_[i] = VK_NULL_HANDLE; }
-            if (spriteIB_[i])    { vkDestroyBuffer(device_, spriteIB_[i], nullptr);    spriteIB_[i]    = VK_NULL_HANDLE; }
-            if (spriteIBMem_[i]) { vkFreeMemory(device_, spriteIBMem_[i], nullptr);    spriteIBMem_[i] = VK_NULL_HANDLE; }
+            if (spriteVB_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, spriteVB_[i], nullptr);    spriteVB_[i]    = VK_NULL_HANDLE; }
+            if (spriteVBMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, spriteVBMem_[i], nullptr);    spriteVBMem_[i] = VK_NULL_HANDLE; }
+            if (spriteIB_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, spriteIB_[i], nullptr);    spriteIB_[i]    = VK_NULL_HANDLE; }
+            if (spriteIBMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, spriteIBMem_[i], nullptr);    spriteIBMem_[i] = VK_NULL_HANDLE; }
         }
 
-        // Pipelines
-        for (auto& [key, pipe] : pipelines3D_)
-            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
-        pipelines3D_.clear();
-        if (pipeline2D_       != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipeline2D_, nullptr);              pipeline2D_       = VK_NULL_HANDLE; }
-        if (pipelineLayout3D_ != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout3D_, nullptr);  pipelineLayout3D_ = VK_NULL_HANDLE; }
-        if (pipelineLayout2D_ != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout2D_, nullptr);  pipelineLayout2D_ = VK_NULL_HANDLE; }
+        // Step 3: destroy image views, images, and memory.
+        // Externally-owned textures.
+        for (auto* tex : liveTextures_) { tex->ReleaseVulkanResources(); tex->DisconnectOwner(); }
+        liveTextures_.clear();
+        // Depth buffer.
+        if (depthImageView_ != VK_NULL_HANDLE) { vkDestroyImageView(device_, depthImageView_, nullptr); depthImageView_ = VK_NULL_HANDLE; }
+        if (depthImage_     != VK_NULL_HANDLE) { vkDestroyImage(device_, depthImage_, nullptr);         depthImage_     = VK_NULL_HANDLE; }
+        if (depthMemory_    != VK_NULL_HANDLE) { vkFreeMemory(device_, depthMemory_, nullptr);           depthMemory_    = VK_NULL_HANDLE; }
 
-        // Descriptor resources — all sets freed above; safe to destroy pool now
+        // Step 4: destroy descriptor resources.
         if (descriptorPool_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);           descriptorPool_      = VK_NULL_HANDLE; }
         if (descriptorSetLayout_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr); descriptorSetLayout_ = VK_NULL_HANDLE; }
         if (defaultSampler_      != VK_NULL_HANDLE) { vkDestroySampler(device_, defaultSampler_, nullptr);                  defaultSampler_      = VK_NULL_HANDLE; }
 
-        CleanupSwapchain();
-        CleanupDepthResources();
+        // Step 5: destroy pipelines, render pass, and framebuffers.
+        for (auto& [key, pipe] : pipelines3D_)
+            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
+        pipelines3D_.clear();
+        if (pipeline2D_       != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipeline2D_, nullptr);             pipeline2D_       = VK_NULL_HANDLE; }
+        if (pipelineLayout3D_ != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout3D_, nullptr); pipelineLayout3D_ = VK_NULL_HANDLE; }
+        if (pipelineLayout2D_ != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout2D_, nullptr); pipelineLayout2D_ = VK_NULL_HANDLE; }
+        for (auto fb : swapchainFramebuffers_)
+            if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
+        swapchainFramebuffers_.clear();
+        if (renderPass_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_, nullptr); renderPass_ = VK_NULL_HANDLE; }
 
-        if (renderPass_ != VK_NULL_HANDLE) {
-            vkDestroyRenderPass(device_, renderPass_, nullptr);
-            renderPass_ = VK_NULL_HANDLE;
-        }
-
+        // Sync objects (semaphores and fences).
         for (int i = 0; i < MaxFramesInFlight; ++i) {
             if (i < (int)imageAvailableSemaphores_.size() && imageAvailableSemaphores_[i] != VK_NULL_HANDLE) {
                 vkDestroySemaphore(device_, imageAvailableSemaphores_[i], nullptr);
@@ -506,8 +509,17 @@ namespace CNA::Internal::Backends::Vulkan
             }
         }
 
+        // Step 6: destroy command pool (before swapchain).
         if (commandPool_ != VK_NULL_HANDLE) { vkDestroyCommandPool(device_, commandPool_, nullptr); commandPool_ = VK_NULL_HANDLE; }
 
+        // Step 7: destroy swapchain resources.
+        for (auto iv : swapchainImageViews_)
+            if (iv != VK_NULL_HANDLE) vkDestroyImageView(device_, iv, nullptr);
+        swapchainImageViews_.clear();
+        swapchainImages_.clear();
+        if (swapchain_ != VK_NULL_HANDLE) { vkDestroySwapchainKHR(device_, swapchain_, nullptr); swapchain_ = VK_NULL_HANDLE; }
+
+        // Step 8: destroy device last among Vulkan device-level objects.
         vkDestroyDevice(device_, nullptr);
         device_ = VK_NULL_HANDLE;
 
@@ -516,7 +528,6 @@ namespace CNA::Internal::Backends::Vulkan
                 vkGetInstanceProcAddr(instance_, "vkDestroyDebugUtilsMessengerEXT"));
             if (fn) { fn(instance_, debugMessenger_, nullptr); debugMessenger_ = VK_NULL_HANDLE; }
         }
-
         if (surface_  != VK_NULL_HANDLE) { SDL_Vulkan_DestroySurface(instance_, surface_, nullptr); surface_  = VK_NULL_HANDLE; }
         if (instance_ != VK_NULL_HANDLE) { vkDestroyInstance(instance_, nullptr);                   instance_ = VK_NULL_HANDLE; }
     }
