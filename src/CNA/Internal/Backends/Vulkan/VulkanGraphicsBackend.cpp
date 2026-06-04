@@ -154,18 +154,35 @@ namespace CNA::Internal::Backends::Vulkan
         vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
     }
 
-    VulkanTextureBackend::~VulkanTextureBackend()
+    void VulkanTextureBackend::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
         VkDevice dev = owner_->device_;
-        if (descriptorSet_ != VK_NULL_HANDLE)
+        if (descriptorSet_ != VK_NULL_HANDLE) {
             vkFreeDescriptorSets(dev, owner_->descriptorPool_, 1, &descriptorSet_);
-        if (imageView_ != VK_NULL_HANDLE)
+            descriptorSet_ = VK_NULL_HANDLE;
+        }
+        if (imageView_ != VK_NULL_HANDLE) {
             vkDestroyImageView(dev, imageView_, nullptr);
-        if (image_ != VK_NULL_HANDLE)
+            imageView_ = VK_NULL_HANDLE;
+        }
+        if (image_ != VK_NULL_HANDLE) {
             vkDestroyImage(dev, image_, nullptr);
-        if (memory_ != VK_NULL_HANDLE)
+            image_ = VK_NULL_HANDLE;
+        }
+        if (memory_ != VK_NULL_HANDLE) {
             vkFreeMemory(dev, memory_, nullptr);
+            memory_ = VK_NULL_HANDLE;
+        }
+    }
+
+    VulkanTextureBackend::~VulkanTextureBackend()
+    {
+        if (owner_) {
+            auto& list = owner_->liveTextures_;
+            list.erase(std::remove(list.begin(), list.end(), this), list.end());
+        }
+        ReleaseVulkanResources();
     }
 
     // =========================================================================
@@ -312,11 +329,27 @@ namespace CNA::Internal::Backends::Vulkan
             buffer_, memory_, &mappedPtr_);
     }
 
-    VulkanVertexBufferBackend::~VulkanVertexBufferBackend()
+    void VulkanVertexBufferBackend::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
-        vkDestroyBuffer(owner_->device_, buffer_, nullptr);
-        vkFreeMemory(owner_->device_, memory_, nullptr);
+        VkDevice dev = owner_->device_;
+        if (buffer_ != VK_NULL_HANDLE) {
+            vkDestroyBuffer(dev, buffer_, nullptr);
+            buffer_ = VK_NULL_HANDLE;
+        }
+        if (memory_ != VK_NULL_HANDLE) {
+            vkFreeMemory(dev, memory_, nullptr);
+            memory_ = VK_NULL_HANDLE;
+        }
+    }
+
+    VulkanVertexBufferBackend::~VulkanVertexBufferBackend()
+    {
+        if (owner_) {
+            auto& list = owner_->liveVertexBuffers_;
+            list.erase(std::remove(list.begin(), list.end(), this), list.end());
+        }
+        ReleaseVulkanResources();
     }
 
     void VulkanVertexBufferBackend::SetData(const void* data, int vertex_count,
@@ -341,11 +374,27 @@ namespace CNA::Internal::Backends::Vulkan
             buffer_, memory_, &mappedPtr_);
     }
 
-    VulkanIndexBufferBackend::~VulkanIndexBufferBackend()
+    void VulkanIndexBufferBackend::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
-        vkDestroyBuffer(owner_->device_, buffer_, nullptr);
-        vkFreeMemory(owner_->device_, memory_, nullptr);
+        VkDevice dev = owner_->device_;
+        if (buffer_ != VK_NULL_HANDLE) {
+            vkDestroyBuffer(dev, buffer_, nullptr);
+            buffer_ = VK_NULL_HANDLE;
+        }
+        if (memory_ != VK_NULL_HANDLE) {
+            vkFreeMemory(dev, memory_, nullptr);
+            memory_ = VK_NULL_HANDLE;
+        }
+    }
+
+    VulkanIndexBufferBackend::~VulkanIndexBufferBackend()
+    {
+        if (owner_) {
+            auto& list = owner_->liveIndexBuffers_;
+            list.erase(std::remove(list.begin(), list.end(), this), list.end());
+        }
+        ReleaseVulkanResources();
     }
 
     void VulkanIndexBufferBackend::SetData16(const void* data, int index_count)
@@ -395,24 +444,44 @@ namespace CNA::Internal::Backends::Vulkan
         if (device_ != VK_NULL_HANDLE)
             vkDeviceWaitIdle(device_);
 
+        // Release Vulkan resources of all externally-owned objects before device destruction.
+        // Their C++ destructors may fire after ours; DisconnectOwner() prevents dangling use.
+        for (auto* tex : liveTextures_) {
+            tex->ReleaseVulkanResources();
+            tex->DisconnectOwner();
+        }
+        liveTextures_.clear();
+        for (auto* vb : liveVertexBuffers_) {
+            vb->ReleaseVulkanResources();
+            vb->DisconnectOwner();
+        }
+        liveVertexBuffers_.clear();
+        for (auto* ib : liveIndexBuffers_) {
+            ib->ReleaseVulkanResources();
+            ib->DisconnectOwner();
+        }
+        liveIndexBuffers_.clear();
+
         // Sprite GPU buffers
         for (int i = 0; i < MaxFramesInFlight; ++i) {
-            if (spriteVB_[i])    vkDestroyBuffer(device_, spriteVB_[i], nullptr);
-            if (spriteVBMem_[i]) vkFreeMemory(device_, spriteVBMem_[i], nullptr);
-            if (spriteIB_[i])    vkDestroyBuffer(device_, spriteIB_[i], nullptr);
-            if (spriteIBMem_[i]) vkFreeMemory(device_, spriteIBMem_[i], nullptr);
+            if (spriteVB_[i])    { vkDestroyBuffer(device_, spriteVB_[i], nullptr);    spriteVB_[i]    = VK_NULL_HANDLE; }
+            if (spriteVBMem_[i]) { vkFreeMemory(device_, spriteVBMem_[i], nullptr);    spriteVBMem_[i] = VK_NULL_HANDLE; }
+            if (spriteIB_[i])    { vkDestroyBuffer(device_, spriteIB_[i], nullptr);    spriteIB_[i]    = VK_NULL_HANDLE; }
+            if (spriteIBMem_[i]) { vkFreeMemory(device_, spriteIBMem_[i], nullptr);    spriteIBMem_[i] = VK_NULL_HANDLE; }
         }
 
         // Pipelines
-        for (auto& [_, p] : pipelines3D_)
-            if (p) vkDestroyPipeline(device_, p, nullptr);
-        if (pipeline2D_)       vkDestroyPipeline(device_, pipeline2D_, nullptr);
-        if (pipelineLayout3D_) vkDestroyPipelineLayout(device_, pipelineLayout3D_, nullptr);
-        if (pipelineLayout2D_) vkDestroyPipelineLayout(device_, pipelineLayout2D_, nullptr);
+        for (auto& [key, pipe] : pipelines3D_)
+            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
+        pipelines3D_.clear();
+        if (pipeline2D_       != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipeline2D_, nullptr);              pipeline2D_       = VK_NULL_HANDLE; }
+        if (pipelineLayout3D_ != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout3D_, nullptr);  pipelineLayout3D_ = VK_NULL_HANDLE; }
+        if (pipelineLayout2D_ != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout2D_, nullptr);  pipelineLayout2D_ = VK_NULL_HANDLE; }
 
-        if (descriptorPool_)      vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
-        if (descriptorSetLayout_) vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
-        if (defaultSampler_)      vkDestroySampler(device_, defaultSampler_, nullptr);
+        // Descriptor resources — all sets freed above; safe to destroy pool now
+        if (descriptorPool_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);           descriptorPool_      = VK_NULL_HANDLE; }
+        if (descriptorSetLayout_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr); descriptorSetLayout_ = VK_NULL_HANDLE; }
+        if (defaultSampler_      != VK_NULL_HANDLE) { vkDestroySampler(device_, defaultSampler_, nullptr);                  defaultSampler_      = VK_NULL_HANDLE; }
 
         CleanupSwapchain();
         CleanupDepthResources();
@@ -423,25 +492,33 @@ namespace CNA::Internal::Backends::Vulkan
         }
 
         for (int i = 0; i < MaxFramesInFlight; ++i) {
-            if (i < (int)imageAvailableSemaphores_.size())
+            if (i < (int)imageAvailableSemaphores_.size() && imageAvailableSemaphores_[i] != VK_NULL_HANDLE) {
                 vkDestroySemaphore(device_, imageAvailableSemaphores_[i], nullptr);
-            if (i < (int)renderFinishedSemaphores_.size())
+                imageAvailableSemaphores_[i] = VK_NULL_HANDLE;
+            }
+            if (i < (int)renderFinishedSemaphores_.size() && renderFinishedSemaphores_[i] != VK_NULL_HANDLE) {
                 vkDestroySemaphore(device_, renderFinishedSemaphores_[i], nullptr);
-            if (i < (int)inFlightFences_.size())
+                renderFinishedSemaphores_[i] = VK_NULL_HANDLE;
+            }
+            if (i < (int)inFlightFences_.size() && inFlightFences_[i] != VK_NULL_HANDLE) {
                 vkDestroyFence(device_, inFlightFences_[i], nullptr);
+                inFlightFences_[i] = VK_NULL_HANDLE;
+            }
         }
 
-        if (commandPool_) vkDestroyCommandPool(device_, commandPool_, nullptr);
-        if (device_)      vkDestroyDevice(device_, nullptr);
+        if (commandPool_ != VK_NULL_HANDLE) { vkDestroyCommandPool(device_, commandPool_, nullptr); commandPool_ = VK_NULL_HANDLE; }
 
-        if (sEnableValidation && debugMessenger_) {
+        vkDestroyDevice(device_, nullptr);
+        device_ = VK_NULL_HANDLE;
+
+        if (sEnableValidation && debugMessenger_ != VK_NULL_HANDLE) {
             auto fn = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
                 vkGetInstanceProcAddr(instance_, "vkDestroyDebugUtilsMessengerEXT"));
-            if (fn) fn(instance_, debugMessenger_, nullptr);
+            if (fn) { fn(instance_, debugMessenger_, nullptr); debugMessenger_ = VK_NULL_HANDLE; }
         }
 
-        if (surface_)  SDL_Vulkan_DestroySurface(instance_, surface_, nullptr);
-        if (instance_) vkDestroyInstance(instance_, nullptr);
+        if (surface_  != VK_NULL_HANDLE) { SDL_Vulkan_DestroySurface(instance_, surface_, nullptr); surface_  = VK_NULL_HANDLE; }
+        if (instance_ != VK_NULL_HANDLE) { vkDestroyInstance(instance_, nullptr);                   instance_ = VK_NULL_HANDLE; }
     }
 
     // =========================================================================
@@ -1487,7 +1564,9 @@ namespace CNA::Internal::Backends::Vulkan
 
     std::unique_ptr<ITextureBackend> VulkanGraphicsBackend::CreateTexture(const ImageData& data)
     {
-        return std::make_unique<VulkanTextureBackend>(data, this);
+        auto tex = std::make_unique<VulkanTextureBackend>(data, this);
+        liveTextures_.push_back(tex.get());
+        return tex;
     }
 
     std::unique_ptr<ISpriteBatchBackend> VulkanGraphicsBackend::CreateSpriteBatch()
@@ -1497,12 +1576,16 @@ namespace CNA::Internal::Backends::Vulkan
 
     std::unique_ptr<IVertexBufferBackend> VulkanGraphicsBackend::CreateVertexBuffer(int cap)
     {
-        return std::make_unique<VulkanVertexBufferBackend>(cap, this);
+        auto vb = std::make_unique<VulkanVertexBufferBackend>(cap, this);
+        liveVertexBuffers_.push_back(vb.get());
+        return vb;
     }
 
     std::unique_ptr<IIndexBufferBackend> VulkanGraphicsBackend::CreateIndexBuffer16(int cap)
     {
-        return std::make_unique<VulkanIndexBufferBackend>(cap, this);
+        auto ib = std::make_unique<VulkanIndexBufferBackend>(cap, this);
+        liveIndexBuffers_.push_back(ib.get());
+        return ib;
     }
 
     // ---- 3D pipeline ----

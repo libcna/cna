@@ -33,6 +33,9 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkDescriptorSet GetDescriptorSet() const { return descriptorSet_; }
 
+        void ReleaseVulkanResources();
+        void DisconnectOwner() { owner_ = nullptr; }
+
     private:
         int                 width_         = 0;
         int                 height_        = 0;
@@ -103,6 +106,9 @@ namespace CNA::Internal::Backends::Vulkan
         VkBuffer GetBuffer()     const { return buffer_; }
         int      GetCapacity()   const { return capacity_; }
 
+        void ReleaseVulkanResources();
+        void DisconnectOwner() { owner_ = nullptr; }
+
     private:
         VkBuffer                buffer_      = VK_NULL_HANDLE;
         VkDeviceMemory          memory_      = VK_NULL_HANDLE;
@@ -126,6 +132,9 @@ namespace CNA::Internal::Backends::Vulkan
         int  GetIndexCount() const override { return indexCount_; }
 
         VkBuffer GetBuffer() const { return buffer_; }
+
+        void ReleaseVulkanResources();
+        void DisconnectOwner() { owner_ = nullptr; }
 
     private:
         VkBuffer                buffer_     = VK_NULL_HANDLE;
@@ -238,6 +247,11 @@ namespace CNA::Internal::Backends::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> spriteIB_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> spriteIBMem_ = {};
         std::array<void*,          MaxFramesInFlight> spriteIBPtr_ = {};
+
+        // --- Lifetime tracking for externally-owned Vulkan resources ---
+        std::vector<VulkanTextureBackend*>      liveTextures_;
+        std::vector<VulkanVertexBufferBackend*> liveVertexBuffers_;
+        std::vector<VulkanIndexBufferBackend*>  liveIndexBuffers_;
 
         // --- Per-frame accumulated draw data (cleared in Present) ---
         struct Pending3DDraw {
