@@ -65,6 +65,43 @@ namespace Microsoft::Xna::Framework::Input::Touch
         return -1;
     }
 
+    void TouchCollection::Add(const TouchLocation& item)
+    {
+        touches_.push_back(item);
+    }
+
+    void TouchCollection::Clear()
+    {
+        touches_.clear();
+    }
+
+    bool TouchCollection::Remove(const TouchLocation& item)
+    {
+        for (auto it = touches_.begin(); it != touches_.end(); ++it)
+        {
+            if (*it == item)
+            {
+                touches_.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void TouchCollection::RemoveAt(int index)
+    {
+        if (index < 0 || static_cast<std::size_t>(index) >= touches_.size())
+            throw std::out_of_range("TouchCollection index out of range");
+        touches_.erase(touches_.begin() + index);
+    }
+
+    void TouchCollection::Insert(int index, const TouchLocation& item)
+    {
+        if (index < 0 || static_cast<std::size_t>(index) > touches_.size())
+            throw std::out_of_range("TouchCollection index out of range");
+        touches_.insert(touches_.begin() + index, item);
+    }
+
     std::vector<TouchLocation>::iterator TouchCollection::begin() { return touches_.begin(); }
     std::vector<TouchLocation>::iterator TouchCollection::end()   { return touches_.end(); }
 

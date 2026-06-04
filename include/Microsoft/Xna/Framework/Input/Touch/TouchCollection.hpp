@@ -42,6 +42,12 @@ namespace Microsoft::Xna::Framework::Input::Touch
         void CopyTo(std::vector<TouchLocation>& array, int arrayIndex) const;
         [[nodiscard]] int IndexOf(const TouchLocation& item) const;
 
+        void Add(const TouchLocation& item);
+        void Clear();
+        bool Remove(const TouchLocation& item);
+        void RemoveAt(int index);
+        void Insert(int index, const TouchLocation& item);
+
         std::vector<TouchLocation>::iterator begin();
         std::vector<TouchLocation>::iterator end();
         [[nodiscard]] std::vector<TouchLocation>::const_iterator begin() const;

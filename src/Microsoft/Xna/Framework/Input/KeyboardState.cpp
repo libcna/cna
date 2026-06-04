@@ -27,4 +27,37 @@ namespace Microsoft::Xna::Framework::Input
     {
         return {pressedKeys_.begin(), pressedKeys_.end()};
     }
+
+    KeyState KeyboardState::getItem(const Keys key) const
+    {
+        return IsKeyDown(key) ? KeyState::Down : KeyState::Up;
+    }
+
+    bool KeyboardState::Equals(const KeyboardState& other) const
+    {
+        return pressedKeys_ == other.pressedKeys_;
+    }
+
+    int KeyboardState::GetHashCode() const
+    {
+        int hash = 0;
+        for (const Keys k : pressedKeys_)
+            hash ^= static_cast<int>(k) * 31;
+        return hash;
+    }
+
+    std::string KeyboardState::ToString() const
+    {
+        return "[KeyboardState]";
+    }
+
+    bool operator==(const KeyboardState& a, const KeyboardState& b)
+    {
+        return a.Equals(b);
+    }
+
+    bool operator!=(const KeyboardState& a, const KeyboardState& b)
+    {
+        return !(a == b);
+    }
 }

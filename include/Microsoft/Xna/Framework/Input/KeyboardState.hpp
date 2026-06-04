@@ -4,44 +4,39 @@
 
 #pragma once
 
+#include <string>
 #include <unordered_set>
 #include <vector>
 
 #include "Keys.hpp"
+#include "KeyState.hpp"
 
 namespace Microsoft::Xna::Framework::Input
 {
-    /**
-     * @brief Snapshot of currently pressed keyboard keys.
-     *
-     * @note Status: PARTIAL
-     */
+    /// Represents the state of keystrokes from a keyboard device.
     struct KeyboardState
     {
-    public:
         KeyboardState();
         explicit KeyboardState(const std::unordered_set<Keys>& pressedKeys);
 
-        /**
-         * @brief Checks whether the specified key is currently pressed.
-         *
-         * @note Status: IMPLEMENTED
-         */
-        bool IsKeyDown(Keys key) const;
+        /// Returns whether a key is pressed (Down) or released (Up).
+        [[nodiscard]] KeyState getItem(Keys key) const;
 
-        /**
-         * @brief Checks whether the specified key is currently released.
-         *
-         * @note Status: IMPLEMENTED
-         */
-        bool IsKeyUp(Keys key) const;
+        /// Returns true if the given key is currently held down.
+        [[nodiscard]] bool IsKeyDown(Keys key) const;
 
-        /**
-         * @brief Returns all currently pressed keys in this snapshot.
-         *
-         * @note Status: IMPLEMENTED
-         */
-        std::vector<Keys> GetPressedKeys() const;
+        /// Returns true if the given key is not currently pressed.
+        [[nodiscard]] bool IsKeyUp(Keys key) const;
+
+        /// Returns an array of all currently pressed keys.
+        [[nodiscard]] std::vector<Keys> GetPressedKeys() const;
+
+        [[nodiscard]] bool Equals(const KeyboardState& other) const;
+        [[nodiscard]] int GetHashCode() const;
+        [[nodiscard]] std::string ToString() const;
+
+        friend bool operator==(const KeyboardState& a, const KeyboardState& b);
+        friend bool operator!=(const KeyboardState& a, const KeyboardState& b);
 
     private:
         std::unordered_set<Keys> pressedKeys_;

@@ -5,6 +5,7 @@ namespace Microsoft::Xna::Framework::Input
 {
     std::uintptr_t           Mouse::WindowHandle            = 0;
     std::function<void(int)> Mouse::ClickedEXT              = nullptr;
+    bool                     Mouse::IsRelativeMouseModeEXT  = false;
     int                      Mouse::INTERNAL_WindowWidth     = 0;
     int                      Mouse::INTERNAL_WindowHeight    = 0;
     int                      Mouse::INTERNAL_BackBufferWidth  = 0;

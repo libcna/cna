@@ -30,6 +30,9 @@ namespace Microsoft::Xna::Framework::Input
         // FNA extension: fires when a mouse button is clicked.
         NOXNA static std::function<void(int)> ClickedEXT;
 
+        /// When true, mouse motion is reported as relative delta rather than absolute position.
+        NOXNA static bool IsRelativeMouseModeEXT;
+
         // Internal scaling values (set by GraphicsDeviceManager).
         NOXNA static int INTERNAL_WindowWidth;
         NOXNA static int INTERNAL_WindowHeight;

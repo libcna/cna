@@ -12,4 +12,14 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::InputManager::GetKeyboardState();
     }
+
+    KeyboardState Keyboard::GetState(Microsoft::Xna::Framework::PlayerIndex /*playerIndex*/)
+    {
+        return GetState();
+    }
+
+    Keys Keyboard::GetKeyFromScancodeEXT(Keys scancode)
+    {
+        return scancode;
+    }
 }
