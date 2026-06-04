@@ -88,8 +88,8 @@ namespace Microsoft::Xna::Framework
 
     Game::Game()
         : Components_(),
-          Content_(),
           GraphicsDevice_(),
+          Content_(),
           Window_(),
           LaunchParameters_(),
           Services_(),

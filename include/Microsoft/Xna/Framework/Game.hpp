@@ -193,8 +193,8 @@ namespace Microsoft::Xna::Framework
 
     private:
         GameComponentCollection Components_;
-        Content::ContentManager Content_;
         Graphics::GraphicsDevice GraphicsDevice_;
+        Content::ContentManager Content_;
         GameWindow Window_;
         LaunchParameters LaunchParameters_;
         GameServiceContainer Services_;
