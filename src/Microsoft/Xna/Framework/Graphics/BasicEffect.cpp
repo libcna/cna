@@ -10,51 +10,44 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void BasicEffect::OnApply()
     {
-        if (device_)
-        {
-            device_->SetCurrentEffect(this);
-        }
+        if (device_) device_->SetCurrentEffect(this);
     }
 
-    Vector3 BasicEffect::getDiffuseColorProperty() const { return diffuseColor_; }
-    void BasicEffect::setDiffuseColorProperty(const Vector3& v) { diffuseColor_ = v; }
-
-    Vector3 BasicEffect::getEmissiveColorProperty() const { return emissiveColor_; }
-    void BasicEffect::setEmissiveColorProperty(const Vector3& v) { emissiveColor_ = v; }
-
-    Vector3 BasicEffect::getSpecularColorProperty() const { return specularColor_; }
-    void BasicEffect::setSpecularColorProperty(const Vector3& v) { specularColor_ = v; }
-
-    float BasicEffect::getSpecularPowerProperty() const { return specularPower_; }
-    void BasicEffect::setSpecularPowerProperty(float v) { specularPower_ = v; }
-
+    // IEffectLights
     Vector3 BasicEffect::getAmbientLightColorProperty() const { return ambientLightColor_; }
     void BasicEffect::setAmbientLightColorProperty(const Vector3& v) { ambientLightColor_ = v; }
-
-    float BasicEffect::getAlphaProperty() const { return alpha_; }
-    void BasicEffect::setAlphaProperty(float v) { alpha_ = v; }
-
     bool BasicEffect::getLightingEnabledProperty() const { return lightingEnabled_; }
     void BasicEffect::setLightingEnabledProperty(bool v) { lightingEnabled_ = v; }
+    DirectionalLight& BasicEffect::getDirectionalLight0Property() { return DirectionalLight0; }
+    DirectionalLight& BasicEffect::getDirectionalLight1Property() { return DirectionalLight1; }
+    DirectionalLight& BasicEffect::getDirectionalLight2Property() { return DirectionalLight2; }
 
     bool BasicEffect::getPreferPerPixelLightingProperty() const { return preferPerPixelLighting_; }
     void BasicEffect::setPreferPerPixelLightingProperty(bool v) { preferPerPixelLighting_ = v; }
 
+    Vector3 BasicEffect::getDiffuseColorProperty() const { return diffuseColor_; }
+    void BasicEffect::setDiffuseColorProperty(const Vector3& v) { diffuseColor_ = v; }
+    Vector3 BasicEffect::getEmissiveColorProperty() const { return emissiveColor_; }
+    void BasicEffect::setEmissiveColorProperty(const Vector3& v) { emissiveColor_ = v; }
+    Vector3 BasicEffect::getSpecularColorProperty() const { return specularColor_; }
+    void BasicEffect::setSpecularColorProperty(const Vector3& v) { specularColor_ = v; }
+    float BasicEffect::getSpecularPowerProperty() const { return specularPower_; }
+    void BasicEffect::setSpecularPowerProperty(float v) { specularPower_ = v; }
+    float BasicEffect::getAlphaProperty() const { return alpha_; }
+    void BasicEffect::setAlphaProperty(float v) { alpha_ = v; }
+
     bool BasicEffect::getTextureEnabledProperty() const { return textureEnabled_; }
     void BasicEffect::setTextureEnabledProperty(bool v) { textureEnabled_ = v; }
-
     Texture2D* BasicEffect::getTextureProperty() const { return texture_; }
     void BasicEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
 
-    bool BasicEffect::getFogEnabledProperty() const { return fogEnabled_; }
-    void BasicEffect::setFogEnabledProperty(bool v) { fogEnabled_ = v; }
-
+    // IEffectFog
     Vector3 BasicEffect::getFogColorProperty() const { return fogColor_; }
     void BasicEffect::setFogColorProperty(const Vector3& v) { fogColor_ = v; }
-
+    bool BasicEffect::getFogEnabledProperty() const { return fogEnabled_; }
+    void BasicEffect::setFogEnabledProperty(bool v) { fogEnabled_ = v; }
     float BasicEffect::getFogStartProperty() const { return fogStart_; }
     void BasicEffect::setFogStartProperty(float v) { fogStart_ = v; }
-
     float BasicEffect::getFogEndProperty() const { return fogEnd_; }
     void BasicEffect::setFogEndProperty(float v) { fogEnd_ = v; }
 

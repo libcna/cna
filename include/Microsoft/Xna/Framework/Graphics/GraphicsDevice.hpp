@@ -1,16 +1,31 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DisplayMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ResourceCreatedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ResourceDestroyedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -31,6 +46,8 @@ namespace Microsoft::Xna::Framework
 namespace Microsoft::Xna::Framework::Graphics
 {
     class BasicEffect;
+    class RenderTarget2D;
+    class RenderTargetCube;
 }
 
 namespace CNA::Internal::Backends
@@ -40,26 +57,21 @@ namespace CNA::Internal::Backends
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Main graphics device used for clearing, presenting and drawing primitives.
     class GraphicsDevice : public System::Object, public System::IDisposable
     {
     public:
-        /// Raised before the device is disposed.
+        // --- Events ---
         System::EventHandler<System::EventArgs> Disposing;
-
-        /// Raised after the device has been reset.
+        System::EventHandler<System::EventArgs> DeviceLost;
         System::EventHandler<System::EventArgs> DeviceReset;
-
-        /// Raised before the device is reset.
         System::EventHandler<System::EventArgs> DeviceResetting;
+        System::EventHandler<ResourceCreatedEventArgs> ResourceCreated;
+        System::EventHandler<ResourceDestroyedEventArgs> ResourceDestroyed;
 
-        /// Creates a graphics device using default adapter and presentation parameters.
+        // --- Constructors ---
         GraphicsDevice();
-
-        /// Creates a graphics device using explicit adapter, profile and presentation parameters.
         GraphicsDevice(GraphicsAdapter& adapter, GraphicsProfile graphicsProfile,
                        const PresentationParameters& presentationParameters);
-
         ~GraphicsDevice() override;
 
         GraphicsDevice(const GraphicsDevice&) = delete;
@@ -67,117 +79,107 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice(GraphicsDevice&&) = delete;
         GraphicsDevice& operator=(GraphicsDevice&&) = delete;
 
-        /// Gets the adapter used by this graphics device.
+        // --- State properties ---
+        [[nodiscard]] bool getIsDisposedProperty() const;
+        [[nodiscard]] GraphicsDeviceStatus getGraphicsDeviceStatusProperty() const;
         [[nodiscard]] GraphicsAdapter& getAdapterProperty() const;
-
-        /// Gets the requested graphics profile.
         [[nodiscard]] GraphicsProfile getGraphicsProfileProperty() const;
-
-        /// Gets the active presentation parameters.
         [[nodiscard]] PresentationParameters& getPresentationParametersProperty();
-
-        /// Gets the active presentation parameters.
         [[nodiscard]] const PresentationParameters& getPresentationParametersProperty() const;
 
-        /// Gets the current viewport.
-        [[nodiscard]] const Viewport& getViewportProperty() const;
+        // --- Display ---
+        [[nodiscard]] DisplayMode getDisplayModeProperty() const;
 
-        /// Sets the current viewport.
+        // --- GL State ---
+        [[nodiscard]] TextureCollection& getTexturesProperty();
+        [[nodiscard]] SamplerStateCollection& getSamplerStatesProperty();
+        [[nodiscard]] TextureCollection& getVertexTexturesProperty();
+        [[nodiscard]] SamplerStateCollection& getVertexSamplerStatesProperty();
+
+        [[nodiscard]] BlendState& getBlendStateProperty();
+        void setBlendStateProperty(const BlendState& value);
+        [[nodiscard]] const BlendState& getBlendStateProperty() const;
+
+        [[nodiscard]] DepthStencilState& getDepthStencilStateProperty();
+        void setDepthStencilStateProperty(const DepthStencilState& value);
+        [[nodiscard]] const DepthStencilState& getDepthStencilStateProperty() const;
+
+        [[nodiscard]] RasterizerState& getRasterizerStateProperty();
+        void setRasterizerStateProperty(const RasterizerState& value);
+        [[nodiscard]] const RasterizerState& getRasterizerStateProperty() const;
+
+        [[nodiscard]] Rectangle getScissorRectangleProperty() const;
+        void setScissorRectangleProperty(const Rectangle& value);
+
+        [[nodiscard]] const Viewport& getViewportProperty() const;
         void setViewportProperty(const Viewport& value);
 
-        /// Gets the currently bound index buffer.
-        [[nodiscard]] const IndexBuffer* getIndicesProperty() const;
+        [[nodiscard]] Color getBlendFactorProperty() const;
+        void setBlendFactorProperty(const Color& value);
 
-        /// Sets the currently bound index buffer.
+        [[nodiscard]] int getMultiSampleMaskProperty() const;
+        void setMultiSampleMaskProperty(int value);
+
+        [[nodiscard]] int getReferenceStencilProperty() const;
+        void setReferenceStencilProperty(int value);
+
+        // --- Index buffer ---
+        [[nodiscard]] const IndexBuffer* getIndicesProperty() const;
         void setIndicesProperty(const IndexBuffer* indexBuffer);
 
-        /// Gets whether this graphics device has been disposed.
-        [[nodiscard]] bool getIsDisposedProperty() const;
-
-        /// Clears the color buffer with the specified color.
+        // --- Core operations ---
         void Clear(const Color& color);
-
-        /// Clears the color buffer with the specified RGBA components in the range 0..1.
         void Clear(float r, float g, float b, float a);
-
-        /// Clears the selected buffers.
         void Clear(ClearOptions options, const Color& color, float depth, int stencil);
-
-        /// Clears the color and depth buffers.
         void Clear(const Color& color, float depth);
 
-        /// Presents the rendered frame.
         void Present();
 
-        /// Resets this device with new presentation parameters and adapter.
+        void Reset();
+        void Reset(const PresentationParameters& presentationParameters);
         void Reset(const PresentationParameters& presentationParameters, GraphicsAdapter& adapter);
-
-        /// Resets this device with new presentation parameters and optional adapter.
         void Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter);
 
-        /// Releases the device resources.
         void Dispose() override;
 
-        /// Enables or disables depth testing in the backend.
-        NOXNA void SetDepthTestEnabled(bool enabled);
-        /// Enables or disables alpha blending (SRC_ALPHA / ONE_MINUS_SRC_ALPHA).
-        /// @note Not in XNA 4.0 — use GraphicsDevice.BlendState in XNA.
-        NOXNA void SetBlendEnabled(bool enabled);
-        /// Enables or disables writes to the depth buffer.
-        /// @note Not in XNA 4.0 — use GraphicsDevice.DepthStencilState in XNA.
-        NOXNA void SetDepthWriteEnabled(bool enabled);
+        // --- Render targets ---
+        void SetRenderTarget(RenderTarget2D* renderTarget);
+        void SetRenderTarget(RenderTargetCube* renderTarget, CubeMapFace cubeMapFace);
+        void SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets);
+        [[nodiscard]] std::vector<RenderTargetBinding> GetRenderTargets() const;
 
-        /// Binds a vertex buffer.
+        // --- Vertex/index buffers ---
         void SetVertexBuffer(const VertexBuffer* vertexBuffer);
+        void SetVertexBuffer(const VertexBuffer* vertexBuffer, int vertexOffset);
+        void SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers);
+        [[nodiscard]] std::vector<VertexBufferBinding> GetVertexBuffers() const;
 
-        /// Binds an index buffer.
         void SetIndexBuffer(const IndexBuffer* indexBuffer);
-
-        /// Gets the currently bound vertex buffer.
         [[nodiscard]] const VertexBuffer* GetVertexBuffer() const;
-
-        /// Gets the currently bound index buffer.
         [[nodiscard]] const IndexBuffer* GetIndexBuffer() const;
 
-        /// Backward-compatible XNA-shaped getter used by older CNA code.
-        [[nodiscard]] const IndexBuffer* Indices() const;
-
-        /// Backward-compatible XNA-shaped setter used by older CNA code.
-        void Indices(const IndexBuffer* indexBuffer);
-
-        /// Draws non-indexed primitives from the current vertex buffer.
+        // --- Draw ---
         void DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount);
+        void DrawIndexedPrimitives(PrimitiveType primitiveType,
+                                   int baseVertex, int minVertexIndex,
+                                   int numVertices, int startIndex, int primitiveCount);
+        void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData,
+                                int vertexOffset, int primitiveCount);
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const void* vertexData, int vertexOffset, int numVertices,
+                                       const void* indexData, int indexOffset, int primitiveCount);
 
-        /// Draws indexed primitives from the current vertex and index buffers.
-        void DrawIndexedPrimitives(
-            PrimitiveType primitiveType,
-            int baseVertex,
-            int minVertexIndex,
-            int numVertices,
-            int startIndex,
-            int primitiveCount
-        );
+        // --- NOXNA helpers (not in XNA 4.0) ---
+        NOXNA void SetDepthTestEnabled(bool enabled);
+        NOXNA void SetBlendEnabled(bool enabled);
+        NOXNA void SetDepthWriteEnabled(bool enabled);
 
-        /// Draws user-provided vertex data. This overload is present but awaits backend support.
-        void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData, int vertexOffset,
-                                int primitiveCount);
-
-        /// Draws user-provided indexed vertex data. This overload is present but awaits backend support.
-        void DrawUserIndexedPrimitives(
-            PrimitiveType primitiveType,
-            const void* vertexData,
-            int vertexOffset,
-            int numVertices,
-            const void* indexData,
-            int indexOffset,
-            int primitiveCount
-        );
-
-        /// Gets the active backend. Throws if the backend is not available.
         [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
-
-        /// Internal hook used by BasicEffect::Apply.
         void SetCurrentEffect(BasicEffect* effect);
+
+        // Backward compat
+        [[nodiscard]] const IndexBuffer* Indices() const;
+        void Indices(const IndexBuffer* indexBuffer);
 
         [[nodiscard]] const std::string& GetTypeName() const override;
 
@@ -195,6 +197,22 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsProfile graphicsProfile_;
         PresentationParameters presentationParameters_;
         bool isDisposed_;
+
+        BlendState blendState_;
+        DepthStencilState depthStencilState_;
+        RasterizerState rasterizerState_;
+        Rectangle scissorRectangle_;
+        Color blendFactor_;
+        int multiSampleMask_ = -1;
+        int referenceStencil_ = 0;
+
+        TextureCollection textures_;
+        SamplerStateCollection samplerStates_;
+        TextureCollection vertexTextures_;
+        SamplerStateCollection vertexSamplerStates_;
+
+        std::vector<RenderTargetBinding> currentRenderTargets_;
+        std::vector<VertexBufferBinding> currentVertexBuffers_;
 
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const;
         [[nodiscard]] SDL_Window* GetWindowInternal() const;

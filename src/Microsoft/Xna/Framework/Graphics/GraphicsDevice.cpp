@@ -2,6 +2,8 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #ifdef CNA_BACKEND_BGFX
@@ -692,5 +694,100 @@ namespace Microsoft::Xna::Framework::Graphics
             }
 #endif
         }
+    }
+
+    // --- New XNA 4.0 API methods ---
+
+    GraphicsDeviceStatus GraphicsDevice::getGraphicsDeviceStatusProperty() const
+    {
+        return GraphicsDeviceStatus::Normal;
+    }
+
+    DisplayMode GraphicsDevice::getDisplayModeProperty() const
+    {
+        if (presentationParameters_.getIsFullScreenProperty())
+        {
+            int w = 0, h = 0;
+            if (backend_) backend_->GetViewportSize(w, h);
+            return DisplayMode(w, h, SurfaceFormat::Color);
+        }
+        return getAdapterProperty().getCurrentDisplayModeProperty();
+    }
+
+    TextureCollection& GraphicsDevice::getTexturesProperty() { return textures_; }
+    SamplerStateCollection& GraphicsDevice::getSamplerStatesProperty() { return samplerStates_; }
+    TextureCollection& GraphicsDevice::getVertexTexturesProperty() { return vertexTextures_; }
+    SamplerStateCollection& GraphicsDevice::getVertexSamplerStatesProperty() { return vertexSamplerStates_; }
+
+    BlendState& GraphicsDevice::getBlendStateProperty() { return blendState_; }
+    const BlendState& GraphicsDevice::getBlendStateProperty() const { return blendState_; }
+    void GraphicsDevice::setBlendStateProperty(const BlendState& value) { blendState_ = value; }
+
+    DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() { return depthStencilState_; }
+    const DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() const { return depthStencilState_; }
+    void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value) { depthStencilState_ = value; }
+
+    RasterizerState& GraphicsDevice::getRasterizerStateProperty() { return rasterizerState_; }
+    const RasterizerState& GraphicsDevice::getRasterizerStateProperty() const { return rasterizerState_; }
+    void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value) { rasterizerState_ = value; }
+
+    Rectangle GraphicsDevice::getScissorRectangleProperty() const { return scissorRectangle_; }
+    void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value) { scissorRectangle_ = value; }
+
+    Color GraphicsDevice::getBlendFactorProperty() const { return blendFactor_; }
+    void GraphicsDevice::setBlendFactorProperty(const Color& value) { blendFactor_ = value; }
+
+    int GraphicsDevice::getMultiSampleMaskProperty() const { return multiSampleMask_; }
+    void GraphicsDevice::setMultiSampleMaskProperty(int value) { multiSampleMask_ = value; }
+
+    int GraphicsDevice::getReferenceStencilProperty() const { return referenceStencil_; }
+    void GraphicsDevice::setReferenceStencilProperty(int value) { referenceStencil_ = value; }
+
+    void GraphicsDevice::Reset()
+    {
+        Reset(presentationParameters_, adapter_);
+    }
+
+    void GraphicsDevice::Reset(const PresentationParameters& presentationParameters)
+    {
+        Reset(presentationParameters, adapter_);
+    }
+
+    void GraphicsDevice::SetRenderTarget(RenderTarget2D* /*renderTarget*/)
+    {
+        // Render target switching is not yet implemented in CNA backends.
+        // Calling SetRenderTarget(nullptr) restores the back buffer (no-op here).
+    }
+
+    void GraphicsDevice::SetRenderTarget(RenderTargetCube* /*renderTarget*/, CubeMapFace /*cubeMapFace*/)
+    {
+        // Not yet implemented.
+    }
+
+    void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
+    {
+        currentRenderTargets_ = renderTargets;
+    }
+
+    std::vector<RenderTargetBinding> GraphicsDevice::GetRenderTargets() const
+    {
+        return currentRenderTargets_;
+    }
+
+    void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer, int /*vertexOffset*/)
+    {
+        SetVertexBuffer(vertexBuffer);
+    }
+
+    void GraphicsDevice::SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers)
+    {
+        currentVertexBuffers_ = vertexBuffers;
+        if (!vertexBuffers.empty())
+            currentVertexBuffer_ = vertexBuffers[0].getVertexBufferProperty();
+    }
+
+    std::vector<VertexBufferBinding> GraphicsDevice::GetVertexBuffers() const
+    {
+        return currentVertexBuffers_;
     }
 }

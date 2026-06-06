@@ -1,61 +1,44 @@
 #pragma once
 
-#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechniqueCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
 
-    /**
-     * @brief XNA 4.0 `Effect` base class.
-     *
-     * Owns a `GraphicsDevice` reference and one or more techniques. The
-     * derived class is responsible for exposing typed parameters (e.g.
-     * `BasicEffect::World`) and for the actual on-device activation logic
-     * inside `OnApply()`.
-     *
-     * @note Status: PARTIAL. Only the minimum surface needed by
-     *       `BasicEffect` and the cube3d demo is implemented: a single
-     *       `CurrentTechnique` containing a single `EffectPass`.
-     */
-    class Effect
+    class Effect : public GraphicsResource
     {
     public:
-        explicit Effect(GraphicsDevice& device)
-            : device_(&device),
-              currentTechnique_(this, "Default")
-        {
-        }
-
-        virtual ~Effect() = default;
+        explicit Effect(GraphicsDevice& device);
+        ~Effect() override;
 
         Effect(const Effect&) = delete;
         Effect& operator=(const Effect&) = delete;
 
-        /** XNA: `Effect.GraphicsDevice`. */
-        [[nodiscard]] GraphicsDevice& GraphicsDeviceRef() const { return *device_; }
+        [[nodiscard]] EffectTechnique* getCurrentTechniqueProperty() const;
+        void setCurrentTechniqueProperty(EffectTechnique* value);
 
-        /** XNA: `Effect.CurrentTechnique`. */
-        [[nodiscard]] EffectTechnique& CurrentTechnique() { return currentTechnique_; }
-        [[nodiscard]] const EffectTechnique& CurrentTechnique() const { return currentTechnique_; }
+        [[nodiscard]] EffectParameterCollection& getParametersProperty();
+        [[nodiscard]] const EffectParameterCollection& getParametersProperty() const;
 
-        /**
-         * @brief XNA-style entry point that activates the effect on its
-         *        device for the next draw call.
-         *
-         * Equivalent to calling `CurrentTechnique.Passes[0].Apply()`.
-         */
-        void Apply() { OnApply(); }
+        [[nodiscard]] EffectTechniqueCollection& getTechniquesProperty();
+        [[nodiscard]] const EffectTechniqueCollection& getTechniquesProperty() const;
+
+        void Apply();
+
+        [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
-        /**
-         * @brief Subclass hook that performs the actual on-device binding.
-         */
         virtual void OnApply() = 0;
+        void Dispose(bool disposing) override;
 
         GraphicsDevice* device_;
 
     private:
-        EffectTechnique currentTechnique_;
+        EffectParameterCollection parameters_;
+        EffectTechniqueCollection techniques_;
+        EffectTechnique* currentTechnique_ = nullptr;
     };
 }
