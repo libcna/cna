@@ -104,6 +104,11 @@ namespace Microsoft::Xna::Framework::Media
             }
         }
 
+        // Apply stored track preferences, then register as the video's active player
+        if (audioTrack_ >= 0) decoder_->SetAudioStream(audioTrack_);
+        if (videoTrack_ >= 0) decoder_->SetVideoStream(videoTrack_);
+        video->parent_ = this;
+
         // Decode and display first frame immediately
         double pts = 0.0;
         if (decoder_->NextFrame(rgbaBuffer_, pts) && frameTexture_)
@@ -129,6 +134,7 @@ namespace Microsoft::Xna::Framework::Media
             SDL_DestroyAudioStream(audioStream_);
             audioStream_ = nullptr;
         }
+        if (video_) video_->parent_ = nullptr;
         frameTexture_.reset();
         decoder_.reset();
         state_        = MediaState::Stopped;
@@ -171,6 +177,18 @@ namespace Microsoft::Xna::Framework::Media
         startTime_ = Clock::now();
         state_     = MediaState::Playing;
         if (audioStream_) SDL_ResumeAudioStreamDevice(audioStream_);
+    }
+
+    void VideoPlayer::SetAudioTrackEXT(SharpRuntime::intcs track)
+    {
+        audioTrack_ = track;
+        if (decoder_) decoder_->SetAudioStream(track);
+    }
+
+    void VideoPlayer::SetVideoTrackEXT(SharpRuntime::intcs track)
+    {
+        videoTrack_ = track;
+        if (decoder_) decoder_->SetVideoStream(track);
     }
 
     // -------------------------------------------------------------------------

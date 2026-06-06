@@ -8,6 +8,7 @@
 
 #include "Microsoft/Xna/Framework/Media/MediaState.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
@@ -64,6 +65,20 @@ namespace Microsoft::Xna::Framework::Media
         void Pause();
         void Resume();
 
+        /// Selects which audio track to use (0-based index among audio streams).
+        void SetAudioTrackEXT(SharpRuntime::intcs track);
+
+        /// Selects which video track to use (0-based index among video streams).
+        void SetVideoTrackEXT(SharpRuntime::intcs track);
+
+        /// Metadata about a video file (width, height, fps).
+        struct VideoInfo
+        {
+            int    width  = 0;
+            int    height = 0;
+            double fps    = 0.0;
+        };
+
         [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
@@ -78,6 +93,9 @@ namespace Microsoft::Xna::Framework::Media
         MediaState state_ = MediaState::Stopped;
         float volume_     = 1.0f;
         Video* video_     = nullptr;
+
+        SharpRuntime::intcs audioTrack_ = -1;
+        SharpRuntime::intcs videoTrack_ = -1;
 
         std::unique_ptr<CNA::Internal::Media::VideoDecoder> decoder_;
         std::unique_ptr<Graphics::Texture2D>                frameTexture_;

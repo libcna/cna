@@ -143,6 +143,101 @@ namespace CNA::Internal::Media
         if (audioCtx_) avcodec_flush_buffers(audioCtx_);
     }
 
+    bool VideoDecoder::OpenAudioStreamByIndex(int streamIdx)
+    {
+        if (!fmtCtx_ || streamIdx < 0 || streamIdx >= (int)fmtCtx_->nb_streams) return false;
+        AVStream* as = fmtCtx_->streams[streamIdx];
+        if (as->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) return false;
+
+        const AVCodec* codec = avcodec_find_decoder(as->codecpar->codec_id);
+        if (!codec) return false;
+
+        AVCodecContext* newCtx = avcodec_alloc_context3(codec);
+        avcodec_parameters_to_context(newCtx, as->codecpar);
+        if (avcodec_open2(newCtx, codec, nullptr) < 0)
+        {
+            avcodec_free_context(&newCtx);
+            return false;
+        }
+
+        if (swrCtx_)   { swr_free(&swrCtx_);              swrCtx_   = nullptr; }
+        if (audioCtx_) { avcodec_free_context(&audioCtx_); }
+
+        audioCtx_      = newCtx;
+        audioStream_   = streamIdx;
+        sampleRate_    = audioCtx_->sample_rate;
+        channels_      = audioCtx_->ch_layout.nb_channels;
+        audioTimeBase_ = av_q2d(as->time_base);
+        pendingAudio_.clear();
+
+        swr_alloc_set_opts2(
+            &swrCtx_,
+            &audioCtx_->ch_layout, AV_SAMPLE_FMT_FLT, sampleRate_,
+            &audioCtx_->ch_layout, audioCtx_->sample_fmt, sampleRate_,
+            0, nullptr);
+        if (swr_init(swrCtx_) < 0) { swr_free(&swrCtx_); swrCtx_ = nullptr; }
+
+        return true;
+    }
+
+    bool VideoDecoder::OpenVideoStreamByIndex(int streamIdx)
+    {
+        if (!fmtCtx_ || streamIdx < 0 || streamIdx >= (int)fmtCtx_->nb_streams) return false;
+        AVStream* vs = fmtCtx_->streams[streamIdx];
+        if (vs->codecpar->codec_type != AVMEDIA_TYPE_VIDEO) return false;
+
+        const AVCodec* codec = avcodec_find_decoder(vs->codecpar->codec_id);
+        if (!codec) return false;
+
+        AVCodecContext* newCtx = avcodec_alloc_context3(codec);
+        avcodec_parameters_to_context(newCtx, vs->codecpar);
+        if (avcodec_open2(newCtx, codec, nullptr) < 0)
+        {
+            avcodec_free_context(&newCtx);
+            return false;
+        }
+
+        if (videoCtx_) avcodec_free_context(&videoCtx_);
+
+        videoCtx_      = newCtx;
+        videoStream_   = streamIdx;
+        width_         = videoCtx_->width;
+        height_        = videoCtx_->height;
+        fps_           = (vs->avg_frame_rate.den > 0)
+                         ? static_cast<float>(av_q2d(vs->avg_frame_rate))
+                         : 24.0f;
+        videoTimeBase_ = av_q2d(vs->time_base);
+        return true;
+    }
+
+    void VideoDecoder::SetAudioStream(int trackIndex)
+    {
+        if (!fmtCtx_ || trackIndex < 0) return;
+        int found = 0;
+        for (int i = 0; i < (int)fmtCtx_->nb_streams; ++i)
+        {
+            if (fmtCtx_->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+            {
+                if (found == trackIndex) { OpenAudioStreamByIndex(i); return; }
+                ++found;
+            }
+        }
+    }
+
+    void VideoDecoder::SetVideoStream(int trackIndex)
+    {
+        if (!fmtCtx_ || trackIndex < 0) return;
+        int found = 0;
+        for (int i = 0; i < (int)fmtCtx_->nb_streams; ++i)
+        {
+            if (fmtCtx_->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+            {
+                if (found == trackIndex) { OpenVideoStreamByIndex(i); return; }
+                ++found;
+            }
+        }
+    }
+
     // ---------------------------------------------------------------------------
     // YUV420P → RGBA  (BT.601 full-range)
     // ---------------------------------------------------------------------------

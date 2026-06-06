@@ -48,6 +48,12 @@ namespace CNA::Internal::Media
         /// Seeks to the beginning of the stream.
         void SeekToStart();
 
+        /// Switches the active audio stream to the trackIndex-th audio stream (0-based).
+        void SetAudioStream(int trackIndex);
+
+        /// Switches the active video stream to the trackIndex-th video stream (0-based).
+        void SetVideoStream(int trackIndex);
+
         /// Decodes the next video frame into RGBA output buffer.
         /// @param rgbaOut  output buffer; resized to width*height*4 bytes.
         /// @param ptsOut   presentation timestamp in seconds.
@@ -64,6 +70,8 @@ namespace CNA::Internal::Media
         bool ReceiveVideoFrame();    // receive one decoded video frame
         void ConvertFrameToRGBA(std::vector<uint8_t>& out);
         void ProcessAudioPacket(AVPacket* pkt);
+        bool OpenAudioStreamByIndex(int streamIdx);
+        bool OpenVideoStreamByIndex(int streamIdx);
 
         // BT.601 YUV420P → RGBA (no libswscale needed)
         static void yuv420p_to_rgba(

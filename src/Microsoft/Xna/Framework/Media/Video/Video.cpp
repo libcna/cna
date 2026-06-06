@@ -1,4 +1,5 @@
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
+#include "Microsoft/Xna/Framework/Media/Video/VideoPlayer.hpp"
 #include "CNA/Internal/Media/VideoDecoder.hpp"
 
 #include <utility>
@@ -72,6 +73,18 @@ namespace Microsoft::Xna::Framework::Media
     const std::string& Video::getFileNameProperty() const { return fileName_; }
 
     Graphics::GraphicsDevice* Video::getGraphicsDeviceProperty() const { return device_; }
+
+    void Video::SetAudioTrackEXT(SharpRuntime::intcs track)
+    {
+        audioTrack_ = track;
+        if (parent_) parent_->SetAudioTrackEXT(track);
+    }
+
+    void Video::SetVideoTrackEXT(SharpRuntime::intcs track)
+    {
+        videoTrack_ = track;
+        if (parent_) parent_->SetVideoTrackEXT(track);
+    }
 
     Video* Video::FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device)
     {

@@ -15,8 +15,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
 namespace Microsoft::Xna::Framework::Media
 {
+    class VideoPlayer;
+
     /// Represents a video asset that can be played through VideoPlayer.
-    /// @note Status: Stub — video decoding not implemented
     class Video final : public System::Object
     {
     public:
@@ -50,6 +51,12 @@ namespace Microsoft::Xna::Framework::Media
         /// Creates a Video from a URI and a graphics device.
         static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);
 
+        /// Selects which audio stream to use when multiple audio tracks are present.
+        void SetAudioTrackEXT(SharpRuntime::intcs track);
+
+        /// Selects which video stream to use when multiple video tracks are present.
+        void SetVideoTrackEXT(SharpRuntime::intcs track);
+
         /// Returns the file path this Video was loaded from.
         NOXNA [[nodiscard]] const std::string& getFileNameProperty() const;
 
@@ -59,6 +66,8 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
+        friend class VideoPlayer;
+
         std::string fileName_;
         Graphics::GraphicsDevice* device_;
         SharpRuntime::intcs width_;
@@ -66,5 +75,9 @@ namespace Microsoft::Xna::Framework::Media
         float framesPerSecond_;
         VideoSoundtrackType soundtrackType_;
         System::TimeSpan duration_;
+
+        SharpRuntime::intcs audioTrack_ = -1;
+        SharpRuntime::intcs videoTrack_ = -1;
+        VideoPlayer* parent_ = nullptr;
     };
 }
