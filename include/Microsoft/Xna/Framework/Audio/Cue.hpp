@@ -1,7 +1,9 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "System/EventArgs.hpp"
@@ -14,16 +16,12 @@ namespace Microsoft::Xna::Framework::Audio
     class AudioEmitter;
     class AudioListener;
     class SoundBank;
+    class SoundEffectInstance;
 
     /// Represents a named sound cue from a SoundBank.
-    ///
-    /// NOTE: XACT cue playback requires .XSB/.XWB files and is not supported by
-    /// the SDL3_mixer backend. All playback methods are accepted without error
-    /// but produce no audio output.
     class Cue final : public System::Object, public System::IDisposable
     {
     public:
-        /// Raised when this cue is about to be disposed.
         System::EventHandler<System::EventArgs> Disposing;
 
         ~Cue() override;
@@ -55,15 +53,27 @@ namespace Microsoft::Xna::Framework::Audio
 
     private:
         friend class SoundBank;
-        Cue(std::string name, SoundBank* bank);
+        friend class AudioEngine;
+        Cue(std::string name, SoundBank* bank, uint16_t cueIndex);
 
         enum class State { Created, Preparing, Prepared, Playing, Pausing, Paused, Stopping, Stopped };
 
         std::string name_;
         SoundBank*  bank_;
+        uint16_t    cueIndex_   = 0xFFFF;
+        uint16_t    categoryIdx_= 0xFFFF;
         State       state_      = State::Created;
         bool        isDisposed_ = false;
+
         std::unordered_map<std::string, float> variables_;
+
+        struct PlaybackInstance
+        {
+            std::unique_ptr<SoundEffectInstance> instance;
+        };
+        std::vector<PlaybackInstance> active_;
+
+        void StopInternal(bool immediate);
 
         GetTypeNameHPP()
     };

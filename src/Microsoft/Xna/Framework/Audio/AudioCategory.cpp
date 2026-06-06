@@ -11,38 +11,35 @@ namespace Microsoft::Xna::Framework::Audio
     {
     }
 
-    const std::string& AudioCategory::getNameProperty() const
-    {
-        return name_;
-    }
+    const std::string& AudioCategory::getNameProperty() const { return name_; }
 
     void AudioCategory::Pause()
     {
-        // SDL3_mixer has no category-level pause; no-op.
-        if (parent_ && parent_->getIsDisposedProperty()) return;
+        if (parent_ && !parent_->getIsDisposedProperty())
+            parent_->PauseCategoryInternal(index_);
     }
 
     void AudioCategory::Resume()
     {
-        // SDL3_mixer has no category-level resume; no-op.
-        if (parent_ && parent_->getIsDisposedProperty()) return;
+        if (parent_ && !parent_->getIsDisposedProperty())
+            parent_->ResumeCategoryInternal(index_);
     }
 
-    void AudioCategory::SetVolume(float /*volume*/)
+    void AudioCategory::SetVolume(float volume)
     {
-        // SDL3_mixer has no category-level volume; no-op.
-        if (parent_ && parent_->getIsDisposedProperty()) return;
+        if (parent_ && !parent_->getIsDisposedProperty())
+            parent_->SetCategoryVolumeInternal(index_, volume);
     }
 
-    void AudioCategory::Stop(AudioStopOptions /*options*/)
+    void AudioCategory::Stop(AudioStopOptions options)
     {
-        // SDL3_mixer has no category-level stop; no-op.
-        if (parent_ && parent_->getIsDisposedProperty()) return;
+        if (parent_ && !parent_->getIsDisposedProperty())
+            parent_->StopCategoryInternal(index_, options == AudioStopOptions::Immediate);
     }
 
     bool AudioCategory::Equals(const AudioCategory& other) const
     {
-        return GetHashCode() == other.GetHashCode();
+        return parent_ == other.parent_ && index_ == other.index_;
     }
 
     int AudioCategory::GetHashCode() const
@@ -50,13 +47,6 @@ namespace Microsoft::Xna::Framework::Audio
         return static_cast<int>(std::hash<std::string>{}(name_));
     }
 
-    bool AudioCategory::operator==(const AudioCategory& other) const
-    {
-        return Equals(other);
-    }
-
-    bool AudioCategory::operator!=(const AudioCategory& other) const
-    {
-        return !Equals(other);
-    }
+    bool AudioCategory::operator==(const AudioCategory& other) const { return Equals(other); }
+    bool AudioCategory::operator!=(const AudioCategory& other) const { return !Equals(other); }
 }
