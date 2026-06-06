@@ -1,7 +1,9 @@
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -51,6 +53,15 @@ namespace Microsoft::Xna::Framework::Audio
         std::unique_ptr<XactSoundBankImpl> xactImpl_;
 
         const CNA::Internal::Audio::XsbData* GetXsbData() const;
+
+        // Fire-and-forget cues from PlayCue() — kept alive until the sound
+        // duration has elapsed, then swept on the next PlayCue() call.
+        struct FireAndForget
+        {
+            std::unique_ptr<Cue> cue;
+            std::chrono::steady_clock::time_point created;
+        };
+        std::vector<FireAndForget> fireAndForget_;
 
         GetTypeNameHPP()
     };

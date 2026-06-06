@@ -5,6 +5,8 @@
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -104,12 +106,25 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_)
             throw std::runtime_error("SoundBank is disposed");
 
-        // Fire-and-forget: create a Cue, play it, immediately discard the object.
-        // The underlying SoundEffect handles lifetime via SDL3_mixer callbacks.
+        // Sweep fire-and-forget cues older than 5 seconds. Destroying a Cue
+        // whose sound has already finished is effectively a no-op (the SDL3_mixer
+        // track is stopped, then destroyed — both harmless on a completed track).
+        auto now = std::chrono::steady_clock::now();
+        fireAndForget_.erase(
+            std::remove_if(
+                fireAndForget_.begin(), fireAndForget_.end(),
+                [&now](const FireAndForget& faf)
+                {
+                    return std::chrono::duration_cast<std::chrono::seconds>(
+                               now - faf.created).count() >= 5;
+                }),
+            fireAndForget_.end());
+
         std::unique_ptr<Cue> cue(GetCue(name));
         cue->Play();
-        // Cue destructor stops immediately — for fire-and-forget, Play() has
-        // already submitted the audio buffers; the track lives on in SDL3_mixer.
+        // Keep the Cue alive so its SoundEffectInstances (and their SDL3_mixer
+        // tracks) are not destroyed before the sound has had a chance to play.
+        fireAndForget_.push_back({std::move(cue), now});
     }
 
     void SoundBank::PlayCue(const std::string& name,
@@ -126,6 +141,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (!isDisposed_)
         {
             Disposing.Raise(this, System::EventArgs::Empty);
+            fireAndForget_.clear(); // stops any still-playing fire-and-forget cues
             xactImpl_.reset();
             isDisposed_ = true;
         }
