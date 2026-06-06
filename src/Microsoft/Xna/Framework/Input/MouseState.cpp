@@ -57,8 +57,21 @@ namespace Microsoft::Xna::Framework::Input
 
     std::string MouseState::ToString() const
     {
+        std::string buttons;
+        auto append = [&](const char* name) {
+            if (!buttons.empty()) buttons += ' ';
+            buttons += name;
+        };
+        if (leftButton_   == ButtonState::Pressed) append("Left");
+        if (rightButton_  == ButtonState::Pressed) append("Right");
+        if (middleButton_ == ButtonState::Pressed) append("Middle");
+        if (xButton1_     == ButtonState::Pressed) append("XButton1");
+        if (xButton2_     == ButtonState::Pressed) append("XButton2");
+        if (buttons.empty()) buttons = "None";
         return "[MouseState X=" + std::to_string(x_) +
-               " Y=" + std::to_string(y_) + "]";
+               ", Y=" + std::to_string(y_) +
+               ", Buttons=" + buttons +
+               ", Wheel=" + std::to_string(scrollWheelValue_) + "]";
     }
 
     bool operator==(const MouseState& left, const MouseState& right)

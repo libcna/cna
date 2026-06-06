@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <string>
 
+#include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
 namespace CNA::Internal::Input
@@ -46,5 +47,12 @@ namespace CNA::Internal::Input
          * @brief Returns the SDL GUID string for the gamepad at the given player slot.
          */
         static std::string GetGUID(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+
+        /**
+         * @brief Queries SDL for the actual hardware capabilities of the gamepad.
+         */
+        static Microsoft::Xna::Framework::Input::GamePadCapabilities GetCapabilities(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex
+        );
     };
 }

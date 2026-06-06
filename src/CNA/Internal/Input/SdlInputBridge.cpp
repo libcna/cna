@@ -2,6 +2,8 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
 
 #include <algorithm>
 #include <string>
@@ -417,6 +419,93 @@ namespace CNA::Internal::Input
         char buf[33] = {};
         SDL_GUIDToString(guid, buf, static_cast<int>(sizeof(buf)));
         return std::string(buf);
+    }
+
+    static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)
+    {
+        using Microsoft::Xna::Framework::Input::GamePadType;
+        switch (t)
+        {
+        case SDL_JOYSTICK_TYPE_GAMEPAD:      return GamePadType::GamePad;
+        case SDL_JOYSTICK_TYPE_WHEEL:        return GamePadType::Wheel;
+        case SDL_JOYSTICK_TYPE_ARCADE_STICK: return GamePadType::ArcadeStick;
+        case SDL_JOYSTICK_TYPE_FLIGHT_STICK: return GamePadType::FlightStick;
+        case SDL_JOYSTICK_TYPE_DANCE_PAD:    return GamePadType::DancePad;
+        case SDL_JOYSTICK_TYPE_GUITAR:       return GamePadType::Guitar;
+        case SDL_JOYSTICK_TYPE_DRUM_KIT:     return GamePadType::DrumKit;
+        case SDL_JOYSTICK_TYPE_ARCADE_PAD:   return GamePadType::BigButtonPad;
+        default:                             return GamePadType::Unknown;
+        }
+    }
+
+    Microsoft::Xna::Framework::Input::GamePadCapabilities
+    SdlInputBridge::GetCapabilities(Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        using Microsoft::Xna::Framework::Input::GamePadCapabilities;
+
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return GamePadCapabilities{};
+
+        GamePadCapabilities caps{};
+        caps.IsConnected = true;
+
+        // Joystick type → GamePadType
+        SDL_Joystick* joystick = SDL_GetGamepadJoystick(gamepad);
+        if (joystick != nullptr)
+            caps.GamePadType_ = sdl_joystick_type_to_gamepad_type(SDL_GetJoystickType(joystick));
+
+        // Buttons
+        caps.HasAButton            = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
+        caps.HasBButton            = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_EAST);
+        caps.HasXButton            = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_WEST);
+        caps.HasYButton            = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH);
+        caps.HasBackButton         = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_BACK);
+        caps.HasBigButton          = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_GUIDE);
+        caps.HasStartButton        = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_START);
+        caps.HasLeftStickButton    = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK);
+        caps.HasRightStickButton   = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_STICK);
+        caps.HasLeftShoulderButton = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+        caps.HasRightShoulderButton= SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+        caps.HasDPadUpButton       = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
+        caps.HasDPadDownButton     = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+        caps.HasDPadLeftButton     = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+        caps.HasDPadRightButton    = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+
+        // Axes
+        caps.HasLeftXThumbStick  = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX);
+        caps.HasLeftYThumbStick  = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY);
+        caps.HasRightXThumbStick = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
+        caps.HasRightYThumbStick = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
+        caps.HasLeftTrigger      = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
+        caps.HasRightTrigger     = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
+
+        // Rumble: probe with all-zero call — returns true if supported
+        const bool hasRumble = SDL_RumbleGamepad(gamepad, 0, 0, 0);
+        caps.HasLeftVibrationMotor  = hasRumble;
+        caps.HasRightVibrationMotor = hasRumble;
+
+        // Trigger rumble
+        caps.HasTriggerVibrationMotorsEXT = SDL_RumbleGamepadTriggers(gamepad, 0, 0, 0);
+
+        // Light bar (RGB LED)
+        const SDL_PropertiesID props = SDL_GetGamepadProperties(gamepad);
+        if (props != 0)
+            caps.HasLightBarEXT = SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false);
+
+        // Extended buttons
+        caps.HasMisc1EXT   = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_MISC1);
+        caps.HasPaddle1EXT = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1);
+        caps.HasPaddle2EXT = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1);
+        caps.HasPaddle3EXT = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2);
+        caps.HasPaddle4EXT = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_PADDLE2);
+
+        // Touchpad, gyro, accelerometer
+        caps.HasTouchPadEXT      = SDL_GetNumGamepadTouchpads(gamepad) > 0;
+        caps.HasGyroEXT          = SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO);
+        caps.HasAccelerometerEXT = SDL_GamepadHasSensor(gamepad, SDL_SENSOR_ACCEL);
+
+        return caps;
     }
 
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)

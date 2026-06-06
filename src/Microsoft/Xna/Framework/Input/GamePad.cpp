@@ -19,34 +19,7 @@ namespace Microsoft::Xna::Framework::Input
 
     GamePadCapabilities GamePad::GetCapabilities(PlayerIndex playerIndex)
     {
-        const auto raw = CNA::Internal::Input::InputManager::GetRawGamePadState(playerIndex);
-        GamePadCapabilities caps;
-        caps.IsConnected = raw.isConnected;
-        if (!raw.isConnected)
-            return caps;
-
-        caps.HasAButton             = true;
-        caps.HasBButton             = true;
-        caps.HasXButton             = true;
-        caps.HasYButton             = true;
-        caps.HasBackButton          = true;
-        caps.HasStartButton         = true;
-        caps.HasLeftShoulderButton  = true;
-        caps.HasRightShoulderButton = true;
-        caps.HasLeftStickButton     = true;
-        caps.HasRightStickButton    = true;
-        caps.HasDPadUpButton        = true;
-        caps.HasDPadDownButton      = true;
-        caps.HasDPadLeftButton      = true;
-        caps.HasDPadRightButton     = true;
-        caps.HasLeftXThumbStick     = true;
-        caps.HasLeftYThumbStick     = true;
-        caps.HasRightXThumbStick    = true;
-        caps.HasRightYThumbStick    = true;
-        caps.HasLeftTrigger         = true;
-        caps.HasRightTrigger        = true;
-        caps.GamePadType_           = GamePadType::GamePad;
-        return caps;
+        return CNA::Internal::Input::SdlInputBridge::GetCapabilities(playerIndex);
     }
 
     GamePadState GamePad::GetState(PlayerIndex playerIndex)
