@@ -13,21 +13,22 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     struct VertexPositionTexture : public IVertexType
     {
-        Vector3 Position;
-        Vector2 TextureCoordinate;
+        Microsoft::Xna::Framework::Vector3 Position;
+        Microsoft::Xna::Framework::Vector2 TextureCoordinate;
 
         VertexPositionTexture() = default;
 
-        VertexPositionTexture(const Vector3& position, const Vector2& textureCoordinate)
+        VertexPositionTexture(const Microsoft::Xna::Framework::Vector3& position,
+                              const Microsoft::Xna::Framework::Vector2& textureCoordinate)
             : Position(position), TextureCoordinate(textureCoordinate)
         {
         }
 
-        static const VertexDeclaration VertexDeclaration;
+        [[nodiscard]] static const Graphics::VertexDeclaration& getVertexDeclarationStatic();
 
         [[nodiscard]] const Graphics::VertexDeclaration& getVertexDeclarationProperty() const override
         {
-            return VertexDeclaration;
+            return getVertexDeclarationStatic();
         }
 
         bool operator==(const VertexPositionTexture& o) const

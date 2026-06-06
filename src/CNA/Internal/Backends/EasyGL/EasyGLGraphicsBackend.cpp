@@ -568,6 +568,60 @@ void main()
     }
 
     // -------------------------------------------------------------------------
+    // Graphics state
+    // -------------------------------------------------------------------------
+
+    void EasyGLGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                                 int colorDstBlend, int alphaDstBlend,
+                                                 int colorBlendFunc, int alphaBlendFunc)
+    {
+        if (metagl::IsContextLost()) return;
+        // Blend::One=0, Blend::Zero=1 → Opaque preset: src=One, dst=Zero → effectively no blending
+        const bool blendEnabled = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
+                                    alphaSrcBlend == 0 && alphaDstBlend == 1);
+        device.set_blend_enabled(blendEnabled);
+        if (blendEnabled)
+        {
+            device.set_blend_func_separate(
+                ToEasyGLBlendFactor(colorSrcBlend), ToEasyGLBlendFactor(colorDstBlend),
+                ToEasyGLBlendFactor(alphaSrcBlend), ToEasyGLBlendFactor(alphaDstBlend));
+            device.set_blend_equation_separate(
+                ToEasyGLBlendEquation(colorBlendFunc),
+                ToEasyGLBlendEquation(alphaBlendFunc));
+        }
+    }
+
+    void EasyGLGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                                        int depthFunc)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_depth_test_enabled(depthEnable);
+        device.set_depth_mask(depthWriteEnable);
+        if (depthEnable)
+            device.set_depth_func(ToEasyGLCompareFunc(depthFunc));
+    }
+
+    void EasyGLGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
+                                                      bool scissorTestEnable)
+    {
+        if (metagl::IsContextLost()) return;
+        // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
+        // OpenGL default front face is CCW; CW faces are back faces.
+        if (cullMode == 0)
+        {
+            device.set_cull_face_enabled(false);
+        }
+        else
+        {
+            device.set_cull_face_enabled(true);
+            device.set_cull_face(cullMode == 1 ? ::easygl::CullFace::Back
+                                                : ::easygl::CullFace::Front);
+        }
+        device.set_scissor_test_enabled(scissorTestEnable);
+        // FillMode::WireFrame not supported in OpenGL ES — silently ignored
+    }
+
+    // -------------------------------------------------------------------------
     // 3D pipeline
     // -------------------------------------------------------------------------
 
@@ -770,6 +824,63 @@ void main()
 
     namespace
     {
+        // XNA Blend enum → easygl BlendFactor
+        // Blend: One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4,
+        //        InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
+        //        DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
+        //        InverseBlendFactor=11, SourceAlphaSaturation=12
+        ::easygl::BlendFactor ToEasyGLBlendFactor(int xnaBlend)
+        {
+            switch (xnaBlend)
+            {
+            case  1: return ::easygl::BlendFactor::Zero;
+            case  2: return ::easygl::BlendFactor::SrcColor;
+            case  3: return ::easygl::BlendFactor::OneMinusSrcColor;
+            case  4: return ::easygl::BlendFactor::SrcAlpha;
+            case  5: return ::easygl::BlendFactor::OneMinusSrcAlpha;
+            case  6: return ::easygl::BlendFactor::DstColor;
+            case  7: return ::easygl::BlendFactor::OneMinusDstColor;
+            case  8: return ::easygl::BlendFactor::DstAlpha;
+            case  9: return ::easygl::BlendFactor::OneMinusDstAlpha;
+            case 10: return ::easygl::BlendFactor::ConstantColor;
+            case 11: return ::easygl::BlendFactor::OneMinusConstantColor;
+            case 12: return ::easygl::BlendFactor::SrcAlphaSaturate;
+            default: return ::easygl::BlendFactor::One;  // Blend::One = 0
+            }
+        }
+
+        // XNA BlendFunction enum → easygl BlendEquation
+        // BlendFunction: Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4
+        ::easygl::BlendEquation ToEasyGLBlendEquation(int xnaBlendFunc)
+        {
+            switch (xnaBlendFunc)
+            {
+            case 1: return ::easygl::BlendEquation::FuncSubtract;
+            case 2: return ::easygl::BlendEquation::FuncReverseSubtract;
+            case 3: return ::easygl::BlendEquation::Max;
+            case 4: return ::easygl::BlendEquation::Min;
+            default: return ::easygl::BlendEquation::FuncAdd;  // BlendFunction::Add = 0
+            }
+        }
+
+        // XNA CompareFunction enum → easygl CompareFunc
+        // CompareFunction: Always=0, Never=1, Less=2, LessEqual=3, Equal=4,
+        //                  GreaterEqual=5, Greater=6, NotEqual=7
+        ::easygl::CompareFunc ToEasyGLCompareFunc(int xnaCompare)
+        {
+            switch (xnaCompare)
+            {
+            case 1: return ::easygl::CompareFunc::Never;
+            case 2: return ::easygl::CompareFunc::Less;
+            case 3: return ::easygl::CompareFunc::Lequal;
+            case 4: return ::easygl::CompareFunc::Equal;
+            case 5: return ::easygl::CompareFunc::Gequal;
+            case 6: return ::easygl::CompareFunc::Greater;
+            case 7: return ::easygl::CompareFunc::Notequal;
+            default: return ::easygl::CompareFunc::Always;  // CompareFunction::Always = 0
+            }
+        }
+
         ::easygl::PrimitiveType ToEasyGl(PrimitiveType pt)
         {
             switch (pt)

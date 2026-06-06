@@ -181,6 +181,13 @@ namespace CNA::Internal::Backends::EasyGL
         void DebugSimulateContextLoss() override;
         void DebugRestoreContext() override;
 
+        // ---- Graphics state: IMPLEMENTED ----
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc) override;
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable) override;
+
         // ---- 3D: IMPLEMENTED ----
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void SetDepthTestEnabled(bool enabled) override;

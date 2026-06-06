@@ -129,6 +129,21 @@ namespace CNA::Internal::Backends
         virtual std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) = 0;
         virtual std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() = 0;
 
+        // ---- Graphics state ----
+
+        /// Applies a BlendState to the backend. Default: no-op.
+        virtual void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                     int colorDstBlend, int alphaDstBlend,
+                                     int colorBlendFunc, int alphaBlendFunc) {}
+
+        /// Applies a DepthStencilState to the backend. Default: no-op.
+        virtual void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                            int depthFunc) {}
+
+        /// Applies a RasterizerState to the backend. Default: no-op.
+        virtual void ApplyRasterizerState(int cullMode, int fillMode,
+                                          bool scissorTestEnable) {}
+
         // ---- 3D pipeline ----
 
         /**

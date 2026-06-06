@@ -26,8 +26,8 @@ TEST(GamePadInputTest, GetStateReturnsDisconnectedWhenNoGamePadConnected)
     EXPECT_FALSE(state.getIsConnectedProperty());
     EXPECT_EQ(state.getButtonsProperty().getAProperty(), ButtonState::Released);
     EXPECT_EQ(state.getButtonsProperty().getStartProperty(), ButtonState::Released);
-    EXPECT_FLOAT_EQ(state.getLeftTriggerProperty(), 0.0f);
-    EXPECT_FLOAT_EQ(state.getRightTriggerProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(state.getTriggersProperty().getRightProperty(), 0.0f);
 
     ResetGamePadState();
 }
@@ -63,14 +63,14 @@ TEST(GamePadInputTest, GetStateReflectsMappedButtonsAndAxes)
     EXPECT_TRUE(state.getIsConnectedProperty());
     EXPECT_EQ(state.getButtonsProperty().getAProperty(), ButtonState::Pressed);
     EXPECT_EQ(state.getButtonsProperty().getBackProperty(), ButtonState::Pressed);
-    EXPECT_EQ(state.getButtonsProperty().getDPadLeftProperty(), ButtonState::Pressed);
+    EXPECT_EQ(state.getDPadProperty().getLeftProperty(), ButtonState::Pressed);
     EXPECT_EQ(state.getButtonsProperty().getBProperty(), ButtonState::Released);
-    EXPECT_FLOAT_EQ(state.getLeftThumbstickProperty().X, 0.25f);
-    EXPECT_FLOAT_EQ(state.getLeftThumbstickProperty().Y, -0.75f);
-    EXPECT_FLOAT_EQ(state.getRightThumbstickProperty().X, -1.0f);
-    EXPECT_FLOAT_EQ(state.getRightThumbstickProperty().Y, 1.0f);
-    EXPECT_FLOAT_EQ(state.getLeftTriggerProperty(), 0.2f);
-    EXPECT_FLOAT_EQ(state.getRightTriggerProperty(), 1.0f);
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 0.25f);
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().Y, -0.75f);
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getRightProperty().X, -1.0f);
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getRightProperty().Y, 1.0f);
+    EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.2f);
+    EXPECT_FLOAT_EQ(state.getTriggersProperty().getRightProperty(), 1.0f);
 
     ResetGamePadState();
 }
@@ -114,10 +114,10 @@ TEST(GamePadInputTest, AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedSt
                                                             CNA::Internal::Input::GamePadAxis::RightTrigger, 4.0f);
 
     const auto clampedState = GamePad::GetState(PlayerIndex::One);
-    EXPECT_FLOAT_EQ(clampedState.getLeftThumbstickProperty().X, 1.0f);
-    EXPECT_FLOAT_EQ(clampedState.getRightThumbstickProperty().Y, -1.0f);
-    EXPECT_FLOAT_EQ(clampedState.getLeftTriggerProperty(), 0.0f);
-    EXPECT_FLOAT_EQ(clampedState.getRightTriggerProperty(), 1.0f);
+    EXPECT_FLOAT_EQ(clampedState.getThumbSticksProperty().getLeftProperty().X, 1.0f);
+    EXPECT_FLOAT_EQ(clampedState.getThumbSticksProperty().getRightProperty().Y, -1.0f);
+    EXPECT_FLOAT_EQ(clampedState.getTriggersProperty().getLeftProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(clampedState.getTriggersProperty().getRightProperty(), 1.0f);
 
     const auto invalidState = GamePad::GetState(static_cast<PlayerIndex>(99));
     EXPECT_FALSE(invalidState.getIsConnectedProperty());

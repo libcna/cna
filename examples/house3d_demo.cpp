@@ -397,7 +397,7 @@ protected:
         effect_->World      = Matrix::getIdentityProperty();
 
         // XNA 4.0-style draw flow.
-        for (auto& pass : effect_->CurrentTechnique().Passes()) {
+        for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty()) {
             pass.Apply();
             for (const auto& m : meshes_) {
                 device.SetVertexBuffer(m.vb.get());

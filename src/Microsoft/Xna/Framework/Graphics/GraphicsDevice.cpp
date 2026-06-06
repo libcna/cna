@@ -117,7 +117,8 @@ namespace Microsoft::Xna::Framework::Graphics
           adapter_(&adapter),
           graphicsProfile_(graphicsProfile),
           presentationParameters_(presentationParameters),
-          isDisposed_(false)
+          isDisposed_(false),
+          blendFactor_(Color::White)
     {
 #ifdef __ANDROID__
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
@@ -721,15 +722,42 @@ namespace Microsoft::Xna::Framework::Graphics
 
     BlendState& GraphicsDevice::getBlendStateProperty() { return blendState_; }
     const BlendState& GraphicsDevice::getBlendStateProperty() const { return blendState_; }
-    void GraphicsDevice::setBlendStateProperty(const BlendState& value) { blendState_ = value; }
+    void GraphicsDevice::setBlendStateProperty(const BlendState& value)
+    {
+        blendState_ = value;
+        if (backend_)
+            backend_->ApplyBlendState(
+                (int)value.getColorSourceBlendProperty(),
+                (int)value.getAlphaSourceBlendProperty(),
+                (int)value.getColorDestinationBlendProperty(),
+                (int)value.getAlphaDestinationBlendProperty(),
+                (int)value.getColorBlendFunctionProperty(),
+                (int)value.getAlphaBlendFunctionProperty());
+    }
 
     DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() { return depthStencilState_; }
     const DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() const { return depthStencilState_; }
-    void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value) { depthStencilState_ = value; }
+    void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value)
+    {
+        depthStencilState_ = value;
+        if (backend_)
+            backend_->ApplyDepthStencilState(
+                value.getDepthBufferEnableProperty(),
+                value.getDepthBufferWriteEnableProperty(),
+                (int)value.getDepthBufferFunctionProperty());
+    }
 
     RasterizerState& GraphicsDevice::getRasterizerStateProperty() { return rasterizerState_; }
     const RasterizerState& GraphicsDevice::getRasterizerStateProperty() const { return rasterizerState_; }
-    void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value) { rasterizerState_ = value; }
+    void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
+    {
+        rasterizerState_ = value;
+        if (backend_)
+            backend_->ApplyRasterizerState(
+                (int)value.getCullModeProperty(),
+                (int)value.getFillModeProperty(),
+                value.getScissorTestEnableProperty());
+    }
 
     Rectangle GraphicsDevice::getScissorRectangleProperty() const { return scissorRectangle_; }
     void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value) { scissorRectangle_ = value; }
