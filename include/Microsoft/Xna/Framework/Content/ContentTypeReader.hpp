@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -16,6 +17,15 @@ namespace Microsoft::Xna::Framework::Content
     {
     public:
         virtual ~ContentTypeReader() = default;
+
+        /**
+         * @brief Returns the file extensions this reader handles (e.g. {".png", ".jpg"}).
+         *
+         * When ContentManager::Load is called with an asset name that has no extension,
+         * it iterates these extensions and tries each one until a file is found.
+         * Return an empty vector if the reader always receives a full path.
+         */
+        [[nodiscard]] virtual std::vector<std::string> GetExtensions() const { return {}; }
 
         /**
          * @brief Reads and constructs an asset of type T.

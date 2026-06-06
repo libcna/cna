@@ -1,5 +1,8 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -15,12 +18,17 @@ namespace Microsoft::Xna::Framework::Content
 
     const std::string& ContentManager::getRootDirectoryProperty() const
     {
-        return RootDirectory_;
+        return rootDirectory_;
     }
 
     void ContentManager::setRootDirectoryProperty(const std::string& v)
     {
-        RootDirectory_ = v;
+        rootDirectory_ = v;
+    }
+
+    void ContentManager::setRootDirectoryProperty(std::string&& v)
+    {
+        rootDirectory_ = std::move(v);
     }
 
     // ---------------------------------------------------------------------------
@@ -29,7 +37,7 @@ namespace Microsoft::Xna::Framework::Content
 
     ContentManager::ContentManager()
     {
-        RegisterBuiltinEffectLoader();
+        RegisterBuiltinLoaders();
     }
 
     void ContentManager::setGraphicsDevice(Graphics::GraphicsDevice& graphicsDevice)
@@ -50,7 +58,11 @@ namespace Microsoft::Xna::Framework::Content
 
     void ContentManager::Dispose()
     {
-        Unload();
+        if (!disposed_)
+        {
+            Unload();
+            disposed_ = true;
+        }
     }
 
     void ContentManager::Unload()
@@ -66,16 +78,14 @@ namespace Microsoft::Xna::Framework::Content
     {
         if (assetName.empty())
         {
-            return getRootDirectoryProperty();
+            return rootDirectory_;
         }
-
-        if (getRootDirectoryProperty().empty())
+        if (rootDirectory_.empty())
         {
             return assetName;
         }
-
         namespace fs = std::filesystem;
-        return (fs::path(getRootDirectoryProperty()) / assetName).string();
+        return (fs::path(rootDirectory_) / assetName).string();
     }
 
     std::string ContentManager::NormalizeKey(const std::string& assetName) const
@@ -88,21 +98,54 @@ namespace Microsoft::Xna::Framework::Content
     }
 
     // ---------------------------------------------------------------------------
-    // Built-in Effect loader
+    // Built-in type readers
     // ---------------------------------------------------------------------------
 
     namespace
     {
-        /**
-         * @brief Minimal JSON string-value extractor.
-         *
-         * Finds the value of a simple string field in a flat JSON object:
-         *   { "key": "value" }
-         *
-         * @param json  Full JSON text.
-         * @param key   Field name to look up.
-         * @return Field value, or empty string if not found.
-         */
+        class Texture2DTypeReader : public ContentTypeReader<Graphics::Texture2D>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tga", ".tif", ".tiff", ".qoi"};
+            }
+
+            Graphics::Texture2D Read(const std::string& path, ContentManager& cm) override
+            {
+                Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
+                return Graphics::Texture2D(path, gd);
+            }
+        };
+
+        class SoundEffectTypeReader : public ContentTypeReader<Audio::SoundEffect>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".wav"};
+            }
+
+            Audio::SoundEffect Read(const std::string& path, ContentManager& /*cm*/) override
+            {
+                return Audio::SoundEffect(path);
+            }
+        };
+
+        // ---------------------------------------------------------------------------
+
+        std::string ReadTextFile(const std::string& path)
+        {
+            std::ifstream file(path);
+            if (!file.is_open())
+            {
+                throw ContentLoadException("Cannot open file: " + path);
+            }
+            std::ostringstream ss;
+            ss << file.rdbuf();
+            return ss.str();
+        }
+
         std::string ExtractJsonStringField(const std::string& json, const std::string& key)
         {
             const std::string needle = "\"" + key + "\"";
@@ -121,25 +164,17 @@ namespace Microsoft::Xna::Framework::Content
             return json.substr(pos + 1, end - pos - 1);
         }
 
-        std::string ReadTextFile(const std::string& path)
-        {
-            std::ifstream file(path);
-            if (!file.is_open())
-            {
-                throw ContentLoadException("Cannot open file: " + path);
-            }
-            std::ostringstream ss;
-            ss << file.rdbuf();
-            return ss.str();
-        }
-
         class EffectTypeReader : public ContentTypeReader<std::shared_ptr<Graphics::Effect>>
         {
         public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".shader.json"};
+            }
+
             std::shared_ptr<Graphics::Effect> Read(const std::string& path, ContentManager& cm) override
             {
-                // Resolve .shader.json path: use path as-is if it ends with .shader.json,
-                // otherwise append the extension.
+                // If path doesn't already end with .shader.json, append it.
                 std::string jsonPath = path;
                 const std::string ext = ".shader.json";
                 if (jsonPath.size() < ext.size() ||
@@ -164,18 +199,22 @@ namespace Microsoft::Xna::Framework::Content
                 const std::string vertPath = (fs::path(root) / vertRel).string();
                 const std::string fragPath = (fs::path(root) / fragRel).string();
 
-                const std::string vertSrc = ReadTextFile(vertPath);
-                const std::string fragSrc = ReadTextFile(fragPath);
-
                 return std::make_shared<Graphics::ShaderEffect>(
-                    cm.getGraphicsDeviceInternal(), vertSrc, fragSrc);
+                    cm.getGraphicsDeviceInternal(),
+                    ReadTextFile(vertPath),
+                    ReadTextFile(fragPath));
             }
         };
+
     } // anonymous namespace
 
-    void ContentManager::RegisterBuiltinEffectLoader()
+    // ---------------------------------------------------------------------------
+
+    void ContentManager::RegisterBuiltinLoaders()
     {
-        RegisterTypeReader<std::shared_ptr<Graphics::Effect>>(
-            std::make_unique<EffectTypeReader>());
+        RegisterTypeReader<Graphics::Texture2D>(std::make_unique<Texture2DTypeReader>());
+        RegisterTypeReader<Audio::SoundEffect>(std::make_unique<SoundEffectTypeReader>());
+        RegisterTypeReader<std::shared_ptr<Graphics::Effect>>(std::make_unique<EffectTypeReader>());
     }
-}
+
+} // namespace Microsoft::Xna::Framework::Content

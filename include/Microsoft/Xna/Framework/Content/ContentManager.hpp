@@ -1,6 +1,7 @@
 #pragma once
 
 #include <any>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -10,11 +11,12 @@
 
 #include "CNA/Logger.hpp"
 #include "SharpRuntime/Prop.hpp"
-#include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+#include "System/IDisposable.hpp"
+
+namespace Microsoft::Xna::Framework::Audio  { class SoundEffect; }
+namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; }
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -23,74 +25,40 @@ namespace Microsoft::Xna::Framework::Content
     /**
      * @brief Content manager with extensible type reader support and asset caching.
      *
-     * Supports loading assets by type. Built-in support for:
-     * - Graphics::Texture2D
-     * - Audio::SoundEffect
-     * - std::shared_ptr<Graphics::Effect> (via .shader.json descriptor)
-     *
-     * Custom types can be registered via RegisterTypeReader<T>().
+     * Supports loading assets by type. Custom types are registered via RegisterTypeReader<T>().
+     * Built-in loaders (Texture2D, SoundEffect, Effect) are registered in the constructor.
      */
-    class ContentManager
+    class ContentManager : public System::IDisposable
     {
     private:
-        std::string RootDirectory_ = "Content";
+        std::string rootDirectory_ = "Content";
         Graphics::GraphicsDevice* graphicsDevice_ = nullptr;
+        bool disposed_ = false;
 
         std::unordered_map<std::string, std::any> loadedAssets_;
         std::unordered_map<std::type_index, std::any> typeReaders_;
 
         DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret1, ref1, constmet1)
-        void Dispose();
 
-    private:
-        /**
-         * @brief Builds a full asset path from the root directory and asset name.
-         *
-         * @param assetName Relative asset path.
-         * @return Full path to the asset file.
-         */
         [[nodiscard]] std::string BuildAssetPath(const std::string& assetName) const;
-
-        /**
-         * @brief Normalises an asset name to a canonical cache key.
-         *
-         * Converts to lowercase and replaces backslashes with forward slashes.
-         *
-         * @param assetName Raw asset name.
-         * @return Normalised key string.
-         */
         [[nodiscard]] std::string NormalizeKey(const std::string& assetName) const;
 
-        /**
-         * @brief Registers the built-in Effect loader for .shader.json files.
-         */
-        void RegisterBuiltinEffectLoader();
+        void RegisterBuiltinLoaders();
 
     public:
-        /**
-         * @brief Constructs a content manager and registers built-in loaders.
-         */
         ContentManager();
+        ~ContentManager() override = default;
+
+        void Dispose() override;
 
         void setGraphicsDevice(Graphics::GraphicsDevice& graphicsDevice);
 
-        /**
-         * @brief Returns the graphics device, or throws if not set.
-         *
-         * Used internally by built-in loaders that need to create GPU resources.
-         */
         [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceInternal() const;
 
-        /**
-         * @brief Releases all cached assets.
-         */
         void Unload();
 
         /**
          * @brief Registers a custom type reader for assets of type T.
-         *
-         * @tparam T Asset type.
-         * @param reader Unique pointer to the type reader implementation.
          */
         template <typename T>
         void RegisterTypeReader(std::unique_ptr<ContentTypeReader<T>> reader)
@@ -102,22 +70,23 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief Loads an asset of type T from the content root.
          *
-         * Results are cached — subsequent calls with the same asset name
-         * return the already-loaded instance without I/O.
-         *
-         * Built-in supported types:
-         * - Microsoft::Xna::Framework::Graphics::Texture2D
-         * - Microsoft::Xna::Framework::Audio::SoundEffect
-         * - std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect>
+         * Results are cached — subsequent calls with the same asset name return the
+         * already-loaded instance. If assetName has no file extension, each extension
+         * returned by the registered reader's GetExtensions() is tried in order.
          *
          * @tparam T Asset type.
-         * @param assetName Relative file path inside the content root.
+         * @param assetName Relative file path inside the content root (with or without extension).
          * @return Loaded asset instance.
          * @throws ContentLoadException if the asset cannot be loaded.
          */
         template <typename T>
         [[nodiscard]] T Load(const std::string& assetName)
         {
+            if (disposed_)
+            {
+                throw std::runtime_error("ContentManager has been disposed.");
+            }
+
             const std::string key = NormalizeKey(assetName);
             log::Debug(std::string("Loading asset: ") + assetName);
 
@@ -128,53 +97,60 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             auto readerIt = typeReaders_.find(std::type_index(typeid(T)));
-            if (readerIt != typeReaders_.end())
-            {
-                auto& readerAny = readerIt->second;
-                auto* reader = std::any_cast<std::shared_ptr<ContentTypeReader<T>>>(&readerAny);
-                if (reader && *reader)
-                {
-                    T result = (*reader)->Read(BuildAssetPath(assetName), *this);
-                    loadedAssets_[key] = result;
-                    return result;
-                }
-            }
-
-            const std::string fullPath = BuildAssetPath(assetName);
-
-            if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Graphics::Texture2D>)
-            {
-                if (graphicsDevice_ == nullptr)
-                {
-                    throw ContentLoadException("ContentManager::Load<Texture2D>() failed: GraphicsDevice is null.");
-                }
-                std::string path = fullPath;
-                if (!CONTAINS(assetName, "."))
-                {
-                    path += ".png";
-                }
-                T result(path, *graphicsDevice_);
-                loadedAssets_[key] = result;
-                return result;
-            }
-            else if constexpr (std::is_same_v<T, Microsoft::Xna::Framework::Audio::SoundEffect>)
-            {
-                std::string path = fullPath;
-                if (!CONTAINS(assetName, "."))
-                {
-                    path += ".wav";
-                }
-                T result(path);
-                loadedAssets_[key] = result;
-                return result;
-            }
-            else
+            if (readerIt == typeReaders_.end())
             {
                 throw ContentLoadException(
-                    std::string("ContentManager::Load<T>(): No reader registered for type and asset '") +
-                    assetName + "'."
-                );
+                    std::string("ContentManager::Load<T>(): No reader registered for type, asset '")
+                    + assetName + "'.");
             }
+
+            auto* readerPtr = std::any_cast<std::shared_ptr<ContentTypeReader<T>>>(&readerIt->second);
+            if (!readerPtr || !*readerPtr)
+            {
+                throw ContentLoadException(
+                    std::string("ContentManager::Load<T>(): Reader is null for asset '")
+                    + assetName + "'.");
+            }
+
+            ContentTypeReader<T>& reader = **readerPtr;
+            const std::string resolvedPath = ResolveAssetPath(assetName, reader);
+
+            T result = reader.Read(resolvedPath, *this);
+            loadedAssets_[key] = result;
+            return result;
+        }
+
+    private:
+        /**
+         * @brief Resolves the full filesystem path for an asset, trying reader extensions
+         *        when the asset name has no extension.
+         */
+        template <typename T>
+        [[nodiscard]] std::string ResolveAssetPath(
+            const std::string& assetName,
+            ContentTypeReader<T>& reader) const
+        {
+            const std::string base = BuildAssetPath(assetName);
+
+            // If assetName already has an extension, use the path as-is.
+            if (std::filesystem::path(assetName).has_extension())
+            {
+                return base;
+            }
+
+            // Try each extension declared by the reader.
+            const auto extensions = reader.GetExtensions();
+            for (const auto& ext : extensions)
+            {
+                const std::string candidate = base + ext;
+                if (std::filesystem::exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            // Fall back to bare path (reader may handle the extension itself).
+            return base;
         }
     };
 }
