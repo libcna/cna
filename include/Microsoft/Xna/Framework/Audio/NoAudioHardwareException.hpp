@@ -1,6 +1,8 @@
 #pragma once
 
+#include <exception>
 #include <stdexcept>
+#include <string>
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -13,5 +15,13 @@ namespace Microsoft::Xna::Framework::Audio
 
         explicit NoAudioHardwareException(const std::string& message)
             : std::runtime_error(message) {}
+
+        NoAudioHardwareException(const std::string& message, std::exception_ptr innerException)
+            : std::runtime_error(message), innerException_(innerException) {}
+
+        [[nodiscard]] std::exception_ptr InnerException() const { return innerException_; }
+
+    private:
+        std::exception_ptr innerException_;
     };
 }
