@@ -25,7 +25,7 @@ namespace Microsoft::Xna::Framework::Input
         static void SetPosition(int x, int y);
 
         /// Sets the mouse cursor image.
-        static void SetCursor(MouseCursor cursor);
+        static void SetCursor(MouseCursor& cursor);
 
         // FNA extension: fires when a mouse button is clicked.
         NOXNA static std::function<void(int)> ClickedEXT;

@@ -49,9 +49,11 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     bool TouchLocation::Equals(const TouchLocation& other) const
     {
-        return id_    == other.id_    &&
-               state_ == other.state_ &&
-               position_ == other.position_;
+        return id_           == other.id_           &&
+               position_     == other.position_     &&
+               state_        == other.state_        &&
+               prevPosition_ == other.prevPosition_ &&
+               prevState_    == other.prevState_;
     }
 
     int TouchLocation::GetHashCode() const

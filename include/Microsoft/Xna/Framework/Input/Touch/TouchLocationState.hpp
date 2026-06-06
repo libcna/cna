@@ -10,10 +10,10 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
         Invalid,
 
-        Moved,
+        Released,
 
         Pressed,
 
-        Released
+        Moved
     };
 }

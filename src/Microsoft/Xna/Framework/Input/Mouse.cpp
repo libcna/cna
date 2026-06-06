@@ -1,5 +1,6 @@
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include <SDL3/SDL.h>
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -22,9 +23,9 @@ namespace Microsoft::Xna::Framework::Input
         CNA::Internal::Input::InputManager::SetMousePosition(x, y);
     }
 
-    void Mouse::SetCursor(MouseCursor cursor)
+    void Mouse::SetCursor(MouseCursor& cursor)
     {
-        (void)cursor;
+        SDL_SetCursor(cursor.GetSDLCursor());
     }
 
     void Mouse::INTERNAL_onClicked(int button)
