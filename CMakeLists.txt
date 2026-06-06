@@ -220,6 +220,48 @@ if(CNA_BUILD_EXAMPLES)
             cna_copy_sdl_runtime(cna_demo_2d)
         endif()
     endif()
+
+    # ---- Audio demo (works with all backends) --------------------------------
+    add_executable(cna_demo_sound
+        examples/demo_sound/src/Main.cpp
+        examples/demo_sound/src/SoundDemo.cpp
+    )
+    target_include_directories(cna_demo_sound PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_sound/src
+    )
+
+    if(EMSCRIPTEN)
+        set_target_properties(cna_demo_sound PROPERTIES SUFFIX ".html")
+        target_link_libraries(cna_demo_sound PRIVATE
+            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+        target_link_options(cna_demo_sound PRIVATE
+            -sALLOW_MEMORY_GROWTH=1
+            -sSTACK_SIZE=1048576
+            -sINITIAL_MEMORY=134217728
+            -sFORCE_FILESYSTEM=1
+            "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_sound/Content@/Content"
+        )
+    else()
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_sound PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_sound PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_sound PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_sound POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_sound/Content"
+                "$<TARGET_FILE_DIR:cna_demo_sound>/Content"
+            COMMENT "Copying Content next to cna_demo_sound executable")
+        if(WIN32)
+            set_target_properties(cna_demo_sound PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_sound)
+        endif()
+    endif()
 endif()
 
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHICS_BACKEND STREQUAL "VULKAN"))
