@@ -177,6 +177,44 @@ namespace CNA::Internal::Backends::Vulkan
         }
     }
 
+    void VulkanTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    {
+        if (!owner_ || !owner_->device_ || !rgba) return;
+        VkDevice dev = owner_->device_;
+        VkDeviceSize size = static_cast<VkDeviceSize>(width_) * height_ * 4;
+
+        VkBuffer stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        owner_->CreateBuffer(size,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem);
+
+        void* mapped = nullptr;
+        vkMapMemory(dev, stagingMem, 0, size, 0, &mapped);
+        if (stride == width_ * 4)
+        {
+            std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
+        }
+        else
+        {
+            for (int y = 0; y < height_; ++y)
+                std::memcpy(static_cast<uint8_t*>(mapped) + y * width_ * 4,
+                            rgba + y * stride, static_cast<std::size_t>(width_) * 4);
+        }
+        vkUnmapMemory(dev, stagingMem);
+
+        owner_->TransitionImageLayout(image_,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        owner_->CopyBufferToImage(stagingBuf, image_,
+            static_cast<uint32_t>(width_), static_cast<uint32_t>(height_));
+        owner_->TransitionImageLayout(image_,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+    }
+
     VulkanTextureBackend::~VulkanTextureBackend()
     {
         if (owner_) {

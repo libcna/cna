@@ -57,6 +57,12 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_ = device_->GetBackend().CreateTexture(img);
     }
 
+    void Texture2D::SetDataRGBA(const uint8_t* data, int pixelCount)
+    {
+        if (!backend_ || !data || pixelCount <= 0) return;
+        backend_->UpdatePixels(data, width * 4);
+    }
+
     Texture2D::~Texture2D()
     {
     }

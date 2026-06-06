@@ -59,6 +59,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /// XNA 4.0: Texture2D.SetData<Color>(Color[] data)
         void SetData(const Color* data, int elementCount);
 
+        /// Updates texture pixels from a raw RGBA byte buffer. pixelCount = width * height.
+        NOXNA void SetDataRGBA(const uint8_t* data, int pixelCount);
+
         ITextureBackend& GetBackend() const { return *backend_; }
 
         /// @note Not in XNA 4.0 — prefer the Texture2D(device,w,h)+SetData pattern.

@@ -78,6 +78,8 @@ namespace CNA::Internal::Backends
         virtual int GetHeight() const = 0;
         // TODO: SDL dependency should be abstracted later
         virtual SDL_Texture* GetNativeTexture() const = 0;
+        /// Replaces texture pixels in-place. stride = row bytes (width * 4 for RGBA).
+        virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
     };
 
     class ISpriteBatchBackend

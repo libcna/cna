@@ -1,4 +1,5 @@
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
+#include "CNA/Internal/Media/VideoDecoder.hpp"
 
 #include <utility>
 
@@ -13,7 +14,15 @@ namespace Microsoft::Xna::Framework::Media
           soundtrackType_(VideoSoundtrackType::MusicAndDialog),
           duration_(System::TimeSpan::Zero)
     {
-        // TODO: implement codec detection and metadata reading from file
+        CNA::Internal::Media::VideoDecoder probe;
+        if (probe.Open(fileName_))
+        {
+            width_          = probe.GetWidth();
+            height_         = probe.GetHeight();
+            framesPerSecond_= probe.GetFPS();
+            duration_       = System::TimeSpan::FromMilliseconds(
+                                  static_cast<double>(probe.GetDuration() * 1000.0));
+        }
     }
 
     Video::Video(std::string fileName, Graphics::GraphicsDevice* device,
@@ -59,6 +68,10 @@ namespace Microsoft::Xna::Framework::Media
     {
         duration_ = value;
     }
+
+    const std::string& Video::getFileNameProperty() const { return fileName_; }
+
+    Graphics::GraphicsDevice* Video::getGraphicsDeviceProperty() const { return device_; }
 
     Video* Video::FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device)
     {

@@ -111,8 +111,16 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
     add_compile_definitions(CNA_BACKEND_VULKAN)
     find_package(Vulkan REQUIRED)
 else()
+
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
 endif()
+
+# --- FFmpeg (video decoding) ---
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBAVCODEC  REQUIRED libavcodec)
+pkg_check_modules(LIBAVFORMAT REQUIRED libavformat)
+pkg_check_modules(LIBAVUTIL   REQUIRED libavutil)
+pkg_check_modules(LIBSWRESAMPLE REQUIRED libswresample)
 
 # Common backend interfaces
 add_library(cna_backend_graphics_common INTERFACE)
@@ -171,6 +179,18 @@ target_link_libraries(CNA
         SDL3_image::SDL3_image
         SDL3_mixer::SDL3_mixer
 #        SDL3_ttf::SDL3_ttf
+        ${LIBAVCODEC_LIBRARIES}
+        ${LIBAVFORMAT_LIBRARIES}
+        ${LIBAVUTIL_LIBRARIES}
+        ${LIBSWRESAMPLE_LIBRARIES}
+)
+
+target_include_directories(CNA
+        PRIVATE
+        ${LIBAVCODEC_INCLUDE_DIRS}
+        ${LIBAVFORMAT_INCLUDE_DIRS}
+        ${LIBAVUTIL_INCLUDE_DIRS}
+        ${LIBSWRESAMPLE_INCLUDE_DIRS}
 )
 
 # --- Examples ---

@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Media/VideoSoundtrackType.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
@@ -48,6 +49,12 @@ namespace Microsoft::Xna::Framework::Media
 
         /// Creates a Video from a URI and a graphics device.
         static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);
+
+        /// Returns the file path this Video was loaded from.
+        NOXNA [[nodiscard]] const std::string& getFileNameProperty() const;
+
+        /// Returns the associated GraphicsDevice (may be null).
+        NOXNA [[nodiscard]] Graphics::GraphicsDevice* getGraphicsDeviceProperty() const;
 
         [[nodiscard]] const std::string& GetTypeName() const override;
 

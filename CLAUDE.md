@@ -321,3 +321,17 @@ Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vu
 
 Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
 (`SDL_RENDERER` | `EASYGL` | `VULKAN` | `BGFX`).
+
+---
+
+## System Dependencies (Linux)
+
+The following system packages are required to build CNA on Debian/Ubuntu:
+
+```bash
+# FFmpeg — required for VideoPlayer (video decoding)
+sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
+
+# Note: libswscale-dev may not be available in some repos (runtime libswscale8 is enough).
+# CNA implements YUV→RGBA conversion internally and does NOT depend on libswscale headers.
+```

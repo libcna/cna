@@ -39,6 +39,12 @@ namespace CNA::Internal::Backends::SdlRenderer
         }
     }
 
+    void SdlTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    {
+        if (!texture || !rgba) return;
+        SDL_UpdateTexture(texture, nullptr, rgba, stride);
+    }
+
     // --- SdlSpriteBatchBackend ---
 
     SdlSpriteBatchBackend::SdlSpriteBatchBackend(SDL_Renderer* r) : renderer(r)

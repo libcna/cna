@@ -18,6 +18,7 @@ namespace CNA::Internal::Backends::SdlRenderer
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return texture; }
+        void UpdatePixels(const uint8_t* rgba, int stride) override;
     };
 
     class SdlSpriteBatchBackend : public ISpriteBatchBackend

@@ -35,6 +35,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
+        void UpdatePixels(const uint8_t* rgba, int stride) override;
 
     private:
         int                 width_         = 0;
