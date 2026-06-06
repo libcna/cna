@@ -1,53 +1,208 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 
+#include <istream>
 #include <stdexcept>
+#include <vector>
 
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
+#include "CNA/Internal/Audio/AudioMixer.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Audio
 {
-#ifdef SOUND_ENABLED
-    namespace
-    {
-        MIX_Mixer* g_mixer = nullptr;
-
-        MIX_Mixer* GetMixer()
-        {
-            if (!g_mixer)
-            {
-                if (!MIX_Init())
-                {
-                    throw std::runtime_error(std::string("MIX_Init failed: ") + SDL_GetError());
-                }
-
-                SDL_AudioSpec spec{};
-                spec.format = SDL_AUDIO_S16;
-                spec.channels = 2;
-                spec.freq = 44100;
-
-                g_mixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
-                if (!g_mixer)
-                {
-                    throw std::runtime_error(std::string("MIX_CreateMixerDevice failed: ") + SDL_GetError());
-                }
-            }
-
-            return g_mixer;
-        }
-    }
-#endif
     class SoundEffect::Impl
     {
     public:
 #ifdef SOUND_ENABLED
-        std::shared_ptr<MIX_Audio> audio{};
+        std::shared_ptr<MIX_Audio> audio;
+        SharpRuntime::intcs sampleRate = 44100;
+        SharpRuntime::uintcs channels  = 2;
 #endif
     };
 
-    float SoundEffect::MasterVolume_ = 1.0f;
+    // --- static members ---
+
+    float SoundEffect::MasterVolume_   = 1.0f;
+    float SoundEffect::DistanceScale_  = 1.0f;
+    float SoundEffect::DopplerScale_   = 1.0f;
+    float SoundEffect::SpeedOfSound_   = 343.5f;
+
+    // --- internal helpers ---
+
+#ifdef SOUND_ENABLED
+    namespace
+    {
+        void SDLCALL OnFireAndForgetStopped(void* /*userdata*/, MIX_Track* track)
+        {
+            MIX_DestroyTrack(track);
+        }
+
+        std::shared_ptr<MIX_Audio> LoadAudioFromMemory(
+            const void* data,
+            std::size_t len,
+            bool ownBuffer)
+        {
+            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+
+            MIX_Audio* raw = ownBuffer
+                ? MIX_LoadAudioNoCopy(mixer, data, len, true)
+                : MIX_LoadAudioNoCopy(mixer, data, len, false);
+
+            if (!raw)
+            {
+                throw std::runtime_error(
+                    std::string("Failed to load audio from buffer: ") + SDL_GetError()
+                );
+            }
+
+            return {raw, [](MIX_Audio* p) { if (p) MIX_DestroyAudio(p); }};
+        }
+    }
+#endif
+
+    // --- private constructor ---
+
+    SoundEffect::SoundEffect(std::shared_ptr<Impl> impl, std::string name)
+        : impl_(std::move(impl)), name_(std::move(name))
+    {
+    }
+
+    // --- public constructors ---
+
+    SoundEffect::SoundEffect(const std::string& assetName)
+        : impl_(std::make_shared<Impl>())
+    {
+        if (assetName.empty())
+        {
+            return;
+        }
+
+#ifdef SOUND_ENABLED
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+
+        MIX_Audio* raw = MIX_LoadAudio(mixer, assetName.c_str(), true);
+        if (!raw)
+        {
+            throw std::runtime_error(
+                "Failed to load sound: " + assetName + " — " + SDL_GetError()
+            );
+        }
+
+        impl_->audio = {raw, [](MIX_Audio* p) { if (p) MIX_DestroyAudio(p); }};
+
+        SDL_AudioSpec spec{};
+        if (MIX_GetAudioFormat(raw, &spec))
+        {
+            impl_->sampleRate = spec.freq;
+            impl_->channels   = static_cast<SharpRuntime::uintcs>(spec.channels);
+        }
+#else
+        (void)assetName;
+#endif
+    }
+
+    SoundEffect::SoundEffect(
+        const std::vector<SharpRuntime::bytecs>& buffer,
+        SharpRuntime::intcs sampleRate,
+        AudioChannels channels)
+        : SoundEffect(buffer, 0, static_cast<SharpRuntime::intcs>(buffer.size()),
+                      sampleRate, channels, 0, 0)
+    {
+    }
+
+    SoundEffect::SoundEffect(
+        const std::vector<SharpRuntime::bytecs>& buffer,
+        SharpRuntime::intcs offset,
+        SharpRuntime::intcs count,
+        SharpRuntime::intcs sampleRate,
+        AudioChannels channels,
+        SharpRuntime::intcs loopStart,
+        SharpRuntime::intcs loopLength)
+        : impl_(std::make_shared<Impl>())
+    {
+        loopStart_  = static_cast<SharpRuntime::uintcs>(loopStart);
+        loopLength_ = static_cast<SharpRuntime::uintcs>(loopLength);
+
+        if (count < 0 || offset < 0 ||
+            offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
+        {
+            throw std::out_of_range("buffer range");
+        }
+
+#ifdef SOUND_ENABLED
+        SDL_AudioSpec spec{};
+        spec.format   = SDL_AUDIO_S16LE;
+        spec.channels = static_cast<int>(channels);
+        spec.freq     = sampleRate;
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+
+        MIX_Audio* raw = MIX_LoadRawAudio(
+            mixer,
+            buffer.data() + offset,
+            static_cast<std::size_t>(count),
+            &spec
+        );
+        if (!raw)
+        {
+            throw std::runtime_error(
+                std::string("Failed to create sound from buffer: ") + SDL_GetError()
+            );
+        }
+
+        impl_->audio      = {raw, [](MIX_Audio* p) { if (p) MIX_DestroyAudio(p); }};
+        impl_->sampleRate = sampleRate;
+        impl_->channels   = static_cast<SharpRuntime::uintcs>(channels);
+#else
+        (void)offset;
+        (void)count;
+        (void)sampleRate;
+        (void)channels;
+#endif
+    }
+
+    SoundEffect::~SoundEffect() = default;
+
+    // --- properties ---
+
+    System::TimeSpan SoundEffect::getDurationProperty() const
+    {
+#ifdef SOUND_ENABLED
+        if (impl_ && impl_->audio && impl_->sampleRate > 0)
+        {
+            Sint64 frames = MIX_GetAudioDuration(impl_->audio.get());
+            if (frames > 0)
+            {
+                return System::TimeSpan::FromSeconds(
+                    static_cast<double>(frames) / impl_->sampleRate
+                );
+            }
+        }
+#endif
+        return System::TimeSpan::Zero;
+    }
+
+    bool SoundEffect::getIsDisposedProperty() const
+    {
+        return isDisposed_;
+    }
+
+    const std::string& SoundEffect::getNameProperty() const
+    {
+        return name_;
+    }
+
+    void SoundEffect::setNameProperty(const std::string& value)
+    {
+        name_ = value;
+    }
+
+    void SoundEffect::setNameProperty(std::string&& value)
+    {
+        name_ = std::move(value);
+    }
 
     float SoundEffect::getMasterVolumeProperty()
     {
@@ -64,54 +219,211 @@ namespace Microsoft::Xna::Framework::Audio
         setMasterVolumeProperty(v);
     }
 
-    SoundEffect::SoundEffect(const std::string& assetName)
-        : impl_(std::make_shared<Impl>())
+    float SoundEffect::getDistanceScaleProperty()
     {
-        if (assetName.empty()) return;
-#ifdef SOUND_ENABLED
-        MIX_Mixer* mixer = GetMixer();
-
-        MIX_Audio* rawAudio = MIX_LoadAudio(mixer, assetName.c_str(), true);
-
-        if (!rawAudio)
-        {
-            throw std::runtime_error(
-                "Failed to load sound: " + assetName + " Error: " + SDL_GetError()
-            );
-        }
-
-        impl_->audio = std::shared_ptr<MIX_Audio>(
-            rawAudio,
-            [](MIX_Audio* ptr)
-            {
-                if (ptr)
-                {
-                    MIX_DestroyAudio(ptr);
-                }
-            }
-        );
-#else
-        (void)assetName;
-#endif
+        return DistanceScale_;
     }
 
-    SoundEffect::~SoundEffect() = default;
-
-    void* SoundEffect::getNativeAudioHandle() const
+    void SoundEffect::setDistanceScaleProperty(float value)
     {
-#ifdef SOUND_ENABLED
-        if (!impl_ || !impl_->audio)
+        if (value <= 0.0f)
         {
-            return nullptr;
+            throw std::out_of_range("DistanceScale must be > 0");
         }
-        return impl_->audio.get();
-#else
-        return nullptr;
-#endif
+        DistanceScale_ = value;
     }
+
+    float SoundEffect::getDopplerScaleProperty()
+    {
+        return DopplerScale_;
+    }
+
+    void SoundEffect::setDopplerScaleProperty(float value)
+    {
+        if (value < 0.0f)
+        {
+            throw std::out_of_range("DopplerScale must be >= 0");
+        }
+        DopplerScale_ = value;
+    }
+
+    float SoundEffect::getSpeedOfSoundProperty()
+    {
+        return SpeedOfSound_;
+    }
+
+    void SoundEffect::setSpeedOfSoundProperty(float value)
+    {
+        SpeedOfSound_ = value;
+    }
+
+    // --- methods ---
 
     SoundEffectInstance SoundEffect::CreateInstance() const
     {
         return SoundEffectInstance(*this);
+    }
+
+    bool SoundEffect::Play()
+    {
+        return Play(1.0f, 0.0f, 0.0f);
+    }
+
+    bool SoundEffect::Play(float volume, float pitch, float pan)
+    {
+        if (isDisposed_)
+        {
+            return false;
+        }
+
+#ifdef SOUND_ENABLED
+        auto* audio = static_cast<MIX_Audio*>(getNativeAudioHandle());
+        if (!audio)
+        {
+            return false;
+        }
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_Track* track = MIX_CreateTrack(mixer);
+        if (!track)
+        {
+            return false;
+        }
+
+        if (!MIX_SetTrackAudio(track, audio))
+        {
+            MIX_DestroyTrack(track);
+            return false;
+        }
+
+        MIX_SetTrackGain(track, volume * MasterVolume_);
+
+        MIX_StereoGains stereo{};
+        stereo.left  = (pan < 0.0f) ? 1.0f : (1.0f - pan);
+        stereo.right = (pan > 0.0f) ? 1.0f : (1.0f + pan);
+        MIX_SetTrackStereo(track, &stereo);
+
+        if (pitch != 0.0f)
+        {
+            const float ratio = (pitch < 0.0f)
+                ? (1.0f + pitch * 0.5f)
+                : (1.0f + pitch);
+            MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
+        }
+
+        // Auto-destroy track when playback finishes.
+        MIX_SetTrackStoppedCallback(track, OnFireAndForgetStopped, nullptr);
+
+        if (!MIX_PlayTrack(track, 0))
+        {
+            MIX_DestroyTrack(track);
+            return false;
+        }
+
+        return true;
+#else
+        (void)volume; (void)pitch; (void)pan;
+        return false;
+#endif
+    }
+
+    void SoundEffect::Dispose()
+    {
+        if (!isDisposed_)
+        {
+            impl_.reset();
+            isDisposed_ = true;
+        }
+    }
+
+    void* SoundEffect::getNativeAudioHandle() const
+    {
+#ifdef SOUND_ENABLED
+        if (impl_ && impl_->audio)
+        {
+            return impl_->audio.get();
+        }
+#endif
+        return nullptr;
+    }
+
+    // --- static methods ---
+
+    System::TimeSpan SoundEffect::GetSampleDuration(
+        SharpRuntime::intcs sizeInBytes,
+        SharpRuntime::intcs sampleRate,
+        AudioChannels channels)
+    {
+        // 16-bit PCM: 2 bytes per sample
+        const int bytesPerFrame = static_cast<int>(channels) * 2;
+        if (bytesPerFrame <= 0 || sampleRate <= 0)
+        {
+            return System::TimeSpan::Zero;
+        }
+        const int frames = sizeInBytes / bytesPerFrame;
+        return System::TimeSpan::FromSeconds(
+            static_cast<double>(frames) / sampleRate
+        );
+    }
+
+    SharpRuntime::intcs SoundEffect::GetSampleSizeInBytes(
+        System::TimeSpan duration,
+        SharpRuntime::intcs sampleRate,
+        AudioChannels channels)
+    {
+        return static_cast<SharpRuntime::intcs>(
+            duration.getTotalSecondsProperty() *
+            sampleRate *
+            static_cast<int>(channels) *
+            2 // 16-bit PCM
+        );
+    }
+
+    SoundEffect* SoundEffect::FromStream(std::istream& stream)
+    {
+        // Read all bytes from the stream.
+        std::vector<char> bytes(
+            (std::istreambuf_iterator<char>(stream)),
+            std::istreambuf_iterator<char>()
+        );
+
+        if (bytes.empty())
+        {
+            throw std::runtime_error("SoundEffect::FromStream: empty stream");
+        }
+
+#ifdef SOUND_ENABLED
+        SDL_IOStream* io = SDL_IOFromConstMem(bytes.data(), bytes.size());
+        if (!io)
+        {
+            throw std::runtime_error(
+                std::string("SoundEffect::FromStream: SDL_IOFromConstMem failed: ") + SDL_GetError()
+            );
+        }
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_Audio* raw   = MIX_LoadAudio_IO(mixer, io, true, true); // predecode=true, closeio=true
+        if (!raw)
+        {
+            throw std::runtime_error(
+                std::string("SoundEffect::FromStream: MIX_LoadAudio_IO failed: ") + SDL_GetError()
+            );
+        }
+
+        auto implPtr = std::make_shared<Impl>();
+        implPtr->audio = {raw, [](MIX_Audio* p) { if (p) MIX_DestroyAudio(p); }};
+
+        SDL_AudioSpec spec{};
+        if (MIX_GetAudioFormat(raw, &spec))
+        {
+            implPtr->sampleRate = spec.freq;
+            implPtr->channels   = static_cast<SharpRuntime::uintcs>(spec.channels);
+        }
+
+        return new SoundEffect(std::move(implPtr));
+#else
+        (void)bytes;
+        return new SoundEffect(std::make_shared<Impl>());
+#endif
     }
 }

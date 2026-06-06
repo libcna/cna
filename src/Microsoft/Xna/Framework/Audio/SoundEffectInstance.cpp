@@ -1,11 +1,17 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
 #include <utility>
 
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
+#include "CNA/Internal/Audio/AudioMixer.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Audio
@@ -13,60 +19,30 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
     namespace
     {
-        MIX_Mixer* g_mixer = nullptr;
-
-        MIX_Mixer* EnsureMixer()
-        {
-            if (!MIX_Init())
-            {
-                return nullptr;
-            }
-
-            if (!g_mixer)
-            {
-                SDL_AudioSpec spec{};
-                spec.format = SDL_AUDIO_S16;
-                spec.channels = 2;
-                spec.freq = 44100;
-
-                g_mixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
-            }
-
-            return g_mixer;
-        }
-
         MIX_Track* AsTrack(void* p)
         {
             return static_cast<MIX_Track*>(p);
         }
 
-        void ApplyTrackVolumeAndPan(MIX_Track* track, float volume, float masterVolume, float pan)
+        void ApplyTrackProperties(MIX_Track* track, float volume, float masterVolume,
+                                  float pan, float pitch)
         {
-            if (!track)
-            {
-                return;
-            }
+            if (!track) return;
 
-            const float gain = volume * masterVolume;
-            MIX_SetTrackGain(track, gain);
+            MIX_SetTrackGain(track, volume * masterVolume);
 
             MIX_StereoGains stereo{};
-            stereo.left = 1.0f;
-            stereo.right = 1.0f;
-
-            if (pan < 0.0f)
-            {
-                stereo.right = 1.0f + pan;
-            }
-            else if (pan > 0.0f)
-            {
-                stereo.left = 1.0f - pan;
-            }
-
+            stereo.left  = (pan < 0.0f) ? 1.0f : (1.0f - pan);
+            stereo.right = (pan > 0.0f) ? 1.0f : (1.0f + pan);
             MIX_SetTrackStereo(track, &stereo);
+
+            const float ratio = (pitch < 0.0f)
+                ? (1.0f + pitch * 0.5f)
+                : (1.0f + pitch);
+            MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
         }
 
-        void DestroyTrackIfNeeded(void*& trackPtr)
+        void DestroyTrackSafe(void*& trackPtr)
         {
             MIX_Track* track = AsTrack(trackPtr);
             if (track)
@@ -91,27 +67,28 @@ namespace Microsoft::Xna::Framework::Audio
 
     SoundEffectInstance::~SoundEffectInstance()
     {
-#ifdef SOUND_ENABLED
-        DestroyTrackIfNeeded(track_);
-#endif
-        playing_ = false;
-        State_ = SoundState::Stopped;
+        if (!isDisposed_)
+        {
+            Dispose();
+        }
     }
 
     SoundEffectInstance::SoundEffectInstance(SoundEffectInstance&& other) noexcept
         : soundEffect_(other.soundEffect_)
-          , track_(other.track_)
-          , playing_(other.playing_)
-          , Volume_(other.Volume_)
-          , Pan_(other.Pan_)
-          , Pitch_(other.Pitch_)
-          , IsLooped_(other.IsLooped_)
-          , State_(other.State_)
+        , track_(other.track_)
+        , playing_(other.playing_)
+        , State_(other.State_)
+        , IsLooped_(other.IsLooped_)
+        , isDisposed_(other.isDisposed_)
+        , Volume_(other.Volume_)
+        , Pan_(other.Pan_)
+        , Pitch_(other.Pitch_)
     {
         other.soundEffect_ = nullptr;
-        other.track_ = nullptr;
-        other.playing_ = false;
-        other.State_ = SoundState::Stopped;
+        other.track_       = nullptr;
+        other.playing_     = false;
+        other.State_       = SoundState::Stopped;
+        other.isDisposed_  = true;
     }
 
     SoundEffectInstance& SoundEffectInstance::operator=(SoundEffectInstance&& other) noexcept
@@ -119,39 +96,64 @@ namespace Microsoft::Xna::Framework::Audio
         if (this != &other)
         {
 #ifdef SOUND_ENABLED
-            DestroyTrackIfNeeded(track_);
+            DestroyTrackSafe(track_);
 #endif
             soundEffect_ = other.soundEffect_;
-            track_ = other.track_;
-            playing_ = other.playing_;
-            Volume_ = other.Volume_;
-            Pan_ = other.Pan_;
-            Pitch_ = other.Pitch_;
-            IsLooped_ = other.IsLooped_;
-            State_ = other.State_;
+            track_       = other.track_;
+            playing_     = other.playing_;
+            State_       = other.State_;
+            IsLooped_    = other.IsLooped_;
+            isDisposed_  = other.isDisposed_;
+            Volume_      = other.Volume_;
+            Pan_         = other.Pan_;
+            Pitch_       = other.Pitch_;
 
             other.soundEffect_ = nullptr;
-            other.track_ = nullptr;
-            other.playing_ = false;
-            other.State_ = SoundState::Stopped;
+            other.track_       = nullptr;
+            other.playing_     = false;
+            other.State_       = SoundState::Stopped;
+            other.isDisposed_  = true;
         }
         return *this;
     }
 
+    void SoundEffectInstance::Dispose()
+    {
+        if (!isDisposed_)
+        {
+#ifdef SOUND_ENABLED
+            DestroyTrackSafe(track_);
+#endif
+            playing_    = false;
+            State_      = SoundState::Stopped;
+            isDisposed_ = true;
+        }
+    }
+
     void SoundEffectInstance::Play()
     {
-#ifdef SOUND_ENABLED
-        if (!soundEffect_)
+        if (isDisposed_)
         {
-            State_ = SoundState::Stopped;
-            playing_ = false;
-            return;
+            throw std::runtime_error("Cannot Play a disposed SoundEffectInstance");
         }
 
-        MIX_Mixer* mixer = EnsureMixer();
-        if (!mixer)
+#ifdef SOUND_ENABLED
+        // If paused, resume instead of restarting.
+        if (State_ == SoundState::Paused)
         {
-            State_ = SoundState::Stopped;
+            MIX_Track* track = AsTrack(track_);
+            if (track)
+            {
+                MIX_ResumeTrack(track);
+                State_   = SoundState::Playing;
+                playing_ = true;
+                return;
+            }
+        }
+
+        if (!soundEffect_)
+        {
+            State_   = SoundState::Stopped;
             playing_ = false;
             return;
         }
@@ -159,10 +161,12 @@ namespace Microsoft::Xna::Framework::Audio
         auto* audio = static_cast<MIX_Audio*>(soundEffect_->getNativeAudioHandle());
         if (!audio)
         {
-            State_ = SoundState::Stopped;
+            State_   = SoundState::Stopped;
             playing_ = false;
             return;
         }
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
 
         MIX_Track* track = AsTrack(track_);
         if (!track)
@@ -170,7 +174,7 @@ namespace Microsoft::Xna::Framework::Audio
             track = MIX_CreateTrack(mixer);
             if (!track)
             {
-                State_ = SoundState::Stopped;
+                State_   = SoundState::Stopped;
                 playing_ = false;
                 return;
             }
@@ -179,29 +183,17 @@ namespace Microsoft::Xna::Framework::Audio
 
         if (!MIX_SetTrackAudio(track, audio))
         {
-            State_ = SoundState::Stopped;
+            State_   = SoundState::Stopped;
             playing_ = false;
             return;
         }
 
-        ApplyTrackVolumeAndPan(track, Volume_, SoundEffect::getMasterVolumeProperty(), Pan_);
-
-        if (Pitch_ != 0.0f)
-        {
-            const float ratio = (Pitch_ < 0.0f)
-                                    ? (1.0f + Pitch_ * 0.5f)
-                                    : (1.0f + Pitch_);
-            MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
-        }
-        else
-        {
-            MIX_SetTrackFrequencyRatio(track, 1.0f);
-        }
+        ApplyTrackProperties(track, Volume_, SoundEffect::getMasterVolumeProperty(), Pan_, Pitch_);
 
         SDL_PropertiesID props = SDL_CreateProperties();
         if (props == 0)
         {
-            State_ = SoundState::Stopped;
+            State_   = SoundState::Stopped;
             playing_ = false;
             return;
         }
@@ -213,40 +205,56 @@ namespace Microsoft::Xna::Framework::Audio
 
         if (!ok)
         {
-            State_ = SoundState::Stopped;
+            State_   = SoundState::Stopped;
             playing_ = false;
             return;
         }
 
         playing_ = true;
-        State_ = SoundState::Playing;
+        State_   = SoundState::Playing;
 #else
-        State_ = SoundState::Stopped;
+        State_   = SoundState::Stopped;
         playing_ = false;
 #endif
     }
 
     void SoundEffectInstance::Stop()
     {
+        Stop(true);
+    }
+
+    void SoundEffectInstance::Stop(bool immediate)
+    {
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrack(track_);
         if (track)
         {
-            MIX_StopTrack(track, 0);
+            if (immediate)
+            {
+                MIX_StopTrack(track, 0);
+            }
+            else
+            {
+                // Exit loop so the track plays to the end and stops naturally.
+                MIX_SetTrackLoops(track, 0);
+            }
         }
 #endif
-        playing_ = false;
-        State_ = SoundState::Stopped;
+        if (immediate)
+        {
+            playing_ = false;
+            State_   = SoundState::Stopped;
+        }
     }
 
     void SoundEffectInstance::Pause()
     {
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrack(track_);
-        if (track && State_ == SoundState::Playing)
+        if (track && getStateProperty() == SoundState::Playing)
         {
             MIX_PauseTrack(track);
-            State_ = SoundState::Paused;
+            State_   = SoundState::Paused;
             playing_ = false;
         }
 #endif
@@ -256,13 +264,52 @@ namespace Microsoft::Xna::Framework::Audio
     {
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrack(track_);
-        if (track && State_ == SoundState::Paused)
+        if (track && getStateProperty() == SoundState::Paused)
         {
             MIX_ResumeTrack(track);
-            State_ = SoundState::Playing;
+            State_   = SoundState::Playing;
             playing_ = true;
         }
 #endif
+    }
+
+    void SoundEffectInstance::Apply3D(const AudioListener& listener, const AudioEmitter& emitter)
+    {
+        // SDL3_mixer does not support full 3D spatial audio (Doppler, HRTF, orientation).
+        // This is a simplified linear distance/pan approximation.
+
+        const auto& lp = listener.getPositionProperty();
+        const auto& ep = emitter.getPositionProperty();
+
+        const float dx = ep.X - lp.X;
+        const float dy = ep.Y - lp.Y;
+        const float dz = ep.Z - lp.Z;
+        const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+        const float distScale = SoundEffect::getDistanceScaleProperty();
+        const float vol = 1.0f / (1.0f + distance / (distScale > 0.0f ? distScale : 1.0f));
+        setVolumeProperty(std::clamp(vol, 0.0f, 1.0f));
+
+        const float pan = (distance > 0.0f)
+            ? std::clamp(dx / distance, -1.0f, 1.0f)
+            : 0.0f;
+        setPanProperty(pan);
+    }
+
+    void SoundEffectInstance::Apply3D(const AudioListener* listeners, int listenerCount,
+                                      const AudioEmitter& emitter)
+    {
+        if (listenerCount == 1)
+        {
+            Apply3D(listeners[0], emitter);
+            return;
+        }
+        throw std::runtime_error("Only one AudioListener is supported");
+    }
+
+    bool SoundEffectInstance::getIsDisposedProperty() const
+    {
+        return isDisposed_;
     }
 
     float SoundEffectInstance::getVolumeProperty() const
@@ -276,7 +323,10 @@ namespace Microsoft::Xna::Framework::Audio
 
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrack(track_);
-        ApplyTrackVolumeAndPan(track, Volume_, SoundEffect::getMasterVolumeProperty(), Pan_);
+        if (track)
+        {
+            MIX_SetTrackGain(track, Volume_ * SoundEffect::getMasterVolumeProperty());
+        }
 #endif
     }
 
@@ -296,7 +346,13 @@ namespace Microsoft::Xna::Framework::Audio
 
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrack(track_);
-        ApplyTrackVolumeAndPan(track, Volume_, SoundEffect::getMasterVolumeProperty(), Pan_);
+        if (track)
+        {
+            MIX_StereoGains stereo{};
+            stereo.left  = (Pan_ < 0.0f) ? 1.0f : (1.0f - Pan_);
+            stereo.right = (Pan_ > 0.0f) ? 1.0f : (1.0f + Pan_);
+            MIX_SetTrackStereo(track, &stereo);
+        }
 #endif
     }
 
@@ -319,8 +375,8 @@ namespace Microsoft::Xna::Framework::Audio
         if (track)
         {
             const float ratio = (Pitch_ < 0.0f)
-                                    ? (1.0f + Pitch_ * 0.5f)
-                                    : (1.0f + Pitch_);
+                ? (1.0f + Pitch_ * 0.5f)
+                : (1.0f + Pitch_);
             MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
         }
 #endif
@@ -338,15 +394,13 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::setIsLoopedProperty(const bool& looped)
     {
-        IsLooped_ = looped;
-
-#ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
-        if (track && (State_ == SoundState::Playing || State_ == SoundState::Paused))
+        if (playing_)
         {
-            MIX_SetTrackLoops(track, IsLooped_ ? -1 : 0);
+            throw std::runtime_error(
+                "Cannot change IsLooped while a SoundEffectInstance is playing"
+            );
         }
-#endif
+        IsLooped_ = looped;
     }
 
     void SoundEffectInstance::setIsLoopedProperty(bool&& looped)
@@ -370,6 +424,9 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return SoundState::Playing;
         }
+        // Track finished playing; sync internal state.
+        const_cast<SoundEffectInstance*>(this)->playing_ = false;
+        const_cast<SoundEffectInstance*>(this)->State_   = SoundState::Stopped;
         return SoundState::Stopped;
 #else
         return State_;

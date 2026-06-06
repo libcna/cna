@@ -1,26 +1,79 @@
 #include "Microsoft/Xna/Framework/Media/MediaPlayer.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <stdexcept>
+
+#ifdef SOUND_ENABLED
+#include <SDL3/SDL.h>
+#include <SDL3_mixer/SDL_mixer.h>
+#include "CNA/Internal/Audio/AudioMixer.hpp"
+#endif
 
 namespace Microsoft::Xna::Framework::Media
 {
     System::EventHandler<System::EventArgs> MediaPlayer::ActiveSongChanged;
     System::EventHandler<System::EventArgs> MediaPlayer::MediaStateChanged;
 
-    bool MediaPlayer::isMuted_ = false;
-    bool MediaPlayer::isRepeating_ = false;
-    bool MediaPlayer::isShuffled_ = false;
-    MediaState MediaPlayer::state_ = MediaState::Stopped;
-    float MediaPlayer::volume_ = 1.0f;
-    bool MediaPlayer::initialized_ = false;
+    bool         MediaPlayer::isMuted_               = false;
+    bool         MediaPlayer::isRepeating_           = false;
+    bool         MediaPlayer::isShuffled_            = false;
+    MediaState   MediaPlayer::state_                 = MediaState::Stopped;
+    float        MediaPlayer::volume_                = 1.0f;
+    bool         MediaPlayer::initialized_           = false;
     SharpRuntime::intcs MediaPlayer::numSongsInQueuePlayed_ = 0;
-    MediaQueue MediaPlayer::queue_;
+    MediaQueue   MediaPlayer::queue_;
     std::mt19937 MediaPlayer::random_(std::random_device{}());
 
-    bool MediaPlayer::timerRunning_ = false;
+    bool         MediaPlayer::timerRunning_          = false;
     std::chrono::steady_clock::time_point MediaPlayer::timerStart_;
-    std::chrono::duration<double> MediaPlayer::accumulatedTime_ = std::chrono::duration<double>::zero();
+    std::chrono::duration<double> MediaPlayer::accumulatedTime_ =
+        std::chrono::duration<double>::zero();
+
+#ifdef SOUND_ENABLED
+    namespace
+    {
+        MIX_Track*  g_musicTrack  = nullptr;
+        MIX_Audio*  g_musicAudio  = nullptr;
+
+        std::atomic<bool> g_songEnded{false};
+
+        void SDLCALL OnMusicTrackStopped(void* /*userdata*/, MIX_Track* /*track*/)
+        {
+            // Called from the audio thread — only set a flag.
+            g_songEnded.store(true, std::memory_order_relaxed);
+        }
+
+        void DestroyMusicAudio()
+        {
+            if (g_musicAudio)
+            {
+                MIX_DestroyAudio(g_musicAudio);
+                g_musicAudio = nullptr;
+            }
+        }
+
+        void DestroyMusicTrack()
+        {
+            if (g_musicTrack)
+            {
+                MIX_StopTrack(g_musicTrack, 0);
+                MIX_DestroyTrack(g_musicTrack);
+                g_musicTrack = nullptr;
+            }
+        }
+
+        void ApplyMusicVolume(float vol, bool muted)
+        {
+            if (g_musicTrack)
+            {
+                MIX_SetTrackGain(g_musicTrack, muted ? 0.0f : vol);
+            }
+        }
+    }
+#endif
+
+    // --- properties ---
 
     bool MediaPlayer::getGameHasControlProperty()
     {
@@ -35,8 +88,9 @@ namespace Microsoft::Xna::Framework::Media
     void MediaPlayer::setIsMutedProperty(bool value)
     {
         isMuted_ = value;
-
-        // Backend hook: apply song volume as either 0.0f or volume_.
+#ifdef SOUND_ENABLED
+        ApplyMusicVolume(volume_, isMuted_);
+#endif
     }
 
     bool MediaPlayer::getIsRepeatingProperty()
@@ -91,21 +145,23 @@ namespace Microsoft::Xna::Framework::Media
     void MediaPlayer::setVolumeProperty(float value)
     {
         volume_ = Microsoft::Xna::Framework::MathHelper::Clamp(value, 0.0f, 1.0f);
-
-        // Backend hook: apply song volume as either 0.0f or volume_.
+#ifdef SOUND_ENABLED
+        ApplyMusicVolume(volume_, isMuted_);
+#endif
     }
 
     bool MediaPlayer::getIsVisualizationEnabledProperty()
     {
-        // Backend hook: query visualization state.
+        // SDL3_mixer does not expose visualization data.
         return false;
     }
 
-    void MediaPlayer::setIsVisualizationEnabledProperty(bool value)
+    void MediaPlayer::setIsVisualizationEnabledProperty(bool /*value*/)
     {
-        (void)value;
-        // Backend hook: enable or disable visualization.
+        // SDL3_mixer does not support visualization.
     }
+
+    // --- public methods ---
 
     void MediaPlayer::MoveNext()
     {
@@ -124,7 +180,12 @@ namespace Microsoft::Xna::Framework::Media
             return;
         }
 
-        // Backend hook: pause current song.
+#ifdef SOUND_ENABLED
+        if (g_musicTrack)
+        {
+            MIX_PauseTrack(g_musicTrack);
+        }
+#endif
         TimerStop();
         setStateProperty(MediaState::Paused);
     }
@@ -172,7 +233,12 @@ namespace Microsoft::Xna::Framework::Media
             return;
         }
 
-        // Backend hook: resume current song.
+#ifdef SOUND_ENABLED
+        if (g_musicTrack)
+        {
+            MIX_ResumeTrack(g_musicTrack);
+        }
+#endif
         TimerStart();
         setStateProperty(MediaState::Playing);
     }
@@ -184,7 +250,11 @@ namespace Microsoft::Xna::Framework::Media
             return;
         }
 
-        // Backend hook: stop current song.
+#ifdef SOUND_ENABLED
+        DestroyMusicTrack();
+        DestroyMusicAudio();
+        g_songEnded.store(false, std::memory_order_relaxed);
+#endif
         TimerStop();
         TimerReset();
 
@@ -202,7 +272,7 @@ namespace Microsoft::Xna::Framework::Media
     void MediaPlayer::GetVisualizationData(VisualizationData& data)
     {
         (void)data;
-        // Backend hook: fill frequency/sample visualization arrays.
+        // SDL3_mixer does not expose frequency/sample visualization data.
     }
 
     void MediaPlayer::Update()
@@ -212,8 +282,29 @@ namespace Microsoft::Xna::Framework::Media
             return;
         }
 
-        // Backend hook: return here while the current song has not ended.
-        // Until backend song-end detection exists, there is no automatic advancement.
+#ifdef SOUND_ENABLED
+        if (!g_songEnded.exchange(false, std::memory_order_relaxed))
+        {
+            return;
+        }
+#else
+        return;
+#endif
+
+        numSongsInQueuePlayed_ += 1;
+
+        if (numSongsInQueuePlayed_ >= queue_.getCountProperty())
+        {
+            numSongsInQueuePlayed_ = 0;
+            if (!isRepeating_)
+            {
+                Stop();
+                Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged = true;
+                return;
+            }
+        }
+
+        MoveNext();
     }
 
     void MediaPlayer::OnActiveSongChanged()
@@ -230,10 +321,15 @@ namespace Microsoft::Xna::Framework::Media
     {
         if (initialized_)
         {
-            // Backend hook: quit song subsystem.
+#ifdef SOUND_ENABLED
+            DestroyMusicTrack();
+            DestroyMusicAudio();
+#endif
             initialized_ = false;
         }
     }
+
+    // --- private helpers ---
 
     void MediaPlayer::LoadSong(Song* song)
     {
@@ -241,7 +337,6 @@ namespace Microsoft::Xna::Framework::Media
         {
             return;
         }
-
         queue_.Add(new Song(song->getHandle(), song->getNameProperty()));
     }
 
@@ -254,16 +349,18 @@ namespace Microsoft::Xna::Framework::Media
             return;
         }
 
-        if (getIsRepeatingProperty() && queue_.getActiveSongIndexProperty() >= queue_.getCountProperty() - 1)
+        if (isRepeating_ && queue_.getActiveSongIndexProperty() >= queue_.getCountProperty() - 1)
         {
             queue_.setActiveSongIndexProperty(0);
             direction = 0;
         }
 
-        if (getIsShuffledProperty())
+        if (isShuffled_)
         {
-            std::uniform_int_distribution<SharpRuntime::intcs> distribution(0, queue_.getCountProperty() - 1);
-            queue_.setActiveSongIndexProperty(distribution(random_));
+            std::uniform_int_distribution<SharpRuntime::intcs> dist(
+                0, queue_.getCountProperty() - 1
+            );
+            queue_.setActiveSongIndexProperty(dist(random_));
         }
         else
         {
@@ -296,23 +393,79 @@ namespace Microsoft::Xna::Framework::Media
 
         if (!initialized_)
         {
-            // Backend hook: initialize song subsystem.
             initialized_ = true;
         }
 
-        // Backend hook: play song and use returned duration.
-        // song->setDurationProperty(System::TimeSpan::FromSeconds(...));
+#ifdef SOUND_ENABLED
+        // Stop and release any previously playing music.
+        DestroyMusicTrack();
+        DestroyMusicAudio();
+        g_songEnded.store(false, std::memory_order_relaxed);
 
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+
+        // Load the song file (streaming, no full predecode for long music tracks).
+        g_musicAudio = MIX_LoadAudio(mixer, song->getHandle().c_str(), false);
+        if (!g_musicAudio)
+        {
+            return;
+        }
+
+        g_musicTrack = MIX_CreateTrack(mixer);
+        if (!g_musicTrack)
+        {
+            DestroyMusicAudio();
+            return;
+        }
+
+        if (!MIX_SetTrackAudio(g_musicTrack, g_musicAudio))
+        {
+            DestroyMusicTrack();
+            DestroyMusicAudio();
+            return;
+        }
+
+        ApplyMusicVolume(volume_, isMuted_);
+        MIX_SetTrackStoppedCallback(g_musicTrack, OnMusicTrackStopped, nullptr);
+
+        // Report duration from the audio asset.
+        SDL_AudioSpec spec{};
+        if (MIX_GetAudioFormat(g_musicAudio, &spec) && spec.freq > 0)
+        {
+            Sint64 frames = MIX_GetAudioDuration(g_musicAudio);
+            if (frames > 0)
+            {
+                song->setDurationProperty(
+                    System::TimeSpan::FromSeconds(
+                        static_cast<double>(frames) / spec.freq
+                    )
+                );
+            }
+        }
+
+        if (!MIX_PlayTrack(g_musicTrack, 0))
+        {
+            DestroyMusicTrack();
+            DestroyMusicAudio();
+            return;
+        }
+
+        song->setPlayCountProperty(song->getPlayCountProperty() + 1);
+#endif
+
+        TimerReset();
         TimerStart();
         setStateProperty(MediaState::Playing);
     }
+
+    // --- timer ---
 
     void MediaPlayer::TimerStart()
     {
         if (!timerRunning_)
         {
-            timerStart_ = std::chrono::steady_clock::now();
-            timerRunning_ = true;
+            timerStart_    = std::chrono::steady_clock::now();
+            timerRunning_  = true;
         }
     }
 
@@ -321,7 +474,7 @@ namespace Microsoft::Xna::Framework::Media
         if (timerRunning_)
         {
             accumulatedTime_ += std::chrono::steady_clock::now() - timerStart_;
-            timerRunning_ = false;
+            timerRunning_    = false;
         }
     }
 
@@ -341,7 +494,6 @@ namespace Microsoft::Xna::Framework::Media
         {
             elapsed += std::chrono::steady_clock::now() - timerStart_;
         }
-
         return System::TimeSpan::FromSeconds(elapsed.count());
     }
 }

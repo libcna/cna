@@ -1,131 +1,136 @@
 #pragma once
 
+#include <istream>
 #include <memory>
 #include <string>
+#include <vector>
 
-#include "SoundEffectI.hpp"
-#include "SoundEffectInstance.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffectI.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
+#include "System/IDisposable.hpp"
+#include "System/TimeSpan.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    /**
-     * @brief Represents a loaded sound effect asset.
-     *
-     * This class mirrors the XNA / MonoGame SoundEffect type.
-     * A SoundEffect instance owns or shares the underlying native audio resource
-     * and can be used to create playable SoundEffectInstance objects.
-     *
-     * The class uses shared internal state, so copying SoundEffect objects is cheap.
-     */
-    class SoundEffect : public SoundEffectI
+    /// Represents a loaded sound effect asset.
+    class SoundEffect : public SoundEffectI, public System::IDisposable
     {
         friend class SoundEffectInstance;
 
     private:
-        /**
-         * @brief Internal implementation object.
-         *
-         * Stores platform-specific audio data and hides backend details from the public API.
-         */
         class Impl;
-
-        /**
-         * @brief Shared pointer to the internal implementation.
-         *
-         * This makes SoundEffect cheap to copy while sharing the same loaded native audio asset.
-         */
         std::shared_ptr<Impl> impl_;
 
-        /**
-         * @brief Global master volume for all sound effects.
-         *
-         * Expected range is from 0.0f to 1.0f.
-         */
         static float MasterVolume_;
+        static float DistanceScale_;
+        static float DopplerScale_;
+        static float SpeedOfSound_;
 
-    private:
-        /**
-         * @brief Returns the native backend audio handle.
-         *
-         * This is intended for internal engine use only, for example by SoundEffectInstance.
-         *
-         * @return Pointer to the native audio object, or nullptr if no native audio is loaded.
-         */
+        std::string name_;
+        bool isDisposed_ = false;
+        SharpRuntime::uintcs loopStart_ = 0;
+        SharpRuntime::uintcs loopLength_ = 0;
+
         [[nodiscard]] void* getNativeAudioHandle() const;
 
+        /// Internal constructor that wraps a preloaded Impl.
+        explicit SoundEffect(std::shared_ptr<Impl> impl, std::string name = {});
+
     public:
-        /**
-         * @brief Constructs a sound effect by loading it from an asset path.
-         *
-         * @param assetName Path or identifier of the sound asset to load.
-         *
-         * @throws std::runtime_error If loading fails when sound support is enabled.
-         */
+        /// Constructs a SoundEffect by loading from a file path.
         explicit SoundEffect(const std::string& assetName);
 
-        /**
-         * @brief Destroys the sound effect.
-         */
+        /// Constructs a SoundEffect from a raw 16-bit PCM buffer.
+        SoundEffect(const std::vector<SharpRuntime::bytecs>& buffer,
+                    SharpRuntime::intcs sampleRate,
+                    AudioChannels channels);
+
+        /// Constructs a SoundEffect from a range within a 16-bit PCM buffer with loop points.
+        SoundEffect(const std::vector<SharpRuntime::bytecs>& buffer,
+                    SharpRuntime::intcs offset,
+                    SharpRuntime::intcs count,
+                    SharpRuntime::intcs sampleRate,
+                    AudioChannels channels,
+                    SharpRuntime::intcs loopStart,
+                    SharpRuntime::intcs loopLength);
+
         ~SoundEffect() override;
 
-        /**
-         * @brief Copy constructor.
-         *
-         * Copies the SoundEffect as a shared handle to the same internal audio resource.
-         */
         SoundEffect(const SoundEffect&) = default;
-
-        /**
-         * @brief Copy assignment operator.
-         *
-         * Assigns the SoundEffect as a shared handle to the same internal audio resource.
-         *
-         * @return Reference to this object.
-         */
         SoundEffect& operator=(const SoundEffect&) = default;
-
-        /**
-         * @brief Move constructor.
-         */
         SoundEffect(SoundEffect&&) noexcept = default;
-
-        /**
-         * @brief Move assignment operator.
-         *
-         * @return Reference to this object.
-         */
         SoundEffect& operator=(SoundEffect&&) noexcept = default;
 
-        /**
-         * @brief Gets the global master volume for sound effects.
-         *
-         * @return Master volume in the range 0.0f to 1.0f.
-         */
+        // --- Properties ---
+
+        /// Gets the duration of the sound effect.
+        [[nodiscard]] System::TimeSpan getDurationProperty() const;
+
+        /// Gets whether this instance has been disposed.
+        [[nodiscard]] bool getIsDisposedProperty() const;
+
+        /// Gets the display name of the sound effect.
+        [[nodiscard]] const std::string& getNameProperty() const;
+
+        /// Sets the display name of the sound effect.
+        void setNameProperty(const std::string& value);
+        void setNameProperty(std::string&& value);
+
+        // --- Static properties ---
+
+        /// Gets the global master volume for all sound effects. Range [0, 1].
         [[nodiscard]] static float getMasterVolumeProperty();
-
-        /**
-         * @brief Sets the global master volume for sound effects.
-         *
-         * Values outside the range 0.0f to 1.0f are clamped.
-         *
-         * @param v New master volume.
-         */
+        /// Sets the global master volume for all sound effects. Clamped to [0, 1].
         static void setMasterVolumeProperty(const float& v);
-
-        /**
-         * @brief Sets the global master volume for sound effects.
-         *
-         * Values outside the range 0.0f to 1.0f are clamped.
-         *
-         * @param v New master volume.
-         */
         static void setMasterVolumeProperty(float&& v);
 
-        /**
-         * @brief Creates a playable sound effect instance from this sound effect.
-         *
-         * @return A SoundEffectInstance bound to this sound effect.
-         */
+        /// Gets the distance scaling factor for 3D attenuation.
+        /// SDL3_mixer does not implement full 3D audio; this value is used in Apply3D
+        /// approximations only.
+        [[nodiscard]] static float getDistanceScaleProperty();
+        static void setDistanceScaleProperty(float value);
+
+        /// Gets the Doppler effect scale factor.
+        /// SDL3_mixer does not implement Doppler effects; this is stored but not applied.
+        [[nodiscard]] static float getDopplerScaleProperty();
+        static void setDopplerScaleProperty(float value);
+
+        /// Gets the speed of sound used in Doppler calculations.
+        /// SDL3_mixer does not implement Doppler effects; this is stored but not applied.
+        [[nodiscard]] static float getSpeedOfSoundProperty();
+        static void setSpeedOfSoundProperty(float value);
+
+        // --- Methods ---
+
+        /// Creates a playable instance of this sound effect.
         [[nodiscard]] SoundEffectInstance CreateInstance() const override;
+
+        /// Plays the sound effect once at full volume with default pitch and pan.
+        bool Play();
+
+        /// Plays the sound effect once with the specified volume, pitch and pan.
+        bool Play(float volume, float pitch, float pan);
+
+        /// Releases the underlying audio resource.
+        void Dispose() override;
+
+        // --- Static methods ---
+
+        /// Returns the duration of a 16-bit PCM buffer.
+        [[nodiscard]] static System::TimeSpan GetSampleDuration(
+            SharpRuntime::intcs sizeInBytes,
+            SharpRuntime::intcs sampleRate,
+            AudioChannels channels);
+
+        /// Returns the byte count for a 16-bit PCM buffer of the given duration.
+        [[nodiscard]] static SharpRuntime::intcs GetSampleSizeInBytes(
+            System::TimeSpan duration,
+            SharpRuntime::intcs sampleRate,
+            AudioChannels channels);
+
+        /// Loads a SoundEffect from a WAV stream. The caller owns the returned object.
+        [[nodiscard]] static SoundEffect* FromStream(std::istream& stream);
     };
 }
