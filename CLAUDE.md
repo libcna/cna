@@ -170,11 +170,11 @@ Always check `isDisposed_` before acting; throw `std::runtime_error` if used aft
 
 Map C# visibility intentionally — do not make every member public:
 
-| C#        | C++                                          |
-|-----------|----------------------------------------------|
-| `public`  | `public`                                     |
-| `internal`| `private`, `protected`, or omit entirely     |
-| `private` | `private`                                    |
+| C#        | C++                                                              |
+|-----------|------------------------------------------------------------------|
+| `public`  | `public`                                                         |
+| `internal`| `private`, `protected`, detail/internal namespace, or omit entirely |
+| `private` | `private`                                                        |
 
 C# `internal DebugDisplayString` should **not** become a public C++ API method.
 
