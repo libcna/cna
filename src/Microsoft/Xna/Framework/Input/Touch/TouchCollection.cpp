@@ -1,4 +1,5 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <stdexcept>
 
@@ -17,7 +18,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     }
 
     int  TouchCollection::getCountProperty()       const { return static_cast<int>(touches_.size()); }
-    bool TouchCollection::getIsConnectedProperty() const { return true; }
+    bool TouchCollection::getIsConnectedProperty() const { return TouchPanel::getTouchDeviceExistsProperty(); }
     bool TouchCollection::getIsReadOnlyProperty()  const { return true; }
 
     const TouchLocation& TouchCollection::operator[](std::size_t index) const
