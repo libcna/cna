@@ -112,6 +112,8 @@ namespace
             return GamePadButton::DPadLeft;
         case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
             return GamePadButton::DPadRight;
+        case SDL_GAMEPAD_BUTTON_GUIDE:
+            return GamePadButton::BigButton;
         default:
             return std::nullopt;
         }
@@ -305,18 +307,61 @@ namespace
         case SDLK_7: return Keys::D7;
         case SDLK_8: return Keys::D8;
         case SDLK_9: return Keys::D9;
-        case SDLK_F5: return Keys::F5;
-        case SDLK_F6: return Keys::F6;
-        case SDLK_F7: return Keys::F7;
-        case SDLK_F8: return Keys::F8;
-        case SDLK_F12: return Keys::F12;
+        case SDLK_BACKSPACE: return Keys::Back;
+        case SDLK_LALT:  return Keys::LeftAlt;
+        case SDLK_RALT:  return Keys::RightAlt;
+        case SDLK_LGUI:  return Keys::LeftWindows;
+        case SDLK_RGUI:  return Keys::RightWindows;
+        case SDLK_CAPSLOCK:  return Keys::CapsLock;
+        case SDLK_NUMLOCKCLEAR: return Keys::NumLock;
+        case SDLK_SCROLLLOCK:   return Keys::Scroll;
+        case SDLK_F1:  return Keys::F1;
+        case SDLK_F2:  return Keys::F2;
+        case SDLK_F3:  return Keys::F3;
+        case SDLK_F4:  return Keys::F4;
+        case SDLK_F5:  return Keys::F5;
+        case SDLK_F6:  return Keys::F6;
+        case SDLK_F7:  return Keys::F7;
+        case SDLK_F8:  return Keys::F8;
+        case SDLK_F9:  return Keys::F9;
+        case SDLK_F10: return Keys::F10;
         case SDLK_F11: return Keys::F11;
+        case SDLK_F12: return Keys::F12;
+        case SDLK_KP_0: return Keys::NumPad0;
+        case SDLK_KP_1: return Keys::NumPad1;
+        case SDLK_KP_2: return Keys::NumPad2;
+        case SDLK_KP_3: return Keys::NumPad3;
+        case SDLK_KP_4: return Keys::NumPad4;
+        case SDLK_KP_5: return Keys::NumPad5;
+        case SDLK_KP_6: return Keys::NumPad6;
+        case SDLK_KP_7: return Keys::NumPad7;
+        case SDLK_KP_8: return Keys::NumPad8;
+        case SDLK_KP_9: return Keys::NumPad9;
+        case SDLK_KP_MULTIPLY: return Keys::Multiply;
+        case SDLK_KP_PLUS:     return Keys::Add;
+        case SDLK_KP_MINUS:    return Keys::Subtract;
+        case SDLK_KP_DECIMAL:  return Keys::Decimal;
+        case SDLK_KP_DIVIDE:   return Keys::Divide;
+        case SDLK_KP_ENTER:    return Keys::Enter;
+        case SDLK_SEMICOLON:   return Keys::OemSemicolon;
+        case SDLK_EQUALS:      return Keys::OemPlus;
+        case SDLK_COMMA:       return Keys::OemComma;
+        case SDLK_MINUS:       return Keys::OemMinus;
+        case SDLK_PERIOD:      return Keys::OemPeriod;
+        case SDLK_SLASH:       return Keys::OemQuestion;
+        case SDLK_GRAVE:       return Keys::OemTilde;
+        case SDLK_LEFTBRACKET: return Keys::OemOpenBrackets;
+        case SDLK_BACKSLASH:   return Keys::OemPipe;
+        case SDLK_RIGHTBRACKET:return Keys::OemCloseBrackets;
+        case SDLK_APOSTROPHE:  return Keys::OemQuotes;
         case SDLK_PAGEUP:   return Keys::PageUp;
         case SDLK_PAGEDOWN: return Keys::PageDown;
         case SDLK_HOME:     return Keys::Home;
         case SDLK_END:      return Keys::End;
         case SDLK_INSERT:   return Keys::Insert;
         case SDLK_DELETE:   return Keys::Delete;
+        case SDLK_PRINTSCREEN: return Keys::PrintScreen;
+        case SDLK_PAUSE:       return Keys::Pause;
         default: return std::nullopt;
         }
     }
@@ -324,6 +369,56 @@ namespace
 
 namespace CNA::Internal::Input
 {
+    static SDL_Gamepad* get_sdl_gamepad_for_player(const Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        const auto slot = static_cast<std::size_t>(static_cast<int>(playerIndex));
+        if (slot >= MaxSupportedGamePads)
+            return nullptr;
+        return get_opened_gamepads()[slot];
+    }
+
+    bool SdlInputBridge::SetVibration(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex,
+        float leftMotor,
+        float rightMotor
+    )
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return false;
+        const auto left  = static_cast<Uint16>(std::clamp(leftMotor,  0.0f, 1.0f) * 0xFFFF);
+        const auto right = static_cast<Uint16>(std::clamp(rightMotor, 0.0f, 1.0f) * 0xFFFF);
+        return SDL_RumbleGamepad(gamepad, left, right, 0);
+    }
+
+    bool SdlInputBridge::SetTriggerVibration(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex,
+        float leftTrigger,
+        float rightTrigger
+    )
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return false;
+        const auto left  = static_cast<Uint16>(std::clamp(leftTrigger,  0.0f, 1.0f) * 0xFFFF);
+        const auto right = static_cast<Uint16>(std::clamp(rightTrigger, 0.0f, 1.0f) * 0xFFFF);
+        return SDL_RumbleGamepadTriggers(gamepad, left, right, 0);
+    }
+
+    std::string SdlInputBridge::GetGUID(Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return "";
+        SDL_JoystickID joystickId = SDL_GetGamepadID(gamepad);
+        if (joystickId == 0)
+            return "";
+        SDL_GUID guid = SDL_GetGamepadGUIDForID(joystickId);
+        char buf[33] = {};
+        SDL_GUIDToString(guid, buf, static_cast<int>(sizeof(buf)));
+        return std::string(buf);
+    }
+
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)
     {
         switch (event.type)
@@ -355,6 +450,12 @@ namespace CNA::Internal::Input
                     break;
                 case SDL_BUTTON_MIDDLE:
                     InputManager::SetMouseButtonState(MouseButton::Middle, state);
+                    break;
+                case SDL_BUTTON_X1:
+                    InputManager::SetMouseButtonState(MouseButton::XButton1, state);
+                    break;
+                case SDL_BUTTON_X2:
+                    InputManager::SetMouseButtonState(MouseButton::XButton2, state);
                     break;
                 default:
                     break;

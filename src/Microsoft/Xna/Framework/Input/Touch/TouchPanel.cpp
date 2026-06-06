@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/GestureDetector.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch
 {
@@ -155,13 +156,20 @@ namespace Microsoft::Xna::Framework::Input::Touch
             std::round(dy * static_cast<float>(displayHeight_))
         );
 
-        (void)fingerId;
-        (void)state;
-        (void)touchPos;
-        (void)delta;
-
-        // Gesture recognition is intentionally left for the future GestureDetector port.
-        // Gesture samples can still be queued through EnqueueGesture.
+        switch (state)
+        {
+        case TouchLocationState::Pressed:
+            CNA::Internal::Input::GestureDetector::OnPressed(fingerId, touchPos);
+            break;
+        case TouchLocationState::Moved:
+            CNA::Internal::Input::GestureDetector::OnMoved(fingerId, touchPos, delta);
+            break;
+        case TouchLocationState::Released:
+            CNA::Internal::Input::GestureDetector::OnReleased(fingerId, touchPos);
+            break;
+        default:
+            break;
+        }
     }
 
     void TouchPanel::SetFinger(intcs index, intcs fingerId, const Vector2& fingerPos)
@@ -231,8 +239,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
         previousTouches_ = touches_;
 
-        // Platform-specific polling should update touch slots via SetFinger().
-        // Existing CNA backends may also update CNA::Internal::Input::InputManager directly.
+        CNA::Internal::Input::GestureDetector::OnUpdate();
     }
 
     void TouchPanel::updateInputManagerTouch(intcs fingerId, TouchLocationState state, const Vector2& position)

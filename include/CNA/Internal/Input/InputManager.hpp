@@ -36,6 +36,8 @@ namespace CNA::Internal::Input
         Left,
         Right,
         Middle,
+        XButton1,
+        XButton2,
     };
 
     /**
@@ -59,6 +61,7 @@ namespace CNA::Internal::Input
         DPadDown,
         DPadLeft,
         DPadRight,
+        BigButton,
     };
 
     /**

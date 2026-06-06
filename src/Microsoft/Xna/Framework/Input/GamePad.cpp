@@ -1,5 +1,6 @@
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SdlInputBridge.hpp"
 
 #include <cmath>
 
@@ -73,14 +74,12 @@ namespace Microsoft::Xna::Framework::Input
 
     bool GamePad::SetVibration(PlayerIndex playerIndex, float leftMotor, float rightMotor)
     {
-        (void)playerIndex; (void)leftMotor; (void)rightMotor;
-        return false;
+        return CNA::Internal::Input::SdlInputBridge::SetVibration(playerIndex, leftMotor, rightMotor);
     }
 
     std::string GamePad::GetGUIDEXT(PlayerIndex playerIndex)
     {
-        (void)playerIndex;
-        return "";
+        return CNA::Internal::Input::SdlInputBridge::GetGUID(playerIndex);
     }
 
     void GamePad::SetLightBarEXT(PlayerIndex playerIndex, const Microsoft::Xna::Framework::Color& color)
@@ -90,8 +89,7 @@ namespace Microsoft::Xna::Framework::Input
 
     bool GamePad::SetTriggerVibrationEXT(PlayerIndex playerIndex, float leftTrigger, float rightTrigger)
     {
-        (void)playerIndex; (void)leftTrigger; (void)rightTrigger;
-        return false;
+        return CNA::Internal::Input::SdlInputBridge::SetTriggerVibration(playerIndex, leftTrigger, rightTrigger);
     }
 
     bool GamePad::GetGyroEXT(PlayerIndex playerIndex, Microsoft::Xna::Framework::Vector3& gyro)

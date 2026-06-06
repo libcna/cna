@@ -30,6 +30,8 @@ namespace CNA::Internal::Input
             ButtonState LeftButton = ButtonState::Released;
             ButtonState RightButton = ButtonState::Released;
             ButtonState MiddleButton = ButtonState::Released;
+            ButtonState XButton1 = ButtonState::Released;
+            ButtonState XButton2 = ButtonState::Released;
         };
 
         using Microsoft::Xna::Framework::Input::Buttons;
@@ -113,6 +115,12 @@ namespace CNA::Internal::Input
             break;
         case MouseButton::Middle:
             mouseState.MiddleButton = state;
+            break;
+        case MouseButton::XButton1:
+            mouseState.XButton1 = state;
+            break;
+        case MouseButton::XButton2:
+            mouseState.XButton2 = state;
             break;
         }
     }
@@ -207,6 +215,7 @@ namespace CNA::Internal::Input
         case GamePadButton::DPadDown:     setFlag(Buttons::DPadDown);     break;
         case GamePadButton::DPadLeft:     setFlag(Buttons::DPadLeft);     break;
         case GamePadButton::DPadRight:    setFlag(Buttons::DPadRight);    break;
+        case GamePadButton::BigButton:    setFlag(Buttons::BigButton);    break;
         }
     }
 
@@ -257,8 +266,8 @@ namespace CNA::Internal::Input
             mouseState.LeftButton,
             mouseState.MiddleButton,
             mouseState.RightButton,
-            ButtonState::Released,
-            ButtonState::Released
+            mouseState.XButton1,
+            mouseState.XButton2
         );
     }
 
