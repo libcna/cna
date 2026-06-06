@@ -1,0 +1,245 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) Robert Vokac and contributors
+#include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
+#include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
+
+#include <filesystem>
+#include <stdexcept>
+
+#include <SDL3/SDL.h>
+
+namespace Microsoft::Xna::Framework::Storage
+{
+    namespace fs = std::filesystem;
+
+    // -------------------------------------------------------------------------
+    // Synchronous IAsyncResult implementations (internal, not exposed in header)
+    // -------------------------------------------------------------------------
+
+    class SelectorResult final : public System::IAsyncResult
+    {
+    public:
+        std::optional<PlayerIndex> playerIndex;
+        void* asyncState = nullptr;
+
+        bool getIsCompletedProperty()           const override { return true; }
+        bool getCompletedSynchronouslyProperty() const override { return true; }
+    };
+
+    class ContainerResult final : public System::IAsyncResult
+    {
+    public:
+        std::string displayName;
+        void* asyncState = nullptr;
+
+        bool getIsCompletedProperty()           const override { return true; }
+        bool getCompletedSynchronouslyProperty() const override { return true; }
+    };
+
+    // -------------------------------------------------------------------------
+    // Static member definitions
+    // -------------------------------------------------------------------------
+
+    System::EventHandler<System::EventArgs> StorageDevice::DeviceChanged;
+    std::string StorageDevice::storageRoot_;
+    std::string StorageDevice::appName_;
+    bool StorageDevice::storageRootInitialized_ = false;
+
+    // -------------------------------------------------------------------------
+    // Storage root resolution
+    // -------------------------------------------------------------------------
+
+    const std::string& StorageDevice::EnsureStorageRoot()
+    {
+        if (storageRootInitialized_) return storageRoot_;
+        storageRootInitialized_ = true;
+
+        const std::string app = appName_.empty() ? "game" : appName_;
+        char* prefPath = SDL_GetPrefPath(nullptr, app.c_str());
+        if (prefPath)
+        {
+            storageRoot_ = prefPath;
+            SDL_free(prefPath);
+            // SDL_GetPrefPath creates the directory; strip the trailing separator
+            // so StorageContainer can append its own components cleanly.
+            while (!storageRoot_.empty() &&
+                   (storageRoot_.back() == '/' || storageRoot_.back() == '\\'))
+            {
+                storageRoot_.pop_back();
+            }
+            return storageRoot_;
+        }
+
+        // Fallback: XDG_DATA_HOME or HOME/.local/share/<app>
+        const char* xdg = SDL_getenv("XDG_DATA_HOME");
+        if (xdg && *xdg)
+        {
+            storageRoot_ = (fs::path(xdg) / app).string();
+            return storageRoot_;
+        }
+        const char* home = SDL_getenv("HOME");
+        if (home && *home)
+        {
+            storageRoot_ = (fs::path(home) / ".local" / "share" / app).string();
+            return storageRoot_;
+        }
+
+        storageRoot_ = fs::current_path().string();
+        return storageRoot_;
+    }
+
+    // -------------------------------------------------------------------------
+    // Constructor / destructor
+    // -------------------------------------------------------------------------
+
+    StorageDevice::StorageDevice(std::optional<PlayerIndex> player)
+        : devicePlayer_(player) {}
+
+    // -------------------------------------------------------------------------
+    // Properties
+    // -------------------------------------------------------------------------
+
+    long long StorageDevice::getFreeSpaceProperty() const
+    {
+        try
+        {
+            const auto& root = EnsureStorageRoot();
+            if (!fs::exists(root)) return std::numeric_limits<long long>::max();
+            return static_cast<long long>(fs::space(root).available);
+        }
+        catch (const std::exception& e)
+        {
+            throw StorageDeviceNotConnectedException(
+                "The storage device bound to the container is not connected.", e);
+        }
+    }
+
+    bool StorageDevice::getIsConnectedProperty() const
+    {
+        try
+        {
+            const auto& root = EnsureStorageRoot();
+            // If path doesn't exist yet, the drive is still accessible
+            fs::path p(root);
+            // Walk up to find an existing ancestor
+            while (!p.empty() && !fs::exists(p)) p = p.parent_path();
+            return !p.empty();
+        }
+        catch (...) { return false; }
+    }
+
+    long long StorageDevice::getTotalSpaceProperty() const
+    {
+        try
+        {
+            const auto& root = EnsureStorageRoot();
+            if (!fs::exists(root)) return std::numeric_limits<long long>::max();
+            return static_cast<long long>(fs::space(root).capacity);
+        }
+        catch (const std::exception& e)
+        {
+            throw StorageDeviceNotConnectedException(
+                "The storage device bound to the container is not connected.", e);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // OpenContainer
+    // -------------------------------------------------------------------------
+
+    std::unique_ptr<System::IAsyncResult> StorageDevice::BeginOpenContainer(
+        const std::string& displayName,
+        std::function<void(System::IAsyncResult*)> callback,
+        void* state)
+    {
+        auto result = std::make_unique<ContainerResult>();
+        result->displayName = displayName;
+        result->asyncState  = state;
+        if (callback) callback(result.get());
+        return result;
+    }
+
+    std::unique_ptr<StorageContainer> StorageDevice::EndOpenContainer(
+        System::IAsyncResult* result)
+    {
+        auto* r = dynamic_cast<ContainerResult*>(result);
+        if (!r) throw std::invalid_argument("result was not produced by BeginOpenContainer.");
+
+        int playerIdx = devicePlayer_.has_value()
+            ? static_cast<int>(devicePlayer_.value())
+            : -1;
+
+        return std::unique_ptr<StorageContainer>(
+            new StorageContainer(*this, r->displayName, EnsureStorageRoot(), playerIdx));
+    }
+
+    void StorageDevice::DeleteContainer(const std::string& titleName)
+    {
+        if (titleName.empty())
+            throw std::invalid_argument("titleName must not be empty.");
+        fs::remove_all(fs::path(EnsureStorageRoot()) / titleName);
+    }
+
+    // -------------------------------------------------------------------------
+    // ShowSelector
+    // -------------------------------------------------------------------------
+
+    std::unique_ptr<System::IAsyncResult> StorageDevice::BeginShowSelector(
+        std::function<void(System::IAsyncResult*)> callback, void* state)
+    {
+        return BeginShowSelector(0, 0, std::move(callback), state);
+    }
+
+    std::unique_ptr<System::IAsyncResult> StorageDevice::BeginShowSelector(
+        PlayerIndex player,
+        std::function<void(System::IAsyncResult*)> callback, void* state)
+    {
+        return BeginShowSelector(player, 0, 0, std::move(callback), state);
+    }
+
+    std::unique_ptr<System::IAsyncResult> StorageDevice::BeginShowSelector(
+        int /*sizeInBytes*/, int /*directoryCount*/,
+        std::function<void(System::IAsyncResult*)> callback, void* state)
+    {
+        auto result = std::make_unique<SelectorResult>();
+        result->playerIndex = std::nullopt;
+        result->asyncState  = state;
+        if (callback) callback(result.get());
+        return result;
+    }
+
+    std::unique_ptr<System::IAsyncResult> StorageDevice::BeginShowSelector(
+        PlayerIndex player, int /*sizeInBytes*/, int /*directoryCount*/,
+        std::function<void(System::IAsyncResult*)> callback, void* state)
+    {
+        auto result = std::make_unique<SelectorResult>();
+        result->playerIndex = player;
+        result->asyncState  = state;
+        if (callback) callback(result.get());
+        return result;
+    }
+
+    std::unique_ptr<StorageDevice> StorageDevice::EndShowSelector(System::IAsyncResult* result)
+    {
+        auto* r = dynamic_cast<SelectorResult*>(result);
+        if (!r) throw std::invalid_argument("result was not produced by BeginShowSelector.");
+        return std::unique_ptr<StorageDevice>(new StorageDevice(r->playerIndex));
+    }
+
+    // -------------------------------------------------------------------------
+    // CNA extensions
+    // -------------------------------------------------------------------------
+
+    void StorageDevice::SetAppNameEXT(const std::string& appName)
+    {
+        appName_               = appName;
+        storageRootInitialized_ = false; // force re-evaluation next access
+        storageRoot_.clear();
+    }
+
+    std::string StorageDevice::GetStorageRootEXT()
+    {
+        return EnsureStorageRoot();
+    }
+
+} // namespace Microsoft::Xna::Framework::Storage
