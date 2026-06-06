@@ -247,11 +247,33 @@ If old game code breaks after the API is corrected, fix the game code separately
 
 ---
 
+## SharpRuntime Extensions
+
+`sharp-runtime` is the project's C++ reimplementation of the .NET runtime (`System.*` namespace and primitive
+type aliases). If CNA needs anything from .NET that is not yet in sharp-runtime — a type alias, a class, an
+interface, an exception type, a utility — **add it to sharp-runtime first**, then use it from CNA.
+
+Do **not** inline .NET concepts directly into CNA headers as raw C++ types or ad-hoc workarounds.
+
+Examples of things that belong in sharp-runtime, not in CNA:
+
+- Type aliases (`bytecs`, `String`, `Single`, …)
+- `System::IDisposable`, `System::Object`, `System::EventHandler<T>`
+- `System::Exception` and its subclasses
+- `System::TimeSpan`, `System::IO::Stream`, `System::Collections::*`
+- Any other `System.*` type referenced by the XNA 4.0 API
+
+When adding to sharp-runtime, follow the same minimal-stub rule: implement only what CNA currently needs,
+with the correct final name and namespace.
+
+---
+
 ## Missing Dependencies
 
 When porting a file and a required class, enum, or type alias does not yet exist:
 
-- Add a **minimal correctly-named stub** in the correct namespace, sufficient for compilation.
+- If the missing type belongs to the .NET runtime (`System.*` or a primitive alias), add it to **sharp-runtime** (see above).
+- Otherwise add a **minimal correctly-named stub** in the correct namespace, sufficient for compilation.
 - Do not implement large unrelated systems to satisfy a missing dependency.
 - Stubs must use the correct final namespace and name from XNA/FNA.
 - Report missing stubs in the task/PR description.
