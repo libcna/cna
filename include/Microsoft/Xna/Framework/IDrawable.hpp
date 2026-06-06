@@ -2,6 +2,8 @@
 
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/EventArgs.hpp"
+#include "System/EventHandler.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -16,6 +18,12 @@ namespace Microsoft::Xna::Framework
 
         /// Gets whether this object should be drawn.
         [[nodiscard]] virtual bool getVisibleProperty() const = 0;
+
+        /// Returns the DrawOrderChanged event.
+        [[nodiscard]] virtual System::EventHandler<System::EventArgs>& getDrawOrderChangedEvent() = 0;
+
+        /// Returns the VisibleChanged event.
+        [[nodiscard]] virtual System::EventHandler<System::EventArgs>& getVisibleChangedEvent() = 0;
 
         /// Draws the object.
         virtual void Draw(const GameTime& gameTime) = 0;

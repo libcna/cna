@@ -2,6 +2,8 @@
 
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/EventArgs.hpp"
+#include "System/EventHandler.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -16,6 +18,12 @@ namespace Microsoft::Xna::Framework
 
         /// Gets the order used to sort updateable components.
         [[nodiscard]] virtual SharpRuntime::intcs getUpdateOrderProperty() const = 0;
+
+        /// Returns the EnabledChanged event.
+        [[nodiscard]] virtual System::EventHandler<System::EventArgs>& getEnabledChangedEvent() = 0;
+
+        /// Returns the UpdateOrderChanged event.
+        [[nodiscard]] virtual System::EventHandler<System::EventArgs>& getUpdateOrderChangedEvent() = 0;
 
         /// Updates the component.
         virtual void Update(GameTime& gameTime) = 0;

@@ -8,6 +8,11 @@ namespace Microsoft::Xna::Framework::Input
 {
     KeyboardState::KeyboardState() = default;
 
+    KeyboardState::KeyboardState(std::initializer_list<Keys> keys)
+        : pressedKeys_(keys)
+    {
+    }
+
     KeyboardState::KeyboardState(const std::unordered_set<Keys>& pressedKeys)
         : pressedKeys_(pressedKeys)
     {

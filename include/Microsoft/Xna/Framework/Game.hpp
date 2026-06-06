@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "Microsoft/Xna/Framework/ExitingEventArgs.hpp"
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollectionEventArgs.hpp"
@@ -15,7 +14,7 @@
 #include "Microsoft/Xna/Framework/IDrawable.hpp"
 #include "Microsoft/Xna/Framework/IGameComponent.hpp"
 #include "Microsoft/Xna/Framework/IGraphicsDeviceManager.hpp"
-#include "Microsoft/Xna/Framework/IGraphicsDeviceService.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
 #include "Microsoft/Xna/Framework/IUpdateable.hpp"
 #include "Microsoft/Xna/Framework/LaunchParameters.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -44,7 +43,7 @@ namespace Microsoft::Xna::Framework
         System::EventHandler<System::EventArgs> Disposed;
 
         /// Raised when the game is exiting.
-        System::EventHandler<ExitingEventArgs> Exiting;
+        System::EventHandler<System::EventArgs> Exiting;
 
         Game();
         ~Game() override;
@@ -177,7 +176,7 @@ namespace Microsoft::Xna::Framework
         virtual void Update(GameTime& gameTime);
 
         /// Raises the Exiting event.
-        virtual void OnExiting(System::Object* sender, const ExitingEventArgs& args);
+        virtual void OnExiting(System::Object* sender, const System::EventArgs& args);
 
         /// Raises the Activated event.
         virtual void OnActivated(System::Object* sender, const System::EventArgs& args);
@@ -210,7 +209,7 @@ namespace Microsoft::Xna::Framework
         std::vector<IDrawable*> drawableComponents_;
         std::vector<IDrawable*> currentlyDrawingComponents_;
 
-        IGraphicsDeviceService* graphicsDeviceService_;
+        Graphics::IGraphicsDeviceService* graphicsDeviceService_;
         IGraphicsDeviceManager* graphicsDeviceManager_;
         Graphics::GraphicsAdapter* currentAdapter_;
 

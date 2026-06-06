@@ -77,6 +77,16 @@ namespace Microsoft::Xna::Framework
         return typeName;
     }
 
+    System::EventHandler<System::EventArgs>& GameComponent::getEnabledChangedEvent()
+    {
+        return EnabledChanged;
+    }
+
+    System::EventHandler<System::EventArgs>& GameComponent::getUpdateOrderChangedEvent()
+    {
+        return UpdateOrderChanged;
+    }
+
     void GameComponent::OnUpdateOrderChanged(System::Object* sender, const System::EventArgs& args)
     {
         (void)sender;

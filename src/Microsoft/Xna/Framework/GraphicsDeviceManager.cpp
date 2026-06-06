@@ -337,6 +337,26 @@ namespace Microsoft::Xna::Framework
         disposed_ = true;
     }
 
+    System::EventHandler<System::EventArgs>& GraphicsDeviceManager::getDeviceCreatedEvent()
+    {
+        return DeviceCreated;
+    }
+
+    System::EventHandler<System::EventArgs>& GraphicsDeviceManager::getDeviceDisposingEvent()
+    {
+        return DeviceDisposing;
+    }
+
+    System::EventHandler<System::EventArgs>& GraphicsDeviceManager::getDeviceResetEvent()
+    {
+        return DeviceReset;
+    }
+
+    System::EventHandler<System::EventArgs>& GraphicsDeviceManager::getDeviceResettingEvent()
+    {
+        return DeviceResetting;
+    }
+
     void GraphicsDeviceManager::OnDeviceCreated(System::Object* sender, const System::EventArgs& args)
     {
         DeviceCreated.Raise(sender, args);

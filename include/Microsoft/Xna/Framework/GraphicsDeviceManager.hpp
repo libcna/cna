@@ -6,7 +6,7 @@
 #include "Microsoft/Xna/Framework/GameServiceContainer.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceInformation.hpp"
 #include "Microsoft/Xna/Framework/IGraphicsDeviceManager.hpp"
-#include "Microsoft/Xna/Framework/IGraphicsDeviceService.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
 #include "Microsoft/Xna/Framework/PreparingDeviceSettingsEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -37,7 +37,7 @@ namespace Microsoft::Xna::Framework
 
     /// Manages the graphics device and applies high-level presentation settings.
     class GraphicsDeviceManager : public System::Object,
-                                  public IGraphicsDeviceService,
+                                  public Graphics::IGraphicsDeviceService,
                                   public System::IDisposable,
                                   public IGraphicsDeviceManager
     {
@@ -79,6 +79,18 @@ namespace Microsoft::Xna::Framework
 
         /// Gets the managed graphics device.
         [[nodiscard]] Graphics::GraphicsDevice* getGraphicsDeviceProperty() const override;
+
+        /// Returns the DeviceCreated event.
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceCreatedEvent() override;
+
+        /// Returns the DeviceDisposing event.
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceDisposingEvent() override;
+
+        /// Returns the DeviceReset event.
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResetEvent() override;
+
+        /// Returns the DeviceResetting event.
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResettingEvent() override;
 
         /// Gets whether the graphics device should be fullscreen.
         [[nodiscard]] bool getIsFullScreenProperty() const;

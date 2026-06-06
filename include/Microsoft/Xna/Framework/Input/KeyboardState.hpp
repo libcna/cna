@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <initializer_list>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -17,6 +18,7 @@ namespace Microsoft::Xna::Framework::Input
     struct KeyboardState
     {
         KeyboardState();
+        KeyboardState(std::initializer_list<Keys> keys);
         explicit KeyboardState(const std::unordered_set<Keys>& pressedKeys);
 
         /// Returns whether a key is pressed (Down) or released (Up).

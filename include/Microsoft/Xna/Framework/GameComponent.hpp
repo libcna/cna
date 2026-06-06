@@ -52,6 +52,12 @@ namespace Microsoft::Xna::Framework
         /// Sets the order used to sort updateable components.
         void setUpdateOrderProperty(SharpRuntime::intcs value);
 
+        /// Returns the EnabledChanged event.
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getEnabledChangedEvent() override;
+
+        /// Returns the UpdateOrderChanged event.
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getUpdateOrderChangedEvent() override;
+
         /// Shuts down the component.
         void Dispose() override;
 

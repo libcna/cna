@@ -34,6 +34,12 @@ namespace Microsoft::Xna::Framework
         /// Sets visibility and raises the visibility change event when the value changes.
         void setVisibleProperty(bool value);
 
+        /// Returns the DrawOrderChanged event.
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getDrawOrderChangedEvent() override;
+
+        /// Returns the VisibleChanged event.
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getVisibleChangedEvent() override;
+
         /// Raised when the draw order changes.
         System::EventHandler<System::EventArgs> DrawOrderChanged;
 

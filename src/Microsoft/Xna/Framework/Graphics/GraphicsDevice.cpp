@@ -2,6 +2,7 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #ifdef CNA_BACKEND_BGFX
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
@@ -12,6 +13,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -427,13 +429,64 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
-        (void)primitiveType;
-        (void)vertexData;
-        (void)vertexOffset;
-        (void)primitiveCount;
+        if (backend_ == nullptr)
+            return;
 
-        throw std::runtime_error(
-            "GraphicsDevice::DrawUserPrimitives is not implemented yet by the current CNA backend."
+        if (currentEffect_ == nullptr)
+            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+
+        // Compute vertex count from primitive type.
+        int vertsPerPrimitive = 0;
+        switch (primitiveType)
+        {
+            case PrimitiveType::TriangleList: vertsPerPrimitive = 3; break;
+            case PrimitiveType::TriangleStrip: vertsPerPrimitive = 1; break; // n+2 total, approx
+            case PrimitiveType::LineList:    vertsPerPrimitive = 2; break;
+            case PrimitiveType::LineStrip:   vertsPerPrimitive = 1; break;
+            default:
+                throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: unsupported PrimitiveType.");
+        }
+
+        int totalVerts;
+        if (primitiveType == PrimitiveType::TriangleList || primitiveType == PrimitiveType::LineList)
+            totalVerts = primitiveCount * vertsPerPrimitive;
+        else if (primitiveType == PrimitiveType::TriangleStrip)
+            totalVerts = primitiveCount + 2;
+        else if (primitiveType == PrimitiveType::LineStrip)
+            totalVerts = primitiveCount + 1;
+        else
+            totalVerts = primitiveCount;
+
+        // vertexData points to an array of VertexPositionColor starting at vertexOffset.
+        const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
+
+        // Pack into the compact GPU layout that the backend expects (16 bytes: vec3 + 4 ubytes).
+        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; };
+        static_assert(sizeof(GpuVertex) == 16, "GpuVertex must be 16 bytes");
+
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(totalVerts));
+        for (int i = 0; i < totalVerts; ++i)
+        {
+            packed[i].x = vertices[i].Position.X;
+            packed[i].y = vertices[i].Position.Y;
+            packed[i].z = vertices[i].Position.Z;
+            packed[i].r = static_cast<std::uint8_t>(vertices[i].Color.getRProperty());
+            packed[i].g = static_cast<std::uint8_t>(vertices[i].Color.getGProperty());
+            packed[i].b = static_cast<std::uint8_t>(vertices[i].Color.getBProperty());
+            packed[i].a = static_cast<std::uint8_t>(vertices[i].Color.getAProperty());
+        }
+
+        // Upload to a temporary vertex buffer and draw.
+        auto tmpVb = backend_->CreateVertexBuffer(totalVerts);
+        tmpVb->SetData(packed.data(), totalVerts, sizeof(GpuVertex));
+
+        backend_->DrawColoredPrimitives(
+            *tmpVb,
+            currentEffect_->World,
+            currentEffect_->View,
+            currentEffect_->Projection,
+            primitiveType,
+            primitiveCount
         );
     }
 

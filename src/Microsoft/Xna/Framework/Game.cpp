@@ -165,7 +165,7 @@ namespace Microsoft::Xna::Framework
     {
         if (graphicsDeviceService_ == nullptr)
         {
-            graphicsDeviceService_ = Services_.GetService<IGraphicsDeviceService>();
+            graphicsDeviceService_ = Services_.GetService<Graphics::IGraphicsDeviceService>();
         }
 
         if (graphicsDeviceService_ != nullptr && graphicsDeviceService_->getGraphicsDeviceProperty() != nullptr)
@@ -513,7 +513,7 @@ namespace Microsoft::Xna::Framework
             }
         }
 
-        graphicsDeviceService_ = Services_.GetService<IGraphicsDeviceService>();
+        graphicsDeviceService_ = Services_.GetService<Graphics::IGraphicsDeviceService>();
         if (graphicsDeviceService_ == nullptr || graphicsDeviceService_->getGraphicsDeviceProperty() != nullptr)
         {
             LoadContent();
@@ -562,7 +562,7 @@ namespace Microsoft::Xna::Framework
         FrameworkDispatcher::Update();
     }
 
-    void Game::OnExiting(System::Object* sender, const ExitingEventArgs& args)
+    void Game::OnExiting(System::Object* sender, const System::EventArgs& args)
     {
         (void) sender;
         Exiting.Raise(this, args);
@@ -731,8 +731,7 @@ namespace Microsoft::Xna::Framework
             Tick();
         }
 
-        ExitingEventArgs exitingEventArgs;
-        OnExiting(this, exitingEventArgs);
+        OnExiting(this, System::EventArgs::Empty);
 #endif
     }
 
@@ -932,8 +931,7 @@ namespace Microsoft::Xna::Framework
         if (!state.game->RunApplication)
         {
             emscripten_cancel_main_loop();
-            ExitingEventArgs exitingEventArgs;
-            state.game->OnExiting(state.game, exitingEventArgs);
+            state.game->OnExiting(state.game, System::EventArgs::Empty);
         }
     }
 #endif

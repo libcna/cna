@@ -88,6 +88,16 @@ namespace Microsoft::Xna::Framework
     {
     }
 
+    System::EventHandler<System::EventArgs>& DrawableGameComponent::getDrawOrderChangedEvent()
+    {
+        return DrawOrderChanged;
+    }
+
+    System::EventHandler<System::EventArgs>& DrawableGameComponent::getVisibleChangedEvent()
+    {
+        return VisibleChanged;
+    }
+
     void DrawableGameComponent::OnVisibleChanged(System::Object* sender, const System::EventArgs& args)
     {
         (void)sender;
