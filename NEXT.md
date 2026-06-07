@@ -81,11 +81,27 @@ content loading are the next major missing pieces.
   are inherited no-ops; no state is actually applied.
 - **`FillMode::WireFrame`** — silently ignored in EasyGL (OpenGL ES does not support
   `glPolygonMode`).
-- **`SpriteFont`** — header exists; no implementation (font rendering not wired).
 
 ---
 
 ## 3. Recent changes
+
+### Current session — Implement SpriteFont glyph rendering (Task 12)
+- **Rewrote:** `SpriteFont.hpp` — full FNA data model: glyph atlas `Texture2D*`, `glyphData`,
+  `croppingData`, `kerning` (Vector3 = left bearing/width/right bearing), `characterMap` +
+  `characterIndexMap` (fast lookup). Added `Characters`, `DefaultCharacter` (nullable),
+  `LineSpacing`, `Spacing` properties (fixed `getLineSpasingProperty` typo →
+  `getLineSpacingProperty`). Added a `NOXNA` public constructor mirroring FNA's internal
+  one (CNA has no XNB pipeline, so content readers/apps build the atlas themselves).
+- **Added:** `SpriteFont.cpp` — constructor builds the index map; `MeasureString` ports FNA's
+  line-by-line width/height accumulation (CR/LF handling, first-in-line abs kerning,
+  DefaultCharacter fallback, throws on unresolved chars).
+- **Modified:** `SpriteBatch.hpp/.cpp` — added three `DrawString` overloads (position+color;
+  +rotation/origin/uniform scale/effects/layerDepth; +Vector2 scale). The glyph loop mirrors
+  FNA's pen advance, scales/rotates each glyph's offset around the origin, and emits one
+  backend `Draw` per glyph (simple dest/src-rect path when un-rotated and un-flipped, the
+  rotation-capable `Draw` otherwise). `SpriteBatch` is a friend of `SpriteFont`.
+- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
 
 ### Current session — Implement GraphicsAdapter PCI IDs (Task 9)
 - **Modified:** `GraphicsAdapter.hpp` — added private `vendorId_` / `deviceId_` members;
@@ -281,7 +297,7 @@ silently misread vertex data. Fixing this requires the backend to read stride fr
 | done | `SkinnedEffect` — implemented (72 bones, weights 1/2/4, lighting matrices, perPixel/oneLight shader index) |
 | done | `OcclusionQuery` — implemented via `IOcclusionQueryBackend`; EasyGL uses `GL_ANY_SAMPLES_PASSED` (GLES3: PixelCount = 0 or 1); other backends return null → stub fallback |
 | incomplete | `Model::Draw` — no effect binding, does nothing useful |
-| incomplete | `SpriteFont` — header only, no glyph rendering |
+| done | `SpriteFont` — full glyph data model + `MeasureString`; `SpriteBatch::DrawString` (3 string overloads) renders glyphs via per-character source/dest rects |
 | done | `SpriteBatch::Begin(SpriteSortMode, BlendState)` — forwards `BlendState` to `GraphicsDevice::setBlendStateProperty` |
 | done | EasyGL vertex buffer stride — `ApplyLayout(stride)` configures VAO for all four built-in vertex types; `VertexBuffer::SetData` overloads added for all types |
 | done | `DrawUserIndexedPrimitives` — implemented: packs VertexPositionColor + 16-bit indices into temp buffers, calls `DrawIndexedColoredPrimitives` |

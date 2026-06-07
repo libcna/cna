@@ -15,6 +15,7 @@ struct SDL_Renderer;
 namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
+    class SpriteFont;
 }
 
 namespace CNA::Internal::Backends
@@ -106,5 +107,40 @@ namespace Microsoft::Xna::Framework::Graphics
                   Vector2 origin,
                   SpriteEffects effect,
                   float layerDepth);
+
+        /**
+         * @brief Draws a string of text using the given font.
+         *
+         * @param spriteFont Font providing the glyph atlas and layout.
+         * @param text       Text to render.
+         * @param position   Top-left position, in pixels.
+         * @param color      Tint color.
+         */
+        void DrawString(const SpriteFont& spriteFont,
+                        const std::string& text,
+                        Vector2 position,
+                        Color color);
+
+        /// Draws text with rotation, origin, uniform scale, flipping and layer depth.
+        void DrawString(const SpriteFont& spriteFont,
+                        const std::string& text,
+                        Vector2 position,
+                        Color color,
+                        float rotation,
+                        Vector2 origin,
+                        float scale,
+                        SpriteEffects effects,
+                        float layerDepth);
+
+        /// Draws text with rotation, origin, non-uniform scale, flipping and layer depth.
+        void DrawString(const SpriteFont& spriteFont,
+                        const std::string& text,
+                        Vector2 position,
+                        Color color,
+                        float rotation,
+                        Vector2 origin,
+                        Vector2 scale,
+                        SpriteEffects effects,
+                        float layerDepth);
     };
 }
