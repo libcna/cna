@@ -26,8 +26,8 @@ content loading are the next major missing pieces.
 ## 2. Current status
 
 ### Build
-- **Clean build** as of commit `93946e5` on branch `develop`.
-- Default debug build: `cmake-build-debug/` — backend `VULKAN`.
+- **Clean build** on branch `develop` (after SpriteEffect addition).
+- Default debug build: `cmake-build-vulkan/` — backend `VULKAN`.
 - Libraries built: `libCNA.a`, `libcna_backend_graphics_vulkan.a`.
 - Executables built: `CnaTests`, `cna_demo_2d`, `cna_demo_input`, `cna_demo_sound`,
   `cna_demo_xact`, `cna_house3d_demo`.
@@ -43,6 +43,8 @@ content loading are the next major missing pieces.
   `EffectParameter` with full GetValue/SetValue overloads, `EffectAnnotation`, all collections.
 - **BasicEffect** with `IEffectMatrices`, `IEffectFog`, `IEffectLights` (inline overrides on
   public `World`/`View`/`Projection` members for backward compatibility).
+- **SpriteEffect** — derives from `Effect`; builds orthographic projection matrix in `OnApply()`
+  for use by `SpriteBatch`.
 - **Vertex types:** `VertexPositionColor`, `VertexPositionColorTexture`,
   `VertexPositionNormalTexture`, `VertexPositionTexture`.
 - **PackedVector:** 18 types — `Alpha8`, `Bgr565`, `Bgra4444`, `Bgra5551`, `Byte4`,
@@ -66,8 +68,8 @@ content loading are the next major missing pieces.
 - **Content:** `ContentManager` + `ContentTypeReader<T>` — custom system (no XNB).
 
 ### What does NOT work yet
-- **Stock Effects:** `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`,
-  `SkinnedEffect`, `SpriteEffect` — none implemented.
+- **Stock Effects:** All five stock effects implemented: `SpriteEffect`, `AlphaTestEffect`,
+  `EnvironmentMapEffect`, `DualTextureEffect`, `SkinnedEffect`.
 - **`DrawUserIndexedPrimitives`** — throws `std::runtime_error` (not implemented).
 - **`OcclusionQuery`** — stub only, `Begin()`/`End()` are no-ops.
 - **`IVertexBufferBackend`** — only handles the 16-byte `VertexPositionColor` stride on EasyGL;
@@ -84,6 +86,87 @@ content loading are the next major missing pieces.
 ---
 
 ## 3. Recent changes
+
+### Current session — Wire SpriteBatch::Begin BlendState (Task 7)
+- **Modified:** `SpriteBatch` now stores `GraphicsDevice*` (added `graphicsDevice_` member to
+  header; constructor sets it from the constructor parameter).
+- **Modified:** `Begin(SpriteSortMode, BlendState)` — forwards `blend_state` to
+  `graphicsDevice_->setBlendStateProperty(blend_state)` before calling `Begin()`, so that
+  `Begin(SpriteSortMode::Immediate, BlendState::Additive)` now actually applies the blend mode
+  via the backend's `ApplyBlendState` path.
+- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
+
+### Previous session — Fix EasyGL vertex buffer stride (Task 6)
+- **Modified:** `EasyGLVertexBufferBackend::InitializeLayout()` — now only creates VBO+VAO
+  (no attribute pointers); attribute config deferred to new `ApplyLayout(stride)`.
+- **Added:** `EasyGLVertexBufferBackend::ApplyLayout(std::size_t stride)` — stride-dispatch
+  configures the VAO for all four built-in vertex layouts:
+  - 16 → VertexPositionColor: float3@0 + ubyte4-normalized@12
+  - 20 → VertexPositionTexture: float3@0 + float2@12
+  - 24 → VertexPositionColorTexture: float3@0 + ubyte4-normalized@12 + float2@16
+  - 32 → VertexPositionNormalTexture: float3@0 + float3@12 + float2@24
+- **Modified:** `SetData()` calls `ApplyLayout(stride_in_bytes_)` after each upload.
+- **Modified:** `recreate_gl_resource()` calls `ApplyLayout(stride_in_bytes_)` after context restore.
+- **Added:** `VertexBuffer::SetData` overloads for `VertexPositionColorTexture`,
+  `VertexPositionNormalTexture`, `VertexPositionTexture` — each packs the source struct
+  (which carries a vtable pointer from `IVertexType`) into the compact GPU layout.
+- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
+
+### Previous session — Implement `SkinnedEffect`
+- **Added:** `include/Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp` and
+  `src/Microsoft/Xna/Framework/Graphics/SkinnedEffect.cpp`.
+- Derives from `Effect`, `IEffectMatrices`, `IEffectLights`, `IEffectFog`.
+- `MaxBones = 72` public const; `SetBoneTransforms` / `GetBoneTransforms(int count)`.
+- `WeightsPerVertex` validates 1/2/4, throws `std::out_of_range` otherwise.
+- `LightingEnabled` always returns `true`; setting to `false` throws `std::runtime_error`.
+- `OnApply()`: WorldViewProj, fog vector, world+world-inverse-transpose, eye position,
+  diffuse+emissive material color (with ambient), one-light opt, shader index
+  (fog × weightsPerVertex × perPixel/oneLight = multiple variants matching FNA).
+- `GetBoneTransforms` restores `M44 = 1` to mirror FNA's 4x3 bone storage behaviour.
+- Texture stored as direct member pointer; specular color/power backed by member + param.
+- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
+
+### Previous session — Implement `DualTextureEffect` and fix EasyGL vertex stride
+- **Added:** `include/Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp` and
+  `src/Microsoft/Xna/Framework/Graphics/DualTextureEffect.cpp`.
+- Derives from `Effect`, `IEffectMatrices`, `IEffectFog`.
+- Exposes: `World/View/Projection`, `DiffuseColor`, `Alpha`, `Texture`, `Texture2`,
+  `VertexColorEnabled`, and all fog properties.
+- `OnApply()`: dirty-flag lazy recomputation of WorldViewProj, fog vector, diffuse/alpha
+  packed color, and shader index (fog + vertexColor flags).
+- Both textures stored as direct member pointers (Texture2D does not inherit from Texture).
+- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
+
+### Previous session — Implement `EnvironmentMapEffect`
+- **Added:** `include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp` and
+  `src/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.cpp`.
+- Derives from `Effect`, `IEffectMatrices`, `IEffectLights`, `IEffectFog`.
+- Implements all XNA properties: `World/View/Projection`, `DiffuseColor`, `EmissiveColor`,
+  `Alpha`, `AmbientLightColor`, three `DirectionalLight` members, fog properties, `Texture`,
+  `EnvironmentMap` (TextureCube), `EnvironmentMapAmount`, `EnvironmentMapSpecular`, `FresnelFactor`.
+- `LightingEnabled` always returns `true`; setting to `false` throws `std::runtime_error`.
+- `OnApply()`: dirty-flag lazy recomputation of WorldViewProj, fog vector, world/world-inverse-
+  transpose, eye position, diffuse+emissive material color, one-light optimisation, shader index.
+- Texture/EnvironmentMap stored as direct member pointers (same pattern as AlphaTestEffect).
+- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
+
+### Previous session — Implement `AlphaTestEffect`
+- **Added:** `include/Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp` and
+  `src/Microsoft/Xna/Framework/Graphics/AlphaTestEffect.cpp`.
+- `AlphaTestEffect` derives from `Effect`, `IEffectMatrices`, `IEffectFog`.
+- Implements lazy dirty-flag recomputation of WorldViewProj, fog vector, diffuse/alpha color,
+  alpha test vector (all 8 CompareFunction modes), and shader index — matching FNA behavior.
+- **Note:** `Texture2D` in CNA does not inherit from `Texture`, so the EffectParameter texture
+  storage path is unusable; `Texture` property backed by a direct member pointer instead.
+- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly with no errors.
+
+### Previous session — Implement `SpriteEffect`
+- **Added:** `include/Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp` and
+  `src/Microsoft/Xna/Framework/Graphics/SpriteEffect.cpp`.
+- `SpriteEffect` derives from `Effect`, caches the `MatrixTransform` parameter, and in
+  `OnApply()` builds an orthographic off-center projection plus −0.5 px half-pixel offset
+  matrix matching FNA's behavior exactly.
+- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly with no errors.
 
 ### Commit `93946e5` — Port Graphics.PackedVector types and wire EasyGL graphics state
 - **Added:** 18 PackedVector header-only types under
@@ -135,12 +218,16 @@ silently misread vertex data. Fixing this requires the backend to read stride fr
 
 | Status | Issue |
 |--------|-------|
-| incomplete | Stock effects `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `SpriteEffect` — not implemented |
+| done | `SpriteEffect` — implemented (orthographic projection matrix for SpriteBatch) |
+| done | `AlphaTestEffect` — implemented (alpha test vector + fog + WVP, all CompareFunction modes) |
+| done | `EnvironmentMapEffect` — implemented (env map, fresnel, specular, lighting matrices, fog, one-light opt.) |
+| done | `DualTextureEffect` — implemented (two-texture blend, fog, vertex color, diffuse/alpha) |
+| done | `SkinnedEffect` — implemented (72 bones, weights 1/2/4, lighting matrices, perPixel/oneLight shader index) |
 | incomplete | `OcclusionQuery::Begin()/End()` — stub, always returns `isComplete_=false, pixelCount_=0` |
 | incomplete | `Model::Draw` — no effect binding, does nothing useful |
 | incomplete | `SpriteFont` — header only, no glyph rendering |
-| incomplete | `SpriteBatch::Begin(SpriteSortMode, BlendState)` — ignores `BlendState` |
-| confirmed bug | EasyGL `IVertexBufferBackend` always uses 16-byte stride VAO layout, breaks any vertex type other than `VertexPositionColor` |
+| done | `SpriteBatch::Begin(SpriteSortMode, BlendState)` — forwards `BlendState` to `GraphicsDevice::setBlendStateProperty` |
+| done | EasyGL vertex buffer stride — `ApplyLayout(stride)` configures VAO for all four built-in vertex types; `VertexBuffer::SetData` overloads added for all types |
 | incomplete | `DrawUserIndexedPrimitives` — throws `std::runtime_error` |
 | incomplete | Vulkan / BGFX backends — `ApplyBlendState / ApplyDepthStencilState / ApplyRasterizerState` are no-ops |
 | incomplete | `FillMode::WireFrame` silently ignored (OpenGL ES limitation) |
@@ -229,49 +316,19 @@ cmake --build cmake-build-debug
 
 ## 8. Next smallest tasks
 
-### Task 1 — Implement `SpriteEffect`
-**Goal:** Port `SpriteEffect` (XNA internal effect used by SpriteBatch) from FNA.
-**Files:** `include/.../Graphics/SpriteEffect.hpp`, `src/.../Graphics/SpriteEffect.cpp`.
-**Reference:** `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/SpriteEffect.cs`
-**Verify:** `cmake --build cmake-build-debug --target CNA`
+### ~~Task 1 — Implement `SpriteEffect`~~ **DONE**
 
-### Task 2 — Implement `AlphaTestEffect`
-**Goal:** Port `AlphaTestEffect` from FNA — alpha-reference blending effect.
-**Files:** `include/.../Graphics/AlphaTestEffect.hpp`, `src/.../Graphics/AlphaTestEffect.cpp`.
-**Reference:** FNA `StockEffects/AlphaTestEffect.cs`
-**Verify:** `cmake --build cmake-build-debug --target CNA`
+### ~~Task 2 — Implement `AlphaTestEffect`~~ **DONE**
 
-### Task 3 — Implement `EnvironmentMapEffect`
-**Goal:** Port `EnvironmentMapEffect` — single texture + environment map + fog.
-**Files:** `include/.../Graphics/EnvironmentMapEffect.hpp`, `src/.../EnvironmentMapEffect.cpp`.
-**Reference:** FNA `StockEffects/EnvironmentMapEffect.cs`
-**Verify:** `cmake --build cmake-build-debug --target CNA`
+### ~~Task 3 — Implement `EnvironmentMapEffect`~~ **DONE**
 
-### Task 4 — Implement `DualTextureEffect`
-**Goal:** Port `DualTextureEffect` — two-texture blending effect.
-**Files:** `include/.../Graphics/DualTextureEffect.hpp`, `src/.../DualTextureEffect.cpp`.
-**Reference:** FNA `StockEffects/DualTextureEffect.cs`
-**Verify:** `cmake --build cmake-build-debug --target CNA`
+### ~~Task 4 — Implement `DualTextureEffect`~~ **DONE**
 
-### Task 5 — Implement `SkinnedEffect`
-**Goal:** Port `SkinnedEffect` — skinned mesh effect with up to 72 bone matrices.
-**Files:** `include/.../Graphics/SkinnedEffect.hpp`, `src/.../SkinnedEffect.cpp`.
-**Reference:** FNA `StockEffects/SkinnedEffect.cs`
-**Verify:** `cmake --build cmake-build-debug --target CNA`
+### ~~Task 5 — Implement `SkinnedEffect`~~ **DONE**
 
-### Task 6 — Fix EasyGL vertex buffer stride
-**Goal:** Make `EasyGLVertexBufferBackend::SetData` configure the VAO layout from
-`stride_in_bytes` rather than hard-coding 16 bytes. This unblocks `VertexPositionColorTexture`
-and `VertexPositionNormalTexture` in 3D rendering.
-**Files:** `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` —
-`EasyGLVertexBufferBackend::InitializeLayout()` and `SetData()`.
-**Verify:** Manual draw with `VertexPositionColorTexture` in EasyGL demo.
+### ~~Task 6 — Fix EasyGL vertex buffer stride~~ **DONE**
 
-### Task 7 — Wire `SpriteBatch::Begin(SpriteSortMode, BlendState)` to backend
-**Goal:** Forward `BlendState` to `GraphicsDevice::setBlendStateProperty` so that
-`Begin(SpriteSortMode::Immediate, BlendState::Additive)` actually applies the blend mode.
-**Files:** `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`
-**Verify:** `cmake --build cmake-build-debug --target CNA`
+### ~~Task 7 — Wire `SpriteBatch::Begin(SpriteSortMode, BlendState)` to backend~~ **DONE**
 
 ---
 
@@ -300,15 +357,11 @@ and `VertexPositionNormalTexture` in 3D rendering.
 ```
 Read NEXT.md first to understand the current state of the CNA project.
 
-The next task is Task 1 from section 8: implement SpriteEffect in CNA.
-
-Steps:
-1. Read the FNA reference: /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/SpriteEffect.cs
-2. Read the existing Effect base class: include/Microsoft/Xna/Framework/Graphics/Effect.hpp
-3. Create include/Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp and
-   src/Microsoft/Xna/Framework/Graphics/SpriteEffect.cpp following CLAUDE.md rules.
-4. Build: cmake --build cmake-build-debug --target CNA
-5. Fix any errors, then update NEXT.md to reflect the completed task.
-
-Do not refactor any unrelated code. Do not add features beyond what SpriteEffect requires.
+Tasks 1–7 from section 8 are all complete. There is no pre-defined Task 8 yet.
+Consult the "Known bugs and limitations" table in section 5 for the next best target.
+Good candidates (incomplete items):
+- OcclusionQuery::Begin()/End() — stub-only, always returns isComplete_=false
+- SpriteFont — header only, no glyph rendering
+- DrawUserIndexedPrimitives — throws std::runtime_error
+- Model::Draw — no effect binding
 ```

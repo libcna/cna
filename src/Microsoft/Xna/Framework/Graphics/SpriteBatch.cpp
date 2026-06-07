@@ -10,6 +10,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     SpriteBatch::SpriteBatch(GraphicsDevice& graphicsDevice)
         : backend_(graphicsDevice.GetBackend().CreateSpriteBatch()),
+          graphicsDevice_(&graphicsDevice),
           begun(false)
     {
     }
@@ -33,7 +34,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state)
     {
         (void)sprite_sort_mode;
-        (void)blend_state;
+        if (graphicsDevice_)
+            graphicsDevice_->setBlendStateProperty(blend_state);
         Begin();
     }
 

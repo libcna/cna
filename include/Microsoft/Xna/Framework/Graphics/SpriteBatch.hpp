@@ -45,6 +45,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     private:
         std::unique_ptr<ISpriteBatchBackend> backend_;
+        GraphicsDevice* graphicsDevice_ = nullptr;
         bool begun = false;
 
     public:

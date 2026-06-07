@@ -713,14 +713,55 @@ void main()
     {
         vbo.create();
         vao.create();
-        // Layout for VertexPositionColor: vec3 position (offset 0) + 4xUByte color (offset 12).
-        // Total stride is 16 bytes (sizeof(VertexPositionColor)).
+        // Attribute layout is configured lazily in ApplyLayout() once stride is known.
+    }
+
+    void EasyGLVertexBufferBackend::ApplyLayout(std::size_t stride)
+    {
+        const int s = static_cast<int>(stride);
         vao.bind();
         vbo.bind(::easygl::BufferTarget::Array);
-        vao.enable_attribute(0);
-        vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, 16, (void*)0);
-        vao.enable_attribute(1);
-        vao.set_attribute_pointer(1, 4, ::easygl::DataType::UnsignedByte, true, 16, (void*)12);
+        switch (stride)
+        {
+        case 16:
+            // VertexPositionColor (packed): float3 position + ubyte4 color
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)12);
+            break;
+        case 20:
+            // VertexPositionTexture (packed): float3 position + float2 texcoord
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 2, ::easygl::DataType::Float, false, s, (void*)12);
+            break;
+        case 24:
+            // VertexPositionColorTexture (packed): float3 position + ubyte4 color + float2 texcoord
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)16);
+            break;
+        case 32:
+            // VertexPositionNormalTexture (packed): float3 position + float3 normal + float2 texcoord
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)24);
+            break;
+        default:
+            // Unknown layout: bind position-only as a safe fallback
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            CNA_RENDER_LOG("ApplyLayout: unknown stride=" << stride << ", using position-only fallback");
+            break;
+        }
         vao.unbind();
     }
 
@@ -730,7 +771,7 @@ void main()
     {
         InitializeLayout();
         if (registry_) registry_->add(this);
-        CNA_RENDER_LOG("VertexBuffer created: capacity=" << capacity << " stride=16");
+        CNA_RENDER_LOG("VertexBuffer created: capacity=" << capacity);
     }
 
     EasyGLVertexBufferBackend::~EasyGLVertexBufferBackend()
@@ -751,6 +792,7 @@ void main()
         {
             vbo.bind(::easygl::BufferTarget::Array);
             vbo.set_data(::easygl::BufferTarget::Array, cpu_data_.data(), cpu_data_.size());
+            ApplyLayout(stride_in_bytes_);
         }
     }
 
@@ -763,6 +805,7 @@ void main()
         cpu_data_.assign(bytes, bytes + byte_count);
         vbo.bind(::easygl::BufferTarget::Array);
         vbo.set_data(::easygl::BufferTarget::Array, data, byte_count);
+        ApplyLayout(stride_in_bytes_);
         CNA_RENDER_LOG("VertexBuffer SetData: count=" << count << " stride=" << stride_in_bytes
             << " bytes=" << byte_count);
     }

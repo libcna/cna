@@ -4,6 +4,9 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
@@ -67,8 +70,10 @@ namespace Microsoft::Xna::Framework::Graphics
         VertexBuffer(const VertexBuffer&) = delete;
         VertexBuffer& operator=(const VertexBuffer&) = delete;
 
-        /** Uploads `count` vertices into the buffer (replaces previous content). */
         void SetData(const VertexPositionColor* vertices, int count);
+        void SetData(const VertexPositionColorTexture* vertices, int count);
+        void SetData(const VertexPositionNormalTexture* vertices, int count);
+        void SetData(const VertexPositionTexture* vertices, int count);
 
         /** Number of vertices currently stored. */
         [[nodiscard]] int VertexCount() const;

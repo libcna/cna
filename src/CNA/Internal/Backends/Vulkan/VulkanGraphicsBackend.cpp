@@ -396,6 +396,7 @@ namespace CNA::Internal::Backends::Vulkan
                                             std::size_t stride_in_bytes)
     {
         vertexCount_ = vertex_count;
+        stride_      = stride_in_bytes;
         std::memcpy(mappedPtr_, data, vertex_count * stride_in_bytes);
     }
 
@@ -472,6 +473,7 @@ namespace CNA::Internal::Backends::Vulkan
         CreateDescriptorPool();
         CreatePipeline2D();
         CreateSpriteBuffers();
+        CreateFrame3DBuffers();
         initialized_ = true;
         SDL_Log("[Vulkan] Backend initialised");
     }
@@ -497,12 +499,16 @@ namespace CNA::Internal::Backends::Vulkan
         liveVertexBuffers_.clear();
         for (auto* ib : liveIndexBuffers_)  { ib->ReleaseVulkanResources(); ib->DisconnectOwner(); }
         liveIndexBuffers_.clear();
-        // Backend-owned sprite buffers.
+        // Backend-owned sprite buffers + per-frame 3D buffers.
         for (int i = 0; i < MaxFramesInFlight; ++i) {
             if (spriteVB_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, spriteVB_[i], nullptr);    spriteVB_[i]    = VK_NULL_HANDLE; }
             if (spriteVBMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, spriteVBMem_[i], nullptr);    spriteVBMem_[i] = VK_NULL_HANDLE; }
             if (spriteIB_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, spriteIB_[i], nullptr);    spriteIB_[i]    = VK_NULL_HANDLE; }
             if (spriteIBMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, spriteIBMem_[i], nullptr);    spriteIBMem_[i] = VK_NULL_HANDLE; }
+            if (frame3DVB_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, frame3DVB_[i], nullptr);   frame3DVB_[i]    = VK_NULL_HANDLE; }
+            if (frame3DVBMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, frame3DVBMem_[i], nullptr);   frame3DVBMem_[i] = VK_NULL_HANDLE; }
+            if (frame3DIB_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, frame3DIB_[i], nullptr);   frame3DIB_[i]    = VK_NULL_HANDLE; }
+            if (frame3DIBMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, frame3DIBMem_[i], nullptr);   frame3DIBMem_[i] = VK_NULL_HANDLE; }
         }
 
         // Step 3: destroy image views, images, and memory.
@@ -1350,6 +1356,18 @@ namespace CNA::Internal::Backends::Vulkan
         }
     }
 
+    void VulkanGraphicsBackend::CreateFrame3DBuffers()
+    {
+        for (int i = 0; i < MaxFramesInFlight; ++i) {
+            CreateBuffer(kFrame3DVBSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                frame3DVB_[i], frame3DVBMem_[i], &frame3DVBPtr_[i]);
+            CreateBuffer(kFrame3DIBSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                frame3DIB_[i], frame3DIBMem_[i], &frame3DIBPtr_[i]);
+        }
+    }
+
     // =========================================================================
     // Memory / resource helpers
     // =========================================================================
@@ -1537,8 +1555,21 @@ namespace CNA::Internal::Backends::Vulkan
         activeBatches_.clear();
 
         // ----- 3D draws -----
+        // Upload all pending vertex/index data into this frame's ring buffers, then draw.
         VkPipeline lastPipeline3D = VK_NULL_HANDLE;
+        VkDeviceSize vbOffset3D = 0;
+        VkDeviceSize ibOffset3D = 0;
         for (const auto& draw : pending3D_) {
+            if (draw.vbData.empty()) continue;
+            if (vbOffset3D + draw.vbData.size() > kFrame3DVBSize) continue; // overflow guard
+            if (!draw.ibData.empty() && ibOffset3D + draw.ibData.size() > kFrame3DIBSize) continue;
+
+            std::memcpy(static_cast<uint8_t*>(frame3DVBPtr_[currentFrame_]) + vbOffset3D,
+                        draw.vbData.data(), draw.vbData.size());
+            if (!draw.ibData.empty())
+                std::memcpy(static_cast<uint8_t*>(frame3DIBPtr_[currentFrame_]) + ibOffset3D,
+                            draw.ibData.data(), draw.ibData.size());
+
             VkPipeline pipe = GetOrCreatePipeline3D(draw.topology,
                                                     draw.depthTest, draw.depthWrite, draw.blend);
             if (pipe != lastPipeline3D) {
@@ -1546,14 +1577,15 @@ namespace CNA::Internal::Backends::Vulkan
                 lastPipeline3D = pipe;
             }
             vkCmdPushConstants(cb, pipelineLayout3D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, draw.mvp);
-            VkDeviceSize off = 0;
-            vkCmdBindVertexBuffers(cb, 0, 1, &draw.vb, &off);
-            if (draw.ib != VK_NULL_HANDLE) {
-                vkCmdBindIndexBuffer(cb, draw.ib, 0, VK_INDEX_TYPE_UINT16);
+            vkCmdBindVertexBuffers(cb, 0, 1, &frame3DVB_[currentFrame_], &vbOffset3D);
+            if (!draw.ibData.empty()) {
+                vkCmdBindIndexBuffer(cb, frame3DIB_[currentFrame_], ibOffset3D, VK_INDEX_TYPE_UINT16);
                 vkCmdDrawIndexed(cb, draw.drawCount, 1, 0, 0, 0);
+                ibOffset3D += static_cast<VkDeviceSize>(draw.ibData.size());
             } else {
                 vkCmdDraw(cb, draw.drawCount, 1, 0, 0);
             }
+            vbOffset3D += static_cast<VkDeviceSize>(draw.vbData.size());
         }
         pending3D_.clear();
 
@@ -1654,17 +1686,23 @@ namespace CNA::Internal::Backends::Vulkan
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
     {
-        const Matrix wvp = world * view * projection;
+        const auto& vulkanVB = static_cast<const VulkanVertexBufferBackend&>(vb);
+        uint32_t drawCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        std::size_t stride = vulkanVB.GetStride() > 0 ? vulkanVB.GetStride() : 16;
+
         Pending3DDraw d{};
+        const Matrix wvp = world * view * projection;
         wvp.ToColumnMajor(d.mvp);
-        d.vb         = static_cast<const VulkanVertexBufferBackend&>(vb).GetBuffer();
-        d.ib         = VK_NULL_HANDLE;
+
+        d.vbData.resize(drawCount * stride);
+        std::memcpy(d.vbData.data(), vulkanVB.GetMappedPtr(), drawCount * stride);
+
         d.topology   = ToVkTopology(primitive);
-        d.drawCount  = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        d.drawCount  = drawCount;
         d.depthTest  = depthTestEnabled_;
         d.depthWrite = depthWriteEnabled_;
         d.blend      = blendEnabled_;
-        pending3D_.push_back(d);
+        pending3D_.push_back(std::move(d));
     }
 
     void VulkanGraphicsBackend::DrawIndexedColoredPrimitives(
@@ -1672,17 +1710,30 @@ namespace CNA::Internal::Backends::Vulkan
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
     {
-        const Matrix wvp = world * view * projection;
+        const auto& vulkanVB = static_cast<const VulkanVertexBufferBackend&>(vb);
+        const auto& vulkanIB = static_cast<const VulkanIndexBufferBackend&>(ib);
+        uint32_t indexCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        std::size_t stride  = vulkanVB.GetStride() > 0 ? vulkanVB.GetStride() : 16;
+        int vertexCount     = vulkanVB.GetVertexCount();
+
         Pending3DDraw d{};
+        const Matrix wvp = world * view * projection;
         wvp.ToColumnMajor(d.mvp);
-        d.vb         = static_cast<const VulkanVertexBufferBackend&>(vb).GetBuffer();
-        d.ib         = static_cast<const VulkanIndexBufferBackend&>(ib).GetBuffer();
+
+        d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
+        std::memcpy(d.vbData.data(), vulkanVB.GetMappedPtr(),
+                    static_cast<std::size_t>(vertexCount) * stride);
+
+        d.ibData.resize(static_cast<std::size_t>(indexCount) * sizeof(uint16_t));
+        std::memcpy(d.ibData.data(), vulkanIB.GetMappedPtr(),
+                    static_cast<std::size_t>(indexCount) * sizeof(uint16_t));
+
         d.topology   = ToVkTopology(primitive);
-        d.drawCount  = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        d.drawCount  = indexCount;
         d.depthTest  = depthTestEnabled_;
         d.depthWrite = depthWriteEnabled_;
         d.blend      = blendEnabled_;
-        pending3D_.push_back(d);
+        pending3D_.push_back(std::move(d));
     }
 
 } // namespace CNA::Internal::Backends::Vulkan

@@ -104,8 +104,10 @@ namespace CNA::Internal::Backends::Vulkan
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         int  GetVertexCount() const override { return vertexCount_; }
 
-        VkBuffer GetBuffer()     const { return buffer_; }
-        int      GetCapacity()   const { return capacity_; }
+        VkBuffer    GetBuffer()    const { return buffer_; }
+        int         GetCapacity()  const { return capacity_; }
+        const void* GetMappedPtr() const { return mappedPtr_; }
+        std::size_t GetStride()    const { return stride_; }
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
@@ -116,6 +118,7 @@ namespace CNA::Internal::Backends::Vulkan
         void*                   mappedPtr_   = nullptr;
         int                     capacity_    = 0;
         int                     vertexCount_ = 0;
+        std::size_t             stride_      = 0;
         VulkanGraphicsBackend*  owner_       = nullptr;
     };
 
@@ -132,7 +135,8 @@ namespace CNA::Internal::Backends::Vulkan
         void SetData16(const void* data, int index_count) override;
         int  GetIndexCount() const override { return indexCount_; }
 
-        VkBuffer GetBuffer() const { return buffer_; }
+        VkBuffer    GetBuffer()    const { return buffer_; }
+        const void* GetMappedPtr() const { return mappedPtr_; }
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
@@ -254,12 +258,23 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VulkanVertexBufferBackend*> liveVertexBuffers_;
         std::vector<VulkanIndexBufferBackend*>  liveIndexBuffers_;
 
-        // --- Per-frame accumulated draw data (cleared in Present) ---
+        // --- Per-frame 3D dynamic geometry buffers ---
+        // Vertex/index data is copied to CPU at draw time, then uploaded here after fence wait.
+        static constexpr VkDeviceSize kFrame3DVBSize = 4 * 1024 * 1024;  // 4 MB
+        static constexpr VkDeviceSize kFrame3DIBSize = 1 * 1024 * 1024;  // 1 MB
+        std::array<VkBuffer,       MaxFramesInFlight> frame3DVB_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> frame3DVBMem_ = {};
+        std::array<void*,          MaxFramesInFlight> frame3DVBPtr_ = {};
+        std::array<VkBuffer,       MaxFramesInFlight> frame3DIB_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> frame3DIBMem_ = {};
+        std::array<void*,          MaxFramesInFlight> frame3DIBPtr_ = {};
+
+        // --- Per-frame accumulated draw data (cleared in RecordCommandBuffer) ---
         struct Pending3DDraw {
-            VkBuffer            vb;
-            VkBuffer            ib;          // VK_NULL_HANDLE = non-indexed
+            std::vector<uint8_t> vbData;     // copied vertex bytes (stride 16)
+            std::vector<uint8_t> ibData;     // copied index bytes (uint16), empty = non-indexed
             VkPrimitiveTopology topology;
-            uint32_t            drawCount;   // vertex or index count
+            uint32_t            drawCount;   // vertex or index count to submit
             float               mvp[16];
             bool                depthTest;
             bool                depthWrite;
@@ -298,6 +313,7 @@ namespace CNA::Internal::Backends::Vulkan
         void       CleanupDepthResources();
         VkPipeline GetOrCreatePipeline3D(VkPrimitiveTopology, bool depthTest, bool depthWrite, bool blend);
         void CreateSpriteBuffers();
+        void CreateFrame3DBuffers();
 
         // ---- Swapchain lifecycle ----
         void RecreateSwapchain();

@@ -83,12 +83,15 @@ namespace CNA::Internal::Backends::EasyGL
     };
 
     /**
-     * @brief EasyGL-backed `VertexPositionColor` vertex buffer.
+     * @brief EasyGL-backed vertex buffer.
      *
-     * Owns a `::easygl::Buffer` (GL VBO) and a `::easygl::VertexArray`
-     * pre-configured for the position+color layout.
+     * Owns a GL VBO and VAO. The VAO attribute layout is configured
+     * dynamically in ApplyLayout() based on the stride passed to SetData(),
+     * supporting all four built-in XNA vertex types.
      *
-     * @note Status: IMPLEMENTED for `VertexPositionColor`.
+     * @note Status: IMPLEMENTED for stride 16/20/24/32 (VertexPositionColor,
+     *       VertexPositionTexture, VertexPositionColorTexture,
+     *       VertexPositionNormalTexture).
      */
     class EasyGLVertexBufferBackend : public IVertexBufferBackend, public ::easygl::RecoverableResource
     {
@@ -108,6 +111,7 @@ namespace CNA::Internal::Backends::EasyGL
 
     private:
         void InitializeLayout();
+        void ApplyLayout(std::size_t stride);
         ::easygl::ResourceRegistry* registry_ = nullptr;
         std::vector<uint8_t> cpu_data_;
         std::size_t stride_in_bytes_ = 0;

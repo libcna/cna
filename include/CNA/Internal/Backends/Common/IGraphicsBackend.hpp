@@ -28,14 +28,15 @@ namespace CNA::Internal::Backends
     using ImageData = CNA::Internal::Graphics::ImageData;
 
     /**
-     * @brief Backend handle for a vertex buffer of `VertexPositionColor` data.
+     * @brief Backend handle for a vertex buffer.
      *
      * Owned by `Microsoft::Xna::Framework::Graphics::VertexBuffer`. The
      * concrete type is backend-specific (e.g. an OpenGL VBO+VAO pair) and
      * intentionally hidden from the public XNA-like API.
      *
-     * @note Status: PARTIAL. Only vertex layouts compatible with
-     *       `VertexPositionColor` are supported.
+     * @note Status: IMPLEMENTED for VertexPositionColor (stride 16),
+     *       VertexPositionTexture (20), VertexPositionColorTexture (24),
+     *       and VertexPositionNormalTexture (32) on the EasyGL backend.
      */
     class IVertexBufferBackend
     {
