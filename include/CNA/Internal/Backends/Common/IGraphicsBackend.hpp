@@ -100,6 +100,18 @@ namespace CNA::Internal::Backends
         virtual SDL_Texture* GetNativeTexture() const = 0;
         /// Replaces texture pixels in-place. stride = row bytes (width * 4 for RGBA).
         virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
+        /// Binds the underlying GL texture handle (no-op on non-GL backends).
+        virtual void BindGL() const {}
+    };
+
+    /// Backend handle for a 2D render target (off-screen FBO on EasyGL).
+    class IRenderTargetBackend : public ITextureBackend
+    {
+    public:
+        /// Bind the FBO so subsequent draws go to this render target.
+        virtual void BindAsRenderTarget() = 0;
+        /// Unbind and restore the default framebuffer (back buffer).
+        virtual void UnbindAsRenderTarget() = 0;
     };
 
     class ISpriteBatchBackend
@@ -174,6 +186,14 @@ namespace CNA::Internal::Backends
         /// Creates a backend occlusion query object. Returns nullptr on
         /// backends that do not support hardware occlusion queries.
         virtual std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() { return nullptr; }
+
+        /// Creates an off-screen FBO-backed render target. Returns nullptr on
+        /// backends that do not support render targets.
+        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) { return nullptr; }
+
+        /// Activates the given render target (binds its FBO). Pass nullptr to
+        /// restore the default back buffer.
+        virtual void SetRenderTarget2D(IRenderTargetBackend* rt) {}
 
         // ---- Graphics state ----
 

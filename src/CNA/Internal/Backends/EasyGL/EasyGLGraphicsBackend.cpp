@@ -136,6 +136,82 @@ namespace CNA::Internal::Backends::EasyGL
                              image_data_.pixels.data());
     }
 
+    void EasyGLTextureBackend::BindGL() const
+    {
+        texture.bind(::easygl::TextureTarget::Texture2D);
+    }
+
+    // --- EasyGLRenderTargetBackend ---
+
+    EasyGLRenderTargetBackend::EasyGLRenderTargetBackend(int w, int h, bool hasDepth,
+                                                          ::easygl::ResourceRegistry* registry)
+        : width_(w), height_(h), hasDepth_(hasDepth), registry_(registry)
+    {
+        CreateResources();
+        if (registry_) registry_->add(this);
+    }
+
+    EasyGLRenderTargetBackend::~EasyGLRenderTargetBackend()
+    {
+        if (registry_) registry_->remove(this);
+    }
+
+    void EasyGLRenderTargetBackend::CreateResources()
+    {
+        colorTex_.create();
+        colorTex_.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                               ::metagl::InternalFormat::Rgba8,
+                               width_, height_,
+                               ::metagl::PixelFormat::Rgba,
+                               ::metagl::PixelType::UnsignedByte,
+                               nullptr);
+
+        fbo_.create();
+        fbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                               ::metagl::FramebufferAttachment::Color0,
+                               ::easygl::TextureTarget::Texture2D,
+                               colorTex_.native_handle(), 0);
+
+        if (hasDepth_)
+        {
+            depthRbo_.create();
+            depthRbo_.bind();
+            depthRbo_.set_storage(::metagl::InternalFormat::DepthComponent24, width_, height_);
+            fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                     ::metagl::FramebufferAttachment::Depth,
+                                     depthRbo_.native_handle());
+        }
+
+        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
+    void EasyGLRenderTargetBackend::BindAsRenderTarget()
+    {
+        fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
+    void EasyGLRenderTargetBackend::UnbindAsRenderTarget()
+    {
+        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
+    void EasyGLRenderTargetBackend::BindGL() const
+    {
+        colorTex_.bind(::easygl::TextureTarget::Texture2D);
+    }
+
+    void EasyGLRenderTargetBackend::release_gl_handle_only()
+    {
+        fbo_.reset_handle_no_gl();
+        colorTex_.reset_handle_no_gl();
+        depthRbo_.reset_handle_no_gl();
+    }
+
+    void EasyGLRenderTargetBackend::recreate_gl_resource()
+    {
+        CreateResources();
+    }
+
     // --- EasyGLSpriteBatchBackend ---
 
     EasyGLSpriteBatchBackend::EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry,
@@ -308,7 +384,7 @@ void main()
         };
         program_.set_uniform_matrix4(program_.uniform_location("projection"), ortho);
 
-        current_texture_->texture.bind(::easygl::TextureTarget::Texture2D);
+        current_texture_->BindGL();
 
         vbo_.bind(::easygl::BufferTarget::Array);
         vbo_.set_data(::easygl::BufferTarget::Array,
@@ -338,8 +414,9 @@ void main()
 
     void EasyGLSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
     {
-        auto& glTex = static_cast<const EasyGLTextureBackend&>(texture);
-        Draw(texture, Rectangle((int)x, (int)y, glTex.width, glTex.height), Rectangle(0, 0, glTex.width, glTex.height),
+        const int w = texture.GetWidth();
+        const int h = texture.GetHeight();
+        Draw(texture, Rectangle((int)x, (int)y, w, h), Rectangle(0, 0, w, h),
              Microsoft::Xna::Framework::Color::White);
     }
 
@@ -362,17 +439,18 @@ void main()
     {
         if (!begun) throw std::runtime_error("Draw called before Begin()");
 
-        auto& glTex = static_cast<const EasyGLTextureBackend&>(texture);
-
         // Flush pending batch if texture changes
-        if (current_texture_ != nullptr && current_texture_ != &glTex)
+        if (current_texture_ != nullptr && current_texture_ != &texture)
             FlushBatch();
-        current_texture_ = &glTex;
+        current_texture_ = &texture;
 
-        float u1 = (float)sourceRectangle.X / (float)glTex.width;
-        float v1 = (float)sourceRectangle.Y / (float)glTex.height;
-        float u2 = (float)(sourceRectangle.X + sourceRectangle.Width) / (float)glTex.width;
-        float v2 = (float)(sourceRectangle.Y + sourceRectangle.Height) / (float)glTex.height;
+        const float texW = static_cast<float>(texture.GetWidth());
+        const float texH = static_cast<float>(texture.GetHeight());
+
+        float u1 = (float)sourceRectangle.X / texW;
+        float v1 = (float)sourceRectangle.Y / texH;
+        float u2 = (float)(sourceRectangle.X + sourceRectangle.Width)  / texW;
+        float v2 = (float)(sourceRectangle.Y + sourceRectangle.Height) / texH;
 
         u1 = std::clamp(u1, 0.0f, 1.0f);
         v1 = std::clamp(v1, 0.0f, 1.0f);
@@ -621,6 +699,19 @@ void main()
     std::unique_ptr<IOcclusionQueryBackend> EasyGLGraphicsBackend::CreateOcclusionQuery()
     {
         return std::make_unique<EasyGLOcclusionQueryBackend>(&registry_);
+    }
+
+    std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth)
+    {
+        return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, &registry_);
+    }
+
+    void EasyGLGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt)
+            rt->BindAsRenderTarget();
+        else
+            ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
     }
 
     namespace
@@ -1165,8 +1256,7 @@ void main()
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_texture, 0);
             if (params.texture0)
-                static_cast<const EasyGLTextureBackend*>(params.texture0)->texture
-                    .bind(::easygl::TextureTarget::Texture2D);
+                params.texture0->BindGL();
             else
                 default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
         }

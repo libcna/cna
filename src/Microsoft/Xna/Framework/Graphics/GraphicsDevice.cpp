@@ -845,10 +845,10 @@ namespace Microsoft::Xna::Framework::Graphics
         Reset(presentationParameters, adapter_);
     }
 
-    void GraphicsDevice::SetRenderTarget(RenderTarget2D* /*renderTarget*/)
+    void GraphicsDevice::SetRenderTarget(RenderTarget2D* renderTarget)
     {
-        // Render target switching is not yet implemented in CNA backends.
-        // Calling SetRenderTarget(nullptr) restores the back buffer (no-op here).
+        if (backend_)
+            backend_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetBackend() : nullptr);
     }
 
     void GraphicsDevice::SetRenderTarget(RenderTargetCube* /*renderTarget*/, CubeMapFace /*cubeMapFace*/)

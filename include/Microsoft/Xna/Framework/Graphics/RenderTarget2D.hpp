@@ -1,10 +1,14 @@
 #pragma once
 
+#include <memory>
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IRenderTarget.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "CNA/CNAHelper.hpp"
+
+namespace CNA::Internal::Backends { class IRenderTargetBackend; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -33,6 +37,10 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] int getMultiSampleCountProperty() const override;
         [[nodiscard]] SurfaceFormat getFormatProperty() const;
 
+        /// Returns the backend render target handle. Returns nullptr if the
+        /// backend does not support off-screen rendering.
+        NOXNA [[nodiscard]] CNA::Internal::Backends::IRenderTargetBackend* GetRenderTargetBackend() const;
+
     private:
         int width_;
         int height_;
@@ -41,5 +49,7 @@ namespace Microsoft::Xna::Framework::Graphics
         DepthFormat depthFormat_;
         int multiSampleCount_;
         RenderTargetUsage usage_;
+
+        std::unique_ptr<CNA::Internal::Backends::IRenderTargetBackend> rtBackend_;
     };
 }

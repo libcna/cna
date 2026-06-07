@@ -23,12 +23,43 @@ namespace CNA::Internal::Backends::EasyGL
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
+        void BindGL() const override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
 
     private:
         ImageData image_data_;
+        ::easygl::ResourceRegistry* registry_ = nullptr;
+    };
+
+    /// EasyGL render target: off-screen FBO with a color texture and optional depth renderbuffer.
+    class EasyGLRenderTargetBackend : public IRenderTargetBackend, public ::easygl::RecoverableResource
+    {
+    public:
+        EasyGLRenderTargetBackend(int w, int h, bool hasDepth, ::easygl::ResourceRegistry* registry);
+        ~EasyGLRenderTargetBackend() override;
+
+        int GetWidth()  const override { return width_; }
+        int GetHeight() const override { return height_; }
+        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+        void BindGL() const override;
+
+        void BindAsRenderTarget()   override;
+        void UnbindAsRenderTarget() override;
+
+        void release_gl_handle_only() override;
+        void recreate_gl_resource()   override;
+
+    private:
+        void CreateResources();
+
+        ::easygl::Framebuffer  fbo_;
+        ::easygl::Texture      colorTex_;
+        ::easygl::Renderbuffer depthRbo_;
+        int  width_    = 0;
+        int  height_   = 0;
+        bool hasDepth_ = false;
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
@@ -70,7 +101,7 @@ namespace CNA::Internal::Backends::EasyGL
         // flushed in one draw call. A flush also occurs when the texture changes.
         std::vector<Vertex>   pending_vertices_;
         std::vector<uint16_t> pending_indices_;
-        const EasyGLTextureBackend* current_texture_ = nullptr;
+        const ITextureBackend* current_texture_ = nullptr;
 
     public:
         explicit EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry,
@@ -231,6 +262,8 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 

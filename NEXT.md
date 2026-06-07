@@ -83,7 +83,7 @@ wiring.
 | `Texture2D::SaveAsJpeg` | Not implemented. |
 | `Texture2D::GetData` with mip level / rectangle overload | Only the flat `GetData(Color*, startIndex, count)` overload is implemented (reads CPU copy). The `GetData(int level, Rectangle?, ...)` overload is missing. |
 | `SpriteBatch` matrix transform / custom effect | `Begin(sortMode, blendState, effect, transformMatrix)` overloads not yet declared. The common `transformMatrix` parameter (for camera/zoom) is missing. |
-| `RenderTarget2D` backend wiring | `GraphicsDevice::SetRenderTarget` is declared but `RenderTarget2D` does not hook into EasyGL/Vulkan FBO. Off-screen rendering does not work. |
+| `RenderTarget2D` Vulkan backend | EasyGL FBO is wired and works. The Vulkan backend still returns `nullptr` from `CreateRenderTarget2D` (no-op). |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
 | Vulkan / BGFX 3D draw | Vulkan backend has state (blend/depth/cull) but no real 3D draw call path. BGFX throws on all 3D calls. |
 | Model asset loading | No pipeline to load a `Model` from a file; `Model::Draw` is complete but models must be constructed manually via the NOXNA constructor. |
@@ -136,18 +136,31 @@ wiring.
 - Sort order: `BackToFront` → `stable_sort` descending layerDepth; `FrontToBack` → ascending; `Texture` → by texture pointer; `Deferred` → submission order; `Immediate` → no queue, direct flush per call.
 - Build: both backends clean.
 
-### Task 18 — `RenderTarget2D` EasyGL backend wiring
+### ~~Task 18 — `RenderTarget2D` EasyGL backend wiring~~ **DONE**
 
-**Goal:** make off-screen rendering work on the EasyGL backend.
+- Added `virtual void BindGL() const {}` to `ITextureBackend` (all static_casts removed).
+- Added `IRenderTargetBackend : public ITextureBackend` with `BindAsRenderTarget()` / `UnbindAsRenderTarget()`.
+- Added `CreateRenderTarget2D(w, h, hasDepth)` and `SetRenderTarget2D(rt)` to `IGraphicsBackend` (default no-op).
+- Implemented `EasyGLRenderTargetBackend`: FBO + color texture (RGBA8) + optional depth renderbuffer (DepthComponent24).
+- Fixed 3 `static_cast<EasyGLTextureBackend>` sites in `EasyGLGraphicsBackend.cpp` to use virtual `BindGL()` / `GetWidth()` / `GetHeight()`.
+- `EasyGLSpriteBatchBackend::current_texture_` type widened from `const EasyGLTextureBackend*` to `const ITextureBackend*`.
+- `RenderTarget2D` now owns `unique_ptr<IRenderTargetBackend> rtBackend_`, created in its constructor.
+- `GraphicsDevice::SetRenderTarget(RenderTarget2D*)` calls `backend_->SetRenderTarget2D(...)`.
+- Build: both `cmake-build-easygl` and `cmake-build-vulkan` — clean.
 
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/RenderTarget2D.cs`
+### Task 19 — `SpriteBatch::Begin` transform matrix and custom effect overloads
+
+**Goal:** add the missing `Begin(sortMode, blendState, effect, transformMatrix)` overloads so a
+2D camera / zoom transform can be applied to a sprite batch.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/SpriteBatch.cs`
 
 Steps:
-1. Add `IRenderTargetBackend` (or extend `ITextureBackend`) with `Bind()` / `Unbind()`.
-2. Implement `EasyGLRenderTargetBackend` — creates OpenGL ES FBO + color attachment texture
-   + optional depth renderbuffer.
-3. Wire `GraphicsDevice::SetRenderTarget(RenderTarget2D*)` to call `Bind()` on the backend
-   and restore the default framebuffer on `SetRenderTarget(nullptr)`.
+1. Add `Effect* customEffect_` and `Matrix transformMatrix_` fields to `SpriteBatch`.
+2. Add `Begin(SpriteSortMode, BlendState, SamplerState*, DepthStencilState*, RasterizerState*, Effect*, Matrix)` overload (full XNA signature).
+3. In `EasyGLSpriteBatchBackend::FlushBatch` pass the projection matrix through the transform:
+   `ortho = ortho * transformMatrix` (or upload as a separate uniform).
+4. Forward `customEffect_` through the backend if set (may require a new `ISpriteBatchBackend::SetCustomEffect` hook).
 
 ---
 

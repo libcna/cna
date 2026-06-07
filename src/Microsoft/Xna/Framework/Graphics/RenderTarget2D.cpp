@@ -1,7 +1,12 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Backends::IRenderTargetBackend;
+
     RenderTarget2D::RenderTarget2D(GraphicsDevice& device, int width, int height)
         : RenderTarget2D(device, width, height, false, SurfaceFormat::Color, DepthFormat::None)
     {
@@ -24,6 +29,8 @@ namespace Microsoft::Xna::Framework::Graphics
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)
     {
+        const bool hasDepth = (preferredDepthFormat != DepthFormat::None);
+        rtBackend_ = device.GetBackend().CreateRenderTarget2D(width, height, hasDepth);
     }
 
     int RenderTarget2D::getWidthProperty() const { return width_; }
@@ -33,4 +40,9 @@ namespace Microsoft::Xna::Framework::Graphics
     DepthFormat RenderTarget2D::getDepthStencilFormatProperty() const { return depthFormat_; }
     int RenderTarget2D::getMultiSampleCountProperty() const { return multiSampleCount_; }
     SurfaceFormat RenderTarget2D::getFormatProperty() const { return format_; }
+
+    IRenderTargetBackend* RenderTarget2D::GetRenderTargetBackend() const
+    {
+        return rtBackend_.get();
+    }
 }
