@@ -4,6 +4,7 @@ cmake-build-debug/*
 cmake-build-web/*
 .junie/guide.md
 cmake-build-vulkan/*
+cmake-build-easygl/*
 .sdl-prebuilt/
 
 
