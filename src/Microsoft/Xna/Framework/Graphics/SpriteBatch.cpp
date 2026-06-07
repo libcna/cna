@@ -6,6 +6,9 @@
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -31,25 +34,60 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin()
     {
-        if (backend_)
-        {
-            backend_->Begin();
-            begun = true;
-            sortMode_ = SpriteSortMode::Deferred;
-            spriteQueue_.clear();
-        }
+        Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr, nullptr,
+              nullptr, Matrix::getIdentityProperty());
     }
 
     void SpriteBatch::Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state)
     {
+        Begin(sprite_sort_mode, blend_state, nullptr, nullptr, nullptr, nullptr,
+              Matrix::getIdentityProperty());
+    }
+
+    void SpriteBatch::Begin(SpriteSortMode sortMode,
+                            BlendState blendState,
+                            SamplerState* samplerState,
+                            DepthStencilState* depthStencilState,
+                            RasterizerState* rasterizerState)
+    {
+        Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState,
+              nullptr, Matrix::getIdentityProperty());
+    }
+
+    void SpriteBatch::Begin(SpriteSortMode sortMode,
+                            BlendState blendState,
+                            SamplerState* samplerState,
+                            DepthStencilState* depthStencilState,
+                            RasterizerState* rasterizerState,
+                            Effect* effect)
+    {
+        Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState,
+              effect, Matrix::getIdentityProperty());
+    }
+
+    void SpriteBatch::Begin(SpriteSortMode sortMode,
+                            BlendState blendState,
+                            SamplerState* /*samplerState*/,
+                            DepthStencilState* /*depthStencilState*/,
+                            RasterizerState* /*rasterizerState*/,
+                            Effect* effect,
+                            Matrix transformMatrix)
+    {
+        if (begun)
+            throw std::runtime_error("Begin has been called before calling End.");
+
         if (graphicsDevice_)
-            graphicsDevice_->setBlendStateProperty(blend_state);
+            graphicsDevice_->setBlendStateProperty(blendState);
+
+        customEffect_    = effect;
+        transformMatrix_ = transformMatrix;
 
         if (backend_)
         {
+            backend_->SetTransformMatrix(transformMatrix_);
             backend_->Begin();
-            begun = true;
-            sortMode_ = sprite_sort_mode;
+            begun     = true;
+            sortMode_ = sortMode;
             spriteQueue_.clear();
         }
     }
@@ -61,6 +99,7 @@ namespace Microsoft::Xna::Framework::Graphics
             flushBatch();
         backend_->End();
         begun = false;
+        customEffect_ = nullptr;
     }
 
     // -----------------------------------------------------------------------

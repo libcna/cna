@@ -120,6 +120,9 @@ namespace CNA::Internal::Backends
         virtual ~ISpriteBatchBackend() = default;
         virtual void Begin() = 0;
         virtual void End() = 0;
+        /// Sets the transform matrix applied on top of the 2D ortho projection.
+        /// Must be called before the first Draw of each Begin/End block.
+        virtual void SetTransformMatrix(const Matrix& m) {}
         virtual void Draw(const ITextureBackend& texture, float x, float y) = 0;
         virtual void Draw(const ITextureBackend& texture,
                           const Rectangle& destinationRectangle,

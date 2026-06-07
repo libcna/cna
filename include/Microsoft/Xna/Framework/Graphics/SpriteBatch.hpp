@@ -4,9 +4,13 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -15,6 +19,7 @@ struct SDL_Renderer;
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    class Effect;
     class GraphicsDevice;
     class SpriteFont;
 }
@@ -46,7 +51,9 @@ namespace Microsoft::Xna::Framework::Graphics
         std::unique_ptr<ISpriteBatchBackend> backend_;
         GraphicsDevice* graphicsDevice_ = nullptr;
         bool begun = false;
-        SpriteSortMode sortMode_ = SpriteSortMode::Deferred;
+        SpriteSortMode sortMode_    = SpriteSortMode::Deferred;
+        Matrix transformMatrix_     = Matrix::getIdentityProperty();
+        Effect* customEffect_       = nullptr;
         std::vector<SpriteInfo> spriteQueue_;
 
         void pushSprite(const Texture2D& texture,
@@ -86,6 +93,30 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param blend_state Blend state.
          */
         void Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state);
+
+        /// Begins a sprite batch with state objects (transform defaults to Identity).
+        void Begin(SpriteSortMode sortMode,
+                   BlendState blendState,
+                   SamplerState* samplerState,
+                   DepthStencilState* depthStencilState,
+                   RasterizerState* rasterizerState);
+
+        /// Begins a sprite batch with a custom effect (transform defaults to Identity).
+        void Begin(SpriteSortMode sortMode,
+                   BlendState blendState,
+                   SamplerState* samplerState,
+                   DepthStencilState* depthStencilState,
+                   RasterizerState* rasterizerState,
+                   Effect* effect);
+
+        /// Full XNA Begin overload with transform matrix.
+        void Begin(SpriteSortMode sortMode,
+                   BlendState blendState,
+                   SamplerState* samplerState,
+                   DepthStencilState* depthStencilState,
+                   RasterizerState* rasterizerState,
+                   Effect* effect,
+                   Matrix transformMatrix);
 
         /**
          * @brief Ends the current sprite batch.

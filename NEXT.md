@@ -82,7 +82,7 @@ wiring.
 |------|--------|
 | `Texture2D::SaveAsJpeg` | Not implemented. |
 | `Texture2D::GetData` with mip level / rectangle overload | Only the flat `GetData(Color*, startIndex, count)` overload is implemented (reads CPU copy). The `GetData(int level, Rectangle?, ...)` overload is missing. |
-| `SpriteBatch` matrix transform / custom effect | `Begin(sortMode, blendState, effect, transformMatrix)` overloads not yet declared. The common `transformMatrix` parameter (for camera/zoom) is missing. |
+| `SpriteBatch` custom effect | `customEffect_` is stored and cleared in `Begin`/`End` but not yet forwarded to the EasyGL draw path. |
 | `RenderTarget2D` Vulkan backend | EasyGL FBO is wired and works. The Vulkan backend still returns `nullptr` from `CreateRenderTarget2D` (no-op). |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
 | Vulkan / BGFX 3D draw | Vulkan backend has state (blend/depth/cull) but no real 3D draw call path. BGFX throws on all 3D calls. |
@@ -148,19 +148,27 @@ wiring.
 - `GraphicsDevice::SetRenderTarget(RenderTarget2D*)` calls `backend_->SetRenderTarget2D(...)`.
 - Build: both `cmake-build-easygl` and `cmake-build-vulkan` — clean.
 
-### Task 19 — `SpriteBatch::Begin` transform matrix and custom effect overloads
+### ~~Task 19 — `SpriteBatch::Begin` transform matrix and custom effect overloads~~ **DONE**
 
-**Goal:** add the missing `Begin(sortMode, blendState, effect, transformMatrix)` overloads so a
-2D camera / zoom transform can be applied to a sprite batch.
+- All `Begin()` overloads now funnel to the full 7-arg XNA `Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState, effect, transformMatrix)`.
+- `Matrix transformMatrix_` and `Effect* customEffect_` fields added to `SpriteBatch`.
+- `ISpriteBatchBackend::SetTransformMatrix(const Matrix&)` added (default no-op); called from `Begin`.
+- `EasyGLSpriteBatchBackend`: `transform_` stored; `FlushBatch` now computes `Matrix::CreateOrthographicOffCenter(…) * transform_` instead of a hardcoded float array.
+- `customEffect_` stored and cleared per Begin/End cycle — forwarding to the draw path is Task 20.
+- Build: both backends clean.
 
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/SpriteBatch.cs`
+### Task 20 — `Texture2D::GetData` full overload + `SetData` with rectangle
+
+**Goal:** implement the missing `GetData<T>(int level, Rectangle?, T[], int, int)` overload that
+games use to read back texture data at a specific mip level and sub-rectangle.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs`
 
 Steps:
-1. Add `Effect* customEffect_` and `Matrix transformMatrix_` fields to `SpriteBatch`.
-2. Add `Begin(SpriteSortMode, BlendState, SamplerState*, DepthStencilState*, RasterizerState*, Effect*, Matrix)` overload (full XNA signature).
-3. In `EasyGLSpriteBatchBackend::FlushBatch` pass the projection matrix through the transform:
-   `ortho = ortho * transformMatrix` (or upload as a separate uniform).
-4. Forward `customEffect_` through the backend if set (may require a new `ISpriteBatchBackend::SetCustomEffect` hook).
+1. Add `GetData(int level, Rectangle* rect, Color* data, int startIndex, int elementCount)` overload.
+2. For mip level 0 with `rect == nullptr`, delegate to the existing flat `GetData`.
+3. For sub-rectangles, compute the pixel offset into `cpuPixels_` and copy the selected rows.
+4. Add the matching `SetData(int level, Rectangle*, const Color*, int, int)` overload that updates `cpuPixels_` and re-uploads to GPU.
 
 ---
 

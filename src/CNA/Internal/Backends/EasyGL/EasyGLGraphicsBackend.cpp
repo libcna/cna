@@ -242,6 +242,7 @@ namespace CNA::Internal::Backends::EasyGL
         pending_vertices_.clear();
         pending_indices_.clear();
         current_texture_ = nullptr;
+        transform_ = Matrix::getIdentityProperty();
         InitializeResources();
     }
 
@@ -348,6 +349,11 @@ void main()
         device_.set_blend_func(::easygl::BlendFactor::SrcAlpha, ::easygl::BlendFactor::OneMinusSrcAlpha);
     }
 
+    void EasyGLSpriteBatchBackend::SetTransformMatrix(const Matrix& m)
+    {
+        transform_ = m;
+    }
+
     void EasyGLSpriteBatchBackend::End()
     {
         FlushBatch();
@@ -376,12 +382,14 @@ void main()
             logW = vw;
             logH = vh;
         }
-        float ortho[16] = {
-            2.0f / logW, 0, 0, 0,
-            0, -2.0f / logH, 0, 0,
-            0, 0, -1, 0,
-            -1, 1, 0, 1
-        };
+
+        const Matrix orthoM = Matrix::CreateOrthographicOffCenter(
+            0.0f, static_cast<float>(logW),
+            static_cast<float>(logH), 0.0f,
+            -1.0f, 1.0f);
+        const Matrix combined = orthoM * transform_;
+        float ortho[16];
+        combined.ToColumnMajor(ortho);
         program_.set_uniform_matrix4(program_.uniform_location("projection"), ortho);
 
         current_texture_->BindGL();

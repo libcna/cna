@@ -102,6 +102,7 @@ namespace CNA::Internal::Backends::EasyGL
         std::vector<Vertex>   pending_vertices_;
         std::vector<uint16_t> pending_indices_;
         const ITextureBackend* current_texture_ = nullptr;
+        Matrix transform_ = Matrix::getIdentityProperty();
 
     public:
         explicit EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry,
@@ -110,6 +111,7 @@ namespace CNA::Internal::Backends::EasyGL
 
         void Begin() override;
         void End() override;
+        void SetTransformMatrix(const Matrix& m) override;
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,
                   const Rectangle& destinationRectangle,
