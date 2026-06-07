@@ -96,6 +96,53 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_   = device_->GetBackend().CreateTexture(img);
     }
 
+    void Texture2D::SetData(int level, const Rectangle* rect,
+                            const Color* data, int startIndex, int elementCount)
+    {
+        if (!data || elementCount <= 0)
+            throw std::invalid_argument("Texture2D::SetData: data must not be null");
+        if (startIndex < 0)
+            throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+        if (level != 0)
+            throw std::runtime_error("Texture2D::SetData: only mip level 0 is supported");
+
+        int x = 0, y = 0, w = width, h = height;
+        if (rect)
+        {
+            x = rect->X; y = rect->Y;
+            w = rect->Width; h = rect->Height;
+        }
+        if (startIndex + elementCount > w * h)
+            throw std::out_of_range("Texture2D::SetData: not enough elements for the requested region");
+
+        if (cpuPixels_.empty())
+            cpuPixels_.assign(static_cast<std::size_t>(width * height) * 4, 0);
+
+        for (int row = 0; row < h; ++row)
+        {
+            for (int col = 0; col < w; ++col)
+            {
+                const int src = startIndex + row * w + col;
+                const int dst = ((y + row) * width + (x + col)) * 4;
+                cpuPixels_[dst + 0] = data[src].getRProperty();
+                cpuPixels_[dst + 1] = data[src].getGProperty();
+                cpuPixels_[dst + 2] = data[src].getBProperty();
+                cpuPixels_[dst + 3] = data[src].getAProperty();
+            }
+        }
+
+        if (backend_)
+            backend_->UpdatePixels(cpuPixels_.data(), width * 4);
+        else if (device_)
+        {
+            ImageData img;
+            img.width  = width;
+            img.height = height;
+            img.pixels = cpuPixels_;
+            backend_   = device_->GetBackend().CreateTexture(img);
+        }
+    }
+
     void Texture2D::SetDataRGBA(const uint8_t* data, int pixelCount)
     {
         if (!backend_ || !data || pixelCount <= 0) return;
@@ -131,6 +178,43 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(Color* data, int elementCount) const
     {
         GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect,
+                            Color* data, int startIndex, int elementCount) const
+    {
+        if (!data || elementCount <= 0)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        if (level != 0)
+            throw std::runtime_error("Texture2D::GetData: only mip level 0 is supported");
+        if (cpuPixels_.empty())
+            throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
+
+        if (rect == nullptr)
+        {
+            GetData(data, startIndex, elementCount);
+            return;
+        }
+
+        const int x = rect->X, y = rect->Y, w = rect->Width, h = rect->Height;
+
+        if (x < 0 || y < 0 || x + w > width || y + h > height)
+            throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
+        if (startIndex + elementCount > w * h)
+            throw std::out_of_range("Texture2D::GetData: not enough room in data array");
+
+        for (int row = 0; row < h; ++row)
+        {
+            for (int col = 0; col < w; ++col)
+            {
+                const int src = ((y + row) * width + (x + col)) * 4;
+                const int dst = startIndex + row * w + col;
+                data[dst] = Color(cpuPixels_[src + 0],
+                                  cpuPixels_[src + 1],
+                                  cpuPixels_[src + 2],
+                                  cpuPixels_[src + 3]);
+            }
+        }
     }
 
     // -----------------------------------------------------------------------

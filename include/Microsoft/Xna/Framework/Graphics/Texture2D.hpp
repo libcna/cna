@@ -57,11 +57,17 @@ namespace Microsoft::Xna::Framework::Graphics
         /// XNA 4.0: Texture2D.SetData<Color>(Color[] data)
         void SetData(const Color* data, int elementCount);
 
+        /// XNA 4.0: Texture2D.SetData<Color>(int level, Rectangle? rect, Color[], int startIndex, int elementCount)
+        void SetData(int level, const Rectangle* rect, const Color* data, int startIndex, int elementCount);
+
         /// XNA 4.0: Texture2D.GetData<Color>(Color[] data, int startIndex, int elementCount)
         void GetData(Color* data, int startIndex, int elementCount) const;
 
         /// XNA 4.0: Texture2D.GetData<Color>(Color[] data)
         void GetData(Color* data, int elementCount) const;
+
+        /// XNA 4.0: Texture2D.GetData<Color>(int level, Rectangle? rect, Color[], int startIndex, int elementCount)
+        void GetData(int level, const Rectangle* rect, Color* data, int startIndex, int elementCount) const;
 
         /// XNA 4.0: Texture2D.FromStream(GraphicsDevice, Stream)
         static Texture2D FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream);

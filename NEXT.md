@@ -81,7 +81,7 @@ wiring.
 | Area | Status |
 |------|--------|
 | `Texture2D::SaveAsJpeg` | Not implemented. |
-| `Texture2D::GetData` with mip level / rectangle overload | Only the flat `GetData(Color*, startIndex, count)` overload is implemented (reads CPU copy). The `GetData(int level, Rectangle?, ...)` overload is missing. |
+| `Texture2D` mip levels > 0 | `GetData`/`SetData` only support mip level 0. `cpuPixels_` stores one level. |
 | `SpriteBatch` custom effect | `customEffect_` is stored and cleared in `Begin`/`End` but not yet forwarded to the EasyGL draw path. |
 | `RenderTarget2D` Vulkan backend | EasyGL FBO is wired and works. The Vulkan backend still returns `nullptr` from `CreateRenderTarget2D` (no-op). |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
@@ -157,18 +157,28 @@ wiring.
 - `customEffect_` stored and cleared per Begin/End cycle — forwarding to the draw path is Task 20.
 - Build: both backends clean.
 
-### Task 20 — `Texture2D::GetData` full overload + `SetData` with rectangle
+### ~~Task 20 — `Texture2D::GetData` full overload + `SetData` with rectangle~~ **DONE**
 
-**Goal:** implement the missing `GetData<T>(int level, Rectangle?, T[], int, int)` overload that
-games use to read back texture data at a specific mip level and sub-rectangle.
+- Added `GetData(int level, const Rectangle* rect, Color* data, int startIndex, int elementCount)`:
+  delegates to the flat overload when `rect == nullptr`, otherwise copies row-by-row from `cpuPixels_`.
+- Added `SetData(int level, const Rectangle* rect, const Color* data, int startIndex, int elementCount)`:
+  writes row-by-row into `cpuPixels_`, then calls `UpdatePixels` on the backend (or recreates the texture if no backend yet).
+- Both overloads throw `std::runtime_error` for `level != 0` (only mip 0 stored in `cpuPixels_`).
+- Build: both backends clean.
 
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs`
+### Task 21 — `DrawUserPrimitives` / `DrawUserIndexedPrimitives` with all vertex types
+
+**Goal:** extend `DrawUserPrimitives` and `DrawUserIndexedPrimitives` to accept all four vertex
+types (currently only `VertexPositionColor` is supported). Add 32-bit index support to
+`DrawUserIndexedPrimitives`.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/GraphicsDevice.cs`
 
 Steps:
-1. Add `GetData(int level, Rectangle* rect, Color* data, int startIndex, int elementCount)` overload.
-2. For mip level 0 with `rect == nullptr`, delegate to the existing flat `GetData`.
-3. For sub-rectangles, compute the pixel offset into `cpuPixels_` and copy the selected rows.
-4. Add the matching `SetData(int level, Rectangle*, const Color*, int, int)` overload that updates `cpuPixels_` and re-uploads to GPU.
+1. Inspect current `DrawUserPrimitives` and `DrawUserIndexedPrimitives` in `GraphicsDevice.cpp`.
+2. Extend them to forward the vertex stride to `DrawPrimitivesEx` / `DrawIndexedPrimitivesEx` with
+   the correct `GpuDrawParams` so textured/lit vertex types work.
+3. Add 32-bit index variant of `DrawUserIndexedPrimitives`.
 
 ---
 
