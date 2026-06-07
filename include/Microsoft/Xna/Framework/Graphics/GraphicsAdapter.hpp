@@ -109,7 +109,8 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class GraphicsAdapterFactory;
 
         GraphicsAdapter(SharpRuntime::intcs displayIndex, DisplayModeCollection modes, std::string name,
-                        std::string description);
+                        std::string description,
+                        SharpRuntime::intcs vendorId = 0, SharpRuntime::intcs deviceId = 0);
 
         SharpRuntime::intcs displayIndex_;
         DisplayModeCollection supportedDisplayModes_;
@@ -117,6 +118,10 @@ namespace Microsoft::Xna::Framework::Graphics
         std::string deviceName_;
         bool useNullDevice_;
         bool useReferenceDevice_;
+        SharpRuntime::intcs vendorId_;
+        SharpRuntime::intcs deviceId_;
+
+        static void queryPciIds(SharpRuntime::intcs& vendorId, SharpRuntime::intcs& deviceId);
 
         static std::vector<std::unique_ptr<GraphicsAdapter>> adapters_;
 

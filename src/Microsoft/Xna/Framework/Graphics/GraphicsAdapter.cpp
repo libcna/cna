@@ -5,6 +5,11 @@
 #include <stdexcept>
 #include <utility>
 
+#ifdef __linux__
+#include <fstream>
+#include <string>
+#endif
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     std::vector<std::unique_ptr<GraphicsAdapter>> GraphicsAdapter::adapters_;
@@ -74,15 +79,48 @@ namespace Microsoft::Xna::Framework::Graphics
         SharpRuntime::intcs displayIndex,
         DisplayModeCollection modes,
         std::string name,
-        std::string description
+        std::string description,
+        SharpRuntime::intcs vendorId,
+        SharpRuntime::intcs deviceId
     )
         : displayIndex_(displayIndex),
           supportedDisplayModes_(std::move(modes)),
           description_(std::move(description)),
           deviceName_(std::move(name)),
           useNullDevice_(false),
-          useReferenceDevice_(false)
+          useReferenceDevice_(false),
+          vendorId_(vendorId),
+          deviceId_(deviceId)
     {
+    }
+
+    void GraphicsAdapter::queryPciIds(SharpRuntime::intcs& vendorId, SharpRuntime::intcs& deviceId)
+    {
+        vendorId = 0;
+        deviceId = 0;
+#ifdef __linux__
+        // Try each DRM card slot in order; first readable one wins.
+        for (int card = 0; card < 4; ++card)
+        {
+            const std::string base = "/sys/class/drm/card" + std::to_string(card) + "/device/";
+            std::ifstream vf(base + "vendor");
+            std::ifstream df(base + "device");
+            if (!vf.is_open() || !df.is_open())
+                continue;
+            std::string vs, ds;
+            std::getline(vf, vs);
+            std::getline(df, ds);
+            if (vs.empty() || ds.empty())
+                continue;
+            try
+            {
+                vendorId = static_cast<SharpRuntime::intcs>(std::stoul(vs, nullptr, 16));
+                deviceId = static_cast<SharpRuntime::intcs>(std::stoul(ds, nullptr, 16));
+            }
+            catch (...) {}
+            break;
+        }
+#endif
     }
 
     DisplayMode GraphicsAdapter::getCurrentDisplayModeProperty() const
@@ -102,7 +140,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     SharpRuntime::intcs GraphicsAdapter::getDeviceIdProperty() const
     {
-        throw std::logic_error("GraphicsAdapter::DeviceId is not implemented for this backend.");
+        return deviceId_;
     }
 
     const std::string& GraphicsAdapter::getDeviceNameProperty() const
@@ -129,12 +167,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     SharpRuntime::intcs GraphicsAdapter::getRevisionProperty() const
     {
-        throw std::logic_error("GraphicsAdapter::Revision is not implemented for this backend.");
+        return 0;
     }
 
     SharpRuntime::intcs GraphicsAdapter::getSubSystemIdProperty() const
     {
-        throw std::logic_error("GraphicsAdapter::SubSystemId is not implemented for this backend.");
+        return 0;
     }
 
     bool GraphicsAdapter::getUseNullDeviceProperty() const
@@ -159,7 +197,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     SharpRuntime::intcs GraphicsAdapter::getVendorIdProperty() const
     {
-        throw std::logic_error("GraphicsAdapter::VendorId is not implemented for this backend.");
+        return vendorId_;
     }
 
     const std::vector<std::unique_ptr<GraphicsAdapter>>& GraphicsAdapter::getAdaptersProperty()
@@ -224,6 +262,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         adapters_.clear();
 
+        SharpRuntime::intcs vendorId = 0, deviceId = 0;
+        queryPciIds(vendorId, deviceId);
+
         int count = 0;
         SDL_DisplayID* displays = SDL_GetDisplays(&count);
 
@@ -234,7 +275,8 @@ namespace Microsoft::Xna::Framework::Graphics
                     0,
                     DisplayModeCollection({DisplayMode(800, 480, SurfaceFormat::Color)}),
                     "Default Display",
-                    "Default Display"
+                    "Default Display",
+                    vendorId, deviceId
                 )
             ));
             return;
@@ -243,12 +285,14 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < count; ++i)
         {
             const std::string name = getDisplayName(displays[i], i);
+            // All displays share the same GPU — pass PCI IDs to every adapter.
             adapters_.push_back(std::unique_ptr<GraphicsAdapter>(
                 new GraphicsAdapter(
                     i,
                     DisplayModeCollection(queryDisplayModes(i)),
                     name,
-                    name
+                    name,
+                    vendorId, deviceId
                 )
             ));
         }

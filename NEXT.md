@@ -87,7 +87,19 @@ content loading are the next major missing pieces.
 
 ## 3. Recent changes
 
-### Current session — Implement DrawUserIndexedPrimitives (Task 8)
+### Current session — Implement GraphicsAdapter PCI IDs (Task 9)
+- **Modified:** `GraphicsAdapter.hpp` — added private `vendorId_` / `deviceId_` members;
+  extended constructor signature to accept them; added `static queryPciIds()` declaration.
+- **Modified:** `GraphicsAdapter.cpp` — added `queryPciIds()` which on Linux reads
+  `/sys/class/drm/card{0..3}/device/vendor` and `device` (hex) into `vendorId`/`deviceId`;
+  falls back to 0 on other platforms or if the files are missing.
+  `AdaptersChanged()` calls `queryPciIds()` once and passes the result to every adapter
+  constructor (all displays share the same GPU).
+  `getDeviceIdProperty()` and `getVendorIdProperty()` now return stored members;
+  `getRevisionProperty()` and `getSubSystemIdProperty()` return 0 (not available via SDL3).
+- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
+
+### Previous session — Implement DrawUserIndexedPrimitives (Task 8)
 - **Modified:** `GraphicsDevice::DrawUserIndexedPrimitives` in `GraphicsDevice.cpp` — replaced
   unconditional `throw` with a real implementation:
   - Computes index count from `primitiveType` + `primitiveCount` (TriangleList×3, Strip+2, etc.)
@@ -241,7 +253,7 @@ silently misread vertex data. Fixing this requires the backend to read stride fr
 | done | `DrawUserIndexedPrimitives` — implemented: packs VertexPositionColor + 16-bit indices into temp buffers, calls `DrawIndexedColoredPrimitives` |
 | incomplete | Vulkan / BGFX backends — `ApplyBlendState / ApplyDepthStencilState / ApplyRasterizerState` are no-ops |
 | incomplete | `FillMode::WireFrame` silently ignored (OpenGL ES limitation) |
-| incomplete | `GraphicsAdapter` — `DeviceId`, `Revision`, `SubSystemId`, `VendorId` throw `std::logic_error` |
+| done | `GraphicsAdapter` — `VendorId`/`DeviceId` read from `/sys/class/drm/card*/device/` on Linux (fallback 0); `Revision`/`SubSystemId` return 0 (not available via SDL3) |
 | unknown | `IndexBuffer` — 32-bit index size (`IndexElementSize::ThirtyTwoBits`) is documented as partial |
 | needs verification | `EffectParameter::GetValueTexture2D/Texture3D/TextureCube` — pointer cast to `Texture*`, no type-safety guarantee |
 
