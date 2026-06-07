@@ -86,6 +86,29 @@ content loading are the next major missing pieces.
 
 ## 3. Recent changes
 
+### Current session — 32-bit IndexBuffer + EffectParameter texture fix (Task 14)
+- **`IndexBuffer`**: constructor for `ThirtyTwoBits` no longer throws; calls new
+  `CreateIndexBuffer32` factory instead of `CreateIndexBuffer16`. Added
+  `SetData(const uint32_t*, int)` overload. Updated header comment from PARTIAL to
+  fully implemented.
+- **`IIndexBufferBackend`**: added `SetData32` (default throws) and `IsThirtyTwoBit`
+  (default false). Added `CreateIndexBuffer32` to `IGraphicsBackend` (default delegates
+  to `CreateIndexBuffer16` so backends that don't need 32-bit compile unchanged).
+- **EasyGL**: `EasyGLIndexBufferBackend` gets a `thirtyTwoBit` flag, a `SetData32`
+  implementation, and `IsThirtyTwoBit()` override. `CreateIndexBuffer32` factory added.
+  `DrawIndexedColoredPrimitives` and `DrawIndexedPrimitivesEx` pass
+  `GL_UNSIGNED_INT` / `GL_UNSIGNED_SHORT` based on the flag.
+- **Vulkan**: `VulkanIndexBufferBackend` gets `thirtyTwoBit_`, `SetData32`, and
+  `IsThirtyTwoBit()`. `CreateIndexBuffer32` factory added (allocates `uint32_t`-sized
+  buffer). `Pending3DDraw` carries `VkIndexType indexType`; `RecordCommandBuffer` passes
+  it to `vkCmdBindIndexBuffer` replacing the hardcoded `VK_INDEX_TYPE_UINT16`.
+- **`EffectParameter`**: removed broken `dynamic_cast<Texture3D*>(textureData_)` /
+  `dynamic_cast<TextureCube*>(textureData_)` getters (Texture3D/TextureCube don't
+  inherit from Texture in CNA). Added separate `texture3DData_` and `textureCubeData_`
+  members. `GetValueTexture3D()`/`GetValueTextureCube()` return these directly.
+  `SetValue(Texture3D*)` and `SetValue(TextureCube*)` overloads added.
+- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
+
 ### Current session — Implement Vulkan graphics state (Task 13)
 - **Declared and implemented** `ApplyBlendState`, `ApplyDepthStencilState`, `ApplyRasterizerState`
   overrides in `VulkanGraphicsBackend`.
@@ -320,8 +343,8 @@ silently misread vertex data. Fixing this requires the backend to read stride fr
 | done | Vulkan backend — `ApplyBlendState` updates `blendEnabled_`; `ApplyDepthStencilState` updates `depthTestEnabled_`/`depthWriteEnabled_`; `ApplyRasterizerState` updates `cullMode_` (folded into pipeline key) |
 | incomplete | `FillMode::WireFrame` silently ignored (OpenGL ES limitation) |
 | done | `GraphicsAdapter` — `VendorId`/`DeviceId` read from `/sys/class/drm/card*/device/` on Linux (fallback 0); `Revision`/`SubSystemId` return 0 (not available via SDL3) |
-| unknown | `IndexBuffer` — 32-bit index size (`IndexElementSize::ThirtyTwoBits`) is documented as partial |
-| needs verification | `EffectParameter::GetValueTexture2D/Texture3D/TextureCube` — pointer cast to `Texture*`, no type-safety guarantee |
+| done | `IndexBuffer` — `ThirtyTwoBits` now supported: `CreateIndexBuffer32` factory on all backends; `SetData32` on EasyGL/Vulkan; EasyGL `draw_elements` uses `GL_UNSIGNED_INT`; Vulkan `vkCmdBindIndexBuffer` uses `VK_INDEX_TYPE_UINT32`; `IndexBuffer::SetData(uint32_t*)` overload added |
+| done | `EffectParameter::GetValueTexture3D/TextureCube` — fixed: separate `texture3DData_`/`textureCubeData_` fields replace the broken `dynamic_cast<>` from `Texture*`; `SetValue(Texture3D*)` and `SetValue(TextureCube*)` overloads added |
 
 ---
 

@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include <cstddef>
+#include <stdexcept>
 #include <string>
 #include <memory>
 #include <unordered_map>
@@ -58,17 +59,18 @@ namespace CNA::Internal::Backends
 
     /**
      * @brief Backend handle for a 16- or 32-bit index buffer.
-     *
-     * @note Status: PARTIAL. The minimal CNA 3D pipeline currently only
-     *       calls `IGraphicsBackend::DrawIndexedColoredPrimitives` with
-     *       16-bit indices.
      */
     class IIndexBufferBackend
     {
     public:
         virtual ~IIndexBufferBackend() = default;
         virtual void SetData16(const void* data, int index_count) = 0;
-        [[nodiscard]] virtual int GetIndexCount() const = 0;
+        virtual void SetData32(const void* data, int index_count)
+        {
+            throw std::runtime_error("SetData32 not supported by this backend");
+        }
+        [[nodiscard]] virtual int  GetIndexCount()   const = 0;
+        [[nodiscard]] virtual bool IsThirtyTwoBit()  const { return false; }
     };
 
     /**
@@ -218,6 +220,12 @@ namespace CNA::Internal::Backends
          * @brief Creates a backend-specific 16-bit index buffer.
          */
         virtual std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) = 0;
+        /// Creates a 32-bit index buffer. Default delegates to CreateIndexBuffer16 for
+        /// backends that do not yet support 32-bit indices.
+        virtual std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity)
+        {
+            return CreateIndexBuffer16(index_capacity);
+        }
 
         /**
          * @brief Draws colored primitives from `vb` using the supplied transform.

@@ -866,13 +866,15 @@ void main()
             << " bytes=" << byte_count);
     }
 
-    EasyGLIndexBufferBackend::EasyGLIndexBufferBackend(int index_capacity, ::easygl::ResourceRegistry* registry)
-        : capacity(index_capacity)
+    EasyGLIndexBufferBackend::EasyGLIndexBufferBackend(int index_capacity, bool is32bit,
+                                                       ::easygl::ResourceRegistry* registry)
+        : thirtyTwoBit(is32bit)
+        , capacity(index_capacity)
         , registry_(registry)
     {
         ibo.create();
         if (registry_) registry_->add(this);
-        CNA_RENDER_LOG("IndexBuffer created: capacity=" << capacity);
+        CNA_RENDER_LOG("IndexBuffer created: capacity=" << capacity << " 32bit=" << is32bit);
     }
 
     EasyGLIndexBufferBackend::~EasyGLIndexBufferBackend()
@@ -904,6 +906,17 @@ void main()
         ibo.bind(::easygl::BufferTarget::ElementArray);
         ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count);
         CNA_RENDER_LOG("IndexBuffer SetData16: count=" << count);
+    }
+
+    void EasyGLIndexBufferBackend::SetData32(const void* data, int count)
+    {
+        index_count = count;
+        const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint32_t);
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        cpu_data_.assign(bytes, bytes + byte_count);
+        ibo.bind(::easygl::BufferTarget::ElementArray);
+        ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count);
+        CNA_RENDER_LOG("IndexBuffer SetData32: count=" << count);
     }
 
     namespace
@@ -1201,7 +1214,12 @@ void main()
 
     std::unique_ptr<IIndexBufferBackend> EasyGLGraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, &registry_);
+        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, false, &registry_);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> EasyGLGraphicsBackend::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, true, &registry_);
     }
 
     void EasyGLGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb_in,
@@ -1257,7 +1275,9 @@ void main()
 
         vb.vao.bind();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
-        device.draw_elements(ToEasyGl(primitive), index_count, ::easygl::DataType::UnsignedShort, nullptr);
+        const auto idxType = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
+                                              : ::easygl::DataType::UnsignedShort;
+        device.draw_elements(ToEasyGl(primitive), index_count, idxType, nullptr);
         vb.vao.unbind();
     }
 
@@ -1306,7 +1326,9 @@ void main()
 
         vb.vao.bind();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
-        device.draw_elements(ToEasyGl(primitive), index_count, ::easygl::DataType::UnsignedShort, nullptr);
+        const auto idxType2 = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
+                                               : ::easygl::DataType::UnsignedShort;
+        device.draw_elements(ToEasyGl(primitive), index_count, idxType2, nullptr);
         vb.vao.unbind();
     }
 }

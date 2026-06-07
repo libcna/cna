@@ -404,11 +404,12 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanIndexBufferBackend
     // =========================================================================
 
-    VulkanIndexBufferBackend::VulkanIndexBufferBackend(int index_capacity,
+    VulkanIndexBufferBackend::VulkanIndexBufferBackend(int index_capacity, bool thirtyTwoBit,
                                                        VulkanGraphicsBackend* owner)
-        : capacity_(index_capacity), owner_(owner)
+        : capacity_(index_capacity), thirtyTwoBit_(thirtyTwoBit), owner_(owner)
     {
-        VkDeviceSize size = static_cast<VkDeviceSize>(index_capacity) * sizeof(uint16_t);
+        const std::size_t elemSize = thirtyTwoBit ? sizeof(uint32_t) : sizeof(uint16_t);
+        VkDeviceSize size = static_cast<VkDeviceSize>(index_capacity) * elemSize;
         owner_->CreateBuffer(size,
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -443,6 +444,12 @@ namespace CNA::Internal::Backends::Vulkan
     {
         indexCount_ = index_count;
         std::memcpy(mappedPtr_, data, static_cast<size_t>(index_count) * sizeof(uint16_t));
+    }
+
+    void VulkanIndexBufferBackend::SetData32(const void* data, int index_count)
+    {
+        indexCount_ = index_count;
+        std::memcpy(mappedPtr_, data, static_cast<size_t>(index_count) * sizeof(uint32_t));
     }
 
     // =========================================================================
@@ -1588,7 +1595,7 @@ namespace CNA::Internal::Backends::Vulkan
             vkCmdPushConstants(cb, pipelineLayout3D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, draw.mvp);
             vkCmdBindVertexBuffers(cb, 0, 1, &frame3DVB_[currentFrame_], &vbOffset3D);
             if (!draw.ibData.empty()) {
-                vkCmdBindIndexBuffer(cb, frame3DIB_[currentFrame_], ibOffset3D, VK_INDEX_TYPE_UINT16);
+                vkCmdBindIndexBuffer(cb, frame3DIB_[currentFrame_], ibOffset3D, draw.indexType);
                 vkCmdDrawIndexed(cb, draw.drawCount, 1, 0, 0, 0);
                 ibOffset3D += static_cast<VkDeviceSize>(draw.ibData.size());
             } else {
@@ -1673,7 +1680,14 @@ namespace CNA::Internal::Backends::Vulkan
 
     std::unique_ptr<IIndexBufferBackend> VulkanGraphicsBackend::CreateIndexBuffer16(int cap)
     {
-        auto ib = std::make_unique<VulkanIndexBufferBackend>(cap, this);
+        auto ib = std::make_unique<VulkanIndexBufferBackend>(cap, false, this);
+        liveIndexBuffers_.push_back(ib.get());
+        return ib;
+    }
+
+    std::unique_ptr<IIndexBufferBackend> VulkanGraphicsBackend::CreateIndexBuffer32(int cap)
+    {
+        auto ib = std::make_unique<VulkanIndexBufferBackend>(cap, true, this);
         liveIndexBuffers_.push_back(ib.get());
         return ib;
     }
@@ -1712,6 +1726,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.depthWrite = depthWriteEnabled_;
         d.blend      = blendEnabled_;
         d.cullMode   = cullMode_;
+        d.indexType  = VK_INDEX_TYPE_UINT16;  // non-indexed, not used
         pending3D_.push_back(std::move(d));
     }
 
@@ -1744,6 +1759,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.depthWrite = depthWriteEnabled_;
         d.blend      = blendEnabled_;
         d.cullMode   = cullMode_;
+        d.indexType  = vulkanIB.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         pending3D_.push_back(std::move(d));
     }
 

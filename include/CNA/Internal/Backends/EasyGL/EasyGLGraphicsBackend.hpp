@@ -149,10 +149,15 @@ namespace CNA::Internal::Backends::EasyGL
         int index_count = 0;
         int capacity = 0;
 
-        explicit EasyGLIndexBufferBackend(int index_capacity, ::easygl::ResourceRegistry* registry);
+        bool thirtyTwoBit = false;
+
+        explicit EasyGLIndexBufferBackend(int index_capacity, bool thirtyTwoBit,
+                                          ::easygl::ResourceRegistry* registry);
         ~EasyGLIndexBufferBackend() override;
         void SetData16(const void* data, int index_count) override;
-        int GetIndexCount() const override { return index_count; }
+        void SetData32(const void* data, int index_count) override;
+        int  GetIndexCount()  const override { return index_count; }
+        bool IsThirtyTwoBit() const override { return thirtyTwoBit; }
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
@@ -226,6 +231,8 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 
         void DebugSimulateContextLoss() override;
         void DebugRestoreContext() override;
@@ -243,7 +250,6 @@ namespace CNA::Internal::Backends::EasyGL
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
-        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;

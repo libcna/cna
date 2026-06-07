@@ -141,9 +141,9 @@ namespace Microsoft::Xna::Framework::Graphics
             r.push_back({floatData_[i * 4], floatData_[i * 4 + 1], floatData_[i * 4 + 2], floatData_[i * 4 + 3]});
         return r;
     }
-    Texture2D* EffectParameter::GetValueTexture2D() const { return texture2DData_; }
-    Texture3D* EffectParameter::GetValueTexture3D() const { return dynamic_cast<Texture3D*>(textureData_); }
-    TextureCube* EffectParameter::GetValueTextureCube() const { return dynamic_cast<TextureCube*>(textureData_); }
+    Texture2D*   EffectParameter::GetValueTexture2D()   const { return texture2DData_; }
+    Texture3D*   EffectParameter::GetValueTexture3D()   const { return texture3DData_; }
+    TextureCube* EffectParameter::GetValueTextureCube() const { return textureCubeData_; }
 
     // --- SetValue ---
     void EffectParameter::SetValue(bool value)      { intData_ = {value ? 1 : 0}; }
@@ -157,8 +157,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(float value)     { floatData_ = {value}; }
     void EffectParameter::SetValue(const std::vector<float>& v) { floatData_ = v; }
     void EffectParameter::SetValue(const std::string& v) { stringData_ = v; }
-    void EffectParameter::SetValue(Texture* v) { textureData_ = v; }
-    void EffectParameter::SetValue(Texture2D* v) { texture2DData_ = v; }
+    void EffectParameter::SetValue(Texture* v)      { textureData_     = v; }
+    void EffectParameter::SetValue(Texture2D* v)    { texture2DData_   = v; }
+    void EffectParameter::SetValue(Texture3D* v)    { texture3DData_   = v; }
+    void EffectParameter::SetValue(TextureCube* v)  { textureCubeData_ = v; }
 
     void EffectParameter::SetValue(const Matrix& m)
     {

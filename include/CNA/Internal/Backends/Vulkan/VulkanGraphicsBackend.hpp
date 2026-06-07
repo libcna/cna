@@ -129,11 +129,14 @@ namespace CNA::Internal::Backends::Vulkan
     class VulkanIndexBufferBackend : public IIndexBufferBackend
     {
     public:
-        explicit VulkanIndexBufferBackend(int index_capacity, VulkanGraphicsBackend* owner);
+        explicit VulkanIndexBufferBackend(int index_capacity, bool thirtyTwoBit,
+                                          VulkanGraphicsBackend* owner);
         ~VulkanIndexBufferBackend() override;
 
         void SetData16(const void* data, int index_count) override;
-        int  GetIndexCount() const override { return indexCount_; }
+        void SetData32(const void* data, int index_count) override;
+        int  GetIndexCount()  const override { return indexCount_; }
+        bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
         VkBuffer    GetBuffer()    const { return buffer_; }
         const void* GetMappedPtr() const { return mappedPtr_; }
@@ -142,12 +145,13 @@ namespace CNA::Internal::Backends::Vulkan
         void DisconnectOwner() { owner_ = nullptr; }
 
     private:
-        VkBuffer                buffer_     = VK_NULL_HANDLE;
-        VkDeviceMemory          memory_     = VK_NULL_HANDLE;
-        void*                   mappedPtr_  = nullptr;
-        int                     capacity_   = 0;
-        int                     indexCount_ = 0;
-        VulkanGraphicsBackend*  owner_      = nullptr;
+        VkBuffer                buffer_        = VK_NULL_HANDLE;
+        VkDeviceMemory          memory_        = VK_NULL_HANDLE;
+        void*                   mappedPtr_     = nullptr;
+        int                     capacity_      = 0;
+        int                     indexCount_    = 0;
+        bool                    thirtyTwoBit_  = false;
+        VulkanGraphicsBackend*  owner_         = nullptr;
     };
 
     // -------------------------------------------------------------------------
@@ -193,6 +197,7 @@ namespace CNA::Internal::Backends::Vulkan
         void SetDepthWriteEnabled(bool) override;
         std::unique_ptr<IVertexBufferBackend>  CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend>   CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferBackend>   CreateIndexBuffer32(int index_capacity) override;
         void DrawColoredPrimitives(const IVertexBufferBackend&,
                                    const Matrix&, const Matrix&, const Matrix&,
                                    PrimitiveType, int) override;
@@ -288,7 +293,8 @@ namespace CNA::Internal::Backends::Vulkan
             bool                depthTest;
             bool                depthWrite;
             bool                blend;
-            int                 cullMode;    // XNA CullMode: 0=None, 1=CW, 2=CCW
+            int                 cullMode;     // XNA CullMode: 0=None, 1=CW, 2=CCW
+            VkIndexType         indexType;    // VK_INDEX_TYPE_UINT16 or UINT32
         };
         std::vector<Pending3DDraw>                    pending3D_;
         std::vector<VulkanSpriteBatchBackend*>        activeBatches_;

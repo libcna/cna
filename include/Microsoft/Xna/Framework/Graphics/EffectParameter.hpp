@@ -86,6 +86,8 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetValue(const std::vector<Vector4>& value);
         void SetValue(Texture* value);
         void SetValue(Texture2D* value);
+        void SetValue(Texture3D* value);
+        void SetValue(TextureCube* value);
 
     private:
         std::string name_;
@@ -95,12 +97,15 @@ namespace Microsoft::Xna::Framework::Graphics
         EffectParameterClass paramClass_;
         EffectParameterType paramType_;
 
-        // Storage: raw float buffer for numeric types, string for string, pointer for textures
+        // Storage: raw float buffer for numeric types, string for string, pointer for textures.
+        // Texture2D/3D/TextureCube do NOT inherit from Texture in CNA, so each has its own slot.
         std::vector<float> floatData_;
         std::vector<int>   intData_;
         std::string        stringData_;
-        Texture*           textureData_ = nullptr;
-        Texture2D*         texture2DData_ = nullptr;
+        Texture*           textureData_     = nullptr;
+        Texture2D*         texture2DData_   = nullptr;
+        Texture3D*         texture3DData_   = nullptr;
+        TextureCube*       textureCubeData_ = nullptr;
 
         std::unique_ptr<EffectParameterCollection> elements_;
         std::unique_ptr<EffectParameterCollection> members_;
