@@ -104,6 +104,28 @@ namespace CNA::Internal::Backends
                           float layerDepth) = 0;
     };
 
+    /**
+     * @brief Per-draw effect parameters forwarded from the XNA effect layer
+     *        to the graphics backend.
+     *
+     * Populated by GraphicsDevice from the currently bound BasicEffect before
+     * each draw call so the backend can select and configure the appropriate
+     * GLSL shader variant.
+     */
+    struct GpuDrawParams
+    {
+        const ITextureBackend* texture0       = nullptr;      ///< Texture unit 0, or null
+        float diffuseColor[4]  = {1,1,1,1};                  ///< RGBA 0..1
+        float ambientColor[3]  = {0,0,0};                     ///< RGB 0..1
+        float light0Dir[3]     = {0,-1,0};                    ///< World-space, pre-normalized
+        float light0Diffuse[3] = {1,1,1};                     ///< RGB 0..1
+        float worldColMajor[16] = {                           ///< Column-major world matrix
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        bool textureEnabled      = false;
+        bool vertexColorEnabled  = true;
+        bool lightingEnabled     = false;
+    };
+
     class IGraphicsBackend
     {
     public:
@@ -207,6 +229,39 @@ namespace CNA::Internal::Backends
                                                   const Matrix& projection,
                                                   PrimitiveType primitive,
                                                   int primitiveCount) = 0;
+
+        /**
+         * @brief Effect-aware draw — selects the shader variant based on
+         *        vertex layout (derived from stride) and @p params.
+         *
+         * Default implementation falls back to DrawColoredPrimitives so
+         * backends that have not yet implemented this path still work.
+         */
+        virtual void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                                      const Matrix& world,
+                                      const Matrix& view,
+                                      const Matrix& projection,
+                                      PrimitiveType primitive,
+                                      int primitiveCount,
+                                      const GpuDrawParams& params)
+        {
+            DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
+        }
+
+        /**
+         * @brief Indexed counterpart of `DrawPrimitivesEx`.
+         */
+        virtual void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb,
+                                             const IIndexBufferBackend& ib,
+                                             const Matrix& world,
+                                             const Matrix& view,
+                                             const Matrix& projection,
+                                             PrimitiveType primitive,
+                                             int primitiveCount,
+                                             const GpuDrawParams& params)
+        {
+            DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
+        }
 
         // ---- Debug / testing ----
 

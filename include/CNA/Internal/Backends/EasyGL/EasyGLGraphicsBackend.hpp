@@ -105,6 +105,7 @@ namespace CNA::Internal::Backends::EasyGL
         ~EasyGLVertexBufferBackend() override;
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         int GetVertexCount() const override { return vertex_count; }
+        [[nodiscard]] std::size_t GetStride() const { return stride_in_bytes_; }
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
@@ -154,12 +155,36 @@ namespace CNA::Internal::Backends::EasyGL
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
 
-        // 3D pipeline state
-        ::easygl::Program program3d_;
-        int loc_world_view_projection_ = -1;
-        bool program3d_ready_ = false;
+        // 3D pipeline state — one program per vertex layout
+        struct Prog3D {
+            ::easygl::Program prog;
+            bool  ready      = false;
+            int loc_wvp      = -1;
+            int loc_normalmat= -1;  ///< mat3 upper-left of world (lit shader only)
+            int loc_diffuse  = -1;
+            int loc_ambient  = -1;
+            int loc_l0dir    = -1;
+            int loc_l0diff   = -1;
+            int loc_texture  = -1;
+            void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
+        };
+
+        Prog3D prog_colored_;       ///< stride=16: aPos + aColor
+        Prog3D prog_textured_;      ///< stride=20: aPos + aUV
+        Prog3D prog_col_textured_;  ///< stride=24: aPos + aColor + aUV
+        Prog3D prog_lit_textured_;  ///< stride=32: aPos + aNormal + aUV
+
+        ::easygl::Texture default_white_texture_;
+        bool default_white_texture_ready_ = false;
 
         void EnsureColored3DProgram();
+        void EnsureTextured3DProgram();
+        void EnsureColoredTextured3DProgram();
+        void EnsureLit3DProgram();
+        void EnsureDefaultWhiteTexture();
+        Prog3D& SelectProgram(std::size_t stride);
+        void BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
+                            const Matrix& projection, const GpuDrawParams& params);
 
     public:
         explicit EasyGLGraphicsBackend(SDL_Window* window,
@@ -206,5 +231,14 @@ namespace CNA::Internal::Backends::EasyGL
                                           const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb,
+                                     const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
     };
 }

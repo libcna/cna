@@ -2,6 +2,7 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -337,36 +338,65 @@ namespace Microsoft::Xna::Framework::Graphics
         SetIndexBuffer(indexBuffer);
     }
 
+    namespace
+    {
+        CNA::Internal::Backends::GpuDrawParams BuildGpuDrawParams(const BasicEffect* effect)
+        {
+            using namespace CNA::Internal::Backends;
+            GpuDrawParams p;
+            if (!effect) return p;
+
+            p.textureEnabled    = effect->getTextureEnabledProperty();
+            p.vertexColorEnabled = effect->VertexColorEnabled;
+            p.lightingEnabled   = effect->getLightingEnabledProperty();
+
+            if (p.textureEnabled)
+            {
+                const Texture2D* tex = effect->getTextureProperty();
+                if (tex) p.texture0 = &tex->GetBackend();
+            }
+
+            const Vector3 dc = effect->getDiffuseColorProperty();
+            const float   al = effect->getAlphaProperty();
+            p.diffuseColor[0] = dc.X; p.diffuseColor[1] = dc.Y;
+            p.diffuseColor[2] = dc.Z; p.diffuseColor[3] = al;
+
+            const Vector3 ac = effect->getAmbientLightColorProperty();
+            p.ambientColor[0] = ac.X; p.ambientColor[1] = ac.Y; p.ambientColor[2] = ac.Z;
+
+            const Vector3 ld = effect->DirectionalLight0.getDiffuseColorProperty();
+            const Vector3 dir = effect->DirectionalLight0.getDirectionProperty();
+            p.light0Dir[0]    = dir.X; p.light0Dir[1]    = dir.Y; p.light0Dir[2]    = dir.Z;
+            p.light0Diffuse[0]= ld.X;  p.light0Diffuse[1]= ld.Y;  p.light0Diffuse[2]= ld.Z;
+
+            effect->World.ToColumnMajor(p.worldColMajor);
+            return p;
+        }
+    }
+
     void GraphicsDevice::DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount)
     {
         if (backend_ == nullptr)
-        {
             return;
-        }
 
         if (currentVertexBuffer_ == nullptr)
-        {
             throw std::runtime_error("GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
-        }
 
         if (currentEffect_ == nullptr)
-        {
             throw std::runtime_error("GraphicsDevice::DrawPrimitives: no effect has been applied.");
-        }
 
         if (vertexStart != 0)
-        {
             throw std::runtime_error(
                 "GraphicsDevice::DrawPrimitives: non-zero vertexStart is not supported by the current backend.");
-        }
 
-        backend_->DrawColoredPrimitives(
+        backend_->DrawPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
             currentEffect_->World,
             currentEffect_->View,
             currentEffect_->Projection,
             primitiveType,
-            primitiveCount
+            primitiveCount,
+            BuildGpuDrawParams(currentEffect_)
         );
     }
 
@@ -383,45 +413,34 @@ namespace Microsoft::Xna::Framework::Graphics
         (void)numVertices;
 
         if (backend_ == nullptr)
-        {
             return;
-        }
 
         if (currentVertexBuffer_ == nullptr)
-        {
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
-        }
 
         if (currentIndexBuffer_ == nullptr)
-        {
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound.");
-        }
 
         if (currentEffect_ == nullptr)
-        {
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no effect has been applied.");
-        }
 
         if (baseVertex != 0)
-        {
             throw std::runtime_error(
                 "GraphicsDevice::DrawIndexedPrimitives: non-zero baseVertex is not supported by the current backend.");
-        }
 
         if (startIndex != 0)
-        {
             throw std::runtime_error(
                 "GraphicsDevice::DrawIndexedPrimitives: non-zero startIndex is not supported by the current backend.");
-        }
 
-        backend_->DrawIndexedColoredPrimitives(
+        backend_->DrawIndexedPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
             currentIndexBuffer_->GetBackend(),
             currentEffect_->World,
             currentEffect_->View,
             currentEffect_->Projection,
             primitiveType,
-            primitiveCount
+            primitiveCount,
+            BuildGpuDrawParams(currentEffect_)
         );
     }
 
@@ -606,11 +625,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         const int width = presentationParameters_.getBackBufferWidthProperty() > 0
                               ? presentationParameters_.getBackBufferWidthProperty()
-                              : 800;
+                              : 1024;
 
         const int height = presentationParameters_.getBackBufferHeightProperty() > 0
                                ? presentationParameters_.getBackBufferHeightProperty()
-                               : 480;
+                               : 768;
 
         window_ = SDL_CreateWindow("Game", width, height, windowFlags);
         if (window_ == nullptr)

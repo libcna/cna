@@ -99,6 +99,29 @@ content loading are the next major missing pieces.
   `getRevisionProperty()` and `getSubSystemIdProperty()` return 0 (not available via SDL3).
 - Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
 
+### Current session — EasyGL shader pipeline (Task 10)
+- **Modified:** `IGraphicsBackend.hpp` — added `GpuDrawParams` struct (texture0, diffuseColor,
+  ambientColor, light0Dir, light0Diffuse, worldColMajor, textureEnabled, vertexColorEnabled,
+  lightingEnabled) + `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` virtual methods with default
+  fallback to colored-only path.
+- **Modified:** `EasyGLGraphicsBackend.hpp` — replaced single `program3d_` + raw fields with
+  `Prog3D` struct (prog + ready + uniform locs); added 4 program instances (colored/textured/
+  col+textured/lit+textured), default_white_texture_, helper method declarations.
+- **Modified:** `EasyGLGraphicsBackend.cpp` — added `CompileAndLink` helper; implemented
+  `EnsureTextured3DProgram`, `EnsureColoredTextured3DProgram`, `EnsureLit3DProgram`,
+  `EnsureDefaultWhiteTexture`, `SelectProgram(stride)`, `BindDrawParams`; implemented
+  `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` that dispatch to the correct shader by stride;
+  updated context-loss handler to reset all 4 programs.
+- **Modified:** `GraphicsDevice.cpp` — added `BuildGpuDrawParams(BasicEffect*)` helper that
+  reads texture, diffuseColor, alpha, ambientColor, light0 from the current effect; updated
+  `DrawPrimitives`/`DrawIndexedPrimitives` to call `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`.
+- **Shader variants by stride:**
+  - 16 → colored (aPos + aColor → vColor)
+  - 20 → textured (aPos + aUV → texture × uDiffuseColor)
+  - 24 → col+textured (aPos + aColor + aUV → texture × vColor)
+  - 32 → lit+textured (aPos + aNormal + aUV → Phong: ambient + NdotL × light0Diffuse)
+- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
+
 ### Previous session — Implement DrawUserIndexedPrimitives (Task 8)
 - **Modified:** `GraphicsDevice::DrawUserIndexedPrimitives` in `GraphicsDevice.cpp` — replaced
   unconditional `throw` with a real implementation:
