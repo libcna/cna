@@ -143,6 +143,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void Dispose() override;
 
+        // --- Back-buffer readback ---
+        /// XNA 4.0: GraphicsDevice.GetBackBufferData<Color>(Color[])
+        void GetBackBufferData(Color* data, int elementCount);
+        /// XNA 4.0: GraphicsDevice.GetBackBufferData<Color>(Color[], int startIndex, int elementCount)
+        void GetBackBufferData(Color* data, int startIndex, int elementCount);
+        /// XNA 4.0: GraphicsDevice.GetBackBufferData<Color>(Rectangle? rect, Color[], int startIndex, int elementCount)
+        void GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount);
+
         // --- Render targets ---
         void SetRenderTarget(RenderTarget2D* renderTarget);
         void SetRenderTarget(RenderTargetCube* renderTarget, CubeMapFace cubeMapFace);

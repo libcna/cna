@@ -1078,6 +1078,39 @@ namespace Microsoft::Xna::Framework::Graphics
         Reset(presentationParameters, adapter_);
     }
 
+    void GraphicsDevice::GetBackBufferData(Color* data, int elementCount)
+    {
+        GetBackBufferData(nullptr, data, 0, elementCount);
+    }
+
+    void GraphicsDevice::GetBackBufferData(Color* data, int startIndex, int elementCount)
+    {
+        GetBackBufferData(nullptr, data, startIndex, elementCount);
+    }
+
+    void GraphicsDevice::GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount)
+    {
+        int x, y, w, h;
+        if (rect)
+        {
+            x = rect->X;
+            y = rect->Y;
+            w = rect->Width;
+            h = rect->Height;
+        }
+        else
+        {
+            x = 0;
+            y = 0;
+            backend_->GetViewportSize(w, h);
+        }
+
+        if (elementCount < w * h)
+            throw std::runtime_error("GetBackBufferData: data array too small for requested region");
+
+        backend_->ReadBackbuffer(x, y, w, h, reinterpret_cast<uint8_t*>(data + startIndex));
+    }
+
     void GraphicsDevice::SetRenderTarget(RenderTarget2D* renderTarget)
     {
         if (backend_)

@@ -87,6 +87,9 @@ wiring.
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
 | Vulkan / BGFX 3D draw | Vulkan backend has state (blend/depth/cull) but no real 3D draw call path. BGFX throws on all 3D calls. |
 | Model asset loading | No pipeline to load a `Model` from a file; `Model::Draw` is complete but models must be constructed manually via the NOXNA constructor. |
+| `RenderTarget2D` as `Texture2D` | RT in CNA does not inherit `Texture2D` — cannot bind an RT as a sampler texture via the XNA API. Architecturally incorrect vs FNA. |
+| `DrawInstancedPrimitives` | Not implemented. |
+| `GraphicsDevice::GetBackBufferData<T>` | Implemented for `Color*` on EasyGL (glReadPixels + Y-flip); Vulkan throws (staging readback not implemented). |
 
 ---
 
@@ -294,6 +297,21 @@ Steps:
   `Media::Video(path, &device)` so `Content.Load<Video>("cutscene")` works.
 - Both readers registered in `RegisterBuiltinLoaders()`.
 - Build: both backends clean.
+
+### ~~Task 31 — `GraphicsDevice::GetBackBufferData<Color>`~~ **DONE**
+
+- Added `virtual void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)` to
+  `IGraphicsBackend` (default throws — backends that don't support readback remain safe).
+- `EasyGLGraphicsBackend::ReadBackbuffer`: calls `device.read_pixels(metagl::PixelFormat::Rgba,
+  metagl::PixelType::UnsignedByte)`, flips rows vertically (GL bottom-left → XNA top-left).
+  Y coordinate converted: `glY = vpH - y - h`.
+- `GraphicsDevice` gains three XNA 4.0 overloads:
+  - `GetBackBufferData(Color*, elementCount)` — full backbuffer
+  - `GetBackBufferData(Color*, startIndex, elementCount)` — with offset
+  - `GetBackBufferData(const Rectangle*, Color*, startIndex, elementCount)` — with region
+  All funnel to the rect overload; rect==nullptr reads the full viewport.
+- Vulkan backend inherits the throwing default — throws `runtime_error` (staging readback deferred).
+- Build: both `cmake-build-vulkan` and `cmake-build-easygl` — clean.
 
 ---
 

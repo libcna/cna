@@ -277,6 +277,7 @@ namespace CNA::Internal::Backends::EasyGL
 
         void DebugSimulateContextLoss() override;
         void DebugRestoreContext() override;
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         // ---- Graphics state: IMPLEMENTED ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

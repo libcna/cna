@@ -689,6 +689,33 @@ void main()
 #endif
     }
 
+    void EasyGLGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+    {
+        if (metagl::IsContextLost())
+            throw std::runtime_error("ReadBackbuffer: GL context is lost");
+
+        int vpW, vpH;
+        GetViewportSize(vpW, vpH);
+
+        // OpenGL origin is bottom-left; flip y so caller gets top-left origin.
+        const int glY = vpH - y - h;
+
+        device.read_pixels(x, glY, w, h, ::metagl::PixelFormat::Rgba,
+                           ::metagl::PixelType::UnsignedByte, pixels);
+
+        // Flip rows vertically (GL returned bottom-up, XNA expects top-down).
+        const int rowBytes = w * 4;
+        std::vector<uint8_t> tmp(rowBytes);
+        for (int i = 0; i < h / 2; ++i)
+        {
+            uint8_t* top = pixels + i * rowBytes;
+            uint8_t* bot = pixels + (h - 1 - i) * rowBytes;
+            std::copy(top, top + rowBytes, tmp.data());
+            std::copy(bot, bot + rowBytes, top);
+            std::copy(tmp.begin(), tmp.end(), bot);
+        }
+    }
+
     void EasyGLGraphicsBackend::Clear(float r, float g, float b, float a)
     {
         if (metagl::IsContextLost()) return;

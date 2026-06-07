@@ -194,6 +194,14 @@ namespace CNA::Internal::Backends
         virtual std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) = 0;
         virtual std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() = 0;
 
+        /// Reads the rendered backbuffer pixels for the given region into @p pixels (RGBA8).
+        /// @p x, @p y are top-left in game coordinates; @p pixels must hold w*h*4 bytes.
+        /// Default implementation throws — override in backends that support readback.
+        virtual void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+        {
+            throw std::runtime_error("ReadBackbuffer: not implemented in this backend");
+        }
+
         /// Creates a backend occlusion query object. Returns nullptr on
         /// backends that do not support hardware occlusion queries.
         virtual std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() { return nullptr; }
