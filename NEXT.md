@@ -83,7 +83,7 @@ wiring.
 | `Texture2D::SaveAsJpeg` | Implemented via `IMG_SaveJPG_IO` with scaling support. |
 | `Texture2D` mip levels > 0 | Supported: `GetData`/`SetData` handle any level; EasyGL uploads via `set_image_2d(level, …)`. |
 | `SpriteBatch` custom effect | Forwarded: `ShaderEffect` compiles/caches its GLSL program; non-ShaderEffect effects call `Apply()` only. |
-| `RenderTarget2D` Vulkan backend | EasyGL FBO is wired and works. The Vulkan backend still returns `nullptr` from `CreateRenderTarget2D` (no-op). |
+| `RenderTarget2D` Vulkan backend | Implemented: off-screen color+depth images, framebuffer, descriptor set for texture sampling, RT render pass before backbuffer pass. |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
 | Vulkan / BGFX 3D draw | Vulkan backend has state (blend/depth/cull) but no real 3D draw call path. BGFX throws on all 3D calls. |
 | Model asset loading | No pipeline to load a `Model` from a file; `Model::Draw` is complete but models must be constructed manually via the NOXNA constructor. |
@@ -248,19 +248,26 @@ wiring.
 - Added `void UpdatePixelsLevel(…)` override to `EasyGLTextureBackend`: calls `texture.set_image_2d(target, level, w, h, data)`.
 - Build: both backends clean.
 
-### Task 28 — `RenderTarget2D` Vulkan backend
+### ~~Task 28 — `RenderTarget2D` Vulkan backend~~ **DONE**
 
-**Goal:** wire `RenderTarget2D` to the Vulkan backend so games can render off-screen on Vulkan.
-
-FNA reference: n/a — this is a CNA backend implementation task.
-
-Steps:
-1. Add `CreateRenderTarget2D` and `SetRenderTarget2D` overrides to `VulkanGraphicsBackend`.
-2. Implement `VulkanRenderTargetBackend`: Vulkan image + image view + framebuffer.
-3. `BindAsRenderTarget` / `UnbindAsRenderTarget`: begin/end a compatible render pass targeting the
-   Vulkan framebuffer.
-4. `BindGL()` no-op (not GL). `GetWidth`/`GetHeight` return stored dimensions.
-5. Build + smoke-test.
+- Added `VulkanRenderTargetBackend` class: color image (`swapchainFormat_` for pipeline compatibility),
+  dedicated depth image (`depthFormat_`), framebuffer, descriptor set for sampling as texture.
+- Color image is always created with `VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT`.
+- Created `rtRenderPass_`: identical to `renderPass_` but color `finalLayout = SHADER_READ_ONLY_OPTIMAL` —
+  Vulkan render pass compatibility means existing `pipeline2D_` and `pipelines3D_` can be reused unchanged.
+- `CreateRTRenderPass()` is called lazily on first RT construction.
+- `RecordCommandBuffer` refactored: Phase 1 iterates unique RTs from `activeBatches_` + `pending3D_`,
+  opens an `rtRenderPass_` for each RT, draws sprites + 3D targeting it, closes it. Phase 2 is the
+  unchanged backbuffer pass.
+- `activeBatches_` changed to `vector<pair<VulkanSpriteBatchBackend*, VulkanRenderTargetBackend*>>`;
+  each batch records its target RT at `Begin()` time (`backend_->currentRT_`).
+- `Pending3DDraw` gains `rt` field; both `DrawColoredPrimitives` and `DrawIndexedColoredPrimitives`
+  set `d.rt = currentRT_`.
+- `SetRenderTarget2D(rt)` sets `currentRT_`; `SetRenderTarget2D(nullptr)` clears it.
+- `TransitionImageLayout` extended: UNDEFINED → SHADER_READ_ONLY_OPTIMAL and
+  SHADER_READ_ONLY_OPTIMAL → COLOR_ATTACHMENT_OPTIMAL variants added.
+- Destructor cleans up `liveRenderTargets_` and `rtRenderPass_`.
+- Build: both `cmake-build-vulkan` and `cmake-build-easygl` — clean.
 
 ---
 

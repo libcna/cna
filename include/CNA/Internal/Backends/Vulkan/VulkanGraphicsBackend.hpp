@@ -9,7 +9,8 @@
 
 namespace CNA::Internal::Backends::Vulkan
 {
-    class VulkanGraphicsBackend;  // forward
+    class VulkanGraphicsBackend;      // forward
+    class VulkanRenderTargetBackend;  // forward
 
     // -------------------------------------------------------------------------
     // Vertex types (internal to the Vulkan backend)
@@ -45,6 +46,44 @@ namespace CNA::Internal::Backends::Vulkan
         VkImageView         imageView_     = VK_NULL_HANDLE;
         VkDescriptorSet     descriptorSet_ = VK_NULL_HANDLE;
         VulkanGraphicsBackend* owner_      = nullptr;
+    };
+
+    // -------------------------------------------------------------------------
+    // VulkanRenderTargetBackend
+    // -------------------------------------------------------------------------
+
+    class VulkanRenderTargetBackend : public IRenderTargetBackend
+    {
+    public:
+        VulkanRenderTargetBackend(int w, int h, bool hasDepth, VulkanGraphicsBackend* owner);
+        ~VulkanRenderTargetBackend() override;
+
+        int GetWidth()  const override { return width_; }
+        int GetHeight() const override { return height_; }
+        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
+        void BindAsRenderTarget()   override;
+        void UnbindAsRenderTarget() override;
+
+        VkFramebuffer   GetFramebuffer()    const { return framebuffer_; }
+        VkDescriptorSet GetDescriptorSet()  const { return descriptorSet_; }
+
+        void ReleaseVulkanResources();
+        void DisconnectOwner() { owner_ = nullptr; }
+
+    private:
+        int                     width_        = 0;
+        int                     height_       = 0;
+        bool                    hasDepth_     = false;
+        VkImage                 colorImage_   = VK_NULL_HANDLE;
+        VkDeviceMemory          colorMemory_  = VK_NULL_HANDLE;
+        VkImageView             colorView_    = VK_NULL_HANDLE;
+        VkImage                 depthImage_   = VK_NULL_HANDLE;
+        VkDeviceMemory          depthMemory_  = VK_NULL_HANDLE;
+        VkImageView             depthView_    = VK_NULL_HANDLE;
+        VkFramebuffer           framebuffer_  = VK_NULL_HANDLE;
+        VkDescriptorSet         descriptorSet_ = VK_NULL_HANDLE;
+        VulkanGraphicsBackend*  owner_        = nullptr;
     };
 
     // -------------------------------------------------------------------------
@@ -164,6 +203,7 @@ namespace CNA::Internal::Backends::Vulkan
         friend class VulkanVertexBufferBackend;
         friend class VulkanIndexBufferBackend;
         friend class VulkanSpriteBatchBackend;
+        friend class VulkanRenderTargetBackend;
 
     public:
         explicit VulkanGraphicsBackend(SDL_Window* window);
@@ -179,8 +219,10 @@ namespace CNA::Internal::Backends::Vulkan
         SDL_Window*  GetWindowInternal()   const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
-        std::unique_ptr<ITextureBackend>      CreateTexture(const ImageData& data) override;
-        std::unique_ptr<ISpriteBatchBackend>  CreateSpriteBatch() override;
+        std::unique_ptr<ITextureBackend>         CreateTexture(const ImageData& data) override;
+        std::unique_ptr<ISpriteBatchBackend>     CreateSpriteBatch() override;
+        std::unique_ptr<IRenderTargetBackend>    CreateRenderTarget2D(int w, int h, bool hasDepth) override;
+        void                                     SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
         // ---- Graphics state: IMPLEMENTED ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -241,7 +283,8 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VkImageView> swapchainImageViews_;
 
         // --- Render pass (permanent) + framebuffers (per swapchain image) ---
-        VkRenderPass               renderPass_ = VK_NULL_HANDLE;
+        VkRenderPass               renderPass_   = VK_NULL_HANDLE;
+        VkRenderPass               rtRenderPass_ = VK_NULL_HANDLE;  // compatible with renderPass_ but color → SHADER_READ_ONLY_OPTIMAL
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
         // --- Depth buffer (recreated with swapchain) ---
@@ -268,9 +311,10 @@ namespace CNA::Internal::Backends::Vulkan
         std::array<void*,          MaxFramesInFlight> spriteIBPtr_ = {};
 
         // --- Lifetime tracking for externally-owned Vulkan resources ---
-        std::vector<VulkanTextureBackend*>      liveTextures_;
-        std::vector<VulkanVertexBufferBackend*> liveVertexBuffers_;
-        std::vector<VulkanIndexBufferBackend*>  liveIndexBuffers_;
+        std::vector<VulkanTextureBackend*>       liveTextures_;
+        std::vector<VulkanVertexBufferBackend*>  liveVertexBuffers_;
+        std::vector<VulkanIndexBufferBackend*>   liveIndexBuffers_;
+        std::vector<VulkanRenderTargetBackend*>  liveRenderTargets_;
 
         // --- Per-frame 3D dynamic geometry buffers ---
         // Vertex/index data is copied to CPU at draw time, then uploaded here after fence wait.
@@ -285,24 +329,27 @@ namespace CNA::Internal::Backends::Vulkan
 
         // --- Per-frame accumulated draw data (cleared in RecordCommandBuffer) ---
         struct Pending3DDraw {
-            std::vector<uint8_t> vbData;     // copied vertex bytes (stride 16)
-            std::vector<uint8_t> ibData;     // copied index bytes (uint16), empty = non-indexed
-            VkPrimitiveTopology topology;
-            uint32_t            drawCount;   // vertex or index count to submit
-            float               mvp[16];
-            bool                depthTest;
-            bool                depthWrite;
-            bool                blend;
-            int                 cullMode;     // XNA CullMode: 0=None, 1=CW, 2=CCW
-            VkIndexType         indexType;    // VK_INDEX_TYPE_UINT16 or UINT32
+            std::vector<uint8_t>    vbData;     // copied vertex bytes (stride 16)
+            std::vector<uint8_t>    ibData;     // copied index bytes (uint16), empty = non-indexed
+            VkPrimitiveTopology     topology;
+            uint32_t                drawCount;  // vertex or index count to submit
+            float                   mvp[16];
+            bool                    depthTest;
+            bool                    depthWrite;
+            bool                    blend;
+            int                     cullMode;   // XNA CullMode: 0=None, 1=CW, 2=CCW
+            VkIndexType             indexType;  // VK_INDEX_TYPE_UINT16 or UINT32
+            VulkanRenderTargetBackend* rt = nullptr; // nullptr = backbuffer
         };
-        std::vector<Pending3DDraw>                    pending3D_;
-        std::vector<VulkanSpriteBatchBackend*>        activeBatches_;
+        std::vector<Pending3DDraw>  pending3D_;
+        // pair: (batch, target RT) where RT=nullptr means backbuffer
+        std::vector<std::pair<VulkanSpriteBatchBackend*, VulkanRenderTargetBackend*>> activeBatches_;
 
         // --- Frame state ---
         uint32_t currentFrame_ = 0;
         float    clearR_ = 0.f, clearG_ = 0.f, clearB_ = 0.f, clearA_ = 1.f;
         bool     initialized_       = false;
+        VulkanRenderTargetBackend* currentRT_ = nullptr;
         bool     depthTestEnabled_  = true;
         bool     depthWriteEnabled_ = true;
         bool     blendEnabled_      = false;
@@ -311,6 +358,7 @@ namespace CNA::Internal::Backends::Vulkan
         // ---- Init helpers ----
         void CreateInstance();
         void SetupDebugMessenger();
+        void CreateRTRenderPass();
         void CreateSurface();
         void PickPhysicalDevice();
         void CreateLogicalDevice();

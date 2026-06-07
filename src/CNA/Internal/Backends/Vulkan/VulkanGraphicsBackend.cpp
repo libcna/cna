@@ -225,6 +225,175 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     // =========================================================================
+    // VulkanRenderTargetBackend
+    // =========================================================================
+
+    VulkanRenderTargetBackend::VulkanRenderTargetBackend(int w, int h, bool /*hasDepth*/,
+                                                          VulkanGraphicsBackend* owner)
+        : width_(w), height_(h), hasDepth_(true), owner_(owner)
+    {
+        VkDevice dev = owner_->device_;
+        const uint32_t uw = static_cast<uint32_t>(w);
+        const uint32_t uh = static_cast<uint32_t>(h);
+
+        // --- Color image (must use swapchainFormat_ for pipeline compatibility) ---
+        VkImageCreateInfo colorInfo{};
+        colorInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        colorInfo.imageType     = VK_IMAGE_TYPE_2D;
+        colorInfo.format        = owner_->swapchainFormat_;
+        colorInfo.extent        = { uw, uh, 1 };
+        colorInfo.mipLevels     = 1;
+        colorInfo.arrayLayers   = 1;
+        colorInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        colorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        colorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        colorInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        colorInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(dev, &colorInfo, nullptr, &colorImage_) != VK_SUCCESS)
+            throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImage (color) failed");
+
+        VkMemoryRequirements colorReq;
+        vkGetImageMemoryRequirements(dev, colorImage_, &colorReq);
+        VkMemoryAllocateInfo colorAlloc{};
+        colorAlloc.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        colorAlloc.allocationSize  = colorReq.size;
+        colorAlloc.memoryTypeIndex = owner_->FindMemoryType(colorReq.memoryTypeBits,
+                                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (vkAllocateMemory(dev, &colorAlloc, nullptr, &colorMemory_) != VK_SUCCESS)
+            throw std::runtime_error("VulkanRenderTargetBackend: vkAllocateMemory (color) failed");
+        vkBindImageMemory(dev, colorImage_, colorMemory_, 0);
+
+        VkImageViewCreateInfo colorView{};
+        colorView.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        colorView.image    = colorImage_;
+        colorView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        colorView.format   = owner_->swapchainFormat_;
+        colorView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        if (vkCreateImageView(dev, &colorView, nullptr, &colorView_) != VK_SUCCESS)
+            throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImageView (color) failed");
+
+        // --- Depth image (always created to match the 2-attachment rtRenderPass_) ---
+        VkImageCreateInfo depthInfo{};
+        depthInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        depthInfo.imageType     = VK_IMAGE_TYPE_2D;
+        depthInfo.format        = owner_->depthFormat_;
+        depthInfo.extent        = { uw, uh, 1 };
+        depthInfo.mipLevels     = 1;
+        depthInfo.arrayLayers   = 1;
+        depthInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        depthInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        depthInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        depthInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        depthInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(dev, &depthInfo, nullptr, &depthImage_) != VK_SUCCESS)
+            throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImage (depth) failed");
+
+        VkMemoryRequirements depthReq;
+        vkGetImageMemoryRequirements(dev, depthImage_, &depthReq);
+        VkMemoryAllocateInfo depthAlloc{};
+        depthAlloc.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        depthAlloc.allocationSize  = depthReq.size;
+        depthAlloc.memoryTypeIndex = owner_->FindMemoryType(depthReq.memoryTypeBits,
+                                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (vkAllocateMemory(dev, &depthAlloc, nullptr, &depthMemory_) != VK_SUCCESS)
+            throw std::runtime_error("VulkanRenderTargetBackend: vkAllocateMemory (depth) failed");
+        vkBindImageMemory(dev, depthImage_, depthMemory_, 0);
+
+        VkImageViewCreateInfo depthView{};
+        depthView.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        depthView.image    = depthImage_;
+        depthView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        depthView.format   = owner_->depthFormat_;
+        depthView.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
+        if (vkCreateImageView(dev, &depthView, nullptr, &depthView_) != VK_SUCCESS)
+            throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImageView (depth) failed");
+
+        // Lazily create shared RT render pass if not yet done
+        if (owner_->rtRenderPass_ == VK_NULL_HANDLE)
+            owner_->CreateRTRenderPass();
+
+        // --- Framebuffer ---
+        VkImageView fbAtts[] = { colorView_, depthView_ };
+        VkFramebufferCreateInfo fbInfo{};
+        fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        fbInfo.renderPass      = owner_->rtRenderPass_;
+        fbInfo.attachmentCount = 2;
+        fbInfo.pAttachments    = fbAtts;
+        fbInfo.width           = uw;
+        fbInfo.height          = uh;
+        fbInfo.layers          = 1;
+        if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &framebuffer_) != VK_SUCCESS)
+            throw std::runtime_error("VulkanRenderTargetBackend: vkCreateFramebuffer failed");
+
+        // Transition color image to SHADER_READ_ONLY_OPTIMAL (initial state before first RT use)
+        owner_->TransitionImageLayout(colorImage_,
+            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        // --- Descriptor set so the RT can be sampled as a texture ---
+        VkDescriptorSetAllocateInfo dsInfo{};
+        dsInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        dsInfo.descriptorPool     = owner_->descriptorPool_;
+        dsInfo.descriptorSetCount = 1;
+        dsInfo.pSetLayouts        = &owner_->descriptorSetLayout_;
+        if (vkAllocateDescriptorSets(dev, &dsInfo, &descriptorSet_) != VK_SUCCESS)
+            throw std::runtime_error("VulkanRenderTargetBackend: vkAllocateDescriptorSets failed");
+
+        VkDescriptorImageInfo imgDesc{};
+        imgDesc.sampler     = owner_->defaultSampler_;
+        imgDesc.imageView   = colorView_;
+        imgDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet write{};
+        write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet          = descriptorSet_;
+        write.dstBinding      = 0;
+        write.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.descriptorCount = 1;
+        write.pImageInfo      = &imgDesc;
+        vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
+
+        owner_->liveRenderTargets_.push_back(this);
+    }
+
+    void VulkanRenderTargetBackend::ReleaseVulkanResources()
+    {
+        if (!owner_ || !owner_->device_) return;
+        vkDeviceWaitIdle(owner_->device_);
+        VkDevice dev = owner_->device_;
+        if (descriptorSet_ != VK_NULL_HANDLE) {
+            vkFreeDescriptorSets(dev, owner_->descriptorPool_, 1, &descriptorSet_);
+            descriptorSet_ = VK_NULL_HANDLE;
+        }
+        if (framebuffer_ != VK_NULL_HANDLE)  { vkDestroyFramebuffer(dev, framebuffer_, nullptr);  framebuffer_ = VK_NULL_HANDLE; }
+        if (colorView_   != VK_NULL_HANDLE)  { vkDestroyImageView(dev, colorView_, nullptr);       colorView_   = VK_NULL_HANDLE; }
+        if (colorImage_  != VK_NULL_HANDLE)  { vkDestroyImage(dev, colorImage_, nullptr);          colorImage_  = VK_NULL_HANDLE; }
+        if (colorMemory_ != VK_NULL_HANDLE)  { vkFreeMemory(dev, colorMemory_, nullptr);           colorMemory_ = VK_NULL_HANDLE; }
+        if (depthView_   != VK_NULL_HANDLE)  { vkDestroyImageView(dev, depthView_, nullptr);       depthView_   = VK_NULL_HANDLE; }
+        if (depthImage_  != VK_NULL_HANDLE)  { vkDestroyImage(dev, depthImage_, nullptr);          depthImage_  = VK_NULL_HANDLE; }
+        if (depthMemory_ != VK_NULL_HANDLE)  { vkFreeMemory(dev, depthMemory_, nullptr);           depthMemory_ = VK_NULL_HANDLE; }
+    }
+
+    VulkanRenderTargetBackend::~VulkanRenderTargetBackend()
+    {
+        if (owner_) {
+            auto& list = owner_->liveRenderTargets_;
+            list.erase(std::remove(list.begin(), list.end(), this), list.end());
+            if (owner_->currentRT_ == this) owner_->currentRT_ = nullptr;
+        }
+        ReleaseVulkanResources();
+    }
+
+    void VulkanRenderTargetBackend::BindAsRenderTarget()
+    {
+        if (owner_) owner_->currentRT_ = this;
+    }
+
+    void VulkanRenderTargetBackend::UnbindAsRenderTarget()
+    {
+        if (owner_ && owner_->currentRT_ == this) owner_->currentRT_ = nullptr;
+    }
+
+    // =========================================================================
     // VulkanSpriteBatchBackend
     // =========================================================================
 
@@ -240,7 +409,7 @@ namespace CNA::Internal::Backends::Vulkan
         currentTexture_  = nullptr;
         batchFirstIndex_ = 0;
         active_ = true;
-        backend_->activeBatches_.push_back(this);
+        backend_->activeBatches_.push_back({this, backend_->currentRT_});
     }
 
     void VulkanSpriteBatchBackend::FlushTexture()
@@ -501,7 +670,9 @@ namespace CNA::Internal::Backends::Vulkan
         vkDeviceWaitIdle(device_);
 
         // Step 2: destroy buffers and memory.
-        // Externally-owned vertex/index buffers (C++ objects may outlive this destructor).
+        // Externally-owned render targets, vertex/index buffers (C++ objects may outlive this destructor).
+        for (auto* rt : liveRenderTargets_) { rt->ReleaseVulkanResources(); rt->DisconnectOwner(); }
+        liveRenderTargets_.clear();
         for (auto* vb : liveVertexBuffers_) { vb->ReleaseVulkanResources(); vb->DisconnectOwner(); }
         liveVertexBuffers_.clear();
         for (auto* ib : liveIndexBuffers_)  { ib->ReleaseVulkanResources(); ib->DisconnectOwner(); }
@@ -542,7 +713,8 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto fb : swapchainFramebuffers_)
             if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
         swapchainFramebuffers_.clear();
-        if (renderPass_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_, nullptr); renderPass_ = VK_NULL_HANDLE; }
+        if (rtRenderPass_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, rtRenderPass_, nullptr); rtRenderPass_ = VK_NULL_HANDLE; }
+        if (renderPass_   != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_,   nullptr); renderPass_   = VK_NULL_HANDLE; }
 
         // Sync objects (semaphores and fences).
         for (int i = 0; i < MaxFramesInFlight; ++i) {
@@ -880,6 +1052,60 @@ namespace CNA::Internal::Backends::Vulkan
         ci.dependencyCount = 1; ci.pDependencies = &dep;
         if (vkCreateRenderPass(device_, &ci, nullptr, &renderPass_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass failed");
+    }
+
+    void VulkanGraphicsBackend::CreateRTRenderPass()
+    {
+        // Same as renderPass_ but color finalLayout = SHADER_READ_ONLY_OPTIMAL.
+        // This makes the two passes compatible so existing pipelines can be reused.
+        VkAttachmentDescription colorAtt{};
+        colorAtt.format         = swapchainFormat_;
+        colorAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
+        colorAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAtt.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAtt.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkAttachmentDescription depthAtt{};
+        depthAtt.format         = depthFormat_;
+        depthAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
+        depthAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference colorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        VkAttachmentReference depthRef{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
+        VkSubpassDescription sub{};
+        sub.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        sub.colorAttachmentCount    = 1;
+        sub.pColorAttachments       = &colorRef;
+        sub.pDepthStencilAttachment = &depthRef;
+
+        VkSubpassDependency dep{};
+        dep.srcSubpass    = VK_SUBPASS_EXTERNAL;
+        dep.dstSubpass    = 0;
+        dep.srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        dep.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dep.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dep.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+        VkAttachmentDescription atts[] = { colorAtt, depthAtt };
+        VkRenderPassCreateInfo ci{};
+        ci.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        ci.attachmentCount = 2; ci.pAttachments  = atts;
+        ci.subpassCount    = 1; ci.pSubpasses    = &sub;
+        ci.dependencyCount = 1; ci.pDependencies = &dep;
+        if (vkCreateRenderPass(device_, &ci, nullptr, &rtRenderPass_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateRenderPass (RT) failed");
     }
 
     void VulkanGraphicsBackend::CreateFramebuffers()
@@ -1477,6 +1703,18 @@ namespace CNA::Internal::Backends::Vulkan
             barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
             srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        } else if (from == VK_IMAGE_LAYOUT_UNDEFINED &&
+                   to   == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        } else if (from == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                   to   == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         } else {
             throw std::runtime_error("Vulkan: unsupported image layout transition");
         }
@@ -1515,94 +1753,151 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkBeginCommandBuffer(cb, &bi) != VK_SUCCESS)
             throw std::runtime_error("vkBeginCommandBuffer failed");
 
+        // Helper: draw all 2D batches for a specific RT (nullptr = backbuffer) into current render pass.
+        // Sprite VB/IB ring buffers are shared across all passes in a frame — callers must
+        // ensure total sprite counts fit within MaxSpriteVertices.
+        auto drawSpritesFor = [&](VulkanRenderTargetBackend* targetRT,
+                                  float vpW, float vpH)
+        {
+            bool pipelineBound = false;
+            for (auto& [batch, batchRT] : activeBatches_) {
+                if (batchRT != targetRT) continue;
+                const auto& verts = batch->GetVertices();
+                const auto& inds  = batch->GetIndices();
+                const auto& draws = batch->GetDrawCalls();
+                if (verts.empty() || draws.empty()) continue;
+
+                std::memcpy(spriteVBPtr_[currentFrame_], verts.data(),
+                            verts.size() * sizeof(Sprite2DVertex));
+                std::memcpy(spriteIBPtr_[currentFrame_], inds.data(),
+                            inds.size() * sizeof(uint16_t));
+
+                if (!pipelineBound) {
+                    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline2D_);
+                    pipelineBound = true;
+                }
+                VkDeviceSize off = 0;
+                vkCmdBindVertexBuffers(cb, 0, 1, &spriteVB_[currentFrame_], &off);
+                vkCmdBindIndexBuffer(cb, spriteIB_[currentFrame_], 0, VK_INDEX_TYPE_UINT16);
+
+                float vpSize[2] = { vpW, vpH };
+                vkCmdPushConstants(cb, pipelineLayout2D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 8, vpSize);
+
+                for (const auto& d : draws) {
+                    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipelineLayout2D_, 0, 1, &d.descSet, 0, nullptr);
+                    vkCmdDrawIndexed(cb, d.indexCount, 1, d.firstIndex, 0, 0);
+                }
+                batch->ConsumeDraws();
+            }
+        };
+
+        // Helper: draw all pending 3D draws for a specific RT into the current render pass.
+        auto draw3DFor = [&](VulkanRenderTargetBackend* targetRT)
+        {
+            VkPipeline lastPipe = VK_NULL_HANDLE;
+            VkDeviceSize vbOff  = 0;
+            VkDeviceSize ibOff  = 0;
+            for (const auto& draw : pending3D_) {
+                if (draw.rt != targetRT) continue;
+                if (draw.vbData.empty()) continue;
+                if (vbOff + draw.vbData.size() > kFrame3DVBSize) continue;
+                if (!draw.ibData.empty() && ibOff + draw.ibData.size() > kFrame3DIBSize) continue;
+
+                std::memcpy(static_cast<uint8_t*>(frame3DVBPtr_[currentFrame_]) + vbOff,
+                            draw.vbData.data(), draw.vbData.size());
+                if (!draw.ibData.empty())
+                    std::memcpy(static_cast<uint8_t*>(frame3DIBPtr_[currentFrame_]) + ibOff,
+                                draw.ibData.data(), draw.ibData.size());
+
+                VkPipeline pipe = GetOrCreatePipeline3D(draw.topology,
+                                                        draw.depthTest, draw.depthWrite,
+                                                        draw.blend, draw.cullMode);
+                if (pipe != lastPipe) {
+                    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+                    lastPipe = pipe;
+                }
+                vkCmdPushConstants(cb, pipelineLayout3D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, draw.mvp);
+                vkCmdBindVertexBuffers(cb, 0, 1, &frame3DVB_[currentFrame_], &vbOff);
+                if (!draw.ibData.empty()) {
+                    vkCmdBindIndexBuffer(cb, frame3DIB_[currentFrame_], ibOff, draw.indexType);
+                    vkCmdDrawIndexed(cb, draw.drawCount, 1, 0, 0, 0);
+                    ibOff += static_cast<VkDeviceSize>(draw.ibData.size());
+                } else {
+                    vkCmdDraw(cb, draw.drawCount, 1, 0, 0);
+                }
+                vbOff += static_cast<VkDeviceSize>(draw.vbData.size());
+            }
+        };
+
+        // ---- Phase 1: off-screen RT passes ----
+        // Collect unique render targets referenced this frame.
+        std::vector<VulkanRenderTargetBackend*> usedRTs;
+        for (auto& [batch, rt] : activeBatches_)
+            if (rt && std::find(usedRTs.begin(), usedRTs.end(), rt) == usedRTs.end())
+                usedRTs.push_back(rt);
+        for (auto& draw : pending3D_)
+            if (draw.rt && std::find(usedRTs.begin(), usedRTs.end(), draw.rt) == usedRTs.end())
+                usedRTs.push_back(draw.rt);
+
+        for (auto* rt : usedRTs) {
+            VkClearValue rtCv[2]{};
+            rtCv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
+            rtCv[1].depthStencil = { 1.0f, 0 };
+            VkRenderPassBeginInfo rtRp{};
+            rtRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            rtRp.renderPass      = rtRenderPass_;
+            rtRp.framebuffer     = rt->GetFramebuffer();
+            const uint32_t rtW   = static_cast<uint32_t>(rt->GetWidth());
+            const uint32_t rtH   = static_cast<uint32_t>(rt->GetHeight());
+            rtRp.renderArea      = { {0, 0}, { rtW, rtH } };
+            rtRp.clearValueCount = 2;
+            rtRp.pClearValues    = rtCv;
+            vkCmdBeginRenderPass(cb, &rtRp, VK_SUBPASS_CONTENTS_INLINE);
+
+            VkViewport rtVp{};
+            rtVp.x = 0; rtVp.y = 0;
+            rtVp.width  = static_cast<float>(rtW);
+            rtVp.height = static_cast<float>(rtH);
+            rtVp.minDepth = 0.f; rtVp.maxDepth = 1.f;
+            vkCmdSetViewport(cb, 0, 1, &rtVp);
+            VkRect2D rtSc{ {0, 0}, { rtW, rtH } };
+            vkCmdSetScissor(cb, 0, 1, &rtSc);
+
+            drawSpritesFor(rt, static_cast<float>(rtW), static_cast<float>(rtH));
+            draw3DFor(rt);
+
+            vkCmdEndRenderPass(cb);
+        }
+
+        // ---- Phase 2: backbuffer pass ----
         VkClearValue cv[2]{};
-        cv[0].color          = { { clearR_, clearG_, clearB_, clearA_ } };
-        cv[1].depthStencil   = { 1.0f, 0 };
+        cv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
+        cv[1].depthStencil = { 1.0f, 0 };
         VkRenderPassBeginInfo rp{};
-        rp.sType       = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rp.renderPass  = renderPass_;
-        rp.framebuffer = swapchainFramebuffers_[imageIndex];
-        rp.renderArea  = { {0,0}, swapchainExtent_ };
+        rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rp.renderPass      = renderPass_;
+        rp.framebuffer     = swapchainFramebuffers_[imageIndex];
+        rp.renderArea      = { {0, 0}, swapchainExtent_ };
         rp.clearValueCount = 2;
         rp.pClearValues    = cv;
         vkCmdBeginRenderPass(cb, &rp, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport vp{};
         vp.x = 0; vp.y = 0;
-        vp.width  = (float)swapchainExtent_.width;
-        vp.height = (float)swapchainExtent_.height;
+        vp.width  = static_cast<float>(swapchainExtent_.width);
+        vp.height = static_cast<float>(swapchainExtent_.height);
         vp.minDepth = 0.f; vp.maxDepth = 1.f;
         vkCmdSetViewport(cb, 0, 1, &vp);
-        VkRect2D sc{ {0,0}, swapchainExtent_ };
+        VkRect2D sc{ {0, 0}, swapchainExtent_ };
         vkCmdSetScissor(cb, 0, 1, &sc);
 
-        // ----- 2D sprite batches -----
-        bool sprite2DPipelineBound = false;
-        for (auto* batch : activeBatches_) {
-            const auto& verts = batch->GetVertices();
-            const auto& inds  = batch->GetIndices();
-            const auto& draws = batch->GetDrawCalls();
-            if (verts.empty() || draws.empty()) continue;
+        drawSpritesFor(nullptr,
+                       static_cast<float>(swapchainExtent_.width),
+                       static_cast<float>(swapchainExtent_.height));
+        draw3DFor(nullptr);
 
-            uint32_t vbytes = static_cast<uint32_t>(verts.size() * sizeof(Sprite2DVertex));
-            uint32_t ibytes = static_cast<uint32_t>(inds.size()  * sizeof(uint16_t));
-            std::memcpy(spriteVBPtr_[currentFrame_], verts.data(), vbytes);
-            std::memcpy(spriteIBPtr_[currentFrame_], inds.data(),  ibytes);
-
-            if (!sprite2DPipelineBound) {
-                vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline2D_);
-                sprite2DPipelineBound = true;
-            }
-            VkDeviceSize off = 0;
-            vkCmdBindVertexBuffers(cb, 0, 1, &spriteVB_[currentFrame_], &off);
-            vkCmdBindIndexBuffer(cb, spriteIB_[currentFrame_], 0, VK_INDEX_TYPE_UINT16);
-
-            float vpSize[2] = { (float)swapchainExtent_.width, (float)swapchainExtent_.height };
-            vkCmdPushConstants(cb, pipelineLayout2D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 8, vpSize);
-
-            for (const auto& d : draws) {
-                vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelineLayout2D_, 0, 1, &d.descSet, 0, nullptr);
-                vkCmdDrawIndexed(cb, d.indexCount, 1, d.firstIndex, 0, 0);
-            }
-            batch->ConsumeDraws();
-        }
         activeBatches_.clear();
-
-        // ----- 3D draws -----
-        // Upload all pending vertex/index data into this frame's ring buffers, then draw.
-        VkPipeline lastPipeline3D = VK_NULL_HANDLE;
-        VkDeviceSize vbOffset3D = 0;
-        VkDeviceSize ibOffset3D = 0;
-        for (const auto& draw : pending3D_) {
-            if (draw.vbData.empty()) continue;
-            if (vbOffset3D + draw.vbData.size() > kFrame3DVBSize) continue; // overflow guard
-            if (!draw.ibData.empty() && ibOffset3D + draw.ibData.size() > kFrame3DIBSize) continue;
-
-            std::memcpy(static_cast<uint8_t*>(frame3DVBPtr_[currentFrame_]) + vbOffset3D,
-                        draw.vbData.data(), draw.vbData.size());
-            if (!draw.ibData.empty())
-                std::memcpy(static_cast<uint8_t*>(frame3DIBPtr_[currentFrame_]) + ibOffset3D,
-                            draw.ibData.data(), draw.ibData.size());
-
-            VkPipeline pipe = GetOrCreatePipeline3D(draw.topology,
-                                                    draw.depthTest, draw.depthWrite,
-                                                    draw.blend, draw.cullMode);
-            if (pipe != lastPipeline3D) {
-                vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
-                lastPipeline3D = pipe;
-            }
-            vkCmdPushConstants(cb, pipelineLayout3D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, draw.mvp);
-            vkCmdBindVertexBuffers(cb, 0, 1, &frame3DVB_[currentFrame_], &vbOffset3D);
-            if (!draw.ibData.empty()) {
-                vkCmdBindIndexBuffer(cb, frame3DIB_[currentFrame_], ibOffset3D, draw.indexType);
-                vkCmdDrawIndexed(cb, draw.drawCount, 1, 0, 0, 0);
-                ibOffset3D += static_cast<VkDeviceSize>(draw.ibData.size());
-            } else {
-                vkCmdDraw(cb, draw.drawCount, 1, 0, 0);
-            }
-            vbOffset3D += static_cast<VkDeviceSize>(draw.vbData.size());
-        }
         pending3D_.clear();
 
         vkCmdEndRenderPass(cb);
@@ -1671,6 +1966,22 @@ namespace CNA::Internal::Backends::Vulkan
         return std::make_unique<VulkanSpriteBatchBackend>(this);
     }
 
+    std::unique_ptr<IRenderTargetBackend> VulkanGraphicsBackend::CreateRenderTarget2D(
+        int w, int h, bool hasDepth)
+    {
+        return std::make_unique<VulkanRenderTargetBackend>(w, h, hasDepth, this);
+    }
+
+    void VulkanGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt == nullptr) {
+            currentRT_ = nullptr;
+        } else {
+            currentRT_ = static_cast<VulkanRenderTargetBackend*>(rt);
+            currentRT_->BindAsRenderTarget();
+        }
+    }
+
     std::unique_ptr<IVertexBufferBackend> VulkanGraphicsBackend::CreateVertexBuffer(int cap)
     {
         auto vb = std::make_unique<VulkanVertexBufferBackend>(cap, this);
@@ -1727,6 +2038,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.blend      = blendEnabled_;
         d.cullMode   = cullMode_;
         d.indexType  = VK_INDEX_TYPE_UINT16;  // non-indexed, not used
+        d.rt         = currentRT_;
         pending3D_.push_back(std::move(d));
     }
 
@@ -1760,6 +2072,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.blend      = blendEnabled_;
         d.cullMode   = cullMode_;
         d.indexType  = vulkanIB.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
+        d.rt         = currentRT_;
         pending3D_.push_back(std::move(d));
     }
 
