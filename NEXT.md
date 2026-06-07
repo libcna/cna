@@ -269,6 +269,23 @@ wiring.
 - Destructor cleans up `liveRenderTargets_` and `rtRenderPass_`.
 - Build: both `cmake-build-vulkan` and `cmake-build-easygl` — clean.
 
+### Task 29 — `Texture2D` — stream `SaveAsPng`, full constructor, `Format`/`LevelCount`
+
+**Goal:** fill the remaining XNA API gaps on `Texture2D`.
+
+Steps:
+1. Add `SaveAsPng(System::IO::Stream* stream, int width, int height)` — the true XNA 4.0 stream overload (was only file-path before).
+2. Add `Texture2D(GraphicsDevice&, int, int, bool mipMap, SurfaceFormat format)` — full constructor; stores `format_` and computes `levelCount_`.
+3. Expose `getFormatProperty()` → `SurfaceFormat` and `getLevelCountProperty()` → `int` on `Texture2D`.
+
+#### ~~Task 29 — DONE~~
+
+- Added `SaveAsPng(Stream*, int, int)`: uses `SDL_IOFromDynamicMem` + `IMG_SavePNG_IO` + read-back, same pattern as `SaveAsJpeg`.  Scaling via `SDL_ScaleSurface` when target dimensions differ.
+- Added `Texture2D(GraphicsDevice&, int, int, bool mipMap, SurfaceFormat format)`: stores `format_`, computes `levelCount_ = mipMap ? CalculateMipLevels(w,h) : 1`.
+- Added `format_` (`SurfaceFormat::Color`) and `levelCount_` (1) private fields; `getFormatProperty()` and `getLevelCountProperty()` expose them.
+- Static helper `CalculateMipLevels(w,h)` halves dimensions until 1×1.
+- Build: both backends clean.
+
 ---
 
 ## 5. Do not do yet

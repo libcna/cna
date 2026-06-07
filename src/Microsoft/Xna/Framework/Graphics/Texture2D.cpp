@@ -91,6 +91,27 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
     }
 
+    static int CalculateMipLevels(int w, int h)
+    {
+        int levels = 1;
+        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        return levels;
+    }
+
+    Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h,
+                         bool mipMap, SurfaceFormat format)
+        : device_(&graphicsDevice), width(w), height(h),
+          format_(format),
+          levelCount_(mipMap ? CalculateMipLevels(w, h) : 1)
+    {
+        ImageData data;
+        data.width  = w;
+        data.height = h;
+        data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
+        cpuPixels_ = data.pixels;
+        backend_   = graphicsDevice.GetBackend().CreateTexture(data);
+    }
+
     Texture2D::~Texture2D() = default;
 
     // -----------------------------------------------------------------------
@@ -296,6 +317,64 @@ namespace Microsoft::Xna::Framework::Graphics
     // -----------------------------------------------------------------------
     // SaveAsPng
     // -----------------------------------------------------------------------
+
+    void Texture2D::SaveAsPng(System::IO::Stream* stream, int targetWidth, int targetHeight) const
+    {
+        if (!stream)
+            throw std::invalid_argument("Texture2D::SaveAsPng: stream is null");
+        if (cpuPixels_.empty())
+            throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
+
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(
+            width, height, SDL_PIXELFORMAT_RGBA32,
+            const_cast<uint8_t*>(cpuPixels_.data()), width * 4);
+        if (!surface)
+            throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
+
+        SDL_Surface* src = surface;
+        SDL_Surface* scaled = nullptr;
+        if (targetWidth != width || targetHeight != height)
+        {
+            scaled = SDL_ScaleSurface(surface, targetWidth, targetHeight, SDL_SCALEMODE_LINEAR);
+            if (!scaled)
+            {
+                SDL_DestroySurface(surface);
+                throw std::runtime_error(std::string("SDL_ScaleSurface failed: ") + SDL_GetError());
+            }
+            src = scaled;
+        }
+
+        SDL_IOStream* dst = SDL_IOFromDynamicMem();
+        if (!dst)
+        {
+            SDL_DestroySurface(surface);
+            if (scaled) SDL_DestroySurface(scaled);
+            throw std::runtime_error(std::string("SDL_IOFromDynamicMem failed: ") + SDL_GetError());
+        }
+
+        if (!IMG_SavePNG_IO(src, dst, false))
+        {
+            SDL_CloseIO(dst);
+            SDL_DestroySurface(surface);
+            if (scaled) SDL_DestroySurface(scaled);
+            throw std::runtime_error(std::string("IMG_SavePNG_IO failed: ") + SDL_GetError());
+        }
+
+        const Sint64 size = SDL_TellIO(dst);
+        if (size > 0)
+        {
+            auto* buf = static_cast<uint8_t*>(
+                SDL_GetPointerProperty(SDL_GetIOProperties(dst),
+                                       SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, nullptr));
+            if (buf)
+                stream->Write(reinterpret_cast<const System::IO::bytecs*>(buf), 0,
+                              static_cast<System::IO::intcs>(size));
+        }
+
+        SDL_CloseIO(dst);
+        if (scaled) SDL_DestroySurface(scaled);
+        SDL_DestroySurface(surface);
+    }
 
     void Texture2D::SaveAsPng(const std::string& filename) const
     {

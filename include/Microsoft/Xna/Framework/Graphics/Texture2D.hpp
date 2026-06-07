@@ -7,6 +7,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 struct SDL_Texture;
@@ -40,6 +41,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /// XNA 4.0: Texture2D(GraphicsDevice, int width, int height) — creates empty texture.
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height);
 
+        /// XNA 4.0: Texture2D(GraphicsDevice, int width, int height, bool mipMap, SurfaceFormat format)
+        Texture2D(GraphicsDevice& graphicsDevice, int width, int height,
+                  bool mipMap, SurfaceFormat format);
+
         ~Texture2D();
 
         Texture2D(const Texture2D&) = default;
@@ -53,6 +58,10 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] int getHeightProperty() const { return height; }
         /// XNA 4.0: Texture2D.Bounds
         [[nodiscard]] Rectangle getBoundsProperty() const;
+        /// XNA 4.0: Texture2D.Format
+        [[nodiscard]] SurfaceFormat getFormatProperty() const { return format_; }
+        /// XNA 4.0: Texture2D.LevelCount
+        [[nodiscard]] int getLevelCountProperty() const { return levelCount_; }
 
         /// XNA 4.0: Texture2D.SetData<Color>(Color[] data)
         void SetData(const Color* data, int elementCount);
@@ -73,7 +82,10 @@ namespace Microsoft::Xna::Framework::Graphics
         static Texture2D FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream);
 
         /// XNA 4.0: Texture2D.SaveAsPng(Stream, int width, int height)
-        void SaveAsPng(const std::string& filename) const;
+        void SaveAsPng(System::IO::Stream* stream, int width, int height) const;
+
+        /// NOXNA convenience: saves as PNG directly to a file path.
+        NOXNA void SaveAsPng(const std::string& filename) const;
 
         /// XNA 4.0: Texture2D.SaveAsJpeg(Stream, int width, int height)
         void SaveAsJpeg(System::IO::Stream* stream, int width, int height) const;
@@ -96,6 +108,8 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice* device_ = nullptr;
         int width  = 0;
         int height = 0;
+        SurfaceFormat format_   = SurfaceFormat::Color;
+        int           levelCount_ = 1;
         std::vector<uint8_t> cpuPixels_;             // RGBA8 CPU-side copy for mip level 0
         std::vector<std::vector<uint8_t>> extraMipLevels_; // CPU-side copies for mip levels 1+
 
