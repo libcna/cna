@@ -32,6 +32,25 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
+    class EasyGLOcclusionQueryBackend : public IOcclusionQueryBackend, public ::easygl::RecoverableResource
+    {
+    public:
+        explicit EasyGLOcclusionQueryBackend(::easygl::ResourceRegistry* registry);
+        ~EasyGLOcclusionQueryBackend() override;
+
+        void Begin() override;
+        void End()   override;
+        [[nodiscard]] bool IsComplete() const override;
+        [[nodiscard]] int  PixelCount() const override;
+
+        void release_gl_handle_only() override;
+        void recreate_gl_resource()   override;
+
+    private:
+        ::easygl::Query query_;
+        ::easygl::ResourceRegistry* registry_ = nullptr;
+    };
+
     class EasyGLSpriteBatchBackend : public ISpriteBatchBackend, public ::easygl::RecoverableResource
     {
     public:
@@ -206,6 +225,7 @@ namespace CNA::Internal::Backends::EasyGL
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
         void DebugSimulateContextLoss() override;
         void DebugRestoreContext() override;

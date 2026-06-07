@@ -56,6 +56,55 @@ namespace CNA::Internal::Backends::EasyGL
     using namespace Microsoft::Xna::Framework::Graphics;
     using namespace CNA::Internal::Backends;
 
+    // --- EasyGLOcclusionQueryBackend ---
+
+    EasyGLOcclusionQueryBackend::EasyGLOcclusionQueryBackend(::easygl::ResourceRegistry* registry)
+        : registry_(registry)
+    {
+        query_.create();
+        if (registry_) registry_->add(this);
+    }
+
+    EasyGLOcclusionQueryBackend::~EasyGLOcclusionQueryBackend()
+    {
+        if (registry_) registry_->remove(this);
+    }
+
+    void EasyGLOcclusionQueryBackend::Begin()
+    {
+        if (metagl::IsContextLost() || !query_.is_created()) return;
+        query_.begin(::easygl::QueryTarget::AnySamplesPassed);
+    }
+
+    void EasyGLOcclusionQueryBackend::End()
+    {
+        if (metagl::IsContextLost() || !query_.is_created()) return;
+        query_.end(::easygl::QueryTarget::AnySamplesPassed);
+    }
+
+    bool EasyGLOcclusionQueryBackend::IsComplete() const
+    {
+        if (metagl::IsContextLost() || !query_.is_created()) return false;
+        return query_.is_result_available();
+    }
+
+    int EasyGLOcclusionQueryBackend::PixelCount() const
+    {
+        if (!IsComplete()) return 0;
+        // GLES3 uses GL_ANY_SAMPLES_PASSED — result is 0 (none) or 1 (any)
+        return static_cast<int>(query_.result());
+    }
+
+    void EasyGLOcclusionQueryBackend::release_gl_handle_only()
+    {
+        query_.reset_handle_no_gl();
+    }
+
+    void EasyGLOcclusionQueryBackend::recreate_gl_resource()
+    {
+        query_.create();
+    }
+
     // --- EasyGLTextureBackend ---
 
     EasyGLTextureBackend::EasyGLTextureBackend(const ImageData& data, ::easygl::ResourceRegistry* registry)
@@ -567,6 +616,11 @@ void main()
     std::unique_ptr<ISpriteBatchBackend> EasyGLGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<EasyGLSpriteBatchBackend>(device, &registry_, this);
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> EasyGLGraphicsBackend::CreateOcclusionQuery()
+    {
+        return std::make_unique<EasyGLOcclusionQueryBackend>(&registry_);
     }
 
     namespace

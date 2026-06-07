@@ -71,6 +71,23 @@ namespace CNA::Internal::Backends
         [[nodiscard]] virtual int GetIndexCount() const = 0;
     };
 
+    /**
+     * @brief Backend handle for a GPU occlusion query.
+     *
+     * On OpenGL ES 3.0 (EasyGL), uses GL_ANY_SAMPLES_PASSED — so PixelCount()
+     * returns 0 (no visible samples) or 1 (at least one visible sample), not an
+     * exact pixel count. This matches FNA's behaviour on GLES3.
+     */
+    class IOcclusionQueryBackend
+    {
+    public:
+        virtual ~IOcclusionQueryBackend() = default;
+        virtual void Begin() = 0;
+        virtual void End()   = 0;
+        [[nodiscard]] virtual bool IsComplete() const = 0;
+        [[nodiscard]] virtual int  PixelCount() const = 0;
+    };
+
     class ITextureBackend
     {
     public:
@@ -151,6 +168,10 @@ namespace CNA::Internal::Backends
 
         virtual std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) = 0;
         virtual std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() = 0;
+
+        /// Creates a backend occlusion query object. Returns nullptr on
+        /// backends that do not support hardware occlusion queries.
+        virtual std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() { return nullptr; }
 
         // ---- Graphics state ----
 

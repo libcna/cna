@@ -99,6 +99,17 @@ content loading are the next major missing pieces.
   `getRevisionProperty()` and `getSubSystemIdProperty()` return 0 (not available via SDL3).
 - Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
 
+### Current session — OcclusionQuery implementation (Task 11)
+- **Added:** `IOcclusionQueryBackend` to `IGraphicsBackend.hpp` with `Begin/End/IsComplete/PixelCount`;
+  `CreateOcclusionQuery()` factory (default returns nullptr).
+- **Added:** `EasyGLOcclusionQueryBackend` — wraps `::easygl::Query` with `GL_ANY_SAMPLES_PASSED`;
+  `IsComplete()` calls `is_result_available()`, `PixelCount()` calls `result()` (0 or 1 on GLES3);
+  participates in `RecoverableResource` context-loss protocol.
+- **Modified:** `OcclusionQuery.hpp/cpp` — stores `unique_ptr<IOcclusionQueryBackend>`;
+  constructor creates it via `device.GetBackend().CreateOcclusionQuery()`; all methods delegate
+  to backend (null-safe fallback for non-EasyGL backends).
+- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
+
 ### Current session — EasyGL shader pipeline (Task 10)
 - **Modified:** `IGraphicsBackend.hpp` — added `GpuDrawParams` struct (texture0, diffuseColor,
   ambientColor, light0Dir, light0Diffuse, worldColMajor, textureEnabled, vertexColorEnabled,
@@ -268,7 +279,7 @@ silently misread vertex data. Fixing this requires the backend to read stride fr
 | done | `EnvironmentMapEffect` — implemented (env map, fresnel, specular, lighting matrices, fog, one-light opt.) |
 | done | `DualTextureEffect` — implemented (two-texture blend, fog, vertex color, diffuse/alpha) |
 | done | `SkinnedEffect` — implemented (72 bones, weights 1/2/4, lighting matrices, perPixel/oneLight shader index) |
-| incomplete | `OcclusionQuery::Begin()/End()` — stub, always returns `isComplete_=false, pixelCount_=0` |
+| done | `OcclusionQuery` — implemented via `IOcclusionQueryBackend`; EasyGL uses `GL_ANY_SAMPLES_PASSED` (GLES3: PixelCount = 0 or 1); other backends return null → stub fallback |
 | incomplete | `Model::Draw` — no effect binding, does nothing useful |
 | incomplete | `SpriteFont` — header only, no glyph rendering |
 | done | `SpriteBatch::Begin(SpriteSortMode, BlendState)` — forwards `BlendState` to `GraphicsDevice::setBlendStateProperty` |

@@ -1,15 +1,36 @@
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     OcclusionQuery::OcclusionQuery(GraphicsDevice& device)
         : GraphicsResource(&device)
+        , backend_(device.GetBackend().CreateOcclusionQuery())
     {
     }
 
-    bool OcclusionQuery::getIsCompleteProperty() const { return isComplete_; }
-    int OcclusionQuery::getPixelCountProperty() const { return pixelCount_; }
+    OcclusionQuery::~OcclusionQuery() = default;
 
-    void OcclusionQuery::Begin() { isComplete_ = false; }
-    void OcclusionQuery::End()   { isComplete_ = true; }
+    bool OcclusionQuery::getIsCompleteProperty() const
+    {
+        if (backend_) return backend_->IsComplete();
+        return false;
+    }
+
+    int OcclusionQuery::getPixelCountProperty() const
+    {
+        if (backend_) return backend_->PixelCount();
+        return 0;
+    }
+
+    void OcclusionQuery::Begin()
+    {
+        if (backend_) backend_->Begin();
+    }
+
+    void OcclusionQuery::End()
+    {
+        if (backend_) backend_->End();
+    }
 }
