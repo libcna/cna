@@ -286,6 +286,15 @@ Steps:
 - Static helper `CalculateMipLevels(w,h)` halves dimensions until 1×1.
 - Build: both backends clean.
 
+### ~~Task 30 — `ContentManager` — `Song` and `Video` type readers~~ **DONE**
+
+- Added `SongTypeReader`: tries extensions `.mp3 .ogg .wav .flac .opus .aac .wma`; constructs
+  `Media::Song(path, stem)` so `Content.Load<Song>("music")` works without specifying extension.
+- Added `VideoTypeReader`: tries extensions `.mp4 .ogv .webm .mkv .avi .mov`; constructs
+  `Media::Video(path, &device)` so `Content.Load<Video>("cutscene")` works.
+- Both readers registered in `RegisterBuiltinLoaders()`.
+- Build: both backends clean.
+
 ---
 
 ## 5. Do not do yet

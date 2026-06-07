@@ -3,6 +3,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Media/Song.hpp"
+#include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -206,6 +208,36 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+        class SongTypeReader : public ContentTypeReader<Media::Song>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".mp3", ".ogg", ".wav", ".flac", ".opus", ".aac", ".wma"};
+            }
+
+            Media::Song Read(const std::string& path, ContentManager& /*cm*/) override
+            {
+                const std::string name =
+                    std::filesystem::path(path).stem().string();
+                return Media::Song(path, name);
+            }
+        };
+
+        class VideoTypeReader : public ContentTypeReader<Media::Video>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".mp4", ".ogv", ".webm", ".mkv", ".avi", ".mov"};
+            }
+
+            Media::Video Read(const std::string& path, ContentManager& cm) override
+            {
+                return Media::Video(path, &cm.getGraphicsDeviceInternal());
+            }
+        };
+
     } // anonymous namespace
 
     // ---------------------------------------------------------------------------
@@ -215,6 +247,8 @@ namespace Microsoft::Xna::Framework::Content
         RegisterTypeReader<Graphics::Texture2D>(std::make_unique<Texture2DTypeReader>());
         RegisterTypeReader<Audio::SoundEffect>(std::make_unique<SoundEffectTypeReader>());
         RegisterTypeReader<std::shared_ptr<Graphics::Effect>>(std::make_unique<EffectTypeReader>());
+        RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
+        RegisterTypeReader<Media::Video>(std::make_unique<VideoTypeReader>());
     }
 
 } // namespace Microsoft::Xna::Framework::Content
