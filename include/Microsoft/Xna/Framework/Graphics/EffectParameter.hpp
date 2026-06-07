@@ -85,6 +85,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetValue(const Vector4& value);
         void SetValue(const std::vector<Vector4>& value);
         void SetValue(Texture* value);
+        void SetValue(Texture2D* value);
 
     private:
         std::string name_;
@@ -99,6 +100,7 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<int>   intData_;
         std::string        stringData_;
         Texture*           textureData_ = nullptr;
+        Texture2D*         texture2DData_ = nullptr;
 
         std::unique_ptr<EffectParameterCollection> elements_;
         std::unique_ptr<EffectParameterCollection> members_;

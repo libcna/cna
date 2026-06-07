@@ -141,7 +141,7 @@ namespace Microsoft::Xna::Framework::Graphics
             r.push_back({floatData_[i * 4], floatData_[i * 4 + 1], floatData_[i * 4 + 2], floatData_[i * 4 + 3]});
         return r;
     }
-    Texture2D* EffectParameter::GetValueTexture2D() const { return dynamic_cast<Texture2D*>(textureData_); }
+    Texture2D* EffectParameter::GetValueTexture2D() const { return texture2DData_; }
     Texture3D* EffectParameter::GetValueTexture3D() const { return dynamic_cast<Texture3D*>(textureData_); }
     TextureCube* EffectParameter::GetValueTextureCube() const { return dynamic_cast<TextureCube*>(textureData_); }
 
@@ -158,6 +158,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const std::vector<float>& v) { floatData_ = v; }
     void EffectParameter::SetValue(const std::string& v) { stringData_ = v; }
     void EffectParameter::SetValue(Texture* v) { textureData_ = v; }
+    void EffectParameter::SetValue(Texture2D* v) { texture2DData_ = v; }
 
     void EffectParameter::SetValue(const Matrix& m)
     {

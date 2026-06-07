@@ -567,6 +567,90 @@ void main()
         return std::make_unique<EasyGLSpriteBatchBackend>(device, &registry_, this);
     }
 
+    namespace
+    {
+        // XNA Blend enum → easygl BlendFactor
+        // Blend: One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4,
+        //        InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
+        //        DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
+        //        InverseBlendFactor=11, SourceAlphaSaturation=12
+        ::easygl::BlendFactor ToEasyGLBlendFactor(int xnaBlend)
+        {
+            switch (xnaBlend)
+            {
+            case  1: return ::easygl::BlendFactor::Zero;
+            case  2: return ::easygl::BlendFactor::SrcColor;
+            case  3: return ::easygl::BlendFactor::OneMinusSrcColor;
+            case  4: return ::easygl::BlendFactor::SrcAlpha;
+            case  5: return ::easygl::BlendFactor::OneMinusSrcAlpha;
+            case  6: return ::easygl::BlendFactor::DstColor;
+            case  7: return ::easygl::BlendFactor::OneMinusDstColor;
+            case  8: return ::easygl::BlendFactor::DstAlpha;
+            case  9: return ::easygl::BlendFactor::OneMinusDstAlpha;
+            case 10: return ::easygl::BlendFactor::ConstantColor;
+            case 11: return ::easygl::BlendFactor::OneMinusConstantColor;
+            case 12: return ::easygl::BlendFactor::SrcAlphaSaturate;
+            default: return ::easygl::BlendFactor::One;  // Blend::One = 0
+            }
+        }
+
+        // XNA BlendFunction enum → easygl BlendEquation
+        // BlendFunction: Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4
+        ::easygl::BlendEquation ToEasyGLBlendEquation(int xnaBlendFunc)
+        {
+            switch (xnaBlendFunc)
+            {
+            case 1: return ::easygl::BlendEquation::FuncSubtract;
+            case 2: return ::easygl::BlendEquation::FuncReverseSubtract;
+            case 3: return ::easygl::BlendEquation::Max;
+            case 4: return ::easygl::BlendEquation::Min;
+            default: return ::easygl::BlendEquation::FuncAdd;  // BlendFunction::Add = 0
+            }
+        }
+
+        // XNA CompareFunction enum → easygl CompareFunc
+        // CompareFunction: Always=0, Never=1, Less=2, LessEqual=3, Equal=4,
+        //                  GreaterEqual=5, Greater=6, NotEqual=7
+        ::easygl::CompareFunc ToEasyGLCompareFunc(int xnaCompare)
+        {
+            switch (xnaCompare)
+            {
+            case 1: return ::easygl::CompareFunc::Never;
+            case 2: return ::easygl::CompareFunc::Less;
+            case 3: return ::easygl::CompareFunc::Lequal;
+            case 4: return ::easygl::CompareFunc::Equal;
+            case 5: return ::easygl::CompareFunc::Gequal;
+            case 6: return ::easygl::CompareFunc::Greater;
+            case 7: return ::easygl::CompareFunc::Notequal;
+            default: return ::easygl::CompareFunc::Always;  // CompareFunction::Always = 0
+            }
+        }
+
+        ::easygl::PrimitiveType ToEasyGl(PrimitiveType pt)
+        {
+            switch (pt)
+            {
+            case PrimitiveType::TriangleList: return ::easygl::PrimitiveType::Triangles;
+            case PrimitiveType::TriangleStrip: return ::easygl::PrimitiveType::TriangleStrip;
+            case PrimitiveType::LineList: return ::easygl::PrimitiveType::Lines;
+            case PrimitiveType::LineStrip: return ::easygl::PrimitiveType::LineStrip;
+            }
+            return ::easygl::PrimitiveType::Triangles;
+        }
+
+        int VertexCountForPrimitives(PrimitiveType pt, int primitiveCount)
+        {
+            switch (pt)
+            {
+            case PrimitiveType::TriangleList: return primitiveCount * 3;
+            case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+            case PrimitiveType::LineList: return primitiveCount * 2;
+            case PrimitiveType::LineStrip: return primitiveCount + 1;
+            }
+            return 0;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Graphics state
     // -------------------------------------------------------------------------
@@ -820,90 +904,6 @@ void main()
     std::unique_ptr<IIndexBufferBackend> EasyGLGraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
         return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, &registry_);
-    }
-
-    namespace
-    {
-        // XNA Blend enum → easygl BlendFactor
-        // Blend: One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4,
-        //        InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
-        //        DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
-        //        InverseBlendFactor=11, SourceAlphaSaturation=12
-        ::easygl::BlendFactor ToEasyGLBlendFactor(int xnaBlend)
-        {
-            switch (xnaBlend)
-            {
-            case  1: return ::easygl::BlendFactor::Zero;
-            case  2: return ::easygl::BlendFactor::SrcColor;
-            case  3: return ::easygl::BlendFactor::OneMinusSrcColor;
-            case  4: return ::easygl::BlendFactor::SrcAlpha;
-            case  5: return ::easygl::BlendFactor::OneMinusSrcAlpha;
-            case  6: return ::easygl::BlendFactor::DstColor;
-            case  7: return ::easygl::BlendFactor::OneMinusDstColor;
-            case  8: return ::easygl::BlendFactor::DstAlpha;
-            case  9: return ::easygl::BlendFactor::OneMinusDstAlpha;
-            case 10: return ::easygl::BlendFactor::ConstantColor;
-            case 11: return ::easygl::BlendFactor::OneMinusConstantColor;
-            case 12: return ::easygl::BlendFactor::SrcAlphaSaturate;
-            default: return ::easygl::BlendFactor::One;  // Blend::One = 0
-            }
-        }
-
-        // XNA BlendFunction enum → easygl BlendEquation
-        // BlendFunction: Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4
-        ::easygl::BlendEquation ToEasyGLBlendEquation(int xnaBlendFunc)
-        {
-            switch (xnaBlendFunc)
-            {
-            case 1: return ::easygl::BlendEquation::FuncSubtract;
-            case 2: return ::easygl::BlendEquation::FuncReverseSubtract;
-            case 3: return ::easygl::BlendEquation::Max;
-            case 4: return ::easygl::BlendEquation::Min;
-            default: return ::easygl::BlendEquation::FuncAdd;  // BlendFunction::Add = 0
-            }
-        }
-
-        // XNA CompareFunction enum → easygl CompareFunc
-        // CompareFunction: Always=0, Never=1, Less=2, LessEqual=3, Equal=4,
-        //                  GreaterEqual=5, Greater=6, NotEqual=7
-        ::easygl::CompareFunc ToEasyGLCompareFunc(int xnaCompare)
-        {
-            switch (xnaCompare)
-            {
-            case 1: return ::easygl::CompareFunc::Never;
-            case 2: return ::easygl::CompareFunc::Less;
-            case 3: return ::easygl::CompareFunc::Lequal;
-            case 4: return ::easygl::CompareFunc::Equal;
-            case 5: return ::easygl::CompareFunc::Gequal;
-            case 6: return ::easygl::CompareFunc::Greater;
-            case 7: return ::easygl::CompareFunc::Notequal;
-            default: return ::easygl::CompareFunc::Always;  // CompareFunction::Always = 0
-            }
-        }
-
-        ::easygl::PrimitiveType ToEasyGl(PrimitiveType pt)
-        {
-            switch (pt)
-            {
-            case PrimitiveType::TriangleList: return ::easygl::PrimitiveType::Triangles;
-            case PrimitiveType::TriangleStrip: return ::easygl::PrimitiveType::TriangleStrip;
-            case PrimitiveType::LineList: return ::easygl::PrimitiveType::Lines;
-            case PrimitiveType::LineStrip: return ::easygl::PrimitiveType::LineStrip;
-            }
-            return ::easygl::PrimitiveType::Triangles;
-        }
-
-        int VertexCountForPrimitives(PrimitiveType pt, int primitiveCount)
-        {
-            switch (pt)
-            {
-            case PrimitiveType::TriangleList: return primitiveCount * 3;
-            case PrimitiveType::TriangleStrip: return primitiveCount + 2;
-            case PrimitiveType::LineList: return primitiveCount * 2;
-            case PrimitiveType::LineStrip: return primitiveCount + 1;
-            }
-            return 0;
-        }
     }
 
     void EasyGLGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb_in,
