@@ -166,19 +166,30 @@ wiring.
 - Both overloads throw `std::runtime_error` for `level != 0` (only mip 0 stored in `cpuPixels_`).
 - Build: both backends clean.
 
-### Task 21 — `DrawUserPrimitives` / `DrawUserIndexedPrimitives` with all vertex types
+### ~~Task 21 — `DrawUserPrimitives` / `DrawUserIndexedPrimitives` with all vertex types~~ **DONE**
 
-**Goal:** extend `DrawUserPrimitives` and `DrawUserIndexedPrimitives` to accept all four vertex
-types (currently only `VertexPositionColor` is supported). Add 32-bit index support to
-`DrawUserIndexedPrimitives`.
+- Added typed overloads for all 4 vertex types (`VPC`, `VPT`, `VPCT`, `VPNT`) for both
+  `DrawUserPrimitives` and `DrawUserIndexedPrimitives`.
+- Each overload packs vertices into a layout-compatible GPU struct (`GpuVPC/T/CT/NT`) with
+  static_asserts on stride (16/20/24/32), then calls `DrawPrimitivesEx` / `DrawIndexedPrimitivesEx`
+  with `BuildGpuDrawParams(currentEffect_)` for correct texture/color/lighting shader selection.
+- Packing is always explicit (never raw pointer cast) because vertex types inherit `IVertexType`
+  (vtable) and `Color` inherits `IPackedVector` (vtable).
+- `DrawUserIndexedPrimitives` uses 16-bit indices. 32-bit variant deferred.
+- Build: both backends clean.
 
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/GraphicsDevice.cs`
+### Task 22 — `Game::Window` and `GameWindow` resize / fullscreen
+
+**Goal:** expose `GameWindow.ClientSizeChanged`, `GameWindow.AllowUserResizing`, and
+`GameWindow.IsBorderlessEXT` so games can respond to window resizes and toggle fullscreen.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/GameWindow.cs`
 
 Steps:
-1. Inspect current `DrawUserPrimitives` and `DrawUserIndexedPrimitives` in `GraphicsDevice.cpp`.
-2. Extend them to forward the vertex stride to `DrawPrimitivesEx` / `DrawIndexedPrimitivesEx` with
-   the correct `GpuDrawParams` so textured/lit vertex types work.
-3. Add 32-bit index variant of `DrawUserIndexedPrimitives`.
+1. Add `ClientSizeChanged` event (`System::EventHandler<EventArgs>`) to `GameWindow`.
+2. Add `AllowUserResizing` property — hook into `SDL_SetWindowResizable`.
+3. Fire `ClientSizeChanged` from `SdlInputBridge` when `SDL_EVENT_WINDOW_RESIZED` is received.
+4. Update `GraphicsDevice::Viewport` automatically when the window is resized.
 
 ---
 

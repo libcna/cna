@@ -6,6 +6,9 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
 #ifdef CNA_BACKEND_BGFX
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
@@ -578,6 +581,236 @@ namespace Microsoft::Xna::Framework::Graphics
             primitiveType,
             primitiveCount
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // DrawUserPrimitives — typed overloads
+    // -----------------------------------------------------------------------
+
+    namespace
+    {
+        // Returns the vertex count implied by a primitive type and count.
+        int VertexCountForUserPrimitives(PrimitiveType type, int primitiveCount)
+        {
+            switch (type)
+            {
+                case PrimitiveType::TriangleList:  return primitiveCount * 3;
+                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+                case PrimitiveType::LineList:      return primitiveCount * 2;
+                case PrimitiveType::LineStrip:     return primitiveCount + 1;
+                default: return primitiveCount;
+            }
+        }
+
+        // GPU-layout packed structs (no vtable, exact stride).
+        struct GpuVPC  { float x,y,z; std::uint8_t r,g,b,a; };                        // 16
+        struct GpuVPT  { float x,y,z,u,v; };                                           // 20
+        struct GpuVPCT { float x,y,z; std::uint8_t r,g,b,a; float u,v; };             // 24
+        struct GpuVPNT { float x,y,z, nx,ny,nz, u,v; };                               // 32
+
+        static_assert(sizeof(GpuVPC)  == 16);
+        static_assert(sizeof(GpuVPT)  == 20);
+        static_assert(sizeof(GpuVPCT) == 24);
+        static_assert(sizeof(GpuVPNT) == 32);
+    }
+
+    // DrawUserPrimitives — VertexPositionColor
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
+                                            const VertexPositionColor* data, int offset, int count)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int n = VertexCountForUserPrimitives(type, count);
+        std::vector<GpuVPC> packed(static_cast<std::size_t>(n));
+        for (int i = 0; i < n; ++i)
+        {
+            const auto& v = data[offset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Color.getRProperty(), v.Color.getGProperty(),
+                          v.Color.getBProperty(), v.Color.getAProperty() };
+        }
+        auto vb = backend_->CreateVertexBuffer(n);
+        vb->SetData(packed.data(), n, sizeof(GpuVPC));
+        backend_->DrawPrimitivesEx(*vb, currentEffect_->World, currentEffect_->View,
+                                   currentEffect_->Projection, type, count,
+                                   BuildGpuDrawParams(currentEffect_));
+    }
+
+    // DrawUserPrimitives — VertexPositionTexture
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
+                                            const VertexPositionTexture* data, int offset, int count)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int n = VertexCountForUserPrimitives(type, count);
+        std::vector<GpuVPT> packed(static_cast<std::size_t>(n));
+        for (int i = 0; i < n; ++i)
+        {
+            const auto& v = data[offset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        auto vb = backend_->CreateVertexBuffer(n);
+        vb->SetData(packed.data(), n, sizeof(GpuVPT));
+        backend_->DrawPrimitivesEx(*vb, currentEffect_->World, currentEffect_->View,
+                                   currentEffect_->Projection, type, count,
+                                   BuildGpuDrawParams(currentEffect_));
+    }
+
+    // DrawUserPrimitives — VertexPositionColorTexture
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
+                                            const VertexPositionColorTexture* data, int offset, int count)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int n = VertexCountForUserPrimitives(type, count);
+        std::vector<GpuVPCT> packed(static_cast<std::size_t>(n));
+        for (int i = 0; i < n; ++i)
+        {
+            const auto& v = data[offset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Color.getRProperty(), v.Color.getGProperty(),
+                          v.Color.getBProperty(), v.Color.getAProperty(),
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        auto vb = backend_->CreateVertexBuffer(n);
+        vb->SetData(packed.data(), n, sizeof(GpuVPCT));
+        backend_->DrawPrimitivesEx(*vb, currentEffect_->World, currentEffect_->View,
+                                   currentEffect_->Projection, type, count,
+                                   BuildGpuDrawParams(currentEffect_));
+    }
+
+    // DrawUserPrimitives — VertexPositionNormalTexture
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
+                                            const VertexPositionNormalTexture* data, int offset, int count)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int n = VertexCountForUserPrimitives(type, count);
+        std::vector<GpuVPNT> packed(static_cast<std::size_t>(n));
+        for (int i = 0; i < n; ++i)
+        {
+            const auto& v = data[offset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Normal.X, v.Normal.Y, v.Normal.Z,
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        auto vb = backend_->CreateVertexBuffer(n);
+        vb->SetData(packed.data(), n, sizeof(GpuVPNT));
+        backend_->DrawPrimitivesEx(*vb, currentEffect_->World, currentEffect_->View,
+                                   currentEffect_->Projection, type, count,
+                                   BuildGpuDrawParams(currentEffect_));
+    }
+
+    // -----------------------------------------------------------------------
+    // DrawUserIndexedPrimitives — typed overloads
+    // -----------------------------------------------------------------------
+
+    namespace
+    {
+        int IndexCountForPrimitives(PrimitiveType type, int primitiveCount)
+        {
+            switch (type)
+            {
+                case PrimitiveType::TriangleList:  return primitiveCount * 3;
+                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+                case PrimitiveType::LineList:      return primitiveCount * 2;
+                case PrimitiveType::LineStrip:     return primitiveCount + 1;
+                default: return primitiveCount;
+            }
+        }
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const VertexPositionColor* vertices, int vOffset, int numVerts,
+                                                   const std::uint16_t* indices, int iOffset, int primCount)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int ic = IndexCountForPrimitives(type, primCount);
+        std::vector<GpuVPC> packed(static_cast<std::size_t>(numVerts));
+        for (int i = 0; i < numVerts; ++i)
+        {
+            const auto& v = vertices[vOffset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Color.getRProperty(), v.Color.getGProperty(),
+                          v.Color.getBProperty(), v.Color.getAProperty() };
+        }
+        std::vector<std::uint16_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(packed.data(), numVerts, sizeof(GpuVPC));
+        auto ib = backend_->CreateIndexBuffer16(ic);
+        ib->SetData16(idx.data(), ic);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
+                                          currentEffect_->Projection, type, primCount,
+                                          BuildGpuDrawParams(currentEffect_));
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const VertexPositionTexture* vertices, int vOffset, int numVerts,
+                                                   const std::uint16_t* indices, int iOffset, int primCount)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int ic = IndexCountForPrimitives(type, primCount);
+        std::vector<GpuVPT> packed(static_cast<std::size_t>(numVerts));
+        for (int i = 0; i < numVerts; ++i)
+        {
+            const auto& v = vertices[vOffset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        std::vector<std::uint16_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(packed.data(), numVerts, sizeof(GpuVPT));
+        auto ib = backend_->CreateIndexBuffer16(ic);
+        ib->SetData16(idx.data(), ic);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
+                                          currentEffect_->Projection, type, primCount,
+                                          BuildGpuDrawParams(currentEffect_));
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
+                                                   const std::uint16_t* indices, int iOffset, int primCount)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int ic = IndexCountForPrimitives(type, primCount);
+        std::vector<GpuVPCT> packed(static_cast<std::size_t>(numVerts));
+        for (int i = 0; i < numVerts; ++i)
+        {
+            const auto& v = vertices[vOffset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Color.getRProperty(), v.Color.getGProperty(),
+                          v.Color.getBProperty(), v.Color.getAProperty(),
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        std::vector<std::uint16_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(packed.data(), numVerts, sizeof(GpuVPCT));
+        auto ib = backend_->CreateIndexBuffer16(ic);
+        ib->SetData16(idx.data(), ic);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
+                                          currentEffect_->Projection, type, primCount,
+                                          BuildGpuDrawParams(currentEffect_));
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
+                                                   const std::uint16_t* indices, int iOffset, int primCount)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int ic = IndexCountForPrimitives(type, primCount);
+        std::vector<GpuVPNT> packed(static_cast<std::size_t>(numVerts));
+        for (int i = 0; i < numVerts; ++i)
+        {
+            const auto& v = vertices[vOffset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Normal.X, v.Normal.Y, v.Normal.Z,
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        std::vector<std::uint16_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(packed.data(), numVerts, sizeof(GpuVPNT));
+        auto ib = backend_->CreateIndexBuffer16(ic);
+        ib->SetData16(idx.data(), ic);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
+                                          currentEffect_->Projection, type, primCount,
+                                          BuildGpuDrawParams(currentEffect_));
     }
 
     CNA::Internal::Backends::IGraphicsBackend& GraphicsDevice::GetBackend() const
