@@ -80,8 +80,8 @@ wiring.
 
 | Area | Status |
 |------|--------|
-| `Texture2D::FromStream(GraphicsDevice, Stream)` | Not implemented. CNA has a NOXNA file-path constructor via `ImageLoader`; the XNA static `FromStream` with a `System::IO::Stream` argument is missing. Requires `System::IO::Stream` in sharp-runtime. |
-| `Texture2D::GetData<T>` / `SaveAsPng` / `SaveAsJpeg` | Not declared or implemented. |
+| `Texture2D::SaveAsJpeg` | Not implemented. |
+| `Texture2D::GetData` with mip level / rectangle overload | Only the flat `GetData(Color*, startIndex, count)` overload is implemented (reads CPU copy). The `GetData(int level, Rectangle?, ...)` overload is missing. |
 | `SpriteBatch` sort modes | Only `SpriteSortMode::Immediate` / `Deferred` (unordered). `BackToFront`, `FrontToBack`, and `Texture` modes require a deferred sprite queue with sorting before flush. |
 | `RenderTarget2D` backend wiring | `GraphicsDevice::SetRenderTarget` is declared but `RenderTarget2D` does not hook into EasyGL/Vulkan FBO. Off-screen rendering does not work. |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
@@ -114,19 +114,17 @@ wiring.
 
 ## 4. Next smallest tasks
 
-### Task 16 — `Texture2D::FromStream` + `GetData`
+### ~~Task 16 — `Texture2D::FromStream` + `GetData`~~ **DONE**
 
-**Goal:** implement the standard XNA texture loading path.
-
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs`
-(methods `FromStream`, `GetData`, `SaveAsPng`, `SaveAsJpeg`).
-
-Steps:
-1. Add `System::IO::Stream` minimal stub to sharp-runtime (abstract base with `Read(byte*,int)`).
-2. Add `System::IO::MemoryStream` and `System::IO::FileStream` concrete implementations.
-3. Declare and implement `static Texture2D* FromStream(GraphicsDevice* graphicsDevice, System::IO::Stream* stream)` in `Texture2D.hpp/.cpp` — decode via `CNA::Internal::Graphics::ImageLoader` (already handles RGBA).
-4. Declare and implement `GetData(Color* data, int startIndex, int elementCount)` — reads back pixel data from the backend or from a CPU-side copy.
-5. Optionally: `SaveAsPng` / `SaveAsJpeg` via stb_image_write (already likely in the tree).
+### Task 16 (completed) — summary
+- `ImageLoader::LoadFromMemory` — SDL3 `SDL_IOFromConstMem` + `IMG_Load_IO`
+- `Texture2D::FromStream(GraphicsDevice&, Stream&)` — reads full stream into buffer, decodes via ImageLoader
+- `Texture2D::GetData(Color*, startIndex, elementCount)` — reads CPU-side `cpuPixels_` copy
+- `Texture2D::GetData(Color*, elementCount)` — convenience overload
+- `Texture2D::SaveAsPng(const std::string& filename)` — creates SDL_Surface from CPU pixels, calls `IMG_SavePNG`
+- `Texture2D::getWidthProperty()` / `getHeightProperty()` — were missing, added
+- All constructors now populate `cpuPixels_` so `GetData` works immediately after load
+- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both clean
 
 ### Task 17 — `SpriteBatch` deferred sort modes
 

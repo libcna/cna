@@ -11,6 +11,8 @@
 
 struct SDL_Texture;
 
+namespace System::IO { class Stream; }
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
@@ -25,17 +27,9 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     using namespace CNA::Internal::Backends;
 
-    /**
-     * @brief Represents a 2D texture. Mirrors XNA 4.0 Texture2D.
-     */
+    /// Represents a 2D texture. Mirrors XNA 4.0 Texture2D.
     class Texture2D
     {
-    private:
-        std::shared_ptr<ITextureBackend> backend_;
-        GraphicsDevice* device_ = nullptr; // non-owning; set by the (device,w,h) constructor
-        int width  = 0;
-        int height = 0;
-
     public:
         Texture2D();
 
@@ -53,16 +47,32 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture2D(Texture2D&&) noexcept = default;
         Texture2D& operator=(Texture2D&&) noexcept = default;
 
+        /// XNA 4.0: Texture2D.Width
+        [[nodiscard]] int getWidthProperty()  const { return width; }
+        /// XNA 4.0: Texture2D.Height
+        [[nodiscard]] int getHeightProperty() const { return height; }
         /// XNA 4.0: Texture2D.Bounds
         [[nodiscard]] Rectangle getBoundsProperty() const;
 
         /// XNA 4.0: Texture2D.SetData<Color>(Color[] data)
         void SetData(const Color* data, int elementCount);
 
+        /// XNA 4.0: Texture2D.GetData<Color>(Color[] data, int startIndex, int elementCount)
+        void GetData(Color* data, int startIndex, int elementCount) const;
+
+        /// XNA 4.0: Texture2D.GetData<Color>(Color[] data)
+        void GetData(Color* data, int elementCount) const;
+
+        /// XNA 4.0: Texture2D.FromStream(GraphicsDevice, Stream)
+        static Texture2D FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream);
+
+        /// XNA 4.0: Texture2D.SaveAsPng(Stream, int width, int height)
+        void SaveAsPng(const std::string& filename) const;
+
         /// Updates texture pixels from a raw RGBA byte buffer. pixelCount = width * height.
         NOXNA void SetDataRGBA(const uint8_t* data, int pixelCount);
 
-        ITextureBackend& GetBackend() const { return *backend_; }
+        NOXNA ITextureBackend& GetBackend() const { return *backend_; }
 
         /// @note Not in XNA 4.0 — prefer the Texture2D(device,w,h)+SetData pattern.
         NOXNA static Texture2D CreateFromPixels(GraphicsDevice& device,
@@ -70,6 +80,14 @@ namespace Microsoft::Xna::Framework::Graphics
                                                 const std::vector<std::uint8_t>& rgba);
 
     private:
+        std::shared_ptr<ITextureBackend> backend_;
+        GraphicsDevice* device_ = nullptr;
+        int width  = 0;
+        int height = 0;
+        std::vector<uint8_t> cpuPixels_; // RGBA8 CPU-side copy, width*height*4 bytes
+
+        void storeCpuPixels(const uint8_t* rgba, int pixelCount);
+
         [[nodiscard]] SDL_Texture* GetNativeTextureInternal() const;
 
         friend class SpriteBatch;

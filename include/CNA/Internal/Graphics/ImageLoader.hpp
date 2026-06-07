@@ -1,22 +1,18 @@
 #pragma once
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 namespace CNA::Internal::Graphics
 {
-    /**
-     * @brief Shared/internal layer for image loading.
-     * Uses SDL_image internally but hides it from backends.
-     */
     class ImageLoader
     {
     public:
-        /**
-         * @brief Load an image from file and decode it into RGBA8.
-         *
-         * @param assetName Full or relative path to the image file.
-         * @return Decoded ImageData structure.
-         */
+        /// Load an image from a file path and decode it into RGBA8.
         static ImageData Load(const std::string& assetName);
+
+        /// Load an image from an in-memory buffer and decode it into RGBA8.
+        static ImageData LoadFromMemory(const uint8_t* data, std::size_t size);
     };
 }
