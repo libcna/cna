@@ -20,29 +20,23 @@ namespace Microsoft::Xna::Framework::Graphics
                                    DepthFormat preferredDepthFormat,
                                    int preferredMultiSampleCount,
                                    RenderTargetUsage usage)
-        : GraphicsResource(&device)
-        , width_(width)
-        , height_(height)
-        , levelCount_(mipMap ? 1 : 1)
-        , format_(preferredFormat)
+        : Texture2D(device, width, height, preferredFormat, mipMap ? 1 : 1,
+                    std::shared_ptr<IRenderTargetBackend>(
+                        device.GetBackend().CreateRenderTarget2D(
+                            width, height, preferredDepthFormat != DepthFormat::None)))
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)
     {
-        const bool hasDepth = (preferredDepthFormat != DepthFormat::None);
-        rtBackend_ = device.GetBackend().CreateRenderTarget2D(width, height, hasDepth);
+        rtBackend_ = static_cast<IRenderTargetBackend*>(GetBackendRaw());
     }
 
-    int RenderTarget2D::getWidthProperty() const { return width_; }
-    int RenderTarget2D::getHeightProperty() const { return height_; }
-    int RenderTarget2D::getLevelCountProperty() const { return levelCount_; }
     RenderTargetUsage RenderTarget2D::getRenderTargetUsageProperty() const { return usage_; }
     DepthFormat RenderTarget2D::getDepthStencilFormatProperty() const { return depthFormat_; }
     int RenderTarget2D::getMultiSampleCountProperty() const { return multiSampleCount_; }
-    SurfaceFormat RenderTarget2D::getFormatProperty() const { return format_; }
 
     IRenderTargetBackend* RenderTarget2D::GetRenderTargetBackend() const
     {
-        return rtBackend_.get();
+        return rtBackend_;
     }
 }

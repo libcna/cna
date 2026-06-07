@@ -7,17 +7,12 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 struct SDL_Texture;
 
 namespace System::IO { class Stream; }
-
-namespace Microsoft::Xna::Framework::Graphics
-{
-    class GraphicsDevice;
-}
 
 namespace CNA::Internal::Backends
 {
@@ -29,7 +24,7 @@ namespace Microsoft::Xna::Framework::Graphics
     using namespace CNA::Internal::Backends;
 
     /// Represents a 2D texture. Mirrors XNA 4.0 Texture2D.
-    class Texture2D
+    class Texture2D : public Texture
     {
     public:
         Texture2D();
@@ -45,12 +40,14 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height,
                   bool mipMap, SurfaceFormat format);
 
-        ~Texture2D();
+        ~Texture2D() override;
 
         Texture2D(const Texture2D&) = default;
         Texture2D& operator=(const Texture2D&) = default;
         Texture2D(Texture2D&&) noexcept = default;
         Texture2D& operator=(Texture2D&&) noexcept = default;
+
+        [[nodiscard]] const std::string& GetTypeName() const override;
 
         /// XNA 4.0: Texture2D.Width
         [[nodiscard]] int getWidthProperty()  const { return width; }
@@ -58,10 +55,8 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] int getHeightProperty() const { return height; }
         /// XNA 4.0: Texture2D.Bounds
         [[nodiscard]] Rectangle getBoundsProperty() const;
-        /// XNA 4.0: Texture2D.Format
-        [[nodiscard]] SurfaceFormat getFormatProperty() const { return format_; }
-        /// XNA 4.0: Texture2D.LevelCount
-        [[nodiscard]] int getLevelCountProperty() const { return levelCount_; }
+
+        // Format and LevelCount are inherited from Texture.
 
         /// XNA 4.0: Texture2D.SetData<Color>(Color[] data)
         void SetData(const Color* data, int elementCount);
@@ -103,13 +98,18 @@ namespace Microsoft::Xna::Framework::Graphics
                                                 int w, int h,
                                                 const std::vector<std::uint8_t>& rgba);
 
+    protected:
+        /// Used by RenderTarget2D: initializes with a pre-built backend (no CPU-side pixels).
+        Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt, int levelCount,
+                  std::shared_ptr<ITextureBackend> backend);
+
+        /// Returns the raw (non-owning) backend pointer. Used by RenderTarget2D after construction.
+        [[nodiscard]] ITextureBackend* GetBackendRaw() const { return backend_.get(); }
+
     private:
         std::shared_ptr<ITextureBackend> backend_;
-        GraphicsDevice* device_ = nullptr;
         int width  = 0;
         int height = 0;
-        SurfaceFormat format_   = SurfaceFormat::Color;
-        int           levelCount_ = 1;
         std::vector<uint8_t> cpuPixels_;             // RGBA8 CPU-side copy for mip level 0
         std::vector<std::vector<uint8_t>> extraMipLevels_; // CPU-side copies for mip levels 1+
 

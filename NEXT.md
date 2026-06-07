@@ -87,7 +87,7 @@ wiring.
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
 | Vulkan / BGFX 3D draw | Vulkan backend has state (blend/depth/cull) but no real 3D draw call path. BGFX throws on all 3D calls. |
 | Model asset loading | No pipeline to load a `Model` from a file; `Model::Draw` is complete but models must be constructed manually via the NOXNA constructor. |
-| `RenderTarget2D` as `Texture2D` | RT in CNA does not inherit `Texture2D` — cannot bind an RT as a sampler texture via the XNA API. Architecturally incorrect vs FNA. |
+| `RenderTarget2D` as `Texture2D` | Fixed: RT now inherits `Texture2D` (→ `Texture` → `GraphicsResource`). Can be used as a texture. |
 | `DrawInstancedPrimitives` | Not implemented. |
 | `GraphicsDevice::GetBackBufferData<T>` | Implemented for `Color*` on EasyGL (glReadPixels + Y-flip); Vulkan throws (staging readback not implemented). |
 
@@ -312,6 +312,29 @@ Steps:
   All funnel to the rect overload; rect==nullptr reads the full viewport.
 - Vulkan backend inherits the throwing default — throws `runtime_error` (staging readback deferred).
 - Build: both `cmake-build-vulkan` and `cmake-build-easygl` — clean.
+
+### ~~Task 32 — `RenderTarget2D : Texture2D` — correct inheritance hierarchy~~ **DONE**
+
+- **Problem:** `RenderTarget2D` was inheriting `GraphicsResource, IRenderTarget` — it was NOT a
+  `Texture2D`, so an RT could not be bound as a sampler texture. This diverged from FNA where
+  `RenderTarget2D : Texture2D : Texture : GraphicsResource`.
+- **`Texture2D`** now inherits `Texture` (→ `GraphicsResource` → `Object`):
+  - Removed `format_`, `levelCount_` private fields — now use protected `format_` / `levelCount_`
+    from `Texture`.
+  - Removed `device_` — now uses `graphicsDevice_` from `GraphicsResource`.
+  - Added `GetTypeName()` override (required by `System::Object`).
+  - Added protected constructor `Texture2D(device, w, h, fmt, levelCount, shared_ptr<ITextureBackend>)`
+    for `RenderTarget2D` to use.
+  - Added protected `GetBackendRaw()` — lets `RenderTarget2D` retrieve the raw `IRenderTargetBackend*`
+    from the shared_ptr stored in `backend_`.
+- **`RenderTarget2D`** now inherits `Texture2D, IRenderTarget`:
+  - Removed `width_`, `height_`, `format_`, `levelCount_` — all inherited from `Texture2D`/`Texture`.
+  - Constructor calls the protected `Texture2D` ctor; passes a `shared_ptr<IRenderTargetBackend>`
+    (converted from the `unique_ptr` returned by `CreateRenderTarget2D`).
+  - `rtBackend_` is now a raw non-owning ptr obtained via `static_cast<IRenderTargetBackend*>(GetBackendRaw())`.
+  - `IRenderTarget` pure virtuals (`getWidthProperty`, `getHeightProperty`, `getLevelCountProperty`)
+    satisfied via inline forwarders that delegate to `Texture2D`/`Texture`.
+- Build: both backends clean.
 
 ---
 

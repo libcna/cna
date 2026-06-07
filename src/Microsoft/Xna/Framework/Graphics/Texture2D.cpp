@@ -62,9 +62,9 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D::Texture2D() = default;
 
     Texture2D::Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)
+        : Texture(&graphicsDevice)
     {
         ImageData data = ImageLoader::Load(assetName);
-        device_  = &graphicsDevice;
         width    = data.width;
         height   = data.height;
         storeCpuPixels(data.pixels.data(), width * height);
@@ -81,7 +81,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h)
-        : device_(&graphicsDevice), width(w), height(h)
+        : Texture(&graphicsDevice), width(w), height(h)
     {
         ImageData data;
         data.width  = w;
@@ -100,10 +100,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h,
                          bool mipMap, SurfaceFormat format)
-        : device_(&graphicsDevice), width(w), height(h),
-          format_(format),
-          levelCount_(mipMap ? CalculateMipLevels(w, h) : 1)
+        : Texture(&graphicsDevice), width(w), height(h)
     {
+        format_     = format;
+        levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;
         ImageData data;
         data.width  = w;
         data.height = h;
@@ -112,11 +112,25 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
     }
 
+    Texture2D::Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt,
+                         int lvlCount, std::shared_ptr<ITextureBackend> backend)
+        : Texture(&device), width(w), height(h), backend_(std::move(backend))
+    {
+        format_     = fmt;
+        levelCount_ = lvlCount;
+    }
+
     Texture2D::~Texture2D() = default;
 
     // -----------------------------------------------------------------------
     // Properties
     // -----------------------------------------------------------------------
+
+    const std::string& Texture2D::GetTypeName() const
+    {
+        static const std::string name = "Texture2D";
+        return name;
+    }
 
     Rectangle Texture2D::getBoundsProperty() const
     {
@@ -129,7 +143,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SetData(const Color* data, int elementCount)
     {
-        if (!device_ || !data || elementCount <= 0) return;
+        if (!graphicsDevice_ || !data || elementCount <= 0) return;
         ImageData img;
         img.width  = width;
         img.height = height;
@@ -142,7 +156,7 @@ namespace Microsoft::Xna::Framework::Graphics
             img.pixels[i * 4 + 3] = data[i].getAProperty();
         }
         cpuPixels_ = img.pixels;
-        backend_   = device_->GetBackend().CreateTexture(img);
+        backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
     }
 
     void Texture2D::SetData(int level, const Rectangle* rect,
@@ -186,13 +200,13 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (backend_)
                 backend_->UpdatePixels(buf.data(), levelW * 4);
-            else if (device_)
+            else if (graphicsDevice_)
             {
                 ImageData img;
                 img.width  = width;
                 img.height = height;
                 img.pixels = buf;
-                backend_   = device_->GetBackend().CreateTexture(img);
+                backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
             }
         }
         else if (backend_)
@@ -306,7 +320,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::size_t>(len));
 
         Texture2D tex;
-        tex.device_  = &graphicsDevice;
+        tex.graphicsDevice_  = &graphicsDevice;
         tex.width    = img.width;
         tex.height   = img.height;
         tex.storeCpuPixels(img.pixels.data(), img.width * img.height);
@@ -495,7 +509,7 @@ namespace Microsoft::Xna::Framework::Graphics
         data.height = h;
         data.pixels = rgba;
         Texture2D tex;
-        tex.device_     = &device;
+        tex.graphicsDevice_     = &device;
         tex.width       = w;
         tex.height      = h;
         tex.cpuPixels_  = rgba;
