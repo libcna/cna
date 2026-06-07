@@ -213,7 +213,7 @@ namespace CNA::Internal::Backends::Vulkan
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
 
-        void SetVirtualResolution(int, int) override {}
+        void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int)       override {}
 
         SDL_Window*  GetWindowInternal()   const override { return window_; }
@@ -344,6 +344,10 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<Pending3DDraw>  pending3D_;
         // pair: (batch, target RT) where RT=nullptr means backbuffer
         std::vector<std::pair<VulkanSpriteBatchBackend*, VulkanRenderTargetBackend*>> activeBatches_;
+
+        // --- Virtual (game) resolution for 2D NDC mapping ---
+        int virtualWidth_  = 0;
+        int virtualHeight_ = 0;
 
         // --- Frame state ---
         uint32_t currentFrame_ = 0;

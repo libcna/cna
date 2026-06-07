@@ -1,6 +1,5 @@
 #pragma once
 
-#include <optional>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -132,12 +131,12 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Draw(const Texture2D& texture, float x, float y);
 
-        void Draw(const std::optional<Texture2D>::value_type& value,
+        void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   const Rectangle& sourceRectangle,
                   Color color);
 
-        void Draw(const std::optional<Texture2D>& value,
+        void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   const Rectangle& sourceRectangle,
                   Color color,

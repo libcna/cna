@@ -1892,9 +1892,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkRect2D sc{ {0, 0}, swapchainExtent_ };
         vkCmdSetScissor(cb, 0, 1, &sc);
 
-        drawSpritesFor(nullptr,
-                       static_cast<float>(swapchainExtent_.width),
-                       static_cast<float>(swapchainExtent_.height));
+        const float vpW2D = (virtualWidth_  > 0) ? static_cast<float>(virtualWidth_)
+                                                  : static_cast<float>(swapchainExtent_.width);
+        const float vpH2D = (virtualHeight_ > 0) ? static_cast<float>(virtualHeight_)
+                                                  : static_cast<float>(swapchainExtent_.height);
+        drawSpritesFor(nullptr, vpW2D, vpH2D);
         draw3DFor(nullptr);
 
         activeBatches_.clear();
@@ -1952,6 +1954,14 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::GetViewportSize(int& width, int& height)
     {
         SDL_GetWindowSize(window_, &width, &height);
+    }
+
+    void VulkanGraphicsBackend::SetVirtualResolution(int width, int height)
+    {
+        virtualWidth_  = width;
+        virtualHeight_ = height;
+        if (initialized_ && width > 0 && height > 0)
+            RecreateSwapchain();
     }
 
     std::unique_ptr<ITextureBackend> VulkanGraphicsBackend::CreateTexture(const ImageData& data)

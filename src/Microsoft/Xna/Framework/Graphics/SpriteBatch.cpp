@@ -191,7 +191,7 @@ namespace Microsoft::Xna::Framework::Graphics
                    0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
-    void SpriteBatch::Draw(const std::optional<Texture2D>::value_type& texture,
+    void SpriteBatch::Draw(const Texture2D& texture,
                            const Rectangle& destinationRectangle,
                            const Rectangle& sourceRectangle,
                            Color color)
@@ -202,7 +202,7 @@ namespace Microsoft::Xna::Framework::Graphics
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
-    void SpriteBatch::Draw(const std::optional<Texture2D>& value,
+    void SpriteBatch::Draw(const Texture2D& texture,
                            const Rectangle& destinationRectangle,
                            const Rectangle& sourceRectangle,
                            Color color,
@@ -212,8 +212,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            float layerDepth)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_ || !value.has_value()) return;
-        pushSprite(*value, destinationRectangle, sourceRectangle,
+        if (!backend_) return;
+        pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, rotation_rad, origin, effect, layerDepth);
     }
 
