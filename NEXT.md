@@ -86,6 +86,22 @@ content loading are the next major missing pieces.
 
 ## 3. Recent changes
 
+### Current session — Implement Vulkan graphics state (Task 13)
+- **Declared and implemented** `ApplyBlendState`, `ApplyDepthStencilState`, `ApplyRasterizerState`
+  overrides in `VulkanGraphicsBackend`.
+- `ApplyBlendState` — detects opaque preset (Blend::One src + Blend::Zero dst) and updates
+  `blendEnabled_`; blend/opaque pipelines already existed in the per-variant pipeline cache.
+- `ApplyDepthStencilState` — updates `depthTestEnabled_` and `depthWriteEnabled_`; these already
+  fed `GetOrCreatePipeline3D` to bake depth state into the pipeline.
+- `ApplyRasterizerState` — stores `cullMode_` (XNA: None=0, CullCW=1, CullCCW=2); extended
+  `Pending3DDraw` with a `cullMode` field; extended `Make3DKey` with 2 cull-mode bits;
+  extended `GetOrCreatePipeline3D` to map the value to `VK_CULL_MODE_FRONT/BACK_BIT`
+  (pipeline uses `VK_FRONT_FACE_CLOCKWISE`, so CullCW = front = FRONT_BIT).
+  FillMode::WireFrame and scissor test are silently ignored (Vulkan 3D pipeline is 2D-only for now).
+- BGFX backend inherits default no-ops for all three methods (BGFX throws on all 3D calls;
+  no functional change).
+- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
+
 ### Current session — Implement SpriteFont glyph rendering (Task 12)
 - **Rewrote:** `SpriteFont.hpp` — full FNA data model: glyph atlas `Texture2D*`, `glyphData`,
   `croppingData`, `kerning` (Vector3 = left bearing/width/right bearing), `characterMap` +
@@ -301,7 +317,7 @@ silently misread vertex data. Fixing this requires the backend to read stride fr
 | done | `SpriteBatch::Begin(SpriteSortMode, BlendState)` — forwards `BlendState` to `GraphicsDevice::setBlendStateProperty` |
 | done | EasyGL vertex buffer stride — `ApplyLayout(stride)` configures VAO for all four built-in vertex types; `VertexBuffer::SetData` overloads added for all types |
 | done | `DrawUserIndexedPrimitives` — implemented: packs VertexPositionColor + 16-bit indices into temp buffers, calls `DrawIndexedColoredPrimitives` |
-| incomplete | Vulkan / BGFX backends — `ApplyBlendState / ApplyDepthStencilState / ApplyRasterizerState` are no-ops |
+| done | Vulkan backend — `ApplyBlendState` updates `blendEnabled_`; `ApplyDepthStencilState` updates `depthTestEnabled_`/`depthWriteEnabled_`; `ApplyRasterizerState` updates `cullMode_` (folded into pipeline key) |
 | incomplete | `FillMode::WireFrame` silently ignored (OpenGL ES limitation) |
 | done | `GraphicsAdapter` — `VendorId`/`DeviceId` read from `/sys/class/drm/card*/device/` on Linux (fallback 0); `Revision`/`SubSystemId` return 0 (not available via SDL3) |
 | unknown | `IndexBuffer` — 32-bit index size (`IndexElementSize::ThirtyTwoBits`) is documented as partial |

@@ -1214,8 +1214,9 @@ namespace CNA::Internal::Backends::Vulkan
     // 3D pipeline layout + per-variant pipeline (lazily created)
     // =========================================================================
 
-    // Encode (topology × depthTest × depthWrite × blend) into a single uint32_t key.
-    static uint32_t Make3DKey(VkPrimitiveTopology topo, bool depthTest, bool depthWrite, bool blend)
+    // Encode (topology × depthTest × depthWrite × blend × cullMode) into a single uint32_t key.
+    static uint32_t Make3DKey(VkPrimitiveTopology topo, bool depthTest, bool depthWrite,
+                              bool blend, int cullMode)
     {
         uint32_t t = 0;
         switch (topo) {
@@ -1224,12 +1225,13 @@ namespace CNA::Internal::Backends::Vulkan
         case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:      t = 2; break;
         default:                                   t = 3; break;
         }
-        return t | (depthTest ? 4u : 0u) | (depthWrite ? 8u : 0u) | (blend ? 16u : 0u);
+        return t | (depthTest ? 4u : 0u) | (depthWrite ? 8u : 0u) | (blend ? 16u : 0u)
+                 | (static_cast<uint32_t>(cullMode & 0x3) << 5);
     }
 
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline3D(VkPrimitiveTopology topo,
                                                              bool depthTest, bool depthWrite,
-                                                             bool blend)
+                                                             bool blend, int cullMode)
     {
         // Create layout once
         if (pipelineLayout3D_ == VK_NULL_HANDLE) {
@@ -1241,7 +1243,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (3D) failed");
         }
 
-        uint32_t key = Make3DKey(topo, depthTest, depthWrite, blend);
+        uint32_t key = Make3DKey(topo, depthTest, depthWrite, blend, cullMode);
         auto it = pipelines3D_.find(key);
         if (it != pipelines3D_.end()) return it->second;
 
@@ -1273,10 +1275,16 @@ namespace CNA::Internal::Backends::Vulkan
         vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         vpst.viewportCount = 1; vpst.scissorCount = 1;
 
+        // XNA CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
+        // Pipeline uses VK_FRONT_FACE_CLOCKWISE, so CW faces are front faces.
+        VkCullModeFlags vkCull = VK_CULL_MODE_NONE;
+        if (cullMode == 1) vkCull = VK_CULL_MODE_FRONT_BIT;  // cull CW (front) faces
+        if (cullMode == 2) vkCull = VK_CULL_MODE_BACK_BIT;   // cull CCW (back) faces
+
         VkPipelineRasterizationStateCreateInfo rs{};
         rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rs.polygonMode = VK_POLYGON_MODE_FILL;
-        rs.cullMode    = VK_CULL_MODE_NONE;
+        rs.cullMode    = vkCull;
         rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
         rs.lineWidth   = 1.f;
 
@@ -1571,7 +1579,8 @@ namespace CNA::Internal::Backends::Vulkan
                             draw.ibData.data(), draw.ibData.size());
 
             VkPipeline pipe = GetOrCreatePipeline3D(draw.topology,
-                                                    draw.depthTest, draw.depthWrite, draw.blend);
+                                                    draw.depthTest, draw.depthWrite,
+                                                    draw.blend, draw.cullMode);
             if (pipe != lastPipeline3D) {
                 vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
                 lastPipeline3D = pipe;
@@ -1702,6 +1711,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.depthTest  = depthTestEnabled_;
         d.depthWrite = depthWriteEnabled_;
         d.blend      = blendEnabled_;
+        d.cullMode   = cullMode_;
         pending3D_.push_back(std::move(d));
     }
 
@@ -1733,7 +1743,35 @@ namespace CNA::Internal::Backends::Vulkan
         d.depthTest  = depthTestEnabled_;
         d.depthWrite = depthWriteEnabled_;
         d.blend      = blendEnabled_;
+        d.cullMode   = cullMode_;
         pending3D_.push_back(std::move(d));
+    }
+
+    // ---- Graphics state ----
+
+    void VulkanGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                                 int colorDstBlend, int alphaDstBlend,
+                                                 int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+    {
+        // Blend::One=0, Blend::Zero=1 → Opaque preset: src=One, dst=Zero → no blending
+        blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
+                          alphaSrcBlend == 0 && alphaDstBlend == 1);
+    }
+
+    void VulkanGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                                        int /*depthFunc*/)
+    {
+        depthTestEnabled_  = depthEnable;
+        depthWriteEnabled_ = depthWriteEnable;
+    }
+
+    void VulkanGraphicsBackend::ApplyRasterizerState(int cullMode, int /*fillMode*/,
+                                                      bool /*scissorTestEnable*/)
+    {
+        // XNA CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
+        // Stored; folded into the pipeline key at draw time.
+        // FillMode::WireFrame and scissor not supported in this backend — silently ignored.
+        cullMode_ = cullMode;
     }
 
 } // namespace CNA::Internal::Backends::Vulkan

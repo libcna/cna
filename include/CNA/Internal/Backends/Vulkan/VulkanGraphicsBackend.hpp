@@ -178,6 +178,15 @@ namespace CNA::Internal::Backends::Vulkan
         std::unique_ptr<ITextureBackend>      CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend>  CreateSpriteBatch() override;
 
+        // ---- Graphics state: IMPLEMENTED ----
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                    int depthFunc) override;
+        void ApplyRasterizerState(int cullMode, int fillMode,
+                                  bool scissorTestEnable) override;
+
         void ClearColorAndDepth(float, float, float, float, float) override;
         void SetDepthTestEnabled(bool)  override;
         void SetBlendEnabled(bool)      override;
@@ -279,6 +288,7 @@ namespace CNA::Internal::Backends::Vulkan
             bool                depthTest;
             bool                depthWrite;
             bool                blend;
+            int                 cullMode;    // XNA CullMode: 0=None, 1=CW, 2=CCW
         };
         std::vector<Pending3DDraw>                    pending3D_;
         std::vector<VulkanSpriteBatchBackend*>        activeBatches_;
@@ -290,6 +300,7 @@ namespace CNA::Internal::Backends::Vulkan
         bool     depthTestEnabled_  = true;
         bool     depthWriteEnabled_ = true;
         bool     blendEnabled_      = false;
+        int      cullMode_          = 0;  // XNA CullMode: 0=None, 1=CW, 2=CCW
 
         // ---- Init helpers ----
         void CreateInstance();
@@ -311,7 +322,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkFormat   FindDepthFormat() const;
         void       CreateDepthResources();
         void       CleanupDepthResources();
-        VkPipeline GetOrCreatePipeline3D(VkPrimitiveTopology, bool depthTest, bool depthWrite, bool blend);
+        VkPipeline GetOrCreatePipeline3D(VkPrimitiveTopology, bool depthTest, bool depthWrite,
+                                         bool blend, int cullMode);
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
 
