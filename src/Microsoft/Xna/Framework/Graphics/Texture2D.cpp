@@ -22,9 +22,37 @@ namespace Microsoft::Xna::Framework::Graphics
     // Private helpers
     // -----------------------------------------------------------------------
 
+    static int mipDim(int base, int level)
+    {
+        return std::max(1, base >> level);
+    }
+
     void Texture2D::storeCpuPixels(const uint8_t* rgba, int pixelCount)
     {
         cpuPixels_.assign(rgba, rgba + static_cast<std::size_t>(pixelCount) * 4);
+    }
+
+    std::vector<uint8_t>& Texture2D::getMipBuffer(int level)
+    {
+        if (level == 0) return cpuPixels_;
+        const int idx = level - 1;
+        if (static_cast<int>(extraMipLevels_.size()) <= idx)
+            extraMipLevels_.resize(static_cast<std::size_t>(idx + 1));
+        if (extraMipLevels_[idx].empty())
+        {
+            const int w = mipDim(width, level);
+            const int h = mipDim(height, level);
+            extraMipLevels_[idx].assign(static_cast<std::size_t>(w * h) * 4, 0);
+        }
+        return extraMipLevels_[idx];
+    }
+
+    const std::vector<uint8_t>* Texture2D::getMipBufferConst(int level) const
+    {
+        if (level == 0) return cpuPixels_.empty() ? nullptr : &cpuPixels_;
+        const int idx = level - 1;
+        if (static_cast<int>(extraMipLevels_.size()) <= idx) return nullptr;
+        return extraMipLevels_[idx].empty() ? nullptr : &extraMipLevels_[idx];
     }
 
     // -----------------------------------------------------------------------
@@ -103,10 +131,13 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
-        if (level != 0)
-            throw std::runtime_error("Texture2D::SetData: only mip level 0 is supported");
+        if (level < 0)
+            throw std::out_of_range("Texture2D::SetData: level must be >= 0");
 
-        int x = 0, y = 0, w = width, h = height;
+        const int levelW = mipDim(width,  level);
+        const int levelH = mipDim(height, level);
+
+        int x = 0, y = 0, w = levelW, h = levelH;
         if (rect)
         {
             x = rect->X; y = rect->Y;
@@ -115,31 +146,37 @@ namespace Microsoft::Xna::Framework::Graphics
         if (startIndex + elementCount > w * h)
             throw std::out_of_range("Texture2D::SetData: not enough elements for the requested region");
 
-        if (cpuPixels_.empty())
-            cpuPixels_.assign(static_cast<std::size_t>(width * height) * 4, 0);
+        std::vector<uint8_t>& buf = getMipBuffer(level);
 
         for (int row = 0; row < h; ++row)
         {
             for (int col = 0; col < w; ++col)
             {
                 const int src = startIndex + row * w + col;
-                const int dst = ((y + row) * width + (x + col)) * 4;
-                cpuPixels_[dst + 0] = data[src].getRProperty();
-                cpuPixels_[dst + 1] = data[src].getGProperty();
-                cpuPixels_[dst + 2] = data[src].getBProperty();
-                cpuPixels_[dst + 3] = data[src].getAProperty();
+                const int dst = ((y + row) * levelW + (x + col)) * 4;
+                buf[dst + 0] = data[src].getRProperty();
+                buf[dst + 1] = data[src].getGProperty();
+                buf[dst + 2] = data[src].getBProperty();
+                buf[dst + 3] = data[src].getAProperty();
             }
         }
 
-        if (backend_)
-            backend_->UpdatePixels(cpuPixels_.data(), width * 4);
-        else if (device_)
+        if (level == 0)
         {
-            ImageData img;
-            img.width  = width;
-            img.height = height;
-            img.pixels = cpuPixels_;
-            backend_   = device_->GetBackend().CreateTexture(img);
+            if (backend_)
+                backend_->UpdatePixels(buf.data(), levelW * 4);
+            else if (device_)
+            {
+                ImageData img;
+                img.width  = width;
+                img.height = height;
+                img.pixels = buf;
+                backend_   = device_->GetBackend().CreateTexture(img);
+            }
+        }
+        else if (backend_)
+        {
+            backend_->UpdatePixelsLevel(level, buf.data(), levelW, levelH);
         }
     }
 
@@ -185,20 +222,30 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        if (level != 0)
-            throw std::runtime_error("Texture2D::GetData: only mip level 0 is supported");
-        if (cpuPixels_.empty())
-            throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
+        if (level < 0)
+            throw std::out_of_range("Texture2D::GetData: level must be >= 0");
 
-        if (rect == nullptr)
+        const std::vector<uint8_t>* buf = getMipBufferConst(level);
+        if (!buf)
+            throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data for requested mip level");
+
+        if (level == 0 && rect == nullptr)
         {
             GetData(data, startIndex, elementCount);
             return;
         }
 
-        const int x = rect->X, y = rect->Y, w = rect->Width, h = rect->Height;
+        const int levelW = mipDim(width,  level);
+        const int levelH = mipDim(height, level);
 
-        if (x < 0 || y < 0 || x + w > width || y + h > height)
+        int x = 0, y = 0, w = levelW, h = levelH;
+        if (rect)
+        {
+            x = rect->X; y = rect->Y;
+            w = rect->Width; h = rect->Height;
+        }
+
+        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH)
             throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
         if (startIndex + elementCount > w * h)
             throw std::out_of_range("Texture2D::GetData: not enough room in data array");
@@ -207,12 +254,12 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             for (int col = 0; col < w; ++col)
             {
-                const int src = ((y + row) * width + (x + col)) * 4;
+                const int src = ((y + row) * levelW + (x + col)) * 4;
                 const int dst = startIndex + row * w + col;
-                data[dst] = Color(cpuPixels_[src + 0],
-                                  cpuPixels_[src + 1],
-                                  cpuPixels_[src + 2],
-                                  cpuPixels_[src + 3]);
+                data[dst] = Color((*buf)[src + 0],
+                                  (*buf)[src + 1],
+                                  (*buf)[src + 2],
+                                  (*buf)[src + 3]);
             }
         }
     }

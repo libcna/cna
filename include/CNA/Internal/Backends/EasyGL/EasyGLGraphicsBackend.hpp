@@ -24,6 +24,8 @@ namespace CNA::Internal::Backends::EasyGL
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void BindGL() const override;
+        void UpdatePixels(const uint8_t* rgba, int stride) override;
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;

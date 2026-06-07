@@ -81,7 +81,7 @@ wiring.
 | Area | Status |
 |------|--------|
 | `Texture2D::SaveAsJpeg` | Implemented via `IMG_SaveJPG_IO` with scaling support. |
-| `Texture2D` mip levels > 0 | `GetData`/`SetData` only support mip level 0. `cpuPixels_` stores one level. |
+| `Texture2D` mip levels > 0 | Supported: `GetData`/`SetData` handle any level; EasyGL uploads via `set_image_2d(level, …)`. |
 | `SpriteBatch` custom effect | Forwarded: `ShaderEffect` compiles/caches its GLSL program; non-ShaderEffect effects call `Apply()` only. |
 | `RenderTarget2D` Vulkan backend | EasyGL FBO is wired and works. The Vulkan backend still returns `nullptr` from `CreateRenderTarget2D` (no-op). |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
@@ -236,22 +236,31 @@ wiring.
   - File-path overload uses `IMG_SaveJPG` directly (no memory buffer needed).
 - Build: both backends clean.
 
-### Task 27 — `Texture2D` mip levels > 0 for `GetData` / `SetData`
+### ~~Task 27 — `Texture2D` mip levels > 0 for `GetData` / `SetData`~~ **DONE**
 
-**Goal:** extend `GetData` / `SetData` beyond mip level 0 so games can read/write individual mip
-levels for procedural mip generation or LOD capture.
+- Added `extraMipLevels_` (`std::vector<std::vector<uint8_t>>`) for levels 1+; level 0 stays in `cpuPixels_`.
+- Added `getMipBuffer(level)` (lazy allocates at half-size per level) and `getMipBufferConst(level)`.
+- Added `mipDim(base, level) = max(1, base >> level)` helper — drives level width/height.
+- `SetData(level, rect, data, start, count)`: removed `level != 0` throw; uses `getMipBuffer(level)` and `mipDim` for correct dimensions; for level > 0 calls `backend_->UpdatePixelsLevel(level, buf, w, h)`.
+- `GetData(level, rect, data, start, count)`: removed `level != 0` throw; uses `getMipBufferConst(level)` and `mipDim`.
+- Added `virtual void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) {}` to `ITextureBackend` (default no-op).
+- Added `void UpdatePixels(…)` override to `EasyGLTextureBackend` (was previously no-op from base; now does `set_image_2d` at level 0 and updates `image_data_`).
+- Added `void UpdatePixelsLevel(…)` override to `EasyGLTextureBackend`: calls `texture.set_image_2d(target, level, w, h, data)`.
+- Build: both backends clean.
 
-FNA reference: `Texture2D.cs` — `SetData(int level, …)` / `GetData(int level, …)`.
+### Task 28 — `RenderTarget2D` Vulkan backend
+
+**Goal:** wire `RenderTarget2D` to the Vulkan backend so games can render off-screen on Vulkan.
+
+FNA reference: n/a — this is a CNA backend implementation task.
 
 Steps:
-1. Change `cpuPixels_` from a single flat buffer to `std::vector<std::vector<uint8_t>> mipPixels_`
-   where `mipPixels_[0]` is the full-resolution level and subsequent levels are half-size each.
-2. On construction / `SetData(0)` allocate only level 0. Allocate level N lazily on first write.
-3. Update `GetData(int level, …)` and `SetData(int level, …)` to index `mipPixels_[level]`.
-4. Backend `UpdatePixels` already takes the full RGBA buffer; add `UpdatePixelsLevel(level, …)`
-   virtual to `ITextureBackend` for uploading a specific mip (EasyGL: `glTexSubImage2D` with
-   `level` argument; other backends: no-op).
-5. Build + verify existing mip-0 paths are unbroken.
+1. Add `CreateRenderTarget2D` and `SetRenderTarget2D` overrides to `VulkanGraphicsBackend`.
+2. Implement `VulkanRenderTargetBackend`: Vulkan image + image view + framebuffer.
+3. `BindAsRenderTarget` / `UnbindAsRenderTarget`: begin/end a compatible render pass targeting the
+   Vulkan framebuffer.
+4. `BindGL()` no-op (not GL). `GetWidth`/`GetHeight` return stored dimensions.
+5. Build + smoke-test.
 
 ---
 

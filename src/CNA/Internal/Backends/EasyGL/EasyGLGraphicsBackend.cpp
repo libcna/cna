@@ -142,6 +142,19 @@ namespace CNA::Internal::Backends::EasyGL
         texture.bind(::easygl::TextureTarget::Texture2D);
     }
 
+    void EasyGLTextureBackend::UpdatePixels(const uint8_t* rgba, int /*stride*/)
+    {
+        image_data_.pixels.assign(rgba, rgba + static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4);
+        texture.bind(::easygl::TextureTarget::Texture2D);
+        texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, rgba);
+    }
+
+    void EasyGLTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    {
+        texture.bind(::easygl::TextureTarget::Texture2D);
+        texture.set_image_2d(::easygl::TextureTarget::Texture2D, level, levelW, levelH, rgba);
+    }
+
     // --- EasyGLRenderTargetBackend ---
 
     EasyGLRenderTargetBackend::EasyGLRenderTargetBackend(int w, int h, bool hasDepth,

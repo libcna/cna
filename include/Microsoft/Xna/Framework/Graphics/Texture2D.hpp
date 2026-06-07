@@ -96,9 +96,12 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice* device_ = nullptr;
         int width  = 0;
         int height = 0;
-        std::vector<uint8_t> cpuPixels_; // RGBA8 CPU-side copy, width*height*4 bytes
+        std::vector<uint8_t> cpuPixels_;             // RGBA8 CPU-side copy for mip level 0
+        std::vector<std::vector<uint8_t>> extraMipLevels_; // CPU-side copies for mip levels 1+
 
         void storeCpuPixels(const uint8_t* rgba, int pixelCount);
+        std::vector<uint8_t>& getMipBuffer(int level);
+        const std::vector<uint8_t>* getMipBufferConst(int level) const;
 
         [[nodiscard]] SDL_Texture* GetNativeTextureInternal() const;
 

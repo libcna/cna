@@ -101,8 +101,10 @@ namespace CNA::Internal::Backends
         virtual int GetHeight() const = 0;
         // TODO: SDL dependency should be abstracted later
         virtual SDL_Texture* GetNativeTexture() const = 0;
-        /// Replaces texture pixels in-place. stride = row bytes (width * 4 for RGBA).
+        /// Replaces full level-0 texture pixels in-place. stride = row bytes (width * 4 for RGBA).
         virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
+        /// Uploads a specific mip level. levelW/levelH are the dimensions at that level.
+        virtual void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) {}
         /// Binds the underlying GL texture handle (no-op on non-GL backends).
         virtual void BindGL() const {}
     };
