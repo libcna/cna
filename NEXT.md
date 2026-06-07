@@ -9,362 +9,167 @@ modern C++ internals.
 
 **Authoritative API reference:** `/rv/data/library/github.com/FNA-XNA/FNA/src`
 
-**Current phase:** Active API porting. Core infrastructure is stable; stock effects and
-content loading are the next major missing pieces.
+**Current phase:** Core graphics API is largely complete. The next major gaps are texture
+I/O (`Texture2D::FromStream`/`GetData`), SpriteBatch sort modes, and RenderTarget2D backend
+wiring.
 
 **Key architectural decisions:**
 - Backend selected at compile-time via `CNA_GRAPHICS_BACKEND` CMake option (`SDL_RENDERER` |
-  `EASYGL` | `VULKAN` | `BGFX`). The default debug build uses `VULKAN`.
+  `EASYGL` | `VULKAN` | `BGFX`). The default debug build dir is `cmake-build-vulkan/`.
 - `EasyGL` is the primary 3D-capable backend (OpenGL ES 3.0). SDL_Renderer throws for all
-  3D operations by design. Vulkan backend exists but most new state methods are no-ops there.
+  3D operations by design.
 - C# properties become `getXProperty()` / `setXProperty()` pairs. This convention is strict.
 - All .NET primitives use SharpRuntime aliases (`bytecs`, `intcs`, `Single`, `String`, …).
 - Non-XNA extensions inside the `Microsoft::Xna` namespace are tagged with `NOXNA`.
+- New `.cpp` files are auto-discovered via `GLOB_RECURSE` — no CMakeLists edits needed.
 
 ---
 
 ## 2. Current status
 
 ### Build
-- **Clean build** on branch `develop` (after SpriteEffect addition).
-- Default debug build: `cmake-build-vulkan/` — backend `VULKAN`.
-- Libraries built: `libCNA.a`, `libcna_backend_graphics_vulkan.a`.
-- Executables built: `CnaTests`, `cna_demo_2d`, `cna_demo_input`, `cna_demo_sound`,
+- **Clean build** on both `cmake-build-vulkan` and `cmake-build-easygl`.
+- Libraries: `libCNA.a`, `libcna_backend_graphics_vulkan.a` / `libcna_backend_graphics_easygl.a`.
+- Executables: `CnaTests`, `cna_demo_2d`, `cna_demo_input`, `cna_demo_sound`,
   `cna_demo_xact`, `cna_house3d_demo`.
-
-### Tests
-- `CnaTests` compiles and links cleanly after fixing `GamePadInputTests.cpp` in last session.
-- No known failing tests at last build.
+- No known failing tests.
 
 ### What works
 - **Graphics core:** `GraphicsDevice`, `SpriteBatch`, `Texture2D`, `Texture3D`, `TextureCube`,
-  `VertexBuffer`, `IndexBuffer`, `DynamicVertexBuffer`, `DynamicIndexBuffer`.
+  `VertexBuffer`, `IndexBuffer` (16- and 32-bit), `DynamicVertexBuffer`, `DynamicIndexBuffer`.
+- **All five stock effects:** `SpriteEffect`, `AlphaTestEffect`, `EnvironmentMapEffect`,
+  `DualTextureEffect`, `SkinnedEffect` — full XNA API with dirty-flag lazy recomputation.
+- **BasicEffect** — `IEffectMatrices`, `IEffectFog`, `IEffectLights`.
 - **Effect hierarchy:** `Effect` → `GraphicsResource`, `EffectTechnique`, `EffectPass`,
-  `EffectParameter` with full GetValue/SetValue overloads, `EffectAnnotation`, all collections.
-- **BasicEffect** with `IEffectMatrices`, `IEffectFog`, `IEffectLights` (inline overrides on
-  public `World`/`View`/`Projection` members for backward compatibility).
-- **SpriteEffect** — derives from `Effect`; builds orthographic projection matrix in `OnApply()`
-  for use by `SpriteBatch`.
+  `EffectParameter` (full GetValue/SetValue overloads including Texture3D/TextureCube),
+  `EffectAnnotation`, all collections.
 - **Vertex types:** `VertexPositionColor`, `VertexPositionColorTexture`,
   `VertexPositionNormalTexture`, `VertexPositionTexture`.
-- **PackedVector:** 18 types — `Alpha8`, `Bgr565`, `Bgra4444`, `Bgra5551`, `Byte4`,
-  `HalfSingle`, `HalfVector2`, `HalfVector4`, `HalfTypeHelper`, `NormalizedByte2/4`,
-  `NormalizedShort2/4`, `Rg32`, `Rgba1010102`, `Rgba64`, `Short2`, `Short4`.
+- **PackedVector:** 18 types (`Alpha8`, `Bgr565`, `Bgra4444`, `Bgra5551`, `Byte4`,
+  `HalfSingle`, `HalfVector2`, `HalfVector4`, `NormalizedByte2/4`, `NormalizedShort2/4`,
+  `Rg32`, `Rgba1010102`, `Rgba64`, `Short2`, `Short4`).
 - **State objects:** `BlendState`, `DepthStencilState`, `RasterizerState`, `SamplerState`,
-  `SamplerStateCollection`, `TextureCollection` — stored on `GraphicsDevice`, setters wire
-  to `backend_->ApplyBlendState / ApplyDepthStencilState / ApplyRasterizerState`.
-- **EasyGL graphics state:** `ApplyBlendState`, `ApplyDepthStencilState`, `ApplyRasterizerState`
-  implemented with correct XNA→OpenGL enum mapping.
-- **3D rendering:** EasyGL backend — colored primitive drawing, indexed drawing, depth test,
-  blend, depth write, WVP matrix upload. `house3d_demo` runs.
+  `SamplerStateCollection`, `TextureCollection` — wired to `ApplyBlendState / ApplyDepthStencilState /
+  ApplyRasterizerState` on both EasyGL and Vulkan backends.
+- **EasyGL shader pipeline:** 4 shader variants by vertex stride (colored / textured /
+  col+textured / lit+textured); `DrawPrimitivesEx` / `DrawIndexedPrimitivesEx`.
+- **3D rendering:** EasyGL — colored + textured + lit primitive drawing, indexed drawing,
+  depth test, blend, depth write, WVP matrix upload. `house3d_demo` runs.
+- **Model system:** `Model::Draw` — computes absolute bone transforms, binds
+  `IEffectMatrices` (World per bone × world arg, View, Projection), calls `ModelMesh::Draw`
+  which sets VB/IB and issues `DrawIndexedPrimitives` per effect pass.
+- **SpriteFont:** full glyph data model + `MeasureString`; `SpriteBatch::DrawString`
+  (3 overloads) renders glyphs via per-character source/dest rects.
+- **OcclusionQuery:** `IOcclusionQueryBackend`; EasyGL uses `GL_ANY_SAMPLES_PASSED`
+  (GLES3: PixelCount = 0 or 1); other backends stub-fallback.
 - **Input:** Keyboard, Mouse, GamePad (all axes/buttons), Touch, Gesture.
 - **Audio:** SoundEffect, SoundEffectInstance, SoundBank/WaveBank (XACT).
 - **Video:** FFmpeg-based `VideoPlayer` with per-frame texture update.
 - **Storage:** `StorageDevice`, `StorageContainer`.
 - **Math:** `Vector2/3/4`, `Matrix`, `Quaternion`, `BoundingBox`, `BoundingSphere`,
   `BoundingFrustum`, `Plane`, `Ray`, `Curve`, `MathHelper`.
-- **Model system:** `Model`, `ModelBone`, `ModelMesh`, `ModelMeshPart` — stub-level,
-  no asset loading yet.
+- **Game infrastructure:** `Game`, `GameComponent`, `DrawableGameComponent`,
+  `GameComponentCollection`.
 - **Content:** `ContentManager` + `ContentTypeReader<T>` — custom system (no XNB).
+- **`DrawUserIndexedPrimitives`** — packs vertices + 16-bit indices into temp buffers.
+- **`DrawUserPrimitives`** — implemented in `GraphicsDevice.cpp`.
+- **`GraphicsAdapter`:** `VendorId`/`DeviceId` read from `/sys/class/drm/card*/device/` on
+  Linux (fallback 0). `Revision`/`SubSystemId` return 0 (not available via SDL3).
 
 ### What does NOT work yet
-- **Stock Effects:** All five stock effects implemented: `SpriteEffect`, `AlphaTestEffect`,
-  `EnvironmentMapEffect`, `DualTextureEffect`, `SkinnedEffect`.
-- **`DrawUserIndexedPrimitives`** — throws `std::runtime_error` (not implemented).
-- **`OcclusionQuery`** — stub only, `Begin()`/`End()` are no-ops.
-- **`IVertexBufferBackend`** — only handles the 16-byte `VertexPositionColor` stride on EasyGL;
-  other vertex layouts require the `VertexPositionColor`-compatible layout or break silently.
-- **`Model::Draw`** — implemented but no effect/shader binding; does nothing useful.
-- **`SpriteBatch::Begin(SpriteSortMode, BlendState)`** — ignores the `BlendState` parameter
-  (does not forward it to `GraphicsDevice`).
-- **Vulkan / BGFX backends** — `ApplyBlendState / ApplyDepthStencilState / ApplyRasterizerState`
-  are inherited no-ops; no state is actually applied.
-- **`FillMode::WireFrame`** — silently ignored in EasyGL (OpenGL ES does not support
-  `glPolygonMode`).
+
+| Area | Status |
+|------|--------|
+| `Texture2D::FromStream(GraphicsDevice, Stream)` | Not implemented. CNA has a NOXNA file-path constructor via `ImageLoader`; the XNA static `FromStream` with a `System::IO::Stream` argument is missing. Requires `System::IO::Stream` in sharp-runtime. |
+| `Texture2D::GetData<T>` / `SaveAsPng` / `SaveAsJpeg` | Not declared or implemented. |
+| `SpriteBatch` sort modes | Only `SpriteSortMode::Immediate` / `Deferred` (unordered). `BackToFront`, `FrontToBack`, and `Texture` modes require a deferred sprite queue with sorting before flush. |
+| `RenderTarget2D` backend wiring | `GraphicsDevice::SetRenderTarget` is declared but `RenderTarget2D` does not hook into EasyGL/Vulkan FBO. Off-screen rendering does not work. |
+| `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
+| Vulkan / BGFX 3D draw | Vulkan backend has state (blend/depth/cull) but no real 3D draw call path. BGFX throws on all 3D calls. |
+| Model asset loading | No pipeline to load a `Model` from a file; `Model::Draw` is complete but models must be constructed manually via the NOXNA constructor. |
 
 ---
 
-## 3. Recent changes
+## 3. Recent changes (last session)
 
-### Current session — Implement Model::Draw (Task 15)
+### Task 15 — Implement `Model::Draw`
 - **Added:** `src/.../Model.cpp` — `CopyAbsoluteBoneTransformsTo` (parent-relative product),
-  `CopyBoneTransformsFrom/To`, and `Draw(world, view, projection)`: allocates shared bone
-  matrix buffer, applies absolute transforms, iterates mesh effects, casts to `IEffectMatrices`
-  (throws `std::runtime_error` if not supported), sets World = boneMatrix×world / View / Projection,
-  then calls `mesh->Draw()`.
+  `CopyBoneTransformsFrom/To`, and `Draw(world, view, projection)`: shared bone matrix buffer,
+  absolute transform computation, effect `IEffectMatrices` binding per mesh, calls `mesh->Draw()`.
 - **Added:** `src/.../ModelMesh.cpp` — `Draw()` mirrors FNA: sets VB + IB on `GraphicsDevice`,
   iterates `currentTechnique.Passes`, calls `pass.Apply()` then `DrawIndexedPrimitives` per pass.
   NOXNA constructor accepts `GraphicsDevice*` + part list, wires `part->parent_`.
 - **Added:** `src/.../ModelMeshPart.cpp` — `setEffectProperty` implements FNA's
   add/remove-from-parent-Effects-collection logic.
-- **Added:** `src/.../ModelBone.cpp`, `ModelBoneCollection.cpp`, `ModelMeshCollection.cpp`,
-  `ModelMeshPartCollection.cpp`, `ModelEffectCollection.cpp` — accessor implementations.
+- **Added:** `.cpp` for all five collections (`ModelBoneCollection`, `ModelMeshCollection`,
+  `ModelMeshPartCollection`, `ModelEffectCollection`, `ModelBone`).
 - **Updated headers:** `ModelEffectCollection` gains `Add/Remove/Contains` + iterators;
-  `ModelMeshPartCollection`/`ModelMeshCollection` gain iterators; `ModelMeshPart` gains
-  `Tag` property + `parent_` member; `ModelMesh` gains `GraphicsDevice*`, `BoundingSphere`,
-  `Tag`, NOXNA constructor; `Model` gains `Tag`, `CopyBoneTransformsFrom/To`, NOXNA constructor,
-  static `sharedDrawBoneMatrices_`; `ModelBone` gains `AddChild`.
+  all collections gain range-for support; `ModelMeshPart` gains `Tag` + `parent_`;
+  `ModelMesh` gains `GraphicsDevice*`, `BoundingSphere`, `Tag`, NOXNA constructor;
+  `Model` gains `Tag`, `CopyBoneTransformsFrom/To`, NOXNA constructor, static
+  `sharedDrawBoneMatrices_`; `ModelBone` gains `AddChild`.
 - Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
-
-### Current session — 32-bit IndexBuffer + EffectParameter texture fix (Task 14)
-- **`IndexBuffer`**: constructor for `ThirtyTwoBits` no longer throws; calls new
-  `CreateIndexBuffer32` factory instead of `CreateIndexBuffer16`. Added
-  `SetData(const uint32_t*, int)` overload. Updated header comment from PARTIAL to
-  fully implemented.
-- **`IIndexBufferBackend`**: added `SetData32` (default throws) and `IsThirtyTwoBit`
-  (default false). Added `CreateIndexBuffer32` to `IGraphicsBackend` (default delegates
-  to `CreateIndexBuffer16` so backends that don't need 32-bit compile unchanged).
-- **EasyGL**: `EasyGLIndexBufferBackend` gets a `thirtyTwoBit` flag, a `SetData32`
-  implementation, and `IsThirtyTwoBit()` override. `CreateIndexBuffer32` factory added.
-  `DrawIndexedColoredPrimitives` and `DrawIndexedPrimitivesEx` pass
-  `GL_UNSIGNED_INT` / `GL_UNSIGNED_SHORT` based on the flag.
-- **Vulkan**: `VulkanIndexBufferBackend` gets `thirtyTwoBit_`, `SetData32`, and
-  `IsThirtyTwoBit()`. `CreateIndexBuffer32` factory added (allocates `uint32_t`-sized
-  buffer). `Pending3DDraw` carries `VkIndexType indexType`; `RecordCommandBuffer` passes
-  it to `vkCmdBindIndexBuffer` replacing the hardcoded `VK_INDEX_TYPE_UINT16`.
-- **`EffectParameter`**: removed broken `dynamic_cast<Texture3D*>(textureData_)` /
-  `dynamic_cast<TextureCube*>(textureData_)` getters (Texture3D/TextureCube don't
-  inherit from Texture in CNA). Added separate `texture3DData_` and `textureCubeData_`
-  members. `GetValueTexture3D()`/`GetValueTextureCube()` return these directly.
-  `SetValue(Texture3D*)` and `SetValue(TextureCube*)` overloads added.
-- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
-
-### Current session — Implement Vulkan graphics state (Task 13)
-- **Declared and implemented** `ApplyBlendState`, `ApplyDepthStencilState`, `ApplyRasterizerState`
-  overrides in `VulkanGraphicsBackend`.
-- `ApplyBlendState` — detects opaque preset (Blend::One src + Blend::Zero dst) and updates
-  `blendEnabled_`; blend/opaque pipelines already existed in the per-variant pipeline cache.
-- `ApplyDepthStencilState` — updates `depthTestEnabled_` and `depthWriteEnabled_`; these already
-  fed `GetOrCreatePipeline3D` to bake depth state into the pipeline.
-- `ApplyRasterizerState` — stores `cullMode_` (XNA: None=0, CullCW=1, CullCCW=2); extended
-  `Pending3DDraw` with a `cullMode` field; extended `Make3DKey` with 2 cull-mode bits;
-  extended `GetOrCreatePipeline3D` to map the value to `VK_CULL_MODE_FRONT/BACK_BIT`
-  (pipeline uses `VK_FRONT_FACE_CLOCKWISE`, so CullCW = front = FRONT_BIT).
-  FillMode::WireFrame and scissor test are silently ignored (Vulkan 3D pipeline is 2D-only for now).
-- BGFX backend inherits default no-ops for all three methods (BGFX throws on all 3D calls;
-  no functional change).
-- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
-
-### Current session — Implement SpriteFont glyph rendering (Task 12)
-- **Rewrote:** `SpriteFont.hpp` — full FNA data model: glyph atlas `Texture2D*`, `glyphData`,
-  `croppingData`, `kerning` (Vector3 = left bearing/width/right bearing), `characterMap` +
-  `characterIndexMap` (fast lookup). Added `Characters`, `DefaultCharacter` (nullable),
-  `LineSpacing`, `Spacing` properties (fixed `getLineSpasingProperty` typo →
-  `getLineSpacingProperty`). Added a `NOXNA` public constructor mirroring FNA's internal
-  one (CNA has no XNB pipeline, so content readers/apps build the atlas themselves).
-- **Added:** `SpriteFont.cpp` — constructor builds the index map; `MeasureString` ports FNA's
-  line-by-line width/height accumulation (CR/LF handling, first-in-line abs kerning,
-  DefaultCharacter fallback, throws on unresolved chars).
-- **Modified:** `SpriteBatch.hpp/.cpp` — added three `DrawString` overloads (position+color;
-  +rotation/origin/uniform scale/effects/layerDepth; +Vector2 scale). The glyph loop mirrors
-  FNA's pen advance, scales/rotates each glyph's offset around the origin, and emits one
-  backend `Draw` per glyph (simple dest/src-rect path when un-rotated and un-flipped, the
-  rotation-capable `Draw` otherwise). `SpriteBatch` is a friend of `SpriteFont`.
-- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
-
-### Current session — Implement GraphicsAdapter PCI IDs (Task 9)
-- **Modified:** `GraphicsAdapter.hpp` — added private `vendorId_` / `deviceId_` members;
-  extended constructor signature to accept them; added `static queryPciIds()` declaration.
-- **Modified:** `GraphicsAdapter.cpp` — added `queryPciIds()` which on Linux reads
-  `/sys/class/drm/card{0..3}/device/vendor` and `device` (hex) into `vendorId`/`deviceId`;
-  falls back to 0 on other platforms or if the files are missing.
-  `AdaptersChanged()` calls `queryPciIds()` once and passes the result to every adapter
-  constructor (all displays share the same GPU).
-  `getDeviceIdProperty()` and `getVendorIdProperty()` now return stored members;
-  `getRevisionProperty()` and `getSubSystemIdProperty()` return 0 (not available via SDL3).
-- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
-
-### Current session — OcclusionQuery implementation (Task 11)
-- **Added:** `IOcclusionQueryBackend` to `IGraphicsBackend.hpp` with `Begin/End/IsComplete/PixelCount`;
-  `CreateOcclusionQuery()` factory (default returns nullptr).
-- **Added:** `EasyGLOcclusionQueryBackend` — wraps `::easygl::Query` with `GL_ANY_SAMPLES_PASSED`;
-  `IsComplete()` calls `is_result_available()`, `PixelCount()` calls `result()` (0 or 1 on GLES3);
-  participates in `RecoverableResource` context-loss protocol.
-- **Modified:** `OcclusionQuery.hpp/cpp` — stores `unique_ptr<IOcclusionQueryBackend>`;
-  constructor creates it via `device.GetBackend().CreateOcclusionQuery()`; all methods delegate
-  to backend (null-safe fallback for non-EasyGL backends).
-- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
-
-### Current session — EasyGL shader pipeline (Task 10)
-- **Modified:** `IGraphicsBackend.hpp` — added `GpuDrawParams` struct (texture0, diffuseColor,
-  ambientColor, light0Dir, light0Diffuse, worldColMajor, textureEnabled, vertexColorEnabled,
-  lightingEnabled) + `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` virtual methods with default
-  fallback to colored-only path.
-- **Modified:** `EasyGLGraphicsBackend.hpp` — replaced single `program3d_` + raw fields with
-  `Prog3D` struct (prog + ready + uniform locs); added 4 program instances (colored/textured/
-  col+textured/lit+textured), default_white_texture_, helper method declarations.
-- **Modified:** `EasyGLGraphicsBackend.cpp` — added `CompileAndLink` helper; implemented
-  `EnsureTextured3DProgram`, `EnsureColoredTextured3DProgram`, `EnsureLit3DProgram`,
-  `EnsureDefaultWhiteTexture`, `SelectProgram(stride)`, `BindDrawParams`; implemented
-  `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` that dispatch to the correct shader by stride;
-  updated context-loss handler to reset all 4 programs.
-- **Modified:** `GraphicsDevice.cpp` — added `BuildGpuDrawParams(BasicEffect*)` helper that
-  reads texture, diffuseColor, alpha, ambientColor, light0 from the current effect; updated
-  `DrawPrimitives`/`DrawIndexedPrimitives` to call `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`.
-- **Shader variants by stride:**
-  - 16 → colored (aPos + aColor → vColor)
-  - 20 → textured (aPos + aUV → texture × uDiffuseColor)
-  - 24 → col+textured (aPos + aColor + aUV → texture × vColor)
-  - 32 → lit+textured (aPos + aNormal + aUV → Phong: ambient + NdotL × light0Diffuse)
-- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
-
-### Previous session — Implement DrawUserIndexedPrimitives (Task 8)
-- **Modified:** `GraphicsDevice::DrawUserIndexedPrimitives` in `GraphicsDevice.cpp` — replaced
-  unconditional `throw` with a real implementation:
-  - Computes index count from `primitiveType` + `primitiveCount` (TriangleList×3, Strip+2, etc.)
-  - Packs `VertexPositionColor` vertices (with vtable) into compact 16-byte `GpuVertex`
-  - Copies 16-bit indices with `indexOffset` applied
-  - Creates temporary VB + IB via `backend_->CreateVertexBuffer / CreateIndexBuffer16`
-  - Calls `backend_->DrawIndexedColoredPrimitives` with `currentEffect_` matrices
-- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
-
-### Previous session — Wire SpriteBatch::Begin BlendState (Task 7)
-- **Modified:** `SpriteBatch` now stores `GraphicsDevice*` (added `graphicsDevice_` member to
-  header; constructor sets it from the constructor parameter).
-- **Modified:** `Begin(SpriteSortMode, BlendState)` — forwards `blend_state` to
-  `graphicsDevice_->setBlendStateProperty(blend_state)` before calling `Begin()`, so that
-  `Begin(SpriteSortMode::Immediate, BlendState::Additive)` now actually applies the blend mode
-  via the backend's `ApplyBlendState` path.
-- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
-
-### Previous session — Fix EasyGL vertex buffer stride (Task 6)
-- **Modified:** `EasyGLVertexBufferBackend::InitializeLayout()` — now only creates VBO+VAO
-  (no attribute pointers); attribute config deferred to new `ApplyLayout(stride)`.
-- **Added:** `EasyGLVertexBufferBackend::ApplyLayout(std::size_t stride)` — stride-dispatch
-  configures the VAO for all four built-in vertex layouts:
-  - 16 → VertexPositionColor: float3@0 + ubyte4-normalized@12
-  - 20 → VertexPositionTexture: float3@0 + float2@12
-  - 24 → VertexPositionColorTexture: float3@0 + ubyte4-normalized@12 + float2@16
-  - 32 → VertexPositionNormalTexture: float3@0 + float3@12 + float2@24
-- **Modified:** `SetData()` calls `ApplyLayout(stride_in_bytes_)` after each upload.
-- **Modified:** `recreate_gl_resource()` calls `ApplyLayout(stride_in_bytes_)` after context restore.
-- **Added:** `VertexBuffer::SetData` overloads for `VertexPositionColorTexture`,
-  `VertexPositionNormalTexture`, `VertexPositionTexture` — each packs the source struct
-  (which carries a vtable pointer from `IVertexType`) into the compact GPU layout.
-- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
-
-### Previous session — Implement `SkinnedEffect`
-- **Added:** `include/Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp` and
-  `src/Microsoft/Xna/Framework/Graphics/SkinnedEffect.cpp`.
-- Derives from `Effect`, `IEffectMatrices`, `IEffectLights`, `IEffectFog`.
-- `MaxBones = 72` public const; `SetBoneTransforms` / `GetBoneTransforms(int count)`.
-- `WeightsPerVertex` validates 1/2/4, throws `std::out_of_range` otherwise.
-- `LightingEnabled` always returns `true`; setting to `false` throws `std::runtime_error`.
-- `OnApply()`: WorldViewProj, fog vector, world+world-inverse-transpose, eye position,
-  diffuse+emissive material color (with ambient), one-light opt, shader index
-  (fog × weightsPerVertex × perPixel/oneLight = multiple variants matching FNA).
-- `GetBoneTransforms` restores `M44 = 1` to mirror FNA's 4x3 bone storage behaviour.
-- Texture stored as direct member pointer; specular color/power backed by member + param.
-- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
-
-### Previous session — Implement `DualTextureEffect` and fix EasyGL vertex stride
-- **Added:** `include/Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp` and
-  `src/Microsoft/Xna/Framework/Graphics/DualTextureEffect.cpp`.
-- Derives from `Effect`, `IEffectMatrices`, `IEffectFog`.
-- Exposes: `World/View/Projection`, `DiffuseColor`, `Alpha`, `Texture`, `Texture2`,
-  `VertexColorEnabled`, and all fog properties.
-- `OnApply()`: dirty-flag lazy recomputation of WorldViewProj, fog vector, diffuse/alpha
-  packed color, and shader index (fog + vertexColor flags).
-- Both textures stored as direct member pointers (Texture2D does not inherit from Texture).
-- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
-
-### Previous session — Implement `EnvironmentMapEffect`
-- **Added:** `include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp` and
-  `src/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.cpp`.
-- Derives from `Effect`, `IEffectMatrices`, `IEffectLights`, `IEffectFog`.
-- Implements all XNA properties: `World/View/Projection`, `DiffuseColor`, `EmissiveColor`,
-  `Alpha`, `AmbientLightColor`, three `DirectionalLight` members, fog properties, `Texture`,
-  `EnvironmentMap` (TextureCube), `EnvironmentMapAmount`, `EnvironmentMapSpecular`, `FresnelFactor`.
-- `LightingEnabled` always returns `true`; setting to `false` throws `std::runtime_error`.
-- `OnApply()`: dirty-flag lazy recomputation of WorldViewProj, fog vector, world/world-inverse-
-  transpose, eye position, diffuse+emissive material color, one-light optimisation, shader index.
-- Texture/EnvironmentMap stored as direct member pointers (same pattern as AlphaTestEffect).
-- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
-
-### Previous session — Implement `AlphaTestEffect`
-- **Added:** `include/Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp` and
-  `src/Microsoft/Xna/Framework/Graphics/AlphaTestEffect.cpp`.
-- `AlphaTestEffect` derives from `Effect`, `IEffectMatrices`, `IEffectFog`.
-- Implements lazy dirty-flag recomputation of WorldViewProj, fog vector, diffuse/alpha color,
-  alpha test vector (all 8 CompareFunction modes), and shader index — matching FNA behavior.
-- **Note:** `Texture2D` in CNA does not inherit from `Texture`, so the EffectParameter texture
-  storage path is unusable; `Texture` property backed by a direct member pointer instead.
-- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly with no errors.
-
-### Previous session — Implement `SpriteEffect`
-- **Added:** `include/Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp` and
-  `src/Microsoft/Xna/Framework/Graphics/SpriteEffect.cpp`.
-- `SpriteEffect` derives from `Effect`, caches the `MatrixTransform` parameter, and in
-  `OnApply()` builds an orthographic off-center projection plus −0.5 px half-pixel offset
-  matrix matching FNA's behavior exactly.
-- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly with no errors.
-
-### Commit `93946e5` — Port Graphics.PackedVector types and wire EasyGL graphics state
-- **Added:** 18 PackedVector header-only types under
-  `include/Microsoft/Xna/Framework/Graphics/PackedVector/`.
-- **Added:** `ApplyBlendState`, `ApplyDepthStencilState`, `ApplyRasterizerState` to
-  `IGraphicsBackend` (default no-ops) and implemented in `EasyGLGraphicsBackend` with
-  correct XNA→OpenGL enum mapping helpers.
-- **Modified:** `GraphicsDevice` setters now call backend `Apply*` immediately on state change.
-- **Fixed:** `house3d_demo.cpp` — `CurrentTechnique().Passes()` → `getCurrentTechniqueProperty()->getPassesProperty()`.
-- **Fixed:** `GamePadInputTests.cpp` — corrected DPad and trigger access to use proper XNA API.
-
-### Commit `34ae601` — Expand Effect/EffectTechnique API and add vertex type headers
-- Effect hierarchy complete: `Effect`, `EffectTechnique`, `EffectPass`, `EffectParameter`,
-  `EffectParameterCollection`, `EffectTechniqueCollection`, `EffectPassCollection`,
-  `EffectAnnotation`, `EffectAnnotationCollection`.
-- Added `VertexPositionColorTexture`, `VertexPositionNormalTexture`, `VertexPositionTexture`.
-- Added `DynamicVertexBuffer`, `DynamicIndexBuffer`, `RenderTargetCube`.
-- `GraphicsDevice` expanded with render target, scissor, blend factor, stencil, texture
-  collection accessors.
-- `IGraphicsBackend` extended with default-no-op state methods.
-
-### Commit `6536c4b` — Namespace audit: Framework, Graphics, Input
-- Added `KeyboardState(std::initializer_list<Keys>)` constructor matching FNA `params Keys[]`.
-- Various API compliance fixes.
 
 ---
 
-## 4. Current blocker / main problem
+## 4. Next smallest tasks
 
-No hard build blocker exists. The next work is **implementing the five missing XNA stock
-effects** (`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`,
-`SpriteEffect`). These are public XNA API types; the FNA source is at:
+### Task 16 — `Texture2D::FromStream` + `GetData`
 
-```
-/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/
-```
+**Goal:** implement the standard XNA texture loading path.
 
-All prerequisite infrastructure (`Effect`, `IEffectFog`, `IEffectLights`, `IEffectMatrices`,
-`DirectionalLight`, `EffectParameter`, `EffectTechnique`, `GraphicsDevice`) is already present.
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs`
+(methods `FromStream`, `GetData`, `SaveAsPng`, `SaveAsJpeg`).
 
-A secondary limitation: **the EasyGL vertex buffer only works with the VertexPositionColor
-stride (16 bytes)**. Other layouts (e.g. `VertexPositionColorTexture` = 24 bytes) would
-silently misread vertex data. Fixing this requires the backend to read stride from the
-`VertexDeclaration` and configure the VAO layout dynamically.
+Steps:
+1. Add `System::IO::Stream` minimal stub to sharp-runtime (abstract base with `Read(byte*,int)`).
+2. Add `System::IO::MemoryStream` and `System::IO::FileStream` concrete implementations.
+3. Declare and implement `static Texture2D* FromStream(GraphicsDevice* graphicsDevice, System::IO::Stream* stream)` in `Texture2D.hpp/.cpp` — decode via `CNA::Internal::Graphics::ImageLoader` (already handles RGBA).
+4. Declare and implement `GetData(Color* data, int startIndex, int elementCount)` — reads back pixel data from the backend or from a CPU-side copy.
+5. Optionally: `SaveAsPng` / `SaveAsJpeg` via stb_image_write (already likely in the tree).
+
+### Task 17 — `SpriteBatch` deferred sort modes
+
+**Goal:** implement `BackToFront`, `FrontToBack`, and `Texture` sort modes in `SpriteBatch`.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/SpriteBatch.cs`
+
+Current state: `Begin()` records `sortMode_` but `End()` ignores it — all sprites flush in
+submission order.
+
+Steps:
+1. Introduce a `SpriteInfo` struct (texture, dest rect, src rect, color, layer depth, …).
+2. Buffer sprites in `Draw()` instead of flushing immediately when not `Immediate`.
+3. In `End()`, sort the buffer by `layerDepth` (BackToFront / FrontToBack) or by texture pointer
+   (Texture mode), then flush sorted batches.
+
+### Task 18 — `RenderTarget2D` EasyGL backend wiring
+
+**Goal:** make off-screen rendering work on the EasyGL backend.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/RenderTarget2D.cs`
+
+Steps:
+1. Add `IRenderTargetBackend` (or extend `ITextureBackend`) with `Bind()` / `Unbind()`.
+2. Implement `EasyGLRenderTargetBackend` — creates OpenGL ES FBO + color attachment texture
+   + optional depth renderbuffer.
+3. Wire `GraphicsDevice::SetRenderTarget(RenderTarget2D*)` to call `Bind()` on the backend
+   and restore the default framebuffer on `SetRenderTarget(nullptr)`.
 
 ---
 
-## 5. Known bugs and limitations
+## 5. Do not do yet
 
-| Status | Issue |
-|--------|-------|
-| done | `SpriteEffect` — implemented (orthographic projection matrix for SpriteBatch) |
-| done | `AlphaTestEffect` — implemented (alpha test vector + fog + WVP, all CompareFunction modes) |
-| done | `EnvironmentMapEffect` — implemented (env map, fresnel, specular, lighting matrices, fog, one-light opt.) |
-| done | `DualTextureEffect` — implemented (two-texture blend, fog, vertex color, diffuse/alpha) |
-| done | `SkinnedEffect` — implemented (72 bones, weights 1/2/4, lighting matrices, perPixel/oneLight shader index) |
-| done | `OcclusionQuery` — implemented via `IOcclusionQueryBackend`; EasyGL uses `GL_ANY_SAMPLES_PASSED` (GLES3: PixelCount = 0 or 1); other backends return null → stub fallback |
-| done | `Model::Draw` — full implementation: `CopyAbsoluteBoneTransformsTo`, effect `IEffectMatrices` binding (World/View/Projection per bone), `ModelMesh::Draw` sets VB/IB and calls `DrawIndexedPrimitives` per pass; `ModelEffectCollection` Add/Remove/Contains; `ModelMeshPart::setEffectProperty` updates parent Effects collection |
-| done | `SpriteFont` — full glyph data model + `MeasureString`; `SpriteBatch::DrawString` (3 string overloads) renders glyphs via per-character source/dest rects |
-| done | `SpriteBatch::Begin(SpriteSortMode, BlendState)` — forwards `BlendState` to `GraphicsDevice::setBlendStateProperty` |
-| done | EasyGL vertex buffer stride — `ApplyLayout(stride)` configures VAO for all four built-in vertex types; `VertexBuffer::SetData` overloads added for all types |
-| done | `DrawUserIndexedPrimitives` — implemented: packs VertexPositionColor + 16-bit indices into temp buffers, calls `DrawIndexedColoredPrimitives` |
-| done | Vulkan backend — `ApplyBlendState` updates `blendEnabled_`; `ApplyDepthStencilState` updates `depthTestEnabled_`/`depthWriteEnabled_`; `ApplyRasterizerState` updates `cullMode_` (folded into pipeline key) |
-| incomplete | `FillMode::WireFrame` silently ignored (OpenGL ES limitation) |
-| done | `GraphicsAdapter` — `VendorId`/`DeviceId` read from `/sys/class/drm/card*/device/` on Linux (fallback 0); `Revision`/`SubSystemId` return 0 (not available via SDL3) |
-| done | `IndexBuffer` — `ThirtyTwoBits` now supported: `CreateIndexBuffer32` factory on all backends; `SetData32` on EasyGL/Vulkan; EasyGL `draw_elements` uses `GL_UNSIGNED_INT`; Vulkan `vkCmdBindIndexBuffer` uses `VK_INDEX_TYPE_UINT32`; `IndexBuffer::SetData(uint32_t*)` overload added |
-| done | `EffectParameter::GetValueTexture3D/TextureCube` — fixed: separate `texture3DData_`/`textureCubeData_` fields replace the broken `dynamic_cast<>` from `Texture*`; `SetValue(Texture3D*)` and `SetValue(TextureCube*)` overloads added |
+- **No Vulkan 3D implementation** — Vulkan is state-only. Do not add real 3D draw calls there
+  until the EasyGL path is fully verified.
+- **No XNB content pipeline** — CNA uses its own content system. Do not port FNA's 40+
+  `ContentReaders` unless a specific game integration requires XNB loading.
+- **No `Design::*Converter` types** — TypeConverter subclasses for IDE tooling have no meaning
+  in a C++ runtime.
+- **No FNA platform internals** — `FNA3D`, `FNAPlatform`, `GestureDetector`, `DxtUtil`,
+  `X360TexUtil` are FNA implementation details, not XNA API.
+- **No mass refactor** of existing working code.
+- **No API renames** — never rename a method/class for C++ aesthetics if it diverges from FNA.
 
 ---
 
@@ -374,7 +179,7 @@ silently misread vertex data. Fixing this requires the backend to read stride fr
 
 ```
 Microsoft::Xna::Framework::           — public XNA API (must match FNA exactly)
-  Graphics::                          — GraphicsDevice, textures, effects, vertices
+  Graphics::                          — GraphicsDevice, textures, effects, vertices, Model
   Graphics::PackedVector::            — 18 packed types (header-only)
   Input::                             — Keyboard, Mouse, GamePad, Touch, Gesture
   Content::                           — ContentManager + ContentTypeReader<T>
@@ -385,114 +190,84 @@ CNA::                                 — project-specific internals (NOXNA tagg
   Internal::Backends::Common::        — IGraphicsBackend, IVertexBufferBackend, …
   Internal::Backends::EasyGL::        — OpenGL ES 3.0 implementation
   Internal::Backends::SDL_Renderer::  — 2D only; throws on all 3D calls
-  Internal::Backends::Vulkan::        — skeleton; state methods are no-ops
+  Internal::Backends::Vulkan::        — state wired; no real 3D draw path
   Internal::Input::InputManager::     — maps SDL events to XNA Input state
+  Internal::Graphics::ImageLoader::   — loads PNG/BMP/… into RGBA via stb_image
 ```
 
-### Data flow (3D draw call)
+### Data flow (3D draw)
 ```
 Game::Draw()
-  → GraphicsDevice::DrawPrimitives()
-      → IGraphicsBackend::DrawColoredPrimitives()
-          → EasyGLVertexBufferBackend VAO bind + glDrawArrays
+  → GraphicsDevice::DrawIndexedPrimitives()
+      → IGraphicsBackend::DrawIndexedPrimitivesEx(GpuDrawParams)
+          → EasyGLGraphicsBackend: select shader by stride, bind VAO, glDrawElements
+```
+
+### Data flow (Model::Draw)
+```
+Model::Draw(world, view, projection)
+  → CopyAbsoluteBoneTransformsTo(sharedDrawBoneMatrices_)
+  → for each mesh: cast effect → IEffectMatrices, set World/View/Projection
+  → ModelMesh::Draw()
+      → GraphicsDevice::SetVertexBuffer / setIndicesProperty
+      → for each pass: pass.Apply() → GraphicsDevice::DrawIndexedPrimitives()
 ```
 
 ### State flow
 ```
 GraphicsDevice::setBlendStateProperty(bs)
-  → backend_->ApplyBlendState(int…) // EasyGL: glBlendFuncSeparate + glBlendEquationSeparate
-                                     // Vulkan/BGFX: no-op
+  → backend_->ApplyBlendState(…)
+      // EasyGL: glBlendFuncSeparate + glBlendEquationSeparate
+      // Vulkan:  updates blendEnabled_ → baked into pipeline key
+      // BGFX:    no-op
 ```
 
 ### Invariants that must not be broken
-- **XNA API names:** Class/method/enum names must match FNA exactly. Never rename for
-  C++ aesthetic reasons.
-- **Namespace:** Original XNA types stay in `Microsoft::Xna::Framework::*`. `CNA::` is for
-  internals only.
-- **Property convention:** `getXProperty()` / `setXProperty()` for all C# properties.
-- **SharpRuntime types:** Use `bytecs`, `intcs`, `Single`, `String` etc. — never raw C++ types
-  in the XNA API surface.
-- **GLOB_RECURSE in CMake:** New `.cpp` files are auto-discovered; no CMakeLists edits needed
-  for new source files under existing directories.
-- **SDL_Renderer 3D:** Must always throw (by contract). Do not add 3D support there.
+- **XNA API names:** Class/method/enum names must match FNA exactly.
+- **Namespace:** Original XNA types stay in `Microsoft::Xna::Framework::*`. `CNA::` is for internals.
+- **Property convention:** `getXProperty()` / `setXProperty()` — strict.
+- **SharpRuntime types:** `bytecs`, `intcs`, `Single`, `String` etc. — never raw C++ in the XNA surface.
+- **SDL_Renderer 3D:** Must always throw (by contract).
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# Configure (debug, Vulkan backend — default)
-cmake -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug
+# Configure Vulkan build (default)
+cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCMAKE_BUILD_TYPE=Debug
 
-# Configure (debug, EasyGL backend — for 3D testing)
+# Configure EasyGL build (for 3D testing)
 cmake -B cmake-build-easygl -DCNA_GRAPHICS_BACKEND=EASYGL -DCMAKE_BUILD_TYPE=Debug
 
 # Build library only
-cmake --build cmake-build-debug --target CNA
+cmake --build cmake-build-vulkan --target CNA
 
 # Build everything
-cmake --build cmake-build-debug
+cmake --build cmake-build-vulkan
 
 # Run tests
-./cmake-build-debug/CnaTests
+./cmake-build-vulkan/CnaTests
 
-# Run house3d demo (requires EasyGL build)
+# Run 3D demo (EasyGL)
 ./cmake-build-easygl/cna_house3d_demo
 
 # Run 2D demo
-./cmake-build-debug/cna_demo_2d
+./cmake-build-vulkan/cna_demo_2d
 ```
 
 ---
 
-## 8. Next smallest tasks
-
-### ~~Task 1 — Implement `SpriteEffect`~~ **DONE**
-
-### ~~Task 2 — Implement `AlphaTestEffect`~~ **DONE**
-
-### ~~Task 3 — Implement `EnvironmentMapEffect`~~ **DONE**
-
-### ~~Task 4 — Implement `DualTextureEffect`~~ **DONE**
-
-### ~~Task 5 — Implement `SkinnedEffect`~~ **DONE**
-
-### ~~Task 6 — Fix EasyGL vertex buffer stride~~ **DONE**
-
-### ~~Task 7 — Wire `SpriteBatch::Begin(SpriteSortMode, BlendState)` to backend~~ **DONE**
-
----
-
-## 9. Do not do yet
-
-- **No Vulkan 3D implementation** — the Vulkan backend is a skeleton. Do not add real 3D
-  draw calls there until the EasyGL path is fully verified.
-- **No XNB content pipeline** — CNA uses its own content system. Do not port FNA's
-  `*Reader` content classes (the 40+ `ContentReaders` types) unless a specific game
-  integration requires XNB loading.
-- **No `Design::*Converter` types** — `TypeConverter` subclasses for IDE tooling have no
-  meaning in a C++ runtime port.
-- **No FNA platform internals** — `FNA3D`, `FNAPlatform`, `SDL2_FNAPlatform`,
-  `SDL3_FNAPlatform`, `GestureDetector`, `DxtUtil`, `X360TexUtil` are FNA-specific
-  implementation details, not XNA API.
-- **No mass refactor** of existing working code (Effect, GraphicsDevice, EasyGL backend).
-- **No API renames** — never rename a method/class for C++ aesthetics if it diverges from FNA.
-- **No new CMakeLists edits** for adding `.cpp` files — `GLOB_RECURSE` handles it automatically.
-- **No premature Model loading** — `Model::Draw` stub is fine until a proper asset pipeline
-  and effect-binding path are designed end-to-end.
-
----
-
-## 10. Resume prompt
+## 8. Resume prompt
 
 ```
 Read NEXT.md first to understand the current state of the CNA project.
 
-Tasks 1–7 from section 8 are all complete. There is no pre-defined Task 8 yet.
-Consult the "Known bugs and limitations" table in section 5 for the next best target.
-Good candidates (incomplete items):
-- OcclusionQuery::Begin()/End() — stub-only, always returns isComplete_=false
-- SpriteFont — header only, no glyph rendering
-- DrawUserIndexedPrimitives — throws std::runtime_error
-- Model::Draw — no effect binding
+The next tasks are in section 4:
+- Task 16: Texture2D::FromStream + GetData (requires System::IO::Stream in sharp-runtime)
+- Task 17: SpriteBatch deferred sort modes (BackToFront, FrontToBack, Texture)
+- Task 18: RenderTarget2D EasyGL backend wiring (FBO + SetRenderTarget)
+
+The "What does NOT work yet" table in section 2 lists remaining gaps.
+Pick the task most relevant to the current game integration need.
 ```
