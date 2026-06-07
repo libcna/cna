@@ -6,9 +6,17 @@
 |---------|-----------|-----------|
 | Vulkan  | ~24 MB    | Before SpriteBatch/viewport fixes — app crashed with SIGSEGV during the first `Draw`, so `LoadContent` never completed; only `wait.png` was uploaded |
 | Vulkan  | ~100 MB   | After fixes — app runs correctly and completes `LoadContent` |
-| EasyGL  | ~158 MB   | Fully running — **larger than Vulkan despite lighter API** (see below) |
+| EasyGL  | ~48 MB    | Earlier measurement — app ran correctly but RAM was much lower |
+| EasyGL  | ~158 MB   | Current measurement — **larger than Vulkan despite lighter API** (see below) |
 
-The jump from 24 MB to 100 MB on Vulkan is therefore not a regression introduced by the fix — it simply reflects the app reaching full initialization for the first time.
+Both backends show the same pattern: a past low-water mark followed by a large increase.
+The Vulkan jump (24 MB → 100 MB) is partly explained by the app previously crashing before
+`LoadContent` completed, so only one texture was ever uploaded. The EasyGL jump (48 MB →
+158 MB), however, happened while the app was already running correctly — meaning some
+change in the XNA/content layer (not the backend itself) caused the regression in both
+backends simultaneously. The most likely culprit is the addition of `= default` copy
+constructors to `Texture2D` (task 32), which made `ContentManager::Load<T>()` start
+returning deep copies of `cpuPixels_` that were previously either impossible or avoided.
 
 ---
 
@@ -82,14 +90,21 @@ etc.) has a larger resident footprint than EGL/OpenGL in the same process.
 
 ## Why EasyGL uses even more (~158 MB)
 
-The EasyGL backend has not been investigated in depth, but the ContentManager double-copy
-(~68 MB, listed above) is present there too. Beyond that, OpenGL drivers (Mesa RadeonSI,
-Intel ANV, Nouveau) commonly keep a **CPU shadow copy** of all uploaded texture data to
-support `glGetTexImage`, state save/restore, and context loss recovery. Combined with the
-ContentManager copy already in `Pixmap` fields, this could mean **three** CPU copies of
-the texture raster per texture rather than two — raising the texture footprint from ~68 MB
-to ~100 MB. Additional EasyGL-specific factors (SDL/EGL overhead, `pending_vertices_`
-vector growth, etc.) likely make up the rest.
+The EasyGL backend has not been investigated in depth. EasyGL also has the ContentManager
+double-copy problem, but it somehow uses **more** RAM than the heavier Vulkan backend.
+Possible additional factors:
+
+- OpenGL drivers (Mesa RadeonSI, Intel ANV, Nouveau) commonly keep a **CPU shadow copy**
+  of all uploaded texture data to support `glGetTexImage`, state save/restore, and context
+  loss recovery. Combined with the ContentManager duplicate, this means **three** CPU
+  copies of the raster per texture (~102 MB for 13 textures) rather than two — matching
+  the measured 158 MB when base runtime overhead is included.
+- `pending_vertices_` in the EasyGL sprite batch is a `std::vector` that may grow and
+  never shrink across a scene with many different textures.
+- SDL/EGL surface and window management overhead.
+
+The EasyGL RAM problem is at least as serious as Vulkan and shares the same root cause
+(ContentManager copy-by-value), with additional driver-level overhead on top.
 
 ---
 
