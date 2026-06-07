@@ -86,6 +86,26 @@ content loading are the next major missing pieces.
 
 ## 3. Recent changes
 
+### Current session — Implement Model::Draw (Task 15)
+- **Added:** `src/.../Model.cpp` — `CopyAbsoluteBoneTransformsTo` (parent-relative product),
+  `CopyBoneTransformsFrom/To`, and `Draw(world, view, projection)`: allocates shared bone
+  matrix buffer, applies absolute transforms, iterates mesh effects, casts to `IEffectMatrices`
+  (throws `std::runtime_error` if not supported), sets World = boneMatrix×world / View / Projection,
+  then calls `mesh->Draw()`.
+- **Added:** `src/.../ModelMesh.cpp` — `Draw()` mirrors FNA: sets VB + IB on `GraphicsDevice`,
+  iterates `currentTechnique.Passes`, calls `pass.Apply()` then `DrawIndexedPrimitives` per pass.
+  NOXNA constructor accepts `GraphicsDevice*` + part list, wires `part->parent_`.
+- **Added:** `src/.../ModelMeshPart.cpp` — `setEffectProperty` implements FNA's
+  add/remove-from-parent-Effects-collection logic.
+- **Added:** `src/.../ModelBone.cpp`, `ModelBoneCollection.cpp`, `ModelMeshCollection.cpp`,
+  `ModelMeshPartCollection.cpp`, `ModelEffectCollection.cpp` — accessor implementations.
+- **Updated headers:** `ModelEffectCollection` gains `Add/Remove/Contains` + iterators;
+  `ModelMeshPartCollection`/`ModelMeshCollection` gain iterators; `ModelMeshPart` gains
+  `Tag` property + `parent_` member; `ModelMesh` gains `GraphicsDevice*`, `BoundingSphere`,
+  `Tag`, NOXNA constructor; `Model` gains `Tag`, `CopyBoneTransformsFrom/To`, NOXNA constructor,
+  static `sharedDrawBoneMatrices_`; `ModelBone` gains `AddChild`.
+- Build: `cmake-build-vulkan` and `cmake-build-easygl` — both `libCNA.a` link cleanly.
+
 ### Current session — 32-bit IndexBuffer + EffectParameter texture fix (Task 14)
 - **`IndexBuffer`**: constructor for `ThirtyTwoBits` no longer throws; calls new
   `CreateIndexBuffer32` factory instead of `CreateIndexBuffer16`. Added
@@ -335,7 +355,7 @@ silently misread vertex data. Fixing this requires the backend to read stride fr
 | done | `DualTextureEffect` — implemented (two-texture blend, fog, vertex color, diffuse/alpha) |
 | done | `SkinnedEffect` — implemented (72 bones, weights 1/2/4, lighting matrices, perPixel/oneLight shader index) |
 | done | `OcclusionQuery` — implemented via `IOcclusionQueryBackend`; EasyGL uses `GL_ANY_SAMPLES_PASSED` (GLES3: PixelCount = 0 or 1); other backends return null → stub fallback |
-| incomplete | `Model::Draw` — no effect binding, does nothing useful |
+| done | `Model::Draw` — full implementation: `CopyAbsoluteBoneTransformsTo`, effect `IEffectMatrices` binding (World/View/Projection per bone), `ModelMesh::Draw` sets VB/IB and calls `DrawIndexedPrimitives` per pass; `ModelEffectCollection` Add/Remove/Contains; `ModelMeshPart::setEffectProperty` updates parent Effects collection |
 | done | `SpriteFont` — full glyph data model + `MeasureString`; `SpriteBatch::DrawString` (3 string overloads) renders glyphs via per-character source/dest rects |
 | done | `SpriteBatch::Begin(SpriteSortMode, BlendState)` — forwards `BlendState` to `GraphicsDevice::setBlendStateProperty` |
 | done | EasyGL vertex buffer stride — `ApplyLayout(stride)` configures VAO for all four built-in vertex types; `VertexBuffer::SetData` overloads added for all types |

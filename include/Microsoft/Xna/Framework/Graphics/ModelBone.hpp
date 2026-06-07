@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "CNA/CNAHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -19,6 +20,8 @@ namespace Microsoft::Xna::Framework::Graphics
         void setTransformProperty(const Matrix& value);
         [[nodiscard]] ModelBone* getParentProperty() const;
         [[nodiscard]] const std::vector<ModelBone*>& getChildrenProperty() const;
+
+        NOXNA void AddChild(ModelBone* child);
 
     private:
         std::string name_;

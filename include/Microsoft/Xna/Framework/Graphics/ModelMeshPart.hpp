@@ -1,9 +1,12 @@
 #pragma once
 
+#include "System/Object.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     class Effect;
     class IndexBuffer;
+    class ModelMesh;
     class VertexBuffer;
     class VertexDeclaration;
 
@@ -11,6 +14,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class ModelMeshPart
     {
     public:
+        ModelMeshPart() = default;
+
         [[nodiscard]] int getNumVerticesProperty() const;
         [[nodiscard]] int getPrimitiveCountProperty() const;
         [[nodiscard]] int getStartIndexProperty() const;
@@ -19,6 +24,8 @@ namespace Microsoft::Xna::Framework::Graphics
         void setEffectProperty(Effect* value);
         [[nodiscard]] IndexBuffer* getIndexBufferProperty() const;
         [[nodiscard]] VertexBuffer* getVertexBufferProperty() const;
+        [[nodiscard]] System::Object* getTagProperty() const;
+        void setTagProperty(System::Object* value);
 
     private:
         int numVertices_    = 0;
@@ -28,6 +35,8 @@ namespace Microsoft::Xna::Framework::Graphics
         Effect* effect_     = nullptr;
         IndexBuffer* indexBuffer_   = nullptr;
         VertexBuffer* vertexBuffer_ = nullptr;
+        System::Object* tag_        = nullptr;
+        ModelMesh* parent_          = nullptr;
 
         friend class ModelMesh;
     };
