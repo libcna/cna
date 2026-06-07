@@ -359,6 +359,8 @@ namespace CNA::Internal::Backends::Vulkan
         bool     blendEnabled_      = false;
         int      cullMode_          = 0;  // XNA CullMode: 0=None, 1=CW, 2=CCW
 
+        bool frame3DBuffersAllocated_ = false;
+
         // ---- Init helpers ----
         void CreateInstance();
         void SetupDebugMessenger();
@@ -384,6 +386,7 @@ namespace CNA::Internal::Backends::Vulkan
                                          bool blend, int cullMode);
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
+        void EnsureFrame3DBuffers();
 
         // ---- Swapchain lifecycle ----
         void RecreateSwapchain();

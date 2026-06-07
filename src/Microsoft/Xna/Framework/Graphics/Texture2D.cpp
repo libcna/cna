@@ -29,30 +29,36 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::storeCpuPixels(const uint8_t* rgba, int pixelCount)
     {
-        cpuPixels_.assign(rgba, rgba + static_cast<std::size_t>(pixelCount) * 4);
+        if (!cpuPixels_) cpuPixels_ = std::make_shared<std::vector<uint8_t>>();
+        cpuPixels_->assign(rgba, rgba + static_cast<std::size_t>(pixelCount) * 4);
     }
 
     std::vector<uint8_t>& Texture2D::getMipBuffer(int level)
     {
-        if (level == 0) return cpuPixels_;
+        if (level == 0) {
+            if (!cpuPixels_) cpuPixels_ = std::make_shared<std::vector<uint8_t>>();
+            return *cpuPixels_;
+        }
         const int idx = level - 1;
-        if (static_cast<int>(extraMipLevels_.size()) <= idx)
-            extraMipLevels_.resize(static_cast<std::size_t>(idx + 1));
-        if (extraMipLevels_[idx].empty())
+        if (!extraMipLevels_) extraMipLevels_ = std::make_shared<std::vector<std::vector<uint8_t>>>();
+        if (static_cast<int>(extraMipLevels_->size()) <= idx)
+            extraMipLevels_->resize(static_cast<std::size_t>(idx + 1));
+        if ((*extraMipLevels_)[idx].empty())
         {
             const int w = mipDim(width, level);
             const int h = mipDim(height, level);
-            extraMipLevels_[idx].assign(static_cast<std::size_t>(w * h) * 4, 0);
+            (*extraMipLevels_)[idx].assign(static_cast<std::size_t>(w * h) * 4, 0);
         }
-        return extraMipLevels_[idx];
+        return (*extraMipLevels_)[idx];
     }
 
     const std::vector<uint8_t>* Texture2D::getMipBufferConst(int level) const
     {
-        if (level == 0) return cpuPixels_.empty() ? nullptr : &cpuPixels_;
+        if (level == 0) return (!cpuPixels_ || cpuPixels_->empty()) ? nullptr : cpuPixels_.get();
+        if (!extraMipLevels_) return nullptr;
         const int idx = level - 1;
-        if (static_cast<int>(extraMipLevels_.size()) <= idx) return nullptr;
-        return extraMipLevels_[idx].empty() ? nullptr : &extraMipLevels_[idx];
+        if (static_cast<int>(extraMipLevels_->size()) <= idx) return nullptr;
+        return (*extraMipLevels_)[idx].empty() ? nullptr : &(*extraMipLevels_)[idx];
     }
 
     // -----------------------------------------------------------------------
@@ -87,8 +93,8 @@ namespace Microsoft::Xna::Framework::Graphics
         data.width  = w;
         data.height = h;
         data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
-        cpuPixels_ = data.pixels;
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
+        cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
     }
 
     static int CalculateMipLevels(int w, int h)
@@ -108,8 +114,8 @@ namespace Microsoft::Xna::Framework::Graphics
         data.width  = w;
         data.height = h;
         data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
-        cpuPixels_ = data.pixels;
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
+        cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
     }
 
     Texture2D::Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt,
@@ -155,8 +161,8 @@ namespace Microsoft::Xna::Framework::Graphics
             img.pixels[i * 4 + 2] = data[i].getBProperty();
             img.pixels[i * 4 + 3] = data[i].getAProperty();
         }
-        cpuPixels_ = img.pixels;
         backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
+        cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
     }
 
     void Texture2D::SetData(int level, const Rectangle* rect,
@@ -230,20 +236,18 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!data || elementCount <= 0)
             throw std::invalid_argument("data must not be null and elementCount must be > 0");
-        if (cpuPixels_.empty())
+        if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
 
         int total = width * height;
         if (startIndex + elementCount > total)
             throw std::out_of_range("Texture2D::GetData: index out of range");
 
+        const auto& px = *cpuPixels_;
         for (int i = 0; i < elementCount; ++i)
         {
             int src = (startIndex + i) * 4;
-            data[i] = Color(cpuPixels_[src + 0],
-                            cpuPixels_[src + 1],
-                            cpuPixels_[src + 2],
-                            cpuPixels_[src + 3]);
+            data[i] = Color(px[src + 0], px[src + 1], px[src + 2], px[src + 3]);
         }
     }
 
@@ -336,12 +340,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!stream)
             throw std::invalid_argument("Texture2D::SaveAsPng: stream is null");
-        if (cpuPixels_.empty())
+        if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
 
         SDL_Surface* surface = SDL_CreateSurfaceFrom(
             width, height, SDL_PIXELFORMAT_RGBA32,
-            const_cast<uint8_t*>(cpuPixels_.data()), width * 4);
+            const_cast<uint8_t*>(cpuPixels_->data()), width * 4);
         if (!surface)
             throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
 
@@ -392,12 +396,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SaveAsPng(const std::string& filename) const
     {
-        if (cpuPixels_.empty())
+        if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
 
         SDL_Surface* surface = SDL_CreateSurfaceFrom(
             width, height, SDL_PIXELFORMAT_RGBA32,
-            const_cast<uint8_t*>(cpuPixels_.data()), width * 4);
+            const_cast<uint8_t*>(cpuPixels_->data()), width * 4);
 
         if (!surface)
             throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
@@ -418,12 +422,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!stream)
             throw std::invalid_argument("Texture2D::SaveAsJpeg: stream is null");
-        if (cpuPixels_.empty())
+        if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
 
         SDL_Surface* surface = SDL_CreateSurfaceFrom(
             width, height, SDL_PIXELFORMAT_RGBA32,
-            const_cast<uint8_t*>(cpuPixels_.data()), width * 4);
+            const_cast<uint8_t*>(cpuPixels_->data()), width * 4);
         if (!surface)
             throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
 
@@ -474,12 +478,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SaveAsJpeg(const std::string& filename) const
     {
-        if (cpuPixels_.empty())
+        if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
 
         SDL_Surface* surface = SDL_CreateSurfaceFrom(
             width, height, SDL_PIXELFORMAT_RGBA32,
-            const_cast<uint8_t*>(cpuPixels_.data()), width * 4);
+            const_cast<uint8_t*>(cpuPixels_->data()), width * 4);
         if (!surface)
             throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
 
@@ -512,8 +516,8 @@ namespace Microsoft::Xna::Framework::Graphics
         tex.graphicsDevice_     = &device;
         tex.width       = w;
         tex.height      = h;
-        tex.cpuPixels_  = rgba;
         tex.backend_    = device.GetBackend().CreateTexture(data);
+        tex.cpuPixels_  = std::make_shared<std::vector<uint8_t>>(rgba);
         return tex;
     }
 }

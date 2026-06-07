@@ -649,7 +649,6 @@ namespace CNA::Internal::Backends::Vulkan
         CreateDescriptorPool();
         CreatePipeline2D();
         CreateSpriteBuffers();
-        CreateFrame3DBuffers();
         initialized_ = true;
         SDL_Log("[Vulkan] Backend initialised");
     }
@@ -1609,6 +1608,14 @@ namespace CNA::Internal::Backends::Vulkan
         }
     }
 
+    void VulkanGraphicsBackend::EnsureFrame3DBuffers()
+    {
+        if (!frame3DBuffersAllocated_) {
+            CreateFrame3DBuffers();
+            frame3DBuffersAllocated_ = true;
+        }
+    }
+
     // =========================================================================
     // Memory / resource helpers
     // =========================================================================
@@ -1795,6 +1802,8 @@ namespace CNA::Internal::Backends::Vulkan
         // Helper: draw all pending 3D draws for a specific RT into the current render pass.
         auto draw3DFor = [&](VulkanRenderTargetBackend* targetRT)
         {
+            if (pending3D_.empty()) return;
+            EnsureFrame3DBuffers();
             VkPipeline lastPipe = VK_NULL_HANDLE;
             VkDeviceSize vbOff  = 0;
             VkDeviceSize ibOff  = 0;
