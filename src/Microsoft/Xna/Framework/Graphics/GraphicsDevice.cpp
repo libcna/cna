@@ -503,16 +503,61 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
-        (void)primitiveType;
-        (void)vertexData;
-        (void)vertexOffset;
-        (void)numVertices;
-        (void)indexData;
-        (void)indexOffset;
-        (void)primitiveCount;
+        if (backend_ == nullptr)
+            return;
 
-        throw std::runtime_error(
-            "GraphicsDevice::DrawUserIndexedPrimitives is not implemented yet by the current CNA backend."
+        if (currentEffect_ == nullptr)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+
+        // Compute total index count from primitive type (mirrors FNA PrimitiveVerts).
+        int indexCount = 0;
+        switch (primitiveType)
+        {
+            case PrimitiveType::TriangleList:  indexCount = primitiveCount * 3; break;
+            case PrimitiveType::TriangleStrip: indexCount = primitiveCount + 2; break;
+            case PrimitiveType::LineList:      indexCount = primitiveCount * 2; break;
+            case PrimitiveType::LineStrip:     indexCount = primitiveCount + 1; break;
+            default:
+                throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: unsupported PrimitiveType.");
+        }
+
+        // Pack vertices from caller array (assumed VertexPositionColor layout).
+        const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
+        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; };
+        static_assert(sizeof(GpuVertex) == 16, "GpuVertex must be 16 bytes");
+
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(numVertices));
+        for (int i = 0; i < numVertices; ++i)
+        {
+            packed[i].x = vertices[i].Position.X;
+            packed[i].y = vertices[i].Position.Y;
+            packed[i].z = vertices[i].Position.Z;
+            packed[i].r = static_cast<std::uint8_t>(vertices[i].Color.getRProperty());
+            packed[i].g = static_cast<std::uint8_t>(vertices[i].Color.getGProperty());
+            packed[i].b = static_cast<std::uint8_t>(vertices[i].Color.getBProperty());
+            packed[i].a = static_cast<std::uint8_t>(vertices[i].Color.getAProperty());
+        }
+
+        // Copy 16-bit indices with offset applied.
+        const auto* indices = static_cast<const std::uint16_t*>(indexData) + indexOffset;
+        std::vector<std::uint16_t> indexCopy(static_cast<std::size_t>(indexCount));
+        for (int i = 0; i < indexCount; ++i)
+            indexCopy[i] = indices[i];
+
+        auto tmpVb = backend_->CreateVertexBuffer(numVertices);
+        tmpVb->SetData(packed.data(), numVertices, sizeof(GpuVertex));
+
+        auto tmpIb = backend_->CreateIndexBuffer16(indexCount);
+        tmpIb->SetData16(indexCopy.data(), indexCount);
+
+        backend_->DrawIndexedColoredPrimitives(
+            *tmpVb,
+            *tmpIb,
+            currentEffect_->World,
+            currentEffect_->View,
+            currentEffect_->Projection,
+            primitiveType,
+            primitiveCount
         );
     }
 

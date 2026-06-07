@@ -87,7 +87,17 @@ content loading are the next major missing pieces.
 
 ## 3. Recent changes
 
-### Current session — Wire SpriteBatch::Begin BlendState (Task 7)
+### Current session — Implement DrawUserIndexedPrimitives (Task 8)
+- **Modified:** `GraphicsDevice::DrawUserIndexedPrimitives` in `GraphicsDevice.cpp` — replaced
+  unconditional `throw` with a real implementation:
+  - Computes index count from `primitiveType` + `primitiveCount` (TriangleList×3, Strip+2, etc.)
+  - Packs `VertexPositionColor` vertices (with vtable) into compact 16-byte `GpuVertex`
+  - Copies 16-bit indices with `indexOffset` applied
+  - Creates temporary VB + IB via `backend_->CreateVertexBuffer / CreateIndexBuffer16`
+  - Calls `backend_->DrawIndexedColoredPrimitives` with `currentEffect_` matrices
+- Build: `cmake-build-vulkan` — `libCNA.a` links cleanly.
+
+### Previous session — Wire SpriteBatch::Begin BlendState (Task 7)
 - **Modified:** `SpriteBatch` now stores `GraphicsDevice*` (added `graphicsDevice_` member to
   header; constructor sets it from the constructor parameter).
 - **Modified:** `Begin(SpriteSortMode, BlendState)` — forwards `blend_state` to
@@ -228,7 +238,7 @@ silently misread vertex data. Fixing this requires the backend to read stride fr
 | incomplete | `SpriteFont` — header only, no glyph rendering |
 | done | `SpriteBatch::Begin(SpriteSortMode, BlendState)` — forwards `BlendState` to `GraphicsDevice::setBlendStateProperty` |
 | done | EasyGL vertex buffer stride — `ApplyLayout(stride)` configures VAO for all four built-in vertex types; `VertexBuffer::SetData` overloads added for all types |
-| incomplete | `DrawUserIndexedPrimitives` — throws `std::runtime_error` |
+| done | `DrawUserIndexedPrimitives` — implemented: packs VertexPositionColor + 16-bit indices into temp buffers, calls `DrawIndexedColoredPrimitives` |
 | incomplete | Vulkan / BGFX backends — `ApplyBlendState / ApplyDepthStencilState / ApplyRasterizerState` are no-ops |
 | incomplete | `FillMode::WireFrame` silently ignored (OpenGL ES limitation) |
 | incomplete | `GraphicsAdapter` — `DeviceId`, `Revision`, `SubSystemId`, `VendorId` throw `std::logic_error` |
