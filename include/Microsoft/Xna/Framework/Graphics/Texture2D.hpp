@@ -75,6 +75,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /// XNA 4.0: Texture2D.SaveAsPng(Stream, int width, int height)
         void SaveAsPng(const std::string& filename) const;
 
+        /// XNA 4.0: Texture2D.SaveAsJpeg(Stream, int width, int height)
+        void SaveAsJpeg(System::IO::Stream* stream, int width, int height) const;
+
+        /// NOXNA convenience: saves as JPEG directly to a file path.
+        NOXNA void SaveAsJpeg(const std::string& filename) const;
+
         /// Updates texture pixels from a raw RGBA byte buffer. pixelCount = width * height.
         NOXNA void SetDataRGBA(const uint8_t* data, int pixelCount);
 

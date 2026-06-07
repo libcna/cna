@@ -80,7 +80,7 @@ wiring.
 
 | Area | Status |
 |------|--------|
-| `Texture2D::SaveAsJpeg` | Not implemented. |
+| `Texture2D::SaveAsJpeg` | Implemented via `IMG_SaveJPG_IO` with scaling support. |
 | `Texture2D` mip levels > 0 | `GetData`/`SetData` only support mip level 0. `cpuPixels_` stores one level. |
 | `SpriteBatch` custom effect | Forwarded: `ShaderEffect` compiles/caches its GLSL program; non-ShaderEffect effects call `Apply()` only. |
 | `RenderTarget2D` Vulkan backend | EasyGL FBO is wired and works. The Vulkan backend still returns `nullptr` from `CreateRenderTarget2D` (no-op). |
@@ -224,20 +224,34 @@ wiring.
 - `recreate_gl_resource`: clears `compiledFor_` so the custom program is recompiled after context loss.
 - Build: both `cmake-build-easygl` and `cmake-build-vulkan` — clean.
 
-### Task 26 — `Texture2D::SaveAsJpeg`
+### ~~Task 26 — `Texture2D::SaveAsJpeg`~~ **DONE**
 
-**Goal:** implement `SaveAsJpeg(Stream*, int width, int height)` to match the XNA/FNA API.
+- Added `void SaveAsJpeg(System::IO::Stream* stream, int width, int height) const` to `Texture2D.hpp` (XNA 4.0 API).
+- Added `NOXNA void SaveAsJpeg(const std::string& filename) const` file-path convenience overload.
+- Implementation in `Texture2D.cpp`:
+  - Creates `SDL_Surface` from `cpuPixels_` (RGBA32).
+  - If `targetWidth/Height` differ from texture size, uses `SDL_ScaleSurface` (linear filter) to create a scaled surface.
+  - Encodes via `IMG_SaveJPG_IO` into `SDL_IOFromDynamicMem()` at quality 100 (matches FNA default).
+  - Reads back the encoded buffer via `SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER` + `SDL_TellIO`, writes to the `System::IO::Stream`.
+  - File-path overload uses `IMG_SaveJPG` directly (no memory buffer needed).
+- Build: both backends clean.
 
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs` — `SaveAsJpeg`.
+### Task 27 — `Texture2D` mip levels > 0 for `GetData` / `SetData`
+
+**Goal:** extend `GetData` / `SetData` beyond mip level 0 so games can read/write individual mip
+levels for procedural mip generation or LOD capture.
+
+FNA reference: `Texture2D.cs` — `SetData(int level, …)` / `GetData(int level, …)`.
 
 Steps:
-1. Add `void SaveAsJpeg(System::IO::Stream* stream, int width, int height)` to `Texture2D.hpp`.
-2. Implement in `Texture2D.cpp` using SDL3_image `IMG_SaveJPG_IO` (or stb_image_write) — encode
-   `cpuPixels_` RGBA data scaled to requested size (if width/height differ from texture size,
-   scale first with SDL_Surface blitting).
-3. Provide a convenience `SaveAsJpeg(const std::string& path)` NOXNA overload for games that
-   write directly to a file path.
-4. Build + verify.
+1. Change `cpuPixels_` from a single flat buffer to `std::vector<std::vector<uint8_t>> mipPixels_`
+   where `mipPixels_[0]` is the full-resolution level and subsequent levels are half-size each.
+2. On construction / `SetData(0)` allocate only level 0. Allocate level N lazily on first write.
+3. Update `GetData(int level, …)` and `SetData(int level, …)` to index `mipPixels_[level]`.
+4. Backend `UpdatePixels` already takes the full RGBA buffer; add `UpdatePixelsLevel(level, …)`
+   virtual to `ITextureBackend` for uploading a specific mip (EasyGL: `glTexSubImage2D` with
+   `level` argument; other backends: no-op).
+5. Build + verify existing mip-0 paths are unbroken.
 
 ---
 

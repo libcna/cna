@@ -271,6 +271,87 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     // -----------------------------------------------------------------------
+    // SaveAsJpeg
+    // -----------------------------------------------------------------------
+
+    void Texture2D::SaveAsJpeg(System::IO::Stream* stream, int targetWidth, int targetHeight) const
+    {
+        if (!stream)
+            throw std::invalid_argument("Texture2D::SaveAsJpeg: stream is null");
+        if (cpuPixels_.empty())
+            throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
+
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(
+            width, height, SDL_PIXELFORMAT_RGBA32,
+            const_cast<uint8_t*>(cpuPixels_.data()), width * 4);
+        if (!surface)
+            throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
+
+        SDL_Surface* src = surface;
+        SDL_Surface* scaled = nullptr;
+        if (targetWidth != width || targetHeight != height)
+        {
+            scaled = SDL_ScaleSurface(surface, targetWidth, targetHeight, SDL_SCALEMODE_LINEAR);
+            if (!scaled)
+            {
+                SDL_DestroySurface(surface);
+                throw std::runtime_error(std::string("SDL_ScaleSurface failed: ") + SDL_GetError());
+            }
+            src = scaled;
+        }
+
+        SDL_IOStream* dst = SDL_IOFromDynamicMem();
+        if (!dst)
+        {
+            SDL_DestroySurface(surface);
+            if (scaled) SDL_DestroySurface(scaled);
+            throw std::runtime_error(std::string("SDL_IOFromDynamicMem failed: ") + SDL_GetError());
+        }
+
+        if (!IMG_SaveJPG_IO(src, dst, false, 100))
+        {
+            SDL_CloseIO(dst);
+            SDL_DestroySurface(surface);
+            if (scaled) SDL_DestroySurface(scaled);
+            throw std::runtime_error(std::string("IMG_SaveJPG_IO failed: ") + SDL_GetError());
+        }
+
+        const Sint64 size = SDL_TellIO(dst);
+        if (size > 0)
+        {
+            auto* buf = static_cast<uint8_t*>(
+                SDL_GetPointerProperty(SDL_GetIOProperties(dst),
+                                       SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, nullptr));
+            if (buf)
+                stream->Write(reinterpret_cast<const System::IO::bytecs*>(buf), 0,
+                              static_cast<System::IO::intcs>(size));
+        }
+
+        SDL_CloseIO(dst);
+        if (scaled) SDL_DestroySurface(scaled);
+        SDL_DestroySurface(surface);
+    }
+
+    void Texture2D::SaveAsJpeg(const std::string& filename) const
+    {
+        if (cpuPixels_.empty())
+            throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
+
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(
+            width, height, SDL_PIXELFORMAT_RGBA32,
+            const_cast<uint8_t*>(cpuPixels_.data()), width * 4);
+        if (!surface)
+            throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
+
+        if (!IMG_SaveJPG(surface, filename.c_str(), 100))
+        {
+            SDL_DestroySurface(surface);
+            throw std::runtime_error(std::string("IMG_SaveJPG failed: ") + SDL_GetError());
+        }
+        SDL_DestroySurface(surface);
+    }
+
+    // -----------------------------------------------------------------------
     // NOXNA helpers
     // -----------------------------------------------------------------------
 
