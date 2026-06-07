@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include <iostream>
 
 #include "CNA/Platform.hpp"
@@ -232,6 +233,7 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLSpriteBatchBackend::release_gl_handle_only()
     {
         program_.reset_handle_no_gl();
+        customProgram_.reset_handle_no_gl();
         vao_.reset_handle_no_gl();
         vbo_.reset_handle_no_gl();
         ibo_.reset_handle_no_gl();
@@ -243,6 +245,7 @@ namespace CNA::Internal::Backends::EasyGL
         pending_indices_.clear();
         current_texture_ = nullptr;
         transform_ = Matrix::getIdentityProperty();
+        compiledFor_ = nullptr;
         InitializeResources();
     }
 
@@ -354,6 +357,15 @@ void main()
         transform_ = m;
     }
 
+    void EasyGLSpriteBatchBackend::SetCustomEffect(Effect* effect)
+    {
+        if (customEffect_ != effect)
+        {
+            FlushBatch();
+            customEffect_ = effect;
+        }
+    }
+
     void EasyGLSpriteBatchBackend::End()
     {
         FlushBatch();
@@ -364,7 +376,41 @@ void main()
     {
         if (pending_vertices_.empty()) return;
 
-        program_.use();
+        // Determine which GL program to use: built-in or custom ShaderEffect.
+        ::easygl::Program* prog = &program_;
+        auto* shaderFx = customEffect_
+            ? dynamic_cast<Microsoft::Xna::Framework::Graphics::ShaderEffect*>(customEffect_)
+            : nullptr;
+        if (shaderFx != nullptr)
+        {
+            if (compiledFor_ != shaderFx)
+            {
+                ::easygl::Shader vert(::easygl::ShaderType::Vertex);
+                vert.create();
+                vert.compile_from_source(shaderFx->getVertexSourceProperty().c_str());
+                if (!vert.is_compiled())
+                    std::cerr << "SpriteBatch custom vertex shader failed:\n" << vert.info_log() << "\n";
+
+                ::easygl::Shader frag(::easygl::ShaderType::Fragment);
+                frag.create();
+                frag.compile_from_source(shaderFx->getFragmentSourceProperty().c_str());
+                if (!frag.is_compiled())
+                    std::cerr << "SpriteBatch custom fragment shader failed:\n" << frag.info_log() << "\n";
+
+                customProgram_.create();
+                customProgram_.attach(vert);
+                customProgram_.attach(frag);
+                customProgram_.link();
+                if (!customProgram_.is_linked())
+                    std::cerr << "SpriteBatch custom program link failed:\n" << customProgram_.info_log() << "\n";
+
+                compiledFor_ = shaderFx;
+            }
+            prog = &customProgram_;
+            customEffect_->Apply();
+        }
+
+        prog->use();
 
         int logW = 0, logH = 0;
         if (graphicsBackend_)
@@ -390,7 +436,9 @@ void main()
         const Matrix combined = orthoM * transform_;
         float ortho[16];
         combined.ToColumnMajor(ortho);
-        program_.set_uniform_matrix4(program_.uniform_location("projection"), ortho);
+        const int projLoc = prog->uniform_location("projection");
+        if (projLoc >= 0)
+            prog->set_uniform_matrix4(projLoc, ortho);
 
         current_texture_->BindGL();
 

@@ -82,7 +82,7 @@ wiring.
 |------|--------|
 | `Texture2D::SaveAsJpeg` | Not implemented. |
 | `Texture2D` mip levels > 0 | `GetData`/`SetData` only support mip level 0. `cpuPixels_` stores one level. |
-| `SpriteBatch` custom effect | `customEffect_` is stored and cleared in `Begin`/`End` but not yet forwarded to the EasyGL draw path. |
+| `SpriteBatch` custom effect | Forwarded: `ShaderEffect` compiles/caches its GLSL program; non-ShaderEffect effects call `Apply()` only. |
 | `RenderTarget2D` Vulkan backend | EasyGL FBO is wired and works. The Vulkan backend still returns `nullptr` from `CreateRenderTarget2D` (no-op). |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
 | Vulkan / BGFX 3D draw | Vulkan backend has state (blend/depth/cull) but no real 3D draw call path. BGFX throws on all 3D calls. |
@@ -210,21 +210,34 @@ wiring.
 - `BoundingFrustum::Intersects(Ray)` throws `NotImplementedException` — matches FNA (same unimplemented TODO in FNA source).
 - No code changes needed; build clean on both backends.
 
-### Task 25 — `SpriteBatch` custom effect forwarding
+### ~~Task 25 — `SpriteBatch` custom effect forwarding~~ **DONE**
 
-**Goal:** forward `customEffect_` (already stored in `Begin`) to the EasyGL sprite draw path so
-games can use custom GLSL shaders for post-processing or special sprite effects.
+- Added forward declaration of `Effect` and `using Effect = ...` alias to `IGraphicsBackend.hpp`.
+- Added `virtual void SetCustomEffect(Effect* effect) {}` to `ISpriteBatchBackend`.
+- `SpriteBatch::Begin` (7-arg) now calls `backend_->SetCustomEffect(customEffect_)` before `Begin()`.
+- `SpriteBatch::End` resets the backend's custom effect to `nullptr` after `End()`.
+- `EasyGLSpriteBatchBackend`: added `customEffect_`, `customProgram_`, `compiledFor_` fields.
+- `SetCustomEffect`: flushes pending batch on effect change, stores new effect.
+- `FlushBatch`: if a `ShaderEffect` is set, lazily compiles and caches its GLSL program (only recompiles when the effect pointer changes); uses `customProgram_` instead of `program_`. Calls `effect->Apply()` before drawing so `OnApply()` runs. The projection uniform is uploaded to whichever program is active; `uniform_location` returns -1 gracefully if the custom shader doesn't have it.
+- Non-`ShaderEffect` custom effects (e.g. `BasicEffect`) still call `Apply()` but use the built-in sprite program.
+- `release_gl_handle_only`: also resets `customProgram_`.
+- `recreate_gl_resource`: clears `compiledFor_` so the custom program is recompiled after context loss.
+- Build: both `cmake-build-easygl` and `cmake-build-vulkan` — clean.
 
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/SpriteBatch.cs` — `FlushBatch` / `RenderBatch`.
+### Task 26 — `Texture2D::SaveAsJpeg`
+
+**Goal:** implement `SaveAsJpeg(Stream*, int width, int height)` to match the XNA/FNA API.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs` — `SaveAsJpeg`.
 
 Steps:
-1. In `EasyGLSpriteBatchBackend`: add `Effect* customEffect_ = nullptr` and a
-   `SetCustomEffect(Effect*)` method on `ISpriteBatchBackend`.
-2. `SpriteBatch::Begin` calls `backend_->SetCustomEffect(customEffect_)`.
-3. In `FlushBatch`: if `customEffect_ != nullptr`, apply its technique passes instead of the
-   built-in sprite shader.
-4. In `End` / `recreate_gl_resource`: clear `customEffect_ = nullptr` on the backend.
-5. Build + verify `cna_demo_2d` still runs cleanly.
+1. Add `void SaveAsJpeg(System::IO::Stream* stream, int width, int height)` to `Texture2D.hpp`.
+2. Implement in `Texture2D.cpp` using SDL3_image `IMG_SaveJPG_IO` (or stb_image_write) — encode
+   `cpuPixels_` RGBA data scaled to requested size (if width/height differ from texture size,
+   scale first with SDL_Surface blitting).
+3. Provide a convenience `SaveAsJpeg(const std::string& path)` NOXNA overload for games that
+   write directly to a file path.
+4. Build + verify.
 
 ---
 

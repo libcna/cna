@@ -84,6 +84,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (backend_)
         {
+            backend_->SetCustomEffect(customEffect_);
             backend_->SetTransformMatrix(transformMatrix_);
             backend_->Begin();
             begun     = true;
@@ -100,6 +101,7 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_->End();
         begun = false;
         customEffect_ = nullptr;
+        backend_->SetCustomEffect(nullptr);
     }
 
     // -----------------------------------------------------------------------

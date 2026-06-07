@@ -18,6 +18,8 @@ struct SDL_Window;
 struct SDL_Renderer;
 struct SDL_Texture;
 
+namespace Microsoft::Xna::Framework::Graphics { class Effect; }
+
 namespace CNA::Internal::Backends
 {
     using Color = Microsoft::Xna::Framework::Color;
@@ -26,6 +28,7 @@ namespace CNA::Internal::Backends
     using SpriteEffects = Microsoft::Xna::Framework::Graphics::SpriteEffects;
     using PrimitiveType = Microsoft::Xna::Framework::Graphics::PrimitiveType;
     using Matrix = Microsoft::Xna::Framework::Matrix;
+    using Effect = Microsoft::Xna::Framework::Graphics::Effect;
     using ImageData = CNA::Internal::Graphics::ImageData;
 
     /**
@@ -123,6 +126,9 @@ namespace CNA::Internal::Backends
         /// Sets the transform matrix applied on top of the 2D ortho projection.
         /// Must be called before the first Draw of each Begin/End block.
         virtual void SetTransformMatrix(const Matrix& m) {}
+        /// Sets a custom Effect to use for sprite rendering instead of the built-in sprite shader.
+        /// Pass nullptr to restore the built-in shader. Must be called before Begin().
+        virtual void SetCustomEffect(Effect* effect) {}
         virtual void Draw(const ITextureBackend& texture, float x, float y) = 0;
         virtual void Draw(const ITextureBackend& texture,
                           const Rectangle& destinationRectangle,
