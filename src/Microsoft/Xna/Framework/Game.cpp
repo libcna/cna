@@ -803,6 +803,11 @@ namespace Microsoft::Xna::Framework
                     }
                     break;
 
+                case SDL_EVENT_WINDOW_RESIZED:
+                case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                    Window_.updateFromSDL();
+                    break;
+
                 case SDL_EVENT_WILL_ENTER_BACKGROUND:
                     setIsActiveProperty(false);
                     break;

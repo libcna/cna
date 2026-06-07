@@ -178,18 +178,28 @@ wiring.
 - `DrawUserIndexedPrimitives` uses 16-bit indices. 32-bit variant deferred.
 - Build: both backends clean.
 
-### Task 22 — `Game::Window` and `GameWindow` resize / fullscreen
+### ~~Task 22 — `GameWindow` resize event wiring~~ **DONE**
 
-**Goal:** expose `GameWindow.ClientSizeChanged`, `GameWindow.AllowUserResizing`, and
-`GameWindow.IsBorderlessEXT` so games can respond to window resizes and toggle fullscreen.
+- `Game.cpp` event loop now handles `SDL_EVENT_WINDOW_RESIZED` and
+  `SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED` → calls `Window_.updateFromSDL()`.
+- `GraphicsDeviceManager::registerServices()` now subscribes `INTERNAL_OnClientSizeChanged`
+  to `game_->getWindowProperty().ClientSizeChanged` so viewport + back buffer are updated
+  automatically when the window is resized.
+- `GameWindow::AllowUserResizing` / `IsBorderlessEXT` / `ClientSizeChanged` were already
+  implemented; only the SDL event handling and subscription were missing.
+- Build: both backends clean.
 
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/GameWindow.cs`
+### Task 23 — `Viewport` `Project` / `Unproject`
+
+**Goal:** implement `Viewport::Project` and `Viewport::Unproject` so that 3D ↔ 2D coordinate
+conversion works for picking and HUD overlay math.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Viewport.cs`
 
 Steps:
-1. Add `ClientSizeChanged` event (`System::EventHandler<EventArgs>`) to `GameWindow`.
-2. Add `AllowUserResizing` property — hook into `SDL_SetWindowResizable`.
-3. Fire `ClientSizeChanged` from `SdlInputBridge` when `SDL_EVENT_WINDOW_RESIZED` is received.
-4. Update `GraphicsDevice::Viewport` automatically when the window is resized.
+1. Check current `Viewport` struct in `include/Microsoft/Xna/Framework/Graphics/Viewport.hpp`.
+2. Add `Project(Vector3 source, Matrix projection, Matrix view, Matrix world) → Vector3`.
+3. Add `Unproject(Vector3 source, Matrix projection, Matrix view, Matrix world) → Vector3`.
 
 ---
 

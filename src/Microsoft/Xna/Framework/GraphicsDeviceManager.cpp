@@ -488,6 +488,13 @@ namespace Microsoft::Xna::Framework
     {
         // TODO: register IGraphicsDeviceManager and IGraphicsDeviceService once
         // Game::getServicesProperty() is available in CNA.
+
+        // Wire window resize → viewport update.
+        game_->getWindowProperty().ClientSizeChanged +=
+            [this](System::Object* sender, const System::EventArgs& args)
+            {
+                INTERNAL_OnClientSizeChanged(sender, args);
+            };
     }
 
     void GraphicsDeviceManager::unregisterServices()
