@@ -200,18 +200,31 @@ wiring.
   `getTitleSafeAreaProperty()`.
 - Build: both backends clean.
 
-### Task 24 — `BoundingBox` / `BoundingSphere` / `BoundingFrustum` intersection methods
+### ~~Task 24 — `BoundingBox` / `BoundingSphere` / `BoundingFrustum` intersection methods~~ **DONE**
 
-**Goal:** verify and complete the intersection/containment API on the three bounding volume types,
-which games use for culling and picking.
+- Verified all `Contains` / `Intersects` overloads against FNA for all three types.
+- All XNA overloads are present and correctly implemented:
+  - `BoundingBox`: `Contains(BoundingBox/BoundingSphere/BoundingFrustum/Vector3)`, `Intersects(BoundingBox/BoundingSphere/BoundingFrustum/Plane/Ray)` + ref/out variants.
+  - `BoundingSphere`: `Contains(BoundingBox/BoundingSphere/BoundingFrustum/Vector3)`, `Intersects(BoundingBox/BoundingSphere/BoundingFrustum/Plane/Ray)` + ref/out variants.
+  - `BoundingFrustum`: `Contains(BoundingBox/BoundingSphere/BoundingFrustum/Vector3)`, `Intersects(BoundingBox/BoundingSphere/BoundingFrustum/Plane/Ray)` + ref/out variants.
+- `BoundingFrustum::Intersects(Ray)` throws `NotImplementedException` — matches FNA (same unimplemented TODO in FNA source).
+- No code changes needed; build clean on both backends.
 
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/BoundingBox.cs`,
-`BoundingSphere.cs`, `BoundingFrustum.cs`
+### Task 25 — `SpriteBatch` custom effect forwarding
+
+**Goal:** forward `customEffect_` (already stored in `Begin`) to the EasyGL sprite draw path so
+games can use custom GLSL shaders for post-processing or special sprite effects.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/SpriteBatch.cs` — `FlushBatch` / `RenderBatch`.
 
 Steps:
-1. Check which `Contains` / `Intersects` overloads are already present.
-2. Add any missing overloads (e.g. `BoundingBox.Contains(BoundingFrustum)`,
-   `BoundingFrustum.Intersects(BoundingSphere)`, etc.).
+1. In `EasyGLSpriteBatchBackend`: add `Effect* customEffect_ = nullptr` and a
+   `SetCustomEffect(Effect*)` method on `ISpriteBatchBackend`.
+2. `SpriteBatch::Begin` calls `backend_->SetCustomEffect(customEffect_)`.
+3. In `FlushBatch`: if `customEffect_ != nullptr`, apply its technique passes instead of the
+   built-in sprite shader.
+4. In `End` / `recreate_gl_resource`: clear `customEffect_ = nullptr` on the backend.
+5. Build + verify `cna_demo_2d` still runs cleanly.
 
 ---
 
