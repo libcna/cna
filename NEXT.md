@@ -82,7 +82,7 @@ wiring.
 |------|--------|
 | `Texture2D::SaveAsJpeg` | Not implemented. |
 | `Texture2D::GetData` with mip level / rectangle overload | Only the flat `GetData(Color*, startIndex, count)` overload is implemented (reads CPU copy). The `GetData(int level, Rectangle?, ...)` overload is missing. |
-| `SpriteBatch` sort modes | Only `SpriteSortMode::Immediate` / `Deferred` (unordered). `BackToFront`, `FrontToBack`, and `Texture` modes require a deferred sprite queue with sorting before flush. |
+| `SpriteBatch` matrix transform / custom effect | `Begin(sortMode, blendState, effect, transformMatrix)` overloads not yet declared. The common `transformMatrix` parameter (for camera/zoom) is missing. |
 | `RenderTarget2D` backend wiring | `GraphicsDevice::SetRenderTarget` is declared but `RenderTarget2D` does not hook into EasyGL/Vulkan FBO. Off-screen rendering does not work. |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES does not expose `glPolygonMode`. |
 | Vulkan / BGFX 3D draw | Vulkan backend has state (blend/depth/cull) but no real 3D draw call path. BGFX throws on all 3D calls. |
@@ -126,20 +126,15 @@ wiring.
 - All constructors now populate `cpuPixels_` so `GetData` works immediately after load
 - Build: `cmake-build-vulkan` and `cmake-build-easygl` — both clean
 
-### Task 17 — `SpriteBatch` deferred sort modes
+### ~~Task 17 — `SpriteBatch` deferred sort modes~~ **DONE**
 
-**Goal:** implement `BackToFront`, `FrontToBack`, and `Texture` sort modes in `SpriteBatch`.
-
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/SpriteBatch.cs`
-
-Current state: `Begin()` records `sortMode_` but `End()` ignores it — all sprites flush in
-submission order.
-
-Steps:
-1. Introduce a `SpriteInfo` struct (texture, dest rect, src rect, color, layer depth, …).
-2. Buffer sprites in `Draw()` instead of flushing immediately when not `Immediate`.
-3. In `End()`, sort the buffer by `layerDepth` (BackToFront / FrontToBack) or by texture pointer
-   (Texture mode), then flush sorted batches.
+- Private `SpriteInfo` struct added to header (destRect, srcRect, color, rotation, origin, effects, layerDepth).
+- `pushSprite()` helper centralises buffering vs. immediate flush.
+- `Begin(sortMode, blendState)` stores `sortMode_` and clears `spriteQueue_`.
+- All `Draw()` overloads and all `DrawString()` glyphs now go through `pushSprite()`.
+- `End()` calls `flushBatch()` (sorts + replays) before `backend_->End()`.
+- Sort order: `BackToFront` → `stable_sort` descending layerDepth; `FrontToBack` → ascending; `Texture` → by texture pointer; `Deferred` → submission order; `Immediate` → no queue, direct flush per call.
+- Build: both backends clean.
 
 ### Task 18 — `RenderTarget2D` EasyGL backend wiring
 

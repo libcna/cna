@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -27,27 +28,33 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     using namespace CNA::Internal::Backends;
 
-    /**
-     * @brief High-performance batched sprite rendering engine.
-     *
-     * SpriteBatch is not "just a drawing function" — it's a sophisticated batching engine that:
-     * - Collects draw-call requests from the application
-     * - Sorts sprites according to the specified SpriteSortMode
-     * - Generates optimized vertex buffers
-     * - Minimizes texture switches
-     * - Minimizes shader switches
-     * - Minimizes blend state changes
-     * - Submits large batches to the GPU for efficient rendering
-     *
-     * This class uses a backend abstraction to handle the actual rendering,
-     * such as SDL_Renderer or EasyGL.
-     */
+    /// High-performance batched sprite rendering engine matching XNA 4.0 SpriteBatch.
     class SpriteBatch
     {
     private:
+        struct SpriteInfo {
+            const Texture2D* texture = nullptr;
+            Rectangle destRect       = {0, 0, 0, 0};
+            Rectangle srcRect        = {0, 0, 0, 0};
+            Color color              = Color(255, 255, 255, 255);
+            float rotation           = 0.0f;
+            Vector2 origin           = Vector2(0.0f, 0.0f);
+            SpriteEffects effects    = SpriteEffects::None;
+            float layerDepth         = 0.0f;
+        };
+
         std::unique_ptr<ISpriteBatchBackend> backend_;
         GraphicsDevice* graphicsDevice_ = nullptr;
         bool begun = false;
+        SpriteSortMode sortMode_ = SpriteSortMode::Deferred;
+        std::vector<SpriteInfo> spriteQueue_;
+
+        void pushSprite(const Texture2D& texture,
+                        const Rectangle& dest, const Rectangle& src,
+                        Color color, float rotation, Vector2 origin,
+                        SpriteEffects effects, float layerDepth);
+        void flushBatch();
+        void flushSingle(const SpriteInfo& s);
 
     public:
         /**
