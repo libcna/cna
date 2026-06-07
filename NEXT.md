@@ -189,17 +189,29 @@ wiring.
   implemented; only the SDL event handling and subscription were missing.
 - Build: both backends clean.
 
-### Task 23 — `Viewport` `Project` / `Unproject`
+### ~~Task 23 — `Viewport::Project` / `Unproject`~~ **DONE**
 
-**Goal:** implement `Viewport::Project` and `Viewport::Unproject` so that 3D ↔ 2D coordinate
-conversion works for picking and HUD overlay math.
+- Added `Project(source, projection, view, world) → Vector3`: computes WVP, transforms point,
+  perspective-divides, maps to viewport pixel coords. Faithful to FNA.
+- Added `Unproject(source, projection, view, world) → Vector3`: inverts WVP, maps screen pixels
+  to NDC, transforms back, perspective-divides.
+- Added missing Viewport API: `Viewport(x,y,w,h)` constructor, `Viewport(Rectangle)` constructor,
+  `getAspectRatioProperty()`, `getBoundsProperty()` / `setBoundsProperty()`,
+  `getTitleSafeAreaProperty()`.
+- Build: both backends clean.
 
-FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Viewport.cs`
+### Task 24 — `BoundingBox` / `BoundingSphere` / `BoundingFrustum` intersection methods
+
+**Goal:** verify and complete the intersection/containment API on the three bounding volume types,
+which games use for culling and picking.
+
+FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/BoundingBox.cs`,
+`BoundingSphere.cs`, `BoundingFrustum.cs`
 
 Steps:
-1. Check current `Viewport` struct in `include/Microsoft/Xna/Framework/Graphics/Viewport.hpp`.
-2. Add `Project(Vector3 source, Matrix projection, Matrix view, Matrix world) → Vector3`.
-3. Add `Unproject(Vector3 source, Matrix projection, Matrix view, Matrix world) → Vector3`.
+1. Check which `Contains` / `Intersects` overloads are already present.
+2. Add any missing overloads (e.g. `BoundingBox.Contains(BoundingFrustum)`,
+   `BoundingFrustum.Intersects(BoundingSphere)`, etc.).
 
 ---
 
