@@ -157,7 +157,7 @@ runtime with a "no reader registered" exception.
 | `AudioEngine` stub | All `AudioEngine` methods throw or are no-ops. **incomplete** |
 | `Media::MediaLibrary` | Fully stubbed — playlist/photo/artist queries unimplemented. **incomplete** |
 | `BoundingFrustum::Intersects(Ray)` | Throws `NotImplementedException` — matches FNA behavior. **known** |
-| `DrawUserIndexedPrimitives` 32-bit indices | Only `uint16_t` variants exist; no 32-bit index overloads. **incomplete** |
+| `DrawUserIndexedPrimitives` 32-bit indices | ✅ Done — all 4 typed `uint32_t*` overloads added. |
 | EasyGL context loss recovery | Implemented via `DebugSimulateContextLoss` but not triggered by real OS events on Linux. **needs verification** |
 
 ---
@@ -272,25 +272,6 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 - Registered in `RegisterBuiltinLoaders()`.
 - Both backends build clean.
 
-### Task 35 — `ContentManager::Load<Model>` via `.model.json` descriptor
-- **Goal:** `Content.Load<SpriteFont>("fonts/Arial")` works end-to-end.
-- **Descriptor format** (`.font.json` alongside the atlas PNG):
-  ```json
-  {
-    "texture": "fonts/Arial_atlas.png",
-    "lineSpacing": 20,
-    "spacing": 0.0,
-    "defaultCharacter": "?",
-    "glyphs": [
-      { "char": 32, "source": [0,0,5,20], "crop": [0,0,5,20], "kerning": [0,5,0] },
-      ...
-    ]
-  }
-  ```
-- **Files:** `src/Microsoft/Xna/Framework/Content/ContentManager.cpp` (add `SpriteFontTypeReader`),
-  `include/Microsoft/Xna/Framework/Content/ContentManager.hpp` (register new reader type).
-- **Verify:** Unit test or demo that calls `Content.Load<SpriteFont>("myfont")` and draws text.
-
 ### Task 35 — `ContentManager::Load<Model>` via `.model.json` descriptor ✅ DONE
 - `ModelBone(int index, std::string name)` NOXNA constructor added.
 - `ModelMeshPart(VertexBuffer*, IndexBuffer*, numVertices, primCount, startIndex, vertexOffset)` NOXNA constructor added.
@@ -307,6 +288,11 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 - `GraphicsDevice::DrawInstancedPrimitives(primitiveType, baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount, instanceCount)` added — matches XNA 4.0 signature (FNA `GraphicsDevice.cs` line 1257).
 - `IGraphicsBackend::DrawInstancedPrimitivesEx(...)` virtual added with default that throws `std::runtime_error` (SDL_Renderer, Vulkan get the default — not implemented).
 - `EasyGLGraphicsBackend::DrawInstancedPrimitivesEx` override uses `device.draw_elements_instanced` (OpenGL ES 3.0, already in easygl).
+- Both backends build clean.
+
+### Task 38 — `DrawUserIndexedPrimitives` 32-bit index overloads ✅ DONE
+- Added 4 typed overloads for `const uint32_t*` indices: `VertexPositionColor`, `VertexPositionTexture`, `VertexPositionColorTexture`, `VertexPositionNormalTexture`.
+- Pattern mirrors existing uint16 overloads; uses `CreateIndexBuffer32` + `SetData32` (both already implemented in EasyGL and Vulkan).
 - Both backends build clean.
 
 ### Task 37 — `GraphicsDevice::GetBackBufferData` on Vulkan (staging buffer) ✅ DONE

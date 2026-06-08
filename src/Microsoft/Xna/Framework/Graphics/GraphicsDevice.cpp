@@ -862,6 +862,104 @@ namespace Microsoft::Xna::Framework::Graphics
                                           BuildGpuDrawParams(currentEffect_));
     }
 
+    // DrawUserIndexedPrimitives — 32-bit index overloads
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const VertexPositionColor* vertices, int vOffset, int numVerts,
+                                                   const std::uint32_t* indices, int iOffset, int primCount)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int ic = IndexCountForPrimitives(type, primCount);
+        std::vector<GpuVPC> packed(static_cast<std::size_t>(numVerts));
+        for (int i = 0; i < numVerts; ++i)
+        {
+            const auto& v = vertices[vOffset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Color.getRProperty(), v.Color.getGProperty(),
+                          v.Color.getBProperty(), v.Color.getAProperty() };
+        }
+        std::vector<std::uint32_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(packed.data(), numVerts, sizeof(GpuVPC));
+        auto ib = backend_->CreateIndexBuffer32(ic);
+        ib->SetData32(idx.data(), ic);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
+                                          currentEffect_->Projection, type, primCount,
+                                          BuildGpuDrawParams(currentEffect_));
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const VertexPositionTexture* vertices, int vOffset, int numVerts,
+                                                   const std::uint32_t* indices, int iOffset, int primCount)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int ic = IndexCountForPrimitives(type, primCount);
+        std::vector<GpuVPT> packed(static_cast<std::size_t>(numVerts));
+        for (int i = 0; i < numVerts; ++i)
+        {
+            const auto& v = vertices[vOffset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        std::vector<std::uint32_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(packed.data(), numVerts, sizeof(GpuVPT));
+        auto ib = backend_->CreateIndexBuffer32(ic);
+        ib->SetData32(idx.data(), ic);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
+                                          currentEffect_->Projection, type, primCount,
+                                          BuildGpuDrawParams(currentEffect_));
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
+                                                   const std::uint32_t* indices, int iOffset, int primCount)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int ic = IndexCountForPrimitives(type, primCount);
+        std::vector<GpuVPCT> packed(static_cast<std::size_t>(numVerts));
+        for (int i = 0; i < numVerts; ++i)
+        {
+            const auto& v = vertices[vOffset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Color.getRProperty(), v.Color.getGProperty(),
+                          v.Color.getBProperty(), v.Color.getAProperty(),
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        std::vector<std::uint32_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(packed.data(), numVerts, sizeof(GpuVPCT));
+        auto ib = backend_->CreateIndexBuffer32(ic);
+        ib->SetData32(idx.data(), ic);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
+                                          currentEffect_->Projection, type, primCount,
+                                          BuildGpuDrawParams(currentEffect_));
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
+                                                   const std::uint32_t* indices, int iOffset, int primCount)
+    {
+        if (!backend_ || !currentEffect_) return;
+        const int ic = IndexCountForPrimitives(type, primCount);
+        std::vector<GpuVPNT> packed(static_cast<std::size_t>(numVerts));
+        for (int i = 0; i < numVerts; ++i)
+        {
+            const auto& v = vertices[vOffset + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Normal.X, v.Normal.Y, v.Normal.Z,
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        std::vector<std::uint32_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(packed.data(), numVerts, sizeof(GpuVPNT));
+        auto ib = backend_->CreateIndexBuffer32(ic);
+        ib->SetData32(idx.data(), ic);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
+                                          currentEffect_->Projection, type, primCount,
+                                          BuildGpuDrawParams(currentEffect_));
+    }
+
     CNA::Internal::Backends::IGraphicsBackend& GraphicsDevice::GetBackend() const
     {
         if (backend_ == nullptr)

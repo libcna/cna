@@ -202,6 +202,19 @@ namespace Microsoft::Xna::Framework::Graphics
         void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
                                        const VertexPositionNormalTexture* vertexData, int vertexOffset, int numVertices,
                                        const std::uint16_t* indexData, int indexOffset, int primitiveCount);
+        // 32-bit index overloads
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionColor* vertexData, int vertexOffset, int numVertices,
+                                       const std::uint32_t* indexData, int indexOffset, int primitiveCount);
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionColorTexture* vertexData, int vertexOffset, int numVertices,
+                                       const std::uint32_t* indexData, int indexOffset, int primitiveCount);
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionTexture* vertexData, int vertexOffset, int numVertices,
+                                       const std::uint32_t* indexData, int indexOffset, int primitiveCount);
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionNormalTexture* vertexData, int vertexOffset, int numVertices,
+                                       const std::uint32_t* indexData, int indexOffset, int primitiveCount);
 
         // --- NOXNA helpers (not in XNA 4.0) ---
         NOXNA void SetDepthTestEnabled(bool enabled);
