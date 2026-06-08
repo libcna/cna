@@ -5,6 +5,17 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    ModelMeshPart::ModelMeshPart(VertexBuffer* vb, IndexBuffer* ib,
+                                 int numVertices, int primitiveCount,
+                                 int startIndex, int vertexOffset)
+        : numVertices_(numVertices)
+        , primitiveCount_(primitiveCount)
+        , startIndex_(startIndex)
+        , vertexOffset_(vertexOffset)
+        , indexBuffer_(ib)
+        , vertexBuffer_(vb)
+    {}
+
     int ModelMeshPart::getNumVerticesProperty()  const { return numVertices_; }
     int ModelMeshPart::getPrimitiveCountProperty() const { return primitiveCount_; }
     int ModelMeshPart::getStartIndexProperty()   const { return startIndex_; }

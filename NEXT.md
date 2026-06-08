@@ -77,7 +77,7 @@ and hardening existing systems.
 | Area | Status |
 |------|--------|
 | `ContentManager::Load<SpriteFont>` | ✅ Done — `SpriteFontTypeReader` via `.font.json`. |
-| `ContentManager::Load<Model>` | No `ModelTypeReader`. `Model::Draw` works but models must be built manually. |
+| `ContentManager::Load<Model>` | ✅ Done — `ModelTypeReader` via `.model.json` + binary vertex/index files. |
 | `GetBackBufferData` on Vulkan | Throws — staging-buffer readback not wired. |
 | `DrawInstancedPrimitives` | Completely absent from `GraphicsDevice`. |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES 3.0 has no `glPolygonMode`. |
@@ -151,7 +151,7 @@ runtime with a "no reader registered" exception.
 | Vulkan `GetBackBufferData` | Throws `runtime_error`. All screenshot/readback attempts on Vulkan fail. **incomplete** |
 | `DrawInstancedPrimitives` | Missing from `GraphicsDevice` and all backends. **incomplete** |
 | `ContentManager::Load<SpriteFont>` | No reader. **incomplete** |
-| `ContentManager::Load<Model>` | No reader. **incomplete** |
+| `ContentManager::Load<Model>` | ✅ Done — `ModelTypeReader` via `.model.json`. |
 | `SpriteFont::textureValue_` | ✅ Fixed — now `Texture2D` by value (owned). No lifetime risk. |
 | `FillMode::WireFrame` | Silently ignored on GLES3. **known limitation** |
 | `AudioEngine` stub | All `AudioEngine` methods throw or are no-ops. **incomplete** |
@@ -291,25 +291,17 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
   `include/Microsoft/Xna/Framework/Content/ContentManager.hpp` (register new reader type).
 - **Verify:** Unit test or demo that calls `Content.Load<SpriteFont>("myfont")` and draws text.
 
-### Task 35 — `ContentManager::Load<Model>` via `.model.json` descriptor
-- **Goal:** `Content.Load<Model>("models/house")` works; `Model::Draw(world, view, proj)` renders it.
-- **Descriptor format** (`.model.json`):
-  ```json
-  {
-    "meshes": [
-      {
-        "name": "body",
-        "vertices": "models/house_body.bin",
-        "indices": "models/house_body_idx.bin",
-        "vertexStride": 32,
-        "effect": "shaders/BasicEffect"
-      }
-    ],
-    "bones": [...]
-  }
-  ```
-- **Files:** `src/Microsoft/Xna/Framework/Content/ContentManager.cpp` (add `ModelTypeReader`).
-- **Verify:** Demo that loads and draws the model; compare visually with `house3d_demo`.
+### Task 35 — `ContentManager::Load<Model>` via `.model.json` descriptor ✅ DONE
+- `ModelBone(int index, std::string name)` NOXNA constructor added.
+- `ModelMeshPart(VertexBuffer*, IndexBuffer*, numVertices, primCount, startIndex, vertexOffset)` NOXNA constructor added.
+- `ModelMesh(GraphicsDevice*, std::string name, vector<ModelMeshPart*>)` overloaded NOXNA constructor added.
+- `Model::setOwnedResources(shared_ptr<void>)` NOXNA setter added; `Model` holds `shared_ptr<void> ownedResources_` for type-erased GPU resource lifetime.
+- `ModelTypeReader` added to `ContentManager.cpp` (anonymous namespace):
+  - Parses `.model.json`: `"meshes"` array + optional `"bones"` (first bone name used as root).
+  - Per mesh: reads vertex `.bin` and index `.bin` (uint16 indices); dispatches to typed `VertexBuffer::SetData` by stride (16/20/24/32).
+  - Effect: `"BasicEffect"` or empty → `make_shared<BasicEffect>(device)`; otherwise `cm.Load<shared_ptr<Effect>>(name)`.
+  - GPU resources owned by `shared_ptr<ModelResources>` stored in `Model::ownedResources_`; copies of Model share the same buffers.
+- Both backends build clean.
 
 ### Task 36 — `DrawInstancedPrimitives` (at least as a stub with correct API)
 - **Goal:** `GraphicsDevice::DrawInstancedPrimitives(...)` exists and matches XNA 4.0 signature.

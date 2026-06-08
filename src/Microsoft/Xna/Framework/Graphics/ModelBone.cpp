@@ -2,6 +2,10 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    ModelBone::ModelBone(int index, std::string name)
+        : name_(std::move(name)), index_(index)
+    {}
+
     const std::string& ModelBone::getNameProperty()            const { return name_; }
     int                ModelBone::getIndexProperty()           const { return index_; }
     const Matrix&      ModelBone::getTransformProperty()       const { return transform_; }

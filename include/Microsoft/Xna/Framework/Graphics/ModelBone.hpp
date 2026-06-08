@@ -14,6 +14,9 @@ namespace Microsoft::Xna::Framework::Graphics
     class ModelBone
     {
     public:
+        NOXNA ModelBone() = default;
+        NOXNA ModelBone(int index, std::string name);
+
         [[nodiscard]] const std::string& getNameProperty() const;
         [[nodiscard]] int getIndexProperty() const;
         [[nodiscard]] const Matrix& getTransformProperty() const;

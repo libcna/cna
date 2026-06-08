@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
@@ -29,6 +30,9 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] System::Object* getTagProperty() const;
         void setTagProperty(System::Object* value);
 
+        /// Transfers ownership of GPU resources allocated by a content reader.
+        NOXNA void setOwnedResources(std::shared_ptr<void> resources);
+
         void CopyAbsoluteBoneTransformsTo(std::vector<Matrix>& destinationBoneTransforms) const;
         void CopyBoneTransformsFrom(const std::vector<Matrix>& sourceBoneTransforms);
         void CopyBoneTransformsTo(std::vector<Matrix>& destinationBoneTransforms) const;
@@ -39,6 +43,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ModelMeshCollection meshes_;
         ModelBone* root_ = nullptr;
         System::Object* tag_ = nullptr;
+        std::shared_ptr<void> ownedResources_;
 
         static std::vector<Matrix> sharedDrawBoneMatrices_;
     };

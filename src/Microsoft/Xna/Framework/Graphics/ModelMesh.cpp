@@ -16,6 +16,16 @@ namespace Microsoft::Xna::Framework::Graphics
             part->parent_ = this;
     }
 
+    ModelMesh::ModelMesh(GraphicsDevice* graphicsDevice, std::string name,
+                         std::vector<ModelMeshPart*> parts)
+        : graphicsDevice_(graphicsDevice)
+        , name_(std::move(name))
+    {
+        meshParts_.parts_ = std::move(parts);
+        for (ModelMeshPart* part : meshParts_.parts_)
+            part->parent_ = this;
+    }
+
     BoundingSphere ModelMesh::getBoundingSphereProperty() const { return boundingSphere_; }
     const ModelEffectCollection& ModelMesh::getEffectsProperty()        const { return effects_; }
     ModelEffectCollection&       ModelMesh::getEffectsPropertyMutable()       { return effects_; }

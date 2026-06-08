@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "System/Object.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -7,7 +8,7 @@ namespace Microsoft::Xna::Framework::Graphics
     class Effect;
     class IndexBuffer;
     class ModelMesh;
-    class VertexBuffer;
+    class VertexBuffer; // NOXNA: used by NOXNA constructor
     class VertexDeclaration;
 
     /// Represents a batch of geometry using the same effect within a ModelMesh.
@@ -15,6 +16,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         ModelMeshPart() = default;
+        NOXNA ModelMeshPart(VertexBuffer* vb, IndexBuffer* ib,
+                            int numVertices, int primitiveCount,
+                            int startIndex, int vertexOffset);
 
         [[nodiscard]] int getNumVerticesProperty() const;
         [[nodiscard]] int getPrimitiveCountProperty() const;

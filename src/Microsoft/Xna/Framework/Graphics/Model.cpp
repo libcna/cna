@@ -21,6 +21,10 @@ namespace Microsoft::Xna::Framework::Graphics
             root_ = bones_.bones_[0];
     }
 
+    void Model::setOwnedResources(std::shared_ptr<void> resources) {
+        ownedResources_ = std::move(resources);
+    }
+
     const ModelBoneCollection& Model::getBonesProperty()  const { return bones_; }
     const ModelMeshCollection& Model::getMeshesProperty() const { return meshes_; }
     ModelBone*                 Model::getRootProperty()   const { return root_; }

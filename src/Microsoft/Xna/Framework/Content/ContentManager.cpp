@@ -1,17 +1,26 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 
@@ -370,6 +379,169 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+        static std::vector<std::uint8_t> ReadBinaryFile(const std::string& path)
+        {
+            std::ifstream file(path, std::ios::binary);
+            if (!file.is_open())
+                throw ContentLoadException("Cannot open binary file: " + path);
+            return std::vector<std::uint8_t>(
+                std::istreambuf_iterator<char>(file), {});
+        }
+
+        // ---------------------------------------------------------------------------
+        // .model.json descriptor reader
+        // ---------------------------------------------------------------------------
+
+        class ModelTypeReader : public ContentTypeReader<Graphics::Model>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".model.json"};
+            }
+
+            Graphics::Model Read(const std::string& path, ContentManager& cm) override
+            {
+                namespace fs = std::filesystem;
+
+                const std::string json = ReadTextFile(path);
+                const std::string root = cm.getRootDirectoryProperty();
+                Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
+
+                // Owned resources shared by all copies of the returned Model.
+                struct ModelResources {
+                    std::vector<std::unique_ptr<Graphics::VertexBuffer>>  vbs;
+                    std::vector<std::unique_ptr<Graphics::IndexBuffer>>   ibs;
+                    std::vector<std::unique_ptr<Graphics::ModelBone>>     boneOwners;
+                    std::vector<std::unique_ptr<Graphics::ModelMesh>>     meshOwners;
+                    std::vector<std::unique_ptr<Graphics::ModelMeshPart>> partOwners;
+                    std::vector<std::shared_ptr<Graphics::Effect>>        effectOwners;
+                };
+                auto res = std::make_shared<ModelResources>();
+
+                std::vector<Graphics::ModelBone*> boneRawPtrs;
+                std::vector<Graphics::ModelMesh*> meshRawPtrs;
+
+                // Root bone
+                {
+                    std::string rootName = "Root";
+                    const std::size_t bk = json.find("\"bones\"");
+                    if (bk != std::string::npos) {
+                        const std::size_t ba = json.find('[', bk);
+                        if (ba != std::string::npos) {
+                            const std::size_t bo = json.find('{', ba);
+                            if (bo != std::string::npos) {
+                                int d = 1; std::size_t e = bo + 1;
+                                while (e < json.size() && d > 0) {
+                                    if (json[e] == '{') ++d;
+                                    else if (json[e] == '}') --d;
+                                    ++e;
+                                }
+                                const std::string bg = json.substr(bo, e - bo);
+                                const std::string n  = ExtractJsonStringField(bg, "name");
+                                if (!n.empty()) rootName = n;
+                            }
+                        }
+                    }
+                    auto bone = std::make_unique<Graphics::ModelBone>(0, std::move(rootName));
+                    boneRawPtrs.push_back(bone.get());
+                    res->boneOwners.push_back(std::move(bone));
+                }
+
+                // Meshes
+                const std::size_t mk = json.find("\"meshes\"");
+                if (mk != std::string::npos) {
+                    const std::size_t ma = json.find('[', mk);
+                    if (ma != std::string::npos) {
+                        std::size_t pos = ma + 1;
+                        while (true) {
+                            const std::size_t os = json.find('{', pos);
+                            if (os == std::string::npos) break;
+                            int depth = 1;
+                            std::size_t oe = os + 1;
+                            while (oe < json.size() && depth > 0) {
+                                if (json[oe] == '{') ++depth;
+                                else if (json[oe] == '}') --depth;
+                                ++oe;
+                            }
+                            const std::string mg = json.substr(os, oe - os);
+                            pos = oe;
+
+                            const std::string meshName  = ExtractJsonStringField(mg, "name");
+                            const std::string vertFile  = ExtractJsonStringField(mg, "vertices");
+                            const std::string idxFile   = ExtractJsonStringField(mg, "indices");
+                            const int         stride    = JsonInt(mg, "vertexStride", 16);
+                            const std::string effectStr = ExtractJsonStringField(mg, "effect");
+
+                            if (vertFile.empty() || idxFile.empty())
+                                continue;
+
+                            const auto vertBytes = ReadBinaryFile(
+                                (fs::path(root) / vertFile).string());
+                            const auto idxBytes  = ReadBinaryFile(
+                                (fs::path(root) / idxFile).string());
+
+                            if (stride <= 0) continue;
+                            const int numVertices = static_cast<int>(vertBytes.size()) / stride;
+                            const int numIndices  = static_cast<int>(idxBytes.size())
+                                                    / static_cast<int>(sizeof(std::uint16_t));
+                            const int primCount   = numIndices / 3;
+
+                            auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
+                            if (stride == static_cast<int>(sizeof(Graphics::VertexPositionColor)))
+                                vb->SetData(reinterpret_cast<const Graphics::VertexPositionColor*>(
+                                    vertBytes.data()), numVertices);
+                            else if (stride == static_cast<int>(
+                                         sizeof(Graphics::VertexPositionNormalTexture)))
+                                vb->SetData(reinterpret_cast<const Graphics::VertexPositionNormalTexture*>(
+                                    vertBytes.data()), numVertices);
+                            else if (stride == static_cast<int>(
+                                         sizeof(Graphics::VertexPositionColorTexture)))
+                                vb->SetData(reinterpret_cast<const Graphics::VertexPositionColorTexture*>(
+                                    vertBytes.data()), numVertices);
+                            else if (stride == static_cast<int>(sizeof(Graphics::VertexPositionTexture)))
+                                vb->SetData(reinterpret_cast<const Graphics::VertexPositionTexture*>(
+                                    vertBytes.data()), numVertices);
+
+                            auto ib = std::make_unique<Graphics::IndexBuffer>(device, numIndices);
+                            ib->SetData(reinterpret_cast<const std::uint16_t*>(
+                                idxBytes.data()), numIndices);
+
+                            auto part = std::make_unique<Graphics::ModelMeshPart>(
+                                vb.get(), ib.get(), numVertices, primCount, 0, 0);
+                            Graphics::ModelMeshPart* partPtr = part.get();
+
+                            auto mesh = std::make_unique<Graphics::ModelMesh>(
+                                &device, meshName.empty() ? "mesh" : meshName,
+                                std::vector<Graphics::ModelMeshPart*>{partPtr});
+
+                            // Load effect and register it in the mesh's effect collection.
+                            std::shared_ptr<Graphics::Effect> fx;
+                            if (effectStr.empty() || effectStr == "BasicEffect") {
+                                fx = std::make_shared<Graphics::BasicEffect>(device);
+                            } else {
+                                fx = cm.Load<std::shared_ptr<Graphics::Effect>>(effectStr);
+                            }
+                            partPtr->setEffectProperty(fx.get());
+                            res->effectOwners.push_back(std::move(fx));
+
+                            meshRawPtrs.push_back(mesh.get());
+                            res->vbs.push_back(std::move(vb));
+                            res->ibs.push_back(std::move(ib));
+                            res->partOwners.push_back(std::move(part));
+                            res->meshOwners.push_back(std::move(mesh));
+                        }
+                    }
+                }
+
+                Graphics::Model model(&device,
+                                      std::move(boneRawPtrs),
+                                      std::move(meshRawPtrs));
+                model.setOwnedResources(res);
+                return model;
+            }
+        };
+
         class SongTypeReader : public ContentTypeReader<Media::Song>
         {
         public:
@@ -410,6 +582,7 @@ namespace Microsoft::Xna::Framework::Content
         RegisterTypeReader<Audio::SoundEffect>(std::make_unique<SoundEffectTypeReader>());
         RegisterTypeReader<std::shared_ptr<Graphics::Effect>>(std::make_unique<EffectTypeReader>());
         RegisterTypeReader<Graphics::SpriteFont>(std::make_unique<SpriteFontTypeReader>());
+        RegisterTypeReader<Graphics::Model>(std::make_unique<ModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
         RegisterTypeReader<Media::Video>(std::make_unique<VideoTypeReader>());
     }

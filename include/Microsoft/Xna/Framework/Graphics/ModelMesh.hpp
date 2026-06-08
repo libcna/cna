@@ -20,6 +20,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         NOXNA ModelMesh(GraphicsDevice* graphicsDevice, std::vector<ModelMeshPart*> parts);
+        NOXNA ModelMesh(GraphicsDevice* graphicsDevice, std::string name,
+                        std::vector<ModelMeshPart*> parts);
 
         [[nodiscard]] BoundingSphere getBoundingSphereProperty() const;
         [[nodiscard]] const ModelEffectCollection& getEffectsProperty() const;
