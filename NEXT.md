@@ -304,6 +304,19 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 - `lastPresentedImageIndex_` stored in `Present()` so `ReadBackbuffer` knows which swapchain image to read.
 - Both backends build clean.
 
+### Task 39 — Unit tests for `Color`, `Rectangle`, `Vector2` ✅ DONE
+- Added `tests/Microsoft/Xna/Framework/ColorTests.cpp` — 26 tests covering: constructors (byte/int/float),
+  static named colors (White/Black/Red/Transparent/CornflowerBlue), packed AABBGGRR layout,
+  `operator==`/`!=`/`*`, `Lerp` (clamping, midpoint), `Multiply`, `ToVector3`/`ToVector4`,
+  `FromNonPremultiplied`.
+- Added `tests/Microsoft/Xna/Framework/RectangleTests.cpp` — 21 tests covering: constructors, edge properties
+  (Left/Right/Top/Bottom), Center (even/odd truncation), IsEmpty, Contains (point/rect), Intersects,
+  `Intersect` static (overlap region, disjoint→Empty), `Union`, `operator==`/`!=`, Offset, Inflate.
+- Added `tests/Microsoft/Xna/Framework/Vector2Tests.cpp` — 33 tests covering: static constants, constructors,
+  Length/LengthSquared, Normalize (in-place and static), Add/Subtract/Multiply/Divide, Dot, Distance,
+  Lerp, Min/Max, Clamp, Negate, all arithmetic and comparison operators.
+- All 80 tests pass. Both backends build clean.
+
 ---
 
 ## 9. Do not do yet
