@@ -5,7 +5,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    SpriteFont::SpriteFont(Texture2D* texture,
+    SpriteFont::SpriteFont(Texture2D texture,
                            std::vector<Rectangle> glyphBounds,
                            std::vector<Rectangle> cropping,
                            std::vector<charcs> characters,
@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float spacing,
                            std::vector<Vector3> kerningData,
                            std::optional<charcs> defaultCharacter)
-        : textureValue_(texture)
+        : textureValue_(std::move(texture))
         , glyphData_(std::move(glyphBounds))
         , croppingData_(std::move(cropping))
         , kerning_(std::move(kerningData))

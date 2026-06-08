@@ -257,8 +257,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!begun) throw std::runtime_error("SpriteBatch::DrawString called before Begin().");
         if (!backend_ || text.empty()) return;
 
-        const Texture2D* texture = spriteFont.textureValue_;
-        if (texture == nullptr) return;
+        const Texture2D& texture = spriteFont.textureValue_;
+        if (texture.getWidthProperty() == 0) return;
 
         const float sinR = std::sin(rotation);
         const float cosR = std::cos(rotation);
@@ -316,7 +316,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 static_cast<intcs>(std::lround(static_cast<float>(cGlyph.Width)  * scale.X)),
                 static_cast<intcs>(std::lround(static_cast<float>(cGlyph.Height) * scale.Y)));
 
-            pushSprite(*texture, dest, cGlyph, color,
+            pushSprite(texture, dest, cGlyph, color,
                        rotation, Vector2::Zero, effects, layerDepth);
 
             curOffset.X += cKern.Y + cKern.Z;

@@ -27,6 +27,11 @@ namespace Microsoft::Xna::Framework::Graphics
                        int preferredMultiSampleCount = 0,
                        RenderTargetUsage usage = RenderTargetUsage::DiscardContents);
 
+        RenderTarget2D(const RenderTarget2D&)            = delete;
+        RenderTarget2D& operator=(const RenderTarget2D&) = delete;
+        RenderTarget2D(RenderTarget2D&&)                 = default;
+        RenderTarget2D& operator=(RenderTarget2D&&)      = default;
+
         // Width, Height, Format, LevelCount are all inherited from Texture2D / Texture.
         // IRenderTarget pure virtuals satisfied:
         [[nodiscard]] int getWidthProperty()    const override { return Texture2D::getWidthProperty(); }

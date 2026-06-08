@@ -10,11 +10,10 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    class Texture2D;
-
     using SharpRuntime::charcs;
     using SharpRuntime::String;
 
@@ -40,7 +39,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param kerningData Per-glyph (left bearing, width, right bearing).
          * @param defaultCharacter Fallback glyph, or std::nullopt to throw on misses.
          */
-        NOXNA SpriteFont(Texture2D* texture,
+        NOXNA SpriteFont(Texture2D texture,
                          std::vector<Rectangle> glyphBounds,
                          std::vector<Rectangle> cropping,
                          std::vector<charcs> characters,
@@ -68,7 +67,7 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] Vector2 MeasureString(const String& text) const;
 
     private:
-        Texture2D* textureValue_ = nullptr;
+        Texture2D textureValue_;
         std::vector<Rectangle> glyphData_;
         std::vector<Rectangle> croppingData_;
         std::vector<Vector3> kerning_;

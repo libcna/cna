@@ -76,7 +76,7 @@ and hardening existing systems.
 
 | Area | Status |
 |------|--------|
-| `ContentManager::Load<SpriteFont>` | No `SpriteFontTypeReader`. Requires a `.font.json` descriptor format. |
+| `ContentManager::Load<SpriteFont>` | ✅ Done — `SpriteFontTypeReader` via `.font.json`. |
 | `ContentManager::Load<Model>` | No `ModelTypeReader`. `Model::Draw` works but models must be built manually. |
 | `GetBackBufferData` on Vulkan | Throws — staging-buffer readback not wired. |
 | `DrawInstancedPrimitives` | Completely absent from `GraphicsDevice`. |
@@ -152,7 +152,7 @@ runtime with a "no reader registered" exception.
 | `DrawInstancedPrimitives` | Missing from `GraphicsDevice` and all backends. **incomplete** |
 | `ContentManager::Load<SpriteFont>` | No reader. **incomplete** |
 | `ContentManager::Load<Model>` | No reader. **incomplete** |
-| `SpriteFont::textureValue_` is a raw `Texture2D*` | Not owned by `SpriteFont`; lifetime must be managed externally. When loaded via content manager, the atlas `Texture2D` must outlive the `SpriteFont`. **design risk** |
+| `SpriteFont::textureValue_` | ✅ Fixed — now `Texture2D` by value (owned). No lifetime risk. |
 | `FillMode::WireFrame` | Silently ignored on GLES3. **known limitation** |
 | `AudioEngine` stub | All `AudioEngine` methods throw or are no-ops. **incomplete** |
 | `Media::MediaLibrary` | Fully stubbed — playlist/photo/artist queries unimplemented. **incomplete** |
@@ -258,15 +258,21 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 
 ## 8. Next smallest tasks
 
-### Task 33 — `RenderTarget2D`: delete copy constructor / assignment (correctness fix)
-- **Goal:** Prevent silent double-free of `rtBackend_` raw pointer when an RT is copied.
-- **Files:** `include/Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp`
-- **Change:** Add `RenderTarget2D(const RenderTarget2D&) = delete;` and
-  `RenderTarget2D& operator=(const RenderTarget2D&) = delete;`
-- **Verify:** `cmake --build cmake-build-vulkan --target CNA` — must compile cleanly.
-  Check that no existing code copies an RT by value (grep for `RenderTarget2D rt =` etc.).
+### Task 33 — `RenderTarget2D`: delete copy constructor / assignment ✅ DONE
+- Added `= delete` for copy ctor/assignment, `= default` for move in `RenderTarget2D.hpp`.
+- Verified: no existing code copies RT by value. Both backends build clean.
 
-### Task 34 — `ContentManager::Load<SpriteFont>` via `.font.json` descriptor
+### Task 34 — `ContentManager::Load<SpriteFont>` via `.font.json` descriptor ✅ DONE
+- `SpriteFont::textureValue_` changed from raw `Texture2D*` to `Texture2D` (owned by value).
+  Constructor now takes `Texture2D` by value (moved in). Eliminates dangling-pointer risk.
+- `SpriteFontTypeReader` added to `ContentManager.cpp` (anonymous namespace):
+  - Parses `.font.json` descriptor (texture path, lineSpacing, spacing, defaultCharacter, glyphs array).
+  - Loads atlas via `cm.Load<Texture2D>(textureName)` — atlas is cached and lifetime-safe.
+  - Parses each glyph: `{ "char": N, "source":[x,y,w,h], "crop":[x,y,w,h], "kerning":[l,a,r] }`.
+- Registered in `RegisterBuiltinLoaders()`.
+- Both backends build clean.
+
+### Task 35 — `ContentManager::Load<Model>` via `.model.json` descriptor
 - **Goal:** `Content.Load<SpriteFont>("fonts/Arial")` works end-to-end.
 - **Descriptor format** (`.font.json` alongside the atlas PNG):
   ```json
