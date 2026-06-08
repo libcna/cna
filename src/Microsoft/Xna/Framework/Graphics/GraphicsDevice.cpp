@@ -447,6 +447,55 @@ namespace Microsoft::Xna::Framework::Graphics
         );
     }
 
+    void GraphicsDevice::DrawInstancedPrimitives(
+        PrimitiveType primitiveType,
+        int baseVertex,
+        int minVertexIndex,
+        int numVertices,
+        int startIndex,
+        int primitiveCount,
+        int instanceCount
+    )
+    {
+        (void)minVertexIndex;
+        (void)numVertices;
+
+        if (backend_ == nullptr)
+            return;
+
+        if (currentVertexBuffer_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound.");
+
+        if (currentIndexBuffer_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawInstancedPrimitives: no index buffer is bound.");
+
+        if (currentEffect_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawInstancedPrimitives: no effect has been applied.");
+
+        if (baseVertex != 0)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawInstancedPrimitives: non-zero baseVertex is not supported.");
+
+        if (startIndex != 0)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawInstancedPrimitives: non-zero startIndex is not supported.");
+
+        backend_->DrawInstancedPrimitivesEx(
+            currentVertexBuffer_->GetBackend(),
+            currentIndexBuffer_->GetBackend(),
+            currentEffect_->World,
+            currentEffect_->View,
+            currentEffect_->Projection,
+            primitiveType,
+            primitiveCount,
+            instanceCount,
+            BuildGpuDrawParams(currentEffect_)
+        );
+    }
+
     void GraphicsDevice::DrawUserPrimitives(
         PrimitiveType primitiveType,
         const void* vertexData,

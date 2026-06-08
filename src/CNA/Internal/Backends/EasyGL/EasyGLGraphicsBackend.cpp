@@ -1530,6 +1530,34 @@ void main()
         device.draw_elements(ToEasyGl(primitive), index_count, idxType2, nullptr);
         vb.vao.unbind();
     }
+
+    void EasyGLGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb_in,
+                                                          const IIndexBufferBackend& ib_in,
+                                                          const Matrix& world,
+                                                          const Matrix& view,
+                                                          const Matrix& projection,
+                                                          PrimitiveType primitive,
+                                                          int primitiveCount,
+                                                          int instanceCount,
+                                                          const GpuDrawParams& params)
+    {
+        if (metagl::IsContextLost()) return;
+        const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
+        const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
+        Prog3D& p = SelectProgram(vb.GetStride());
+        p.prog.use();
+        BindDrawParams(p, world, view, projection, params);
+
+        const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
+        const auto idxType = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
+                                             : ::easygl::DataType::UnsignedShort;
+
+        vb.vao.bind();
+        ib.ibo.bind(::easygl::BufferTarget::ElementArray);
+        device.draw_elements_instanced(ToEasyGl(primitive), index_count, idxType,
+                                       nullptr, instanceCount);
+        vb.vao.unbind();
+    }
 }
 
 namespace CNA::Internal::Backends

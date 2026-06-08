@@ -172,6 +172,10 @@ namespace Microsoft::Xna::Framework::Graphics
         void DrawIndexedPrimitives(PrimitiveType primitiveType,
                                    int baseVertex, int minVertexIndex,
                                    int numVertices, int startIndex, int primitiveCount);
+        void DrawInstancedPrimitives(PrimitiveType primitiveType,
+                                     int baseVertex, int minVertexIndex,
+                                     int numVertices, int startIndex,
+                                     int primitiveCount, int instanceCount);
         void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData,
                                 int vertexOffset, int primitiveCount);
         void DrawUserPrimitives(PrimitiveType primitiveType,

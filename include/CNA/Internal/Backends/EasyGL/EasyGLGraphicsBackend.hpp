@@ -309,5 +309,11 @@ namespace CNA::Internal::Backends::EasyGL
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
+                                       const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount,
+                                       int instanceCount,
+                                       const GpuDrawParams& params) override;
     };
 }

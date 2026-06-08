@@ -79,7 +79,7 @@ and hardening existing systems.
 | `ContentManager::Load<SpriteFont>` | ✅ Done — `SpriteFontTypeReader` via `.font.json`. |
 | `ContentManager::Load<Model>` | ✅ Done — `ModelTypeReader` via `.model.json` + binary vertex/index files. |
 | `GetBackBufferData` on Vulkan | Throws — staging-buffer readback not wired. |
-| `DrawInstancedPrimitives` | Completely absent from `GraphicsDevice`. |
+| `DrawInstancedPrimitives` | ✅ Done — EasyGL uses `glDrawElementsInstanced`; others throw. |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES 3.0 has no `glPolygonMode`. |
 | `Media::MediaLibrary` | Fully stubbed — all methods throw `runtime_error`. |
 | `Audio::AudioEngine` | Mostly stubbed. |
@@ -303,15 +303,11 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
   - GPU resources owned by `shared_ptr<ModelResources>` stored in `Model::ownedResources_`; copies of Model share the same buffers.
 - Both backends build clean.
 
-### Task 36 — `DrawInstancedPrimitives` (at least as a stub with correct API)
-- **Goal:** `GraphicsDevice::DrawInstancedPrimitives(...)` exists and matches XNA 4.0 signature.
-  EasyGL: implement with `glDrawElementsInstanced`. Others: throw `NotImplementedException`.
-- **Files:** `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
-  `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
-  `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp`,
-  `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`.
-- **FNA reference:** `GraphicsDevice.cs` line 1257.
-- **Verify:** `cmake --build cmake-build-easygl --target CNA` clean.
+### Task 36 — `DrawInstancedPrimitives` ✅ DONE
+- `GraphicsDevice::DrawInstancedPrimitives(primitiveType, baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount, instanceCount)` added — matches XNA 4.0 signature (FNA `GraphicsDevice.cs` line 1257).
+- `IGraphicsBackend::DrawInstancedPrimitivesEx(...)` virtual added with default that throws `std::runtime_error` (SDL_Renderer, Vulkan get the default — not implemented).
+- `EasyGLGraphicsBackend::DrawInstancedPrimitivesEx` override uses `device.draw_elements_instanced` (OpenGL ES 3.0, already in easygl).
+- Both backends build clean.
 
 ### Task 37 — `GraphicsDevice::GetBackBufferData` on Vulkan (staging buffer)
 - **Goal:** Screenshot API works on Vulkan backend.

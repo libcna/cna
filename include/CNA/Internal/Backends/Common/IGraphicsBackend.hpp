@@ -335,6 +335,23 @@ namespace CNA::Internal::Backends
             DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
         }
 
+        /// Instanced indexed draw — default throws on backends that don't support it.
+        virtual void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
+                                               const IIndexBufferBackend& ib,
+                                               const Matrix& world,
+                                               const Matrix& view,
+                                               const Matrix& projection,
+                                               PrimitiveType primitive,
+                                               int primitiveCount,
+                                               int instanceCount,
+                                               const GpuDrawParams& params)
+        {
+            (void)vb; (void)ib; (void)world; (void)view; (void)projection;
+            (void)primitive; (void)primitiveCount; (void)instanceCount; (void)params;
+            throw std::runtime_error(
+                "DrawInstancedPrimitives is not supported on this graphics backend.");
+        }
+
         // ---- Debug / testing ----
 
         /// Simulates an OpenGL context loss.
