@@ -304,6 +304,22 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 - `lastPresentedImageIndex_` stored in `Present()` so `ReadBackbuffer` knows which swapchain image to read.
 - Both backends build clean.
 
+### Task 41 — Unit tests for `Quaternion`, `BoundingBox`, `BoundingSphere` ✅ DONE
+- Added `tests/Microsoft/Xna/Framework/QuaternionTests.cpp` — 26 tests: Identity (components, length),
+  constructors (4-component, vector+scalar), Length/LengthSquared, Normalize (in-place, static),
+  Conjugate (static and in-place), Dot, CreateFromAxisAngle (0→identity, π→half-turn, unit length),
+  Multiply (by identity, q×q*≈identity), Inverse (identity round-trip, q×inv≈I), Lerp/Slerp
+  (boundary and unit-length results), operators (==, !=, unary -), CreateFromRotationMatrix(Identity)→Identity.
+- Added `tests/Microsoft/Xna/Framework/BoundingBoxTests.cpp` — 19 tests: constructor, Contains(point)
+  (center, min/max corners, outside), Contains(box) (inside/intersects/disjoint), Intersects(box)
+  (overlapping, adjacent, disjoint), Intersects(sphere), GetCorners (count=8, contains Min+Max),
+  CreateFromPoints (exact extents), CreateMerged, operators.
+- Added `tests/Microsoft/Xna/Framework/BoundingSphereTests.cpp` — 21 tests: constructors, Contains(point/sphere)
+  (inside, boundary, disjoint), Intersects(sphere) (symmetry), Intersects(box), CreateFromBoundingBox
+  (all corners within, center=box center), CreateFromPoints, CreateMerged, Transform(identity/translation),
+  operators.
+- All 66 tests pass. Both backends build clean.
+
 ### Task 40 — Unit tests for `Vector3`, `Vector4`, `Matrix` ✅ DONE
 - Added `tests/Microsoft/Xna/Framework/Vector3Tests.cpp` — 38 tests: static constants (Zero/One/UnitX–Z,
   Up/Down/Right/Left/Forward/Backward), constructors, Length/LengthSquared, Normalize, Cross product
