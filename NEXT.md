@@ -304,6 +304,17 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 - `lastPresentedImageIndex_` stored in `Present()` so `ReadBackbuffer` knows which swapchain image to read.
 - Both backends build clean.
 
+### Task 42 — Unit tests for `MathHelper` (extended) and `Point` ✅ DONE
+- Extended `tests/Microsoft/Xna/Framework/MathHelperTests.cpp` with 32 new tests covering:
+  constants (Pi, TwoPi, PiOver2, PiOver4), Lerp (zero/one/half/negative range), SmoothStep
+  (boundary clamping, midpoint), ToDegrees/ToRadians (known angles + round-trip), Distance
+  (symmetric, zero), Max/Min, WrapAngle (zero, full turn, small positive, over-π wraps negative),
+  WithinEpsilon, ClosestMSAAPower (powers-of-two and rounding).
+- Added `tests/Microsoft/Xna/Framework/PointTests.cpp` — 14 tests: Zero constant, constructors
+  (default, two-arg, negative), equality (==, !=, Equals), all four arithmetic operators
+  (+, -, *, /), identity properties (add Zero, subtract self→zero).
+- All 50 tests pass. Both backends build clean.
+
 ### Task 41 — Unit tests for `Quaternion`, `BoundingBox`, `BoundingSphere` ✅ DONE
 - Added `tests/Microsoft/Xna/Framework/QuaternionTests.cpp` — 26 tests: Identity (components, length),
   constructors (4-component, vector+scalar), Length/LengthSquared, Normalize (in-place, static),
