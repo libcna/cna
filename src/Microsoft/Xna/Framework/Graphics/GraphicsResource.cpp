@@ -7,6 +7,28 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     }
 
+    GraphicsResource::GraphicsResource(const GraphicsResource& other)
+        : graphicsDevice_(other.graphicsDevice_)
+        , name_(other.name_)
+        , tag_(other.tag_)
+        , isDisposed_(false)
+        // Disposing handlers deliberately not copied: each object owns its lifecycle
+    {
+    }
+
+    GraphicsResource& GraphicsResource::operator=(const GraphicsResource& other)
+    {
+        if (this != &other)
+        {
+            graphicsDevice_ = other.graphicsDevice_;
+            name_ = other.name_;
+            tag_ = other.tag_;
+            isDisposed_ = false;
+            // Disposing handlers deliberately not copied
+        }
+        return *this;
+    }
+
     GraphicsResource::~GraphicsResource()
     {
         Dispose(false);

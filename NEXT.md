@@ -10,8 +10,8 @@ modern C++ internals, so that XNA-targeting games can be ported to C++ with mini
 **Authoritative API reference:** `/rv/data/library/github.com/FNA-XNA/FNA/src`
 
 **Development phase:** Core graphics, input, audio, and content APIs are largely complete.
-The next phase is filling remaining content-pipeline gaps (SpriteFont and Model file loading)
-and hardening existing systems.
+Content pipeline is fully functional (SpriteFont, Model, Texture2D, Sound, Song, Video loaders).
+The current focus is hardening existing systems, improving test coverage, and fixing edge-case bugs.
 
 **Key architectural decisions:**
 - Backend selected at compile-time via `CNA_GRAPHICS_BACKEND` CMake option
@@ -32,7 +32,8 @@ and hardening existing systems.
 - Libraries: `libCNA.a`, `libcna_backend_graphics_vulkan.a` / `libcna_backend_graphics_easygl.a`.
 - Executables: `CnaTests`, `cna_demo_2d`, `cna_demo_input`, `cna_demo_sound`,
   `cna_demo_xact`, `cna_house3d_demo`.
-- No known failing tests.
+- 1 pre-existing failing test: `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes` — axis
+  scaling mismatch in SDL GamePad mapping (not related to recent changes).
 
 ### What works
 - **Graphics core:** `GraphicsDevice` (full state API, render targets, back-buffer readback on EasyGL),
@@ -70,20 +71,22 @@ and hardening existing systems.
   `SoundEffect`, `Effect` (`.shader.json`), `Song`, `Video`. No XNB pipeline.
 - **DrawUserPrimitives / DrawUserIndexedPrimitives** — all 4 typed vertex variants.
 - **Viewport::Project / Unproject** — fully implemented.
-- **GetBackBufferData<Color>** — EasyGL: `glReadPixels` + Y-flip. Vulkan: throws.
+- **GetBackBufferData<Color>** — EasyGL: `glReadPixels` + Y-flip. Vulkan: staging buffer readback.
+- **Content pipeline:** `ContentManager` readers for `Texture2D`, `SpriteFont` (`.font.json`),
+  `Model` (`.model.json`), `Effect` (`.shader.json`), `SoundEffect`, `Song`, `Video`.
+- **DrawInstancedPrimitives** — EasyGL: `glDrawElementsInstanced`. Others throw.
+- **DrawUserIndexedPrimitives** — all 4 typed vertex variants, 16-bit and 32-bit indices.
 
 ### What does NOT work yet
 
 | Area | Status |
 |------|--------|
-| `ContentManager::Load<SpriteFont>` | ✅ Done — `SpriteFontTypeReader` via `.font.json`. |
-| `ContentManager::Load<Model>` | ✅ Done — `ModelTypeReader` via `.model.json` + binary vertex/index files. |
-| `GetBackBufferData` on Vulkan | ✅ Done — staging buffer + BGRA→RGBA. |
-| `DrawInstancedPrimitives` | ✅ Done — EasyGL uses `glDrawElementsInstanced`; others throw. |
-| `FillMode::WireFrame` | Silently ignored — OpenGL ES 3.0 has no `glPolygonMode`. |
-| `Media::MediaLibrary` | Fully stubbed — all methods throw `runtime_error`. |
-| `Audio::AudioEngine` | Mostly stubbed. |
-| Vulkan `GetBackBufferData` | ✅ Done — staging buffer readback + BGRA→RGBA conversion. |
+| `FillMode::WireFrame` | Silently ignored — OpenGL ES 3.0 has no `glPolygonMode`. Known limitation. |
+| `Media::MediaLibrary` | Fully stubbed — playlist/photo/artist queries unimplemented. Do not implement. |
+| `Audio::AudioEngine` | Mostly stubbed. Low priority. |
+| Vulkan 3D textured pipeline | Only stride-16 (colored) is supported. Textured/lit needs a full Vulkan shader system. |
+| EasyGL context loss on real OS events | `DebugSimulateContextLoss` works; real OS suspend/resume not verified on Linux. |
+| `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes` | Axis scaling mismatch in SDL GamePad mapping. Pre-existing failure. |
 
 ---
 
@@ -123,22 +126,13 @@ and hardening existing systems.
 
 **No hard compilation blocker — both backends build cleanly.**
 
-The most impactful functional gap is **`ContentManager::Load<SpriteFont>`**: games universally
-load fonts via `Content.Load<SpriteFont>("fonts/Arial")`. The infrastructure is in place
-(`SpriteFont` class is complete, `ContentTypeReader<T>` exists), but there is no
-`SpriteFontTypeReader` and no agreed descriptor file format (`.font.json`).
+All major content-pipeline gaps are closed (SpriteFont, Model, Texture2D, Sound, Song, Video).
+The remaining functional gaps are either low-priority stubs (`AudioEngine`, `MediaLibrary`) or
+require major new work (Vulkan textured 3D pipeline) which is explicitly deferred in section 9.
 
-The descriptor must encode:
-- Path to the glyph atlas PNG
-- Per-glyph source rectangles (glyphBounds)
-- Per-glyph cropping rectangles
-- Character list (unicode code points)
-- LineSpacing, Spacing (float)
-- Kerning data (Vector3 per glyph: left bearing, advance width, right bearing)
-- Optional default character
-
-Until this reader exists, any game that loads a SpriteFont via ContentManager will fail at
-runtime with a "no reader registered" exception.
+The most impactful next actionable work is **test coverage of remaining XNA APIs** — specifically
+`Ray`, `Plane`, `Curve`, and `GameTime` — and resolving the pre-existing GamePad axis scaling
+failure in `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes`.
 
 ---
 
@@ -146,19 +140,19 @@ runtime with a "no reader registered" exception.
 
 | Issue | Status |
 |-------|--------|
-| `Texture2D` copy semantics with `GraphicsResource` base | `GraphicsResource::~GraphicsResource()` calls `Dispose(false)` on every temporary, setting `isDisposed_ = true` on each copy that gets destroyed. The live copy is unaffected since fields are separate. Benign in practice but semantically surprising. **suspected bug** |
-| `RenderTarget2D` default copy ctor copies `rtBackend_` raw ptr | Two RT objects pointing at the same backend is dangerous if either is destroyed. **confirmed design issue** — RT should not be copyable; add `= delete`. |
-| Vulkan `GetBackBufferData` | Throws `runtime_error`. All screenshot/readback attempts on Vulkan fail. **incomplete** |
-| `DrawInstancedPrimitives` | Missing from `GraphicsDevice` and all backends. **incomplete** |
-| `ContentManager::Load<SpriteFont>` | No reader. **incomplete** |
-| `ContentManager::Load<Model>` | ✅ Done — `ModelTypeReader` via `.model.json`. |
-| `SpriteFont::textureValue_` | ✅ Fixed — now `Texture2D` by value (owned). No lifetime risk. |
-| `FillMode::WireFrame` | Silently ignored on GLES3. **known limitation** |
-| `AudioEngine` stub | All `AudioEngine` methods throw or are no-ops. **incomplete** |
-| `Media::MediaLibrary` | Fully stubbed — playlist/photo/artist queries unimplemented. **incomplete** |
+| `GraphicsResource` copy semantics | ✅ Fixed — explicit copy ctor/assignment: `isDisposed_=false`, `Disposing` handlers not copied. |
+| `RenderTarget2D` copyability | ✅ Fixed (Task 33) — copy ctor/assignment `= delete`; move `= default`. |
+| `Vulkan GetBackBufferData` | ✅ Fixed (Task 37) — staging buffer + BGRA→RGBA conversion. |
+| `DrawInstancedPrimitives` | ✅ Fixed (Task 36) — EasyGL uses `glDrawElementsInstanced`; others throw. |
+| `ContentManager::Load<SpriteFont>` | ✅ Fixed (Task 34) — `SpriteFontTypeReader` via `.font.json`. |
+| `ContentManager::Load<Model>` | ✅ Fixed (Task 35) — `ModelTypeReader` via `.model.json`. |
+| `DrawUserIndexedPrimitives` 32-bit | ✅ Fixed (Task 38) — all 4 typed `uint32_t*` overloads. |
+| `FillMode::WireFrame` | Silently ignored on GLES3 — no `glPolygonMode` in OpenGL ES 3.0. **known limitation** |
+| `AudioEngine` stub | All `AudioEngine` methods throw or are no-ops. Low priority. |
+| `Media::MediaLibrary` | Fully stubbed. Do not implement (see section 9). |
 | `BoundingFrustum::Intersects(Ray)` | Throws `NotImplementedException` — matches FNA behavior. **known** |
-| `DrawUserIndexedPrimitives` 32-bit indices | ✅ Done — all 4 typed `uint32_t*` overloads added. |
-| EasyGL context loss recovery | Implemented via `DebugSimulateContextLoss` but not triggered by real OS events on Linux. **needs verification** |
+| EasyGL context loss recovery | `DebugSimulateContextLoss` works; real OS suspend/resume not verified. |
+| `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes` | Axis scaling mismatch in SDL mapping. Pre-existing. |
 
 ---
 
@@ -302,6 +296,19 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
   `vkCmdCopyImageToBuffer`, TRANSFER_SRC_OPTIMAL → PRESENT_SRC_KHR barrier →
   `EndOneTimeCommands` → map → copy with BGRA→RGBA channel swap if needed → unmap → destroy buffer.
 - `lastPresentedImageIndex_` stored in `Present()` so `ReadBackbuffer` knows which swapchain image to read.
+- Both backends build clean.
+
+### Task 43 — Fix `GraphicsResource` copy semantics ✅ DONE
+- Added explicit copy constructor and copy assignment operator to `GraphicsResource`.
+- Copy constructor: copies `graphicsDevice_`, `name_`, `tag_`; sets `isDisposed_ = false`;
+  does NOT copy `Disposing` event handlers (each object owns its own event lifecycle).
+- Copy assignment: same policy — reset `isDisposed_ = false`, skip handlers.
+- Root cause: default copy ctor inherited the `Disposing` handler vector, so destroying a copy
+  via explicit `Dispose(true)` would fire those handlers with the wrong `this` pointer as sender.
+  Also, `isDisposed_` on the copy being set `true` by the destructor was confusing but harmless.
+- `Texture2D(const Texture2D&) = default` continues to work — it now calls the fixed base ctor.
+- Updated NEXT.md sections 1, 2, 4, 5 to reflect current project state (all stale entries removed).
+- 305/306 tests pass (1 pre-existing GamePad axis failure unrelated to this change).
 - Both backends build clean.
 
 ### Task 42 — Unit tests for `MathHelper` (extended) and `Point` ✅ DONE

@@ -43,6 +43,14 @@ namespace Microsoft::Xna::Framework::Graphics
     protected:
         explicit GraphicsResource(GraphicsDevice* device = nullptr);
 
+        // Copy: carries identity (device/name/tag) but NOT isDisposed_ or event handlers.
+        // Each copy starts undisposed with its own fresh Disposing subscriber list.
+        GraphicsResource(const GraphicsResource& other);
+        GraphicsResource& operator=(const GraphicsResource& other);
+
+        GraphicsResource(GraphicsResource&&) = default;
+        GraphicsResource& operator=(GraphicsResource&&) = default;
+
         virtual void Dispose(bool disposing);
 
         GraphicsDevice* graphicsDevice_;
