@@ -73,8 +73,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ImageData data = ImageLoader::Load(assetName);
         width    = data.width;
         height   = data.height;
-        storeCpuPixels(data.pixels.data(), width * height);
-        backend_ = graphicsDevice.GetBackend().CreateTexture(data);
+        backend_   = graphicsDevice.GetBackend().CreateTexture(data);
+        cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
+        backend_->ShareCpuPixels(cpuPixels_);
     }
 
     Texture2D::Texture2D(const std::string& assetName)
@@ -82,7 +83,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ImageData data = ImageLoader::Load(assetName);
         width    = data.width;
         height   = data.height;
-        storeCpuPixels(data.pixels.data(), width * height);
+        cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         // No GraphicsDevice — backend stays null until attached.
     }
 
@@ -95,6 +96,7 @@ namespace Microsoft::Xna::Framework::Graphics
         data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
+        backend_->ShareCpuPixels(cpuPixels_);
     }
 
     static int CalculateMipLevels(int w, int h)
@@ -116,6 +118,7 @@ namespace Microsoft::Xna::Framework::Graphics
         data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
+        backend_->ShareCpuPixels(cpuPixels_);
     }
 
     Texture2D::Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt,
@@ -163,6 +166,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
+        backend_->ShareCpuPixels(cpuPixels_);
     }
 
     void Texture2D::SetData(int level, const Rectangle* rect,
@@ -213,6 +217,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 img.height = height;
                 img.pixels = buf;
                 backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
+                backend_->ShareCpuPixels(cpuPixels_);
             }
         }
         else if (backend_)
@@ -327,8 +332,9 @@ namespace Microsoft::Xna::Framework::Graphics
         tex.graphicsDevice_  = &graphicsDevice;
         tex.width    = img.width;
         tex.height   = img.height;
-        tex.storeCpuPixels(img.pixels.data(), img.width * img.height);
-        tex.backend_ = graphicsDevice.GetBackend().CreateTexture(img);
+        tex.backend_   = graphicsDevice.GetBackend().CreateTexture(img);
+        tex.cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
+        tex.backend_->ShareCpuPixels(tex.cpuPixels_);
         return tex;
     }
 
@@ -513,11 +519,12 @@ namespace Microsoft::Xna::Framework::Graphics
         data.height = h;
         data.pixels = rgba;
         Texture2D tex;
-        tex.graphicsDevice_     = &device;
-        tex.width       = w;
-        tex.height      = h;
-        tex.backend_    = device.GetBackend().CreateTexture(data);
-        tex.cpuPixels_  = std::make_shared<std::vector<uint8_t>>(rgba);
+        tex.graphicsDevice_ = &device;
+        tex.width           = w;
+        tex.height          = h;
+        tex.backend_        = device.GetBackend().CreateTexture(data);
+        tex.cpuPixels_      = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
+        tex.backend_->ShareCpuPixels(tex.cpuPixels_);
         return tex;
     }
 }

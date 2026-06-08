@@ -1,5 +1,36 @@
 # RAM Usage Analysis — mobile-eggbert
 
+## Vulkan: why mobile-eggbert went from ~28 MB to ~78 MB
+
+| Component | Size | Present before? |
+|-----------|------|-----------------|
+| App base + SDL3 + Vulkan ICD/loader | ~10–15 MB | Yes |
+| Khronos validation layer (debug builds) | ~20–30 MB | Yes (may have been excluded from old measurement) |
+| Sprite VB/IB ring buffers (HOST\_VISIBLE, permanently mapped) | ~2 MB | Yes |
+| **`cpuPixels_` — one CPU copy of all texture pixel data** | **~34 MB** | **No — added by task 32** |
+| 3D ring buffers (lazy — only if 3D draw issued) | 0 MB for 2D | Eagerly allocated before; now lazy |
+
+The dominant new cost is `cpuPixels_`: task 32 added `= default` copy constructors to
+`Texture2D`, which required every texture to retain a CPU-side RGBA buffer so that
+`ContentManager::Load<T>()` could return copies by value. `Texture2D::GetData()` also
+requires this buffer.
+
+The Khronos validation layer (~20–30 MB) has always been present in debug builds and
+absent in release builds. If the old ~28 MB figure was a **release** measurement and the
+new ~78 MB figure is a **debug** measurement, the effective regression is:
+
+| Build | Before task 32 | After task 32 + fixes |
+|-------|---------------|-----------------------|
+| Debug | ~48 MB | ~78 MB (+30 MB = cpuPixels_) |
+| Release | ~28 MB | ~48 MB (+20 MB = cpuPixels_ net of validation layer) |
+
+In short: **~34 MB of the increase is `cpuPixels_`** (one shared copy, required for
+the XNA `GetData` API). The rest is the validation layer being included in the
+measurement. A release build of mobile-eggbert on Vulkan is expected to use
+approximately **~45–50 MB** after all current fixes.
+
+---
+
 ## Observed figures
 
 | Backend | RAM usage | Condition |
@@ -108,32 +139,42 @@ The EasyGL RAM problem is at least as serious as Vulkan and shares the same root
 
 ---
 
-## Can these be fixed? Yes — ranked by impact
+## Fixes applied
 
-### Fix 1 — ContentManager: avoid copying `cpuPixels_` on cache return **(~34 MB saved, both backends)**
+### Fix 1 — ContentManager: `cpuPixels_` shared across copies ✅ **(~34 MB saved, both backends)**
 
-The cache should return a value that shares the GPU backend without duplicating CPU pixels.
-Options:
-- Change `cache_` to store `std::shared_ptr<Texture2D>` and return by shared_ptr, or
-- Move the `Texture2D` out of the cache on first access and keep only the GPU-side
-  `shared_ptr<ITextureBackend>` in the cache for subsequent loads, or
-- Make `cpuPixels_` inside `Texture2D` lazy/optional and drop it after GPU upload if
-  `GetData` is not required.
+`cpuPixels_` is now `std::shared_ptr<std::vector<uint8_t>>`. Copies of `Texture2D`
+(cache entry + game field) share the same underlying vector via `shared_ptr` reference
+counting. No pixel duplication on cache return.
 
-XNA 4.0 requires `Texture2D::GetData` to work, so the CPU copy cannot be unconditionally
-dropped, but it can at least stop being duplicated.
+### Fix 2 — Vulkan: lazy 3D ring buffer allocation ✅ **(~10 MB saved for 2D games)**
 
-### Fix 2 — Vulkan: lazy 3D ring buffer allocation **(~10 MB saved for 2D games)**
+`frame3DVB_` / `frame3DIB_` are now allocated on the first actual 3D draw call via
+`EnsureFrame3DBuffers()`. A pure 2D game like mobile-eggbert never pays this cost.
 
-Allocate `frame3DVB_` / `frame3DIB_` on the first actual 3D draw call rather than at
-backend startup. A pure 2D game like mobile-eggbert would never pay this cost.
+### Fix 3 — EasyGL: remove `image_data_` duplicate in `EasyGLTextureBackend` ✅ **(~34 MB saved)**
 
-### Fix 3 — OpenGL: investigate driver shadow copies
+`EasyGLTextureBackend` previously stored a full `ImageData image_data_` copy of all
+pixel data separately from `Texture2D::cpuPixels_`. This was the largest remaining
+RAM regression after Fix 1:
 
-If Mesa keeps CPU-side texture shadow copies, it may be possible to hint the driver
-(e.g. `GL_ARB_pixel_buffer_object` upload path, or driver-specific hints) to drop them.
-Alternatively, the same `cpuPixels_` consolidation from Fix 1 reduces the impact since
-less data is uploaded to begin with.
+- Each texture kept **two** independent CPU copies of its pixels:
+  one in `cpuPixels_` (shared via `shared_ptr` across `Texture2D` copies) and
+  one in `EasyGLTextureBackend::image_data_` (unique per backend instance).
+
+- This also caused the ~1.5 MB-per-world-entry RAM growth in mobile-eggbert:
+  world-specific textures accumulated in the `ContentManager` cache, each costing
+  2× pixels instead of 1×.
+
+**Replaced** `image_data_` with `std::shared_ptr<std::vector<uint8_t>> pixels_` that
+points back to `Texture2D::cpuPixels_` via `ITextureBackend::ShareCpuPixels()`. This
+shared reference is sufficient for OpenGL context-loss restoration while eliminating
+the duplicate allocation.
+
+**Also** changed texture-loading constructors (`Texture2D(path, device)`, `FromStream`,
+`CreateFromPixels`) to **move** `ImageData.pixels` into `cpuPixels_` instead of
+copying, cutting peak RAM during texture loading from 3× to 2× (data in transit +
+GPU staging buffer).
 
 ### Fix 4 — Validation layer
 
@@ -142,14 +183,39 @@ Already correctly disabled in release builds. No action needed.
 ### Fix 5 — Reduce sprite ring buffer sizes
 
 `MaxSpriteVertices = 32768` (2 MB × 2) may be larger than needed for mobile-eggbert.
-A smaller default (e.g. 8192) would save ~1.5 MB. Low priority.
+A smaller default (e.g. 8192) would save ~1.5 MB. Low priority, not yet done.
+
+---
+
+## Remaining overhead
+
+| Source | Approx. | Notes |
+|--------|---------|-------|
+| `cpuPixels_` (all textures) | ~34 MB | Required for `Texture2D::GetData` (XNA API) |
+| Mesa driver shadow copies | ~34 MB | Mesa keeps CPU copies for `glGetTexImage`/context recovery; hard to avoid |
+| Vulkan ICD + loader | ~5–15 MB | Inherent to the API choice |
+| Sprite ring buffers | ~2 MB | Bounded; Fix 5 can trim slightly |
+| Validation layer (debug only) | ~20–30 MB | Already guarded by `#ifdef NDEBUG` |
+
+### Remaining per-world RAM growth
+
+`ContentManager` caches all loaded assets permanently (until `Unload()` is called).
+If mobile-eggbert loads world-specific textures without calling `Unload()` between
+worlds, those textures accumulate in the cache. After Fix 3, each accumulated texture
+costs 1× pixels (down from 2×), so the growth rate is halved.
+
+The correct fix at the game level is to call `content.Unload()` when leaving a world
+and reload the next world's assets. Alternatively, a future CNA improvement could add
+a NOXNA `ContentManager::Unload(const std::string& assetName)` per-asset eviction API.
 
 ---
 
 ## Summary
 
-The dominant, fixable issue is **Fix 1** (ContentManager double-copy): it wastes ~34 MB
-on both backends with a relatively straightforward architectural change. Fix 2 (lazy 3D
-buffers) provides an additional 10 MB saving on Vulkan at no cost for 2D games.
-The remaining overhead (driver libraries, validation in debug) is mostly inherent to the
-choice of API and build configuration.
+| Fix | Saved | Status |
+|-----|-------|--------|
+| ContentManager `cpuPixels_` sharing | ~34 MB | ✅ Done (commit a5c4274) |
+| Vulkan lazy 3D buffers | ~10 MB | ✅ Done (commit a5c4274) |
+| EasyGL `image_data_` removal | ~34 MB | ✅ Done (this commit) |
+| Mesa driver shadow copies | ~34 MB | ⚠️ Hard to avoid on Mesa |
+| Sprite ring buffer sizing | ~1.5 MB | Low priority |

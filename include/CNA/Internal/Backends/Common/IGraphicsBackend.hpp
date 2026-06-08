@@ -107,6 +107,10 @@ namespace CNA::Internal::Backends
         virtual void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) {}
         /// Binds the underlying GL texture handle (no-op on non-GL backends).
         virtual void BindGL() const {}
+        /// Shares a reference to the CPU pixel buffer owned by Texture2D::cpuPixels_.
+        /// The backend stores this reference for OpenGL context-loss restoration instead
+        /// of keeping its own duplicate copy of the pixel data.
+        virtual void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
     };
 
     /// Backend handle for a 2D render target (off-screen FBO on EasyGL).

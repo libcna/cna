@@ -109,8 +109,7 @@ namespace CNA::Internal::Backends::EasyGL
     // --- EasyGLTextureBackend ---
 
     EasyGLTextureBackend::EasyGLTextureBackend(const ImageData& data, ::easygl::ResourceRegistry* registry)
-        : image_data_(data)
-        , registry_(registry)
+        : registry_(registry)
     {
         width = data.width;
         height = data.height;
@@ -132,9 +131,17 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLTextureBackend::recreate_gl_resource()
     {
         texture.create();
-        texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
-                             image_data_.width, image_data_.height,
-                             image_data_.pixels.data());
+        if (pixels_ && !pixels_->empty())
+        {
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                                 width, height, pixels_->data());
+        }
+        else
+        {
+            const std::vector<uint8_t> blank(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4, 0);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                                 width, height, blank.data());
+        }
     }
 
     void EasyGLTextureBackend::BindGL() const
@@ -142,9 +149,15 @@ namespace CNA::Internal::Backends::EasyGL
         texture.bind(::easygl::TextureTarget::Texture2D);
     }
 
+    void EasyGLTextureBackend::ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels)
+    {
+        pixels_ = std::move(pixels);
+    }
+
     void EasyGLTextureBackend::UpdatePixels(const uint8_t* rgba, int /*stride*/)
     {
-        image_data_.pixels.assign(rgba, rgba + static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4);
+        // pixels_ (shared with Texture2D::cpuPixels_) is already updated by the caller
+        // before this method is invoked — no need to update it here.
         texture.bind(::easygl::TextureTarget::Texture2D);
         texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, rgba);
     }

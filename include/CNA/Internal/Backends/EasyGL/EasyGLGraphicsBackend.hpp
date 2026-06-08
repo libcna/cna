@@ -29,9 +29,10 @@ namespace CNA::Internal::Backends::EasyGL
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
+        void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override;
 
     private:
-        ImageData image_data_;
+        std::shared_ptr<std::vector<uint8_t>> pixels_;
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
