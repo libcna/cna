@@ -130,9 +130,9 @@ All major content-pipeline gaps are closed (SpriteFont, Model, Texture2D, Sound,
 The remaining functional gaps are either low-priority stubs (`AudioEngine`, `MediaLibrary`) or
 require major new work (Vulkan textured 3D pipeline) which is explicitly deferred in section 9.
 
-The most impactful next actionable work is **test coverage of remaining XNA APIs** — specifically
-`Ray`, `Plane`, `Curve`, and `GameTime` — and resolving the pre-existing GamePad axis scaling
-failure in `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes`.
+The most impactful next actionable work is **resolving the pre-existing GamePad axis scaling failure**
+in `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes`, and further expanding test coverage
+(e.g. `BoundingFrustum`, `Storage`, `Audio` unit tests).
 
 ---
 
@@ -353,6 +353,20 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
   CreateRotationZ (0→identity, π/2→cos/sin layout), operators (+, scalar *, ==, !=),
   direction properties (Right, Up from identity).
 - All 90 tests pass. Both backends build clean.
+
+### Task 44 — Unit tests for `Ray`, `Plane`, `Curve`, `CurveKey`, `CurveKeyCollection` ✅ DONE
+- Added `tests/Microsoft/Xna/Framework/RayTests.cpp` — 17 tests: constructors, Equals/operators,
+  Intersects(BoundingBox) (hit, miss, origin-inside, out-ref), Intersects(BoundingSphere) (hit, miss,
+  origin-inside, out-ref), Intersects(Plane) (hit, parallel-miss, out-ref), ToString.
+- Added `tests/Microsoft/Xna/Framework/PlaneTests.cpp` — 24 tests: all 4 constructors (Normal+D, Vector4,
+  floats, 3 points), Dot/DotCoordinate/DotNormal (value + out-ref overloads), Normalize (in-place, static,
+  out-ref), Intersects(BoundingBox) (Front/Back/Intersecting), Intersects(BoundingSphere) (all 3 results),
+  Equals/operators, Transform by identity Matrix and Quaternion, ToString.
+- Added `tests/Microsoft/Xna/Framework/CurveTests.cpp` — 27 tests: CurveKey constructors/setters/Clone/
+  operators/CompareTo; CurveKeyCollection Add/Count/ordering/Contains/Remove/Clear/Clone; Curve IsConstant
+  (0/1/2 keys), Evaluate (empty→0, single key, exact positions, midpoint flat tangents, pre/post Constant
+  loop), Clone independence, loop type getters/setters, ComputeTangents (Flat/Linear/Smooth), out-of-range throw.
+- 68 new tests, all pass. Full suite: 373 pass / 1 pre-existing GamePad failure. Both backends build clean.
 
 ### Task 39 — Unit tests for `Color`, `Rectangle`, `Vector2` ✅ DONE
 - Added `tests/Microsoft/Xna/Framework/ColorTests.cpp` — 26 tests covering: constructors (byte/int/float),
