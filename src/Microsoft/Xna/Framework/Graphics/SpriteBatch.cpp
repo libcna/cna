@@ -221,6 +221,62 @@ namespace Microsoft::Xna::Framework::Graphics
     // DrawString overloads
     // -----------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------
+    // Draw stubs — XNA 4.0 overloads not yet fully implemented
+    // -----------------------------------------------------------------------
+
+    void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
+    {
+        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+        (void)texture; (void)position; (void)color;
+    }
+
+    void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
+                           std::optional<Rectangle> sourceRectangle, Color color)
+    {
+        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+        (void)texture; (void)position; (void)sourceRectangle; (void)color;
+    }
+
+    void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
+                           std::optional<Rectangle> sourceRectangle, Color color,
+                           float rotation, Vector2 origin, float scale,
+                           SpriteEffects effects, float layerDepth)
+    {
+        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+        (void)texture; (void)position; (void)sourceRectangle; (void)color;
+        (void)rotation; (void)origin; (void)scale; (void)effects; (void)layerDepth;
+    }
+
+    void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
+                           std::optional<Rectangle> sourceRectangle, Color color,
+                           float rotation, Vector2 origin, Vector2 scale,
+                           SpriteEffects effects, float layerDepth)
+    {
+        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+        (void)texture; (void)position; (void)sourceRectangle; (void)color;
+        (void)rotation; (void)origin; (void)scale; (void)effects; (void)layerDepth;
+    }
+
+    void SpriteBatch::Draw(const Texture2D& texture,
+                           const Rectangle& destinationRectangle, Color color)
+    {
+        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+        (void)texture; (void)destinationRectangle; (void)color;
+    }
+
+    void SpriteBatch::Draw(const Texture2D& texture,
+                           const Rectangle& destinationRectangle,
+                           std::optional<Rectangle> sourceRectangle, Color color)
+    {
+        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+        (void)texture; (void)destinationRectangle; (void)sourceRectangle; (void)color;
+    }
+
+    // -----------------------------------------------------------------------
+    // DrawString overloads
+    // -----------------------------------------------------------------------
+
     void SpriteBatch::DrawString(const SpriteFont& spriteFont,
                                  const std::string& text,
                                  Vector2 position,
@@ -321,5 +377,36 @@ namespace Microsoft::Xna::Framework::Graphics
 
             curOffset.X += cKern.Y + cKern.Z;
         }
+    }
+
+    // CNA_STUB: DrawString(StringBuilder, ...) overloads — XNA 4.0 API surface.
+    void SpriteBatch::DrawString(const SpriteFont& spriteFont,
+                                 const System::Text::StringBuilder& text,
+                                 Vector2 position, Color color)
+    {
+        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+        (void)spriteFont; (void)text; (void)position; (void)color;
+    }
+
+    void SpriteBatch::DrawString(const SpriteFont& spriteFont,
+                                 const System::Text::StringBuilder& text,
+                                 Vector2 position, Color color,
+                                 float rotation, Vector2 origin, float scale,
+                                 SpriteEffects effects, float layerDepth)
+    {
+        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+        (void)spriteFont; (void)text; (void)position; (void)color;
+        (void)rotation; (void)origin; (void)scale; (void)effects; (void)layerDepth;
+    }
+
+    void SpriteBatch::DrawString(const SpriteFont& spriteFont,
+                                 const System::Text::StringBuilder& text,
+                                 Vector2 position, Color color,
+                                 float rotation, Vector2 origin, Vector2 scale,
+                                 SpriteEffects effects, float layerDepth)
+    {
+        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+        (void)spriteFont; (void)text; (void)position; (void)color;
+        (void)rotation; (void)origin; (void)scale; (void)effects; (void)layerDepth;
     }
 }

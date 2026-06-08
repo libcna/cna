@@ -10,6 +10,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     {
         Byte4() : packedValue_(0) {}
         Byte4(float x, float y, float z, float w) : packedValue_(Pack(x, y, z, w)) {}
+        Byte4(Vector4 vector) : packedValue_(Pack(vector.X, vector.Y, vector.Z, vector.W)) {}
         explicit Byte4(uint32_t packed) : packedValue_(packed) {}
 
         [[nodiscard]] uint32_t getPackedValueProperty() const override { return packedValue_; }

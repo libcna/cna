@@ -10,6 +10,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     {
         Rgba1010102() : packedValue_(0) {}
         Rgba1010102(float r, float g, float b, float a) : packedValue_(Pack(r, g, b, a)) {}
+        Rgba1010102(Vector4 vector) : packedValue_(Pack(vector.X, vector.Y, vector.Z, vector.W)) {}
 
         [[nodiscard]] uint32_t getPackedValueProperty() const override { return packedValue_; }
         void setPackedValueProperty(uint32_t v) override { packedValue_ = v; }

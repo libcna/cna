@@ -11,6 +11,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     {
         NormalizedByte2() : packedValue_(0) {}
         NormalizedByte2(float x, float y) : packedValue_(Pack(x, y)) {}
+        NormalizedByte2(Vector2 vector) : packedValue_(Pack(vector.X, vector.Y)) {}
 
         [[nodiscard]] uint16_t getPackedValueProperty() const override { return packedValue_; }
         void setPackedValueProperty(uint16_t v) override { packedValue_ = v; }

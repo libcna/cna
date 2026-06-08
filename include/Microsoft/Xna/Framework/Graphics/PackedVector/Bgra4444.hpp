@@ -10,6 +10,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     {
         Bgra4444() : packedValue_(0) {}
         Bgra4444(float r, float g, float b, float a) : packedValue_(Pack(r, g, b, a)) {}
+        Bgra4444(Vector4 vector) : packedValue_(Pack(vector.X, vector.Y, vector.Z, vector.W)) {}
 
         [[nodiscard]] uint16_t getPackedValueProperty() const override { return packedValue_; }
         void setPackedValueProperty(uint16_t v) override { packedValue_ = v; }

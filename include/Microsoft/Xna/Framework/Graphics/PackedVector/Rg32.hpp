@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <algorithm>
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
 
@@ -10,6 +11,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     {
         Rg32() : packedValue_(0) {}
         Rg32(float r, float g) : packedValue_(Pack(r, g)) {}
+        Rg32(Vector2 vector) : packedValue_(Pack(vector.X, vector.Y)) {}
 
         [[nodiscard]] uint32_t getPackedValueProperty() const override { return packedValue_; }
         void setPackedValueProperty(uint32_t v) override { packedValue_ = v; }

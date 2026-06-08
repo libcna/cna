@@ -11,6 +11,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     {
         HalfVector2() : packedValue_(0) {}
         HalfVector2(float x, float y) : packedValue_(Pack(x, y)) {}
+        HalfVector2(Vector2 vector) : packedValue_(Pack(vector.X, vector.Y)) {}
 
         [[nodiscard]] uint32_t getPackedValueProperty() const override { return packedValue_; }
         void setPackedValueProperty(uint32_t v) override { packedValue_ = v; }

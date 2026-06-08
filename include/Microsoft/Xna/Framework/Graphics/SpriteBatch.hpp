@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -13,6 +14,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+
+#include "System/Text/StringBuilder.hpp"
 
 struct SDL_Renderer;
 
@@ -145,6 +148,24 @@ namespace Microsoft::Xna::Framework::Graphics
                   SpriteEffects effect,
                   float layerDepth);
 
+        // CNA_STUB: XNA 4.0 Draw overloads — declarations present, bodies not yet implemented.
+        void Draw(const Texture2D& texture, Vector2 position, Color color);
+        void Draw(const Texture2D& texture, Vector2 position,
+                  std::optional<Rectangle> sourceRectangle, Color color);
+        void Draw(const Texture2D& texture, Vector2 position,
+                  std::optional<Rectangle> sourceRectangle, Color color,
+                  float rotation, Vector2 origin, float scale,
+                  SpriteEffects effects, float layerDepth);
+        void Draw(const Texture2D& texture, Vector2 position,
+                  std::optional<Rectangle> sourceRectangle, Color color,
+                  float rotation, Vector2 origin, Vector2 scale,
+                  SpriteEffects effects, float layerDepth);
+        void Draw(const Texture2D& texture,
+                  const Rectangle& destinationRectangle, Color color);
+        void Draw(const Texture2D& texture,
+                  const Rectangle& destinationRectangle,
+                  std::optional<Rectangle> sourceRectangle, Color color);
+
         /**
          * @brief Draws a string of text using the given font.
          *
@@ -172,6 +193,31 @@ namespace Microsoft::Xna::Framework::Graphics
         /// Draws text with rotation, origin, non-uniform scale, flipping and layer depth.
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
+                        Vector2 position,
+                        Color color,
+                        float rotation,
+                        Vector2 origin,
+                        Vector2 scale,
+                        SpriteEffects effects,
+                        float layerDepth);
+
+        // CNA_STUB: XNA 4.0 DrawString(SpriteFont, StringBuilder, ...) overloads.
+        // StringBuilder variants are equivalent to string variants at runtime.
+        void DrawString(const SpriteFont& spriteFont,
+                        const System::Text::StringBuilder& text,
+                        Vector2 position,
+                        Color color);
+        void DrawString(const SpriteFont& spriteFont,
+                        const System::Text::StringBuilder& text,
+                        Vector2 position,
+                        Color color,
+                        float rotation,
+                        Vector2 origin,
+                        float scale,
+                        SpriteEffects effects,
+                        float layerDepth);
+        void DrawString(const SpriteFont& spriteFont,
+                        const System::Text::StringBuilder& text,
                         Vector2 position,
                         Color color,
                         float rotation,

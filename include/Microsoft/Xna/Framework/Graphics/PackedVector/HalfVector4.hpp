@@ -10,6 +10,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     {
         HalfVector4() : packedValue_(0) {}
         HalfVector4(float x, float y, float z, float w) : packedValue_(Pack(x, y, z, w)) {}
+        HalfVector4(Vector4 vector) : packedValue_(Pack(vector.X, vector.Y, vector.Z, vector.W)) {}
 
         [[nodiscard]] uint64_t getPackedValueProperty() const override { return packedValue_; }
         void setPackedValueProperty(uint64_t v) override { packedValue_ = v; }
