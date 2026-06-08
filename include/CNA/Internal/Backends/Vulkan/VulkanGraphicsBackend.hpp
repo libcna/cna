@@ -212,6 +212,7 @@ namespace CNA::Internal::Backends::Vulkan
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int)       override {}
@@ -350,7 +351,8 @@ namespace CNA::Internal::Backends::Vulkan
         int virtualHeight_ = 0;
 
         // --- Frame state ---
-        uint32_t currentFrame_ = 0;
+        uint32_t currentFrame_            = 0;
+        uint32_t lastPresentedImageIndex_ = 0;
         float    clearR_ = 0.f, clearG_ = 0.f, clearB_ = 0.f, clearA_ = 1.f;
         bool     initialized_       = false;
         VulkanRenderTargetBackend* currentRT_ = nullptr;

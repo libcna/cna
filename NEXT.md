@@ -78,12 +78,12 @@ and hardening existing systems.
 |------|--------|
 | `ContentManager::Load<SpriteFont>` | ✅ Done — `SpriteFontTypeReader` via `.font.json`. |
 | `ContentManager::Load<Model>` | ✅ Done — `ModelTypeReader` via `.model.json` + binary vertex/index files. |
-| `GetBackBufferData` on Vulkan | Throws — staging-buffer readback not wired. |
+| `GetBackBufferData` on Vulkan | ✅ Done — staging buffer + BGRA→RGBA. |
 | `DrawInstancedPrimitives` | ✅ Done — EasyGL uses `glDrawElementsInstanced`; others throw. |
 | `FillMode::WireFrame` | Silently ignored — OpenGL ES 3.0 has no `glPolygonMode`. |
 | `Media::MediaLibrary` | Fully stubbed — all methods throw `runtime_error`. |
 | `Audio::AudioEngine` | Mostly stubbed. |
-| Vulkan `GetBackBufferData` | Throws. |
+| Vulkan `GetBackBufferData` | ✅ Done — staging buffer readback + BGRA→RGBA conversion. |
 
 ---
 
@@ -309,13 +309,14 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 - `EasyGLGraphicsBackend::DrawInstancedPrimitivesEx` override uses `device.draw_elements_instanced` (OpenGL ES 3.0, already in easygl).
 - Both backends build clean.
 
-### Task 37 — `GraphicsDevice::GetBackBufferData` on Vulkan (staging buffer)
-- **Goal:** Screenshot API works on Vulkan backend.
-- **Approach:** After `Present()`, blit swapchain image to a host-visible staging buffer,
-  pipeline barrier, map, copy to caller, unmap.
-- **Files:** `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`,
-  `include/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp`.
-- **Verify:** `./cmake-build-vulkan/cna_demo_2d` + add a screenshot call; check the PNG is correct.
+### Task 37 — `GraphicsDevice::GetBackBufferData` on Vulkan (staging buffer) ✅ DONE
+- `VulkanGraphicsBackend::ReadBackbuffer(x, y, w, h, pixels)` override added.
+- Approach: `vkDeviceWaitIdle` → create host-coherent staging VkBuffer →
+  one-time cmd: PRESENT_SRC_KHR → TRANSFER_SRC_OPTIMAL barrier,
+  `vkCmdCopyImageToBuffer`, TRANSFER_SRC_OPTIMAL → PRESENT_SRC_KHR barrier →
+  `EndOneTimeCommands` → map → copy with BGRA→RGBA channel swap if needed → unmap → destroy buffer.
+- `lastPresentedImageIndex_` stored in `Present()` so `ReadBackbuffer` knows which swapchain image to read.
+- Both backends build clean.
 
 ---
 

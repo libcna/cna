@@ -1957,7 +1957,99 @@ namespace CNA::Internal::Backends::Vulkan
         else if (result != VK_SUCCESS)
             throw std::runtime_error("vkQueuePresentKHR failed");
 
+        lastPresentedImageIndex_ = imageIndex;
         currentFrame_ = (currentFrame_ + 1) % MaxFramesInFlight;
+    }
+
+    void VulkanGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+    {
+        if (!initialized_ || swapchainImages_.empty()) return;
+
+        // Wait for all GPU work to finish so the swapchain image is safe to read.
+        vkDeviceWaitIdle(device_);
+
+        const VkDeviceSize bufSize = static_cast<VkDeviceSize>(w) * h * 4;
+        VkBuffer      stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        CreateBuffer(bufSize,
+                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     stagingBuf, stagingMem);
+
+        VkImage srcImage = swapchainImages_[lastPresentedImageIndex_];
+
+        // One-time command buffer: PRESENT_SRC_KHR → TRANSFER_SRC → copy → PRESENT_SRC_KHR
+        VkCommandBuffer cb = BeginOneTimeCommands();
+
+        auto barrier = [&](VkImage img,
+                           VkImageLayout oldLayout, VkImageLayout newLayout,
+                           VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                           VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
+        {
+            VkImageMemoryBarrier b{};
+            b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            b.oldLayout           = oldLayout;
+            b.newLayout           = newLayout;
+            b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.image               = img;
+            b.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+            b.srcAccessMask       = srcAccess;
+            b.dstAccessMask       = dstAccess;
+            vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
+        };
+
+        // Transition swapchain image to TRANSFER_SRC_OPTIMAL.
+        barrier(srcImage,
+                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_ACCESS_MEMORY_READ_BIT,
+                VK_ACCESS_TRANSFER_READ_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        VkBufferImageCopy region{};
+        region.bufferOffset      = 0;
+        region.bufferRowLength   = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource  = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+        region.imageOffset       = { x, y, 0 };
+        region.imageExtent       = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        vkCmdCopyImageToBuffer(cb, srcImage,
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               stagingBuf, 1, &region);
+
+        // Transition swapchain image back to PRESENT_SRC_KHR.
+        barrier(srcImage,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                VK_ACCESS_TRANSFER_READ_BIT,
+                VK_ACCESS_MEMORY_READ_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        EndOneTimeCommands(cb);
+
+        // Map and copy — also handle BGRA → RGBA channel swap.
+        void* mapped = nullptr;
+        vkMapMemory(device_, stagingMem, 0, bufSize, 0, &mapped);
+        const auto* src = static_cast<const uint8_t*>(mapped);
+        const bool isBGRA = (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
+                             swapchainFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
+        if (isBGRA) {
+            for (int i = 0; i < w * h; ++i) {
+                pixels[i * 4 + 0] = src[i * 4 + 2]; // R ← B
+                pixels[i * 4 + 1] = src[i * 4 + 1]; // G ← G
+                pixels[i * 4 + 2] = src[i * 4 + 0]; // B ← R
+                pixels[i * 4 + 3] = src[i * 4 + 3]; // A ← A
+            }
+        } else {
+            std::memcpy(pixels, src, static_cast<std::size_t>(bufSize));
+        }
+        vkUnmapMemory(device_, stagingMem);
+
+        vkDestroyBuffer(device_, stagingBuf, nullptr);
+        vkFreeMemory(device_, stagingMem, nullptr);
     }
 
     void VulkanGraphicsBackend::GetViewportSize(int& width, int& height)
