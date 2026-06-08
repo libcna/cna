@@ -304,6 +304,22 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 - `lastPresentedImageIndex_` stored in `Present()` so `ReadBackbuffer` knows which swapchain image to read.
 - Both backends build clean.
 
+### Task 40 — Unit tests for `Vector3`, `Vector4`, `Matrix` ✅ DONE
+- Added `tests/Microsoft/Xna/Framework/Vector3Tests.cpp` — 38 tests: static constants (Zero/One/UnitX–Z,
+  Up/Down/Right/Left/Forward/Backward), constructors, Length/LengthSquared, Normalize, Cross product
+  (X×Y=Z, anticommutativity, parallel→zero), Dot (orthogonal, parallel, symmetry), Distance,
+  Add/Subtract/Multiply/Divide, Lerp, Min/Max, all operators (+=, -=, unary -, *, /, ==, !=), Reflect.
+- Added `tests/Microsoft/Xna/Framework/Vector4Tests.cpp` — 29 tests: static constants, constructors
+  (4-component, scalar, Vector2+zw, Vector3+w), Length, Normalize, Dot (7 axes, product value),
+  Distance, Add/Subtract/Multiply, Lerp, Min/Max, Clamp, operators.
+- Added `tests/Microsoft/Xna/Framework/MatrixTests.cpp` — 23 tests: Identity diagonal/off-diagonal,
+  default ctor zeros, Determinant (identity=1, scale=product), CreateTranslation row-4 layout,
+  getTranslationProperty round-trip, CreateScale (uniform/non-uniform), Multiply (by identity,
+  two translations accumulate), Invert (identity→identity, M×M⁻¹≈I), Transpose (swap),
+  CreateRotationZ (0→identity, π/2→cos/sin layout), operators (+, scalar *, ==, !=),
+  direction properties (Right, Up from identity).
+- All 90 tests pass. Both backends build clean.
+
 ### Task 39 — Unit tests for `Color`, `Rectangle`, `Vector2` ✅ DONE
 - Added `tests/Microsoft/Xna/Framework/ColorTests.cpp` — 26 tests covering: constructors (byte/int/float),
   static named colors (White/Black/Red/Transparent/CornflowerBlue), packed AABBGGRR layout,
