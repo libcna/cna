@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/Game.hpp"
 
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
@@ -85,6 +87,12 @@ namespace Microsoft::Xna::Framework
     }
 
     const System::TimeSpan Game::MaxElapsedTime = System::TimeSpan::FromMilliseconds(500.0);
+
+    const std::string& Game::GetTypeName() const
+    {
+        static const std::string typeName = "Microsoft.Xna.Framework.Game";
+        return typeName;
+    }
 
     Game::Game()
         : Components_(),

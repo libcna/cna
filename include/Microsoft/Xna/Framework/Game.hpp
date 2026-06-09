@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <array>
@@ -5,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollectionEventArgs.hpp"
@@ -135,6 +138,8 @@ namespace Microsoft::Xna::Framework
         /// Disposes the game.
         void Dispose() override;
 
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+
         /// Compatibility helper used by existing CNA examples.
         [[nodiscard]] NOXNA double getTargetFPSProperty() const;
 
@@ -145,7 +150,7 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] NOXNA static double fpsToMillisecondsPerFrame(SharpRuntime::intcs framesPerSecond);
 
         /// Internal loop flag matching the FNA/XNA Game implementation shape.
-        bool RunApplication;
+        NOXNA bool RunApplication;
 
     protected:
         /// Called before the game loop starts.
