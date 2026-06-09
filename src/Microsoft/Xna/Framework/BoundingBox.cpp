@@ -516,6 +516,8 @@ namespace Microsoft::Xna::Framework
 
     std::size_t BoundingBox::GetHashCode() const
     {
+        // FNA: Min.GetHashCode() + Max.GetHashCode().
+        // C++ uses a platform-native size_t with boost-style combining instead of int addition.
         auto combine = [](std::size_t seed, float value)
         {
             const std::size_t hashed = std::hash<float>{}(value);

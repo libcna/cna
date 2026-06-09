@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/ContainmentType.hpp"
@@ -438,4 +440,74 @@ TEST(BoundingBoxTest, ToStringContainsMinAndMax)
     std::string s = box.ToString();
     EXPECT_NE(s.find("Min"), std::string::npos);
     EXPECT_NE(s.find("Max"), std::string::npos);
+}
+
+TEST(BoundingBoxTest, ToStringMatchesFNAFormat)
+{
+    // FNA: "{{Min:{X:1 Y:2 Z:3} Max:{X:4 Y:5 Z:6}}}"
+    BoundingBox box(Vector3(1.0f, 2.0f, 3.0f), Vector3(4.0f, 5.0f, 6.0f));
+    std::string s = box.ToString();
+    EXPECT_EQ(s.substr(0, 7), "{{Min:{");
+    EXPECT_NE(s.find("Max:{"), std::string::npos);
+    EXPECT_EQ(s.back(), '}');
+}
+
+// --- CornerCount ---
+
+TEST(BoundingBoxTest, CornerCountIsEight)
+{
+    EXPECT_EQ(BoundingBox::CornerCount, 8);
+}
+
+// --- CreateFromPoints edge cases ---
+
+TEST(BoundingBoxTest, CreateFromPointsEmptyThrows)
+{
+    std::vector<Vector3> empty;
+    EXPECT_THROW(BoundingBox::CreateFromPoints(empty), System::ArgumentException);
+}
+
+TEST(BoundingBoxTest, CreateFromPointsSinglePoint)
+{
+    std::vector<Vector3> pts = { Vector3(3.0f, 3.0f, 3.0f) };
+    BoundingBox box = BoundingBox::CreateFromPoints(pts);
+    EXPECT_FLOAT_EQ(box.Min.X, 3.0f);
+    EXPECT_FLOAT_EQ(box.Max.X, 3.0f);
+}
+
+// --- GetCorners(vector) too-small throws ---
+
+TEST(BoundingBoxTest, GetCornersTooSmallVectorThrows)
+{
+    BoundingBox box(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 1.0f, 1.0f));
+    std::vector<Vector3> corners(4);
+    EXPECT_THROW(box.GetCorners(corners), System::ArgumentOutOfRangeException);
+}
+
+// --- Intersects(BoundingFrustum) ---
+
+TEST(BoundingBoxTest, IntersectsFrustumOverlapping)
+{
+    // Large box centred at origin overlaps any frustum looking through the origin.
+    BoundingBox box(Vector3(-100.0f, -100.0f, -100.0f), Vector3(100.0f, 100.0f, 100.0f));
+    Matrix view = Matrix::CreateLookAt(
+        Vector3(0.0f, 0.0f, 5.0f),
+        Vector3(0.0f, 0.0f, 0.0f),
+        Vector3(0.0f, 1.0f, 0.0f));
+    Matrix proj = Matrix::CreatePerspectiveFieldOfView(0.785398f, 1.0f, 1.0f, 10.0f);
+    BoundingFrustum frustum(view * proj);
+    EXPECT_TRUE(box.Intersects(frustum));
+}
+
+TEST(BoundingBoxTest, IntersectsFrustumDisjoint)
+{
+    // Tiny box far behind the frustum.
+    BoundingBox box(Vector3(0.0f, 0.0f, 1000.0f), Vector3(1.0f, 1.0f, 1001.0f));
+    Matrix view = Matrix::CreateLookAt(
+        Vector3(0.0f, 0.0f, 5.0f),
+        Vector3(0.0f, 0.0f, 0.0f),
+        Vector3(0.0f, 1.0f, 0.0f));
+    Matrix proj = Matrix::CreatePerspectiveFieldOfView(0.785398f, 1.0f, 1.0f, 10.0f);
+    BoundingFrustum frustum(view * proj);
+    EXPECT_FALSE(box.Intersects(frustum));
 }
