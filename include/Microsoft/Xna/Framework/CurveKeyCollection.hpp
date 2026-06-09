@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -10,9 +13,10 @@ namespace Microsoft::Xna::Framework
     class CurveKeyCollection
     {
     public:
-        using container_type = std::vector<CurveKey>;
-        using iterator = container_type::iterator;
-        using const_iterator = container_type::const_iterator;
+        // NOXNA — C++ iterator support (replaces IEnumerable<CurveKey>)
+        NOXNA using container_type = std::vector<CurveKey>;
+        NOXNA using iterator = container_type::iterator;
+        NOXNA using const_iterator = container_type::const_iterator;
 
         /// Gets the number of keys in the collection.
         [[nodiscard]] int getCountProperty() const;
@@ -58,12 +62,13 @@ namespace Microsoft::Xna::Framework
         /// Removes the key at the specified index.
         void RemoveAt(int index);
 
-        [[nodiscard]] iterator begin();
-        [[nodiscard]] iterator end();
-        [[nodiscard]] const_iterator begin() const;
-        [[nodiscard]] const_iterator end() const;
-        [[nodiscard]] const_iterator cbegin() const;
-        [[nodiscard]] const_iterator cend() const;
+        // NOXNA — C++ range-for / STL algorithm support
+        NOXNA [[nodiscard]] iterator begin();
+        NOXNA [[nodiscard]] iterator end();
+        NOXNA [[nodiscard]] const_iterator begin() const;
+        NOXNA [[nodiscard]] const_iterator end() const;
+        NOXNA [[nodiscard]] const_iterator cbegin() const;
+        NOXNA [[nodiscard]] const_iterator cend() const;
 
     private:
         bool isReadOnly;
