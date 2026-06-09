@@ -1,14 +1,13 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 namespace Microsoft::Xna::Framework
 {
-    /// Defines whether a curve segment is interpolated or stepped.
+    /// Defines the continuity of keys on a Curve.
     enum class CurveContinuity
     {
-        /// Values between this key and the next key are interpolated.
-        Smooth,
-
-        /// Values between this key and the next key stay on the current key until the next key is reached.
-        Step
+        Smooth = 0, ///< Interpolation can be used between this key and the next.
+        Step   = 1  ///< Interpolation cannot be used; position returns this key's value.
     };
 }
