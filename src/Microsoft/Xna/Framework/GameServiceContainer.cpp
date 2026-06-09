@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/GameServiceContainer.hpp"
 
 namespace Microsoft::Xna::Framework
