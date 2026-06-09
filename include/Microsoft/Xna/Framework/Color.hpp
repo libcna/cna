@@ -446,8 +446,10 @@ namespace Microsoft::Xna::Framework
          * @param r Red component value from 0 to 255.
          * @param g Green component value from 0 to 255.
          * @param b Blue component value from 0 to 255.
+         *
+         * @note NOXNA — not part of the XNA 4.0 API. CNA convenience overload.
          */
-        Color(bytecs r, bytecs g, bytecs b);
+        NOXNA Color(bytecs r, bytecs g, bytecs b);
 
         /**
          * @brief Constructs an RGBA color from 8-bit byte components including alpha.
@@ -456,8 +458,10 @@ namespace Microsoft::Xna::Framework
          * @param g Green component value from 0 to 255.
          * @param b Blue component value from 0 to 255.
          * @param alpha Alpha component value from 0 to 255.
+         *
+         * @note NOXNA — not part of the XNA 4.0 API. CNA convenience overload.
          */
-        Color(bytecs r, bytecs g, bytecs b, bytecs alpha);
+        NOXNA Color(bytecs r, bytecs g, bytecs b, bytecs alpha);
 
         // ------------------------------------------------------------------
         // Public instance methods
@@ -602,6 +606,8 @@ namespace Microsoft::Xna::Framework
      * @param scale Multiplicator.
      * @param value Source Color.
      * @return Multiplication result.
+     *
+     * @note NOXNA — commutative form not present in XNA 4.0 / FNA. CNA convenience overload.
      */
-    [[nodiscard]] Color operator*(float scale, const Color& value);
+    NOXNA [[nodiscard]] Color operator*(float scale, const Color& value);
 } // namespace Microsoft::Xna::Framework

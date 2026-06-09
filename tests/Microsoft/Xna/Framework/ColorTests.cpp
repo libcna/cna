@@ -222,3 +222,152 @@ TEST(ColorTest, FromNonPremultipliedScalesRgbByAlpha)
     EXPECT_EQ(c.getBProperty(), 0);
     EXPECT_EQ(c.getAProperty(), 128);
 }
+
+TEST(ColorTest, FromNonPremultipliedVector4ScalesRgbByAlpha)
+{
+    // alpha=0.5 → each channel * 0.5
+    Color c = Color::FromNonPremultiplied(Vector4(1.0f, 0.0f, 0.0f, 0.5f));
+    EXPECT_EQ(c.getAProperty(), 127);
+    EXPECT_GT(c.getRProperty(), 0);
+    EXPECT_EQ(c.getGProperty(), 0);
+    EXPECT_EQ(c.getBProperty(), 0);
+}
+
+// --- Vector4 / Vector3 constructors ---
+
+TEST(ColorTest, Vector4ConstructorSetsAllComponents)
+{
+    Color c(Vector4(1.0f, 0.5f, 0.0f, 1.0f));
+    EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getBProperty(), 0);
+    EXPECT_EQ(c.getAProperty(), 255);
+}
+
+TEST(ColorTest, Vector3ConstructorSetsRgbAndOpaqueAlpha)
+{
+    Color c(Vector3(0.0f, 1.0f, 0.5f));
+    EXPECT_EQ(c.getRProperty(), 0);
+    EXPECT_EQ(c.getGProperty(), 255);
+    EXPECT_EQ(c.getAProperty(), 255);
+}
+
+// --- Component setters ---
+
+TEST(ColorTest, SetRPropertyUpdatesOnlyRedChannel)
+{
+    Color c = Color::White;
+    c.setRProperty(static_cast<uint8_t>(10));
+    EXPECT_EQ(c.getRProperty(), 10);
+    EXPECT_EQ(c.getGProperty(), 255);
+    EXPECT_EQ(c.getBProperty(), 255);
+    EXPECT_EQ(c.getAProperty(), 255);
+}
+
+TEST(ColorTest, SetGPropertyUpdatesOnlyGreenChannel)
+{
+    Color c = Color::White;
+    c.setGProperty(static_cast<uint8_t>(20));
+    EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 20);
+    EXPECT_EQ(c.getBProperty(), 255);
+    EXPECT_EQ(c.getAProperty(), 255);
+}
+
+TEST(ColorTest, SetBPropertyUpdatesOnlyBlueChannel)
+{
+    Color c = Color::White;
+    c.setBProperty(static_cast<uint8_t>(30));
+    EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 255);
+    EXPECT_EQ(c.getBProperty(), 30);
+    EXPECT_EQ(c.getAProperty(), 255);
+}
+
+TEST(ColorTest, SetAPropertyUpdatesOnlyAlphaChannel)
+{
+    Color c = Color::White;
+    c.setAProperty(static_cast<uint8_t>(0));
+    EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 255);
+    EXPECT_EQ(c.getBProperty(), 255);
+    EXPECT_EQ(c.getAProperty(), 0);
+}
+
+// --- PackedValue setter ---
+
+TEST(ColorTest, SetPackedValuePropertyRoundTrips)
+{
+    Color c(0, 0, 0, 0);
+    c.setPackedValueProperty(0xFF0000FFu);
+    EXPECT_EQ(c.getPackedValueProperty(), 0xFF0000FFu);
+    EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 0);
+    EXPECT_EQ(c.getBProperty(), 0);
+    EXPECT_EQ(c.getAProperty(), 255);
+}
+
+// --- Equals (direct call) ---
+
+TEST(ColorTest, EqualsReturnsTrueForSameComponents)
+{
+    Color a(50, 100, 150, 200);
+    Color b(50, 100, 150, 200);
+    EXPECT_TRUE(a.Equals(b));
+}
+
+TEST(ColorTest, EqualsReturnsFalseForDifferentComponents)
+{
+    Color a(50, 100, 150, 200);
+    Color b(50, 100, 150, 201);
+    EXPECT_FALSE(a.Equals(b));
+}
+
+// --- GetHashCode ---
+
+TEST(ColorTest, GetHashCodeEqualForEqualColors)
+{
+    Color a(10, 20, 30, 40);
+    Color b(10, 20, 30, 40);
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(ColorTest, GetHashCodeDifferentForDifferentColors)
+{
+    Color a(10, 20, 30, 40);
+    Color b(10, 20, 30, 41);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
+// --- ToString ---
+
+TEST(ColorTest, ToStringHasExpectedFormat)
+{
+    Color c(255, 0, 128, 255);
+    std::string s = c.ToString();
+    EXPECT_NE(s.find("R:255"), std::string::npos);
+    EXPECT_NE(s.find("G:0"),   std::string::npos);
+    EXPECT_NE(s.find("B:128"), std::string::npos);
+    EXPECT_NE(s.find("A:255"), std::string::npos);
+}
+
+// --- PackFromVector4 (IPackedVector) ---
+
+TEST(ColorTest, PackFromVector4SetsComponents)
+{
+    Color c(0, 0, 0, 0);
+    c.PackFromVector4(Vector4(1.0f, 0.0f, 0.0f, 1.0f));
+    EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 0);
+    EXPECT_EQ(c.getBProperty(), 0);
+    EXPECT_EQ(c.getAProperty(), 255);
+}
+
+// --- operator* commutative (NOXNA) ---
+
+TEST(ColorTest, MultiplyOperatorCommutativeMatchesNormal)
+{
+    Color a = Color::White * 0.5f;
+    Color b = 0.5f * Color::White;
+    EXPECT_EQ(a.getRProperty(), b.getRProperty());
+    EXPECT_EQ(a.getAProperty(), b.getAProperty());
+}
