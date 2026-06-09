@@ -58,7 +58,7 @@ TEST(GamePadInputTest, GetStateReflectsMappedButtonsAndAxes)
     CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
                                                             CNA::Internal::Input::GamePadAxis::RightTrigger, 1.0f);
 
-    const auto state = GamePad::GetState(PlayerIndex::One);
+    const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None);
 
     EXPECT_TRUE(state.getIsConnectedProperty());
     EXPECT_EQ(state.getButtonsProperty().getAProperty(), ButtonState::Pressed);

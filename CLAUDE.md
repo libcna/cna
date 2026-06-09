@@ -299,6 +299,23 @@ const Color Color::CornflowerBlue{…};
 
 ---
 
+## Tests
+
+Every public XNA 4.0 API method, constructor, operator, and constant **must** have at least one unit test.
+Tests live under `tests/` mirroring the namespace path, using Google Test.
+
+Rules:
+- Every method overload must be covered by at least one test case.
+- Out-ref overloads (e.g. `void Contains(const BoundingBox&, ContainmentType&)`) must be tested separately from the value-returning variants.
+- Static factory methods (`CreateFromPoints`, `CreateMerged`, `CreateFromSphere`, …) each need their own test.
+- Equality operators (`==`, `!=`) and `Equals()` must be tested for both equal and unequal cases.
+- `ToString()` must be tested for expected format.
+- `GetHashCode()` must be tested for consistency (equal objects produce equal hashes).
+- Tests that exist before a new implementation lands are insufficient — when adding a new method, add or extend tests in the same task.
+- Do not mark an API as "complete" in AUDIT.md unless its tests are also complete.
+
+---
+
 ## Build and Report
 
 After making changes:

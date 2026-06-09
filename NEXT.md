@@ -130,8 +130,7 @@ All major content-pipeline gaps are closed (SpriteFont, Model, Texture2D, Sound,
 The remaining functional gaps are either low-priority stubs (`AudioEngine`, `MediaLibrary`) or
 require major new work (Vulkan textured 3D pipeline) which is explicitly deferred in section 9.
 
-The most impactful next actionable work is **resolving the pre-existing GamePad axis scaling failure**
-in `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes`, and further expanding test coverage
+All 374 tests pass. The next actionable work is expanding test coverage
 (e.g. `BoundingFrustum`, `Storage`, `Audio` unit tests).
 
 ---
@@ -147,6 +146,7 @@ in `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes`, and further expandin
 | `ContentManager::Load<SpriteFont>` | ✅ Fixed (Task 34) — `SpriteFontTypeReader` via `.font.json`. |
 | `ContentManager::Load<Model>` | ✅ Fixed (Task 35) — `ModelTypeReader` via `.model.json`. |
 | `DrawUserIndexedPrimitives` 32-bit | ✅ Fixed (Task 38) — all 4 typed `uint32_t*` overloads. |
+| `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes` | ✅ Fixed — test now uses `GamePadDeadZone::None`; it tests InputManager plumbing, not dead-zone math. All 374 tests pass. |
 | `FillMode::WireFrame` | Silently ignored on GLES3 — no `glPolygonMode` in OpenGL ES 3.0. **known limitation** |
 | `AudioEngine` stub | All `AudioEngine` methods throw or are no-ops. Low priority. |
 | `Media::MediaLibrary` | Fully stubbed. Do not implement (see section 9). |
