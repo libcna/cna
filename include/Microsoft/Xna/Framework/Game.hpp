@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
@@ -235,6 +236,9 @@ namespace Microsoft::Xna::Framework
         System::TimeSpan worstCaseSleepPrecision_;
 
         static const System::TimeSpan MaxElapsedTime;
+
+        std::unordered_map<IUpdateable*, System::EventHandler<System::EventArgs>::Token> updateOrderChangedTokens_;
+        std::unordered_map<IDrawable*, System::EventHandler<System::EventArgs>::Token> drawOrderChangedTokens_;
 
         void AssertNotDisposed() const;
         void DoInitialize();

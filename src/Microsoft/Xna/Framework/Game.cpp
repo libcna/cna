@@ -654,6 +654,15 @@ namespace Microsoft::Xna::Framework
         {
             CategorizeComponent(Components_[i]);
         }
+
+        Components_.ComponentAdded += [this](System::Object* s, const GameComponentCollectionEventArgs& a)
+        {
+            OnComponentAdded(s, a);
+        };
+        Components_.ComponentRemoved += [this](System::Object* s, const GameComponentCollectionEventArgs& a)
+        {
+            OnComponentRemoved(s, a);
+        };
     }
 
     void Game::CategorizeComponent(IGameComponent* component)
@@ -666,11 +675,17 @@ namespace Microsoft::Xna::Framework
         if (auto* updateable = dynamic_cast<IUpdateable*>(component))
         {
             SortUpdateable(updateable);
+            updateOrderChangedTokens_[updateable] = updateable->getUpdateOrderChangedEvent().Add(
+                [this](System::Object* s, const System::EventArgs& a) { OnUpdateOrderChanged(s, a); }
+            );
         }
 
         if (auto* drawable = dynamic_cast<IDrawable*>(component))
         {
             SortDrawable(drawable);
+            drawOrderChangedTokens_[drawable] = drawable->getDrawOrderChangedEvent().Add(
+                [this](System::Object* s, const System::EventArgs& a) { OnDrawOrderChanged(s, a); }
+            );
         }
     }
 
@@ -855,11 +870,23 @@ namespace Microsoft::Xna::Framework
         if (auto* updateable = dynamic_cast<IUpdateable*>(component))
         {
             RemoveUpdateable(updateableComponents_, updateable);
+            const auto it = updateOrderChangedTokens_.find(updateable);
+            if (it != updateOrderChangedTokens_.end())
+            {
+                updateable->getUpdateOrderChangedEvent().Remove(it->second);
+                updateOrderChangedTokens_.erase(it);
+            }
         }
 
         if (auto* drawable = dynamic_cast<IDrawable*>(component))
         {
             RemoveDrawable(drawableComponents_, drawable);
+            const auto it = drawOrderChangedTokens_.find(drawable);
+            if (it != drawOrderChangedTokens_.end())
+            {
+                drawable->getDrawOrderChangedEvent().Remove(it->second);
+                drawOrderChangedTokens_.erase(it);
+            }
         }
     }
 
