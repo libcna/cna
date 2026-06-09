@@ -4,6 +4,12 @@
 
 namespace Microsoft::Xna::Framework
 {
+    const std::string& DrawableGameComponent::GetTypeName() const
+    {
+        static const std::string typeName = "Microsoft.Xna.Framework.DrawableGameComponent";
+        return typeName;
+    }
+
     DrawableGameComponent::DrawableGameComponent(Game& game)
         : GameComponent(game),
           initialized_(false),

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameComponent.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -47,6 +48,8 @@ namespace Microsoft::Xna::Framework
 
         /// Raised when visibility changes.
         System::EventHandler<System::EventArgs> VisibleChanged;
+
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /// Initializes the component and loads content when a graphics device is available.
         void Initialize() override;
