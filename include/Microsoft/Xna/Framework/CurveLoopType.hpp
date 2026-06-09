@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 namespace Microsoft::Xna::Framework
@@ -5,19 +7,10 @@ namespace Microsoft::Xna::Framework
     /// Defines how a Curve is evaluated before its first key or after its last key.
     enum class CurveLoopType
     {
-        /// Use the first key before the curve and the last key after the curve.
-        Constant,
-
-        /// Wrap positions from the end of the curve back to the beginning.
-        Cycle,
-
-        /// Wrap positions and offset the value by the first/last key value difference for each cycle.
-        CycleOffset,
-
-        /// Alternate evaluation direction between the start and end of the curve.
-        Oscillate,
-
-        /// Extrapolate linearly outside the curve range.
-        Linear
+        Constant    = 0, ///< Clamp to the value of the first or last key.
+        Cycle       = 1, ///< Wrap positions from the end back to the beginning.
+        CycleOffset = 2, ///< Wrap and offset the value by the first/last key difference per cycle.
+        Oscillate   = 3, ///< Alternate evaluation direction between start and end.
+        Linear      = 4  ///< Extrapolate linearly beyond the curve range.
     };
 }
