@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/IGameComponent.hpp"
 #include "Microsoft/Xna/Framework/IUpdateable.hpp"
@@ -70,7 +73,7 @@ namespace Microsoft::Xna::Framework
         /// Compares this component with another component using update order.
         [[nodiscard]] SharpRuntime::intcs CompareTo(const GameComponent& other) const;
 
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
         /// Called after update order changes.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/GameComponent.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
