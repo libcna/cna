@@ -68,7 +68,7 @@ namespace Microsoft::Xna::Framework
         (void)gameTime;
     }
 
-    SharpRuntime::intcs GameComponent::CompareTo(const GameComponent& other) const
+    int GameComponent::CompareTo(const GameComponent& other) const
     {
         return other.getUpdateOrderProperty() - getUpdateOrderProperty();
     }

@@ -11,6 +11,7 @@
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
+#include "System/IComparable.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 
@@ -22,6 +23,7 @@ namespace Microsoft::Xna::Framework
     class GameComponent : public System::Object,
                           public IGameComponent,
                           public IUpdateable,
+                          public System::IComparable<GameComponent>,
                           public System::IDisposable
     {
     public:
@@ -71,7 +73,7 @@ namespace Microsoft::Xna::Framework
         void Update(GameTime& gameTime) override;
 
         /// Compares this component with another component using update order.
-        [[nodiscard]] SharpRuntime::intcs CompareTo(const GameComponent& other) const;
+        [[nodiscard]] int CompareTo(const GameComponent& other) const override;
 
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
