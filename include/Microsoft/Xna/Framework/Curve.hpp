@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include "Microsoft/Xna/Framework/CurveKeyCollection.hpp"

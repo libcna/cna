@@ -282,3 +282,127 @@ TEST(CurveTest, ComputeTangentOutOfRangeThrows)
     c.getKeysProperty().Add(CurveKey(0.0f, 0.0f));
     EXPECT_THROW(c.ComputeTangent(5, CurveTangent::Flat), std::out_of_range);
 }
+
+TEST(CurveTest, ComputeTangentSingleArgDelegates)
+{
+    // ComputeTangent(index, type) must use the same type for both in and out.
+    // With a symmetric linear curve (equal step left and right), both tangents are equal.
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f));
+    c.getKeysProperty().Add(CurveKey(2.0f, 2.0f));
+    c.ComputeTangent(1, CurveTangent::Linear);
+    // tangentIn = v[1]-v[0] = 1, tangentOut = v[2]-v[1] = 1
+    EXPECT_NEAR(c.getKeysProperty()[1].getTangentInProperty(), 1.0f, kEps);
+    EXPECT_NEAR(c.getKeysProperty()[1].getTangentOutProperty(), 1.0f, kEps);
+}
+
+TEST(CurveTest, ComputeTangentTwoArgSetsInOutIndependently)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 2.0f));
+    c.getKeysProperty().Add(CurveKey(3.0f, 4.0f));
+    c.ComputeTangent(1, CurveTangent::Flat, CurveTangent::Linear);
+    EXPECT_NEAR(c.getKeysProperty()[1].getTangentInProperty(), 0.0f, kEps);
+    EXPECT_NEAR(c.getKeysProperty()[1].getTangentOutProperty(), 2.0f, kEps);
+}
+
+TEST(CurveTest, ComputeTangentsTwoArgOverload)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f));
+    c.getKeysProperty().Add(CurveKey(2.0f, 3.0f));
+    c.ComputeTangents(CurveTangent::Flat, CurveTangent::Linear);
+    // All TangentIn = 0 (Flat); TangentOut for middle key = value[2]-value[1] = 2
+    EXPECT_NEAR(c.getKeysProperty()[1].getTangentInProperty(), 0.0f, kEps);
+    EXPECT_NEAR(c.getKeysProperty()[1].getTangentOutProperty(), 2.0f, kEps);
+}
+
+// -----------------------------------------------------------------------
+// Curve — loop types beyond Constant
+// -----------------------------------------------------------------------
+
+TEST(CurveTest, EvaluatePreLoopLinear)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(1.0f, 3.0f, 2.0f, 2.0f)); // tangentIn = 2
+    c.getKeysProperty().Add(CurveKey(2.0f, 5.0f));
+    c.setPreLoopProperty(CurveLoopType::Linear);
+    // Linear: first.Value - first.TangentIn * (first.Position - position)
+    // = 3 - 2*(1 - 0) = 1
+    EXPECT_NEAR(c.Evaluate(0.0f), 1.0f, kEps);
+}
+
+TEST(CurveTest, EvaluatePostLoopLinear)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 2.0f)); // first.TangentOut = 2
+    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f));
+    c.setPostLoopProperty(CurveLoopType::Linear);
+    // Linear: last.Value + first.TangentOut * (position - last.Position)
+    // = 1 + 2*(2 - 1) = 3
+    EXPECT_NEAR(c.Evaluate(2.0f), 3.0f, kEps);
+}
+
+TEST(CurveTest, EvaluatePreLoopCycleRepeats)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 0.0f));
+    c.setPreLoopProperty(CurveLoopType::Cycle);
+    // position = -0.5 wraps to 0.5 within [0,1] → same as Evaluate(0.5)
+    float direct = c.Evaluate(0.5f);
+    float cycled = c.Evaluate(-0.5f);
+    EXPECT_NEAR(cycled, direct, kEps);
+}
+
+TEST(CurveTest, EvaluatePostLoopCycleRepeats)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 0.0f));
+    c.setPostLoopProperty(CurveLoopType::Cycle);
+    float direct = c.Evaluate(0.5f);
+    float cycled = c.Evaluate(1.5f);
+    EXPECT_NEAR(cycled, direct, kEps);
+}
+
+TEST(CurveTest, EvaluatePostLoopCycleOffsetShifts)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 2.0f, 0.0f, 0.0f));
+    c.setPostLoopProperty(CurveLoopType::CycleOffset);
+    // At position=1.5 (cycle=1): virtualPos=0.5, GetCurvePosition(0.5) + 1*(2-0)
+    float direct = c.Evaluate(0.5f);
+    float offset = c.Evaluate(1.5f);
+    EXPECT_NEAR(offset, direct + 2.0f, kEps);
+}
+
+TEST(CurveTest, EvaluatePostLoopOscillateReversesOnOddCycle)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 0.0f));
+    c.setPostLoopProperty(CurveLoopType::Oscillate);
+    // position=1.25 → cycle=1 (odd) → should mirror: Evaluate(0.75)
+    float mirrored = c.Evaluate(0.75f);
+    float oscillated = c.Evaluate(1.25f);
+    EXPECT_NEAR(oscillated, mirrored, kEps);
+}
+
+// -----------------------------------------------------------------------
+// Curve — Step continuity
+// -----------------------------------------------------------------------
+
+TEST(CurveTest, StepContinuityReturnsCurrentSegmentValue)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f, CurveContinuity::Step));
+    c.getKeysProperty().Add(CurveKey(1.0f, 5.0f, 0.0f, 0.0f, CurveContinuity::Step));
+    c.getKeysProperty().Add(CurveKey(2.0f, 9.0f));
+    // At position=0.5 (between key 0 and key 1, Step continuity) → prev value
+    EXPECT_NEAR(c.Evaluate(0.5f), 0.0f, kEps);
+}
