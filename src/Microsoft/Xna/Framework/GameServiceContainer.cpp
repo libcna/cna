@@ -23,6 +23,8 @@ namespace Microsoft::Xna::Framework
             throw std::invalid_argument("A service with this type is already registered.");
         }
 
+        // FNA also checks type.IsAssignableFrom(provider.GetType()) here.
+        // C++ has no runtime reflection to verify assignability across void*, so the check is omitted.
         services_.emplace(key, provider);
     }
 
