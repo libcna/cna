@@ -64,6 +64,47 @@ TEST(CurveKeyTest, CompareTo)
     EXPECT_EQ(a.CompareTo(a), 0);
 }
 
+TEST(CurveKeyTest, ConstructorFiveArgs)
+{
+    CurveKey k(3.0f, 7.0f, 1.0f, -1.0f, CurveContinuity::Step);
+    EXPECT_FLOAT_EQ(k.getPositionProperty(), 3.0f);
+    EXPECT_FLOAT_EQ(k.getValueProperty(), 7.0f);
+    EXPECT_FLOAT_EQ(k.getTangentInProperty(), 1.0f);
+    EXPECT_FLOAT_EQ(k.getTangentOutProperty(), -1.0f);
+    EXPECT_EQ(k.getContinuityProperty(), CurveContinuity::Step);
+}
+
+TEST(CurveKeyTest, ContinuitySetterRoundTrips)
+{
+    CurveKey k(0.0f, 0.0f);
+    EXPECT_EQ(k.getContinuityProperty(), CurveContinuity::Smooth);
+    k.setContinuityProperty(CurveContinuity::Step);
+    EXPECT_EQ(k.getContinuityProperty(), CurveContinuity::Step);
+}
+
+TEST(CurveKeyTest, EqualsDirectCall)
+{
+    CurveKey a(1.0f, 2.0f, 0.5f, -0.5f, CurveContinuity::Smooth);
+    CurveKey b(1.0f, 2.0f, 0.5f, -0.5f, CurveContinuity::Smooth);
+    CurveKey c(1.0f, 2.0f, 0.5f, -0.5f, CurveContinuity::Step);
+    EXPECT_TRUE(a.Equals(b));
+    EXPECT_FALSE(a.Equals(c));
+}
+
+TEST(CurveKeyTest, GetHashCodeEqualForEqualKeys)
+{
+    CurveKey a(1.0f, 2.0f, 0.5f, -0.5f);
+    CurveKey b(1.0f, 2.0f, 0.5f, -0.5f);
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(CurveKeyTest, GetHashCodeDifferentForDifferentKeys)
+{
+    CurveKey a(1.0f, 2.0f);
+    CurveKey b(1.0f, 3.0f);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
 // -----------------------------------------------------------------------
 // CurveKeyCollection
 // -----------------------------------------------------------------------
