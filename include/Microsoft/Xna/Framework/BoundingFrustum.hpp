@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <array>
@@ -11,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/PlaneIntersectionType.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/IEquatable.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -19,7 +22,7 @@ namespace Microsoft::Xna::Framework
     struct Ray;
 
     /// Defines a viewing frustum for intersection tests.
-    class BoundingFrustum
+    class BoundingFrustum : public System::IEquatable<BoundingFrustum>
     {
     public:
         /// Number of corner points in the frustum.
@@ -73,7 +76,7 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] std::optional<float> Intersects(Ray ray) const;
         void Intersects(const Ray& ray, std::optional<float>& result) const;
 
-        [[nodiscard]] bool Equals(const BoundingFrustum& other) const;
+        [[nodiscard]] bool Equals(const BoundingFrustum& other) const override;
         [[nodiscard]] std::size_t GetHashCode() const;
         [[nodiscard]] std::string ToString() const;
 

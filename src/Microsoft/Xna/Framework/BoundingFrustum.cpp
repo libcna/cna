@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
 
 #include <cmath>
@@ -349,6 +351,8 @@ namespace Microsoft::Xna::Framework
 
     std::size_t BoundingFrustum::GetHashCode() const
     {
+        // FNA: this.matrix.GetHashCode() returning int.
+        // C++ uses platform-native std::size_t to match Matrix::GetHashCode().
         return matrix.GetHashCode();
     }
 
@@ -367,6 +371,8 @@ namespace Microsoft::Xna::Framework
 
     bool operator==(const BoundingFrustum& a, const BoundingFrustum& b)
     {
+        // FNA checks (object.Equals(a, null)) for null operands because BoundingFrustum is a C# class.
+        // C++ references cannot be null, so the null guards are omitted.
         return a.getMatrixProperty() == b.getMatrixProperty();
     }
 

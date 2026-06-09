@@ -117,6 +117,13 @@ TEST(BoundingFrustumTest, GetCornersFillVectorMatchesReturnedVector)
     }
 }
 
+TEST(BoundingFrustumTest, GetCornersTooSmallVectorThrows)
+{
+    BoundingFrustum f = MakeTestFrustum();
+    std::vector<Vector3> tooSmall(BoundingFrustum::CornerCount - 1);
+    EXPECT_THROW(f.GetCorners(tooSmall), std::out_of_range);
+}
+
 // --- Contains (Vector3) ---
 
 TEST(BoundingFrustumTest, ContainsPointInsideFrustum)
@@ -410,6 +417,7 @@ TEST(BoundingFrustumTest, HashCodeEqualForEqualFrustums)
     BoundingFrustum b = MakeTestFrustum();
     EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
 }
+
 
 // --- ToString ---
 
