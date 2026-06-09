@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 
 #include <algorithm>
@@ -10,6 +12,11 @@ namespace Microsoft::Xna::Framework
     GameComponentCollection::size_type GameComponentCollection::getCountProperty() const
     {
         return items_.size();
+    }
+
+    bool GameComponentCollection::Contains(IGameComponent* item) const
+    {
+        return IndexOf(item) != -1;
     }
 
     void GameComponentCollection::Add(IGameComponent* item)

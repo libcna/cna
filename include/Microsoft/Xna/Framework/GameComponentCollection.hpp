@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <cstddef>
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollectionEventArgs.hpp"
 #include "Microsoft/Xna/Framework/IGameComponent.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -16,9 +19,10 @@ namespace Microsoft::Xna::Framework
     class GameComponentCollection final : public System::Object
     {
     public:
-        using size_type = std::vector<IGameComponent*>::size_type;
-        using iterator = std::vector<IGameComponent*>::iterator;
-        using const_iterator = std::vector<IGameComponent*>::const_iterator;
+        // NOXNA — C++ iterator support (replaces IEnumerable<IGameComponent>)
+        NOXNA using size_type = std::vector<IGameComponent*>::size_type;
+        NOXNA using iterator = std::vector<IGameComponent*>::iterator;
+        NOXNA using const_iterator = std::vector<IGameComponent*>::const_iterator;
 
         /// Raised after a component is added.
         System::EventHandler<GameComponentCollectionEventArgs> ComponentAdded;
@@ -31,6 +35,9 @@ namespace Microsoft::Xna::Framework
 
         /// Gets the number of components in the collection.
         [[nodiscard]] size_type getCountProperty() const;
+
+        /// Returns whether the collection contains the specified component.
+        [[nodiscard]] bool Contains(IGameComponent* item) const;
 
         /// Adds a component to the end of the collection.
         void Add(IGameComponent* item);
@@ -53,12 +60,12 @@ namespace Microsoft::Xna::Framework
         /// Gets the component at the specified index.
         [[nodiscard]] IGameComponent* operator[](size_type index) const;
 
-        [[nodiscard]] iterator begin();
-        [[nodiscard]] iterator end();
-        [[nodiscard]] const_iterator begin() const;
-        [[nodiscard]] const_iterator end() const;
+        NOXNA [[nodiscard]] iterator begin();
+        NOXNA [[nodiscard]] iterator end();
+        NOXNA [[nodiscard]] const_iterator begin() const;
+        NOXNA [[nodiscard]] const_iterator end() const;
 
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         std::vector<IGameComponent*> items_;
