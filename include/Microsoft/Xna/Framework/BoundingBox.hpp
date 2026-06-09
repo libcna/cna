@@ -3,6 +3,7 @@
 #pragma once
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/IEquatable.hpp"
 
 #include <cstddef>
 #include <optional>
@@ -20,7 +21,7 @@ namespace Microsoft::Xna::Framework
     struct Ray;
 
     /// Axis-aligned box represented by its minimum and maximum 3D corners.
-    struct BoundingBox
+    struct BoundingBox : public System::IEquatable<BoundingBox>
     {
     public:
         /// The corner with the smallest X, Y and Z coordinates.
@@ -91,7 +92,7 @@ namespace Microsoft::Xna::Framework
         void Intersects(const Plane& plane, PlaneIntersectionType& result) const;
 
         /// Compares this box with another box.
-        [[nodiscard]] bool Equals(const BoundingBox& other) const;
+        [[nodiscard]] bool Equals(const BoundingBox& other) const override;
 
         /// Creates the smallest box that contains all supplied points.
         [[nodiscard]] static BoundingBox CreateFromPoints(const std::vector<Vector3>& points);
