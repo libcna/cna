@@ -13,9 +13,11 @@ namespace Microsoft::Xna::Framework
     class CurveKeyCollection
     {
     public:
-        // NOXNA — C++ iterator support (replaces IEnumerable<CurveKey>)
+        /// Underlying container type.
         NOXNA using container_type = std::vector<CurveKey>;
+        /// Mutable iterator over the key sequence.
         NOXNA using iterator = container_type::iterator;
+        /// Immutable iterator over the key sequence.
         NOXNA using const_iterator = container_type::const_iterator;
 
         /// Gets the number of keys in the collection.
@@ -62,12 +64,17 @@ namespace Microsoft::Xna::Framework
         /// Removes the key at the specified index.
         void RemoveAt(int index);
 
-        // NOXNA — C++ range-for / STL algorithm support
+        /// Returns an iterator to the first key.
         NOXNA [[nodiscard]] iterator begin();
+        /// Returns an iterator past the last key.
         NOXNA [[nodiscard]] iterator end();
+        /// Returns a const iterator to the first key.
         NOXNA [[nodiscard]] const_iterator begin() const;
+        /// Returns a const iterator past the last key.
         NOXNA [[nodiscard]] const_iterator end() const;
+        /// Returns a const iterator to the first key.
         NOXNA [[nodiscard]] const_iterator cbegin() const;
+        /// Returns a const iterator past the last key.
         NOXNA [[nodiscard]] const_iterator cend() const;
 
     private:

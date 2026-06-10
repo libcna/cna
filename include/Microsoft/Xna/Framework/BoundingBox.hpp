@@ -40,12 +40,15 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] std::string getDebugDisplayStringProperty() const;
 
     public:
+        /// Creates a box with zero-initialised Min and Max corners.
         BoundingBox() = default;
 
         /// Creates a box from minimum and maximum corners.
         BoundingBox(const Vector3& min, const Vector3& max);
 
+        /// Output-ref variant; writes the containment result to @p result.
         void Contains(const BoundingBox& box, ContainmentType& result) const;
+        /// Output-ref variant; writes the containment result to @p result.
         void Contains(const BoundingSphere& sphere, ContainmentType& result) const;
 
         /// Checks whether the point is inside this box.
@@ -60,6 +63,7 @@ namespace Microsoft::Xna::Framework
         /// Checks whether a sphere is outside, inside, or overlapping this box.
         [[nodiscard]] ContainmentType Contains(const BoundingSphere& sphere) const;
 
+        /// Output-ref variant; writes the containment result to @p result.
         void Contains(const Vector3& point, ContainmentType& result) const;
 
         /// Returns the eight corners of this box in XNA corner order.
@@ -71,11 +75,13 @@ namespace Microsoft::Xna::Framework
         /// Returns the distance along a ray where it hits this box, or an empty optional if there is no hit.
         [[nodiscard]] std::optional<float> Intersects(const Ray& ray) const;
 
+        /// Output-ref variant; writes the intersection distance to @p result, or empty if no hit.
         void Intersects(const Ray& ray, std::optional<float>& result) const;
 
         /// Checks whether this box intersects a frustum.
         [[nodiscard]] bool Intersects(const BoundingFrustum& frustum) const;
 
+        /// Output-ref variant; writes the sphere intersection result to @p result.
         void Intersects(const BoundingSphere& sphere, bool& result) const;
 
         /// Checks whether this box intersects another box.
@@ -84,11 +90,13 @@ namespace Microsoft::Xna::Framework
         /// Classifies this box against a plane.
         [[nodiscard]] PlaneIntersectionType Intersects(const Plane& plane) const;
 
+        /// Output-ref variant; writes the box intersection result to @p result.
         void Intersects(const BoundingBox& box, bool& result) const;
 
         /// Checks whether this box intersects a sphere.
         [[nodiscard]] bool Intersects(const BoundingSphere& sphere) const;
 
+        /// Output-ref variant; writes the plane intersection type to @p result.
         void Intersects(const Plane& plane, PlaneIntersectionType& result) const;
 
         /// Compares this box with another box.
@@ -100,18 +108,24 @@ namespace Microsoft::Xna::Framework
         /// Creates a box that tightly encloses a sphere.
         [[nodiscard]] static BoundingBox CreateFromSphere(const BoundingSphere& sphere);
 
+        /// Output-ref variant; writes the result box to @p result.
         static void CreateFromSphere(const BoundingSphere& sphere, BoundingBox& result);
 
         /// Creates the smallest box that contains both input boxes.
         [[nodiscard]] static BoundingBox CreateMerged(const BoundingBox& original, const BoundingBox& additional);
 
+        /// Output-ref variant; writes the merged box to @p result.
         static void CreateMerged(const BoundingBox& original, const BoundingBox& additional, BoundingBox& result);
 
+        /// Returns a hash code for this box.
         [[nodiscard]] std::size_t GetHashCode() const;
 
+        /// Returns a string representation of this box.
         [[nodiscard]] std::string ToString() const;
     };
 
+    /// Returns true when both boxes have equal Min and Max.
     bool operator==(const BoundingBox& a, const BoundingBox& b);
+    /// Returns true when either Min or Max differs between the boxes.
     bool operator!=(const BoundingBox& a, const BoundingBox& b);
 }

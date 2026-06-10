@@ -11,6 +11,10 @@ Use this checklist for every `.cs` file ported from FNA to CNA.
 - [ ] `// SPDX-License-Identifier: MS-PL` present in `.cpp`
 - [ ] `#include "CNA/CNAHelper.hpp"` present in `.hpp` if `NOXNA` is used anywhere
 
+### Doxygen documentation
+- [ ] Every public method, constructor, operator, property getter/setter, and constant in the `.hpp` has a `///` Doxygen comment
+- [ ] No public member is left undocumented
+
 ### API surface (compare line-by-line with FNA source)
 - [ ] All public fields / constants present
 - [ ] All public properties mapped to `getXProperty()` / `setXProperty()`

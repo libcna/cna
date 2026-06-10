@@ -240,6 +240,8 @@ If old game code breaks after the API is corrected, fix the game code separately
 
 ## Comments and Documentation
 
+- **Every public method, constructor, property getter/setter, operator, and constant in every `.hpp` file MUST have a Doxygen `///` comment.**
+- Use `///` single-line Doxygen style. Multi-line `/** … */` blocks are only acceptable when a `@param`/`@return` table genuinely adds value.
 - Copy the intent of public C# XML doc comments into `.hpp` Doxygen-style comments.
 - Do not copy comments word-for-word if rephrasing is clearer.
 - **Never** add comments like "taken from FNA", "copied from FNA", or "based on FNA source".
