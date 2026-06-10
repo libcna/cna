@@ -21,6 +21,7 @@ namespace Microsoft::Xna::Framework
 
     CurveKey& CurveKeyCollection::getItemProperty(int index)
     {
+        // FNA relies on List<T>'s implicit range check; C++ adds an explicit one that also covers negative indices.
         if (index < 0 || index >= getCountProperty())
         {
             throw std::out_of_range("CurveKeyCollection index is out of range");
@@ -39,6 +40,7 @@ namespace Microsoft::Xna::Framework
 
     void CurveKeyCollection::setItemProperty(int index, const CurveKey& value)
     {
+        // FNA only checks index >= Count; C++ also guards against negative index.
         if (index < 0 || index >= getCountProperty())
         {
             throw std::out_of_range("CurveKeyCollection index is out of range");
@@ -113,6 +115,8 @@ namespace Microsoft::Xna::Framework
 
     void CurveKeyCollection::CopyTo(std::vector<CurveKey>& array, int arrayIndex) const
     {
+        // FNA throws ArgumentOutOfRangeException / ArgumentException via List<T>.CopyTo;
+        // C++ uses std::out_of_range for both cases.
         if (arrayIndex < 0)
         {
             throw std::out_of_range("arrayIndex is out of range");

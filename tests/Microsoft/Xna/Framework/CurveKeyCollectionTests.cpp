@@ -146,3 +146,50 @@ TEST(CurveKeyCollectionTest, CopyTo)
     EXPECT_FLOAT_EQ(dest[1].getValueProperty(), 10.0f);
     EXPECT_FLOAT_EQ(dest[2].getValueProperty(), 20.0f);
 }
+
+TEST(CurveKeyCollectionTest, CopyToNegativeIndexThrows)
+{
+    CurveKeyCollection col;
+    col.Add(CurveKey(1.0f, 1.0f));
+    std::vector<CurveKey> dest(2, CurveKey(0.0f, 0.0f));
+    EXPECT_THROW(col.CopyTo(dest, -1), std::out_of_range);
+}
+
+TEST(CurveKeyCollectionTest, CopyToArrayTooSmallThrows)
+{
+    CurveKeyCollection col;
+    col.Add(CurveKey(1.0f, 1.0f));
+    col.Add(CurveKey(2.0f, 2.0f));
+    std::vector<CurveKey> dest(1, CurveKey(0.0f, 0.0f));
+    EXPECT_THROW(col.CopyTo(dest, 0), std::out_of_range);
+}
+
+TEST(CurveKeyCollectionTest, GetItemPropertyOutOfRangeThrows)
+{
+    CurveKeyCollection col;
+    col.Add(CurveKey(1.0f, 1.0f));
+    EXPECT_THROW(col.getItemProperty(1), std::out_of_range);
+    EXPECT_THROW(col.getItemProperty(-1), std::out_of_range);
+}
+
+TEST(CurveKeyCollectionTest, CloneIsIndependent)
+{
+    CurveKeyCollection col;
+    col.Add(CurveKey(1.0f, 10.0f));
+    CurveKeyCollection c = col.Clone();
+    c.Clear();
+    EXPECT_EQ(col.getCountProperty(), 1);
+}
+
+TEST(CurveKeyCollectionTest, RangeForIteration)
+{
+    CurveKeyCollection col;
+    col.Add(CurveKey(1.0f, 10.0f));
+    col.Add(CurveKey(2.0f, 20.0f));
+    float sum = 0.0f;
+    for (const CurveKey& k : col)
+    {
+        sum += k.getValueProperty();
+    }
+    EXPECT_FLOAT_EQ(sum, 30.0f);
+}
