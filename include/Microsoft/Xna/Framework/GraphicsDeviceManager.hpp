@@ -1,6 +1,11 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <string>
+#include <vector>
+
+#include "CNA/CNAHelper.hpp"
 
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/GameServiceContainer.hpp"
@@ -26,12 +31,17 @@ namespace Microsoft::Xna::Framework
     class Game;
 
     /// CNA-specific presentation/scaling policy for the rendering backend.
-    enum class PresentationMode
+    NOXNA enum class PresentationMode
     {
+        /// Scale with black bars to preserve aspect ratio.
         Letterbox = 0,
+        /// Scale with cropping to fill the screen.
         Overscan = 1,
+        /// Stretch to fill the screen ignoring aspect ratio.
         Stretch = 2,
+        /// Render at the native back-buffer size without scaling.
         NativeBackBuffer = 3,
+        /// Fix the back-buffer height and scale the width to the display aspect ratio.
         FixedHeightDynamicWidth = 4
     };
 
@@ -42,7 +52,9 @@ namespace Microsoft::Xna::Framework
                                   public IGraphicsDeviceManager
     {
     public:
+        /// Default back buffer width used when no explicit width is set.
         static constexpr SharpRuntime::intcs DefaultBackBufferWidth = 800;
+        /// Default back buffer height used when no explicit height is set.
         static constexpr SharpRuntime::intcs DefaultBackBufferHeight = 480;
 
         /// Raised when this manager is disposed.
@@ -63,12 +75,13 @@ namespace Microsoft::Xna::Framework
         /// Raised before device settings are applied, allowing callers to adjust them.
         System::EventHandler<PreparingDeviceSettingsEventArgs> PreparingDeviceSettings;
 
-        /// Creates an empty graphics device manager.
-        GraphicsDeviceManager();
+        /// Creates an empty graphics device manager with no associated Game.
+        NOXNA GraphicsDeviceManager();
 
         /// Creates a graphics device manager for the specified game.
         explicit GraphicsDeviceManager(Game* game);
 
+        /// Destructor; calls Dispose(false).
         ~GraphicsDeviceManager() override;
 
         /// Gets the requested graphics feature profile.
@@ -141,10 +154,10 @@ namespace Microsoft::Xna::Framework
         void setSupportedOrientationsProperty(DisplayOrientation value);
 
         /// Gets the CNA presentation/scaling policy.
-        [[nodiscard]] PresentationMode getPreferredPresentationModeProperty() const;
+        NOXNA [[nodiscard]] PresentationMode getPreferredPresentationModeProperty() const;
 
         /// Sets the CNA presentation/scaling policy.
-        void setPreferredPresentationModeProperty(PresentationMode value);
+        NOXNA void setPreferredPresentationModeProperty(PresentationMode value);
 
         /// Applies pending graphics setting changes.
         void ApplyChanges();
@@ -164,7 +177,8 @@ namespace Microsoft::Xna::Framework
         /// Ends drawing and presents the frame.
         void EndDraw() override;
 
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        /// Returns the fully-qualified .NET type name of this class.
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
         /// Performs disposal. When disposing is true, managed-style resources are released.

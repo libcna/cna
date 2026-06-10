@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
 #include <SDL3/SDL.h>
@@ -385,12 +387,14 @@ namespace Microsoft::Xna::Framework
 
     bool GraphicsDeviceManager::CanResetDevice(const GraphicsDeviceInformation& newDeviceInfo)
     {
+        // FNA throws NotImplementedException; CNA returns true when a device exists.
         (void)newDeviceInfo;
         return graphicsDevice_ != nullptr;
     }
 
     GraphicsDeviceInformation GraphicsDeviceManager::FindBestDevice(bool anySuitableDevice)
     {
+        // FNA throws NotImplementedException; CNA returns a sensible default GDI.
         (void)anySuitableDevice;
 
         GraphicsDeviceInformation gdi;
@@ -402,6 +406,7 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::RankDevices(std::vector<GraphicsDeviceInformation>& foundDevices)
     {
+        // FNA throws NotImplementedException; CNA is a no-op (single SDL adapter, no ranking needed).
         (void)foundDevices;
     }
 
@@ -415,6 +420,7 @@ namespace Microsoft::Xna::Framework
             return;
         }
 
+        // FNA calls FNAPlatform.ScaleForWindow to apply HiDPI scaling here; CNA uses the raw client size.
         Rectangle size = window->getClientBoundsProperty();
         resizedBackBufferWidth_ = size.Width;
         resizedBackBufferHeight_ = size.Height;
@@ -470,6 +476,7 @@ namespace Microsoft::Xna::Framework
         }
         else if (pp.getMultiSampleCountProperty() == 0)
         {
+            // FNA queries FNA3D_GetMaxMultiSampleCount and caps at 8; CNA uses 8 directly (no FNA3D).
             pp.setMultiSampleCountProperty(8);
         }
 
@@ -486,8 +493,10 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::registerServices()
     {
-        // TODO: register IGraphicsDeviceManager and IGraphicsDeviceService once
-        // Game::getServicesProperty() is available in CNA.
+        // FNA calls game.Services.AddService(typeof(IGraphicsDeviceManager), this) and
+        // AddService(typeof(IGraphicsDeviceService), this). CNA omits this because
+        // Game::getGraphicsDeviceProperty() falls back to its own GraphicsDevice_ when
+        // no service is registered, so the game loop works without the service registry.
 
         // Wire window resize → viewport update.
         game_->getWindowProperty().ClientSizeChanged +=
