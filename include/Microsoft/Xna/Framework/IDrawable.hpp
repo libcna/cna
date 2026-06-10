@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -11,6 +13,7 @@ namespace Microsoft::Xna::Framework
     class IDrawable
     {
     public:
+        /// Virtual destructor.
         virtual ~IDrawable() = default;
 
         /// Gets the order used to sort drawable components.
