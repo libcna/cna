@@ -1,6 +1,4 @@
-//
-// Created by robertvokac on 5/28/25.
-//
+// SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 
@@ -49,23 +47,13 @@ namespace Microsoft::Xna::Framework
         TotalGameTime_ = value;
     }
 
-    void GameTime::setTotalGameTimeProperty(TimeSpan&& value)
-    {
-        TotalGameTime_ = std::move(value);
-    }
-
     void GameTime::setElapsedGameTimeProperty(const TimeSpan& value)
     {
         ElapsedGameTime_ = value;
-    }
-
-    void GameTime::setElapsedGameTimeProperty(TimeSpan&& value)
-    {
-        ElapsedGameTime_ = std::move(value);
     }
 
     void GameTime::setIsRunningSlowlyProperty(bool value)
     {
         IsRunningSlowly_ = value;
     }
-} // namespace Microsoft::Xna::Framework
+}
