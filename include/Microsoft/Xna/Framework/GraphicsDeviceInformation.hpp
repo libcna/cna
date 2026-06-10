@@ -1,5 +1,10 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
+#include <string>
+
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
@@ -11,7 +16,10 @@ namespace Microsoft::Xna::Framework
     class GraphicsDeviceInformation : public System::Object
     {
     public:
+        /// Creates a new instance with default adapter, Reach profile, and default presentation parameters.
         GraphicsDeviceInformation();
+
+        /// Destructor.
         ~GraphicsDeviceInformation() override = default;
 
         /// Gets the adapter on which the graphics device should be created.
@@ -38,7 +46,8 @@ namespace Microsoft::Xna::Framework
         /// Creates a copy of this graphics-device information object.
         [[nodiscard]] GraphicsDeviceInformation Clone() const;
 
-        [[nodiscard]] const SharpRuntime::String& GetTypeName() const override;
+        /// Returns the fully-qualified .NET type name of this class.
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         Graphics::GraphicsAdapter* adapter_;

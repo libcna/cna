@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/GraphicsDeviceInformation.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -53,9 +55,9 @@ namespace Microsoft::Xna::Framework
         return clone;
     }
 
-    const SharpRuntime::String& GraphicsDeviceInformation::GetTypeName() const
+    const std::string& GraphicsDeviceInformation::GetTypeName() const
     {
-        static const SharpRuntime::String typeName = "Microsoft.Xna.Framework.Graphics.GraphicsDeviceInformation";
+        static const std::string typeName = "Microsoft.Xna.Framework.GraphicsDeviceInformation";
         return typeName;
     }
 }
