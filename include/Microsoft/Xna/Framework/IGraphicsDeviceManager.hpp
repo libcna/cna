@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 namespace Microsoft::Xna::Framework
@@ -6,6 +8,7 @@ namespace Microsoft::Xna::Framework
     class IGraphicsDeviceManager
     {
     public:
+        /// Virtual destructor.
         virtual ~IGraphicsDeviceManager() = default;
 
         /// Prepares the device for drawing. Returns false when drawing should be skipped.
