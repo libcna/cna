@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 
 #include <SDL3/SDL.h>
@@ -183,9 +185,9 @@ namespace Microsoft::Xna::Framework
         EndScreenDeviceChange(screenDeviceName, bounds.Width, bounds.Height);
     }
 
-    const GameWindow::String& GameWindow::GetTypeName() const
+    const std::string& GameWindow::GetTypeName() const
     {
-        static const String typeName = "Microsoft.Xna.Framework.GameWindow";
+        static const std::string typeName = "Microsoft.Xna.Framework.GameWindow";
         return typeName;
     }
 

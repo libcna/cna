@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <cstdint>
+#include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -14,18 +18,21 @@ struct SDL_Window;
 namespace Microsoft::Xna::Framework
 {
     class Game;
-
-    /// Represents the game window and exposes its platform-backed window state.
     class GraphicsDeviceManager;
 
+    /// Represents the game window backed by an SDL window.
+    /// FNA defines GameWindow as abstract with per-platform subclasses; CNA collapses
+    /// that hierarchy into one concrete SDL-backed class.
     class GameWindow : public System::Object
     {
         friend class Game;
         friend class GraphicsDeviceManager;
 
     public:
-        using String = SharpRuntime::String;
-        using intcs = SharpRuntime::intcs;
+        /// String type alias for C++ compatibility.
+        NOXNA using String = SharpRuntime::String;
+        /// Integer type alias matching the C# int used in the XNA API.
+        NOXNA using intcs = SharpRuntime::intcs;
 
         /// Raised when the client area size changes.
         System::EventHandler<System::EventArgs> ClientSizeChanged;
@@ -40,8 +47,9 @@ namespace Microsoft::Xna::Framework
         GameWindow();
 
         /// Creates a window wrapper for an existing SDL window.
-        explicit GameWindow(SDL_Window* window);
+        NOXNA explicit GameWindow(SDL_Window* window);
 
+        /// Destructor.
         ~GameWindow() override = default;
 
         /// Gets whether the user may resize the window.
@@ -83,7 +91,8 @@ namespace Microsoft::Xna::Framework
         /// Ends a device change using the current client size.
         void EndScreenDeviceChange(const String& screenDeviceName);
 
-        [[nodiscard]] const String& GetTypeName() const override;
+        /// Returns the fully-qualified .NET type name of this class.
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
         /// Called when the window is activated.
