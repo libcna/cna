@@ -1,8 +1,12 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "CNA/CNAHelper.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -14,7 +18,7 @@ namespace Microsoft::Xna::Framework
         LaunchParameters();
 
         /// Creates launch parameters from an explicit argument list.
-        explicit LaunchParameters(const std::vector<std::string>& args);
+        NOXNA explicit LaunchParameters(const std::vector<std::string>& args);
 
         /// Returns true when the dictionary contains the specified key.
         [[nodiscard]] bool ContainsKey(const std::string& key) const;

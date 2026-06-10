@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/LaunchParameters.hpp"
 
 #include <algorithm>
@@ -31,6 +33,8 @@ namespace Microsoft::Xna::Framework
 
     void LaunchParameters::Add(const std::string& key, const std::string& value)
     {
+        // FNA's Dictionary<string,string>.Add throws on duplicate key; emplace silently ignores it.
+        // Parse always guards with ContainsKey first, so this deviation is safe in practice.
         emplace(key, value);
     }
 
@@ -109,6 +113,8 @@ namespace Microsoft::Xna::Framework
                 continue;
             }
 
+            // FNA: IndexOf(":", 1, arg.Length - 2) — searches [1, arg.Length-2] inclusive.
+            // find(':', 1) + the > check below is equivalent: ':' at the last position has no value.
             const std::size_t valueOffset = arg.find(':', 1);
             if (valueOffset == std::string::npos || valueOffset > arg.size() - 2)
             {
