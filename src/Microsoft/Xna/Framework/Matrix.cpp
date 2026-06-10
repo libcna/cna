@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
 #include <algorithm>
@@ -83,6 +85,9 @@ namespace Microsoft::Xna::Framework
             return Mul3(v, factor);
         }
 
+        // FNA delegates to MathHelper.WithinEpsilon which uses the computed MachineEpsilonFloat.
+        // 1.192092896e-07f is FLT_EPSILON; the values are typically identical but computed
+        // separately here to avoid a circular dependency from this anonymous namespace.
         bool WithinEpsilon(float a, float b)
         {
             return std::fabs(a - b) <= 1.192092896e-07f;
@@ -186,6 +191,8 @@ namespace Microsoft::Xna::Framework
         translation.Y = M42;
         translation.Z = M43;
 
+        // FNA uses Math.Sign() which returns 0 for negative zero; std::signbit returns true for
+        // negative zero, giving xs=-1 instead of xs=1. Edge case with no practical impact.
         const float xs = std::signbit(M11 * M12 * M13 * M14) ? -1.0f : 1.0f;
         const float ys = std::signbit(M21 * M22 * M23 * M24) ? -1.0f : 1.0f;
         const float zs = std::signbit(M31 * M32 * M33 * M34) ? -1.0f : 1.0f;
@@ -962,6 +969,16 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Invert(const Matrix& matrix, Matrix& result)
     {
+        /*
+         * Use Laplace expansion theorem to calculate the inverse of a 4x4 matrix.
+         *
+         * 1. Calculate the 2x2 determinants needed the 4x4 determinant based on
+         *    the 2x2 determinants.
+         * 3. Create the adjugate matrix, which satisfies: A * adj(A) = det(A) * I.
+         * 4. Divide adjugate matrix with the determinant to find the inverse.
+         */
+        // FNA casts each operand to double before multiplying to gain extra precision;
+        // CNA uses plain float arithmetic for simplicity (no observable difference in practice).
         const float num1 = matrix.M11;
         const float num2 = matrix.M12;
         const float num3 = matrix.M13;

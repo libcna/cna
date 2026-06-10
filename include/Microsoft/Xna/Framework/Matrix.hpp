@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <optional>
@@ -313,14 +315,23 @@ namespace Microsoft::Xna::Framework
         /// Transforms a matrix by a quaternion rotation in an output parameter.
         static void Transform(const Matrix& value, const Quaternion& rotation, Matrix& result);
 
+        /// Adds two matrices component-wise.
         friend Matrix operator+(Matrix matrix1, Matrix matrix2);
+        /// Divides the elements of one matrix by the elements of another.
         friend Matrix operator/(Matrix matrix1, Matrix matrix2);
+        /// Divides all elements of a matrix by a scalar.
         friend Matrix operator/(Matrix matrix, float divider);
+        /// Returns true when both matrices are equal without tolerance.
         friend bool operator==(Matrix matrix1, Matrix matrix2);
+        /// Returns true when any element differs between the two matrices.
         friend bool operator!=(Matrix matrix1, Matrix matrix2);
+        /// Multiplies two matrices using standard matrix multiplication.
         friend Matrix operator*(Matrix matrix1, Matrix matrix2);
+        /// Multiplies all matrix elements by a scalar.
         friend Matrix operator*(Matrix matrix, float scaleFactor);
+        /// Subtracts one matrix from another component-wise.
         friend Matrix operator-(Matrix matrix1, Matrix matrix2);
+        /// Negates all matrix elements.
         friend Matrix operator-(Matrix matrix);
 
         /// Returns this matrix in the transposed column-major form expected by OpenGL-style uniform uploads.
