@@ -70,7 +70,7 @@ namespace Microsoft::Xna::Framework
         if (initialized_)
         {
             UnloadContent();
-            initialized_ = false;
+            initialized_ = false; // FNA does not reset the flag; C++ resets it to allow safe re-Dispose.
         }
 
         GameComponent::Dispose(disposing);
