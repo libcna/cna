@@ -7,6 +7,7 @@
 #include <typeinfo>
 #include <unordered_map>
 
+#include "CNA/CNAHelper.hpp"
 #include "System/IServiceProvider.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -18,12 +19,17 @@ namespace Microsoft::Xna::Framework
         /// Creates an empty service container.
         GameServiceContainer();
 
+        /// Destructor.
         ~GameServiceContainer() override = default;
 
-        GameServiceContainer(const GameServiceContainer&) = delete;
-        GameServiceContainer& operator=(const GameServiceContainer&) = delete;
-        GameServiceContainer(GameServiceContainer&&) = default;
-        GameServiceContainer& operator=(GameServiceContainer&&) = default;
+        /// Copying is disabled; services are registered by pointer identity.
+        NOXNA GameServiceContainer(const GameServiceContainer&) = delete;
+        /// Copy assignment is disabled.
+        NOXNA GameServiceContainer& operator=(const GameServiceContainer&) = delete;
+        /// Move constructor.
+        NOXNA GameServiceContainer(GameServiceContainer&&) = default;
+        /// Move assignment operator.
+        NOXNA GameServiceContainer& operator=(GameServiceContainer&&) = default;
 
         /// Adds a service provider for the specified service type.
         template <typename TService>
