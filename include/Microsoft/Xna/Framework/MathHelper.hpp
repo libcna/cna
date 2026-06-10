@@ -1,16 +1,20 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework
 {
     using SharpRuntime::intcs;
 
-    /// Common mathematical constants and helper operations used by the framework.
+    /// Contains commonly used precalculated values and mathematical operations.
     class MathHelper final
     {
     public:
-        MathHelper() = delete;
+        /// Deleted; MathHelper is a static utility class.
+        NOXNA MathHelper() = delete;
 
         /// Mathematical constant e.
         static constexpr float E = 2.71828175f;
@@ -32,6 +36,9 @@ namespace Microsoft::Xna::Framework
 
         /// Pi multiplied by two.
         static constexpr float TwoPi = 6.28318548f;
+
+        // FNA marks the four members below as 'internal'; C++ has no assembly-scope visibility,
+        // so they are public here. Other framework types (e.g. Vector2, Matrix) rely on them.
 
         /// Float epsilon used by framework-level approximate comparisons.
         static const float MachineEpsilonFloat;

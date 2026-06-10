@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include <gtest/gtest.h>
 #include <cmath>
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
@@ -216,4 +218,112 @@ TEST(MathHelperTest, ClosestMSAAPowerRoundsDownToNextPowerOfTwo)
     EXPECT_EQ(MathHelper::ClosestMSAAPower(3), 2);
     EXPECT_EQ(MathHelper::ClosestMSAAPower(5), 4);
     EXPECT_EQ(MathHelper::ClosestMSAAPower(7), 4);
+}
+
+TEST(MathHelperTest, ClosestMSAAPowerOneReturnsZero)
+{
+    // 1 is invalid for MSAA; special-cased to return 0
+    EXPECT_EQ(MathHelper::ClosestMSAAPower(1), 0);
+}
+
+// --- Float Clamp overload ---
+
+TEST(MathHelperTest, FloatClampInRange)
+{
+    EXPECT_NEAR(MathHelper::Clamp(5.0f, 1.0f, 10.0f), 5.0f, kEps);
+}
+
+TEST(MathHelperTest, FloatClampBelowMin)
+{
+    EXPECT_NEAR(MathHelper::Clamp(-1.0f, 0.0f, 1.0f), 0.0f, kEps);
+}
+
+TEST(MathHelperTest, FloatClampAboveMax)
+{
+    EXPECT_NEAR(MathHelper::Clamp(2.0f, 0.0f, 1.0f), 1.0f, kEps);
+}
+
+// --- Barycentric ---
+
+TEST(MathHelperTest, BarycentricAtOrigin)
+{
+    // amount1=0, amount2=0 → value1
+    EXPECT_NEAR(MathHelper::Barycentric(1.0f, 2.0f, 3.0f, 0.0f, 0.0f), 1.0f, kEps);
+}
+
+TEST(MathHelperTest, BarycentricFullWeight2)
+{
+    // amount1=1, amount2=0 → value2
+    EXPECT_NEAR(MathHelper::Barycentric(1.0f, 2.0f, 3.0f, 1.0f, 0.0f), 2.0f, kEps);
+}
+
+TEST(MathHelperTest, BarycentricFullWeight3)
+{
+    // amount1=0, amount2=1 → value3
+    EXPECT_NEAR(MathHelper::Barycentric(1.0f, 2.0f, 3.0f, 0.0f, 1.0f), 3.0f, kEps);
+}
+
+// --- CatmullRom ---
+
+TEST(MathHelperTest, CatmullRomAtZeroReturnsValue2)
+{
+    // amount=0 → value2
+    EXPECT_NEAR(MathHelper::CatmullRom(0.0f, 1.0f, 2.0f, 3.0f, 0.0f), 1.0f, kEps);
+}
+
+TEST(MathHelperTest, CatmullRomAtOneReturnsValue3)
+{
+    // amount=1 → value3
+    EXPECT_NEAR(MathHelper::CatmullRom(0.0f, 1.0f, 2.0f, 3.0f, 1.0f), 2.0f, kEps);
+}
+
+TEST(MathHelperTest, CatmullRomAtHalfIsMidpoint)
+{
+    // Symmetric uniform points 0,1,2,3 → midpoint at 0.5 is 1.5
+    EXPECT_NEAR(MathHelper::CatmullRom(0.0f, 1.0f, 2.0f, 3.0f, 0.5f), 1.5f, 1e-4f);
+}
+
+// --- Hermite ---
+
+TEST(MathHelperTest, HermiteAtZeroReturnsValue1)
+{
+    EXPECT_NEAR(MathHelper::Hermite(1.0f, 0.0f, 5.0f, 0.0f, 0.0f), 1.0f, kEps);
+}
+
+TEST(MathHelperTest, HermiteAtOneReturnsValue2)
+{
+    EXPECT_NEAR(MathHelper::Hermite(1.0f, 0.0f, 5.0f, 0.0f, 1.0f), 5.0f, kEps);
+}
+
+TEST(MathHelperTest, HermiteAtHalfReturnsMidpointForZeroTangents)
+{
+    // Zero tangents → same as SmoothStep midpoint
+    EXPECT_NEAR(MathHelper::Hermite(0.0f, 0.0f, 10.0f, 0.0f, 0.5f), 5.0f, kEps);
+}
+
+// --- Constants ---
+
+TEST(MathHelperTest, EConstantApprox)
+{
+    EXPECT_NEAR(MathHelper::E, 2.71828175f, 1e-6f);
+}
+
+TEST(MathHelperTest, Log10EConstantApprox)
+{
+    EXPECT_NEAR(MathHelper::Log10E, 0.4342945f, 1e-6f);
+}
+
+TEST(MathHelperTest, Log2EConstantApprox)
+{
+    EXPECT_NEAR(MathHelper::Log2E, 1.442695f, 1e-5f);
+}
+
+TEST(MathHelperTest, MachineEpsilonFloatIsPositive)
+{
+    EXPECT_GT(MathHelper::MachineEpsilonFloat, 0.0f);
+}
+
+TEST(MathHelperTest, MachineEpsilonFloatIsSmall)
+{
+    EXPECT_LT(MathHelper::MachineEpsilonFloat, 1e-4f);
 }

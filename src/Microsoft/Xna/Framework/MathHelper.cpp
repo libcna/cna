@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 
 #include <cmath>
@@ -25,6 +27,9 @@ namespace Microsoft::Xna::Framework
         float amount
     )
     {
+        /* Using formula from http://www.mvps.org/directx/articles/catmull/
+         * Internally using doubles not to lose precision.
+         */
         const double amountSquared = static_cast<double>(amount) * amount;
         const double amountCubed = amountSquared * amount;
 
@@ -58,6 +63,10 @@ namespace Microsoft::Xna::Framework
         float amount
     )
     {
+        /* All transformed to double not to lose precision
+         * Otherwise, for high numbers of param:amount the result is NaN instead
+         * of Infinity.
+         */
         const double v1 = value1;
         const double v2 = value2;
         const double t1 = tangent1;
@@ -128,6 +137,7 @@ namespace Microsoft::Xna::Framework
             return angle;
         }
 
+        // FNA uses the C# % operator; std::fmod is equivalent for float modulo.
         angle = std::fmod(angle, TwoPi);
 
         if (angle <= -Pi)
@@ -157,8 +167,14 @@ namespace Microsoft::Xna::Framework
 
     intcs MathHelper::ClosestMSAAPower(intcs value)
     {
+        /* Checking for the highest power of two _after_ than the given int:
+         * http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
+         * Take result, divide by 2, get the highest power of two _before_!
+         * -flibit
+         */
         if (value == 1)
         {
+            // ... Except for 1, which is invalid for MSAA -flibit
             return 0;
         }
 
@@ -183,6 +199,9 @@ namespace Microsoft::Xna::Framework
         float machineEpsilon = 1.0f;
         float comparison;
 
+        /* Keep halving the working value of machineEpsilon until we get a number that
+         * when added to 1.0f will still evaluate as equal to 1.0f.
+         */
         do
         {
             machineEpsilon *= 0.5f;
