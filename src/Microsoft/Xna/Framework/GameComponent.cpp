@@ -35,6 +35,7 @@ namespace Microsoft::Xna::Framework
         {
             enabled_ = value;
             EnabledChanged.Raise(this, System::EventArgs::Empty);
+            // FNA passes null as args to OnEnabledChanged; C++ uses Empty since references cannot be null.
             OnEnabledChanged(this, System::EventArgs::Empty);
         }
     }
@@ -50,6 +51,7 @@ namespace Microsoft::Xna::Framework
         {
             updateOrder_ = value;
             UpdateOrderChanged.Raise(this, System::EventArgs::Empty);
+            // FNA passes null as args to OnUpdateOrderChanged; C++ uses Empty since references cannot be null.
             OnUpdateOrderChanged(this, System::EventArgs::Empty);
         }
     }
@@ -103,6 +105,7 @@ namespace Microsoft::Xna::Framework
 
     void GameComponent::Dispose(bool disposing)
     {
+        // FNA's base Dispose(bool) has no disposed_ guard; C++ adds one so the destructor path is idempotent.
         if (disposed_)
         {
             return;

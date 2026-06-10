@@ -75,6 +75,7 @@ namespace Microsoft::Xna::Framework
         /// Compares this component with another component using update order.
         [[nodiscard]] int CompareTo(const GameComponent& other) const override;
 
+        /// Returns the fully-qualified .NET type name of this class.
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
