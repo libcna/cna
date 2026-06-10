@@ -2,7 +2,9 @@
 
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/IEquatable.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
@@ -32,7 +34,8 @@ namespace Microsoft::Xna::Framework
      *       avoided by using concrete @c Color objects directly; use
      *       @c IPackedVector* only when runtime polymorphism is needed.
      */
-    struct Color : public Graphics::PackedVector::IPackedVectorT<UInt32>
+    struct Color : public Graphics::PackedVector::IPackedVectorT<UInt32>,
+                   public System::IEquatable<Color>
     {
         // ------------------------------------------------------------------
         // Public component properties
@@ -473,7 +476,7 @@ namespace Microsoft::Xna::Framework
          * @param other The Color to compare.
          * @return @c true if the instances are equal; @c false otherwise.
          */
-        [[nodiscard]] bool Equals(const Color& other) const;
+        [[nodiscard]] bool Equals(const Color& other) const override;
 
         /**
          * @brief Gets a Vector3 representation for this object.
@@ -494,7 +497,7 @@ namespace Microsoft::Xna::Framework
          *
          * @return Hash code of this Color.
          */
-        [[nodiscard]] intcs GetHashCode() const;
+        [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns a string representation of this Color in the format:

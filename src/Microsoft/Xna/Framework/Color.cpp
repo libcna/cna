@@ -353,9 +353,9 @@ namespace Microsoft::Xna::Framework
             static_cast<float>(ToInt(getAProperty())) / 255.0f);
     }
 
-    intcs Color::GetHashCode() const
+    std::size_t Color::GetHashCode() const
     {
-        return static_cast<intcs>(packedValue);
+        return static_cast<std::size_t>(packedValue);
     }
 
     std::string Color::ToString() const
