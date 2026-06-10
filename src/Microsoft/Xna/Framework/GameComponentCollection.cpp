@@ -151,6 +151,7 @@ namespace Microsoft::Xna::Framework
     {
         (void)index;
         (void)item;
+        // FNA throws NotSupportedException; C++ uses std::logic_error (no System::NotSupportedException yet).
         throw std::logic_error("SetItem is not supported.");
     }
 

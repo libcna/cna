@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MS-PL
-
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollectionEventArgs.hpp"
@@ -179,4 +178,26 @@ TEST(GameComponentCollectionTest, InsertAtIndexFiresAdded)
     EXPECT_EQ(received, &b);
     EXPECT_EQ(c[0], &b);
     EXPECT_EQ(c[1], &a);
+}
+
+TEST(GameComponentCollectionTest, InsertOutOfRangeThrows)
+{
+    GameComponentCollection c;
+    StubComponent comp;
+    EXPECT_THROW(c.Insert(5, &comp), std::out_of_range);
+}
+
+TEST(GameComponentCollectionTest, RangeForIteratesAllComponents)
+{
+    GameComponentCollection c;
+    StubComponent a, b;
+    c.Add(&a);
+    c.Add(&b);
+    int count = 0;
+    for (IGameComponent* p : c)
+    {
+        (void)p;
+        ++count;
+    }
+    EXPECT_EQ(count, 2);
 }

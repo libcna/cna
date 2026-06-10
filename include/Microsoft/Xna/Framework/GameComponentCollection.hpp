@@ -19,9 +19,11 @@ namespace Microsoft::Xna::Framework
     class GameComponentCollection final : public System::Object
     {
     public:
-        // NOXNA — C++ iterator support (replaces IEnumerable<IGameComponent>)
+        /// Element count type for C++ container compatibility.
         NOXNA using size_type = std::vector<IGameComponent*>::size_type;
+        /// Mutable iterator over components (replaces IEnumerable<IGameComponent>).
         NOXNA using iterator = std::vector<IGameComponent*>::iterator;
+        /// Read-only iterator over components.
         NOXNA using const_iterator = std::vector<IGameComponent*>::const_iterator;
 
         /// Raised after a component is added.
@@ -30,7 +32,10 @@ namespace Microsoft::Xna::Framework
         /// Raised after a component is removed.
         System::EventHandler<GameComponentCollectionEventArgs> ComponentRemoved;
 
+        /// Creates an empty collection.
         GameComponentCollection() = default;
+
+        /// Destructor.
         ~GameComponentCollection() override = default;
 
         /// Gets the number of components in the collection.
@@ -60,11 +65,16 @@ namespace Microsoft::Xna::Framework
         /// Gets the component at the specified index.
         [[nodiscard]] IGameComponent* operator[](size_type index) const;
 
+        /// Returns an iterator to the first component.
         NOXNA [[nodiscard]] iterator begin();
+        /// Returns an iterator past the last component.
         NOXNA [[nodiscard]] iterator end();
+        /// Returns a const iterator to the first component.
         NOXNA [[nodiscard]] const_iterator begin() const;
+        /// Returns a const iterator past the last component.
         NOXNA [[nodiscard]] const_iterator end() const;
 
+        /// Returns the fully-qualified .NET type name of this class.
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
