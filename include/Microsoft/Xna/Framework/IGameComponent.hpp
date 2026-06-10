@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 namespace Microsoft::Xna::Framework
@@ -6,6 +8,7 @@ namespace Microsoft::Xna::Framework
     class IGameComponent
     {
     public:
+        /// Virtual destructor.
         virtual ~IGameComponent() = default;
 
         /// Initializes the component.
