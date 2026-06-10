@@ -22,6 +22,7 @@ namespace Microsoft::Xna::Framework
         Portrait = 4
     };
 
+    /// Combines two orientation flags.
     [[nodiscard]] constexpr DisplayOrientation operator|(DisplayOrientation left, DisplayOrientation right)
     {
         using Underlying = std::underlying_type_t<DisplayOrientation>;
@@ -30,6 +31,7 @@ namespace Microsoft::Xna::Framework
         );
     }
 
+    /// Returns the flags present in both operands.
     [[nodiscard]] constexpr DisplayOrientation operator&(DisplayOrientation left, DisplayOrientation right)
     {
         using Underlying = std::underlying_type_t<DisplayOrientation>;
@@ -38,18 +40,21 @@ namespace Microsoft::Xna::Framework
         );
     }
 
+    /// Returns the bitwise complement of the orientation flags.
     [[nodiscard]] constexpr DisplayOrientation operator~(DisplayOrientation value)
     {
         using Underlying = std::underlying_type_t<DisplayOrientation>;
         return static_cast<DisplayOrientation>(~static_cast<Underlying>(value));
     }
 
+    /// Adds orientation flags in-place.
     constexpr DisplayOrientation& operator|=(DisplayOrientation& left, DisplayOrientation right)
     {
         left = left | right;
         return left;
     }
 
+    /// Keeps only the flags present in both operands in-place.
     constexpr DisplayOrientation& operator&=(DisplayOrientation& left, DisplayOrientation right)
     {
         left = left & right;

@@ -57,6 +57,13 @@ TEST(DisplayOrientationTest, AndAssignClearsFlag)
     EXPECT_EQ(o, DisplayOrientation::LandscapeLeft);
 }
 
+TEST(DisplayOrientationTest, BitwiseNotInvertsFlags)
+{
+    DisplayOrientation inv = ~DisplayOrientation::LandscapeLeft;
+    EXPECT_EQ(inv & DisplayOrientation::LandscapeLeft, DisplayOrientation::Default);
+    EXPECT_NE(inv & DisplayOrientation::Portrait, DisplayOrientation::Default);
+}
+
 TEST(DisplayOrientationTest, EqualityHolds)
 {
     DisplayOrientation a = DisplayOrientation::Portrait;
