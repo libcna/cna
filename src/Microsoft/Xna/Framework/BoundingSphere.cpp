@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 
 #include <algorithm>
@@ -166,7 +168,7 @@ namespace Microsoft::Xna::Framework
         return ContainmentType::Intersects;
     }
 
-    bool BoundingSphere::Equals(BoundingSphere other) const
+    bool BoundingSphere::Equals(const BoundingSphere& other) const
     {
         return Center == other.Center && Radius == other.Radius;
     }

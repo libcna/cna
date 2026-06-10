@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <cstddef>
@@ -8,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/ContainmentType.hpp"
 #include "Microsoft/Xna/Framework/PlaneIntersectionType.hpp"
+#include "System/IEquatable.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -18,7 +21,7 @@ namespace Microsoft::Xna::Framework
     struct Ray;
 
     /// Describes a sphere used for 3D bounding and intersection tests.
-    struct BoundingSphere
+    struct BoundingSphere : public System::IEquatable<BoundingSphere>
     {
         /// The sphere center.
         Vector3 Center;
@@ -44,7 +47,7 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] ContainmentType Contains(BoundingSphere sphere) const;
         [[nodiscard]] ContainmentType Contains(Vector3 point) const;
 
-        [[nodiscard]] bool Equals(BoundingSphere other) const;
+        [[nodiscard]] bool Equals(const BoundingSphere& other) const override;
 
         /// Creates the smallest sphere that contains a box.
         [[nodiscard]] static BoundingSphere CreateFromBoundingBox(BoundingBox box);

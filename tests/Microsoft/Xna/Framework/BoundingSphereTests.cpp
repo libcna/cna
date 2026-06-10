@@ -492,3 +492,37 @@ TEST(BoundingSphereTest, ToStringContainsCenterAndRadius)
     EXPECT_NE(str.find("Center"), std::string::npos);
     EXPECT_NE(str.find("Radius"), std::string::npos);
 }
+
+// --- CreateFromPoints edge cases ---
+
+TEST(BoundingSphereTest, CreateFromPointsThrowsOnEmptyVector)
+{
+    std::vector<Vector3> empty;
+    EXPECT_THROW(BoundingSphere::CreateFromPoints(empty), std::invalid_argument);
+}
+
+// --- CreateMerged containment edge cases ---
+
+TEST(BoundingSphereTest, CreateMergedOriginalContainsAdditional)
+{
+    // original is large enough to already contain additional
+    BoundingSphere original(Vector3::Zero, 10.0f);
+    BoundingSphere additional(Vector3(1.0f, 0.0f, 0.0f), 1.0f);
+    BoundingSphere result = BoundingSphere::CreateMerged(original, additional);
+    EXPECT_NEAR(result.Center.X, original.Center.X, kEps);
+    EXPECT_NEAR(result.Center.Y, original.Center.Y, kEps);
+    EXPECT_NEAR(result.Center.Z, original.Center.Z, kEps);
+    EXPECT_NEAR(result.Radius, original.Radius, kEps);
+}
+
+TEST(BoundingSphereTest, CreateMergedAdditionalContainsOriginal)
+{
+    // additional is large enough to already contain original
+    BoundingSphere original(Vector3(1.0f, 0.0f, 0.0f), 1.0f);
+    BoundingSphere additional(Vector3::Zero, 10.0f);
+    BoundingSphere result = BoundingSphere::CreateMerged(original, additional);
+    EXPECT_NEAR(result.Center.X, additional.Center.X, kEps);
+    EXPECT_NEAR(result.Center.Y, additional.Center.Y, kEps);
+    EXPECT_NEAR(result.Center.Z, additional.Center.Z, kEps);
+    EXPECT_NEAR(result.Radius, additional.Radius, kEps);
+}
