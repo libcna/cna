@@ -49,7 +49,10 @@ namespace Microsoft::Xna::Framework
         /// Raised when the game is exiting.
         System::EventHandler<System::EventArgs> Exiting;
 
+        /// Creates a new Game instance and initialises all subsystems.
         Game();
+
+        /// Destructor; calls Dispose(false) to release unmanaged resources.
         ~Game() override;
 
         /// Gets the game component collection.
@@ -78,9 +81,6 @@ namespace Microsoft::Xna::Framework
 
         /// Gets whether the game window is active.
         [[nodiscard]] bool getIsActiveProperty() const;
-
-        /// Sets whether the game window is active and raises activation events.
-        void setIsActiveProperty(bool value);
 
         /// Gets whether the game uses a fixed timestep.
         [[nodiscard]] bool getIsFixedTimeStepProperty() const;
@@ -139,6 +139,7 @@ namespace Microsoft::Xna::Framework
         /// Disposes the game.
         void Dispose() override;
 
+        /// Returns the fully-qualified .NET type name of this class.
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /// Compatibility helper used by existing CNA examples.
@@ -239,6 +240,9 @@ namespace Microsoft::Xna::Framework
 
         std::unordered_map<IUpdateable*, System::EventHandler<System::EventArgs>::Token> updateOrderChangedTokens_;
         std::unordered_map<IDrawable*, System::EventHandler<System::EventArgs>::Token> drawOrderChangedTokens_;
+
+        // FNA: internal set — only Game itself may change the active state.
+        void setIsActiveProperty(bool value);
 
         void AssertNotDisposed() const;
         void DoInitialize();

@@ -367,6 +367,7 @@ namespace Microsoft::Xna::Framework
                 UpdateEstimatedSleepPrecision(timeAdvancedSinceSleeping);
             }
 
+            // FNA uses Thread.SpinWait(1); yield() is the nearest C++ equivalent.
             while (TimeSpanLess(accumulatedElapsedTime_, TargetElapsedTime_))
             {
                 std::this_thread::yield();
@@ -415,10 +416,9 @@ namespace Microsoft::Xna::Framework
                 --updateFrameLag_;
             }
 
+            // FNA: TimeSpan.FromTicks(TargetElapsedTime.Ticks * stepCount) — integer ticks, no float error.
             gameTime_.setElapsedGameTimeProperty(
-                System::TimeSpan::FromMilliseconds(
-                    TotalMilliseconds(TargetElapsedTime_) * static_cast<double>(stepCount)
-                )
+                System::TimeSpan::FromTicks(TargetElapsedTime_.getTicksProperty() * stepCount)
             );
         }
         else
@@ -760,6 +760,7 @@ namespace Microsoft::Xna::Framework
 
     System::TimeSpan Game::AdvanceElapsedTime()
     {
+        // FNA uses System.Diagnostics.Stopwatch; CNA uses SDL_GetPerformanceCounter for equivalent high-resolution timing.
         const std::uint64_t currentCounter = SDL_GetPerformanceCounter();
 
         if (previousPerformanceCounter_ == 0)
