@@ -2,12 +2,17 @@
 
 #pragma once
 
+#include <cstddef>
+
+#include "System/IEquatable.hpp"
+#include "System/IComparable.hpp"
 #include "Microsoft/Xna/Framework/CurveContinuity.hpp"
 
 namespace Microsoft::Xna::Framework
 {
     /// Key point on a Curve.
-    class CurveKey
+    class CurveKey : public System::IEquatable<CurveKey>,
+                     public System::IComparable<CurveKey>
     {
     public:
         /// Gets or sets whether the segment between this key and the next key is smooth or stepped.
@@ -42,13 +47,13 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] CurveKey Clone() const;
 
         /// Compares this key position with another key position.
-        [[nodiscard]] int CompareTo(const CurveKey& other) const;
+        [[nodiscard]] int CompareTo(const CurveKey& other) const override;
 
         /// Compares this key with another key.
-        [[nodiscard]] bool Equals(const CurveKey& other) const;
+        [[nodiscard]] bool Equals(const CurveKey& other) const override;
 
         /// Gets a hash code from the key fields.
-        [[nodiscard]] int GetHashCode() const;
+        [[nodiscard]] std::size_t GetHashCode() const;
 
         friend bool operator==(const CurveKey& a, const CurveKey& b);
         friend bool operator!=(const CurveKey& a, const CurveKey& b);

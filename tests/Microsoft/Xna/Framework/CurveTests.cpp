@@ -536,3 +536,35 @@ TEST(CurveTest, StepContinuityReturnsCurrentSegmentValue)
     // At position=0.5 (between key 0 and key 1, Step continuity) → prev value
     EXPECT_NEAR(c.Evaluate(0.5f), 0.0f, kEps);
 }
+
+TEST(CurveTest, EvaluatePreLoopCycleOffsetShifts)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 2.0f, 0.0f, 0.0f));
+    c.setPreLoopProperty(CurveLoopType::CycleOffset);
+    // position=-0.5 → cycle=-1: GetCurvePosition(0.5) + (-1)*(2-0)
+    float direct = c.Evaluate(0.5f);
+    float offset = c.Evaluate(-0.5f);
+    EXPECT_NEAR(offset, direct - 2.0f, kEps);
+}
+
+TEST(CurveTest, EvaluatePreLoopOscillateReversesOnOddCycle)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 0.0f));
+    c.setPreLoopProperty(CurveLoopType::Oscillate);
+    // position=-0.25, cycle=-1 (odd) → virtualPos=0.25 → same as Evaluate(0.25)
+    // (PreLoop oscillate mirrors from the start, PostLoop from the end)
+    float direct = c.Evaluate(0.25f);
+    float oscillated = c.Evaluate(-0.25f);
+    EXPECT_NEAR(oscillated, direct, kEps);
+}
+
+TEST(CurveTest, ComputeTangentNegativeIndexThrows)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f));
+    EXPECT_THROW(c.ComputeTangent(-1, CurveTangent::Flat), std::out_of_range);
+}

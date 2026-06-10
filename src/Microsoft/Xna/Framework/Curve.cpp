@@ -185,6 +185,7 @@ namespace Microsoft::Xna::Framework
 
     void Curve::ComputeTangent(int keyIndex, CurveTangent tangentInType, CurveTangent tangentOutType)
     {
+        // FNA has no bounds check here; C++ adds one to avoid undefined behaviour
         if (keyIndex < 0 || keyIndex >= keys.getCountProperty())
         {
             throw std::out_of_range("Curve keyIndex is out of range");

@@ -9,12 +9,12 @@ namespace Microsoft::Xna::Framework
 {
     namespace
     {
-        int FloatHash(float value)
+        std::size_t FloatHash(float value)
         {
             std::uint32_t bits = 0;
             static_assert(sizeof(bits) == sizeof(value));
             std::memcpy(&bits, &value, sizeof(value));
-            return static_cast<int>(bits);
+            return static_cast<std::size_t>(bits);
         }
     }
 
@@ -105,13 +105,13 @@ namespace Microsoft::Xna::Framework
         return *this == other;
     }
 
-    int CurveKey::GetHashCode() const
+    std::size_t CurveKey::GetHashCode() const
     {
         return FloatHash(position) ^
             FloatHash(value) ^
             FloatHash(tangentIn) ^
             FloatHash(tangentOut) ^
-            static_cast<int>(continuity);
+            static_cast<std::size_t>(continuity);
     }
 
     bool operator==(const CurveKey& a, const CurveKey& b)
