@@ -373,7 +373,7 @@ namespace Microsoft::Xna::Framework
         /**
          * @brief Returns a debug string @c "R G B A" for display purposes.
          */
-        [[nodiscard]] INTERNAL std::string getDebugDisplayStringProperty() const;
+        NOXNA [[nodiscard]] std::string getDebugDisplayStringProperty() const;
 
         // ------------------------------------------------------------------
         // Constructors
