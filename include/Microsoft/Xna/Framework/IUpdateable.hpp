@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -11,6 +13,7 @@ namespace Microsoft::Xna::Framework
     class IUpdateable
     {
     public:
+        /// Virtual destructor.
         virtual ~IUpdateable() = default;
 
         /// Gets whether this component should be updated.
