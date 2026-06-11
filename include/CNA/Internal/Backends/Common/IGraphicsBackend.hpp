@@ -352,6 +352,12 @@ namespace CNA::Internal::Backends
                 "DrawInstancedPrimitives is not supported on this graphics backend.");
         }
 
+        /// Disables context-loss recovery on the running backend.
+        /// Safe to call after backend creation when no resources have been
+        /// loaded yet (e.g. from Game1 constructor). Future Create* calls
+        /// will skip registry registration and CPU shadow copies.
+        virtual void SetContextRecoveryEnabled(bool /*enabled*/) {}
+
         // ---- Debug / testing ----
 
         /// Simulates an OpenGL context loss.

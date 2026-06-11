@@ -282,6 +282,7 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 
+        void SetContextRecoveryEnabled(bool enabled) override { contextRecoveryEnabled_ = enabled; }
         void DebugSimulateContextLoss() override;
         void DebugRestoreContext() override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;

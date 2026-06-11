@@ -1027,6 +1027,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetContextRecoveryEnabled(bool enabled)
     {
         contextRecoveryEnabled_ = enabled;
+        if (backend_)
+            backend_->SetContextRecoveryEnabled(enabled);
     }
 
     void GraphicsDevice::createBackend()
