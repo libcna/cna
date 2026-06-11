@@ -295,7 +295,8 @@ if(CNA_BUILD_EXAMPLES)
         endif()
     endif()
 
-    # ---- XACT demo (works with all backends) ---------------------------------
+    # ---- XACT demo (desktop only — XACT is Windows/Xbox-specific, no web content) -
+    if(NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_demo_xact
         examples/demo_xact/src/Main.cpp
         examples/demo_xact/src/XactDemo.cpp
@@ -303,39 +304,26 @@ if(CNA_BUILD_EXAMPLES)
     target_include_directories(cna_demo_xact PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_xact/src
     )
-
-    if(EMSCRIPTEN)
-        set_target_properties(cna_demo_xact PROPERTIES SUFFIX ".html")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
         target_link_libraries(cna_demo_xact PRIVATE
-            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
-        target_link_options(cna_demo_xact PRIVATE
-            -sALLOW_MEMORY_GROWTH=1
-            -sSTACK_SIZE=1048576
-            -sINITIAL_MEMORY=134217728
-            -sFORCE_FILESYSTEM=1
-            "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_xact/Content@/Content"
-        )
+            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+            SHARP_RUNTIME)
     else()
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-            target_link_libraries(cna_demo_xact PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-                SHARP_RUNTIME)
-        else()
-            target_link_libraries(cna_demo_xact PRIVATE CNA SHARP_RUNTIME)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(cna_demo_xact PRIVATE SDL3::SDL3main)
-        endif()
-        add_custom_command(TARGET cna_demo_xact POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_xact/Content"
-                "$<TARGET_FILE_DIR:cna_demo_xact>/Content"
-            COMMENT "Copying Content next to cna_demo_xact executable")
-        if(WIN32)
-            set_target_properties(cna_demo_xact PROPERTIES WIN32_EXECUTABLE TRUE)
-            cna_copy_sdl_runtime(cna_demo_xact)
-        endif()
+        target_link_libraries(cna_demo_xact PRIVATE CNA SHARP_RUNTIME)
     endif()
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_demo_xact PRIVATE SDL3::SDL3main)
+    endif()
+    add_custom_command(TARGET cna_demo_xact POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_xact/Content"
+            "$<TARGET_FILE_DIR:cna_demo_xact>/Content"
+        COMMENT "Copying Content next to cna_demo_xact executable")
+    if(WIN32)
+        set_target_properties(cna_demo_xact PROPERTIES WIN32_EXECUTABLE TRUE)
+        cna_copy_sdl_runtime(cna_demo_xact)
+    endif()
+    endif() # NOT EMSCRIPTEN AND NOT ANDROID
 
     # ---- Input & Touch demo (works with all backends) ------------------------
     add_executable(cna_demo_input
