@@ -733,6 +733,72 @@ namespace Microsoft::Xna::Framework
         drawableComponents_.insert(it, drawable);
     }
 
+#if defined(__EMSCRIPTEN__)
+    struct Game::EmscriptenLoopState
+    {
+        Game* game = nullptr;
+        GameTime gameTime;
+        std::uint64_t lastTickMs = 0;
+        double accumulatorMs = 0.0;
+    };
+
+    Game::EmscriptenLoopState Game::s_emLoopState;
+
+    void Game::EmscriptenMainLoopCallback()
+    {
+        EmscriptenLoopState& state = s_emLoopState;
+        if (state.game == nullptr)
+        {
+            return;
+        }
+
+        state.game->PollEvents();
+
+        const std::uint64_t nowMs = SDL_GetTicks();
+        if (state.lastTickMs == 0)
+        {
+            state.lastTickMs = nowMs;
+        }
+
+        double deltaMs = static_cast<double>(nowMs - state.lastTickMs);
+        state.lastTickMs = nowMs;
+
+        if (deltaMs > 250.0)
+        {
+            deltaMs = 250.0;
+        }
+
+        state.accumulatorMs += deltaMs;
+        const double targetMs = state.game->getTargetMsFrameTimeProperty();
+        const auto stepSpan = System::TimeSpan::FromMilliseconds(targetMs);
+
+        bool updated = false;
+        while (state.accumulatorMs >= targetMs)
+        {
+            state.accumulatorMs -= targetMs;
+
+            state.gameTime.setElapsedGameTimeProperty(stepSpan);
+            state.gameTime.setTotalGameTimeProperty(state.gameTime.getTotalGameTimeProperty() + stepSpan);
+            state.gameTime.setIsRunningSlowlyProperty(false);
+
+            state.game->Update(state.gameTime);
+            updated = true;
+        }
+
+        if (updated && state.game->BeginDraw())
+        {
+            state.game->Draw(state.gameTime);
+            state.game->EndDraw();
+        }
+
+        if (!state.game->RunApplication)
+        {
+            emscripten_cancel_main_loop();
+            state.game->OnExiting(state.game, System::EventArgs::Empty);
+        }
+    }
+#endif
+
     void Game::BeforeLoop()
     {
         setIsActiveProperty(true);
@@ -911,69 +977,4 @@ namespace Microsoft::Xna::Framework
         }
     }
 
-#if defined(__EMSCRIPTEN__)
-    struct Game::EmscriptenLoopState
-    {
-        Game* game = nullptr;
-        GameTime gameTime;
-        std::uint64_t lastTickMs = 0;
-        double accumulatorMs = 0.0;
-    };
-
-    Game::EmscriptenLoopState Game::s_emLoopState;
-
-    void Game::EmscriptenMainLoopCallback()
-    {
-        EmscriptenLoopState& state = s_emLoopState;
-        if (state.game == nullptr)
-        {
-            return;
-        }
-
-        state.game->PollEvents();
-
-        const std::uint64_t nowMs = SDL_GetTicks();
-        if (state.lastTickMs == 0)
-        {
-            state.lastTickMs = nowMs;
-        }
-
-        double deltaMs = static_cast<double>(nowMs - state.lastTickMs);
-        state.lastTickMs = nowMs;
-
-        if (deltaMs > 250.0)
-        {
-            deltaMs = 250.0;
-        }
-
-        state.accumulatorMs += deltaMs;
-        const double targetMs = state.game->getTargetMsFrameTimeProperty();
-        const auto stepSpan = System::TimeSpan::FromMilliseconds(targetMs);
-
-        bool updated = false;
-        while (state.accumulatorMs >= targetMs)
-        {
-            state.accumulatorMs -= targetMs;
-
-            state.gameTime.setElapsedGameTimeProperty(stepSpan);
-            state.gameTime.setTotalGameTimeProperty(state.gameTime.getTotalGameTimeProperty() + stepSpan);
-            state.gameTime.setIsRunningSlowlyProperty(false);
-
-            state.game->Update(state.gameTime);
-            updated = true;
-        }
-
-        if (updated && state.game->BeginDraw())
-        {
-            state.game->Draw(state.gameTime);
-            state.game->EndDraw();
-        }
-
-        if (!state.game->RunApplication)
-        {
-            emscripten_cancel_main_loop();
-            state.game->OnExiting(state.game, System::EventArgs::Empty);
-        }
-    }
-#endif
 }

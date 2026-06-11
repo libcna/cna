@@ -8,7 +8,12 @@ option(CNA_USE_SYSTEM_SDL "Use system SDL packages instead of vendored submodule
 # SDL is built once and reused across all builds and build types.
 # To force a full SDL rebuild, delete this directory manually:
 #   rm -rf <source_dir>/.sdl-prebuilt
-set(CNA_SDL_PREBUILT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt"
+if(EMSCRIPTEN)
+    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten")
+else()
+    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt")
+endif()
+set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}"
     CACHE PATH "Persistent SDL3 install root (survives cmake --clean and build-tree deletion)")
 
 function(cna_configure_vendored_sdl)

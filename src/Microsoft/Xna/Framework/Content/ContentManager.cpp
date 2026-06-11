@@ -13,7 +13,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -560,6 +562,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
         class VideoTypeReader : public ContentTypeReader<Media::Video>
         {
         public:
@@ -573,6 +576,7 @@ namespace Microsoft::Xna::Framework::Content
                 return Media::Video(path, &cm.getGraphicsDeviceInternal());
             }
         };
+#endif
 
     } // anonymous namespace
 
@@ -586,7 +590,9 @@ namespace Microsoft::Xna::Framework::Content
         RegisterTypeReader<Graphics::SpriteFont>(std::make_unique<SpriteFontTypeReader>());
         RegisterTypeReader<Graphics::Model>(std::make_unique<ModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
         RegisterTypeReader<Media::Video>(std::make_unique<VideoTypeReader>());
+#endif
     }
 
 } // namespace Microsoft::Xna::Framework::Content

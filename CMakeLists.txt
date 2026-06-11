@@ -115,12 +115,14 @@ else()
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
 endif()
 
-# --- FFmpeg (video decoding) ---
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBAVCODEC  REQUIRED libavcodec)
-pkg_check_modules(LIBAVFORMAT REQUIRED libavformat)
-pkg_check_modules(LIBAVUTIL   REQUIRED libavutil)
-pkg_check_modules(LIBSWRESAMPLE REQUIRED libswresample)
+# --- FFmpeg (video decoding) — not available on Emscripten/Android ---
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBAVCODEC  REQUIRED libavcodec)
+    pkg_check_modules(LIBAVFORMAT REQUIRED libavformat)
+    pkg_check_modules(LIBAVUTIL   REQUIRED libavutil)
+    pkg_check_modules(LIBSWRESAMPLE REQUIRED libswresample)
+endif()
 
 # Common backend interfaces
 add_library(cna_backend_graphics_common INTERFACE)
@@ -153,6 +155,13 @@ file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
 # Exclude backend sources from main CNA library to avoid double compilation and conflicts
 list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/Backends/.*")
 
+# Exclude FFmpeg-dependent sources on platforms where FFmpeg is unavailable
+if(EMSCRIPTEN OR ANDROID)
+    list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Media/VideoDecoder\\.cpp$")
+    list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/Media/Video/VideoPlayer\\.cpp$")
+    list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/Media/Video/Video\\.cpp$")
+endif()
+
 add_library(CNA STATIC
         ${CNA_SOURCES}
 )
@@ -179,19 +188,22 @@ target_link_libraries(CNA
         SDL3_image::SDL3_image
         SDL3_mixer::SDL3_mixer
 #        SDL3_ttf::SDL3_ttf
+)
+
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+    target_link_libraries(CNA PRIVATE
         ${LIBAVCODEC_LIBRARIES}
         ${LIBAVFORMAT_LIBRARIES}
         ${LIBAVUTIL_LIBRARIES}
         ${LIBSWRESAMPLE_LIBRARIES}
-)
-
-target_include_directories(CNA
-        PRIVATE
+    )
+    target_include_directories(CNA PRIVATE
         ${LIBAVCODEC_INCLUDE_DIRS}
         ${LIBAVFORMAT_INCLUDE_DIRS}
         ${LIBAVUTIL_INCLUDE_DIRS}
         ${LIBSWRESAMPLE_INCLUDE_DIRS}
-)
+    )
+endif()
 
 # --- Examples ---
 # The 3D house demo exercises the EasyGL 3D pipeline. Other backends throw
