@@ -413,19 +413,16 @@ namespace Microsoft::Xna::Framework
     void GraphicsDeviceManager::INTERNAL_OnClientSizeChanged(System::Object* sender, const System::EventArgs& args)
     {
         (void)args;
+        (void)sender;
 
-        auto* window = dynamic_cast<GameWindow*>(sender);
-        if (window == nullptr)
-        {
-            return;
-        }
-
-        // FNA calls FNAPlatform.ScaleForWindow to apply HiDPI scaling here; CNA uses the raw client size.
-        Rectangle size = window->getClientBoundsProperty();
-        resizedBackBufferWidth_ = size.Width;
-        resizedBackBufferHeight_ = size.Height;
-        useResizedBackBuffer_ = true;
-        ApplyChanges();
+        // Do NOT call ApplyChanges() here. ApplyChanges() would forward the
+        // new physical window size as the virtual resolution, corrupting the
+        // game's logical coordinate space and breaking scaling on all backends.
+        // Each backend queries SDL_GetWindowSize() dynamically every frame, so
+        // no explicit notification is required — only the XNA Viewport needs
+        // to be refreshed so scissor/viewport state stays coherent.
+        if (graphicsDevice_ != nullptr)
+            graphicsDevice_->UpdateViewportFromWindow();
     }
 
     void GraphicsDeviceManager::INTERNAL_CreateGraphicsDeviceInformation(GraphicsDeviceInformation& gdi)
