@@ -220,6 +220,10 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA void SetDepthTestEnabled(bool enabled);
         NOXNA void SetBlendEnabled(bool enabled);
         NOXNA void SetDepthWriteEnabled(bool enabled);
+        /// Disables GL context-loss recovery (CPU shadow copies + ResourceRegistry).
+        /// Must be called before the device is initialized. Safe on desktop where
+        /// context loss never occurs; saves ~1x texture RAM per loaded texture.
+        NOXNA void SetContextRecoveryEnabled(bool enabled);
 
         [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
         void SetCurrentEffect(BasicEffect* effect);
@@ -271,10 +275,6 @@ namespace Microsoft::Xna::Framework::Graphics
         void UpdateViewportFromWindow();
         void SetVirtualResolution(int width, int height);
         void SetPresentationMode(int mode);
-        /// Disables GL context-loss recovery (CPU shadow copies + ResourceRegistry).
-        /// Must be called before the device is initialized. Safe on desktop where
-        /// context loss never occurs; saves ~1x texture RAM per loaded texture.
-        NOXNA void SetContextRecoveryEnabled(bool enabled);
         void applyPresentationParametersToWindow();
 
         friend class Texture2D;
