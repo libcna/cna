@@ -527,4 +527,16 @@ namespace Microsoft::Xna::Framework::Graphics
         tex.backend_->ShareCpuPixels(tex.cpuPixels_);
         return tex;
     }
+
+    Texture2D Texture2D::ReconstructFromCache(GraphicsDevice& device,
+                                              int w, int h,
+                                              SurfaceFormat fmt,
+                                              int levelCount,
+                                              std::shared_ptr<ITextureBackend> backend,
+                                              std::shared_ptr<std::vector<uint8_t>> cpuPixels)
+    {
+        Texture2D tex(device, w, h, fmt, levelCount, std::move(backend));
+        tex.cpuPixels_ = std::move(cpuPixels);
+        return tex;
+    }
 }

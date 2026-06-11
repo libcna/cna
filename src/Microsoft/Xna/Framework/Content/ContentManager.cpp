@@ -1,4 +1,5 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -82,6 +83,7 @@ namespace Microsoft::Xna::Framework::Content
     void ContentManager::Unload()
     {
         loadedAssets_.clear();
+        textureCache_.clear();
     }
 
     // ---------------------------------------------------------------------------
@@ -587,4 +589,78 @@ namespace Microsoft::Xna::Framework::Content
         RegisterTypeReader<Media::Video>(std::make_unique<VideoTypeReader>());
     }
 
+} // namespace Microsoft::Xna::Framework::Content
+
+// ---------------------------------------------------------------------------
+// Explicit specialisation: weak-cache for Texture2D
+// ---------------------------------------------------------------------------
+// Textures are NOT stored in loadedAssets_ (strong cache). Instead only weak
+// references are kept. When the last external Texture2D copy is destroyed its
+// GPU backend is freed immediately, preventing per-world RAM growth caused by
+// world-specific background textures accumulating in the cache.
+// ---------------------------------------------------------------------------
+
+namespace Microsoft::Xna::Framework::Content
+{
+    template<>
+    Graphics::Texture2D ContentManager::Load<Graphics::Texture2D>(const std::string& assetName)
+    {
+        if (disposed_)
+            throw std::runtime_error("ContentManager has been disposed.");
+
+        const std::string key = NormalizeKey(assetName);
+        log::Debug(std::string("Loading texture: ") + assetName);
+
+        auto cacheIt = textureCache_.find(key);
+        if (cacheIt != textureCache_.end())
+        {
+            auto backendSp   = cacheIt->second.backend.lock();
+            auto cpuPixelsSp = cacheIt->second.cpuPixels.lock();
+            if (backendSp && cpuPixelsSp)
+            {
+                // Reuse the existing GPU backend — no reload from disk needed.
+                const int w = backendSp->GetWidth();
+                const int h = backendSp->GetHeight();
+                return Graphics::Texture2D::ReconstructFromCache(
+                    getGraphicsDeviceInternal(),
+                    w, h,
+                    cacheIt->second.fmt,
+                    cacheIt->second.levelCount,
+                    std::move(backendSp),
+                    std::move(cpuPixelsSp));
+            }
+            // Both weak refs expired — remove stale entry and fall through to reload.
+            textureCache_.erase(cacheIt);
+        }
+
+        // Load fresh from disk.
+        auto readerIt = typeReaders_.find(std::type_index(typeid(Graphics::Texture2D)));
+        if (readerIt == typeReaders_.end())
+            throw ContentLoadException(
+                std::string("ContentManager::Load<Texture2D>(): No reader registered, asset '")
+                + assetName + "'.");
+
+        auto* readerPtr = std::any_cast<
+            std::shared_ptr<ContentTypeReader<Graphics::Texture2D>>>(&readerIt->second);
+        if (!readerPtr || !*readerPtr)
+            throw ContentLoadException(
+                std::string("ContentManager::Load<Texture2D>(): Reader is null, asset '")
+                + assetName + "'.");
+
+        ContentTypeReader<Graphics::Texture2D>& reader = **readerPtr;
+        const std::string resolvedPath = ResolveAssetPath(assetName, reader);
+
+        Graphics::Texture2D result = reader.Read(resolvedPath, *this);
+
+        // Cache weak references so the GPU backend is freed as soon as the
+        // caller drops all its Texture2D copies.
+        WeakTextureEntry entry;
+        entry.backend    = result.GetBackendWeak();
+        entry.cpuPixels  = result.GetCpuPixelsWeak();
+        entry.fmt        = result.getFormatProperty();
+        entry.levelCount = result.getLevelCountProperty();
+        textureCache_[key] = std::move(entry);
+
+        return result;
+    }
 } // namespace Microsoft::Xna::Framework::Content

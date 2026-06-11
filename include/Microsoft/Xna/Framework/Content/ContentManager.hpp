@@ -8,15 +8,18 @@
 #include <typeindex>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
 
 #include "CNA/Logger.hpp"
 #include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/IDisposable.hpp"
 
 namespace Microsoft::Xna::Framework::Audio  { class SoundEffect; }
-namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; }
+namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; class Texture2D; }
+namespace CNA::Internal::Backends { class ITextureBackend; }
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -37,6 +40,14 @@ namespace Microsoft::Xna::Framework::Content
 
         std::unordered_map<std::string, std::any> loadedAssets_;
         std::unordered_map<std::type_index, std::any> typeReaders_;
+
+        struct WeakTextureEntry {
+            std::weak_ptr<CNA::Internal::Backends::ITextureBackend> backend;
+            std::weak_ptr<std::vector<uint8_t>> cpuPixels;
+            Graphics::SurfaceFormat fmt;
+            int levelCount;
+        };
+        std::unordered_map<std::string, WeakTextureEntry> textureCache_;
 
         DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret1, ref1, constmet1)
 
@@ -153,4 +164,10 @@ namespace Microsoft::Xna::Framework::Content
             return base;
         }
     };
+
+    // Explicit specialisation: Texture2D assets use a weak cache so that the
+    // GPU backend is freed as soon as the last external Texture2D copy is dropped,
+    // preventing per-world RAM growth when worlds load unique background textures.
+    template<>
+    Graphics::Texture2D ContentManager::Load<Graphics::Texture2D>(const std::string& assetName);
 }

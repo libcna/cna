@@ -93,10 +93,24 @@ namespace Microsoft::Xna::Framework::Graphics
 
         NOXNA ITextureBackend& GetBackend() const { return *backend_; }
 
+        /// Returns a weak reference to the GPU backend. Used by ContentManager's weak texture cache.
+        NOXNA std::weak_ptr<ITextureBackend> GetBackendWeak() const { return backend_; }
+
+        /// Returns a weak reference to the CPU pixel buffer. Used by ContentManager's weak texture cache.
+        NOXNA std::weak_ptr<std::vector<uint8_t>> GetCpuPixelsWeak() const { return cpuPixels_; }
+
         /// @note Not in XNA 4.0 — prefer the Texture2D(device,w,h)+SetData pattern.
         NOXNA static Texture2D CreateFromPixels(GraphicsDevice& device,
                                                 int w, int h,
                                                 const std::vector<std::uint8_t>& rgba);
+
+        /// Reconstructs a Texture2D from a cached backend and CPU pixel buffer without reloading from disk.
+        NOXNA static Texture2D ReconstructFromCache(GraphicsDevice& device,
+                                                    int w, int h,
+                                                    SurfaceFormat fmt,
+                                                    int levelCount,
+                                                    std::shared_ptr<ITextureBackend> backend,
+                                                    std::shared_ptr<std::vector<uint8_t>> cpuPixels);
 
     protected:
         /// Used by RenderTarget2D: initializes with a pre-built backend (no CPU-side pixels).
