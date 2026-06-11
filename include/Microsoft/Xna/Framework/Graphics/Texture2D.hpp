@@ -127,6 +127,9 @@ namespace Microsoft::Xna::Framework::Graphics
         std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
         std::shared_ptr<std::vector<std::vector<uint8_t>>> extraMipLevels_;
 
+        /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.
+        void MaybeFreeCpuPixels();
+
         void storeCpuPixels(const uint8_t* rgba, int pixelCount);
         std::vector<uint8_t>& getMipBuffer(int level);
         const std::vector<uint8_t>* getMipBufferConst(int level) const;

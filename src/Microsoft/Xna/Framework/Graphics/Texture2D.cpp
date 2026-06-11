@@ -27,6 +27,12 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
+    void Texture2D::MaybeFreeCpuPixels()
+    {
+        if (graphicsDevice_ && !graphicsDevice_->contextRecoveryEnabled_)
+            cpuPixels_.reset();
+    }
+
     void Texture2D::storeCpuPixels(const uint8_t* rgba, int pixelCount)
     {
         if (!cpuPixels_) cpuPixels_ = std::make_shared<std::vector<uint8_t>>();
@@ -76,6 +82,7 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         backend_->ShareCpuPixels(cpuPixels_);
+        MaybeFreeCpuPixels();
     }
 
     Texture2D::Texture2D(const std::string& assetName)
@@ -97,6 +104,7 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         backend_->ShareCpuPixels(cpuPixels_);
+        MaybeFreeCpuPixels();
     }
 
     static int CalculateMipLevels(int w, int h)
@@ -119,6 +127,7 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         backend_->ShareCpuPixels(cpuPixels_);
+        MaybeFreeCpuPixels();
     }
 
     Texture2D::Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt,
@@ -167,6 +176,7 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
         backend_->ShareCpuPixels(cpuPixels_);
+        MaybeFreeCpuPixels();
     }
 
     void Texture2D::SetData(int level, const Rectangle* rect,
@@ -335,6 +345,7 @@ namespace Microsoft::Xna::Framework::Graphics
         tex.backend_   = graphicsDevice.GetBackend().CreateTexture(img);
         tex.cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
         tex.backend_->ShareCpuPixels(tex.cpuPixels_);
+        tex.MaybeFreeCpuPixels();
         return tex;
     }
 
@@ -525,6 +536,7 @@ namespace Microsoft::Xna::Framework::Graphics
         tex.backend_        = device.GetBackend().CreateTexture(data);
         tex.cpuPixels_      = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         tex.backend_->ShareCpuPixels(tex.cpuPixels_);
+        tex.MaybeFreeCpuPixels();
         return tex;
     }
 

@@ -615,8 +615,8 @@ namespace Microsoft::Xna::Framework::Content
         if (cacheIt != textureCache_.end())
         {
             auto backendSp   = cacheIt->second.backend.lock();
-            auto cpuPixelsSp = cacheIt->second.cpuPixels.lock();
-            if (backendSp && cpuPixelsSp)
+            auto cpuPixelsSp = cacheIt->second.cpuPixels.lock(); // may be null when context recovery disabled
+            if (backendSp)
             {
                 // Reuse the existing GPU backend — no reload from disk needed.
                 const int w = backendSp->GetWidth();
@@ -629,7 +629,7 @@ namespace Microsoft::Xna::Framework::Content
                     std::move(backendSp),
                     std::move(cpuPixelsSp));
             }
-            // Both weak refs expired — remove stale entry and fall through to reload.
+            // Backend expired — remove stale entry and fall through to reload.
             textureCache_.erase(cacheIt);
         }
 
