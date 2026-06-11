@@ -151,7 +151,7 @@ namespace CNA::Internal::Backends::EasyGL
 
     void EasyGLTextureBackend::ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels)
     {
-        pixels_ = std::move(pixels);
+        if (registry_) pixels_ = std::move(pixels);
     }
 
     void EasyGLTextureBackend::UpdatePixels(const uint8_t* rgba, int /*stride*/)
@@ -599,11 +599,12 @@ void main()
     // --- EasyGLGraphicsBackend ---
 
     EasyGLGraphicsBackend::EasyGLGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                  CnaPresentationMode mode)
+                                                  CnaPresentationMode mode, bool contextRecoveryEnabled)
         : window(window)
         , virtualWidth_(virtualWidth)
         , virtualHeight_(virtualHeight)
         , presentationMode_(mode)
+        , contextRecoveryEnabled_(contextRecoveryEnabled)
     {
         if (!window) throw std::runtime_error("EasyGLGraphicsBackend initialized with null window.");
 
@@ -797,22 +798,22 @@ void main()
 
     std::unique_ptr<ITextureBackend> EasyGLGraphicsBackend::CreateTexture(const ImageData& data)
     {
-        return std::make_unique<EasyGLTextureBackend>(data, &registry_);
+        return std::make_unique<EasyGLTextureBackend>(data, RegistryPtr());
     }
 
     std::unique_ptr<ISpriteBatchBackend> EasyGLGraphicsBackend::CreateSpriteBatch()
     {
-        return std::make_unique<EasyGLSpriteBatchBackend>(device, &registry_, this);
+        return std::make_unique<EasyGLSpriteBatchBackend>(device, RegistryPtr(), this);
     }
 
     std::unique_ptr<IOcclusionQueryBackend> EasyGLGraphicsBackend::CreateOcclusionQuery()
     {
-        return std::make_unique<EasyGLOcclusionQueryBackend>(&registry_);
+        return std::make_unique<EasyGLOcclusionQueryBackend>(RegistryPtr());
     }
 
     std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth)
     {
-        return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, &registry_);
+        return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, RegistryPtr());
     }
 
     void EasyGLGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -1057,8 +1058,11 @@ void main()
         vertex_count = count;
         stride_in_bytes_ = stride_in_bytes;
         const std::size_t byte_count = static_cast<std::size_t>(count) * stride_in_bytes;
-        const auto* bytes = static_cast<const uint8_t*>(data);
-        cpu_data_.assign(bytes, bytes + byte_count);
+        if (registry_)
+        {
+            const auto* bytes = static_cast<const uint8_t*>(data);
+            cpu_data_.assign(bytes, bytes + byte_count);
+        }
         vbo.bind(::easygl::BufferTarget::Array);
         vbo.set_data(::easygl::BufferTarget::Array, data, byte_count);
         ApplyLayout(stride_in_bytes_);
@@ -1101,8 +1105,11 @@ void main()
     {
         index_count = count;
         const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint16_t);
-        const auto* bytes = static_cast<const uint8_t*>(data);
-        cpu_data_.assign(bytes, bytes + byte_count);
+        if (registry_)
+        {
+            const auto* bytes = static_cast<const uint8_t*>(data);
+            cpu_data_.assign(bytes, bytes + byte_count);
+        }
         ibo.bind(::easygl::BufferTarget::ElementArray);
         ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count);
         CNA_RENDER_LOG("IndexBuffer SetData16: count=" << count);
@@ -1112,8 +1119,11 @@ void main()
     {
         index_count = count;
         const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint32_t);
-        const auto* bytes = static_cast<const uint8_t*>(data);
-        cpu_data_.assign(bytes, bytes + byte_count);
+        if (registry_)
+        {
+            const auto* bytes = static_cast<const uint8_t*>(data);
+            cpu_data_.assign(bytes, bytes + byte_count);
+        }
         ibo.bind(::easygl::BufferTarget::ElementArray);
         ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count);
         CNA_RENDER_LOG("IndexBuffer SetData32: count=" << count);
@@ -1408,17 +1418,17 @@ void main()
 
     std::unique_ptr<IVertexBufferBackend> EasyGLGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
-        return std::make_unique<EasyGLVertexBufferBackend>(vertex_capacity, &registry_);
+        return std::make_unique<EasyGLVertexBufferBackend>(vertex_capacity, RegistryPtr());
     }
 
     std::unique_ptr<IIndexBufferBackend> EasyGLGraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, false, &registry_);
+        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, false, RegistryPtr());
     }
 
     std::unique_ptr<IIndexBufferBackend> EasyGLGraphicsBackend::CreateIndexBuffer32(int index_capacity)
     {
-        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, true, &registry_);
+        return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, true, RegistryPtr());
     }
 
     void EasyGLGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb_in,
@@ -1566,7 +1576,8 @@ namespace CNA::Internal::Backends
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
         return std::make_unique<EasyGL::EasyGLGraphicsBackend>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+            args.window, args.virtualWidth, args.virtualHeight,
+            args.presentationMode, args.contextRecoveryEnabled);
     }
 #endif
 }

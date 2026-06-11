@@ -440,6 +440,12 @@ namespace CNA::Internal::Backends
         /// keeps preferred height fixed and derives logical width from the
         /// actual surface aspect ratio, matching XNA/Windows Phone behaviour.
         CnaPresentationMode presentationMode = CnaPresentationMode::FixedHeightDynamicWidth;
+        /// When false, the EasyGL backend will not keep CPU-side copies of
+        /// texture pixels or vertex/index data and will not register resources
+        /// with the ResourceRegistry. This eliminates the per-texture CPU
+        /// shadow copy overhead at the cost of making GL context-loss recovery
+        /// impossible. Safe on desktop where context loss never occurs.
+        bool contextRecoveryEnabled = true;
     };
 
     // Factory function to be implemented by each backend

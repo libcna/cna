@@ -1024,12 +1024,18 @@ namespace Microsoft::Xna::Framework::Graphics
         LogWindowDebugState(window_, "after SDL_CreateWindow");
     }
 
+    void GraphicsDevice::SetContextRecoveryEnabled(bool enabled)
+    {
+        contextRecoveryEnabled_ = enabled;
+    }
+
     void GraphicsDevice::createBackend()
     {
         GraphicsBackendCreateArgs args;
         args.window = window_;
         args.virtualWidth = virtualWidth_;
         args.virtualHeight = virtualHeight_;
+        args.contextRecoveryEnabled = contextRecoveryEnabled_;
 
         backend_ = CreateGraphicsBackend(args);
 
