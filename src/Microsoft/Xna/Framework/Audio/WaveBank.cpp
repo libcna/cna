@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"

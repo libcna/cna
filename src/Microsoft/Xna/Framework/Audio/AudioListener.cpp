@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 
 namespace Microsoft::Xna::Framework::Audio

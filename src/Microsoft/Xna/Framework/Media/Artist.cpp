@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Artist.hpp"
 
 #include <stdexcept>

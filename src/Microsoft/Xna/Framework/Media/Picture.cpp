@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Picture.hpp"
 
 #include <stdexcept>

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotation.hpp"
 #include <stdexcept>
 

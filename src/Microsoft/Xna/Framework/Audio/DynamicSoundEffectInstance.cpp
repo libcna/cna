@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
 
 #include <algorithm>

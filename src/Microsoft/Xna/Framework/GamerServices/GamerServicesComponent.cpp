@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices

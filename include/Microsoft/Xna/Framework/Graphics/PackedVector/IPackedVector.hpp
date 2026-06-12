@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 //
 // IPackedVector.hpp — C++ port of the FNA/XNA IPackedVector interfaces.
 //

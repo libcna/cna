@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 
 #include <stdexcept>

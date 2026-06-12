@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/ContainmentType.hpp"
 

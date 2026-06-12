@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/VideoPlayer.hpp"
 #include "CNA/Internal/Media/VideoDecoder.hpp"

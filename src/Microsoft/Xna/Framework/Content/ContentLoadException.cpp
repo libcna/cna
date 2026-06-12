@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 
 namespace Microsoft::Xna::Framework::Content

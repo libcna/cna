@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
 #if defined(CNA_BACKEND_BGFX) && __has_include(<bgfx/bgfx.h>)

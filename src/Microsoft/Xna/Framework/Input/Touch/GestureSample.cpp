@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch

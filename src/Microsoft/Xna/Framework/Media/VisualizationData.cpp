@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/VisualizationData.hpp"
 
 namespace Microsoft::Xna::Framework::Media

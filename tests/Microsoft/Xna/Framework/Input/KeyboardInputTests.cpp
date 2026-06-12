@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Input/InputManager.hpp"
