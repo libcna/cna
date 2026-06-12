@@ -252,6 +252,55 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 
 ## 8. Next smallest tasks
 
+### Task 45 — sharp-runtime: Doxygen `///` on all public members ⬜ TODO
+
+**Status:** Not started. 412 `.hpp` files under
+`/rv/data/development/github.com/openeggbert/sharp-runtime/include/` are missing `///` Doxygen
+comments on their public methods, constructors, operators, and enum values.
+
+**Breakdown by directory:**
+
+| Directory | Files missing `///` |
+|---|---|
+| `System/` (root, direct files only) | ~144 |
+| `System/Collections/` | 61 |
+| `System/Threading/` | 48 |
+| `System/IO/` | 46 |
+| `System/Text/` | 31 |
+| `System/Diagnostics/` | 20 |
+| `System/Globalization/` | 20 |
+| `System/ComponentModel/` | 9 |
+| `System/Runtime/` | 7 |
+| `System/Numerics/` | 7 |
+| `System/Xml/` | 4 |
+| `System/Security/` | 4 |
+| `System/Net/` | 4 |
+| `System/Buffers/` | 4 |
+| `SharpRuntime/` | 3 |
+
+**Permission note:** Background agents spawned from the CNA session cannot write to the
+sharp-runtime directory. To run this task efficiently, open Claude Code directly inside
+sharp-runtime and run parallel agents from there:
+
+```bash
+cd /rv/data/development/github.com/openeggbert/sharp-runtime
+claude
+# then ask: "doxygen komentare pro vsechny verejne metody"
+```
+
+Alternatively, global `~/.claude/settings.json` has been updated with explicit
+`Edit`/`Write` allow rules for `openeggbert/**` — future agent attempts may succeed.
+
+**Rules for the comments:**
+- `///` single-line style only (no `/** */` blocks on individual members)
+- One short sentence per member: "Gets the count.", "Removes all elements.", etc.
+- Enum enumerators need `///` too
+- Do NOT commit from agents — one clean commit at the end
+
+---
+
+
+
 ### Task 33 — `RenderTarget2D`: delete copy constructor / assignment ✅ DONE
 - Added `= delete` for copy ctor/assignment, `= default` for move in `RenderTarget2D.hpp`.
 - Verified: no existing code copies RT by value. Both backends build clean.

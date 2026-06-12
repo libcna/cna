@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(/rv/data/development/github.com/openeggbert/sharp-runtime/**)",
+      "Write(/rv/data/development/github.com/openeggbert/sharp-runtime/**)",
+      "Bash(find /rv/data/development/github.com/openeggbert/sharp-runtime/**)"
+    ]
+  }
+}
