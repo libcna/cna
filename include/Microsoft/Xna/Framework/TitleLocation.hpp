@@ -1,6 +1,10 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <string>
+
+#include "CNA/CNAHelper.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -8,15 +12,16 @@ namespace Microsoft::Xna::Framework
     class TitleLocation final
     {
     public:
+        /// Static-only class; not instantiable.
         TitleLocation() = delete;
 
         /// Gets the base directory for title content.
         [[nodiscard]] static const std::string& getPathProperty();
 
         /// Sets the base directory for title content. Useful for tests and custom launchers.
-        static void setPathProperty(const std::string& value);
+        NOXNA static void setPathProperty(const std::string& value);
 
-        /// XNA-style property helper for code that expects TitleLocation::Path().
+        /// Gets the base directory for title content (matches XNA property name).
         [[nodiscard]] static const std::string& Path();
 
     private:
