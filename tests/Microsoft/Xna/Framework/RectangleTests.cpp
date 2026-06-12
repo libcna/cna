@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Point.hpp"
@@ -191,4 +193,144 @@ TEST(RectangleTest, InflateExpandsEdges)
     EXPECT_EQ(r.Y, 10);
     EXPECT_EQ(r.Width, 110);
     EXPECT_EQ(r.Height, 70);
+}
+
+TEST(RectangleTest, OffsetByInts)
+{
+    Rectangle r(10, 20, 100, 50);
+    r.Offset(5, -10);
+    EXPECT_EQ(r.X, 15);
+    EXPECT_EQ(r.Y, 10);
+    EXPECT_EQ(r.Width, 100);
+    EXPECT_EQ(r.Height, 50);
+}
+
+// --- Contains(Point) value overload + out-ref overloads ---
+
+TEST(RectangleTest, ContainsPointValueOverload)
+{
+    Rectangle r(0, 0, 100, 100);
+    EXPECT_TRUE(r.Contains(Point(50, 50)));
+    EXPECT_FALSE(r.Contains(Point(100, 50))); // exclusive right edge
+}
+
+TEST(RectangleTest, ContainsPointOutRef)
+{
+    Rectangle r(0, 0, 100, 100);
+    bool result = false;
+    r.Contains(Point(50, 50), result);
+    EXPECT_TRUE(result);
+    r.Contains(Point(200, 200), result);
+    EXPECT_FALSE(result);
+}
+
+TEST(RectangleTest, ContainsRectangleOutRef)
+{
+    Rectangle outer(0, 0, 100, 100);
+    Rectangle inner(10, 10, 50, 50);
+    bool result = false;
+    outer.Contains(inner, result);
+    EXPECT_TRUE(result);
+    Rectangle partial(50, 50, 100, 100);
+    outer.Contains(partial, result);
+    EXPECT_FALSE(result);
+}
+
+// --- Intersects out-ref ---
+
+TEST(RectangleTest, IntersectsOutRef)
+{
+    Rectangle a(0, 0, 100, 100);
+    Rectangle b(50, 50, 100, 100);
+    bool result = false;
+    a.Intersects(b, result);
+    EXPECT_TRUE(result);
+    Rectangle c(200, 200, 10, 10);
+    a.Intersects(c, result);
+    EXPECT_FALSE(result);
+}
+
+// --- Static out-ref overloads ---
+
+TEST(RectangleTest, IntersectStaticOutRef)
+{
+    Rectangle a(0, 0, 100, 100);
+    Rectangle b(50, 50, 100, 100);
+    Rectangle result;
+    Rectangle::Intersect(a, b, result);
+    EXPECT_EQ(result.X, 50);
+    EXPECT_EQ(result.Y, 50);
+    EXPECT_EQ(result.Width, 50);
+    EXPECT_EQ(result.Height, 50);
+}
+
+TEST(RectangleTest, UnionStaticOutRef)
+{
+    Rectangle a(0, 0, 10, 10);
+    Rectangle b(20, 20, 10, 10);
+    Rectangle result;
+    Rectangle::Union(a, b, result);
+    EXPECT_EQ(result.X, 0);
+    EXPECT_EQ(result.Y, 0);
+    EXPECT_EQ(result.Width, 30);
+    EXPECT_EQ(result.Height, 30);
+}
+
+// --- Location getter / setter ---
+
+TEST(RectangleTest, LocationGetterReturnsTopLeft)
+{
+    Rectangle r(10, 20, 100, 50);
+    Point loc = r.getLocationProperty();
+    EXPECT_EQ(loc.X, 10);
+    EXPECT_EQ(loc.Y, 20);
+}
+
+TEST(RectangleTest, LocationSetterMovesRectangle)
+{
+    Rectangle r(10, 20, 100, 50);
+    r.setLocationProperty(Point(5, 7));
+    EXPECT_EQ(r.X, 5);
+    EXPECT_EQ(r.Y, 7);
+    EXPECT_EQ(r.Width, 100); // size unchanged
+    EXPECT_EQ(r.Height, 50);
+}
+
+// --- Empty static property ---
+
+TEST(RectangleTest, EmptyStaticPropertyIsZero)
+{
+    Rectangle e = Rectangle::getEmptyProperty();
+    EXPECT_TRUE(e.getIsEmptyProperty());
+}
+
+// --- Equals, GetHashCode, ToString ---
+
+TEST(RectangleTest, EqualsMethodMatchesOperator)
+{
+    Rectangle a(1, 2, 3, 4);
+    Rectangle b(1, 2, 3, 4);
+    Rectangle c(1, 2, 3, 5);
+    EXPECT_TRUE(a.Equals(b));
+    EXPECT_FALSE(a.Equals(c));
+}
+
+TEST(RectangleTest, GetHashCodeEqualRectanglesGiveEqualHash)
+{
+    Rectangle a(1, 2, 3, 4);
+    Rectangle b(1, 2, 3, 4);
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(RectangleTest, GetHashCodeDifferentRectanglesTypicallyDiffer)
+{
+    Rectangle a(1, 2, 3, 4);
+    Rectangle b(10, 20, 30, 40);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(RectangleTest, ToStringFormat)
+{
+    Rectangle r(1, 2, 3, 4);
+    EXPECT_EQ(r.ToString(), "{X:1 Y:2 Width:3 Height:4}");
 }

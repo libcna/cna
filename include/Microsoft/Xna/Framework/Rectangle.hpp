@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <string>
@@ -111,7 +113,9 @@ namespace Microsoft::Xna::Framework
         /// Computes the union of two rectangles into an output parameter.
         static void Union(const Rectangle& value1, const Rectangle& value2, Rectangle& result);
 
+        /// Returns true when all four fields are equal.
         friend bool operator==(Rectangle value1, Rectangle value2);
+        /// Returns true when any field differs.
         friend bool operator!=(Rectangle value1, Rectangle value2);
 
     private:
