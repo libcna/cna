@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
 
 #include <cstdlib>
