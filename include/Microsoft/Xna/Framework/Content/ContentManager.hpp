@@ -58,15 +58,21 @@ namespace Microsoft::Xna::Framework::Content
         void RegisterBuiltinLoaders();
 
     public:
+        /// Constructs a ContentManager with a default root directory of "Content".
         ContentManager();
+        /// Destroys the content manager and releases loaded assets.
         ~ContentManager() override = default;
 
+        /// Releases all resources used by this content manager.
         void Dispose() override;
 
+        /// Sets the graphics device used when loading GPU resources such as textures.
         void setGraphicsDevice(Graphics::GraphicsDevice& graphicsDevice);
 
+        /// Returns the graphics device associated with this content manager.
         [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceInternal() const;
 
+        /// Unloads all cached assets and frees the associated resources.
         void Unload();
 
         /**

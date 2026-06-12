@@ -7,17 +7,26 @@
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
+    /// Packed vector type storing four unsigned byte channels in a 32-bit value.
     struct Byte4 : public IPackedVectorT<uint32_t>
     {
+        /// Constructs a Byte4 with a packed value of zero.
         Byte4() : packedValue_(0) {}
+        /// Constructs a Byte4 from four float values in [0, 255].
         Byte4(float x, float y, float z, float w) : packedValue_(Pack(x, y, z, w)) {}
+        /// Constructs a Byte4 from a Vector4 with components in [0, 255].
         Byte4(Vector4 vector) : packedValue_(Pack(vector.X, vector.Y, vector.Z, vector.W)) {}
+        /// Constructs a Byte4 from a raw 32-bit packed value.
         explicit Byte4(uint32_t packed) : packedValue_(packed) {}
 
+        /// Gets the packed 32-bit value.
         [[nodiscard]] uint32_t getPackedValueProperty() const override { return packedValue_; }
+        /// Sets the packed 32-bit value.
         void setPackedValueProperty(uint32_t v) override { packedValue_ = v; }
 
+        /// Packs the XYZW components of a Vector4 into this Byte4.
         void PackFromVector4(const Vector4& v) override { packedValue_ = Pack(v.X, v.Y, v.Z, v.W); }
+        /// Expands the packed value to a Vector4 with each component in [0, 255].
         [[nodiscard]] Vector4 ToVector4() const
         {
             return {
@@ -28,7 +37,9 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
             };
         }
 
+        /// Returns true if both values are equal.
         bool operator==(const Byte4& o) const { return packedValue_ == o.packedValue_; }
+        /// Returns true if both values are not equal.
         bool operator!=(const Byte4& o) const { return !(*this == o); }
 
     private:

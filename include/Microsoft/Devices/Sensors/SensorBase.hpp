@@ -19,30 +19,7 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    /**
-     * @brief Provides the base implementation for sensor types.
-     *
-     * This is a C++ counterpart of the .NET
-     * Microsoft.Devices.Sensors.SensorBase<TSensorReading> class.
-     *
-     * In the original .NET version:
-     * - the class implements IDisposable
-     * - it exposes CurrentValue and TimeBetweenUpdates properties
-     * - it raises CurrentValueChanged and TimeBetweenUpdatesChanged events
-     * - it uses a finalizer that calls Dispose(false)
-     *
-     * In this C++ port:
-     * - IDisposable is represented by System::IDisposable
-     * - events are represented by System::EventHandler<T>
-     * - properties are represented by getter/setter methods
-     * - the finalizer/GC pattern cannot be reproduced exactly
-     *
-     * @tparam TSensorReading Type of sensor reading.
-     *
-     * @note Status: Partial.
-     * @note TSensorReading must derive from ISensorReading.
-     * @note The .NET finalizer semantics cannot be reproduced exactly in C++.
-     */
+    /// Abstract base class for device sensors; provides current-value and event-notification infrastructure.
     template <typename TSensorReading>
     class SensorBase : public System::Object, public System::IDisposable
     {

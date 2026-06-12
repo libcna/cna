@@ -17,6 +17,7 @@ namespace Microsoft::Xna::Framework::Content
     class ContentTypeReader
     {
     public:
+        /// Virtual destructor.
         virtual ~ContentTypeReader() = default;
 
         /**

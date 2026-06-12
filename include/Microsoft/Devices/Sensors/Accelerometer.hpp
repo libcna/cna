@@ -17,17 +17,7 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    /**
-     * @brief Provides access to the device accelerometer sensor.
-     *
-     * This is a partial C++ counterpart of the MonoGame
-     * Microsoft.Devices.Sensors.Accelerometer class.
-     *
-     * @note Status: Partial.
-     * @note Public API intentionally follows the original C# type.
-     * SDL3 event processing is kept internal.
-     * @note Runtime behavior is expected to be validated primarily on Android devices.
-     */
+    /// Provides access to the device accelerometer sensor.
     class Accelerometer final : public SensorBase<AccelerometerReading>
     {
     private:

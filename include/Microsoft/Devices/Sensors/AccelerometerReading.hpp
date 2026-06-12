@@ -14,14 +14,7 @@ namespace Microsoft::Devices::Sensors
 {
     using Xna::Framework::Vector3;
 
-    /**
-     * @brief Represents one accelerometer reading.
-     *
-     * This is a partial C++ counterpart of the .NET
-     * Microsoft.Devices.Sensors.AccelerometerReading type.
-     *
-     * @note Status: Partial.
-     */
+    /// Represents one accelerometer sensor reading with a timestamp and acceleration vector.
     class AccelerometerReading : public ISensorReading
     {
     private:

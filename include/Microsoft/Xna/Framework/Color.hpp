@@ -18,22 +18,7 @@ namespace Microsoft::Xna::Framework
     using SharpRuntime::uintcs;
     using SharpRuntime::UInt32;
 
-    /**
-     * @brief Describes a 32-bit packed color.
-     *
-     * The packed layout stores R in bits 0–7, G in bits 8–15, B in bits 16–23,
-     * and A in bits 24–31 (i.e. the numeric packed value reads AABBGGRR).
-     * Examples: opaque red = @c 0xff0000ff, opaque blue = @c 0xffff0000,
-     * CornflowerBlue = @c 0xffed9564, White = @c 0xffffffff.
-     *
-     * Implements both @c IPackedVector (non-generic, for runtime polymorphism)
-     * and @c IPackedVectorT<UInt32> (generic variant that exposes PackedValue
-     * typed as UInt32).
-     *
-     * @note The virtual dispatch overhead from the IPackedVector base can be
-     *       avoided by using concrete @c Color objects directly; use
-     *       @c IPackedVector* only when runtime polymorphism is needed.
-     */
+    /// Describes a 32-bit packed RGBA color (packed as AABBGGRR).
     struct Color : public Graphics::PackedVector::IPackedVectorT<UInt32>,
                    public System::IEquatable<Color>
     {

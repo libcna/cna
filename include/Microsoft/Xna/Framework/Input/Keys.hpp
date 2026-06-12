@@ -7,13 +7,7 @@
 
 namespace Microsoft::Xna::Framework::Input
 {
-    /**
-     * @brief Defines the keys on a keyboard.
-     *
-     * This enumeration mirrors the XNA / MonoGame keyboard key definitions.
-     * Numeric values correspond to the original key codes used by the framework.
-     * @note Status: Verified
-     */
+    /// Defines the keys on a keyboard.
     enum class Keys
     {
         /** @brief Reserved. */

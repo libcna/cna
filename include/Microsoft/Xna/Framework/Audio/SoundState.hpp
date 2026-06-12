@@ -8,12 +8,16 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
+    /// Specifies the playback state of a sound.
     enum class SoundState
     {
+        /// The sound is currently playing.
         Playing,
 
+        /// The sound is currently paused.
         Paused,
 
+        /// The sound is currently stopped.
         Stopped,
     };
 }

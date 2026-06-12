@@ -22,24 +22,27 @@ namespace Microsoft::Xna::Framework::Graphics
     class VertexDeclaration
     {
     public:
+        /// Constructs an empty VertexDeclaration with zero stride.
         VertexDeclaration() = default;
 
+        /// Constructs a VertexDeclaration with the given stride and element list.
         VertexDeclaration(int vertexStride,
                           std::initializer_list<VertexElement> elements)
             : vertexStride_(vertexStride), elements_(elements)
         {
         }
 
+        /// Constructs a VertexDeclaration with the given stride and element vector.
         VertexDeclaration(int vertexStride,
                           std::vector<VertexElement> elements)
             : vertexStride_(vertexStride), elements_(std::move(elements))
         {
         }
 
-        /** Size in bytes of one vertex described by this declaration. */
+        /// Gets the size in bytes of one vertex described by this declaration.
         [[nodiscard]] int VertexStride() const { return vertexStride_; }
 
-        /** Returns the element list (semantic + format + offset entries). */
+        /// Returns the element list (semantic, format, and offset entries).
         [[nodiscard]] const std::vector<VertexElement>& GetVertexElements() const
         {
             return elements_;

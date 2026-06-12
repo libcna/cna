@@ -14,16 +14,7 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    /**
-     * @brief Provides data for a sensor reading event.
-     *
-     * This is a C++ counterpart of the .NET
-     * Microsoft.Devices.Sensors.SensorReadingEventArgs<T> class.
-     *
-     * @tparam T Type of sensor reading payload.
-     *
-     * @note Status: Partial.
-     */
+    /// Provides data for a sensor reading event, carrying the latest sensor reading.
     template <typename T>
     class SensorReadingEventArgs : public System::EventArgs
     {

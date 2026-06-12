@@ -20,16 +20,18 @@ namespace Microsoft::Xna::Framework::Graphics
      */
     struct VertexPositionColor
     {
-        /** Position in object space. */
+        /// Position in object space.
         Microsoft::Xna::Framework::Vector3 Position;
-        /** Per-vertex color. */
+        /// Per-vertex color.
         Microsoft::Xna::Framework::Color Color;
 
+        /// Constructs a default VertexPositionColor with position zero and white color.
         VertexPositionColor()
             : Position(0, 0, 0), Color(255, 255, 255, 255)
         {
         }
 
+        /// Constructs a VertexPositionColor with the given position and color.
         VertexPositionColor(const Microsoft::Xna::Framework::Vector3& position,
                             const Microsoft::Xna::Framework::Color& color)
             : Position(position), Color(color)

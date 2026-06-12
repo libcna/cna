@@ -66,17 +66,24 @@ namespace Microsoft::Xna::Framework::Graphics
                      int vertexCount,
                      BufferUsage bufferUsage);
 
+        /// Destroys this vertex buffer and releases its GPU resources.
         ~VertexBuffer();
 
+        /// Copying is not allowed.
         VertexBuffer(const VertexBuffer&) = delete;
+        /// Copy-assignment is not allowed.
         VertexBuffer& operator=(const VertexBuffer&) = delete;
 
+        /// Uploads VertexPositionColor vertex data to the GPU buffer.
         void SetData(const VertexPositionColor* vertices, int count);
+        /// Uploads VertexPositionColorTexture vertex data to the GPU buffer.
         void SetData(const VertexPositionColorTexture* vertices, int count);
+        /// Uploads VertexPositionNormalTexture vertex data to the GPU buffer.
         void SetData(const VertexPositionNormalTexture* vertices, int count);
+        /// Uploads VertexPositionTexture vertex data to the GPU buffer.
         void SetData(const VertexPositionTexture* vertices, int count);
 
-        /** Number of vertices currently stored. */
+        /// Returns the number of vertices currently stored in this buffer.
         [[nodiscard]] int VertexCount() const;
 
         /**

@@ -8,8 +8,10 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
     // Half-precision float (IEEE 754-2008 binary16) helpers.
     // Matches FNA's HalfTypeHelper exactly.
+    /// Helper struct providing conversion between 32-bit float and 16-bit half-precision float.
     struct HalfTypeHelper
     {
+        /// Converts a 32-bit float to a 16-bit half-precision float representation.
         [[nodiscard]] static uint16_t Convert(float f)
         {
             uint32_t bits;
@@ -22,6 +24,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
             return static_cast<uint16_t>(sign | (exp << 10) | mantissa);
         }
 
+        /// Converts a 16-bit half-precision float to a 32-bit float.
         [[nodiscard]] static float Convert(uint16_t h)
         {
             uint32_t sign     = (static_cast<uint32_t>(h) & 0x8000u) << 16;

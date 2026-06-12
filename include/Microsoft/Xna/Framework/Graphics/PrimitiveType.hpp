@@ -3,21 +3,16 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /**
-     * @brief Primitive topology accepted by `GraphicsDevice::DrawUserPrimitives`
-     *        and similar 3D draw entry points.
-     *
-     * Mirrors `Microsoft.Xna.Framework.Graphics.PrimitiveType` from XNA 4.0.
-     *
-     * @note Status: PARTIAL. Only `TriangleList`, `TriangleStrip`, `LineList`
-     *       and `LineStrip` are honored by the EasyGL backend; other backends
-     *       reject 3D draws entirely.
-     */
+    /// Defines the primitive topology for drawing operations.
     enum class PrimitiveType
     {
+        /// A list of isolated triangles.
         TriangleList = 0,
+        /// A strip of connected triangles.
         TriangleStrip = 1,
+        /// A list of isolated line segments.
         LineList = 2,
+        /// A strip of connected line segments.
         LineStrip = 3
     };
 }

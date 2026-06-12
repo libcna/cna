@@ -7,16 +7,24 @@
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
+    /// Packed vector type storing four signed normalized 16-bit integers (XYZW) in a 64-bit value.
     struct NormalizedShort4 : public IPackedVectorT<uint64_t>
     {
+        /// Constructs a NormalizedShort4 with a packed value of zero.
         NormalizedShort4() : packedValue_(0) {}
+        /// Constructs a NormalizedShort4 from normalized X, Y, Z, W floats in [-1, 1].
         NormalizedShort4(float x, float y, float z, float w) : packedValue_(Pack(x, y, z, w)) {}
+        /// Constructs a NormalizedShort4 from a Vector4 with components in [-1, 1].
         NormalizedShort4(Vector4 vector) : packedValue_(Pack(vector.X, vector.Y, vector.Z, vector.W)) {}
 
+        /// Gets the packed 64-bit value.
         [[nodiscard]] uint64_t getPackedValueProperty() const override { return packedValue_; }
+        /// Sets the packed 64-bit value.
         void setPackedValueProperty(uint64_t v) override { packedValue_ = v; }
 
+        /// Packs the XYZW components of a Vector4 as signed normalized 16-bit integers.
         void PackFromVector4(const Vector4& v) override { packedValue_ = Pack(v.X, v.Y, v.Z, v.W); }
+        /// Expands the packed value to a normalized Vector4.
         [[nodiscard]] Vector4 ToVector4() const
         {
             return {
@@ -27,7 +35,9 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
             };
         }
 
+        /// Returns true if both values are equal.
         bool operator==(const NormalizedShort4& o) const { return packedValue_ == o.packedValue_; }
+        /// Returns true if both values are not equal.
         bool operator!=(const NormalizedShort4& o) const { return !(*this == o); }
 
     private:
