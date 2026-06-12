@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <string>
@@ -150,13 +152,21 @@ namespace Microsoft::Xna::Framework
         /// Normalizes a quaternion and stores the result in an output parameter.
         static void Normalize(const Quaternion& quaternion, Quaternion& result);
 
+        /// Adds two quaternions component-wise.
         friend Quaternion operator+(Quaternion quaternion1, Quaternion quaternion2);
+        /// Divides one quaternion by another.
         friend Quaternion operator/(Quaternion quaternion1, Quaternion quaternion2);
+        /// Returns true when all four components are equal.
         friend bool operator==(Quaternion quaternion1, Quaternion quaternion2);
+        /// Returns true when any component differs.
         friend bool operator!=(Quaternion quaternion1, Quaternion quaternion2);
+        /// Multiplies two quaternions.
         friend Quaternion operator*(Quaternion quaternion1, Quaternion quaternion2);
+        /// Multiplies all components of a quaternion by a scalar.
         friend Quaternion operator*(Quaternion quaternion1, float scaleFactor);
+        /// Subtracts one quaternion from another component-wise.
         friend Quaternion operator-(Quaternion quaternion1, Quaternion quaternion2);
+        /// Negates all four components of a quaternion.
         friend Quaternion operator-(Quaternion quaternion);
 
     private:
