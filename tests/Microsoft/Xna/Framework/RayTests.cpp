@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: MS-PL
+
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Ray.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
 
 using namespace Microsoft::Xna::Framework;
@@ -182,3 +186,29 @@ TEST(RayTest, ToStringContainsPositionAndDirection)
     EXPECT_NE(s.find("Position"), std::string::npos);
     EXPECT_NE(s.find("Direction"), std::string::npos);
 }
+
+// -----------------------------------------------------------------------
+// GetHashCode
+// -----------------------------------------------------------------------
+
+TEST(RayTest, GetHashCodeEqualRaysGiveEqualHash)
+{
+    Ray a(Vector3(1.0f, 2.0f, 3.0f), Vector3(0.0f, 1.0f, 0.0f));
+    Ray b(Vector3(1.0f, 2.0f, 3.0f), Vector3(0.0f, 1.0f, 0.0f));
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(RayTest, GetHashCodeDifferentRaysTypicallyDiffer)
+{
+    Ray a(Vector3::Zero, Vector3::UnitX);
+    Ray b(Vector3::UnitY, Vector3::UnitZ);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
+// -----------------------------------------------------------------------
+// Intersects(BoundingFrustum)
+// -----------------------------------------------------------------------
+
+// Ray::Intersects(BoundingFrustum) delegates to BoundingFrustum::Intersects(Ray),
+// which is not yet implemented (throws NotImplementedException). Test omitted until
+// BoundingFrustum::Intersects(Ray) is ported.
