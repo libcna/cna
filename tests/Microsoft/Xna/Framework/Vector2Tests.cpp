@@ -1,7 +1,13 @@
+// SPDX-License-Identifier: MS-PL
+
 #include <gtest/gtest.h>
 #include <cmath>
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
 
+using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector2;
 
 // --- Static constants ---
@@ -49,6 +55,50 @@ TEST(Vector2Test, ScalarConstructorSetsBothComponents)
     EXPECT_FLOAT_EQ(v.Y, 7.0f);
 }
 
+// --- Equals ---
+
+TEST(Vector2Test, EqualsReturnsTrueForSameVector)
+{
+    Vector2 a(1.0f, 2.0f);
+    Vector2 b(1.0f, 2.0f);
+    EXPECT_TRUE(a.Equals(b));
+}
+
+TEST(Vector2Test, EqualsReturnsFalseForDifferentVector)
+{
+    Vector2 a(1.0f, 2.0f);
+    Vector2 b(1.0f, 3.0f);
+    EXPECT_FALSE(a.Equals(b));
+}
+
+// --- GetHashCode ---
+
+TEST(Vector2Test, GetHashCodeEqualVectorsGiveEqualHash)
+{
+    Vector2 a(1.0f, 2.0f);
+    Vector2 b(1.0f, 2.0f);
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(Vector2Test, GetHashCodeDifferentVectorsTypicallyDiffer)
+{
+    Vector2 a(1.0f, 2.0f);
+    Vector2 b(3.0f, 4.0f);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
+// --- ToString ---
+
+TEST(Vector2Test, ToStringFormat)
+{
+    Vector2 v(1.0f, 2.0f);
+    std::string s = v.ToString();
+    EXPECT_NE(s.find("1"), std::string::npos);
+    EXPECT_NE(s.find("2"), std::string::npos);
+    EXPECT_NE(s.find("X"), std::string::npos);
+    EXPECT_NE(s.find("Y"), std::string::npos);
+}
+
 // --- Length ---
 
 TEST(Vector2Test, LengthOf3_4Is5)
@@ -87,6 +137,14 @@ TEST(Vector2Test, NormalizeStaticPreservesOriginal)
     EXPECT_FLOAT_EQ(original.X, 3.0f);
 }
 
+TEST(Vector2Test, NormalizeOutRef)
+{
+    Vector2 v(3.0f, 4.0f);
+    Vector2 result;
+    Vector2::Normalize(v, result);
+    EXPECT_NEAR(result.Length(), 1.0f, 1e-6f);
+}
+
 // --- Arithmetic ---
 
 TEST(Vector2Test, AddTwoVectors)
@@ -94,6 +152,16 @@ TEST(Vector2Test, AddTwoVectors)
     Vector2 a(1.0f, 2.0f);
     Vector2 b(3.0f, 4.0f);
     Vector2 result = Vector2::Add(a, b);
+    EXPECT_FLOAT_EQ(result.X, 4.0f);
+    EXPECT_FLOAT_EQ(result.Y, 6.0f);
+}
+
+TEST(Vector2Test, AddOutRef)
+{
+    Vector2 a(1.0f, 2.0f);
+    Vector2 b(3.0f, 4.0f);
+    Vector2 result;
+    Vector2::Add(a, b, result);
     EXPECT_FLOAT_EQ(result.X, 4.0f);
     EXPECT_FLOAT_EQ(result.Y, 6.0f);
 }
@@ -107,6 +175,16 @@ TEST(Vector2Test, SubtractTwoVectors)
     EXPECT_FLOAT_EQ(result.Y, 4.0f);
 }
 
+TEST(Vector2Test, SubtractOutRef)
+{
+    Vector2 a(5.0f, 7.0f);
+    Vector2 b(2.0f, 3.0f);
+    Vector2 result;
+    Vector2::Subtract(a, b, result);
+    EXPECT_FLOAT_EQ(result.X, 3.0f);
+    EXPECT_FLOAT_EQ(result.Y, 4.0f);
+}
+
 TEST(Vector2Test, MultiplyByScalar)
 {
     Vector2 v(2.0f, 3.0f);
@@ -115,12 +193,77 @@ TEST(Vector2Test, MultiplyByScalar)
     EXPECT_FLOAT_EQ(result.Y, 6.0f);
 }
 
+TEST(Vector2Test, MultiplyScalarOutRef)
+{
+    Vector2 v(2.0f, 3.0f);
+    Vector2 result;
+    Vector2::Multiply(v, 2.0f, result);
+    EXPECT_FLOAT_EQ(result.X, 4.0f);
+    EXPECT_FLOAT_EQ(result.Y, 6.0f);
+}
+
+TEST(Vector2Test, MultiplyVectorByVector)
+{
+    Vector2 result = Vector2::Multiply(Vector2(2.0f, 3.0f), Vector2(4.0f, 5.0f));
+    EXPECT_FLOAT_EQ(result.X, 8.0f);
+    EXPECT_FLOAT_EQ(result.Y, 15.0f);
+}
+
+TEST(Vector2Test, MultiplyVectorByVectorOutRef)
+{
+    Vector2 result;
+    Vector2::Multiply(Vector2(2.0f, 3.0f), Vector2(4.0f, 5.0f), result);
+    EXPECT_FLOAT_EQ(result.X, 8.0f);
+    EXPECT_FLOAT_EQ(result.Y, 15.0f);
+}
+
 TEST(Vector2Test, DivideByScalar)
 {
     Vector2 v(4.0f, 6.0f);
     Vector2 result = Vector2::Divide(v, 2.0f);
     EXPECT_FLOAT_EQ(result.X, 2.0f);
     EXPECT_FLOAT_EQ(result.Y, 3.0f);
+}
+
+TEST(Vector2Test, DivideScalarOutRef)
+{
+    Vector2 v(4.0f, 6.0f);
+    Vector2 result;
+    Vector2::Divide(v, 2.0f, result);
+    EXPECT_FLOAT_EQ(result.X, 2.0f);
+    EXPECT_FLOAT_EQ(result.Y, 3.0f);
+}
+
+TEST(Vector2Test, DivideVectorByVector)
+{
+    Vector2 result = Vector2::Divide(Vector2(6.0f, 9.0f), Vector2(2.0f, 3.0f));
+    EXPECT_FLOAT_EQ(result.X, 3.0f);
+    EXPECT_FLOAT_EQ(result.Y, 3.0f);
+}
+
+TEST(Vector2Test, DivideVectorByVectorOutRef)
+{
+    Vector2 result;
+    Vector2::Divide(Vector2(6.0f, 9.0f), Vector2(2.0f, 3.0f), result);
+    EXPECT_FLOAT_EQ(result.X, 3.0f);
+    EXPECT_FLOAT_EQ(result.Y, 3.0f);
+}
+
+// --- Negate ---
+
+TEST(Vector2Test, NegateStaticFlipsBothComponents)
+{
+    Vector2 result = Vector2::Negate(Vector2(1.0f, -2.0f));
+    EXPECT_FLOAT_EQ(result.X, -1.0f);
+    EXPECT_FLOAT_EQ(result.Y, 2.0f);
+}
+
+TEST(Vector2Test, NegateOutRef)
+{
+    Vector2 result;
+    Vector2::Negate(Vector2(3.0f, -4.0f), result);
+    EXPECT_FLOAT_EQ(result.X, -3.0f);
+    EXPECT_FLOAT_EQ(result.Y, 4.0f);
 }
 
 // --- Dot product ---
@@ -135,6 +278,13 @@ TEST(Vector2Test, DotOfParallelVectorsIsProduct)
     EXPECT_FLOAT_EQ(Vector2::Dot(Vector2(2.0f, 0.0f), Vector2(3.0f, 0.0f)), 6.0f);
 }
 
+TEST(Vector2Test, DotOutRef)
+{
+    float result = 0.0f;
+    Vector2::Dot(Vector2(2.0f, 0.0f), Vector2(3.0f, 0.0f), result);
+    EXPECT_FLOAT_EQ(result, 6.0f);
+}
+
 // --- Distance ---
 
 TEST(Vector2Test, DistanceBetween3_4AndOriginIs5)
@@ -142,9 +292,23 @@ TEST(Vector2Test, DistanceBetween3_4AndOriginIs5)
     EXPECT_FLOAT_EQ(Vector2::Distance(Vector2::Zero, Vector2(3.0f, 4.0f)), 5.0f);
 }
 
+TEST(Vector2Test, DistanceOutRef)
+{
+    float result = 0.0f;
+    Vector2::Distance(Vector2::Zero, Vector2(3.0f, 4.0f), result);
+    EXPECT_FLOAT_EQ(result, 5.0f);
+}
+
 TEST(Vector2Test, DistanceSquaredBetween3_4AndOriginIs25)
 {
     EXPECT_FLOAT_EQ(Vector2::DistanceSquared(Vector2::Zero, Vector2(3.0f, 4.0f)), 25.0f);
+}
+
+TEST(Vector2Test, DistanceSquaredOutRef)
+{
+    float result = 0.0f;
+    Vector2::DistanceSquared(Vector2::Zero, Vector2(3.0f, 4.0f), result);
+    EXPECT_FLOAT_EQ(result, 25.0f);
 }
 
 // --- Lerp ---
@@ -170,6 +334,55 @@ TEST(Vector2Test, LerpAtHalfReturnsMidpoint)
     EXPECT_FLOAT_EQ(result.Y, 1.0f);
 }
 
+TEST(Vector2Test, LerpOutRef)
+{
+    Vector2 result;
+    Vector2::Lerp(Vector2::Zero, Vector2(4.0f, 2.0f), 0.5f, result);
+    EXPECT_FLOAT_EQ(result.X, 2.0f);
+    EXPECT_FLOAT_EQ(result.Y, 1.0f);
+}
+
+// --- SmoothStep ---
+
+TEST(Vector2Test, SmoothStepAtZeroReturnsFirst)
+{
+    Vector2 result = Vector2::SmoothStep(Vector2::Zero, Vector2::One, 0.0f);
+    EXPECT_FLOAT_EQ(result.X, 0.0f);
+    EXPECT_FLOAT_EQ(result.Y, 0.0f);
+}
+
+TEST(Vector2Test, SmoothStepAtOneReturnsSecond)
+{
+    Vector2 result = Vector2::SmoothStep(Vector2::Zero, Vector2::One, 1.0f);
+    EXPECT_FLOAT_EQ(result.X, 1.0f);
+    EXPECT_FLOAT_EQ(result.Y, 1.0f);
+}
+
+TEST(Vector2Test, SmoothStepOutRef)
+{
+    Vector2 result;
+    Vector2::SmoothStep(Vector2::Zero, Vector2::One, 0.0f, result);
+    EXPECT_FLOAT_EQ(result.X, 0.0f);
+    EXPECT_FLOAT_EQ(result.Y, 0.0f);
+}
+
+// --- Clamp ---
+
+TEST(Vector2Test, ClampKeepsComponentsInRange)
+{
+    Vector2 result = Vector2::Clamp(Vector2(-5.0f, 10.0f), Vector2(0.0f, 0.0f), Vector2(5.0f, 5.0f));
+    EXPECT_FLOAT_EQ(result.X, 0.0f);
+    EXPECT_FLOAT_EQ(result.Y, 5.0f);
+}
+
+TEST(Vector2Test, ClampOutRef)
+{
+    Vector2 result;
+    Vector2::Clamp(Vector2(-5.0f, 10.0f), Vector2(0.0f, 0.0f), Vector2(5.0f, 5.0f), result);
+    EXPECT_FLOAT_EQ(result.X, 0.0f);
+    EXPECT_FLOAT_EQ(result.Y, 5.0f);
+}
+
 // --- Min / Max ---
 
 TEST(Vector2Test, MinReturnsComponentWiseMinimum)
@@ -179,11 +392,168 @@ TEST(Vector2Test, MinReturnsComponentWiseMinimum)
     EXPECT_FLOAT_EQ(result.Y, 1.0f);
 }
 
+TEST(Vector2Test, MinOutRef)
+{
+    Vector2 result;
+    Vector2::Min(Vector2(3.0f, 1.0f), Vector2(1.0f, 4.0f), result);
+    EXPECT_FLOAT_EQ(result.X, 1.0f);
+    EXPECT_FLOAT_EQ(result.Y, 1.0f);
+}
+
 TEST(Vector2Test, MaxReturnsComponentWiseMaximum)
 {
     Vector2 result = Vector2::Max(Vector2(3.0f, 1.0f), Vector2(1.0f, 4.0f));
     EXPECT_FLOAT_EQ(result.X, 3.0f);
     EXPECT_FLOAT_EQ(result.Y, 4.0f);
+}
+
+TEST(Vector2Test, MaxOutRef)
+{
+    Vector2 result;
+    Vector2::Max(Vector2(3.0f, 1.0f), Vector2(1.0f, 4.0f), result);
+    EXPECT_FLOAT_EQ(result.X, 3.0f);
+    EXPECT_FLOAT_EQ(result.Y, 4.0f);
+}
+
+// --- Reflect ---
+
+TEST(Vector2Test, ReflectAcrossXAxis)
+{
+    // Incoming: (1,-1), normal: (0,1) → reflected: (1,1)
+    Vector2 result = Vector2::Reflect(Vector2(1.0f, -1.0f), Vector2::UnitY);
+    EXPECT_NEAR(result.X, 1.0f, 1e-6f);
+    EXPECT_NEAR(result.Y, 1.0f, 1e-6f);
+}
+
+TEST(Vector2Test, ReflectOutRef)
+{
+    Vector2 result;
+    Vector2::Reflect(Vector2(1.0f, -1.0f), Vector2::UnitY, result);
+    EXPECT_NEAR(result.X, 1.0f, 1e-6f);
+    EXPECT_NEAR(result.Y, 1.0f, 1e-6f);
+}
+
+// --- Barycentric ---
+
+TEST(Vector2Test, BarycentricAmount1OneReturnsV2)
+{
+    // v1 + 1*(v2-v1) + 0*(v3-v1) = v2
+    Vector2 result = Vector2::Barycentric(
+        Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(0.0f, 1.0f), 1.0f, 0.0f);
+    EXPECT_NEAR(result.X, 1.0f, 1e-6f);
+    EXPECT_NEAR(result.Y, 0.0f, 1e-6f);
+}
+
+TEST(Vector2Test, BarycentricOutRef)
+{
+    Vector2 result;
+    Vector2::Barycentric(
+        Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(0.0f, 1.0f), 0.0f, 1.0f, result);
+    EXPECT_NEAR(result.X, 0.0f, 1e-6f);
+    EXPECT_NEAR(result.Y, 1.0f, 1e-6f);
+}
+
+// --- CatmullRom ---
+
+TEST(Vector2Test, CatmullRomAtZeroReturnsV2)
+{
+    Vector2 result = Vector2::CatmullRom(
+        Vector2(-1.0f, 0.0f), Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(2.0f, 0.0f), 0.0f);
+    EXPECT_NEAR(result.X, 0.0f, 1e-5f);
+    EXPECT_NEAR(result.Y, 0.0f, 1e-5f);
+}
+
+TEST(Vector2Test, CatmullRomOutRef)
+{
+    Vector2 result;
+    Vector2::CatmullRom(
+        Vector2(-1.0f, 0.0f), Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(2.0f, 0.0f), 0.0f, result);
+    EXPECT_NEAR(result.X, 0.0f, 1e-5f);
+    EXPECT_NEAR(result.Y, 0.0f, 1e-5f);
+}
+
+// --- Hermite ---
+
+TEST(Vector2Test, HermiteAtZeroReturnsV1)
+{
+    Vector2 result = Vector2::Hermite(
+        Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(2.0f, 0.0f), Vector2(1.0f, 0.0f), 0.0f);
+    EXPECT_NEAR(result.X, 0.0f, 1e-6f);
+    EXPECT_NEAR(result.Y, 0.0f, 1e-6f);
+}
+
+TEST(Vector2Test, HermiteAtOneReturnsV2)
+{
+    Vector2 result = Vector2::Hermite(
+        Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(2.0f, 0.0f), Vector2(1.0f, 0.0f), 1.0f);
+    EXPECT_NEAR(result.X, 2.0f, 1e-5f);
+    EXPECT_NEAR(result.Y, 0.0f, 1e-5f);
+}
+
+TEST(Vector2Test, HermiteOutRef)
+{
+    Vector2 result;
+    Vector2::Hermite(
+        Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(2.0f, 0.0f), Vector2(1.0f, 0.0f), 0.0f, result);
+    EXPECT_NEAR(result.X, 0.0f, 1e-6f);
+    EXPECT_NEAR(result.Y, 0.0f, 1e-6f);
+}
+
+// --- Transform by Matrix ---
+
+TEST(Vector2Test, TransformByIdentityMatrix)
+{
+    Vector2 v(3.0f, 4.0f);
+    Vector2 result = Vector2::Transform(v, Matrix::getIdentityProperty());
+    EXPECT_NEAR(result.X, 3.0f, 1e-5f);
+    EXPECT_NEAR(result.Y, 4.0f, 1e-5f);
+}
+
+TEST(Vector2Test, TransformByIdentityMatrixOutRef)
+{
+    Vector2 v(3.0f, 4.0f);
+    Vector2 result;
+    Vector2::Transform(v, Matrix::getIdentityProperty(), result);
+    EXPECT_NEAR(result.X, 3.0f, 1e-5f);
+    EXPECT_NEAR(result.Y, 4.0f, 1e-5f);
+}
+
+// --- TransformNormal by Matrix ---
+
+TEST(Vector2Test, TransformNormalByIdentityMatrix)
+{
+    Vector2 n(1.0f, 0.0f);
+    Vector2 result = Vector2::TransformNormal(n, Matrix::getIdentityProperty());
+    EXPECT_NEAR(result.X, 1.0f, 1e-5f);
+    EXPECT_NEAR(result.Y, 0.0f, 1e-5f);
+}
+
+TEST(Vector2Test, TransformNormalByIdentityMatrixOutRef)
+{
+    Vector2 n(1.0f, 0.0f);
+    Vector2 result;
+    Vector2::TransformNormal(n, Matrix::getIdentityProperty(), result);
+    EXPECT_NEAR(result.X, 1.0f, 1e-5f);
+    EXPECT_NEAR(result.Y, 0.0f, 1e-5f);
+}
+
+// --- Transform by Quaternion ---
+
+TEST(Vector2Test, TransformByIdentityQuaternion)
+{
+    Vector2 v(3.0f, 4.0f);
+    Vector2 result = Vector2::Transform(v, Quaternion::Identity);
+    EXPECT_NEAR(result.X, 3.0f, 1e-5f);
+    EXPECT_NEAR(result.Y, 4.0f, 1e-5f);
+}
+
+TEST(Vector2Test, TransformByIdentityQuaternionOutRef)
+{
+    Vector2 v(3.0f, 4.0f);
+    Vector2 result;
+    Vector2::Transform(v, Quaternion::Identity, result);
+    EXPECT_NEAR(result.X, 3.0f, 1e-5f);
+    EXPECT_NEAR(result.Y, 4.0f, 1e-5f);
 }
 
 // --- Operators ---
@@ -216,10 +586,31 @@ TEST(Vector2Test, MultiplicationByScalarOperator)
     EXPECT_FLOAT_EQ(result.Y, 9.0f);
 }
 
+TEST(Vector2Test, ScalarLeftMultiplicationOperator)
+{
+    Vector2 result = 3.0f * Vector2(2.0f, 3.0f);
+    EXPECT_FLOAT_EQ(result.X, 6.0f);
+    EXPECT_FLOAT_EQ(result.Y, 9.0f);
+}
+
+TEST(Vector2Test, ComponentWiseMultiplicationOperator)
+{
+    Vector2 result = Vector2(2.0f, 3.0f) * Vector2(4.0f, 5.0f);
+    EXPECT_FLOAT_EQ(result.X, 8.0f);
+    EXPECT_FLOAT_EQ(result.Y, 15.0f);
+}
+
 TEST(Vector2Test, DivisionByScalarOperator)
 {
     Vector2 result = Vector2(6.0f, 9.0f) / 3.0f;
     EXPECT_FLOAT_EQ(result.X, 2.0f);
+    EXPECT_FLOAT_EQ(result.Y, 3.0f);
+}
+
+TEST(Vector2Test, ComponentWiseDivisionOperator)
+{
+    Vector2 result = Vector2(6.0f, 9.0f) / Vector2(2.0f, 3.0f);
+    EXPECT_FLOAT_EQ(result.X, 3.0f);
     EXPECT_FLOAT_EQ(result.Y, 3.0f);
 }
 
@@ -237,22 +628,4 @@ TEST(Vector2Test, InequalityOperator)
     Vector2 b(1.0f, 3.0f);
     EXPECT_FALSE(a == b);
     EXPECT_TRUE(a != b);
-}
-
-// --- Clamp ---
-
-TEST(Vector2Test, ClampKeepsComponentsInRange)
-{
-    Vector2 result = Vector2::Clamp(Vector2(-5.0f, 10.0f), Vector2(0.0f, 0.0f), Vector2(5.0f, 5.0f));
-    EXPECT_FLOAT_EQ(result.X, 0.0f);
-    EXPECT_FLOAT_EQ(result.Y, 5.0f);
-}
-
-// --- Negate ---
-
-TEST(Vector2Test, NegateStaticFlipsBothComponents)
-{
-    Vector2 result = Vector2::Negate(Vector2(1.0f, -2.0f));
-    EXPECT_FLOAT_EQ(result.X, -1.0f);
-    EXPECT_FLOAT_EQ(result.Y, 2.0f);
 }

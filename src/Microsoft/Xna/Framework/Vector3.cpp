@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include <algorithm>
 #include <cmath>
