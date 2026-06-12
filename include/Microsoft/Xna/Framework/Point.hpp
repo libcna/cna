@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #pragma once
 
 #include <string>
@@ -38,11 +40,17 @@ namespace Microsoft::Xna::Framework
         /// Returns a string in the form {X:... Y:...}.
         [[nodiscard]] std::string ToString() const;
 
+        /// Adds two points component-wise.
         friend Point operator+(Point value1, Point value2);
+        /// Subtracts one point from another component-wise.
         friend Point operator-(Point value1, Point value2);
+        /// Multiplies the components of two points together.
         friend Point operator*(Point value1, Point value2);
+        /// Divides the components of one point by the components of another.
         friend Point operator/(Point value1, Point value2);
+        /// Returns true when both points have equal coordinates.
         friend bool operator==(Point value1, Point value2);
+        /// Returns true when the points differ in any coordinate.
         friend bool operator!=(Point value1, Point value2);
 
     private:

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MS-PL
+
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Point.hpp"
 
@@ -113,4 +115,34 @@ TEST(PointTest, AdditionWithNegativeCoordinates)
     Point result = Point(5, 3) + Point(-2, -1);
     EXPECT_EQ(result.X, 3);
     EXPECT_EQ(result.Y, 2);
+}
+
+// --- GetHashCode ---
+
+TEST(PointTest, GetHashCodeEqualPointsGiveEqualHash)
+{
+    Point a(7, 13);
+    Point b(7, 13);
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(PointTest, GetHashCodeDifferentPointsTypicallyDiffer)
+{
+    // Uses X ^ Y; choose values where XORs differ
+    Point a(1, 2);
+    Point b(3, 4);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
+// --- ToString ---
+
+TEST(PointTest, ToStringFormat)
+{
+    Point p(3, 7);
+    EXPECT_EQ(p.ToString(), "{X:3 Y:7}");
+}
+
+TEST(PointTest, ToStringZero)
+{
+    EXPECT_EQ(Point::Zero.ToString(), "{X:0 Y:0}");
 }
