@@ -1,22 +1,16 @@
-//
-// Created by robertvokac on 5/26/25.
-//
+// SPDX-License-Identifier: MS-PL
 
 #pragma once
+
 #include "System/EventArgs.hpp"
-#include "SharpRuntime/Prop.hpp"
 
 namespace Microsoft::Xna::Framework
 {
-    class ExitingEventArgs : System::EventArgs
+    /// Provides data for the Game.Exiting event.
+    class ExitingEventArgs : public System::EventArgs
     {
     public:
-        explicit ExitingEventArgs()
-            : Cancel_(false)
-        {
-        }
-
-    private:
-        DEF_PROP(bool, Cancel, getter1, setter1, member1, static0, constret1, ref0, constmet1)
+        /// Creates default ExitingEventArgs.
+        ExitingEventArgs() = default;
     };
 }
