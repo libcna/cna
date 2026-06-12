@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: MS-PL
+
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -235,4 +238,95 @@ TEST(PlaneTest, ToStringContainsNormalAndD)
     std::string s = p.ToString();
     EXPECT_NE(s.find("Normal"), std::string::npos);
     EXPECT_NE(s.find("D"), std::string::npos);
+}
+
+// -----------------------------------------------------------------------
+// DotCoordinate out-ref overload
+// -----------------------------------------------------------------------
+
+TEST(PlaneTest, DotCoordinateOutRef)
+{
+    Plane p(Vector3(0.0f, 1.0f, 0.0f), -2.0f);
+    float result = 0.0f;
+    p.DotCoordinate(Vector3(5.0f, 2.0f, -3.0f), result);
+    EXPECT_NEAR(result, 0.0f, kEps);
+}
+
+// -----------------------------------------------------------------------
+// Intersects out-ref overloads
+// -----------------------------------------------------------------------
+
+TEST(PlaneTest, IntersectsBoundingBoxOutRef)
+{
+    Plane p(Vector3(0.0f, 1.0f, 0.0f), 0.0f);
+    BoundingBox box(Vector3(0.0f, 1.0f, 0.0f), Vector3(2.0f, 3.0f, 2.0f));
+    PlaneIntersectionType result = PlaneIntersectionType::Intersecting;
+    p.Intersects(box, result);
+    EXPECT_EQ(result, PlaneIntersectionType::Front);
+}
+
+TEST(PlaneTest, IntersectsBoundingSphereOutRef)
+{
+    Plane p(Vector3(0.0f, 1.0f, 0.0f), 0.0f);
+    BoundingSphere s(Vector3(0.0f, 3.0f, 0.0f), 1.0f);
+    PlaneIntersectionType result = PlaneIntersectionType::Intersecting;
+    p.Intersects(s, result);
+    EXPECT_EQ(result, PlaneIntersectionType::Front);
+}
+
+// -----------------------------------------------------------------------
+// Intersects(BoundingFrustum)
+// -----------------------------------------------------------------------
+
+TEST(PlaneTest, IntersectsBoundingFrustumIntersecting)
+{
+    // A frustum built from an identity-like projection; the y=0 plane
+    // passes through the frustum interior → Intersecting.
+    Matrix proj = Matrix::CreatePerspectiveFieldOfView(
+        1.0f, 1.0f, 0.1f, 100.0f
+    );
+    BoundingFrustum frustum(proj);
+    Plane p(Vector3(0.0f, 1.0f, 0.0f), 0.0f);
+    PlaneIntersectionType result = frustum.Intersects(p);
+    EXPECT_EQ(result, PlaneIntersectionType::Intersecting);
+}
+
+// -----------------------------------------------------------------------
+// Transform out-ref overloads
+// -----------------------------------------------------------------------
+
+TEST(PlaneTest, TransformByIdentityMatrixOutRef)
+{
+    Plane p(Vector3(0.0f, 1.0f, 0.0f), -1.0f);
+    Plane q;
+    Plane::Transform(p, Matrix::getIdentityProperty(), q);
+    EXPECT_NEAR(q.Normal.Y, 1.0f, kEps);
+    EXPECT_NEAR(q.D, -1.0f, kEps);
+}
+
+TEST(PlaneTest, TransformByIdentityQuaternionOutRef)
+{
+    Plane p(Vector3(0.0f, 1.0f, 0.0f), -1.0f);
+    Plane q;
+    Plane::Transform(p, Quaternion::Identity, q);
+    EXPECT_NEAR(q.Normal.Y, 1.0f, kEps);
+    EXPECT_NEAR(q.D, -1.0f, kEps);
+}
+
+// -----------------------------------------------------------------------
+// GetHashCode
+// -----------------------------------------------------------------------
+
+TEST(PlaneTest, GetHashCodeEqualPlanesGiveEqualHash)
+{
+    Plane a(Vector3(0.0f, 1.0f, 0.0f), -2.0f);
+    Plane b(Vector3(0.0f, 1.0f, 0.0f), -2.0f);
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(PlaneTest, GetHashCodeDifferentPlanesTypicallyDiffer)
+{
+    Plane a(Vector3(0.0f, 1.0f, 0.0f), -2.0f);
+    Plane b(Vector3(1.0f, 0.0f, 0.0f), 5.0f);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
 }
