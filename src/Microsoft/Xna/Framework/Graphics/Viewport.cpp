@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include <string>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -98,5 +99,15 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         return vector;
+    }
+
+    std::string Viewport::ToString() const
+    {
+        return "{X:" + std::to_string(x) +
+               " Y:" + std::to_string(y) +
+               " Width:" + std::to_string(Width_) +
+               " Height:" + std::to_string(Height_) +
+               " MinDepth:" + std::to_string(minDepth) +
+               " MaxDepth:" + std::to_string(maxDepth) + "}";
     }
 }
