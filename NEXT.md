@@ -252,7 +252,7 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 
 ## 8. Next smallest tasks
 
-### Task 46 — CNA: Doxygen `///` comments — audit and sync with FNA ⬜ TODO
+### Task 46 — CNA: Doxygen comments — audit and sync with FNA ✅ DONE
 
 **Status:** Not started.
 
