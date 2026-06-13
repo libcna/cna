@@ -54,7 +54,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets a mutable reference to the effect collection.
          * @return A mutable reference to the effect collection.
          */
-        [[nodiscard]] ModelEffectCollection& getEffectsPropertyMutable();
+        NOXNA [[nodiscard]] ModelEffectCollection& getEffectsPropertyMutable();
 
         /**
          * @brief Gets the ModelMeshPart objects that make up this mesh.

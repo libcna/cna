@@ -62,7 +62,8 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height,
                   bool mipMap, SurfaceFormat format);
 
-        ~Texture2D() override;
+        /** @brief Destructor. */
+        NOXNA ~Texture2D() override;
 
         Texture2D(const Texture2D&) = default;
         Texture2D& operator=(const Texture2D&) = default;

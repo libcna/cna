@@ -18,4 +18,22 @@ namespace Microsoft::Xna::Framework::Graphics
     int Texture3D::getDepthProperty() const { return depth_; }
     SurfaceFormat Texture3D::getFormatProperty() const { return format_; }
     int Texture3D::getLevelCountProperty() const { return levelCount_; }
+
+    const std::string& Texture3D::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.Texture3D";
+        return name;
+    }
+
+    void Texture3D::SetData(const Color* data, int elementCount) {}
+    void Texture3D::SetData(const Color* data, int startIndex, int elementCount) {}
+    void Texture3D::SetData(int level, int left, int top, int right, int bottom, int front, int back,
+                            const Color* data, int startIndex, int elementCount) {}
+    void Texture3D::SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
+                                      const void* data, int dataLength) {}
+
+    void Texture3D::GetData(Color* data, int elementCount) const {}
+    void Texture3D::GetData(Color* data, int startIndex, int elementCount) const {}
+    void Texture3D::GetData(int level, int left, int top, int right, int bottom, int front, int back,
+                            Color* data, int startIndex, int elementCount) const {}
 }

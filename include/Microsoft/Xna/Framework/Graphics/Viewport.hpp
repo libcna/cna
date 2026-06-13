@@ -101,5 +101,12 @@ namespace Microsoft::Xna::Framework::Graphics
             const Microsoft::Xna::Framework::Matrix& projection,
             const Microsoft::Xna::Framework::Matrix& view,
             const Microsoft::Xna::Framework::Matrix& world) const;
+
+        /**
+         * @brief Returns a string representation of this Viewport.
+         *
+         * @return A string of the form "{X:x Y:y Width:w Height:h MinDepth:n MaxDepth:x}".
+         */
+        [[nodiscard]] std::string ToString() const;
     };
 }

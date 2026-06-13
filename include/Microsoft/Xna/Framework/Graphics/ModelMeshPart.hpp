@@ -9,7 +9,7 @@ namespace Microsoft::Xna::Framework::Graphics
     class Effect;
     class IndexBuffer;
     class ModelMesh;
-    class VertexBuffer; // NOXNA: used by NOXNA constructor
+    class VertexBuffer;
     class VertexDeclaration;
 
     /**

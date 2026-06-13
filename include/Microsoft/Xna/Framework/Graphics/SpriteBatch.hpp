@@ -4,6 +4,7 @@
 #include <optional>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -77,8 +78,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Creates an empty sprite batch. */
         SpriteBatch();
 
-        /** @brief Destroys the sprite batch. */
-        ~SpriteBatch();
+        /** @brief Destructor. */
+        NOXNA ~SpriteBatch();
 
         /** @brief Begins a sprite batch with default settings (AlphaBlend, LinearClamp, no depth). */
         void Begin();
@@ -188,7 +189,6 @@ namespace Microsoft::Xna::Framework::Graphics
                   SpriteEffects effect,
                   float layerDepth);
 
-        // CNA_STUB: XNA 4.0 Draw overloads — declarations present, bodies not yet implemented.
         /**
          * @brief Draws a texture at the given position with a tint color.
          *
@@ -321,8 +321,6 @@ namespace Microsoft::Xna::Framework::Graphics
                         SpriteEffects effects,
                         float layerDepth);
 
-        // CNA_STUB: XNA 4.0 DrawString(SpriteFont, StringBuilder, ...) overloads.
-        // StringBuilder variants are equivalent to string variants at runtime.
         /**
          * @brief Draws a StringBuilder as text using the given font.
          *

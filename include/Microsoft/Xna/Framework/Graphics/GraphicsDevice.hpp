@@ -89,7 +89,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         GraphicsDevice(GraphicsAdapter& adapter, GraphicsProfile graphicsProfile,
                        const PresentationParameters& presentationParameters);
-        ~GraphicsDevice() override;
+
+        /** @brief Destructor. */
+        NOXNA ~GraphicsDevice() override;
 
         GraphicsDevice(const GraphicsDevice&) = delete;
         GraphicsDevice& operator=(const GraphicsDevice&) = delete;
@@ -560,18 +562,17 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA void SetContextRecoveryEnabled(bool enabled);
 
         /** @brief Returns a reference to the active graphics backend. */
-        [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
+        NOXNA [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
         /**
          * @brief Sets the currently active BasicEffect for draw calls.
          * @param effect The effect to use, or nullptr.
          */
-        void SetCurrentEffect(BasicEffect* effect);
+        NOXNA void SetCurrentEffect(BasicEffect* effect);
 
-        // Backward compat
-        /** @brief Returns the currently bound index buffer (backward-compatible accessor). */
+        /** @brief Returns the currently bound index buffer. */
         [[nodiscard]] const IndexBuffer* Indices() const;
         /**
-         * @brief Binds an index buffer (backward-compatible accessor).
+         * @brief Binds an index buffer.
          * @param indexBuffer The index buffer to bind.
          */
         void Indices(const IndexBuffer* indexBuffer);
