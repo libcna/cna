@@ -42,6 +42,16 @@ namespace Microsoft::Xna::Framework::Graphics
         return format_;
     }
 
+    bool DisplayMode::operator==(const DisplayMode& other) const
+    {
+        return width_ == other.width_ && height_ == other.height_ && format_ == other.format_;
+    }
+
+    bool DisplayMode::operator!=(const DisplayMode& other) const
+    {
+        return !(*this == other);
+    }
+
     const std::string& DisplayMode::GetTypeName() const
     {
         static const std::string typeName = "Microsoft.Xna.Framework.Graphics.DisplayMode";

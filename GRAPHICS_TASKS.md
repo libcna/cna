@@ -41,7 +41,7 @@
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 8 | Tests: `Viewport` — `Project`, `Unproject`, `Bounds`, `TitleSafeArea`, constructor, equality | ✅ | 16 tests; also added missing ToString() implementation |
-| 9 | Tests: `DisplayMode` — `Width`, `Height`, `AspectRatio`, `Format` | ⬜ | |
+| 9 | Tests: `DisplayMode` — `Width`, `Height`, `AspectRatio`, `Format` | ✅ | 16 tests; also added missing operator==/!= (in XNA/FNA API) |
 | 10 | Tests: `Rectangle`-based: `PresentationParameters` constructor/properties | ⬜ | |
 | 11 | Tests: `BlendState` — predefined states (Opaque, AlphaBlend, Additive, NonPremultiplied), property getters | ⬜ | |
 | 12 | Tests: `DepthStencilState` — predefined states (Default, None, Read), property getters | ⬜ | |
