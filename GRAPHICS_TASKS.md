@@ -27,8 +27,8 @@
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 1 | `EffectMaterial` stub — `Effect` subclass, correct namespace, SPDX, Doxygen, NOXNA dtor+GetTypeName | ✅ | Single-line subclass; no backend work |
-| 2 | Doxygen `/** @brief */` audit — `Graphics/` root headers (GraphicsDevice, SpriteBatch, Texture2D, Texture3D, TextureCube, Viewport, DisplayMode, …) | 🔄 | NOXNA/dtor/GetTypeName/iterator batch done; large classes (GraphicsDevice, SpriteBatch, Texture*) still need full Doxygen review |
-| 3 | Doxygen audit — `Graphics/Effect/` (Effect, EffectParameter, EffectTechnique, …) + StockEffects (BasicEffect, AlphaTestEffect, …) | ⬜ | ~21 files |
+| 2 | Doxygen `/** @brief */` audit — `Graphics/` root headers (GraphicsDevice, SpriteBatch, Texture2D, Texture3D, TextureCube, Viewport, DisplayMode, …) | ✅ | Texture3D/TextureCube SetData/GetData stubs added; NOXNA/Doxygen complete |
+| 3 | Doxygen audit — `Graphics/Effect/` (Effect, EffectParameter, EffectTechnique, …) + StockEffects (BasicEffect, AlphaTestEffect, …) | ✅ | NOXNA iterators on 3 collections; GetTypeName on 7 concrete subclasses |
 | 4 | Doxygen audit — `Graphics/PackedVector/` (all 18 packed types) | ⬜ | ~18 files |
 | 5 | Doxygen audit — `Graphics/States/` (BlendState, DepthStencilState, RasterizerState, SamplerState, …) | ⬜ | ~12 files |
 | 6 | Doxygen audit — `Graphics/Vertices/` (VertexBuffer, IndexBuffer, VertexDeclaration, VertexPosition*, …) | ⬜ | ~16 files |
