@@ -19,7 +19,7 @@ namespace Microsoft::Xna::Framework::Input
         Mouse() = delete;
 
         /** @brief Gets or sets the native window handle used for mouse state queries. */
-        NOXNA static std::uintptr_t WindowHandle;
+        static std::uintptr_t WindowHandle;
 
         /**
          * @brief Gets mouse state information including position and button presses.
@@ -38,7 +38,7 @@ namespace Microsoft::Xna::Framework::Input
          * @brief Sets the mouse cursor image.
          * @param cursor The cursor to display.
          */
-        static void SetCursor(MouseCursor& cursor);
+        NOXNA static void SetCursor(MouseCursor& cursor);
 
         /** @brief FNA extension: fires when a mouse button is clicked. */
         NOXNA static std::function<void(int)> ClickedEXT;
