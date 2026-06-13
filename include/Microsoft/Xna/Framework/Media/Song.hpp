@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
@@ -20,7 +21,7 @@ namespace Microsoft::Xna::Framework::Media
          * @param fileName File path to the audio file.
          * @param name     Optional display name; defaults to the file name.
          */
-        explicit Song(std::string fileName, std::string name = {});
+        NOXNA explicit Song(std::string fileName, std::string name = {});
 
         /**
          * @brief Creates a song from a local file path, asset name, and duration in milliseconds.
@@ -29,10 +30,10 @@ namespace Microsoft::Xna::Framework::Media
          * @param assetName  Asset/display name for this song.
          * @param durationMS Song duration in milliseconds.
          */
-        Song(std::string fileName, std::string assetName, SharpRuntime::intcs durationMS);
+        NOXNA Song(std::string fileName, std::string assetName, SharpRuntime::intcs durationMS);
 
         /** @brief Destroys the song and releases any associated resources. */
-        ~Song() override;
+        NOXNA ~Song() override;
 
         /**
          * @brief Gets the display name of this song.
@@ -51,11 +52,9 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Sets the playback duration of this song.
          *
-         * Used internally by MediaPlayer and content loading.
-         *
          * @param value New duration.
          */
-        void setDurationProperty(System::TimeSpan value);
+        NOXNA void setDurationProperty(System::TimeSpan value);
 
         /**
          * @brief Gets whether this song has DRM copy protection.
@@ -83,7 +82,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param value New play count.
          */
-        void setPlayCountProperty(SharpRuntime::intcs value);
+        NOXNA void setPlayCountProperty(SharpRuntime::intcs value);
 
         /**
          * @brief Gets the user rating for this song.
@@ -118,11 +117,17 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] bool Equals(const Song* song) const;
 
         /**
+         * @brief Gets the hash code for this Song instance.
+         * @return Hash code of the object.
+         */
+        [[nodiscard]] int GetHashCode() const;
+
+        /**
          * @brief Gets the backend file path or handle used by this song.
          *
          * @return Handle/path string.
          */
-        [[nodiscard]] const std::string& getHandle() const;
+        NOXNA [[nodiscard]] const std::string& getHandle() const;
 
         /**
          * @brief Constructs a song from a local URI/path string.
@@ -134,7 +139,7 @@ namespace Microsoft::Xna::Framework::Media
         static Song* FromUri(const std::string& name, const std::string& uri);
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns whether two songs are equal. */
         friend bool operator==(const Song& song1, const Song& song2);
