@@ -42,7 +42,7 @@
 |---|------|--------|-------|
 | 8 | Tests: `Viewport` — `Project`, `Unproject`, `Bounds`, `TitleSafeArea`, constructor, equality | ✅ | 16 tests; also added missing ToString() implementation |
 | 9 | Tests: `DisplayMode` — `Width`, `Height`, `AspectRatio`, `Format` | ✅ | 16 tests; also added missing operator==/!= (in XNA/FNA API) |
-| 10 | Tests: `Rectangle`-based: `PresentationParameters` constructor/properties | ⬜ | |
+| 10 | Tests: `Rectangle`-based: `PresentationParameters` constructor/properties | ✅ | 24 tests; defaults, all setters/getters, Bounds, Clone |
 | 11 | Tests: `BlendState` — predefined states (Opaque, AlphaBlend, Additive, NonPremultiplied), property getters | ⬜ | |
 | 12 | Tests: `DepthStencilState` — predefined states (Default, None, Read), property getters | ⬜ | |
 | 13 | Tests: `RasterizerState` — predefined states (CullCounterClockwise, CullClockwise, CullNone), property getters | ⬜ | |
