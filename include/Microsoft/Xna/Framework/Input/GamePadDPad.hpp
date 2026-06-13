@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 
@@ -38,7 +39,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] ButtonState getUpProperty() const;
 
         /** @brief Constructs a GamePadDPad with all directions released. */
-        GamePadDPad();
+        NOXNA GamePadDPad();
 
         /**
          * @brief Constructs a GamePadDPad with explicit direction states.
@@ -55,7 +56,7 @@ namespace Microsoft::Xna::Framework::Input
          * @param buttons The combined button flags.
          * @return The resulting GamePadDPad.
          */
-        static GamePadDPad FromButtons(Buttons buttons);
+        NOXNA static GamePadDPad FromButtons(Buttons buttons);
 
         /**
          * @brief Compares this instance with another for equality.
