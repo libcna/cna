@@ -76,7 +76,7 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 37 | SDL_Renderer: verify every 3D `IGraphicsBackend` method throws `std::runtime_error` with a clear message ("SDL_Renderer does not support 3D: DrawColoredPrimitives") | ⬜ | Audit `SdlGraphicsBackend.cpp` |
+| 37 | SDL_Renderer: verify every 3D `IGraphicsBackend` method throws `std::runtime_error` with a clear message ("SDL_Renderer does not support 3D: DrawColoredPrimitives") | ✅ | All 8 pure-virtual 3D methods throw; message now includes method name |
 | 38 | SDL_Renderer: wire `SamplerState` filter → `SDL_SetTextureScaleMode` (nearest/linear) | ⬜ | Per-texture, applied in `ISpriteBatchBackend::Draw` |
 | 39 | SDL_Renderer: wire `ScissorRectangle` → `SDL_SetRenderClipRect` | ⬜ | Add `SetScissorRect` to `IGraphicsBackend` first |
 | 40 | SDL_Renderer: implement `RenderTarget2D` via `SDL_TEXTUREACCESS_TARGET` | ⬜ | Allows off-screen 2D rendering |

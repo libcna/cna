@@ -403,39 +403,38 @@ namespace CNA::Internal::Backends::SdlRenderer
         return std::make_unique<SdlSpriteBatchBackend>(renderer);
     }
 
-    // ---- 3D: explicit STUB. SDL_Renderer cannot do 3D. ----
-    static void ThrowNo3D()
+    // ---- 3D: SDL_Renderer is intentionally 2D-only. All 3D calls throw. ----
+    static void ThrowNo3D(const char* methodName)
     {
         throw std::runtime_error(
-            "SDL_Renderer backend: 3D rendering is not supported by this backend yet. "
-            "Use the EasyGL backend for 3D.");
+            std::string("SDL_Renderer does not support 3D: ") + methodName);
     }
 
-    void SdlGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D(); }
-    void SdlGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D(); }
-    void SdlGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D(); }
-    void SdlGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D(); }
+    void SdlGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
+    void SdlGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D("SetDepthTestEnabled"); }
+    void SdlGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
+    void SdlGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
 
     std::unique_ptr<IVertexBufferBackend> SdlGraphicsBackend::CreateVertexBuffer(int)
     {
-        ThrowNo3D();
+        ThrowNo3D("CreateVertexBuffer");
         return nullptr;
     }
 
     std::unique_ptr<IIndexBufferBackend> SdlGraphicsBackend::CreateIndexBuffer16(int)
     {
-        ThrowNo3D();
+        ThrowNo3D("CreateIndexBuffer16");
         return nullptr;
     }
 
     void SdlGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
                                                    const Matrix&, const Matrix&, const Matrix&,
-                                                   PrimitiveType, int) { ThrowNo3D(); }
+                                                   PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
 
     void SdlGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
                                                           const IIndexBufferBackend&,
                                                           const Matrix&, const Matrix&, const Matrix&,
-                                                          PrimitiveType, int) { ThrowNo3D(); }
+                                                          PrimitiveType, int) { ThrowNo3D("DrawIndexedColoredPrimitives"); }
 }
 
 namespace CNA::Internal::Backends
