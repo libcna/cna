@@ -8,7 +8,7 @@
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Thrown when the maximum number of simultaneous sound instances is exceeded. */
-    class InstancePlayLimitException : public std::runtime_error
+    class InstancePlayLimitException final : public std::runtime_error
     {
     public:
         /** @brief Constructs an InstancePlayLimitException with a default message. */
