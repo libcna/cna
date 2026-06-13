@@ -418,4 +418,10 @@ namespace Microsoft::Xna::Framework::Graphics
             dirtyFlags_ &= ~DirtyShaderIndex;
         }
     }
+
+    const std::string& SkinnedEffect::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.SkinnedEffect";
+        return name;
+    }
 }

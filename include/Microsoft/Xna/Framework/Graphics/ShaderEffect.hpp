@@ -41,6 +41,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA [[nodiscard]] const std::string& getFragmentSourceProperty() const;
 
+        /** @brief Returns the fully qualified CNA type name. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+
     protected:
         /**
          * @brief Applies the GLSL shaders to the graphics device before drawing.

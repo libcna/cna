@@ -33,7 +33,8 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] Effect* Clone();
 
-        // IEffectMatrices
+        /** @brief Returns the fully qualified .NET type name. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets the world matrix.

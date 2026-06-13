@@ -72,4 +72,10 @@ namespace Microsoft::Xna::Framework::Graphics
         DirectionalLight2.setSpecularColorProperty(Vector3::Zero);
         DirectionalLight2.setEnabledProperty(true);
     }
+
+    const std::string& BasicEffect::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.BasicEffect";
+        return name;
+    }
 }

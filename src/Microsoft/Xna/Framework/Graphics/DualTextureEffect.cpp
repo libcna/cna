@@ -230,4 +230,10 @@ namespace Microsoft::Xna::Framework::Graphics
             dirtyFlags_ &= ~DirtyShaderIndex;
         }
     }
+
+    const std::string& DualTextureEffect::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.DualTextureEffect";
+        return name;
+    }
 }

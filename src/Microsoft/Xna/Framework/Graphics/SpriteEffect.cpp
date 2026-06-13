@@ -44,4 +44,10 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix halfPixelOffset = Matrix::CreateTranslation(-0.5f, -0.5f, 0.0f);
         matrixParam_->SetValue(halfPixelOffset * projection);
     }
+
+    const std::string& SpriteEffect::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.SpriteEffect";
+        return name;
+    }
 }

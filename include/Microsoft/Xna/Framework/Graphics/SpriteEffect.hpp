@@ -29,6 +29,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] Effect* Clone();
 
+        /** @brief Returns the fully qualified .NET type name. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+
     protected:
         /**
          * @brief Applies the sprite transform matrix parameter to the graphics device.

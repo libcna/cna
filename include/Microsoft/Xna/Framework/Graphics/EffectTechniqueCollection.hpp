@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -68,33 +69,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Const iterator type for range-for support. */
         using const_iterator = std::vector<EffectTechnique>::const_iterator;
 
-        /**
-         * @brief Returns a mutable iterator to the first technique.
-         *
-         * @return Begin iterator.
-         */
-        iterator begin();
-
-        /**
-         * @brief Returns a mutable iterator past the last technique.
-         *
-         * @return End iterator.
-         */
-        iterator end();
-
-        /**
-         * @brief Returns a const iterator to the first technique.
-         *
-         * @return Const begin iterator.
-         */
-        const_iterator begin() const;
-
-        /**
-         * @brief Returns a const iterator past the last technique.
-         *
-         * @return Const end iterator.
-         */
-        const_iterator end() const;
+        /** @brief Returns a mutable iterator to the first technique. */
+        NOXNA iterator begin();
+        /** @brief Returns a mutable iterator past the last technique. */
+        NOXNA iterator end();
+        /** @brief Returns a const iterator to the first technique. */
+        NOXNA const_iterator begin() const;
+        /** @brief Returns a const iterator past the last technique. */
+        NOXNA const_iterator end() const;
 
     private:
         std::vector<EffectTechnique> elements_;

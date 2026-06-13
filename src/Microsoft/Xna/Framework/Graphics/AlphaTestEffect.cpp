@@ -300,4 +300,10 @@ namespace Microsoft::Xna::Framework::Graphics
             dirtyFlags_ &= ~DirtyShaderIndex;
         }
     }
+
+    const std::string& AlphaTestEffect::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.AlphaTestEffect";
+        return name;
+    }
 }

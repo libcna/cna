@@ -28,4 +28,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         CNA::Logger::Debug("ShaderEffect::OnApply() — GLSL shader effect applied.");
     }
+
+    const std::string& ShaderEffect::GetTypeName() const
+    {
+        static const std::string name = "CNA.ShaderEffect";
+        return name;
+    }
 }

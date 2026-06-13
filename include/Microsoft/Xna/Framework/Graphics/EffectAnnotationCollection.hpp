@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotation.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -74,28 +75,14 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return Begin iterator.
          */
-        iterator begin();
-
-        /**
-         * @brief Returns a mutable iterator past the last annotation.
-         *
-         * @return End iterator.
-         */
-        iterator end();
-
-        /**
-         * @brief Returns a const iterator to the first annotation.
-         *
-         * @return Const begin iterator.
-         */
-        const_iterator begin() const;
-
-        /**
-         * @brief Returns a const iterator past the last annotation.
-         *
-         * @return Const end iterator.
-         */
-        const_iterator end() const;
+        /** @brief Returns a mutable iterator to the first annotation. */
+        NOXNA iterator begin();
+        /** @brief Returns a mutable iterator past the last annotation. */
+        NOXNA iterator end();
+        /** @brief Returns a const iterator to the first annotation. */
+        NOXNA const_iterator begin() const;
+        /** @brief Returns a const iterator past the last annotation. */
+        NOXNA const_iterator end() const;
 
     private:
         std::vector<EffectAnnotation> elements_;

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -68,33 +69,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Const iterator type for range-for support. */
         using const_iterator = std::vector<EffectParameter>::const_iterator;
 
-        /**
-         * @brief Returns a mutable iterator to the first parameter.
-         *
-         * @return Begin iterator.
-         */
-        iterator begin();
-
-        /**
-         * @brief Returns a mutable iterator past the last parameter.
-         *
-         * @return End iterator.
-         */
-        iterator end();
-
-        /**
-         * @brief Returns a const iterator to the first parameter.
-         *
-         * @return Const begin iterator.
-         */
-        const_iterator begin() const;
-
-        /**
-         * @brief Returns a const iterator past the last parameter.
-         *
-         * @return Const end iterator.
-         */
-        const_iterator end() const;
+        /** @brief Returns a mutable iterator to the first parameter. */
+        NOXNA iterator begin();
+        /** @brief Returns a mutable iterator past the last parameter. */
+        NOXNA iterator end();
+        /** @brief Returns a const iterator to the first parameter. */
+        NOXNA const_iterator begin() const;
+        /** @brief Returns a const iterator past the last parameter. */
+        NOXNA const_iterator end() const;
 
     private:
         std::vector<EffectParameter> elements_;

@@ -38,7 +38,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Gets or sets whether per-vertex color is used for rendering. */
         bool VertexColorEnabled = true;
 
-        // IEffectMatrices — delegate to World/View/Projection member vars
+        /** @brief Returns the fully qualified .NET type name. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets the world matrix.
