@@ -1,27 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-//
-// IPackedVector.hpp — C++ port of the FNA/XNA IPackedVector interfaces.
-//
-// FNA original:
-//   namespace Microsoft.Xna.Framework.Graphics.PackedVector
-//   public interface IPackedVector
-//   public interface IPackedVector<TPacked>
-//
-// In C# Color implements both IPackedVector (non-generic) and
-// IPackedVector<uint> (generic).  C++ has no generics, so we use:
-//   - IPackedVector          — abstract base with PackFromVector4 (non-generic)
-//   - IPackedVectorT<T>      — CRTP / template base that additionally
-//                              exposes PackedValue get/set typed to T
-// Color inherits IPackedVectorT<UInt32> which itself inherits IPackedVector.
-//
-// Note: Color is a value-type (struct) in C#.  Inheriting from a base class
-// in C++ with virtual methods adds a vptr and changes the ABI / size.  To
-// keep the common case zero-overhead the base classes are header-only and
-// use CRTP where possible.  Any class that actually needs runtime polymorphism
-// via IPackedVector* can still do so through the virtual interface.
-
 #pragma once
 
+// C# has IPackedVector (non-generic) and IPackedVector<TPacked> (generic).
+// C++ has no generics, so:
+//   IPackedVector    — abstract base with PackFromVector4 (non-generic)
+//   IPackedVectorT<T>— adds typed PackedValue get/set
+// Inheriting virtual methods adds a vptr; for the common value-type case
+// this is acceptable since these are only used through pointers for polymorphism.
+
+#include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 // Forward declaration – Color.hpp (and anything else that includes this)
@@ -49,7 +36,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
         virtual void PackFromVector4(const Microsoft::Xna::Framework::Vector4& vector) = 0;
 
         /** @brief Virtual destructor. */
-        virtual ~IPackedVector() = default;
+        NOXNA virtual ~IPackedVector() = default;
     };
 
     /**

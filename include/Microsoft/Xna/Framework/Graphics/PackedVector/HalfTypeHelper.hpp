@@ -6,9 +6,6 @@
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
-    // Half-precision float (IEEE 754-2008 binary16) helpers.
-    // Matches FNA's HalfTypeHelper exactly.
-
     /**
      * @brief Helper providing conversion between 32-bit float and 16-bit half-precision float.
      */
