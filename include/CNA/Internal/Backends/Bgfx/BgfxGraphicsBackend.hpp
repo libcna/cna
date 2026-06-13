@@ -182,6 +182,9 @@ namespace CNA::Internal::Backends::Bgfx
         float blendFactorR_ = 1.f, blendFactorG_ = 1.f, blendFactorB_ = 1.f, blendFactorA_ = 1.f;
         // Scissor rect (0,0,0,0 = disabled)
         uint16_t scissorX_ = 0, scissorY_ = 0, scissorW_ = 0, scissorH_ = 0;
+        // Stencil state (per-draw-call via bgfx::setStencil)
+        uint32_t stencilFront_ = BGFX_STENCIL_NONE;
+        uint32_t stencilBack_  = BGFX_STENCIL_NONE;
         // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)
         bgfx::FrameBufferHandle mrtFbo_ = BGFX_INVALID_HANDLE;
 

@@ -147,7 +147,7 @@
 | 81 | Bgfx: Custom `Effect` / shader — load bgfx compiled shaders via `IEffectBackend` | ⚠️ | BgfxEffectBackend stub: CompileProgram returns false (bgfx needs pre-compiled binaries); Bind is no-op (per-draw-call model) |
 | 82 | Bgfx: `GetBackBufferData` / `ReadBackbuffer` — bgfx blit to CPU-visible texture | ⚠️ | Stub: throws with clear message; bgfx readback is async (blit + bgfx::readTexture) — not yet implemented |
 | 83 | Bgfx: `BlendFactor` wired | ✅ | SetBlendFactor calls bgfx::setBlendFactor(packed RGBA8) |
-| 84 | Bgfx: `ReferenceStencil` wired | ⬜ | Requires bgfx stencil API; deferred |
+| 84 | Bgfx: `ReferenceStencil` wired | ✅ | Full stencil mapping in ApplyDepthStencilState; stencilFront_/stencilBack_ passed to bgfx::setStencil in SubmitSprite |
 
 ---
 

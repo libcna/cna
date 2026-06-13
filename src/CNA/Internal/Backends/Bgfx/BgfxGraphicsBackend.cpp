@@ -821,6 +821,7 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setScissor(scissorX_, scissorY_, scissorW_, scissorH_);
         bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_MSAA
                        | blendFlags_ | depthFlags_ | cullFlags_);
+        bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::submit(spriteViewId, spriteProgram);
     }
 
@@ -863,18 +864,93 @@ namespace CNA::Internal::Backends::Bgfx
                 XnaBlendToBgfxFactor(colorDstBlend));
     }
 
+    static uint32_t XnaCompareFuncToBgfxStencilTest(int f)
+    {
+        // XNA CompareFunction: Always=0, Never=1, Less=2, LessEqual=3, Equal=4,
+        //                      GreaterEqual=5, Greater=6, NotEqual=7
+        switch (f)
+        {
+        case 1:  return BGFX_STENCIL_TEST_NEVER;    break;
+        case 2:  return BGFX_STENCIL_TEST_LESS;     break;
+        case 3:  return BGFX_STENCIL_TEST_LEQUAL;   break;
+        case 4:  return BGFX_STENCIL_TEST_EQUAL;    break;
+        case 5:  return BGFX_STENCIL_TEST_GEQUAL;   break;
+        case 6:  return BGFX_STENCIL_TEST_GREATER;  break;
+        case 7:  return BGFX_STENCIL_TEST_NOTEQUAL; break;
+        default: return BGFX_STENCIL_TEST_ALWAYS;   break;
+        }
+    }
+
+    static uint32_t XnaStencilOpToFailS(int op)
+    {
+        // XNA StencilOperation: Keep=0,Zero=1,Replace=2,Increment=3,
+        //                       Decrement=4,IncrSat=5,DecrSat=6,Invert=7
+        switch (op)
+        {
+        case 1:  return BGFX_STENCIL_OP_FAIL_S_ZERO;    break;
+        case 2:  return BGFX_STENCIL_OP_FAIL_S_REPLACE;  break;
+        case 3:  return BGFX_STENCIL_OP_FAIL_S_INCRWRAP; break;
+        case 4:  return BGFX_STENCIL_OP_FAIL_S_DECRWRAP; break;
+        case 5:  return BGFX_STENCIL_OP_FAIL_S_INCRSAT;  break;
+        case 6:  return BGFX_STENCIL_OP_FAIL_S_DECRSAT;  break;
+        case 7:  return BGFX_STENCIL_OP_FAIL_S_INVERT;   break;
+        default: return BGFX_STENCIL_OP_FAIL_S_KEEP;     break;
+        }
+    }
+
+    static uint32_t XnaStencilOpToFailZ(int op)
+    {
+        switch (op)
+        {
+        case 1:  return BGFX_STENCIL_OP_FAIL_Z_ZERO;    break;
+        case 2:  return BGFX_STENCIL_OP_FAIL_Z_REPLACE;  break;
+        case 3:  return BGFX_STENCIL_OP_FAIL_Z_INCRWRAP; break;
+        case 4:  return BGFX_STENCIL_OP_FAIL_Z_DECRWRAP; break;
+        case 5:  return BGFX_STENCIL_OP_FAIL_Z_INCRSAT;  break;
+        case 6:  return BGFX_STENCIL_OP_FAIL_Z_DECRSAT;  break;
+        case 7:  return BGFX_STENCIL_OP_FAIL_Z_INVERT;   break;
+        default: return BGFX_STENCIL_OP_FAIL_Z_KEEP;     break;
+        }
+    }
+
+    static uint32_t XnaStencilOpToPassZ(int op)
+    {
+        switch (op)
+        {
+        case 1:  return BGFX_STENCIL_OP_PASS_Z_ZERO;    break;
+        case 2:  return BGFX_STENCIL_OP_PASS_Z_REPLACE;  break;
+        case 3:  return BGFX_STENCIL_OP_PASS_Z_INCRWRAP; break;
+        case 4:  return BGFX_STENCIL_OP_PASS_Z_DECRWRAP; break;
+        case 5:  return BGFX_STENCIL_OP_PASS_Z_INCRSAT;  break;
+        case 6:  return BGFX_STENCIL_OP_PASS_Z_DECRSAT;  break;
+        case 7:  return BGFX_STENCIL_OP_PASS_Z_INVERT;   break;
+        default: return BGFX_STENCIL_OP_PASS_Z_KEEP;     break;
+        }
+    }
+
+    static uint32_t BuildBgfxStencil(int func, int pass, int fail, int depthFail,
+                                     int mask, int writeMask, int ref)
+    {
+        return XnaCompareFuncToBgfxStencilTest(func)
+             | XnaStencilOpToPassZ(pass)
+             | XnaStencilOpToFailS(fail)
+             | XnaStencilOpToFailZ(depthFail)
+             | BGFX_STENCIL_FUNC_REF(static_cast<uint8_t>(ref))
+             | BGFX_STENCIL_FUNC_RMASK(static_cast<uint8_t>(mask));
+        (void)writeMask; // bgfx uses a global stencil write mask, not per-state
+    }
+
     void BgfxGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
                                                       int depthFunc,
-                                                      bool /*stencilEnable*/, int /*stencilFunc*/,
-                                                      int /*stencilPass*/, int /*stencilFail*/,
-                                                      int /*stencilDepthFail*/,
-                                                      int /*stencilMask*/, int /*stencilWriteMask*/,
-                                                      int /*referenceStencil*/,
-                                                      bool /*twoSidedStencilMode*/,
-                                                      int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
-                                                      int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+                                                      bool stencilEnable, int stencilFunc,
+                                                      int stencilPass, int stencilFail,
+                                                      int stencilDepthFail,
+                                                      int stencilMask, int stencilWriteMask,
+                                                      int referenceStencil,
+                                                      bool twoSidedStencilMode,
+                                                      int ccwStencilFunc, int ccwStencilPass,
+                                                      int ccwStencilFail, int ccwStencilDepthFail)
     {
-        // bgfx stencil not mapped here; depth only
         depthFlags_ = depthWriteEnable ? BGFX_STATE_WRITE_Z : 0;
         if (depthEnable)
         {
@@ -891,6 +967,23 @@ namespace CNA::Internal::Backends::Bgfx
             case 7:  depthFlags_ |= BGFX_STATE_DEPTH_TEST_NOTEQUAL; break;
             default: depthFlags_ |= BGFX_STATE_DEPTH_TEST_ALWAYS;   break;
             }
+        }
+
+        if (stencilEnable)
+        {
+            stencilFront_ = BuildBgfxStencil(stencilFunc, stencilPass, stencilFail,
+                                             stencilDepthFail, stencilMask, stencilWriteMask,
+                                             referenceStencil);
+            stencilBack_ = twoSidedStencilMode
+                ? BuildBgfxStencil(ccwStencilFunc, ccwStencilPass, ccwStencilFail,
+                                   ccwStencilDepthFail, stencilMask, stencilWriteMask,
+                                   referenceStencil)
+                : stencilFront_;
+        }
+        else
+        {
+            stencilFront_ = BGFX_STENCIL_NONE;
+            stencilBack_  = BGFX_STENCIL_NONE;
         }
     }
 
