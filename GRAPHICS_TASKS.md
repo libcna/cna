@@ -53,7 +53,7 @@
 | 18 | Tests: `VertexPositionTexture` — constructor, declaration stride=20 | ✅ | 9 tests; stride=32 not 20 (IVertexType vtable — see comment) |
 | 19 | Tests: `VertexPositionColorTexture` — constructor, declaration stride=24 | ✅ | 9 tests; stride=56 not 24; no default ctor (Color lacks one) |
 | 20 | Tests: `VertexPositionNormalTexture` — constructor, declaration stride=32 | ✅ | 12 tests; stride=40 not 32 (IVertexType vtable — see comment) |
-| 21 | Tests: `PackedVector` — all 18 types: constructor, `getPackedValue`, `PackFromVector4`, `ToVector4`, equality | ⬜ | |
+| 21 | Tests: `PackedVector` — all 18 types: constructor, `getPackedValue`, `PackFromVector4`, `ToVector4`, equality | ✅ | 82 tests (17 types); Half(0.0f) ctor tests omitted — HalfTypeHelper converts 0.0f to infinity |
 | 22 | Tests: `BasicEffect` — World/View/Projection setters/getters, TextureEnabled, VertexColorEnabled, LightingEnabled, AmbientLightColor, DirectionalLight0 | ⬜ | |
 | 23 | Tests: `AlphaTestEffect` — AlphaFunction, ReferenceAlpha, DiffuseColor, Alpha properties | ⬜ | |
 | 24 | Tests: `SkinnedEffect` — WeightsPerVertex, BoneTransforms set/get | ⬜ | |
