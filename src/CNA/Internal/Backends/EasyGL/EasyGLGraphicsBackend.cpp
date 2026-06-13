@@ -352,14 +352,33 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLRenderTargetBackend::CreateResources()
     {
         colorTex_.create();
+        // The 6-parameter set_image_2d overload does not call glBindTexture first;
+        // bind the texture explicitly so glTexImage2D targets our handle.
+        colorTex_.bind(::easygl::TextureTarget::Texture2D);
         colorTex_.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
                                ::metagl::InternalFormat::Rgba8,
                                width_, height_,
                                ::metagl::PixelFormat::Rgba,
                                ::metagl::PixelType::UnsignedByte,
                                nullptr);
+        // Default GL min-filter is NEAREST_MIPMAP_LINEAR; since the RT has no mipmaps
+        // it would be texture-incomplete when sampled.  Use LINEAR (no mipmaps).
+        colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
+                                ::metagl::TextureParameter::MinFilter,
+                                static_cast<int>(::metagl::TextureMagFilter::Linear));
+        colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
+                                ::metagl::TextureParameter::MagFilter,
+                                static_cast<int>(::metagl::TextureMagFilter::Linear));
+        colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
+                                ::metagl::TextureParameter::WrapS,
+                                static_cast<int>(::metagl::TextureWrap::ClampToEdge));
+        colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
+                                ::metagl::TextureParameter::WrapT,
+                                static_cast<int>(::metagl::TextureWrap::ClampToEdge));
 
         fbo_.create();
+        // glFramebufferTexture2D operates on the currently bound FBO; bind ours first.
+        fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
         fbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
                                ::metagl::FramebufferAttachment::Color0,
                                ::easygl::TextureTarget::Texture2D,
@@ -967,11 +986,26 @@ void main()
         if (metagl::IsContextLost())
             throw std::runtime_error("ReadBackbuffer: GL context is lost");
 
-        int vpW, vpH;
-        GetViewportSize(vpW, vpH);
+        // On the default framebuffer (no render target bound), explicitly select
+        // GL_BACK as the read source.  EGL/GLES3 contexts do not guarantee that
+        // the read buffer defaults to GL_BACK, so skipping this call can leave
+        // the read buffer pointing at GL_NONE and glReadPixels returns zeros.
+        // When a render-target FBO is bound, the read buffer is already
+        // GL_COLOR_ATTACHMENT0, so no explicit call is needed there.
+        if (currentRtHeight_ == 0)
+            device.set_read_buffer(::easygl::ReadBuffer::Back);
+
+        // Use the render-target's own height for the Y-flip when an RT is bound;
+        // fall back to the window/viewport height for the default framebuffer.
+        int fbH = currentRtHeight_;
+        if (fbH == 0)
+        {
+            int vpW;
+            GetViewportSize(vpW, fbH);
+        }
 
         // OpenGL origin is bottom-left; flip y so caller gets top-left origin.
-        const int glY = vpH - y - h;
+        const int glY = fbH - y - h;
 
         device.read_pixels(x, glY, w, h, ::metagl::PixelFormat::Rgba,
                            ::metagl::PixelType::UnsignedByte, pixels);
@@ -1104,9 +1138,15 @@ void main()
     {
         mrtFboReady_ = false;
         if (rt)
+        {
+            currentRtHeight_ = rt->GetHeight();
             rt->BindAsRenderTarget();
+        }
         else
+        {
+            currentRtHeight_ = 0;
             ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+        }
     }
 
     void EasyGLGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
@@ -1387,8 +1427,8 @@ void main()
         ::easygl::TextureMagFilter magF;
         switch (filter)
         {
-        case 1: // Point
-            minF = ::easygl::TextureMinFilter::NearestMipmapNearest;
+        case 1: // Point — nearest neighbour, no mipmaps
+            minF = ::easygl::TextureMinFilter::Nearest;
             magF = ::easygl::TextureMagFilter::Nearest;
             break;
         case 2: // Anisotropic
@@ -1419,8 +1459,8 @@ void main()
             minF = ::easygl::TextureMinFilter::NearestMipmapNearest;
             magF = ::easygl::TextureMagFilter::Linear;
             break;
-        default: // Linear
-            minF = ::easygl::TextureMinFilter::LinearMipmapLinear;
+        default: // Linear — bilinear, no mipmaps (CNA does not generate mipmaps by default)
+            minF = ::easygl::TextureMinFilter::Linear;
             magF = ::easygl::TextureMagFilter::Linear;
             break;
         }

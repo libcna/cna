@@ -21,6 +21,9 @@ public:
     void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
     void Draw(const Microsoft::Xna::Framework::GameTime& gameTime) override;
 
+    /** @brief Enables smoke-test mode: exit cleanly after @p n Draw frames. */
+    void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
+
     GetTypeNameHPP()
 
 private:
@@ -77,6 +80,9 @@ private:
 
     int minFlyers = 50;
     int maxFlyers = 100;
+
+    // When >= 0, exit cleanly after this many more Draw frames (smoke-test mode).
+    int smokeFramesLeft_ = -1;
 
 protected:
     Microsoft::Xna::Framework::Graphics::SpriteBatch* spriteBatch = nullptr;

@@ -1211,6 +1211,33 @@ namespace CNA::Internal::Backends::Bgfx
                        | ToTopologyFlag(primitive));
         bgfx::submit(currentViewId_, colored3DProgram_);
     }
+
+    void BgfxGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                                               const Matrix& world, const Matrix& view,
+                                               const Matrix& projection,
+                                               PrimitiveType primitive, int primitiveCount,
+                                               const GpuDrawParams& /*params*/)
+    {
+        // Textured/lit bgfx shader variants require pre-compiled binary shaders.
+        // Until they are available, fall back to the colored-only path.
+        DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
+    }
+
+    void BgfxGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& /*vb*/,
+                                                         const IIndexBufferBackend& /*ib*/,
+                                                         const Matrix& /*world*/,
+                                                         const Matrix& /*view*/,
+                                                         const Matrix& /*projection*/,
+                                                         PrimitiveType /*primitive*/,
+                                                         int /*primitiveCount*/,
+                                                         int /*instanceCount*/,
+                                                         const GpuDrawParams& /*params*/)
+    {
+        throw std::runtime_error(
+            "BgfxGraphicsBackend::DrawInstancedPrimitivesEx: "
+            "instanced drawing requires pre-compiled bgfx shader variants with "
+            "instance-data attributes — not yet implemented.");
+    }
 }
 
 namespace CNA::Internal::Backends

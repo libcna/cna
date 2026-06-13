@@ -2199,7 +2199,15 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     void VulkanGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
-                                                        int /*depthFunc*/)
+                                                        int /*depthFunc*/,
+                                                        bool /*stencilEnable*/, int /*stencilFunc*/,
+                                                        int /*stencilPass*/, int /*stencilFail*/,
+                                                        int /*stencilDepthFail*/,
+                                                        int /*stencilMask*/, int /*stencilWriteMask*/,
+                                                        int /*referenceStencil*/,
+                                                        bool /*twoSidedStencilMode*/,
+                                                        int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
+                                                        int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
     {
         depthTestEnabled_  = depthEnable;
         depthWriteEnabled_ = depthWriteEnable;

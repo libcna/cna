@@ -129,9 +129,9 @@
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 65 | Bgfx: fix `DrawIndexedColoredPrimitives` — make it actually submit a bgfx draw call | ⚠️ | BgfxVertexBufferBackend (DynamicVB + VertexLayout with stride-adaptive skip), BgfxIndexBufferBackend; submit wired — silent no-op until colored3DProgram_ is loaded with pre-compiled bgfx shaders |
-| 66 | Bgfx: `DrawPrimitivesEx` (GpuDrawParams → bgfx uniform upload) | ⬜ | Requires bgfx-compiled ex shaders |
-| 67 | Bgfx: `DrawInstancedPrimitivesEx` | ⬜ | |
-| 68 | Bgfx: `DrawUserPrimitives` / `DrawUserIndexedPrimitives` — transient bgfx buffers | ⬜ | |
+| 66 | Bgfx: `DrawPrimitivesEx` (GpuDrawParams → bgfx uniform upload) | ⚠️ | Override added; falls back to DrawColoredPrimitives — textured/lit shader variants require pre-compiled bgfx binaries |
+| 67 | Bgfx: `DrawInstancedPrimitivesEx` | ⚠️ | Override throws with clear message; bgfx instancing requires pre-compiled shader with instance-data attributes |
+| 68 | Bgfx: `DrawUserPrimitives` / `DrawUserIndexedPrimitives` — transient bgfx buffers | ✅ | GraphicsDevice.cpp already packs and routes DrawUserPrimitives through temporary VB → DrawColoredPrimitives; typed overloads route through DrawPrimitivesEx |
 | 69 | Bgfx: wire `BlendState` → bgfx state flags (`BGFX_STATE_BLEND_*`) | ✅ | blendFlags_ stored; applied in SubmitSprite |
 | 70 | Bgfx: wire `DepthStencilState` → bgfx state flags | ✅ | depthFlags_ stored; depth only (stencil not mapped) |
 | 71 | Bgfx: wire `RasterizerState` → bgfx state flags (cull, wireframe) | ✅ | cullFlags_ stored; wireframe not supported |
@@ -155,9 +155,9 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 85 | Integration test: EasyGL — `cna_house3d_demo` runs without errors (CI smoke test) | ⬜ | Already works manually; automate |
-| 86 | Integration test: EasyGL — render a textured quad off-screen, read back pixels with `GetBackBufferData`, assert color | ⬜ | Headless test |
-| 87 | Integration test: EasyGL — render to `RenderTarget2D`, sample as texture, read back | ⬜ | |
+| 85 | Integration test: EasyGL — `cna_house3d_demo` runs without errors (CI smoke test) | ✅ | `--smoke N` flag added; CTest entry EasyGL_House3D_SmokeTest passes in 1.3 s with DISPLAY=:0 |
+| 86 | Integration test: EasyGL — render a textured quad off-screen, read back pixels with `GetBackBufferData`, assert color | ✅ | `examples/easygl_textured_quad_test.cpp`; fixed Color vtable-pointer mis-cast in `GetBackBufferData`, explicit `glReadBuffer(Back)` |
+| 87 | Integration test: EasyGL — render to `RenderTarget2D`, sample as texture, read back | ✅ | `examples/easygl_render_target_test.cpp`; fixed FBO bind before attach, texture bind before `glTexImage2D`, LINEAR min-filter on RT colorTex_ |
 | 88 | Integration test: Vulkan — `cna_demo_2d` runs without errors (CI smoke test) | ⬜ | Already works manually; automate |
 | 89 | Integration test: Bgfx — basic draw call completes without crash (smoke test) | ⬜ | Once task 65 done |
 

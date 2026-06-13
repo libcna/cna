@@ -337,6 +337,9 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Framebuffer mrtFbo_;
         bool mrtFboReady_ = false;
 
+        // Height of the currently bound render target; 0 = default framebuffer.
+        int currentRtHeight_ = 0;
+
         void EnsureColored3DProgram();
         void EnsureTextured3DProgram();
         void EnsureColoredTextured3DProgram();

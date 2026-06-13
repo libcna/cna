@@ -402,6 +402,70 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             cna_copy_sdl_runtime(cna_house3d_demo)
         endif()
     endif()
+
+    # EasyGL integration tests (Task 85, 86, 87)
+    if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+       AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
+
+        # --- helper macro: build a headless EasyGL test exe --------------------
+        macro(cna_easygl_test target src)
+            add_executable(${target} ${src})
+            if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+                target_link_libraries(${target} PRIVATE
+                    -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                    SHARP_RUNTIME)
+            else()
+                target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+            endif()
+            if(TARGET SDL3::SDL3main)
+                target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+            endif()
+        endmacro()
+
+        enable_testing()
+
+        # Task 85: 3-frame smoke test
+        add_test(NAME EasyGL_House3D_SmokeTest
+                 COMMAND cna_house3d_demo --smoke 3)
+        set_tests_properties(EasyGL_House3D_SmokeTest PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 86: textured quad pixel readback
+        cna_easygl_test(cna_test_easygl_textured_quad
+                        examples/easygl_textured_quad_test.cpp)
+        add_test(NAME EasyGL_TexturedQuad_Readback
+                 COMMAND cna_test_easygl_textured_quad)
+        set_tests_properties(EasyGL_TexturedQuad_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 87: RenderTarget2D → texture → readback
+        cna_easygl_test(cna_test_easygl_render_target
+                        examples/easygl_render_target_test.cpp)
+        add_test(NAME EasyGL_RenderTarget2D_Readback
+                 COMMAND cna_test_easygl_render_target)
+        set_tests_properties(EasyGL_RenderTarget2D_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    endif()
+
+    # Vulkan integration test (Task 88)
+    if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+       AND CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
+
+        enable_testing()
+
+        # Task 88: 3-frame smoke test for the Vulkan backend
+        add_test(NAME Vulkan_Demo2D_SmokeTest
+                 COMMAND cna_demo_2d --smoke 3)
+        set_tests_properties(Vulkan_Demo2D_SmokeTest PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    endif()
+
 endif()
 
 if(CNA_BUILD_TESTS)

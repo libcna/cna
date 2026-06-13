@@ -230,7 +230,13 @@ namespace CNA::Internal::Backends::Vulkan
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
-                                    int depthFunc) override;
+                                    int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode,
                                   bool scissorTestEnable) override;
 

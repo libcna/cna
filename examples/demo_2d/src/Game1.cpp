@@ -200,6 +200,11 @@ void Game1::UpdateFlyers(float deltaTime)
 
 void Game1::Update(Microsoft::Xna::Framework::GameTime& gameTime)
 {
+    if (smokeFramesLeft_ > 0)
+    {
+        if (--smokeFramesLeft_ == 0) { Exit(); return; }
+    }
+
     static bool played = false;
     if (!played && flySoundInstance) {
         flySoundInstance->Play();

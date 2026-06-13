@@ -287,6 +287,16 @@ namespace CNA::Internal::Backends::Bgfx
                                           const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
+                                       const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount,
+                                       int instanceCount,
+                                       const GpuDrawParams& params) override;
 
         void SubmitSprite(const BgfxTextureBackend& texture,
                           const Rectangle& destinationRectangle,

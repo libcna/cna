@@ -18,6 +18,15 @@
 int main(int argc, char* argv[]) {
     std::cout<<"Starting game" <<std::endl;
     auto *game = new Game1();
+
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string(argv[i]) == "--smoke" && i + 1 < argc)
+            game->SetSmokeFrames(std::stoi(argv[++i]));
+        else if (std::string(argv[i]) == "--smoke")
+            game->SetSmokeFrames(3);
+    }
+
     game->Run();  // Launching of the game.
     delete game;
     return 0;

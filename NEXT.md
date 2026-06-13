@@ -1,457 +1,379 @@
-# NEXT.md — CNA project handoff
+# NEXT.md — CNA handoff document
+
+---
 
 ## 1. Project summary
 
-**CNA** is a C++23 reimplementation of the XNA 4.0 programming model built on SDL3 with a
-pluggable compile-time graphics backend. It is a framework/runtime, not a game. The goal is to
-preserve the `Microsoft::Xna::Framework` public API exactly as defined by FNA while using
-modern C++ internals, so that XNA-targeting games can be ported to C++ with minimal API friction.
+**CNA** is a C++23 reimplementation of the XNA 4.0 programming model (namespace
+`Microsoft::Xna::Framework`) built on SDL3 with a pluggable graphics backend layer.
+It is a framework/runtime, not a game.
 
-**Authoritative API reference:** `/rv/data/library/github.com/FNA-XNA/FNA/src`
+**Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering to
+one of four backends: SDL_Renderer, EasyGL (OpenGL ES 3.2 via easygl + metagl),
+Vulkan, or Bgfx.
 
-**Development phase:** Core graphics, input, audio, and content APIs are largely complete.
-Content pipeline is fully functional (SpriteFont, Model, Texture2D, Sound, Song, Video loaders).
-The current focus is hardening existing systems, improving test coverage, and fixing edge-case bugs.
+**Current phase**: Phase 7 of GRAPHICS_TASKS.md — integration tests.  
+Tasks 85–87 (EasyGL pixel-readback and RenderTarget2D tests) are complete.
+Task 88 (Vulkan smoke test) is partially done: the binary builds and the `--smoke`
+flag was added to `demo_2d`, but the smoke run was not yet executed.
+Task 89 (Bgfx smoke test) is blocked by missing pre-compiled Bgfx shaders.
 
-**Key architectural decisions:**
-- Backend selected at compile-time via `CNA_GRAPHICS_BACKEND` CMake option
-  (`SDL_RENDERER` | `EASYGL` | `VULKAN` | `BGFX`). Default debug builds use `cmake-build-vulkan/`.
-- `EasyGL` is the primary 3D-capable backend (OpenGL ES 3.0). SDL_Renderer throws on all 3D ops.
-- C# properties → `getXProperty()` / `setXProperty()`. This convention is strict everywhere.
-- All .NET primitives use SharpRuntime aliases (`bytecs`, `intcs`, `Single`, `String`, …).
-- Non-XNA extensions inside the `Microsoft::Xna` namespace are tagged `NOXNA`.
-- New `.cpp` files are auto-discovered via `GLOB_RECURSE` — no CMakeLists edits needed.
-- The class hierarchy mirrors FNA: `RenderTarget2D : Texture2D : Texture : GraphicsResource`.
+**Key architectural decisions**:
+- Backend is selected at compile time via `CNA_GRAPHICS_BACKEND` CMake option.
+- `IGraphicsBackend` is the contract between the XNA API layer and any backend.
+- `Color` inherits `IPackedVectorT<UInt32>` (virtual base) — it has a vtable pointer
+  before the packed pixel data; raw `uint8_t*` casts must use a temporary buffer.
+- SharpRuntime (`/rv/data/development/github.com/openeggbert/sharp-runtime`) provides
+  .NET primitive type aliases (`bytecs`, `String`, etc.) and `System.*` stubs.
+- FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src` is the authoritative
+  XNA 4.0 API reference.
 
 ---
 
 ## 2. Current status
 
-### Build
-- **Clean build** on both `cmake-build-vulkan` and `cmake-build-easygl`.
-- Libraries: `libCNA.a`, `libcna_backend_graphics_vulkan.a` / `libcna_backend_graphics_easygl.a`.
-- Executables: `CnaTests`, `cna_demo_2d`, `cna_demo_input`, `cna_demo_sound`,
-  `cna_demo_xact`, `cna_house3d_demo`.
-- 1 pre-existing failing test: `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes` — axis
-  scaling mismatch in SDL GamePad mapping (not related to recent changes).
+### EasyGL backend (`cmake-build-easygl`)
+- **Builds**: clean, no errors.
+- **Task 85** `EasyGL_House3D_SmokeTest`: ✅ passes (3-frame smoke, ~1.3 s).
+- **Task 86** `EasyGL_TexturedQuad_Readback`: ✅ passes — renders a 1×1 red texture
+  full-screen, reads back centre pixel with `GetBackBufferData`, asserts R=255.
+- **Task 87** `EasyGL_RenderTarget2D_Readback`: ✅ passes — clears a 64×64 RT to
+  green, blits via SpriteBatch, reads back centre pixel, asserts G=255.
+- 3D house demo (`cna_house3d_demo`) runs interactively.
 
-### What works
-- **Graphics core:** `GraphicsDevice` (full state API, render targets, back-buffer readback on EasyGL),
-  `SpriteBatch` (all sort modes, transform matrix, custom ShaderEffect),
-  `Texture2D` (load, GetData/SetData, all mip levels, SaveAsPng/SaveAsJpeg with streams),
-  `Texture3D`, `TextureCube`, 18 PackedVector types.
-- **Texture hierarchy:** `Texture2D : Texture : GraphicsResource : Object` — correct FNA-matching
-  inheritance. `RenderTarget2D : Texture2D, IRenderTarget` — RTs are usable as sampler textures.
-- **Effects:** `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`,
-  `SkinnedEffect`, `SpriteEffect`. Full `IEffectMatrices` / `IEffectFog` / `IEffectLights`.
-  `EffectParameter` complete (all GetValue/SetValue overloads).
-- **Vertices/Buffers:** `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer` (16- and 32-bit),
-  `DynamicIndexBuffer`, all 4 VertexPosition* types.
-- **States:** `BlendState`, `DepthStencilState`, `RasterizerState`, `SamplerState` — all wired
-  to `ApplyBlendState / ApplyDepthStencilState / ApplyRasterizerState` on EasyGL and Vulkan.
-- **RenderTarget2D:** EasyGL (FBO + depth renderbuffer) and Vulkan (off-screen images, RT render
-  pass, deferred command recording) backends both implemented.
-- **3D rendering (EasyGL):** 4 shader variants by vertex stride, depth test/write, blend,
-  cull mode, WVP matrix upload. `house3d_demo` runs.
-- **3D rendering (Vulkan):** Deferred via `Pending3DDraw` queue; blend/depth/cull state
-  wired; uses push constants for MVP. Functional for colored and indexed primitives.
-- **Model system:** `Model::Draw` — bone transforms, `IEffectMatrices` binding, `ModelMesh::Draw`
-  issues `DrawIndexedPrimitives` per effect pass.
-- **SpriteFont:** Full glyph data model, `MeasureString`, `SpriteBatch::DrawString` (3 overloads).
-- **OcclusionQuery:** EasyGL uses `GL_ANY_SAMPLES_PASSED`; others stub-fallback.
-- **Input:** Keyboard, Mouse, GamePad (all axes/buttons), Touch, Gesture.
-- **Audio:** SoundEffect, SoundEffectInstance, SoundBank/WaveBank (XACT). AudioEngine is a stub.
-- **Video:** FFmpeg-based `VideoPlayer` with per-frame RGBA texture update.
-- **Storage:** `StorageDevice`, `StorageContainer`.
-- **Math:** `Vector2/3/4`, `Matrix`, `Quaternion`, `BoundingBox`, `BoundingSphere`,
-  `BoundingFrustum`, `Plane`, `Ray`, `Curve`, `MathHelper`.
-- **Game infrastructure:** `Game`, `GameComponent`, `DrawableGameComponent`,
-  `GameWindow` (resize event wired), `GraphicsDeviceManager`, `GameComponentCollection`.
-- **Content:** `ContentManager` + `ContentTypeReader<T>` — readers for `Texture2D`,
-  `SoundEffect`, `Effect` (`.shader.json`), `Song`, `Video`. No XNB pipeline.
-- **DrawUserPrimitives / DrawUserIndexedPrimitives** — all 4 typed vertex variants.
-- **Viewport::Project / Unproject** — fully implemented.
-- **GetBackBufferData<Color>** — EasyGL: `glReadPixels` + Y-flip. Vulkan: staging buffer readback.
-- **Content pipeline:** `ContentManager` readers for `Texture2D`, `SpriteFont` (`.font.json`),
-  `Model` (`.model.json`), `Effect` (`.shader.json`), `SoundEffect`, `Song`, `Video`.
-- **DrawInstancedPrimitives** — EasyGL: `glDrawElementsInstanced`. Others throw.
-- **DrawUserIndexedPrimitives** — all 4 typed vertex variants, 16-bit and 32-bit indices.
+### Vulkan backend (`cmake-build-vulkan`)
+- **Builds**: clean after fixing `ApplyDepthStencilState` signature mismatch this session.
+- `cna_demo_2d` binary exists and the `--smoke 3` flag was added this session.
+- Smoke run was **not yet executed** — interrupted before completion.
+- CTest entry `Vulkan_Demo2D_SmokeTest` exists in `CMakeLists.txt` but the Vulkan
+  build dir has `CNA_BUILD_TESTS=OFF`, so `ctest` cannot pick it up without reconfigure.
 
-### What does NOT work yet
+### Bgfx backend
+- No `cmake-build-bgfx` directory exists.
+- Bgfx is fetched via FetchContent (large download from github.com/bkaradzic/bgfx.cmake).
+- Task 65 is ⚠️: draw call submission is wired but is a silent no-op because
+  `colored3DProgram_` requires pre-compiled bgfx shader binaries not present in the repo.
+- `GetBackBufferData` stubs throw with a clear message (async bgfx readback not implemented).
 
-| Area | Status |
-|------|--------|
-| `FillMode::WireFrame` | Silently ignored — OpenGL ES 3.0 has no `glPolygonMode`. Known limitation. |
-| `Media::MediaLibrary` | Fully stubbed — playlist/photo/artist queries unimplemented. Do not implement. |
-| `Audio::AudioEngine` | Mostly stubbed. Low priority. |
-| Vulkan 3D textured pipeline | Only stride-16 (colored) is supported. Textured/lit needs a full Vulkan shader system. |
-| EasyGL context loss on real OS events | `DebugSimulateContextLoss` works; real OS suspend/resume not verified on Linux. |
-| `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes` | Axis scaling mismatch in SDL GamePad mapping. Pre-existing failure. |
+### What does not work yet
+- Vulkan textured/lit 3D pipeline (tasks 52–64, deferred).
+- Bgfx actual rendering (pre-compiled shaders missing, tasks 65–67 partial).
+- `Texture3D`/`TextureCube` `GetData` on GLES3 (no `glGetTexImage`).
+- Unit tests (Google Test suite, tasks 8–36) not run in CI yet.
 
 ---
 
 ## 3. Recent changes
 
-### Task 28 — `RenderTarget2D` Vulkan backend
-- `VulkanRenderTargetBackend`: color image (`swapchainFormat_`), depth image, framebuffer,
-  descriptor set for texture sampling, `rtRenderPass_` with `SHADER_READ_ONLY_OPTIMAL` final layout.
-- `RecordCommandBuffer` refactored: Phase 1 draws to each RT; Phase 2 draws to backbuffer.
-- `activeBatches_` changed to `vector<pair<VulkanSpriteBatchBackend*, VulkanRenderTargetBackend*>>`.
+### Files modified this session
 
-### Task 29 — `Texture2D` stream API
-- `SaveAsPng(Stream*, w, h)` — XNA 4.0 stream overload via `SDL_IOFromDynamicMem` + `IMG_SavePNG_IO`.
-- `Texture2D(GraphicsDevice&, w, h, bool mipMap, SurfaceFormat)` full constructor.
-- `getFormatProperty()` and `getLevelCountProperty()` exposed (now inherited from `Texture`).
+| File | Change |
+|------|--------|
+| `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp` | `GetBackBufferData`: use tmp `uint8_t[]` buffer + `Color(r,g,b,a)` to avoid writing into `Color`'s vtable pointer |
+| `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` | `ReadBackbuffer`: add `glReadBuffer(Back)` for default FB; use `currentRtHeight_` for Y-flip when RT is bound |
+| `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` | Sampler filter fix: `LINEAR_MIPMAP_LINEAR` → `LINEAR` in `ApplySamplerState` (black overlay bug fix from previous session) |
+| `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` | `EasyGLRenderTargetBackend::CreateResources`: bind FBO before `attach_texture_2d`; bind texture before `set_image_2d`; set LINEAR min/mag/wrap on `colorTex_` |
+| `include/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp` | Added `int currentRtHeight_ = 0` member |
+| `include/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp` | Fixed `ApplyDepthStencilState` override signature (added stencil parameters to match updated base) |
+| `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp` | Matching implementation update (stencil params ignored with comments) |
+| `examples/demo_2d/src/Game1.hpp` | Added `SetSmokeFrames(int n)` + `smokeFramesLeft_` member |
+| `examples/demo_2d/src/Game1.cpp` | Added smoke countdown in `Update()` |
+| `examples/demo_2d/src/Main.cpp` | Added `--smoke [N]` argument parsing |
+| `CMakeLists.txt` | Added `Vulkan_Demo2D_SmokeTest` CTest entry under `VULKAN` + `CNA_BUILD_TESTS` guard |
+| `GRAPHICS_TASKS.md` | Marked tasks 86 and 87 as ✅ |
 
-### Task 30 — `ContentManager` Song/Video readers
-- `SongTypeReader` — extensions: `.mp3 .ogg .wav .flac .opus .aac .wma`.
-- `VideoTypeReader` — extensions: `.mp4 .ogv .webm .mkv .avi .mov`.
+### Files added this session
 
-### Task 31 — `GraphicsDevice::GetBackBufferData<Color>`
-- `IGraphicsBackend::ReadBackbuffer(x, y, w, h, pixels)` — default throws.
-- `EasyGLGraphicsBackend::ReadBackbuffer` — `device.read_pixels(GL_RGBA, UNSIGNED_BYTE)` + Y-flip.
-- `GraphicsDevice` gains 3 XNA 4.0 overloads: full buffer, with startIndex, with Rectangle.
+| File | Purpose |
+|------|---------|
+| `examples/easygl_textured_quad_test.cpp` | Task 86 integration test |
+| `examples/easygl_render_target_test.cpp` | Task 87 integration test |
 
-### Task 32 — `RenderTarget2D : Texture2D` hierarchy fix
-- `Texture2D` now inherits `Texture : GraphicsResource : Object` (FNA-matching hierarchy).
-- Removed duplicate `format_`, `levelCount_`, `device_` from `Texture2D` (inherited from `Texture`).
-- Added `GetTypeName()` override (required by `System::Object`).
-- Added protected ctor `Texture2D(device, w, h, fmt, levelCount, shared_ptr<ITextureBackend>)`.
-- `RenderTarget2D : Texture2D, IRenderTarget` — RT is now IS-A Texture2D. `rtBackend_` is a
-  non-owning raw pointer; ownership lives in `Texture2D::backend_` as `shared_ptr`.
+### Bugs fixed this session
+
+1. **`Color` vtable mis-cast** — `GetBackBufferData` cast `Color*` to `uint8_t*` and
+   passed it to `glReadPixels`. Because `Color` has a virtual base (`IPackedVectorT`),
+   the vtable pointer occupies the first 8 bytes; `packedValue` starts at byte 8.
+   `glReadPixels` wrote 4 bytes starting at byte 0 (into the vtable pointer, not the
+   pixel data). Fixed with a temporary `uint8_t[]` buffer.
+2. **`glReadBuffer` not called on default FB** — On EGL/GLES3, the initial read buffer
+   is not guaranteed to be `GL_BACK`. `ReadBackbuffer` now explicitly calls
+   `device.set_read_buffer(Back)` when reading from the default framebuffer.
+3. **FBO created but not bound before attachment** — `EasyGLRenderTargetBackend::
+   CreateResources` called `glFramebufferTexture2D` without first binding the FBO;
+   the call was silently applied to the wrong framebuffer. Added `fbo_.bind()` before
+   `attach_texture_2d`.
+4. **RT texture not bound before `glTexImage2D`** — The 6-param `Texture::set_image_2d`
+   overload does not call `glBindTexture` first; `colorTex_` remained uninitialized,
+   making the FBO incomplete. Added explicit `colorTex_.bind()` before `set_image_2d`.
+5. **RT texture incomplete when sampled** — Default GL min-filter is
+   `GL_NEAREST_MIPMAP_LINEAR`; since the RT has no mipmaps, SpriteBatch sampled it as
+   black. Fixed by setting `GL_LINEAR` on `colorTex_` after creation.
+6. **Vulkan `ApplyDepthStencilState` signature mismatch** — Base class was extended with
+   full stencil parameters; the Vulkan header still had the old 3-param signature,
+   causing a compile error.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No hard compilation blocker — both backends build cleanly.**
+**Task 88 — Vulkan smoke test not yet verified.**
 
-All major content-pipeline gaps are closed (SpriteFont, Model, Texture2D, Sound, Song, Video).
-The remaining functional gaps are either low-priority stubs (`AudioEngine`, `MediaLibrary`) or
-require major new work (Vulkan textured 3D pipeline) which is explicitly deferred in section 9.
+The `cna_demo_2d --smoke 3` binary was rebuilt in `cmake-build-vulkan` with the new
+`--smoke` flag. The smoke run was interrupted before it could be executed.
 
-All 374 tests pass. The next actionable work is expanding test coverage
-(e.g. `BoundingFrustum`, `Storage`, `Audio` unit tests).
+**Exact command to run:**
+```bash
+cd /rv/data/development/github.com/openeggbert/cna/cmake-build-vulkan
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
+echo "exit=$?"
+```
+
+**Suspected failure mode**: `LoadContent()` loads `Content/images/player.png`. If the
+Content directory is missing from `cmake-build-vulkan/`, it will throw and exit non-zero.
+Check with: `ls cmake-build-vulkan/Content/`.
+
+**Affected files:**
+- `cmake-build-vulkan/cna_demo_2d` — binary exists
+- `cmake-build-vulkan/Content/` — may be absent
+- `examples/demo_2d/src/Game1.cpp` — `LoadContent` loads assets
 
 ---
 
 ## 5. Known bugs and limitations
 
-| Issue | Status |
-|-------|--------|
-| `GraphicsResource` copy semantics | ✅ Fixed — explicit copy ctor/assignment: `isDisposed_=false`, `Disposing` handlers not copied. |
-| `RenderTarget2D` copyability | ✅ Fixed (Task 33) — copy ctor/assignment `= delete`; move `= default`. |
-| `Vulkan GetBackBufferData` | ✅ Fixed (Task 37) — staging buffer + BGRA→RGBA conversion. |
-| `DrawInstancedPrimitives` | ✅ Fixed (Task 36) — EasyGL uses `glDrawElementsInstanced`; others throw. |
-| `ContentManager::Load<SpriteFont>` | ✅ Fixed (Task 34) — `SpriteFontTypeReader` via `.font.json`. |
-| `ContentManager::Load<Model>` | ✅ Fixed (Task 35) — `ModelTypeReader` via `.model.json`. |
-| `DrawUserIndexedPrimitives` 32-bit | ✅ Fixed (Task 38) — all 4 typed `uint32_t*` overloads. |
-| `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes` | ✅ Fixed — test now uses `GamePadDeadZone::None`; it tests InputManager plumbing, not dead-zone math. All 374 tests pass. |
-| `FillMode::WireFrame` | Silently ignored on GLES3 — no `glPolygonMode` in OpenGL ES 3.0. **known limitation** |
-| `AudioEngine` stub | All `AudioEngine` methods throw or are no-ops. Low priority. |
-| `Media::MediaLibrary` | Fully stubbed. Do not implement (see section 9). |
-| `BoundingFrustum::Intersects(Ray)` | Throws `NotImplementedException` — matches FNA behavior. **known** |
-| EasyGL context loss recovery | `DebugSimulateContextLoss` works; real OS suspend/resume not verified. |
-| `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes` | Axis scaling mismatch in SDL mapping. Pre-existing. |
+| Status | Item |
+|--------|------|
+| **incomplete** | Task 88: Vulkan smoke test not executed after adding `--smoke` flag |
+| **incomplete** | Task 89: Bgfx smoke test blocked — no build dir, task 65 draw calls are no-ops |
+| **confirmed bug** | Bgfx `GetBackBufferData` always throws; async readback not implemented (task 82 stub) |
+| **incomplete** | `Texture3D::GetData` / `TextureCube::GetData` on GLES3 — stub only |
+| **incomplete** | Vulkan textured/lit 3D pipeline (tasks 52–64) — all deferred |
+| **incomplete** | Bgfx actual rendering requires pre-compiled bgfx shader binaries |
+| **needs verification** | `EasyGLRenderTargetCubeBackend::CreateResources` — likely has the same missing-bind pattern fixed in the 2D RT this session |
+| **needs verification** | Vulkan `cna_demo_2d --smoke 3` exit code |
+| **unknown** | Whether `CNA_BUILD_TESTS=ON` in Vulkan build breaks anything |
 
 ---
 
 ## 6. Architecture notes
 
-### Main modules
+### Module map
 
 ```
-Microsoft::Xna::Framework::           — public XNA 4.0 API (must match FNA exactly)
-  Graphics::                          — GraphicsDevice, textures, effects, vertices, Model
-    Texture : GraphicsResource        — base for all textures; holds format_, levelCount_
-    Texture2D : Texture               — 2D texture + CPU-side pixel cache
-    RenderTarget2D : Texture2D, IRenderTarget — RT is a Texture2D; shares backend_ ptr
-    PackedVector::                    — 18 packed pixel types (header-only)
-  Input::                             — Keyboard, Mouse, GamePad, Touch, Gesture
-  Content::                           — ContentManager + ContentTypeReader<T> (no XNB)
-  Audio::                             — SoundEffect, SoundBank, WaveBank (XACT)
-  Media::                             — VideoPlayer (FFmpeg), Song, MediaPlayer
+Microsoft::Xna::Framework::*            ← XNA public API (include/ + src/)
+  └─ GraphicsDevice                     ← delegates to IGraphicsBackend*
+       └─ IGraphicsBackend              ← include/CNA/Internal/Backends/Common/
+            ├─ EasyGLGraphicsBackend    ← src/CNA/Internal/Backends/EasyGL/
+            ├─ VulkanGraphicsBackend    ← src/CNA/Internal/Backends/Vulkan/
+            ├─ BgfxGraphicsBackend      ← src/CNA/Internal/Backends/Bgfx/
+            └─ SDLGraphicsBackend       ← src/CNA/Internal/Backends/SDL/
 
-CNA::                                 — project-specific internals
-  Internal::Backends::Common::        — IGraphicsBackend, ITextureBackend, IVertexBufferBackend
-  Internal::Backends::EasyGL::        — OpenGL ES 3.0 (primary 3D backend)
-  Internal::Backends::SDL_Renderer::  — 2D only; throws on all 3D calls
-  Internal::Backends::Vulkan::        — 2D + deferred 3D via Pending3DDraw queue
-  Internal::Input::InputManager::     — SDL events → XNA Input state
-  Internal::Graphics::ImageLoader::   — PNG/BMP/… → RGBA via stb_image/SDL3_image
+SharpRuntime    ← /rv/data/development/github.com/openeggbert/sharp-runtime
+  System::*, type aliases (bytecs, String, Single, …)
+
+metagl          ← raw GL function loader + typed enum wrappers
+easygl          ← GL resource wrappers (Device, Texture, Framebuffer, Sampler, …)
 ```
 
-### Data flow (3D draw, EasyGL)
-```
-Game::Draw()
-  → GraphicsDevice::DrawIndexedPrimitives()
-      → IGraphicsBackend::DrawIndexedPrimitivesEx(GpuDrawParams)
-          → EasyGLGraphicsBackend: select shader by stride, bind VAO, glDrawElements
-```
+### Critical invariants
 
-### Data flow (RenderTarget usage)
+- **`Color` has a vtable pointer** (from `IPackedVectorT`): never cast `Color*` to
+  `uint8_t*` for GL pixel I/O. Always use a `uint8_t[]` buffer and construct
+  `Color(r,g,b,a)` per pixel.
+- **`easygl::Texture::set_image_2d` (6-param overload)** does NOT call `glBindTexture`
+  first. Always call `tex.bind(target)` explicitly before this overload.
+- **`easygl::Framebuffer::attach_texture_2d`** calls raw `glFramebufferTexture2D` on
+  the currently bound FBO. Always call `fbo.bind(target)` before attaching.
+- **RT texture min-filter**: RenderTarget textures must have min-filter set to
+  `GL_LINEAR` (not the default `GL_NEAREST_MIPMAP_LINEAR`) because they have no mipmaps.
+- **`glReadBuffer(GL_BACK)`** must be called explicitly before `glReadPixels` on the
+  default framebuffer on EGL/GLES3.
+- **`currentRtHeight_`** in `EasyGLGraphicsBackend` tracks the bound RT pixel height
+  for Y-flip in `ReadBackbuffer`. Kept in sync by `SetRenderTarget2D`.
+- **Backend is compile-time only**: no runtime backend switching.
+- **XNA namespace = XNA API only**: non-XNA extensions must be tagged `NOXNA`.
+
+### Data flow for pixel readback
+
 ```
-GraphicsDevice::SetRenderTarget(&rt)
-  → IGraphicsBackend::SetRenderTarget2D(rt.GetRenderTargetBackend())
-      → EasyGL: glBindFramebuffer(FBO) / Vulkan: sets currentRT_
-
-SpriteBatch::Begin() records target RT.
-On End() / Present: RT content is in rt.backend_ (shared_ptr<ITextureBackend>).
-device.Textures[0] = &rt;          // valid — RT IS-A Texture2D IS-A Texture
+device.GetBackBufferData(&rect, &pixel, 0, 1)
+  → GraphicsDevice::GetBackBufferData            [GraphicsDevice.cpp]
+      uint8_t buf[w*h*4]
+      → backend_->ReadBackbuffer(x, y, w, h, buf)  [EasyGLGraphicsBackend.cpp]
+          if (default FB): glReadBuffer(GL_BACK)
+          fbH = currentRtHeight_ > 0 ? currentRtHeight_ : getLogicalSize()
+          glReadPixels(x, fbH-y-h, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buf)
+          vertical row flip (bottom-up → top-down)
+      for each pixel: data[i] = Color(buf[i*4], buf[i*4+1], buf[i*4+2], buf[i*4+3])
 ```
-
-### Important invariants
-
-- **XNA API names:** Class/method/enum names must match FNA exactly.
-- **Namespace:** XNA types stay in `Microsoft::Xna::Framework::*`. `CNA::` is for internals.
-- **Property convention:** `getXProperty()` / `setXProperty()` — never raw public fields.
-- **SharpRuntime types:** `bytecs`, `intcs`, `Single`, `String` etc. — never raw C++ in XNA surface.
-- **SDL_Renderer 3D:** Must always throw (by contract).
-- **`Texture2D` backend_:** Private `shared_ptr<ITextureBackend>`. For `RenderTarget2D` the RT
-  backend lives here; `rtBackend_` is non-owning. Do not store a second `shared_ptr` to the same
-  backend from `RenderTarget2D`.
-- **FNA hierarchy:** `RenderTarget2D : Texture2D : Texture : GraphicsResource`. Do not flatten this.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# Configure Vulkan build (default)
-cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCMAKE_BUILD_TYPE=Debug
-
-# Configure EasyGL build (3D demos, tests)
-cmake -B cmake-build-easygl -DCNA_GRAPHICS_BACKEND=EASYGL -DCMAKE_BUILD_TYPE=Debug
-
-# Build library only
-cmake --build cmake-build-vulkan --target CNA
+# EasyGL — build
+cmake -B cmake-build-easygl -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-easygl --target CNA
 
-# Build everything (both backends)
-cmake --build cmake-build-vulkan
-cmake --build cmake-build-easygl
+# EasyGL — run integration tests (requires X11)
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-easygl -R EasyGL --output-on-failure
 
-# Run tests
-./cmake-build-easygl/CnaTests
-./cmake-build-vulkan/CnaTests   # if available
+# EasyGL — run integration tests individually
+cd cmake-build-easygl
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_test_easygl_textured_quad
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_test_easygl_render_target
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_house3d_demo --smoke 3
 
-# Run 3D demo (EasyGL — requires display)
-./cmake-build-easygl/cna_house3d_demo
+# Vulkan — build cna_demo_2d
+cmake --build cmake-build-vulkan --target cna_demo_2d
 
-# Run 2D demo (Vulkan)
-./cmake-build-vulkan/cna_demo_2d
+# Vulkan — smoke test (manual, binary already built)
+cd cmake-build-vulkan
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
+echo "exit=$?"
 
-# Run sound demo
-./cmake-build-vulkan/cna_demo_sound
+# Vulkan — reconfigure with CNA_BUILD_TESTS=ON, then run ctest
+cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-vulkan --target cna_demo_2d
+ctest --test-dir cmake-build-vulkan -R Vulkan --output-on-failure
 
-# FNA reference source
-ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
+# Bgfx — create build (requires network for FetchContent)
+cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX
+cmake --build cmake-build-bgfx --target cna_demo_2d 2>&1 | tail -20
+cd cmake-build-bgfx
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
+
+# Check Content directory exists in Vulkan build
+ls cmake-build-vulkan/Content/
+
+# Check git status
+git status && git log --oneline -5
 ```
 
 ---
 
 ## 8. Next smallest tasks
 
-### Task 46 — CNA: Doxygen comments — audit and sync with FNA ✅ DONE
+### Task 88 — Verify Vulkan smoke test *(first priority)*
 
-**Status:** Not started.
+**Goal**: Confirm `cna_demo_2d --smoke 3` exits 0 under the Vulkan backend.
 
-**Goal:** Every public method, constructor, operator, constant, and enum value in every CNA
-`.hpp` file under `include/` must have a `///` Doxygen comment. Comments should reflect the FNA
-XML documentation where one exists.
+**Files likely involved**:
+- `cmake-build-vulkan/cna_demo_2d` (binary, already built)
+- Possibly `cmake-build-vulkan/Content/` (check it exists)
 
-**Rules per member:**
+**Verification**:
+```bash
+cd cmake-build-vulkan
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
+echo "exit=$?"
+```
 
-1. **No comment yet** → copy the intent from the FNA XML `<summary>` (rephrased to one short
-   sentence in `///` style). Do not write "taken from FNA".
-2. **Comment exists in CNA, FNA has a better one** → replace with FNA version (rephrased).
-3. **Comment exists in CNA and is already better or equivalent** → keep CNA version unchanged.
+If exit≠0: check for missing `Content/` directory or audio init errors in stderr.
+If `Content/` is missing: symlink or copy from `examples/demo_2d/Content`.
 
-**Style rules:**
-- `///` single-line style only. No `/** */` blocks on individual members.
-- One short sentence per member ending with a period.
-- Enum enumerators need `///` too.
-
-**FNA reference:** `/rv/data/library/github.com/FNA-XNA/FNA/src`
-
-**Scope:** All `.hpp` files under `include/Microsoft/Xna/` and `include/CNA/`.
-
-**Approach (large task — work in batches per namespace):**
-- `include/Microsoft/Xna/Framework/` (root files: Color, Vector*, Matrix, …)
-- `include/Microsoft/Xna/Framework/Graphics/` (Texture2D, SpriteBatch, Effects, …)
-- `include/Microsoft/Xna/Framework/Input/`
-- `include/Microsoft/Xna/Framework/Audio/`
-- `include/Microsoft/Xna/Framework/Media/`
-- `include/Microsoft/Xna/Framework/Content/`
-- `include/CNA/` (internal helpers — write brief intent comments where missing)
-
-Do NOT commit from agents — one clean commit at the end.
+After confirmed pass: update `GRAPHICS_TASKS.md` task 88 to ✅.
 
 ---
 
-### Task 33 — `RenderTarget2D`: delete copy constructor / assignment ✅ DONE
-- Added `= delete` for copy ctor/assignment, `= default` for move in `RenderTarget2D.hpp`.
-- Verified: no existing code copies RT by value. Both backends build clean.
+### Task 88b — Wire CTest for Vulkan smoke test
 
-### Task 34 — `ContentManager::Load<SpriteFont>` via `.font.json` descriptor ✅ DONE
-- `SpriteFont::textureValue_` changed from raw `Texture2D*` to `Texture2D` (owned by value).
-  Constructor now takes `Texture2D` by value (moved in). Eliminates dangling-pointer risk.
-- `SpriteFontTypeReader` added to `ContentManager.cpp` (anonymous namespace):
-  - Parses `.font.json` descriptor (texture path, lineSpacing, spacing, defaultCharacter, glyphs array).
-  - Loads atlas via `cm.Load<Texture2D>(textureName)` — atlas is cached and lifetime-safe.
-  - Parses each glyph: `{ "char": N, "source":[x,y,w,h], "crop":[x,y,w,h], "kerning":[l,a,r] }`.
-- Registered in `RegisterBuiltinLoaders()`.
-- Both backends build clean.
+**Goal**: Make `ctest -R Vulkan_Demo2D_SmokeTest` work.
 
-### Task 35 — `ContentManager::Load<Model>` via `.model.json` descriptor ✅ DONE
-- `ModelBone(int index, std::string name)` NOXNA constructor added.
-- `ModelMeshPart(VertexBuffer*, IndexBuffer*, numVertices, primCount, startIndex, vertexOffset)` NOXNA constructor added.
-- `ModelMesh(GraphicsDevice*, std::string name, vector<ModelMeshPart*>)` overloaded NOXNA constructor added.
-- `Model::setOwnedResources(shared_ptr<void>)` NOXNA setter added; `Model` holds `shared_ptr<void> ownedResources_` for type-erased GPU resource lifetime.
-- `ModelTypeReader` added to `ContentManager.cpp` (anonymous namespace):
-  - Parses `.model.json`: `"meshes"` array + optional `"bones"` (first bone name used as root).
-  - Per mesh: reads vertex `.bin` and index `.bin` (uint16 indices); dispatches to typed `VertexBuffer::SetData` by stride (16/20/24/32).
-  - Effect: `"BasicEffect"` or empty → `make_shared<BasicEffect>(device)`; otherwise `cm.Load<shared_ptr<Effect>>(name)`.
-  - GPU resources owned by `shared_ptr<ModelResources>` stored in `Model::ownedResources_`; copies of Model share the same buffers.
-- Both backends build clean.
+**Files involved**: reconfigure `cmake-build-vulkan` with `-DCNA_BUILD_TESTS=ON`
 
-### Task 36 — `DrawInstancedPrimitives` ✅ DONE
-- `GraphicsDevice::DrawInstancedPrimitives(primitiveType, baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount, instanceCount)` added — matches XNA 4.0 signature (FNA `GraphicsDevice.cs` line 1257).
-- `IGraphicsBackend::DrawInstancedPrimitivesEx(...)` virtual added with default that throws `std::runtime_error` (SDL_Renderer, Vulkan get the default — not implemented).
-- `EasyGLGraphicsBackend::DrawInstancedPrimitivesEx` override uses `device.draw_elements_instanced` (OpenGL ES 3.0, already in easygl).
-- Both backends build clean.
+**Verification**:
+```bash
+cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-vulkan --target cna_demo_2d
+ctest --test-dir cmake-build-vulkan -R Vulkan_Demo2D_SmokeTest --output-on-failure
+```
 
-### Task 38 — `DrawUserIndexedPrimitives` 32-bit index overloads ✅ DONE
-- Added 4 typed overloads for `const uint32_t*` indices: `VertexPositionColor`, `VertexPositionTexture`, `VertexPositionColorTexture`, `VertexPositionNormalTexture`.
-- Pattern mirrors existing uint16 overloads; uses `CreateIndexBuffer32` + `SetData32` (both already implemented in EasyGL and Vulkan).
-- Both backends build clean.
+---
 
-### Task 37 — `GraphicsDevice::GetBackBufferData` on Vulkan (staging buffer) ✅ DONE
-- `VulkanGraphicsBackend::ReadBackbuffer(x, y, w, h, pixels)` override added.
-- Approach: `vkDeviceWaitIdle` → create host-coherent staging VkBuffer →
-  one-time cmd: PRESENT_SRC_KHR → TRANSFER_SRC_OPTIMAL barrier,
-  `vkCmdCopyImageToBuffer`, TRANSFER_SRC_OPTIMAL → PRESENT_SRC_KHR barrier →
-  `EndOneTimeCommands` → map → copy with BGRA→RGBA channel swap if needed → unmap → destroy buffer.
-- `lastPresentedImageIndex_` stored in `Present()` so `ReadBackbuffer` knows which swapchain image to read.
-- Both backends build clean.
+### Task 89 — Bgfx smoke test
 
-### Task 43 — Fix `GraphicsResource` copy semantics ✅ DONE
-- Added explicit copy constructor and copy assignment operator to `GraphicsResource`.
-- Copy constructor: copies `graphicsDevice_`, `name_`, `tag_`; sets `isDisposed_ = false`;
-  does NOT copy `Disposing` event handlers (each object owns its own event lifecycle).
-- Copy assignment: same policy — reset `isDisposed_ = false`, skip handlers.
-- Root cause: default copy ctor inherited the `Disposing` handler vector, so destroying a copy
-  via explicit `Dispose(true)` would fire those handlers with the wrong `this` pointer as sender.
-  Also, `isDisposed_` on the copy being set `true` by the destructor was confusing but harmless.
-- `Texture2D(const Texture2D&) = default` continues to work — it now calls the fixed base ctor.
-- Updated NEXT.md sections 1, 2, 4, 5 to reflect current project state (all stale entries removed).
-- 305/306 tests pass (1 pre-existing GamePad axis failure unrelated to this change).
-- Both backends build clean.
+**Goal**: Create a Bgfx build, run `cna_demo_2d --smoke 3`, verify no crash.
+Actual rendering will be blank — that is acceptable for a smoke test.
 
-### Task 42 — Unit tests for `MathHelper` (extended) and `Point` ✅ DONE
-- Extended `tests/Microsoft/Xna/Framework/MathHelperTests.cpp` with 32 new tests covering:
-  constants (Pi, TwoPi, PiOver2, PiOver4), Lerp (zero/one/half/negative range), SmoothStep
-  (boundary clamping, midpoint), ToDegrees/ToRadians (known angles + round-trip), Distance
-  (symmetric, zero), Max/Min, WrapAngle (zero, full turn, small positive, over-π wraps negative),
-  WithinEpsilon, ClosestMSAAPower (powers-of-two and rounding).
-- Added `tests/Microsoft/Xna/Framework/PointTests.cpp` — 14 tests: Zero constant, constructors
-  (default, two-arg, negative), equality (==, !=, Equals), all four arithmetic operators
-  (+, -, *, /), identity properties (add Zero, subtract self→zero).
-- All 50 tests pass. Both backends build clean.
+**Files involved**:
+- Requires network (FetchContent: bgfx.cmake)
+- `CMakeLists.txt` — add `Bgfx_Demo2D_SmokeTest` CTest entry (same pattern as Vulkan)
 
-### Task 41 — Unit tests for `Quaternion`, `BoundingBox`, `BoundingSphere` ✅ DONE
-- Added `tests/Microsoft/Xna/Framework/QuaternionTests.cpp` — 26 tests: Identity (components, length),
-  constructors (4-component, vector+scalar), Length/LengthSquared, Normalize (in-place, static),
-  Conjugate (static and in-place), Dot, CreateFromAxisAngle (0→identity, π→half-turn, unit length),
-  Multiply (by identity, q×q*≈identity), Inverse (identity round-trip, q×inv≈I), Lerp/Slerp
-  (boundary and unit-length results), operators (==, !=, unary -), CreateFromRotationMatrix(Identity)→Identity.
-- Added `tests/Microsoft/Xna/Framework/BoundingBoxTests.cpp` — 19 tests: constructor, Contains(point)
-  (center, min/max corners, outside), Contains(box) (inside/intersects/disjoint), Intersects(box)
-  (overlapping, adjacent, disjoint), Intersects(sphere), GetCorners (count=8, contains Min+Max),
-  CreateFromPoints (exact extents), CreateMerged, operators.
-- Added `tests/Microsoft/Xna/Framework/BoundingSphereTests.cpp` — 21 tests: constructors, Contains(point/sphere)
-  (inside, boundary, disjoint), Intersects(sphere) (symmetry), Intersects(box), CreateFromBoundingBox
-  (all corners within, center=box center), CreateFromPoints, CreateMerged, Transform(identity/translation),
-  operators.
-- All 66 tests pass. Both backends build clean.
+**Verification**:
+```bash
+cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX
+cmake --build cmake-build-bgfx --target cna_demo_2d 2>&1 | tail -10
+cd cmake-build-bgfx
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
+echo "exit=$?"
+```
 
-### Task 40 — Unit tests for `Vector3`, `Vector4`, `Matrix` ✅ DONE
-- Added `tests/Microsoft/Xna/Framework/Vector3Tests.cpp` — 38 tests: static constants (Zero/One/UnitX–Z,
-  Up/Down/Right/Left/Forward/Backward), constructors, Length/LengthSquared, Normalize, Cross product
-  (X×Y=Z, anticommutativity, parallel→zero), Dot (orthogonal, parallel, symmetry), Distance,
-  Add/Subtract/Multiply/Divide, Lerp, Min/Max, all operators (+=, -=, unary -, *, /, ==, !=), Reflect.
-- Added `tests/Microsoft/Xna/Framework/Vector4Tests.cpp` — 29 tests: static constants, constructors
-  (4-component, scalar, Vector2+zw, Vector3+w), Length, Normalize, Dot (7 axes, product value),
-  Distance, Add/Subtract/Multiply, Lerp, Min/Max, Clamp, operators.
-- Added `tests/Microsoft/Xna/Framework/MatrixTests.cpp` — 23 tests: Identity diagonal/off-diagonal,
-  default ctor zeros, Determinant (identity=1, scale=product), CreateTranslation row-4 layout,
-  getTranslationProperty round-trip, CreateScale (uniform/non-uniform), Multiply (by identity,
-  two translations accumulate), Invert (identity→identity, M×M⁻¹≈I), Transpose (swap),
-  CreateRotationZ (0→identity, π/2→cos/sin layout), operators (+, scalar *, ==, !=),
-  direction properties (Right, Up from identity).
-- All 90 tests pass. Both backends build clean.
+---
 
-### Task 44 — Unit tests for `Ray`, `Plane`, `Curve`, `CurveKey`, `CurveKeyCollection` ✅ DONE
-- Added `tests/Microsoft/Xna/Framework/RayTests.cpp` — 17 tests: constructors, Equals/operators,
-  Intersects(BoundingBox) (hit, miss, origin-inside, out-ref), Intersects(BoundingSphere) (hit, miss,
-  origin-inside, out-ref), Intersects(Plane) (hit, parallel-miss, out-ref), ToString.
-- Added `tests/Microsoft/Xna/Framework/PlaneTests.cpp` — 24 tests: all 4 constructors (Normal+D, Vector4,
-  floats, 3 points), Dot/DotCoordinate/DotNormal (value + out-ref overloads), Normalize (in-place, static,
-  out-ref), Intersects(BoundingBox) (Front/Back/Intersecting), Intersects(BoundingSphere) (all 3 results),
-  Equals/operators, Transform by identity Matrix and Quaternion, ToString.
-- Added `tests/Microsoft/Xna/Framework/CurveTests.cpp` — 27 tests: CurveKey constructors/setters/Clone/
-  operators/CompareTo; CurveKeyCollection Add/Count/ordering/Contains/Remove/Clear/Clone; Curve IsConstant
-  (0/1/2 keys), Evaluate (empty→0, single key, exact positions, midpoint flat tangents, pre/post Constant
-  loop), Clone independence, loop type getters/setters, ComputeTangents (Flat/Linear/Smooth), out-of-range throw.
-- 68 new tests, all pass. Full suite: 373 pass / 1 pre-existing GamePad failure. Both backends build clean.
+### Task — Verify `EasyGLRenderTargetCubeBackend` FBO setup
 
-### Task 39 — Unit tests for `Color`, `Rectangle`, `Vector2` ✅ DONE
-- Added `tests/Microsoft/Xna/Framework/ColorTests.cpp` — 26 tests covering: constructors (byte/int/float),
-  static named colors (White/Black/Red/Transparent/CornflowerBlue), packed AABBGGRR layout,
-  `operator==`/`!=`/`*`, `Lerp` (clamping, midpoint), `Multiply`, `ToVector3`/`ToVector4`,
-  `FromNonPremultiplied`.
-- Added `tests/Microsoft/Xna/Framework/RectangleTests.cpp` — 21 tests covering: constructors, edge properties
-  (Left/Right/Top/Bottom), Center (even/odd truncation), IsEmpty, Contains (point/rect), Intersects,
-  `Intersect` static (overlap region, disjoint→Empty), `Union`, `operator==`/`!=`, Offset, Inflate.
-- Added `tests/Microsoft/Xna/Framework/Vector2Tests.cpp` — 33 tests covering: static constants, constructors,
-  Length/LengthSquared, Normalize (in-place and static), Add/Subtract/Multiply/Divide, Dot, Distance,
-  Lerp, Min/Max, Clamp, Negate, all arithmetic and comparison operators.
-- All 80 tests pass. Both backends build clean.
+**Goal**: Check whether `EasyGLRenderTargetCubeBackend::CreateResources` has the same
+missing-bind bugs that were fixed in the 2D RT this session.
+
+**Files involved**:
+- `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` (~line 428)
+
+**What to check**: Does `CreateResources` call `fbo_.bind()` before any FBO attach
+operations? Does the cube texture have LINEAR min-filter set?
+
+---
+
+### Task — Unit test regression guard for `GetBackBufferData` vtable fix
+
+**Goal**: Add a Google Test that calls `GetBackBufferData` after a colored clear and
+asserts the correct color is returned. Prevents regression of the vtable mis-cast bug.
+
+**Files involved**: `tests/Microsoft/Xna/Framework/Graphics/` (new test file)
+
+**Verification**:
+```bash
+ctest --test-dir cmake-build-easygl -R GetBackBufferData --output-on-failure
+```
 
 ---
 
 ## 9. Do not do yet
 
-- **No Vulkan 3D textured/lit pipeline** — Vulkan 3D currently supports only colored primitives
-  (stride 16). Do not add a full shader system until the EasyGL path is fully verified and tested.
-- **No XNB content pipeline** — CNA uses its own `.json`-descriptor content system.
-  Do not port FNA's 40+ XNB `ContentReaders`.
-- **No `Texture2D` base-class split** (separating `Texture` into more sub-levels) — the current
-  `Texture → Texture2D` hierarchy is sufficient.
-- **No `Design::*Converter` types** — TypeConverter subclasses for IDE tooling have no meaning
-  in a C++ runtime.
-- **No FNA platform internals** — `FNA3D`, `FNAPlatform`, `GestureDetector`, `DxtUtil`, `X360TexUtil`.
-- **No mass refactor** of existing working code.
-- **No API renames** — never rename a method/class for C++ aesthetics if it diverges from FNA.
-- **No broad AudioEngine implementation** until a real game integration requires it.
-- **No mass MediaLibrary implementation** — photo/playlist APIs are not needed for games.
+- **No Vulkan 3D textured/lit pipeline** (tasks 52–64) — requires SPIR-V shader
+  variants; large block of work, deferred by design.
+- **No Bgfx shader compilation setup** — bgfx requires platform-specific pre-compiled
+  binaries via `shaderc`; do not attempt to wire up a shader build pipeline.
+- **No refactoring of `IGraphicsBackend`** — signature changes break all four backends
+  simultaneously; only add new virtual methods with default no-op implementations.
+- **No changes to `Color` memory layout** — it is a packed XNA type with a virtual
+  base; work around the vtable at call sites, do not redesign the class.
+- **No mass `easygl` / `metagl` API changes** — these are third-party libraries;
+  prefer wrappers.
+- **No new XNA API classes** until the current integration test phase (tasks 88, 89)
+  is complete.
+- **No Google Test suite reorganization** — run existing tests before restructuring.
+- **No Bgfx build without verifying network access** — FetchContent downloads from
+  GitHub; confirm connectivity first.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first to understand the current state of the CNA project.
+Read NEXT.md first. Then open only the files listed for the first task below.
+Do not refactor unrelated code. Do not expand scope.
 
-The FNA authoritative reference is at: /rv/data/library/github.com/FNA-XNA/FNA/src
+First task: verify Task 88 — Vulkan smoke test.
 
-Start with the first uncompleted task in section 8 (Next smallest tasks).
-Inspect only the files relevant to that task — do not read the whole codebase.
-Do not refactor unrelated code or clean up nearby code that is not broken.
-Make one small, verifiable improvement.
-After implementing, run:
-  cmake --build cmake-build-vulkan --target CNA
-  cmake --build cmake-build-easygl --target CNA
-Fix any errors before reporting done.
-Update NEXT.md: mark the completed task as DONE in section 3, update section 2 if needed.
+Steps:
+1. Check Content exists: ls cmake-build-vulkan/Content/
+2. Run: cd cmake-build-vulkan && DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
+3. If exit=0: mark task 88 ✅ in GRAPHICS_TASKS.md, update NEXT.md, proceed to Task 89.
+4. If exit≠0: diagnose with stderr output; likely fix is Content dir or audio init.
+   Fix the smallest possible thing and re-run.
+
+After finishing: update NEXT.md with the new status and the next task.
 ```

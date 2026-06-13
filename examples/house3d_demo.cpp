@@ -242,6 +242,11 @@ protected:
     void Update(GameTime& gameTime) override {
         Game::Update(gameTime);
 
+        if (smokeFramesLeft_ > 0)
+        {
+            if (--smokeFramesLeft_ == 0) { Exit(); return; }
+        }
+
         const float dt = static_cast<float>(
             gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
 
@@ -402,7 +407,7 @@ protected:
             for (const auto& m : meshes_) {
                 device.SetVertexBuffer(m.vb.get());
                 device.Indices(m.ib.get()); // XNA: graphicsDevice.Indices = ...
-                const int numVertices = m.vb->VertexCount();
+                const int numVertices = m.vb->getVertexCountProperty();
                 device.DrawIndexedPrimitives(
                     PrimitiveType::TriangleList,
                     /*baseVertex=*/0,
@@ -416,7 +421,7 @@ protected:
             for (const auto& m : edgeMeshes_) {
                 device.SetVertexBuffer(m.vb.get());
                 device.Indices(m.ib.get());
-                const int numVertices = m.vb->VertexCount();
+                const int numVertices = m.vb->getVertexCountProperty();
                 device.DrawIndexedPrimitives(
                     PrimitiveType::LineList,
                     /*baseVertex=*/0,
@@ -435,7 +440,7 @@ protected:
                 device.Indices(m.ib.get());
                 device.DrawIndexedPrimitives(
                     PrimitiveType::TriangleList,
-                    0, 0, m.vb->VertexCount(), 0, m.primitiveCount);
+                    0, 0, m.vb->getVertexCountProperty(), 0, m.primitiveCount);
             }
             device.SetDepthWriteEnabled(true);
             device.SetBlendEnabled(false);
@@ -1242,10 +1247,25 @@ private:
     std::unique_ptr<SpriteBatch> spriteBatch_;
     Texture2D                    overlayTexture_;
     float                        overlayTimer_ = 0.0f;
+
+    // When >= 0, the demo exits after this many more frames (smoke-test mode).
+    int smokeFramesLeft_ = -1;
+
+public:
+    void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
 };
 
-int main() {
+int main(int argc, char* argv[]) {
     House3DDemo game;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string(argv[i]) == "--smoke" && i + 1 < argc)
+            game.SetSmokeFrames(std::stoi(argv[++i]));
+        else if (std::string(argv[i]) == "--smoke")
+            game.SetSmokeFrames(3);
+    }
+
     game.Run();
     return 0;
 }

@@ -1307,7 +1307,17 @@ namespace Microsoft::Xna::Framework::Graphics
         if (elementCount < w * h)
             throw std::runtime_error("GetBackBufferData: data array too small for requested region");
 
-        backend_->ReadBackbuffer(x, y, w, h, reinterpret_cast<uint8_t*>(data + startIndex));
+        // Color inherits a vtable pointer, so its first byte is NOT the R component.
+        // Use a plain byte buffer for ReadBackbuffer, then unpack each RGBA group
+        // into a Color(r, g, b, a) to avoid writing into the vtable pointer.
+        const int pixelCount = w * h;
+        std::vector<uint8_t> buf(static_cast<std::size_t>(pixelCount) * 4);
+        backend_->ReadBackbuffer(x, y, w, h, buf.data());
+        for (int i = 0; i < pixelCount; ++i)
+        {
+            const uint8_t* p = buf.data() + i * 4;
+            data[startIndex + i] = Color(p[0], p[1], p[2], p[3]);
+        }
     }
 
     void GraphicsDevice::SetRenderTarget(RenderTarget2D* renderTarget)
