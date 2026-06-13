@@ -54,18 +54,18 @@
 | 19 | Tests: `VertexPositionColorTexture` — constructor, declaration stride=24 | ✅ | 9 tests; stride=56 not 24; no default ctor (Color lacks one) |
 | 20 | Tests: `VertexPositionNormalTexture` — constructor, declaration stride=32 | ✅ | 12 tests; stride=40 not 32 (IVertexType vtable — see comment) |
 | 21 | Tests: `PackedVector` — all 18 types: constructor, `getPackedValue`, `PackFromVector4`, `ToVector4`, equality | ✅ | 82 tests (17 types); Half(0.0f) ctor tests omitted — HalfTypeHelper converts 0.0f to infinity |
-| 22 | Tests: `BasicEffect` — World/View/Projection setters/getters, TextureEnabled, VertexColorEnabled, LightingEnabled, AmbientLightColor, DirectionalLight0 | ⬜ | |
-| 23 | Tests: `AlphaTestEffect` — AlphaFunction, ReferenceAlpha, DiffuseColor, Alpha properties | ⬜ | |
-| 24 | Tests: `SkinnedEffect` — WeightsPerVertex, BoneTransforms set/get | ⬜ | |
-| 25 | Tests: `EffectParameter` — GetValueSingle, GetValueVector3, GetValueMatrix, SetValue round-trips | ⬜ | |
-| 26 | Tests: `EffectTechnique` / `EffectPass` — name accessor, pass count | ⬜ | |
-| 27 | Tests: `SpriteFont` — `MeasureString` (empty string, single char, multi-char), `LineSpacing`, `Spacing`, `DefaultCharacter` | ⬜ | |
-| 28 | Tests: `ModelBone` — constructor, `getIndexProperty`, `getNameProperty`, parent/child chain | ⬜ | |
-| 29 | Tests: `ModelMesh` — name, mesh parts count, parent bone reference | ⬜ | |
-| 30 | Tests: `ModelBoneCollection` — Count, indexer, Find | ⬜ | |
-| 31 | Tests: `ClearOptions` — enum values match XNA (Color=1, Depth=2, Stencil=4) | ⬜ | |
-| 32 | Tests: `SurfaceFormat` — enum values match XNA | ⬜ | |
-| 33 | Tests: `GraphicsDeviceStatus` — enum values | ⬜ | |
+| 22 | Tests: `BasicEffect` — World/View/Projection setters/getters, TextureEnabled, VertexColorEnabled, LightingEnabled, AmbientLightColor, DirectionalLight0 | ⛔ | Requires real GraphicsDevice (SDL_Init + window) |
+| 23 | Tests: `AlphaTestEffect` — AlphaFunction, ReferenceAlpha, DiffuseColor, Alpha properties | ⛔ | Requires real GraphicsDevice |
+| 24 | Tests: `SkinnedEffect` — WeightsPerVertex, BoneTransforms set/get | ⛔ | Requires real GraphicsDevice |
+| 25 | Tests: `EffectParameter` — GetValueSingle, GetValueVector3, GetValueMatrix, SetValue round-trips | ⛔ | Requires real GraphicsDevice |
+| 26 | Tests: `EffectTechnique` / `EffectPass` — name accessor, pass count | ⛔ | Requires real GraphicsDevice |
+| 27 | Tests: `SpriteFont` — `MeasureString` (empty string, single char, multi-char), `LineSpacing`, `Spacing`, `DefaultCharacter` | ⛔ | Requires real GraphicsDevice |
+| 28 | Tests: `ModelBone` — constructor, `getIndexProperty`, `getNameProperty`, parent/child chain | ✅ | 12 tests |
+| 29 | Tests: `ModelMesh` — name, mesh parts count, parent bone reference | ⛔ | Requires Model/GraphicsDevice to populate |
+| 30 | Tests: `ModelBoneCollection` — Count, indexer, Find | ⛔ | No public Add — only Model can populate |
+| 31 | Tests: `ClearOptions` — enum values match XNA (Color=1, Depth=2, Stencil=4) | ✅ | 6 tests; also tests bitwise operators |
+| 32 | Tests: `SurfaceFormat` — enum values match XNA | ✅ | 20 tests; ordinals 0–19 verified against FNA |
+| 33 | Tests: `GraphicsDeviceStatus` — enum values | ✅ | 4 tests |
 | 34 | Tests: `RenderTargetBinding` — constructor from RenderTarget2D, face accessor | ⬜ | |
 | 35 | Tests: `OcclusionQuery` — construction, begin/end/IsComplete cycle (headless if possible) | ⬜ | May need EasyGL context |
 | 36 | Tests: `DeviceLostException`, `DeviceNotResetException`, `NoSuitableGraphicsDeviceException` — message + inheritance | ⬜ | |
