@@ -30,7 +30,7 @@
 | 2 | Doxygen `/** @brief */` audit — `Graphics/` root headers (GraphicsDevice, SpriteBatch, Texture2D, Texture3D, TextureCube, Viewport, DisplayMode, …) | ✅ | Texture3D/TextureCube SetData/GetData stubs added; NOXNA/Doxygen complete |
 | 3 | Doxygen audit — `Graphics/Effect/` (Effect, EffectParameter, EffectTechnique, …) + StockEffects (BasicEffect, AlphaTestEffect, …) | ✅ | NOXNA iterators on 3 collections; GetTypeName on 7 concrete subclasses |
 | 4 | Doxygen audit — `Graphics/PackedVector/` (all 18 packed types) | ✅ | All 17 types already complete; fixed IPackedVector NOXNA dtor + FNA-ref comments |
-| 5 | Doxygen audit — `Graphics/States/` (BlendState, DepthStencilState, RasterizerState, SamplerState, …) | ⬜ | ~12 files |
+| 5 | Doxygen audit — `Graphics/States/` (BlendState, DepthStencilState, RasterizerState, SamplerState, …) | ✅ | All 15 files already complete; no changes needed |
 | 6 | Doxygen audit — `Graphics/Vertices/` (VertexBuffer, IndexBuffer, VertexDeclaration, VertexPosition*, …) | ⬜ | ~16 files |
 | 7 | NOXNA audit — verify every non-XNA-4.0 extension in Graphics headers is tagged `NOXNA` | ⬜ | Walk through each header |
 
