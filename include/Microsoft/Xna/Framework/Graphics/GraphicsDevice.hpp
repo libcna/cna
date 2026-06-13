@@ -577,7 +577,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void Indices(const IndexBuffer* indexBuffer);
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         SDL_Window* window_;

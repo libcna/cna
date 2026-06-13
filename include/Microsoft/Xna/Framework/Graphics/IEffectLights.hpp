@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 
@@ -13,7 +14,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Virtual destructor. */
-        virtual ~IEffectLights() = default;
+        NOXNA virtual ~IEffectLights() = default;
 
         /**
          * @brief Gets the ambient light color applied to the scene.

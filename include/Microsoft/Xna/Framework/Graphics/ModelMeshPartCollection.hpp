@@ -3,6 +3,8 @@
 
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     class ModelMeshPart;
@@ -30,13 +32,13 @@ namespace Microsoft::Xna::Framework::Graphics
         using const_iterator = std::vector<ModelMeshPart*>::const_iterator;
 
         /** @brief Returns an iterator to the beginning of the collection. */
-        iterator begin();
+        NOXNA iterator begin();
         /** @brief Returns an iterator past the end of the collection. */
-        iterator end();
+        NOXNA iterator end();
         /** @brief Returns a const iterator to the beginning of the collection. */
-        const_iterator begin() const;
+        NOXNA const_iterator begin() const;
         /** @brief Returns a const iterator past the end of the collection. */
-        const_iterator end() const;
+        NOXNA const_iterator end() const;
 
     private:
         std::vector<ModelMeshPart*> parts_;

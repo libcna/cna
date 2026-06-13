@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -73,28 +74,28 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return Begin iterator.
          */
-        iterator begin();
+        NOXNA iterator begin();
 
         /**
          * @brief Returns a mutable iterator past the last pass.
          *
          * @return End iterator.
          */
-        iterator end();
+        NOXNA iterator end();
 
         /**
          * @brief Returns a const iterator to the first pass.
          *
          * @return Const begin iterator.
          */
-        const_iterator begin() const;
+        NOXNA const_iterator begin() const;
 
         /**
          * @brief Returns a const iterator past the last pass.
          *
          * @return Const end iterator.
          */
-        const_iterator end() const;
+        NOXNA const_iterator end() const;
 
     private:
         std::vector<EffectPass> elements_;

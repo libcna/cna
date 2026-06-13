@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 
@@ -10,7 +11,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class IRenderTarget
     {
     public:
-        virtual ~IRenderTarget() = default;
+        /** @brief Virtual destructor. */
+        NOXNA virtual ~IRenderTarget() = default;
 
         /** @brief Returns the width of the render target in pixels. */
         [[nodiscard]] virtual int getWidthProperty() const = 0;

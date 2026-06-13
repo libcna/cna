@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -157,7 +158,7 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] PresentationParameters Clone() const;
 
         /** @brief Returns the fully-qualified .NET type name for this class. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         SurfaceFormat backBufferFormat_;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 
@@ -12,7 +13,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class IGraphicsDeviceService
     {
     public:
-        virtual ~IGraphicsDeviceService() = default;
+        /** @brief Virtual destructor. */
+        NOXNA virtual ~IGraphicsDeviceService() = default;
 
         /** @brief Returns the current graphics device. */
         [[nodiscard]] virtual GraphicsDevice* getGraphicsDeviceProperty() const = 0;

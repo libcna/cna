@@ -70,7 +70,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture2D& operator=(Texture2D&&) noexcept = default;
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns the texture width in pixels. */
         [[nodiscard]] int getWidthProperty()  const { return width; }

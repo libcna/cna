@@ -3,6 +3,8 @@
 
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
+
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "System/IDisposable.hpp"
@@ -19,7 +21,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Raised when this resource is disposed. */
         System::EventHandler<System::EventArgs> Disposing;
 
-        ~GraphicsResource() override;
+        /** @brief Destroys the GraphicsResource and releases backend resources. */
+        NOXNA ~GraphicsResource() override;
 
         /** @brief Returns the graphics device that owns this resource. */
         [[nodiscard]] GraphicsDevice* getGraphicsDeviceProperty() const;

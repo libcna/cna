@@ -23,7 +23,7 @@ namespace Microsoft::Xna::Framework::Graphics
         explicit Effect(GraphicsDevice& device);
 
         /** @brief Destroys the effect and releases its GPU resources. */
-        ~Effect() override;
+        NOXNA ~Effect() override;
 
         /** @brief Copying is not allowed. */
         Effect(const Effect&) = delete;
@@ -85,7 +85,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return The string "Microsoft.Xna.Framework.Graphics.Effect".
          */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Returns the graphics device that owns this effect.

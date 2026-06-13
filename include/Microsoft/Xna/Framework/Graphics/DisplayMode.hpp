@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/Object.hpp"
@@ -37,7 +38,7 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] SurfaceFormat getFormatProperty() const;
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         SharpRuntime::intcs width_;

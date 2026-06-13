@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DisplayMode.hpp"
 #include "System/Object.hpp"
 
@@ -35,12 +36,12 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] const DisplayMode& operator[](SharpRuntime::intcs index) const;
 
         /** @brief Returns an iterator to the first display mode. */
-        [[nodiscard]] const_iterator begin() const;
+        NOXNA [[nodiscard]] const_iterator begin() const;
         /** @brief Returns an iterator past the last display mode. */
-        [[nodiscard]] const_iterator end() const;
+        NOXNA [[nodiscard]] const_iterator end() const;
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         std::vector<DisplayMode> modes_;

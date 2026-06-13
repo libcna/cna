@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -12,7 +13,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Virtual destructor. */
-        virtual ~IEffectFog() = default;
+        NOXNA virtual ~IEffectFog() = default;
 
         /**
          * @brief Gets the fog color.

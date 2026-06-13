@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     class VertexDeclaration;
@@ -9,7 +11,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class IVertexType
     {
     public:
-        virtual ~IVertexType() = default;
+        /** @brief Virtual destructor. */
+        NOXNA virtual ~IVertexType() = default;
 
         /** @brief Returns the vertex declaration describing the layout of this vertex type. */
         [[nodiscard]] virtual const VertexDeclaration& getVertexDeclarationProperty() const = 0;

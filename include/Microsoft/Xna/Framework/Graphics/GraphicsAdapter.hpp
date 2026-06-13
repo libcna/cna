@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DisplayMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DisplayModeCollection.hpp"
@@ -141,7 +142,7 @@ namespace Microsoft::Xna::Framework::Graphics
         static void AdaptersChanged();
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         friend class GraphicsAdapterFactory;
