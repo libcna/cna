@@ -12,8 +12,11 @@ Use this checklist for every `.cs` file ported from FNA to CNA.
 - [ ] `#include "CNA/CNAHelper.hpp"` present in `.hpp` if `NOXNA` is used anywhere
 
 ### Doxygen documentation
-- [ ] Every public method, constructor, operator, property getter/setter, and constant in the `.hpp` has a `///` Doxygen comment
+- [ ] Every public method, constructor, operator, property getter/setter, and constant in the `.hpp` has a `/** @brief … */` Doxygen block comment
+- [ ] Methods with parameters have `@param` for each parameter
+- [ ] Non-void methods have `@return`
 - [ ] No public member is left undocumented
+- [ ] No bare `///` comments on public API declarations (only `/** */` blocks allowed)
 
 ### API surface (compare line-by-line with FNA source)
 - [ ] All public fields / constants present
