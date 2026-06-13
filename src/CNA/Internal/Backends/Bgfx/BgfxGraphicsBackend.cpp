@@ -551,8 +551,105 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setTexture(0, textureSampler, texture.textureHandle);
         bgfx::setVertexBuffer(0, &vertexBuffer);
         bgfx::setIndexBuffer(&indexBuffer);
-        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_MSAA | BGFX_STATE_BLEND_ALPHA);
+        if (scissorW_ > 0 && scissorH_ > 0)
+            bgfx::setScissor(scissorX_, scissorY_, scissorW_, scissorH_);
+        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_MSAA
+                       | blendFlags_ | depthFlags_ | cullFlags_);
         bgfx::submit(spriteViewId, spriteProgram);
+    }
+
+    // ---- Graphics state ----
+
+    static uint64_t XnaBlendToBgfxFactor(int blend)
+    {
+        // XNA Blend: One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4,
+        //            InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
+        //            DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
+        //            InverseBlendFactor=11, SourceAlphaSaturation=12
+        switch (blend)
+        {
+        case 0:  return BGFX_STATE_BLEND_ONE;
+        case 1:  return BGFX_STATE_BLEND_ZERO;
+        case 2:  return BGFX_STATE_BLEND_SRC_COLOR;
+        case 3:  return BGFX_STATE_BLEND_INV_SRC_COLOR;
+        case 4:  return BGFX_STATE_BLEND_SRC_ALPHA;
+        case 5:  return BGFX_STATE_BLEND_INV_SRC_ALPHA;
+        case 6:  return BGFX_STATE_BLEND_DST_COLOR;
+        case 7:  return BGFX_STATE_BLEND_INV_DST_COLOR;
+        case 8:  return BGFX_STATE_BLEND_DST_ALPHA;
+        case 9:  return BGFX_STATE_BLEND_INV_DST_ALPHA;
+        case 10: return BGFX_STATE_BLEND_FACTOR;
+        case 11: return BGFX_STATE_BLEND_INV_FACTOR;
+        case 12: return BGFX_STATE_BLEND_SRC_ALPHA_SAT;
+        default: return BGFX_STATE_BLEND_ONE;
+        }
+    }
+
+    void BgfxGraphicsBackend::ApplyBlendState(int colorSrcBlend, int /*alphaSrcBlend*/,
+                                               int colorDstBlend, int /*alphaDstBlend*/,
+                                               int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+    {
+        if (colorSrcBlend == 0 && colorDstBlend == 1)
+            blendFlags_ = 0;  // One, Zero → Opaque (no blend)
+        else
+            blendFlags_ = BGFX_STATE_BLEND_FUNC(
+                XnaBlendToBgfxFactor(colorSrcBlend),
+                XnaBlendToBgfxFactor(colorDstBlend));
+    }
+
+    void BgfxGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                                      int depthFunc,
+                                                      bool /*stencilEnable*/, int /*stencilFunc*/,
+                                                      int /*stencilPass*/, int /*stencilFail*/,
+                                                      int /*stencilDepthFail*/,
+                                                      int /*stencilMask*/, int /*stencilWriteMask*/,
+                                                      int /*referenceStencil*/,
+                                                      bool /*twoSidedStencilMode*/,
+                                                      int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
+                                                      int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+    {
+        // bgfx stencil not mapped here; depth only
+        depthFlags_ = depthWriteEnable ? BGFX_STATE_WRITE_Z : 0;
+        if (depthEnable)
+        {
+            // XNA CompareFunction: Always=0, Never=1, Less=2, LessEqual=3, Equal=4,
+            //                      GreaterEqual=5, Greater=6, NotEqual=7
+            switch (depthFunc)
+            {
+            case 1:  depthFlags_ |= BGFX_STATE_DEPTH_TEST_NEVER;    break;
+            case 2:  depthFlags_ |= BGFX_STATE_DEPTH_TEST_LESS;     break;
+            case 3:  depthFlags_ |= BGFX_STATE_DEPTH_TEST_LEQUAL;   break;
+            case 4:  depthFlags_ |= BGFX_STATE_DEPTH_TEST_EQUAL;    break;
+            case 5:  depthFlags_ |= BGFX_STATE_DEPTH_TEST_GEQUAL;   break;
+            case 6:  depthFlags_ |= BGFX_STATE_DEPTH_TEST_GREATER;  break;
+            case 7:  depthFlags_ |= BGFX_STATE_DEPTH_TEST_NOTEQUAL; break;
+            default: depthFlags_ |= BGFX_STATE_DEPTH_TEST_ALWAYS;   break;
+            }
+        }
+    }
+
+    void BgfxGraphicsBackend::ApplyRasterizerState(int cullMode, int /*fillMode*/,
+                                                    bool scissorTestEnable)
+    {
+        // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
+        switch (cullMode)
+        {
+        case 1:  cullFlags_ = BGFX_STATE_CULL_CW;  break;
+        case 2:  cullFlags_ = BGFX_STATE_CULL_CCW; break;
+        default: cullFlags_ = 0;                    break;
+        }
+        // Scissor test state — disable by zeroing the rect
+        if (!scissorTestEnable)
+            scissorW_ = scissorH_ = 0;
+    }
+
+    void BgfxGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        if (w <= 0 || h <= 0) { scissorW_ = scissorH_ = 0; return; }
+        scissorX_ = static_cast<uint16_t>(x);
+        scissorY_ = static_cast<uint16_t>(y);
+        scissorW_ = static_cast<uint16_t>(w);
+        scissorH_ = static_cast<uint16_t>(h);
     }
 
     // ---- 3D: explicit STUB. Bgfx backend has no 3D path implemented yet. ----

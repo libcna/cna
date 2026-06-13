@@ -132,11 +132,11 @@
 | 66 | Bgfx: `DrawPrimitivesEx` (GpuDrawParams → bgfx uniform upload) | ⬜ | Requires task 65 |
 | 67 | Bgfx: `DrawInstancedPrimitivesEx` | ⬜ | |
 | 68 | Bgfx: `DrawUserPrimitives` / `DrawUserIndexedPrimitives` — transient bgfx buffers | ⬜ | |
-| 69 | Bgfx: wire `BlendState` → bgfx state flags (`BGFX_STATE_BLEND_*`) | ⬜ | |
-| 70 | Bgfx: wire `DepthStencilState` → bgfx state flags | ⬜ | |
-| 71 | Bgfx: wire `RasterizerState` → bgfx state flags (cull, wireframe) | ⬜ | |
+| 69 | Bgfx: wire `BlendState` → bgfx state flags (`BGFX_STATE_BLEND_*`) | ✅ | blendFlags_ stored; applied in SubmitSprite |
+| 70 | Bgfx: wire `DepthStencilState` → bgfx state flags | ✅ | depthFlags_ stored; depth only (stencil not mapped) |
+| 71 | Bgfx: wire `RasterizerState` → bgfx state flags (cull, wireframe) | ✅ | cullFlags_ stored; wireframe not supported |
 | 72 | Bgfx: wire `SamplerState` → bgfx sampler flags | ⬜ | |
-| 73 | Bgfx: wire `ScissorRectangle` → `bgfx::setScissor` | ⬜ | |
+| 73 | Bgfx: wire `ScissorRectangle` → `bgfx::setScissor` | ✅ | scissorX/Y/W/H_ stored; bgfx::setScissor in SubmitSprite |
 | 74 | Bgfx: `RenderTarget2D` — bgfx framebuffer with color+depth attachments | ⬜ | |
 | 75 | Bgfx: `ISpriteBatchBackend` — 2D sprite rendering via bgfx (transient quads) | ⬜ | |
 | 76 | Bgfx: `OcclusionQuery` — bgfx occlusion query object | ⬜ | |

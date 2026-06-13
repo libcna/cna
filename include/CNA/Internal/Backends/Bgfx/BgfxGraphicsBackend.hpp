@@ -67,6 +67,13 @@ namespace CNA::Internal::Backends::Bgfx
         uint32_t clearRgba = 0x000000ff;
         bool initialized = false;
 
+        // Stored graphics state applied per-draw in bgfx
+        uint64_t blendFlags_  = BGFX_STATE_BLEND_ALPHA;
+        uint64_t depthFlags_  = BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_WRITE_Z;
+        uint64_t cullFlags_   = BGFX_STATE_CULL_CCW;
+        // Scissor rect (0,0,0,0 = disabled)
+        uint16_t scissorX_ = 0, scissorY_ = 0, scissorW_ = 0, scissorH_ = 0;
+
         explicit BgfxGraphicsBackend(SDL_Window* window);
         ~BgfxGraphicsBackend() override;
         void Clear(float r, float g, float b, float a) override;
@@ -84,6 +91,21 @@ namespace CNA::Internal::Backends::Bgfx
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+
+        // Graphics state (stored; applied per-draw in SubmitSprite and future 3D draws)
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+        void ApplyRasterizerState(int cullMode, int fillMode,
+                                  bool scissorTestEnable) override;
+        void SetScissorRect(int x, int y, int w, int h) override;
 
         // 3D pipeline: NOT supported by the bgfx backend yet.
         // @note Status: STUB. Every entry point throws std::runtime_error.
