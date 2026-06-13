@@ -128,8 +128,8 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 65 | Bgfx: fix `DrawIndexedColoredPrimitives` — make it actually submit a bgfx draw call | ⬜ | Currently a stub |
-| 66 | Bgfx: `DrawPrimitivesEx` (GpuDrawParams → bgfx uniform upload) | ⬜ | Requires task 65 |
+| 65 | Bgfx: fix `DrawIndexedColoredPrimitives` — make it actually submit a bgfx draw call | ⚠️ | BgfxVertexBufferBackend (DynamicVB + VertexLayout with stride-adaptive skip), BgfxIndexBufferBackend; submit wired — silent no-op until colored3DProgram_ is loaded with pre-compiled bgfx shaders |
+| 66 | Bgfx: `DrawPrimitivesEx` (GpuDrawParams → bgfx uniform upload) | ⬜ | Requires bgfx-compiled ex shaders |
 | 67 | Bgfx: `DrawInstancedPrimitivesEx` | ⬜ | |
 | 68 | Bgfx: `DrawUserPrimitives` / `DrawUserIndexedPrimitives` — transient bgfx buffers | ⬜ | |
 | 69 | Bgfx: wire `BlendState` → bgfx state flags (`BGFX_STATE_BLEND_*`) | ✅ | blendFlags_ stored; applied in SubmitSprite |

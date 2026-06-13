@@ -637,17 +637,11 @@ namespace CNA::Internal::Backends::Bgfx
 
     BgfxGraphicsBackend::~BgfxGraphicsBackend()
     {
-        if (bgfx::isValid(textureSampler))
-        {
-            bgfx::destroy(textureSampler);
-            textureSampler = BGFX_INVALID_HANDLE;
-        }
-
-        if (bgfx::isValid(spriteProgram))
-        {
-            bgfx::destroy(spriteProgram);
-            spriteProgram = BGFX_INVALID_HANDLE;
-        }
+        if (bgfx::isValid(wvpUniform_))     { bgfx::destroy(wvpUniform_);     wvpUniform_     = BGFX_INVALID_HANDLE; }
+        if (bgfx::isValid(colored3DProgram_)) { bgfx::destroy(colored3DProgram_); colored3DProgram_ = BGFX_INVALID_HANDLE; }
+        if (bgfx::isValid(mrtFbo_))         { bgfx::destroy(mrtFbo_);         mrtFbo_         = BGFX_INVALID_HANDLE; }
+        if (bgfx::isValid(textureSampler))  { bgfx::destroy(textureSampler);  textureSampler  = BGFX_INVALID_HANDLE; }
+        if (bgfx::isValid(spriteProgram))   { bgfx::destroy(spriteProgram);   spriteProgram   = BGFX_INVALID_HANDLE; }
 
         if (initialized)
         {
@@ -1052,39 +1046,171 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setBlendFactor(packed);
     }
 
-    // ---- 3D: explicit STUB. Bgfx backend has no 3D path implemented yet. ----
-    static void ThrowNo3D()
+    // ---- 3D: vertex/index buffers + draw wiring ----
+
+    static void ThrowNo3DState()
     {
         throw std::runtime_error(
-            "Bgfx backend: 3D rendering is not supported by this backend yet. "
-            "Use the EasyGL backend for 3D.");
+            "Bgfx backend: ClearColorAndDepth / SetDepthTestEnabled / SetBlend* "
+            "are not yet wired into bgfx state flags.");
     }
 
-    void BgfxGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D(); }
-    void BgfxGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D(); }
-    void BgfxGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D(); }
-    void BgfxGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D(); }
+    void BgfxGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3DState(); }
+    void BgfxGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3DState(); }
+    void BgfxGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3DState(); }
+    void BgfxGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3DState(); }
 
-    std::unique_ptr<IVertexBufferBackend> BgfxGraphicsBackend::CreateVertexBuffer(int)
+    // --- BgfxVertexBufferBackend ---
+
+    static bgfx::VertexLayout MakeBgfxLayout(std::size_t stride)
     {
-        ThrowNo3D();
-        return nullptr;
+        bgfx::VertexLayout layout;
+        layout.begin();
+        layout.add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float);       // 12 bytes at offset 0
+        layout.add(bgfx::Attrib::Color0,   4, bgfx::AttribType::Uint8, true); // 4 bytes at offset 12
+        if (stride > 16)
+            layout.skip(static_cast<uint8_t>(stride - 16)); // pad to actual stride
+        layout.end();
+        return layout;
     }
 
-    std::unique_ptr<IIndexBufferBackend> BgfxGraphicsBackend::CreateIndexBuffer16(int)
+    BgfxVertexBufferBackend::BgfxVertexBufferBackend(int capacity)
     {
-        ThrowNo3D();
-        return nullptr;
+        layout = MakeBgfxLayout(16);
+        handle = bgfx::createDynamicVertexBuffer(
+            static_cast<uint32_t>(capacity),
+            layout,
+            BGFX_BUFFER_ALLOW_RESIZE);
     }
 
-    void BgfxGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
-                                                    const Matrix&, const Matrix&, const Matrix&,
-                                                    PrimitiveType, int) { ThrowNo3D(); }
+    BgfxVertexBufferBackend::~BgfxVertexBufferBackend()
+    {
+        if (bgfx::isValid(handle)) bgfx::destroy(handle);
+    }
 
-    void BgfxGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
-                                                           const IIndexBufferBackend&,
-                                                           const Matrix&, const Matrix&, const Matrix&,
-                                                           PrimitiveType, int) { ThrowNo3D(); }
+    void BgfxVertexBufferBackend::SetData(const void* data, int vertex_count, std::size_t stride_in_bytes)
+    {
+        vertexCount = vertex_count;
+        if (stride_in_bytes != stride)
+        {
+            stride = stride_in_bytes;
+            layout = MakeBgfxLayout(stride_in_bytes);
+            if (bgfx::isValid(handle)) bgfx::destroy(handle);
+            handle = bgfx::createDynamicVertexBuffer(
+                static_cast<uint32_t>(vertex_count),
+                layout,
+                BGFX_BUFFER_ALLOW_RESIZE);
+        }
+        if (!bgfx::isValid(handle) || !data || vertex_count <= 0) return;
+        const uint32_t byteSize = static_cast<uint32_t>(vertex_count) * static_cast<uint32_t>(stride_in_bytes);
+        bgfx::update(handle, 0, bgfx::copy(data, byteSize));
+    }
+
+    std::unique_ptr<IVertexBufferBackend> BgfxGraphicsBackend::CreateVertexBuffer(int capacity)
+    {
+        return std::make_unique<BgfxVertexBufferBackend>(capacity);
+    }
+
+    // --- BgfxIndexBufferBackend ---
+
+    BgfxIndexBufferBackend::BgfxIndexBufferBackend(int capacity, bool thirtyTwoBit)
+        : is32bit(thirtyTwoBit)
+    {
+        const uint16_t flags = is32bit ? BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE
+                                       : BGFX_BUFFER_ALLOW_RESIZE;
+        handle = bgfx::createDynamicIndexBuffer(static_cast<uint32_t>(capacity), flags);
+    }
+
+    BgfxIndexBufferBackend::~BgfxIndexBufferBackend()
+    {
+        if (bgfx::isValid(handle)) bgfx::destroy(handle);
+    }
+
+    void BgfxIndexBufferBackend::SetData16(const void* data, int index_count)
+    {
+        indexCount = index_count;
+        if (!bgfx::isValid(handle) || !data || index_count <= 0) return;
+        bgfx::update(handle, 0, bgfx::copy(data, static_cast<uint32_t>(index_count) * 2u));
+    }
+
+    void BgfxIndexBufferBackend::SetData32(const void* data, int index_count)
+    {
+        indexCount = index_count;
+        if (!bgfx::isValid(handle) || !data || index_count <= 0) return;
+        bgfx::update(handle, 0, bgfx::copy(data, static_cast<uint32_t>(index_count) * 4u));
+    }
+
+    std::unique_ptr<IIndexBufferBackend> BgfxGraphicsBackend::CreateIndexBuffer16(int capacity)
+    {
+        return std::make_unique<BgfxIndexBufferBackend>(capacity, false);
+    }
+
+    // --- 3D draw calls ---
+
+    static uint64_t ToTopologyFlag(PrimitiveType p)
+    {
+        switch (p)
+        {
+        case PrimitiveType::TriangleStrip: return BGFX_STATE_PT_TRISTRIP;
+        case PrimitiveType::LineList:      return BGFX_STATE_PT_LINES;
+        case PrimitiveType::LineStrip:     return BGFX_STATE_PT_LINESTRIP;
+        case PrimitiveType::PointListEXT:  return BGFX_STATE_PT_POINTS;
+        default:                           return 0; // default = triangle list
+        }
+    }
+
+    void BgfxGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb_in,
+                                                    const Matrix& world, const Matrix& view,
+                                                    const Matrix& projection,
+                                                    PrimitiveType primitive, int primitiveCount)
+    {
+        if (!bgfx::isValid(colored3DProgram_)) return; // shader not loaded
+        auto& vb = static_cast<const BgfxVertexBufferBackend&>(vb_in);
+        if (!bgfx::isValid(vb.handle)) return;
+
+        if (!bgfx::isValid(wvpUniform_))
+            wvpUniform_ = bgfx::createUniform("u_wvp", bgfx::UniformType::Mat4);
+
+        const Matrix wvp = world * view * projection;
+        float wvp_col[16];
+        wvp.ToColumnMajor(wvp_col);
+        bgfx::setUniform(wvpUniform_, wvp_col);
+
+        bgfx::setVertexBuffer(0, vb.handle);
+        bgfx::setStencil(stencilFront_, stencilBack_);
+        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+                       | blendFlags_ | depthFlags_ | cullFlags_)
+                       | ToTopologyFlag(primitive));
+        bgfx::submit(currentViewId_, colored3DProgram_);
+    }
+
+    void BgfxGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb_in,
+                                                           const IIndexBufferBackend& ib_in,
+                                                           const Matrix& world, const Matrix& view,
+                                                           const Matrix& projection,
+                                                           PrimitiveType primitive, int primitiveCount)
+    {
+        if (!bgfx::isValid(colored3DProgram_)) return; // shader not loaded
+        auto& vb = static_cast<const BgfxVertexBufferBackend&>(vb_in);
+        auto& ib = static_cast<const BgfxIndexBufferBackend&>(ib_in);
+        if (!bgfx::isValid(vb.handle) || !bgfx::isValid(ib.handle)) return;
+
+        if (!bgfx::isValid(wvpUniform_))
+            wvpUniform_ = bgfx::createUniform("u_wvp", bgfx::UniformType::Mat4);
+
+        const Matrix wvp = world * view * projection;
+        float wvp_col[16];
+        wvp.ToColumnMajor(wvp_col);
+        bgfx::setUniform(wvpUniform_, wvp_col);
+
+        bgfx::setVertexBuffer(0, vb.handle);
+        bgfx::setIndexBuffer(ib.handle);
+        bgfx::setStencil(stencilFront_, stencilBack_);
+        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+                       | blendFlags_ | depthFlags_ | cullFlags_)
+                       | ToTopologyFlag(primitive));
+        bgfx::submit(currentViewId_, colored3DProgram_);
+    }
 }
 
 namespace CNA::Internal::Backends

@@ -3,6 +3,7 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include <bgfx/bgfx.h>
 #include <SDL3/SDL.h>
+#include <cstddef>
 #include <cstdint>
 
 namespace CNA::Internal::Backends::Bgfx
@@ -133,6 +134,39 @@ namespace CNA::Internal::Backends::Bgfx
         [[nodiscard]] unsigned int GetGLHandle() const override { return 0; }
     };
 
+    /// bgfx dynamic vertex buffer.
+    class BgfxVertexBufferBackend : public IVertexBufferBackend
+    {
+    public:
+        bgfx::DynamicVertexBufferHandle handle = BGFX_INVALID_HANDLE;
+        bgfx::VertexLayout layout;
+        int vertexCount = 0;
+        std::size_t stride = 0;
+
+        explicit BgfxVertexBufferBackend(int capacity);
+        ~BgfxVertexBufferBackend() override;
+
+        void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        [[nodiscard]] int GetVertexCount() const override { return vertexCount; }
+    };
+
+    /// bgfx dynamic index buffer (16-bit).
+    class BgfxIndexBufferBackend : public IIndexBufferBackend
+    {
+    public:
+        bgfx::DynamicIndexBufferHandle handle = BGFX_INVALID_HANDLE;
+        int indexCount = 0;
+        bool is32bit = false;
+
+        explicit BgfxIndexBufferBackend(int capacity, bool thirtyTwoBit = false);
+        ~BgfxIndexBufferBackend() override;
+
+        void SetData16(const void* data, int index_count) override;
+        void SetData32(const void* data, int index_count) override;
+        [[nodiscard]] int  GetIndexCount()  const override { return indexCount; }
+        [[nodiscard]] bool IsThirtyTwoBit() const override { return is32bit; }
+    };
+
     class BgfxSpriteBatchBackend : public ISpriteBatchBackend
     {
     public:
@@ -187,6 +221,10 @@ namespace CNA::Internal::Backends::Bgfx
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;
         // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)
         bgfx::FrameBufferHandle mrtFbo_ = BGFX_INVALID_HANDLE;
+        // 3D colored primitives shader (BGFX_INVALID_HANDLE until pre-compiled binaries are provided)
+        bgfx::ProgramHandle colored3DProgram_ = BGFX_INVALID_HANDLE;
+        // Uniform handle for world-view-projection matrix (shared between 3D draw calls)
+        bgfx::UniformHandle wvpUniform_ = BGFX_INVALID_HANDLE;
 
         explicit BgfxGraphicsBackend(SDL_Window* window);
         ~BgfxGraphicsBackend() override;
@@ -234,8 +272,8 @@ namespace CNA::Internal::Backends::Bgfx
                                int maxAnisotropy) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
 
-        // 3D pipeline: NOT supported by the bgfx backend yet.
-        // @note Status: STUB. Every entry point throws std::runtime_error.
+        // 3D pipeline — vertex/index buffers implemented; draw calls need colored3DProgram_.
+        // @note ClearColorAndDepth / SetDepth*/ SetBlend still throw (not wired to state flags yet).
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
