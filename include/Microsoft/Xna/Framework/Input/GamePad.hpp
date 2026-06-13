@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
