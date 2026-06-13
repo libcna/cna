@@ -393,6 +393,7 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
+        if (bgfx::isValid(mrtFbo_)) { bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
         if (rt)
         {
             rt->BindAsRenderTarget();
@@ -405,6 +406,33 @@ namespace CNA::Internal::Backends::Bgfx
             currentViewId_ = 0;
             spriteViewId = 0;
         }
+    }
+
+    void BgfxGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        if (bgfx::isValid(mrtFbo_)) { bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
+        if (count <= 0)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (count == 1)
+        {
+            SetRenderTarget2D(rts[0]);
+            return;
+        }
+        // Multi-target: build a temporary framebuffer from the color textures.
+        bgfx::Attachment attachments[BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS];
+        int n = count < BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS ? count : BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS;
+        for (int i = 0; i < n; ++i)
+        {
+            auto* bgfxRt = static_cast<BgfxRenderTargetBackend*>(rts[i]);
+            attachments[i].init(bgfxRt->colorTex);
+        }
+        mrtFbo_ = bgfx::createFrameBuffer(static_cast<uint8_t>(n), attachments);
+        bgfx::setViewFrameBuffer(1, mrtFbo_);
+        currentViewId_ = 1;
+        spriteViewId = 1;
     }
 
     // --- BgfxRenderTargetCubeBackend ---

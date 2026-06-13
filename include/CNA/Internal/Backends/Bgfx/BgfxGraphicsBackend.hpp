@@ -161,6 +161,8 @@ namespace CNA::Internal::Backends::Bgfx
         float blendFactorR_ = 1.f, blendFactorG_ = 1.f, blendFactorB_ = 1.f, blendFactorA_ = 1.f;
         // Scissor rect (0,0,0,0 = disabled)
         uint16_t scissorX_ = 0, scissorY_ = 0, scissorW_ = 0, scissorH_ = 0;
+        // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)
+        bgfx::FrameBufferHandle mrtFbo_ = BGFX_INVALID_HANDLE;
 
         explicit BgfxGraphicsBackend(SDL_Window* window);
         ~BgfxGraphicsBackend() override;
@@ -184,6 +186,7 @@ namespace CNA::Internal::Backends::Bgfx
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;
 
         // Graphics state (stored; applied per-draw in SubmitSprite and future 3D draws)

@@ -143,7 +143,7 @@
 | 77 | Bgfx: `Texture3D` — `bgfx::createTexture3D` | ✅ | BgfxTexture3DBackend + ITexture3DBackend interface; wired in Texture3D.cpp |
 | 78 | Bgfx: `TextureCube` — `bgfx::createTextureCube` | ✅ | BgfxTextureCubeBackend + ITextureCubeBackend interface; wired in TextureCube.cpp |
 | 79 | Bgfx: `RenderTargetCube` — bgfx framebuffer with cube face attachment | ✅ | BgfxRenderTargetCubeBackend: bgfx::createTextureCube + per-face FBO via bgfx::Attachment |
-| 80 | Bgfx: Multiple render targets (MRT) — multi-attachment bgfx framebuffer | ⬜ | |
+| 80 | Bgfx: Multiple render targets (MRT) — multi-attachment bgfx framebuffer | ✅ | SetRenderTargets override builds temp MRT FBO via bgfx::Attachment + bgfx::createFrameBuffer |
 | 81 | Bgfx: Custom `Effect` / shader — load bgfx compiled shaders via `IEffectBackend` | ⬜ | |
 | 82 | Bgfx: `GetBackBufferData` / `ReadBackbuffer` — bgfx blit to CPU-visible texture | ⬜ | |
 | 83 | Bgfx: `BlendFactor` wired | ✅ | SetBlendFactor calls bgfx::setBlendFactor(packed RGBA8) |
