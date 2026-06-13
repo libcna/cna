@@ -1,11 +1,12 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include <chrono>
 #include <memory>
+#include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaState.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -41,7 +42,7 @@ namespace Microsoft::Xna::Framework::Media
         VideoPlayer();
 
         /** @brief Destroys the VideoPlayer and releases decoder and audio resources. */
-        ~VideoPlayer() override;
+        NOXNA ~VideoPlayer() override;
 
         /** @brief Releases all resources used by this VideoPlayer. */
         void Dispose() override;
@@ -168,7 +169,7 @@ namespace Microsoft::Xna::Framework::Media
         };
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         void OpenDecoder(Video* video);

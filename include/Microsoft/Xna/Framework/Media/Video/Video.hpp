@@ -28,7 +28,7 @@ namespace Microsoft::Xna::Framework::Media
          * @param fileName File path to the video file.
          * @param device   GraphicsDevice used for frame rendering.
          */
-        Video(std::string fileName, Graphics::GraphicsDevice* device);
+        NOXNA Video(std::string fileName, Graphics::GraphicsDevice* device);
 
         /**
          * @brief Creates a Video with explicit metadata (raw-file constructor).
@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::Media
          * @param framesPerSecond Frame rate.
          * @param soundtrackType Type of audio content in the video.
          */
-        Video(std::string fileName, Graphics::GraphicsDevice* device,
+        NOXNA Video(std::string fileName, Graphics::GraphicsDevice* device,
               SharpRuntime::intcs durationMS, SharpRuntime::intcs width,
               SharpRuntime::intcs height, float framesPerSecond,
               VideoSoundtrackType soundtrackType);
@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param value New duration.
          */
-        void setDurationProperty(System::TimeSpan value);
+        NOXNA void setDurationProperty(System::TimeSpan value);
 
         /**
          * @brief Creates a Video from a URI and a graphics device.
@@ -126,7 +126,7 @@ namespace Microsoft::Xna::Framework::Media
         NOXNA [[nodiscard]] Graphics::GraphicsDevice* getGraphicsDeviceProperty() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         friend class VideoPlayer;
