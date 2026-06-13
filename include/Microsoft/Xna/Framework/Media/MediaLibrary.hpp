@@ -5,7 +5,9 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "System/IDisposable.hpp"
+#include "System/IO/Stream.hpp"
 #include "System/Object.hpp"
 
 namespace Microsoft::Xna::Framework::Media
@@ -128,7 +130,16 @@ namespace Microsoft::Xna::Framework::Media
          */
         Picture* SavePicture(std::string name, const std::vector<uint8_t>& imageBuffer);
 
+        /**
+         * @brief Saves a picture from a stream into the media library.
+         *
+         * @param name   Display name for the picture.
+         * @param source Stream containing the image data.
+         * @return Pointer to the newly created Picture.
+         */
+        Picture* SavePicture(std::string name, System::IO::Stream* source);
+
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
     };
 }
