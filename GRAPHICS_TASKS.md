@@ -140,7 +140,7 @@
 | 74 | Bgfx: `RenderTarget2D` — bgfx framebuffer with color+depth attachments | ✅ | BgfxRenderTargetBackend: bgfx::createFrameBuffer+createTexture2D; SetRenderTarget2D switches view |
 | 75 | Bgfx: `ISpriteBatchBackend` — 2D sprite rendering via bgfx (transient quads) | ✅ | Already implemented — BgfxSpriteBatchBackend |
 | 76 | Bgfx: `OcclusionQuery` — bgfx occlusion query object | ✅ | BgfxOcclusionQueryBackend: bgfx::createOcclusionQuery + getResult; Begin/End are stubs (bgfx uses per-draw-call model) |
-| 77 | Bgfx: `Texture3D` — `bgfx::createTexture3D` | ⬜ | |
+| 77 | Bgfx: `Texture3D` — `bgfx::createTexture3D` | ✅ | BgfxTexture3DBackend + ITexture3DBackend interface; wired in Texture3D.cpp |
 | 78 | Bgfx: `TextureCube` — `bgfx::createTextureCube` | ⬜ | |
 | 79 | Bgfx: `RenderTargetCube` — bgfx framebuffer with cube face attachment | ✅ | BgfxRenderTargetCubeBackend: bgfx::createTextureCube + per-face FBO via bgfx::Attachment |
 | 80 | Bgfx: Multiple render targets (MRT) — multi-attachment bgfx framebuffer | ⬜ | |

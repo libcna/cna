@@ -45,6 +45,20 @@ namespace CNA::Internal::Backends::Bgfx
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
     };
 
+    /// bgfx-backed 3D (volume) texture.
+    class BgfxTexture3DBackend : public ITexture3DBackend
+    {
+    public:
+        bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
+
+        BgfxTexture3DBackend(int w, int h, int depth, bool mipMap, int surfaceFormat);
+        ~BgfxTexture3DBackend() override;
+
+        void SetData(int level, int x, int y, int z,
+                     int w, int h, int depth,
+                     const void* data, int dataLength) override;
+    };
+
     /// bgfx-backed 2D render target (bgfx framebuffer with color + depth textures).
     class BgfxRenderTargetBackend : public IRenderTargetBackend
     {
@@ -152,6 +166,7 @@ namespace CNA::Internal::Backends::Bgfx
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;

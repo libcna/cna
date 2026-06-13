@@ -267,6 +267,44 @@ namespace CNA::Internal::Backends::Bgfx
         return std::make_unique<BgfxOcclusionQueryBackend>();
     }
 
+    // --- BgfxTexture3DBackend ---
+
+    BgfxTexture3DBackend::BgfxTexture3DBackend(int w, int h, int depth, bool /*mipMap*/, int /*surfaceFormat*/)
+    {
+        handle = bgfx::createTexture3D(
+            static_cast<uint16_t>(w),
+            static_cast<uint16_t>(h),
+            static_cast<uint16_t>(depth),
+            false,
+            bgfx::TextureFormat::RGBA8,
+            BGFX_TEXTURE_NONE);
+    }
+
+    BgfxTexture3DBackend::~BgfxTexture3DBackend()
+    {
+        if (bgfx::isValid(handle))
+            bgfx::destroy(handle);
+    }
+
+    void BgfxTexture3DBackend::SetData(int level, int x, int y, int z,
+                                       int w, int h, int depth,
+                                       const void* data, int dataLength)
+    {
+        if (!bgfx::isValid(handle) || !data || dataLength <= 0) return;
+        const bgfx::Memory* mem = bgfx::copy(data, static_cast<uint32_t>(dataLength));
+        bgfx::updateTexture3D(handle,
+            static_cast<uint8_t>(level),
+            static_cast<uint16_t>(x), static_cast<uint16_t>(y), static_cast<uint16_t>(z),
+            static_cast<uint16_t>(w), static_cast<uint16_t>(h), static_cast<uint16_t>(depth),
+            mem);
+    }
+
+    std::unique_ptr<ITexture3DBackend> BgfxGraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<BgfxTexture3DBackend>(w, h, depth, mipMap, surfaceFormat);
+    }
+
     // --- BgfxRenderTargetBackend ---
 
     BgfxRenderTargetBackend::BgfxRenderTargetBackend(int w, int h, bool hasDepth)
