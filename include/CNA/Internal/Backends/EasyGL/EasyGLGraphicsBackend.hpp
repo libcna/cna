@@ -217,6 +217,8 @@ namespace CNA::Internal::Backends::EasyGL
 
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
+        static constexpr int kMaxSamplerSlots = 16;
+        ::easygl::Sampler samplers_[kMaxSamplerSlots];
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         bool contextRecoveryEnabled_ = true;
 
@@ -291,8 +293,18 @@ namespace CNA::Internal::Backends::EasyGL
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;
-        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc) override;
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable) override;
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                               int maxAnisotropy) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
+        void SetScissorRect(int x, int y, int w, int h) override;
 
         // ---- 3D: IMPLEMENTED ----
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;

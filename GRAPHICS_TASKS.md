@@ -88,16 +88,16 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 42 | EasyGL: wire `ScissorRectangle` → `glScissor` / `glEnable(GL_SCISSOR_TEST)` | ⬜ | Add `SetScissorRect(x,y,w,h)` to `IGraphicsBackend` |
-| 43 | EasyGL: complete `ApplyDepthStencilState` — stencil operations (StencilEnable, StencilFunction, StencilPass/Fail/DepthFail, TwoSidedStencilMode) | ⬜ | Currently only depth enabled/write/func |
-| 44 | EasyGL: `SamplerState` on texture slots 1–15 (currently only slot 0 is fully applied) | ⬜ | `glBindSampler` or `glTexParameteri` per active unit |
+| 42 | EasyGL: wire `ScissorRectangle` → `glScissor` / `glEnable(GL_SCISSOR_TEST)` | ✅ | Add `SetScissorRect(x,y,w,h)` to `IGraphicsBackend` |
+| 43 | EasyGL: complete `ApplyDepthStencilState` — stencil operations (StencilEnable, StencilFunction, StencilPass/Fail/DepthFail, TwoSidedStencilMode) | ✅ | Currently only depth enabled/write/func |
+| 44 | EasyGL: `SamplerState` on texture slots 1–15 (currently only slot 0 is fully applied) | ✅ | `glBindSampler` or `glTexParameteri` per active unit |
 | 45 | EasyGL: Multiple render targets (MRT) — `SetRenderTargets(array)` via `glDrawBuffers` | ⬜ | Add `SetRenderTargets` to `IGraphicsBackend` |
 | 46 | EasyGL: `RenderTargetCube` — 6-face FBO with cube map attachment | ⬜ | Add `IRenderTargetCubeBackend`; attach per-face in `BindAsRenderTarget(face)` |
 | 47 | EasyGL: `Texture3D` `GetData` — `glGetTexImage` if available (desktop GL only; stub on GLES3) | ⬜ | Low priority |
 | 48 | EasyGL: `TextureCube` `GetData` — per-face readback | ⬜ | Low priority |
 | 49 | EasyGL: `FillMode::WireFrame` — document as permanent known limitation (no `glPolygonMode` on GLES3) | ℹ️ | Already documented in NEXT.md |
-| 50 | EasyGL: `BlendFactor` (`glBlendColor`) wired to `GraphicsDevice.BlendFactor` setter | ⬜ | Add `SetBlendFactor(r,g,b,a)` to `IGraphicsBackend` |
-| 51 | EasyGL: `ReferenceStencil` wired to stencil reference in `ApplyDepthStencilState` | ⬜ | Part of task 43 |
+| 50 | EasyGL: `BlendFactor` (`glBlendColor`) wired to `GraphicsDevice.BlendFactor` setter | ✅ | Add `SetBlendFactor(r,g,b,a)` to `IGraphicsBackend` |
+| 51 | EasyGL: `ReferenceStencil` wired to stencil reference in `ApplyDepthStencilState` | ✅ | Part of task 43 |
 
 ---
 
@@ -170,13 +170,13 @@ These interface changes are prerequisites for multiple backend tasks above.
 | # | Task | Status | Needed by |
 |---|------|--------|-----------|
 | 90 | Add `SetScissorRect(x, y, w, h)` to `IGraphicsBackend` (default no-op) | ✅ | Done as part of task 39 |
-| 91 | Add `SetBlendFactor(r, g, b, a)` to `IGraphicsBackend` (default no-op) | ⬜ | Tasks 50, 63, 83 |
-| 92 | Add `SetReferenceStencil(value)` to `IGraphicsBackend` (default no-op) | ⬜ | Tasks 51, 84 |
+| 91 | Add `SetBlendFactor(r, g, b, a)` to `IGraphicsBackend` (default no-op) | ✅ | Tasks 50, 63, 83 |
+| 92 | Add `SetReferenceStencil(value)` to `IGraphicsBackend` (default no-op) | ✅ | Tasks 51, 84 — folded into ApplyDepthStencilState |
 | 93 | Add `SetRenderTargets(array, count)` to `IGraphicsBackend` (default calls `SetRenderTarget2D` with first) | ⬜ | Tasks 45, 62, 80 |
 | 94 | Add `IRenderTargetCubeBackend` interface + `CreateRenderTargetCube(w, h, format)` factory | ⬜ | Tasks 46, 61, 79 |
 | 95 | Wire `GraphicsDevice.ScissorRectangle` setter → `IGraphicsBackend::SetScissorRect` | ✅ | Done as part of task 39 |
-| 96 | Wire `GraphicsDevice.BlendFactor` setter → `IGraphicsBackend::SetBlendFactor` | ⬜ | Tasks 50, 63 |
-| 97 | Wire `GraphicsDevice.ReferenceStencil` setter → `IGraphicsBackend::SetReferenceStencil` | ⬜ | Tasks 51, 84 |
+| 96 | Wire `GraphicsDevice.BlendFactor` setter → `IGraphicsBackend::SetBlendFactor` | ✅ | Tasks 50, 63 |
+| 97 | Wire `GraphicsDevice.ReferenceStencil` setter → `IGraphicsBackend::SetReferenceStencil` | ✅ | Folded into ApplyDepthStencilState (Task 43) |
 | 98 | Wire `GraphicsDevice.SetRenderTargets(RenderTargetBinding[])` → `IGraphicsBackend::SetRenderTargets` | ⬜ | Tasks 45, 62 |
 | 99 | Wire `GraphicsDevice.SetRenderTarget(RenderTargetCube, CubeMapFace)` → `IRenderTargetCubeBackend` | ⬜ | Tasks 46, 61 |
 | 100 | `IEffectBackend` interface — `CompileProgram(vertSrc, fragSrc)`, `Bind()`, `SetUniform*(name, ...)` — used by `ShaderEffect` and custom `Effect` loading | ⬜ | Tasks 64, 81 |

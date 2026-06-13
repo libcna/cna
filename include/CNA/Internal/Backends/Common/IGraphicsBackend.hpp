@@ -230,11 +230,31 @@ namespace CNA::Internal::Backends
 
         /// Applies a DepthStencilState to the backend. Default: no-op.
         virtual void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
-                                            int depthFunc) {}
+                                            int depthFunc,
+                                            bool stencilEnable, int stencilFunc,
+                                            int stencilPass, int stencilFail, int stencilDepthFail,
+                                            int stencilMask, int stencilWriteMask, int referenceStencil,
+                                            bool twoSidedStencilMode,
+                                            int ccwStencilFunc, int ccwStencilPass,
+                                            int ccwStencilFail, int ccwStencilDepthFail) {}
 
         /// Applies a RasterizerState to the backend. Default: no-op.
         virtual void ApplyRasterizerState(int cullMode, int fillMode,
                                           bool scissorTestEnable) {}
+
+        /// Applies a SamplerState to the given texture slot. Default: no-op.
+        /// @param slot         Texture unit index (0–15).
+        /// @param filter       Raw TextureFilter int value.
+        /// @param addressU     Raw TextureAddressMode int value for U.
+        /// @param addressV     Raw TextureAddressMode int value for V.
+        /// @param maxAnisotropy Maximum anisotropy level (1–16).
+        virtual void ApplySamplerState(int slot, int filter,
+                                       int addressU, int addressV,
+                                       int maxAnisotropy) {}
+
+        /// Sets the constant blend color used with the BlendFactor blend mode.
+        /// Maps to glBlendColor on GL backends. Default: no-op.
+        virtual void SetBlendFactor(float r, float g, float b, float a) {}
 
         /// Sets the scissor clip rectangle. Default: no-op.
         virtual void SetScissorRect(int x, int y, int w, int h) {}

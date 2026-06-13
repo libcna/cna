@@ -393,6 +393,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error(
                 "GraphicsDevice::DrawPrimitives: non-zero vertexStart is not supported by the current backend.");
 
+        applySamplerStatesToBackend();
         backend_->DrawPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
             currentEffect_->World,
@@ -436,6 +437,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error(
                 "GraphicsDevice::DrawIndexedPrimitives: non-zero startIndex is not supported by the current backend.");
 
+        applySamplerStatesToBackend();
         backend_->DrawIndexedPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
             currentIndexBuffer_->GetBackend(),
@@ -1123,6 +1125,20 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void GraphicsDevice::applySamplerStatesToBackend()
+    {
+        if (!backend_) return;
+        for (int i = 0; i < SamplerStateCollection::MaxSamplers; ++i)
+        {
+            const SamplerState& ss = samplerStates_[i];
+            backend_->ApplySamplerState(i,
+                (int)ss.getFilterProperty(),
+                (int)ss.getAddressUProperty(),
+                (int)ss.getAddressVProperty(),
+                ss.getMaxAnisotropyProperty());
+        }
+    }
+
     void GraphicsDevice::applyPresentationParametersToWindow()
     {
         if (window_ == nullptr)
@@ -1197,7 +1213,20 @@ namespace Microsoft::Xna::Framework::Graphics
             backend_->ApplyDepthStencilState(
                 value.getDepthBufferEnableProperty(),
                 value.getDepthBufferWriteEnableProperty(),
-                (int)value.getDepthBufferFunctionProperty());
+                (int)value.getDepthBufferFunctionProperty(),
+                value.getStencilEnableProperty(),
+                (int)value.getStencilFunctionProperty(),
+                (int)value.getStencilPassProperty(),
+                (int)value.getStencilFailProperty(),
+                (int)value.getStencilDepthBufferFailProperty(),
+                value.getStencilMaskProperty(),
+                value.getStencilWriteMaskProperty(),
+                value.getReferenceStencilProperty(),
+                value.getTwoSidedStencilModeProperty(),
+                (int)value.getCounterClockwiseStencilFunctionProperty(),
+                (int)value.getCounterClockwiseStencilPassProperty(),
+                (int)value.getCounterClockwiseStencilFailProperty(),
+                (int)value.getCounterClockwiseStencilDepthBufferFailProperty());
     }
 
     RasterizerState& GraphicsDevice::getRasterizerStateProperty() { return rasterizerState_; }
@@ -1221,7 +1250,16 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     Color GraphicsDevice::getBlendFactorProperty() const { return blendFactor_; }
-    void GraphicsDevice::setBlendFactorProperty(const Color& value) { blendFactor_ = value; }
+    void GraphicsDevice::setBlendFactorProperty(const Color& value)
+    {
+        blendFactor_ = value;
+        if (backend_)
+            backend_->SetBlendFactor(
+                value.getRProperty() / 255.0f,
+                value.getGProperty() / 255.0f,
+                value.getBProperty() / 255.0f,
+                value.getAProperty() / 255.0f);
+    }
 
     int GraphicsDevice::getMultiSampleMaskProperty() const { return multiSampleMask_; }
     void GraphicsDevice::setMultiSampleMaskProperty(int value) { multiSampleMask_ = value; }

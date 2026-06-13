@@ -883,6 +883,23 @@ void main()
             }
         }
 
+        // XNA StencilOperation ordinals: Keep=0, Zero=1, Replace=2, Increment=3,
+        // Decrement=4, IncrementSaturation=5, DecrementSaturation=6, Invert=7
+        ::easygl::StencilOp ToEasyGLStencilOp(int xnaOp)
+        {
+            switch (xnaOp)
+            {
+            case 1: return ::easygl::StencilOp::Zero;
+            case 2: return ::easygl::StencilOp::Replace;
+            case 3: return ::easygl::StencilOp::IncrWrap;
+            case 4: return ::easygl::StencilOp::DecrWrap;
+            case 5: return ::easygl::StencilOp::Incr;
+            case 6: return ::easygl::StencilOp::Decr;
+            case 7: return ::easygl::StencilOp::Invert;
+            default: return ::easygl::StencilOp::Keep;  // StencilOperation::Keep = 0
+            }
+        }
+
         ::easygl::PrimitiveType ToEasyGl(PrimitiveType pt)
         {
             switch (pt)
@@ -933,13 +950,55 @@ void main()
     }
 
     void EasyGLGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
-                                                        int depthFunc)
+                                                        int depthFunc,
+                                                        bool stencilEnable, int stencilFunc,
+                                                        int stencilPass, int stencilFail, int stencilDepthFail,
+                                                        int stencilMask, int stencilWriteMask, int referenceStencil,
+                                                        bool twoSidedStencilMode,
+                                                        int ccwStencilFunc, int ccwStencilPass,
+                                                        int ccwStencilFail, int ccwStencilDepthFail)
     {
         if (metagl::IsContextLost()) return;
+
         device.set_depth_test_enabled(depthEnable);
         device.set_depth_mask(depthWriteEnable);
         if (depthEnable)
             device.set_depth_func(ToEasyGLCompareFunc(depthFunc));
+
+        device.set_stencil_test_enabled(stencilEnable);
+        if (stencilEnable)
+        {
+            const auto eglSFail  = ToEasyGLStencilOp(stencilFail);
+            const auto eglDFail  = ToEasyGLStencilOp(stencilDepthFail);
+            const auto eglPass   = ToEasyGLStencilOp(stencilPass);
+            if (twoSidedStencilMode)
+            {
+                device.set_stencil_func_separate(::easygl::CullFace::Front,
+                    ToEasyGLCompareFunc(stencilFunc),
+                    referenceStencil, static_cast<unsigned int>(stencilMask));
+                device.set_stencil_op_separate(::easygl::CullFace::Front,
+                    eglSFail, eglDFail, eglPass);
+                device.set_stencil_mask_separate(::easygl::CullFace::Front,
+                    static_cast<unsigned int>(stencilWriteMask));
+
+                device.set_stencil_func_separate(::easygl::CullFace::Back,
+                    ToEasyGLCompareFunc(ccwStencilFunc),
+                    referenceStencil, static_cast<unsigned int>(stencilMask));
+                device.set_stencil_op_separate(::easygl::CullFace::Back,
+                    ToEasyGLStencilOp(ccwStencilFail),
+                    ToEasyGLStencilOp(ccwStencilDepthFail),
+                    ToEasyGLStencilOp(ccwStencilPass));
+                device.set_stencil_mask_separate(::easygl::CullFace::Back,
+                    static_cast<unsigned int>(stencilWriteMask));
+            }
+            else
+            {
+                device.set_stencil_func(ToEasyGLCompareFunc(stencilFunc),
+                    referenceStencil, static_cast<unsigned int>(stencilMask));
+                device.set_stencil_op(eglSFail, eglDFail, eglPass);
+                device.set_stencil_mask(static_cast<unsigned int>(stencilWriteMask));
+            }
+        }
     }
 
     void EasyGLGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
@@ -960,6 +1019,100 @@ void main()
         }
         device.set_scissor_test_enabled(scissorTestEnable);
         // FillMode::WireFrame not supported in OpenGL ES — silently ignored
+    }
+
+    void EasyGLGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        if (metagl::IsContextLost()) return;
+        if (w <= 0 || h <= 0)
+        {
+            device.set_scissor_test_enabled(false);
+            return;
+        }
+        // OpenGL scissor origin is bottom-left; convert from top-left XNA coordinates.
+        int physW, physH;
+        getPhysicalSize(physW, physH);
+        device.set_scissor(x, physH - y - h, w, h);
+        device.set_scissor_test_enabled(true);
+    }
+
+    void EasyGLGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_blend_color(r, g, b, a);
+    }
+
+    void EasyGLGraphicsBackend::ApplySamplerState(int slot, int filter,
+                                                   int addressU, int addressV,
+                                                   int maxAnisotropy)
+    {
+        if (metagl::IsContextLost()) return;
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+
+        ::easygl::Sampler& s = samplers_[slot];
+        if (!s.is_created())
+            s.create();
+
+        // TextureFilter → min/mag filter
+        // XNA: Linear=0, Point=1, Anisotropic=2, LinearMipPoint=3,
+        //      PointMipLinear=4, MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6,
+        //      MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8
+        ::easygl::TextureMinFilter minF;
+        ::easygl::TextureMagFilter magF;
+        switch (filter)
+        {
+        case 1: // Point
+            minF = ::easygl::TextureMinFilter::NearestMipmapNearest;
+            magF = ::easygl::TextureMagFilter::Nearest;
+            break;
+        case 2: // Anisotropic
+            minF = ::easygl::TextureMinFilter::LinearMipmapLinear;
+            magF = ::easygl::TextureMagFilter::Linear;
+            break;
+        case 3: // LinearMipPoint
+            minF = ::easygl::TextureMinFilter::LinearMipmapNearest;
+            magF = ::easygl::TextureMagFilter::Linear;
+            break;
+        case 4: // PointMipLinear
+            minF = ::easygl::TextureMinFilter::NearestMipmapLinear;
+            magF = ::easygl::TextureMagFilter::Nearest;
+            break;
+        case 5: // MinLinearMagPointMipLinear
+            minF = ::easygl::TextureMinFilter::LinearMipmapLinear;
+            magF = ::easygl::TextureMagFilter::Nearest;
+            break;
+        case 6: // MinLinearMagPointMipPoint
+            minF = ::easygl::TextureMinFilter::LinearMipmapNearest;
+            magF = ::easygl::TextureMagFilter::Nearest;
+            break;
+        case 7: // MinPointMagLinearMipLinear
+            minF = ::easygl::TextureMinFilter::NearestMipmapLinear;
+            magF = ::easygl::TextureMagFilter::Linear;
+            break;
+        case 8: // MinPointMagLinearMipPoint
+            minF = ::easygl::TextureMinFilter::NearestMipmapNearest;
+            magF = ::easygl::TextureMagFilter::Linear;
+            break;
+        default: // Linear
+            minF = ::easygl::TextureMinFilter::LinearMipmapLinear;
+            magF = ::easygl::TextureMagFilter::Linear;
+            break;
+        }
+        s.set_parameter(::easygl::TextureParameter::MinFilter, static_cast<int>(minF));
+        s.set_parameter(::easygl::TextureParameter::MagFilter, static_cast<int>(magF));
+
+        // TextureAddressMode → GL wrap: Wrap=0→Repeat, Clamp=1→ClampToEdge, Mirror=2→MirroredRepeat
+        auto toWrap = [](int mode) -> int {
+            switch (mode) {
+            case 1:  return static_cast<int>(::easygl::TextureWrap::ClampToEdge);
+            case 2:  return static_cast<int>(::easygl::TextureWrap::MirroredRepeat);
+            default: return static_cast<int>(::easygl::TextureWrap::Repeat);
+            }
+        };
+        s.set_parameter(::easygl::TextureParameter::WrapS, toWrap(addressU));
+        s.set_parameter(::easygl::TextureParameter::WrapT, toWrap(addressV));
+
+        s.bind(static_cast<unsigned int>(slot));
     }
 
     // -------------------------------------------------------------------------
