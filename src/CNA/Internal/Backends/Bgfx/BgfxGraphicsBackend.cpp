@@ -234,6 +234,39 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
+    // --- BgfxOcclusionQueryBackend ---
+
+    BgfxOcclusionQueryBackend::BgfxOcclusionQueryBackend()
+    {
+        handle = bgfx::createOcclusionQuery();
+    }
+
+    BgfxOcclusionQueryBackend::~BgfxOcclusionQueryBackend()
+    {
+        if (bgfx::isValid(handle))
+            bgfx::destroy(handle);
+    }
+
+    bool BgfxOcclusionQueryBackend::IsComplete() const
+    {
+        if (!bgfx::isValid(handle)) return false;
+        return bgfx::getResult(handle) != bgfx::OcclusionQueryResult::NoResult;
+    }
+
+    int BgfxOcclusionQueryBackend::PixelCount() const
+    {
+        if (!bgfx::isValid(handle)) return 0;
+        int32_t result = 0;
+        auto r = bgfx::getResult(handle, &result);
+        if (r == bgfx::OcclusionQueryResult::Visible) return result;
+        return 0;
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> BgfxGraphicsBackend::CreateOcclusionQuery()
+    {
+        return std::make_unique<BgfxOcclusionQueryBackend>();
+    }
+
     // --- BgfxRenderTargetBackend ---
 
     BgfxRenderTargetBackend::BgfxRenderTargetBackend(int w, int h, bool hasDepth)

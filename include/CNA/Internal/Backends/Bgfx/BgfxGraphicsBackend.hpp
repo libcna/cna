@@ -16,6 +16,21 @@ namespace CNA::Internal::Backends::Bgfx
 
     class BgfxGraphicsBackend;
 
+    /// bgfx-backed occlusion query.
+    class BgfxOcclusionQueryBackend : public IOcclusionQueryBackend
+    {
+    public:
+        bgfx::OcclusionQueryHandle handle = BGFX_INVALID_HANDLE;
+
+        BgfxOcclusionQueryBackend();
+        ~BgfxOcclusionQueryBackend() override;
+
+        void Begin() override {}
+        void End()   override {}
+        [[nodiscard]] bool IsComplete() const override;
+        [[nodiscard]] int  PixelCount() const override;
+    };
+
     class BgfxTextureBackend : public ITextureBackend
     {
     public:
@@ -136,6 +151,7 @@ namespace CNA::Internal::Backends::Bgfx
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;
