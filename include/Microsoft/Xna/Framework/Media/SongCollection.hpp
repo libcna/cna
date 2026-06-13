@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
@@ -25,7 +26,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param songs Vector of Song pointers.
          */
-        explicit SongCollection(std::vector<Song*> songs);
+        NOXNA explicit SongCollection(std::vector<Song*> songs);
 
         /**
          * @brief Gets the song at the specified index.
@@ -53,19 +54,19 @@ namespace Microsoft::Xna::Framework::Media
         void Dispose() override;
 
         /** @brief Returns an iterator to the first song. */
-        [[nodiscard]] iterator begin();
+        NOXNA [[nodiscard]] iterator begin();
 
         /** @brief Returns an iterator past the last song. */
-        [[nodiscard]] iterator end();
+        NOXNA [[nodiscard]] iterator end();
 
         /** @brief Returns a const iterator to the first song. */
-        [[nodiscard]] const_iterator begin() const;
+        NOXNA [[nodiscard]] const_iterator begin() const;
 
         /** @brief Returns a const iterator past the last song. */
-        [[nodiscard]] const_iterator end() const;
+        NOXNA [[nodiscard]] const_iterator end() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         std::vector<Song*> innerList_;
