@@ -234,6 +234,69 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
+    // --- BgfxRenderTargetBackend ---
+
+    BgfxRenderTargetBackend::BgfxRenderTargetBackend(int w, int h, bool hasDepth)
+        : width(w), height(h)
+    {
+        // Create color texture with render target flag
+        colorTex = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h),
+            false, 1, bgfx::TextureFormat::RGBA8,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+
+        bgfx::TextureHandle attachments[2] = { colorTex, BGFX_INVALID_HANDLE };
+        int numAttachments = 1;
+
+        if (hasDepth)
+        {
+            attachments[1] = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h),
+                false, 1, bgfx::TextureFormat::D24S8, BGFX_TEXTURE_RT);
+            numAttachments = 2;
+        }
+
+        fbo = bgfx::createFrameBuffer(numAttachments, attachments, true);
+    }
+
+    BgfxRenderTargetBackend::~BgfxRenderTargetBackend()
+    {
+        if (bgfx::isValid(fbo))
+            bgfx::destroy(fbo);
+    }
+
+    void BgfxRenderTargetBackend::BindAsRenderTarget()
+    {
+        bgfx::setViewFrameBuffer(1, fbo);
+        bgfx::setViewRect(1, 0, 0, static_cast<uint16_t>(width), static_cast<uint16_t>(height));
+    }
+
+    void BgfxRenderTargetBackend::UnbindAsRenderTarget()
+    {
+        bgfx::setViewFrameBuffer(1, BGFX_INVALID_HANDLE);
+    }
+
+    // ---
+
+    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth)
+    {
+        return std::make_unique<BgfxRenderTargetBackend>(w, h, hasDepth);
+    }
+
+    void BgfxGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt)
+        {
+            rt->BindAsRenderTarget();
+            currentViewId_ = 1;
+            spriteViewId = 1;
+        }
+        else
+        {
+            bgfx::setViewFrameBuffer(0, BGFX_INVALID_HANDLE);
+            currentViewId_ = 0;
+            spriteViewId = 0;
+        }
+    }
+
     BgfxSpriteBatchBackend::BgfxSpriteBatchBackend(BgfxGraphicsBackend& graphicsBackend)
         : graphicsBackend(graphicsBackend)
     {

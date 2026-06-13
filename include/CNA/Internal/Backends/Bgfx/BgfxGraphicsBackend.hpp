@@ -30,6 +30,28 @@ namespace CNA::Internal::Backends::Bgfx
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
     };
 
+    /// bgfx-backed 2D render target (bgfx framebuffer with color + depth textures).
+    class BgfxRenderTargetBackend : public IRenderTargetBackend
+    {
+    public:
+        bgfx::FrameBufferHandle fbo = BGFX_INVALID_HANDLE;
+        bgfx::TextureHandle colorTex = BGFX_INVALID_HANDLE;
+        int width = 0;
+        int height = 0;
+
+        BgfxRenderTargetBackend(int w, int h, bool hasDepth);
+        ~BgfxRenderTargetBackend() override;
+
+        int GetWidth()  const override { return width; }
+        int GetHeight() const override { return height; }
+        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+        void UpdatePixels(const uint8_t* rgba, int stride) override {}
+        void BindGL() const override {}
+
+        void BindAsRenderTarget()   override;
+        void UnbindAsRenderTarget() override;
+    };
+
     class BgfxSpriteBatchBackend : public ISpriteBatchBackend
     {
     public:
@@ -62,6 +84,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ProgramHandle spriteProgram = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle textureSampler = BGFX_INVALID_HANDLE;
         bgfx::ViewId spriteViewId = 0;
+        bgfx::ViewId currentViewId_ = 0;  ///< Active view (0=backbuffer, 1=RT0, etc.)
         uint16_t cachedWidth = 0;
         uint16_t cachedHeight = 0;
         uint32_t clearRgba = 0x000000ff;
@@ -96,6 +119,8 @@ namespace CNA::Internal::Backends::Bgfx
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
         // Graphics state (stored; applied per-draw in SubmitSprite and future 3D draws)
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

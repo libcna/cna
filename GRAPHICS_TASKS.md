@@ -137,7 +137,7 @@
 | 71 | Bgfx: wire `RasterizerState` → bgfx state flags (cull, wireframe) | ✅ | cullFlags_ stored; wireframe not supported |
 | 72 | Bgfx: wire `SamplerState` → bgfx sampler flags | ✅ | samplerFlags_[slot] stored; applied in bgfx::setTexture |
 | 73 | Bgfx: wire `ScissorRectangle` → `bgfx::setScissor` | ✅ | scissorX/Y/W/H_ stored; bgfx::setScissor in SubmitSprite |
-| 74 | Bgfx: `RenderTarget2D` — bgfx framebuffer with color+depth attachments | ⬜ | |
+| 74 | Bgfx: `RenderTarget2D` — bgfx framebuffer with color+depth attachments | ✅ | BgfxRenderTargetBackend: bgfx::createFrameBuffer+createTexture2D; SetRenderTarget2D switches view |
 | 75 | Bgfx: `ISpriteBatchBackend` — 2D sprite rendering via bgfx (transient quads) | ⬜ | |
 | 76 | Bgfx: `OcclusionQuery` — bgfx occlusion query object | ⬜ | |
 | 77 | Bgfx: `Texture3D` — `bgfx::createTexture3D` | ⬜ | |
