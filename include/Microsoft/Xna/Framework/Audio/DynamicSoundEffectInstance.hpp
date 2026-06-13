@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include "CNA/CNAHelper.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -125,13 +126,13 @@ namespace Microsoft::Xna::Framework::Audio
                                   SharpRuntime::intcs count);
 
         /** @brief Submits any pending pre-play buffers to the hardware stream. */
-        void QueueInitialBuffers();
+        NOXNA void QueueInitialBuffers();
 
         /** @brief Clears all pending buffers without stopping playback. */
-        void ClearBuffers();
+        NOXNA void ClearBuffers();
 
         /** @brief Pumps stream data and raises BufferNeeded when more data is required. */
-        void Update();
+        NOXNA void Update();
 
         /**
          * @brief Returns the current playback state based on the dynamic track.
