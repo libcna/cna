@@ -44,7 +44,7 @@
 | 9 | Tests: `DisplayMode` — `Width`, `Height`, `AspectRatio`, `Format` | ✅ | 16 tests; also added missing operator==/!= (in XNA/FNA API) |
 | 10 | Tests: `Rectangle`-based: `PresentationParameters` constructor/properties | ✅ | 24 tests; defaults, all setters/getters, Bounds, Clone |
 | 11 | Tests: `BlendState` — predefined states (Opaque, AlphaBlend, Additive, NonPremultiplied), property getters | ✅ | 32 tests |
-| 12 | Tests: `DepthStencilState` — predefined states (Default, None, Read), property getters | ⬜ | |
+| 12 | Tests: `DepthStencilState` — predefined states (Default, None, Read), property getters | ✅ | 28 tests |
 | 13 | Tests: `RasterizerState` — predefined states (CullCounterClockwise, CullClockwise, CullNone), property getters | ⬜ | |
 | 14 | Tests: `SamplerState` — predefined states (LinearClamp, LinearWrap, PointClamp, etc.), property getters | ⬜ | |
 | 15 | Tests: `VertexElement` — constructor, getters | ⬜ | |
