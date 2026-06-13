@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "System/IDisposable.hpp"
@@ -24,7 +24,7 @@ namespace Microsoft::Xna::Framework::Storage
     {
     public:
         /** @brief Destroys the container. */
-        ~StorageContainer() override;
+        NOXNA ~StorageContainer() override;
 
         /** @brief Releases the resources used by this container. */
         void Dispose() override;
@@ -54,7 +54,7 @@ namespace Microsoft::Xna::Framework::Storage
         System::EventHandler<System::EventArgs> Disposing;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         // ---- Directory operations ----
 
