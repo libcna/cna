@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
 
 namespace Microsoft::Xna::Framework::Input
@@ -25,7 +26,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] float getRightProperty() const;
 
         /** @brief Constructs with both triggers at rest. */
-        GamePadTriggers();
+        NOXNA GamePadTriggers();
 
         /**
          * @brief Constructs with clamped trigger values.
