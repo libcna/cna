@@ -8,7 +8,7 @@
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Thrown when a requested microphone device is not connected. */
-    class NoMicrophoneConnectedException : public std::runtime_error
+    class NoMicrophoneConnectedException final : public std::runtime_error
     {
     public:
         /** @brief Constructs a NoMicrophoneConnectedException with a default message. */

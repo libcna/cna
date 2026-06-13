@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
@@ -49,10 +50,10 @@ namespace Microsoft::Xna::Framework::Audio
         SoundEffectInstance& operator=(const SoundEffectInstance&) = delete;
 
         /** @brief Move-constructs a SoundEffectInstance, transferring ownership of the audio track. */
-        SoundEffectInstance(SoundEffectInstance&& other) noexcept;
+        NOXNA SoundEffectInstance(SoundEffectInstance&& other) noexcept;
 
         /** @brief Move-assigns a SoundEffectInstance, transferring ownership of the audio track. */
-        SoundEffectInstance& operator=(SoundEffectInstance&& other) noexcept;
+        NOXNA SoundEffectInstance& operator=(SoundEffectInstance&& other) noexcept;
 
         /** @brief Starts or resumes playback of this instance. */
         virtual void Play();
@@ -119,7 +120,7 @@ namespace Microsoft::Xna::Framework::Audio
         void setVolumeProperty(const float& volume);
 
         /** @brief Sets the playback volume (move overload). */
-        void setVolumeProperty(float&& volume);
+        NOXNA void setVolumeProperty(float&& volume);
 
         /**
          * @brief Gets the stereo pan. Range [-1 (left), 1 (right)].
@@ -136,7 +137,7 @@ namespace Microsoft::Xna::Framework::Audio
         void setPanProperty(const float& pan);
 
         /** @brief Sets the stereo pan (move overload). */
-        void setPanProperty(float&& pan);
+        NOXNA void setPanProperty(float&& pan);
 
         /**
          * @brief Gets the pitch adjustment. Range [-1, 1].
@@ -153,7 +154,7 @@ namespace Microsoft::Xna::Framework::Audio
         void setPitchProperty(const float& pitch);
 
         /** @brief Sets the pitch adjustment (move overload). */
-        void setPitchProperty(float&& pitch);
+        NOXNA void setPitchProperty(float&& pitch);
 
         /**
          * @brief Gets whether the sound loops continuously.
@@ -170,7 +171,7 @@ namespace Microsoft::Xna::Framework::Audio
         virtual void setIsLoopedProperty(const bool& looped);
 
         /** @brief Sets whether the sound loops (move overload). */
-        virtual void setIsLoopedProperty(bool&& looped);
+        NOXNA virtual void setIsLoopedProperty(bool&& looped);
 
         /**
          * @brief Gets the current playback state.

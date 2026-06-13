@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/RendererDetail.hpp"
 
+#include <functional>
 #include <utility>
 
 namespace Microsoft::Xna::Framework::Audio
@@ -34,5 +35,10 @@ namespace Microsoft::Xna::Framework::Audio
     bool RendererDetail::operator!=(const RendererDetail& other) const
     {
         return !(*this == other);
+    }
+
+    int RendererDetail::GetHashCode() const
+    {
+        return std::hash<std::string>{}(rendererId_);
     }
 }

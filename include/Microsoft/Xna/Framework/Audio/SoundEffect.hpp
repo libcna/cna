@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectI.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
@@ -16,7 +17,7 @@
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Represents a loaded sound effect asset. */
-    class SoundEffect : public SoundEffectI, public System::IDisposable
+    class SoundEffect final : public SoundEffectI, public System::IDisposable
     {
         friend class SoundEffectInstance;
 
@@ -45,7 +46,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param assetName Path to the audio file (WAV or other supported format).
          */
-        explicit SoundEffect(const std::string& assetName);
+        NOXNA explicit SoundEffect(const std::string& assetName);
 
         /**
          * @brief Constructs a SoundEffect from a raw 16-bit PCM buffer.
@@ -116,7 +117,7 @@ namespace Microsoft::Xna::Framework::Audio
         void setNameProperty(const std::string& value);
 
         /** @brief Sets the display name of this sound effect (move overload). */
-        void setNameProperty(std::string&& value);
+        NOXNA void setNameProperty(std::string&& value);
 
         // --- Static properties ---
 
@@ -135,7 +136,7 @@ namespace Microsoft::Xna::Framework::Audio
         static void setMasterVolumeProperty(const float& v);
 
         /** @brief Sets the global master volume (move overload). */
-        static void setMasterVolumeProperty(float&& v);
+        NOXNA static void setMasterVolumeProperty(float&& v);
 
         /**
          * @brief Gets the distance scaling factor used in Apply3D attenuation approximations.

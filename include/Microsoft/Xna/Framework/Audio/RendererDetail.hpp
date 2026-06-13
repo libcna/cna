@@ -22,12 +22,11 @@ namespace Microsoft::Xna::Framework::Audio
          */
         [[nodiscard]] const std::string& getRendererIdProperty() const;
 
-        /**
-         * @brief Returns a string representation of this renderer detail.
-         *
-         * @return String containing the friendly name and renderer ID.
-         */
+        /** @brief Returns the friendly name of this renderer. */
         [[nodiscard]] std::string ToString() const;
+
+        /** @brief Returns a hash code based on the renderer ID. */
+        [[nodiscard]] int GetHashCode() const;
 
         /** @brief Returns whether two renderer details are equal. */
         bool operator==(const RendererDetail& other) const;
@@ -35,15 +34,11 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Returns whether two renderer details are not equal. */
         bool operator!=(const RendererDetail& other) const;
 
-        /**
-         * @brief Constructs a RendererDetail with the given display name and ID.
-         *
-         * @param friendlyName Human-readable renderer name.
-         * @param rendererId   Unique renderer identifier.
-         */
+    private:
+        friend class AudioEngine;
+
         RendererDetail(std::string friendlyName, std::string rendererId);
 
-    private:
         std::string friendlyName_;
         std::string rendererId_;
     };

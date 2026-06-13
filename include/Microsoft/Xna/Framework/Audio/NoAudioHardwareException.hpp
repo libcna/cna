@@ -8,7 +8,7 @@
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Thrown when no audio hardware is available on the current system. */
-    class NoAudioHardwareException : public std::runtime_error
+    class NoAudioHardwareException final : public std::runtime_error
     {
     public:
         /** @brief Constructs a NoAudioHardwareException with a default message. */
