@@ -71,6 +71,11 @@ namespace CNA::Internal::Backends::Bgfx
         uint64_t blendFlags_  = BGFX_STATE_BLEND_ALPHA;
         uint64_t depthFlags_  = BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_WRITE_Z;
         uint64_t cullFlags_   = BGFX_STATE_CULL_CCW;
+        // Sampler flags per slot (slots 0–15)
+        static constexpr int kMaxSamplerSlots = 16;
+        uint32_t samplerFlags_[kMaxSamplerSlots] = {};
+        // Blend color for BGFX_STATE_BLEND_FACTOR
+        float blendFactorR_ = 1.f, blendFactorG_ = 1.f, blendFactorB_ = 1.f, blendFactorA_ = 1.f;
         // Scissor rect (0,0,0,0 = disabled)
         uint16_t scissorX_ = 0, scissorY_ = 0, scissorW_ = 0, scissorH_ = 0;
 
@@ -106,6 +111,9 @@ namespace CNA::Internal::Backends::Bgfx
         void ApplyRasterizerState(int cullMode, int fillMode,
                                   bool scissorTestEnable) override;
         void SetScissorRect(int x, int y, int w, int h) override;
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                               int maxAnisotropy) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
 
         // 3D pipeline: NOT supported by the bgfx backend yet.
         // @note Status: STUB. Every entry point throws std::runtime_error.

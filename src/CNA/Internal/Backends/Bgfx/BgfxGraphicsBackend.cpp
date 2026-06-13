@@ -548,7 +548,7 @@ namespace CNA::Internal::Backends::Bgfx
         indices[4] = 3;
         indices[5] = 0;
 
-        bgfx::setTexture(0, textureSampler, texture.textureHandle);
+        bgfx::setTexture(0, textureSampler, texture.textureHandle, samplerFlags_[0]);
         bgfx::setVertexBuffer(0, &vertexBuffer);
         bgfx::setIndexBuffer(&indexBuffer);
         if (scissorW_ > 0 && scissorH_ > 0)
@@ -650,6 +650,47 @@ namespace CNA::Internal::Backends::Bgfx
         scissorY_ = static_cast<uint16_t>(y);
         scissorW_ = static_cast<uint16_t>(w);
         scissorH_ = static_cast<uint16_t>(h);
+    }
+
+    void BgfxGraphicsBackend::ApplySamplerState(int slot, int filter,
+                                                 int addressU, int addressV,
+                                                 int /*maxAnisotropy*/)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        uint32_t flags = 0;
+        // TextureFilter → bgfx sampler flags
+        // Linear=0, Point=1, Anisotropic=2, *MipPoint=3, *MipLinear=4, ...
+        switch (filter)
+        {
+        case 1:  // Point
+            flags |= BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MAG_POINT | BGFX_SAMPLER_MIP_POINT;
+            break;
+        case 2:  // Anisotropic — bgfx handles via ANISOTROPIC flag
+            flags |= BGFX_SAMPLER_MIN_ANISOTROPIC | BGFX_SAMPLER_MAG_ANISOTROPIC;
+            break;
+        default: // Linear and variants
+            break; // BGFX_SAMPLER default is linear
+        }
+        // TextureAddressMode: Wrap=0, Clamp=1, Mirror=2
+        if (addressU == 1)      flags |= BGFX_SAMPLER_U_CLAMP;
+        else if (addressU == 2) flags |= BGFX_SAMPLER_U_MIRROR;
+        if (addressV == 1)      flags |= BGFX_SAMPLER_V_CLAMP;
+        else if (addressV == 2) flags |= BGFX_SAMPLER_V_MIRROR;
+        samplerFlags_[slot] = flags;
+    }
+
+    void BgfxGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        blendFactorR_ = r;
+        blendFactorG_ = g;
+        blendFactorB_ = b;
+        blendFactorA_ = a;
+        // Applied via bgfx::setBlendFactor (rgba packed as RGBA8) in next draw call
+        const uint32_t packed = (static_cast<uint32_t>(r * 255) << 24) |
+                                 (static_cast<uint32_t>(g * 255) << 16) |
+                                 (static_cast<uint32_t>(b * 255) << 8)  |
+                                  static_cast<uint32_t>(a * 255);
+        bgfx::setBlendFactor(packed);
     }
 
     // ---- 3D: explicit STUB. Bgfx backend has no 3D path implemented yet. ----

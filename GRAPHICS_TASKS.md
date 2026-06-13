@@ -135,7 +135,7 @@
 | 69 | Bgfx: wire `BlendState` → bgfx state flags (`BGFX_STATE_BLEND_*`) | ✅ | blendFlags_ stored; applied in SubmitSprite |
 | 70 | Bgfx: wire `DepthStencilState` → bgfx state flags | ✅ | depthFlags_ stored; depth only (stencil not mapped) |
 | 71 | Bgfx: wire `RasterizerState` → bgfx state flags (cull, wireframe) | ✅ | cullFlags_ stored; wireframe not supported |
-| 72 | Bgfx: wire `SamplerState` → bgfx sampler flags | ⬜ | |
+| 72 | Bgfx: wire `SamplerState` → bgfx sampler flags | ✅ | samplerFlags_[slot] stored; applied in bgfx::setTexture |
 | 73 | Bgfx: wire `ScissorRectangle` → `bgfx::setScissor` | ✅ | scissorX/Y/W/H_ stored; bgfx::setScissor in SubmitSprite |
 | 74 | Bgfx: `RenderTarget2D` — bgfx framebuffer with color+depth attachments | ⬜ | |
 | 75 | Bgfx: `ISpriteBatchBackend` — 2D sprite rendering via bgfx (transient quads) | ⬜ | |
@@ -146,8 +146,8 @@
 | 80 | Bgfx: Multiple render targets (MRT) — multi-attachment bgfx framebuffer | ⬜ | |
 | 81 | Bgfx: Custom `Effect` / shader — load bgfx compiled shaders via `IEffectBackend` | ⬜ | |
 | 82 | Bgfx: `GetBackBufferData` / `ReadBackbuffer` — bgfx blit to CPU-visible texture | ⬜ | |
-| 83 | Bgfx: `BlendFactor` wired | ⬜ | |
-| 84 | Bgfx: `ReferenceStencil` wired | ⬜ | |
+| 83 | Bgfx: `BlendFactor` wired | ✅ | SetBlendFactor calls bgfx::setBlendFactor(packed RGBA8) |
+| 84 | Bgfx: `ReferenceStencil` wired | ⬜ | Requires bgfx stencil API; deferred |
 
 ---
 
