@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include <functional>
@@ -26,7 +25,7 @@ namespace Microsoft::Xna::Framework::Storage
     {
     public:
         /** @brief Destroys the StorageDevice. */
-        ~StorageDevice() = default;
+        NOXNA ~StorageDevice() = default;
 
         // ---- Properties ----
 
