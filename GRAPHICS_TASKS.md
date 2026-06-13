@@ -26,7 +26,7 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | `EffectMaterial` stub — `Effect` subclass, correct namespace, SPDX, Doxygen, NOXNA dtor+GetTypeName | ⬜ | Single-line subclass; no backend work |
+| 1 | `EffectMaterial` stub — `Effect` subclass, correct namespace, SPDX, Doxygen, NOXNA dtor+GetTypeName | ✅ | Single-line subclass; no backend work |
 | 2 | Doxygen `/** @brief */` audit — `Graphics/` root headers (GraphicsDevice, SpriteBatch, Texture2D, Texture3D, TextureCube, Viewport, DisplayMode, …) | ⬜ | ~46 files; follow CLAUDE.md style |
 | 3 | Doxygen audit — `Graphics/Effect/` (Effect, EffectParameter, EffectTechnique, …) + StockEffects (BasicEffect, AlphaTestEffect, …) | ⬜ | ~21 files |
 | 4 | Doxygen audit — `Graphics/PackedVector/` (all 18 packed types) | ⬜ | ~18 files |
