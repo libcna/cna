@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
@@ -26,7 +27,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] const Microsoft::Xna::Framework::Vector2& getRightProperty() const;
 
         /** @brief Constructs with both sticks at rest. */
-        GamePadThumbSticks();
+        NOXNA GamePadThumbSticks();
 
         /**
          * @brief Constructs with given positions; applies square clamp to [-1, 1].
