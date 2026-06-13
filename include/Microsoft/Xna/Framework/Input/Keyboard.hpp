@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MS-PL
-//
-// Created by robertvokac on 5/26/25.
-//
-
 #pragma once
 
 #include "KeyboardState.hpp"
