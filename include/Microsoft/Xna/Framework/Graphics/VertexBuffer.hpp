@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
@@ -20,54 +21,34 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
 
-    /**
-     * @brief GPU vertex buffer for `VertexPositionColor` data.
-     *
-     * Mirrors the public surface of `Microsoft.Xna.Framework.Graphics.VertexBuffer`
-     * for the minimal `VertexPositionColor` use-case.
-     *
-     * @note Status: PARTIAL. Only `VertexPositionColor` is supported; the
-     *       generic `VertexDeclaration`/`SetData<T>` from XNA is not
-     *       reproduced. Backed by EasyGL only; other backends throw.
-     */
+    /** @brief GPU vertex buffer for storing vertex data. */
     class VertexBuffer
     {
     public:
         /**
-         * @brief Creates an empty vertex buffer with capacity for
-         *        `vertexCount` `VertexPositionColor` vertices.
-         *
-         * @note Status: IMPLEMENTED. CNA-only convenience overload kept for
-         *       compatibility with earlier code; the EasyGL backend always
-         *       interprets the storage as `VertexPositionColor`.
+         * @brief Creates an empty vertex buffer with capacity for `vertexCount` vertices.
+         * @param device      Owning graphics device.
+         * @param vertexCount Number of vertices the buffer can hold.
          */
         VertexBuffer(GraphicsDevice& device, int vertexCount);
 
         /**
-         * @brief XNA 4.0-shaped constructor.
+         * @brief Constructs a vertex buffer from a vertex declaration.
          *
-         * Mirrors `VertexBuffer(GraphicsDevice, VertexDeclaration,
-         * int vertexCount, BufferUsage)`.
+         * Mirrors `VertexBuffer(GraphicsDevice, VertexDeclaration, int, BufferUsage)`.
          *
-         * @param device         Owning graphics device.
-         * @param vertexDeclaration Layout description (currently only used
-         *                       for source-level XNA compatibility — the
-         *                       EasyGL backend interprets the buffer as
-         *                       `VertexPositionColor`).
-         * @param vertexCount    Number of vertices the buffer can hold.
-         * @param bufferUsage    Usage hint (ignored by the current backend).
-         *
-         * @note Status: PARTIAL. Only the `VertexPositionColor` declaration
-         *       is honored at draw time; the `BufferUsage` hint is stored
-         *       but otherwise ignored.
+         * @param device            Owning graphics device.
+         * @param vertexDeclaration Vertex layout description.
+         * @param vertexCount       Number of vertices the buffer can hold.
+         * @param bufferUsage       Usage hint.
          */
         VertexBuffer(GraphicsDevice& device,
                      const VertexDeclaration& vertexDeclaration,
                      int vertexCount,
                      BufferUsage bufferUsage);
 
-        /** @brief Destroys this vertex buffer and releases its GPU resources. */
-        ~VertexBuffer();
+        /** @brief Destructor. */
+        NOXNA ~VertexBuffer();
 
         /** @brief Copying is not allowed. */
         VertexBuffer(const VertexBuffer&) = delete;
@@ -103,13 +84,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Returns the number of vertices this buffer was created to hold.
          * @return The vertex capacity of the buffer.
          */
-        [[nodiscard]] int VertexCount() const;
+        [[nodiscard]] int getVertexCountProperty() const;
 
         /**
          * @brief Internal accessor used by the backend draw paths.
-         * @note CNA-specific. Not part of the original XNA API.
          */
-        [[nodiscard]] CNA::Internal::Backends::IVertexBufferBackend& GetBackend() const { return *backend_; }
+        NOXNA [[nodiscard]] CNA::Internal::Backends::IVertexBufferBackend& GetBackend() const { return *backend_; }
 
     private:
         std::unique_ptr<CNA::Internal::Backends::IVertexBufferBackend> backend_;

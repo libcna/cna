@@ -7,14 +7,7 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     /**
-     * @brief XNA 4.0 `VertexElement`.
-     *
-     * Describes a single attribute slot inside a vertex stride.
-     *
-     * @note Status: STUB. Stored verbatim and exposed via
-     *       `VertexDeclaration::GetVertexElements()` for API-shape
-     *       compatibility; the EasyGL backend currently still routes
-     *       through hard-coded layouts for the built-in vertex types.
+     * @brief Describes a single attribute slot inside a vertex stride.
      */
     struct VertexElement
     {

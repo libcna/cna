@@ -9,15 +9,7 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     /**
-     * @brief XNA 4.0 `VertexDeclaration` (stride + element list).
-     *
-     * Describes the byte layout of a single vertex.
-     *
-     * @note Status: STUB. The CNA backend does not yet consume the element
-     *       list; only the `VertexStride` is meaningful at the moment, and
-     *       even that is hard-coded for the built-in vertex types in the
-     *       EasyGL backend. The class exists so that XNA-style sample code
-     *       compiles and runs unchanged.
+     * @brief Describes the byte layout of a single vertex (stride + element list).
      */
     class VertexDeclaration
     {
@@ -51,7 +43,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Returns the size in bytes of one vertex described by this declaration.
          * @return The vertex stride in bytes.
          */
-        [[nodiscard]] int VertexStride() const { return vertexStride_; }
+        [[nodiscard]] int getVertexStrideProperty() const { return vertexStride_; }
 
         /**
          * @brief Returns the list of vertex element descriptors.

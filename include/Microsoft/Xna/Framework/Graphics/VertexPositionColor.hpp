@@ -13,10 +13,6 @@ namespace Microsoft::Xna::Framework::Graphics
      * Layout-compatible with the XNA 4.0 vertex of the same name. The struct
      * is plain old data (POD-ish) so it can be uploaded directly to a GPU
      * vertex buffer.
-     *
-     * @note Status: PARTIAL. The `VertexDeclaration`/`IVertexType` interfaces
-     *       from XNA are not exposed; the EasyGL backend special-cases this
-     *       layout for the early 3D pipeline.
      */
     struct VertexPositionColor
     {
@@ -43,17 +39,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
-         * @brief Returns the XNA-style `VertexDeclaration` for this vertex
-         *        type (`Position` + `Color`).
-         *
-         * Mirrors `VertexPositionColor.VertexDeclaration` from XNA 4.0.
-         *
-         * @note Status: PARTIAL. The returned declaration is informational
-         *       — the EasyGL backend currently relies on the hard-coded
-         *       layout for this built-in vertex type. The element list and
-         *       stride still match the actual memory layout.
+         * @brief Returns the static vertex declaration describing the layout of this vertex type.
+         * @return Const reference to the VertexDeclaration for VertexPositionColor.
          */
-        static const ::Microsoft::Xna::Framework::Graphics::VertexDeclaration& VertexDeclaration()
+        [[nodiscard]] static const ::Microsoft::Xna::Framework::Graphics::VertexDeclaration& getVertexDeclarationStatic()
         {
             using ::Microsoft::Xna::Framework::Graphics::VertexElement;
             using ::Microsoft::Xna::Framework::Graphics::VertexElementFormat;

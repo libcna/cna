@@ -34,7 +34,7 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_->SetData32(indices, count);
     }
 
-    int IndexBuffer::IndexCount() const
+    int IndexBuffer::getIndexCountProperty() const
     {
         return backend_->GetIndexCount();
     }

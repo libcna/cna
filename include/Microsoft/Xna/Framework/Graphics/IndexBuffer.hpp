@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
@@ -39,8 +40,8 @@ namespace Microsoft::Xna::Framework::Graphics
                     int indexCount,
                     BufferUsage bufferUsage);
 
-        /** @brief Destroys this index buffer and releases its GPU resources. */
-        ~IndexBuffer();
+        /** @brief Destructor. */
+        NOXNA ~IndexBuffer();
 
         /** @brief Copying is not allowed. */
         IndexBuffer(const IndexBuffer&) = delete;
@@ -65,13 +66,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Returns the number of indices this buffer was created to hold.
          * @return The index capacity of the buffer.
          */
-        [[nodiscard]] int IndexCount() const;
+        [[nodiscard]] int getIndexCountProperty() const;
 
         /**
          * @brief Internal accessor used by the backend draw paths.
-         * @note CNA-specific. Not part of the original XNA API.
          */
-        [[nodiscard]] CNA::Internal::Backends::IIndexBufferBackend& GetBackend() const { return *backend_; }
+        NOXNA [[nodiscard]] CNA::Internal::Backends::IIndexBufferBackend& GetBackend() const { return *backend_; }
 
     private:
         std::unique_ptr<CNA::Internal::Backends::IIndexBufferBackend> backend_;

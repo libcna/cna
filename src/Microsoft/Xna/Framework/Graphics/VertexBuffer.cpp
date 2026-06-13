@@ -122,7 +122,7 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_->SetData(packed.data(), count, sizeof(GpuVertex));
     }
 
-    int VertexBuffer::VertexCount() const
+    int VertexBuffer::getVertexCountProperty() const
     {
         return backend_->GetVertexCount();
     }
