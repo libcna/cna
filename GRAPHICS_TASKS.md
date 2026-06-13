@@ -46,7 +46,7 @@
 | 11 | Tests: `BlendState` — predefined states (Opaque, AlphaBlend, Additive, NonPremultiplied), property getters | ✅ | 32 tests |
 | 12 | Tests: `DepthStencilState` — predefined states (Default, None, Read), property getters | ✅ | 28 tests |
 | 13 | Tests: `RasterizerState` — predefined states (CullCounterClockwise, CullClockwise, CullNone), property getters | ✅ | 19 tests |
-| 14 | Tests: `SamplerState` — predefined states (LinearClamp, LinearWrap, PointClamp, etc.), property getters | ⬜ | |
+| 14 | Tests: `SamplerState` — predefined states (LinearClamp, LinearWrap, PointClamp, etc.), property getters | ✅ | 30 tests |
 | 15 | Tests: `VertexElement` — constructor, getters | ⬜ | |
 | 16 | Tests: `VertexDeclaration` — constructor from element array, `getVertexStrideProperty`, element access | ⬜ | |
 | 17 | Tests: `VertexPositionColor` — constructor, declaration stride=16 | ⬜ | |
