@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
@@ -96,6 +97,12 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] bool Equals(const Album* other) const;
 
         /**
+         * @brief Gets the hash code for this Album instance.
+         * @return Hash code of the object.
+         */
+        [[nodiscard]] int GetHashCode() const;
+
+        /**
          * @brief Returns a string representation of this album.
          *
          * @return Album name string.
@@ -103,12 +110,15 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] std::string ToString() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns whether two albums are equal. */
         friend bool operator==(const Album& lhs, const Album& rhs);
 
         /** @brief Returns whether two albums are not equal. */
         friend bool operator!=(const Album& lhs, const Album& rhs);
+
+    private:
+        Album();
     };
 }
