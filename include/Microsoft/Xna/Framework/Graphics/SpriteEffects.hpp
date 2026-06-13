@@ -3,14 +3,14 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Defines sprite visual options for mirroring during rendering.
+    /** @brief Defines sprite visual options for mirroring during rendering. */
     enum class SpriteEffects
     {
-        /// No mirroring is applied.
+        /** @brief No options specified. */
         None = 0,
-        /// The sprite is flipped horizontally.
+        /** @brief Render the sprite reversed along the X axis. */
         FlipHorizontally = 1,
-        /// The sprite is flipped vertically.
+        /** @brief Render the sprite reversed along the Y axis. */
         FlipVertically = 2
     };
 }

@@ -7,17 +7,26 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// The arguments to the GraphicsDeviceManager PreparingDeviceSettings event.
+    /** @brief The arguments to the GraphicsDeviceManager PreparingDeviceSettings event. */
     class PreparingDeviceSettingsEventArgs : public System::EventArgs
     {
     public:
-        /// Creates a new instance with the given default device settings.
+        /**
+         * @brief Creates a new instance with the given default device settings.
+         * @param graphicsDeviceInformation The default device settings that may be overridden by subscribers.
+         */
         explicit PreparingDeviceSettingsEventArgs(GraphicsDeviceInformation& graphicsDeviceInformation);
 
-        /// Returns the graphics device settings that will be used in device creation.
+        /**
+         * @brief Returns the graphics device settings that will be used in device creation.
+         * @return A mutable reference to the graphics device information.
+         */
         [[nodiscard]] GraphicsDeviceInformation& getGraphicsDeviceInformationProperty();
 
-        /// Returns the graphics device settings that will be used in device creation.
+        /**
+         * @brief Returns the graphics device settings that will be used in device creation.
+         * @return A const reference to the graphics device information.
+         */
         [[nodiscard]] const GraphicsDeviceInformation& getGraphicsDeviceInformationProperty() const;
 
     private:

@@ -8,20 +8,29 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Provides the base path used to resolve title content files.
+    /** @brief Provides the base path used to resolve title content files. */
     class TitleLocation final
     {
     public:
-        /// Static-only class; not instantiable.
+        /** @brief Static-only class; not instantiable. */
         TitleLocation() = delete;
 
-        /// Gets the base directory for title content.
+        /**
+         * @brief Gets the base directory for title content.
+         * @return A const reference to the base content path string.
+         */
         [[nodiscard]] static const std::string& getPathProperty();
 
-        /// Sets the base directory for title content. Useful for tests and custom launchers.
+        /**
+         * @brief Sets the base directory for title content. Useful for tests and custom launchers.
+         * @param value The new base content path.
+         */
         NOXNA static void setPathProperty(const std::string& value);
 
-        /// Gets the base directory for title content (matches XNA property name).
+        /**
+         * @brief Gets the base directory for title content (matches XNA property name).
+         * @return A const reference to the base content path string.
+         */
         [[nodiscard]] static const std::string& Path();
 
     private:

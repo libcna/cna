@@ -36,7 +36,7 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     using namespace CNA::Internal::Backends;
 
-    /// High-performance batched sprite rendering engine matching XNA 4.0 SpriteBatch.
+    /** @brief High-performance batched sprite rendering engine matching XNA 4.0 SpriteBatch. */
     class SpriteBatch
     {
     private:
@@ -74,37 +74,48 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         explicit SpriteBatch(GraphicsDevice& graphicsDevice);
 
-        /**
-         * @brief Creates an empty sprite batch.
-         */
+        /** @brief Creates an empty sprite batch. */
         SpriteBatch();
 
-        /**
-         * @brief Destroys the sprite batch.
-         */
+        /** @brief Destroys the sprite batch. */
         ~SpriteBatch();
 
-        /**
-         * @brief Begins a sprite batch with default settings.
-         */
+        /** @brief Begins a sprite batch with default settings (AlphaBlend, LinearClamp, no depth). */
         void Begin();
 
         /**
-         * @brief Begins a sprite batch with explicit settings.
+         * @brief Begins a sprite batch with explicit sort mode and blend state.
          *
          * @param sprite_sort_mode Sprite sort mode.
          * @param blend_state Blend state.
          */
         void Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state);
 
-        /// Begins a sprite batch with state objects (transform defaults to Identity).
+        /**
+         * @brief Begins a sprite batch with state objects; transform defaults to Identity.
+         *
+         * @param sortMode         Sprite sort mode.
+         * @param blendState       Blend state.
+         * @param samplerState     Sampler state, or nullptr to use LinearClamp.
+         * @param depthStencilState Depth-stencil state, or nullptr to use None.
+         * @param rasterizerState  Rasterizer state, or nullptr to use CullCounterClockwise.
+         */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
                    SamplerState* samplerState,
                    DepthStencilState* depthStencilState,
                    RasterizerState* rasterizerState);
 
-        /// Begins a sprite batch with a custom effect (transform defaults to Identity).
+        /**
+         * @brief Begins a sprite batch with a custom effect; transform defaults to Identity.
+         *
+         * @param sortMode         Sprite sort mode.
+         * @param blendState       Blend state.
+         * @param samplerState     Sampler state, or nullptr to use LinearClamp.
+         * @param depthStencilState Depth-stencil state, or nullptr to use None.
+         * @param rasterizerState  Rasterizer state, or nullptr to use CullCounterClockwise.
+         * @param effect           Custom effect to apply, or nullptr to use the default sprite effect.
+         */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
                    SamplerState* samplerState,
@@ -112,7 +123,17 @@ namespace Microsoft::Xna::Framework::Graphics
                    RasterizerState* rasterizerState,
                    Effect* effect);
 
-        /// Full XNA Begin overload with transform matrix.
+        /**
+         * @brief Begins a sprite batch with all XNA parameters including a transform matrix.
+         *
+         * @param sortMode         Sprite sort mode.
+         * @param blendState       Blend state.
+         * @param samplerState     Sampler state, or nullptr to use LinearClamp.
+         * @param depthStencilState Depth-stencil state, or nullptr to use None.
+         * @param rasterizerState  Rasterizer state, or nullptr to use CullCounterClockwise.
+         * @param effect           Custom effect, or nullptr for the default sprite effect.
+         * @param transformMatrix  Matrix applied to all sprites before projection.
+         */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
                    SamplerState* samplerState,
@@ -121,25 +142,43 @@ namespace Microsoft::Xna::Framework::Graphics
                    Effect* effect,
                    Matrix transformMatrix);
 
-        /**
-         * @brief Ends the current sprite batch.
-         */
+        /** @brief Flushes the current batch and ends the sprite drawing session. */
         void End();
 
         /**
-         * @brief Draws a texture at the given position.
+         * @brief Draws a texture at the given screen-space position.
          *
          * @param texture Texture to draw.
-         * @param x X coordinate.
-         * @param y Y coordinate.
+         * @param x X coordinate in pixels.
+         * @param y Y coordinate in pixels.
          */
         void Draw(const Texture2D& texture, float x, float y);
 
+        /**
+         * @brief Draws a region of a texture into a destination rectangle with a tint color.
+         *
+         * @param texture              Texture to draw.
+         * @param destinationRectangle Rectangle that defines the draw destination in screen space.
+         * @param sourceRectangle      Rectangle that selects the region of the texture to draw.
+         * @param color                Tint color; use Color::White for no tint.
+         */
         void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   const Rectangle& sourceRectangle,
                   Color color);
 
+        /**
+         * @brief Draws a region of a texture into a destination rectangle with rotation, origin, effects, and depth.
+         *
+         * @param texture              Texture to draw.
+         * @param destinationRectangle Rectangle that defines the draw destination in screen space.
+         * @param sourceRectangle      Rectangle that selects the region of the texture to draw.
+         * @param color                Tint color.
+         * @param rotation_rad         Rotation angle in radians.
+         * @param origin               Point within the texture used as the rotation origin.
+         * @param effect               Sprite flipping flags.
+         * @param layerDepth           Depth value for sort ordering (0 = front, 1 = back).
+         */
         void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   const Rectangle& sourceRectangle,
@@ -150,19 +189,75 @@ namespace Microsoft::Xna::Framework::Graphics
                   float layerDepth);
 
         // CNA_STUB: XNA 4.0 Draw overloads — declarations present, bodies not yet implemented.
+        /**
+         * @brief Draws a texture at the given position with a tint color.
+         *
+         * @param texture  Texture to draw.
+         * @param position Position in screen space.
+         * @param color    Tint color.
+         */
         void Draw(const Texture2D& texture, Vector2 position, Color color);
+        /**
+         * @brief Draws an optional source region of a texture at a position.
+         *
+         * @param texture         Texture to draw.
+         * @param position        Position in screen space.
+         * @param sourceRectangle Optional source rectangle; draws the whole texture if empty.
+         * @param color           Tint color.
+         */
         void Draw(const Texture2D& texture, Vector2 position,
                   std::optional<Rectangle> sourceRectangle, Color color);
+        /**
+         * @brief Draws a texture at a position with rotation, origin, uniform scale, effects, and depth.
+         *
+         * @param texture         Texture to draw.
+         * @param position        Position in screen space.
+         * @param sourceRectangle Optional source rectangle.
+         * @param color           Tint color.
+         * @param rotation        Rotation angle in radians.
+         * @param origin          Rotation/scale origin in texture space.
+         * @param scale           Uniform scale factor.
+         * @param effects         Sprite flipping flags.
+         * @param layerDepth      Depth value for sort ordering.
+         */
         void Draw(const Texture2D& texture, Vector2 position,
                   std::optional<Rectangle> sourceRectangle, Color color,
                   float rotation, Vector2 origin, float scale,
                   SpriteEffects effects, float layerDepth);
+        /**
+         * @brief Draws a texture at a position with rotation, origin, non-uniform scale, effects, and depth.
+         *
+         * @param texture         Texture to draw.
+         * @param position        Position in screen space.
+         * @param sourceRectangle Optional source rectangle.
+         * @param color           Tint color.
+         * @param rotation        Rotation angle in radians.
+         * @param origin          Rotation/scale origin in texture space.
+         * @param scale           Non-uniform scale vector.
+         * @param effects         Sprite flipping flags.
+         * @param layerDepth      Depth value for sort ordering.
+         */
         void Draw(const Texture2D& texture, Vector2 position,
                   std::optional<Rectangle> sourceRectangle, Color color,
                   float rotation, Vector2 origin, Vector2 scale,
                   SpriteEffects effects, float layerDepth);
+        /**
+         * @brief Draws a texture scaled to fill a destination rectangle.
+         *
+         * @param texture              Texture to draw.
+         * @param destinationRectangle Draw destination in screen space.
+         * @param color                Tint color.
+         */
         void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle, Color color);
+        /**
+         * @brief Draws an optional source region of a texture into a destination rectangle.
+         *
+         * @param texture              Texture to draw.
+         * @param destinationRectangle Draw destination in screen space.
+         * @param sourceRectangle      Optional source rectangle.
+         * @param color                Tint color.
+         */
         void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   std::optional<Rectangle> sourceRectangle, Color color);
@@ -180,7 +275,19 @@ namespace Microsoft::Xna::Framework::Graphics
                         Vector2 position,
                         Color color);
 
-        /// Draws text with rotation, origin, uniform scale, flipping and layer depth.
+        /**
+         * @brief Draws text with rotation, origin, uniform scale, flipping, and layer depth.
+         *
+         * @param spriteFont Font providing the glyph atlas and layout.
+         * @param text       Text to render.
+         * @param position   Position in screen space.
+         * @param color      Tint color.
+         * @param rotation   Rotation angle in radians.
+         * @param origin     Rotation/scale origin in screen space.
+         * @param scale      Uniform scale factor.
+         * @param effects    Sprite flipping flags.
+         * @param layerDepth Depth value for sort ordering.
+         */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
                         Vector2 position,
@@ -191,7 +298,19 @@ namespace Microsoft::Xna::Framework::Graphics
                         SpriteEffects effects,
                         float layerDepth);
 
-        /// Draws text with rotation, origin, non-uniform scale, flipping and layer depth.
+        /**
+         * @brief Draws text with rotation, origin, non-uniform scale, flipping, and layer depth.
+         *
+         * @param spriteFont Font providing the glyph atlas and layout.
+         * @param text       Text to render.
+         * @param position   Position in screen space.
+         * @param color      Tint color.
+         * @param rotation   Rotation angle in radians.
+         * @param origin     Rotation/scale origin in screen space.
+         * @param scale      Non-uniform scale vector.
+         * @param effects    Sprite flipping flags.
+         * @param layerDepth Depth value for sort ordering.
+         */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
                         Vector2 position,
@@ -204,10 +323,31 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // CNA_STUB: XNA 4.0 DrawString(SpriteFont, StringBuilder, ...) overloads.
         // StringBuilder variants are equivalent to string variants at runtime.
+        /**
+         * @brief Draws a StringBuilder as text using the given font.
+         *
+         * @param spriteFont Font providing the glyph atlas and layout.
+         * @param text       Text to render.
+         * @param position   Top-left position, in pixels.
+         * @param color      Tint color.
+         */
         void DrawString(const SpriteFont& spriteFont,
                         const System::Text::StringBuilder& text,
                         Vector2 position,
                         Color color);
+        /**
+         * @brief Draws a StringBuilder as text with rotation, origin, uniform scale, flipping, and depth.
+         *
+         * @param spriteFont Font providing the glyph atlas and layout.
+         * @param text       Text to render.
+         * @param position   Position in screen space.
+         * @param color      Tint color.
+         * @param rotation   Rotation angle in radians.
+         * @param origin     Rotation/scale origin in screen space.
+         * @param scale      Uniform scale factor.
+         * @param effects    Sprite flipping flags.
+         * @param layerDepth Depth value for sort ordering.
+         */
         void DrawString(const SpriteFont& spriteFont,
                         const System::Text::StringBuilder& text,
                         Vector2 position,
@@ -217,6 +357,19 @@ namespace Microsoft::Xna::Framework::Graphics
                         float scale,
                         SpriteEffects effects,
                         float layerDepth);
+        /**
+         * @brief Draws a StringBuilder as text with rotation, origin, non-uniform scale, flipping, and depth.
+         *
+         * @param spriteFont Font providing the glyph atlas and layout.
+         * @param text       Text to render.
+         * @param position   Position in screen space.
+         * @param color      Tint color.
+         * @param rotation   Rotation angle in radians.
+         * @param origin     Rotation/scale origin in screen space.
+         * @param scale      Non-uniform scale vector.
+         * @param effects    Sprite flipping flags.
+         * @param layerDepth Depth value for sort ordering.
+         */
         void DrawString(const SpriteFont& spriteFont,
                         const System::Text::StringBuilder& text,
                         Vector2 position,

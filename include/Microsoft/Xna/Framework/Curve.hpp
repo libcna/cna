@@ -8,44 +8,94 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Collection of CurveKey points that can be evaluated as a curve.
+    /** @brief Contains a collection of CurveKey points in 2D space and provides methods for evaluating features of the curve they define. */
     class Curve
     {
     public:
-        /// Gets true when this curve has zero or one keys.
+        /**
+         * @brief Gets whether this curve is constant.
+         * @return true if the curve has zero or one keys; false otherwise.
+         */
         [[nodiscard]] bool getIsConstantProperty() const;
 
-        /// Gets the collection of curve keys.
+        /**
+         * @brief Gets the collection of curve keys.
+         * @return A mutable reference to the key collection.
+         */
         [[nodiscard]] CurveKeyCollection& getKeysProperty();
+
+        /**
+         * @brief Gets the collection of curve keys.
+         * @return A const reference to the key collection.
+         */
         [[nodiscard]] const CurveKeyCollection& getKeysProperty() const;
 
-        /// Gets or sets how values after the last control point are handled.
+        /**
+         * @brief Gets how values after the last control point are handled.
+         * @return The post-loop behavior type.
+         */
         [[nodiscard]] CurveLoopType getPostLoopProperty() const;
+
+        /**
+         * @brief Sets how values after the last control point are handled.
+         * @param value The desired post-loop behavior.
+         */
         void setPostLoopProperty(CurveLoopType value);
 
-        /// Gets or sets how values before the first control point are handled.
+        /**
+         * @brief Gets how values before the first control point are handled.
+         * @return The pre-loop behavior type.
+         */
         [[nodiscard]] CurveLoopType getPreLoopProperty() const;
+
+        /**
+         * @brief Sets how values before the first control point are handled.
+         * @param value The desired pre-loop behavior.
+         */
         void setPreLoopProperty(CurveLoopType value);
 
-        /// Constructs an empty curve.
+        /** @brief Constructs an empty curve. */
         Curve();
 
-        /// Creates a copy of this curve.
+        /**
+         * @brief Creates a copy of this curve.
+         * @return A deep copy of this curve.
+         */
         [[nodiscard]] Curve Clone() const;
 
-        /// Evaluates the curve value at the given position.
+        /**
+         * @brief Evaluates the curve value at the given position.
+         * @param position The position on the curve to evaluate.
+         * @return The interpolated value at that position.
+         */
         [[nodiscard]] float Evaluate(float position) const;
 
-        /// Computes matching in/out tangents for all keys.
+        /**
+         * @brief Computes matching in/out tangents for all keys.
+         * @param tangentType The tangent type to apply to both TangentIn and TangentOut.
+         */
         void ComputeTangents(CurveTangent tangentType);
 
-        /// Computes separate in/out tangents for all keys.
+        /**
+         * @brief Computes separate in/out tangents for all keys.
+         * @param tangentInType The tangent type for TangentIn on each key.
+         * @param tangentOutType The tangent type for TangentOut on each key.
+         */
         void ComputeTangents(CurveTangent tangentInType, CurveTangent tangentOutType);
 
-        /// Computes matching in/out tangents for a single key.
+        /**
+         * @brief Computes matching in/out tangents for a single key.
+         * @param keyIndex The index of the key in the collection.
+         * @param tangentType The tangent type to apply to both TangentIn and TangentOut.
+         */
         void ComputeTangent(int keyIndex, CurveTangent tangentType);
 
-        /// Computes separate in/out tangents for a single key.
+        /**
+         * @brief Computes separate in/out tangents for a single key.
+         * @param keyIndex The index of the key in the collection.
+         * @param tangentInType The tangent type for TangentIn.
+         * @param tangentOutType The tangent type for TangentOut.
+         */
         void ComputeTangent(int keyIndex, CurveTangent tangentInType, CurveTangent tangentOutType);
 
     private:

@@ -3,12 +3,12 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Specifies the size of each index element in an index buffer.
+    /** @brief Defines the size of each index element in an IndexBuffer or DynamicIndexBuffer. */
     enum class IndexElementSize
     {
-        /// 16-bit indices (std::uint16_t). Fully supported.
+        /** @brief 16-bit short/ushort index value. */
         SixteenBits = 16,
-        /// 32-bit indices (std::uint32_t). Not yet implemented.
+        /** @brief 32-bit int/uint index value. */
         ThirtyTwoBits = 32,
     };
 }

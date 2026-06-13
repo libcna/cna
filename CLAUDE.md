@@ -240,12 +240,25 @@ If old game code breaks after the API is corrected, fix the game code separately
 
 ## Comments and Documentation
 
-- **Every public method, constructor, property getter/setter, operator, and constant in every `.hpp` file MUST have a Doxygen `///` comment.**
-- Use `///` single-line Doxygen style. Multi-line `/** … */` blocks are only acceptable when a `@param`/`@return` table genuinely adds value.
-- Copy the intent of public C# XML doc comments into `.hpp` Doxygen-style comments.
+- **Every public method, constructor, property getter/setter, operator, and constant in every `.hpp` file MUST have a Doxygen comment.**
+- Use the **full Doxygen block style** with `@brief`, `@param`, and `@return` where applicable:
+  ```cpp
+  /**
+   * @brief Short description of what the method does.
+   *
+   * @param paramName Description of the parameter.
+   * @return Description of the return value.
+   */
+  ```
+- For simple members with no parameters and no return value (e.g. a void method, a constant, an enum value),
+  a single-line `/** @brief Short description. */` is acceptable.
+- **Never** use bare `///` comments on public API members — always use the `/** */` block form with at least `@brief`.
+- Copy the intent of public C# XML doc comments (`<summary>`, `<param>`, `<returns>`) into Doxygen.
+  The text can often be taken verbatim from FNA and placed in `@brief` / `@param` / `@return`.
 - Do not copy comments word-for-word if rephrasing is clearer.
 - **Never** add comments like "taken from FNA", "copied from FNA", or "based on FNA source".
 - Keep internal implementation free of redundant comments. Only add a comment when the WHY is non-obvious.
+- `///` style comments are acceptable only inside method bodies for brief inline notes — not on public API declarations.
 
 ---
 

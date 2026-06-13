@@ -8,25 +8,25 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
 
-    /// Provides access to the graphics device service.
+    /** @brief Provides access to the graphics device and its lifecycle events. */
     class IGraphicsDeviceService
     {
     public:
         virtual ~IGraphicsDeviceService() = default;
 
-        /// Gets the current graphics device.
+        /** @brief Returns the current graphics device. */
         [[nodiscard]] virtual GraphicsDevice* getGraphicsDeviceProperty() const = 0;
 
-        /// Returns the DeviceCreated event.
+        /** @brief Returns the DeviceCreated event handler. */
         [[nodiscard]] virtual System::EventHandler<System::EventArgs>& getDeviceCreatedEvent() = 0;
 
-        /// Returns the DeviceDisposing event.
+        /** @brief Returns the DeviceDisposing event handler. */
         [[nodiscard]] virtual System::EventHandler<System::EventArgs>& getDeviceDisposingEvent() = 0;
 
-        /// Returns the DeviceReset event.
+        /** @brief Returns the DeviceReset event handler. */
         [[nodiscard]] virtual System::EventHandler<System::EventArgs>& getDeviceResetEvent() = 0;
 
-        /// Returns the DeviceResetting event.
+        /** @brief Returns the DeviceResetting event handler. */
         [[nodiscard]] virtual System::EventHandler<System::EventArgs>& getDeviceResettingEvent() = 0;
     };
 }

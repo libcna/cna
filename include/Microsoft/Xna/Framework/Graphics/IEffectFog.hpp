@@ -5,31 +5,69 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Interface for effects that support distance-based fog.
+    /**
+     * @brief Interface for effects that support distance-based linear fog.
+     */
     class IEffectFog
     {
     public:
-        /// Virtual destructor.
+        /** @brief Virtual destructor. */
         virtual ~IEffectFog() = default;
 
-        /// Gets the fog color.
+        /**
+         * @brief Gets the fog color.
+         *
+         * @return The current fog color as a Vector3 (R, G, B in [0, 1]).
+         */
         [[nodiscard]] virtual Vector3 getFogColorProperty() const = 0;
-        /// Sets the fog color.
+
+        /**
+         * @brief Sets the fog color.
+         *
+         * @param value The new fog color as a Vector3 (R, G, B in [0, 1]).
+         */
         virtual void setFogColorProperty(const Vector3& value) = 0;
 
-        /// Gets whether fog is enabled.
+        /**
+         * @brief Gets whether fog is enabled.
+         *
+         * @return True if fog is currently enabled.
+         */
         [[nodiscard]] virtual bool getFogEnabledProperty() const = 0;
-        /// Sets whether fog is enabled.
+
+        /**
+         * @brief Sets whether fog is enabled.
+         *
+         * @param value True to enable fog; false to disable.
+         */
         virtual void setFogEnabledProperty(bool value) = 0;
 
-        /// Gets the distance at which fog reaches full density.
+        /**
+         * @brief Gets the camera-space distance at which fog reaches full density.
+         *
+         * @return The fog end distance.
+         */
         [[nodiscard]] virtual float getFogEndProperty() const = 0;
-        /// Sets the distance at which fog reaches full density.
+
+        /**
+         * @brief Sets the camera-space distance at which fog reaches full density.
+         *
+         * @param value The fog end distance.
+         */
         virtual void setFogEndProperty(float value) = 0;
 
-        /// Gets the distance at which fog begins.
+        /**
+         * @brief Gets the camera-space distance at which fog begins.
+         *
+         * @return The fog start distance.
+         */
         [[nodiscard]] virtual float getFogStartProperty() const = 0;
-        /// Sets the distance at which fog begins.
+
+        /**
+         * @brief Sets the camera-space distance at which fog begins.
+         *
+         * @param value The fog start distance.
+         */
         virtual void setFogStartProperty(float value) = 0;
     };
 }

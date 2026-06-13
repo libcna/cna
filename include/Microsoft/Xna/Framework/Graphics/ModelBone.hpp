@@ -11,20 +11,62 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class ModelBoneCollection;
 
-    /// Represents a bone in a model skeleton.
+    /**
+     * @brief Represents bone data for a model.
+     */
     class ModelBone
     {
     public:
+        /** @brief Constructs a default bone. */
         NOXNA ModelBone() = default;
+
+        /**
+         * @brief Constructs a bone with the given index and name.
+         * @param index The index of this bone in the model's Bones collection.
+         * @param name The name of this bone.
+         */
         NOXNA ModelBone(int index, std::string name);
 
+        /**
+         * @brief Gets the name of this bone.
+         * @return The bone's name string.
+         */
         [[nodiscard]] const std::string& getNameProperty() const;
+
+        /**
+         * @brief Gets the index of this bone in the Bones collection.
+         * @return The zero-based bone index.
+         */
         [[nodiscard]] int getIndexProperty() const;
+
+        /**
+         * @brief Gets the transform matrix of this bone relative to its parent bone.
+         * @return The bone transform matrix.
+         */
         [[nodiscard]] const Matrix& getTransformProperty() const;
+
+        /**
+         * @brief Sets the transform matrix of this bone relative to its parent bone.
+         * @param value The new transform matrix.
+         */
         void setTransformProperty(const Matrix& value);
+
+        /**
+         * @brief Gets the parent bone of this bone.
+         * @return Pointer to the parent ModelBone, or nullptr if this is the root.
+         */
         [[nodiscard]] ModelBone* getParentProperty() const;
+
+        /**
+         * @brief Gets a collection of bones that are children of this bone.
+         * @return A vector of child bone pointers.
+         */
         [[nodiscard]] const std::vector<ModelBone*>& getChildrenProperty() const;
 
+        /**
+         * @brief Adds a child bone to this bone.
+         * @param child Pointer to the child ModelBone to add.
+         */
         NOXNA void AddChild(ModelBone* child);
 
     private:

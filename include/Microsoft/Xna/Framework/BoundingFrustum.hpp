@@ -21,83 +21,238 @@ namespace Microsoft::Xna::Framework
     struct BoundingSphere;
     struct Ray;
 
-    /// Defines a viewing frustum for intersection tests.
+    /** @brief Defines a viewing frustum for intersection tests. */
     class BoundingFrustum : public System::IEquatable<BoundingFrustum>
     {
     public:
-        /// Number of corner points in the frustum.
+        /** @brief Number of corner points in the frustum. */
         static constexpr int CornerCount = 8;
 
-        /// Constructs a frustum from the given combined view-projection matrix.
+        /**
+         * @brief Constructs a frustum from the given combined view-projection matrix.
+         *
+         * @param value The combined view-projection matrix.
+         */
         explicit BoundingFrustum(Matrix value);
 
-        /// Gets or sets the matrix used to build this frustum.
+        /**
+         * @brief Gets the matrix used to build this frustum.
+         *
+         * @return The current combined view-projection matrix.
+         */
         [[nodiscard]] Matrix getMatrixProperty() const;
+
+        /**
+         * @brief Sets the matrix used to build this frustum.
+         *
+         * @param value The new combined view-projection matrix.
+         */
         void setMatrixProperty(Matrix value);
 
-        /// Gets the near plane.
+        /**
+         * @brief Gets the near plane.
+         *
+         * @return The near clipping plane.
+         */
         [[nodiscard]] Plane getNearProperty() const;
 
-        /// Gets the far plane.
+        /**
+         * @brief Gets the far plane.
+         *
+         * @return The far clipping plane.
+         */
         [[nodiscard]] Plane getFarProperty() const;
 
-        /// Gets the left plane.
+        /**
+         * @brief Gets the left plane.
+         *
+         * @return The left clipping plane.
+         */
         [[nodiscard]] Plane getLeftProperty() const;
 
-        /// Gets the right plane.
+        /**
+         * @brief Gets the right plane.
+         *
+         * @return The right clipping plane.
+         */
         [[nodiscard]] Plane getRightProperty() const;
 
-        /// Gets the top plane.
+        /**
+         * @brief Gets the top plane.
+         *
+         * @return The top clipping plane.
+         */
         [[nodiscard]] Plane getTopProperty() const;
 
-        /// Gets the bottom plane.
+        /**
+         * @brief Gets the bottom plane.
+         *
+         * @return The bottom clipping plane.
+         */
         [[nodiscard]] Plane getBottomProperty() const;
 
-        /// Checks whether another frustum is outside, inside, or overlapping this frustum.
+        /**
+         * @brief Checks whether another frustum is outside, inside, or overlapping this frustum.
+         *
+         * @param frustum The frustum to test.
+         * @return The containment type describing the relationship.
+         */
         [[nodiscard]] ContainmentType Contains(const BoundingFrustum& frustum) const;
-        /// Checks whether a box is outside, inside, or overlapping this frustum.
+
+        /**
+         * @brief Checks whether a box is outside, inside, or overlapping this frustum.
+         *
+         * @param box The box to test.
+         * @return The containment type describing the relationship.
+         */
         [[nodiscard]] ContainmentType Contains(BoundingBox box) const;
-        /// Output-ref variant; writes the containment result to @p result.
+
+        /**
+         * @brief Output-ref variant; writes the containment result to @p result.
+         *
+         * @param box The box to test.
+         * @param result Output that receives the containment type.
+         */
         void Contains(const BoundingBox& box, ContainmentType& result) const;
-        /// Checks whether a sphere is outside, inside, or overlapping this frustum.
+
+        /**
+         * @brief Checks whether a sphere is outside, inside, or overlapping this frustum.
+         *
+         * @param sphere The sphere to test.
+         * @return The containment type describing the relationship.
+         */
         [[nodiscard]] ContainmentType Contains(BoundingSphere sphere) const;
-        /// Output-ref variant; writes the containment result to @p result.
+
+        /**
+         * @brief Output-ref variant; writes the containment result to @p result.
+         *
+         * @param sphere The sphere to test.
+         * @param result Output that receives the containment type.
+         */
         void Contains(const BoundingSphere& sphere, ContainmentType& result) const;
-        /// Checks whether a point is outside, inside, or on this frustum.
+
+        /**
+         * @brief Checks whether a point is outside, inside, or on this frustum.
+         *
+         * @param point The point to test.
+         * @return The containment type describing the relationship.
+         */
         [[nodiscard]] ContainmentType Contains(Vector3 point) const;
-        /// Output-ref variant; writes the containment result to @p result.
+
+        /**
+         * @brief Output-ref variant; writes the containment result to @p result.
+         *
+         * @param point The point to test.
+         * @param result Output that receives the containment type.
+         */
         void Contains(const Vector3& point, ContainmentType& result) const;
 
-        /// Returns a copy of this frustum's corner points.
+        /**
+         * @brief Returns a copy of this frustum's corner points.
+         *
+         * @return A vector of eight corner positions.
+         */
         [[nodiscard]] std::vector<Vector3> GetCorners() const;
 
-        /// Copies this frustum's corner points into the supplied vector.
+        /**
+         * @brief Copies this frustum's corner points into the supplied vector.
+         *
+         * @param corners Output vector that receives the corner positions.
+         */
         void GetCorners(std::vector<Vector3>& corners) const;
 
-        /// Checks whether this frustum intersects another frustum.
+        /**
+         * @brief Checks whether this frustum intersects another frustum.
+         *
+         * @param frustum The frustum to test.
+         * @return @c true if the frustums intersect; @c false otherwise.
+         */
         [[nodiscard]] bool Intersects(const BoundingFrustum& frustum) const;
-        /// Checks whether this frustum intersects a box.
+
+        /**
+         * @brief Checks whether this frustum intersects a box.
+         *
+         * @param box The box to test.
+         * @return @c true if the frustum and box intersect; @c false otherwise.
+         */
         [[nodiscard]] bool Intersects(BoundingBox box) const;
-        /// Output-ref variant; writes the box intersection result to @p result.
+
+        /**
+         * @brief Output-ref variant; writes the box intersection result to @p result.
+         *
+         * @param box The box to test.
+         * @param result Output that receives the intersection result.
+         */
         void Intersects(const BoundingBox& box, bool& result) const;
-        /// Checks whether this frustum intersects a sphere.
+
+        /**
+         * @brief Checks whether this frustum intersects a sphere.
+         *
+         * @param sphere The sphere to test.
+         * @return @c true if the frustum and sphere intersect; @c false otherwise.
+         */
         [[nodiscard]] bool Intersects(BoundingSphere sphere) const;
-        /// Output-ref variant; writes the sphere intersection result to @p result.
+
+        /**
+         * @brief Output-ref variant; writes the sphere intersection result to @p result.
+         *
+         * @param sphere The sphere to test.
+         * @param result Output that receives the intersection result.
+         */
         void Intersects(const BoundingSphere& sphere, bool& result) const;
-        /// Classifies this frustum against a plane.
+
+        /**
+         * @brief Classifies this frustum against a plane.
+         *
+         * @param plane The plane to test against.
+         * @return The plane intersection type.
+         */
         [[nodiscard]] PlaneIntersectionType Intersects(Plane plane) const;
-        /// Output-ref variant; writes the plane intersection type to @p result.
+
+        /**
+         * @brief Output-ref variant; writes the plane intersection type to @p result.
+         *
+         * @param plane The plane to test against.
+         * @param result Output that receives the plane intersection type.
+         */
         void Intersects(const Plane& plane, PlaneIntersectionType& result) const;
-        /// Returns the distance along a ray where it hits this frustum, or an empty optional if there is no hit.
+
+        /**
+         * @brief Returns the distance along a ray where it hits this frustum, or an empty optional if there is no hit.
+         *
+         * @param ray The ray to test.
+         * @return The intersection distance, or empty if no intersection.
+         */
         [[nodiscard]] std::optional<float> Intersects(Ray ray) const;
-        /// Output-ref variant; writes the intersection distance to @p result, or empty if no hit.
+
+        /**
+         * @brief Output-ref variant; writes the intersection distance to @p result, or empty if no hit.
+         *
+         * @param ray The ray to test.
+         * @param result Output that receives the intersection distance or empty.
+         */
         void Intersects(const Ray& ray, std::optional<float>& result) const;
 
-        /// Compares this frustum with another frustum.
+        /**
+         * @brief Compares this frustum with another frustum.
+         *
+         * @param other The frustum to compare against.
+         * @return @c true if the frustums are equal; @c false otherwise.
+         */
         [[nodiscard]] bool Equals(const BoundingFrustum& other) const override;
-        /// Returns a hash code for this frustum.
+
+        /**
+         * @brief Returns a hash code for this frustum.
+         *
+         * @return Hash code of this bounding frustum.
+         */
         [[nodiscard]] std::size_t GetHashCode() const;
-        /// Returns a string representation of this frustum.
+
+        /**
+         * @brief Returns a string representation of this frustum.
+         *
+         * @return String representation of this bounding frustum.
+         */
         [[nodiscard]] std::string ToString() const;
 
     private:
@@ -114,8 +269,21 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] std::string getDebugDisplayStringProperty() const;
     };
 
-    /// Returns true when both frustums have the same matrix.
+    /**
+     * @brief Returns true when both frustums have the same matrix.
+     *
+     * @param a Left-hand bounding frustum.
+     * @param b Right-hand bounding frustum.
+     * @return @c true if the frustums are equal; @c false otherwise.
+     */
     [[nodiscard]] bool operator==(const BoundingFrustum& a, const BoundingFrustum& b);
-    /// Returns true when the frustums have different matrices.
+
+    /**
+     * @brief Returns true when the frustums have different matrices.
+     *
+     * @param a Left-hand bounding frustum.
+     * @param b Right-hand bounding frustum.
+     * @return @c true if the frustums are not equal; @c false otherwise.
+     */
     [[nodiscard]] bool operator!=(const BoundingFrustum& a, const BoundingFrustum& b);
 }

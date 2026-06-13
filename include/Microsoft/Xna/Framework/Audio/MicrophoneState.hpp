@@ -3,13 +3,13 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    /// Defines the current state of a microphone.
+    /** @brief Defines the current capture state of a microphone device. */
     enum class MicrophoneState
     {
-        /// The microphone is capturing samples.
+        /** @brief The microphone is actively capturing samples. */
         Started,
 
-        /// The microphone is not capturing samples.
+        /** @brief The microphone is not capturing samples. */
         Stopped
     };
 }

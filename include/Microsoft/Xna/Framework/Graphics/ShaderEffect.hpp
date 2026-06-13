@@ -27,13 +27,24 @@ namespace Microsoft::Xna::Framework::Graphics
                            const std::string& vertSrc,
                            const std::string& fragSrc);
 
-        /// Gets the GLSL vertex shader source string.
-        NOXNA const std::string& getVertexSourceProperty() const;
-        /// Gets the GLSL fragment shader source string.
-        NOXNA const std::string& getFragmentSourceProperty() const;
+        /**
+         * @brief Gets the GLSL vertex shader source string.
+         *
+         * @return The vertex shader source.
+         */
+        NOXNA [[nodiscard]] const std::string& getVertexSourceProperty() const;
+
+        /**
+         * @brief Gets the GLSL fragment shader source string.
+         *
+         * @return The fragment shader source.
+         */
+        NOXNA [[nodiscard]] const std::string& getFragmentSourceProperty() const;
 
     protected:
-        /// Applies the GLSL shaders to the graphics device.
+        /**
+         * @brief Applies the GLSL shaders to the graphics device before drawing.
+         */
         void OnApply() override;
 
     private:

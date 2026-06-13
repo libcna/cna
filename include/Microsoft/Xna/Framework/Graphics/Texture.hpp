@@ -6,14 +6,14 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Abstract base class for all texture types.
+    /** @brief Abstract base class for all texture types. */
     class Texture : public GraphicsResource
     {
     public:
-        /// Gets the format of the texture data.
+        /** @brief Returns the surface format of the texture data. */
         [[nodiscard]] SurfaceFormat getFormatProperty() const;
 
-        /// Gets the number of mipmap levels in this texture.
+        /** @brief Returns the number of mipmap levels in this texture. */
         [[nodiscard]] int getLevelCountProperty() const;
 
     protected:

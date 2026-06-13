@@ -15,48 +15,119 @@ namespace Microsoft::Xna::Framework
     struct BoundingSphere;
     struct Plane;
 
-    /// Defines a ray, specified by a starting position and a direction.
+    /** @brief Defines a ray, specified by a starting position and a direction. */
     struct Ray
     {
-        /// The starting position of this ray.
+        /** @brief The starting position of this ray. */
         Vector3 Position;
-        /// The direction of this ray.
+        /** @brief The direction of this ray. */
         Vector3 Direction;
 
-        /// Constructs a zero-initialized ray.
+        /** @brief Constructs a zero-initialized ray. */
         Ray() = default;
-        /// Constructs a ray with the given starting position and direction.
+
+        /**
+         * @brief Constructs a ray with the given starting position and direction.
+         *
+         * @param position The starting position of the ray.
+         * @param direction The direction of the ray.
+         */
         Ray(Vector3 position, Vector3 direction);
 
-        /// Returns true when both the position and direction match another ray.
+        /**
+         * @brief Returns true when both the position and direction match another ray.
+         *
+         * @param other The ray to compare against.
+         * @return @c true if the rays are equal; @c false otherwise.
+         */
         [[nodiscard]] bool Equals(Ray other) const;
-        /// Returns a hash code for this ray.
+
+        /**
+         * @brief Returns a hash code for this ray.
+         *
+         * @return Hash code of this ray.
+         */
         [[nodiscard]] std::size_t GetHashCode() const;
 
-        /// Returns the distance along the ray to the first intersection with a bounding box, or nullopt if no hit.
+        /**
+         * @brief Returns the distance along the ray to the first intersection with a bounding box, or nullopt if no hit.
+         *
+         * @param box The bounding box to test.
+         * @return The intersection distance, or empty if no intersection.
+         */
         [[nodiscard]] std::optional<float> Intersects(BoundingBox box) const;
-        /// Computes the intersection distance with a bounding box into an output parameter.
+
+        /**
+         * @brief Computes the intersection distance with a bounding box into an output parameter.
+         *
+         * @param box The bounding box to test.
+         * @param result Output that receives the intersection distance or empty.
+         */
         void Intersects(const BoundingBox& box, std::optional<float>& result) const;
 
-        /// Returns the distance along the ray to the first intersection with a bounding sphere, or nullopt if no hit.
+        /**
+         * @brief Returns the distance along the ray to the first intersection with a bounding sphere, or nullopt if no hit.
+         *
+         * @param sphere The bounding sphere to test.
+         * @return The intersection distance, or empty if no intersection.
+         */
         [[nodiscard]] std::optional<float> Intersects(BoundingSphere sphere) const;
-        /// Computes the intersection distance with a bounding sphere into an output parameter.
+
+        /**
+         * @brief Computes the intersection distance with a bounding sphere into an output parameter.
+         *
+         * @param sphere The bounding sphere to test.
+         * @param result Output that receives the intersection distance or empty.
+         */
         void Intersects(const BoundingSphere& sphere, std::optional<float>& result) const;
 
-        /// Returns the distance along the ray to the intersection with a plane, or nullopt if no hit.
+        /**
+         * @brief Returns the distance along the ray to the intersection with a plane, or nullopt if no hit.
+         *
+         * @param plane The plane to test.
+         * @return The intersection distance, or empty if no intersection.
+         */
         [[nodiscard]] std::optional<float> Intersects(Plane plane) const;
-        /// Computes the intersection distance with a plane into an output parameter.
+
+        /**
+         * @brief Computes the intersection distance with a plane into an output parameter.
+         *
+         * @param plane The plane to test.
+         * @param result Output that receives the intersection distance or empty.
+         */
         void Intersects(const Plane& plane, std::optional<float>& result) const;
 
-        /// Returns the distance along the ray to the first intersection with a bounding frustum, or nullopt if no hit.
+        /**
+         * @brief Returns the distance along the ray to the first intersection with a bounding frustum, or nullopt if no hit.
+         *
+         * @param frustum The bounding frustum to test.
+         * @return The intersection distance, or empty if no intersection.
+         */
         [[nodiscard]] std::optional<float> Intersects(const BoundingFrustum& frustum) const;
 
-        /// Returns a string representation of this ray.
+        /**
+         * @brief Returns a string representation of this ray.
+         *
+         * @return String representation of this ray.
+         */
         [[nodiscard]] std::string ToString() const;
     };
 
-    /// Returns true when both rays have equal position and direction.
+    /**
+     * @brief Returns true when both rays have equal position and direction.
+     *
+     * @param a Left-hand ray.
+     * @param b Right-hand ray.
+     * @return @c true if the rays are equal; @c false otherwise.
+     */
     [[nodiscard]] bool operator==(Ray a, Ray b);
-    /// Returns true when the rays differ in position or direction.
+
+    /**
+     * @brief Returns true when the rays differ in position or direction.
+     *
+     * @param a Left-hand ray.
+     * @param b Right-hand ray.
+     * @return @c true if the rays are not equal; @c false otherwise.
+     */
     [[nodiscard]] bool operator!=(Ray a, Ray b);
 }

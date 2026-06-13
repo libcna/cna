@@ -18,7 +18,9 @@
 
 namespace Microsoft::Xna::Framework::Input::Touch
 {
-    /// Provides access to touch input state and queued gesture samples.
+    /**
+     * @brief Provides access to touch input state and queued gesture samples.
+     */
     class TouchPanel final
     {
     public:
@@ -26,64 +28,123 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         TouchPanel() = delete;
 
-        /// Maximum number of simultaneous touches accepted by the XNA touch panel API.
+        /** @brief Maximum number of simultaneous touches accepted by the XNA touch panel API. */
         static constexpr intcs MAX_TOUCHES = 8;
 
-        /// Marker used when no finger is present for a touch slot.
+        /** @brief Marker used when no finger is present for a touch slot. */
         static constexpr intcs NO_FINGER = -1;
 
-        /// Gets the display width used for normalized touch coordinates.
+        /**
+         * @brief Gets the display width used for normalized touch coordinates.
+         * @return The display width in pixels.
+         */
         [[nodiscard]] static intcs getDisplayWidthProperty();
 
-        /// Sets the display width used for normalized touch coordinates.
+        /**
+         * @brief Sets the display width used for normalized touch coordinates.
+         * @param value The display width in pixels.
+         */
         static void setDisplayWidthProperty(intcs value);
 
-        /// Gets the display height used for normalized touch coordinates.
+        /**
+         * @brief Gets the display height used for normalized touch coordinates.
+         * @return The display height in pixels.
+         */
         [[nodiscard]] static intcs getDisplayHeightProperty();
 
-        /// Sets the display height used for normalized touch coordinates.
+        /**
+         * @brief Sets the display height used for normalized touch coordinates.
+         * @param value The display height in pixels.
+         */
         static void setDisplayHeightProperty(intcs value);
 
-        /// Gets the current display orientation.
+        /**
+         * @brief Gets the current display orientation.
+         * @return The display orientation.
+         */
         [[nodiscard]] static Microsoft::Xna::Framework::DisplayOrientation getDisplayOrientationProperty();
 
-        /// Sets the current display orientation.
+        /**
+         * @brief Sets the current display orientation.
+         * @param value The display orientation to set.
+         */
         static void setDisplayOrientationProperty(Microsoft::Xna::Framework::DisplayOrientation value);
 
-        /// Gets the gesture types currently enabled for detection.
+        /**
+         * @brief Gets the gesture types currently enabled for detection.
+         * @return The enabled gesture types.
+         */
         [[nodiscard]] static GestureType getEnabledGesturesProperty();
 
-        /// Sets the gesture types enabled for detection.
+        /**
+         * @brief Sets the gesture types enabled for detection.
+         * @param value The gesture types to enable.
+         */
         static void setEnabledGesturesProperty(GestureType value);
 
-        /// Gets whether a gesture sample is ready to be read.
+        /**
+         * @brief Gets whether a gesture sample is ready to be read.
+         * @return True if a gesture is available; false otherwise.
+         */
         [[nodiscard]] static bool getIsGestureAvailableProperty();
 
-        /// Gets the native window handle associated with the touch panel, if any.
+        /**
+         * @brief Gets the native window handle associated with the touch panel, if any.
+         * @return The native window handle.
+         */
         [[nodiscard]] static std::uintptr_t getWindowHandleProperty();
 
-        /// Sets the native window handle associated with the touch panel.
+        /**
+         * @brief Sets the native window handle associated with the touch panel.
+         * @param value The native window handle.
+         */
         static void setWindowHandleProperty(std::uintptr_t value);
 
-        /// Gets whether a touch device is currently known to exist.
+        /**
+         * @brief Gets whether a touch device is currently known to exist.
+         * @return True if a touch device exists; false otherwise.
+         */
         [[nodiscard]] static bool getTouchDeviceExistsProperty();
 
-        /// Sets whether a touch device is currently known to exist.
+        /**
+         * @brief Sets whether a touch device is currently known to exist.
+         * @param value True if a touch device exists; false otherwise.
+         */
         static void setTouchDeviceExistsProperty(bool value);
 
-        /// Returns touch panel capabilities.
+        /**
+         * @brief Returns touch panel capabilities.
+         * @return The touch panel capabilities.
+         */
         [[nodiscard]] static TouchPanelCapabilities GetCapabilities();
 
-        /// Returns the current touch state snapshot.
+        /**
+         * @brief Returns the current touch state snapshot.
+         * @return The current touch collection.
+         */
         [[nodiscard]] static TouchCollection GetState();
 
-        /// Removes and returns the oldest queued gesture sample.
+        /**
+         * @brief Removes and returns the oldest queued gesture sample.
+         * @return The next gesture sample.
+         */
         [[nodiscard]] static GestureSample ReadGesture();
 
-        /// Queues a gesture sample for ReadGesture.
+        /**
+         * @brief Queues a gesture sample for later retrieval via ReadGesture.
+         * @param gesture The gesture sample to enqueue.
+         */
         static void EnqueueGesture(const GestureSample& gesture);
 
-        /// Handles a normalized platform touch event used by gesture processing.
+        /**
+         * @brief Handles a normalized platform touch event used by gesture processing.
+         * @param fingerId The finger identifier.
+         * @param state The touch location state of this event.
+         * @param x The normalized x coordinate.
+         * @param y The normalized y coordinate.
+         * @param dx The x delta since the last event.
+         * @param dy The y delta since the last event.
+         */
         static void INTERNAL_onTouchEvent(
             intcs fingerId,
             TouchLocationState state,
@@ -93,10 +154,17 @@ namespace Microsoft::Xna::Framework::Input::Touch
             float dy
         );
 
-        /// Updates one touch slot with a finger id and pixel position.
+        /**
+         * @brief Updates one touch slot with a finger id and pixel position.
+         * @param index The slot index to update.
+         * @param fingerId The finger identifier.
+         * @param fingerPos The current finger position in pixels.
+         */
         static void SetFinger(intcs index, intcs fingerId, const Microsoft::Xna::Framework::Vector2& fingerPos);
 
-        /// Advances touch panel state by one frame.
+        /**
+         * @brief Advances touch panel state by one frame.
+         */
         static void Update();
 
     private:

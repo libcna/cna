@@ -3,32 +3,32 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Defines the data type of a vertex element in a vertex declaration.
+    /** @brief Defines the data type of a vertex element in a vertex declaration. */
     enum class VertexElementFormat
     {
-        /// One single-precision float.
+        /** @brief Single 32-bit floating-point number. */
         Single = 0,
-        /// Two single-precision floats.
+        /** @brief Two-component 32-bit floating-point number. */
         Vector2 = 1,
-        /// Three single-precision floats.
+        /** @brief Three-component 32-bit floating-point number. */
         Vector3 = 2,
-        /// Four single-precision floats.
+        /** @brief Four-component 32-bit floating-point number. */
         Vector4 = 3,
-        /// Packed 4-byte color (BGRA). Used by VertexPositionColor.
+        /** @brief Four-component packed unsigned byte mapped to the 0–1 range (BGRA). */
         Color = 4,
-        /// Four unsigned bytes.
+        /** @brief Four-component unsigned byte. */
         Byte4 = 5,
-        /// Two signed 16-bit integers.
+        /** @brief Two-component signed 16-bit integer. */
         Short2 = 6,
-        /// Four signed 16-bit integers.
+        /** @brief Four-component signed 16-bit integer. */
         Short4 = 7,
-        /// Two signed normalized 16-bit integers.
+        /** @brief Normalized two-component signed 16-bit integer. */
         NormalizedShort2 = 8,
-        /// Four signed normalized 16-bit integers.
+        /** @brief Normalized four-component signed 16-bit integer. */
         NormalizedShort4 = 9,
-        /// Two 16-bit floating-point values.
+        /** @brief Two-component 16-bit floating-point number. */
         HalfVector2 = 10,
-        /// Four 16-bit floating-point values.
+        /** @brief Four-component 16-bit floating-point number. */
         HalfVector4 = 11,
     };
 }

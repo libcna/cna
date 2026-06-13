@@ -9,14 +9,18 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    /// Exception thrown when a sensor operation fails.
+    /** @brief Exception thrown when a sensor operation fails. */
     class SensorFailedException : public System::Exception
     {
     public:
-        /// Constructs a SensorFailedException with a default message.
+        /** @brief Constructs a SensorFailedException with a default message. */
         SensorFailedException();
 
-        /// Constructs a SensorFailedException with the given message string.
+        /**
+         * @brief Constructs a SensorFailedException with the given message.
+         *
+         * @param str Null-terminated error message string.
+         */
         explicit SensorFailedException(const char* str);
     };
 }

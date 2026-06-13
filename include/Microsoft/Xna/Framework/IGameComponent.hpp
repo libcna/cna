@@ -4,14 +4,14 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Provides initialization behavior for a game component.
+    /** @brief Provides initialization behavior for a game component. */
     class IGameComponent
     {
     public:
-        /// Virtual destructor.
+        /** @brief Virtual destructor. */
         virtual ~IGameComponent() = default;
 
-        /// Initializes the component.
+        /** @brief Initializes the component. */
         virtual void Initialize() = 0;
     };
 }

@@ -4,16 +4,16 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Defines the index of a player for various input components.
+    /** @brief Defines the index of a player for various input components. */
     enum class PlayerIndex
     {
-        /// The first player index.
+        /** @brief The first player index. */
         One   = 0,
-        /// The second player index.
+        /** @brief The second player index. */
         Two   = 1,
-        /// The third player index.
+        /** @brief The third player index. */
         Three = 2,
-        /// The fourth player index.
+        /** @brief The fourth player index. */
         Four  = 3
     };
 }

@@ -8,24 +8,49 @@
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
-    /// Packed vector type storing two signed normalized bytes (XY) in a 16-bit value.
+    /**
+     * @brief Packed vector type storing two signed normalized bytes (XY) in a 16-bit value.
+     */
     struct NormalizedByte2 : public IPackedVectorT<uint16_t>
     {
-        /// Constructs a NormalizedByte2 with a packed value of zero.
+        /** @brief Constructs a NormalizedByte2 with a packed value of zero. */
         NormalizedByte2() : packedValue_(0) {}
-        /// Constructs a NormalizedByte2 from normalized X and Y floats in [-1, 1].
+
+        /**
+         * @brief Constructs a NormalizedByte2 from normalized X and Y floats in [-1, 1].
+         * @param x The x component in [-1, 1].
+         * @param y The y component in [-1, 1].
+         */
         NormalizedByte2(float x, float y) : packedValue_(Pack(x, y)) {}
-        /// Constructs a NormalizedByte2 from a Vector2 with components in [-1, 1].
+
+        /**
+         * @brief Constructs a NormalizedByte2 from a Vector2 with components in [-1, 1].
+         * @param vector Vector containing the XY components.
+         */
         NormalizedByte2(Vector2 vector) : packedValue_(Pack(vector.X, vector.Y)) {}
 
-        /// Gets the packed 16-bit value.
+        /**
+         * @brief Gets the packed 16-bit value.
+         * @return The packed 16-bit value.
+         */
         [[nodiscard]] uint16_t getPackedValueProperty() const override { return packedValue_; }
-        /// Sets the packed 16-bit value.
+
+        /**
+         * @brief Sets the packed 16-bit value.
+         * @param v The new packed 16-bit value.
+         */
         void setPackedValueProperty(uint16_t v) override { packedValue_ = v; }
 
-        /// Packs the XY components of a Vector4 as signed normalized bytes.
+        /**
+         * @brief Packs the XY components of a Vector4 as signed normalized bytes.
+         * @param v Vector whose XY components are packed.
+         */
         void PackFromVector4(const Vector4& v) override { packedValue_ = Pack(v.X, v.Y); }
-        /// Expands the packed value to a Vector4 with Z = 0, W = 1.
+
+        /**
+         * @brief Expands the packed value to a Vector4 with Z = 0, W = 1.
+         * @return The unpacked Vector4.
+         */
         [[nodiscard]] Vector4 ToVector4() const
         {
             return {
@@ -35,9 +60,18 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
             };
         }
 
-        /// Returns true if both values are equal.
+        /**
+         * @brief Returns true if both NormalizedByte2 values are equal.
+         * @param o The other NormalizedByte2 to compare.
+         * @return True if equal.
+         */
         bool operator==(const NormalizedByte2& o) const { return packedValue_ == o.packedValue_; }
-        /// Returns true if both values are not equal.
+
+        /**
+         * @brief Returns true if both NormalizedByte2 values are not equal.
+         * @param o The other NormalizedByte2 to compare.
+         * @return True if not equal.
+         */
         bool operator!=(const NormalizedByte2& o) const { return !(*this == o); }
 
     private:

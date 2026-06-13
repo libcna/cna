@@ -5,43 +5,51 @@
 
 namespace Microsoft::Xna::Framework::Input::Touch
 {
-    /// Defines the gesture types that can be enabled and read from TouchPanel.
+    /**
+     * @brief Defines the gesture types that can be enabled and read from TouchPanel.
+     */
     enum class GestureType : int
     {
-        /// No gesture.
+        /** @brief No gesture. */
         None = 0,
 
-        /// Single tap.
+        /** @brief Single tap gesture. */
         Tap = 1,
 
-        /// Double tap.
+        /** @brief Double tap gesture. */
         DoubleTap = 2,
 
-        /// Hold gesture.
+        /** @brief Hold gesture. */
         Hold = 4,
 
-        /// Horizontal drag.
+        /** @brief Horizontal drag gesture. */
         HorizontalDrag = 8,
 
-        /// Vertical drag.
+        /** @brief Vertical drag gesture. */
         VerticalDrag = 16,
 
-        /// Free-form drag.
+        /** @brief Free-form drag gesture. */
         FreeDrag = 32,
 
-        /// Pinch gesture.
+        /** @brief Pinch gesture. */
         Pinch = 64,
 
-        /// Flick gesture.
+        /** @brief Flick gesture. */
         Flick = 128,
 
-        /// Drag completion.
+        /** @brief Drag completion gesture. */
         DragComplete = 256,
 
-        /// Pinch completion.
+        /** @brief Pinch completion gesture. */
         PinchComplete = 512
     };
 
+    /**
+     * @brief Combines two GestureType values using bitwise OR.
+     * @param left The left operand.
+     * @param right The right operand.
+     * @return The combined GestureType value.
+     */
     [[nodiscard]] constexpr GestureType operator|(GestureType left, GestureType right)
     {
         using Underlying = std::underlying_type_t<GestureType>;
@@ -50,6 +58,12 @@ namespace Microsoft::Xna::Framework::Input::Touch
         );
     }
 
+    /**
+     * @brief Masks two GestureType values using bitwise AND.
+     * @param left The left operand.
+     * @param right The right operand.
+     * @return The masked GestureType value.
+     */
     [[nodiscard]] constexpr GestureType operator&(GestureType left, GestureType right)
     {
         using Underlying = std::underlying_type_t<GestureType>;
@@ -58,12 +72,24 @@ namespace Microsoft::Xna::Framework::Input::Touch
         );
     }
 
+    /**
+     * @brief Combines a GestureType value with another using bitwise OR-assignment.
+     * @param left The left operand (modified in place).
+     * @param right The right operand.
+     * @return Reference to the modified left operand.
+     */
     constexpr GestureType& operator|=(GestureType& left, GestureType right)
     {
         left = left | right;
         return left;
     }
 
+    /**
+     * @brief Masks a GestureType value with another using bitwise AND-assignment.
+     * @param left The left operand (modified in place).
+     * @param right The right operand.
+     * @return Reference to the modified left operand.
+     */
     constexpr GestureType& operator&=(GestureType& left, GestureType right)
     {
         left = left & right;

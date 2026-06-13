@@ -12,20 +12,25 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Describes a vertex with position, normal vector, and one set of texture coordinates.
+    /** @brief Describes a vertex with position, surface normal, and one set of texture coordinates. */
     struct VertexPositionNormalTexture : public IVertexType
     {
-        /// Position of the vertex in object space.
+        /** @brief Position of the vertex in object space. */
         Microsoft::Xna::Framework::Vector3 Position;
-        /// Surface normal at this vertex.
+        /** @brief Surface normal at this vertex. */
         Microsoft::Xna::Framework::Vector3 Normal;
-        /// Texture coordinates for this vertex.
+        /** @brief Texture coordinates for this vertex. */
         Microsoft::Xna::Framework::Vector2 TextureCoordinate;
 
-        /// Constructs a default VertexPositionNormalTexture.
+        /** @brief Constructs a default VertexPositionNormalTexture with all fields zero. */
         VertexPositionNormalTexture() = default;
 
-        /// Constructs a VertexPositionNormalTexture with the given position, normal, and texture coordinate.
+        /**
+         * @brief Constructs a VertexPositionNormalTexture with the given position, normal, and texture coordinate.
+         * @param position          The vertex position in object space.
+         * @param normal            The surface normal at this vertex.
+         * @param textureCoordinate The UV texture coordinate.
+         */
         VertexPositionNormalTexture(const Microsoft::Xna::Framework::Vector3& position,
                                     const Microsoft::Xna::Framework::Vector3& normal,
                                     const Microsoft::Xna::Framework::Vector2& textureCoordinate)
@@ -33,23 +38,40 @@ namespace Microsoft::Xna::Framework::Graphics
         {
         }
 
-        /// Returns the vertex declaration describing the layout of this vertex type.
+        /**
+         * @brief Returns the static vertex declaration describing the layout of this vertex type.
+         * @return Const reference to the VertexDeclaration for VertexPositionNormalTexture.
+         */
         [[nodiscard]] static const Graphics::VertexDeclaration& getVertexDeclarationStatic();
 
-        /// Returns the vertex declaration for this instance.
+        /**
+         * @brief Returns the vertex declaration for this instance (delegates to the static version).
+         * @return Const reference to the VertexDeclaration for VertexPositionNormalTexture.
+         */
         [[nodiscard]] const Graphics::VertexDeclaration& getVertexDeclarationProperty() const override
         {
             return getVertexDeclarationStatic();
         }
 
-        /// Returns true if both vertices are equal.
+        /**
+         * @brief Returns true if both vertices are equal.
+         * @param o The other vertex to compare with.
+         * @return True if Position, Normal, and TextureCoordinate are all equal.
+         */
         bool operator==(const VertexPositionNormalTexture& o) const
         {
             return Position == o.Position && Normal == o.Normal && TextureCoordinate == o.TextureCoordinate;
         }
-        /// Returns true if both vertices are not equal.
+        /**
+         * @brief Returns true if both vertices are not equal.
+         * @param o The other vertex to compare with.
+         * @return True if any field differs.
+         */
         bool operator!=(const VertexPositionNormalTexture& o) const { return !(*this == o); }
-        /// Returns a string representation of this vertex.
+        /**
+         * @brief Returns a string representation of this vertex.
+         * @return A string listing Position, Normal, and TextureCoordinate values.
+         */
         [[nodiscard]] std::string ToString() const;
     };
 }

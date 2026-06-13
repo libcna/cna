@@ -5,13 +5,17 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Provides data for the GraphicsDevice.ResourceCreated event.
+    /** @brief Provides event data for the GraphicsDevice.ResourceCreated event. */
     class ResourceCreatedEventArgs : public System::EventArgs
     {
     public:
+        /**
+         * @brief Constructs a ResourceCreatedEventArgs with the given resource pointer.
+         * @param resource Pointer to the newly created resource object (default nullptr).
+         */
         explicit ResourceCreatedEventArgs(void* resource = nullptr) : resource_(resource) {}
 
-        /// Gets the resource that was created.
+        /** @brief Returns a pointer to the newly created resource object. */
         [[nodiscard]] void* getResourceProperty() const { return resource_; }
 
     private:

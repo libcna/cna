@@ -8,14 +8,18 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    /// Exception thrown when an accelerometer operation fails.
+    /** @brief Exception thrown when an accelerometer operation fails. */
     class AccelerometerFailedException : public SensorFailedException
     {
     public:
-        /// Constructs an AccelerometerFailedException with a default message.
+        /** @brief Constructs an AccelerometerFailedException with a default message. */
         AccelerometerFailedException();
 
-        /// Constructs an AccelerometerFailedException with the given message string.
+        /**
+         * @brief Constructs an AccelerometerFailedException with the given message.
+         *
+         * @param str Null-terminated error message string.
+         */
         explicit AccelerometerFailedException(const char* str);
     };
 };

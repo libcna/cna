@@ -9,28 +9,26 @@
 
 namespace CNA
 {
-    /**
-     * @brief Represents a target platform supported by CNA.
-     *
-     * @note Status: Implemented
-     */
+    /** @brief Enumerates the target platforms supported by CNA. */
     enum class Platform
     {
+        /** @brief Windows, Linux, or macOS desktop. */
         Desktop,
+        /** @brief Android mobile. */
         Android,
+        /** @brief Apple iOS. */
         iOS,
+        /** @brief Browser via Emscripten/WebAssembly. */
         Web
     };
 
     /**
-     * @brief Returns the current platform.
+     * @brief Returns the current platform determined at compile time.
      *
-     * The platform is determined at compile time using platform-specific
-     * preprocessor macros.
+     * The platform is detected using platform-specific preprocessor macros
+     * (__EMSCRIPTEN__, __ANDROID__, __APPLE__ + TARGET_OS_IPHONE).
      *
-     * @return The current platform.
-     *
-     * @note Status: Implemented
+     * @return The current Platform value.
      */
     constexpr Platform getCurrentPlatform()
     {

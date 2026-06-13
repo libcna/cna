@@ -16,76 +16,326 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class EffectParameter;
 
-    /// Built-in effect for rendering skinned character models.
+    /**
+     * @brief Built-in effect for rendering skinned character models with bone transforms,
+     *        lighting, optional fog, and a diffuse texture.
+     */
     class SkinnedEffect : public Effect, public IEffectMatrices, public IEffectLights, public IEffectFog
     {
     public:
+        /** @brief Maximum number of bone transform matrices supported. */
         static const int MaxBones = 72;
 
+        /**
+         * @brief Constructs a SkinnedEffect for the given graphics device.
+         *
+         * @param device The graphics device that will own this effect.
+         */
         explicit SkinnedEffect(GraphicsDevice& device);
 
+        /**
+         * @brief Creates a clone of this effect.
+         *
+         * @return Pointer to the cloned Effect.
+         */
         [[nodiscard]] Effect* Clone();
 
         // IEffectMatrices
+
+        /**
+         * @brief Gets the world matrix.
+         *
+         * @return The current world matrix.
+         */
         [[nodiscard]] Matrix getWorldProperty() const override;
+
+        /**
+         * @brief Sets the world matrix.
+         *
+         * @param value The new world matrix.
+         */
         void setWorldProperty(const Matrix& value) override;
+
+        /**
+         * @brief Gets the view matrix.
+         *
+         * @return The current view matrix.
+         */
         [[nodiscard]] Matrix getViewProperty() const override;
+
+        /**
+         * @brief Sets the view matrix.
+         *
+         * @param value The new view matrix.
+         */
         void setViewProperty(const Matrix& value) override;
+
+        /**
+         * @brief Gets the projection matrix.
+         *
+         * @return The current projection matrix.
+         */
         [[nodiscard]] Matrix getProjectionProperty() const override;
+
+        /**
+         * @brief Sets the projection matrix.
+         *
+         * @param value The new projection matrix.
+         */
         void setProjectionProperty(const Matrix& value) override;
 
+        /**
+         * @brief Gets the material diffuse color (range 0 to 1).
+         *
+         * @return The diffuse color as a Vector3.
+         */
         [[nodiscard]] Vector3 getDiffuseColorProperty() const;
+
+        /**
+         * @brief Sets the material diffuse color (range 0 to 1).
+         *
+         * @param value The new diffuse color.
+         */
         void setDiffuseColorProperty(const Vector3& value);
 
+        /**
+         * @brief Gets the material emissive color.
+         *
+         * @return The emissive color as a Vector3.
+         */
         [[nodiscard]] Vector3 getEmissiveColorProperty() const;
+
+        /**
+         * @brief Sets the material emissive color.
+         *
+         * @param value The new emissive color.
+         */
         void setEmissiveColorProperty(const Vector3& value);
 
+        /**
+         * @brief Gets the material specular color.
+         *
+         * @return The specular color as a Vector3.
+         */
         [[nodiscard]] Vector3 getSpecularColorProperty() const;
+
+        /**
+         * @brief Sets the material specular color.
+         *
+         * @param value The new specular color.
+         */
         void setSpecularColorProperty(const Vector3& value);
 
+        /**
+         * @brief Gets the material specular power (shininess exponent).
+         *
+         * @return The specular power.
+         */
         [[nodiscard]] float getSpecularPowerProperty() const;
+
+        /**
+         * @brief Sets the material specular power (shininess exponent).
+         *
+         * @param value The new specular power.
+         */
         void setSpecularPowerProperty(float value);
 
+        /**
+         * @brief Gets the material alpha (opacity), in the range [0, 1].
+         *
+         * @return The alpha value.
+         */
         [[nodiscard]] float getAlphaProperty() const;
+
+        /**
+         * @brief Sets the material alpha (opacity), in the range [0, 1].
+         *
+         * @param value The new alpha value.
+         */
         void setAlphaProperty(float value);
 
+        /**
+         * @brief Gets whether per-pixel lighting is preferred over per-vertex lighting.
+         *
+         * @return True if per-pixel lighting is preferred.
+         */
         [[nodiscard]] bool getPreferPerPixelLightingProperty() const;
+
+        /**
+         * @brief Sets whether per-pixel lighting is preferred.
+         *
+         * @param value True to prefer per-pixel lighting.
+         */
         void setPreferPerPixelLightingProperty(bool value);
 
         // IEffectLights
+
+        /**
+         * @brief Gets the ambient light color applied to the scene.
+         *
+         * @return The ambient light color as a Vector3.
+         */
         [[nodiscard]] Vector3 getAmbientLightColorProperty() const override;
+
+        /**
+         * @brief Sets the ambient light color applied to the scene.
+         *
+         * @param value The new ambient light color.
+         */
         void setAmbientLightColorProperty(const Vector3& value) override;
+
+        /**
+         * @brief Gets whether per-vertex lighting is enabled.
+         *
+         * @return True if lighting is enabled.
+         */
         [[nodiscard]] bool getLightingEnabledProperty() const override;
+
+        /**
+         * @brief Sets whether per-vertex lighting is enabled.
+         *
+         * @param value True to enable lighting.
+         */
         void setLightingEnabledProperty(bool value) override;
+
+        /**
+         * @brief Gets the first directional light source.
+         *
+         * @return Reference to DirectionalLight0.
+         */
         [[nodiscard]] DirectionalLight& getDirectionalLight0Property() override;
+
+        /**
+         * @brief Gets the second directional light source.
+         *
+         * @return Reference to DirectionalLight1.
+         */
         [[nodiscard]] DirectionalLight& getDirectionalLight1Property() override;
+
+        /**
+         * @brief Gets the third directional light source.
+         *
+         * @return Reference to DirectionalLight2.
+         */
         [[nodiscard]] DirectionalLight& getDirectionalLight2Property() override;
+
+        /**
+         * @brief Activates default three-point lighting (key, fill, and back lights).
+         */
         void EnableDefaultLighting() override;
 
+        /** @brief The first directional light source. */
         DirectionalLight DirectionalLight0;
+        /** @brief The second directional light source. */
         DirectionalLight DirectionalLight1;
+        /** @brief The third directional light source. */
         DirectionalLight DirectionalLight2;
 
         // IEffectFog
+
+        /**
+         * @brief Gets the fog color.
+         *
+         * @return The fog color as a Vector3.
+         */
         [[nodiscard]] Vector3 getFogColorProperty() const override;
+
+        /**
+         * @brief Sets the fog color.
+         *
+         * @param value The new fog color.
+         */
         void setFogColorProperty(const Vector3& value) override;
+
+        /**
+         * @brief Gets whether distance fog is enabled.
+         *
+         * @return True if fog is enabled.
+         */
         [[nodiscard]] bool getFogEnabledProperty() const override;
+
+        /**
+         * @brief Sets whether distance fog is enabled.
+         *
+         * @param value True to enable fog.
+         */
         void setFogEnabledProperty(bool value) override;
+
+        /**
+         * @brief Gets the camera-space distance at which fog begins.
+         *
+         * @return The fog start distance.
+         */
         [[nodiscard]] float getFogStartProperty() const override;
+
+        /**
+         * @brief Sets the camera-space distance at which fog begins.
+         *
+         * @param value The new fog start distance.
+         */
         void setFogStartProperty(float value) override;
+
+        /**
+         * @brief Gets the camera-space distance at which fog reaches full density.
+         *
+         * @return The fog end distance.
+         */
         [[nodiscard]] float getFogEndProperty() const override;
+
+        /**
+         * @brief Sets the camera-space distance at which fog reaches full density.
+         *
+         * @param value The new fog end distance.
+         */
         void setFogEndProperty(float value) override;
 
+        /**
+         * @brief Gets the diffuse texture applied to geometry rendered with this effect.
+         *
+         * @return Pointer to the current Texture2D, or nullptr if none.
+         */
         [[nodiscard]] Texture2D* getTextureProperty() const;
+
+        /**
+         * @brief Sets the diffuse texture applied to geometry rendered with this effect.
+         *
+         * @param value Pointer to the Texture2D to use.
+         */
         void setTextureProperty(Texture2D* value);
 
+        /**
+         * @brief Gets the number of bone weights used per vertex (1, 2, or 4).
+         *
+         * @return The weights-per-vertex count.
+         */
         [[nodiscard]] int getWeightsPerVertexProperty() const;
+
+        /**
+         * @brief Sets the number of bone weights used per vertex (1, 2, or 4).
+         *
+         * @param value The new weights-per-vertex count.
+         */
         void setWeightsPerVertexProperty(int value);
 
+        /**
+         * @brief Sets the array of bone transform matrices.
+         *
+         * @param boneTransforms Vector of bone-space-to-world-space matrices; size must not exceed MaxBones.
+         */
         void SetBoneTransforms(const std::vector<Matrix>& boneTransforms);
+
+        /**
+         * @brief Gets a subset of the current bone transform matrices.
+         *
+         * @param count Number of bone matrices to retrieve.
+         * @return Vector of the first @p count bone matrices.
+         */
         [[nodiscard]] std::vector<Matrix> GetBoneTransforms(int count) const;
 
     protected:
+        /**
+         * @brief Applies shader parameters to the graphics device before drawing.
+         */
         void OnApply() override;
 
     private:

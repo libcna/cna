@@ -20,103 +20,159 @@ namespace Microsoft::Xna::Framework
     class Game;
     class GraphicsDeviceManager;
 
-    /// Represents the game window backed by an SDL window.
-    /// FNA defines GameWindow as abstract with per-platform subclasses; CNA collapses
-    /// that hierarchy into one concrete SDL-backed class.
+    /**
+     * @brief Represents the game window backed by an SDL window.
+     *
+     * FNA defines GameWindow as abstract with per-platform subclasses; CNA collapses
+     * that hierarchy into one concrete SDL-backed class.
+     */
     class GameWindow : public System::Object
     {
         friend class Game;
         friend class GraphicsDeviceManager;
 
     public:
-        /// String type alias for C++ compatibility.
+        /** @brief String type alias for C++ compatibility. */
         NOXNA using String = SharpRuntime::String;
-        /// Integer type alias matching the C# int used in the XNA API.
+        /** @brief Integer type alias matching the C# int used in the XNA API. */
         NOXNA using intcs = SharpRuntime::intcs;
 
-        /// Raised when the client area size changes.
+        /** @brief Raised when the client area size changes. */
         System::EventHandler<System::EventArgs> ClientSizeChanged;
 
-        /// Raised when the display orientation changes.
+        /** @brief Raised when the display orientation changes. */
         System::EventHandler<System::EventArgs> OrientationChanged;
 
-        /// Raised when the screen device name changes.
+        /** @brief Raised when the screen device name changes. */
         System::EventHandler<System::EventArgs> ScreenDeviceNameChanged;
 
-        /// Creates a window wrapper without an attached SDL window.
+        /** @brief Creates a window wrapper without an attached SDL window. */
         GameWindow();
 
-        /// Creates a window wrapper for an existing SDL window.
+        /**
+         * @brief Creates a window wrapper for an existing SDL window.
+         * @param window Pointer to an existing SDL_Window to wrap.
+         */
         NOXNA explicit GameWindow(SDL_Window* window);
 
-        /// Destructor.
+        /** @brief Destructor. */
         ~GameWindow() override = default;
 
-        /// Gets whether the user may resize the window.
+        /**
+         * @brief Gets whether the user may resize the window.
+         * @return true if user resizing is allowed.
+         */
         [[nodiscard]] bool getAllowUserResizingProperty() const;
 
-        /// Sets whether the user may resize the window.
+        /**
+         * @brief Sets whether the user may resize the window.
+         * @param value true to allow user resizing; false to prevent it.
+         */
         void setAllowUserResizingProperty(bool value);
 
-        /// Gets the client bounds of the window.
+        /**
+         * @brief Gets the client bounds of the window.
+         * @return A Rectangle describing the client area in screen coordinates.
+         */
         [[nodiscard]] Rectangle getClientBoundsProperty() const;
 
-        /// Gets the current display orientation.
+        /**
+         * @brief Gets the current display orientation.
+         * @return The current DisplayOrientation value.
+         */
         [[nodiscard]] DisplayOrientation getCurrentOrientationProperty() const;
 
-        /// Gets the native window handle as an integer pointer value.
+        /**
+         * @brief Gets the native window handle as an integer pointer value.
+         * @return The platform window handle.
+         */
         [[nodiscard]] SharpRuntime::IntPtr getHandleProperty() const;
 
-        /// Gets the name of the screen/display containing this window.
+        /**
+         * @brief Gets the name of the screen/display containing this window.
+         * @return A const reference to the screen device name string.
+         */
         [[nodiscard]] const String& getScreenDeviceNameProperty() const;
 
-        /// Gets the cached title of the window.
+        /**
+         * @brief Gets the cached title of the window.
+         * @return A const reference to the window title string.
+         */
         [[nodiscard]] const String& getTitleProperty() const;
 
-        /// Sets the title of the window and updates the native SDL window.
+        /**
+         * @brief Sets the title of the window and updates the native SDL window.
+         * @param title The new window title.
+         */
         void setTitleProperty(const String& title);
 
-        /// Gets whether the window border is hidden.
+        /**
+         * @brief Gets whether the window border is hidden.
+         * @return true if the window is borderless.
+         */
         [[nodiscard]] bool getIsBorderlessEXTProperty() const;
 
-        /// Shows or hides the window border when supported by SDL.
+        /**
+         * @brief Shows or hides the window border when supported by SDL.
+         * @param value true to remove the border; false to restore it.
+         */
         void setIsBorderlessEXTProperty(bool value);
 
-        /// Begins a fullscreen/windowed device change.
+        /**
+         * @brief Begins a fullscreen/windowed device change.
+         * @param willBeFullScreen true if the new mode is fullscreen; false for windowed.
+         */
         void BeginScreenDeviceChange(bool willBeFullScreen);
 
-        /// Ends a device change using the specified display name and client size.
+        /**
+         * @brief Ends a device change using the specified display name and client size.
+         * @param screenDeviceName The name of the display adapter.
+         * @param clientWidth The new client area width in pixels.
+         * @param clientHeight The new client area height in pixels.
+         */
         void EndScreenDeviceChange(const String& screenDeviceName, intcs clientWidth, intcs clientHeight);
 
-        /// Ends a device change using the current client size.
+        /**
+         * @brief Ends a device change using the current client size.
+         * @param screenDeviceName The name of the display adapter.
+         */
         void EndScreenDeviceChange(const String& screenDeviceName);
 
-        /// Returns the fully-qualified .NET type name of this class.
+        /**
+         * @brief Returns the fully-qualified .NET type name of this class.
+         * @return A const reference to the type name string.
+         */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
-        /// Called when the window is activated.
+        /** @brief Called when the window is activated. */
         void OnActivated();
 
-        /// Raises ClientSizeChanged.
+        /** @brief Raises ClientSizeChanged. */
         void OnClientSizeChanged();
 
-        /// Called when the window is deactivated.
+        /** @brief Called when the window is deactivated. */
         void OnDeactivated();
 
-        /// Raises OrientationChanged.
+        /** @brief Raises OrientationChanged. */
         void OnOrientationChanged();
 
-        /// Called when the window should repaint.
+        /** @brief Called when the window should repaint. */
         void OnPaint();
 
-        /// Raises ScreenDeviceNameChanged.
+        /** @brief Raises ScreenDeviceNameChanged. */
         void OnScreenDeviceNameChanged();
 
-        /// Stores supported orientations and adjusts current orientation if needed.
+        /**
+         * @brief Stores supported orientations and adjusts current orientation if needed.
+         * @param orientations Bitmask of the orientations the game supports.
+         */
         void SetSupportedOrientations(DisplayOrientation orientations);
 
-        /// Applies the title to the native window.
+        /**
+         * @brief Applies the title to the native window.
+         * @param title The title string to apply.
+         */
         virtual void SetTitle(const String& title);
 
     private:

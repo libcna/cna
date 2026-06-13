@@ -15,14 +15,22 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    /// Sound effect instance whose audio buffers are submitted dynamically by user code.
+    /** @brief Sound effect instance whose audio buffers are submitted dynamically by user code. */
     class DynamicSoundEffectInstance final : public SoundEffectInstance
     {
     public:
-        /// Raised when the instance needs more submitted audio buffers.
+        /** @brief Raised when the instance needs more submitted audio buffers. */
         System::EventHandler<System::EventArgs> BufferNeeded;
 
+        /**
+         * @brief Constructs a DynamicSoundEffectInstance with the specified format.
+         *
+         * @param sampleRate Audio sample rate in Hz.
+         * @param channels   Channel layout (Mono or Stereo).
+         */
         DynamicSoundEffectInstance(SharpRuntime::intcs sampleRate, AudioChannels channels);
+
+        /** @brief Destroys the instance and releases the audio stream. */
         ~DynamicSoundEffectInstance() override;
 
         DynamicSoundEffectInstance(const DynamicSoundEffectInstance&) = delete;
@@ -30,54 +38,106 @@ namespace Microsoft::Xna::Framework::Audio
         DynamicSoundEffectInstance(DynamicSoundEffectInstance&&) = delete;
         DynamicSoundEffectInstance& operator=(DynamicSoundEffectInstance&&) = delete;
 
-        /// Gets the number of submitted buffers still pending hardware playback.
+        /**
+         * @brief Gets the number of submitted buffers still pending hardware playback.
+         *
+         * @return Pending buffer count.
+         */
         [[nodiscard]] SharpRuntime::intcs getPendingBufferCountProperty() const;
 
-        /// Dynamic instances cannot be looped; always returns false.
+        /**
+         * @brief Dynamic instances cannot be looped; always returns false.
+         *
+         * @return false.
+         */
         [[nodiscard]] bool getIsLoopedProperty() const override;
+
+        /**
+         * @brief Attempting to set IsLooped on a dynamic instance has no effect.
+         *
+         * @param value Ignored.
+         */
         void setIsLoopedProperty(bool value);
 
-        /// Gets whether this instance has been disposed.
+        /**
+         * @brief Gets whether this instance has been disposed.
+         *
+         * @return true if disposed; otherwise false.
+         */
         [[nodiscard]] bool getIsDisposedProperty() const;
 
-        /// Converts a byte count to playback duration for this instance's format.
+        /**
+         * @brief Converts a byte count to playback duration for this instance's format.
+         *
+         * @param sizeInBytes Number of PCM data bytes.
+         * @return Corresponding playback duration.
+         */
         [[nodiscard]] System::TimeSpan GetSampleDuration(SharpRuntime::intcs sizeInBytes) const;
 
-        /// Converts a duration to a byte count for this instance's format.
+        /**
+         * @brief Converts a duration to a byte count for this instance's format.
+         *
+         * @param duration Desired playback duration.
+         * @return Number of bytes required.
+         */
         [[nodiscard]] SharpRuntime::intcs GetSampleSizeInBytes(System::TimeSpan duration) const;
 
-        /// Requests more buffers if needed, then starts or continues playback.
+        /** @brief Requests more buffers if needed, then starts or continues playback. */
         void Play() override;
 
-        /// Stops playback and clears all queued buffers.
+        /** @brief Stops playback and clears all queued buffers. */
         void Stop() override;
 
-        /// Submits a complete 16-bit PCM byte buffer.
+        /**
+         * @brief Submits a complete 16-bit PCM byte buffer for playback.
+         *
+         * @param buffer PCM audio data.
+         */
         void SubmitBuffer(const std::vector<SharpRuntime::bytecs>& buffer);
 
-        /// Submits a range from a 16-bit PCM byte buffer.
+        /**
+         * @brief Submits a range from a 16-bit PCM byte buffer for playback.
+         *
+         * @param buffer PCM audio data.
+         * @param offset Byte offset into the buffer.
+         * @param count  Number of bytes to submit.
+         */
         void SubmitBuffer(const std::vector<SharpRuntime::bytecs>& buffer,
                           SharpRuntime::intcs offset,
                           SharpRuntime::intcs count);
 
-        /// Submits a complete float32 sample buffer.
+        /**
+         * @brief Submits a complete float32 sample buffer for playback.
+         *
+         * @param buffer Float32 audio samples.
+         */
         void SubmitFloatBufferEXT(const std::vector<float>& buffer);
 
-        /// Submits a range from a float32 sample buffer.
+        /**
+         * @brief Submits a range from a float32 sample buffer for playback.
+         *
+         * @param buffer Float32 audio samples.
+         * @param offset Sample offset into the buffer.
+         * @param count  Number of samples to submit.
+         */
         void SubmitFloatBufferEXT(const std::vector<float>& buffer,
                                   SharpRuntime::intcs offset,
                                   SharpRuntime::intcs count);
 
-        /// Submits any pending pre-play buffers to the hardware stream.
+        /** @brief Submits any pending pre-play buffers to the hardware stream. */
         void QueueInitialBuffers();
 
-        /// Clears all pending buffers without stopping playback.
+        /** @brief Clears all pending buffers without stopping playback. */
         void ClearBuffers();
 
-        /// Pumps stream data and raises BufferNeeded when more data is required.
+        /** @brief Pumps stream data and raises BufferNeeded when more data is required. */
         void Update();
 
-        /// Returns the current playback state based on the dynamic track.
+        /**
+         * @brief Returns the current playback state based on the dynamic track.
+         *
+         * @return Current SoundState.
+         */
         [[nodiscard]] SoundState getStateProperty() const override;
 
     private:

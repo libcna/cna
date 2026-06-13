@@ -2,17 +2,22 @@
 
 namespace CNA
 {
-    /**
-     * @brief Severity level of a log message.
-     */
+    /** @brief Severity level of a log message. */
     enum class LogLevel
     {
-        FATAL = 0, ///< Critical issue: key business functionalities are not working.
-        ERROR = 1, ///< One or more functionalities are not working properly.
-        WARN = 2, ///< Unexpected behavior occurred, but the application continues.
-        INFO = 3, ///< Informational message about normal application events.
-        DEBUG = 4, ///< Useful for debugging and troubleshooting.
-        TRACE = 5, ///< Fine-grained, highly detailed information for step-by-step tracing.
-        EXPERIMENT = 100 ///< Used for experimental features and test-related logging.
+        /** @brief Critical issue: key business functionalities are not working. */
+        FATAL = 0,
+        /** @brief One or more functionalities are not working properly. */
+        ERROR = 1,
+        /** @brief Unexpected behavior occurred, but the application continues. */
+        WARN = 2,
+        /** @brief Informational message about normal application events. */
+        INFO = 3,
+        /** @brief Useful for debugging and troubleshooting. */
+        DEBUG = 4,
+        /** @brief Fine-grained, highly detailed information for step-by-step tracing. */
+        TRACE = 5,
+        /** @brief Used for experimental features and test-related logging. */
+        EXPERIMENT = 100
     };
 }

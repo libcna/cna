@@ -19,76 +19,160 @@ namespace Microsoft::Xna::Framework::Storage
 {
     class StorageDevice;
 
-    /// Provides a logical collection of files used for user-data storage.
+    /** @brief Provides a logical collection of files used for user-data persistence. */
     class StorageContainer : public System::Object, public System::IDisposable
     {
     public:
+        /** @brief Destroys the container. */
         ~StorageContainer() override;
 
+        /** @brief Releases the resources used by this container. */
         void Dispose() override;
 
-        /// The name passed to BeginOpenContainer.
+        /**
+         * @brief Gets the display name that was passed to BeginOpenContainer.
+         *
+         * @return Container display name.
+         */
         [[nodiscard]] const std::string& getDisplayNameProperty() const;
 
-        /// Whether Dispose() has been called.
+        /**
+         * @brief Gets whether Dispose() has been called on this container.
+         *
+         * @return true if disposed; otherwise false.
+         */
         [[nodiscard]] bool getIsDisposedProperty() const;
 
-        /// The device that owns this container.
+        /**
+         * @brief Gets the StorageDevice that owns this container.
+         *
+         * @return Reference to the owning StorageDevice.
+         */
         [[nodiscard]] const StorageDevice& getStorageDeviceProperty() const;
 
-        /// Fired when Dispose() is called.
+        /** @brief Raised when Dispose() is called. */
         System::EventHandler<System::EventArgs> Disposing;
 
+        /** @brief Returns the fully-qualified .NET type name. */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
         // ---- Directory operations ----
 
-        /// Creates a subdirectory relative to this container's root.
+        /**
+         * @brief Creates a subdirectory relative to this container's root.
+         *
+         * @param directory Relative directory path to create.
+         */
         void CreateDirectory(const std::string& directory);
 
-        /// Returns true if the relative directory exists.
+        /**
+         * @brief Returns true if the relative directory exists.
+         *
+         * @param directory Relative directory path to check.
+         * @return true if the directory exists; otherwise false.
+         */
         [[nodiscard]] bool DirectoryExists(const std::string& directory) const;
 
-        /// Deletes a relative directory (must be empty).
+        /**
+         * @brief Deletes a relative directory (must be empty).
+         *
+         * @param directory Relative directory path to delete.
+         */
         void DeleteDirectory(const std::string& directory);
 
-        /// Returns names of all subdirectories in this container's root.
+        /**
+         * @brief Returns the names of all subdirectories in this container's root.
+         *
+         * @return Vector of directory name strings.
+         */
         [[nodiscard]] std::vector<std::string> GetDirectoryNames() const;
 
-        /// Returns names of subdirectories matching a glob pattern.
+        /**
+         * @brief Returns the names of subdirectories matching a glob pattern.
+         *
+         * @param searchPattern Glob pattern to match directory names against.
+         * @return Vector of matching directory name strings.
+         */
         [[nodiscard]] std::vector<std::string> GetDirectoryNames(
             const std::string& searchPattern) const;
 
         // ---- File operations ----
 
-        /// Creates or truncates a file and returns a write stream.
+        /**
+         * @brief Creates or truncates a file and returns a write stream.
+         *
+         * @param file Relative file path.
+         * @return Unique pointer to a writable Stream.
+         */
         [[nodiscard]] std::unique_ptr<System::IO::Stream> CreateFile(
             const std::string& file);
 
-        /// Returns true if the relative file exists.
+        /**
+         * @brief Returns true if the relative file exists.
+         *
+         * @param file Relative file path.
+         * @return true if the file exists; otherwise false.
+         */
         [[nodiscard]] bool FileExists(const std::string& file) const;
 
-        /// Deletes a relative file.
+        /**
+         * @brief Deletes a relative file.
+         *
+         * @param file Relative file path to delete.
+         */
         void DeleteFile(const std::string& file);
 
-        /// Returns names of all files in this container's root.
+        /**
+         * @brief Returns the names of all files in this container's root.
+         *
+         * @return Vector of file name strings.
+         */
         [[nodiscard]] std::vector<std::string> GetFileNames() const;
 
-        /// Returns names of files matching a glob pattern.
+        /**
+         * @brief Returns the names of files matching a glob pattern.
+         *
+         * @param searchPattern Glob pattern to match file names against.
+         * @return Vector of matching file name strings.
+         */
         [[nodiscard]] std::vector<std::string> GetFileNames(
             const std::string& searchPattern) const;
 
         // ---- Stream open ----
 
+        /**
+         * @brief Opens a file stream with the specified file mode.
+         *
+         * @param file     Relative file path.
+         * @param fileMode Mode for opening the file.
+         * @return Unique pointer to the opened Stream.
+         */
         [[nodiscard]] std::unique_ptr<System::IO::Stream> OpenFile(
             const std::string& file,
             System::IO::FileMode fileMode);
 
+        /**
+         * @brief Opens a file stream with the specified file mode and access.
+         *
+         * @param file       Relative file path.
+         * @param fileMode   Mode for opening the file.
+         * @param fileAccess Desired read/write access.
+         * @return Unique pointer to the opened Stream.
+         */
         [[nodiscard]] std::unique_ptr<System::IO::Stream> OpenFile(
             const std::string& file,
             System::IO::FileMode fileMode,
             System::IO::FileAccess fileAccess);
 
+        /**
+         * @brief Opens a file stream with the specified file mode, access, and share mode.
+         *
+         * @param file       Relative file path.
+         * @param fileMode   Mode for opening the file.
+         * @param fileAccess Desired read/write access.
+         * @param fileShare  Sharing mode for concurrent access.
+         * @return Unique pointer to the opened Stream.
+         */
         [[nodiscard]] std::unique_ptr<System::IO::Stream> OpenFile(
             const std::string& file,
             System::IO::FileMode fileMode,

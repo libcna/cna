@@ -19,7 +19,7 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    /// Abstract base class for device sensors; provides current-value and event-notification infrastructure.
+    /** @brief Abstract base class for device sensors; provides current-value and event-notification infrastructure. */
     template <typename TSensorReading>
     class SensorBase : public System::Object, public System::IDisposable
     {

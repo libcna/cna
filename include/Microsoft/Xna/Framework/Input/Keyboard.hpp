@@ -12,20 +12,32 @@
 
 namespace Microsoft::Xna::Framework::Input
 {
-    /// Allows retrieval of keystrokes from a keyboard input device.
+    /**
+     * @brief Allows getting keystrokes from keyboard.
+     */
     class Keyboard
     {
     public:
         Keyboard() = delete;
 
-        /// Returns a snapshot of current keyboard state.
+        /**
+         * @brief Returns the current keyboard state.
+         * @return The current keyboard state.
+         */
         static KeyboardState GetState();
 
-        /// Returns a snapshot of current keyboard state for the given player.
-        /// In XNA 4.0 this ignores playerIndex and returns the shared state.
+        /**
+         * @brief Returns the current keyboard state for a given player.
+         * @param playerIndex Player index of the keyboard.
+         * @return The current keyboard state.
+         */
         static KeyboardState GetState(Microsoft::Xna::Framework::PlayerIndex playerIndex);
 
-        /// Returns the Keys value corresponding to the given hardware scancode (FNA extension).
+        /**
+         * @brief Returns the Keys value corresponding to the given hardware scancode (FNA extension).
+         * @param scancode The scancode to translate.
+         * @return The corresponding Keys value.
+         */
         NOXNA static Keys GetKeyFromScancodeEXT(Keys scancode);
     };
 }

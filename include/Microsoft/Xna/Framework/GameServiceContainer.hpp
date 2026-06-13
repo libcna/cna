@@ -12,26 +12,30 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Stores game services and retrieves them by service type.
+    /** @brief Stores game services and retrieves them by service type. */
     class GameServiceContainer : public System::IServiceProvider
     {
     public:
-        /// Creates an empty service container.
+        /** @brief Creates an empty service container. */
         GameServiceContainer();
 
-        /// Destructor.
+        /** @brief Destructor. */
         ~GameServiceContainer() override = default;
 
-        /// Copying is disabled; services are registered by pointer identity.
+        /** @brief Copying is disabled; services are registered by pointer identity. */
         NOXNA GameServiceContainer(const GameServiceContainer&) = delete;
-        /// Copy assignment is disabled.
+        /** @brief Copy assignment is disabled. */
         NOXNA GameServiceContainer& operator=(const GameServiceContainer&) = delete;
-        /// Move constructor.
+        /** @brief Move constructor. */
         NOXNA GameServiceContainer(GameServiceContainer&&) = default;
-        /// Move assignment operator.
+        /** @brief Move assignment operator. */
         NOXNA GameServiceContainer& operator=(GameServiceContainer&&) = default;
 
-        /// Adds a service provider for the specified service type.
+        /**
+         * @brief Adds a service provider for the specified service type.
+         * @tparam TService The service interface type to register under.
+         * @param provider Pointer to the service implementation; must not be null.
+         */
         template <typename TService>
         void AddService(TService* provider)
         {
@@ -43,27 +47,45 @@ namespace Microsoft::Xna::Framework
             AddService(typeid(TService), static_cast<void*>(provider));
         }
 
-        /// Adds a service provider using a runtime type key.
+        /**
+         * @brief Adds a service provider using a runtime type key.
+         * @param type The runtime type used as the service key.
+         * @param provider Pointer to the service implementation.
+         */
         void AddService(const std::type_info& type, void* provider);
 
-        /// Gets a service provider for the specified service type.
+        /**
+         * @brief Gets a service provider for the specified service type.
+         * @tparam TService The service interface type to look up.
+         * @return Pointer to the registered service, or nullptr if not found.
+         */
         template <typename TService>
         [[nodiscard]] TService* GetService() const
         {
             return static_cast<TService*>(GetService(typeid(TService)));
         }
 
-        /// Gets a service provider using a runtime type key.
+        /**
+         * @brief Gets a service provider using a runtime type key.
+         * @param type The runtime type used as the service key.
+         * @return Pointer to the registered service, or nullptr if not found.
+         */
         [[nodiscard]] void* GetService(const std::type_info& type) const override;
 
-        /// Removes the service registered for the specified service type.
+        /**
+         * @brief Removes the service registered for the specified service type.
+         * @tparam TService The service interface type to unregister.
+         */
         template <typename TService>
         void RemoveService()
         {
             RemoveService(typeid(TService));
         }
 
-        /// Removes the service registered for the runtime type key.
+        /**
+         * @brief Removes the service registered for the runtime type key.
+         * @param type The runtime type whose service entry should be removed.
+         */
         void RemoveService(const std::type_info& type);
 
     private:

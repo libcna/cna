@@ -7,30 +7,62 @@
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
-    /// Packed vector type storing a single alpha value as an 8-bit unsigned integer.
+    /**
+     * @brief Packed vector type containing a single alpha value as an 8-bit unsigned integer.
+     */
     struct Alpha8 : public IPackedVectorT<uint8_t>
     {
-        /// Constructs an Alpha8 with a packed value of zero.
+        /** @brief Constructs an Alpha8 with a packed value of zero. */
         Alpha8() : packedValue_(0) {}
-        /// Constructs an Alpha8 from a normalized alpha float in [0, 1].
+
+        /**
+         * @brief Constructs an Alpha8 from a normalized alpha float in [0, 1].
+         * @param alpha The alpha component in the range [0, 1].
+         */
         explicit Alpha8(float alpha) : packedValue_(Pack(alpha)) {}
 
-        /// Gets the packed 8-bit alpha value.
+        /**
+         * @brief Gets the packed 8-bit alpha value.
+         * @return The packed byte value.
+         */
         [[nodiscard]] uint8_t getPackedValueProperty() const override { return packedValue_; }
-        /// Sets the packed 8-bit alpha value.
+
+        /**
+         * @brief Sets the packed 8-bit alpha value.
+         * @param v The new packed byte value.
+         */
         void setPackedValueProperty(uint8_t v) override { packedValue_ = v; }
 
-        /// Packs the W component of a Vector4 as an 8-bit alpha value.
+        /**
+         * @brief Packs the W component of a Vector4 as an 8-bit alpha value.
+         * @param v Vector containing the alpha in the W component.
+         */
         void PackFromVector4(const Vector4& v) override { packedValue_ = Pack(v.W); }
-        /// Expands the packed value to a Vector4 with XYZW = {0, 0, 0, alpha}.
+
+        /**
+         * @brief Expands the packed value to a Vector4 with components {0, 0, 0, alpha}.
+         * @return The unpacked Vector4.
+         */
         [[nodiscard]] Vector4 ToVector4() const { return {0.0f, 0.0f, 0.0f, packedValue_ / 255.0f}; }
 
-        /// Returns the alpha as a normalized float in [0, 1].
+        /**
+         * @brief Returns the alpha as a normalized float in [0, 1].
+         * @return The alpha component.
+         */
         [[nodiscard]] float ToAlpha() const { return packedValue_ / 255.0f; }
 
-        /// Returns true if both values are equal.
+        /**
+         * @brief Returns true if both Alpha8 values are equal.
+         * @param o The other Alpha8 to compare.
+         * @return True if equal.
+         */
         bool operator==(const Alpha8& o) const { return packedValue_ == o.packedValue_; }
-        /// Returns true if both values are not equal.
+
+        /**
+         * @brief Returns true if both Alpha8 values are not equal.
+         * @param o The other Alpha8 to compare.
+         * @return True if not equal.
+         */
         bool operator!=(const Alpha8& o) const { return !(*this == o); }
 
     private:

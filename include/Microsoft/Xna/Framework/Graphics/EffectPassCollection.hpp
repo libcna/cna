@@ -8,38 +8,92 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// An indexed collection of EffectPass objects within a technique.
+    /**
+     * @brief An indexed, name-keyed collection of EffectPass objects within a technique.
+     */
     class EffectPassCollection
     {
     public:
-        /// Constructs an empty EffectPassCollection.
+        /** @brief Constructs an empty EffectPassCollection. */
         EffectPassCollection() = default;
 
-        /// Gets the number of passes in this collection.
+        /**
+         * @brief Gets the number of passes in this collection.
+         *
+         * @return The pass count.
+         */
         [[nodiscard]] int getCountProperty() const;
-        /// Gets the pass at the specified index.
+
+        /**
+         * @brief Gets the pass at the specified index (mutable overload).
+         *
+         * @param index Zero-based index of the pass.
+         * @return Reference to the pass.
+         */
         [[nodiscard]] EffectPass& operator[](int index);
-        /// Gets the pass at the specified index (const overload).
+
+        /**
+         * @brief Gets the pass at the specified index (const overload).
+         *
+         * @param index Zero-based index of the pass.
+         * @return Const reference to the pass.
+         */
         [[nodiscard]] const EffectPass& operator[](int index) const;
-        /// Gets the pass with the specified name, or nullptr if not found.
+
+        /**
+         * @brief Gets the pass with the specified name.
+         *
+         * @param name The pass name to search for.
+         * @return Pointer to the matching pass, or nullptr if not found.
+         */
         [[nodiscard]] EffectPass* operator[](const std::string& name);
-        /// Gets the pass with the specified name, or nullptr if not found (const overload).
+
+        /**
+         * @brief Gets the pass with the specified name (const overload).
+         *
+         * @param name The pass name to search for.
+         * @return Const pointer to the matching pass, or nullptr if not found.
+         */
         [[nodiscard]] const EffectPass* operator[](const std::string& name) const;
 
-        /// Adds a pass to this collection.
+        /**
+         * @brief Adds a pass to this collection.
+         *
+         * @param pass The EffectPass to add.
+         */
         void Add(EffectPass pass);
 
-        /// Iterator type for range-for support.
+        /** @brief Mutable iterator type for range-for support. */
         using iterator = std::vector<EffectPass>::iterator;
-        /// Const iterator type for range-for support.
+        /** @brief Const iterator type for range-for support. */
         using const_iterator = std::vector<EffectPass>::const_iterator;
-        /// Returns an iterator to the beginning of the collection.
+
+        /**
+         * @brief Returns a mutable iterator to the first pass.
+         *
+         * @return Begin iterator.
+         */
         iterator begin();
-        /// Returns an iterator to the end of the collection.
+
+        /**
+         * @brief Returns a mutable iterator past the last pass.
+         *
+         * @return End iterator.
+         */
         iterator end();
-        /// Returns a const iterator to the beginning of the collection.
+
+        /**
+         * @brief Returns a const iterator to the first pass.
+         *
+         * @return Const begin iterator.
+         */
         const_iterator begin() const;
-        /// Returns a const iterator to the end of the collection.
+
+        /**
+         * @brief Returns a const iterator past the last pass.
+         *
+         * @return Const end iterator.
+         */
         const_iterator end() const;
 
     private:

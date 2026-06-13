@@ -12,11 +12,20 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
 
-    /// A cube texture that can be used as a render target.
+    /** @brief A cube map texture that can be used as a render target. */
     class RenderTargetCube : public TextureCube, public IRenderTarget
     {
     public:
-        /// Constructs a RenderTargetCube with the given size, format, depth format, and usage.
+        /**
+         * @brief Creates a RenderTargetCube with the given size, format, depth format, and usage.
+         * @param device                    The graphics device to create the render target on.
+         * @param size                      Width and height of each cube face in pixels.
+         * @param mipMap                    True to generate a full mipmap chain.
+         * @param preferredFormat           The desired surface format.
+         * @param preferredDepthFormat      The desired depth-stencil format.
+         * @param preferredMultiSampleCount Desired multisample count (0 = no multisampling).
+         * @param usage                     Specifies how the render target content is preserved.
+         */
         RenderTargetCube(GraphicsDevice& device, int size,
                          bool mipMap,
                          SurfaceFormat preferredFormat,
@@ -25,23 +34,23 @@ namespace Microsoft::Xna::Framework::Graphics
                          RenderTargetUsage usage = RenderTargetUsage::DiscardContents);
 
         // IRenderTarget
-        /// Gets the width of this render target in pixels.
+        /** @brief Returns the width of each cube face in pixels. */
         [[nodiscard]] int getWidthProperty() const override;
-        /// Gets the height of this render target in pixels.
+        /** @brief Returns the height of each cube face in pixels. */
         [[nodiscard]] int getHeightProperty() const override;
-        /// Gets the number of mipmap levels.
+        /** @brief Returns the number of mipmap levels. */
         [[nodiscard]] int getLevelCountProperty() const override;
-        /// Gets the depth/stencil format of this render target.
+        /** @brief Returns the depth-stencil buffer format. */
         [[nodiscard]] DepthFormat getDepthStencilFormatProperty() const override;
-        /// Gets the number of multisample samples.
+        /** @brief Returns the number of multisample locations. */
         [[nodiscard]] int getMultiSampleCountProperty() const override;
-        /// Gets the render target usage mode.
+        /** @brief Returns the render target usage mode. */
         [[nodiscard]] RenderTargetUsage getRenderTargetUsageProperty() const override;
 
-        /// Gets whether the render target content has been lost.
+        /** @brief Returns false; content is never lost in CNA. */
         [[nodiscard]] bool getIsContentLostProperty() const { return false; }
 
-        /// Raised when the render target content is lost (never raised in CNA).
+        /** @brief Raised when the render target content is lost (never raised in CNA). */
         System::EventHandler<System::EventArgs> ContentLost;
 
     private:

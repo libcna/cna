@@ -14,7 +14,7 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    /// Provides data for a sensor reading event, carrying the latest sensor reading.
+    /** @brief Provides data for a sensor reading event, carrying the latest sensor reading. */
     template <typename T>
     class SensorReadingEventArgs : public System::EventArgs
     {

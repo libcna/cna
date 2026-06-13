@@ -17,97 +17,170 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
-    /// Static media playback controller for songs and the active song queue.
+    /** @brief Static media playback controller for songs and the active song queue. */
     class MediaPlayer final
     {
     public:
         MediaPlayer() = delete;
 
-        /// Raised when the active song changes.
+        /** @brief Raised when the active song changes. */
         static System::EventHandler<System::EventArgs> ActiveSongChanged;
 
-        /// Raised when the media playback state changes.
+        /** @brief Raised when the playback state changes. */
         static System::EventHandler<System::EventArgs> MediaStateChanged;
 
-        /// Returns whether the game has control of its own music playback.
+        /**
+         * @brief Gets whether the game has control of its own background music.
+         *
+         * @return true if the game controls music playback; otherwise false.
+         */
         [[nodiscard]] static bool getGameHasControlProperty();
 
-        /// Gets whether song playback is muted.
+        /**
+         * @brief Gets whether song playback is muted.
+         *
+         * @return true if muted; otherwise false.
+         */
         [[nodiscard]] static bool getIsMutedProperty();
 
-        /// Sets whether song playback is muted.
+        /**
+         * @brief Sets whether song playback is muted.
+         *
+         * @param value New muted state.
+         */
         static void setIsMutedProperty(bool value);
 
-        /// Gets whether the playback queue repeats.
+        /**
+         * @brief Gets whether the playback queue repeats.
+         *
+         * @return true if repeating; otherwise false.
+         */
         [[nodiscard]] static bool getIsRepeatingProperty();
 
-        /// Sets whether the playback queue repeats.
+        /**
+         * @brief Sets whether the playback queue repeats.
+         *
+         * @param value New repeating state.
+         */
         static void setIsRepeatingProperty(bool value);
 
-        /// Gets whether the playback queue is shuffled.
+        /**
+         * @brief Gets whether the playback queue is shuffled.
+         *
+         * @return true if shuffled; otherwise false.
+         */
         [[nodiscard]] static bool getIsShuffledProperty();
 
-        /// Sets whether the playback queue is shuffled.
+        /**
+         * @brief Sets whether the playback queue is shuffled.
+         *
+         * @param value New shuffled state.
+         */
         static void setIsShuffledProperty(bool value);
 
-        /// Gets the current play position.
+        /**
+         * @brief Gets the current playback position within the active song.
+         *
+         * @return Current play position as a TimeSpan.
+         */
         [[nodiscard]] static System::TimeSpan getPlayPositionProperty();
 
-        /// Gets the media queue used by the media player.
+        /**
+         * @brief Gets the media queue managed by this player.
+         *
+         * @return Reference to the MediaQueue.
+         */
         [[nodiscard]] static MediaQueue& getQueueProperty();
 
-        /// Gets the current playback state.
+        /**
+         * @brief Gets the current playback state.
+         *
+         * @return Current MediaState.
+         */
         [[nodiscard]] static MediaState getStateProperty();
 
-        /// Gets the current media volume.
+        /**
+         * @brief Gets the current playback volume. Range [0, 1].
+         *
+         * @return Current volume.
+         */
         [[nodiscard]] static float getVolumeProperty();
 
-        /// Sets the current media volume. Values are clamped to [0, 1].
+        /**
+         * @brief Sets the current playback volume. Values are clamped to [0, 1].
+         *
+         * @param value New volume.
+         */
         static void setVolumeProperty(float value);
 
-        /// Gets whether visualization data collection is enabled.
+        /**
+         * @brief Gets whether visualization data collection is enabled.
+         *
+         * @return true if visualization is enabled; otherwise false.
+         */
         [[nodiscard]] static bool getIsVisualizationEnabledProperty();
 
-        /// Enables or disables visualization data collection.
+        /**
+         * @brief Enables or disables visualization data collection.
+         *
+         * @param value New visualization enabled state.
+         */
         static void setIsVisualizationEnabledProperty(bool value);
 
-        /// Moves playback to the next song.
+        /** @brief Advances playback to the next song in the queue. */
         static void MoveNext();
 
-        /// Moves playback to the previous song.
+        /** @brief Moves playback back to the previous song in the queue. */
         static void MovePrevious();
 
-        /// Pauses playback when a song is playing.
+        /** @brief Pauses playback when a song is currently playing. */
         static void Pause();
 
-        /// Clears the queue, queues one song and starts playback immediately.
+        /**
+         * @brief Clears the queue, enqueues the given song, and starts playback.
+         *
+         * @param song Song to play.
+         */
         static void Play(Song* song);
 
-        /// Clears the queue, queues the collection and starts at the first song.
+        /**
+         * @brief Clears the queue, enqueues the collection, and starts at the first song.
+         *
+         * @param songs Collection of songs to enqueue.
+         */
         static void Play(const SongCollection& songs);
 
-        /// Clears the queue, queues the collection and starts at the specified index.
+        /**
+         * @brief Clears the queue, enqueues the collection, and starts at the specified index.
+         *
+         * @param songs Collection of songs to enqueue.
+         * @param index Zero-based index of the first song to play.
+         */
         static void Play(const SongCollection& songs, SharpRuntime::intcs index);
 
-        /// Resumes playback from a paused state.
+        /** @brief Resumes playback from a paused state. */
         static void Resume();
 
-        /// Stops playback and resets the active queue playback state.
+        /** @brief Stops playback and resets the active queue playback state. */
         static void Stop();
 
-        /// Fills visualization data for the current song when supported by the backend.
+        /**
+         * @brief Fills visualization data for the current song when supported by the backend.
+         *
+         * @param data Visualization data buffer to populate.
+         */
         static void GetVisualizationData(VisualizationData& data);
 
-        /// Performs pending media-player maintenance.
+        /** @brief Performs pending media-player maintenance (timer updates, state transitions). */
         static void Update();
 
-        /// Raises the deferred ActiveSongChanged event.
+        /** @brief Raises the deferred ActiveSongChanged event. */
         static void OnActiveSongChanged();
 
-        /// Raises the deferred MediaStateChanged event.
+        /** @brief Raises the deferred MediaStateChanged event. */
         static void OnMediaStateChanged();
 
-        /// Releases backend media resources if initialized.
+        /** @brief Releases backend media resources if initialized. Called at application exit. */
         static void ProgramExit();
 
     private:

@@ -10,64 +10,136 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
-    /// Represents a song that can be played through MediaPlayer.
+    /** @brief Represents a song that can be played through MediaPlayer. */
     class Song final : public System::Object, public System::IDisposable
     {
     public:
-        /// Creates a song from a local file path and optional display name.
+        /**
+         * @brief Creates a song from a local file path with an optional display name.
+         *
+         * @param fileName File path to the audio file.
+         * @param name     Optional display name; defaults to the file name.
+         */
         explicit Song(std::string fileName, std::string name = {});
 
-        /// Creates a song from a local file path, asset name and duration in milliseconds.
+        /**
+         * @brief Creates a song from a local file path, asset name, and duration in milliseconds.
+         *
+         * @param fileName   File path to the audio file.
+         * @param assetName  Asset/display name for this song.
+         * @param durationMS Song duration in milliseconds.
+         */
         Song(std::string fileName, std::string assetName, SharpRuntime::intcs durationMS);
 
-        /// Disposes the song.
+        /** @brief Destroys the song and releases any associated resources. */
         ~Song() override;
 
-        /// Gets the display name of the song.
+        /**
+         * @brief Gets the display name of this song.
+         *
+         * @return Song name string.
+         */
         [[nodiscard]] const std::string& getNameProperty() const;
 
-        /// Gets the song duration.
+        /**
+         * @brief Gets the playback duration of this song.
+         *
+         * @return Duration as a TimeSpan.
+         */
         [[nodiscard]] System::TimeSpan getDurationProperty() const;
 
-        /// Sets the song duration. Used internally by MediaPlayer/content loading.
+        /**
+         * @brief Sets the playback duration of this song.
+         *
+         * Used internally by MediaPlayer and content loading.
+         *
+         * @param value New duration.
+         */
         void setDurationProperty(System::TimeSpan value);
 
-        /// Gets whether the song is protected.
+        /**
+         * @brief Gets whether this song has DRM copy protection.
+         *
+         * @return true if protected; otherwise false.
+         */
         [[nodiscard]] bool getIsProtectedProperty() const;
 
-        /// Gets whether the song has a user rating.
+        /**
+         * @brief Gets whether this song has a user rating.
+         *
+         * @return true if a rating has been set; otherwise false.
+         */
         [[nodiscard]] bool getIsRatedProperty() const;
 
-        /// Gets how many times the song has been played.
+        /**
+         * @brief Gets how many times this song has been played.
+         *
+         * @return Play count.
+         */
         [[nodiscard]] SharpRuntime::intcs getPlayCountProperty() const;
 
-        /// Sets how many times the song has been played.
+        /**
+         * @brief Sets how many times this song has been played.
+         *
+         * @param value New play count.
+         */
         void setPlayCountProperty(SharpRuntime::intcs value);
 
-        /// Gets the rating value.
+        /**
+         * @brief Gets the user rating for this song.
+         *
+         * @return Rating value.
+         */
         [[nodiscard]] SharpRuntime::intcs getRatingProperty() const;
 
-        /// Gets the track number.
+        /**
+         * @brief Gets the track number of this song within its album.
+         *
+         * @return Track number.
+         */
         [[nodiscard]] SharpRuntime::intcs getTrackNumberProperty() const;
 
-        /// Gets whether the song has been disposed.
+        /**
+         * @brief Gets whether this song has been disposed.
+         *
+         * @return true if disposed; otherwise false.
+         */
         [[nodiscard]] bool getIsDisposedProperty() const;
 
-        /// Disposes the song.
+        /** @brief Releases this song and any associated resources. */
         void Dispose() override;
 
-        /// Compares two songs by their backing handle/path.
+        /**
+         * @brief Returns whether this song is equal to another by comparing their handles.
+         *
+         * @param song Song to compare with.
+         * @return true if equal; otherwise false.
+         */
         [[nodiscard]] bool Equals(const Song* song) const;
 
-        /// Gets the backend/local file handle used by this song.
+        /**
+         * @brief Gets the backend file path or handle used by this song.
+         *
+         * @return Handle/path string.
+         */
         [[nodiscard]] const std::string& getHandle() const;
 
-        /// Constructs a song from a local URI/path string.
+        /**
+         * @brief Constructs a song from a local URI/path string.
+         *
+         * @param name Display name for the song.
+         * @param uri  File URI or local path.
+         * @return Pointer to the newly created Song.
+         */
         static Song* FromUri(const std::string& name, const std::string& uri);
 
+        /** @brief Returns the fully-qualified .NET type name. */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
+        /** @brief Returns whether two songs are equal. */
         friend bool operator==(const Song& song1, const Song& song2);
+
+        /** @brief Returns whether two songs are not equal. */
         friend bool operator!=(const Song& song1, const Song& song2);
 
     private:

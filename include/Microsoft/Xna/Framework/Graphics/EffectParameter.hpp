@@ -23,127 +23,416 @@ namespace Microsoft::Xna::Framework::Graphics
     class Texture3D;
     class TextureCube;
 
-    /// Represents a parameter (uniform) declared in an effect shader.
+    /**
+     * @brief Represents a parameter (uniform variable) declared in an effect shader.
+     */
     class EffectParameter
     {
     public:
-        /// Constructs an EffectParameter with full metadata.
+        /**
+         * @brief Constructs an EffectParameter with full type metadata.
+         *
+         * @param name        Name of the parameter as declared in the shader.
+         * @param semantic    Semantic string attached to the parameter.
+         * @param rowCount    Number of rows (matrix parameters).
+         * @param columnCount Number of columns (matrix parameters).
+         * @param paramClass  Classification of the parameter (scalar, vector, matrix, etc.).
+         * @param paramType   Data type of the parameter.
+         */
         EffectParameter(std::string name, std::string semantic,
                         int rowCount, int columnCount,
                         EffectParameterClass paramClass,
                         EffectParameterType paramType);
 
-        /// Gets the name of this parameter.
+        /**
+         * @brief Gets the name of this parameter.
+         *
+         * @return The parameter name string.
+         */
         [[nodiscard]] const std::string& getNameProperty() const;
-        /// Gets the semantic string of this parameter.
+
+        /**
+         * @brief Gets the semantic string of this parameter.
+         *
+         * @return The semantic string.
+         */
         [[nodiscard]] const std::string& getSemanticProperty() const;
-        /// Gets the number of rows for matrix parameters.
+
+        /**
+         * @brief Gets the number of rows for matrix parameters.
+         *
+         * @return Row count.
+         */
         [[nodiscard]] int getRowCountProperty() const;
-        /// Gets the number of columns for matrix parameters.
+
+        /**
+         * @brief Gets the number of columns for matrix parameters.
+         *
+         * @return Column count.
+         */
         [[nodiscard]] int getColumnCountProperty() const;
-        /// Gets the parameter class.
+
+        /**
+         * @brief Gets the parameter class (scalar, vector, matrix, object, or struct).
+         *
+         * @return The EffectParameterClass value.
+         */
         [[nodiscard]] EffectParameterClass getParameterClassProperty() const;
-        /// Gets the parameter type.
+
+        /**
+         * @brief Gets the parameter type (bool, int, float, texture, etc.).
+         *
+         * @return The EffectParameterType value.
+         */
         [[nodiscard]] EffectParameterType getParameterTypeProperty() const;
-        /// Gets the collection of array elements for array parameters.
+
+        /**
+         * @brief Gets the collection of array elements for array parameters.
+         *
+         * @return Reference to the elements collection.
+         */
         [[nodiscard]] EffectParameterCollection& getElementsProperty();
-        /// Gets the collection of struct members for struct parameters.
+
+        /**
+         * @brief Gets the collection of struct members for struct parameters.
+         *
+         * @return Reference to the structure members collection.
+         */
         [[nodiscard]] EffectParameterCollection& getStructureMembersProperty();
-        /// Gets the collection of annotations attached to this parameter.
+
+        /**
+         * @brief Gets the collection of annotations attached to this parameter.
+         *
+         * @return Reference to the annotation collection.
+         */
         [[nodiscard]] EffectAnnotationCollection& getAnnotationsProperty();
 
         // GetValue overloads
-        /// Gets the value of this parameter as a boolean.
+
+        /**
+         * @brief Gets the value of this parameter as a boolean.
+         *
+         * @return The boolean value stored in this parameter.
+         */
         [[nodiscard]] bool GetValueBoolean() const;
-        /// Gets the value of this parameter as a boolean array.
+
+        /**
+         * @brief Gets the value of this parameter as a boolean array.
+         *
+         * @param count Number of elements to retrieve.
+         * @return Vector of boolean values.
+         */
         [[nodiscard]] std::vector<bool> GetValueBooleanArray(int count) const;
-        /// Gets the value of this parameter as a 32-bit integer.
+
+        /**
+         * @brief Gets the value of this parameter as a 32-bit integer.
+         *
+         * @return The integer value stored in this parameter.
+         */
         [[nodiscard]] int GetValueInt32() const;
-        /// Gets the value of this parameter as an integer array.
+
+        /**
+         * @brief Gets the value of this parameter as an integer array.
+         *
+         * @param count Number of elements to retrieve.
+         * @return Vector of integer values.
+         */
         [[nodiscard]] std::vector<int> GetValueInt32Array(int count) const;
-        /// Gets the value of this parameter as a single-precision float.
+
+        /**
+         * @brief Gets the value of this parameter as a single-precision float.
+         *
+         * @return The float value stored in this parameter.
+         */
         [[nodiscard]] float GetValueSingle() const;
-        /// Gets the value of this parameter as a float array.
+
+        /**
+         * @brief Gets the value of this parameter as a float array.
+         *
+         * @param count Number of elements to retrieve.
+         * @return Vector of float values.
+         */
         [[nodiscard]] std::vector<float> GetValueSingleArray(int count) const;
-        /// Gets the value of this parameter as a string.
+
+        /**
+         * @brief Gets the value of this parameter as a string.
+         *
+         * @return The cached string value.
+         */
         [[nodiscard]] std::string GetValueString() const;
-        /// Gets the value of this parameter as a Matrix.
+
+        /**
+         * @brief Gets the value of this parameter as a Matrix (column-major unpacking).
+         *
+         * @return The Matrix value stored in this parameter.
+         */
         [[nodiscard]] Matrix GetValueMatrix() const;
-        /// Gets the value of this parameter as a Matrix array.
+
+        /**
+         * @brief Gets the value of this parameter as a Matrix array (column-major unpacking).
+         *
+         * @param count Number of matrices to retrieve.
+         * @return Vector of Matrix values.
+         */
         [[nodiscard]] std::vector<Matrix> GetValueMatrixArray(int count) const;
-        /// Gets the transposed value of this parameter as a Matrix.
+
+        /**
+         * @brief Gets the transposed value of this parameter as a Matrix.
+         *
+         * @return The transposed Matrix value stored in this parameter.
+         */
         [[nodiscard]] Matrix GetValueMatrixTranspose() const;
-        /// Gets the transposed value of this parameter as a Matrix array.
+
+        /**
+         * @brief Gets the transposed value of this parameter as a Matrix array.
+         *
+         * @param count Number of matrices to retrieve.
+         * @return Vector of transposed Matrix values.
+         */
         [[nodiscard]] std::vector<Matrix> GetValueMatrixTransposeArray(int count) const;
-        /// Gets the value of this parameter as a Quaternion.
+
+        /**
+         * @brief Gets the value of this parameter as a Quaternion.
+         *
+         * @return The Quaternion value stored in this parameter.
+         */
         [[nodiscard]] Quaternion GetValueQuaternion() const;
-        /// Gets the value of this parameter as a Quaternion array.
+
+        /**
+         * @brief Gets the value of this parameter as a Quaternion array.
+         *
+         * @param count Number of quaternions to retrieve.
+         * @return Vector of Quaternion values.
+         */
         [[nodiscard]] std::vector<Quaternion> GetValueQuaternionArray(int count) const;
-        /// Gets the value of this parameter as a Vector2.
+
+        /**
+         * @brief Gets the value of this parameter as a Vector2.
+         *
+         * @return The Vector2 value stored in this parameter.
+         */
         [[nodiscard]] Vector2 GetValueVector2() const;
-        /// Gets the value of this parameter as a Vector2 array.
+
+        /**
+         * @brief Gets the value of this parameter as a Vector2 array.
+         *
+         * @param count Number of elements to retrieve.
+         * @return Vector of Vector2 values.
+         */
         [[nodiscard]] std::vector<Vector2> GetValueVector2Array(int count) const;
-        /// Gets the value of this parameter as a Vector3.
+
+        /**
+         * @brief Gets the value of this parameter as a Vector3.
+         *
+         * @return The Vector3 value stored in this parameter.
+         */
         [[nodiscard]] Vector3 GetValueVector3() const;
-        /// Gets the value of this parameter as a Vector3 array.
+
+        /**
+         * @brief Gets the value of this parameter as a Vector3 array.
+         *
+         * @param count Number of elements to retrieve.
+         * @return Vector of Vector3 values.
+         */
         [[nodiscard]] std::vector<Vector3> GetValueVector3Array(int count) const;
-        /// Gets the value of this parameter as a Vector4.
+
+        /**
+         * @brief Gets the value of this parameter as a Vector4.
+         *
+         * @return The Vector4 value stored in this parameter.
+         */
         [[nodiscard]] Vector4 GetValueVector4() const;
-        /// Gets the value of this parameter as a Vector4 array.
+
+        /**
+         * @brief Gets the value of this parameter as a Vector4 array.
+         *
+         * @param count Number of elements to retrieve.
+         * @return Vector of Vector4 values.
+         */
         [[nodiscard]] std::vector<Vector4> GetValueVector4Array(int count) const;
-        /// Gets the value of this parameter as a Texture2D pointer.
+
+        /**
+         * @brief Gets the value of this parameter as a Texture2D pointer.
+         *
+         * @return Pointer to the Texture2D, or nullptr if none is set.
+         */
         [[nodiscard]] Texture2D* GetValueTexture2D() const;
-        /// Gets the value of this parameter as a Texture3D pointer.
+
+        /**
+         * @brief Gets the value of this parameter as a Texture3D pointer.
+         *
+         * @return Pointer to the Texture3D, or nullptr if none is set.
+         */
         [[nodiscard]] Texture3D* GetValueTexture3D() const;
-        /// Gets the value of this parameter as a TextureCube pointer.
+
+        /**
+         * @brief Gets the value of this parameter as a TextureCube pointer.
+         *
+         * @return Pointer to the TextureCube, or nullptr if none is set.
+         */
         [[nodiscard]] TextureCube* GetValueTextureCube() const;
 
         // SetValue overloads
-        /// Sets the value of this parameter from a boolean.
+
+        /**
+         * @brief Sets the value of this parameter from a boolean.
+         *
+         * @param value The boolean value to store.
+         */
         void SetValue(bool value);
-        /// Sets the value of this parameter from a boolean array.
+
+        /**
+         * @brief Sets the value of this parameter from a boolean array.
+         *
+         * @param value The array of boolean values to store.
+         */
         void SetValue(const std::vector<bool>& value);
-        /// Sets the value of this parameter from an integer.
+
+        /**
+         * @brief Sets the value of this parameter from a 32-bit integer.
+         *
+         * @param value The integer value to store.
+         */
         void SetValue(int value);
-        /// Sets the value of this parameter from an integer array.
+
+        /**
+         * @brief Sets the value of this parameter from an integer array.
+         *
+         * @param value The array of integer values to store.
+         */
         void SetValue(const std::vector<int>& value);
-        /// Sets the value of this parameter from a float.
+
+        /**
+         * @brief Sets the value of this parameter from a single-precision float.
+         *
+         * @param value The float value to store.
+         */
         void SetValue(float value);
-        /// Sets the value of this parameter from a float array.
+
+        /**
+         * @brief Sets the value of this parameter from a float array.
+         *
+         * @param value The array of float values to store.
+         */
         void SetValue(const std::vector<float>& value);
-        /// Sets the value of this parameter from a string.
+
+        /**
+         * @brief Sets the value of this parameter from a string.
+         *
+         * @param value The string value to store.
+         */
         void SetValue(const std::string& value);
-        /// Sets the value of this parameter from a Matrix.
+
+        /**
+         * @brief Sets the value of this parameter from a Matrix (column-major packing).
+         *
+         * @param value The Matrix to store.
+         */
         void SetValue(const Matrix& value);
-        /// Sets the value of this parameter from a Matrix array.
+
+        /**
+         * @brief Sets the value of this parameter from a Matrix array (column-major packing).
+         *
+         * @param value The array of matrices to store.
+         */
         void SetValue(const std::vector<Matrix>& value);
-        /// Sets the transposed value of this parameter from a Matrix.
+
+        /**
+         * @brief Sets the transposed value of this parameter from a Matrix.
+         *
+         * @param value The Matrix to transpose and store.
+         */
         void SetValueTranspose(const Matrix& value);
-        /// Sets the transposed value of this parameter from a Matrix array.
+
+        /**
+         * @brief Sets the transposed value of this parameter from a Matrix array.
+         *
+         * @param value The array of matrices to transpose and store.
+         */
         void SetValueTranspose(const std::vector<Matrix>& value);
-        /// Sets the value of this parameter from a Quaternion.
+
+        /**
+         * @brief Sets the value of this parameter from a Quaternion.
+         *
+         * @param value The Quaternion to store.
+         */
         void SetValue(const Quaternion& value);
-        /// Sets the value of this parameter from a Quaternion array.
+
+        /**
+         * @brief Sets the value of this parameter from a Quaternion array.
+         *
+         * @param value The array of Quaternion values to store.
+         */
         void SetValue(const std::vector<Quaternion>& value);
-        /// Sets the value of this parameter from a Vector2.
+
+        /**
+         * @brief Sets the value of this parameter from a Vector2.
+         *
+         * @param value The Vector2 to store.
+         */
         void SetValue(const Vector2& value);
-        /// Sets the value of this parameter from a Vector2 array.
+
+        /**
+         * @brief Sets the value of this parameter from a Vector2 array.
+         *
+         * @param value The array of Vector2 values to store.
+         */
         void SetValue(const std::vector<Vector2>& value);
-        /// Sets the value of this parameter from a Vector3.
+
+        /**
+         * @brief Sets the value of this parameter from a Vector3.
+         *
+         * @param value The Vector3 to store.
+         */
         void SetValue(const Vector3& value);
-        /// Sets the value of this parameter from a Vector3 array.
+
+        /**
+         * @brief Sets the value of this parameter from a Vector3 array.
+         *
+         * @param value The array of Vector3 values to store.
+         */
         void SetValue(const std::vector<Vector3>& value);
-        /// Sets the value of this parameter from a Vector4.
+
+        /**
+         * @brief Sets the value of this parameter from a Vector4.
+         *
+         * @param value The Vector4 to store.
+         */
         void SetValue(const Vector4& value);
-        /// Sets the value of this parameter from a Vector4 array.
+
+        /**
+         * @brief Sets the value of this parameter from a Vector4 array.
+         *
+         * @param value The array of Vector4 values to store.
+         */
         void SetValue(const std::vector<Vector4>& value);
-        /// Sets the value of this parameter from a Texture pointer.
+
+        /**
+         * @brief Sets the value of this parameter from a base Texture pointer.
+         *
+         * @param value Pointer to the texture to bind.
+         */
         void SetValue(Texture* value);
-        /// Sets the value of this parameter from a Texture2D pointer.
+
+        /**
+         * @brief Sets the value of this parameter from a Texture2D pointer.
+         *
+         * @param value Pointer to the Texture2D to bind.
+         */
         void SetValue(Texture2D* value);
-        /// Sets the value of this parameter from a Texture3D pointer.
+
+        /**
+         * @brief Sets the value of this parameter from a Texture3D pointer.
+         *
+         * @param value Pointer to the Texture3D to bind.
+         */
         void SetValue(Texture3D* value);
-        /// Sets the value of this parameter from a TextureCube pointer.
+
+        /**
+         * @brief Sets the value of this parameter from a TextureCube pointer.
+         *
+         * @param value Pointer to the TextureCube to bind.
+         */
         void SetValue(TextureCube* value);
 
     private:

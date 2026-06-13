@@ -16,70 +16,95 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Describes a graphics adapter/display available to the system.
+    /** @brief Describes a graphics adapter/display available to the system. */
     class GraphicsAdapter final : public System::Object
     {
     public:
         using IntPtr = std::uintptr_t;
 
-        /// Gets the current display mode for this adapter.
+        /** @brief Returns the current display mode for this adapter. */
         [[nodiscard]] DisplayMode getCurrentDisplayModeProperty() const;
 
-        /// Gets display modes supported by this adapter.
+        /** @brief Returns the display modes supported by this adapter. */
         [[nodiscard]] const DisplayModeCollection& getSupportedDisplayModesProperty() const;
 
-        /// Gets the adapter description.
+        /** @brief Returns the adapter description string. */
         [[nodiscard]] const std::string& getDescriptionProperty() const;
 
-        /// Gets the device id. Not implemented for the SDL backend.
+        /** @brief Returns the device identifier. Not implemented for the SDL backend. */
         [[nodiscard]] SharpRuntime::intcs getDeviceIdProperty() const;
 
-        /// Gets the device/display name.
+        /** @brief Returns the device or display name. */
         [[nodiscard]] const std::string& getDeviceNameProperty() const;
 
-        /// Gets whether this is the default adapter.
+        /** @brief Returns true if this is the default adapter. */
         [[nodiscard]] bool getIsDefaultAdapterProperty() const;
 
-        /// Gets whether the current display mode is widescreen.
+        /**
+         * @brief Returns true if the current display mode has a widescreen aspect ratio.
+         *
+         * Common widescreen modes include 16:9, 16:10, and 2:1.
+         */
         [[nodiscard]] bool getIsWideScreenProperty() const;
 
-        /// Gets the monitor/display handle for this adapter.
+        /** @brief Returns the native monitor handle for this adapter. */
         [[nodiscard]] IntPtr getMonitorHandleProperty() const;
 
-        /// Gets the adapter revision. Not implemented for the SDL backend.
+        /** @brief Returns the adapter revision number. Not implemented for the SDL backend. */
         [[nodiscard]] SharpRuntime::intcs getRevisionProperty() const;
 
-        /// Gets the subsystem id. Not implemented for the SDL backend.
+        /** @brief Returns the subsystem identifier. Not implemented for the SDL backend. */
         [[nodiscard]] SharpRuntime::intcs getSubSystemIdProperty() const;
 
-        /// Gets whether a null device should be used.
+        /** @brief Returns true if a null device should be used instead of hardware. */
         [[nodiscard]] bool getUseNullDeviceProperty() const;
 
-        /// Sets whether a null device should be used.
+        /**
+         * @brief Sets whether a null device should be used.
+         * @param value True to use a null device.
+         */
         void setUseNullDeviceProperty(bool value);
 
-        /// Gets whether a reference device should be used.
+        /** @brief Returns true if a reference (software) device should be used. */
         [[nodiscard]] bool getUseReferenceDeviceProperty() const;
 
-        /// Sets whether a reference device should be used.
+        /**
+         * @brief Sets whether a reference device should be used.
+         * @param value True to use the reference device.
+         */
         void setUseReferenceDeviceProperty(bool value);
 
-        /// Gets the vendor id. Not implemented for the SDL backend.
+        /** @brief Returns the vendor identifier. Not implemented for the SDL backend. */
         [[nodiscard]] SharpRuntime::intcs getVendorIdProperty() const;
 
-        /// Gets the default adapter.
+        /** @brief Returns the default graphics adapter (adapter index 0). */
         [[nodiscard]] static GraphicsAdapter& getDefaultAdapterProperty();
 
-        /// XNA-style static default adapter object.
+        /** @brief The default graphics adapter (XNA-style static accessor). */
         static GraphicsAdapter& DefaultAdapter;
 
-        /// Gets the list of graphics adapters.
+        /** @brief Returns the list of all available graphics adapters. */
         [[nodiscard]] static const std::vector<std::unique_ptr<GraphicsAdapter>>& getAdaptersProperty();
 
-        /// Returns true when the profile is supported by this adapter.
+        /**
+         * @brief Returns true if the given graphics profile is supported by this adapter.
+         * @param graphicsProfile The profile to test.
+         * @return True if the profile is supported.
+         */
         [[nodiscard]] bool IsProfileSupported(GraphicsProfile graphicsProfile) const;
 
-        /// Queries the render target format selected by this adapter.
+        /**
+         * @brief Queries the render target format that the adapter will select for the given inputs.
+         *
+         * @param graphicsProfile           The target graphics profile.
+         * @param format                    The requested surface format.
+         * @param depthFormat               The requested depth format.
+         * @param multiSampleCount          The requested multisample count.
+         * @param selectedFormat            Receives the format that was actually chosen.
+         * @param selectedDepthFormat       Receives the depth format that was actually chosen.
+         * @param selectedMultiSampleCount  Receives the multisample count that was actually chosen.
+         * @return True if the requested format was accepted without substitution.
+         */
         [[nodiscard]] bool QueryRenderTargetFormat(
             GraphicsProfile graphicsProfile,
             SurfaceFormat format,
@@ -90,7 +115,18 @@ namespace Microsoft::Xna::Framework::Graphics
             SharpRuntime::intcs& selectedMultiSampleCount
         ) const;
 
-        /// Queries the back buffer format selected by this adapter.
+        /**
+         * @brief Queries the back-buffer format that the adapter will select for the given inputs.
+         *
+         * @param graphicsProfile           The target graphics profile.
+         * @param format                    The requested surface format.
+         * @param depthFormat               The requested depth format.
+         * @param multiSampleCount          The requested multisample count.
+         * @param selectedFormat            Receives the format that was actually chosen.
+         * @param selectedDepthFormat       Receives the depth format that was actually chosen.
+         * @param selectedMultiSampleCount  Receives the multisample count that was actually chosen.
+         * @return True if the requested format was accepted without substitution.
+         */
         [[nodiscard]] bool QueryBackBufferFormat(
             GraphicsProfile graphicsProfile,
             SurfaceFormat format,
@@ -101,9 +137,10 @@ namespace Microsoft::Xna::Framework::Graphics
             SharpRuntime::intcs& selectedMultiSampleCount
         ) const;
 
-        /// Refreshes the cached adapter list.
+        /** @brief Refreshes the cached list of available graphics adapters. */
         static void AdaptersChanged();
 
+        /** @brief Returns the fully qualified .NET type name of this class. */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:

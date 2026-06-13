@@ -58,25 +58,37 @@ namespace Microsoft::Xna::Framework::Content
         void RegisterBuiltinLoaders();
 
     public:
-        /// Constructs a ContentManager with a default root directory of "Content".
+        /** @brief Constructs a ContentManager with a default root directory of "Content". */
         ContentManager();
-        /// Destroys the content manager and releases loaded assets.
+
+        /** @brief Destroys the content manager and releases all loaded assets. */
         ~ContentManager() override = default;
 
-        /// Releases all resources used by this content manager.
+        /** @brief Releases all resources used by this content manager. */
         void Dispose() override;
 
-        /// Sets the graphics device used when loading GPU resources such as textures.
+        /**
+         * @brief Sets the graphics device used when loading GPU resources such as textures.
+         *
+         * @param graphicsDevice The graphics device to associate with this manager.
+         */
         void setGraphicsDevice(Graphics::GraphicsDevice& graphicsDevice);
 
-        /// Returns the graphics device associated with this content manager.
+        /**
+         * @brief Returns the graphics device associated with this content manager.
+         *
+         * @return Reference to the associated GraphicsDevice.
+         */
         [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceInternal() const;
 
-        /// Unloads all cached assets and frees the associated resources.
+        /** @brief Unloads all cached assets and frees the associated resources. */
         void Unload();
 
         /**
          * @brief Registers a custom type reader for assets of type T.
+         *
+         * @tparam T     Asset type this reader produces.
+         * @param reader Unique pointer to the type reader to register.
          */
         template <typename T>
         void RegisterTypeReader(std::unique_ptr<ContentTypeReader<T>> reader)
@@ -142,6 +154,11 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief Resolves the full filesystem path for an asset, trying reader extensions
          *        when the asset name has no extension.
+         *
+         * @tparam T       Asset type.
+         * @param assetName Relative asset name.
+         * @param reader    Type reader whose extensions are tried.
+         * @return Full resolved filesystem path.
          */
         template <typename T>
         [[nodiscard]] std::string ResolveAssetPath(

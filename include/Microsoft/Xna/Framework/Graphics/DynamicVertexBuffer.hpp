@@ -7,11 +7,17 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// A vertex buffer whose content is expected to change frequently.
+    /** @brief A vertex buffer whose content is expected to change frequently. */
     class DynamicVertexBuffer : public VertexBuffer
     {
     public:
-        /// Constructs a DynamicVertexBuffer with the given declaration, vertex count, and usage hint.
+        /**
+         * @brief Constructs a DynamicVertexBuffer with the given declaration, vertex count, and usage hint.
+         * @param device            The graphics device.
+         * @param vertexDeclaration Layout description for the vertex type.
+         * @param vertexCount       Capacity in vertices.
+         * @param bufferUsage       Usage hint for the buffer.
+         */
         DynamicVertexBuffer(GraphicsDevice& device,
                             const VertexDeclaration& vertexDeclaration,
                             int vertexCount,
@@ -20,20 +26,27 @@ namespace Microsoft::Xna::Framework::Graphics
         {
         }
 
-        /// Constructs a DynamicVertexBuffer with the given device and vertex count.
+        /**
+         * @brief Constructs a DynamicVertexBuffer with the given device and vertex count.
+         * @param device      The graphics device.
+         * @param vertexCount Capacity in vertices.
+         */
         DynamicVertexBuffer(GraphicsDevice& device, int vertexCount)
             : VertexBuffer(device, vertexCount)
         {
         }
 
-        /// Gets whether the vertex buffer content has been lost.
+        /** @brief Returns false; content is never lost in CNA. */
         [[nodiscard]] bool getIsContentLostProperty() const { return false; }
 
-        // XNA 4.0 compliance: ContentLost event (never raised in CNA — we never lose content)
-        /// Raised when the vertex buffer content is lost (never raised in CNA).
+        /** @brief Raised when the vertex buffer content is lost (never raised in CNA). */
         System::EventHandler<System::EventArgs> ContentLost;
 
-        /// Uploads vertex data using SetDataOptions::Discard semantics.
+        /**
+         * @brief Uploads vertex data with Discard semantics (equivalent to SetData).
+         * @param vertices Pointer to the source vertex array.
+         * @param count    Number of vertices to upload.
+         */
         void SetDataDiscard(const VertexPositionColor* vertices, int count)
         {
             SetData(vertices, count);

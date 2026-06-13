@@ -9,38 +9,92 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// An indexed collection of EffectAnnotation objects.
+    /**
+     * @brief An indexed, name-keyed collection of EffectAnnotation objects.
+     */
     class EffectAnnotationCollection
     {
     public:
-        /// Constructs an empty EffectAnnotationCollection.
+        /** @brief Constructs an empty EffectAnnotationCollection. */
         EffectAnnotationCollection() = default;
 
-        /// Gets the number of annotations in this collection.
+        /**
+         * @brief Gets the number of annotations in this collection.
+         *
+         * @return The annotation count.
+         */
         [[nodiscard]] int getCountProperty() const;
-        /// Gets the annotation at the specified index.
+
+        /**
+         * @brief Gets the annotation at the specified index (mutable overload).
+         *
+         * @param index Zero-based index of the annotation.
+         * @return Reference to the annotation.
+         */
         [[nodiscard]] EffectAnnotation& operator[](int index);
-        /// Gets the annotation at the specified index (const overload).
+
+        /**
+         * @brief Gets the annotation at the specified index (const overload).
+         *
+         * @param index Zero-based index of the annotation.
+         * @return Const reference to the annotation.
+         */
         [[nodiscard]] const EffectAnnotation& operator[](int index) const;
-        /// Gets the annotation with the specified name, or nullptr if not found.
+
+        /**
+         * @brief Gets the annotation with the specified name.
+         *
+         * @param name The annotation name to search for.
+         * @return Pointer to the matching annotation, or nullptr if not found.
+         */
         [[nodiscard]] EffectAnnotation* operator[](const std::string& name);
-        /// Gets the annotation with the specified name, or nullptr if not found (const overload).
+
+        /**
+         * @brief Gets the annotation with the specified name (const overload).
+         *
+         * @param name The annotation name to search for.
+         * @return Const pointer to the matching annotation, or nullptr if not found.
+         */
         [[nodiscard]] const EffectAnnotation* operator[](const std::string& name) const;
 
-        /// Adds an annotation to this collection.
+        /**
+         * @brief Adds an annotation to this collection.
+         *
+         * @param annotation The EffectAnnotation to add.
+         */
         void Add(EffectAnnotation annotation);
 
-        /// Iterator type for range-for support.
+        /** @brief Mutable iterator type for range-for support. */
         using iterator = std::vector<EffectAnnotation>::iterator;
-        /// Const iterator type for range-for support.
+        /** @brief Const iterator type for range-for support. */
         using const_iterator = std::vector<EffectAnnotation>::const_iterator;
-        /// Returns an iterator to the beginning of the collection.
+
+        /**
+         * @brief Returns a mutable iterator to the first annotation.
+         *
+         * @return Begin iterator.
+         */
         iterator begin();
-        /// Returns an iterator to the end of the collection.
+
+        /**
+         * @brief Returns a mutable iterator past the last annotation.
+         *
+         * @return End iterator.
+         */
         iterator end();
-        /// Returns a const iterator to the beginning of the collection.
+
+        /**
+         * @brief Returns a const iterator to the first annotation.
+         *
+         * @return Const begin iterator.
+         */
         const_iterator begin() const;
-        /// Returns a const iterator to the end of the collection.
+
+        /**
+         * @brief Returns a const iterator past the last annotation.
+         *
+         * @return Const end iterator.
+         */
         const_iterator end() const;
 
     private:

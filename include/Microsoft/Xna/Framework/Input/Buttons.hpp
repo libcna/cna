@@ -6,7 +6,9 @@
 
 namespace Microsoft::Xna::Framework::Input
 {
-    /// Defines the buttons on a gamepad.
+    /**
+     * @brief Defines the buttons on a gamepad.
+     */
     enum class Buttons : uint32_t
     {
         DPadUp                = 0x00000001,
@@ -43,30 +45,59 @@ namespace Microsoft::Xna::Framework::Input
         TouchPadEXT           = 0x00100000,
     };
 
+    /**
+     * @brief Combines two Buttons values using bitwise OR.
+     * @param left The left operand.
+     * @param right The right operand.
+     * @return The combined Buttons value.
+     */
     [[nodiscard]] constexpr Buttons operator|(Buttons left, Buttons right)
     {
         using U = std::underlying_type_t<Buttons>;
         return static_cast<Buttons>(static_cast<U>(left) | static_cast<U>(right));
     }
 
+    /**
+     * @brief Masks two Buttons values using bitwise AND.
+     * @param left The left operand.
+     * @param right The right operand.
+     * @return The masked Buttons value.
+     */
     [[nodiscard]] constexpr Buttons operator&(Buttons left, Buttons right)
     {
         using U = std::underlying_type_t<Buttons>;
         return static_cast<Buttons>(static_cast<U>(left) & static_cast<U>(right));
     }
 
+    /**
+     * @brief Inverts a Buttons value using bitwise NOT.
+     * @param b The Buttons value to invert.
+     * @return The inverted Buttons value.
+     */
     [[nodiscard]] constexpr Buttons operator~(Buttons b)
     {
         using U = std::underlying_type_t<Buttons>;
         return static_cast<Buttons>(~static_cast<U>(b));
     }
 
+    /**
+     * @brief Combines a Buttons value with another using bitwise OR-assignment.
+     * @param left The left operand (modified in place).
+     * @param right The right operand.
+     * @return Reference to the modified left operand.
+     */
     constexpr Buttons& operator|=(Buttons& left, Buttons right)
     {
         left = left | right;
         return left;
     }
 
+    /**
+     * @brief Masks a Buttons value with another using bitwise AND-assignment.
+     * @param left The left operand (modified in place).
+     * @param right The right operand.
+     * @return Reference to the modified left operand.
+     */
     constexpr Buttons& operator&=(Buttons& left, Buttons right)
     {
         left = left & right;

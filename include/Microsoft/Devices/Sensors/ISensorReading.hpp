@@ -27,7 +27,7 @@ namespace Microsoft::Devices::Sensors
          */
         [[nodiscard]] virtual const System::DateTimeOffset& getTimestampProperty() const = 0;
 
-        /// Virtual destructor.
+        /** @brief Virtual destructor. */
         virtual ~ISensorReading() = default;
     };
 } // namespace Microsoft::Devices::Sensors

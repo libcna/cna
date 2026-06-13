@@ -3,34 +3,34 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Defines the semantic usage of a vertex element within a vertex declaration.
+    /** @brief Defines the semantic usage of a vertex element within a vertex declaration. */
     enum class VertexElementUsage
     {
-        /// The element contains a position.
+        /** @brief Position data. */
         Position = 0,
-        /// The element contains a color.
+        /** @brief Color data. */
         Color = 1,
-        /// The element contains texture coordinates.
+        /** @brief Texture coordinate data, or user-defined data. */
         TextureCoordinate = 2,
-        /// The element contains a surface normal.
+        /** @brief Normal data. */
         Normal = 3,
-        /// The element contains a binormal (bitangent) vector.
+        /** @brief Binormal data. */
         Binormal = 4,
-        /// The element contains a tangent vector.
+        /** @brief Tangent data. */
         Tangent = 5,
-        /// The element contains blend indices for skinning.
+        /** @brief Blending indices data. */
         BlendIndices = 6,
-        /// The element contains blend weights for skinning.
+        /** @brief Blending weight data. */
         BlendWeight = 7,
-        /// The element contains depth information.
+        /** @brief Depth data. */
         Depth = 8,
-        /// The element contains a fog factor.
+        /** @brief Fog data. */
         Fog = 9,
-        /// The element contains a point size.
+        /** @brief Point size data; usable for drawing point sprites. */
         PointSize = 10,
-        /// The element contains a sample index.
+        /** @brief Sampler data for specifying the displacement value to look up. */
         Sample = 11,
-        /// The element contains a tessellation factor.
+        /** @brief Positive float tessellation factor controlling the rate of tessellation. */
         TessellateFactor = 12,
     };
 }

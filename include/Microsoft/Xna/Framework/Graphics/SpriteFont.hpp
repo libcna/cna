@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::Graphics
     using SharpRuntime::charcs;
     using SharpRuntime::String;
 
-    /// Represents a font texture used to draw text with SpriteBatch.
+    /** @brief Represents a font texture used to draw text with SpriteBatch. */
     class SpriteFont
     {
     public:
@@ -49,22 +49,51 @@ namespace Microsoft::Xna::Framework::Graphics
                          std::vector<Vector3> kerningData,
                          std::optional<charcs> defaultCharacter);
 
-        /// XNA 4.0: SpriteFont.Characters — the characters this font can render.
+        /**
+         * @brief Gets the collection of characters this font can render.
+         * @return Read-only reference to the character list.
+         */
         [[nodiscard]] const std::vector<charcs>& getCharactersProperty() const;
 
-        /// XNA 4.0: SpriteFont.DefaultCharacter — fallback glyph for missing chars.
+        /**
+         * @brief Gets the fallback character used when a requested character is not in the font.
+         * @return Optional fallback character; std::nullopt if unset (throws on miss).
+         */
         [[nodiscard]] std::optional<charcs> getDefaultCharacterProperty() const;
+        /**
+         * @brief Sets the fallback character used when a requested character is not in the font.
+         * @param value Optional fallback character; pass std::nullopt to throw on misses.
+         */
         void setDefaultCharacterProperty(std::optional<charcs> value);
 
-        /// XNA 4.0: SpriteFont.LineSpacing
+        /**
+         * @brief Gets the vertical distance in pixels between the base lines of two consecutive lines of text.
+         * @return Current line spacing in pixels.
+         */
         [[nodiscard]] int getLineSpacingProperty() const;
+        /**
+         * @brief Sets the vertical distance in pixels between the base lines of two consecutive lines of text.
+         * @param value New line spacing in pixels.
+         */
         void setLineSpacingProperty(int value);
 
-        /// XNA 4.0: SpriteFont.Spacing
+        /**
+         * @brief Gets the extra horizontal spacing in pixels applied between characters.
+         * @return Current character spacing offset.
+         */
         [[nodiscard]] float getSpacingProperty() const;
+        /**
+         * @brief Sets the extra horizontal spacing in pixels applied between characters.
+         * @param value New character spacing offset.
+         */
         void setSpacingProperty(float value);
 
-        /// Measures the size of a string when drawn with this font.
+        /**
+         * @brief Measures the size of a string when drawn with this font.
+         *
+         * @param text The text to measure.
+         * @return The width and height of the rendered text, in pixels.
+         */
         [[nodiscard]] Vector2 MeasureString(const String& text) const;
 
     private:

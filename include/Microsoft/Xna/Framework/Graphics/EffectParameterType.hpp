@@ -3,28 +3,30 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Defines the data type of an effect parameter.
+    /**
+     * @brief Defines the data type of an effect parameter.
+     */
     enum class EffectParameterType
     {
-        /// The parameter is a void pointer.
+        /** @brief The parameter is a void pointer. */
         Void,
-        /// The parameter is a Boolean value.
+        /** @brief The parameter is a Boolean value. */
         Bool,
-        /// The parameter is a 32-bit integer.
+        /** @brief The parameter is a 32-bit integer. */
         Int32,
-        /// The parameter is a single-precision floating-point value.
+        /** @brief The parameter is a single-precision floating-point value. */
         Single,
-        /// The parameter is a string.
+        /** @brief The parameter is a string. */
         String,
-        /// The parameter is a texture.
+        /** @brief The parameter is a texture of unspecified dimension. */
         Texture,
-        /// The parameter is a 1D texture.
+        /** @brief The parameter is a 1D texture. */
         Texture1D,
-        /// The parameter is a 2D texture.
+        /** @brief The parameter is a 2D texture. */
         Texture2D,
-        /// The parameter is a 3D texture.
+        /** @brief The parameter is a 3D texture. */
         Texture3D,
-        /// The parameter is a cube texture.
+        /** @brief The parameter is a cube texture. */
         TextureCube
     };
 }

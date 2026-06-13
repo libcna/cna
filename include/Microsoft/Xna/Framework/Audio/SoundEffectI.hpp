@@ -5,13 +5,18 @@ namespace Microsoft::Xna::Framework::Audio
 {
     class SoundEffectInstance;
 
-    /// Abstract interface for types that can create sound effect instances.
+    /** @brief Abstract interface for types that can produce SoundEffectInstance objects. */
     class SoundEffectI
     {
     public:
-        /// Virtual destructor.
+        /** @brief Virtual destructor. */
         virtual ~SoundEffectI() = default;
-        /// Creates a new SoundEffectInstance from this sound effect.
+
+        /**
+         * @brief Creates a new SoundEffectInstance from this sound effect.
+         *
+         * @return A new SoundEffectInstance bound to this effect.
+         */
         [[nodiscard]] virtual SoundEffectInstance CreateInstance() const = 0;
     };
 }

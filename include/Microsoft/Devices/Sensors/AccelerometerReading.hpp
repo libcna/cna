@@ -14,7 +14,7 @@ namespace Microsoft::Devices::Sensors
 {
     using Xna::Framework::Vector3;
 
-    /// Represents one accelerometer sensor reading with a timestamp and acceleration vector.
+    /** @brief Represents one accelerometer sensor reading with a timestamp and acceleration vector. */
     class AccelerometerReading : public ISensorReading
     {
     private:

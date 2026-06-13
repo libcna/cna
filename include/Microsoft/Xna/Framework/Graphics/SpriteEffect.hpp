@@ -7,15 +7,32 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class EffectParameter;
 
-    /// Default effect used by SpriteBatch.
+    /**
+     * @brief Default sprite-rendering effect used internally by SpriteBatch.
+     *
+     * Applies a single world-view-projection matrix transform to a textured quad.
+     */
     class SpriteEffect : public Effect
     {
     public:
+        /**
+         * @brief Constructs a SpriteEffect for the given graphics device.
+         *
+         * @param device The graphics device that will own this effect.
+         */
         explicit SpriteEffect(GraphicsDevice& device);
 
+        /**
+         * @brief Creates a clone of this effect.
+         *
+         * @return Pointer to the cloned Effect.
+         */
         [[nodiscard]] Effect* Clone();
 
     protected:
+        /**
+         * @brief Applies the sprite transform matrix parameter to the graphics device.
+         */
         void OnApply() override;
 
     private:

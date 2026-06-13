@@ -6,11 +6,16 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Thrown when the graphics device is lost.
+    /** @brief Thrown when the graphics device is lost. */
     class DeviceLostException : public std::runtime_error
     {
     public:
+        /** @brief Constructs a DeviceLostException with a default message. */
         DeviceLostException() : std::runtime_error("The graphics device was lost.") {}
+        /**
+         * @brief Constructs a DeviceLostException with a custom message.
+         * @param message Description of the device-lost condition.
+         */
         explicit DeviceLostException(const std::string& message) : std::runtime_error(message) {}
     };
 }

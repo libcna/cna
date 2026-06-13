@@ -11,24 +11,67 @@ namespace Microsoft::Xna::Framework::Media
     class AlbumCollection;
     class SongCollection;
 
-    /// Represents a music genre.
-    /// @note Status: Stub — media library catalog access not implemented
+    /**
+     * @brief Represents a music genre in the media library.
+     *
+     * @note Status: Stub — media library catalog access not implemented.
+     */
     class Genre final : public System::Object, public System::IDisposable
     {
     public:
+        /** @brief Releases the resources used by this genre. */
         void Dispose() override;
 
+        /**
+         * @brief Gets the collection of albums in this genre.
+         *
+         * @return Pointer to the AlbumCollection.
+         */
         [[nodiscard]] AlbumCollection* getAlbumsProperty() const;
+
+        /**
+         * @brief Gets whether this genre has been disposed.
+         *
+         * @return true if disposed; otherwise false.
+         */
         [[nodiscard]] bool getIsDisposedProperty() const;
+
+        /**
+         * @brief Gets the display name of this genre.
+         *
+         * @return Genre name string.
+         */
         [[nodiscard]] std::string getNameProperty() const;
+
+        /**
+         * @brief Gets the collection of songs in this genre.
+         *
+         * @return Pointer to the SongCollection.
+         */
         [[nodiscard]] SongCollection* getSongsProperty() const;
 
+        /**
+         * @brief Returns whether this genre is equal to another.
+         *
+         * @param other Genre to compare with.
+         * @return true if equal; otherwise false.
+         */
         [[nodiscard]] bool Equals(const Genre* other) const;
+
+        /**
+         * @brief Returns a string representation of this genre.
+         *
+         * @return Genre name string.
+         */
         [[nodiscard]] std::string ToString() const;
 
+        /** @brief Returns the fully-qualified .NET type name. */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
+        /** @brief Returns whether two genres are equal. */
         friend bool operator==(const Genre& lhs, const Genre& rhs);
+
+        /** @brief Returns whether two genres are not equal. */
         friend bool operator!=(const Genre& lhs, const Genre& rhs);
     };
 }

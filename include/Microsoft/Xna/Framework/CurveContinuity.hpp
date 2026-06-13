@@ -4,10 +4,12 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Defines the continuity of keys on a Curve.
+    /** @brief Defines the continuity of keys on a Curve. */
     enum class CurveContinuity
     {
-        Smooth = 0, ///< Interpolation can be used between this key and the next.
-        Step   = 1  ///< Interpolation cannot be used; position returns this key's value.
+        /** @brief Interpolation can be used between this key and the next. */
+        Smooth = 0,
+        /** @brief Interpolation cannot be used. A position between the two points returns this point's value. */
+        Step   = 1
     };
 }

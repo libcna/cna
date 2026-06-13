@@ -7,24 +7,51 @@
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
-    /// Packed vector type storing RGBA as four 16-bit unsigned integers in a 64-bit value.
+    /**
+     * @brief Packed vector type storing RGBA as four 16-bit unsigned integers in a 64-bit value.
+     */
     struct Rgba64 : public IPackedVectorT<uint64_t>
     {
-        /// Constructs a Rgba64 with a packed value of zero.
+        /** @brief Constructs a Rgba64 with a packed value of zero. */
         Rgba64() : packedValue_(0) {}
-        /// Constructs a Rgba64 from normalized red, green, blue, alpha floats in [0, 1].
+
+        /**
+         * @brief Constructs a Rgba64 from normalized RGBA floats in [0, 1].
+         * @param r The red component in [0, 1].
+         * @param g The green component in [0, 1].
+         * @param b The blue component in [0, 1].
+         * @param a The alpha component in [0, 1].
+         */
         Rgba64(float r, float g, float b, float a) : packedValue_(Pack(r, g, b, a)) {}
-        /// Constructs a Rgba64 from a Vector4 with components in [0, 1].
+
+        /**
+         * @brief Constructs a Rgba64 from a Vector4 with components in [0, 1].
+         * @param vector Vector containing the XYZW (RGBA) components.
+         */
         Rgba64(Vector4 vector) : packedValue_(Pack(vector.X, vector.Y, vector.Z, vector.W)) {}
 
-        /// Gets the packed 64-bit value.
+        /**
+         * @brief Gets the packed 64-bit value.
+         * @return The packed 64-bit value.
+         */
         [[nodiscard]] uint64_t getPackedValueProperty() const override { return packedValue_; }
-        /// Sets the packed 64-bit value.
+
+        /**
+         * @brief Sets the packed 64-bit value.
+         * @param v The new packed 64-bit value.
+         */
         void setPackedValueProperty(uint64_t v) override { packedValue_ = v; }
 
-        /// Packs the XYZW components of a Vector4 as 16-bit unsigned normalized RGBA channels.
+        /**
+         * @brief Packs the XYZW components of a Vector4 as 16-bit unsigned normalized RGBA channels.
+         * @param v The Vector4 to pack.
+         */
         void PackFromVector4(const Vector4& v) override { packedValue_ = Pack(v.X, v.Y, v.Z, v.W); }
-        /// Expands the packed value to a normalized Vector4.
+
+        /**
+         * @brief Expands the packed value to a normalized Vector4.
+         * @return The unpacked Vector4.
+         */
         [[nodiscard]] Vector4 ToVector4() const
         {
             return {
@@ -35,9 +62,18 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
             };
         }
 
-        /// Returns true if both values are equal.
+        /**
+         * @brief Returns true if both Rgba64 values are equal.
+         * @param o The other Rgba64 to compare.
+         * @return True if equal.
+         */
         bool operator==(const Rgba64& o) const { return packedValue_ == o.packedValue_; }
-        /// Returns true if both values are not equal.
+
+        /**
+         * @brief Returns true if both Rgba64 values are not equal.
+         * @param o The other Rgba64 to compare.
+         * @return True if not equal.
+         */
         bool operator!=(const Rgba64& o) const { return !(*this == o); }
 
     private:

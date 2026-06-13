@@ -17,17 +17,17 @@ namespace Microsoft::Devices::Sensors
      */
     enum class SensorState
     {
-        /// The sensor is not supported on this device.
+        /** @brief The sensor is not supported on this device. */
         NotSupported,
-        /// The sensor is ready and providing data.
+        /** @brief The sensor is ready and providing data. */
         Ready,
-        /// The sensor is initializing.
+        /** @brief The sensor is currently initializing. */
         Initializing,
-        /// The sensor has no data available.
+        /** @brief The sensor has no data available. */
         NoData,
-        /// The sensor cannot be accessed due to missing permissions.
+        /** @brief The sensor cannot be accessed due to missing permissions. */
         NoPermissions,
-        /// The sensor is disabled.
+        /** @brief The sensor is disabled. */
         Disabled,
     };
 } // namespace Microsoft::Devices::Sensors

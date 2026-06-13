@@ -13,20 +13,25 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Describes a vertex with position, color, and one set of texture coordinates.
+    /** @brief Describes a vertex with position, color, and one set of texture coordinates. */
     struct VertexPositionColorTexture : public IVertexType
     {
-        /// Position of the vertex in object space.
+        /** @brief Position of the vertex in object space. */
         Microsoft::Xna::Framework::Vector3 Position;
-        /// Per-vertex color.
+        /** @brief Per-vertex color. */
         Microsoft::Xna::Framework::Color Color;
-        /// Texture coordinates for this vertex.
+        /** @brief Texture coordinates for this vertex. */
         Microsoft::Xna::Framework::Vector2 TextureCoordinate;
 
-        /// Constructs a default VertexPositionColorTexture.
+        /** @brief Constructs a default VertexPositionColorTexture with all fields zero. */
         VertexPositionColorTexture() = default;
 
-        /// Constructs a VertexPositionColorTexture with the given position, color, and texture coordinate.
+        /**
+         * @brief Constructs a VertexPositionColorTexture with the given position, color, and texture coordinate.
+         * @param position          The vertex position in object space.
+         * @param color             The per-vertex color.
+         * @param textureCoordinate The UV texture coordinate.
+         */
         VertexPositionColorTexture(const Microsoft::Xna::Framework::Vector3& position,
                                    const Microsoft::Xna::Framework::Color& color,
                                    const Microsoft::Xna::Framework::Vector2& textureCoordinate)
@@ -34,23 +39,40 @@ namespace Microsoft::Xna::Framework::Graphics
         {
         }
 
-        /// Returns the vertex declaration describing the layout of this vertex type.
+        /**
+         * @brief Returns the static vertex declaration describing the layout of this vertex type.
+         * @return Const reference to the VertexDeclaration for VertexPositionColorTexture.
+         */
         [[nodiscard]] static const Graphics::VertexDeclaration& getVertexDeclarationStatic();
 
-        /// Returns the vertex declaration for this instance.
+        /**
+         * @brief Returns the vertex declaration for this instance (delegates to the static version).
+         * @return Const reference to the VertexDeclaration for VertexPositionColorTexture.
+         */
         [[nodiscard]] const Graphics::VertexDeclaration& getVertexDeclarationProperty() const override
         {
             return getVertexDeclarationStatic();
         }
 
-        /// Returns true if both vertices are equal.
+        /**
+         * @brief Returns true if both vertices are equal.
+         * @param o The other vertex to compare with.
+         * @return True if Position, Color, and TextureCoordinate are all equal.
+         */
         bool operator==(const VertexPositionColorTexture& o) const
         {
             return Position == o.Position && Color == o.Color && TextureCoordinate == o.TextureCoordinate;
         }
-        /// Returns true if both vertices are not equal.
+        /**
+         * @brief Returns true if both vertices are not equal.
+         * @param o The other vertex to compare with.
+         * @return True if any field differs.
+         */
         bool operator!=(const VertexPositionColorTexture& o) const { return !(*this == o); }
-        /// Returns a string representation of this vertex.
+        /**
+         * @brief Returns a string representation of this vertex.
+         * @return A string listing Position, Color, and TextureCoordinate values.
+         */
         [[nodiscard]] std::string ToString() const;
     };
 }

@@ -12,13 +12,22 @@
  */
 namespace Microsoft::Xna::Framework::GamerServices
 {
-    /// Provides access to the in-game Guide overlay (trial mode detection, etc.).
+    /**
+     * @brief Provides access to the in-game Guide overlay (trial mode detection, etc.).
+     *
+     * @note CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+     */
     class Guide
     {
     public:
-        /// Shows the Guide overlay for the specified player.
+        /**
+         * @brief Shows the Guide overlay for the specified player.
+         *
+         * @param playerIndex Index of the player requesting the overlay.
+         */
         static void Show(const PlayerIndex& playerIndex);
-        /// Gets or sets whether the game is running in trial mode.
+
+        /** @brief Gets or sets whether the game is running in trial mode. */
         DEF_PROP(bool, IsTrialMode, getter1, setter0, member0, static1, constret1, ref1, constmet0)
     };
 }

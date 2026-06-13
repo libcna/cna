@@ -4,13 +4,18 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Defines how a Curve is evaluated before its first key or after its last key.
+    /** @brief Defines how a Curve is evaluated before its first key or after its last key. */
     enum class CurveLoopType
     {
-        Constant    = 0, ///< Clamp to the value of the first or last key.
-        Cycle       = 1, ///< Wrap positions from the end back to the beginning.
-        CycleOffset = 2, ///< Wrap and offset the value by the first/last key difference per cycle.
-        Oscillate   = 3, ///< Alternate evaluation direction between start and end.
-        Linear      = 4  ///< Extrapolate linearly beyond the curve range.
+        /** @brief The curve value is clamped to the value of the first or last key. */
+        Constant    = 0,
+        /** @brief Positions wrap around from the end back to the beginning of the curve. */
+        Cycle       = 1,
+        /** @brief Positions wrap and the value is offset by the first/last key difference per cycle. */
+        CycleOffset = 2,
+        /** @brief The evaluation direction alternates between start and end each cycle. */
+        Oscillate   = 3,
+        /** @brief Linear interpolation is used to extrapolate beyond the curve range. */
+        Linear      = 4
     };
 }

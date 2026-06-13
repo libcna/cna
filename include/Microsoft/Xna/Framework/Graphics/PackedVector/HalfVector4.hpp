@@ -7,24 +7,51 @@
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
-    /// Packed vector type storing four half-precision floats in a 64-bit value.
+    /**
+     * @brief Packed vector type storing four half-precision floats in a 64-bit value.
+     */
     struct HalfVector4 : public IPackedVectorT<uint64_t>
     {
-        /// Constructs a HalfVector4 with a packed value of zero.
+        /** @brief Constructs a HalfVector4 with a packed value of zero. */
         HalfVector4() : packedValue_(0) {}
-        /// Constructs a HalfVector4 from X, Y, Z, W float components.
+
+        /**
+         * @brief Constructs a HalfVector4 from X, Y, Z, W float components.
+         * @param x The x component.
+         * @param y The y component.
+         * @param z The z component.
+         * @param w The w component.
+         */
         HalfVector4(float x, float y, float z, float w) : packedValue_(Pack(x, y, z, w)) {}
-        /// Constructs a HalfVector4 from a Vector4.
+
+        /**
+         * @brief Constructs a HalfVector4 from a Vector4.
+         * @param vector The Vector4 to pack.
+         */
         HalfVector4(Vector4 vector) : packedValue_(Pack(vector.X, vector.Y, vector.Z, vector.W)) {}
 
-        /// Gets the packed 64-bit value containing four half-precision floats.
+        /**
+         * @brief Gets the packed 64-bit value containing four half-precision floats.
+         * @return The packed 64-bit value.
+         */
         [[nodiscard]] uint64_t getPackedValueProperty() const override { return packedValue_; }
-        /// Sets the packed 64-bit value.
+
+        /**
+         * @brief Sets the packed 64-bit value.
+         * @param v The new packed 64-bit value.
+         */
         void setPackedValueProperty(uint64_t v) override { packedValue_ = v; }
 
-        /// Packs the XYZW components of a Vector4 as half-precision floats.
+        /**
+         * @brief Packs the XYZW components of a Vector4 as half-precision floats.
+         * @param v The Vector4 to pack.
+         */
         void PackFromVector4(const Vector4& v) override { packedValue_ = Pack(v.X, v.Y, v.Z, v.W); }
-        /// Expands the packed value to a Vector4.
+
+        /**
+         * @brief Expands the packed value to a Vector4.
+         * @return The unpacked Vector4.
+         */
         [[nodiscard]] Vector4 ToVector4() const
         {
             return {
@@ -35,9 +62,18 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
             };
         }
 
-        /// Returns true if both values are equal.
+        /**
+         * @brief Returns true if both HalfVector4 values are equal.
+         * @param o The other HalfVector4 to compare.
+         * @return True if equal.
+         */
         bool operator==(const HalfVector4& o) const { return packedValue_ == o.packedValue_; }
-        /// Returns true if both values are not equal.
+
+        /**
+         * @brief Returns true if both HalfVector4 values are not equal.
+         * @param o The other HalfVector4 to compare.
+         * @return True if not equal.
+         */
         bool operator!=(const HalfVector4& o) const { return !(*this == o); }
 
     private:

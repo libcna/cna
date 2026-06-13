@@ -18,52 +18,114 @@ namespace Microsoft::Xna::Framework::Media
 {
     class VideoPlayer;
 
-    /// Represents a video asset that can be played through VideoPlayer.
+    /** @brief Represents a video asset that can be played through VideoPlayer. */
     class Video final : public System::Object
     {
     public:
-        /// Creates a Video from a file path and a graphics device (XNB constructor).
+        /**
+         * @brief Creates a Video from a file path and a graphics device (XNB constructor).
+         *
+         * @param fileName File path to the video file.
+         * @param device   GraphicsDevice used for frame rendering.
+         */
         Video(std::string fileName, Graphics::GraphicsDevice* device);
 
-        /// Creates a Video with explicit metadata (raw-file constructor).
+        /**
+         * @brief Creates a Video with explicit metadata (raw-file constructor).
+         *
+         * @param fileName       File path to the video file.
+         * @param device         GraphicsDevice used for frame rendering.
+         * @param durationMS     Duration in milliseconds.
+         * @param width          Frame width in pixels.
+         * @param height         Frame height in pixels.
+         * @param framesPerSecond Frame rate.
+         * @param soundtrackType Type of audio content in the video.
+         */
         Video(std::string fileName, Graphics::GraphicsDevice* device,
               SharpRuntime::intcs durationMS, SharpRuntime::intcs width,
               SharpRuntime::intcs height, float framesPerSecond,
               VideoSoundtrackType soundtrackType);
 
-        /// Gets the width of the video in pixels.
+        /**
+         * @brief Gets the width of the video in pixels.
+         *
+         * @return Video width.
+         */
         [[nodiscard]] SharpRuntime::intcs getWidthProperty() const;
 
-        /// Gets the height of the video in pixels.
+        /**
+         * @brief Gets the height of the video in pixels.
+         *
+         * @return Video height.
+         */
         [[nodiscard]] SharpRuntime::intcs getHeightProperty() const;
 
-        /// Gets the frame rate of the video.
+        /**
+         * @brief Gets the frame rate of the video.
+         *
+         * @return Frames per second.
+         */
         [[nodiscard]] float getFramesPerSecondProperty() const;
 
-        /// Gets the soundtrack type of the video.
+        /**
+         * @brief Gets the type of audio content in this video.
+         *
+         * @return VideoSoundtrackType value.
+         */
         [[nodiscard]] VideoSoundtrackType getVideoSoundtrackTypeProperty() const;
 
-        /// Gets the duration of the video.
+        /**
+         * @brief Gets the total duration of this video.
+         *
+         * @return Duration as a TimeSpan.
+         */
         [[nodiscard]] System::TimeSpan getDurationProperty() const;
 
-        /// Sets the duration of the video (internal use).
+        /**
+         * @brief Sets the total duration of this video (internal use).
+         *
+         * @param value New duration.
+         */
         void setDurationProperty(System::TimeSpan value);
 
-        /// Creates a Video from a URI and a graphics device.
+        /**
+         * @brief Creates a Video from a URI and a graphics device.
+         *
+         * @param uri    File URI or local path.
+         * @param device GraphicsDevice used for frame rendering.
+         * @return Pointer to the newly created Video.
+         */
         static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);
 
-        /// Selects which audio stream to use when multiple audio tracks are present.
+        /**
+         * @brief Selects which audio stream to use when the file contains multiple audio tracks.
+         *
+         * @param track Zero-based audio stream index.
+         */
         void SetAudioTrackEXT(SharpRuntime::intcs track);
 
-        /// Selects which video stream to use when multiple video tracks are present.
+        /**
+         * @brief Selects which video stream to use when the file contains multiple video tracks.
+         *
+         * @param track Zero-based video stream index.
+         */
         void SetVideoTrackEXT(SharpRuntime::intcs track);
 
-        /// Returns the file path this Video was loaded from.
+        /**
+         * @brief Returns the file path this Video was loaded from.
+         *
+         * @return File path string.
+         */
         NOXNA [[nodiscard]] const std::string& getFileNameProperty() const;
 
-        /// Returns the associated GraphicsDevice (may be null).
+        /**
+         * @brief Returns the associated GraphicsDevice (may be null).
+         *
+         * @return Pointer to the GraphicsDevice, or nullptr.
+         */
         NOXNA [[nodiscard]] Graphics::GraphicsDevice* getGraphicsDeviceProperty() const;
 
+        /** @brief Returns the fully-qualified .NET type name. */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:

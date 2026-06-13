@@ -33,168 +33,272 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Base class that provides the XNA-style game loop, services, window, content and components.
+    /** @brief Base class that provides the XNA-style game loop, services, window, content and components. */
     class Game : public System::Object, public System::IDisposable
     {
     public:
-        /// Raised when the game becomes active.
+        /** @brief Raised when the game becomes active. */
         System::EventHandler<System::EventArgs> Activated;
 
-        /// Raised when the game becomes inactive.
+        /** @brief Raised when the game becomes inactive. */
         System::EventHandler<System::EventArgs> Deactivated;
 
-        /// Raised when the game has been disposed.
+        /** @brief Raised when the game has been disposed. */
         System::EventHandler<System::EventArgs> Disposed;
 
-        /// Raised when the game is exiting.
+        /** @brief Raised when the game is exiting. */
         System::EventHandler<System::EventArgs> Exiting;
 
-        /// Creates a new Game instance and initialises all subsystems.
+        /** @brief Creates a new Game instance and initialises all subsystems. */
         Game();
 
-        /// Destructor; calls Dispose(false) to release unmanaged resources.
+        /** @brief Destructor; calls Dispose(false) to release unmanaged resources. */
         ~Game() override;
 
-        /// Gets the game component collection.
+        /**
+         * @brief Gets the game component collection.
+         * @return A reference to the mutable game component collection.
+         */
         [[nodiscard]] GameComponentCollection& getComponentsProperty();
 
-        /// Gets the game component collection.
+        /**
+         * @brief Gets the game component collection.
+         * @return A const reference to the game component collection.
+         */
         [[nodiscard]] const GameComponentCollection& getComponentsProperty() const;
 
-        /// Gets the content manager.
+        /**
+         * @brief Gets the content manager.
+         * @return A reference to the mutable content manager.
+         */
         [[nodiscard]] Content::ContentManager& getContentProperty();
 
-        /// Gets the content manager.
+        /**
+         * @brief Gets the content manager.
+         * @return A const reference to the content manager.
+         */
         [[nodiscard]] const Content::ContentManager& getContentProperty() const;
 
-        /// Sets the content manager.
+        /**
+         * @brief Sets the content manager.
+         * @param value The new content manager to assign.
+         */
         void setContentProperty(const Content::ContentManager& value);
 
-        /// Gets the graphics device from the graphics device service when available.
+        /**
+         * @brief Gets the graphics device from the graphics device service when available.
+         * @return A reference to the graphics device.
+         */
         [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceProperty();
 
-        /// Gets the time spent sleeping when the game is inactive.
+        /**
+         * @brief Gets the time spent sleeping when the game is inactive.
+         * @return A const reference to the inactive sleep time.
+         */
         [[nodiscard]] const System::TimeSpan& getInactiveSleepTimeProperty() const;
 
-        /// Sets the time spent sleeping when the game is inactive.
+        /**
+         * @brief Sets the time spent sleeping when the game is inactive.
+         * @param value The new inactive sleep time; must be non-negative.
+         */
         void setInactiveSleepTimeProperty(const System::TimeSpan& value);
 
-        /// Gets whether the game window is active.
+        /**
+         * @brief Gets whether the game window is active.
+         * @return true if the game window currently has focus.
+         */
         [[nodiscard]] bool getIsActiveProperty() const;
 
-        /// Gets whether the game uses a fixed timestep.
+        /**
+         * @brief Gets whether the game uses a fixed timestep.
+         * @return true if the game loop uses a fixed timestep.
+         */
         [[nodiscard]] bool getIsFixedTimeStepProperty() const;
 
-        /// Sets whether the game uses a fixed timestep.
+        /**
+         * @brief Sets whether the game uses a fixed timestep.
+         * @param value true to enable fixed timestep; false for variable timestep.
+         */
         void setIsFixedTimeStepProperty(bool value);
 
-        /// Gets whether the mouse cursor is visible.
+        /**
+         * @brief Gets whether the mouse cursor is visible.
+         * @return true if the mouse cursor is visible.
+         */
         [[nodiscard]] bool getIsMouseVisibleProperty() const;
 
-        /// Sets whether the mouse cursor is visible.
+        /**
+         * @brief Sets whether the mouse cursor is visible.
+         * @param value true to show the mouse cursor; false to hide it.
+         */
         void setIsMouseVisibleProperty(bool value);
 
-        /// Gets command-line launch parameters.
+        /**
+         * @brief Gets command-line launch parameters.
+         * @return A reference to the mutable launch parameters map.
+         */
         [[nodiscard]] LaunchParameters& getLaunchParametersProperty();
 
-        /// Gets command-line launch parameters.
+        /**
+         * @brief Gets command-line launch parameters.
+         * @return A const reference to the launch parameters map.
+         */
         [[nodiscard]] const LaunchParameters& getLaunchParametersProperty() const;
 
-        /// Gets the target elapsed time between updates.
+        /**
+         * @brief Gets the target elapsed time between updates.
+         * @return A const reference to the target elapsed time.
+         */
         [[nodiscard]] const System::TimeSpan& getTargetElapsedTimeProperty() const;
 
-        /// Sets the target elapsed time between updates.
+        /**
+         * @brief Sets the target elapsed time between updates.
+         * @param value The desired time between updates; must be positive and non-zero.
+         */
         void setTargetElapsedTimeProperty(const System::TimeSpan& value);
 
-        /// Gets the service container.
+        /**
+         * @brief Gets the service container.
+         * @return A reference to the mutable service container.
+         */
         [[nodiscard]] GameServiceContainer& getServicesProperty();
 
-        /// Gets the service container.
+        /**
+         * @brief Gets the service container.
+         * @return A const reference to the service container.
+         */
         [[nodiscard]] const GameServiceContainer& getServicesProperty() const;
 
-        /// Gets the game window.
+        /**
+         * @brief Gets the game window.
+         * @return A reference to the mutable game window.
+         */
         [[nodiscard]] GameWindow& getWindowProperty();
 
-        /// Gets the game window.
+        /**
+         * @brief Gets the game window.
+         * @return A const reference to the game window.
+         */
         [[nodiscard]] const GameWindow& getWindowProperty() const;
 
-        /// Signals the game loop to exit.
+        /** @brief Signals the game loop to exit. */
         void Exit();
 
-        /// Resets elapsed timing for the next variable-timestep update.
+        /** @brief Resets elapsed timing for the next variable-timestep update. */
         void ResetElapsedTime();
 
-        /// Skips drawing for the current frame.
+        /** @brief Skips drawing for the current frame. */
         void SuppressDraw();
 
-        /// Runs exactly one frame.
+        /** @brief Runs exactly one frame. */
         void RunOneFrame();
 
-        /// Runs the game loop until Exit is called.
+        /** @brief Runs the game loop until Exit is called. */
         void Run();
 
-        /// Advances one game tick.
+        /** @brief Advances one game tick. */
         void Tick();
 
-        /// Disposes the game.
+        /** @brief Disposes the game. */
         void Dispose() override;
 
-        /// Returns the fully-qualified .NET type name of this class.
+        /**
+         * @brief Returns the fully-qualified .NET type name of this class.
+         * @return A const reference to the type name string.
+         */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
-        /// Compatibility helper used by existing CNA examples.
+        /**
+         * @brief Compatibility helper used by existing CNA examples.
+         * @return The current target frames per second.
+         */
         [[nodiscard]] NOXNA double getTargetFPSProperty() const;
 
-        /// Compatibility helper used by existing CNA examples.
+        /**
+         * @brief Compatibility helper used by existing CNA examples.
+         * @return The current target milliseconds per frame.
+         */
         [[nodiscard]] NOXNA double getTargetMsFrameTimeProperty() const;
 
-        /// Converts frames-per-second to milliseconds per frame.
+        /**
+         * @brief Converts frames-per-second to milliseconds per frame.
+         * @param framesPerSecond The frame rate to convert.
+         * @return The equivalent milliseconds per frame.
+         */
         [[nodiscard]] NOXNA static double fpsToMillisecondsPerFrame(SharpRuntime::intcs framesPerSecond);
 
-        /// Internal loop flag matching the FNA/XNA Game implementation shape.
+        /** @brief Internal loop flag matching the FNA/XNA Game implementation shape. */
         NOXNA bool RunApplication;
 
     protected:
-        /// Called before the game loop starts.
+        /** @brief Called before the game loop starts. */
         virtual void BeginRun();
 
-        /// Called after the game loop ends.
+        /** @brief Called after the game loop ends. */
         virtual void EndRun();
 
-        /// Called before drawing. Returning false skips Draw/EndDraw.
+        /**
+         * @brief Called before drawing. Returning false skips Draw/EndDraw.
+         * @return true if drawing should proceed; false to skip the current frame.
+         */
         virtual bool BeginDraw();
 
-        /// Called after drawing.
+        /** @brief Called after drawing. */
         virtual void EndDraw();
 
-        /// Loads graphics and content resources.
+        /** @brief Loads graphics and content resources. */
         virtual void LoadContent();
 
-        /// Unloads graphics and content resources.
+        /** @brief Unloads graphics and content resources. */
         virtual void UnloadContent();
 
-        /// Initializes the game and current components.
+        /** @brief Initializes the game and current components. */
         virtual void Initialize();
 
-        /// Draws the game and drawable components.
+        /**
+         * @brief Draws the game and drawable components.
+         * @param gameTime Snapshot of the game timing state.
+         */
         virtual void Draw(const GameTime& gameTime);
 
-        /// Updates the game and updateable components.
+        /**
+         * @brief Updates the game and updateable components.
+         * @param gameTime Snapshot of the game timing state.
+         */
         virtual void Update(GameTime& gameTime);
 
-        /// Raises the Exiting event.
+        /**
+         * @brief Raises the Exiting event.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnExiting(System::Object* sender, const System::EventArgs& args);
 
-        /// Raises the Activated event.
+        /**
+         * @brief Raises the Activated event.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnActivated(System::Object* sender, const System::EventArgs& args);
 
-        /// Raises the Deactivated event.
+        /**
+         * @brief Raises the Deactivated event.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnDeactivated(System::Object* sender, const System::EventArgs& args);
 
-        /// Displays a missing-requirement error when the platform can do so.
+        /**
+         * @brief Displays a missing-requirement error when the platform can do so.
+         * @param exception The exception that describes the missing requirement.
+         * @return true if the error was shown; false otherwise.
+         */
         virtual bool ShowMissingRequirementMessage(const std::exception& exception);
 
-        /// Performs disposal.
+        /**
+         * @brief Performs disposal.
+         * @param disposing true when called from Dispose(); false when called from the destructor.
+         */
         virtual void Dispose(bool disposing);
 
     private:

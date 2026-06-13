@@ -5,19 +5,20 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Defines which buffers are cleared by GraphicsDevice::Clear.
+    /** @brief Defines the buffers cleared by a GraphicsDevice::Clear operation. */
     enum class ClearOptions : int
     {
-        /// Clear the render target color buffer.
+        /** @brief Color buffer. */
         Target = 1,
 
-        /// Clear the depth buffer.
+        /** @brief Depth buffer. */
         DepthBuffer = 2,
 
-        /// Clear the stencil buffer.
+        /** @brief Stencil buffer. */
         Stencil = 4
     };
 
+    /** @brief Combines two ClearOptions flags with bitwise OR. */
     [[nodiscard]] constexpr ClearOptions operator|(ClearOptions left, ClearOptions right)
     {
         using Underlying = std::underlying_type_t<ClearOptions>;
@@ -26,6 +27,7 @@ namespace Microsoft::Xna::Framework::Graphics
         );
     }
 
+    /** @brief Masks two ClearOptions flags with bitwise AND. */
     [[nodiscard]] constexpr ClearOptions operator&(ClearOptions left, ClearOptions right)
     {
         using Underlying = std::underlying_type_t<ClearOptions>;
@@ -34,12 +36,14 @@ namespace Microsoft::Xna::Framework::Graphics
         );
     }
 
+    /** @brief Combines flags into @p left with bitwise OR-assignment. */
     constexpr ClearOptions& operator|=(ClearOptions& left, ClearOptions right)
     {
         left = left | right;
         return left;
     }
 
+    /** @brief Masks @p left with @p right using bitwise AND-assignment. */
     constexpr ClearOptions& operator&=(ClearOptions& left, ClearOptions right)
     {
         left = left & right;

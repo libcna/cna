@@ -15,81 +15,148 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Describes the presentation settings used by a GraphicsDevice.
+    /** @brief Describes the presentation settings used by a GraphicsDevice. */
     class PresentationParameters : public System::Object
     {
     public:
         using IntPtr = std::uintptr_t;
 
-        /// Creates presentation parameters with XNA-compatible defaults.
+        /** @brief Creates presentation parameters with XNA-compatible defaults. */
         PresentationParameters();
 
-        /// Gets the back buffer format.
+        /**
+         * @brief Gets the back buffer pixel format.
+         * @return Current back buffer surface format.
+         */
         [[nodiscard]] SurfaceFormat getBackBufferFormatProperty() const;
 
-        /// Sets the back buffer format.
+        /**
+         * @brief Sets the back buffer pixel format.
+         * @param value New back buffer surface format.
+         */
         void setBackBufferFormatProperty(SurfaceFormat value);
 
-        /// Gets the back buffer height.
+        /**
+         * @brief Gets the back buffer height in pixels.
+         * @return Current back buffer height.
+         */
         [[nodiscard]] SharpRuntime::intcs getBackBufferHeightProperty() const;
 
-        /// Sets the back buffer height.
+        /**
+         * @brief Sets the back buffer height in pixels.
+         * @param value New back buffer height.
+         */
         void setBackBufferHeightProperty(SharpRuntime::intcs value);
 
-        /// Gets the back buffer width.
+        /**
+         * @brief Gets the back buffer width in pixels.
+         * @return Current back buffer width.
+         */
         [[nodiscard]] SharpRuntime::intcs getBackBufferWidthProperty() const;
 
-        /// Sets the back buffer width.
+        /**
+         * @brief Sets the back buffer width in pixels.
+         * @param value New back buffer width.
+         */
         void setBackBufferWidthProperty(SharpRuntime::intcs value);
 
-        /// Gets bounds matching the back buffer dimensions.
+        /**
+         * @brief Gets a rectangle whose size matches the back buffer dimensions (origin at 0,0).
+         * @return Rectangle with width and height of the back buffer.
+         */
         [[nodiscard]] Microsoft::Xna::Framework::Rectangle getBoundsProperty() const;
 
-        /// Gets the native device window handle.
+        /**
+         * @brief Gets the native window handle associated with the device.
+         * @return Current device window handle.
+         */
         [[nodiscard]] IntPtr getDeviceWindowHandleProperty() const;
 
-        /// Sets the native device window handle.
+        /**
+         * @brief Sets the native window handle associated with the device.
+         * @param value New device window handle.
+         */
         void setDeviceWindowHandleProperty(IntPtr value);
 
-        /// Gets the depth/stencil format.
+        /**
+         * @brief Gets the depth/stencil buffer format.
+         * @return Current depth-stencil format.
+         */
         [[nodiscard]] DepthFormat getDepthStencilFormatProperty() const;
 
-        /// Sets the depth/stencil format.
+        /**
+         * @brief Sets the depth/stencil buffer format.
+         * @param value New depth-stencil format.
+         */
         void setDepthStencilFormatProperty(DepthFormat value);
 
-        /// Gets whether presentation is fullscreen.
+        /**
+         * @brief Gets whether the device is presenting in fullscreen mode.
+         * @return true if fullscreen mode is active.
+         */
         [[nodiscard]] bool getIsFullScreenProperty() const;
 
-        /// Sets whether presentation is fullscreen.
+        /**
+         * @brief Sets whether the device should present in fullscreen mode.
+         * @param value true to use fullscreen presentation.
+         */
         void setIsFullScreenProperty(bool value);
 
-        /// Gets the multisample count.
+        /**
+         * @brief Gets the number of multisample anti-aliasing samples.
+         * @return Current multisample count (0 = disabled).
+         */
         [[nodiscard]] SharpRuntime::intcs getMultiSampleCountProperty() const;
 
-        /// Sets the multisample count.
+        /**
+         * @brief Sets the number of multisample anti-aliasing samples.
+         * @param value New multisample count (0 = disabled).
+         */
         void setMultiSampleCountProperty(SharpRuntime::intcs value);
 
-        /// Gets the presentation interval.
+        /**
+         * @brief Gets the presentation interval controlling display refresh synchronisation.
+         * @return Current presentation interval.
+         */
         [[nodiscard]] PresentInterval getPresentationIntervalProperty() const;
 
-        /// Sets the presentation interval.
+        /**
+         * @brief Sets the presentation interval controlling display refresh synchronisation.
+         * @param value New presentation interval.
+         */
         void setPresentationIntervalProperty(PresentInterval value);
 
-        /// Gets the display orientation.
+        /**
+         * @brief Gets the display orientation.
+         * @return Current display orientation.
+         */
         [[nodiscard]] Microsoft::Xna::Framework::DisplayOrientation getDisplayOrientationProperty() const;
 
-        /// Sets the display orientation.
+        /**
+         * @brief Sets the display orientation.
+         * @param value New display orientation.
+         */
         void setDisplayOrientationProperty(Microsoft::Xna::Framework::DisplayOrientation value);
 
-        /// Gets render-target usage.
+        /**
+         * @brief Gets the render-target usage policy for the back buffer.
+         * @return Current render-target usage.
+         */
         [[nodiscard]] RenderTargetUsage getRenderTargetUsageProperty() const;
 
-        /// Sets render-target usage.
+        /**
+         * @brief Sets the render-target usage policy for the back buffer.
+         * @param value New render-target usage.
+         */
         void setRenderTargetUsageProperty(RenderTargetUsage value);
 
-        /// Creates a copy of this object.
+        /**
+         * @brief Creates a copy of this PresentationParameters.
+         * @return A new PresentationParameters with all fields copied from this instance.
+         */
         [[nodiscard]] PresentationParameters Clone() const;
 
+        /** @brief Returns the fully-qualified .NET type name for this class. */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:

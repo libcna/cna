@@ -9,27 +9,37 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
-    /// Stores frequency-domain and sample-domain media visualization values.
+    /** @brief Stores frequency-domain and sample-domain data for media visualization. */
     class VisualizationData : public System::Object
     {
     public:
+        /** @brief Number of frequency and sample values in each visualization buffer. */
         static constexpr SharpRuntime::intcs Size = 256;
 
-        /// Frequency values used by the media visualization API.
+        /** @brief Frequency-domain values used by the media visualization API. */
         std::array<float, Size> freq;
 
-        /// Sample values used by the media visualization API.
+        /** @brief Sample-domain values used by the media visualization API. */
         std::array<float, Size> samp;
 
-        /// Creates visualization buffers initialized to zero.
+        /** @brief Creates visualization buffers initialized to zero. */
         VisualizationData();
 
-        /// Gets the frequency values.
+        /**
+         * @brief Gets the frequency-domain visualization values.
+         *
+         * @return Const reference to the frequency value array.
+         */
         [[nodiscard]] const std::array<float, Size>& getFrequenciesProperty() const;
 
-        /// Gets the sample values.
+        /**
+         * @brief Gets the sample-domain visualization values.
+         *
+         * @return Const reference to the sample value array.
+         */
         [[nodiscard]] const std::array<float, Size>& getSamplesProperty() const;
 
+        /** @brief Returns the fully-qualified .NET type name. */
         [[nodiscard]] const std::string& GetTypeName() const override;
     };
 }

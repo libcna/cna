@@ -10,24 +10,58 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class Effect;
 
-    /// Represents a rendering technique within an effect, containing one or more passes.
+    /**
+     * @brief Represents a rendering technique within an effect, containing one or more passes.
+     *
+     * A technique groups related passes that collectively implement one rendering strategy.
+     */
     class EffectTechnique
     {
     public:
-        /// Constructs a default EffectTechnique.
+        /** @brief Constructs a default EffectTechnique with no owner and an empty name. */
         EffectTechnique() = default;
-        /// Constructs an EffectTechnique owned by the given effect with the given name.
+
+        /**
+         * @brief Constructs an EffectTechnique owned by the given effect with the given name.
+         *
+         * @param owner Pointer to the Effect that owns this technique.
+         * @param name  Name of this technique as declared in the effect.
+         */
         EffectTechnique(Effect* owner, std::string name);
 
-        /// Gets the name of this technique.
+        /**
+         * @brief Gets the name of this technique.
+         *
+         * @return The technique name string.
+         */
         [[nodiscard]] const std::string& getNameProperty() const;
-        /// Gets the collection of passes in this technique.
+
+        /**
+         * @brief Gets the collection of passes in this technique (mutable overload).
+         *
+         * @return Reference to the pass collection.
+         */
         [[nodiscard]] EffectPassCollection& getPassesProperty();
-        /// Gets the collection of passes in this technique (const overload).
+
+        /**
+         * @brief Gets the collection of passes in this technique (const overload).
+         *
+         * @return Const reference to the pass collection.
+         */
         [[nodiscard]] const EffectPassCollection& getPassesProperty() const;
-        /// Gets the annotations attached to this technique.
+
+        /**
+         * @brief Gets the annotations attached to this technique (mutable overload).
+         *
+         * @return Reference to the annotation collection.
+         */
         [[nodiscard]] EffectAnnotationCollection& getAnnotationsProperty();
-        /// Gets the annotations attached to this technique (const overload).
+
+        /**
+         * @brief Gets the annotations attached to this technique (const overload).
+         *
+         * @return Const reference to the annotation collection.
+         */
         [[nodiscard]] const EffectAnnotationCollection& getAnnotationsProperty() const;
 
     private:

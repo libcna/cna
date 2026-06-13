@@ -10,47 +10,110 @@ namespace Microsoft::Xna::Framework
 {
     using SharpRuntime::intcs;
 
-    /// Describes a point in two-dimensional integer space.
+    /** @brief Describes a point in two-dimensional integer space. */
     struct Point
     {
-        /// Point with X = 0 and Y = 0.
+        /** @brief Point with X = 0 and Y = 0. */
         static const Point Zero;
 
-        /// X coordinate of this point.
+        /** @brief X coordinate of this point. */
         intcs X;
 
-        /// Y coordinate of this point.
+        /** @brief Y coordinate of this point. */
         intcs Y;
 
-        /// Creates a point at 0, 0.
+        /** @brief Creates a point at 0, 0. */
         Point();
 
-        /// Creates a point from the specified X and Y coordinates.
+        /**
+         * @brief Creates a point from the specified X and Y coordinates.
+         *
+         * @param x The X coordinate.
+         * @param y The Y coordinate.
+         */
         Point(intcs x, intcs y);
 
-        /// Gets the zero point.
+        /**
+         * @brief Gets the zero point.
+         *
+         * @return A point with X = 0 and Y = 0.
+         */
         [[nodiscard]] static Point getZeroProperty();
 
-        /// Returns true when both coordinates match another point.
+        /**
+         * @brief Returns true when both coordinates match another point.
+         *
+         * @param other The point to compare against.
+         * @return @c true if the points are equal; @c false otherwise.
+         */
         [[nodiscard]] bool Equals(const Point& other) const;
 
-        /// Returns a hash code for this point.
+        /**
+         * @brief Returns a hash code for this point.
+         *
+         * @return Hash code of this point.
+         */
         [[nodiscard]] intcs GetHashCode() const;
 
-        /// Returns a string in the form {X:... Y:...}.
+        /**
+         * @brief Returns a string in the form {X:... Y:...}.
+         *
+         * @return String representation of this point.
+         */
         [[nodiscard]] std::string ToString() const;
 
-        /// Adds two points component-wise.
+        /**
+         * @brief Adds two points component-wise.
+         *
+         * @param value1 Left-hand point.
+         * @param value2 Right-hand point.
+         * @return The component-wise sum.
+         */
         friend Point operator+(Point value1, Point value2);
-        /// Subtracts one point from another component-wise.
+
+        /**
+         * @brief Subtracts one point from another component-wise.
+         *
+         * @param value1 Left-hand point.
+         * @param value2 Right-hand point.
+         * @return The component-wise difference.
+         */
         friend Point operator-(Point value1, Point value2);
-        /// Multiplies the components of two points together.
+
+        /**
+         * @brief Multiplies the components of two points together.
+         *
+         * @param value1 Left-hand point.
+         * @param value2 Right-hand point.
+         * @return The component-wise product.
+         */
         friend Point operator*(Point value1, Point value2);
-        /// Divides the components of one point by the components of another.
+
+        /**
+         * @brief Divides the components of one point by the components of another.
+         *
+         * @param value1 Left-hand point.
+         * @param value2 Right-hand point.
+         * @return The component-wise quotient.
+         */
         friend Point operator/(Point value1, Point value2);
-        /// Returns true when both points have equal coordinates.
+
+        /**
+         * @brief Returns true when both points have equal coordinates.
+         *
+         * @param value1 Left-hand point.
+         * @param value2 Right-hand point.
+         * @return @c true if the points are equal; @c false otherwise.
+         */
         friend bool operator==(Point value1, Point value2);
-        /// Returns true when the points differ in any coordinate.
+
+        /**
+         * @brief Returns true when the points differ in any coordinate.
+         *
+         * @param value1 Left-hand point.
+         * @param value2 Right-hand point.
+         * @return @c true if the points are not equal; @c false otherwise.
+         */
         friend bool operator!=(Point value1, Point value2);
 
     private:

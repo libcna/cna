@@ -4,20 +4,23 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Creates and drives drawing for the graphics device used by Game.
+    /** @brief Creates and drives drawing for the graphics device used by Game. */
     class IGraphicsDeviceManager
     {
     public:
-        /// Virtual destructor.
+        /** @brief Virtual destructor. */
         virtual ~IGraphicsDeviceManager() = default;
 
-        /// Prepares the device for drawing. Returns false when drawing should be skipped.
+        /**
+         * @brief Prepares the device for drawing. Returns false when drawing should be skipped.
+         * @return true if drawing should proceed; false to skip the current frame.
+         */
         [[nodiscard]] virtual bool BeginDraw() = 0;
 
-        /// Creates the graphics device, or recreates it when one already exists.
+        /** @brief Creates the graphics device, or recreates it when one already exists. */
         virtual void CreateDevice() = 0;
 
-        /// Finishes drawing and presents the back buffer.
+        /** @brief Finishes drawing and presents the back buffer. */
         virtual void EndDraw() = 0;
     };
 }

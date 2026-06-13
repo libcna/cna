@@ -17,7 +17,7 @@ namespace Microsoft::Xna::Framework::Content
     class ContentTypeReader
     {
     public:
-        /// Virtual destructor.
+        /** @brief Virtual destructor. */
         virtual ~ContentTypeReader() = default;
 
         /**
@@ -26,6 +26,8 @@ namespace Microsoft::Xna::Framework::Content
          * When ContentManager::Load is called with an asset name that has no extension,
          * it iterates these extensions and tries each one until a file is found.
          * Return an empty vector if the reader always receives a full path.
+         *
+         * @return Vector of file extension strings.
          */
         [[nodiscard]] virtual std::vector<std::string> GetExtensions() const { return {}; }
 

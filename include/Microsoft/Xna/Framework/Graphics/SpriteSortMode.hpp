@@ -7,19 +7,19 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Defines the sprite-batch drawing order for SpriteBatch.Begin.
+    /** @brief Defines sprite sort rendering options for SpriteBatch::Begin. */
     enum class SpriteSortMode
     {
-        /// Sprites are not drawn until SpriteBatch.End is called; textures are not sorted.
+        /** @brief All sprites are drawn when SpriteBatch::End is called, in draw-call order. Depth is ignored. */
         Deferred,
 
-        /// Each sprite is drawn with a separate draw call and is rendered immediately.
+        /** @brief Each sprite is drawn with an individual draw call rather than at SpriteBatch::End. Depth is ignored. */
         Immediate,
-        /// Sprites are sorted by texture prior to drawing.
+        /** @brief Same as Deferred, except sprites are sorted by texture prior to drawing. Depth is ignored. */
         Texture,
-        /// Sprites are sorted by depth in back-to-front order prior to drawing.
+        /** @brief Same as Deferred, except sprites are sorted by depth in back-to-front order prior to drawing. */
         BackToFront,
-        /// Sprites are sorted by depth in front-to-back order prior to drawing.
+        /** @brief Same as Deferred, except sprites are sorted by depth in front-to-back order prior to drawing. */
         FrontToBack,
     };
 }

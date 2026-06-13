@@ -3,13 +3,13 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
-    /// Defines available media source types.
+    /** @brief Defines the type of a media source device. */
     enum class MediaSourceType
     {
-        /// The local device storage.
+        /** @brief The local device storage. */
         LocalDevice = 0,
 
-        /// Windows Media Connect device.
+        /** @brief A Windows Media Connect streaming device. */
         WindowsMediaConnect = 4
     };
 }

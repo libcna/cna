@@ -8,24 +8,49 @@
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
-    /// Packed vector type storing red and green channels as two 16-bit unsigned integers in a 32-bit value.
+    /**
+     * @brief Packed vector type storing red and green channels as two 16-bit unsigned integers in a 32-bit value.
+     */
     struct Rg32 : public IPackedVectorT<uint32_t>
     {
-        /// Constructs a Rg32 with a packed value of zero.
+        /** @brief Constructs a Rg32 with a packed value of zero. */
         Rg32() : packedValue_(0) {}
-        /// Constructs a Rg32 from normalized red and green floats in [0, 1].
+
+        /**
+         * @brief Constructs a Rg32 from normalized red and green floats in [0, 1].
+         * @param r The red component in [0, 1].
+         * @param g The green component in [0, 1].
+         */
         Rg32(float r, float g) : packedValue_(Pack(r, g)) {}
-        /// Constructs a Rg32 from a Vector2 with components in [0, 1].
+
+        /**
+         * @brief Constructs a Rg32 from a Vector2 with components in [0, 1].
+         * @param vector Vector containing the RG components.
+         */
         Rg32(Vector2 vector) : packedValue_(Pack(vector.X, vector.Y)) {}
 
-        /// Gets the packed 32-bit value.
+        /**
+         * @brief Gets the packed 32-bit value.
+         * @return The packed 32-bit value.
+         */
         [[nodiscard]] uint32_t getPackedValueProperty() const override { return packedValue_; }
-        /// Sets the packed 32-bit value.
+
+        /**
+         * @brief Sets the packed 32-bit value.
+         * @param v The new packed 32-bit value.
+         */
         void setPackedValueProperty(uint32_t v) override { packedValue_ = v; }
 
-        /// Packs the XY components of a Vector4 as unsigned 16-bit normalized channels.
+        /**
+         * @brief Packs the XY components of a Vector4 as unsigned 16-bit normalized channels.
+         * @param v Vector whose XY components are packed.
+         */
         void PackFromVector4(const Vector4& v) override { packedValue_ = Pack(v.X, v.Y); }
-        /// Expands the packed value to a Vector4 with Z = 0, W = 1.
+
+        /**
+         * @brief Expands the packed value to a Vector4 with Z = 0, W = 1.
+         * @return The unpacked Vector4.
+         */
         [[nodiscard]] Vector4 ToVector4() const
         {
             return {
@@ -35,9 +60,18 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
             };
         }
 
-        /// Returns true if both values are equal.
+        /**
+         * @brief Returns true if both Rg32 values are equal.
+         * @param o The other Rg32 to compare.
+         * @return True if equal.
+         */
         bool operator==(const Rg32& o) const { return packedValue_ == o.packedValue_; }
-        /// Returns true if both values are not equal.
+
+        /**
+         * @brief Returns true if both Rg32 values are not equal.
+         * @param o The other Rg32 to compare.
+         * @return True if not equal.
+         */
         bool operator!=(const Rg32& o) const { return !(*this == o); }
 
     private:

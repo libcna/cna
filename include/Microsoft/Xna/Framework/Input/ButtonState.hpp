@@ -7,12 +7,14 @@
 
 namespace Microsoft::Xna::Framework::Input
 {
-    /// Specifies the state of a button on a mouse or gamepad.
+    /**
+     * @brief Specifies the state of a button on a mouse or gamepad.
+     */
     enum class ButtonState
     {
-        /// The button is released.
+        /** @brief The button is released. */
         Released,
-        /// The button is pressed.
+        /** @brief The button is pressed. */
         Pressed,
     };
 }

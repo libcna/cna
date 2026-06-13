@@ -16,23 +16,79 @@ namespace Microsoft::Xna::Framework::Graphics
     class ModelBone;
     class ModelMeshPart;
 
-    /// Represents a mesh within a Model, containing one or more mesh parts.
+    /**
+     * @brief Represents a mesh that is part of a Model.
+     */
     class ModelMesh
     {
     public:
+        /**
+         * @brief Constructs a mesh from a graphics device and parts.
+         * @param graphicsDevice A valid reference to the GraphicsDevice.
+         * @param parts The mesh parts that make up this mesh.
+         */
         NOXNA ModelMesh(GraphicsDevice* graphicsDevice, std::vector<ModelMeshPart*> parts);
+
+        /**
+         * @brief Constructs a named mesh from a graphics device and parts.
+         * @param graphicsDevice A valid reference to the GraphicsDevice.
+         * @param name The name of this mesh.
+         * @param parts The mesh parts that make up this mesh.
+         */
         NOXNA ModelMesh(GraphicsDevice* graphicsDevice, std::string name,
                         std::vector<ModelMeshPart*> parts);
 
+        /**
+         * @brief Gets the bounding sphere that contains this mesh.
+         * @return The bounding sphere.
+         */
         [[nodiscard]] BoundingSphere getBoundingSphereProperty() const;
+
+        /**
+         * @brief Gets the collection of effects associated with this mesh.
+         * @return A const reference to the effect collection.
+         */
         [[nodiscard]] const ModelEffectCollection& getEffectsProperty() const;
+
+        /**
+         * @brief Gets a mutable reference to the effect collection.
+         * @return A mutable reference to the effect collection.
+         */
         [[nodiscard]] ModelEffectCollection& getEffectsPropertyMutable();
+
+        /**
+         * @brief Gets the ModelMeshPart objects that make up this mesh.
+         * @return A const reference to the mesh parts collection.
+         */
         [[nodiscard]] const ModelMeshPartCollection& getMeshPartsProperty() const;
+
+        /**
+         * @brief Gets the name of this mesh.
+         * @return The mesh name string.
+         */
         [[nodiscard]] const std::string& getNameProperty() const;
+
+        /**
+         * @brief Gets the parent bone for this mesh.
+         * @return Pointer to the parent ModelBone.
+         */
         [[nodiscard]] ModelBone* getParentBoneProperty() const;
+
+        /**
+         * @brief Gets the custom object attached to this mesh.
+         * @return Pointer to the tag object, or nullptr.
+         */
         [[nodiscard]] System::Object* getTagProperty() const;
+
+        /**
+         * @brief Sets the custom object attached to this mesh.
+         * @param value Pointer to the tag object.
+         */
         void setTagProperty(System::Object* value);
 
+        /**
+         * @brief Draws all ModelMeshPart objects in this mesh using their current effect settings.
+         */
         void Draw();
 
     private:

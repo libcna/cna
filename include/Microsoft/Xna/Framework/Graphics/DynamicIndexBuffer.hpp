@@ -7,11 +7,17 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// An index buffer whose content is expected to change frequently.
+    /** @brief An index buffer whose content is expected to change frequently. */
     class DynamicIndexBuffer : public IndexBuffer
     {
     public:
-        /// Constructs a DynamicIndexBuffer with the given element size, index count, and usage hint.
+        /**
+         * @brief Constructs a DynamicIndexBuffer with the given element size, index count, and usage hint.
+         * @param device           The graphics device.
+         * @param indexElementSize Element size — SixteenBits or ThirtyTwoBits.
+         * @param indexCount       Number of indices the buffer can hold.
+         * @param bufferUsage      Usage hint for the buffer.
+         */
         DynamicIndexBuffer(GraphicsDevice& device,
                            IndexElementSize indexElementSize,
                            int indexCount,
@@ -20,20 +26,27 @@ namespace Microsoft::Xna::Framework::Graphics
         {
         }
 
-        /// Constructs a DynamicIndexBuffer with the given device and index count.
+        /**
+         * @brief Constructs a DynamicIndexBuffer with the given device and 16-bit index count.
+         * @param device     The graphics device.
+         * @param indexCount Number of indices the buffer can hold.
+         */
         DynamicIndexBuffer(GraphicsDevice& device, int indexCount)
             : IndexBuffer(device, indexCount)
         {
         }
 
-        /// Gets whether the index buffer content has been lost.
+        /** @brief Returns false; content is never lost in CNA. */
         [[nodiscard]] bool getIsContentLostProperty() const { return false; }
 
-        // XNA 4.0 compliance: ContentLost event (never raised in CNA — we never lose content)
-        /// Raised when the index buffer content is lost (never raised in CNA).
+        /** @brief Raised when the index buffer content is lost (never raised in CNA). */
         System::EventHandler<System::EventArgs> ContentLost;
 
-        /// Uploads index data using SetDataOptions::Discard semantics.
+        /**
+         * @brief Uploads index data with Discard semantics (equivalent to SetData).
+         * @param indices Pointer to the source 16-bit index array.
+         * @param count   Number of indices to upload.
+         */
         void SetDataDiscard(const std::uint16_t* indices, int count)
         {
             SetData(indices, count);

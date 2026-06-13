@@ -13,52 +13,75 @@ namespace Microsoft::Xna::Framework
     struct Plane;
     struct Quaternion;
 
-    /// Represents a right-handed 4x4 matrix storing translation, scale and rotation data.
+    /** @brief Represents a right-handed 4x4 matrix storing translation, scale and rotation data. */
     struct Matrix
     {
-        /// Returns the identity matrix.
+        /**
+         * @brief Returns the identity matrix.
+         *
+         * @return The identity matrix.
+         */
         static const Matrix getIdentityProperty();
 
-        /// A first row and first column value.
+        /** @brief A first row and first column value. */
         float M11;
-        /// A first row and second column value.
+        /** @brief A first row and second column value. */
         float M12;
-        /// A first row and third column value.
+        /** @brief A first row and third column value. */
         float M13;
-        /// A first row and fourth column value.
+        /** @brief A first row and fourth column value. */
         float M14;
 
-        /// A second row and first column value.
+        /** @brief A second row and first column value. */
         float M21;
-        /// A second row and second column value.
+        /** @brief A second row and second column value. */
         float M22;
-        /// A second row and third column value.
+        /** @brief A second row and third column value. */
         float M23;
-        /// A second row and fourth column value.
+        /** @brief A second row and fourth column value. */
         float M24;
 
-        /// A third row and first column value.
+        /** @brief A third row and first column value. */
         float M31;
-        /// A third row and second column value.
+        /** @brief A third row and second column value. */
         float M32;
-        /// A third row and third column value.
+        /** @brief A third row and third column value. */
         float M33;
-        /// A third row and fourth column value.
+        /** @brief A third row and fourth column value. */
         float M34;
 
-        /// A fourth row and first column value.
+        /** @brief A fourth row and first column value. */
         float M41;
-        /// A fourth row and second column value.
+        /** @brief A fourth row and second column value. */
         float M42;
-        /// A fourth row and third column value.
+        /** @brief A fourth row and third column value. */
         float M43;
-        /// A fourth row and fourth column value.
+        /** @brief A fourth row and fourth column value. */
         float M44;
 
-        /// Constructs a zero-filled matrix.
+        /** @brief Constructs a zero-filled matrix. */
         Matrix();
 
-        /// Constructs a matrix from all 16 row-major field values.
+        /**
+         * @brief Constructs a matrix from all 16 row-major field values.
+         *
+         * @param m11 Value for row 1, column 1.
+         * @param m12 Value for row 1, column 2.
+         * @param m13 Value for row 1, column 3.
+         * @param m14 Value for row 1, column 4.
+         * @param m21 Value for row 2, column 1.
+         * @param m22 Value for row 2, column 2.
+         * @param m23 Value for row 2, column 3.
+         * @param m24 Value for row 2, column 4.
+         * @param m31 Value for row 3, column 1.
+         * @param m32 Value for row 3, column 2.
+         * @param m33 Value for row 3, column 3.
+         * @param m34 Value for row 3, column 4.
+         * @param m41 Value for row 4, column 1.
+         * @param m42 Value for row 4, column 2.
+         * @param m43 Value for row 4, column 3.
+         * @param m44 Value for row 4, column 4.
+         */
         Matrix(
             float m11, float m12, float m13, float m14,
             float m21, float m22, float m23, float m24,
@@ -66,62 +89,170 @@ namespace Microsoft::Xna::Framework
             float m41, float m42, float m43, float m44
         );
 
-        /// Gets the backward vector from the third matrix row.
+        /**
+         * @brief Gets the backward vector from the third matrix row.
+         *
+         * @return The backward direction vector.
+         */
         [[nodiscard]] Vector3 getBackwardProperty() const;
-        /// Sets the backward vector in the third matrix row.
+
+        /**
+         * @brief Sets the backward vector in the third matrix row.
+         *
+         * @param value The backward direction vector to set.
+         */
         void setBackwardProperty(Vector3 value);
 
-        /// Gets the down vector from the negated second matrix row.
+        /**
+         * @brief Gets the down vector from the negated second matrix row.
+         *
+         * @return The down direction vector.
+         */
         [[nodiscard]] Vector3 getDownProperty() const;
-        /// Sets the down vector into the negated second matrix row.
+
+        /**
+         * @brief Sets the down vector into the negated second matrix row.
+         *
+         * @param value The down direction vector to set.
+         */
         void setDownProperty(Vector3 value);
 
-        /// Gets the forward vector from the negated third matrix row.
+        /**
+         * @brief Gets the forward vector from the negated third matrix row.
+         *
+         * @return The forward direction vector.
+         */
         [[nodiscard]] Vector3 getForwardProperty() const;
-        /// Sets the forward vector into the negated third matrix row.
+
+        /**
+         * @brief Sets the forward vector into the negated third matrix row.
+         *
+         * @param value The forward direction vector to set.
+         */
         void setForwardProperty(Vector3 value);
 
-        /// Gets the left vector from the negated first matrix row.
+        /**
+         * @brief Gets the left vector from the negated first matrix row.
+         *
+         * @return The left direction vector.
+         */
         [[nodiscard]] Vector3 getLeftProperty() const;
-        /// Sets the left vector into the negated first matrix row.
+
+        /**
+         * @brief Sets the left vector into the negated first matrix row.
+         *
+         * @param value The left direction vector to set.
+         */
         void setLeftProperty(Vector3 value);
 
-        /// Gets the right vector from the first matrix row.
+        /**
+         * @brief Gets the right vector from the first matrix row.
+         *
+         * @return The right direction vector.
+         */
         [[nodiscard]] Vector3 getRightProperty() const;
-        /// Sets the right vector into the first matrix row.
+
+        /**
+         * @brief Sets the right vector into the first matrix row.
+         *
+         * @param value The right direction vector to set.
+         */
         void setRightProperty(Vector3 value);
 
-        /// Gets the translation stored in this matrix.
+        /**
+         * @brief Gets the translation stored in this matrix.
+         *
+         * @return The translation vector.
+         */
         [[nodiscard]] Vector3 getTranslationProperty() const;
-        /// Sets the translation stored in this matrix.
+
+        /**
+         * @brief Sets the translation stored in this matrix.
+         *
+         * @param value The translation vector to set.
+         */
         void setTranslationProperty(Vector3 value);
 
-        /// Gets the up vector from the second matrix row.
+        /**
+         * @brief Gets the up vector from the second matrix row.
+         *
+         * @return The up direction vector.
+         */
         [[nodiscard]] Vector3 getUpProperty() const;
-        /// Sets the up vector into the second matrix row.
+
+        /**
+         * @brief Sets the up vector into the second matrix row.
+         *
+         * @param value The up direction vector to set.
+         */
         void setUpProperty(Vector3 value);
 
-        /// Decomposes this matrix into scale, rotation and translation parts.
+        /**
+         * @brief Decomposes this matrix into scale, rotation and translation parts.
+         *
+         * @param scale Output vector that receives the scale components.
+         * @param rotation Output quaternion that receives the rotation.
+         * @param translation Output vector that receives the translation.
+         * @return @c true if the decomposition succeeded; @c false otherwise.
+         */
         [[nodiscard]] bool Decompose(Vector3& scale, Quaternion& rotation, Vector3& translation) const;
 
-        /// Returns the determinant of this matrix.
+        /**
+         * @brief Returns the determinant of this matrix.
+         *
+         * @return The determinant.
+         */
         [[nodiscard]] float Determinant() const;
 
-        /// Compares this matrix with another matrix without tolerance.
+        /**
+         * @brief Compares this matrix with another matrix without tolerance.
+         *
+         * @param other The matrix to compare against.
+         * @return @c true if the matrices are equal; @c false otherwise.
+         */
         [[nodiscard]] bool Equals(const Matrix& other) const;
 
-        /// Returns a hash code for this matrix.
+        /**
+         * @brief Returns a hash code for this matrix.
+         *
+         * @return Hash code of this matrix.
+         */
         [[nodiscard]] int GetHashCode() const;
 
-        /// Returns a string representation of all 16 fields.
+        /**
+         * @brief Returns a string representation of all 16 fields.
+         *
+         * @return String representation of this matrix.
+         */
         [[nodiscard]] std::string ToString() const;
 
-        /// Adds two matrices component by component.
+        /**
+         * @brief Adds two matrices component by component.
+         *
+         * @param matrix1 Source matrix.
+         * @param matrix2 Source matrix.
+         * @return The component-wise sum.
+         */
         [[nodiscard]] static Matrix Add(Matrix matrix1, Matrix matrix2);
-        /// Adds two matrices component by component and stores the result in an output parameter.
+
+        /**
+         * @brief Adds two matrices component by component and stores the result in an output parameter.
+         *
+         * @param matrix1 Source matrix.
+         * @param matrix2 Source matrix.
+         * @param result Output matrix that receives the sum.
+         */
         static void Add(const Matrix& matrix1, const Matrix& matrix2, Matrix& result);
 
-        /// Creates a spherical billboard matrix.
+        /**
+         * @brief Creates a spherical billboard matrix.
+         *
+         * @param objectPosition Position of the object the billboard will rotate to face.
+         * @param cameraPosition Position of the camera.
+         * @param cameraUpVector The up vector of the camera.
+         * @param cameraForwardVector Optional forward vector of the camera.
+         * @return The billboard matrix.
+         */
         [[nodiscard]] static Matrix CreateBillboard(
             Vector3 objectPosition,
             Vector3 cameraPosition,
@@ -129,7 +260,15 @@ namespace Microsoft::Xna::Framework
             std::optional<Vector3> cameraForwardVector
         );
 
-        /// Creates a spherical billboard matrix in an output parameter.
+        /**
+         * @brief Creates a spherical billboard matrix in an output parameter.
+         *
+         * @param objectPosition Position of the object the billboard will rotate to face.
+         * @param cameraPosition Position of the camera.
+         * @param cameraUpVector The up vector of the camera.
+         * @param cameraForwardVector Optional forward vector of the camera.
+         * @param result Output matrix that receives the billboard matrix.
+         */
         static void CreateBillboard(
             const Vector3& objectPosition,
             const Vector3& cameraPosition,
@@ -138,7 +277,16 @@ namespace Microsoft::Xna::Framework
             Matrix& result
         );
 
-        /// Creates a cylindrical billboard matrix constrained to a rotation axis.
+        /**
+         * @brief Creates a cylindrical billboard matrix constrained to a rotation axis.
+         *
+         * @param objectPosition Position of the object the billboard will rotate to face.
+         * @param cameraPosition Position of the camera.
+         * @param rotateAxis The axis to rotate around.
+         * @param cameraForwardVector Optional forward vector of the camera.
+         * @param objectForwardVector Optional forward vector of the object.
+         * @return The constrained billboard matrix.
+         */
         [[nodiscard]] static Matrix CreateConstrainedBillboard(
             Vector3 objectPosition,
             Vector3 cameraPosition,
@@ -147,7 +295,16 @@ namespace Microsoft::Xna::Framework
             std::optional<Vector3> objectForwardVector
         );
 
-        /// Creates a cylindrical billboard matrix constrained to a rotation axis in an output parameter.
+        /**
+         * @brief Creates a cylindrical billboard matrix constrained to a rotation axis in an output parameter.
+         *
+         * @param objectPosition Position of the object.
+         * @param cameraPosition Position of the camera.
+         * @param rotateAxis The axis to rotate around.
+         * @param cameraForwardVector Optional forward vector of the camera.
+         * @param objectForwardVector Optional forward vector of the object.
+         * @param result Output matrix that receives the constrained billboard matrix.
+         */
         static void CreateConstrainedBillboard(
             const Vector3& objectPosition,
             const Vector3& cameraPosition,
@@ -157,184 +314,658 @@ namespace Microsoft::Xna::Framework
             Matrix& result
         );
 
-        /// Creates a rotation matrix from an axis and angle in radians.
+        /**
+         * @brief Creates a rotation matrix from an axis and angle in radians.
+         *
+         * @param axis The axis to rotate around.
+         * @param angle The angle in radians.
+         * @return The rotation matrix.
+         */
         [[nodiscard]] static Matrix CreateFromAxisAngle(Vector3 axis, float angle);
-        /// Creates a rotation matrix from an axis and angle in radians in an output parameter.
+
+        /**
+         * @brief Creates a rotation matrix from an axis and angle in radians in an output parameter.
+         *
+         * @param axis The axis to rotate around.
+         * @param angle The angle in radians.
+         * @param result Output matrix that receives the rotation matrix.
+         */
         static void CreateFromAxisAngle(const Vector3& axis, float angle, Matrix& result);
 
-        /// Creates a rotation matrix from a quaternion.
+        /**
+         * @brief Creates a rotation matrix from a quaternion.
+         *
+         * @param quaternion The source quaternion.
+         * @return The rotation matrix.
+         */
         [[nodiscard]] static Matrix CreateFromQuaternion(Quaternion quaternion);
-        /// Creates a rotation matrix from a quaternion in an output parameter.
+
+        /**
+         * @brief Creates a rotation matrix from a quaternion in an output parameter.
+         *
+         * @param quaternion The source quaternion.
+         * @param result Output matrix that receives the rotation matrix.
+         */
         static void CreateFromQuaternion(const Quaternion& quaternion, Matrix& result);
 
-        /// Creates a rotation matrix from yaw, pitch and roll angles in radians.
+        /**
+         * @brief Creates a rotation matrix from yaw, pitch and roll angles in radians.
+         *
+         * @param yaw Rotation angle around the y-axis in radians.
+         * @param pitch Rotation angle around the x-axis in radians.
+         * @param roll Rotation angle around the z-axis in radians.
+         * @return The rotation matrix.
+         */
         [[nodiscard]] static Matrix CreateFromYawPitchRoll(float yaw, float pitch, float roll);
-        /// Creates a rotation matrix from yaw, pitch and roll angles in an output parameter.
+
+        /**
+         * @brief Creates a rotation matrix from yaw, pitch and roll angles in an output parameter.
+         *
+         * @param yaw Rotation angle around the y-axis in radians.
+         * @param pitch Rotation angle around the x-axis in radians.
+         * @param roll Rotation angle around the z-axis in radians.
+         * @param result Output matrix that receives the rotation matrix.
+         */
         static void CreateFromYawPitchRoll(float yaw, float pitch, float roll, Matrix& result);
 
-        /// Creates a right-handed view matrix.
+        /**
+         * @brief Creates a right-handed view matrix.
+         *
+         * @param cameraPosition The position of the camera.
+         * @param cameraTarget The target the camera is looking at.
+         * @param cameraUpVector The up vector of the camera.
+         * @return The view matrix.
+         */
         [[nodiscard]] static Matrix CreateLookAt(Vector3 cameraPosition, Vector3 cameraTarget, Vector3 cameraUpVector);
-        /// Creates a right-handed view matrix in an output parameter.
+
+        /**
+         * @brief Creates a right-handed view matrix in an output parameter.
+         *
+         * @param cameraPosition The position of the camera.
+         * @param cameraTarget The target the camera is looking at.
+         * @param cameraUpVector The up vector of the camera.
+         * @param result Output matrix that receives the view matrix.
+         */
         static void CreateLookAt(const Vector3& cameraPosition, const Vector3& cameraTarget,
                                  const Vector3& cameraUpVector, Matrix& result);
 
-        /// Creates an orthographic projection matrix.
+        /**
+         * @brief Creates an orthographic projection matrix.
+         *
+         * @param width Width of the view volume.
+         * @param height Height of the view volume.
+         * @param zNearPlane Minimum z-value of the view volume.
+         * @param zFarPlane Maximum z-value of the view volume.
+         * @return The orthographic projection matrix.
+         */
         [[nodiscard]] static Matrix CreateOrthographic(float width, float height, float zNearPlane, float zFarPlane);
-        /// Creates an orthographic projection matrix in an output parameter.
+
+        /**
+         * @brief Creates an orthographic projection matrix in an output parameter.
+         *
+         * @param width Width of the view volume.
+         * @param height Height of the view volume.
+         * @param zNearPlane Minimum z-value of the view volume.
+         * @param zFarPlane Maximum z-value of the view volume.
+         * @param result Output matrix that receives the orthographic projection.
+         */
         static void CreateOrthographic(float width, float height, float zNearPlane, float zFarPlane, Matrix& result);
 
-        /// Creates an off-center orthographic projection matrix.
+        /**
+         * @brief Creates an off-center orthographic projection matrix.
+         *
+         * @param left Minimum x-value of the view volume.
+         * @param right Maximum x-value of the view volume.
+         * @param bottom Minimum y-value of the view volume.
+         * @param top Maximum y-value of the view volume.
+         * @param zNearPlane Minimum z-value of the view volume.
+         * @param zFarPlane Maximum z-value of the view volume.
+         * @return The off-center orthographic projection matrix.
+         */
         [[nodiscard]] static Matrix CreateOrthographicOffCenter(float left, float right, float bottom, float top,
                                                                 float zNearPlane, float zFarPlane);
-        /// Creates an off-center orthographic projection matrix in an output parameter.
+
+        /**
+         * @brief Creates an off-center orthographic projection matrix in an output parameter.
+         *
+         * @param left Minimum x-value of the view volume.
+         * @param right Maximum x-value of the view volume.
+         * @param bottom Minimum y-value of the view volume.
+         * @param top Maximum y-value of the view volume.
+         * @param zNearPlane Minimum z-value of the view volume.
+         * @param zFarPlane Maximum z-value of the view volume.
+         * @param result Output matrix that receives the projection.
+         */
         static void CreateOrthographicOffCenter(float left, float right, float bottom, float top, float zNearPlane,
                                                 float zFarPlane, Matrix& result);
 
-        /// Creates a perspective projection matrix.
+        /**
+         * @brief Creates a perspective projection matrix.
+         *
+         * @param width Width of the view volume at the near plane.
+         * @param height Height of the view volume at the near plane.
+         * @param nearPlaneDistance Distance to the near view plane.
+         * @param farPlaneDistance Distance to the far view plane.
+         * @return The perspective projection matrix.
+         */
         [[nodiscard]] static Matrix CreatePerspective(float width, float height, float nearPlaneDistance,
                                                       float farPlaneDistance);
-        /// Creates a perspective projection matrix in an output parameter.
+
+        /**
+         * @brief Creates a perspective projection matrix in an output parameter.
+         *
+         * @param width Width of the view volume at the near plane.
+         * @param height Height of the view volume at the near plane.
+         * @param nearPlaneDistance Distance to the near view plane.
+         * @param farPlaneDistance Distance to the far view plane.
+         * @param result Output matrix that receives the perspective projection.
+         */
         static void CreatePerspective(float width, float height, float nearPlaneDistance, float farPlaneDistance,
                                       Matrix& result);
 
-        /// Creates a perspective projection matrix using a field of view.
+        /**
+         * @brief Creates a perspective projection matrix using a field of view.
+         *
+         * @param fieldOfView Field of view in the y direction, in radians.
+         * @param aspectRatio Aspect ratio (width divided by height).
+         * @param nearPlaneDistance Distance to the near view plane.
+         * @param farPlaneDistance Distance to the far view plane.
+         * @return The field-of-view perspective projection matrix.
+         */
         [[nodiscard]] static Matrix CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio,
                                                                  float nearPlaneDistance, float farPlaneDistance);
-        /// Creates a perspective projection matrix using a field of view in an output parameter.
+
+        /**
+         * @brief Creates a perspective projection matrix using a field of view in an output parameter.
+         *
+         * @param fieldOfView Field of view in the y direction, in radians.
+         * @param aspectRatio Aspect ratio.
+         * @param nearPlaneDistance Distance to the near view plane.
+         * @param farPlaneDistance Distance to the far view plane.
+         * @param result Output matrix that receives the projection.
+         */
         static void CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance,
                                                  float farPlaneDistance, Matrix& result);
 
-        /// Creates an off-center perspective projection matrix.
+        /**
+         * @brief Creates an off-center perspective projection matrix.
+         *
+         * @param left Minimum x-value of the view volume at the near plane.
+         * @param right Maximum x-value of the view volume at the near plane.
+         * @param bottom Minimum y-value of the view volume at the near plane.
+         * @param top Maximum y-value of the view volume at the near plane.
+         * @param nearPlaneDistance Distance to the near view plane.
+         * @param farPlaneDistance Distance to the far view plane.
+         * @return The off-center perspective projection matrix.
+         */
         [[nodiscard]] static Matrix CreatePerspectiveOffCenter(float left, float right, float bottom, float top,
                                                                float nearPlaneDistance, float farPlaneDistance);
-        /// Creates an off-center perspective projection matrix in an output parameter.
+
+        /**
+         * @brief Creates an off-center perspective projection matrix in an output parameter.
+         *
+         * @param left Minimum x-value at the near plane.
+         * @param right Maximum x-value at the near plane.
+         * @param bottom Minimum y-value at the near plane.
+         * @param top Maximum y-value at the near plane.
+         * @param nearPlaneDistance Distance to the near view plane.
+         * @param farPlaneDistance Distance to the far view plane.
+         * @param result Output matrix that receives the projection.
+         */
         static void CreatePerspectiveOffCenter(float left, float right, float bottom, float top,
                                                float nearPlaneDistance, float farPlaneDistance, Matrix& result);
 
-        /// Creates a rotation matrix around the X axis.
+        /**
+         * @brief Creates a rotation matrix around the X axis.
+         *
+         * @param radians Angle in radians to rotate around the X axis.
+         * @return The rotation matrix.
+         */
         [[nodiscard]] static Matrix CreateRotationX(float radians);
-        /// Creates a rotation matrix around the X axis in an output parameter.
+
+        /**
+         * @brief Creates a rotation matrix around the X axis in an output parameter.
+         *
+         * @param radians Angle in radians.
+         * @param result Output matrix that receives the rotation matrix.
+         */
         static void CreateRotationX(float radians, Matrix& result);
 
-        /// Creates a rotation matrix around the Y axis.
+        /**
+         * @brief Creates a rotation matrix around the Y axis.
+         *
+         * @param radians Angle in radians to rotate around the Y axis.
+         * @return The rotation matrix.
+         */
         [[nodiscard]] static Matrix CreateRotationY(float radians);
-        /// Creates a rotation matrix around the Y axis in an output parameter.
+
+        /**
+         * @brief Creates a rotation matrix around the Y axis in an output parameter.
+         *
+         * @param radians Angle in radians.
+         * @param result Output matrix that receives the rotation matrix.
+         */
         static void CreateRotationY(float radians, Matrix& result);
 
-        /// Creates a rotation matrix around the Z axis.
+        /**
+         * @brief Creates a rotation matrix around the Z axis.
+         *
+         * @param radians Angle in radians to rotate around the Z axis.
+         * @return The rotation matrix.
+         */
         [[nodiscard]] static Matrix CreateRotationZ(float radians);
-        /// Creates a rotation matrix around the Z axis in an output parameter.
+
+        /**
+         * @brief Creates a rotation matrix around the Z axis in an output parameter.
+         *
+         * @param radians Angle in radians.
+         * @param result Output matrix that receives the rotation matrix.
+         */
         static void CreateRotationZ(float radians, Matrix& result);
 
-        /// Creates a uniform scale matrix.
+        /**
+         * @brief Creates a uniform scale matrix.
+         *
+         * @param scale Scale factor for all axes.
+         * @return The scale matrix.
+         */
         [[nodiscard]] static Matrix CreateScale(float scale);
-        /// Creates a uniform scale matrix in an output parameter.
+
+        /**
+         * @brief Creates a uniform scale matrix in an output parameter.
+         *
+         * @param scale Scale factor for all axes.
+         * @param result Output matrix that receives the scale matrix.
+         */
         static void CreateScale(float scale, Matrix& result);
 
-        /// Creates a non-uniform scale matrix.
+        /**
+         * @brief Creates a non-uniform scale matrix.
+         *
+         * @param xScale Scale factor for the X axis.
+         * @param yScale Scale factor for the Y axis.
+         * @param zScale Scale factor for the Z axis.
+         * @return The scale matrix.
+         */
         [[nodiscard]] static Matrix CreateScale(float xScale, float yScale, float zScale);
-        /// Creates a non-uniform scale matrix in an output parameter.
+
+        /**
+         * @brief Creates a non-uniform scale matrix in an output parameter.
+         *
+         * @param xScale Scale factor for the X axis.
+         * @param yScale Scale factor for the Y axis.
+         * @param zScale Scale factor for the Z axis.
+         * @param result Output matrix that receives the scale matrix.
+         */
         static void CreateScale(float xScale, float yScale, float zScale, Matrix& result);
 
-        /// Creates a scale matrix from a vector.
+        /**
+         * @brief Creates a scale matrix from a vector.
+         *
+         * @param scales Vector containing the scale factors for each axis.
+         * @return The scale matrix.
+         */
         [[nodiscard]] static Matrix CreateScale(Vector3 scales);
-        /// Creates a scale matrix from a vector in an output parameter.
+
+        /**
+         * @brief Creates a scale matrix from a vector in an output parameter.
+         *
+         * @param scales Vector containing the scale factors.
+         * @param result Output matrix that receives the scale matrix.
+         */
         static void CreateScale(const Vector3& scales, Matrix& result);
 
-        /// Creates a shadow projection matrix using a light direction and plane.
+        /**
+         * @brief Creates a shadow projection matrix using a light direction and plane.
+         *
+         * @param lightDirection The direction of the light casting the shadow.
+         * @param plane The plane on which the shadow is projected.
+         * @return The shadow matrix.
+         */
         [[nodiscard]] static Matrix CreateShadow(Vector3 lightDirection, Plane plane);
-        /// Creates a shadow projection matrix in an output parameter.
+
+        /**
+         * @brief Creates a shadow projection matrix in an output parameter.
+         *
+         * @param lightDirection The direction of the light casting the shadow.
+         * @param plane The plane on which the shadow is projected.
+         * @param result Output matrix that receives the shadow matrix.
+         */
         static void CreateShadow(const Vector3& lightDirection, const Plane& plane, Matrix& result);
 
-        /// Creates a translation matrix from coordinates.
+        /**
+         * @brief Creates a translation matrix from coordinates.
+         *
+         * @param xPosition Translation along the X axis.
+         * @param yPosition Translation along the Y axis.
+         * @param zPosition Translation along the Z axis.
+         * @return The translation matrix.
+         */
         [[nodiscard]] static Matrix CreateTranslation(float xPosition, float yPosition, float zPosition);
-        /// Creates a translation matrix from a vector.
+
+        /**
+         * @brief Creates a translation matrix from a vector.
+         *
+         * @param position The translation vector.
+         * @return The translation matrix.
+         */
         [[nodiscard]] static Matrix CreateTranslation(Vector3 position);
-        /// Creates a translation matrix from a vector in an output parameter.
+
+        /**
+         * @brief Creates a translation matrix from a vector in an output parameter.
+         *
+         * @param position The translation vector.
+         * @param result Output matrix that receives the translation matrix.
+         */
         static void CreateTranslation(const Vector3& position, Matrix& result);
-        /// Creates a translation matrix from coordinates in an output parameter.
+
+        /**
+         * @brief Creates a translation matrix from coordinates in an output parameter.
+         *
+         * @param xPosition Translation along the X axis.
+         * @param yPosition Translation along the Y axis.
+         * @param zPosition Translation along the Z axis.
+         * @param result Output matrix that receives the translation matrix.
+         */
         static void CreateTranslation(float xPosition, float yPosition, float zPosition, Matrix& result);
 
-        /// Creates a reflection matrix from a plane.
+        /**
+         * @brief Creates a reflection matrix from a plane.
+         *
+         * @param value The plane to reflect across.
+         * @return The reflection matrix.
+         */
         [[nodiscard]] static Matrix CreateReflection(Plane value);
-        /// Creates a reflection matrix from a plane in an output parameter.
+
+        /**
+         * @brief Creates a reflection matrix from a plane in an output parameter.
+         *
+         * @param value The plane to reflect across.
+         * @param result Output matrix that receives the reflection matrix.
+         */
         static void CreateReflection(const Plane& value, Matrix& result);
 
-        /// Creates a world matrix from position, forward and up vectors.
+        /**
+         * @brief Creates a world matrix from position, forward and up vectors.
+         *
+         * @param position The position of the object.
+         * @param forward The forward direction of the object.
+         * @param up The up direction of the object.
+         * @return The world matrix.
+         */
         [[nodiscard]] static Matrix CreateWorld(Vector3 position, Vector3 forward, Vector3 up);
-        /// Creates a world matrix in an output parameter.
+
+        /**
+         * @brief Creates a world matrix in an output parameter.
+         *
+         * @param position The position of the object.
+         * @param forward The forward direction of the object.
+         * @param up The up direction of the object.
+         * @param result Output matrix that receives the world matrix.
+         */
         static void CreateWorld(const Vector3& position, const Vector3& forward, const Vector3& up, Matrix& result);
 
-        /// Divides one matrix by another component by component.
+        /**
+         * @brief Divides one matrix by another component by component.
+         *
+         * @param matrix1 Source matrix.
+         * @param matrix2 Divisor matrix.
+         * @return The component-wise quotient.
+         */
         [[nodiscard]] static Matrix Divide(Matrix matrix1, Matrix matrix2);
-        /// Divides one matrix by another component by component in an output parameter.
+
+        /**
+         * @brief Divides one matrix by another component by component in an output parameter.
+         *
+         * @param matrix1 Source matrix.
+         * @param matrix2 Divisor matrix.
+         * @param result Output matrix that receives the quotient.
+         */
         static void Divide(const Matrix& matrix1, const Matrix& matrix2, Matrix& result);
 
-        /// Divides a matrix by a scalar.
+        /**
+         * @brief Divides a matrix by a scalar.
+         *
+         * @param matrix1 Source matrix.
+         * @param divider The divisor scalar.
+         * @return The scaled matrix.
+         */
         [[nodiscard]] static Matrix Divide(Matrix matrix1, float divider);
-        /// Divides a matrix by a scalar in an output parameter.
+
+        /**
+         * @brief Divides a matrix by a scalar in an output parameter.
+         *
+         * @param matrix1 Source matrix.
+         * @param divider The divisor scalar.
+         * @param result Output matrix that receives the result.
+         */
         static void Divide(const Matrix& matrix1, float divider, Matrix& result);
 
-        /// Returns the inverse of a matrix.
+        /**
+         * @brief Returns the inverse of a matrix.
+         *
+         * @param matrix The matrix to invert.
+         * @return The inverted matrix.
+         */
         [[nodiscard]] static Matrix Invert(Matrix matrix);
-        /// Returns the inverse of a matrix in an output parameter.
+
+        /**
+         * @brief Returns the inverse of a matrix in an output parameter.
+         *
+         * @param matrix The matrix to invert.
+         * @param result Output matrix that receives the inverse.
+         */
         static void Invert(const Matrix& matrix, Matrix& result);
 
-        /// Linearly interpolates between two matrices.
+        /**
+         * @brief Linearly interpolates between two matrices.
+         *
+         * @param matrix1 Source matrix.
+         * @param matrix2 Destination matrix.
+         * @param amount Interpolation weight between 0 and 1.
+         * @return The interpolated matrix.
+         */
         [[nodiscard]] static Matrix Lerp(Matrix matrix1, Matrix matrix2, float amount);
-        /// Linearly interpolates between two matrices in an output parameter.
+
+        /**
+         * @brief Linearly interpolates between two matrices in an output parameter.
+         *
+         * @param matrix1 Source matrix.
+         * @param matrix2 Destination matrix.
+         * @param amount Interpolation weight.
+         * @param result Output matrix that receives the result.
+         */
         static void Lerp(const Matrix& matrix1, const Matrix& matrix2, float amount, Matrix& result);
 
-        /// Multiplies two matrices.
+        /**
+         * @brief Multiplies two matrices.
+         *
+         * @param matrix1 Left-hand matrix.
+         * @param matrix2 Right-hand matrix.
+         * @return The matrix product.
+         */
         [[nodiscard]] static Matrix Multiply(Matrix matrix1, Matrix matrix2);
-        /// Multiplies two matrices in an output parameter.
+
+        /**
+         * @brief Multiplies two matrices in an output parameter.
+         *
+         * @param matrix1 Left-hand matrix.
+         * @param matrix2 Right-hand matrix.
+         * @param result Output matrix that receives the product.
+         */
         static void Multiply(const Matrix& matrix1, const Matrix& matrix2, Matrix& result);
 
-        /// Multiplies a matrix by a scalar.
+        /**
+         * @brief Multiplies a matrix by a scalar.
+         *
+         * @param matrix1 Source matrix.
+         * @param scaleFactor Scalar multiplier.
+         * @return The scaled matrix.
+         */
         [[nodiscard]] static Matrix Multiply(Matrix matrix1, float scaleFactor);
-        /// Multiplies a matrix by a scalar in an output parameter.
+
+        /**
+         * @brief Multiplies a matrix by a scalar in an output parameter.
+         *
+         * @param matrix1 Source matrix.
+         * @param scaleFactor Scalar multiplier.
+         * @param result Output matrix that receives the result.
+         */
         static void Multiply(const Matrix& matrix1, float scaleFactor, Matrix& result);
 
-        /// Negates every matrix component.
+        /**
+         * @brief Negates every matrix component.
+         *
+         * @param matrix Source matrix.
+         * @return The negated matrix.
+         */
         [[nodiscard]] static Matrix Negate(Matrix matrix);
-        /// Negates every matrix component in an output parameter.
+
+        /**
+         * @brief Negates every matrix component in an output parameter.
+         *
+         * @param matrix Source matrix.
+         * @param result Output matrix that receives the negated result.
+         */
         static void Negate(const Matrix& matrix, Matrix& result);
 
-        /// Subtracts one matrix from another.
+        /**
+         * @brief Subtracts one matrix from another.
+         *
+         * @param matrix1 Source matrix.
+         * @param matrix2 Matrix to subtract.
+         * @return The difference matrix.
+         */
         [[nodiscard]] static Matrix Subtract(Matrix matrix1, Matrix matrix2);
-        /// Subtracts one matrix from another in an output parameter.
+
+        /**
+         * @brief Subtracts one matrix from another in an output parameter.
+         *
+         * @param matrix1 Source matrix.
+         * @param matrix2 Matrix to subtract.
+         * @param result Output matrix that receives the difference.
+         */
         static void Subtract(const Matrix& matrix1, const Matrix& matrix2, Matrix& result);
 
-        /// Transposes a matrix.
+        /**
+         * @brief Transposes a matrix.
+         *
+         * @param matrix Source matrix.
+         * @return The transposed matrix.
+         */
         [[nodiscard]] static Matrix Transpose(Matrix matrix);
-        /// Transposes a matrix in an output parameter.
+
+        /**
+         * @brief Transposes a matrix in an output parameter.
+         *
+         * @param matrix Source matrix.
+         * @param result Output matrix that receives the transposed result.
+         */
         static void Transpose(const Matrix& matrix, Matrix& result);
 
-        /// Transforms a matrix by a quaternion rotation.
+        /**
+         * @brief Transforms a matrix by a quaternion rotation.
+         *
+         * @param value Source matrix.
+         * @param rotation The quaternion rotation to apply.
+         * @return The transformed matrix.
+         */
         [[nodiscard]] static Matrix Transform(Matrix value, Quaternion rotation);
-        /// Transforms a matrix by a quaternion rotation in an output parameter.
+
+        /**
+         * @brief Transforms a matrix by a quaternion rotation in an output parameter.
+         *
+         * @param value Source matrix.
+         * @param rotation The quaternion rotation to apply.
+         * @param result Output matrix that receives the transformed result.
+         */
         static void Transform(const Matrix& value, const Quaternion& rotation, Matrix& result);
 
-        /// Adds two matrices component-wise.
+        /**
+         * @brief Adds two matrices component-wise.
+         *
+         * @param matrix1 Left-hand matrix.
+         * @param matrix2 Right-hand matrix.
+         * @return The component-wise sum.
+         */
         friend Matrix operator+(Matrix matrix1, Matrix matrix2);
-        /// Divides the elements of one matrix by the elements of another.
+
+        /**
+         * @brief Divides the elements of one matrix by the elements of another.
+         *
+         * @param matrix1 Left-hand matrix.
+         * @param matrix2 Right-hand matrix.
+         * @return The component-wise quotient.
+         */
         friend Matrix operator/(Matrix matrix1, Matrix matrix2);
-        /// Divides all elements of a matrix by a scalar.
+
+        /**
+         * @brief Divides all elements of a matrix by a scalar.
+         *
+         * @param matrix Source matrix.
+         * @param divider Divisor scalar.
+         * @return The scaled matrix.
+         */
         friend Matrix operator/(Matrix matrix, float divider);
-        /// Returns true when both matrices are equal without tolerance.
+
+        /**
+         * @brief Returns true when both matrices are equal without tolerance.
+         *
+         * @param matrix1 Left-hand matrix.
+         * @param matrix2 Right-hand matrix.
+         * @return @c true if the matrices are equal; @c false otherwise.
+         */
         friend bool operator==(Matrix matrix1, Matrix matrix2);
-        /// Returns true when any element differs between the two matrices.
+
+        /**
+         * @brief Returns true when any element differs between the two matrices.
+         *
+         * @param matrix1 Left-hand matrix.
+         * @param matrix2 Right-hand matrix.
+         * @return @c true if the matrices are not equal; @c false otherwise.
+         */
         friend bool operator!=(Matrix matrix1, Matrix matrix2);
-        /// Multiplies two matrices using standard matrix multiplication.
+
+        /**
+         * @brief Multiplies two matrices using standard matrix multiplication.
+         *
+         * @param matrix1 Left-hand matrix.
+         * @param matrix2 Right-hand matrix.
+         * @return The matrix product.
+         */
         friend Matrix operator*(Matrix matrix1, Matrix matrix2);
-        /// Multiplies all matrix elements by a scalar.
+
+        /**
+         * @brief Multiplies all matrix elements by a scalar.
+         *
+         * @param matrix Source matrix.
+         * @param scaleFactor Scalar multiplier.
+         * @return The scaled matrix.
+         */
         friend Matrix operator*(Matrix matrix, float scaleFactor);
-        /// Subtracts one matrix from another component-wise.
+
+        /**
+         * @brief Subtracts one matrix from another component-wise.
+         *
+         * @param matrix1 Left-hand matrix.
+         * @param matrix2 Right-hand matrix.
+         * @return The component-wise difference.
+         */
         friend Matrix operator-(Matrix matrix1, Matrix matrix2);
-        /// Negates all matrix elements.
+
+        /**
+         * @brief Negates all matrix elements.
+         *
+         * @param matrix Source matrix.
+         * @return The negated matrix.
+         */
         friend Matrix operator-(Matrix matrix);
 
-        /// Returns this matrix in the transposed column-major form expected by OpenGL-style uniform uploads.
+        /**
+         * @brief Returns this matrix in the transposed column-major form expected by OpenGL-style uniform uploads.
+         *
+         * @param out Array of 16 floats that receives the column-major matrix data.
+         */
         NOXNA void ToColumnMajor(float out[16]) const;
 
     private:

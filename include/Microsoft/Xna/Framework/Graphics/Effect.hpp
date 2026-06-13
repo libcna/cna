@@ -9,47 +9,98 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
 
-    /// Base class for an effect that contains shader programs and parameters.
+    /**
+     * @brief Base class for an effect that contains shader programs and render-state parameters.
+     */
     class Effect : public GraphicsResource
     {
     public:
-        /// Constructs an Effect for the given graphics device.
+        /**
+         * @brief Constructs an Effect for the given graphics device.
+         *
+         * @param device The graphics device that will own this effect.
+         */
         explicit Effect(GraphicsDevice& device);
-        /// Destroys the effect and releases its resources.
+
+        /** @brief Destroys the effect and releases its GPU resources. */
         ~Effect() override;
 
-        /// Copying is not allowed.
+        /** @brief Copying is not allowed. */
         Effect(const Effect&) = delete;
-        /// Copy-assignment is not allowed.
+
+        /** @brief Copy-assignment is not allowed. */
         Effect& operator=(const Effect&) = delete;
 
-        /// Gets the currently active technique.
+        /**
+         * @brief Gets the currently active technique.
+         *
+         * @return Pointer to the active EffectTechnique, or nullptr if none is set.
+         */
         [[nodiscard]] EffectTechnique* getCurrentTechniqueProperty() const;
-        /// Sets the currently active technique.
+
+        /**
+         * @brief Sets the currently active technique.
+         *
+         * @param value Pointer to the technique to activate.
+         */
         void setCurrentTechniqueProperty(EffectTechnique* value);
 
-        /// Gets the collection of effect parameters.
+        /**
+         * @brief Gets the collection of effect parameters (mutable overload).
+         *
+         * @return Reference to the parameter collection.
+         */
         [[nodiscard]] EffectParameterCollection& getParametersProperty();
-        /// Gets the collection of effect parameters (const overload).
+
+        /**
+         * @brief Gets the collection of effect parameters (const overload).
+         *
+         * @return Const reference to the parameter collection.
+         */
         [[nodiscard]] const EffectParameterCollection& getParametersProperty() const;
 
-        /// Gets the collection of techniques defined in this effect.
+        /**
+         * @brief Gets the collection of techniques defined in this effect (mutable overload).
+         *
+         * @return Reference to the technique collection.
+         */
         [[nodiscard]] EffectTechniqueCollection& getTechniquesProperty();
-        /// Gets the collection of techniques defined in this effect (const overload).
+
+        /**
+         * @brief Gets the collection of techniques defined in this effect (const overload).
+         *
+         * @return Const reference to the technique collection.
+         */
         [[nodiscard]] const EffectTechniqueCollection& getTechniquesProperty() const;
 
-        /// Applies the effect state to the graphics device ready for rendering.
+        /**
+         * @brief Applies the effect state to the graphics device ready for rendering.
+         *
+         * Calls OnApply() on the active technique's current pass.
+         */
         void Apply();
 
-        /// Returns the fully-qualified .NET type name of this object.
+        /**
+         * @brief Returns the fully-qualified .NET type name of this object.
+         *
+         * @return The string "Microsoft.Xna.Framework.Graphics.Effect".
+         */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
-        /// Derived classes override this to upload shader parameters to the GPU.
+        /**
+         * @brief Derived classes override this to upload shader parameters to the GPU before drawing.
+         */
         virtual void OnApply() = 0;
-        /// Releases managed and unmanaged resources held by this effect.
+
+        /**
+         * @brief Releases managed and unmanaged resources held by this effect.
+         *
+         * @param disposing True if called from Dispose(); false if called from a finalizer.
+         */
         void Dispose(bool disposing) override;
 
+        /** @brief The graphics device that owns this effect. */
         GraphicsDevice* device_;
 
     private:

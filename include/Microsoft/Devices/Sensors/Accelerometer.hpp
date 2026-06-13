@@ -17,7 +17,7 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    /// Provides access to the device accelerometer sensor.
+    /** @brief Provides access to the device accelerometer sensor. */
     class Accelerometer final : public SensorBase<AccelerometerReading>
     {
     private:

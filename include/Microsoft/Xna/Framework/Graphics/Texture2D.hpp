@@ -24,20 +24,41 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     using namespace CNA::Internal::Backends;
 
-    /// Represents a 2D texture. Mirrors XNA 4.0 Texture2D.
+    /** @brief Represents a 2D texture. Mirrors XNA 4.0 Texture2D. */
     class Texture2D : public Texture
     {
     public:
+        /** @brief Constructs a default, uninitialized Texture2D. */
         Texture2D();
 
-        /// XNA 4.0: Texture2D(GraphicsDevice, string assetName) — loads from file.
+        /**
+         * @brief Loads a Texture2D from a file asset by name.
+         * @param assetName Path to the image file.
+         */
         explicit Texture2D(const std::string& assetName);
+        /**
+         * @brief Loads a Texture2D from a file asset using the given device.
+         * @param assetName     Path to the image file.
+         * @param graphicsDevice The device to upload the texture to.
+         */
         Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice);
 
-        /// XNA 4.0: Texture2D(GraphicsDevice, int width, int height) — creates empty texture.
+        /**
+         * @brief Creates an empty Texture2D with Color format.
+         * @param graphicsDevice The device to create the texture on.
+         * @param width          Width in pixels.
+         * @param height         Height in pixels.
+         */
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height);
 
-        /// XNA 4.0: Texture2D(GraphicsDevice, int width, int height, bool mipMap, SurfaceFormat format)
+        /**
+         * @brief Creates a Texture2D with explicit format and optional mip levels.
+         * @param graphicsDevice The device to create the texture on.
+         * @param width          Width in pixels.
+         * @param height         Height in pixels.
+         * @param mipMap         True to generate a full mipmap chain.
+         * @param format         The desired surface format.
+         */
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height,
                   bool mipMap, SurfaceFormat format);
 
@@ -48,64 +69,149 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture2D(Texture2D&&) noexcept = default;
         Texture2D& operator=(Texture2D&&) noexcept = default;
 
+        /** @brief Returns the fully qualified .NET type name of this class. */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
-        /// XNA 4.0: Texture2D.Width
+        /** @brief Returns the texture width in pixels. */
         [[nodiscard]] int getWidthProperty()  const { return width; }
-        /// XNA 4.0: Texture2D.Height
+        /** @brief Returns the texture height in pixels. */
         [[nodiscard]] int getHeightProperty() const { return height; }
-        /// XNA 4.0: Texture2D.Bounds
+        /** @brief Returns a Rectangle with origin (0,0) and the texture dimensions. */
         [[nodiscard]] Rectangle getBoundsProperty() const;
 
         // Format and LevelCount are inherited from Texture.
 
-        /// XNA 4.0: Texture2D.SetData<Color>(Color[] data)
+        /**
+         * @brief Uploads pixel data to the texture.
+         * @param data         Pointer to the Color array.
+         * @param elementCount Number of Color elements to upload.
+         */
         void SetData(const Color* data, int elementCount);
 
-        /// XNA 4.0: Texture2D.SetData<Color>(int level, Rectangle? rect, Color[], int startIndex, int elementCount)
+        /**
+         * @brief Uploads pixel data to a specific mip level and optional sub-rectangle.
+         * @param level        Mip level to write (0 = full size).
+         * @param rect         Sub-rectangle to update, or nullptr for the entire level.
+         * @param data         Pointer to the Color array.
+         * @param startIndex   First element in @p data to use.
+         * @param elementCount Number of Color elements to upload.
+         */
         void SetData(int level, const Rectangle* rect, const Color* data, int startIndex, int elementCount);
 
-        /// XNA 4.0: Texture2D.GetData<Color>(Color[] data, int startIndex, int elementCount)
+        /**
+         * @brief Reads pixel data from the texture into the provided array.
+         * @param data         Output array to receive the pixel data.
+         * @param startIndex   First element in @p data to write to.
+         * @param elementCount Number of Color elements to read.
+         */
         void GetData(Color* data, int startIndex, int elementCount) const;
 
-        /// XNA 4.0: Texture2D.GetData<Color>(Color[] data)
+        /**
+         * @brief Reads all pixel data from the texture into the provided array.
+         * @param data         Output array to receive the pixel data.
+         * @param elementCount Number of Color elements to read.
+         */
         void GetData(Color* data, int elementCount) const;
 
-        /// XNA 4.0: Texture2D.GetData<Color>(int level, Rectangle? rect, Color[], int startIndex, int elementCount)
+        /**
+         * @brief Reads pixel data from a specific mip level and optional sub-rectangle.
+         * @param level        Mip level to read (0 = full size).
+         * @param rect         Sub-rectangle to read, or nullptr for the entire level.
+         * @param data         Output array to receive the pixel data.
+         * @param startIndex   First element in @p data to write to.
+         * @param elementCount Number of Color elements to read.
+         */
         void GetData(int level, const Rectangle* rect, Color* data, int startIndex, int elementCount) const;
 
-        /// XNA 4.0: Texture2D.FromStream(GraphicsDevice, Stream)
+        /**
+         * @brief Creates a Texture2D by decoding image data from a stream.
+         * @param graphicsDevice The device to create the texture on.
+         * @param stream         The input stream containing encoded image data.
+         * @return The decoded Texture2D.
+         */
         static Texture2D FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream);
 
-        /// XNA 4.0: Texture2D.SaveAsPng(Stream, int width, int height)
+        /**
+         * @brief Saves the texture as a PNG image to the given stream.
+         * @param stream  Output stream to write the PNG data to.
+         * @param width   Width to encode (should match the texture width).
+         * @param height  Height to encode (should match the texture height).
+         */
         void SaveAsPng(System::IO::Stream* stream, int width, int height) const;
 
-        /// NOXNA convenience: saves as PNG directly to a file path.
+        /**
+         * @brief Saves the texture as a PNG image directly to a file.
+         * @param filename Destination file path.
+         */
         NOXNA void SaveAsPng(const std::string& filename) const;
 
-        /// XNA 4.0: Texture2D.SaveAsJpeg(Stream, int width, int height)
+        /**
+         * @brief Saves the texture as a JPEG image to the given stream.
+         * @param stream  Output stream to write the JPEG data to.
+         * @param width   Width to encode.
+         * @param height  Height to encode.
+         */
         void SaveAsJpeg(System::IO::Stream* stream, int width, int height) const;
 
-        /// NOXNA convenience: saves as JPEG directly to a file path.
+        /**
+         * @brief Saves the texture as a JPEG image directly to a file.
+         * @param filename Destination file path.
+         */
         NOXNA void SaveAsJpeg(const std::string& filename) const;
 
-        /// Updates texture pixels from a raw RGBA byte buffer. pixelCount = width * height.
+        /**
+         * @brief Uploads raw RGBA pixel data to the texture.
+         * @param data       Pointer to the RGBA byte buffer (4 bytes per pixel).
+         * @param pixelCount Total number of pixels (width * height).
+         */
         NOXNA void SetDataRGBA(const uint8_t* data, int pixelCount);
 
+        /** @brief Returns a reference to the GPU texture backend. */
         NOXNA ITextureBackend& GetBackend() const { return *backend_; }
 
-        /// Returns a weak reference to the GPU backend. Used by ContentManager's weak texture cache.
+        /**
+         * @brief Returns a weak pointer to the GPU texture backend.
+         *
+         * Used by ContentManager's weak texture cache.
+         * @return A weak_ptr to the backend; may be expired if the texture is destroyed.
+         */
         NOXNA std::weak_ptr<ITextureBackend> GetBackendWeak() const { return backend_; }
 
-        /// Returns a weak reference to the CPU pixel buffer. Used by ContentManager's weak texture cache.
+        /**
+         * @brief Returns a weak pointer to the CPU-side pixel buffer.
+         *
+         * Used by ContentManager's weak texture cache.
+         * @return A weak_ptr to the pixel buffer; may be expired if context recovery is disabled.
+         */
         NOXNA std::weak_ptr<std::vector<uint8_t>> GetCpuPixelsWeak() const { return cpuPixels_; }
 
-        /// @note Not in XNA 4.0 — prefer the Texture2D(device,w,h)+SetData pattern.
+        /**
+         * @brief Creates a Texture2D from a raw RGBA pixel vector.
+         *
+         * Prefer the Texture2D(device, w, h) + SetData pattern for XNA-compatible code.
+         *
+         * @param device The device to create the texture on.
+         * @param w      Width in pixels.
+         * @param h      Height in pixels.
+         * @param rgba   RGBA pixel data (4 bytes per pixel, size must equal w * h * 4).
+         * @return The created Texture2D.
+         */
         NOXNA static Texture2D CreateFromPixels(GraphicsDevice& device,
                                                 int w, int h,
                                                 const std::vector<std::uint8_t>& rgba);
 
-        /// Reconstructs a Texture2D from a cached backend and CPU pixel buffer without reloading from disk.
+        /**
+         * @brief Reconstructs a Texture2D from a cached backend and CPU pixel buffer without reloading from disk.
+         *
+         * @param device    The device to associate with the texture.
+         * @param w         Width in pixels.
+         * @param h         Height in pixels.
+         * @param fmt       Surface format.
+         * @param levelCount Number of mip levels.
+         * @param backend   Shared backend handle from a previous Texture2D.
+         * @param cpuPixels Shared CPU pixel buffer from a previous Texture2D.
+         * @return The reconstructed Texture2D.
+         */
         NOXNA static Texture2D ReconstructFromCache(GraphicsDevice& device,
                                                     int w, int h,
                                                     SurfaceFormat fmt,
@@ -114,11 +220,24 @@ namespace Microsoft::Xna::Framework::Graphics
                                                     std::shared_ptr<std::vector<uint8_t>> cpuPixels);
 
     protected:
-        /// Used by RenderTarget2D: initializes with a pre-built backend (no CPU-side pixels).
+        /**
+         * @brief Constructs a Texture2D from a pre-built backend (used by RenderTarget2D).
+         * @param device     The owning device.
+         * @param w          Width in pixels.
+         * @param h          Height in pixels.
+         * @param fmt        Surface format.
+         * @param levelCount Number of mip levels.
+         * @param backend    Shared ownership of the pre-built GPU backend.
+         */
         Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt, int levelCount,
                   std::shared_ptr<ITextureBackend> backend);
 
-        /// Returns the raw (non-owning) backend pointer. Used by RenderTarget2D after construction.
+        /**
+         * @brief Returns the raw non-owning backend pointer.
+         *
+         * Used by RenderTarget2D after construction.
+         * @return Pointer to the backend, or nullptr.
+         */
         [[nodiscard]] ITextureBackend* GetBackendRaw() const { return backend_.get(); }
 
     private:

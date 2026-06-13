@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-/// @namespace Microsoft::Xna::Framework::Input
-/// Provides keyboard, mouse, gamepad and touch input APIs.
+/** @brief Provides keyboard, mouse, gamepad, and touch input APIs. */
+namespace Microsoft::Xna::Framework::Input {}
 
-/// @namespace Microsoft::Xna::Framework::Audio
-/// Provides sound effect and audio playback APIs.
+/** @brief Provides sound effect, XACT cue, and audio playback APIs. */
+namespace Microsoft::Xna::Framework::Audio {}
 
-/// @namespace Microsoft::Xna::Framework::Content
-/// Provides runtime support for loading game content.
+/** @brief Provides runtime support for loading and managing game content. */
+namespace Microsoft::Xna::Framework::Content {}

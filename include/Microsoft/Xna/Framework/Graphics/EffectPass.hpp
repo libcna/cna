@@ -9,21 +9,49 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class Effect;
 
-    /// Represents a single rendering pass within an effect technique.
+    /**
+     * @brief Represents a single rendering pass within an effect technique.
+     *
+     * Each pass encapsulates vertex and pixel shader programs together with
+     * any associated render-state changes.
+     */
     class EffectPass
     {
     public:
-        /// Constructs an EffectPass owned by the given effect with the given name.
+        /**
+         * @brief Constructs an EffectPass owned by the given effect with the given name.
+         *
+         * @param owner Pointer to the Effect that owns this pass.
+         * @param name  Name of this pass as declared in the effect.
+         */
         EffectPass(Effect* owner, std::string name);
 
-        /// Gets the name of this pass.
+        /**
+         * @brief Gets the name of this pass.
+         *
+         * @return The pass name string.
+         */
         [[nodiscard]] const std::string& getNameProperty() const;
-        /// Gets the annotations attached to this pass.
+
+        /**
+         * @brief Gets the annotations attached to this pass (mutable overload).
+         *
+         * @return Reference to the annotation collection.
+         */
         [[nodiscard]] EffectAnnotationCollection& getAnnotationsProperty();
-        /// Gets the annotations attached to this pass (const overload).
+
+        /**
+         * @brief Gets the annotations attached to this pass (const overload).
+         *
+         * @return Const reference to the annotation collection.
+         */
         [[nodiscard]] const EffectAnnotationCollection& getAnnotationsProperty() const;
 
-        /// Applies this pass to the graphics device, making the pass's shaders and state active.
+        /**
+         * @brief Applies this pass to the graphics device, making its shaders and state active.
+         *
+         * Must be called before issuing draw calls that should use this pass.
+         */
         void Apply();
 
     private:

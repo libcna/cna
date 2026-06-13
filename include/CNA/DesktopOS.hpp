@@ -6,43 +6,31 @@
 
 namespace CNA
 {
-    /**
-     * @brief Represents a desktop operating system.
-     * @note Status: Verified
-     */
+    /** @brief Identifies a desktop operating system. */
     enum class DesktopOS
     {
-        /**
-         * @brief Microsoft Windows.
-         */
+        /** @brief Microsoft Windows. */
         Windows,
 
-        /**
-         * @brief GNU/Linux.
-         */
+        /** @brief GNU/Linux. */
         Linux,
 
-        /**
-         * @brief Apple macOS.
-         */
+        /** @brief Apple macOS. */
         MacOSX,
 
-        /**
-         * @brief Any other desktop operating system.
-         */
+        /** @brief Any other desktop operating system. */
         Other
     };
 
     /**
      * @brief Returns the current desktop operating system.
      *
-     * This function may only be used when the current platform is
-     * @c Platform::Desktop. If the current platform is not desktop,
+     * This function may only be called when the current platform is
+     * Platform::Desktop. If the current platform is not Desktop,
      * an exception is thrown.
      *
-     * @return The current desktop operating system.
-     *
-     * @throws CNAException Thrown when the current platform is not desktop.
+     * @return The current DesktopOS value.
+     * @throws CNAException Thrown when the current platform is not Desktop.
      */
     DesktopOS getCurrentDesktopOS();
 } // CNA

@@ -8,19 +8,42 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class ModelMesh;
 
-    /// A collection of ModelMesh objects.
+    /**
+     * @brief Represents a collection of ModelMesh objects.
+     */
     class ModelMeshCollection
     {
     public:
+        /**
+         * @brief Retrieves a ModelMesh by index.
+         * @param index The zero-based index of the mesh to retrieve.
+         * @return Pointer to the ModelMesh at the specified index.
+         */
         [[nodiscard]] ModelMesh* operator[](int index) const;
+
+        /**
+         * @brief Retrieves a ModelMesh by name. Throws if not found.
+         * @param name The name of the mesh to retrieve.
+         * @return Pointer to the ModelMesh with the given name.
+         */
         [[nodiscard]] ModelMesh* operator[](const std::string& name) const;
+
+        /**
+         * @brief Gets the number of meshes in this collection.
+         * @return The mesh count.
+         */
         [[nodiscard]] int getCountProperty() const;
 
         using iterator = std::vector<ModelMesh*>::iterator;
         using const_iterator = std::vector<ModelMesh*>::const_iterator;
+
+        /** @brief Returns an iterator to the beginning of the collection. */
         iterator begin();
+        /** @brief Returns an iterator past the end of the collection. */
         iterator end();
+        /** @brief Returns a const iterator to the beginning of the collection. */
         const_iterator begin() const;
+        /** @brief Returns a const iterator past the end of the collection. */
         const_iterator end() const;
 
     private:

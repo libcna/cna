@@ -8,38 +8,92 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// An indexed collection of EffectParameter objects.
+    /**
+     * @brief An indexed, name-keyed collection of EffectParameter objects.
+     */
     class EffectParameterCollection
     {
     public:
-        /// Constructs an empty EffectParameterCollection.
+        /** @brief Constructs an empty EffectParameterCollection. */
         EffectParameterCollection() = default;
 
-        /// Gets the number of parameters in this collection.
+        /**
+         * @brief Gets the number of parameters in this collection.
+         *
+         * @return The parameter count.
+         */
         [[nodiscard]] int getCountProperty() const;
-        /// Gets the parameter at the specified index.
+
+        /**
+         * @brief Gets the parameter at the specified index (mutable overload).
+         *
+         * @param index Zero-based index of the parameter.
+         * @return Reference to the parameter.
+         */
         [[nodiscard]] EffectParameter& operator[](int index);
-        /// Gets the parameter at the specified index (const overload).
+
+        /**
+         * @brief Gets the parameter at the specified index (const overload).
+         *
+         * @param index Zero-based index of the parameter.
+         * @return Const reference to the parameter.
+         */
         [[nodiscard]] const EffectParameter& operator[](int index) const;
-        /// Gets the parameter with the specified name, or nullptr if not found.
+
+        /**
+         * @brief Gets the parameter with the specified name.
+         *
+         * @param name The parameter name to search for.
+         * @return Pointer to the matching parameter, or nullptr if not found.
+         */
         [[nodiscard]] EffectParameter* operator[](const std::string& name);
-        /// Gets the parameter with the specified name, or nullptr if not found (const overload).
+
+        /**
+         * @brief Gets the parameter with the specified name (const overload).
+         *
+         * @param name The parameter name to search for.
+         * @return Const pointer to the matching parameter, or nullptr if not found.
+         */
         [[nodiscard]] const EffectParameter* operator[](const std::string& name) const;
 
-        /// Adds a parameter to this collection.
+        /**
+         * @brief Adds a parameter to this collection.
+         *
+         * @param param The EffectParameter to add.
+         */
         void Add(EffectParameter param);
 
-        /// Iterator type for range-for support.
+        /** @brief Mutable iterator type for range-for support. */
         using iterator = std::vector<EffectParameter>::iterator;
-        /// Const iterator type for range-for support.
+        /** @brief Const iterator type for range-for support. */
         using const_iterator = std::vector<EffectParameter>::const_iterator;
-        /// Returns an iterator to the beginning of the collection.
+
+        /**
+         * @brief Returns a mutable iterator to the first parameter.
+         *
+         * @return Begin iterator.
+         */
         iterator begin();
-        /// Returns an iterator to the end of the collection.
+
+        /**
+         * @brief Returns a mutable iterator past the last parameter.
+         *
+         * @return End iterator.
+         */
         iterator end();
-        /// Returns a const iterator to the beginning of the collection.
+
+        /**
+         * @brief Returns a const iterator to the first parameter.
+         *
+         * @return Const begin iterator.
+         */
         const_iterator begin() const;
-        /// Returns a const iterator to the end of the collection.
+
+        /**
+         * @brief Returns a const iterator past the last parameter.
+         *
+         * @return Const end iterator.
+         */
         const_iterator end() const;
 
     private:

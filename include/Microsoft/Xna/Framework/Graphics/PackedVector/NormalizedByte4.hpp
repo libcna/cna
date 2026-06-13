@@ -7,24 +7,51 @@
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
-    /// Packed vector type storing four signed normalized bytes (XYZW) in a 32-bit value.
+    /**
+     * @brief Packed vector type storing four signed normalized bytes (XYZW) in a 32-bit value.
+     */
     struct NormalizedByte4 : public IPackedVectorT<uint32_t>
     {
-        /// Constructs a NormalizedByte4 with a packed value of zero.
+        /** @brief Constructs a NormalizedByte4 with a packed value of zero. */
         NormalizedByte4() : packedValue_(0) {}
-        /// Constructs a NormalizedByte4 from normalized X, Y, Z, W floats in [-1, 1].
+
+        /**
+         * @brief Constructs a NormalizedByte4 from normalized XYZW floats in [-1, 1].
+         * @param x The x component in [-1, 1].
+         * @param y The y component in [-1, 1].
+         * @param z The z component in [-1, 1].
+         * @param w The w component in [-1, 1].
+         */
         NormalizedByte4(float x, float y, float z, float w) : packedValue_(Pack(x, y, z, w)) {}
-        /// Constructs a NormalizedByte4 from a Vector4 with components in [-1, 1].
+
+        /**
+         * @brief Constructs a NormalizedByte4 from a Vector4 with components in [-1, 1].
+         * @param vector Vector containing the XYZW components.
+         */
         NormalizedByte4(Vector4 vector) : packedValue_(Pack(vector.X, vector.Y, vector.Z, vector.W)) {}
 
-        /// Gets the packed 32-bit value.
+        /**
+         * @brief Gets the packed 32-bit value.
+         * @return The packed 32-bit value.
+         */
         [[nodiscard]] uint32_t getPackedValueProperty() const override { return packedValue_; }
-        /// Sets the packed 32-bit value.
+
+        /**
+         * @brief Sets the packed 32-bit value.
+         * @param v The new packed 32-bit value.
+         */
         void setPackedValueProperty(uint32_t v) override { packedValue_ = v; }
 
-        /// Packs the XYZW components of a Vector4 as signed normalized bytes.
+        /**
+         * @brief Packs the XYZW components of a Vector4 as signed normalized bytes.
+         * @param v The Vector4 to pack.
+         */
         void PackFromVector4(const Vector4& v) override { packedValue_ = Pack(v.X, v.Y, v.Z, v.W); }
-        /// Expands the packed value to a normalized Vector4.
+
+        /**
+         * @brief Expands the packed value to a normalized Vector4.
+         * @return The unpacked Vector4.
+         */
         [[nodiscard]] Vector4 ToVector4() const
         {
             return {
@@ -35,9 +62,18 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
             };
         }
 
-        /// Returns true if both values are equal.
+        /**
+         * @brief Returns true if both NormalizedByte4 values are equal.
+         * @param o The other NormalizedByte4 to compare.
+         * @return True if equal.
+         */
         bool operator==(const NormalizedByte4& o) const { return packedValue_ == o.packedValue_; }
-        /// Returns true if both values are not equal.
+
+        /**
+         * @brief Returns true if both NormalizedByte4 values are not equal.
+         * @param o The other NormalizedByte4 to compare.
+         * @return True if not equal.
+         */
         bool operator!=(const NormalizedByte4& o) const { return !(*this == o); }
 
     private:

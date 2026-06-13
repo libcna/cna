@@ -3,13 +3,13 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    /// Specifies how a playing cue or category should be stopped.
+    /** @brief Specifies how a playing cue or category should be stopped. */
     enum class AudioStopOptions
     {
-        /// Stop after all authored release phases complete.
+        /** @brief Stop after all authored release phases complete. */
         AsAuthored,
 
-        /// Stop immediately, cutting off release tails.
+        /** @brief Stop immediately, cutting off release tails. */
         Immediate
     };
 }

@@ -7,14 +7,20 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Event arguments used when a game component is added to or removed from a collection.
+    /** @brief Event arguments used when a game component is added to or removed from a collection. */
     class GameComponentCollectionEventArgs : public System::EventArgs
     {
     public:
-        /// Creates event arguments for the specified game component.
+        /**
+         * @brief Creates event arguments for the specified game component.
+         * @param gameComponent Pointer to the component associated with the event.
+         */
         explicit GameComponentCollectionEventArgs(IGameComponent* gameComponent);
 
-        /// Gets the game component associated with the collection event.
+        /**
+         * @brief Gets the game component associated with the collection event.
+         * @return Pointer to the game component that was added or removed.
+         */
         [[nodiscard]] IGameComponent* getGameComponentProperty() const;
 
     private:

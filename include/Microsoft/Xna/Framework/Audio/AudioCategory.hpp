@@ -9,32 +9,53 @@ namespace Microsoft::Xna::Framework::Audio
 {
     class AudioEngine;
 
-    /// Represents a named category of sounds managed by an AudioEngine.
-    ///
-    /// NOTE: Category-level mixing is not available on the SDL3_mixer backend.
-    /// Pause/Resume/SetVolume/Stop are accepted without error but have no
-    /// audible effect.
+    /**
+     * @brief Represents a named category of sounds managed by an AudioEngine.
+     *
+     * Category-level mixing is not available on the SDL3_mixer backend.
+     * Pause, Resume, SetVolume, and Stop are accepted without error but have no
+     * audible effect on that backend.
+     */
     struct AudioCategory
     {
-        /// Gets the name of this category.
+        /** @brief Gets the name of this category. */
         [[nodiscard]] const std::string& getNameProperty() const;
 
-        /// Pauses all cues in this category. No-op on SDL3_mixer backend.
+        /** @brief Pauses all cues in this category. No-op on SDL3_mixer backend. */
         void Pause();
 
-        /// Resumes all cues in this category. No-op on SDL3_mixer backend.
+        /** @brief Resumes all cues in this category. No-op on SDL3_mixer backend. */
         void Resume();
 
-        /// Sets the volume for this category. No-op on SDL3_mixer backend.
+        /**
+         * @brief Sets the volume for this category. No-op on SDL3_mixer backend.
+         *
+         * @param volume New volume level.
+         */
         void SetVolume(float volume);
 
-        /// Stops all cues in this category. No-op on SDL3_mixer backend.
+        /**
+         * @brief Stops all cues in this category.
+         *
+         * @param options Whether to stop immediately or let release phases finish.
+         */
         void Stop(AudioStopOptions options);
 
+        /**
+         * @brief Returns whether this category is equal to another.
+         *
+         * @param other Category to compare with.
+         * @return true if equal; otherwise false.
+         */
         [[nodiscard]] bool Equals(const AudioCategory& other) const;
+
+        /** @brief Returns a hash code for this category. */
         [[nodiscard]] int GetHashCode() const;
 
+        /** @brief Returns whether two categories are equal. */
         bool operator==(const AudioCategory& other) const;
+
+        /** @brief Returns whether two categories are not equal. */
         bool operator!=(const AudioCategory& other) const;
 
     private:

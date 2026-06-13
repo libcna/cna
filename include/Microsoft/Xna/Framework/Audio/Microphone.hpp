@@ -15,62 +15,113 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    /// Represents a microphone capture device.
+    /** @brief Represents a microphone capture device. */
     class Microphone : public System::Object
     {
     public:
-        /// Name of the microphone device.
+        /** @brief Name of the microphone device. */
         const std::string Name;
 
-        /// Raised when enough captured data is available to be read.
+        /** @brief Raised when enough captured data is available to be read. */
         System::EventHandler<System::EventArgs> BufferReady;
 
-        /// Gets all available microphones.
+        /**
+         * @brief Gets the list of all available microphone devices.
+         *
+         * @return Reference to the vector of available microphones.
+         */
         [[nodiscard]] static const std::vector<Microphone*>& getAllProperty();
 
-        /// Gets the default microphone, or nullptr when no microphones are available.
+        /**
+         * @brief Gets the default microphone device, or nullptr when none is available.
+         *
+         * @return Pointer to the default Microphone, or nullptr.
+         */
         [[nodiscard]] static Microphone* getDefaultProperty();
 
-        /// Cached microphone list used by the framework dispatcher.
+        /** @brief Cached microphone list used by the framework dispatcher. */
         static std::vector<Microphone*>* micList;
 
-        /// Gets the duration threshold used for BufferReady notifications.
+        /**
+         * @brief Gets the duration threshold used for BufferReady notifications.
+         *
+         * @return Current buffer duration.
+         */
         [[nodiscard]] System::TimeSpan getBufferDurationProperty() const;
 
-        /// Sets the duration threshold used for BufferReady notifications.
+        /**
+         * @brief Sets the duration threshold used for BufferReady notifications.
+         *
+         * @param value New buffer duration.
+         */
         void setBufferDurationProperty(System::TimeSpan value);
 
-        /// Gets whether this device is a headset microphone.
+        /**
+         * @brief Gets whether this device is a headset microphone.
+         *
+         * @return true if this is a headset microphone; otherwise false.
+         */
         [[nodiscard]] bool getIsHeadsetProperty() const;
 
-        /// Gets the capture sample rate.
+        /**
+         * @brief Gets the capture sample rate in Hz.
+         *
+         * @return Sample rate.
+         */
         [[nodiscard]] SharpRuntime::intcs getSampleRateProperty() const;
 
-        /// Gets the current microphone state.
+        /**
+         * @brief Gets the current capture state of this microphone.
+         *
+         * @return Current MicrophoneState.
+         */
         [[nodiscard]] MicrophoneState getStateProperty() const;
 
-        /// Reads captured sample bytes into a buffer.
+        /**
+         * @brief Reads captured audio bytes into the provided buffer.
+         *
+         * @param buffer Buffer to receive the captured data.
+         * @return Number of bytes actually read.
+         */
         SharpRuntime::intcs GetData(std::vector<SharpRuntime::bytecs>& buffer);
 
-        /// Reads captured sample bytes into a range of a buffer.
+        /**
+         * @brief Reads captured audio bytes into a range of the provided buffer.
+         *
+         * @param buffer Buffer to receive the captured data.
+         * @param offset Byte offset within the buffer to start writing.
+         * @param count  Maximum number of bytes to read.
+         * @return Number of bytes actually read.
+         */
         SharpRuntime::intcs GetData(std::vector<SharpRuntime::bytecs>& buffer, SharpRuntime::intcs offset,
                                     SharpRuntime::intcs count);
 
-        /// Converts a byte count to its duration for this microphone format.
+        /**
+         * @brief Converts a byte count to its playback duration for this microphone's format.
+         *
+         * @param sizeInBytes Number of PCM data bytes.
+         * @return Corresponding duration.
+         */
         [[nodiscard]] System::TimeSpan GetSampleDuration(SharpRuntime::intcs sizeInBytes) const;
 
-        /// Converts a duration to a byte count for this microphone format.
+        /**
+         * @brief Converts a duration to a byte count for this microphone's format.
+         *
+         * @param duration Desired duration.
+         * @return Number of bytes required.
+         */
         [[nodiscard]] SharpRuntime::intcs GetSampleSizeInBytes(System::TimeSpan duration) const;
 
-        /// Starts capturing samples.
+        /** @brief Starts capturing audio samples from this device. */
         void Start();
 
-        /// Stops capturing samples.
+        /** @brief Stops capturing audio samples from this device. */
         void Stop();
 
-        /// Checks whether enough data is queued and raises BufferReady when needed.
+        /** @brief Checks whether enough data is queued and raises BufferReady when needed. */
         void CheckBuffer();
 
+        /** @brief Fixed capture sample rate used by XNA microphone capture. */
         static constexpr SharpRuntime::intcs SAMPLERATE = 44100;
 
     private:

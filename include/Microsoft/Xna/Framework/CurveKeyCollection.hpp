@@ -9,72 +9,150 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Collection of CurveKey elements used by Curve.
+    /** @brief The collection of CurveKey elements and a part of the Curve class. */
     class CurveKeyCollection
     {
     public:
-        /// Underlying container type.
+        /** @brief Underlying container type. */
         NOXNA using container_type = std::vector<CurveKey>;
-        /// Mutable iterator over the key sequence.
+        /** @brief Mutable iterator over the key sequence. */
         NOXNA using iterator = container_type::iterator;
-        /// Immutable iterator over the key sequence.
+        /** @brief Immutable iterator over the key sequence. */
         NOXNA using const_iterator = container_type::const_iterator;
 
-        /// Gets the number of keys in the collection.
+        /**
+         * @brief Returns the count of keys in this collection.
+         * @return The number of keys stored.
+         */
         [[nodiscard]] int getCountProperty() const;
 
-        /// Gets whether the collection is read-only.
+        /**
+         * @brief Returns false because this is not a read-only collection.
+         * @return false unless the collection has been locked.
+         */
         [[nodiscard]] bool getIsReadOnlyProperty() const;
 
-        /// Gets a key by index.
+        /**
+         * @brief Gets a key by index.
+         * @param index The zero-based index of the key.
+         * @return A mutable reference to the key at the given index.
+         */
         [[nodiscard]] CurveKey& getItemProperty(int index);
+
+        /**
+         * @brief Gets a key by index.
+         * @param index The zero-based index of the key.
+         * @return A const reference to the key at the given index.
+         */
         [[nodiscard]] const CurveKey& getItemProperty(int index) const;
 
-        /// Sets a key by index while preserving position ordering.
+        /**
+         * @brief Sets a key by index while preserving position ordering.
+         * @param index The zero-based index of the key to replace.
+         * @param value The new key value.
+         */
         void setItemProperty(int index, const CurveKey& value);
 
-        /// C++ indexer equivalent for the C# collection indexer.
+        /**
+         * @brief C++ indexer equivalent for the C# collection indexer.
+         * @param index The zero-based index of the key.
+         * @return A mutable reference to the key at the given index.
+         */
         [[nodiscard]] CurveKey& operator[](int index);
+
+        /**
+         * @brief C++ indexer equivalent for the C# collection indexer.
+         * @param index The zero-based index of the key.
+         * @return A const reference to the key at the given index.
+         */
         [[nodiscard]] const CurveKey& operator[](int index) const;
 
-        /// Creates an empty key collection.
+        /** @brief Creates an empty key collection. */
         CurveKeyCollection();
 
-        /// Adds a key while preserving ascending position order.
+        /**
+         * @brief Adds a key while preserving ascending position order.
+         * @param item The key to add to the collection.
+         */
         void Add(const CurveKey& item);
 
-        /// Removes all keys from the collection.
+        /** @brief Removes all keys from the collection. */
         void Clear();
 
-        /// Creates a copy of this collection.
+        /**
+         * @brief Creates a copy of this collection.
+         * @return A deep copy of this collection.
+         */
         [[nodiscard]] CurveKeyCollection Clone() const;
 
-        /// Returns true if the collection contains the given key.
+        /**
+         * @brief Returns true if the collection contains the given key.
+         * @param item The key to locate.
+         * @return true if the key is found; false otherwise.
+         */
         [[nodiscard]] bool Contains(const CurveKey& item) const;
 
-        /// Copies keys into an existing vector starting at the specified array index.
+        /**
+         * @brief Copies keys into an existing vector starting at the specified array index.
+         * @param array The destination vector to copy into.
+         * @param arrayIndex The zero-based index in the array to start copying from.
+         */
         void CopyTo(std::vector<CurveKey>& array, int arrayIndex) const;
 
-        /// Finds a key and returns its index, or -1 when it is not present.
+        /**
+         * @brief Finds a key and returns its index, or -1 when it is not present.
+         * @param item The key to locate.
+         * @return The zero-based index of the key, or -1 if not found.
+         */
         [[nodiscard]] int IndexOf(const CurveKey& item) const;
 
-        /// Removes the first matching key.
+        /**
+         * @brief Removes the first matching key.
+         * @param item The key to remove.
+         * @return true if the key was found and removed; false otherwise.
+         */
         bool Remove(const CurveKey& item);
 
-        /// Removes the key at the specified index.
+        /**
+         * @brief Removes the key at the specified index.
+         * @param index The zero-based index of the key to remove.
+         */
         void RemoveAt(int index);
 
-        /// Returns an iterator to the first key.
+        /**
+         * @brief Returns an iterator to the first key.
+         * @return A mutable iterator pointing to the first key.
+         */
         NOXNA [[nodiscard]] iterator begin();
-        /// Returns an iterator past the last key.
+
+        /**
+         * @brief Returns an iterator past the last key.
+         * @return A mutable iterator one past the last key.
+         */
         NOXNA [[nodiscard]] iterator end();
-        /// Returns a const iterator to the first key.
+
+        /**
+         * @brief Returns a const iterator to the first key.
+         * @return An immutable iterator pointing to the first key.
+         */
         NOXNA [[nodiscard]] const_iterator begin() const;
-        /// Returns a const iterator past the last key.
+
+        /**
+         * @brief Returns a const iterator past the last key.
+         * @return An immutable iterator one past the last key.
+         */
         NOXNA [[nodiscard]] const_iterator end() const;
-        /// Returns a const iterator to the first key.
+
+        /**
+         * @brief Returns a const iterator to the first key.
+         * @return An immutable iterator pointing to the first key.
+         */
         NOXNA [[nodiscard]] const_iterator cbegin() const;
-        /// Returns a const iterator past the last key.
+
+        /**
+         * @brief Returns a const iterator past the last key.
+         * @return An immutable iterator one past the last key.
+         */
         NOXNA [[nodiscard]] const_iterator cend() const;
 
     private:

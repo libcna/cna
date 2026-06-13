@@ -3,12 +3,14 @@
 
 namespace Microsoft::Xna::Framework::Input
 {
-    /// Identifies the state of a keyboard key.
+    /**
+     * @brief Identifies the state of a keyboard key.
+     */
     enum class KeyState
     {
-        /// Key is released.
+        /** @brief Key is released. */
         Up,
-        /// Key is pressed.
+        /** @brief Key is pressed. */
         Down,
     };
 }

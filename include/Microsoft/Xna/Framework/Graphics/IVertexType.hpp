@@ -5,12 +5,13 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class VertexDeclaration;
 
-    /// Implemented by vertex structures to expose their VertexDeclaration.
+    /** @brief Implemented by vertex structures to expose their VertexDeclaration. */
     class IVertexType
     {
     public:
         virtual ~IVertexType() = default;
 
+        /** @brief Returns the vertex declaration describing the layout of this vertex type. */
         [[nodiscard]] virtual const VertexDeclaration& getVertexDeclarationProperty() const = 0;
     };
 }

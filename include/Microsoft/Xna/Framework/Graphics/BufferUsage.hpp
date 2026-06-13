@@ -3,12 +3,12 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Specifies the buffer usage mode for vertex and index buffers.
+    /** @brief A usage hint for optimizing memory placement of graphics buffers. */
     enum class BufferUsage
     {
-        /// Default usage; both reads and writes are allowed.
+        /** @brief No special usage; the buffer may be read and written. */
         None = 0,
-        /// Hint that the application will only write to the buffer.
+        /** @brief The buffer will not be readable and will be optimized for rendering and writing. */
         WriteOnly = 1,
     };
 }

@@ -3,16 +3,16 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
-    /// Defines the type of sounds in a video.
+    /** @brief Defines the type of audio content in a video. */
     enum class VideoSoundtrackType
     {
-        /// This video contains only music.
+        /** @brief The video contains music only. */
         Music,
 
-        /// This video contains only dialog.
+        /** @brief The video contains dialog only. */
         Dialog,
 
-        /// This video contains music and dialog.
+        /** @brief The video contains both music and dialog. */
         MusicAndDialog
     };
 }

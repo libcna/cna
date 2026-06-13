@@ -30,182 +30,300 @@ namespace Microsoft::Xna::Framework
 {
     class Game;
 
-    /// CNA-specific presentation/scaling policy for the rendering backend.
+    /** @brief CNA-specific presentation/scaling policy for the rendering backend. */
     NOXNA enum class PresentationMode
     {
-        /// Scale with black bars to preserve aspect ratio.
+        /** @brief Scale with black bars to preserve aspect ratio. */
         Letterbox = 0,
-        /// Scale with cropping to fill the screen.
+        /** @brief Scale with cropping to fill the screen. */
         Overscan = 1,
-        /// Stretch to fill the screen ignoring aspect ratio.
+        /** @brief Stretch to fill the screen ignoring aspect ratio. */
         Stretch = 2,
-        /// Render at the native back-buffer size without scaling.
+        /** @brief Render at the native back-buffer size without scaling. */
         NativeBackBuffer = 3,
-        /// Fix the back-buffer height and scale the width to the display aspect ratio.
+        /** @brief Fix the back-buffer height and scale the width to the display aspect ratio. */
         FixedHeightDynamicWidth = 4
     };
 
-    /// Manages the graphics device and applies high-level presentation settings.
+    /** @brief Manages the graphics device and applies high-level presentation settings. */
     class GraphicsDeviceManager : public System::Object,
                                   public Graphics::IGraphicsDeviceService,
                                   public System::IDisposable,
                                   public IGraphicsDeviceManager
     {
     public:
-        /// Default back buffer width used when no explicit width is set.
+        /** @brief Default back buffer width used when no explicit width is set. */
         static constexpr SharpRuntime::intcs DefaultBackBufferWidth = 800;
-        /// Default back buffer height used when no explicit height is set.
+        /** @brief Default back buffer height used when no explicit height is set. */
         static constexpr SharpRuntime::intcs DefaultBackBufferHeight = 480;
 
-        /// Raised when this manager is disposed.
+        /** @brief Raised when this manager is disposed. */
         System::EventHandler<System::EventArgs> Disposed;
 
-        /// Raised after the graphics device has been created.
+        /** @brief Raised after the graphics device has been created. */
         System::EventHandler<System::EventArgs> DeviceCreated;
 
-        /// Raised before the graphics device is disposed.
+        /** @brief Raised before the graphics device is disposed. */
         System::EventHandler<System::EventArgs> DeviceDisposing;
 
-        /// Raised after the graphics device has reset.
+        /** @brief Raised after the graphics device has reset. */
         System::EventHandler<System::EventArgs> DeviceReset;
 
-        /// Raised before the graphics device resets.
+        /** @brief Raised before the graphics device resets. */
         System::EventHandler<System::EventArgs> DeviceResetting;
 
-        /// Raised before device settings are applied, allowing callers to adjust them.
+        /** @brief Raised before device settings are applied, allowing callers to adjust them. */
         System::EventHandler<PreparingDeviceSettingsEventArgs> PreparingDeviceSettings;
 
-        /// Creates an empty graphics device manager with no associated Game.
+        /** @brief Creates an empty graphics device manager with no associated Game. */
         NOXNA GraphicsDeviceManager();
 
-        /// Creates a graphics device manager for the specified game.
+        /**
+         * @brief Creates a graphics device manager for the specified game.
+         * @param game Pointer to the game that owns this manager; must not be null.
+         */
         explicit GraphicsDeviceManager(Game* game);
 
-        /// Destructor; calls Dispose(false).
+        /** @brief Destructor; calls Dispose(false). */
         ~GraphicsDeviceManager() override;
 
-        /// Gets the requested graphics feature profile.
+        /**
+         * @brief Gets the requested graphics feature profile.
+         * @return The current graphics profile.
+         */
         [[nodiscard]] Graphics::GraphicsProfile getGraphicsProfileProperty() const;
 
-        /// Sets the requested graphics feature profile.
+        /**
+         * @brief Sets the requested graphics feature profile.
+         * @param value The desired graphics profile.
+         */
         void setGraphicsProfileProperty(Graphics::GraphicsProfile value);
 
-        /// Gets the managed graphics device.
+        /**
+         * @brief Gets the managed graphics device.
+         * @return Pointer to the graphics device, or nullptr if not yet created.
+         */
         [[nodiscard]] Graphics::GraphicsDevice* getGraphicsDeviceProperty() const override;
 
-        /// Returns the DeviceCreated event.
+        /**
+         * @brief Returns the DeviceCreated event.
+         * @return A reference to the DeviceCreated event handler.
+         */
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceCreatedEvent() override;
 
-        /// Returns the DeviceDisposing event.
+        /**
+         * @brief Returns the DeviceDisposing event.
+         * @return A reference to the DeviceDisposing event handler.
+         */
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceDisposingEvent() override;
 
-        /// Returns the DeviceReset event.
+        /**
+         * @brief Returns the DeviceReset event.
+         * @return A reference to the DeviceReset event handler.
+         */
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResetEvent() override;
 
-        /// Returns the DeviceResetting event.
+        /**
+         * @brief Returns the DeviceResetting event.
+         * @return A reference to the DeviceResetting event handler.
+         */
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResettingEvent() override;
 
-        /// Gets whether the graphics device should be fullscreen.
+        /**
+         * @brief Gets whether the graphics device should be fullscreen.
+         * @return true if fullscreen mode is requested.
+         */
         [[nodiscard]] bool getIsFullScreenProperty() const;
 
-        /// Sets whether the graphics device should be fullscreen.
+        /**
+         * @brief Sets whether the graphics device should be fullscreen.
+         * @param value true to request fullscreen; false for windowed mode.
+         */
         void setIsFullScreenProperty(bool value);
 
-        /// Gets whether multisampling is preferred.
+        /**
+         * @brief Gets whether multisampling is preferred.
+         * @return true if multisampling is preferred.
+         */
         [[nodiscard]] bool getPreferMultiSamplingProperty() const;
 
-        /// Sets whether multisampling is preferred.
+        /**
+         * @brief Sets whether multisampling is preferred.
+         * @param value true to request multisampling; false to disable it.
+         */
         void setPreferMultiSamplingProperty(bool value);
 
-        /// Gets the preferred back buffer format.
+        /**
+         * @brief Gets the preferred back buffer format.
+         * @return The preferred surface format for the back buffer.
+         */
         [[nodiscard]] Graphics::SurfaceFormat getPreferredBackBufferFormatProperty() const;
 
-        /// Sets the preferred back buffer format.
+        /**
+         * @brief Sets the preferred back buffer format.
+         * @param value The desired surface format for the back buffer.
+         */
         void setPreferredBackBufferFormatProperty(Graphics::SurfaceFormat value);
 
-        /// Gets the preferred back buffer height.
+        /**
+         * @brief Gets the preferred back buffer height.
+         * @return The preferred height in pixels.
+         */
         [[nodiscard]] SharpRuntime::intcs getPreferredBackBufferHeightProperty() const;
 
-        /// Sets the preferred back buffer height.
+        /**
+         * @brief Sets the preferred back buffer height.
+         * @param value The desired height in pixels.
+         */
         void setPreferredBackBufferHeightProperty(SharpRuntime::intcs value);
 
-        /// Gets the preferred back buffer width.
+        /**
+         * @brief Gets the preferred back buffer width.
+         * @return The preferred width in pixels.
+         */
         [[nodiscard]] SharpRuntime::intcs getPreferredBackBufferWidthProperty() const;
 
-        /// Sets the preferred back buffer width.
+        /**
+         * @brief Sets the preferred back buffer width.
+         * @param value The desired width in pixels.
+         */
         void setPreferredBackBufferWidthProperty(SharpRuntime::intcs value);
 
-        /// Gets the preferred depth/stencil format.
+        /**
+         * @brief Gets the preferred depth/stencil format.
+         * @return The preferred depth/stencil format.
+         */
         [[nodiscard]] Graphics::DepthFormat getPreferredDepthStencilFormatProperty() const;
 
-        /// Sets the preferred depth/stencil format.
+        /**
+         * @brief Sets the preferred depth/stencil format.
+         * @param value The desired depth/stencil format.
+         */
         void setPreferredDepthStencilFormatProperty(Graphics::DepthFormat value);
 
-        /// Gets whether presenting should synchronize with vertical retrace.
+        /**
+         * @brief Gets whether presenting should synchronize with vertical retrace.
+         * @return true if vertical sync is enabled.
+         */
         [[nodiscard]] bool getSynchronizeWithVerticalRetraceProperty() const;
 
-        /// Sets whether presenting should synchronize with vertical retrace.
+        /**
+         * @brief Sets whether presenting should synchronize with vertical retrace.
+         * @param value true to enable vertical sync; false to disable it.
+         */
         void setSynchronizeWithVerticalRetraceProperty(bool value);
 
-        /// Gets supported display orientations.
+        /**
+         * @brief Gets supported display orientations.
+         * @return The bitmask of supported display orientations.
+         */
         [[nodiscard]] DisplayOrientation getSupportedOrientationsProperty() const;
 
-        /// Sets supported display orientations.
+        /**
+         * @brief Sets supported display orientations.
+         * @param value Bitmask of the orientations the game supports.
+         */
         void setSupportedOrientationsProperty(DisplayOrientation value);
 
-        /// Gets the CNA presentation/scaling policy.
+        /**
+         * @brief Gets the CNA presentation/scaling policy.
+         * @return The current presentation mode.
+         */
         NOXNA [[nodiscard]] PresentationMode getPreferredPresentationModeProperty() const;
 
-        /// Sets the CNA presentation/scaling policy.
+        /**
+         * @brief Sets the CNA presentation/scaling policy.
+         * @param value The desired presentation mode.
+         */
         NOXNA void setPreferredPresentationModeProperty(PresentationMode value);
 
-        /// Applies pending graphics setting changes.
+        /** @brief Applies pending graphics setting changes. */
         void ApplyChanges();
 
-        /// Toggles fullscreen state and applies the change.
+        /** @brief Toggles fullscreen state and applies the change. */
         void ToggleFullScreen();
 
-        /// Releases this manager and the graphics device it owns, if any.
+        /** @brief Releases this manager and the graphics device it owns, if any. */
         void Dispose() override;
 
-        /// Creates or recreates the graphics device.
+        /** @brief Creates or recreates the graphics device. */
         void CreateDevice() override;
 
-        /// Begins drawing for the current frame.
+        /**
+         * @brief Begins drawing for the current frame.
+         * @return true if drawing should proceed; false if no device is available.
+         */
         [[nodiscard]] bool BeginDraw() override;
 
-        /// Ends drawing and presents the frame.
+        /** @brief Ends drawing and presents the frame. */
         void EndDraw() override;
 
-        /// Returns the fully-qualified .NET type name of this class.
+        /**
+         * @brief Returns the fully-qualified .NET type name of this class.
+         * @return A const reference to the type name string.
+         */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
-        /// Performs disposal. When disposing is true, managed-style resources are released.
+        /**
+         * @brief Performs disposal. When disposing is true, managed-style resources are released.
+         * @param disposing true when called from Dispose(); false when called from the destructor.
+         */
         virtual void Dispose(bool disposing);
 
-        /// Raises DeviceCreated.
+        /**
+         * @brief Raises DeviceCreated.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnDeviceCreated(System::Object* sender, const System::EventArgs& args);
 
-        /// Raises DeviceDisposing.
+        /**
+         * @brief Raises DeviceDisposing.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnDeviceDisposing(System::Object* sender, const System::EventArgs& args);
 
-        /// Raises DeviceReset.
+        /**
+         * @brief Raises DeviceReset.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnDeviceReset(System::Object* sender, const System::EventArgs& args);
 
-        /// Raises DeviceResetting.
+        /**
+         * @brief Raises DeviceResetting.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnDeviceResetting(System::Object* sender, const System::EventArgs& args);
 
-        /// Raises PreparingDeviceSettings.
+        /**
+         * @brief Raises PreparingDeviceSettings.
+         * @param sender The object that originated the event.
+         * @param args Mutable event data containing the device settings to adjust.
+         */
         virtual void OnPreparingDeviceSettings(System::Object* sender, PreparingDeviceSettingsEventArgs& args);
 
-        /// Returns whether the current graphics device can reset to the supplied settings.
+        /**
+         * @brief Returns whether the current graphics device can reset to the supplied settings.
+         * @param newDeviceInfo The candidate device settings.
+         * @return true if a reset is possible; false otherwise.
+         */
         virtual bool CanResetDevice(const GraphicsDeviceInformation& newDeviceInfo);
 
-        /// Finds the best graphics device settings for this game.
+        /**
+         * @brief Finds the best graphics device settings for this game.
+         * @param anySuitableDevice true to accept any suitable device; false for strict matching.
+         * @return The best matching GraphicsDeviceInformation.
+         */
         virtual GraphicsDeviceInformation FindBestDevice(bool anySuitableDevice);
 
-        /// Ranks candidate graphics device settings.
+        /**
+         * @brief Ranks candidate graphics device settings.
+         * @param foundDevices The list of candidate device settings to rank in place.
+         */
         virtual void RankDevices(std::vector<GraphicsDeviceInformation>& foundDevices);
 
     private:

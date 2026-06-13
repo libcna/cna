@@ -3,16 +3,16 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Defines the primitive topology for drawing operations.
+    /** @brief Defines how vertex data is ordered into geometric primitives. */
     enum class PrimitiveType
     {
-        /// A list of isolated triangles.
+        /** @brief Renders isolated triangles; each group of three vertices defines one triangle. */
         TriangleList = 0,
-        /// A strip of connected triangles.
+        /** @brief Renders a strip of connected triangles; the back-face culling flag is flipped on even-numbered triangles. */
         TriangleStrip = 1,
-        /// A list of isolated line segments.
+        /** @brief Renders a list of isolated straight line segments. */
         LineList = 2,
-        /// A strip of connected line segments.
+        /** @brief Renders the vertices as a single polyline. */
         LineStrip = 3
     };
 }

@@ -19,7 +19,7 @@ namespace Microsoft::Xna::Framework
 {
     class Game;
 
-    /// Base implementation for a game component that participates in the update loop.
+    /** @brief Base implementation for a game component that participates in the update loop. */
     class GameComponent : public System::Object,
                           public IGameComponent,
                           public IUpdateable,
@@ -27,65 +27,110 @@ namespace Microsoft::Xna::Framework
                           public System::IDisposable
     {
     public:
-        /// Raised when the component is disposed.
+        /** @brief Raised when the component is disposed. */
         System::EventHandler<System::EventArgs> Disposed;
 
-        /// Raised when the enabled state changes.
+        /** @brief Raised when the enabled state changes. */
         System::EventHandler<System::EventArgs> EnabledChanged;
 
-        /// Raised when the update order changes.
+        /** @brief Raised when the update order changes. */
         System::EventHandler<System::EventArgs> UpdateOrderChanged;
 
-        /// Creates a component owned by the specified game.
+        /**
+         * @brief Creates a component owned by the specified game.
+         * @param game The game that owns this component.
+         */
         explicit GameComponent(Game& game);
 
-        /// Releases component resources.
+        /** @brief Releases component resources. */
         ~GameComponent() override;
 
-        /// Gets the game that owns this component.
+        /**
+         * @brief Gets the game that owns this component.
+         * @return A reference to the owning game.
+         */
         [[nodiscard]] Game& getGameProperty() const;
 
-        /// Gets whether this component should be updated.
+        /**
+         * @brief Gets whether this component should be updated.
+         * @return true if the component participates in the update loop.
+         */
         [[nodiscard]] bool getEnabledProperty() const override;
 
-        /// Sets whether this component should be updated.
+        /**
+         * @brief Sets whether this component should be updated.
+         * @param value true to enable updates; false to disable them.
+         */
         void setEnabledProperty(bool value);
 
-        /// Gets the order used to sort updateable components.
+        /**
+         * @brief Gets the order used to sort updateable components.
+         * @return The update order value; lower values update first.
+         */
         [[nodiscard]] SharpRuntime::intcs getUpdateOrderProperty() const override;
 
-        /// Sets the order used to sort updateable components.
+        /**
+         * @brief Sets the order used to sort updateable components.
+         * @param value The new update order value.
+         */
         void setUpdateOrderProperty(SharpRuntime::intcs value);
 
-        /// Returns the EnabledChanged event.
+        /**
+         * @brief Returns the EnabledChanged event.
+         * @return A reference to the EnabledChanged event handler.
+         */
         [[nodiscard]] System::EventHandler<System::EventArgs>& getEnabledChangedEvent() override;
 
-        /// Returns the UpdateOrderChanged event.
+        /**
+         * @brief Returns the UpdateOrderChanged event.
+         * @return A reference to the UpdateOrderChanged event handler.
+         */
         [[nodiscard]] System::EventHandler<System::EventArgs>& getUpdateOrderChangedEvent() override;
 
-        /// Shuts down the component.
+        /** @brief Shuts down the component. */
         void Dispose() override;
 
-        /// Initializes the component.
+        /** @brief Initializes the component. */
         void Initialize() override;
 
-        /// Updates the component.
+        /**
+         * @brief Updates the component.
+         * @param gameTime Snapshot of the game timing state.
+         */
         void Update(GameTime& gameTime) override;
 
-        /// Compares this component with another component using update order.
+        /**
+         * @brief Compares this component with another component using update order.
+         * @param other The other component to compare with.
+         * @return A negative value, zero, or positive based on update order comparison.
+         */
         [[nodiscard]] int CompareTo(const GameComponent& other) const override;
 
-        /// Returns the fully-qualified .NET type name of this class.
+        /**
+         * @brief Returns the fully-qualified .NET type name of this class.
+         * @return A const reference to the type name string.
+         */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
-        /// Called after update order changes.
+        /**
+         * @brief Called after update order changes.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnUpdateOrderChanged(System::Object* sender, const System::EventArgs& args);
 
-        /// Called after enabled state changes.
+        /**
+         * @brief Called after enabled state changes.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnEnabledChanged(System::Object* sender, const System::EventArgs& args);
 
-        /// Performs disposal. When disposing is true, managed-style events may be raised.
+        /**
+         * @brief Performs disposal. When disposing is true, managed-style events may be raised.
+         * @param disposing true when called from Dispose(); false when called from the destructor.
+         */
         virtual void Dispose(bool disposing);
 
     private:

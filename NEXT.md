@@ -252,54 +252,42 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/
 
 ## 8. Next smallest tasks
 
-### Task 45 — sharp-runtime: Doxygen `///` on all public members ⬜ TODO
+### Task 46 — CNA: Doxygen `///` comments — audit and sync with FNA ⬜ TODO
 
-**Status:** Not started. 412 `.hpp` files under
-`/rv/data/development/github.com/openeggbert/sharp-runtime/include/` are missing `///` Doxygen
-comments on their public methods, constructors, operators, and enum values.
+**Status:** Not started.
 
-**Breakdown by directory:**
+**Goal:** Every public method, constructor, operator, constant, and enum value in every CNA
+`.hpp` file under `include/` must have a `///` Doxygen comment. Comments should reflect the FNA
+XML documentation where one exists.
 
-| Directory | Files missing `///` |
-|---|---|
-| `System/` (root, direct files only) | ~144 |
-| `System/Collections/` | 61 |
-| `System/Threading/` | 48 |
-| `System/IO/` | 46 |
-| `System/Text/` | 31 |
-| `System/Diagnostics/` | 20 |
-| `System/Globalization/` | 20 |
-| `System/ComponentModel/` | 9 |
-| `System/Runtime/` | 7 |
-| `System/Numerics/` | 7 |
-| `System/Xml/` | 4 |
-| `System/Security/` | 4 |
-| `System/Net/` | 4 |
-| `System/Buffers/` | 4 |
-| `SharpRuntime/` | 3 |
+**Rules per member:**
 
-**Permission note:** Background agents spawned from the CNA session cannot write to the
-sharp-runtime directory. To run this task efficiently, open Claude Code directly inside
-sharp-runtime and run parallel agents from there:
+1. **No comment yet** → copy the intent from the FNA XML `<summary>` (rephrased to one short
+   sentence in `///` style). Do not write "taken from FNA".
+2. **Comment exists in CNA, FNA has a better one** → replace with FNA version (rephrased).
+3. **Comment exists in CNA and is already better or equivalent** → keep CNA version unchanged.
 
-```bash
-cd /rv/data/development/github.com/openeggbert/sharp-runtime
-claude
-# then ask: "doxygen komentare pro vsechny verejne metody"
-```
+**Style rules:**
+- `///` single-line style only. No `/** */` blocks on individual members.
+- One short sentence per member ending with a period.
+- Enum enumerators need `///` too.
 
-Alternatively, global `~/.claude/settings.json` has been updated with explicit
-`Edit`/`Write` allow rules for `openeggbert/**` — future agent attempts may succeed.
+**FNA reference:** `/rv/data/library/github.com/FNA-XNA/FNA/src`
 
-**Rules for the comments:**
-- `///` single-line style only (no `/** */` blocks on individual members)
-- One short sentence per member: "Gets the count.", "Removes all elements.", etc.
-- Enum enumerators need `///` too
-- Do NOT commit from agents — one clean commit at the end
+**Scope:** All `.hpp` files under `include/Microsoft/Xna/` and `include/CNA/`.
+
+**Approach (large task — work in batches per namespace):**
+- `include/Microsoft/Xna/Framework/` (root files: Color, Vector*, Matrix, …)
+- `include/Microsoft/Xna/Framework/Graphics/` (Texture2D, SpriteBatch, Effects, …)
+- `include/Microsoft/Xna/Framework/Input/`
+- `include/Microsoft/Xna/Framework/Audio/`
+- `include/Microsoft/Xna/Framework/Media/`
+- `include/Microsoft/Xna/Framework/Content/`
+- `include/CNA/` (internal helpers — write brief intent comments where missing)
+
+Do NOT commit from agents — one clean commit at the end.
 
 ---
-
-
 
 ### Task 33 — `RenderTarget2D`: delete copy constructor / assignment ✅ DONE
 - Added `= delete` for copy ctor/assignment, `= default` for move in `RenderTarget2D.hpp`.

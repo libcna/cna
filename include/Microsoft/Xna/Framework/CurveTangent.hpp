@@ -4,11 +4,14 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Defines how tangents are calculated for CurveKey points.
+    /** @brief Defines the different tangent types to be calculated for CurveKey points in a Curve. */
     enum class CurveTangent
     {
-        Flat   = 0, ///< Tangent is always zero.
-        Linear = 1, ///< Tangent equals the difference to the neighboring key value.
-        Smooth = 2  ///< Tangent is smoothed using both neighboring keys.
+        /** @brief The tangent always has a value equal to zero. */
+        Flat   = 0,
+        /** @brief The tangent equals the difference between the current value and the neighboring key value. */
+        Linear = 1,
+        /** @brief The smooth tangent is computed by taking into account the values of both neighboring keys. */
+        Smooth = 2
     };
 }

@@ -3,11 +3,14 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Describes the status of the GraphicsDevice.
+    /** @brief Describes the status of the GraphicsDevice. */
     enum class GraphicsDeviceStatus
     {
+        /** @brief The device is operating normally. */
         Normal,
+        /** @brief The device has been lost and cannot process commands. */
         Lost,
+        /** @brief The device has not been reset after being lost. */
         NotReset,
     };
 }

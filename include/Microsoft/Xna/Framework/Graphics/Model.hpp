@@ -16,27 +16,85 @@ namespace Microsoft::Xna::Framework::Graphics
     class ModelBone;
     class ModelMesh;
 
-    /// Represents a 3D model composed of bones and meshes.
+    /**
+     * @brief A basic 3D model with per-mesh parent bones.
+     */
     class Model
     {
     public:
+        /** @brief Constructs an empty model. */
         Model() = default;
+
+        /**
+         * @brief Constructs a model from a graphics device, bones, and meshes.
+         * @param graphicsDevice A valid reference to the GraphicsDevice.
+         * @param bones The collection of bones.
+         * @param meshes The collection of meshes.
+         */
         NOXNA Model(GraphicsDevice* graphicsDevice,
                     std::vector<ModelBone*> bones,
                     std::vector<ModelMesh*> meshes);
 
+        /**
+         * @brief Gets the collection of bones that describe how each mesh relates to its parent.
+         * @return The model's bone collection.
+         */
         [[nodiscard]] const ModelBoneCollection& getBonesProperty() const;
+
+        /**
+         * @brief Gets the collection of meshes that compose this model.
+         * @return The model's mesh collection.
+         */
         [[nodiscard]] const ModelMeshCollection& getMeshesProperty() const;
+
+        /**
+         * @brief Gets the root bone for this model.
+         * @return Pointer to the root ModelBone.
+         */
         [[nodiscard]] ModelBone* getRootProperty() const;
+
+        /**
+         * @brief Gets the custom object attached to this model.
+         * @return Pointer to the tag object, or nullptr.
+         */
         [[nodiscard]] System::Object* getTagProperty() const;
+
+        /**
+         * @brief Sets the custom object attached to this model.
+         * @param value Pointer to the tag object.
+         */
         void setTagProperty(System::Object* value);
 
-        /// Transfers ownership of GPU resources allocated by a content reader.
+        /**
+         * @brief Transfers ownership of GPU resources allocated by a content reader.
+         * @param resources Shared ownership handle to the resources.
+         */
         NOXNA void setOwnedResources(std::shared_ptr<void> resources);
 
+        /**
+         * @brief Copies bone transforms relative to all parent bones to a given vector.
+         * @param destinationBoneTransforms The vector receiving the absolute bone transforms.
+         */
         void CopyAbsoluteBoneTransformsTo(std::vector<Matrix>& destinationBoneTransforms) const;
+
+        /**
+         * @brief Copies bone transforms from a given vector into this model's bones.
+         * @param sourceBoneTransforms The vector of prepared bone transform data.
+         */
         void CopyBoneTransformsFrom(const std::vector<Matrix>& sourceBoneTransforms);
+
+        /**
+         * @brief Copies bone transforms relative to the root bone to a given vector.
+         * @param destinationBoneTransforms The vector receiving the bone transforms.
+         */
         void CopyBoneTransformsTo(std::vector<Matrix>& destinationBoneTransforms) const;
+
+        /**
+         * @brief Draws all model meshes using their current effect settings.
+         * @param world The world transform matrix.
+         * @param view The view transform matrix.
+         * @param projection The projection transform matrix.
+         */
         void Draw(const Matrix& world, const Matrix& view, const Matrix& projection);
 
     private:

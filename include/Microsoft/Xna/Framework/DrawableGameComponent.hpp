@@ -15,62 +15,104 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Game component that can draw itself and participates in draw ordering and visibility.
+    /** @brief Game component that can draw itself and participates in draw ordering and visibility. */
     class DrawableGameComponent : public GameComponent, public IDrawable
     {
     public:
-        /// Creates a drawable component attached to the specified game.
+        /**
+         * @brief Creates a drawable component attached to the specified game.
+         * @param game The game that owns this component.
+         */
         explicit DrawableGameComponent(Game& game);
 
-        /// Gets the graphics device associated with the owning game.
+        /**
+         * @brief Gets the graphics device associated with the owning game.
+         * @return A reference to the graphics device.
+         */
         [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceProperty();
 
-        /// Gets the drawing order value used to sort drawable components.
+        /**
+         * @brief Gets the drawing order value used to sort drawable components.
+         * @return The draw order; lower values are drawn first.
+         */
         [[nodiscard]] SharpRuntime::Int32 getDrawOrderProperty() const;
 
-        /// Sets the drawing order and raises the draw-order change event when the value changes.
+        /**
+         * @brief Sets the drawing order and raises the draw-order change event when the value changes.
+         * @param value The new draw order value.
+         */
         void setDrawOrderProperty(SharpRuntime::Int32 value);
 
-        /// Gets whether this component should be drawn.
+        /**
+         * @brief Gets whether this component should be drawn.
+         * @return true if the component is visible and should be drawn.
+         */
         [[nodiscard]] bool getVisibleProperty() const;
 
-        /// Sets visibility and raises the visibility change event when the value changes.
+        /**
+         * @brief Sets visibility and raises the visibility change event when the value changes.
+         * @param value true to make the component visible; false to hide it.
+         */
         void setVisibleProperty(bool value);
 
-        /// Returns the DrawOrderChanged event.
+        /**
+         * @brief Returns the DrawOrderChanged event.
+         * @return A reference to the DrawOrderChanged event handler.
+         */
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDrawOrderChangedEvent() override;
 
-        /// Returns the VisibleChanged event.
+        /**
+         * @brief Returns the VisibleChanged event.
+         * @return A reference to the VisibleChanged event handler.
+         */
         [[nodiscard]] System::EventHandler<System::EventArgs>& getVisibleChangedEvent() override;
 
-        /// Raised when the draw order changes.
+        /** @brief Raised when the draw order changes. */
         System::EventHandler<System::EventArgs> DrawOrderChanged;
 
-        /// Raised when visibility changes.
+        /** @brief Raised when visibility changes. */
         System::EventHandler<System::EventArgs> VisibleChanged;
 
+        /**
+         * @brief Returns the fully-qualified .NET type name of this class.
+         * @return A const reference to the type name string.
+         */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
-        /// Initializes the component and loads content when a graphics device is available.
+        /** @brief Initializes the component and loads content when a graphics device is available. */
         void Initialize() override;
 
-        /// Draws the component.
+        /**
+         * @brief Draws the component.
+         * @param gameTime Snapshot of the game timing state.
+         */
         void Draw(const GameTime& gameTime) override;
 
     protected:
-        /// Releases component content when the component is disposed.
+        /**
+         * @brief Releases component content when the component is disposed.
+         * @param disposing true when called from Dispose(); false when called from the destructor.
+         */
         void Dispose(bool disposing) override;
 
-        /// Loads graphics resources used by the component.
+        /** @brief Loads graphics resources used by the component. */
         virtual void LoadContent();
 
-        /// Releases graphics resources used by the component.
+        /** @brief Releases graphics resources used by the component. */
         virtual void UnloadContent();
 
-        /// Called after visibility changes.
+        /**
+         * @brief Called after visibility changes.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnVisibleChanged(System::Object* sender, const System::EventArgs& args);
 
-        /// Called after draw order changes.
+        /**
+         * @brief Called after draw order changes.
+         * @param sender The object that originated the event.
+         * @param args Event data.
+         */
         virtual void OnDrawOrderChanged(System::Object* sender, const System::EventArgs& args);
 
     private:

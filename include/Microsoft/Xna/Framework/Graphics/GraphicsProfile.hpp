@@ -3,13 +3,13 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Defines the requested graphics feature level.
+    /** @brief Defines a set of graphic capabilities. */
     enum class GraphicsProfile
     {
-        /// Limited feature set intended for broad hardware compatibility.
+        /** @brief Use a limited set of graphic features to support the widest variety of devices. */
         Reach,
 
-        /// Expanded feature set intended for more capable graphics hardware.
+        /** @brief Use the largest available set of graphic features targeting more capable hardware. */
         HiDef
     };
 }

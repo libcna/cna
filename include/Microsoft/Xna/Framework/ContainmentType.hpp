@@ -4,11 +4,14 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Defines how one bounding volume relates to another.
+    /** @brief Defines how the bounding volumes intersect or contain one another. */
     enum class ContainmentType
     {
-        Disjoint   = 0, ///< The two bounding volumes do not overlap.
-        Contains   = 1, ///< One bounding volume fully contains the other.
-        Intersects = 2  ///< The bounding volumes partially overlap.
+        /** @brief Indicates that there is no overlap between two bounding volumes. */
+        Disjoint   = 0,
+        /** @brief Indicates that one bounding volume completely contains another volume. */
+        Contains   = 1,
+        /** @brief Indicates that bounding volumes partially overlap one another. */
+        Intersects = 2
     };
 }

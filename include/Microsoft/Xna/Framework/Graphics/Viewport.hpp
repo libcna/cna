@@ -8,7 +8,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// Describes the drawable area of the render target.
+    /** @brief Describes the view bounds for the render-target surface. */
     class Viewport
     {
     private:
@@ -16,43 +16,86 @@ namespace Microsoft::Xna::Framework::Graphics
         int Width_;
 
     public:
+        /** @brief X coordinate of the upper-left corner of the viewport in pixels. */
         int x;
+        /** @brief Y coordinate of the upper-left corner of the viewport in pixels. */
         int y;
+        /** @brief Lower limit of the depth range of the viewport. */
         float minDepth;
+        /** @brief Upper limit of the depth range of the viewport. */
         float maxDepth;
 
         DEF_PROP(int, Height, getter1, setter1, member0, static0, constret1, ref1, constmet1)
         DEF_PROP(int, Width,  getter1, setter1, member0, static0, constret1, ref1, constmet1)
 
-        /// Constructs an empty viewport.
+        /** @brief Constructs an empty viewport with all fields set to zero. */
         Viewport();
 
-        /// Constructs a viewport from position and size. MinDepth=0, MaxDepth=1.
+        /**
+         * @brief Constructs a viewport from a position and size; MinDepth=0, MaxDepth=1.
+         *
+         * @param x      X coordinate of the upper-left corner in pixels.
+         * @param y      Y coordinate of the upper-left corner in pixels.
+         * @param width  Width of the viewport in pixels.
+         * @param height Height of the viewport in pixels.
+         */
         Viewport(int x, int y, int width, int height);
 
-        /// Constructs a viewport from a rectangle. MinDepth=0, MaxDepth=1.
+        /**
+         * @brief Constructs a viewport from a rectangle; MinDepth=0, MaxDepth=1.
+         *
+         * @param bounds Rectangle that defines the location and size of the viewport.
+         */
         explicit Viewport(const Microsoft::Xna::Framework::Rectangle& bounds);
 
-        /// Read-only: width / height ratio (0 if either dimension is zero).
+        /**
+         * @brief Gets the aspect ratio of this viewport (width / height).
+         * @return Aspect ratio, or 0 if either dimension is zero.
+         */
         [[nodiscard]] float getAspectRatioProperty() const;
 
-        /// Gets the viewport area as a Rectangle.
+        /**
+         * @brief Gets the viewport area as a Rectangle.
+         * @return Rectangle whose position and size match this viewport.
+         */
         [[nodiscard]] Microsoft::Xna::Framework::Rectangle getBoundsProperty() const;
 
-        /// Sets the viewport area from a Rectangle.
+        /**
+         * @brief Sets the viewport area from a Rectangle.
+         * @param value Rectangle that defines the new viewport position and size.
+         */
         void setBoundsProperty(const Microsoft::Xna::Framework::Rectangle& value);
 
-        /// The subset guaranteed to be visible on lower-quality displays (same as Bounds).
+        /**
+         * @brief Gets the subset of the viewport guaranteed to be visible on lower-quality displays.
+         * @return Same rectangle as Bounds.
+         */
         [[nodiscard]] Microsoft::Xna::Framework::Rectangle getTitleSafeAreaProperty() const;
 
-        /// Projects a world-space point to screen space.
+        /**
+         * @brief Projects a world-space point into screen space.
+         *
+         * @param source     The world-space point to project.
+         * @param projection The projection matrix.
+         * @param view       The view matrix.
+         * @param world      The world matrix.
+         * @return The projected screen-space point.
+         */
         [[nodiscard]] Microsoft::Xna::Framework::Vector3 Project(
             Microsoft::Xna::Framework::Vector3 source,
             const Microsoft::Xna::Framework::Matrix& projection,
             const Microsoft::Xna::Framework::Matrix& view,
             const Microsoft::Xna::Framework::Matrix& world) const;
 
-        /// Unprojects a screen-space point back to world space.
+        /**
+         * @brief Unprojects a screen-space point back into world space.
+         *
+         * @param source     The screen-space point to unproject.
+         * @param projection The projection matrix.
+         * @param view       The view matrix.
+         * @param world      The world matrix.
+         * @return The unprojected world-space point.
+         */
         [[nodiscard]] Microsoft::Xna::Framework::Vector3 Unproject(
             Microsoft::Xna::Framework::Vector3 source,
             const Microsoft::Xna::Framework::Matrix& projection,

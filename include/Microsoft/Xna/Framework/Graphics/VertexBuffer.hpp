@@ -66,24 +66,43 @@ namespace Microsoft::Xna::Framework::Graphics
                      int vertexCount,
                      BufferUsage bufferUsage);
 
-        /// Destroys this vertex buffer and releases its GPU resources.
+        /** @brief Destroys this vertex buffer and releases its GPU resources. */
         ~VertexBuffer();
 
-        /// Copying is not allowed.
+        /** @brief Copying is not allowed. */
         VertexBuffer(const VertexBuffer&) = delete;
-        /// Copy-assignment is not allowed.
+        /** @brief Copy-assignment is not allowed. */
         VertexBuffer& operator=(const VertexBuffer&) = delete;
 
-        /// Uploads VertexPositionColor vertex data to the GPU buffer.
+        /**
+         * @brief Uploads VertexPositionColor vertex data to the GPU buffer.
+         * @param vertices Pointer to the source vertex array.
+         * @param count    Number of vertices to upload.
+         */
         void SetData(const VertexPositionColor* vertices, int count);
-        /// Uploads VertexPositionColorTexture vertex data to the GPU buffer.
+        /**
+         * @brief Uploads VertexPositionColorTexture vertex data to the GPU buffer.
+         * @param vertices Pointer to the source vertex array.
+         * @param count    Number of vertices to upload.
+         */
         void SetData(const VertexPositionColorTexture* vertices, int count);
-        /// Uploads VertexPositionNormalTexture vertex data to the GPU buffer.
+        /**
+         * @brief Uploads VertexPositionNormalTexture vertex data to the GPU buffer.
+         * @param vertices Pointer to the source vertex array.
+         * @param count    Number of vertices to upload.
+         */
         void SetData(const VertexPositionNormalTexture* vertices, int count);
-        /// Uploads VertexPositionTexture vertex data to the GPU buffer.
+        /**
+         * @brief Uploads VertexPositionTexture vertex data to the GPU buffer.
+         * @param vertices Pointer to the source vertex array.
+         * @param count    Number of vertices to upload.
+         */
         void SetData(const VertexPositionTexture* vertices, int count);
 
-        /// Returns the number of vertices currently stored in this buffer.
+        /**
+         * @brief Returns the number of vertices this buffer was created to hold.
+         * @return The vertex capacity of the buffer.
+         */
         [[nodiscard]] int VertexCount() const;
 
         /**

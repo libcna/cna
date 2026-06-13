@@ -16,31 +16,55 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
 
-    /// Index buffer storing 16-bit or 32-bit indices.
+    /** @brief Index buffer storing 16-bit or 32-bit indices for indexed draw calls. */
     class IndexBuffer
     {
     public:
-        /// Creates a 16-bit index buffer with capacity for @p indexCount indices.
+        /**
+         * @brief Creates a 16-bit index buffer with the given capacity.
+         * @param device     The graphics device.
+         * @param indexCount Number of indices the buffer can hold.
+         */
         IndexBuffer(GraphicsDevice& device, int indexCount);
 
-        /// XNA 4.0: IndexBuffer(GraphicsDevice, IndexElementSize, int, BufferUsage).
-        /// Both SixteenBits and ThirtyTwoBits are supported.
+        /**
+         * @brief Creates an index buffer with explicit element size and usage hint.
+         * @param device           The graphics device.
+         * @param indexElementSize Element size — SixteenBits or ThirtyTwoBits.
+         * @param indexCount       Number of indices the buffer can hold.
+         * @param bufferUsage      Usage hint for the buffer.
+         */
         IndexBuffer(GraphicsDevice& device,
                     IndexElementSize indexElementSize,
                     int indexCount,
                     BufferUsage bufferUsage);
 
+        /** @brief Destroys this index buffer and releases its GPU resources. */
         ~IndexBuffer();
 
+        /** @brief Copying is not allowed. */
         IndexBuffer(const IndexBuffer&) = delete;
+        /** @brief Copy-assignment is not allowed. */
         IndexBuffer& operator=(const IndexBuffer&) = delete;
 
-        /// Uploads @p count 16-bit indices (replaces previous content).
+        /**
+         * @brief Uploads 16-bit index data to the buffer (replaces previous content).
+         * @param indices Pointer to the source index array.
+         * @param count   Number of indices to upload.
+         */
         void SetData(const std::uint16_t* indices, int count);
 
-        /// Uploads @p count 32-bit indices (replaces previous content).
+        /**
+         * @brief Uploads 32-bit index data to the buffer (replaces previous content).
+         * @param indices Pointer to the source index array.
+         * @param count   Number of indices to upload.
+         */
         void SetData(const std::uint32_t* indices, int count);
 
+        /**
+         * @brief Returns the number of indices this buffer was created to hold.
+         * @return The index capacity of the buffer.
+         */
         [[nodiscard]] int IndexCount() const;
 
         /**

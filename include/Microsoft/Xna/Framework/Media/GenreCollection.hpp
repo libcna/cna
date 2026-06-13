@@ -12,25 +12,55 @@ namespace Microsoft::Xna::Framework::Media
 {
     class Genre;
 
-    /// Collection of genres.
-    /// @note Status: Stub — media library catalog access not implemented
+    /**
+     * @brief An ordered, read-only collection of Genre objects.
+     *
+     * @note Status: Stub — media library catalog access not implemented.
+     */
     class GenreCollection final : public System::Object, public System::IDisposable
     {
     public:
         using iterator = std::vector<Genre*>::iterator;
         using const_iterator = std::vector<Genre*>::const_iterator;
 
+        /** @brief Releases the resources used by this collection. */
         void Dispose() override;
 
+        /**
+         * @brief Gets the number of genres in this collection.
+         *
+         * @return Genre count.
+         */
         [[nodiscard]] SharpRuntime::intcs getCountProperty() const;
+
+        /**
+         * @brief Gets whether this collection has been disposed.
+         *
+         * @return true if disposed; otherwise false.
+         */
         [[nodiscard]] bool getIsDisposedProperty() const;
+
+        /**
+         * @brief Gets the genre at the specified index.
+         *
+         * @param index Zero-based index.
+         * @return Pointer to the Genre at that index.
+         */
         [[nodiscard]] Genre* operator[](SharpRuntime::intcs index) const;
 
+        /** @brief Returns an iterator to the first genre. */
         [[nodiscard]] iterator begin();
+
+        /** @brief Returns an iterator past the last genre. */
         [[nodiscard]] iterator end();
+
+        /** @brief Returns a const iterator to the first genre. */
         [[nodiscard]] const_iterator begin() const;
+
+        /** @brief Returns a const iterator past the last genre. */
         [[nodiscard]] const_iterator end() const;
 
+        /** @brief Returns the fully-qualified .NET type name. */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:

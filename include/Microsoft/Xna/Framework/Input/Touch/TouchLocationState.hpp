@@ -7,19 +7,21 @@
 
 namespace Microsoft::Xna::Framework::Input::Touch
 {
-    /// Specifies the state of a touch-screen touch-point.
+    /**
+     * @brief Specifies the state of a touch-screen touch point.
+     */
     enum class TouchLocationState
     {
-        /// This touch point is in an invalid state.
+        /** @brief This touch point is in an invalid state. */
         Invalid,
 
-        /// This touch point was released.
+        /** @brief This touch point was released. */
         Released,
 
-        /// This touch point was pressed.
+        /** @brief This touch point was pressed. */
         Pressed,
 
-        /// This touch point was moved.
+        /** @brief This touch point was moved. */
         Moved
     };
 }

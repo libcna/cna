@@ -6,11 +6,11 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Provides data for the Game.Exiting event.
+    /** @brief Provides data for the Game.Exiting event. */
     class ExitingEventArgs : public System::EventArgs
     {
     public:
-        /// Creates default ExitingEventArgs.
+        /** @brief Creates default ExitingEventArgs. */
         ExitingEventArgs() = default;
     };
 }

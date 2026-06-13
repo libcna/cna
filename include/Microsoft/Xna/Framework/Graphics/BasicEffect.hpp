@@ -15,118 +15,310 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
 
-    /// Built-in effect that supports per-pixel lighting, fog, and texture mapping.
+    /**
+     * @brief Built-in effect that supports optional texturing, vertex coloring, fog, and lighting.
+     */
     class BasicEffect : public Effect, public IEffectMatrices, public IEffectFog, public IEffectLights
     {
     public:
-        /// Constructs a BasicEffect for the given graphics device.
+        /**
+         * @brief Constructs a BasicEffect for the given graphics device.
+         *
+         * @param device The graphics device that will own this effect.
+         */
         explicit BasicEffect(GraphicsDevice& device);
 
-        // XNA public member vars (also exposed via IEffectMatrices)
-        /// The world matrix applied to drawn geometry.
+        /** @brief The world matrix applied to drawn geometry. */
         Matrix World      = Matrix::getIdentityProperty();
-        /// The view matrix representing the camera transform.
+        /** @brief The view matrix representing the camera transform. */
         Matrix View       = Matrix::getIdentityProperty();
-        /// The projection matrix applied to transform to clip space.
+        /** @brief The projection matrix applied to transform geometry to clip space. */
         Matrix Projection = Matrix::getIdentityProperty();
 
-        /// Gets or sets whether per-vertex color is used for rendering.
+        /** @brief Gets or sets whether per-vertex color is used for rendering. */
         bool VertexColorEnabled = true;
 
         // IEffectMatrices — delegate to World/View/Projection member vars
-        /// Gets the world matrix.
+
+        /**
+         * @brief Gets the world matrix.
+         *
+         * @return The current world matrix.
+         */
         [[nodiscard]] Matrix getWorldProperty() const override      { return World; }
-        /// Sets the world matrix.
+
+        /**
+         * @brief Sets the world matrix.
+         *
+         * @param v The new world matrix.
+         */
         void setWorldProperty(const Matrix& v) override             { World = v; }
-        /// Gets the view matrix.
+
+        /**
+         * @brief Gets the view matrix.
+         *
+         * @return The current view matrix.
+         */
         [[nodiscard]] Matrix getViewProperty() const override       { return View; }
-        /// Sets the view matrix.
+
+        /**
+         * @brief Sets the view matrix.
+         *
+         * @param v The new view matrix.
+         */
         void setViewProperty(const Matrix& v) override              { View = v; }
-        /// Gets the projection matrix.
+
+        /**
+         * @brief Gets the projection matrix.
+         *
+         * @return The current projection matrix.
+         */
         [[nodiscard]] Matrix getProjectionProperty() const override  { return Projection; }
-        /// Sets the projection matrix.
+
+        /**
+         * @brief Sets the projection matrix.
+         *
+         * @param v The new projection matrix.
+         */
         void setProjectionProperty(const Matrix& v) override        { Projection = v; }
 
         // IEffectLights
-        /// Gets the ambient light color.
+
+        /**
+         * @brief Gets the ambient light color applied to the scene.
+         *
+         * @return The ambient light color as a Vector3.
+         */
         [[nodiscard]] Vector3 getAmbientLightColorProperty() const override;
-        /// Sets the ambient light color.
+
+        /**
+         * @brief Sets the ambient light color applied to the scene.
+         *
+         * @param value The new ambient light color.
+         */
         void setAmbientLightColorProperty(const Vector3& value) override;
-        /// Gets whether lighting is enabled.
+
+        /**
+         * @brief Gets whether per-vertex lighting is enabled.
+         *
+         * @return True if lighting is enabled.
+         */
         [[nodiscard]] bool getLightingEnabledProperty() const override;
-        /// Sets whether lighting is enabled.
+
+        /**
+         * @brief Sets whether per-vertex lighting is enabled.
+         *
+         * @param value True to enable lighting.
+         */
         void setLightingEnabledProperty(bool value) override;
-        /// Gets the first directional light.
+
+        /**
+         * @brief Gets the first directional light source.
+         *
+         * @return Reference to DirectionalLight0.
+         */
         [[nodiscard]] DirectionalLight& getDirectionalLight0Property() override;
-        /// Gets the second directional light.
+
+        /**
+         * @brief Gets the second directional light source.
+         *
+         * @return Reference to DirectionalLight1.
+         */
         [[nodiscard]] DirectionalLight& getDirectionalLight1Property() override;
-        /// Gets the third directional light.
+
+        /**
+         * @brief Gets the third directional light source.
+         *
+         * @return Reference to DirectionalLight2.
+         */
         [[nodiscard]] DirectionalLight& getDirectionalLight2Property() override;
-        /// Activates default three-point lighting.
+
+        /**
+         * @brief Activates default three-point lighting (key, fill, and back lights).
+         */
         void EnableDefaultLighting() override;
 
-        /// The first directional light source.
+        /** @brief The first directional light source. */
         DirectionalLight DirectionalLight0;
-        /// The second directional light source.
+        /** @brief The second directional light source. */
         DirectionalLight DirectionalLight1;
-        /// The third directional light source.
+        /** @brief The third directional light source. */
         DirectionalLight DirectionalLight2;
 
-        /// Gets whether per-pixel lighting is preferred over per-vertex lighting.
+        /**
+         * @brief Gets whether per-pixel lighting is preferred over per-vertex lighting.
+         *
+         * @return True if per-pixel lighting is preferred.
+         */
         [[nodiscard]] bool getPreferPerPixelLightingProperty() const;
-        /// Sets whether per-pixel lighting is preferred.
+
+        /**
+         * @brief Sets whether per-pixel lighting is preferred.
+         *
+         * @param value True to prefer per-pixel lighting.
+         */
         void setPreferPerPixelLightingProperty(bool value);
 
-        /// Gets the diffuse color of the material.
+        /**
+         * @brief Gets the material diffuse color (range 0 to 1).
+         *
+         * @return The diffuse color as a Vector3.
+         */
         [[nodiscard]] Vector3 getDiffuseColorProperty() const;
-        /// Sets the diffuse color of the material.
+
+        /**
+         * @brief Sets the material diffuse color (range 0 to 1).
+         *
+         * @param value The new diffuse color.
+         */
         void setDiffuseColorProperty(const Vector3& value);
-        /// Gets the emissive color of the material.
+
+        /**
+         * @brief Gets the material emissive color.
+         *
+         * @return The emissive color as a Vector3.
+         */
         [[nodiscard]] Vector3 getEmissiveColorProperty() const;
-        /// Sets the emissive color of the material.
+
+        /**
+         * @brief Sets the material emissive color.
+         *
+         * @param value The new emissive color.
+         */
         void setEmissiveColorProperty(const Vector3& value);
-        /// Gets the specular color of the material.
+
+        /**
+         * @brief Gets the material specular color.
+         *
+         * @return The specular color as a Vector3.
+         */
         [[nodiscard]] Vector3 getSpecularColorProperty() const;
-        /// Sets the specular color of the material.
+
+        /**
+         * @brief Sets the material specular color.
+         *
+         * @param value The new specular color.
+         */
         void setSpecularColorProperty(const Vector3& value);
-        /// Gets the specular power (shininess) of the material.
+
+        /**
+         * @brief Gets the material specular power (shininess exponent).
+         *
+         * @return The specular power.
+         */
         [[nodiscard]] float getSpecularPowerProperty() const;
-        /// Sets the specular power (shininess) of the material.
+
+        /**
+         * @brief Sets the material specular power (shininess exponent).
+         *
+         * @param value The new specular power.
+         */
         void setSpecularPowerProperty(float value);
-        /// Gets the alpha (opacity) of the material.
+
+        /**
+         * @brief Gets the material alpha (opacity), in the range [0, 1].
+         *
+         * @return The alpha value.
+         */
         [[nodiscard]] float getAlphaProperty() const;
-        /// Sets the alpha (opacity) of the material.
+
+        /**
+         * @brief Sets the material alpha (opacity), in the range [0, 1].
+         *
+         * @param value The new alpha value.
+         */
         void setAlphaProperty(float value);
 
-        /// Gets whether texture mapping is enabled.
+        /**
+         * @brief Gets whether texture mapping is enabled.
+         *
+         * @return True if texturing is enabled.
+         */
         [[nodiscard]] bool getTextureEnabledProperty() const;
-        /// Sets whether texture mapping is enabled.
+
+        /**
+         * @brief Sets whether texture mapping is enabled.
+         *
+         * @param value True to enable texturing.
+         */
         void setTextureEnabledProperty(bool value);
-        /// Gets the texture applied to geometry rendered with this effect.
+
+        /**
+         * @brief Gets the texture applied to geometry rendered with this effect.
+         *
+         * @return Pointer to the current Texture2D, or nullptr if none.
+         */
         [[nodiscard]] Texture2D* getTextureProperty() const;
-        /// Sets the texture applied to geometry rendered with this effect.
+
+        /**
+         * @brief Sets the texture applied to geometry rendered with this effect.
+         *
+         * @param value Pointer to the Texture2D to use.
+         */
         void setTextureProperty(Texture2D* value);
 
         // IEffectFog
-        /// Gets the fog color.
+
+        /**
+         * @brief Gets the fog color.
+         *
+         * @return The fog color as a Vector3.
+         */
         [[nodiscard]] Vector3 getFogColorProperty() const override;
-        /// Sets the fog color.
+
+        /**
+         * @brief Sets the fog color.
+         *
+         * @param value The new fog color.
+         */
         void setFogColorProperty(const Vector3& value) override;
-        /// Gets whether fog is enabled.
+
+        /**
+         * @brief Gets whether distance fog is enabled.
+         *
+         * @return True if fog is enabled.
+         */
         [[nodiscard]] bool getFogEnabledProperty() const override;
-        /// Sets whether fog is enabled.
+
+        /**
+         * @brief Sets whether distance fog is enabled.
+         *
+         * @param value True to enable fog.
+         */
         void setFogEnabledProperty(bool value) override;
-        /// Gets the distance at which fog begins.
+
+        /**
+         * @brief Gets the camera-space distance at which fog begins.
+         *
+         * @return The fog start distance.
+         */
         [[nodiscard]] float getFogStartProperty() const override;
-        /// Sets the distance at which fog begins.
+
+        /**
+         * @brief Sets the camera-space distance at which fog begins.
+         *
+         * @param value The new fog start distance.
+         */
         void setFogStartProperty(float value) override;
-        /// Gets the distance at which fog reaches full density.
+
+        /**
+         * @brief Gets the camera-space distance at which fog reaches full density.
+         *
+         * @return The fog end distance.
+         */
         [[nodiscard]] float getFogEndProperty() const override;
-        /// Sets the distance at which fog reaches full density.
+
+        /**
+         * @brief Sets the camera-space distance at which fog reaches full density.
+         *
+         * @param value The new fog end distance.
+         */
         void setFogEndProperty(float value) override;
 
     protected:
-        /// Applies shader parameters to the graphics device before drawing.
+        /**
+         * @brief Applies shader parameters to the graphics device before drawing.
+         */
         void OnApply() override;
 
     private:

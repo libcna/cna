@@ -11,14 +11,31 @@ namespace CNA::Internal::Backends { class IRenderTargetBackend; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /// A 2D texture that can be used as a render target. Mirrors XNA 4.0 RenderTarget2D.
+    /** @brief A 2D texture that can be used as a render target. Mirrors XNA 4.0 RenderTarget2D. */
     class RenderTarget2D : public Texture2D, public IRenderTarget
     {
     public:
+        /**
+         * @brief Creates a RenderTarget2D with default format and no depth buffer.
+         * @param device The graphics device to create the render target on.
+         * @param width  Width in pixels.
+         * @param height Height in pixels.
+         */
         RenderTarget2D(GraphicsDevice& device,
                        int width,
                        int height);
 
+        /**
+         * @brief Creates a RenderTarget2D with explicit format, depth format, and usage.
+         * @param device                    The graphics device to create the render target on.
+         * @param width                     Width in pixels.
+         * @param height                    Height in pixels.
+         * @param mipMap                    True to generate a full mipmap chain.
+         * @param preferredFormat           The desired surface format.
+         * @param preferredDepthFormat      The desired depth-stencil format.
+         * @param preferredMultiSampleCount Desired multisample count (0 = no multisampling).
+         * @param usage                     Specifies how the render target content is preserved.
+         */
         RenderTarget2D(GraphicsDevice& device,
                        int width,
                        int height,
@@ -35,15 +52,25 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Width, Height, Format, LevelCount are all inherited from Texture2D / Texture.
         // IRenderTarget pure virtuals satisfied:
+        /** @brief Returns the render target width in pixels. */
         [[nodiscard]] int getWidthProperty()    const override { return Texture2D::getWidthProperty(); }
+        /** @brief Returns the render target height in pixels. */
         [[nodiscard]] int getHeightProperty()   const override { return Texture2D::getHeightProperty(); }
+        /** @brief Returns the number of mip levels. */
         [[nodiscard]] int getLevelCountProperty() const override { return Texture::getLevelCountProperty(); }
+        /** @brief Returns the render target usage mode. */
         [[nodiscard]] RenderTargetUsage getRenderTargetUsageProperty() const override;
+        /** @brief Returns the depth-stencil buffer format. */
         [[nodiscard]] DepthFormat getDepthStencilFormatProperty() const override;
+        /** @brief Returns the number of multisample locations. */
         [[nodiscard]] int getMultiSampleCountProperty() const override;
 
-        /// Returns the backend render target handle. Returns nullptr if the
-        /// backend does not support off-screen rendering.
+        /**
+         * @brief Returns the backend render target handle.
+         *
+         * Returns nullptr if the backend does not support off-screen rendering.
+         * @return Pointer to the IRenderTargetBackend, or nullptr.
+         */
         NOXNA [[nodiscard]] CNA::Internal::Backends::IRenderTargetBackend* GetRenderTargetBackend() const;
 
     private:

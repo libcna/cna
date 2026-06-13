@@ -13,23 +13,23 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /// Updates framework-level systems such as dynamic audio streams, media and touch input.
+    /** @brief Updates framework-level systems such as dynamic audio streams, media and touch input. */
     class FrameworkDispatcher final
     {
     public:
-        /// Static-only class; not instantiable.
+        /** @brief Static-only class; not instantiable. */
         FrameworkDispatcher() = delete;
 
-        /// Processes pending framework updates and raises deferred framework events.
+        /** @brief Processes pending framework updates and raises deferred framework events. */
         static void Update();
 
-        /// Pending active-song-changed notification flag (internal use).
+        /** @brief Pending active-song-changed notification flag (internal use). */
         NOXNA static bool ActiveSongChanged;
-        /// Pending media-state-changed notification flag (internal use).
+        /** @brief Pending media-state-changed notification flag (internal use). */
         NOXNA static bool MediaStateChanged;
-        /// Dynamic sound effect instances registered for update (internal use).
+        /** @brief Dynamic sound effect instances registered for update (internal use). */
         NOXNA static std::vector<Audio::DynamicSoundEffectInstance*> Streams;
-        /// Mutex protecting the Streams list (internal use).
+        /** @brief Mutex protecting the Streams list (internal use). */
         NOXNA static std::mutex StreamsMutex;
     };
 }

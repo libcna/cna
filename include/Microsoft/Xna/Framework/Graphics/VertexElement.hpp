@@ -18,19 +18,25 @@ namespace Microsoft::Xna::Framework::Graphics
      */
     struct VertexElement
     {
-        /// Byte offset from the start of the vertex.
+        /** @brief Byte offset from the start of the vertex stride. */
         int Offset = 0;
-        /// Component type and count of this attribute.
+        /** @brief Component type and count of this vertex attribute. */
         VertexElementFormat VertexElementFormatValue = VertexElementFormat::Single;
-        /// Semantic channel of this attribute.
+        /** @brief Semantic channel (e.g. Position, Color, TextureCoordinate) of this attribute. */
         VertexElementUsage VertexElementUsageValue = VertexElementUsage::Position;
-        /// Index for repeated semantics (e.g. multiple texcoords).
+        /** @brief Index for repeated semantics (e.g. multiple texture coordinate sets). */
         int UsageIndex = 0;
 
-        /// Constructs a default VertexElement.
+        /** @brief Constructs a default VertexElement with offset 0, Single format, and Position usage. */
         VertexElement() = default;
 
-        /// Constructs a VertexElement with the specified offset, format, usage, and usage index.
+        /**
+         * @brief Constructs a VertexElement with the specified offset, format, usage, and usage index.
+         * @param offset     Byte offset from the start of the vertex.
+         * @param format     Data format and component count for this attribute.
+         * @param usage      Semantic meaning (Position, Color, TextureCoordinate, etc.).
+         * @param usageIndex Disambiguates repeated semantics (e.g. TEXCOORD0 vs TEXCOORD1).
+         */
         VertexElement(int offset,
                       VertexElementFormat format,
                       VertexElementUsage usage,

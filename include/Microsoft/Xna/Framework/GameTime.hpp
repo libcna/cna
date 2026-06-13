@@ -10,28 +10,46 @@ namespace Microsoft::Xna::Framework
 
     using System::TimeSpan;
 
-    /// Stores timing information for the current game update.
+    /** @brief Stores timing information for the current game update. */
     class GameTime
     {
         friend class Game;
 
     public:
-        /// Initializes TotalGameTime and ElapsedGameTime to zero and IsRunningSlowly to false.
+        /** @brief Initializes TotalGameTime and ElapsedGameTime to zero and IsRunningSlowly to false. */
         GameTime();
 
-        /// Initializes a new instance with the specified total and elapsed game time.
+        /**
+         * @brief Initializes a new instance with the specified total and elapsed game time.
+         * @param totalGameTime Total elapsed game time since the game started.
+         * @param elapsedGameTime Time elapsed since the last update.
+         */
         GameTime(TimeSpan totalGameTime, TimeSpan elapsedGameTime);
 
-        /// Initializes a new instance with the specified time values and slow-running flag.
+        /**
+         * @brief Initializes a new instance with the specified time values and slow-running flag.
+         * @param totalGameTime Total elapsed game time since the game started.
+         * @param elapsedGameTime Time elapsed since the last update.
+         * @param isRunningSlowly true if the game loop is currently running slower than the target rate.
+         */
         GameTime(TimeSpan totalGameTime, TimeSpan elapsedGameTime, bool isRunningSlowly);
 
-        /// Gets the total game time since the start of the game.
+        /**
+         * @brief Gets the total game time since the start of the game.
+         * @return A const reference to the total game time.
+         */
         [[nodiscard]] const TimeSpan& getTotalGameTimeProperty() const;
 
-        /// Gets the elapsed game time since the previous update.
+        /**
+         * @brief Gets the elapsed game time since the previous update.
+         * @return A const reference to the elapsed game time.
+         */
         [[nodiscard]] const TimeSpan& getElapsedGameTimeProperty() const;
 
-        /// Gets whether the game loop is currently running slowly.
+        /**
+         * @brief Gets whether the game loop is currently running slowly.
+         * @return true if the game loop is falling behind the target update rate.
+         */
         [[nodiscard]] bool getIsRunningSlowlyProperty() const;
 
     private:
