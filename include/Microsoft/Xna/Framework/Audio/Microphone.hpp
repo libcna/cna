@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include "CNA/CNAHelper.hpp"
 
 #include <memory>
 #include <string>
@@ -40,7 +41,7 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] static Microphone* getDefaultProperty();
 
         /** @brief Cached microphone list used by the framework dispatcher. */
-        static std::vector<Microphone*>* micList;
+        NOXNA static std::vector<Microphone*>* micList;
 
         /**
          * @brief Gets the duration threshold used for BufferReady notifications.
@@ -119,10 +120,10 @@ namespace Microsoft::Xna::Framework::Audio
         void Stop();
 
         /** @brief Checks whether enough data is queued and raises BufferReady when needed. */
-        void CheckBuffer();
+        NOXNA void CheckBuffer();
 
         /** @brief Fixed capture sample rate used by XNA microphone capture. */
-        static constexpr SharpRuntime::intcs SAMPLERATE = 44100;
+        NOXNA static constexpr SharpRuntime::intcs SAMPLERATE = 44100;
 
     private:
         friend class MicrophoneFactory;
