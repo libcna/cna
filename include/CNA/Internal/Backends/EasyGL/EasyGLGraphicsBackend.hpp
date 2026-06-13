@@ -50,6 +50,7 @@ namespace CNA::Internal::Backends::EasyGL
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
+        [[nodiscard]] unsigned int GetColorGLHandle() const override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
@@ -299,6 +300,10 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;
 
+        // Temporary MRT FBO created by SetRenderTargets(count > 1)
+        ::easygl::Framebuffer mrtFbo_;
+        bool mrtFboReady_ = false;
+
         void EnsureColored3DProgram();
         void EnsureTextured3DProgram();
         void EnsureColoredTextured3DProgram();
@@ -335,6 +340,7 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 

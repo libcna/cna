@@ -91,7 +91,7 @@
 | 42 | EasyGL: wire `ScissorRectangle` → `glScissor` / `glEnable(GL_SCISSOR_TEST)` | ✅ | Add `SetScissorRect(x,y,w,h)` to `IGraphicsBackend` |
 | 43 | EasyGL: complete `ApplyDepthStencilState` — stencil operations (StencilEnable, StencilFunction, StencilPass/Fail/DepthFail, TwoSidedStencilMode) | ✅ | Currently only depth enabled/write/func |
 | 44 | EasyGL: `SamplerState` on texture slots 1–15 (currently only slot 0 is fully applied) | ✅ | `glBindSampler` or `glTexParameteri` per active unit |
-| 45 | EasyGL: Multiple render targets (MRT) — `SetRenderTargets(array)` via `glDrawBuffers` | ⚠️ | Interface + wiring done (Task 93/98); EasyGL uses first target only until full MRT FBO is built |
+| 45 | EasyGL: Multiple render targets (MRT) — `SetRenderTargets(array)` via `glDrawBuffers` | ✅ | SetRenderTargets override builds a combined MRT FBO via fbo.attach_texture_2d + set_draw_buffers; GetColorGLHandle() exposes color texture per RT |
 | 46 | EasyGL: `RenderTargetCube` — 6-face FBO with cube map attachment | ✅ | Add `IRenderTargetCubeBackend`; attach per-face in `BindAsRenderTarget(face)` |
 | 47 | EasyGL: `Texture3D` `GetData` — `glGetTexImage` if available (desktop GL only; stub on GLES3) | ⬜ | Low priority |
 | 48 | EasyGL: `TextureCube` `GetData` — per-face readback | ⬜ | Low priority |

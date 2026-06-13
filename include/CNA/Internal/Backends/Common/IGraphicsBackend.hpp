@@ -142,6 +142,8 @@ namespace CNA::Internal::Backends
         virtual void BindAsRenderTarget() = 0;
         /// Unbind and restore the default framebuffer (back buffer).
         virtual void UnbindAsRenderTarget() = 0;
+        /// Returns the native GL color texture handle; returns 0 on non-GL backends.
+        [[nodiscard]] virtual unsigned int GetColorGLHandle() const { return 0; }
     };
 
     /// Backend handle for a cube-map render target.

@@ -317,6 +317,11 @@ namespace CNA::Internal::Backends::EasyGL
         colorTex_.bind(::easygl::TextureTarget::Texture2D);
     }
 
+    unsigned int EasyGLRenderTargetBackend::GetColorGLHandle() const
+    {
+        return colorTex_.native_handle();
+    }
+
     void EasyGLRenderTargetBackend::release_gl_handle_only()
     {
         fbo_.reset_handle_no_gl();
@@ -1009,10 +1014,52 @@ void main()
 
     void EasyGLGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
+        mrtFboReady_ = false;
         if (rt)
             rt->BindAsRenderTarget();
         else
             ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
+    void EasyGLGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        if (count <= 0)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (count == 1)
+        {
+            SetRenderTarget2D(rts[0]);
+            return;
+        }
+
+        // MRT: build a combined FBO with one color attachment per render target.
+        if (!mrtFboReady_)
+        {
+            mrtFbo_.create();
+            mrtFboReady_ = true;
+        }
+        mrtFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+
+        constexpr int kMaxMRT = 8;
+        const int n = count < kMaxMRT ? count : kMaxMRT;
+        for (int i = 0; i < n; ++i)
+        {
+            unsigned int texHandle = rts[i]->GetColorGLHandle();
+            const auto attachment = static_cast<::metagl::FramebufferAttachment>(
+                static_cast<int>(::metagl::FramebufferAttachment::Color0) + i);
+            mrtFbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                                      attachment,
+                                      ::easygl::TextureTarget::Texture2D,
+                                      texHandle, 0);
+        }
+
+        ::easygl::DrawBuffer drawBufs[kMaxMRT];
+        for (int i = 0; i < n; ++i)
+            drawBufs[i] = static_cast<::easygl::DrawBuffer>(
+                static_cast<int>(::metagl::DrawBuffer::ColorAttachment0) + i);
+        mrtFbo_.set_draw_buffers(std::span<const ::easygl::DrawBuffer>(drawBufs, n));
     }
 
     namespace
