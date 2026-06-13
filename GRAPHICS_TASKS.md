@@ -50,9 +50,9 @@
 | 15 | Tests: `VertexElement` — constructor, getters | ✅ | 10 tests |
 | 16 | Tests: `VertexDeclaration` — constructor from element array, `getVertexStrideProperty`, element access | ✅ | 13 tests |
 | 17 | Tests: `VertexPositionColor` — constructor, declaration stride=16 | ✅ | 7 tests; stride=40 not 16 (Color vtable bug — see test comment) |
-| 18 | Tests: `VertexPositionTexture` — constructor, declaration stride=20 | ⬜ | |
-| 19 | Tests: `VertexPositionColorTexture` — constructor, declaration stride=24 | ⬜ | |
-| 20 | Tests: `VertexPositionNormalTexture` — constructor, declaration stride=32 | ⬜ | |
+| 18 | Tests: `VertexPositionTexture` — constructor, declaration stride=20 | ✅ | 9 tests; stride=32 not 20 (IVertexType vtable — see comment) |
+| 19 | Tests: `VertexPositionColorTexture` — constructor, declaration stride=24 | ✅ | 9 tests; stride=56 not 24; no default ctor (Color lacks one) |
+| 20 | Tests: `VertexPositionNormalTexture` — constructor, declaration stride=32 | ✅ | 12 tests; stride=40 not 32 (IVertexType vtable — see comment) |
 | 21 | Tests: `PackedVector` — all 18 types: constructor, `getPackedValue`, `PackFromVector4`, `ToVector4`, equality | ⬜ | |
 | 22 | Tests: `BasicEffect` — World/View/Projection setters/getters, TextureEnabled, VertexColorEnabled, LightingEnabled, AmbientLightColor, DirectionalLight0 | ⬜ | |
 | 23 | Tests: `AlphaTestEffect` — AlphaFunction, ReferenceAlpha, DiffuseColor, Alpha properties | ⬜ | |
