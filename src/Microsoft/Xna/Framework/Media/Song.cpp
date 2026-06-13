@@ -91,6 +91,11 @@ namespace Microsoft::Xna::Framework::Media
         return song != nullptr && handle_ == song->handle_;
     }
 
+    int Song::GetHashCode() const
+    {
+        return static_cast<int>(std::hash<std::string>{}(handle_));
+    }
+
     const std::string& Song::getHandle() const
     {
         return handle_;
