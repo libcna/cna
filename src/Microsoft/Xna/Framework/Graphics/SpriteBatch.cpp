@@ -68,7 +68,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
                             BlendState blendState,
-                            SamplerState* /*samplerState*/,
+                            SamplerState* samplerState,
                             DepthStencilState* /*depthStencilState*/,
                             RasterizerState* /*rasterizerState*/,
                             Effect* effect,
@@ -87,6 +87,8 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             backend_->SetCustomEffect(customEffect_);
             backend_->SetTransformMatrix(transformMatrix_);
+            if (samplerState)
+                backend_->SetSamplerFilter(static_cast<int>(samplerState->getFilterProperty()));
             backend_->Begin();
             begun     = true;
             sortMode_ = sortMode;

@@ -26,11 +26,13 @@ namespace CNA::Internal::Backends::SdlRenderer
     public:
         SDL_Renderer* renderer;
         bool begun = false;
+        SDL_ScaleMode scaleMode = SDL_SCALEMODE_LINEAR;
 
         explicit SdlSpriteBatchBackend(SDL_Renderer* renderer);
         ~SdlSpriteBatchBackend() override = default;
         void Begin() override;
         void End() override;
+        void SetSamplerFilter(int textureFilter) override;
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,
                   const Rectangle& destinationRectangle,

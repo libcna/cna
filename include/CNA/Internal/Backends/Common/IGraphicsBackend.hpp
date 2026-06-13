@@ -135,6 +135,9 @@ namespace CNA::Internal::Backends
         /// Sets a custom Effect to use for sprite rendering instead of the built-in sprite shader.
         /// Pass nullptr to restore the built-in shader. Must be called before Begin().
         virtual void SetCustomEffect(Effect* effect) {}
+        /// Sets the texture filter mode applied to each Draw call.
+        /// Passes the raw TextureFilter int value; 0=Linear, 1=Point/Nearest, others map to nearest.
+        virtual void SetSamplerFilter(int /*textureFilter*/) {}
         virtual void Draw(const ITextureBackend& texture, float x, float y) = 0;
         virtual void Draw(const ITextureBackend& texture,
                           const Rectangle& destinationRectangle,

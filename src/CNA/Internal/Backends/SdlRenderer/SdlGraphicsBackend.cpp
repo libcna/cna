@@ -66,11 +66,18 @@ namespace CNA::Internal::Backends::SdlRenderer
         begun = false;
     }
 
+    void SdlSpriteBatchBackend::SetSamplerFilter(int textureFilter)
+    {
+        // TextureFilter::Linear=0 → SDL_SCALEMODE_LINEAR; anything else → SDL_SCALEMODE_NEAREST
+        scaleMode = (textureFilter == 0) ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST;
+    }
+
     void SdlSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
     {
         if (!begun) throw std::runtime_error("SdlSpriteBatchBackend::Draw called before Begin().");
         auto& sdlTex = static_cast<const SdlTextureBackend&>(texture);
         if (!sdlTex.texture) return;
+        SDL_SetTextureScaleMode(sdlTex.texture, scaleMode);
 
         SDL_FRect dst{x, y, static_cast<float>(sdlTex.width), static_cast<float>(sdlTex.height)};
         if (!SDL_RenderTexture(renderer, sdlTex.texture, nullptr, &dst))
@@ -87,6 +94,7 @@ namespace CNA::Internal::Backends::SdlRenderer
         if (!begun) throw std::runtime_error("SdlSpriteBatchBackend::Draw called before Begin().");
         auto& sdlTex = static_cast<const SdlTextureBackend&>(texture);
         if (!sdlTex.texture) return;
+        SDL_SetTextureScaleMode(sdlTex.texture, scaleMode);
 
         if (!SDL_SetTextureColorMod(sdlTex.texture, color.getRProperty(), color.getGProperty(), color.getBProperty()))
         {
@@ -128,6 +136,7 @@ namespace CNA::Internal::Backends::SdlRenderer
         if (!begun) throw std::runtime_error("SdlSpriteBatchBackend::Draw called before Begin().");
         auto& sdlTex = static_cast<const SdlTextureBackend&>(texture);
         if (!sdlTex.texture) return;
+        SDL_SetTextureScaleMode(sdlTex.texture, scaleMode);
 
         if (!SDL_SetTextureColorMod(sdlTex.texture, color.getRProperty(), color.getGProperty(), color.getBProperty()))
         {
