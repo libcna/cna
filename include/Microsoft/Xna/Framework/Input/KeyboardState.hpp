@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MS-PL
-//
-// Created by robertvokac on 5/26/25.
-//
-
 #pragma once
 
 #include <initializer_list>
@@ -10,6 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Keys.hpp"
 #include "KeyState.hpp"
 
@@ -21,7 +18,7 @@ namespace Microsoft::Xna::Framework::Input
     struct KeyboardState
     {
         /** @brief Constructs a default KeyboardState with no keys pressed. */
-        KeyboardState();
+        NOXNA KeyboardState();
 
         /**
          * @brief Constructs a KeyboardState with the given keys flagged as pressed.
@@ -33,7 +30,7 @@ namespace Microsoft::Xna::Framework::Input
          * @brief Constructs a KeyboardState from a set of pressed keys.
          * @param pressedKeys The set of keys currently pressed.
          */
-        explicit KeyboardState(const std::unordered_set<Keys>& pressedKeys);
+        NOXNA explicit KeyboardState(const std::unordered_set<Keys>& pressedKeys);
 
         /**
          * @brief Returns the state of a specified key.
@@ -79,7 +76,7 @@ namespace Microsoft::Xna::Framework::Input
          * @brief Returns a string representation of this KeyboardState.
          * @return The string representation.
          */
-        [[nodiscard]] std::string ToString() const;
+        NOXNA [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Compares two KeyboardState instances for equality.

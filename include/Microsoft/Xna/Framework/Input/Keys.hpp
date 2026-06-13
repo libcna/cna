@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MS-PL
-//
-// Created by robertvokac on 5/26/25.
-//
-
 #pragma once
 
 namespace Microsoft::Xna::Framework::Input
@@ -91,54 +87,34 @@ namespace Microsoft::Xna::Framework::Input
         /** @brief HELP key. */
         Help = 47,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit zero key. */
         D0 = 48,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit one key. */
         D1 = 49,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit two key. */
         D2 = 50,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit three key. */
         D3 = 51,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit four key. */
         D4 = 52,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit five key. */
         D5 = 53,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit six key. */
         D6 = 54,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit seven key. */
         D7 = 55,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit eight key. */
         D8 = 56,
 
-        /**
-         * @brief Used for miscellaneous characters; it can vary by keyboard.
-         */
+        /** @brief Digit nine key. */
         D9 = 57,
 
         /** @brief A key. */
