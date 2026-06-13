@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "System/IEquatable.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 
 namespace Microsoft::Xna::Framework::Audio
@@ -16,7 +17,7 @@ namespace Microsoft::Xna::Framework::Audio
      * Pause, Resume, SetVolume, and Stop are accepted without error but have no
      * audible effect on that backend.
      */
-    struct AudioCategory
+    struct AudioCategory : public System::IEquatable<AudioCategory>
     {
         /** @brief Gets the name of this category. */
         [[nodiscard]] const std::string& getNameProperty() const;
@@ -47,7 +48,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @param other Category to compare with.
          * @return true if equal; otherwise false.
          */
-        [[nodiscard]] bool Equals(const AudioCategory& other) const;
+        [[nodiscard]] bool Equals(const AudioCategory& other) const override;
 
         /** @brief Returns a hash code for this category. */
         [[nodiscard]] int GetHashCode() const;
