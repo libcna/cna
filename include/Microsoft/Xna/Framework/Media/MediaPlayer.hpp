@@ -4,6 +4,7 @@
 #include <chrono>
 #include <random>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaQueue.hpp"
@@ -172,16 +173,16 @@ namespace Microsoft::Xna::Framework::Media
         static void GetVisualizationData(VisualizationData& data);
 
         /** @brief Performs pending media-player maintenance (timer updates, state transitions). */
-        static void Update();
+        NOXNA static void Update();
 
         /** @brief Raises the deferred ActiveSongChanged event. */
-        static void OnActiveSongChanged();
+        NOXNA static void OnActiveSongChanged();
 
         /** @brief Raises the deferred MediaStateChanged event. */
-        static void OnMediaStateChanged();
+        NOXNA static void OnMediaStateChanged();
 
         /** @brief Releases backend media resources if initialized. Called at application exit. */
-        static void ProgramExit();
+        NOXNA static void ProgramExit();
 
     private:
         static bool isMuted_;
