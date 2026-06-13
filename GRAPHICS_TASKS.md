@@ -66,9 +66,9 @@
 | 31 | Tests: `ClearOptions` — enum values match XNA (Color=1, Depth=2, Stencil=4) | ✅ | 6 tests; also tests bitwise operators |
 | 32 | Tests: `SurfaceFormat` — enum values match XNA | ✅ | 20 tests; ordinals 0–19 verified against FNA |
 | 33 | Tests: `GraphicsDeviceStatus` — enum values | ✅ | 4 tests |
-| 34 | Tests: `RenderTargetBinding` — constructor from RenderTarget2D, face accessor | ⬜ | |
-| 35 | Tests: `OcclusionQuery` — construction, begin/end/IsComplete cycle (headless if possible) | ⬜ | May need EasyGL context |
-| 36 | Tests: `DeviceLostException`, `DeviceNotResetException`, `NoSuitableGraphicsDeviceException` — message + inheritance | ⬜ | |
+| 34 | Tests: `RenderTargetBinding` — constructor from RenderTarget2D, face accessor | ✅ | 8 tests |
+| 35 | Tests: `OcclusionQuery` — construction, begin/end/IsComplete cycle (headless if possible) | ⛔ | Requires real GraphicsDevice |
+| 36 | Tests: `DeviceLostException`, `DeviceNotResetException`, `NoSuitableGraphicsDeviceException` — message + inheritance | ✅ | 12 tests |
 
 ---
 
