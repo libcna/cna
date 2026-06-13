@@ -138,11 +138,11 @@
 | 72 | Bgfx: wire `SamplerState` → bgfx sampler flags | ✅ | samplerFlags_[slot] stored; applied in bgfx::setTexture |
 | 73 | Bgfx: wire `ScissorRectangle` → `bgfx::setScissor` | ✅ | scissorX/Y/W/H_ stored; bgfx::setScissor in SubmitSprite |
 | 74 | Bgfx: `RenderTarget2D` — bgfx framebuffer with color+depth attachments | ✅ | BgfxRenderTargetBackend: bgfx::createFrameBuffer+createTexture2D; SetRenderTarget2D switches view |
-| 75 | Bgfx: `ISpriteBatchBackend` — 2D sprite rendering via bgfx (transient quads) | ⬜ | |
+| 75 | Bgfx: `ISpriteBatchBackend` — 2D sprite rendering via bgfx (transient quads) | ✅ | Already implemented — BgfxSpriteBatchBackend |
 | 76 | Bgfx: `OcclusionQuery` — bgfx occlusion query object | ⬜ | |
 | 77 | Bgfx: `Texture3D` — `bgfx::createTexture3D` | ⬜ | |
 | 78 | Bgfx: `TextureCube` — `bgfx::createTextureCube` | ⬜ | |
-| 79 | Bgfx: `RenderTargetCube` — bgfx framebuffer with cube face attachment | ⬜ | |
+| 79 | Bgfx: `RenderTargetCube` — bgfx framebuffer with cube face attachment | ✅ | BgfxRenderTargetCubeBackend: bgfx::createTextureCube + per-face FBO via bgfx::Attachment |
 | 80 | Bgfx: Multiple render targets (MRT) — multi-attachment bgfx framebuffer | ⬜ | |
 | 81 | Bgfx: Custom `Effect` / shader — load bgfx compiled shaders via `IEffectBackend` | ⬜ | |
 | 82 | Bgfx: `GetBackBufferData` / `ReadBackbuffer` — bgfx blit to CPU-visible texture | ⬜ | |

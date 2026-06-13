@@ -297,6 +297,45 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
+    // --- BgfxRenderTargetCubeBackend ---
+
+    BgfxRenderTargetCubeBackend::BgfxRenderTargetCubeBackend(int size)
+        : size_(size)
+    {
+        // Cube map texture with render target flag — bgfx manages all 6 faces
+        cubeTex = bgfx::createTextureCube(static_cast<uint16_t>(size), false, 1,
+                                           bgfx::TextureFormat::RGBA8,
+                                           BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+        // The FBO is created per-face bind to attach the right face layer
+        fbo = BGFX_INVALID_HANDLE;
+    }
+
+    BgfxRenderTargetCubeBackend::~BgfxRenderTargetCubeBackend()
+    {
+        if (bgfx::isValid(fbo))    bgfx::destroy(fbo);
+        if (bgfx::isValid(cubeTex)) bgfx::destroy(cubeTex);
+    }
+
+    void BgfxRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    {
+        if (bgfx::isValid(fbo)) bgfx::destroy(fbo);
+        bgfx::Attachment at;
+        at.init(cubeTex, bgfx::Access::Write, static_cast<uint16_t>(face));
+        fbo = bgfx::createFrameBuffer(1, &at);
+        bgfx::setViewFrameBuffer(1, fbo);
+        bgfx::setViewRect(1, 0, 0, static_cast<uint16_t>(size_), static_cast<uint16_t>(size_));
+    }
+
+    void BgfxRenderTargetCubeBackend::UnbindAsRenderTarget()
+    {
+        bgfx::setViewFrameBuffer(1, BGFX_INVALID_HANDLE);
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> BgfxGraphicsBackend::CreateRenderTargetCube(int size)
+    {
+        return std::make_unique<BgfxRenderTargetCubeBackend>(size);
+    }
+
     BgfxSpriteBatchBackend::BgfxSpriteBatchBackend(BgfxGraphicsBackend& graphicsBackend)
         : graphicsBackend(graphicsBackend)
     {

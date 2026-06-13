@@ -52,6 +52,23 @@ namespace CNA::Internal::Backends::Bgfx
         void UnbindAsRenderTarget() override;
     };
 
+    /// bgfx-backed cube map render target.
+    class BgfxRenderTargetCubeBackend : public IRenderTargetCubeBackend
+    {
+    public:
+        bgfx::FrameBufferHandle fbo = BGFX_INVALID_HANDLE;
+        bgfx::TextureHandle cubeTex = BGFX_INVALID_HANDLE;
+        int size_ = 0;
+
+        BgfxRenderTargetCubeBackend(int size);
+        ~BgfxRenderTargetCubeBackend() override;
+
+        [[nodiscard]] int GetSize() const override { return size_; }
+        void BindAsRenderTargetFace(int face) override;
+        void UnbindAsRenderTarget() override;
+        [[nodiscard]] unsigned int GetGLHandle() const override { return 0; }
+    };
+
     class BgfxSpriteBatchBackend : public ISpriteBatchBackend
     {
     public:
@@ -121,6 +138,7 @@ namespace CNA::Internal::Backends::Bgfx
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;
 
         // Graphics state (stored; applied per-draw in SubmitSprite and future 3D draws)
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
