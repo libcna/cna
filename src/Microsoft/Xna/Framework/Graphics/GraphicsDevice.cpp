@@ -1213,7 +1213,12 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     Rectangle GraphicsDevice::getScissorRectangleProperty() const { return scissorRectangle_; }
-    void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value) { scissorRectangle_ = value; }
+    void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value)
+    {
+        scissorRectangle_ = value;
+        if (backend_)
+            backend_->SetScissorRect(value.X, value.Y, value.Width, value.Height);
+    }
 
     Color GraphicsDevice::getBlendFactorProperty() const { return blendFactor_; }
     void GraphicsDevice::setBlendFactorProperty(const Color& value) { blendFactor_ = value; }

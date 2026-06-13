@@ -78,7 +78,7 @@
 |---|------|--------|-------|
 | 37 | SDL_Renderer: verify every 3D `IGraphicsBackend` method throws `std::runtime_error` with a clear message ("SDL_Renderer does not support 3D: DrawColoredPrimitives") | ✅ | All 8 pure-virtual 3D methods throw; message now includes method name |
 | 38 | SDL_Renderer: wire `SamplerState` filter → `SDL_SetTextureScaleMode` (nearest/linear) | ✅ | Added `SetSamplerFilter` to ISpriteBatchBackend; SDL impl maps Linear→LINEAR, else NEAREST; SpriteBatch::Begin wires it |
-| 39 | SDL_Renderer: wire `ScissorRectangle` → `SDL_SetRenderClipRect` | ⬜ | Add `SetScissorRect` to `IGraphicsBackend` first |
+| 39 | SDL_Renderer: wire `ScissorRectangle` → `SDL_SetRenderClipRect` | ✅ | Added SetScissorRect to IGraphicsBackend (task 90); SDL impl calls SDL_SetRenderClipRect; GraphicsDevice::set wires it |
 | 40 | SDL_Renderer: implement `RenderTarget2D` via `SDL_TEXTUREACCESS_TARGET` | ⬜ | Allows off-screen 2D rendering |
 | 41 | SDL_Renderer: wire `BlendState` → `SDL_SetRenderDrawBlendMode` / `SDL_SetTextureBlendMode` | ⬜ | Additive, AlphaBlend, Opaque modes |
 
@@ -169,12 +169,12 @@ These interface changes are prerequisites for multiple backend tasks above.
 
 | # | Task | Status | Needed by |
 |---|------|--------|-----------|
-| 90 | Add `SetScissorRect(x, y, w, h)` to `IGraphicsBackend` (default no-op) | ⬜ | Tasks 39, 42, 57, 73 |
+| 90 | Add `SetScissorRect(x, y, w, h)` to `IGraphicsBackend` (default no-op) | ✅ | Done as part of task 39 |
 | 91 | Add `SetBlendFactor(r, g, b, a)` to `IGraphicsBackend` (default no-op) | ⬜ | Tasks 50, 63, 83 |
 | 92 | Add `SetReferenceStencil(value)` to `IGraphicsBackend` (default no-op) | ⬜ | Tasks 51, 84 |
 | 93 | Add `SetRenderTargets(array, count)` to `IGraphicsBackend` (default calls `SetRenderTarget2D` with first) | ⬜ | Tasks 45, 62, 80 |
 | 94 | Add `IRenderTargetCubeBackend` interface + `CreateRenderTargetCube(w, h, format)` factory | ⬜ | Tasks 46, 61, 79 |
-| 95 | Wire `GraphicsDevice.ScissorRectangle` setter → `IGraphicsBackend::SetScissorRect` | ⬜ | Tasks 39, 42 |
+| 95 | Wire `GraphicsDevice.ScissorRectangle` setter → `IGraphicsBackend::SetScissorRect` | ✅ | Done as part of task 39 |
 | 96 | Wire `GraphicsDevice.BlendFactor` setter → `IGraphicsBackend::SetBlendFactor` | ⬜ | Tasks 50, 63 |
 | 97 | Wire `GraphicsDevice.ReferenceStencil` setter → `IGraphicsBackend::SetReferenceStencil` | ⬜ | Tasks 51, 84 |
 | 98 | Wire `GraphicsDevice.SetRenderTargets(RenderTargetBinding[])` → `IGraphicsBackend::SetRenderTargets` | ⬜ | Tasks 45, 62 |

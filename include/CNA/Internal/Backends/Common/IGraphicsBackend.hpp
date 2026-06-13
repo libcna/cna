@@ -236,6 +236,9 @@ namespace CNA::Internal::Backends
         virtual void ApplyRasterizerState(int cullMode, int fillMode,
                                           bool scissorTestEnable) {}
 
+        /// Sets the scissor clip rectangle. Default: no-op.
+        virtual void SetScissorRect(int x, int y, int w, int h) {}
+
         // ---- 3D pipeline ----
 
         /**

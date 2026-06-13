@@ -402,6 +402,17 @@ namespace CNA::Internal::Backends::SdlRenderer
         height = logicalHeight;
     }
 
+    void SdlGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        if (w <= 0 || h <= 0)
+        {
+            SDL_SetRenderClipRect(renderer, nullptr);
+            return;
+        }
+        SDL_Rect rect{ x, y, w, h };
+        SDL_SetRenderClipRect(renderer, &rect);
+    }
+
     std::unique_ptr<ITextureBackend> SdlGraphicsBackend::CreateTexture(const ImageData& data)
     {
         return std::make_unique<SdlTextureBackend>(renderer, data);
