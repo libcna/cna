@@ -21,6 +21,28 @@ namespace CNA::Internal::Backends::SdlRenderer
         void UpdatePixels(const uint8_t* rgba, int stride) override;
     };
 
+    /// SDL_TEXTUREACCESS_TARGET-based off-screen render target.
+    class SdlRenderTargetBackend : public IRenderTargetBackend
+    {
+    public:
+        SDL_Texture* texture = nullptr;
+        SDL_Renderer* renderer = nullptr;
+        int width = 0;
+        int height = 0;
+
+        SdlRenderTargetBackend(SDL_Renderer* r, int w, int h);
+        ~SdlRenderTargetBackend() override;
+
+        int GetWidth()  const override { return width; }
+        int GetHeight() const override { return height; }
+        SDL_Texture* GetNativeTexture() const override { return texture; }
+        void UpdatePixels(const uint8_t* rgba, int stride) override;
+        void BindGL() const override {}
+
+        void BindAsRenderTarget()   override;
+        void UnbindAsRenderTarget() override;
+    };
+
     class SdlSpriteBatchBackend : public ISpriteBatchBackend
     {
     public:
@@ -72,6 +94,8 @@ namespace CNA::Internal::Backends::SdlRenderer
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,

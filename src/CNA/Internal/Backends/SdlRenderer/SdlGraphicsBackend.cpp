@@ -432,9 +432,55 @@ namespace CNA::Internal::Backends::SdlRenderer
         SDL_SetRenderClipRect(renderer, &rect);
     }
 
+    // --- SdlRenderTargetBackend ---
+
+    SdlRenderTargetBackend::SdlRenderTargetBackend(SDL_Renderer* r, int w, int h)
+        : renderer(r), width(w), height(h)
+    {
+        texture = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA32,
+                                    SDL_TEXTUREACCESS_TARGET, w, h);
+        if (!texture)
+            throw std::runtime_error(std::string("SdlRenderTargetBackend: SDL_CreateTexture failed: ") + SDL_GetError());
+    }
+
+    SdlRenderTargetBackend::~SdlRenderTargetBackend()
+    {
+        if (texture) SDL_DestroyTexture(texture);
+    }
+
+    void SdlRenderTargetBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    {
+        if (texture && rgba) SDL_UpdateTexture(texture, nullptr, rgba, stride);
+    }
+
+    void SdlRenderTargetBackend::BindAsRenderTarget()
+    {
+        SDL_SetRenderTarget(renderer, texture);
+    }
+
+    void SdlRenderTargetBackend::UnbindAsRenderTarget()
+    {
+        SDL_SetRenderTarget(renderer, nullptr);
+    }
+
+    // ---
+
     std::unique_ptr<ITextureBackend> SdlGraphicsBackend::CreateTexture(const ImageData& data)
     {
         return std::make_unique<SdlTextureBackend>(renderer, data);
+    }
+
+    std::unique_ptr<IRenderTargetBackend> SdlGraphicsBackend::CreateRenderTarget2D(int w, int h, bool /*hasDepth*/)
+    {
+        return std::make_unique<SdlRenderTargetBackend>(renderer, w, h);
+    }
+
+    void SdlGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt)
+            rt->BindAsRenderTarget();
+        else
+            SDL_SetRenderTarget(renderer, nullptr);
     }
 
     std::unique_ptr<ISpriteBatchBackend> SdlGraphicsBackend::CreateSpriteBatch()
