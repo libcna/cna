@@ -16,6 +16,27 @@ namespace CNA::Internal::Backends::Bgfx
 
     class BgfxGraphicsBackend;
 
+    /// bgfx-backed effect backend.
+    /// bgfx uses pre-compiled binary shaders; CompileProgram always returns false.
+    /// Load binary shaders directly via the bgfx::createProgram path.
+    class BgfxEffectBackend : public IEffectBackend
+    {
+    public:
+        bgfx::ProgramHandle program = BGFX_INVALID_HANDLE;
+
+        BgfxEffectBackend() = default;
+        ~BgfxEffectBackend() override;
+
+        bool CompileProgram(const std::string& /*vertSrc*/, const std::string& /*fragSrc*/) override { return false; }
+        void Bind() override;
+        void Unbind() override {}
+        [[nodiscard]] bool IsValid() const override { return bgfx::isValid(program); }
+        [[nodiscard]] std::string GetCompileError() const override
+        {
+            return "bgfx backend requires pre-compiled binary shaders (not GLSL source)";
+        }
+    };
+
     /// bgfx-backed occlusion query.
     class BgfxOcclusionQueryBackend : public IOcclusionQueryBackend
     {
@@ -184,6 +205,9 @@ namespace CNA::Internal::Backends::Bgfx
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                             const std::string& fragSrc) override;
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;

@@ -144,8 +144,8 @@
 | 78 | Bgfx: `TextureCube` — `bgfx::createTextureCube` | ✅ | BgfxTextureCubeBackend + ITextureCubeBackend interface; wired in TextureCube.cpp |
 | 79 | Bgfx: `RenderTargetCube` — bgfx framebuffer with cube face attachment | ✅ | BgfxRenderTargetCubeBackend: bgfx::createTextureCube + per-face FBO via bgfx::Attachment |
 | 80 | Bgfx: Multiple render targets (MRT) — multi-attachment bgfx framebuffer | ✅ | SetRenderTargets override builds temp MRT FBO via bgfx::Attachment + bgfx::createFrameBuffer |
-| 81 | Bgfx: Custom `Effect` / shader — load bgfx compiled shaders via `IEffectBackend` | ⬜ | |
-| 82 | Bgfx: `GetBackBufferData` / `ReadBackbuffer` — bgfx blit to CPU-visible texture | ⬜ | |
+| 81 | Bgfx: Custom `Effect` / shader — load bgfx compiled shaders via `IEffectBackend` | ⚠️ | BgfxEffectBackend stub: CompileProgram returns false (bgfx needs pre-compiled binaries); Bind is no-op (per-draw-call model) |
+| 82 | Bgfx: `GetBackBufferData` / `ReadBackbuffer` — bgfx blit to CPU-visible texture | ⚠️ | Stub: throws with clear message; bgfx readback is async (blit + bgfx::readTexture) — not yet implemented |
 | 83 | Bgfx: `BlendFactor` wired | ✅ | SetBlendFactor calls bgfx::setBlendFactor(packed RGBA8) |
 | 84 | Bgfx: `ReferenceStencil` wired | ⬜ | Requires bgfx stencil API; deferred |
 

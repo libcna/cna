@@ -234,6 +234,32 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
+    // --- BgfxEffectBackend ---
+
+    BgfxEffectBackend::~BgfxEffectBackend()
+    {
+        if (bgfx::isValid(program))
+            bgfx::destroy(program);
+    }
+
+    void BgfxEffectBackend::Bind()
+    {
+        // No-op: bgfx programs are submitted per draw call, not bound globally.
+    }
+
+    std::unique_ptr<IEffectBackend> BgfxGraphicsBackend::CreateEffectBackend(
+        const std::string& /*vertSrc*/, const std::string& /*fragSrc*/)
+    {
+        return std::make_unique<BgfxEffectBackend>();
+    }
+
+    void BgfxGraphicsBackend::ReadBackbuffer(int /*x*/, int /*y*/, int /*w*/, int /*h*/, uint8_t* /*pixels*/)
+    {
+        // bgfx readback is asynchronous (blit to BGFX_TEXTURE_READ_BACK + bgfx::readTexture).
+        // A synchronous XNA-style readback is not directly supported; use render-to-texture instead.
+        throw std::runtime_error("BgfxGraphicsBackend::ReadBackbuffer: async readback not yet implemented");
+    }
+
     // --- BgfxOcclusionQueryBackend ---
 
     BgfxOcclusionQueryBackend::BgfxOcclusionQueryBackend()
