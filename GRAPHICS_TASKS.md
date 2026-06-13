@@ -80,7 +80,7 @@
 | 38 | SDL_Renderer: wire `SamplerState` filter → `SDL_SetTextureScaleMode` (nearest/linear) | ✅ | Added `SetSamplerFilter` to ISpriteBatchBackend; SDL impl maps Linear→LINEAR, else NEAREST; SpriteBatch::Begin wires it |
 | 39 | SDL_Renderer: wire `ScissorRectangle` → `SDL_SetRenderClipRect` | ✅ | Added SetScissorRect to IGraphicsBackend (task 90); SDL impl calls SDL_SetRenderClipRect; GraphicsDevice::set wires it |
 | 40 | SDL_Renderer: implement `RenderTarget2D` via `SDL_TEXTUREACCESS_TARGET` | ⬜ | Allows off-screen 2D rendering |
-| 41 | SDL_Renderer: wire `BlendState` → `SDL_SetRenderDrawBlendMode` / `SDL_SetTextureBlendMode` | ⬜ | Additive, AlphaBlend, Opaque modes |
+| 41 | SDL_Renderer: wire `BlendState` → `SDL_SetRenderDrawBlendMode` / `SDL_SetTextureBlendMode` | ✅ | ApplyBlendState maps One/Zero→NONE, SrcAlpha/One→ADD, else→BLEND; Draw queries renderer mode per-texture |
 
 ---
 

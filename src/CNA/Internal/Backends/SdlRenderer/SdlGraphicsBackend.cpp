@@ -104,7 +104,9 @@ namespace CNA::Internal::Backends::SdlRenderer
         {
             throw std::runtime_error(std::string("SDL_SetTextureAlphaMod failed: ") + SDL_GetError());
         }
-        if (!SDL_SetTextureBlendMode(sdlTex.texture, SDL_BLENDMODE_BLEND))
+        SDL_BlendMode currentBlendMode = SDL_BLENDMODE_BLEND;
+        SDL_GetRenderDrawBlendMode(renderer, &currentBlendMode);
+        if (!SDL_SetTextureBlendMode(sdlTex.texture, currentBlendMode))
         {
             throw std::runtime_error(std::string("SDL_SetTextureBlendMode failed: ") + SDL_GetError());
         }
@@ -146,7 +148,9 @@ namespace CNA::Internal::Backends::SdlRenderer
         {
             throw std::runtime_error(std::string("SDL_SetTextureAlphaMod failed: ") + SDL_GetError());
         }
-        if (!SDL_SetTextureBlendMode(sdlTex.texture, SDL_BLENDMODE_BLEND))
+        SDL_BlendMode currentBlendMode = SDL_BLENDMODE_BLEND;
+        SDL_GetRenderDrawBlendMode(renderer, &currentBlendMode);
+        if (!SDL_SetTextureBlendMode(sdlTex.texture, currentBlendMode))
         {
             throw std::runtime_error(std::string("SDL_SetTextureBlendMode failed: ") + SDL_GetError());
         }
@@ -400,6 +404,21 @@ namespace CNA::Internal::Backends::SdlRenderer
         // so the game always works in its own coordinate space.
         width = logicalWidth;
         height = logicalHeight;
+    }
+
+    void SdlGraphicsBackend::ApplyBlendState(int colorSrcBlend, int /*alphaSrcBlend*/,
+                                              int colorDstBlend, int /*alphaDstBlend*/,
+                                              int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+    {
+        // Map common XNA BlendState presets to SDL blend modes.
+        // Blend::One=0, Blend::Zero=1, Blend::SourceAlpha=4, Blend::InverseSourceAlpha=5
+        SDL_BlendMode mode = SDL_BLENDMODE_BLEND;
+        if (colorSrcBlend == 0 && colorDstBlend == 1)       // One, Zero → Opaque
+            mode = SDL_BLENDMODE_NONE;
+        else if (colorSrcBlend == 4 && colorDstBlend == 0)  // SourceAlpha, One → Additive
+            mode = SDL_BLENDMODE_ADD;
+        blendMode_ = mode;
+        SDL_SetRenderDrawBlendMode(renderer, blendMode_);
     }
 
     void SdlGraphicsBackend::SetScissorRect(int x, int y, int w, int h)

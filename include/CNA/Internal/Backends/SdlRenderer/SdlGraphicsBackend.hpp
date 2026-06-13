@@ -73,6 +73,11 @@ namespace CNA::Internal::Backends::SdlRenderer
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         void SetScissorRect(int x, int y, int w, int h) override;
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+
+        SDL_BlendMode blendMode_ = SDL_BLENDMODE_BLEND;
 
         // 3D pipeline: NOT supported by the SDL_Renderer backend.
         // @note Status: STUB. Every entry point throws std::runtime_error.
