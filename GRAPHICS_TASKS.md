@@ -49,7 +49,7 @@
 | 14 | Tests: `SamplerState` — predefined states (LinearClamp, LinearWrap, PointClamp, etc.), property getters | ✅ | 30 tests |
 | 15 | Tests: `VertexElement` — constructor, getters | ✅ | 10 tests |
 | 16 | Tests: `VertexDeclaration` — constructor from element array, `getVertexStrideProperty`, element access | ✅ | 13 tests |
-| 17 | Tests: `VertexPositionColor` — constructor, declaration stride=16 | ⬜ | |
+| 17 | Tests: `VertexPositionColor` — constructor, declaration stride=16 | ✅ | 7 tests; stride=40 not 16 (Color vtable bug — see test comment) |
 | 18 | Tests: `VertexPositionTexture` — constructor, declaration stride=20 | ⬜ | |
 | 19 | Tests: `VertexPositionColorTexture` — constructor, declaration stride=24 | ⬜ | |
 | 20 | Tests: `VertexPositionNormalTexture` — constructor, declaration stride=32 | ⬜ | |
