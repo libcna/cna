@@ -267,6 +267,45 @@ namespace CNA::Internal::Backends::Bgfx
         return std::make_unique<BgfxOcclusionQueryBackend>();
     }
 
+    // --- BgfxTextureCubeBackend ---
+
+    BgfxTextureCubeBackend::BgfxTextureCubeBackend(int size, bool /*mipMap*/, int /*surfaceFormat*/)
+        : size_(size)
+    {
+        handle = bgfx::createTextureCube(
+            static_cast<uint16_t>(size),
+            false,
+            1,
+            bgfx::TextureFormat::RGBA8,
+            BGFX_TEXTURE_NONE);
+    }
+
+    BgfxTextureCubeBackend::~BgfxTextureCubeBackend()
+    {
+        if (bgfx::isValid(handle))
+            bgfx::destroy(handle);
+    }
+
+    void BgfxTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                         const void* data, int dataLength)
+    {
+        if (!bgfx::isValid(handle) || !data || dataLength <= 0) return;
+        const bgfx::Memory* mem = bgfx::copy(data, static_cast<uint32_t>(dataLength));
+        bgfx::updateTextureCube(handle,
+            0,
+            static_cast<uint8_t>(face),
+            static_cast<uint8_t>(level),
+            static_cast<uint16_t>(x), static_cast<uint16_t>(y),
+            static_cast<uint16_t>(w), static_cast<uint16_t>(h),
+            mem);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> BgfxGraphicsBackend::CreateTextureCube(
+        int size, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<BgfxTextureCubeBackend>(size, mipMap, surfaceFormat);
+    }
+
     // --- BgfxTexture3DBackend ---
 
     BgfxTexture3DBackend::BgfxTexture3DBackend(int w, int h, int depth, bool /*mipMap*/, int /*surfaceFormat*/)

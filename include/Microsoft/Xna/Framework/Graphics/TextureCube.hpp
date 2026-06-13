@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+
+namespace CNA::Internal::Backends
+{
+    class ITextureCubeBackend;
+}
 
 namespace System::IO { class Stream; }
 
@@ -96,5 +102,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int size_;
         SurfaceFormat format_;
         int levelCount_;
+        std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend_;
     };
 }

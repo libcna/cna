@@ -93,6 +93,16 @@ namespace CNA::Internal::Backends
         [[nodiscard]] virtual int  PixelCount() const = 0;
     };
 
+    /** @brief Backend interface for a cube map texture. */
+    class ITextureCubeBackend
+    {
+    public:
+        virtual ~ITextureCubeBackend() = default;
+        /** @brief Uploads raw byte data to a sub-rectangle of a single cube face. */
+        virtual void SetData(int face, int level, int x, int y, int w, int h,
+                             const void* data, int dataLength) = 0;
+    };
+
     /** @brief Backend interface for a 3D (volume) texture. */
     class ITexture3DBackend
     {
@@ -271,6 +281,7 @@ namespace CNA::Internal::Backends
         /// backends that do not support hardware occlusion queries.
         virtual std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() { return nullptr; }
         virtual std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) { return nullptr; }
+        virtual std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) { return nullptr; }
 
         /// Creates an off-screen FBO-backed render target. Returns nullptr on
         /// backends that do not support render targets.

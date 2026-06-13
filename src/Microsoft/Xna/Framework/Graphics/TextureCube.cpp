@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -8,6 +10,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , size_(size)
         , format_(format)
         , levelCount_(mipMap ? 1 : 1)
+        , backend_(device.GetBackend().CreateTextureCube(size, mipMap, static_cast<int>(format)))
     {
     }
 
@@ -21,9 +24,22 @@ namespace Microsoft::Xna::Framework::Graphics
         return name;
     }
 
-    void TextureCube::SetData(CubeMapFace face, const Color* data, int elementCount) {}
+    void TextureCube::SetData(CubeMapFace face, const Color* data, int elementCount)
+    {
+        if (backend_)
+            backend_->SetData(static_cast<int>(face), 0, 0, 0, size_, size_,
+                              data, elementCount * static_cast<int>(sizeof(Color)));
+    }
+
     void TextureCube::SetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
-                              const Color* data, int startIndex, int elementCount) {}
+                              const Color* data, int startIndex, int elementCount)
+    {
+        if (!backend_) return;
+        int x = 0, y = 0, w = size_, h = size_;
+        if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
+        backend_->SetData(static_cast<int>(face), level, x, y, w, h,
+                          data + startIndex, elementCount * static_cast<int>(sizeof(Color)));
+    }
 
     void TextureCube::GetData(CubeMapFace face, Color* data, int elementCount) const {}
     void TextureCube::GetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
