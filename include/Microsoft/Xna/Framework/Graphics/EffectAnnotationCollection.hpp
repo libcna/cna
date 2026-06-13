@@ -63,7 +63,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param annotation The EffectAnnotation to add.
          */
-        void Add(EffectAnnotation annotation);
+        NOXNA void Add(EffectAnnotation annotation);
 
         /** @brief Mutable iterator type for range-for support. */
         using iterator = std::vector<EffectAnnotation>::iterator;

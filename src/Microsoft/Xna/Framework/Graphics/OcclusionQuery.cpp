@@ -34,4 +34,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (backend_) backend_->End();
     }
+
+    const std::string& OcclusionQuery::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.OcclusionQuery";
+        return name;
+    }
 }

@@ -40,4 +40,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         return rtBackend_;
     }
+
+    const std::string& RenderTarget2D::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.RenderTarget2D";
+        return name;
+    }
 }

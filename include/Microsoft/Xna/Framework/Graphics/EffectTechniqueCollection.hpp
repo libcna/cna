@@ -62,7 +62,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param technique The EffectTechnique to add.
          */
-        void Add(EffectTechnique technique);
+        NOXNA void Add(EffectTechnique technique);
 
         /** @brief Mutable iterator type for range-for support. */
         using iterator = std::vector<EffectTechnique>::iterator;

@@ -62,7 +62,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param pass The EffectPass to add.
          */
-        void Add(EffectPass pass);
+        NOXNA void Add(EffectPass pass);
 
         /** @brief Mutable iterator type for range-for support. */
         using iterator = std::vector<EffectPass>::iterator;

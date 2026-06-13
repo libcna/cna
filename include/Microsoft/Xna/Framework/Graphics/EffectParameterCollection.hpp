@@ -62,7 +62,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param param The EffectParameter to add.
          */
-        void Add(EffectParameter param);
+        NOXNA void Add(EffectParameter param);
 
         /** @brief Mutable iterator type for range-for support. */
         using iterator = std::vector<EffectParameter>::iterator;

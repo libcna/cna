@@ -2,6 +2,7 @@
 #pragma once
 
 #include <memory>
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 
 namespace CNA::Internal::Backends
@@ -22,8 +23,11 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         explicit OcclusionQuery(GraphicsDevice& device);
 
-        /** @brief Destroys the occlusion query and releases GPU resources. */
-        ~OcclusionQuery() override;
+        /** @brief Destructor. */
+        NOXNA ~OcclusionQuery() override;
+
+        /** @brief Returns the fully qualified CNA type name. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets whether the occlusion query result is available without blocking.
