@@ -87,6 +87,13 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
+        /**
+         * @brief Returns the graphics device that owns this effect.
+         *
+         * @return Reference to the owning GraphicsDevice.
+         */
+        NOXNA [[nodiscard]] GraphicsDevice& getGraphicsDeviceInternal() const;
+
     protected:
         /**
          * @brief Derived classes override this to upload shader parameters to the GPU before drawing.

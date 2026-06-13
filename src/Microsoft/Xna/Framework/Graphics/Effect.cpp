@@ -22,6 +22,8 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsResource::Dispose(disposing);
     }
 
+    GraphicsDevice& Effect::getGraphicsDeviceInternal() const { return *device_; }
+
     EffectTechnique* Effect::getCurrentTechniqueProperty() const { return currentTechnique_; }
 
     void Effect::setCurrentTechniqueProperty(EffectTechnique* value)
