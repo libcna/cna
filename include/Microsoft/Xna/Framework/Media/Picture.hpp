@@ -4,6 +4,7 @@
 #include <chrono>
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -88,6 +89,12 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] bool Equals(const Picture* other) const;
 
         /**
+         * @brief Gets the hash code for this Picture instance.
+         * @return Hash code of the object.
+         */
+        [[nodiscard]] int GetHashCode() const;
+
+        /**
          * @brief Returns a string representation of this picture.
          *
          * @return Picture name string.
@@ -95,12 +102,15 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] std::string ToString() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns whether two pictures are equal. */
         friend bool operator==(const Picture& lhs, const Picture& rhs);
 
         /** @brief Returns whether two pictures are not equal. */
         friend bool operator!=(const Picture& lhs, const Picture& rhs);
+
+    private:
+        Picture();
     };
 }
