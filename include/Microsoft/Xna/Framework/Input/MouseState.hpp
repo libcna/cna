@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 
 #include <string>
@@ -61,7 +62,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] int getScrollWheelValueProperty() const;
 
         /** @brief Constructs a MouseState with all values at rest. */
-        MouseState();
+        NOXNA MouseState();
 
         /**
          * @brief Constructs a MouseState with all pointer and button values specified.
