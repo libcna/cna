@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/Object.hpp"
@@ -16,15 +17,15 @@ namespace Microsoft::Xna::Framework::Media
     {
     public:
         /** @brief Creates an empty media queue with no active song. */
-        MediaQueue();
+        NOXNA MediaQueue();
 
-        MediaQueue(const MediaQueue&) = delete;
-        MediaQueue& operator=(const MediaQueue&) = delete;
-        MediaQueue(MediaQueue&&) = default;
-        MediaQueue& operator=(MediaQueue&&) = default;
+        NOXNA MediaQueue(const MediaQueue&) = delete;
+        NOXNA MediaQueue& operator=(const MediaQueue&) = delete;
+        NOXNA MediaQueue(MediaQueue&&) = default;
+        NOXNA MediaQueue& operator=(MediaQueue&&) = default;
 
         /** @brief Destroys the media queue. */
-        ~MediaQueue() override = default;
+        NOXNA ~MediaQueue() override = default;
 
         /**
          * @brief Gets the currently active song, or nullptr when the queue is empty.
@@ -67,13 +68,13 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param song Song to add.
          */
-        void Add(Song* song);
+        NOXNA void Add(Song* song);
 
         /** @brief Clears all songs from the queue and resets the active index. */
-        void Clear();
+        NOXNA void Clear();
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         std::vector<std::unique_ptr<Song>> songs_;
