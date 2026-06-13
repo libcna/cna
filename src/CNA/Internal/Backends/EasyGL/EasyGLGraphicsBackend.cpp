@@ -57,6 +57,82 @@ namespace CNA::Internal::Backends::EasyGL
     using namespace Microsoft::Xna::Framework::Graphics;
     using namespace CNA::Internal::Backends;
 
+    // --- EasyGLTexture3DBackend ---
+
+    static constexpr int kTexLinear       = static_cast<int>(::metagl::TextureMagFilter::Linear);
+    static constexpr int kTexClampToEdge  = static_cast<int>(::metagl::TextureWrap::ClampToEdge);
+
+    EasyGLTexture3DBackend::EasyGLTexture3DBackend(int w, int h, int depth, bool /*mipMap*/, int /*surfaceFormat*/)
+        : width_(w), height_(h), depth_(depth)
+    {
+        tex_.create();
+        tex_.bind(::easygl::TextureTarget::Texture3D);
+        tex_.set_image_3d(::easygl::TextureTarget::Texture3D, 0,
+                          ::metagl::InternalFormat::Rgba8,
+                          w, h, depth,
+                          ::metagl::PixelFormat::Rgba,
+                          ::metagl::PixelType::UnsignedByte,
+                          nullptr);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MinFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MagFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::WrapS, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::WrapT, kTexClampToEdge);
+    }
+
+    void EasyGLTexture3DBackend::SetData(int level, int x, int y, int z,
+                                          int w, int h, int depth,
+                                          const void* data, int /*dataLength*/)
+    {
+        tex_.bind(::easygl::TextureTarget::Texture3D);
+        tex_.set_sub_image_3d(::easygl::TextureTarget::Texture3D, level,
+                              x, y, z, w, h, depth,
+                              ::metagl::PixelFormat::Rgba,
+                              ::metagl::PixelType::UnsignedByte,
+                              data);
+    }
+
+    // --- EasyGLTextureCubeBackend ---
+
+    static const ::easygl::TextureTarget kCubeFaceTargets[6] = {
+        ::easygl::TextureTarget::TextureCubeMapPositiveX,
+        ::easygl::TextureTarget::TextureCubeMapNegativeX,
+        ::easygl::TextureTarget::TextureCubeMapPositiveY,
+        ::easygl::TextureTarget::TextureCubeMapNegativeY,
+        ::easygl::TextureTarget::TextureCubeMapPositiveZ,
+        ::easygl::TextureTarget::TextureCubeMapNegativeZ,
+    };
+
+    EasyGLTextureCubeBackend::EasyGLTextureCubeBackend(int size, bool /*mipMap*/, int /*surfaceFormat*/)
+        : size_(size)
+    {
+        tex_.create();
+        tex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        for (auto faceTarget : kCubeFaceTargets)
+        {
+            tex_.set_image_2d(faceTarget, 0,
+                              ::metagl::InternalFormat::Rgba8,
+                              size, size,
+                              ::metagl::PixelFormat::Rgba,
+                              ::metagl::PixelType::UnsignedByte,
+                              nullptr);
+        }
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MinFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MagFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::WrapS, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::WrapT, kTexClampToEdge);
+    }
+
+    void EasyGLTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                            const void* data, int /*dataLength*/)
+    {
+        if (face < 0 || face >= 6) return;
+        tex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        tex_.set_sub_image_2d(kCubeFaceTargets[face], level, x, y, w, h,
+                              ::metagl::PixelFormat::Rgba,
+                              ::metagl::PixelType::UnsignedByte,
+                              data);
+    }
+
     // --- EasyGLEffectBackend ---
 
     bool EasyGLEffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
@@ -1002,6 +1078,18 @@ void main()
     std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size)
     {
         return std::make_unique<EasyGLRenderTargetCubeBackend>(size, true, RegistryPtr());
+    }
+
+    std::unique_ptr<ITexture3DBackend> EasyGLGraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<EasyGLTexture3DBackend>(w, h, depth, mipMap, surfaceFormat);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> EasyGLGraphicsBackend::CreateTextureCube(
+        int size, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<EasyGLTextureCubeBackend>(size, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<IEffectBackend> EasyGLGraphicsBackend::CreateEffectBackend(

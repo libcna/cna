@@ -94,6 +94,39 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
+    /// EasyGL 3D (volume) texture backend.
+    class EasyGLTexture3DBackend : public ITexture3DBackend
+    {
+    public:
+        EasyGLTexture3DBackend(int w, int h, int depth, bool mipMap, int surfaceFormat);
+        ~EasyGLTexture3DBackend() override = default;
+
+        void SetData(int level, int x, int y, int z,
+                     int w, int h, int depth,
+                     const void* data, int dataLength) override;
+
+    private:
+        ::easygl::Texture tex_;
+        int width_  = 0;
+        int height_ = 0;
+        int depth_  = 0;
+    };
+
+    /// EasyGL cube map texture backend.
+    class EasyGLTextureCubeBackend : public ITextureCubeBackend
+    {
+    public:
+        EasyGLTextureCubeBackend(int size, bool mipMap, int surfaceFormat);
+        ~EasyGLTextureCubeBackend() override = default;
+
+        void SetData(int face, int level, int x, int y, int w, int h,
+                     const void* data, int dataLength) override;
+
+    private:
+        ::easygl::Texture tex_;
+        int size_ = 0;
+    };
+
     /// EasyGL implementation of IEffectBackend — wraps an easygl::Program.
     class EasyGLEffectBackend : public IEffectBackend
     {
@@ -337,6 +370,8 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;

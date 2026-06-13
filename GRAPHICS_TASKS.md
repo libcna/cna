@@ -93,8 +93,8 @@
 | 44 | EasyGL: `SamplerState` on texture slots 1–15 (currently only slot 0 is fully applied) | ✅ | `glBindSampler` or `glTexParameteri` per active unit |
 | 45 | EasyGL: Multiple render targets (MRT) — `SetRenderTargets(array)` via `glDrawBuffers` | ✅ | SetRenderTargets override builds a combined MRT FBO via fbo.attach_texture_2d + set_draw_buffers; GetColorGLHandle() exposes color texture per RT |
 | 46 | EasyGL: `RenderTargetCube` — 6-face FBO with cube map attachment | ✅ | Add `IRenderTargetCubeBackend`; attach per-face in `BindAsRenderTarget(face)` |
-| 47 | EasyGL: `Texture3D` `GetData` — `glGetTexImage` if available (desktop GL only; stub on GLES3) | ⬜ | Low priority |
-| 48 | EasyGL: `TextureCube` `GetData` — per-face readback | ⬜ | Low priority |
+| 47 | EasyGL: `Texture3D` `GetData` — `glGetTexImage` if available (desktop GL only; stub on GLES3) | ⚠️ | EasyGLTexture3DBackend + SetData implemented; GetData stub (no glGetTexImage on GLES3) |
+| 48 | EasyGL: `TextureCube` `GetData` — per-face readback | ⚠️ | EasyGLTextureCubeBackend + per-face SetData implemented; GetData stub |
 | 49 | EasyGL: `FillMode::WireFrame` — document as permanent known limitation (no `glPolygonMode` on GLES3) | ℹ️ | Already documented in NEXT.md |
 | 50 | EasyGL: `BlendFactor` (`glBlendColor`) wired to `GraphicsDevice.BlendFactor` setter | ✅ | Add `SetBlendFactor(r,g,b,a)` to `IGraphicsBackend` |
 | 51 | EasyGL: `ReferenceStencil` wired to stencil reference in `ApplyDepthStencilState` | ✅ | Part of task 43 |
