@@ -66,6 +66,33 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
+    /// EasyGL cube-map render target: one FBO per face, shared cube-map texture.
+    class EasyGLRenderTargetCubeBackend : public IRenderTargetCubeBackend,
+                                           public ::easygl::RecoverableResource
+    {
+    public:
+        EasyGLRenderTargetCubeBackend(int size, bool hasDepth, ::easygl::ResourceRegistry* registry);
+        ~EasyGLRenderTargetCubeBackend() override;
+
+        [[nodiscard]] int GetSize() const override { return size_; }
+        void BindAsRenderTargetFace(int face) override;
+        void UnbindAsRenderTarget() override;
+        [[nodiscard]] unsigned int GetGLHandle() const override;
+
+        void release_gl_handle_only() override;
+        void recreate_gl_resource()   override;
+
+    private:
+        void CreateResources();
+
+        ::easygl::Texture      cubeTex_;
+        ::easygl::Framebuffer  fbo_;
+        ::easygl::Renderbuffer depthRbo_;
+        int  size_     = 0;
+        bool hasDepth_ = false;
+        ::easygl::ResourceRegistry* registry_ = nullptr;
+    };
+
     class EasyGLOcclusionQueryBackend : public IOcclusionQueryBackend, public ::easygl::RecoverableResource
     {
     public:
@@ -280,6 +307,7 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;

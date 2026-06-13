@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -14,6 +16,13 @@ namespace Microsoft::Xna::Framework::Graphics
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)
     {
+        if (device.backend_)
+            backend_ = device.backend_->CreateRenderTargetCube(size);
+    }
+
+    CNA::Internal::Backends::IRenderTargetCubeBackend* RenderTargetCube::GetRenderTargetCubeBackend() const
+    {
+        return backend_.get();
     }
 
     int RenderTargetCube::getWidthProperty() const  { return size_; }

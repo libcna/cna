@@ -239,6 +239,94 @@ namespace CNA::Internal::Backends::EasyGL
         CreateResources();
     }
 
+    // --- EasyGLRenderTargetCubeBackend ---
+
+    EasyGLRenderTargetCubeBackend::EasyGLRenderTargetCubeBackend(int size, bool hasDepth,
+                                                                    ::easygl::ResourceRegistry* registry)
+        : size_(size), hasDepth_(hasDepth), registry_(registry)
+    {
+        CreateResources();
+        if (registry_) registry_->add(this);
+    }
+
+    EasyGLRenderTargetCubeBackend::~EasyGLRenderTargetCubeBackend()
+    {
+        if (registry_) registry_->remove(this);
+    }
+
+    void EasyGLRenderTargetCubeBackend::CreateResources()
+    {
+        cubeTex_.create();
+        cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        // Allocate storage for all 6 faces
+        static const ::easygl::TextureTarget kFaceTargets[6] = {
+            ::easygl::TextureTarget::TextureCubeMapPositiveX,
+            ::easygl::TextureTarget::TextureCubeMapNegativeX,
+            ::easygl::TextureTarget::TextureCubeMapPositiveY,
+            ::easygl::TextureTarget::TextureCubeMapNegativeY,
+            ::easygl::TextureTarget::TextureCubeMapPositiveZ,
+            ::easygl::TextureTarget::TextureCubeMapNegativeZ,
+        };
+        for (auto faceTarget : kFaceTargets)
+        {
+            cubeTex_.set_image_2d(faceTarget, 0,
+                                   ::metagl::InternalFormat::Rgba8,
+                                   size_, size_,
+                                   ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedByte,
+                                   nullptr);
+        }
+
+        fbo_.create();
+
+        if (hasDepth_)
+        {
+            depthRbo_.create();
+            depthRbo_.bind();
+            depthRbo_.set_storage(::metagl::InternalFormat::DepthComponent24, size_, size_);
+            fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+            fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                      ::metagl::FramebufferAttachment::Depth,
+                                      depthRbo_.native_handle());
+        }
+
+        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
+    void EasyGLRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    {
+        fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        // Attach the requested face (0=+X .. 5=-Z) to the FBO color attachment
+        const auto faceTarget = static_cast<::easygl::TextureTarget>(
+            static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX) + face);
+        fbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                                ::metagl::FramebufferAttachment::Color0,
+                                faceTarget,
+                                cubeTex_.native_handle(), 0);
+    }
+
+    void EasyGLRenderTargetCubeBackend::UnbindAsRenderTarget()
+    {
+        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
+    unsigned int EasyGLRenderTargetCubeBackend::GetGLHandle() const
+    {
+        return cubeTex_.native_handle();
+    }
+
+    void EasyGLRenderTargetCubeBackend::release_gl_handle_only()
+    {
+        fbo_.reset_handle_no_gl();
+        cubeTex_.reset_handle_no_gl();
+        depthRbo_.reset_handle_no_gl();
+    }
+
+    void EasyGLRenderTargetCubeBackend::recreate_gl_resource()
+    {
+        CreateResources();
+    }
+
     // --- EasyGLSpriteBatchBackend ---
 
     EasyGLSpriteBatchBackend::EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry,
@@ -814,6 +902,11 @@ void main()
     std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth)
     {
         return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, RegistryPtr());
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size)
+    {
+        return std::make_unique<EasyGLRenderTargetCubeBackend>(size, true, RegistryPtr());
     }
 
     void EasyGLGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)

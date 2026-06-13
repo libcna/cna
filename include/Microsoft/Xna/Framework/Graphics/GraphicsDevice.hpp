@@ -50,6 +50,7 @@ namespace Microsoft::Xna::Framework::Graphics
     class BasicEffect;
     class RenderTarget2D;
     class RenderTargetCube;
+    class RenderTargetCube;
 }
 
 namespace CNA::Internal::Backends
@@ -625,6 +626,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void applySamplerStatesToBackend();
 
         friend class Texture2D;
+        friend class RenderTargetCube;
         friend class SpriteBatch;
         friend class Microsoft::Xna::Framework::GameWindow;
         friend class Microsoft::Xna::Framework::GraphicsDeviceManager;

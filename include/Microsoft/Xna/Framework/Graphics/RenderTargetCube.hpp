@@ -7,6 +7,10 @@
 #include "Microsoft/Xna/Framework/Graphics/IRenderTarget.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "CNA/CNAHelper.hpp"
+#include <memory>
+
+namespace CNA::Internal::Backends { class IRenderTargetCubeBackend; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -53,10 +57,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Raised when the render target content is lost (never raised in CNA). */
         System::EventHandler<System::EventArgs> ContentLost;
 
+        /** @brief Returns the backend cube render target handle (CNA extension). */
+        NOXNA [[nodiscard]] CNA::Internal::Backends::IRenderTargetCubeBackend* GetRenderTargetCubeBackend() const;
+
     private:
         int size_;
         DepthFormat depthFormat_;
         int multiSampleCount_;
         RenderTargetUsage usage_;
+        std::unique_ptr<CNA::Internal::Backends::IRenderTargetCubeBackend> backend_;
     };
 }

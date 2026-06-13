@@ -123,6 +123,22 @@ namespace CNA::Internal::Backends
         virtual void UnbindAsRenderTarget() = 0;
     };
 
+    /// Backend handle for a cube-map render target.
+    /// Each face can be activated independently for rendering.
+    class IRenderTargetCubeBackend
+    {
+    public:
+        virtual ~IRenderTargetCubeBackend() = default;
+        /// Returns the width/height of each cube face in pixels.
+        [[nodiscard]] virtual int GetSize() const = 0;
+        /// Activates face @p face (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z) as the draw target.
+        virtual void BindAsRenderTargetFace(int face) = 0;
+        /// Unbind and restore the default framebuffer.
+        virtual void UnbindAsRenderTarget() = 0;
+        /// Returns the underlying GL texture handle so the cube map can be sampled.
+        [[nodiscard]] virtual unsigned int GetGLHandle() const { return 0; }
+    };
+
     class ISpriteBatchBackend
     {
     public:
@@ -220,6 +236,26 @@ namespace CNA::Internal::Backends
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.
         virtual void SetRenderTarget2D(IRenderTargetBackend* rt) {}
+
+        /// Creates a cube-map render target. Returns nullptr on backends that
+        /// do not support cube map render targets.
+        virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) { return nullptr; }
+
+        /// Activates a specific face of a cube-map render target for rendering.
+        /// Pass nullptr to restore the default back buffer.
+        virtual void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
+        {
+            if (rt) rt->BindAsRenderTargetFace(face);
+            else SetRenderTarget2D(nullptr);
+        }
+
+        /// Activates multiple render targets for MRT. Default: binds the first
+        /// target via SetRenderTarget2D; backends with MRT support should override.
+        /// Pass nullptr / count=0 to restore the default back buffer.
+        virtual void SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+        {
+            SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
+        }
 
         // ---- Graphics state ----
 

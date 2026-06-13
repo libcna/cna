@@ -1316,14 +1316,31 @@ namespace Microsoft::Xna::Framework::Graphics
             backend_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetBackend() : nullptr);
     }
 
-    void GraphicsDevice::SetRenderTarget(RenderTargetCube* /*renderTarget*/, CubeMapFace /*cubeMapFace*/)
+    void GraphicsDevice::SetRenderTarget(RenderTargetCube* renderTarget, CubeMapFace cubeMapFace)
     {
-        // Not yet implemented.
+        if (backend_)
+            backend_->SetRenderTargetCubeFace(
+                renderTarget ? renderTarget->GetRenderTargetCubeBackend() : nullptr,
+                static_cast<int>(cubeMapFace));
     }
 
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
     {
         currentRenderTargets_ = renderTargets;
+        if (!backend_) return;
+        if (renderTargets.empty())
+        {
+            backend_->SetRenderTargets(nullptr, 0);
+            return;
+        }
+        std::vector<CNA::Internal::Backends::IRenderTargetBackend*> backends;
+        backends.reserve(renderTargets.size());
+        for (const auto& binding : renderTargets)
+        {
+            auto* rt = dynamic_cast<RenderTarget2D*>(binding.getRenderTargetProperty());
+            backends.push_back(rt ? rt->GetRenderTargetBackend() : nullptr);
+        }
+        backend_->SetRenderTargets(backends.data(), static_cast<int>(backends.size()));
     }
 
     std::vector<RenderTargetBinding> GraphicsDevice::GetRenderTargets() const
