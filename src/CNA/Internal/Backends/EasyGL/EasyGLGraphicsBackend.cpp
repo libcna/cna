@@ -57,6 +57,96 @@ namespace CNA::Internal::Backends::EasyGL
     using namespace Microsoft::Xna::Framework::Graphics;
     using namespace CNA::Internal::Backends;
 
+    // --- EasyGLEffectBackend ---
+
+    bool EasyGLEffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
+    {
+        compileError_.clear();
+        ::easygl::Shader vs(::easygl::ShaderType::Vertex);
+        vs.create();
+        vs.compile_from_source(vertSrc.c_str());
+        if (!vs.is_compiled())
+        {
+            compileError_ = "VS: " + vs.info_log();
+            return false;
+        }
+        ::easygl::Shader fs(::easygl::ShaderType::Fragment);
+        fs.create();
+        fs.compile_from_source(fragSrc.c_str());
+        if (!fs.is_compiled())
+        {
+            compileError_ = "FS: " + fs.info_log();
+            return false;
+        }
+        program_.create();
+        program_.attach(vs);
+        program_.attach(fs);
+        program_.link();
+        if (!program_.is_linked())
+        {
+            compileError_ = "Link: " + program_.info_log();
+            return false;
+        }
+        return true;
+    }
+
+    void EasyGLEffectBackend::Bind()
+    {
+        if (program_.is_linked())
+            program_.use();
+    }
+
+    void EasyGLEffectBackend::Unbind()
+    {
+        // No easygl::Program::unuse() — the next bind or sprite-batch flush will override.
+    }
+
+    bool EasyGLEffectBackend::IsValid() const
+    {
+        return program_.is_linked();
+    }
+
+    std::string EasyGLEffectBackend::GetCompileError() const
+    {
+        return compileError_;
+    }
+
+    void EasyGLEffectBackend::SetUniformFloat(const char* name, float value)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform(loc, value);
+    }
+
+    void EasyGLEffectBackend::SetUniformInt(const char* name, int value)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform(loc, value);
+    }
+
+    void EasyGLEffectBackend::SetUniformVec2(const char* name, float x, float y)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform(loc, x, y);
+    }
+
+    void EasyGLEffectBackend::SetUniformVec3(const char* name, float x, float y, float z)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform(loc, x, y, z);
+    }
+
+    void EasyGLEffectBackend::SetUniformVec4(const char* name, float x, float y, float z, float w)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform(loc, x, y, z, w);
+    }
+
+    void EasyGLEffectBackend::SetUniformMat4(const char* name, const float* matrix)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform_matrix4(loc, matrix);
+    }
+
     // --- EasyGLOcclusionQueryBackend ---
 
     EasyGLOcclusionQueryBackend::EasyGLOcclusionQueryBackend(::easygl::ResourceRegistry* registry)
@@ -907,6 +997,14 @@ void main()
     std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size)
     {
         return std::make_unique<EasyGLRenderTargetCubeBackend>(size, true, RegistryPtr());
+    }
+
+    std::unique_ptr<IEffectBackend> EasyGLGraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto backend = std::make_unique<EasyGLEffectBackend>();
+        backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
     }
 
     void EasyGLGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)

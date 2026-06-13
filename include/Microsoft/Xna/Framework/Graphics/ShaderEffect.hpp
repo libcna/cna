@@ -5,6 +5,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
 #include <string>
+#include <memory>
+
+namespace CNA::Internal::Backends { class IEffectBackend; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -50,8 +53,12 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void OnApply() override;
 
+        /** @brief Returns the backend effect handle (CNA extension). */
+        NOXNA [[nodiscard]] CNA::Internal::Backends::IEffectBackend* GetEffectBackend() const;
+
     private:
         std::string vertSrc_;
         std::string fragSrc_;
+        std::unique_ptr<CNA::Internal::Backends::IEffectBackend> effectBackend_;
     };
 }

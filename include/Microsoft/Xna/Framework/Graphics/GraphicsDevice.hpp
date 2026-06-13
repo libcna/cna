@@ -627,6 +627,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         friend class Texture2D;
         friend class RenderTargetCube;
+        friend class ShaderEffect;
         friend class SpriteBatch;
         friend class Microsoft::Xna::Framework::GameWindow;
         friend class Microsoft::Xna::Framework::GraphicsDeviceManager;

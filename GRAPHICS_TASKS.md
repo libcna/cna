@@ -179,7 +179,7 @@ These interface changes are prerequisites for multiple backend tasks above.
 | 97 | Wire `GraphicsDevice.ReferenceStencil` setter → `IGraphicsBackend::SetReferenceStencil` | ✅ | Folded into ApplyDepthStencilState (Task 43) |
 | 98 | Wire `GraphicsDevice.SetRenderTargets(RenderTargetBinding[])` → `IGraphicsBackend::SetRenderTargets` | ✅ | Tasks 45, 62 |
 | 99 | Wire `GraphicsDevice.SetRenderTarget(RenderTargetCube, CubeMapFace)` → `IRenderTargetCubeBackend` | ✅ | Tasks 46, 61 |
-| 100 | `IEffectBackend` interface — `CompileProgram(vertSrc, fragSrc)`, `Bind()`, `SetUniform*(name, ...)` — used by `ShaderEffect` and custom `Effect` loading | ⬜ | Tasks 64, 81 |
+| 100 | `IEffectBackend` interface — `CompileProgram(vertSrc, fragSrc)`, `Bind()`, `SetUniform*(name, ...)` — used by `ShaderEffect` and custom `Effect` loading | ✅ | Tasks 64, 81 |
 
 ---
 

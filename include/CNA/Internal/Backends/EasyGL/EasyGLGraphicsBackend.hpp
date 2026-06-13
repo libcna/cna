@@ -93,6 +93,30 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
+    /// EasyGL implementation of IEffectBackend — wraps an easygl::Program.
+    class EasyGLEffectBackend : public IEffectBackend
+    {
+    public:
+        explicit EasyGLEffectBackend() = default;
+        ~EasyGLEffectBackend() override = default;
+
+        bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
+        void Bind() override;
+        void Unbind() override;
+        [[nodiscard]] bool IsValid() const override;
+        [[nodiscard]] std::string GetCompileError() const override;
+        void SetUniformFloat(const char* name, float value) override;
+        void SetUniformInt(const char* name, int value) override;
+        void SetUniformVec2(const char* name, float x, float y) override;
+        void SetUniformVec3(const char* name, float x, float y, float z) override;
+        void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
+        void SetUniformMat4(const char* name, const float* matrix) override;
+
+    private:
+        ::easygl::Program program_;
+        std::string compileError_;
+    };
+
     class EasyGLOcclusionQueryBackend : public IOcclusionQueryBackend, public ::easygl::RecoverableResource
     {
     public:
@@ -308,6 +332,8 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                             const std::string& fragSrc) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;

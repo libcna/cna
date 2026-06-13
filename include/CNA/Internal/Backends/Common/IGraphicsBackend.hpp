@@ -139,6 +139,37 @@ namespace CNA::Internal::Backends
         [[nodiscard]] virtual unsigned int GetGLHandle() const { return 0; }
     };
 
+    /// Backend handle for a compiled shader program (vertex + fragment).
+    /// Created via IGraphicsBackend::CreateEffectBackend().
+    class IEffectBackend
+    {
+    public:
+        virtual ~IEffectBackend() = default;
+        /// Compiles the program from GLSL/HLSL/SPIR-V sources.
+        /// Returns true on success; false if compilation fails (see GetCompileError()).
+        virtual bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) = 0;
+        /// Binds the program for subsequent draw calls.
+        virtual void Bind() = 0;
+        /// Unbinds the program (restores default shader).
+        virtual void Unbind() = 0;
+        /// Returns true if the program has been compiled successfully.
+        [[nodiscard]] virtual bool IsValid() const = 0;
+        /// Returns the last compilation error string, or empty if no error.
+        [[nodiscard]] virtual std::string GetCompileError() const = 0;
+        /// Sets a float uniform by name.
+        virtual void SetUniformFloat(const char* name, float value) {}
+        /// Sets an int uniform by name.
+        virtual void SetUniformInt(const char* name, int value) {}
+        /// Sets a vec2 uniform by name.
+        virtual void SetUniformVec2(const char* name, float x, float y) {}
+        /// Sets a vec3 uniform by name.
+        virtual void SetUniformVec3(const char* name, float x, float y, float z) {}
+        /// Sets a vec4 uniform by name.
+        virtual void SetUniformVec4(const char* name, float x, float y, float z, float w) {}
+        /// Sets a column-major 4×4 matrix uniform by name.
+        virtual void SetUniformMat4(const char* name, const float* matrix) {}
+    };
+
     class ISpriteBatchBackend
     {
     public:
@@ -240,6 +271,12 @@ namespace CNA::Internal::Backends
         /// Creates a cube-map render target. Returns nullptr on backends that
         /// do not support cube map render targets.
         virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) { return nullptr; }
+
+        /// Compiles a shader program from GLSL/HLSL source strings.
+        /// Returns nullptr on backends that do not support programmable shaders.
+        virtual std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                                      const std::string& fragSrc)
+        { return nullptr; }
 
         /// Activates a specific face of a cube-map render target for rendering.
         /// Pass nullptr to restore the default back buffer.
