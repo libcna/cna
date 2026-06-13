@@ -4,6 +4,7 @@
 #include <array>
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/Object.hpp"
 
@@ -14,13 +15,13 @@ namespace Microsoft::Xna::Framework::Media
     {
     public:
         /** @brief Number of frequency and sample values in each visualization buffer. */
-        static constexpr SharpRuntime::intcs Size = 256;
+        NOXNA static constexpr SharpRuntime::intcs Size = 256;
 
         /** @brief Frequency-domain values used by the media visualization API. */
-        std::array<float, Size> freq;
+        NOXNA std::array<float, Size> freq;
 
         /** @brief Sample-domain values used by the media visualization API. */
-        std::array<float, Size> samp;
+        NOXNA std::array<float, Size> samp;
 
         /** @brief Creates visualization buffers initialized to zero. */
         VisualizationData();
@@ -40,6 +41,6 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] const std::array<float, Size>& getSamplesProperty() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
     };
 }
