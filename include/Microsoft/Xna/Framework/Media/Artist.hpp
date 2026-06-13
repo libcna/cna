@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 
@@ -59,6 +60,12 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] bool Equals(const Artist* other) const;
 
         /**
+         * @brief Gets the hash code for this Artist instance.
+         * @return Hash code of the object.
+         */
+        [[nodiscard]] int GetHashCode() const;
+
+        /**
          * @brief Returns a string representation of this artist.
          *
          * @return Artist name string.
@@ -66,12 +73,15 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] std::string ToString() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        [[nodiscard]] const std::string& GetTypeName() const override;
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns whether two artists are equal. */
         friend bool operator==(const Artist& lhs, const Artist& rhs);
 
         /** @brief Returns whether two artists are not equal. */
         friend bool operator!=(const Artist& lhs, const Artist& rhs);
+
+    private:
+        Artist();
     };
 }
