@@ -57,7 +57,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     void AudioEngine::Init(const std::string& settingsFile)
     {
-        rendererDetails_.emplace_back("SDL3_mixer", "SDL3_mixer");
+        rendererDetails_.push_back(RendererDetail(std::string("SDL3_mixer"), std::string("SDL3_mixer")));
 
         xactImpl_ = std::make_unique<XactEngineImpl>();
 

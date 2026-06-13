@@ -11,10 +11,12 @@
 #include <unordered_map>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "CNA/Logger.hpp"
 #include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+#include "System/IServiceProvider.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/IDisposable.hpp"
 
@@ -37,6 +39,7 @@ namespace Microsoft::Xna::Framework::Content
     private:
         std::string rootDirectory_ = "Content";
         Graphics::GraphicsDevice* graphicsDevice_ = nullptr;
+        System::IServiceProvider* serviceProvider_ = nullptr;
         bool disposed_ = false;
 
         std::unordered_map<std::string, std::any> loadedAssets_;
@@ -58,14 +61,37 @@ namespace Microsoft::Xna::Framework::Content
         void RegisterBuiltinLoaders();
 
     public:
+        /**
+         * @brief Constructs a ContentManager with the given service provider.
+         *
+         * @param serviceProvider Service provider used to resolve graphics and other services.
+         */
+        explicit ContentManager(System::IServiceProvider* serviceProvider);
+
+        /**
+         * @brief Constructs a ContentManager with the given service provider and root directory.
+         *
+         * @param serviceProvider Service provider used to resolve graphics and other services.
+         * @param rootDirectory   Root path prepended to all asset names.
+         */
+        ContentManager(System::IServiceProvider* serviceProvider,
+                       const std::string& rootDirectory);
+
         /** @brief Constructs a ContentManager with a default root directory of "Content". */
-        ContentManager();
+        NOXNA ContentManager();
 
         /** @brief Destroys the content manager and releases all loaded assets. */
         ~ContentManager() override = default;
 
         /** @brief Releases all resources used by this content manager. */
         void Dispose() override;
+
+        /**
+         * @brief Gets the service provider associated with this content manager.
+         *
+         * @return Pointer to the IServiceProvider, or nullptr if none was provided.
+         */
+        [[nodiscard]] System::IServiceProvider* getServiceProviderProperty() const;
 
         /**
          * @brief Sets the graphics device used when loading GPU resources such as textures.

@@ -5,8 +5,8 @@
 
 namespace Microsoft::Xna::Framework::Content
 {
-    ResourceContentManager::ResourceContentManager(System::IServiceProvider* /*serviceProvider*/)
-        : ContentManager()
+    ResourceContentManager::ResourceContentManager(System::IServiceProvider* serviceProvider)
+        : ContentManager(serviceProvider)
     {
     }
 

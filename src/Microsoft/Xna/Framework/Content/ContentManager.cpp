@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "System/IServiceProvider.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -53,9 +54,27 @@ namespace Microsoft::Xna::Framework::Content
     // Constructor / lifecycle
     // ---------------------------------------------------------------------------
 
+    ContentManager::ContentManager(System::IServiceProvider* serviceProvider)
+        : serviceProvider_(serviceProvider)
+    {
+        RegisterBuiltinLoaders();
+    }
+
+    ContentManager::ContentManager(System::IServiceProvider* serviceProvider,
+                                   const std::string& rootDirectory)
+        : serviceProvider_(serviceProvider), rootDirectory_(rootDirectory)
+    {
+        RegisterBuiltinLoaders();
+    }
+
     ContentManager::ContentManager()
     {
         RegisterBuiltinLoaders();
+    }
+
+    System::IServiceProvider* ContentManager::getServiceProviderProperty() const
+    {
+        return serviceProvider_;
     }
 
     void ContentManager::setGraphicsDevice(Graphics::GraphicsDevice& graphicsDevice)
