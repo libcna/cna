@@ -194,6 +194,49 @@ namespace CNA::Internal::Backends::Vulkan
     };
 
     // -------------------------------------------------------------------------
+    // VulkanTexture3DBackend
+    // -------------------------------------------------------------------------
+
+    class VulkanTexture3DBackend : public ITexture3DBackend
+    {
+    public:
+        VulkanTexture3DBackend(VulkanGraphicsBackend* owner, int w, int h, int depth);
+        ~VulkanTexture3DBackend() override;
+
+        void SetData(int level, int x, int y, int z,
+                     int w, int h, int depth,
+                     const void* data, int dataLength) override;
+
+    private:
+        VulkanGraphicsBackend* owner_ = nullptr;
+        VkImage        image_     = VK_NULL_HANDLE;
+        VkDeviceMemory memory_    = VK_NULL_HANDLE;
+        VkImageView    imageView_ = VK_NULL_HANDLE;
+        int width_ = 0, height_ = 0, depth_ = 0;
+    };
+
+    // -------------------------------------------------------------------------
+    // VulkanTextureCubeBackend
+    // -------------------------------------------------------------------------
+
+    class VulkanTextureCubeBackend : public ITextureCubeBackend
+    {
+    public:
+        VulkanTextureCubeBackend(VulkanGraphicsBackend* owner, int size);
+        ~VulkanTextureCubeBackend() override;
+
+        void SetData(int face, int level, int x, int y, int w, int h,
+                     const void* data, int dataLength) override;
+
+    private:
+        VulkanGraphicsBackend* owner_ = nullptr;
+        VkImage        image_     = VK_NULL_HANDLE;
+        VkDeviceMemory memory_    = VK_NULL_HANDLE;
+        VkImageView    imageView_ = VK_NULL_HANDLE;
+        int size_ = 0;
+    };
+
+    // -------------------------------------------------------------------------
     // VulkanOcclusionQueryBackend
     // -------------------------------------------------------------------------
 
@@ -227,6 +270,8 @@ namespace CNA::Internal::Backends::Vulkan
         friend class VulkanSpriteBatchBackend;
         friend class VulkanRenderTargetBackend;
         friend class VulkanOcclusionQueryBackend;
+        friend class VulkanTexture3DBackend;
+        friend class VulkanTextureCubeBackend;
 
     public:
         explicit VulkanGraphicsBackend(SDL_Window* window);
@@ -266,6 +311,8 @@ namespace CNA::Internal::Backends::Vulkan
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        std::unique_ptr<ITexture3DBackend>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
 
         void ClearColorAndDepth(float, float, float, float, float) override;
         void SetDepthTestEnabled(bool)  override;

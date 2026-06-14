@@ -2261,6 +2261,232 @@ namespace CNA::Internal::Backends::Vulkan
         return std::make_unique<VulkanOcclusionQueryBackend>(this);
     }
 
+    std::unique_ptr<ITexture3DBackend> VulkanGraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool /*mipMap*/, int /*surfaceFormat*/)
+    {
+        return std::make_unique<VulkanTexture3DBackend>(this, w, h, depth);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> VulkanGraphicsBackend::CreateTextureCube(
+        int size, bool /*mipMap*/, int /*surfaceFormat*/)
+    {
+        return std::make_unique<VulkanTextureCubeBackend>(this, size);
+    }
+
+    // --- VulkanTexture3DBackend ---
+
+    VulkanTexture3DBackend::VulkanTexture3DBackend(VulkanGraphicsBackend* owner, int w, int h, int depth)
+        : owner_(owner), width_(w), height_(h), depth_(depth)
+    {
+        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+        VkDevice dev = owner_->device_;
+
+        VkImageCreateInfo imgInfo{};
+        imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imgInfo.imageType     = VK_IMAGE_TYPE_3D;
+        imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+        imgInfo.extent        = { static_cast<uint32_t>(w), static_cast<uint32_t>(h),
+                                   static_cast<uint32_t>(depth) };
+        imgInfo.mipLevels     = 1;
+        imgInfo.arrayLayers   = 1;
+        imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        imgInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(dev, &imgInfo, nullptr, &image_) != VK_SUCCESS) return;
+
+        VkMemoryRequirements memReq;
+        vkGetImageMemoryRequirements(dev, image_, &memReq);
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize  = memReq.size;
+        allocInfo.memoryTypeIndex = owner_->FindMemoryType(memReq.memoryTypeBits,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (vkAllocateMemory(dev, &allocInfo, nullptr, &memory_) != VK_SUCCESS) return;
+        vkBindImageMemory(dev, image_, memory_, 0);
+
+        owner_->TransitionImageLayout(image_,
+            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image    = image_;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+        viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
+    }
+
+    VulkanTexture3DBackend::~VulkanTexture3DBackend()
+    {
+        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+        VkDevice dev = owner_->device_;
+        if (imageView_ != VK_NULL_HANDLE) vkDestroyImageView(dev, imageView_, nullptr);
+        if (image_     != VK_NULL_HANDLE) vkDestroyImage(dev, image_, nullptr);
+        if (memory_    != VK_NULL_HANDLE) vkFreeMemory(dev, memory_, nullptr);
+    }
+
+    void VulkanTexture3DBackend::SetData(int level, int x, int y, int z,
+                                          int w, int h, int depth,
+                                          const void* data, int dataLength)
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return;
+        VkDevice dev = owner_->device_;
+
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(dataLength),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+        std::memcpy(mapped, data, static_cast<size_t>(dataLength));
+
+        owner_->TransitionImageLayout(image_,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
+        region.imageOffset      = { x, y, z };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h),
+                                     static_cast<uint32_t>(depth) };
+        vkCmdCopyBufferToImage(cb, stagingBuf, image_,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        owner_->EndOneTimeCommands(cb);
+
+        owner_->TransitionImageLayout(image_,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+    }
+
+    // --- VulkanTextureCubeBackend ---
+
+    VulkanTextureCubeBackend::VulkanTextureCubeBackend(VulkanGraphicsBackend* owner, int size)
+        : owner_(owner), size_(size)
+    {
+        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+        VkDevice dev = owner_->device_;
+
+        VkImageCreateInfo imgInfo{};
+        imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imgInfo.flags         = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        imgInfo.imageType     = VK_IMAGE_TYPE_2D;
+        imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+        imgInfo.extent        = { static_cast<uint32_t>(size), static_cast<uint32_t>(size), 1 };
+        imgInfo.mipLevels     = 1;
+        imgInfo.arrayLayers   = 6;
+        imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        imgInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(dev, &imgInfo, nullptr, &image_) != VK_SUCCESS) return;
+
+        VkMemoryRequirements memReq;
+        vkGetImageMemoryRequirements(dev, image_, &memReq);
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize  = memReq.size;
+        allocInfo.memoryTypeIndex = owner_->FindMemoryType(memReq.memoryTypeBits,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (vkAllocateMemory(dev, &allocInfo, nullptr, &memory_) != VK_SUCCESS) return;
+        vkBindImageMemory(dev, image_, memory_, 0);
+
+        // Transition all 6 faces to shader-read-only (empty initially).
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkImageMemoryBarrier barrier{};
+        barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image               = image_;
+        barrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6 };
+        barrier.srcAccessMask       = 0;
+        barrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cb,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+        owner_->EndOneTimeCommands(cb);
+
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image    = image_;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6 };
+        vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
+    }
+
+    VulkanTextureCubeBackend::~VulkanTextureCubeBackend()
+    {
+        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+        VkDevice dev = owner_->device_;
+        if (imageView_ != VK_NULL_HANDLE) vkDestroyImageView(dev, imageView_, nullptr);
+        if (image_     != VK_NULL_HANDLE) vkDestroyImage(dev, image_, nullptr);
+        if (memory_    != VK_NULL_HANDLE) vkFreeMemory(dev, memory_, nullptr);
+    }
+
+    void VulkanTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                            const void* data, int dataLength)
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return;
+        if (face < 0 || face >= 6) return;
+        VkDevice dev = owner_->device_;
+
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(dataLength),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+        std::memcpy(mapped, data, static_cast<size_t>(dataLength));
+
+        // Transition only the target face layer to TRANSFER_DST_OPTIMAL.
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkImageMemoryBarrier toXfer{};
+        toXfer.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toXfer.oldLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        toXfer.newLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toXfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toXfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toXfer.image               = image_;
+        toXfer.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT,
+                                        static_cast<uint32_t>(level), 1,
+                                        static_cast<uint32_t>(face), 1 };
+        toXfer.srcAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+        toXfer.dstAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier(cb,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &toXfer);
+
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,
+                                     static_cast<uint32_t>(level),
+                                     static_cast<uint32_t>(face), 1 };
+        region.imageOffset      = { x, y, 0 };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        vkCmdCopyBufferToImage(cb, stagingBuf, image_,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        VkImageMemoryBarrier toRead = toXfer;
+        std::swap(toRead.oldLayout, toRead.newLayout);
+        std::swap(toRead.srcAccessMask, toRead.dstAccessMask);
+        vkCmdPipelineBarrier(cb,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &toRead);
+
+        owner_->EndOneTimeCommands(cb);
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+    }
+
     // --- VulkanOcclusionQueryBackend ---
 
     VulkanOcclusionQueryBackend::VulkanOcclusionQueryBackend(VulkanGraphicsBackend* owner)
