@@ -1328,11 +1328,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = 1; cbs.pAttachments = &cba;
 
-        // Dynamic viewport/scissor so resize doesn't require pipeline recreation
-        VkDynamicState dynStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        // Dynamic viewport/scissor/blend-constants so resize and state changes
+        // don't require pipeline recreation.
+        VkDynamicState dynStates[] = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+        };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
 
         // Push constant: vec2 viewportSize (8 bytes) for NDC conversion
         VkPushConstantRange pcRange{};
@@ -1547,10 +1552,14 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = 1; cbs.pAttachments = &cba;
 
-        VkDynamicState dynStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkDynamicState dynStates[] = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+        };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1898,8 +1907,16 @@ namespace CNA::Internal::Backends::Vulkan
         vp.height = static_cast<float>(swapchainExtent_.height);
         vp.minDepth = 0.f; vp.maxDepth = 1.f;
         vkCmdSetViewport(cb, 0, 1, &vp);
-        VkRect2D sc{ {0, 0}, swapchainExtent_ };
-        vkCmdSetScissor(cb, 0, 1, &sc);
+        {
+            VkRect2D sc{ {0, 0}, swapchainExtent_ };
+            if (scissorEnabled_ && scissorW_ > 0 && scissorH_ > 0)
+                sc = { {scissorX_, scissorY_}, {scissorW_, scissorH_} };
+            vkCmdSetScissor(cb, 0, 1, &sc);
+        }
+        {
+            float bc[4] = { blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_ };
+            vkCmdSetBlendConstants(cb, bc);
+        }
 
         const float vpW2D = (virtualWidth_  > 0) ? static_cast<float>(virtualWidth_)
                                                   : static_cast<float>(swapchainExtent_.width);
@@ -2214,13 +2231,99 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     void VulkanGraphicsBackend::ApplyRasterizerState(int cullMode, int /*fillMode*/,
-                                                      bool /*scissorTestEnable*/)
+                                                      bool scissorTestEnable)
     {
         // XNA CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
         // Stored; folded into the pipeline key at draw time.
-        // FillMode::WireFrame and scissor not supported in this backend — silently ignored.
-        cullMode_ = cullMode;
+        // FillMode::WireFrame is a known limitation (Vulkan requires geometry shader).
+        cullMode_       = cullMode;
+        scissorEnabled_ = scissorTestEnable;
     }
+
+    void VulkanGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        scissorX_ = static_cast<int32_t>(x);
+        scissorY_ = static_cast<int32_t>(y);
+        scissorW_ = static_cast<uint32_t>(std::max(0, w));
+        scissorH_ = static_cast<uint32_t>(std::max(0, h));
+    }
+
+    void VulkanGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        blendFactorR_ = r;
+        blendFactorG_ = g;
+        blendFactorB_ = b;
+        blendFactorA_ = a;
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> VulkanGraphicsBackend::CreateOcclusionQuery()
+    {
+        return std::make_unique<VulkanOcclusionQueryBackend>(this);
+    }
+
+    // --- VulkanOcclusionQueryBackend ---
+
+    VulkanOcclusionQueryBackend::VulkanOcclusionQueryBackend(VulkanGraphicsBackend* owner)
+        : owner_(owner)
+    {
+        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+
+        VkQueryPoolCreateInfo qi{};
+        qi.sType      = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        qi.queryType  = VK_QUERY_TYPE_OCCLUSION;
+        qi.queryCount = 1;
+        vkCreateQueryPool(owner_->device_, &qi, nullptr, &pool_);
+        // Reset the query slot before first use.
+        if (pool_ != VK_NULL_HANDLE)
+        {
+            VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+            vkCmdResetQueryPool(cb, pool_, 0, 1);
+            owner_->EndOneTimeCommands(cb);
+        }
+    }
+
+    VulkanOcclusionQueryBackend::~VulkanOcclusionQueryBackend()
+    {
+        if (owner_ && owner_->device_ != VK_NULL_HANDLE && pool_ != VK_NULL_HANDLE)
+            vkDestroyQueryPool(owner_->device_, pool_, nullptr);
+    }
+
+    void VulkanOcclusionQueryBackend::Begin()
+    {
+        if (!owner_ || pool_ == VK_NULL_HANDLE) return;
+        ended_ = false;
+        // Occlusion queries in Vulkan must be recorded inside a render pass.
+        // CNA's Vulkan backend defers all draws to RecordCommandBuffer, so we
+        // cannot inject query begin/end here. The result is always 0 (not visible)
+        // until proper per-draw-call query injection is implemented.
+    }
+
+    void VulkanOcclusionQueryBackend::End()
+    {
+        if (!owner_ || pool_ == VK_NULL_HANDLE) return;
+        ended_ = true;
+        // See Begin(): draw-level query injection is not yet implemented.
+        // Report 0 visible pixels as a safe default.
+        pixelCount_ = 0;
+    }
+
+    bool VulkanOcclusionQueryBackend::IsComplete() const
+    {
+        if (!owner_ || pool_ == VK_NULL_HANDLE || !ended_) return false;
+        uint64_t result = 0;
+        VkResult r = vkGetQueryPoolResults(owner_->device_, pool_, 0, 1,
+                                           sizeof(result), &result,
+                                           sizeof(result),
+                                           VK_QUERY_RESULT_64_BIT);
+        if (r == VK_SUCCESS)
+        {
+            pixelCount_ = static_cast<int>(result);
+            return true;
+        }
+        return false; // VK_NOT_READY
+    }
+
+    int VulkanOcclusionQueryBackend::PixelCount() const { return pixelCount_; }
 
 } // namespace CNA::Internal::Backends::Vulkan
 

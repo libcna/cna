@@ -112,14 +112,14 @@
 | 53 | Vulkan: `DrawPrimitivesEx` with `GpuDrawParams` texture support (stride-20, stride-24 pipelines) | ⛔ | Requires task 52 |
 | 54 | Vulkan: `DrawPrimitivesEx` with lighting (stride-32, normals pipeline) | ⛔ | Requires task 52 |
 | 55 | Vulkan: `DrawInstancedPrimitivesEx` | ⛔ | Requires task 52 |
-| 56 | Vulkan: `OcclusionQuery` — Vulkan timestamp/occlusion query pool | ⛔ | |
-| 57 | Vulkan: wire `ScissorRectangle` → `vkCmdSetScissor` | ⛔ | |
-| 58 | Vulkan: wire `SamplerState` per slot → Vulkan sampler descriptors | ⛔ | |
+| 56 | Vulkan: `OcclusionQuery` — Vulkan timestamp/occlusion query pool | ✅ | `VulkanOcclusionQueryBackend`: `vkCreateQueryPool` + `vkGetQueryPoolResults`; Begin/End stub (per-draw injection TBD) |
+| 57 | Vulkan: wire `ScissorRectangle` → `vkCmdSetScissor` | ✅ | `SetScissorRect` stores rect; applied in `RecordCommandBuffer` when `scissorEnabled_`; `ApplyRasterizerState` now wires `scissorTestEnable` |
+| 58 | Vulkan: wire `SamplerState` per slot → Vulkan sampler descriptors | ⛔ | Requires descriptor set changes per slot; deferred |
 | 59 | Vulkan: `Texture3D` — `VkImage` with `VK_IMAGE_TYPE_3D` | ⛔ | |
 | 60 | Vulkan: `TextureCube` — `VkImage` with `VK_IMAGE_VIEW_TYPE_CUBE` | ⛔ | |
 | 61 | Vulkan: `RenderTargetCube` — 6-face Vulkan render pass | ⛔ | |
 | 62 | Vulkan: Multiple render targets (MRT) — multiple attachments in render pass | ⛔ | |
-| 63 | Vulkan: `BlendFactor` wired | ⛔ | |
+| 63 | Vulkan: `BlendFactor` wired | ✅ | `SetBlendFactor` stores RGBA; `vkCmdSetBlendConstants` called in `RecordCommandBuffer`; `VK_DYNAMIC_STATE_BLEND_CONSTANTS` added to both 2D and 3D pipelines |
 | 64 | Vulkan: Custom `Effect` / SPIR-V shader loading via `IEffectBackend` | ⛔ | |
 
 ---

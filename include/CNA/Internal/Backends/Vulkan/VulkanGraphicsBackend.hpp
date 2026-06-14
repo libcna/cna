@@ -194,6 +194,28 @@ namespace CNA::Internal::Backends::Vulkan
     };
 
     // -------------------------------------------------------------------------
+    // VulkanOcclusionQueryBackend
+    // -------------------------------------------------------------------------
+
+    class VulkanOcclusionQueryBackend : public IOcclusionQueryBackend
+    {
+    public:
+        explicit VulkanOcclusionQueryBackend(VulkanGraphicsBackend* owner);
+        ~VulkanOcclusionQueryBackend() override;
+
+        void Begin() override;
+        void End()   override;
+        [[nodiscard]] bool IsComplete() const override;
+        [[nodiscard]] int  PixelCount() const override;
+
+    private:
+        VulkanGraphicsBackend*  owner_      = nullptr;
+        VkQueryPool             pool_       = VK_NULL_HANDLE;
+        bool                    ended_      = false;
+        mutable int             pixelCount_ = 0;
+    };
+
+    // -------------------------------------------------------------------------
     // VulkanGraphicsBackend
     // -------------------------------------------------------------------------
 
@@ -204,6 +226,7 @@ namespace CNA::Internal::Backends::Vulkan
         friend class VulkanIndexBufferBackend;
         friend class VulkanSpriteBatchBackend;
         friend class VulkanRenderTargetBackend;
+        friend class VulkanOcclusionQueryBackend;
 
     public:
         explicit VulkanGraphicsBackend(SDL_Window* window);
@@ -239,6 +262,10 @@ namespace CNA::Internal::Backends::Vulkan
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode,
                                   bool scissorTestEnable) override;
+
+        void SetScissorRect(int x, int y, int w, int h) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
         void ClearColorAndDepth(float, float, float, float, float) override;
         void SetDepthTestEnabled(bool)  override;
@@ -368,6 +395,15 @@ namespace CNA::Internal::Backends::Vulkan
         int      cullMode_          = 0;  // XNA CullMode: 0=None, 1=CW, 2=CCW
 
         bool frame3DBuffersAllocated_ = false;
+
+        // ScissorRectangle state (Task 57)
+        bool     scissorEnabled_ = false;
+        int32_t  scissorX_ = 0, scissorY_ = 0;
+        uint32_t scissorW_ = 0, scissorH_ = 0;
+
+        // BlendFactor state (Task 63)
+        float blendFactorR_ = 1.f, blendFactorG_ = 1.f,
+              blendFactorB_ = 1.f, blendFactorA_ = 1.f;
 
         // ---- Init helpers ----
         void CreateInstance();
