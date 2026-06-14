@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include <stdexcept>
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 
@@ -6,7 +7,7 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     ModelBone* ModelBoneCollection::operator[](int index) const
     {
-        return bones_[static_cast<std::size_t>(index)];
+        return bones_.at(static_cast<std::size_t>(index));
     }
 
     ModelBone* ModelBoneCollection::operator[](const std::string& name) const
@@ -16,7 +17,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (bone && bone->getNameProperty() == name)
                 return bone;
         }
-        return nullptr;
+        throw std::out_of_range("ModelBoneCollection: bone not found: " + name);
     }
 
     int ModelBoneCollection::getCountProperty() const

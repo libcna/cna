@@ -56,8 +56,26 @@ namespace Microsoft::Xna::Framework::Graphics
                               data, dataLength);
     }
 
-    void Texture3D::GetData(Color* data, int elementCount) const {}
-    void Texture3D::GetData(Color* data, int startIndex, int elementCount) const {}
+    void Texture3D::GetData(Color* data, int elementCount) const
+    {
+        if (backend_)
+            backend_->GetData(0, 0, 0, 0, width_, height_, depth_,
+                              data, elementCount * static_cast<int>(sizeof(Color)));
+    }
+
+    void Texture3D::GetData(Color* data, int startIndex, int elementCount) const
+    {
+        if (backend_)
+            backend_->GetData(0, 0, 0, 0, width_, height_, depth_,
+                              data + startIndex, elementCount * static_cast<int>(sizeof(Color)));
+    }
+
     void Texture3D::GetData(int level, int left, int top, int right, int bottom, int front, int back,
-                            Color* data, int startIndex, int elementCount) const {}
+                            Color* data, int startIndex, int elementCount) const
+    {
+        if (backend_)
+            backend_->GetData(level, left, top, front,
+                              right - left, bottom - top, back - front,
+                              data + startIndex, elementCount * static_cast<int>(sizeof(Color)));
+    }
 }

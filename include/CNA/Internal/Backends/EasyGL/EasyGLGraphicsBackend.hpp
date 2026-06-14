@@ -105,6 +105,10 @@ namespace CNA::Internal::Backends::EasyGL
                      int w, int h, int depth,
                      const void* data, int dataLength) override;
 
+        void GetData(int level, int x, int y, int z,
+                     int w, int h, int depth,
+                     void* data, int dataLength) const override;
+
     private:
         ::easygl::Texture tex_;
         int width_  = 0;
@@ -121,6 +125,9 @@ namespace CNA::Internal::Backends::EasyGL
 
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
+
+        void GetData(int face, int level, int x, int y, int w, int h,
+                     void* data, int dataLength) const override;
 
     private:
         ::easygl::Texture tex_;

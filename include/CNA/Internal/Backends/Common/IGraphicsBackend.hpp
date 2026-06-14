@@ -101,6 +101,9 @@ namespace CNA::Internal::Backends
         /** @brief Uploads raw byte data to a sub-rectangle of a single cube face. */
         virtual void SetData(int face, int level, int x, int y, int w, int h,
                              const void* data, int dataLength) = 0;
+        /** @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face. No-op by default. */
+        virtual void GetData(int face, int level, int x, int y, int w, int h,
+                             void* data, int dataLength) const {}
     };
 
     /** @brief Backend interface for a 3D (volume) texture. */
@@ -112,6 +115,10 @@ namespace CNA::Internal::Backends
         virtual void SetData(int level, int x, int y, int z,
                              int w, int h, int depth,
                              const void* data, int dataLength) = 0;
+        /** @brief Reads back raw RGBA8 pixels from a sub-volume of the given mip level. No-op by default. */
+        virtual void GetData(int level, int x, int y, int z,
+                             int w, int h, int depth,
+                             void* data, int dataLength) const {}
     };
 
     class ITextureBackend

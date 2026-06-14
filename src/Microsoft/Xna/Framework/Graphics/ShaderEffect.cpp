@@ -22,15 +22,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    const std::string& ShaderEffect::getVertexSourceProperty() const
-    {
-        return vertSrc_;
-    }
-
-    const std::string& ShaderEffect::getFragmentSourceProperty() const
-    {
-        return fragSrc_;
-    }
+    const std::string& ShaderEffect::getVertexSourceProperty() const { return vertSrc_; }
+    const std::string& ShaderEffect::getFragmentSourceProperty() const { return fragSrc_; }
+    const std::string& ShaderEffect::GetVertexSource() const { return vertSrc_; }
+    const std::string& ShaderEffect::GetFragmentSource() const { return fragSrc_; }
 
     void ShaderEffect::OnApply()
     {

@@ -1,5 +1,5 @@
 #include "CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp"
-#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include <iostream>
 
 #include "CNA/Platform.hpp"
@@ -10,6 +10,7 @@
 #endif
 #include <metagl/Context.hpp>
 #include <metagl/ContextEvents.hpp>
+#include <metagl/Functions.hpp>
 
 // Verbose 3D rendering trace. Define `CNA_DEBUG_RENDERING` (e.g. via
 // -DCNA_DEBUG_RENDERING) to enable. By default these logs are silent so the
@@ -122,6 +123,35 @@ namespace CNA::Internal::Backends::EasyGL
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::WrapT, kTexClampToEdge);
     }
 
+    void EasyGLTexture3DBackend::GetData(int level, int x, int y, int z,
+                                          int w, int h, int depth,
+                                          void* data, int /*dataLength*/) const
+    {
+        // GLES3 does not have glGetTexImage. Use a temporary FBO per Z-slice
+        // with glReadPixels to read back the pixel data.
+        const int bytesPerPixel = 4; // RGBA8
+        auto* dest = static_cast<uint8_t*>(data);
+
+        ::easygl::Framebuffer fbo;
+        fbo.create();
+        fbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        fbo.set_read_buffer(::easygl::ReadBuffer::ColorAttachment0);
+
+        for (int slice = z; slice < z + depth; ++slice)
+        {
+            fbo.attach_texture_layer(::easygl::FramebufferTarget::Framebuffer,
+                                     ::metagl::FramebufferAttachment::Color0,
+                                     tex_.native_handle(), level, slice);
+            ::metagl::glReadPixels(x, y, w, h,
+                                   ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedByte,
+                                   dest);
+            dest += w * h * bytesPerPixel;
+        }
+
+        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
     void EasyGLTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                             const void* data, int /*dataLength*/)
     {
@@ -131,6 +161,28 @@ namespace CNA::Internal::Backends::EasyGL
                               ::metagl::PixelFormat::Rgba,
                               ::metagl::PixelType::UnsignedByte,
                               data);
+    }
+
+    void EasyGLTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                            void* data, int /*dataLength*/) const
+    {
+        if (face < 0 || face >= 6) return;
+
+        ::easygl::Framebuffer fbo;
+        fbo.create();
+        fbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        fbo.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                              ::metagl::FramebufferAttachment::Color0,
+                              kCubeFaceTargets[face],
+                              tex_.native_handle(), level);
+        fbo.set_read_buffer(::easygl::ReadBuffer::ColorAttachment0);
+
+        ::metagl::glReadPixels(x, y, w, h,
+                               ::metagl::PixelFormat::Rgba,
+                               ::metagl::PixelType::UnsignedByte,
+                               data);
+
+        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
     }
 
     // --- EasyGLEffectBackend ---
@@ -692,24 +744,26 @@ void main()
     {
         if (pending_vertices_.empty()) return;
 
-        // Determine which GL program to use: built-in or custom ShaderEffect.
+        // Determine which GL program to use: built-in or custom Effect.
+        // Access vertex/fragment source via virtual Effect::GetVertexSource()/GetFragmentSource()
+        // to avoid a circular dependency on the concrete ShaderEffect type.
         ::easygl::Program* prog = &program_;
-        auto* shaderFx = customEffect_
-            ? dynamic_cast<Microsoft::Xna::Framework::Graphics::ShaderEffect*>(customEffect_)
-            : nullptr;
-        if (shaderFx != nullptr)
+        if (customEffect_ && !customEffect_->GetVertexSource().empty())
         {
-            if (compiledFor_ != shaderFx)
+            if (compiledFor_ != customEffect_)
             {
+                const std::string& vertSrc = customEffect_->GetVertexSource();
+                const std::string& fragSrc = customEffect_->GetFragmentSource();
+
                 ::easygl::Shader vert(::easygl::ShaderType::Vertex);
                 vert.create();
-                vert.compile_from_source(shaderFx->getVertexSourceProperty().c_str());
+                vert.compile_from_source(vertSrc.c_str());
                 if (!vert.is_compiled())
                     std::cerr << "SpriteBatch custom vertex shader failed:\n" << vert.info_log() << "\n";
 
                 ::easygl::Shader frag(::easygl::ShaderType::Fragment);
                 frag.create();
-                frag.compile_from_source(shaderFx->getFragmentSourceProperty().c_str());
+                frag.compile_from_source(fragSrc.c_str());
                 if (!frag.is_compiled())
                     std::cerr << "SpriteBatch custom fragment shader failed:\n" << frag.info_log() << "\n";
 
@@ -720,7 +774,7 @@ void main()
                 if (!customProgram_.is_linked())
                     std::cerr << "SpriteBatch custom program link failed:\n" << customProgram_.info_log() << "\n";
 
-                compiledFor_ = shaderFx;
+                compiledFor_ = customEffect_;
             }
             prog = &customProgram_;
             customEffect_->Apply();

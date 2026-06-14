@@ -476,6 +476,24 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 27: SpriteFont property and MeasureString tests
+        cna_easygl_test(cna_test_sprite_font
+                        examples/sprite_font_test.cpp)
+        add_test(NAME EasyGL_SpriteFont_Properties
+                 COMMAND cna_test_sprite_font)
+        set_tests_properties(EasyGL_SpriteFont_Properties PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 35: OcclusionQuery begin/end/IsComplete integration test
+        cna_easygl_test(cna_test_occlusion_query
+                        examples/occlusion_query_test.cpp)
+        add_test(NAME EasyGL_OcclusionQuery_Cycle
+                 COMMAND cna_test_occlusion_query)
+        set_tests_properties(EasyGL_OcclusionQuery_Cycle PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration test (Task 88)

@@ -59,15 +59,15 @@
 | 24 | Tests: `SkinnedEffect` — WeightsPerVertex, BoneTransforms set/get | ✅ | `examples/skinned_effect_test.cpp`; EasyGL_SkinnedEffect_Properties CTest |
 | 25 | Tests: `EffectParameter` — GetValueSingle, GetValueVector3, GetValueMatrix, SetValue round-trips | ✅ | `tests/.../EffectParameterTests.cpp`; 18 pure unit tests, no device needed |
 | 26 | Tests: `EffectTechnique` / `EffectPass` — name accessor, pass count | ✅ | `tests/.../EffectTechniqueTests.cpp`; 11 pure unit tests; constructor seeds default "P0" pass |
-| 27 | Tests: `SpriteFont` — `MeasureString` (empty string, single char, multi-char), `LineSpacing`, `Spacing`, `DefaultCharacter` | ⛔ | Requires real GraphicsDevice |
+| 27 | Tests: `SpriteFont` — `MeasureString` (empty string, single char, multi-char), `LineSpacing`, `Spacing`, `DefaultCharacter` | ✅ | EasyGL integration test; all checks pass |
 | 28 | Tests: `ModelBone` — constructor, `getIndexProperty`, `getNameProperty`, parent/child chain | ✅ | 12 tests |
-| 29 | Tests: `ModelMesh` — name, mesh parts count, parent bone reference | ⛔ | Requires Model/GraphicsDevice to populate |
-| 30 | Tests: `ModelBoneCollection` — Count, indexer, Find | ⛔ | No public Add — only Model can populate |
+| 29 | Tests: `ModelMesh` — name, mesh parts count, parent bone reference | ✅ | 6 unit tests; NOXNA ctor with nullptr device; parentBone nullptr until Model assigns |
+| 30 | Tests: `ModelBoneCollection` — Count, indexer, Find | ✅ | 3 unit tests; fixed operator[] to use .at() (throws); name lookup throws when not found |
 | 31 | Tests: `ClearOptions` — enum values match XNA (Color=1, Depth=2, Stencil=4) | ✅ | 6 tests; also tests bitwise operators |
 | 32 | Tests: `SurfaceFormat` — enum values match XNA | ✅ | 20 tests; ordinals 0–19 verified against FNA |
 | 33 | Tests: `GraphicsDeviceStatus` — enum values | ✅ | 4 tests |
 | 34 | Tests: `RenderTargetBinding` — constructor from RenderTarget2D, face accessor | ✅ | 8 tests |
-| 35 | Tests: `OcclusionQuery` — construction, begin/end/IsComplete cycle (headless if possible) | ⛔ | Requires real GraphicsDevice |
+| 35 | Tests: `OcclusionQuery` — construction, begin/end/IsComplete cycle (headless if possible) | ✅ | EasyGL integration test; Begin/End/IsComplete/PixelCount all pass |
 | 36 | Tests: `DeviceLostException`, `DeviceNotResetException`, `NoSuitableGraphicsDeviceException` — message + inheritance | ✅ | 12 tests |
 
 ---
@@ -93,8 +93,8 @@
 | 44 | EasyGL: `SamplerState` on texture slots 1–15 (currently only slot 0 is fully applied) | ✅ | `glBindSampler` or `glTexParameteri` per active unit |
 | 45 | EasyGL: Multiple render targets (MRT) — `SetRenderTargets(array)` via `glDrawBuffers` | ✅ | SetRenderTargets override builds a combined MRT FBO via fbo.attach_texture_2d + set_draw_buffers; GetColorGLHandle() exposes color texture per RT |
 | 46 | EasyGL: `RenderTargetCube` — 6-face FBO with cube map attachment | ✅ | Add `IRenderTargetCubeBackend`; attach per-face in `BindAsRenderTarget(face)` |
-| 47 | EasyGL: `Texture3D` `GetData` — `glGetTexImage` if available (desktop GL only; stub on GLES3) | ⚠️ | EasyGLTexture3DBackend + SetData implemented; GetData stub (no glGetTexImage on GLES3) |
-| 48 | EasyGL: `TextureCube` `GetData` — per-face readback | ⚠️ | EasyGLTextureCubeBackend + per-face SetData implemented; GetData stub |
+| 47 | EasyGL: `Texture3D` `GetData` — `glGetTexImage` if available (desktop GL only; stub on GLES3) | ✅ | GLES3 workaround: temp FBO + `attach_texture_layer` + glReadPixels per Z-slice |
+| 48 | EasyGL: `TextureCube` `GetData` — per-face readback | ✅ | GLES3 workaround: temp FBO + `attach_texture_2d` per face + glReadPixels |
 | 49 | EasyGL: `FillMode::WireFrame` — document as permanent known limitation (no `glPolygonMode` on GLES3) | ℹ️ | Already documented in NEXT.md |
 | 50 | EasyGL: `BlendFactor` (`glBlendColor`) wired to `GraphicsDevice.BlendFactor` setter | ✅ | Add `SetBlendFactor(r,g,b,a)` to `IGraphicsBackend` |
 | 51 | EasyGL: `ReferenceStencil` wired to stencil reference in `ApplyDepthStencilState` | ✅ | Part of task 43 |

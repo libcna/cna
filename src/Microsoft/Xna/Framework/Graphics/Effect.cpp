@@ -39,6 +39,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Effect::Apply() { OnApply(); }
 
+    const std::string& Effect::GetVertexSource() const
+    {
+        static const std::string empty;
+        return empty;
+    }
+
+    const std::string& Effect::GetFragmentSource() const
+    {
+        static const std::string empty;
+        return empty;
+    }
+
     const std::string& Effect::GetTypeName() const
     {
         static const std::string name = "Effect";

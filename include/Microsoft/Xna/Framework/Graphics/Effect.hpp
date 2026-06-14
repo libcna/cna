@@ -94,6 +94,22 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA [[nodiscard]] GraphicsDevice& getGraphicsDeviceInternal() const;
 
+        /**
+         * @brief Returns the GLSL vertex shader source if this is a source-based effect, or empty string.
+         *
+         * Overridden by ShaderEffect. Used by backends to compile custom programs without
+         * a dependency on the concrete ShaderEffect type.
+         */
+        NOXNA [[nodiscard]] virtual const std::string& GetVertexSource() const;
+
+        /**
+         * @brief Returns the GLSL fragment shader source if this is a source-based effect, or empty string.
+         *
+         * Overridden by ShaderEffect. Used by backends to compile custom programs without
+         * a dependency on the concrete ShaderEffect type.
+         */
+        NOXNA [[nodiscard]] virtual const std::string& GetFragmentSource() const;
+
     protected:
         /**
          * @brief Derived classes override this to upload shader parameters to the GPU before drawing.

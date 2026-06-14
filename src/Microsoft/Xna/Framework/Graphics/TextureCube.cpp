@@ -41,9 +41,22 @@ namespace Microsoft::Xna::Framework::Graphics
                           data + startIndex, elementCount * static_cast<int>(sizeof(Color)));
     }
 
-    void TextureCube::GetData(CubeMapFace face, Color* data, int elementCount) const {}
+    void TextureCube::GetData(CubeMapFace face, Color* data, int elementCount) const
+    {
+        if (backend_)
+            backend_->GetData(static_cast<int>(face), 0, 0, 0, size_, size_,
+                              data, elementCount * static_cast<int>(sizeof(Color)));
+    }
+
     void TextureCube::GetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
-                              Color* data, int startIndex, int elementCount) const {}
+                              Color* data, int startIndex, int elementCount) const
+    {
+        if (!backend_) return;
+        int x = 0, y = 0, w = size_, h = size_;
+        if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
+        backend_->GetData(static_cast<int>(face), level, x, y, w, h,
+                          data + startIndex, elementCount * static_cast<int>(sizeof(Color)));
+    }
 
     TextureCube TextureCube::DDSFromStreamEXT(GraphicsDevice& device, System::IO::Stream& stream)
     {

@@ -44,6 +44,20 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA [[nodiscard]] const std::string& getFragmentSourceProperty() const;
 
+        /**
+         * @brief Returns the GLSL vertex shader source (Effect base override).
+         *
+         * Allows backends to access source without depending on the ShaderEffect type.
+         */
+        NOXNA [[nodiscard]] const std::string& GetVertexSource() const override;
+
+        /**
+         * @brief Returns the GLSL fragment shader source (Effect base override).
+         *
+         * Allows backends to access source without depending on the ShaderEffect type.
+         */
+        NOXNA [[nodiscard]] const std::string& GetFragmentSource() const override;
+
         /** @brief Returns the fully qualified CNA type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
