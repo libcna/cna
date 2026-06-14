@@ -449,6 +449,33 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 22: BasicEffect property tests
+        cna_easygl_test(cna_test_basic_effect
+                        examples/basic_effect_test.cpp)
+        add_test(NAME EasyGL_BasicEffect_Properties
+                 COMMAND cna_test_basic_effect)
+        set_tests_properties(EasyGL_BasicEffect_Properties PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 23: AlphaTestEffect property tests
+        cna_easygl_test(cna_test_alpha_test_effect
+                        examples/alpha_test_effect_test.cpp)
+        add_test(NAME EasyGL_AlphaTestEffect_Properties
+                 COMMAND cna_test_alpha_test_effect)
+        set_tests_properties(EasyGL_AlphaTestEffect_Properties PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 24: SkinnedEffect property tests
+        cna_easygl_test(cna_test_skinned_effect
+                        examples/skinned_effect_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_Properties
+                 COMMAND cna_test_skinned_effect)
+        set_tests_properties(EasyGL_SkinnedEffect_Properties PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration test (Task 88)

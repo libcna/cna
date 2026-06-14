@@ -54,11 +54,11 @@
 | 19 | Tests: `VertexPositionColorTexture` — constructor, declaration stride=24 | ✅ | 9 tests; stride=56 not 24; no default ctor (Color lacks one) |
 | 20 | Tests: `VertexPositionNormalTexture` — constructor, declaration stride=32 | ✅ | 12 tests; stride=40 not 32 (IVertexType vtable — see comment) |
 | 21 | Tests: `PackedVector` — all 18 types: constructor, `getPackedValue`, `PackFromVector4`, `ToVector4`, equality | ✅ | 82 tests (17 types); Half(0.0f) ctor tests omitted — HalfTypeHelper converts 0.0f to infinity |
-| 22 | Tests: `BasicEffect` — World/View/Projection setters/getters, TextureEnabled, VertexColorEnabled, LightingEnabled, AmbientLightColor, DirectionalLight0 | ⛔ | Requires real GraphicsDevice (SDL_Init + window) |
-| 23 | Tests: `AlphaTestEffect` — AlphaFunction, ReferenceAlpha, DiffuseColor, Alpha properties | ⛔ | Requires real GraphicsDevice |
-| 24 | Tests: `SkinnedEffect` — WeightsPerVertex, BoneTransforms set/get | ⛔ | Requires real GraphicsDevice |
-| 25 | Tests: `EffectParameter` — GetValueSingle, GetValueVector3, GetValueMatrix, SetValue round-trips | ⛔ | Requires real GraphicsDevice |
-| 26 | Tests: `EffectTechnique` / `EffectPass` — name accessor, pass count | ⛔ | Requires real GraphicsDevice |
+| 22 | Tests: `BasicEffect` — World/View/Projection setters/getters, TextureEnabled, VertexColorEnabled, LightingEnabled, AmbientLightColor, DirectionalLight0 | ✅ | `examples/basic_effect_test.cpp`; integration test via Game + EasyGL; EasyGL_BasicEffect_Properties CTest |
+| 23 | Tests: `AlphaTestEffect` — AlphaFunction, ReferenceAlpha, DiffuseColor, Alpha properties | ✅ | `examples/alpha_test_effect_test.cpp`; EasyGL_AlphaTestEffect_Properties CTest |
+| 24 | Tests: `SkinnedEffect` — WeightsPerVertex, BoneTransforms set/get | ✅ | `examples/skinned_effect_test.cpp`; EasyGL_SkinnedEffect_Properties CTest |
+| 25 | Tests: `EffectParameter` — GetValueSingle, GetValueVector3, GetValueMatrix, SetValue round-trips | ✅ | `tests/.../EffectParameterTests.cpp`; 18 pure unit tests, no device needed |
+| 26 | Tests: `EffectTechnique` / `EffectPass` — name accessor, pass count | ✅ | `tests/.../EffectTechniqueTests.cpp`; 11 pure unit tests; constructor seeds default "P0" pass |
 | 27 | Tests: `SpriteFont` — `MeasureString` (empty string, single char, multi-char), `LineSpacing`, `Spacing`, `DefaultCharacter` | ⛔ | Requires real GraphicsDevice |
 | 28 | Tests: `ModelBone` — constructor, `getIndexProperty`, `getNameProperty`, parent/child chain | ✅ | 12 tests |
 | 29 | Tests: `ModelMesh` — name, mesh parts count, parent bone reference | ⛔ | Requires Model/GraphicsDevice to populate |
