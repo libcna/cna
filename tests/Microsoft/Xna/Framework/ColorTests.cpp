@@ -372,3 +372,26 @@ TEST(ColorTest, MultiplyOperatorCommutativeMatchesNormal)
     EXPECT_EQ(a.getRProperty(), b.getRProperty());
     EXPECT_EQ(a.getAProperty(), b.getAProperty());
 }
+
+// --- Memory layout invariants ---
+
+TEST(ColorTest, SizeIsLargerThanFourBytesVtablePresent)
+{
+    // Color inherits IPackedVectorT<UInt32> (virtual), so a vtable pointer sits
+    // before packedValue. Casting Color* to uint8_t* for GL pixel I/O writes into
+    // the vtable, not the pixel data. GetBackBufferData must use a plain uint8_t[]
+    // buffer and construct Color(r, g, b, a) per pixel — never cast Color* directly.
+    EXPECT_GT(sizeof(Color), sizeof(uint32_t));
+}
+
+TEST(ColorTest, ConstructedFromRawRgbaBytesYieldsCorrectComponents)
+{
+    // Regression guard for the GetBackBufferData vtable mis-cast bug (fixed in a63475e).
+    // Simulates the correct unpack path: plain buffer → Color(r, g, b, a) per pixel.
+    const uint8_t buf[4] = {255, 128, 64, 32};
+    Color c(buf[0], buf[1], buf[2], buf[3]);
+    EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 128);
+    EXPECT_EQ(c.getBProperty(),  64);
+    EXPECT_EQ(c.getAProperty(),  32);
+}

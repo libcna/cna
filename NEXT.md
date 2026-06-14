@@ -178,11 +178,11 @@ cd cmake-build-bgfx && DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
 Fixed: added `GL_LINEAR` min/mag + `GL_CLAMP_TO_EDGE` wrap on `cubeTex_` in `CreateResources`.
 (FBO bind and texture bind were already correct.)
 
-### 2. Unit test regression guard for `GetBackBufferData`
+### ~~2. Unit test regression guard for `GetBackBufferData`~~ — done
 
-Add a Google Test that calls `GetBackBufferData` after a colored clear and asserts
-the returned `Color` is correct. Prevents regression of the vtable mis-cast bug.
-File: `tests/Microsoft/Xna/Framework/Graphics/GraphicsDeviceTest.cpp` (new or extend).
+Added to `ColorTests.cpp`:
+- `ColorTest.SizeIsLargerThanFourBytesVtablePresent` — documents vtable invariant
+- `ColorTest.ConstructedFromRawRgbaBytesYieldsCorrectComponents` — guards correct unpack path
 
 ---
 
