@@ -214,6 +214,7 @@ namespace CNA::Internal::Backends::Bgfx
         uint32_t samplerFlags_[kMaxSamplerSlots] = {};
         // Blend color for BGFX_STATE_BLEND_FACTOR
         float blendFactorR_ = 1.f, blendFactorG_ = 1.f, blendFactorB_ = 1.f, blendFactorA_ = 1.f;
+        uint32_t blendFactorPacked_ = 0xFFFFFFFFu; // packed RGBA8, passed to bgfx::setState
         // Scissor rect (0,0,0,0 = disabled)
         uint16_t scissorX_ = 0, scissorY_ = 0, scissorW_ = 0, scissorH_ = 0;
         // Stencil state (per-draw-call via bgfx::setStencil)

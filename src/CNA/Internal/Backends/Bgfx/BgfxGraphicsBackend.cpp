@@ -448,8 +448,9 @@ namespace CNA::Internal::Backends::Bgfx
             return;
         }
         // Multi-target: build a temporary framebuffer from the color textures.
-        bgfx::Attachment attachments[BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS];
-        int n = count < BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS ? count : BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS;
+        static constexpr int kMaxAttachments = 8; // bgfx BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS default
+        bgfx::Attachment attachments[kMaxAttachments];
+        int n = count < kMaxAttachments ? count : kMaxAttachments;
         for (int i = 0; i < n; ++i)
         {
             auto* bgfxRt = static_cast<BgfxRenderTargetBackend*>(rts[i]);
@@ -522,7 +523,7 @@ namespace CNA::Internal::Backends::Bgfx
             texture,
             Rectangle(static_cast<int>(x), static_cast<int>(y), bgfxTex.width, bgfxTex.height),
             Rectangle(0, 0, bgfxTex.width, bgfxTex.height),
-            Microsoft::Xna::Framework::White
+            Color::White
         );
     }
 
@@ -883,8 +884,8 @@ namespace CNA::Internal::Backends::Bgfx
         {
         case 1:  return BGFX_STENCIL_OP_FAIL_S_ZERO;    break;
         case 2:  return BGFX_STENCIL_OP_FAIL_S_REPLACE;  break;
-        case 3:  return BGFX_STENCIL_OP_FAIL_S_INCRWRAP; break;
-        case 4:  return BGFX_STENCIL_OP_FAIL_S_DECRWRAP; break;
+        case 3:  return BGFX_STENCIL_OP_FAIL_S_INCR;     break;
+        case 4:  return BGFX_STENCIL_OP_FAIL_S_DECR;     break;
         case 5:  return BGFX_STENCIL_OP_FAIL_S_INCRSAT;  break;
         case 6:  return BGFX_STENCIL_OP_FAIL_S_DECRSAT;  break;
         case 7:  return BGFX_STENCIL_OP_FAIL_S_INVERT;   break;
@@ -898,8 +899,8 @@ namespace CNA::Internal::Backends::Bgfx
         {
         case 1:  return BGFX_STENCIL_OP_FAIL_Z_ZERO;    break;
         case 2:  return BGFX_STENCIL_OP_FAIL_Z_REPLACE;  break;
-        case 3:  return BGFX_STENCIL_OP_FAIL_Z_INCRWRAP; break;
-        case 4:  return BGFX_STENCIL_OP_FAIL_Z_DECRWRAP; break;
+        case 3:  return BGFX_STENCIL_OP_FAIL_Z_INCR;     break;
+        case 4:  return BGFX_STENCIL_OP_FAIL_Z_DECR;     break;
         case 5:  return BGFX_STENCIL_OP_FAIL_Z_INCRSAT;  break;
         case 6:  return BGFX_STENCIL_OP_FAIL_Z_DECRSAT;  break;
         case 7:  return BGFX_STENCIL_OP_FAIL_Z_INVERT;   break;
@@ -913,8 +914,8 @@ namespace CNA::Internal::Backends::Bgfx
         {
         case 1:  return BGFX_STENCIL_OP_PASS_Z_ZERO;    break;
         case 2:  return BGFX_STENCIL_OP_PASS_Z_REPLACE;  break;
-        case 3:  return BGFX_STENCIL_OP_PASS_Z_INCRWRAP; break;
-        case 4:  return BGFX_STENCIL_OP_PASS_Z_DECRWRAP; break;
+        case 3:  return BGFX_STENCIL_OP_PASS_Z_INCR;     break;
+        case 4:  return BGFX_STENCIL_OP_PASS_Z_DECR;     break;
         case 5:  return BGFX_STENCIL_OP_PASS_Z_INCRSAT;  break;
         case 6:  return BGFX_STENCIL_OP_PASS_Z_DECRSAT;  break;
         case 7:  return BGFX_STENCIL_OP_PASS_Z_INVERT;   break;
@@ -1038,12 +1039,11 @@ namespace CNA::Internal::Backends::Bgfx
         blendFactorG_ = g;
         blendFactorB_ = b;
         blendFactorA_ = a;
-        // Applied via bgfx::setBlendFactor (rgba packed as RGBA8) in next draw call
-        const uint32_t packed = (static_cast<uint32_t>(r * 255) << 24) |
-                                 (static_cast<uint32_t>(g * 255) << 16) |
-                                 (static_cast<uint32_t>(b * 255) << 8)  |
-                                  static_cast<uint32_t>(a * 255);
-        bgfx::setBlendFactor(packed);
+        // Packed RGBA8 blend factor passed as second arg to bgfx::setState in draw calls
+        blendFactorPacked_ = (static_cast<uint32_t>(r * 255) << 24) |
+                              (static_cast<uint32_t>(g * 255) << 16) |
+                              (static_cast<uint32_t>(b * 255) << 8)  |
+                               static_cast<uint32_t>(a * 255);
     }
 
     // ---- 3D: vertex/index buffers + draw wiring ----
@@ -1154,7 +1154,6 @@ namespace CNA::Internal::Backends::Bgfx
         case PrimitiveType::TriangleStrip: return BGFX_STATE_PT_TRISTRIP;
         case PrimitiveType::LineList:      return BGFX_STATE_PT_LINES;
         case PrimitiveType::LineStrip:     return BGFX_STATE_PT_LINESTRIP;
-        case PrimitiveType::PointListEXT:  return BGFX_STATE_PT_POINTS;
         default:                           return 0; // default = triangle list
         }
     }

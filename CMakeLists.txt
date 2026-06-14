@@ -466,6 +466,20 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
 
     endif()
 
+    if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+       AND CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
+
+        enable_testing()
+
+        # Task 89: 3-frame smoke test for the Bgfx backend
+        add_test(NAME Bgfx_Demo2D_SmokeTest
+                 COMMAND cna_demo_2d --smoke 3)
+        set_tests_properties(Bgfx_Demo2D_SmokeTest PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    endif()
+
 endif()
 
 if(CNA_BUILD_TESTS)

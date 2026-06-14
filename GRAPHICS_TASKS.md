@@ -158,8 +158,8 @@
 | 85 | Integration test: EasyGL — `cna_house3d_demo` runs without errors (CI smoke test) | ✅ | `--smoke N` flag added; CTest entry EasyGL_House3D_SmokeTest passes in 1.3 s with DISPLAY=:0 |
 | 86 | Integration test: EasyGL — render a textured quad off-screen, read back pixels with `GetBackBufferData`, assert color | ✅ | `examples/easygl_textured_quad_test.cpp`; fixed Color vtable-pointer mis-cast in `GetBackBufferData`, explicit `glReadBuffer(Back)` |
 | 87 | Integration test: EasyGL — render to `RenderTarget2D`, sample as texture, read back | ✅ | `examples/easygl_render_target_test.cpp`; fixed FBO bind before attach, texture bind before `glTexImage2D`, LINEAR min-filter on RT colorTex_ |
-| 88 | Integration test: Vulkan — `cna_demo_2d` runs without errors (CI smoke test) | ⬜ | Already works manually; automate |
-| 89 | Integration test: Bgfx — basic draw call completes without crash (smoke test) | ⬜ | Once task 65 done |
+| 88 | Integration test: Vulkan — `cna_demo_2d` runs without errors (CI smoke test) | ✅ | `--smoke 3` exits 0 on AMD Radeon 780M (RADV PHOENIX); `Vulkan_Demo2D_SmokeTest` CTest entry in CMakeLists.txt |
+| 89 | Integration test: Bgfx — basic draw call completes without crash (smoke test) | ✅ | `--smoke 3` exits 0; fixed BGFX_STENCIL_OP_FAIL/PASS _S/_Z _INCRWRAP→_INCR, `bgfx::setBlendFactor`→`blendFactorPacked_`, `PointListEXT` removed, `BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS` replaced with local constant |
 
 ---
 
