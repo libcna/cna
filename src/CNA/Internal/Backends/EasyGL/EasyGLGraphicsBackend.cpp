@@ -466,6 +466,18 @@ namespace CNA::Internal::Backends::EasyGL
                                    ::metagl::PixelType::UnsignedByte,
                                    nullptr);
         }
+        cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
+                               ::metagl::TextureParameter::MinFilter,
+                               static_cast<int>(::metagl::TextureMagFilter::Linear));
+        cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
+                               ::metagl::TextureParameter::MagFilter,
+                               static_cast<int>(::metagl::TextureMagFilter::Linear));
+        cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
+                               ::metagl::TextureParameter::WrapS,
+                               static_cast<int>(::metagl::TextureWrap::ClampToEdge));
+        cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
+                               ::metagl::TextureParameter::WrapT,
+                               static_cast<int>(::metagl::TextureWrap::ClampToEdge));
 
         fbo_.create();
 

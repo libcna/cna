@@ -85,7 +85,7 @@ Next work is Phase 8 or user-directed tasks (see section 8).
 | **confirmed bug** | Bgfx `GetBackBufferData` always throws (async readback not implemented) |
 | **incomplete** | `Texture3D::GetData` / `TextureCube::GetData` on GLES3 — stub only |
 | **incomplete** | Vulkan textured/lit 3D pipeline (tasks 52–64) — deferred |
-| **needs verification** | `EasyGLRenderTargetCubeBackend::CreateResources` — likely has the same missing FBO bind + texture parameter bugs fixed in the 2D RT (`a63475e`) |
+| **fixed** | `EasyGLRenderTargetCubeBackend::CreateResources` — texture bind ✅, FBO bind ✅, added `GL_LINEAR` min/mag + `GL_CLAMP_TO_EDGE` wrap on `cubeTex_` |
 
 ---
 
@@ -173,11 +173,10 @@ cd cmake-build-bgfx && DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
 
 ## 8. Next tasks (ordered)
 
-### 1. Verify `EasyGLRenderTargetCubeBackend` FBO setup
+### ~~1. Verify `EasyGLRenderTargetCubeBackend` FBO setup~~ — done
 
-Check `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` ~line 428.
-Confirm `fbo_.bind()` is called before any attachment and that cube texture has
-`GL_LINEAR` min-filter set. Fix if the same bugs are present.
+Fixed: added `GL_LINEAR` min/mag + `GL_CLAMP_TO_EDGE` wrap on `cubeTex_` in `CreateResources`.
+(FBO bind and texture bind were already correct.)
 
 ### 2. Unit test regression guard for `GetBackBufferData`
 
