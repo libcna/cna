@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -11,7 +12,37 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void BasicEffect::OnApply()
     {
-        if (device_) device_->SetCurrentEffect(this);
+        // SetCurrentEffect is now called by Effect::Apply() after OnApply() returns.
+    }
+
+    void BasicEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    {
+        using namespace CNA::Internal::Backends;
+
+        p.textureEnabled     = textureEnabled_;
+        p.vertexColorEnabled = VertexColorEnabled;
+        p.lightingEnabled    = lightingEnabled_;
+
+        if (p.textureEnabled)
+        {
+            if (texture_) p.texture0 = &texture_->GetBackend();
+        }
+
+        p.diffuseColor[0] = diffuseColor_.X * alpha_;
+        p.diffuseColor[1] = diffuseColor_.Y * alpha_;
+        p.diffuseColor[2] = diffuseColor_.Z * alpha_;
+        p.diffuseColor[3] = alpha_;
+
+        p.ambientColor[0] = ambientLightColor_.X;
+        p.ambientColor[1] = ambientLightColor_.Y;
+        p.ambientColor[2] = ambientLightColor_.Z;
+
+        const Vector3 ld  = DirectionalLight0.getDiffuseColorProperty();
+        const Vector3 dir = DirectionalLight0.getDirectionProperty();
+        p.light0Dir[0]     = dir.X; p.light0Dir[1]     = dir.Y; p.light0Dir[2]     = dir.Z;
+        p.light0Diffuse[0] = ld.X;  p.light0Diffuse[1] = ld.Y;  p.light0Diffuse[2] = ld.Z;
+
+        World.ToColumnMajor(p.worldColMajor);
     }
 
     // IEffectLights

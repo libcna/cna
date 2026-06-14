@@ -104,6 +104,8 @@ namespace CNA::Internal::Backends
         /** @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face. No-op by default. */
         virtual void GetData(int face, int level, int x, int y, int w, int h,
                              void* data, int dataLength) const {}
+        /// Binds this cube map to the currently active GL texture unit. No-op on non-GL backends.
+        virtual void BindGL() const {}
     };
 
     /** @brief Backend interface for a 3D (volume) texture. */
@@ -234,22 +236,56 @@ namespace CNA::Internal::Backends
      * @brief Per-draw effect parameters forwarded from the XNA effect layer
      *        to the graphics backend.
      *
-     * Populated by GraphicsDevice from the currently bound BasicEffect before
-     * each draw call so the backend can select and configure the appropriate
-     * GLSL shader variant.
+     * Populated via Effect::FillGpuDrawParams() before each draw call so the
+     * backend can select and configure the appropriate shader variant.
      */
     struct GpuDrawParams
     {
-        const ITextureBackend* texture0       = nullptr;      ///< Texture unit 0, or null
-        float diffuseColor[4]  = {1,1,1,1};                  ///< RGBA 0..1
-        float ambientColor[3]  = {0,0,0};                     ///< RGB 0..1
-        float light0Dir[3]     = {0,-1,0};                    ///< World-space, pre-normalized
-        float light0Diffuse[3] = {1,1,1};                     ///< RGB 0..1
-        float worldColMajor[16] = {                           ///< Column-major world matrix
+        const ITextureBackend*     texture0 = nullptr;      ///< Texture unit 0 (diffuse), or null
+        const ITextureBackend*     texture1 = nullptr;      ///< Texture unit 1 (DualTextureEffect second layer), or null
+        const ITextureCubeBackend* envMap   = nullptr;      ///< Cube map for EnvironmentMapEffect, or null
+        float diffuseColor[4]  = {1,1,1,1};                ///< RGBA 0..1
+        float ambientColor[3]  = {0,0,0};                   ///< RGB 0..1 (BasicEffect path)
+        float light0Dir[3]     = {0,-1,0};                  ///< World-space, pre-normalized
+        float light0Diffuse[3] = {1,1,1};                   ///< RGB 0..1
+        float worldColMajor[16] = {                         ///< Column-major world matrix
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        /// Alpha-test parameters (x=refVal, y=tolerance, z=passWeight, w=failWeight).
+        /// Shader evaluates: if ((y>0) ? (|a-x|<y) : (a<x)) ? z : w < 0 → discard.
+        /// Default {0,0,1,1} = Always pass (never discard).
+        float alphaTest[4]      = {0.0f, 0.0f, 1.0f, 1.0f};
+        /// EnvironmentMapEffect: emissive+ambient combined, RGB 0..1.
+        float emissiveColor[3]  = {0,0,0};
+        /// EnvironmentMapEffect: specular tint from env map, RGB 0..1.
+        float envMapSpecular[3] = {0,0,0};
+        /// EnvironmentMapEffect: camera world-space position for reflection vector.
+        float eyePositionWorld[3] = {0,0,0};
+        /// EnvironmentMapEffect: blend amount for the env map contribution [0,1].
+        float envMapAmount = 0.0f;
+        /// SkinnedEffect: column-major mat4 per bone (72 × 16 floats), zero-initialised.
+        float boneTransforms[72 * 16] = {};
+        /// SkinnedEffect: number of valid entries in boneTransforms (0 = none).
+        int boneCount = 0;
         bool textureEnabled      = false;
         bool vertexColorEnabled  = true;
         bool lightingEnabled     = false;
+        /// When true the backend selects a two-sampler DualTexture shader variant.
+        bool dualTexture         = false;
+        /// When true the backend selects a cube-map env-mapping shader variant.
+        bool envMapping          = false;
+        /// When true the backend selects the skinning shader variant.
+        bool skinned             = false;
+        /// Number of instances to draw (1 = non-instanced).
+        int instanceCount = 1;
+        /// Per-instance vertex buffer backend pointer; cast to the concrete type inside the backend.
+        /// Null when not instancing. Only valid for the duration of the DrawInstancedPrimitivesEx call.
+        const IVertexBufferBackend* instanceVb = nullptr;
+        /// First vertex index for non-indexed draws (maps to glDrawArrays `first` / vkCmdDraw `firstVertex`).
+        int vertexStart = 0;
+        /// First index in the IBO for indexed draws (maps to glDrawElements byte offset / vkCmdDrawIndexed `firstIndex`).
+        int startIndex  = 0;
+        /// Value added to each index before vertex fetch (maps to glDrawElementsBaseVertex / vkCmdDrawIndexed `vertexOffset`).
+        int baseVertex  = 0;
     };
 
     class IGraphicsBackend

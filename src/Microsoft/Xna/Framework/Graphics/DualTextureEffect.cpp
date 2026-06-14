@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -229,6 +230,27 @@ namespace Microsoft::Xna::Framework::Graphics
             if (shaderIndexParam_) shaderIndexParam_->SetValue(shaderIndex);
             dirtyFlags_ &= ~DirtyShaderIndex;
         }
+    }
+
+    void DualTextureEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    {
+        using namespace CNA::Internal::Backends;
+
+        p.dualTexture        = true;
+        p.textureEnabled     = true;
+        p.vertexColorEnabled = vertexColorEnabled_;
+        p.lightingEnabled    = false;
+
+        if (texture_)  p.texture0 = &texture_->GetBackend();
+        if (texture2_) p.texture1 = &texture2_->GetBackend();
+
+        p.diffuseColor[0] = diffuseColor_.X * alpha_;
+        p.diffuseColor[1] = diffuseColor_.Y * alpha_;
+        p.diffuseColor[2] = diffuseColor_.Z * alpha_;
+        p.diffuseColor[3] = alpha_;
+
+        world_.ToColumnMajor(p.worldColMajor);
+        // alphaTest stays at default {0,0,1,1} (Always pass — DualTextureEffect has no alpha test)
     }
 
     const std::string& DualTextureEffect::GetTypeName() const

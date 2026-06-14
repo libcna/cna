@@ -316,6 +316,16 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void setFogEndProperty(float value) override;
 
+        /**
+         * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
+         *
+         * Populates texture, diffuse color, alpha, ambient color, directional light 0,
+         * world matrix, and the textureEnabled / vertexColorEnabled / lightingEnabled flags.
+         *
+         * @param params Output struct to populate.
+         */
+        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+
     protected:
         /**
          * @brief Applies shader parameters to the graphics device before drawing.

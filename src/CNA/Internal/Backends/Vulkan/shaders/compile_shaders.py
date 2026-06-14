@@ -134,10 +134,32 @@ def main():
     script_dir = Path(__file__).parent
 
     shaders = [
-        ("sprite2d.vert.glsl", VERTEX_SHADER,   "kSprite2dVertSpv"),
-        ("sprite2d.frag.glsl", FRAGMENT_SHADER,  "kSprite2dFragSpv"),
-        ("colored3d.vert.glsl", VERTEX_SHADER,  "kColored3dVertSpv"),
-        ("colored3d.frag.glsl", FRAGMENT_SHADER, "kColored3dFragSpv"),
+        ("sprite2d.vert.glsl",          VERTEX_SHADER,   "kSprite2dVertSpv"),
+        ("sprite2d.frag.glsl",          FRAGMENT_SHADER, "kSprite2dFragSpv"),
+        ("colored3d.vert.glsl",         VERTEX_SHADER,   "kColored3dVertSpv"),
+        ("colored3d.frag.glsl",         FRAGMENT_SHADER, "kColored3dFragSpv"),
+        # Textured 3D pipeline — stride 20 (VertexPositionTexture)
+        ("textured3d.vert.glsl",         VERTEX_SHADER,   "kTextured3dVertSpv"),
+        ("textured3d.frag.glsl",         FRAGMENT_SHADER, "kTextured3dFragSpv"),
+        # Colored+Textured 3D pipeline — stride 24 (VertexPositionColorTexture)
+        ("colored_textured3d.vert.glsl", VERTEX_SHADER,   "kColoredTextured3dVertSpv"),
+        ("colored_textured3d.frag.glsl", FRAGMENT_SHADER, "kColoredTextured3dFragSpv"),
+        # Lit+Textured 3D pipeline — stride 32 (VertexPositionNormalTexture)
+        ("lit_textured3d.vert.glsl",     VERTEX_SHADER,   "kLitTextured3dVertSpv"),
+        ("lit_textured3d.frag.glsl",     FRAGMENT_SHADER, "kLitTextured3dFragSpv"),
+        # AlphaTestEffect pipeline — single VS handles stride 20/24/32 via attribute remapping
+        ("alpha_test3d.vert.glsl",       VERTEX_SHADER,   "kAlphaTest3dVertSpv"),
+        ("alpha_test3d.frag.glsl",       FRAGMENT_SHADER, "kAlphaTest3dFragSpv"),
+        # DualTextureEffect pipeline — VS reuses textured3d; FS samples two texture units
+        ("dual_texture3d.frag.glsl",     FRAGMENT_SHADER, "kDualTexture3dFragSpv"),
+        # EnvironmentMapEffect pipeline — stride 32, world matrix in PC, UBO for FS params
+        ("env_map3d.vert.glsl",          VERTEX_SHADER,   "kEnvMap3dVertSpv"),
+        ("env_map3d.frag.glsl",          FRAGMENT_SHADER, "kEnvMap3dFragSpv"),
+        # SkinnedEffect pipeline — stride 52, bone palette in dynamic UBO (binding=1)
+        ("skinned3d.vert.glsl",          VERTEX_SHADER,   "kSkinned3dVertSpv"),
+        ("skinned3d.frag.glsl",          FRAGMENT_SHADER, "kSkinned3dFragSpv"),
+        # Instanced 3D pipeline — binding=0 per-vertex (pos only), binding=1 per-instance mat4
+        ("instanced3d.vert.glsl",        VERTEX_SHADER,   "kInstanced3dVertSpv"),
     ]
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \

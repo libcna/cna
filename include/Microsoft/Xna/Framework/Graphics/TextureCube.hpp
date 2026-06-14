@@ -98,6 +98,13 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA static TextureCube DDSFromStreamEXT(GraphicsDevice& device, System::IO::Stream& stream);
 
+        /**
+         * @brief Returns a reference to the backend implementation object.
+         *
+         * @return Reference to the backend ITextureCubeBackend.
+         */
+        NOXNA [[nodiscard]] CNA::Internal::Backends::ITextureCubeBackend& GetBackend() const { return *backend_; }
+
     private:
         int size_;
         SurfaceFormat format_;

@@ -152,6 +152,11 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
     }
 
+    void EasyGLTextureCubeBackend::BindGL() const
+    {
+        tex_.bind(::easygl::TextureTarget::TextureCubeMap);
+    }
+
     void EasyGLTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                             const void* data, int /*dataLength*/)
     {
@@ -1009,6 +1014,9 @@ void main()
         prog_textured_.reset_no_gl();
         prog_col_textured_.reset_no_gl();
         prog_lit_textured_.reset_no_gl();
+        prog_dual_textured_.reset_no_gl();
+        prog_env_mapped_.reset_no_gl();
+        prog_skinned_.reset_no_gl();
         default_white_texture_.reset_handle_no_gl();
         default_white_texture_ready_ = false;
 
@@ -1597,6 +1605,19 @@ void main()
             vao.enable_attribute(2);
             vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)24);
             break;
+        case 52:
+            // SkinnedVertex: float3 pos + float3 normal + float2 uv + float4 weights + ubyte4 indices
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 4, ::easygl::DataType::Float, false, s, (void*)32);
+            vao.enable_attribute(4);
+            vao.set_attribute_i_pointer(4, 4, ::easygl::DataType::UnsignedByte, s, (void*)48);
+            break;
         default:
             // Unknown layout: bind position-only as a safe fallback
             vao.enable_attribute(0);
@@ -1759,12 +1780,18 @@ void main()
 "#version 300 es\n"
 "precision mediump float;\n"
 "in vec4 vColor;\n"
+"uniform vec4 uAlphaTest;\n"
 "out vec4 FragColor;\n"
-"void main(){ FragColor=vColor; }\n";
+"void main(){\n"
+"    FragColor=vColor;\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"}\n";
 
         CompileAndLink(prog_colored_.prog, vsrc, fsrc, "colored");
-        prog_colored_.loc_wvp = prog_colored_.prog.uniform_location("uWVP");
-        prog_colored_.ready   = true;
+        prog_colored_.loc_wvp       = prog_colored_.prog.uniform_location("uWVP");
+        prog_colored_.loc_alphatest = prog_colored_.prog.uniform_location("uAlphaTest");
+        prog_colored_.ready         = true;
         CNA_RENDER_LOG("colored3D ready loc_wvp=" << prog_colored_.loc_wvp);
     }
 
@@ -1789,16 +1816,20 @@ void main()
 "in vec2 vUV;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
+"uniform vec4 uAlphaTest;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    FragColor=texture(uTexture,vUV)*uDiffuseColor;\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
 "}\n";
 
         CompileAndLink(prog_textured_.prog, vsrc, fsrc, "textured");
-        prog_textured_.loc_wvp     = prog_textured_.prog.uniform_location("uWVP");
-        prog_textured_.loc_diffuse = prog_textured_.prog.uniform_location("uDiffuseColor");
-        prog_textured_.loc_texture = prog_textured_.prog.uniform_location("uTexture");
-        prog_textured_.ready       = true;
+        prog_textured_.loc_wvp       = prog_textured_.prog.uniform_location("uWVP");
+        prog_textured_.loc_diffuse   = prog_textured_.prog.uniform_location("uDiffuseColor");
+        prog_textured_.loc_texture   = prog_textured_.prog.uniform_location("uTexture");
+        prog_textured_.loc_alphatest = prog_textured_.prog.uniform_location("uAlphaTest");
+        prog_textured_.ready         = true;
         CNA_RENDER_LOG("textured3D ready loc_wvp=" << prog_textured_.loc_wvp);
     }
 
@@ -1826,15 +1857,19 @@ void main()
 "in vec4 vColor;\n"
 "in vec2 vUV;\n"
 "uniform sampler2D uTexture;\n"
+"uniform vec4 uAlphaTest;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    FragColor=texture(uTexture,vUV)*vColor;\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
 "}\n";
 
         CompileAndLink(prog_col_textured_.prog, vsrc, fsrc, "col+textured");
-        prog_col_textured_.loc_wvp     = prog_col_textured_.prog.uniform_location("uWVP");
-        prog_col_textured_.loc_texture = prog_col_textured_.prog.uniform_location("uTexture");
-        prog_col_textured_.ready       = true;
+        prog_col_textured_.loc_wvp       = prog_col_textured_.prog.uniform_location("uWVP");
+        prog_col_textured_.loc_texture   = prog_col_textured_.prog.uniform_location("uTexture");
+        prog_col_textured_.loc_alphatest = prog_col_textured_.prog.uniform_location("uAlphaTest");
+        prog_col_textured_.ready         = true;
         CNA_RENDER_LOG("col+textured3D ready loc_wvp=" << prog_col_textured_.loc_wvp);
     }
 
@@ -1867,12 +1902,15 @@ void main()
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
+"uniform vec4 uAlphaTest;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
 "    float NdotL=max(dot(N,-uLight0Dir),0.0);\n"
 "    vec3 litRGB=(uAmbientColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb;\n"
 "    FragColor=texture(uTexture,vUV)*vec4(litRGB,uDiffuseColor.a);\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
 "}\n";
 
         CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
@@ -1883,8 +1921,184 @@ void main()
         prog_lit_textured_.loc_l0dir     = prog_lit_textured_.prog.uniform_location("uLight0Dir");
         prog_lit_textured_.loc_l0diff    = prog_lit_textured_.prog.uniform_location("uLight0Diffuse");
         prog_lit_textured_.loc_texture   = prog_lit_textured_.prog.uniform_location("uTexture");
+        prog_lit_textured_.loc_alphatest = prog_lit_textured_.prog.uniform_location("uAlphaTest");
         prog_lit_textured_.ready         = true;
         CNA_RENDER_LOG("lit+textured3D ready loc_wvp=" << prog_lit_textured_.loc_wvp);
+    }
+
+    void EasyGLGraphicsBackend::EnsureDualTextured3DProgram()
+    {
+        if (prog_dual_textured_.ready) return;
+
+        static const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location=0) in vec3 aPos;\n"
+"layout(location=1) in vec2 aUV;\n"
+"uniform mat4 uWVP;\n"
+"out vec2 vUV;\n"
+"void main(){\n"
+"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vUV=aUV;\n"
+"}\n";
+        static const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec2 vUV;\n"
+"uniform sampler2D uTexture;\n"
+"uniform sampler2D uTexture2;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform vec4 uAlphaTest;\n"
+"out vec4 FragColor;\n"
+"void main(){\n"
+"    FragColor=texture(uTexture,vUV)*texture(uTexture2,vUV)*uDiffuseColor;\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"}\n";
+
+        CompileAndLink(prog_dual_textured_.prog, vsrc, fsrc, "dual+textured");
+        prog_dual_textured_.loc_wvp       = prog_dual_textured_.prog.uniform_location("uWVP");
+        prog_dual_textured_.loc_texture   = prog_dual_textured_.prog.uniform_location("uTexture");
+        prog_dual_textured_.loc_texture2  = prog_dual_textured_.prog.uniform_location("uTexture2");
+        prog_dual_textured_.loc_diffuse   = prog_dual_textured_.prog.uniform_location("uDiffuseColor");
+        prog_dual_textured_.loc_alphatest = prog_dual_textured_.prog.uniform_location("uAlphaTest");
+        prog_dual_textured_.ready         = true;
+        CNA_RENDER_LOG("dual+textured3D ready loc_wvp=" << prog_dual_textured_.loc_wvp);
+    }
+
+    void EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()
+    {
+        if (prog_env_mapped_.ready) return;
+
+        static const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location=0) in vec3 aPos;\n"
+"layout(location=1) in vec3 aNormal;\n"
+"layout(location=2) in vec2 aUV;\n"
+"uniform mat4 uWVP;\n"
+"uniform mat3 uNormalMatrix;\n"
+"uniform mat4 uWorld;\n"
+"uniform vec3 uEyePosition;\n"
+"out vec3 vWorldNormal;\n"
+"out vec3 vEyeDir;\n"
+"out vec2 vUV;\n"
+"void main(){\n"
+"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vec3 worldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
+"    vWorldNormal=uNormalMatrix*aNormal;\n"
+"    vEyeDir=uEyePosition-worldPos;\n"
+"    vUV=aUV;\n"
+"}\n";
+        static const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec3 vWorldNormal;\n"
+"in vec3 vEyeDir;\n"
+"in vec2 vUV;\n"
+"uniform sampler2D uTexture;\n"
+"uniform samplerCube uEnvMap;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform vec3 uEmissiveColor;\n"
+"uniform vec3 uLight0Dir;\n"
+"uniform vec3 uLight0Diffuse;\n"
+"uniform float uEnvMapAmount;\n"
+"uniform vec3 uEnvMapSpecular;\n"
+"uniform vec4 uAlphaTest;\n"
+"out vec4 FragColor;\n"
+"void main(){\n"
+"    vec3 N=normalize(vWorldNormal);\n"
+"    vec3 E=normalize(vEyeDir);\n"
+"    float NdotL=max(dot(N,-uLight0Dir),0.0);\n"
+"    vec3 litRGB=(uEmissiveColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb;\n"
+"    vec4 texColor=texture(uTexture,vUV);\n"
+"    vec3 reflDir=reflect(-E,N);\n"
+"    vec3 envColor=texture(uEnvMap,reflDir).rgb;\n"
+"    vec3 rgb=litRGB*texColor.rgb+envColor*uEnvMapAmount+uEnvMapSpecular;\n"
+"    FragColor=vec4(rgb,uDiffuseColor.a*texColor.a);\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"}\n";
+
+        CompileAndLink(prog_env_mapped_.prog, vsrc, fsrc, "env+mapped");
+        auto& p = prog_env_mapped_;
+        p.loc_wvp           = p.prog.uniform_location("uWVP");
+        p.loc_normalmat     = p.prog.uniform_location("uNormalMatrix");
+        p.loc_world         = p.prog.uniform_location("uWorld");
+        p.loc_eyepos        = p.prog.uniform_location("uEyePosition");
+        p.loc_texture       = p.prog.uniform_location("uTexture");
+        p.loc_envmap        = p.prog.uniform_location("uEnvMap");
+        p.loc_diffuse       = p.prog.uniform_location("uDiffuseColor");
+        p.loc_emissive      = p.prog.uniform_location("uEmissiveColor");
+        p.loc_l0dir         = p.prog.uniform_location("uLight0Dir");
+        p.loc_l0diff        = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_envmap_amount = p.prog.uniform_location("uEnvMapAmount");
+        p.loc_envmap_spec   = p.prog.uniform_location("uEnvMapSpecular");
+        p.loc_alphatest     = p.prog.uniform_location("uAlphaTest");
+        p.ready             = true;
+        CNA_RENDER_LOG("env+mapped3D ready loc_wvp=" << p.loc_wvp);
+    }
+
+    void EasyGLGraphicsBackend::EnsureSkinnedProgram()
+    {
+        if (prog_skinned_.ready) return;
+
+        static const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location=0) in vec3 aPos;\n"
+"layout(location=1) in vec3 aNormal;\n"
+"layout(location=2) in vec2 aUV;\n"
+"layout(location=3) in vec4 aBoneWeights;\n"
+"layout(location=4) in uvec4 aBoneIndices;\n"
+"uniform mat4 uWVP;\n"
+"uniform mat4 uBones[72];\n"
+"out vec3 vNormal;\n"
+"out vec2 vUV;\n"
+"void main(){\n"
+"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x\n"
+"               +uBones[aBoneIndices.y]*aBoneWeights.y\n"
+"               +uBones[aBoneIndices.z]*aBoneWeights.z\n"
+"               +uBones[aBoneIndices.w]*aBoneWeights.w;\n"
+"    gl_Position=uWVP*skinMat*vec4(aPos,1.0);\n"
+"    vNormal=normalize(mat3(skinMat)*aNormal);\n"
+"    vUV=aUV;\n"
+"}\n";
+
+        static const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec3 vNormal;\n"
+"in vec2 vUV;\n"
+"uniform sampler2D uTexture;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform vec3 uEmissiveColor;\n"
+"uniform vec3 uLight0Dir;\n"
+"uniform vec3 uLight0Diffuse;\n"
+"uniform vec4 uAlphaTest;\n"
+"out vec4 FragColor;\n"
+"void main(){\n"
+"    vec3 N=normalize(vNormal);\n"
+"    float NdotL=max(dot(N,-uLight0Dir),0.0);\n"
+"    vec3 litRGB=(uEmissiveColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb;\n"
+"    vec4 texColor=texture(uTexture,vUV);\n"
+"    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"}\n";
+
+        CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
+        auto& p = prog_skinned_;
+        p.loc_wvp       = p.prog.uniform_location("uWVP");
+        p.loc_bones     = p.prog.uniform_location("uBones[0]");
+        p.loc_texture   = p.prog.uniform_location("uTexture");
+        p.loc_diffuse   = p.prog.uniform_location("uDiffuseColor");
+        p.loc_emissive  = p.prog.uniform_location("uEmissiveColor");
+        p.loc_l0dir     = p.prog.uniform_location("uLight0Dir");
+        p.loc_l0diff    = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
+        p.ready         = true;
+        CNA_RENDER_LOG("skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
 
     void EasyGLGraphicsBackend::EnsureDefaultWhiteTexture()
@@ -1896,8 +2110,24 @@ void main()
         default_white_texture_ready_ = true;
     }
 
-    EasyGLGraphicsBackend::Prog3D& EasyGLGraphicsBackend::SelectProgram(std::size_t stride)
+    EasyGLGraphicsBackend::Prog3D& EasyGLGraphicsBackend::SelectProgram(std::size_t stride,
+                                                                          const GpuDrawParams& params)
     {
+        if (params.skinned)
+        {
+            EnsureSkinnedProgram();
+            return prog_skinned_;
+        }
+        if (params.envMapping)
+        {
+            EnsureEnvMapped3DProgram();
+            return prog_env_mapped_;
+        }
+        if (params.dualTexture)
+        {
+            EnsureDualTextured3DProgram();
+            return prog_dual_textured_;
+        }
         switch (stride)
         {
         case 20: EnsureTextured3DProgram();        return prog_textured_;
@@ -1925,13 +2155,17 @@ void main()
             p.prog.set_uniform_matrix3(p.loc_normalmat, nm);
         }
 
+        // Full world matrix (EnvironmentMapEffect VS — position → world space)
+        if (p.loc_world >= 0)
+            p.prog.set_uniform_matrix4(p.loc_world, params.worldColMajor);
+
         // Diffuse color
         if (p.loc_diffuse >= 0)
             p.prog.set_uniform(p.loc_diffuse,
                 params.diffuseColor[0], params.diffuseColor[1],
                 params.diffuseColor[2], params.diffuseColor[3]);
 
-        // Ambient + light0 (lit shader only)
+        // Ambient + light0 (lit shader / BasicEffect path only)
         if (p.loc_ambient >= 0)
         {
             if (params.lightingEnabled)
@@ -1954,7 +2188,60 @@ void main()
             }
         }
 
-        // Texture
+        // EnvironmentMapEffect: emissive+ambient (pre-combined) + light0 + eye pos + env map
+        if (p.loc_emissive >= 0)
+            p.prog.set_uniform(p.loc_emissive,
+                params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2]);
+
+        if (p.loc_l0dir >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l0dir,
+                params.light0Dir[0], params.light0Dir[1], params.light0Dir[2]);
+        if (p.loc_l0diff >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l0diff,
+                params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2]);
+
+        if (p.loc_eyepos >= 0)
+            p.prog.set_uniform(p.loc_eyepos,
+                params.eyePositionWorld[0], params.eyePositionWorld[1], params.eyePositionWorld[2]);
+
+        // Bone palette (SkinnedEffect)
+        if (p.loc_bones >= 0 && params.boneCount > 0)
+            ::metagl::glUniformMatrix4fv(p.loc_bones, params.boneCount, 0, params.boneTransforms);
+
+        if (p.loc_envmap_amount >= 0)
+            p.prog.set_uniform(p.loc_envmap_amount, params.envMapAmount);
+
+        if (p.loc_envmap_spec >= 0)
+            p.prog.set_uniform(p.loc_envmap_spec,
+                params.envMapSpecular[0], params.envMapSpecular[1], params.envMapSpecular[2]);
+
+        // Cube map (unit 1 — bind before texture0 to leave unit 0 active)
+        if (p.loc_envmap >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_envmap, 1);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
+            if (params.envMap)
+                params.envMap->BindGL();
+            else
+                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
+
+        // Second texture (DualTextureEffect — bind before unit 0 to leave unit 0 active)
+        if (p.loc_texture2 >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_texture2, 1);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
+            if (params.texture1)
+                params.texture1->BindGL();
+            else
+                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
+
+        // Texture (unit 0)
         if (p.loc_texture >= 0)
         {
             EnsureDefaultWhiteTexture();
@@ -1964,6 +2251,12 @@ void main()
             else
                 default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
         }
+
+        // Alpha test (always uploaded; default {0,0,1,1} = Always pass)
+        if (p.loc_alphatest >= 0)
+            p.prog.set_uniform(p.loc_alphatest,
+                params.alphaTest[0], params.alphaTest[1],
+                params.alphaTest[2], params.alphaTest[3]);
     }
 
     void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
@@ -2085,7 +2378,7 @@ void main()
     {
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
-        Prog3D& p = SelectProgram(vb.GetStride());
+        Prog3D& p = SelectProgram(vb.GetStride(), params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
 
@@ -2094,7 +2387,7 @@ void main()
             << " prim=" << static_cast<int>(primitive) << " verts=" << vertex_count);
 
         vb.vao.bind();
-        device.draw_arrays(ToEasyGl(primitive), 0, vertex_count);
+        device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
         vb.vao.unbind();
     }
 
@@ -2110,7 +2403,7 @@ void main()
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
-        Prog3D& p = SelectProgram(vb.GetStride());
+        Prog3D& p = SelectProgram(vb.GetStride(), params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
 
@@ -2122,7 +2415,15 @@ void main()
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         const auto idxType2 = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                : ::easygl::DataType::UnsignedShort;
-        device.draw_elements(ToEasyGl(primitive), index_count, idxType2, nullptr);
+        const int indexSize = ib.thirtyTwoBit ? 4 : 2;
+        const void* indexOffset = reinterpret_cast<const void*>(
+            static_cast<std::uintptr_t>(params.startIndex) * static_cast<std::uintptr_t>(indexSize));
+        if (params.baseVertex == 0) {
+            device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
+        } else {
+            ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxType2,
+                                               indexOffset, params.baseVertex);
+        }
         vb.vao.unbind();
     }
 
@@ -2139,7 +2440,7 @@ void main()
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
-        Prog3D& p = SelectProgram(vb.GetStride());
+        Prog3D& p = SelectProgram(vb.GetStride(), params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
 

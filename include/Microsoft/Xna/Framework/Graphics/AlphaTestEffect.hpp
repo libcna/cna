@@ -220,6 +220,17 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void setReferenceAlphaProperty(int value);
 
+        /**
+         * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
+         *
+         * Populates texture, diffuse color, alpha, vertex-color flag, world matrix,
+         * and the alphaTest vec4 (reference value, tolerance, pass/fail weights) so
+         * the backend fragment shader can perform per-pixel alpha testing via discard.
+         *
+         * @param params Output struct to populate.
+         */
+        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+
     protected:
         /**
          * @brief Applies shader parameters to the graphics device before drawing.

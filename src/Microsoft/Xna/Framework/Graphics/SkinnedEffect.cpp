@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
@@ -303,6 +304,45 @@ namespace Microsoft::Xna::Framework::Graphics
             m.M44 = 1.0f;
 
         return bones;
+    }
+
+    void SkinnedEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    {
+        p.skinned            = true;
+        p.textureEnabled     = true;
+        p.lightingEnabled    = true;
+        p.vertexColorEnabled = false;
+
+        if (texture_) p.texture0 = &texture_->GetBackend();
+
+        p.diffuseColor[0] = diffuseColor_.X * alpha_;
+        p.diffuseColor[1] = diffuseColor_.Y * alpha_;
+        p.diffuseColor[2] = diffuseColor_.Z * alpha_;
+        p.diffuseColor[3] = alpha_;
+
+        // Emissive pre-combined with ambient * diffuse (matches FNA's colour upload)
+        p.emissiveColor[0] = (emissiveColor_.X + ambientLightColor_.X * diffuseColor_.X) * alpha_;
+        p.emissiveColor[1] = (emissiveColor_.Y + ambientLightColor_.Y * diffuseColor_.Y) * alpha_;
+        p.emissiveColor[2] = (emissiveColor_.Z + ambientLightColor_.Z * diffuseColor_.Z) * alpha_;
+
+        const Vector3 ld  = DirectionalLight0.getDiffuseColorProperty();
+        const Vector3 dir = DirectionalLight0.getDirectionProperty();
+        p.light0Dir[0] = dir.X; p.light0Dir[1] = dir.Y; p.light0Dir[2] = dir.Z;
+        p.light0Diffuse[0] = ld.X; p.light0Diffuse[1] = ld.Y; p.light0Diffuse[2] = ld.Z;
+
+        const Matrix viewInverse  = Matrix::Invert(view_);
+        const Vector3 eyePos      = viewInverse.getTranslationProperty();
+        p.eyePositionWorld[0] = eyePos.X;
+        p.eyePositionWorld[1] = eyePos.Y;
+        p.eyePositionWorld[2] = eyePos.Z;
+
+        world_.ToColumnMajor(p.worldColMajor);
+
+        // Upload all 72 bone palette matrices
+        const std::vector<Matrix> bones = GetBoneTransforms(MaxBones);
+        p.boneCount = static_cast<int>(bones.size());
+        for (int i = 0; i < p.boneCount; ++i)
+            bones[i].ToColumnMajor(p.boneTransforms + i * 16);
     }
 
     void SkinnedEffect::OnApply()

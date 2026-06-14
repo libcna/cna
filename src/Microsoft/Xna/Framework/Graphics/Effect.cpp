@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -37,7 +38,16 @@ namespace Microsoft::Xna::Framework::Graphics
     EffectTechniqueCollection& Effect::getTechniquesProperty() { return techniques_; }
     const EffectTechniqueCollection& Effect::getTechniquesProperty() const { return techniques_; }
 
-    void Effect::Apply() { OnApply(); }
+    void Effect::Apply()
+    {
+        OnApply();
+        if (device_) device_->SetCurrentEffect(this);
+    }
+
+    void Effect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& /*params*/) const
+    {
+        // Default: no-op. Concrete subclasses override to populate shader parameters.
+    }
 
     const std::string& Effect::GetVertexSource() const
     {

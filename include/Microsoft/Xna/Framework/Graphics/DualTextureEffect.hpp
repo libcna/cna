@@ -205,6 +205,16 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void setVertexColorEnabledProperty(bool value);
 
+        /**
+         * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
+         *
+         * Populates both texture slots, diffuse color, vertex-color flag, world matrix,
+         * and the dualTexture flag so the backend selects a two-sampler shader variant.
+         *
+         * @param params Output struct to populate.
+         */
+        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+
     protected:
         /**
          * @brief Applies shader parameters to the graphics device before drawing.

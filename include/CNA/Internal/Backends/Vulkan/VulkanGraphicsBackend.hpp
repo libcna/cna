@@ -9,14 +9,28 @@
 
 namespace CNA::Internal::Backends::Vulkan
 {
-    class VulkanGraphicsBackend;      // forward
-    class VulkanRenderTargetBackend;  // forward
+    class VulkanGraphicsBackend;            // forward
+    class VulkanRenderTargetBackend;        // forward
+    class VulkanRenderTargetCubeBackend;    // forward
 
     // -------------------------------------------------------------------------
     // Vertex types (internal to the Vulkan backend)
     // -------------------------------------------------------------------------
 
     struct Sprite2DVertex { float x, y, u, v, r, g, b, a; };
+
+    // -------------------------------------------------------------------------
+    // VulkanRTSource — minimal interface used by RecordCommandBuffer
+    // -------------------------------------------------------------------------
+
+    struct VulkanRTSource {
+        virtual VkFramebuffer GetFramebuffer()             const = 0;
+        virtual VkRenderPass  GetRenderPass()              const = 0;
+        virtual int           GetWidth()                   const = 0;
+        virtual int           GetHeight()                  const = 0;
+        virtual uint32_t      GetColorAttachmentCount()    const = 0;
+        virtual ~VulkanRTSource() = default;
+    };
 
     // -------------------------------------------------------------------------
     // VulkanTextureBackend
@@ -33,6 +47,7 @@ namespace CNA::Internal::Backends::Vulkan
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         VkDescriptorSet GetDescriptorSet() const { return descriptorSet_; }
+        VkImageView     GetImageView()     const { return imageView_; }
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
@@ -52,7 +67,7 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanRenderTargetBackend
     // -------------------------------------------------------------------------
 
-    class VulkanRenderTargetBackend : public IRenderTargetBackend
+    class VulkanRenderTargetBackend : public IRenderTargetBackend, public VulkanRTSource
     {
     public:
         VulkanRenderTargetBackend(int w, int h, bool hasDepth, VulkanGraphicsBackend* owner);
@@ -65,8 +80,12 @@ namespace CNA::Internal::Backends::Vulkan
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
 
-        VkFramebuffer   GetFramebuffer()    const { return framebuffer_; }
-        VkDescriptorSet GetDescriptorSet()  const { return descriptorSet_; }
+        VkFramebuffer   GetFramebuffer()          const override { return framebuffer_; }
+        VkRenderPass    GetRenderPass()            const override;
+        uint32_t        GetColorAttachmentCount()  const override { return 1; }
+        VkDescriptorSet GetDescriptorSet()         const { return descriptorSet_; }
+        VkImageView     GetColorView()             const { return colorView_; }
+        VkImageView     GetDepthView()             const { return depthView_; }
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
@@ -228,6 +247,9 @@ namespace CNA::Internal::Backends::Vulkan
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
 
+        /** @brief Returns the Vulkan image view for this cube map texture. */
+        [[nodiscard]] VkImageView GetImageView() const { return imageView_; }
+
     private:
         VulkanGraphicsBackend* owner_ = nullptr;
         VkImage        image_     = VK_NULL_HANDLE;
@@ -259,6 +281,70 @@ namespace CNA::Internal::Backends::Vulkan
     };
 
     // -------------------------------------------------------------------------
+    // VulkanRenderTargetCubeBackend
+    // -------------------------------------------------------------------------
+
+    class VulkanRenderTargetCubeBackend : public IRenderTargetCubeBackend
+    {
+    public:
+        VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size);
+        ~VulkanRenderTargetCubeBackend() override;
+
+        [[nodiscard]] int GetSize() const override { return size_; }
+        void BindAsRenderTargetFace(int face) override;
+        void UnbindAsRenderTarget() override;
+
+    private:
+        struct FaceProxy : public VulkanRTSource {
+            VkFramebuffer framebuffer  = VK_NULL_HANDLE;
+            VkRenderPass  renderPass   = VK_NULL_HANDLE;
+            int           size         = 0;
+            VkFramebuffer GetFramebuffer()          const override { return framebuffer; }
+            VkRenderPass  GetRenderPass()            const override { return renderPass; }
+            int GetWidth()                          const override { return size; }
+            int GetHeight()                         const override { return size; }
+            uint32_t GetColorAttachmentCount()      const override { return 1; }
+        };
+
+        VulkanGraphicsBackend*     owner_     = nullptr;
+        VkImage                    image_     = VK_NULL_HANDLE;
+        VkDeviceMemory             memory_    = VK_NULL_HANDLE;
+        std::array<VkImageView, 6> faceViews_ = {};
+        VkImage                    depthImage_  = VK_NULL_HANDLE;
+        VkDeviceMemory             depthMemory_ = VK_NULL_HANDLE;
+        VkImageView                depthView_   = VK_NULL_HANDLE;
+        std::array<VkFramebuffer, 6> framebuffers_ = {};
+        std::array<FaceProxy, 6>     faceProxies_;
+        int                        size_      = 0;
+    };
+
+    // -------------------------------------------------------------------------
+    // VulkanMRTProxy — combines N VulkanRenderTargetBackend into one RT source
+    // -------------------------------------------------------------------------
+
+    class VulkanMRTProxy : public VulkanRTSource
+    {
+    public:
+        VulkanMRTProxy(VulkanGraphicsBackend* owner,
+                       VulkanRenderTargetBackend* const* rts, uint32_t count);
+        ~VulkanMRTProxy() override;
+
+        VkFramebuffer GetFramebuffer()          const override { return framebuffer_; }
+        VkRenderPass  GetRenderPass()            const override { return renderPass_; }
+        int           GetWidth()                const override { return width_; }
+        int           GetHeight()               const override { return height_; }
+        uint32_t      GetColorAttachmentCount() const override { return colorCount_; }
+
+    private:
+        VulkanGraphicsBackend* owner_       = nullptr;
+        VkRenderPass           renderPass_  = VK_NULL_HANDLE;
+        VkFramebuffer          framebuffer_ = VK_NULL_HANDLE;
+        int                    width_       = 0;
+        int                    height_      = 0;
+        uint32_t               colorCount_  = 0;
+    };
+
+    // -------------------------------------------------------------------------
     // VulkanGraphicsBackend
     // -------------------------------------------------------------------------
 
@@ -272,6 +358,8 @@ namespace CNA::Internal::Backends::Vulkan
         friend class VulkanOcclusionQueryBackend;
         friend class VulkanTexture3DBackend;
         friend class VulkanTextureCubeBackend;
+        friend class VulkanRenderTargetCubeBackend;
+        friend class VulkanMRTProxy;
 
     public:
         explicit VulkanGraphicsBackend(SDL_Window* window);
@@ -313,6 +401,19 @@ namespace CNA::Internal::Backends::Vulkan
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DBackend>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+
+        // ---- Extended 3D draws (textured + lit) ----
+        void DrawPrimitivesEx(const IVertexBufferBackend&,
+                              const Matrix&, const Matrix&, const Matrix&,
+                              PrimitiveType, int, const GpuDrawParams&) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend&, const IIndexBufferBackend&,
+                                     const Matrix&, const Matrix&, const Matrix&,
+                                     PrimitiveType, int, const GpuDrawParams&) override;
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend&, const IIndexBufferBackend&,
+                                       const Matrix&, const Matrix&, const Matrix&,
+                                       PrimitiveType, int, int, const GpuDrawParams&) override;
 
         void ClearColorAndDepth(float, float, float, float, float) override;
         void SetDepthTestEnabled(bool)  override;
@@ -382,6 +483,56 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipeline            pipeline2D_            = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayout3D_      = VK_NULL_HANDLE;
         std::unordered_map<uint32_t, VkPipeline>             pipelines3D_;
+        VkPipelineLayout      pipelineLayoutExt3D_      = VK_NULL_HANDLE;
+        std::unordered_map<uint64_t, VkPipeline>             pipelinesExt3D_;
+        VkPipelineLayout      pipelineLayoutAlphaTest3D_ = VK_NULL_HANDLE;
+        std::unordered_map<uint64_t, VkPipeline>             pipelinesAlphaTest3D_;
+        VkDescriptorSetLayout descriptorSetLayout2Tex_     = VK_NULL_HANDLE;
+        VkDescriptorPool      descriptorPool2Tex_          = VK_NULL_HANDLE;
+        VkPipelineLayout      pipelineLayoutDualTex3D_     = VK_NULL_HANDLE;
+        std::unordered_map<uint64_t, VkPipeline>             pipelinesDualTex3D_;
+        std::unordered_map<uint64_t, VkDescriptorSet>        dualTexDescSets_;
+        // EnvironmentMapEffect resources
+        VkDescriptorSetLayout descriptorSetLayoutEnvMap_   = VK_NULL_HANDLE;
+        VkDescriptorPool      descriptorPoolEnvMap_        = VK_NULL_HANDLE;
+        VkPipelineLayout      pipelineLayoutEnvMap3D_      = VK_NULL_HANDLE;
+        std::unordered_map<uint64_t, VkPipeline>             pipelinesEnvMap3D_;
+        // Per-frame descriptor set cache: key = hash(view2D, viewCube)
+        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+                   MaxFramesInFlight>                        envMapDescSets_;
+        // Per-frame UBO ring buffer for env map FS params (world+eye+lighting)
+        static constexpr uint32_t kEnvMapUBOStride   = 256; // 96 bytes used, padded to 256
+        static constexpr uint32_t kEnvMapUBOMaxDraws = 512;
+        std::array<VkBuffer,       MaxFramesInFlight> envMapUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> envMapUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> envMapUBOPtr_ = {};
+        // Default 1×1 white cube image for fallback when env map texture is null
+        VkImage               defaultWhiteCubeImage_  = VK_NULL_HANDLE;
+        VkDeviceMemory        defaultWhiteCubeMem_    = VK_NULL_HANDLE;
+        VkImageView           defaultWhiteCubeView_   = VK_NULL_HANDLE;
+        // SkinnedEffect resources
+        VkDescriptorSetLayout descriptorSetLayoutSkinned_  = VK_NULL_HANDLE;
+        VkDescriptorPool      descriptorPoolSkinned_       = VK_NULL_HANDLE;
+        VkPipelineLayout      pipelineLayoutSkinned3D_     = VK_NULL_HANDLE;
+        std::unordered_map<uint64_t, VkPipeline>              pipelinesSkinned3D_;
+        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+                   MaxFramesInFlight>                         skinnedDescSets_;
+        // Per-frame bone matrix UBO ring buffer (4608 bytes/draw × 32 draws max)
+        static constexpr uint32_t kSkinnedUBOStride   = 4608; // 72×64, multiple of 256
+        static constexpr uint32_t kSkinnedUBOMaxDraws = 32;
+        std::array<VkBuffer,       MaxFramesInFlight> skinnedUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> skinnedUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> skinnedUBOPtr_ = {};
+        // --- Instanced 3D pipeline (Task 111) ---
+        // Uses pipelineLayoutExt3D_ (128-byte PC: [0..15]=VP, [16..31]=ext params).
+        // Vertex binding=0: per-vertex VERTEX rate; binding=1: per-instance INSTANCE rate (stride=64).
+        std::unordered_map<uint64_t, VkPipeline> pipelinesInstanced3D_;
+
+        // Default 1×1 white texture used when DrawPrimitivesEx has no texture bound.
+        VkImage               defaultWhiteImage_     = VK_NULL_HANDLE;
+        VkDeviceMemory        defaultWhiteMemory_    = VK_NULL_HANDLE;
+        VkImageView           defaultWhiteView_      = VK_NULL_HANDLE;
+        VkDescriptorSet       defaultWhiteDescSet_   = VK_NULL_HANDLE;
 
         // --- Sprite batch GPU buffers (host-visible, one per frame-in-flight) ---
         std::array<VkBuffer,       MaxFramesInFlight> spriteVB_    = {};
@@ -397,34 +548,64 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VulkanIndexBufferBackend*>   liveIndexBuffers_;
         std::vector<VulkanRenderTargetBackend*>  liveRenderTargets_;
 
+        // --- MRT proxy (owned here; valid for one SetRenderTargets call) ---
+        std::unique_ptr<VulkanMRTProxy>          mrtProxy_;
+
+        // --- MRT render pass cache (keyed by color attachment count) ---
+        std::unordered_map<uint32_t, VkRenderPass> mrtRenderPasses_;
+
         // --- Per-frame 3D dynamic geometry buffers ---
         // Vertex/index data is copied to CPU at draw time, then uploaded here after fence wait.
-        static constexpr VkDeviceSize kFrame3DVBSize = 4 * 1024 * 1024;  // 4 MB
-        static constexpr VkDeviceSize kFrame3DIBSize = 1 * 1024 * 1024;  // 1 MB
-        std::array<VkBuffer,       MaxFramesInFlight> frame3DVB_    = {};
-        std::array<VkDeviceMemory, MaxFramesInFlight> frame3DVBMem_ = {};
-        std::array<void*,          MaxFramesInFlight> frame3DVBPtr_ = {};
-        std::array<VkBuffer,       MaxFramesInFlight> frame3DIB_    = {};
-        std::array<VkDeviceMemory, MaxFramesInFlight> frame3DIBMem_ = {};
-        std::array<void*,          MaxFramesInFlight> frame3DIBPtr_ = {};
+        static constexpr VkDeviceSize kFrame3DVBSize    = 4 * 1024 * 1024;  // 4 MB per-vertex
+        static constexpr VkDeviceSize kFrame3DIBSize    = 1 * 1024 * 1024;  // 1 MB index
+        static constexpr VkDeviceSize kFrame3DInstVBSize = 1 * 1024 * 1024; // 1 MB per-instance
+        std::array<VkBuffer,       MaxFramesInFlight> frame3DVB_       = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> frame3DVBMem_    = {};
+        std::array<void*,          MaxFramesInFlight> frame3DVBPtr_    = {};
+        std::array<VkBuffer,       MaxFramesInFlight> frame3DIB_       = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> frame3DIBMem_    = {};
+        std::array<void*,          MaxFramesInFlight> frame3DIBPtr_    = {};
+        std::array<VkBuffer,       MaxFramesInFlight> frame3DInstVB_   = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> frame3DInstVBMem_= {};
+        std::array<void*,          MaxFramesInFlight> frame3DInstVBPtr_= {};
+        bool frame3DInstBuffersAllocated_ = false;
 
         // --- Per-frame accumulated draw data (cleared in RecordCommandBuffer) ---
         struct Pending3DDraw {
-            std::vector<uint8_t>    vbData;     // copied vertex bytes (stride 16)
-            std::vector<uint8_t>    ibData;     // copied index bytes (uint16), empty = non-indexed
+            std::vector<uint8_t>    vbData;       // copied vertex bytes
+            std::vector<uint8_t>    ibData;       // copied index bytes, empty = non-indexed
             VkPrimitiveTopology     topology;
-            uint32_t                drawCount;  // vertex or index count to submit
-            float                   mvp[16];
+            uint32_t                drawCount;    // vertex or index count to submit
+            float                   pushConst[32] = {}; // 128 bytes: [0..15]=MVP, [16..31]=ext params
             bool                    depthTest;
             bool                    depthWrite;
             bool                    blend;
-            int                     cullMode;   // XNA CullMode: 0=None, 1=CW, 2=CCW
-            VkIndexType             indexType;  // VK_INDEX_TYPE_UINT16 or UINT32
-            VulkanRenderTargetBackend* rt = nullptr; // nullptr = backbuffer
+            int                     cullMode;     // XNA CullMode: 0=None, 1=CW, 2=CCW
+            VkIndexType             indexType;    // VK_INDEX_TYPE_UINT16 or UINT32
+            VulkanRTSource*         rt = nullptr; // nullptr = backbuffer
+            std::size_t             stride = 16;  // vertex stride in bytes
+            VkDescriptorSet         descSet = VK_NULL_HANDLE; // texture (or null)
+            bool                    useExtParams      = false; // true = Ext3D pipeline (128-byte PC)
+            bool                    useAlphaTest      = false; // true = AlphaTest3D pipeline
+            bool                    useDualTexture    = false; // true = DualTex3D pipeline
+            VkDescriptorSet         dualTexDescSet    = VK_NULL_HANDLE; // 2-sampler set
+            bool                    useEnvMap         = false; // true = EnvMap3D pipeline
+            float                   envMapPC[32]      = {};    // push consts: [0..15]=mvp, [16..31]=world
+            float                   envMapUboData[24] = {};    // 6×vec4 = 96 bytes for env map UBO
+            VkDescriptorSet         envMapDescSet     = VK_NULL_HANDLE;
+            bool                    useSkinned        = false; // true = Skinned3D pipeline
+            std::vector<float>      boneMatrices;              // up to 72 mat4s = 1152 floats
+            VkDescriptorSet         skinnedDescSet    = VK_NULL_HANDLE;
+            int32_t                 baseVertex        = 0;     // vertexOffset for vkCmdDrawIndexed
+            bool                    useInstanced      = false; // true = Instanced3D pipeline
+            std::vector<uint8_t>    instVbData;                // per-instance bytes (instanceCount × stride)
+            std::size_t             instVbStride      = 64;    // bytes per instance (default = mat4)
+            uint32_t                instanceCount     = 1;     // number of instances
+            bool                    wireframe         = false; // true = VK_POLYGON_MODE_LINE
         };
         std::vector<Pending3DDraw>  pending3D_;
         // pair: (batch, target RT) where RT=nullptr means backbuffer
-        std::vector<std::pair<VulkanSpriteBatchBackend*, VulkanRenderTargetBackend*>> activeBatches_;
+        std::vector<std::pair<VulkanSpriteBatchBackend*, VulkanRTSource*>> activeBatches_;
 
         // --- Virtual (game) resolution for 2D NDC mapping ---
         int virtualWidth_  = 0;
@@ -435,7 +616,7 @@ namespace CNA::Internal::Backends::Vulkan
         uint32_t lastPresentedImageIndex_ = 0;
         float    clearR_ = 0.f, clearG_ = 0.f, clearB_ = 0.f, clearA_ = 1.f;
         bool     initialized_       = false;
-        VulkanRenderTargetBackend* currentRT_ = nullptr;
+        VulkanRTSource*            currentRT_ = nullptr;
         bool     depthTestEnabled_  = true;
         bool     depthWriteEnabled_ = true;
         bool     blendEnabled_      = false;
@@ -444,7 +625,9 @@ namespace CNA::Internal::Backends::Vulkan
         bool frame3DBuffersAllocated_ = false;
 
         // ScissorRectangle state (Task 57)
-        bool     scissorEnabled_ = false;
+        bool     scissorEnabled_            = false;
+        bool     fillModeWireframe_         = false; // current XNA FillMode::WireFrame state
+        bool     fillModeNonSolidSupported_ = false; // VkPhysicalDeviceFeatures.fillModeNonSolid
         int32_t  scissorX_ = 0, scissorY_ = 0;
         uint32_t scissorW_ = 0, scissorH_ = 0;
 
@@ -474,10 +657,55 @@ namespace CNA::Internal::Backends::Vulkan
         void       CreateDepthResources();
         void       CleanupDepthResources();
         VkPipeline GetOrCreatePipeline3D(VkPrimitiveTopology, bool depthTest, bool depthWrite,
-                                         bool blend, int cullMode);
+                                         bool blend, int cullMode,
+                                         uint32_t colorAttachmentCount = 1, bool wireframe = false);
+        VkPipeline GetOrCreatePipelineExt3D(std::size_t stride, VkPrimitiveTopology,
+                                            bool depthTest, bool depthWrite,
+                                            bool blend, int cullMode,
+                                            uint32_t colorAttachmentCount = 1, bool wireframe = false);
+        VkPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride, VkPrimitiveTopology,
+                                                   bool depthTest, bool depthWrite,
+                                                   bool blend, int cullMode,
+                                                   uint32_t colorAttachmentCount = 1, bool wireframe = false);
+        void       EnsureDualTexResources();
+        VkDescriptorSet GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1);
+        VkPipeline GetOrCreatePipelineDualTex3D(VkPrimitiveTopology,
+                                                bool depthTest, bool depthWrite,
+                                                bool blend, int cullMode,
+                                                uint32_t colorAttachmentCount = 1, bool wireframe = false);
+        // EnvironmentMapEffect
+        void       EnsureEnvMapResources();
+        VkDescriptorSet GetOrCreateEnvMapDescSet(uint32_t frameIdx,
+                                                  VkImageView view2D, VkImageView viewCube);
+        VkPipeline GetOrCreatePipelineEnvMap3D(VkPrimitiveTopology,
+                                                bool depthTest, bool depthWrite,
+                                                bool blend, int cullMode,
+                                                uint32_t colorAttachmentCount = 1, bool wireframe = false);
+        void       FillEnvMapPushConst(float (&pc)[32], const Matrix& wvp, const Matrix& world);
+        // SkinnedEffect
+        void       EnsureSkinnedResources();
+        VkDescriptorSet GetOrCreateSkinnedDescSet(uint32_t frameIdx, VkImageView view2D);
+        VkPipeline GetOrCreatePipelineSkinned3D(VkPrimitiveTopology,
+                                                 bool depthTest, bool depthWrite,
+                                                 bool blend, int cullMode,
+                                                 uint32_t colorAttachmentCount = 1, bool wireframe = false);
+        void       EnsureDefaultWhiteTexture();
+        void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
+        void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
+        // --- Instanced 3D pipeline ---
+        VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
+                                                   bool depthTest, bool depthWrite,
+                                                   bool blend, int cullMode,
+                                                   uint32_t colorAttachmentCount = 1, bool wireframe = false);
+        void FillInstancedPushConst(float (&pc)[32], const Matrix& view, const Matrix& proj,
+                                    const GpuDrawParams& p);
+        void CreateFrame3DInstBuffers();
+        void EnsureFrame3DInstBuffers();
+
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
         void EnsureFrame3DBuffers();
+        VkRenderPass GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount);
 
         // ---- Swapchain lifecycle ----
         void RecreateSwapchain();

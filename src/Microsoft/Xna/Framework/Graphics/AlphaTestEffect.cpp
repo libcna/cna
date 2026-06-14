@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -298,6 +299,67 @@ namespace Microsoft::Xna::Framework::Graphics
 
             if (shaderIndexParam_) shaderIndexParam_->SetValue(shaderIndex);
             dirtyFlags_ &= ~DirtyShaderIndex;
+        }
+    }
+
+    void AlphaTestEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    {
+        using namespace CNA::Internal::Backends;
+
+        p.textureEnabled     = (texture_ != nullptr);
+        p.vertexColorEnabled = vertexColorEnabled_;
+        p.lightingEnabled    = false;
+
+        if (p.textureEnabled)
+            p.texture0 = &texture_->GetBackend();
+
+        p.diffuseColor[0] = diffuseColor_.X * alpha_;
+        p.diffuseColor[1] = diffuseColor_.Y * alpha_;
+        p.diffuseColor[2] = diffuseColor_.Z * alpha_;
+        p.diffuseColor[3] = alpha_;
+
+        world_.ToColumnMajor(p.worldColMajor);
+
+        // Compute alphaTest vec4 from alphaFunction + referenceAlpha.
+        // Shader evaluates: if ((y>0) ? (|a-x|<y) : (a<x)) ? z : w < 0 → discard.
+        const float reference  = static_cast<float>(referenceAlpha_) / 255.0f;
+        constexpr float kThresh = 0.5f / 255.0f;
+
+        p.alphaTest[0] = 0.0f; p.alphaTest[1] = 0.0f;
+        p.alphaTest[2] = 1.0f; p.alphaTest[3] = 1.0f;   // default: Always
+
+        switch (alphaFunction_)
+        {
+            case CompareFunction::Less:
+                p.alphaTest[0] = reference - kThresh;
+                p.alphaTest[2] = 1.0f;  p.alphaTest[3] = -1.0f;
+                break;
+            case CompareFunction::LessEqual:
+                p.alphaTest[0] = reference + kThresh;
+                p.alphaTest[2] = 1.0f;  p.alphaTest[3] = -1.0f;
+                break;
+            case CompareFunction::GreaterEqual:
+                p.alphaTest[0] = reference - kThresh;
+                p.alphaTest[2] = -1.0f; p.alphaTest[3] = 1.0f;
+                break;
+            case CompareFunction::Greater:
+                p.alphaTest[0] = reference + kThresh;
+                p.alphaTest[2] = -1.0f; p.alphaTest[3] = 1.0f;
+                break;
+            case CompareFunction::Equal:
+                p.alphaTest[0] = reference; p.alphaTest[1] = kThresh;
+                p.alphaTest[2] = 1.0f;  p.alphaTest[3] = -1.0f;
+                break;
+            case CompareFunction::NotEqual:
+                p.alphaTest[0] = reference; p.alphaTest[1] = kThresh;
+                p.alphaTest[2] = -1.0f; p.alphaTest[3] = 1.0f;
+                break;
+            case CompareFunction::Never:
+                p.alphaTest[2] = -1.0f; p.alphaTest[3] = -1.0f;
+                break;
+            case CompareFunction::Always:
+            default:
+                break; // already {0,0,1,1}
         }
     }
 

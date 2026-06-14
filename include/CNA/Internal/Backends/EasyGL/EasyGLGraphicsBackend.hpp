@@ -129,6 +129,9 @@ namespace CNA::Internal::Backends::EasyGL
         void GetData(int face, int level, int x, int y, int w, int h,
                      void* data, int dataLength) const override;
 
+        /// Binds this cube map to the currently active GL texture unit.
+        void BindGL() const override;
+
     private:
         ::easygl::Texture tex_;
         int size_ = 0;
@@ -321,21 +324,33 @@ namespace CNA::Internal::Backends::EasyGL
         // 3D pipeline state — one program per vertex layout
         struct Prog3D {
             ::easygl::Program prog;
-            bool  ready      = false;
-            int loc_wvp      = -1;
-            int loc_normalmat= -1;  ///< mat3 upper-left of world (lit shader only)
-            int loc_diffuse  = -1;
-            int loc_ambient  = -1;
-            int loc_l0dir    = -1;
-            int loc_l0diff   = -1;
-            int loc_texture  = -1;
+            bool  ready           = false;
+            int loc_wvp           = -1;
+            int loc_normalmat     = -1;  ///< mat3 upper-left of world (lit/env shader)
+            int loc_world         = -1;  ///< mat4 full world matrix (env map shader)
+            int loc_diffuse       = -1;
+            int loc_ambient       = -1;
+            int loc_l0dir         = -1;
+            int loc_l0diff        = -1;
+            int loc_texture       = -1;
+            int loc_texture2      = -1;  ///< second sampler (DualTextureEffect only)
+            int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
+            int loc_envmap_amount = -1;  ///< float blend [0,1]
+            int loc_envmap_spec   = -1;  ///< vec3 specular tint
+            int loc_emissive      = -1;  ///< vec3 emissive+ambient (env map / skinned)
+            int loc_eyepos        = -1;  ///< vec3 camera world pos
+            int loc_bones         = -1;  ///< mat4[72] bone palette (SkinnedEffect)
+            int loc_alphatest     = -1;  ///< vec4 (refVal, tolerance, passW, failW)
             void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
         };
 
-        Prog3D prog_colored_;       ///< stride=16: aPos + aColor
-        Prog3D prog_textured_;      ///< stride=20: aPos + aUV
-        Prog3D prog_col_textured_;  ///< stride=24: aPos + aColor + aUV
-        Prog3D prog_lit_textured_;  ///< stride=32: aPos + aNormal + aUV
+        Prog3D prog_colored_;        ///< stride=16: aPos + aColor
+        Prog3D prog_textured_;       ///< stride=20: aPos + aUV
+        Prog3D prog_col_textured_;   ///< stride=24: aPos + aColor + aUV
+        Prog3D prog_lit_textured_;   ///< stride=32: aPos + aNormal + aUV
+        Prog3D prog_dual_textured_;  ///< stride=20: aPos + aUV, two samplers (DualTextureEffect)
+        Prog3D prog_env_mapped_;     ///< stride=32: aPos + aNormal + aUV, cube map (EnvironmentMapEffect)
+        Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect)
 
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;
@@ -351,8 +366,11 @@ namespace CNA::Internal::Backends::EasyGL
         void EnsureTextured3DProgram();
         void EnsureColoredTextured3DProgram();
         void EnsureLit3DProgram();
+        void EnsureDualTextured3DProgram();
+        void EnsureEnvMapped3DProgram();
+        void EnsureSkinnedProgram();
         void EnsureDefaultWhiteTexture();
-        Prog3D& SelectProgram(std::size_t stride);
+        Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);
         void BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                             const Matrix& projection, const GpuDrawParams& params);
 

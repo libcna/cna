@@ -3,6 +3,8 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
@@ -344,37 +346,17 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
-        CNA::Internal::Backends::GpuDrawParams BuildGpuDrawParams(const BasicEffect* effect)
+        void ExtractMatrices(const Effect* effect, Matrix& world, Matrix& view, Matrix& proj)
         {
-            using namespace CNA::Internal::Backends;
-            GpuDrawParams p;
-            if (!effect) return p;
-
-            p.textureEnabled    = effect->getTextureEnabledProperty();
-            p.vertexColorEnabled = effect->VertexColorEnabled;
-            p.lightingEnabled   = effect->getLightingEnabledProperty();
-
-            if (p.textureEnabled)
+            world = Matrix::getIdentityProperty();
+            view  = Matrix::getIdentityProperty();
+            proj  = Matrix::getIdentityProperty();
+            if (const auto* m = dynamic_cast<const IEffectMatrices*>(effect))
             {
-                const Texture2D* tex = effect->getTextureProperty();
-                if (tex) p.texture0 = &tex->GetBackend();
+                world = m->getWorldProperty();
+                view  = m->getViewProperty();
+                proj  = m->getProjectionProperty();
             }
-
-            const Vector3 dc = effect->getDiffuseColorProperty();
-            const float   al = effect->getAlphaProperty();
-            p.diffuseColor[0] = dc.X; p.diffuseColor[1] = dc.Y;
-            p.diffuseColor[2] = dc.Z; p.diffuseColor[3] = al;
-
-            const Vector3 ac = effect->getAmbientLightColorProperty();
-            p.ambientColor[0] = ac.X; p.ambientColor[1] = ac.Y; p.ambientColor[2] = ac.Z;
-
-            const Vector3 ld = effect->DirectionalLight0.getDiffuseColorProperty();
-            const Vector3 dir = effect->DirectionalLight0.getDirectionProperty();
-            p.light0Dir[0]    = dir.X; p.light0Dir[1]    = dir.Y; p.light0Dir[2]    = dir.Z;
-            p.light0Diffuse[0]= ld.X;  p.light0Diffuse[1]= ld.Y;  p.light0Diffuse[2]= ld.Z;
-
-            effect->World.ToColumnMajor(p.worldColMajor);
-            return p;
         }
     }
 
@@ -389,19 +371,16 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawPrimitives: no effect has been applied.");
 
-        if (vertexStart != 0)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawPrimitives: non-zero vertexStart is not supported by the current backend.");
-
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Backends::GpuDrawParams p;
+        currentEffect_->FillGpuDrawParams(p);
+        p.vertexStart = vertexStart;
         applySamplerStatesToBackend();
         backend_->DrawPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
-            currentEffect_->World,
-            currentEffect_->View,
-            currentEffect_->Projection,
-            primitiveType,
-            primitiveCount,
-            BuildGpuDrawParams(currentEffect_)
+            world, view, proj,
+            primitiveType, primitiveCount, p
         );
     }
 
@@ -429,24 +408,18 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no effect has been applied.");
 
-        if (baseVertex != 0)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawIndexedPrimitives: non-zero baseVertex is not supported by the current backend.");
-
-        if (startIndex != 0)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawIndexedPrimitives: non-zero startIndex is not supported by the current backend.");
-
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Backends::GpuDrawParams p;
+        currentEffect_->FillGpuDrawParams(p);
+        p.startIndex = startIndex;
+        p.baseVertex = baseVertex;
         applySamplerStatesToBackend();
         backend_->DrawIndexedPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
             currentIndexBuffer_->GetBackend(),
-            currentEffect_->World,
-            currentEffect_->View,
-            currentEffect_->Projection,
-            primitiveType,
-            primitiveCount,
-            BuildGpuDrawParams(currentEffect_)
+            world, view, proj,
+            primitiveType, primitiveCount, p
         );
     }
 
@@ -478,24 +451,27 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error(
                 "GraphicsDevice::DrawInstancedPrimitives: no effect has been applied.");
 
-        if (baseVertex != 0)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawInstancedPrimitives: non-zero baseVertex is not supported.");
-
-        if (startIndex != 0)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawInstancedPrimitives: non-zero startIndex is not supported.");
-
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Backends::GpuDrawParams p;
+        currentEffect_->FillGpuDrawParams(p);
+        p.instanceCount = instanceCount;
+        p.startIndex    = startIndex;
+        p.baseVertex    = baseVertex;
+        // Find the per-instance vertex buffer binding (instanceFrequency > 0).
+        for (const auto& binding : currentVertexBuffers_) {
+            if (binding.getInstanceFrequencyProperty() > 0) {
+                if (auto* vb = binding.getVertexBufferProperty()) {
+                    p.instanceVb = &vb->GetBackend();
+                    break;
+                }
+            }
+        }
         backend_->DrawInstancedPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
             currentIndexBuffer_->GetBackend(),
-            currentEffect_->World,
-            currentEffect_->View,
-            currentEffect_->Projection,
-            primitiveType,
-            primitiveCount,
-            instanceCount,
-            BuildGpuDrawParams(currentEffect_)
+            world, view, proj,
+            primitiveType, primitiveCount, instanceCount, p
         );
     }
 
@@ -557,14 +533,9 @@ namespace Microsoft::Xna::Framework::Graphics
         auto tmpVb = backend_->CreateVertexBuffer(totalVerts);
         tmpVb->SetData(packed.data(), totalVerts, sizeof(GpuVertex));
 
-        backend_->DrawColoredPrimitives(
-            *tmpVb,
-            currentEffect_->World,
-            currentEffect_->View,
-            currentEffect_->Projection,
-            primitiveType,
-            primitiveCount
-        );
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        backend_->DrawColoredPrimitives(*tmpVb, world, view, proj, primitiveType, primitiveCount);
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(
@@ -624,15 +595,9 @@ namespace Microsoft::Xna::Framework::Graphics
         auto tmpIb = backend_->CreateIndexBuffer16(indexCount);
         tmpIb->SetData16(indexCopy.data(), indexCount);
 
-        backend_->DrawIndexedColoredPrimitives(
-            *tmpVb,
-            *tmpIb,
-            currentEffect_->World,
-            currentEffect_->View,
-            currentEffect_->Projection,
-            primitiveType,
-            primitiveCount
-        );
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        backend_->DrawIndexedColoredPrimitives(*tmpVb, *tmpIb, world, view, proj, primitiveType, primitiveCount);
     }
 
     // -----------------------------------------------------------------------
@@ -682,9 +647,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto vb = backend_->CreateVertexBuffer(n);
         vb->SetData(packed.data(), n, sizeof(GpuVPC));
-        backend_->DrawPrimitivesEx(*vb, currentEffect_->World, currentEffect_->View,
-                                   currentEffect_->Projection, type, count,
-                                   BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
     // DrawUserPrimitives — VertexPositionTexture
@@ -702,9 +668,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto vb = backend_->CreateVertexBuffer(n);
         vb->SetData(packed.data(), n, sizeof(GpuVPT));
-        backend_->DrawPrimitivesEx(*vb, currentEffect_->World, currentEffect_->View,
-                                   currentEffect_->Projection, type, count,
-                                   BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
     // DrawUserPrimitives — VertexPositionColorTexture
@@ -724,9 +691,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto vb = backend_->CreateVertexBuffer(n);
         vb->SetData(packed.data(), n, sizeof(GpuVPCT));
-        backend_->DrawPrimitivesEx(*vb, currentEffect_->World, currentEffect_->View,
-                                   currentEffect_->Projection, type, count,
-                                   BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
     // DrawUserPrimitives — VertexPositionNormalTexture
@@ -745,9 +713,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto vb = backend_->CreateVertexBuffer(n);
         vb->SetData(packed.data(), n, sizeof(GpuVPNT));
-        backend_->DrawPrimitivesEx(*vb, currentEffect_->World, currentEffect_->View,
-                                   currentEffect_->Projection, type, count,
-                                   BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
     // -----------------------------------------------------------------------
@@ -788,9 +757,10 @@ namespace Microsoft::Xna::Framework::Graphics
         vb->SetData(packed.data(), numVerts, sizeof(GpuVPC));
         auto ib = backend_->CreateIndexBuffer16(ic);
         ib->SetData16(idx.data(), ic);
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
-                                          currentEffect_->Projection, type, primCount,
-                                          BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -811,9 +781,10 @@ namespace Microsoft::Xna::Framework::Graphics
         vb->SetData(packed.data(), numVerts, sizeof(GpuVPT));
         auto ib = backend_->CreateIndexBuffer16(ic);
         ib->SetData16(idx.data(), ic);
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
-                                          currentEffect_->Projection, type, primCount,
-                                          BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -836,9 +807,10 @@ namespace Microsoft::Xna::Framework::Graphics
         vb->SetData(packed.data(), numVerts, sizeof(GpuVPCT));
         auto ib = backend_->CreateIndexBuffer16(ic);
         ib->SetData16(idx.data(), ic);
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
-                                          currentEffect_->Projection, type, primCount,
-                                          BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -860,9 +832,10 @@ namespace Microsoft::Xna::Framework::Graphics
         vb->SetData(packed.data(), numVerts, sizeof(GpuVPNT));
         auto ib = backend_->CreateIndexBuffer16(ic);
         ib->SetData16(idx.data(), ic);
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
-                                          currentEffect_->Projection, type, primCount,
-                                          BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     // DrawUserIndexedPrimitives — 32-bit index overloads
@@ -886,9 +859,10 @@ namespace Microsoft::Xna::Framework::Graphics
         vb->SetData(packed.data(), numVerts, sizeof(GpuVPC));
         auto ib = backend_->CreateIndexBuffer32(ic);
         ib->SetData32(idx.data(), ic);
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
-                                          currentEffect_->Projection, type, primCount,
-                                          BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -909,9 +883,10 @@ namespace Microsoft::Xna::Framework::Graphics
         vb->SetData(packed.data(), numVerts, sizeof(GpuVPT));
         auto ib = backend_->CreateIndexBuffer32(ic);
         ib->SetData32(idx.data(), ic);
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
-                                          currentEffect_->Projection, type, primCount,
-                                          BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -934,9 +909,10 @@ namespace Microsoft::Xna::Framework::Graphics
         vb->SetData(packed.data(), numVerts, sizeof(GpuVPCT));
         auto ib = backend_->CreateIndexBuffer32(ic);
         ib->SetData32(idx.data(), ic);
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
-                                          currentEffect_->Projection, type, primCount,
-                                          BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -958,9 +934,10 @@ namespace Microsoft::Xna::Framework::Graphics
         vb->SetData(packed.data(), numVerts, sizeof(GpuVPNT));
         auto ib = backend_->CreateIndexBuffer32(ic);
         ib->SetData32(idx.data(), ic);
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, currentEffect_->World, currentEffect_->View,
-                                          currentEffect_->Projection, type, primCount,
-                                          BuildGpuDrawParams(currentEffect_));
+        { Matrix world, view, proj;
+          ExtractMatrices(currentEffect_, world, view, proj);
+          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     CNA::Internal::Backends::IGraphicsBackend& GraphicsDevice::GetBackend() const
@@ -973,7 +950,7 @@ namespace Microsoft::Xna::Framework::Graphics
         return *backend_;
     }
 
-    void GraphicsDevice::SetCurrentEffect(BasicEffect* effect)
+    void GraphicsDevice::SetCurrentEffect(Effect* effect)
     {
         currentEffect_ = effect;
     }

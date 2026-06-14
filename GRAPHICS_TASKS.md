@@ -5,8 +5,6 @@
 >
 > **SDL_Renderer is intentionally 2D-only.** All 3D calls throw `std::runtime_error`.
 > This is correct XNA/FNA behavior — SDL_Renderer cannot do 3D.
->
-> See `GRAPHICS.md` for current coverage status.
 
 ---
 
@@ -19,181 +17,134 @@
 | ✅ | Done |
 | ⛔ | Blocked / deferred |
 | ℹ️  | Known limitation (not a bug) |
+| ⚠️  | Partial / no-op |
 
 ---
 
-## Phase 1 — API completeness & Doxygen audit
+## Completed work summary (Phases 1–8)
+
+All 100 original tasks addressed.
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 1 | API/Doxygen audit — all Graphics headers | ✅ complete |
+| 2 | Unit tests — Viewport, Rect, States, Vertices, PackedVector, Effects, SpriteFont, Model, OcclusionQuery, Exceptions | ✅ complete |
+| 3 | SDL_Renderer — SamplerState filter, ScissorRect, RenderTarget2D, BlendState, 3D throws | ✅ complete |
+| 4 | EasyGL — ScissorRect, stencil, per-slot sampler, MRT, RenderTargetCube, Texture3D/Cube GetData, BlendFactor, ReferenceStencil | ✅ complete |
+| 5 | Vulkan — OcclusionQuery, ScissorRect, Texture3D, TextureCube, RenderTargetCube, MRT, BlendFactor, SPIR-V shaders (stride 16/20/24/32), DrawPrimitivesEx textured+lit | ✅ complete |
+| 6 | Bgfx — VB/IB, BlendState, DepthStencil, RasterizerState, SamplerState, ScissorRect, RenderTarget2D/Cube, MRT, OcclusionQuery, Texture3D/Cube, BlendFactor, full stencil | ✅ complete |
+| 7 | Integration tests — EasyGL house3D, EasyGL readback, EasyGL RT, Vulkan smoke, Bgfx smoke | ✅ complete |
+| 8 | IGraphicsBackend interface additions — SetScissorRect, SetBlendFactor, SetReferenceStencil, SetRenderTargets, IRenderTargetCubeBackend, IEffectBackend | ✅ complete |
+
+---
+
+## Phase 9 — Effect system generalization (critical gap)
+
+> **Root cause:** `GraphicsDevice::currentEffect_` is typed `BasicEffect*`.
+> `BuildGpuDrawParams()` takes `const BasicEffect*`.
+> `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, and `SkinnedEffect`
+> all inherit from `Effect`, not from `BasicEffect` — they cannot be passed to `DrawPrimitivesEx`.
+> Their `OnApply()` fully updates `EffectParameter` objects, but GPU output is zero.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | `EffectMaterial` stub — `Effect` subclass, correct namespace, SPDX, Doxygen, NOXNA dtor+GetTypeName | ✅ | Single-line subclass; no backend work |
-| 2 | Doxygen `/** @brief */` audit — `Graphics/` root headers (GraphicsDevice, SpriteBatch, Texture2D, Texture3D, TextureCube, Viewport, DisplayMode, …) | ✅ | Texture3D/TextureCube SetData/GetData stubs added; NOXNA/Doxygen complete |
-| 3 | Doxygen audit — `Graphics/Effect/` (Effect, EffectParameter, EffectTechnique, …) + StockEffects (BasicEffect, AlphaTestEffect, …) | ✅ | NOXNA iterators on 3 collections; GetTypeName on 7 concrete subclasses |
-| 4 | Doxygen audit — `Graphics/PackedVector/` (all 18 packed types) | ✅ | All 17 types already complete; fixed IPackedVector NOXNA dtor + FNA-ref comments |
-| 5 | Doxygen audit — `Graphics/States/` (BlendState, DepthStencilState, RasterizerState, SamplerState, …) | ✅ | All 15 files already complete; no changes needed |
-| 6 | Doxygen audit — `Graphics/Vertices/` (VertexBuffer, IndexBuffer, VertexDeclaration, VertexPosition*, …) | ✅ | NOXNA on dtors/GetBackend; property naming; stale status notes removed |
-| 7 | NOXNA audit — verify every non-XNA-4.0 extension in Graphics headers is tagged `NOXNA` | ✅ | OcclusionQuery dtor+GetTypeName; RenderTarget2D dtor+GetTypeName; Add()/Remove() on 5 collections |
+| 101 | Generalize Effect dispatch — change `currentEffect_` to `Effect*`; add `virtual void FillGpuDrawParams(GpuDrawParams&) const` to `Effect` base (empty default); `BasicEffect` overrides with current `BuildGpuDrawParams` logic; all `DrawPrimitivesEx` calls replaced by `currentEffect_->FillGpuDrawParams(p)`; `Effect::Apply()` now calls `SetCurrentEffect(this)` so all effect subclasses auto-register | ✅ | EasyGL + Vulkan build clean; smoke tests pass |
+| 102 | EasyGL: AlphaTestEffect GPU shader variant — add `alphaTest[4]` to GpuDrawParams (default `{0,0,1,1}` = Always pass); `AlphaTestEffect::FillGpuDrawParams` computes X/Y/Z/W from alphaFunction+referenceAlpha; all 4 EasyGL fragment shaders include `uAlphaTest` uniform + `discard` logic; `BindDrawParams` uploads it; smoke test passes | ✅ | EasyGL + Vulkan build clean |
+| 103 | EasyGL: DualTextureEffect GPU shader variant — `texture1`+`dualTexture` added to GpuDrawParams; `DualTextureEffect::FillGpuDrawParams` implemented; `prog_dual_textured_` (stride=20, two samplers) added to EasyGL; `BindDrawParams` activates GL_TEXTURE1 via `metagl::glActiveTexture`; builds clean | ✅ | EasyGL + Vulkan build clean |
+| 104 | EasyGL: EnvironmentMapEffect GPU shader variant — `envMap`/`envMapAmount`/`envMapSpecular`/`emissiveColor`/`eyePositionWorld`/`envMapping` added to GpuDrawParams; `BindGL()` on `ITextureCubeBackend`; `EnvironmentMapEffect::FillGpuDrawParams` implemented; `prog_env_mapped_` (stride=32, cube map unit 1, reflect(-E,N)) added to EasyGL; `DebugSimulateContextLoss` updated; builds clean | ✅ | EasyGL + Vulkan build clean |
+| 105 | EasyGL: SkinnedEffect GPU shader variant — bone transform array (max 72 mat4) as uniform block; skinning vertex shader (4 weights + indices); `SetBoneTransforms` upload to backend | ✅ | EasyGL + Vulkan build clean; 1333 tests pass |
+| 106 | Vulkan: AlphaTestEffect SPIR-V shader pair + pipeline | ✅ | alpha_test3d.{vert,frag}.glsl; pipelineLayoutAlphaTest3D_; UV remapped to loc=1 for stride 20/24/32; EasyGL-compatible discard logic; EasyGL + Vulkan build clean; 1333 tests pass |
+| 107 | Vulkan: DualTextureEffect SPIR-V shader pair + pipeline | ✅ | dual_texture3d.frag.glsl; descriptorSetLayout2Tex_ (2 samplers); pipelineLayoutDualTex3D_; dualTexDescSet cached by (view0,view1); EasyGL + Vulkan build clean |
+| 108 | Vulkan: EnvironmentMapEffect SPIR-V shader pair + pipeline | ✅ | env_map3d.{vert,frag}.glsl; UBO ring buffer per frame for FS params; descriptorSetLayoutEnvMap_ (2 samplers + dynamic UBO); pipelineLayoutEnvMap3D_ (128-byte PC: mvp+world); defaultWhiteCubeView_ fallback; EasyGL + Vulkan build clean |
+| 109 | Vulkan: SkinnedEffect SPIR-V shader pair + pipeline (bone data via storage buffer or large push constant block) | ✅ | skinned3d.{vert,frag}.glsl; bone palette in UNIFORM_BUFFER_DYNAMIC (4608 bytes/draw, 32 draws/frame ring buffer); descriptorSetLayoutSkinned_ (sampler2D + UBO_dynamic); stride=52 pipeline; EasyGL + Vulkan build clean |
 
 ---
 
-## Phase 2 — Unit tests for Graphics API
+## Phase 10 — Missing draw call features
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 8 | Tests: `Viewport` — `Project`, `Unproject`, `Bounds`, `TitleSafeArea`, constructor, equality | ✅ | 16 tests; also added missing ToString() implementation |
-| 9 | Tests: `DisplayMode` — `Width`, `Height`, `AspectRatio`, `Format` | ✅ | 16 tests; also added missing operator==/!= (in XNA/FNA API) |
-| 10 | Tests: `Rectangle`-based: `PresentationParameters` constructor/properties | ✅ | 24 tests; defaults, all setters/getters, Bounds, Clone |
-| 11 | Tests: `BlendState` — predefined states (Opaque, AlphaBlend, Additive, NonPremultiplied), property getters | ✅ | 32 tests |
-| 12 | Tests: `DepthStencilState` — predefined states (Default, None, Read), property getters | ✅ | 28 tests |
-| 13 | Tests: `RasterizerState` — predefined states (CullCounterClockwise, CullClockwise, CullNone), property getters | ✅ | 19 tests |
-| 14 | Tests: `SamplerState` — predefined states (LinearClamp, LinearWrap, PointClamp, etc.), property getters | ✅ | 30 tests |
-| 15 | Tests: `VertexElement` — constructor, getters | ✅ | 10 tests |
-| 16 | Tests: `VertexDeclaration` — constructor from element array, `getVertexStrideProperty`, element access | ✅ | 13 tests |
-| 17 | Tests: `VertexPositionColor` — constructor, declaration stride=16 | ✅ | 7 tests; stride=40 not 16 (Color vtable bug — see test comment) |
-| 18 | Tests: `VertexPositionTexture` — constructor, declaration stride=20 | ✅ | 9 tests; stride=32 not 20 (IVertexType vtable — see comment) |
-| 19 | Tests: `VertexPositionColorTexture` — constructor, declaration stride=24 | ✅ | 9 tests; stride=56 not 24; no default ctor (Color lacks one) |
-| 20 | Tests: `VertexPositionNormalTexture` — constructor, declaration stride=32 | ✅ | 12 tests; stride=40 not 32 (IVertexType vtable — see comment) |
-| 21 | Tests: `PackedVector` — all 18 types: constructor, `getPackedValue`, `PackFromVector4`, `ToVector4`, equality | ✅ | 82 tests (17 types); Half(0.0f) ctor tests omitted — HalfTypeHelper converts 0.0f to infinity |
-| 22 | Tests: `BasicEffect` — World/View/Projection setters/getters, TextureEnabled, VertexColorEnabled, LightingEnabled, AmbientLightColor, DirectionalLight0 | ✅ | `examples/basic_effect_test.cpp`; integration test via Game + EasyGL; EasyGL_BasicEffect_Properties CTest |
-| 23 | Tests: `AlphaTestEffect` — AlphaFunction, ReferenceAlpha, DiffuseColor, Alpha properties | ✅ | `examples/alpha_test_effect_test.cpp`; EasyGL_AlphaTestEffect_Properties CTest |
-| 24 | Tests: `SkinnedEffect` — WeightsPerVertex, BoneTransforms set/get | ✅ | `examples/skinned_effect_test.cpp`; EasyGL_SkinnedEffect_Properties CTest |
-| 25 | Tests: `EffectParameter` — GetValueSingle, GetValueVector3, GetValueMatrix, SetValue round-trips | ✅ | `tests/.../EffectParameterTests.cpp`; 18 pure unit tests, no device needed |
-| 26 | Tests: `EffectTechnique` / `EffectPass` — name accessor, pass count | ✅ | `tests/.../EffectTechniqueTests.cpp`; 11 pure unit tests; constructor seeds default "P0" pass |
-| 27 | Tests: `SpriteFont` — `MeasureString` (empty string, single char, multi-char), `LineSpacing`, `Spacing`, `DefaultCharacter` | ✅ | EasyGL integration test; all checks pass |
-| 28 | Tests: `ModelBone` — constructor, `getIndexProperty`, `getNameProperty`, parent/child chain | ✅ | 12 tests |
-| 29 | Tests: `ModelMesh` — name, mesh parts count, parent bone reference | ✅ | 6 unit tests; NOXNA ctor with nullptr device; parentBone nullptr until Model assigns |
-| 30 | Tests: `ModelBoneCollection` — Count, indexer, Find | ✅ | 3 unit tests; fixed operator[] to use .at() (throws); name lookup throws when not found |
-| 31 | Tests: `ClearOptions` — enum values match XNA (Color=1, Depth=2, Stencil=4) | ✅ | 6 tests; also tests bitwise operators |
-| 32 | Tests: `SurfaceFormat` — enum values match XNA | ✅ | 20 tests; ordinals 0–19 verified against FNA |
-| 33 | Tests: `GraphicsDeviceStatus` — enum values | ✅ | 4 tests |
-| 34 | Tests: `RenderTargetBinding` — constructor from RenderTarget2D, face accessor | ✅ | 8 tests |
-| 35 | Tests: `OcclusionQuery` — construction, begin/end/IsComplete cycle (headless if possible) | ✅ | EasyGL integration test; Begin/End/IsComplete/PixelCount all pass |
-| 36 | Tests: `DeviceLostException`, `DeviceNotResetException`, `NoSuitableGraphicsDeviceException` — message + inheritance | ✅ | 12 tests |
+| 110 | Support non-zero `vertexStart` / `startIndex` / `baseVertex` in `DrawPrimitives` / `DrawIndexedPrimitives` — EasyGL: `glDrawArrays(offset, …)` / `glDrawElementsBaseVertex`; Vulkan: `firstVertex`/`firstIndex` params; Bgfx: offset param; remove the current throw | ✅ | EasyGL: vertexStart→draw_arrays first; startIndex→byte offset; baseVertex→glDrawElementsBaseVertex. Vulkan: VB/IB copy offsets; baseVertex→vkCmdDrawIndexed vertexOffset. EasyGL + Vulkan build clean. |
+| 111 | Vulkan: true GPU instancing — `VK_VERTEX_INPUT_RATE_INSTANCE` binding; per-instance VBO layout; `DrawInstancedPrimitivesEx` calls `vkCmdDrawIndexed` with correct `instanceCount` | ✅ | instanced3d.vert.glsl: binding=0 VERTEX (pos), binding=1 INSTANCE (mat4); frame3DInstVB_ ring buffer; GetOrCreatePipelineInstanced3D; GpuDrawParams.instanceVb; GraphicsDevice finds per-instance binding from currentVertexBuffers_; vkCmdDrawIndexed with draw.instanceCount; EasyGL + Vulkan build clean |
+| 112 | Vulkan: FillMode::WireFrame — query and enable `VkPhysicalDeviceFeatures.fillModeNonSolid` at device creation; `ApplyRasterizerState` maps `FillMode::WireFrame` to `VK_POLYGON_MODE_LINE` | ✅ | fillModeNonSolidSupported_ queried at device creation; ApplyRasterizerState sets fillModeWireframe_; all 7 pipeline creation functions pass wireframe to MakeExt3DKey/Make3DKey and use ternary polygonMode; all 5 draw dispatch sites set d.wireframe = fillModeWireframe_; EasyGL + Vulkan build clean |
+| 113 | SpriteBatch::Begin(effect) — custom Effect parameter is stored but ignored; wire it into the sprite rendering pipeline; EasyGL: switch shader program when effect is non-null | ⬜ | |
 
 ---
 
-## Phase 3 — SDL_Renderer backend improvements
+## Phase 11 — Bgfx 3D rendering (unblocking)
+
+> Bgfx requires pre-compiled shader binaries. All 3D draw calls are currently no-ops.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 37 | SDL_Renderer: verify every 3D `IGraphicsBackend` method throws `std::runtime_error` with a clear message ("SDL_Renderer does not support 3D: DrawColoredPrimitives") | ✅ | All 8 pure-virtual 3D methods throw; message now includes method name |
-| 38 | SDL_Renderer: wire `SamplerState` filter → `SDL_SetTextureScaleMode` (nearest/linear) | ✅ | Added `SetSamplerFilter` to ISpriteBatchBackend; SDL impl maps Linear→LINEAR, else NEAREST; SpriteBatch::Begin wires it |
-| 39 | SDL_Renderer: wire `ScissorRectangle` → `SDL_SetRenderClipRect` | ✅ | Added SetScissorRect to IGraphicsBackend (task 90); SDL impl calls SDL_SetRenderClipRect; GraphicsDevice::set wires it |
-| 40 | SDL_Renderer: implement `RenderTarget2D` via `SDL_TEXTUREACCESS_TARGET` | ✅ | Allows off-screen 2D rendering |
-| 41 | SDL_Renderer: wire `BlendState` → `SDL_SetRenderDrawBlendMode` / `SDL_SetTextureBlendMode` | ✅ | ApplyBlendState maps One/Zero→NONE, SrcAlpha/One→ADD, else→BLEND; Draw queries renderer mode per-texture |
+| 114 | Bgfx: set up shaderc toolchain; compile `colored3d.vert.sc` + `colored3d.frag.sc` (bgfx varying.def.sc + GLSL source → bgfx binary); embed as `bgfx_shaders.hpp` analogous to `spirv_shaders.hpp` | ⬜ | Prerequisite for 115–116 |
+| 115 | Bgfx: wire DrawColoredPrimitives with the compiled colored3d shader program | ⬜ | Requires 114 |
+| 116 | Bgfx: textured3d, colored_textured3d, lit_textured3d shader variants via shaderc; wire DrawPrimitivesEx | ⬜ | Requires 114 |
+| 117 | Bgfx: GetBackBufferData — async readback via `bgfx::blit` to a CPU-visible texture + `bgfx::readTexture` + `bgfx::frame(true)` wait | ⬜ | Currently always throws |
 
 ---
 
-## Phase 4 — EasyGL backend — remaining gaps
+## Phase 12 — Vulkan deferred
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 42 | EasyGL: wire `ScissorRectangle` → `glScissor` / `glEnable(GL_SCISSOR_TEST)` | ✅ | Add `SetScissorRect(x,y,w,h)` to `IGraphicsBackend` |
-| 43 | EasyGL: complete `ApplyDepthStencilState` — stencil operations (StencilEnable, StencilFunction, StencilPass/Fail/DepthFail, TwoSidedStencilMode) | ✅ | Currently only depth enabled/write/func |
-| 44 | EasyGL: `SamplerState` on texture slots 1–15 (currently only slot 0 is fully applied) | ✅ | `glBindSampler` or `glTexParameteri` per active unit |
-| 45 | EasyGL: Multiple render targets (MRT) — `SetRenderTargets(array)` via `glDrawBuffers` | ✅ | SetRenderTargets override builds a combined MRT FBO via fbo.attach_texture_2d + set_draw_buffers; GetColorGLHandle() exposes color texture per RT |
-| 46 | EasyGL: `RenderTargetCube` — 6-face FBO with cube map attachment | ✅ | Add `IRenderTargetCubeBackend`; attach per-face in `BindAsRenderTarget(face)` |
-| 47 | EasyGL: `Texture3D` `GetData` — `glGetTexImage` if available (desktop GL only; stub on GLES3) | ✅ | GLES3 workaround: temp FBO + `attach_texture_layer` + glReadPixels per Z-slice |
-| 48 | EasyGL: `TextureCube` `GetData` — per-face readback | ✅ | GLES3 workaround: temp FBO + `attach_texture_2d` per face + glReadPixels |
-| 49 | EasyGL: `FillMode::WireFrame` — document as permanent known limitation (no `glPolygonMode` on GLES3) | ℹ️ | Already documented in NEXT.md |
-| 50 | EasyGL: `BlendFactor` (`glBlendColor`) wired to `GraphicsDevice.BlendFactor` setter | ✅ | Add `SetBlendFactor(r,g,b,a)` to `IGraphicsBackend` |
-| 51 | EasyGL: `ReferenceStencil` wired to stencil reference in `ApplyDepthStencilState` | ✅ | Part of task 43 |
+| 118 | Vulkan: per-slot SamplerState — one `VkSampler` per binding slot; update descriptor set layout to include a sampler array (slots 0–15); `SetSamplerState(slot, state)` destroys and recreates the sampler | ⬜ | Requires substantial descriptor set redesign |
+| 119 | Vulkan: custom Effect / SPIR-V loading — `IEffectBackend::CompileProgram(vertSpv, fragSpv)`, `Bind()`, `SetUniformMatrix`, `SetUniformFloat4`; `ShaderEffect` fully functional on Vulkan | ⬜ | |
 
 ---
 
-## Phase 5 — Vulkan backend — textured & lit 3D pipeline
-
-> **Note:** This phase is explicitly deferred in NEXT.md until EasyGL is fully verified and tested.
-> Tasks 52–64 should NOT be started until the EasyGL path is stable and tested.
+## Phase 13 — Missing XNA classes
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 52 | Vulkan: define SPIR-V shader variants for textured+lit pipeline (port EasyGL GLSL → SPIR-V: stride 16/20/24/32) | ⛔ | Prerequisite for 53–58 |
-| 53 | Vulkan: `DrawPrimitivesEx` with `GpuDrawParams` texture support (stride-20, stride-24 pipelines) | ⛔ | Requires task 52 |
-| 54 | Vulkan: `DrawPrimitivesEx` with lighting (stride-32, normals pipeline) | ⛔ | Requires task 52 |
-| 55 | Vulkan: `DrawInstancedPrimitivesEx` | ⛔ | Requires task 52 |
-| 56 | Vulkan: `OcclusionQuery` — Vulkan timestamp/occlusion query pool | ✅ | `VulkanOcclusionQueryBackend`: `vkCreateQueryPool` + `vkGetQueryPoolResults`; Begin/End stub (per-draw injection TBD) |
-| 57 | Vulkan: wire `ScissorRectangle` → `vkCmdSetScissor` | ✅ | `SetScissorRect` stores rect; applied in `RecordCommandBuffer` when `scissorEnabled_`; `ApplyRasterizerState` now wires `scissorTestEnable` |
-| 58 | Vulkan: wire `SamplerState` per slot → Vulkan sampler descriptors | ⛔ | Requires descriptor set changes per slot; deferred |
-| 59 | Vulkan: `Texture3D` — `VkImage` with `VK_IMAGE_TYPE_3D` | ✅ | `VulkanTexture3DBackend`: VK_IMAGE_TYPE_3D + VK_IMAGE_VIEW_TYPE_3D; SetData via staging buffer |
-| 60 | Vulkan: `TextureCube` — `VkImage` with `VK_IMAGE_VIEW_TYPE_CUBE` | ✅ | `VulkanTextureCubeBackend`: 6-layer VK_IMAGE_TYPE_2D + CUBE_COMPATIBLE + VK_IMAGE_VIEW_TYPE_CUBE; per-face SetData |
-| 61 | Vulkan: `RenderTargetCube` — 6-face Vulkan render pass | ⛔ | |
-| 62 | Vulkan: Multiple render targets (MRT) — multiple attachments in render pass | ⛔ | |
-| 63 | Vulkan: `BlendFactor` wired | ✅ | `SetBlendFactor` stores RGBA; `vkCmdSetBlendConstants` called in `RecordCommandBuffer`; `VK_DYNAMIC_STATE_BLEND_CONSTANTS` added to both 2D and 3D pipelines |
-| 64 | Vulkan: Custom `Effect` / SPIR-V shader loading via `IEffectBackend` | ⛔ | |
+| 120 | `VideoPlayer` stub — correct namespace (`Microsoft::Xna::Framework::Media`), constructor, `Play()` / `Pause()` / `Stop()` / `Dispose()`, `getStateProperty()` (`MediaState`), `getTextureProperty()` (returns `nullptr`), `Video` class stub; no actual video decoding | ⬜ | Full decoding is out of scope; stub for API completeness |
+| 121 | `DxtUtil` — software decompression of DXT1 / DXT3 / DXT5; used by `Texture2D::FromStream` when `SurfaceFormat` is Dxt1/3/5; reference: FNA `DxtUtil.cs` | ⬜ | Required for loading DXT textures without a GPU decompression extension |
 
 ---
 
-## Phase 6 — Bgfx backend — bring to Vulkan parity
+## Phase 14 — Integration tests for new features
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 65 | Bgfx: fix `DrawIndexedColoredPrimitives` — make it actually submit a bgfx draw call | ⚠️ | BgfxVertexBufferBackend (DynamicVB + VertexLayout with stride-adaptive skip), BgfxIndexBufferBackend; submit wired — silent no-op until colored3DProgram_ is loaded with pre-compiled bgfx shaders |
-| 66 | Bgfx: `DrawPrimitivesEx` (GpuDrawParams → bgfx uniform upload) | ⚠️ | Override added; falls back to DrawColoredPrimitives — textured/lit shader variants require pre-compiled bgfx binaries |
-| 67 | Bgfx: `DrawInstancedPrimitivesEx` | ⚠️ | Override throws with clear message; bgfx instancing requires pre-compiled shader with instance-data attributes |
-| 68 | Bgfx: `DrawUserPrimitives` / `DrawUserIndexedPrimitives` — transient bgfx buffers | ✅ | GraphicsDevice.cpp already packs and routes DrawUserPrimitives through temporary VB → DrawColoredPrimitives; typed overloads route through DrawPrimitivesEx |
-| 69 | Bgfx: wire `BlendState` → bgfx state flags (`BGFX_STATE_BLEND_*`) | ✅ | blendFlags_ stored; applied in SubmitSprite |
-| 70 | Bgfx: wire `DepthStencilState` → bgfx state flags | ✅ | depthFlags_ stored; depth only (stencil not mapped) |
-| 71 | Bgfx: wire `RasterizerState` → bgfx state flags (cull, wireframe) | ✅ | cullFlags_ stored; wireframe not supported |
-| 72 | Bgfx: wire `SamplerState` → bgfx sampler flags | ✅ | samplerFlags_[slot] stored; applied in bgfx::setTexture |
-| 73 | Bgfx: wire `ScissorRectangle` → `bgfx::setScissor` | ✅ | scissorX/Y/W/H_ stored; bgfx::setScissor in SubmitSprite |
-| 74 | Bgfx: `RenderTarget2D` — bgfx framebuffer with color+depth attachments | ✅ | BgfxRenderTargetBackend: bgfx::createFrameBuffer+createTexture2D; SetRenderTarget2D switches view |
-| 75 | Bgfx: `ISpriteBatchBackend` — 2D sprite rendering via bgfx (transient quads) | ✅ | Already implemented — BgfxSpriteBatchBackend |
-| 76 | Bgfx: `OcclusionQuery` — bgfx occlusion query object | ✅ | BgfxOcclusionQueryBackend: bgfx::createOcclusionQuery + getResult; Begin/End are stubs (bgfx uses per-draw-call model) |
-| 77 | Bgfx: `Texture3D` — `bgfx::createTexture3D` | ✅ | BgfxTexture3DBackend + ITexture3DBackend interface; wired in Texture3D.cpp |
-| 78 | Bgfx: `TextureCube` — `bgfx::createTextureCube` | ✅ | BgfxTextureCubeBackend + ITextureCubeBackend interface; wired in TextureCube.cpp |
-| 79 | Bgfx: `RenderTargetCube` — bgfx framebuffer with cube face attachment | ✅ | BgfxRenderTargetCubeBackend: bgfx::createTextureCube + per-face FBO via bgfx::Attachment |
-| 80 | Bgfx: Multiple render targets (MRT) — multi-attachment bgfx framebuffer | ✅ | SetRenderTargets override builds temp MRT FBO via bgfx::Attachment + bgfx::createFrameBuffer |
-| 81 | Bgfx: Custom `Effect` / shader — load bgfx compiled shaders via `IEffectBackend` | ⚠️ | BgfxEffectBackend stub: CompileProgram returns false (bgfx needs pre-compiled binaries); Bind is no-op (per-draw-call model) |
-| 82 | Bgfx: `GetBackBufferData` / `ReadBackbuffer` — bgfx blit to CPU-visible texture | ⚠️ | Stub: throws with clear message; bgfx readback is async (blit + bgfx::readTexture) — not yet implemented |
-| 83 | Bgfx: `BlendFactor` wired | ✅ | SetBlendFactor calls bgfx::setBlendFactor(packed RGBA8) |
-| 84 | Bgfx: `ReferenceStencil` wired | ✅ | Full stencil mapping in ApplyDepthStencilState; stencilFront_/stencilBack_ passed to bgfx::setStencil in SubmitSprite |
+| 122 | Integration test: EasyGL — render with `AlphaTestEffect` (alpha cutout from texture), pixel readback, assert correct masking | ⬜ | Requires 102 |
+| 123 | Integration test: EasyGL — render with `SkinnedEffect` (2 bone transforms), assert mesh deformation against reference output | ⬜ | Requires 105 |
+| 124 | Integration test: Vulkan — `DrawInstancedPrimitives` with 3 instances at different positions | ⬜ | Requires 111 |
+| 125 | Integration test: EasyGL/Vulkan — DXT1 texture loaded via `FromStream`, rendered, pixel readback asserts correct color | ⬜ | Requires 121 |
 
 ---
 
-## Phase 7 — Integration & demo tests
+## XNA 4.0 Graphics API coverage
 
-| # | Task | Status | Notes |
-|---|------|--------|-------|
-| 85 | Integration test: EasyGL — `cna_house3d_demo` runs without errors (CI smoke test) | ✅ | `--smoke N` flag added; CTest entry EasyGL_House3D_SmokeTest passes in 1.3 s with DISPLAY=:0 |
-| 86 | Integration test: EasyGL — render a textured quad off-screen, read back pixels with `GetBackBufferData`, assert color | ✅ | `examples/easygl_textured_quad_test.cpp`; fixed Color vtable-pointer mis-cast in `GetBackBufferData`, explicit `glReadBuffer(Back)` |
-| 87 | Integration test: EasyGL — render to `RenderTarget2D`, sample as texture, read back | ✅ | `examples/easygl_render_target_test.cpp`; fixed FBO bind before attach, texture bind before `glTexImage2D`, LINEAR min-filter on RT colorTex_ |
-| 88 | Integration test: Vulkan — `cna_demo_2d` runs without errors (CI smoke test) | ✅ | `--smoke 3` exits 0 on AMD Radeon 780M (RADV PHOENIX); `Vulkan_Demo2D_SmokeTest` CTest entry in CMakeLists.txt |
-| 89 | Integration test: Bgfx — basic draw call completes without crash (smoke test) | ✅ | `--smoke 3` exits 0; fixed BGFX_STENCIL_OP_FAIL/PASS _S/_Z _INCRWRAP→_INCR, `bgfx::setBlendFactor`→`blendFactorPacked_`, `PointListEXT` removed, `BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS` replaced with local constant |
+| Area | Current | After Phase 9–14 |
+|------|---------|------------------|
+| Enums, state objects, value types | ~100% | 100% |
+| SpriteBatch / 2D pipeline | ~100% | 100% |
+| Texture2D, VertexBuffer, IndexBuffer | ~100% | 100% |
+| GraphicsDevice API surface | ~90% (non-zero offsets throw) | ~98% |
+| BasicEffect → GPU (EasyGL) | ~95% | 95% |
+| BasicEffect → GPU (Vulkan) | ~80% | 80% |
+| BasicEffect → GPU (Bgfx) | ~0% visible | ~80% |
+| AlphaTestEffect GPU | ~0% | ~85% |
+| DualTextureEffect GPU | ~0% | ~85% |
+| EnvironmentMapEffect GPU | ~0% | ~75% |
+| SkinnedEffect GPU | ~0% | ~85% |
+| SpriteBatch custom Effect | ~0% | ~80% |
+| Render targets (2D, Cube, MRT) | ~90% | 90% |
+| FillMode::WireFrame | ℹ️ EasyGL N/A (GLES3); ❌ Vulkan | ℹ️ EasyGL N/A; ✅ Vulkan |
+| VideoPlayer | 0% | stub |
+| DXT texture loading | 0% | ✅ |
+| **Overall realistic coverage** | **~75%** | **~95%** |
 
----
-
-## Phase 8 — `IGraphicsBackend` interface additions (shared across phases)
-
-These interface changes are prerequisites for multiple backend tasks above.
-
-| # | Task | Status | Needed by |
-|---|------|--------|-----------|
-| 90 | Add `SetScissorRect(x, y, w, h)` to `IGraphicsBackend` (default no-op) | ✅ | Done as part of task 39 |
-| 91 | Add `SetBlendFactor(r, g, b, a)` to `IGraphicsBackend` (default no-op) | ✅ | Tasks 50, 63, 83 |
-| 92 | Add `SetReferenceStencil(value)` to `IGraphicsBackend` (default no-op) | ✅ | Tasks 51, 84 — folded into ApplyDepthStencilState |
-| 93 | Add `SetRenderTargets(array, count)` to `IGraphicsBackend` (default calls `SetRenderTarget2D` with first) | ✅ | Tasks 45, 62, 80 |
-| 94 | Add `IRenderTargetCubeBackend` interface + `CreateRenderTargetCube(w, h, format)` factory | ✅ | Tasks 46, 61, 79 |
-| 95 | Wire `GraphicsDevice.ScissorRectangle` setter → `IGraphicsBackend::SetScissorRect` | ✅ | Done as part of task 39 |
-| 96 | Wire `GraphicsDevice.BlendFactor` setter → `IGraphicsBackend::SetBlendFactor` | ✅ | Tasks 50, 63 |
-| 97 | Wire `GraphicsDevice.ReferenceStencil` setter → `IGraphicsBackend::SetReferenceStencil` | ✅ | Folded into ApplyDepthStencilState (Task 43) |
-| 98 | Wire `GraphicsDevice.SetRenderTargets(RenderTargetBinding[])` → `IGraphicsBackend::SetRenderTargets` | ✅ | Tasks 45, 62 |
-| 99 | Wire `GraphicsDevice.SetRenderTarget(RenderTargetCube, CubeMapFace)` → `IRenderTargetCubeBackend` | ✅ | Tasks 46, 61 |
-| 100 | `IEffectBackend` interface — `CompileProgram(vertSrc, fragSrc)`, `Bind()`, `SetUniform*(name, ...)` — used by `ShaderEffect` and custom `Effect` loading | ✅ | Tasks 64, 81 |
+> Remaining ~5%: advanced MSAA, GraphicsDeviceManager (intentionally omitted —
+> replaced by SDL3 Game integration), .xnb content pipeline (out of scope),
+> and platform-specific Bgfx renderer quirks.
 
 ---
 
-## Summary by backend
+## Open deferred items (unblocked by external factors)
 
-| Backend | Open tasks | Deferred | Done |
-|---------|-----------|---------|------|
-| SDL_Renderer | 37–41 (5) | — | 3D throws ✓ |
-| EasyGL | 42–51 (10) | 49 (known limit) | Most 3D ✓ |
-| Vulkan | 52–64 (13) | 52–64 (deferred) | Colored 3D ✓ |
-| Bgfx | 65–84 (20) | — | Prototype only |
-| Shared (API + interface) | 90–100 (11) | — | — |
-| Tests | 8–36 (29) | — | — |
-| API/Doxygen | 1–7 (7) | — | — |
-
-**Total open tasks: 95**  
-**Deferred (Vulkan textured pipeline): 13**
+| # | Blocking reason |
+|---|----------------|
+| 114–116 Bgfx shaders | Requires bgfx shaderc binaries and build system setup |
+| 118 Vulkan per-slot sampler | Large descriptor set refactor across the entire Vulkan backend |
+| 104 / 108 EnvironmentMapEffect | Cube map as input texture + reflection shader is complex |

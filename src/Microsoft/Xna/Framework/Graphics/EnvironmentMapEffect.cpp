@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <stdexcept>
 
@@ -379,6 +380,48 @@ namespace Microsoft::Xna::Framework::Graphics
             if (shaderIndexParam_) shaderIndexParam_->SetValue(shaderIndex);
             dirtyFlags_ &= ~DirtyShaderIndex;
         }
+    }
+
+    void EnvironmentMapEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    {
+        using namespace CNA::Internal::Backends;
+
+        p.envMapping         = true;
+        p.textureEnabled     = true;
+        p.lightingEnabled    = true;
+        p.vertexColorEnabled = false;
+
+        if (texture_)        p.texture0 = &texture_->GetBackend();
+        if (environmentMap_) p.envMap   = &environmentMap_->GetBackend();
+
+        p.envMapAmount      = environmentMapAmount_;
+        p.envMapSpecular[0] = environmentMapSpecular_.X;
+        p.envMapSpecular[1] = environmentMapSpecular_.Y;
+        p.envMapSpecular[2] = environmentMapSpecular_.Z;
+
+        p.diffuseColor[0] = diffuseColor_.X * alpha_;
+        p.diffuseColor[1] = diffuseColor_.Y * alpha_;
+        p.diffuseColor[2] = diffuseColor_.Z * alpha_;
+        p.diffuseColor[3] = alpha_;
+
+        // emissive + ambient * diffuse, pre-combined and pre-multiplied by alpha (matches FNA)
+        p.emissiveColor[0] = (emissiveColor_.X + ambientLightColor_.X * diffuseColor_.X) * alpha_;
+        p.emissiveColor[1] = (emissiveColor_.Y + ambientLightColor_.Y * diffuseColor_.Y) * alpha_;
+        p.emissiveColor[2] = (emissiveColor_.Z + ambientLightColor_.Z * diffuseColor_.Z) * alpha_;
+
+        const Vector3 ld  = DirectionalLight0.getDiffuseColorProperty();
+        const Vector3 dir = DirectionalLight0.getDirectionProperty();
+        p.light0Dir[0]    = dir.X; p.light0Dir[1]    = dir.Y; p.light0Dir[2]    = dir.Z;
+        p.light0Diffuse[0]= ld.X;  p.light0Diffuse[1]= ld.Y;  p.light0Diffuse[2]= ld.Z;
+
+        // Eye world position from the inverse view matrix
+        const Matrix viewInverse = Matrix::Invert(view_);
+        const Vector3 eyePos     = viewInverse.getTranslationProperty();
+        p.eyePositionWorld[0] = eyePos.X;
+        p.eyePositionWorld[1] = eyePos.Y;
+        p.eyePositionWorld[2] = eyePos.Z;
+
+        world_.ToColumnMajor(p.worldColMajor);
     }
 
     const std::string& EnvironmentMapEffect::GetTypeName() const

@@ -4,6 +4,9 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechniqueCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "CNA/CNAHelper.hpp"
+
+namespace CNA::Internal::Backends { struct GpuDrawParams; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -109,6 +112,18 @@ namespace Microsoft::Xna::Framework::Graphics
          * a dependency on the concrete ShaderEffect type.
          */
         NOXNA [[nodiscard]] virtual const std::string& GetFragmentSource() const;
+
+        /**
+         * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
+         *
+         * Called by GraphicsDevice before every draw call so the backend can select the
+         * correct shader variant and upload uniforms. Default implementation is a no-op;
+         * concrete effect classes override it to populate texture, color, lighting, and
+         * other backend-relevant fields.
+         *
+         * @param params Output struct to populate.
+         */
+        NOXNA virtual void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const;
 
     protected:
         /**

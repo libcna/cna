@@ -313,6 +313,17 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void setFresnelFactorProperty(float value);
 
+        /**
+         * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
+         *
+         * Populates the diffuse texture, cube-map env map, lighting, diffuse/emissive colors,
+         * eye position, env map amount and specular tint. Sets the envMapping flag so the
+         * backend selects the reflection shader variant.
+         *
+         * @param params Output struct to populate.
+         */
+        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+
     protected:
         /**
          * @brief Applies shader parameters to the graphics device before drawing.

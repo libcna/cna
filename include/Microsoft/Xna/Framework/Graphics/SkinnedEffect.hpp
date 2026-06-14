@@ -333,6 +333,16 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] std::vector<Matrix> GetBoneTransforms(int count) const;
 
+        /**
+         * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
+         *
+         * Populates bone transforms, lighting, diffuse/emissive colors, eye position, and
+         * diffuse texture. Sets the skinned flag so the backend selects the skinning shader variant.
+         *
+         * @param params Output struct to populate.
+         */
+        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+
     protected:
         /**
          * @brief Applies shader parameters to the graphics device before drawing.

@@ -12,8 +12,9 @@ It is a framework/runtime, not a game.
 one of four backends: SDL_Renderer, EasyGL (OpenGL ES 3.2 via easygl + metagl),
 Vulkan, or Bgfx.
 
-**Current phase**: Phase 7 of GRAPHICS_TASKS.md — integration tests.
-Tasks 85–89 are all complete. Phase 7 is done.
+**Current phase**: All 100 GRAPHICS_TASKS.md tasks addressed.
+Three tasks remain deferred by design (true GPU instancing, per-slot Vulkan samplers,
+custom SPIR-V Effect loading).
 
 **Key architectural decisions**:
 - Backend selected at compile time via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -29,52 +30,64 @@ Tasks 85–89 are all complete. Phase 7 is done.
 
 ## 2. Current status
 
-### EasyGL backend (`cmake-build-easygl`)
+### EasyGL backend (`cmake-build-debug`)
 - **Builds**: clean.
-- **Task 85** `EasyGL_House3D_SmokeTest`: ✅
-- **Task 86** `EasyGL_TexturedQuad_Readback`: ✅ — 1×1 red texture, `GetBackBufferData`, asserts R=255.
-- **Task 87** `EasyGL_RenderTarget2D_Readback`: ✅ — 64×64 RT cleared green, blitted via SpriteBatch, asserts G=255.
+- Tasks 42–51, 85–87 all complete (MRT, RenderTargetCube, Texture3D/Cube GetData,
+  scissor, stencil, sampler, BlendFactor, smoke + readback integration tests).
 - `cna_house3d_demo` runs interactively.
 
 ### Vulkan backend (`cmake-build-vulkan`)
 - **Builds**: clean.
-- **Task 88** `Vulkan_Demo2D_SmokeTest`: ✅ — `--smoke 3` exits 0 on AMD Radeon 780M (RADV PHOENIX).
-- CTest entry in `CMakeLists.txt`; reconfigure with `-DCNA_BUILD_TESTS=ON` to run via ctest.
+- Tasks 52–63, 88 all complete.
+  - Textured/lit 3D pipeline: 6 SPIR-V shaders (textured3d, colored_textured3d,
+    lit_textured3d) via 128-byte push constant layout. `GetOrCreatePipelineExt3D`
+    covers strides 20, 24, 32. `FillExtPushConst` fills MVP + lighting params.
+  - `VulkanRTSource` abstract base unifies `currentRT_` for 2D RTs and cube face proxies.
+  - `VulkanMRTProxy`: N-color render pass + combined framebuffer for MRT.
+  - `VulkanRenderTargetCubeBackend`: 6-layer cube-compatible VkImage + per-face VkFramebuffers.
+  - Smoke test (`--smoke 3`) exits 0 on AMD Radeon 780M (RADV PHOENIX).
+- Deferred: Task 55 true instancing, Task 58 per-slot samplers, Task 64 custom Effect.
 
 ### Bgfx backend (`cmake-build-bgfx`)
-- **Builds**: clean after fixing stencil op macro names, `bgfx::setBlendFactor` (no such API →
-  stored as `blendFactorPacked_`), `PointListEXT` (not in XNA 4.0 → removed), and
-  `BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS` (internal header → replaced with local constant 8).
+- **Builds**: clean.
 - **Task 89** `Bgfx_Demo2D_SmokeTest`: ✅ — `--smoke 3` exits 0 (OpenGL 2.1 fallback renderer).
-- Task 65 ⚠️: draw calls are no-ops — needs pre-compiled bgfx shader binaries (shaderc).
+- Tasks 65–67 ⚠️: draw calls are no-ops — needs pre-compiled bgfx shader binaries (shaderc).
 - `GetBackBufferData` stub throws (async bgfx readback not implemented).
 
 ### What does not work yet
-- Vulkan textured/lit 3D pipeline (tasks 52–64, deferred).
-- Bgfx actual rendering — pre-compiled shaders (shaderc) required; task 65 draw calls are no-ops.
+- Vulkan true GPU instancing (Task 55 falls back to single-instance draw).
+- Vulkan per-slot SamplerState (Task 58 deferred — requires descriptor set refactor).
+- Vulkan custom Effect/SPIR-V loading (Task 64 deferred).
+- Bgfx actual 3D rendering — pre-compiled shaders (shaderc) required.
 - `Texture3D`/`TextureCube` `GetData` on GLES3 (no `glGetTexImage`).
 
 ---
 
 ## 3. Last commits
 
-**`a63475e`** — `fix+test(EasyGL/Tasks 85-88): pixel readback, RT, Vulkan smoke setup`
-- `GetBackBufferData`: tmp buffer to avoid `Color` vtable pointer mis-cast.
-- `ReadBackbuffer`: explicit `glReadBuffer(Back)`; `currentRtHeight_` for Y-flip.
-- `EasyGLRenderTargetBackend::CreateResources`: bind FBO before attach; bind texture before `set_image_2d`; `GL_LINEAR` filter.
-- Vulkan `ApplyDepthStencilState` signature fixed; `demo_2d`: `--smoke N` flag.
+**`abc9068`** — Tasks 65, 80-84: Bgfx 3D vertex/index buffers + full stencil + MRT + effect stubs.
 
-**HEAD** (after a63475e) — Tasks 88+89: Vulkan+Bgfx smoke tests ✅
-- Bgfx: fixed stencil op macros (`_INCRWRAP`/`_DECRWRAP` → `_INCR`/`_DECR`), `bgfx::setBlendFactor` API, `PointListEXT`, `BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS` internal header.
-- `Bgfx_Demo2D_SmokeTest` CTest entry added; Vulkan smoke test confirmed passing.
+**`4130035`** — Task 45: EasyGL MRT via glDrawBuffers + GetColorGLHandle.
+
+**`29f577f`** — Tasks 47, 48: Texture3D + TextureCube GPU backends.
+
+**`a63475e`** — Tasks 85-88: pixel readback, RT, Vulkan smoke setup.
+
+**HEAD** — Tasks 52–55, 61–62: Vulkan textured+lit 3D pipeline (SPIR-V), RenderTargetCube,
+MRT, and smoke test verification.
 
 ---
 
 ## 4. Current blocker
 
-**None** — Phase 7 (integration tests, tasks 85–89) is complete.
+**None** — all 100 GRAPHICS_TASKS.md tasks are addressed.
 
-Next work is Phase 8 or user-directed tasks (see section 8).
+Remaining deferred items:
+- Task 55: true Vulkan GPU instancing (requires instanced pipeline + per-instance VBO layout)
+- Task 58: Vulkan per-slot SamplerState (requires descriptor set-per-slot redesign)
+- Task 64: Vulkan custom Effect (SPIR-V loading via IEffectBackend)
+
+Next work is user-directed.
 
 ---
 
@@ -83,9 +96,12 @@ Next work is Phase 8 or user-directed tasks (see section 8).
 | Status | Item |
 |--------|------|
 | **confirmed bug** | Bgfx `GetBackBufferData` always throws (async readback not implemented) |
-| **incomplete** | `Texture3D::GetData` / `TextureCube::GetData` on GLES3 — stub only |
-| **incomplete** | Vulkan textured/lit 3D pipeline (tasks 52–64) — deferred |
-| **fixed** | `EasyGLRenderTargetCubeBackend::CreateResources` — texture bind ✅, FBO bind ✅, added `GL_LINEAR` min/mag + `GL_CLAMP_TO_EDGE` wrap on `cubeTex_` |
+| **incomplete** | Vulkan `DrawInstancedPrimitivesEx` falls back to single-instance (Task 55 deferred) |
+| **incomplete** | Vulkan per-slot SamplerState (Task 58 deferred) |
+| **incomplete** | Vulkan custom Effect / SPIR-V loading (Task 64 deferred) |
+| **incomplete** | Bgfx 3D draw calls are no-ops (pre-compiled bgfx shaders required) |
+| **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
+| **invariant** | `Color` has vtable pointer — never cast `Color*` to `uint8_t*` for pixel I/O |
 
 ---
 
@@ -107,6 +123,25 @@ metagl          ← raw GL function loader + typed enum wrappers
 easygl          ← GL resource wrappers (Device, Texture, Framebuffer, Sampler, …)
 ```
 
+### Vulkan 3D pipeline overview
+
+| Stride | Vertex type                | Shader pair             | Push constant use       |
+|--------|----------------------------|-------------------------|-------------------------|
+| 16     | VertexPositionColor        | colored3d vert/frag     | MVP only (first 64B)    |
+| 20     | VertexPositionTexture      | textured3d vert/frag    | MVP + texture flag      |
+| 24     | VertexPositionColorTexture | colored_textured3d      | MVP + vcEnabled flag    |
+| 32     | VertexPositionNormalTexture| lit_textured3d          | MVP + lighting (128B)   |
+
+Push constant layout (128 bytes = 32 floats):
+- [0..15]  = MVP matrix
+- [16..19] = diffuseColor (vec4)
+- [20..22] = ambientColor (vec3)
+- [23]     = lightingEnabled
+- [24..26] = light0Dir (vec3)
+- [27]     = textureEnabled
+- [28..30] = light0Diffuse (vec3)
+- [31]     = vertexColorEnabled
+
 ### Critical invariants
 
 - **`Color` has a vtable pointer** — never cast `Color*` to `uint8_t*` for pixel I/O;
@@ -123,20 +158,7 @@ easygl          ← GL resource wrappers (Device, Texture, Framebuffer, Sampler,
   in `ReadBackbuffer`; kept in sync by `SetRenderTarget2D`.
 - **Backend is compile-time only** — no runtime switching.
 - **XNA namespace = XNA API only** — non-XNA extensions tagged `NOXNA`.
-
-### Pixel readback data flow
-
-```
-device.GetBackBufferData(&rect, &pixel, 0, 1)
-  → GraphicsDevice::GetBackBufferData
-      uint8_t buf[w*h*4]
-      → backend_->ReadBackbuffer(x, y, w, h, buf)
-          if (default FB): glReadBuffer(GL_BACK)
-          fbH = currentRtHeight_ > 0 ? currentRtHeight_ : getLogicalSize()
-          glReadPixels(x, fbH-y-h, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buf)
-          vertical row flip
-      data[i] = Color(buf[i*4], buf[i*4+1], buf[i*4+2], buf[i*4+3])
-```
+- **Vulkan build: `j1`** — build with `-j1` to avoid race condition in shader header generation.
 
 ---
 
@@ -154,16 +176,14 @@ DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_test_easygl_textured_quad
 DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_test_easygl_render_target
 DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_house3d_demo --smoke 3
 
-# Vulkan — smoke test (Task 88)
-ls cmake-build-vulkan/Content/
+# Vulkan — build (use -j1 to avoid race in SPIR-V header generation)
+cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN
+cmake --build cmake-build-vulkan --target cna_demo_2d -j1
+
+# Vulkan — smoke test (must run from cmake-build-vulkan/)
 cd cmake-build-vulkan && DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
 
-# Vulkan — reconfigure with CNA_BUILD_TESTS=ON for ctest
-cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-vulkan --target cna_demo_2d
-ctest --test-dir cmake-build-vulkan -R Vulkan_Demo2D_SmokeTest --output-on-failure
-
-# Bgfx — create build (requires network)
+# Bgfx — smoke test
 cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX
 cmake --build cmake-build-bgfx --target cna_demo_2d
 cd cmake-build-bgfx && DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
@@ -173,39 +193,24 @@ cd cmake-build-bgfx && DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
 
 ## 8. Next tasks (ordered)
 
-### ~~1. Verify `EasyGLRenderTargetCubeBackend` FBO setup~~ — done
+All 100 GRAPHICS_TASKS.md tasks addressed. Await user direction.
 
-Fixed: added `GL_LINEAR` min/mag + `GL_CLAMP_TO_EDGE` wrap on `cubeTex_` in `CreateResources`.
-(FBO bind and texture bind were already correct.)
-
-### ~~2. Unit test regression guard for `GetBackBufferData`~~ — done
-
-Added to `ColorTests.cpp`:
-- `ColorTest.SizeIsLargerThanFourBytesVtablePresent` — documents vtable invariant
-- `ColorTest.ConstructedFromRawRgbaBytesYieldsCorrectComponents` — guards correct unpack path
+Candidates if continuing graphics work:
+1. **Task 55 true instancing** — add `VK_VERTEX_INPUT_RATE_INSTANCE` binding + instanced pipeline
+2. **Task 58 per-slot samplers** — per-descriptor-set sampler state for slots 0–15
+3. **Task 64 custom Effect** — load arbitrary SPIR-V via `IEffectBackend`
+4. **Bgfx shaders** — compile bgfx shaders with shaderc to unblock Tasks 65–67
 
 ---
 
-## 9. Do not do yet
-
-- No Vulkan 3D textured/lit pipeline (tasks 52–64) — SPIR-V work, deferred by design.
-- No Bgfx shader compilation (`shaderc`) — requires platform-specific binaries.
-- No `IGraphicsBackend` signature refactoring — breaks all four backends at once.
-- No changes to `Color` memory layout — work around the vtable at call sites.
-- No mass `easygl`/`metagl` API changes — third-party libraries.
-- No new XNA API classes until tasks 88 and 89 are closed.
-
----
-
-## 10. Resume prompt
+## 9. Resume prompt
 
 ```
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Phase 7 (tasks 85–89) is complete. Await user direction for the next task.
-Candidates (in order): verify EasyGLRenderTargetCubeBackend FBO setup,
-add GetBackBufferData regression test.
+All 100 GRAPHICS_TASKS.md tasks are addressed. Await user direction.
+Do NOT touch sharp-runtime — another agent is working on it.
 
 Update NEXT.md after each task.
 ```

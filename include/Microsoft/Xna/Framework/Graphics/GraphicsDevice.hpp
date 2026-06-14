@@ -48,6 +48,7 @@ namespace Microsoft::Xna::Framework
 namespace Microsoft::Xna::Framework::Graphics
 {
     class BasicEffect;
+    class Effect;
     class RenderTarget2D;
     class RenderTargetCube;
     class RenderTargetCube;
@@ -565,10 +566,15 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns a reference to the active graphics backend. */
         NOXNA [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
         /**
-         * @brief Sets the currently active BasicEffect for draw calls.
+         * @brief Sets the currently active Effect for draw calls.
+         *
+         * Called automatically by Effect::Apply(). Accepts any Effect subclass;
+         * the backend uses virtual dispatch via FillGpuDrawParams() to obtain
+         * shader parameters for the specific effect type.
+         *
          * @param effect The effect to use, or nullptr.
          */
-        NOXNA void SetCurrentEffect(BasicEffect* effect);
+        NOXNA void SetCurrentEffect(Effect* effect);
 
         /** @brief Returns the currently bound index buffer. */
         [[nodiscard]] const IndexBuffer* Indices() const;
@@ -588,7 +594,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Viewport viewport_;
         const VertexBuffer* currentVertexBuffer_;
         const IndexBuffer* currentIndexBuffer_;
-        BasicEffect* currentEffect_;
+        Effect* currentEffect_;
         int virtualWidth_;
         int virtualHeight_;
         bool contextRecoveryEnabled_ = true;
