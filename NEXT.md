@@ -12,9 +12,8 @@ It is a framework/runtime, not a game.
 one of four backends: SDL_Renderer, EasyGL (OpenGL ES 3.2 via easygl + metagl),
 Vulkan, or Bgfx.
 
-**Current phase**: All 100 GRAPHICS_TASKS.md tasks addressed.
-Three tasks remain deferred by design (true GPU instancing, per-slot Vulkan samplers,
-custom SPIR-V Effect loading).
+**Current phase**: GRAPHICS_TASKS.md Phases 1–11 complete (Tasks 101–114 ✅).
+Phases 12–14 (Tasks 115–125) remain.
 
 **Key architectural decisions**:
 - Backend selected at compile time via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -25,6 +24,7 @@ custom SPIR-V Effect loading).
   .NET primitive type aliases and `System.*` stubs.
 - FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src` is the authoritative
   XNA 4.0 API reference.
+- **DO NOT touch sharp-runtime** — another agent is working on it.
 
 ---
 
@@ -32,62 +32,68 @@ custom SPIR-V Effect loading).
 
 ### EasyGL backend (`cmake-build-debug`)
 - **Builds**: clean.
-- Tasks 42–51, 85–87 all complete (MRT, RenderTargetCube, Texture3D/Cube GetData,
-  scissor, stencil, sampler, BlendFactor, smoke + readback integration tests).
-- `cna_house3d_demo` runs interactively.
+- Effect system fully generalized (Phase 9, Tasks 101–105):
+  - `currentEffect_` changed to `Effect*`; `FillGpuDrawParams()` dispatches polymorphically.
+  - `AlphaTestEffect`: GLSL alpha-discard uniform (`uAlphaTest[4]`) in all 4 fragment shaders.
+  - `DualTextureEffect`: stride=20 dual-sampler pipeline (`prog_dual_textured_`).
+  - `EnvironmentMapEffect`: stride=32 cube-map pipeline (`prog_env_mapped_`).
+  - `SkinnedEffect`: 72-bone UBO skinning shader (`prog_skinned_`).
+- Phase 10 (Tasks 110–113): non-zero vertex/index offsets work; `SpriteBatch::Begin(effect)`
+  wires custom Effect into sprite pipeline.
+- `FillMode::WireFrame` not supported on GLES3 (no `glPolygonMode`) — known limit.
 
 ### Vulkan backend (`cmake-build-vulkan`)
 - **Builds**: clean.
-- Tasks 52–63, 88 all complete.
-  - Textured/lit 3D pipeline: 6 SPIR-V shaders (textured3d, colored_textured3d,
-    lit_textured3d) via 128-byte push constant layout. `GetOrCreatePipelineExt3D`
-    covers strides 20, 24, 32. `FillExtPushConst` fills MVP + lighting params.
-  - `VulkanRTSource` abstract base unifies `currentRT_` for 2D RTs and cube face proxies.
-  - `VulkanMRTProxy`: N-color render pass + combined framebuffer for MRT.
-  - `VulkanRenderTargetCubeBackend`: 6-layer cube-compatible VkImage + per-face VkFramebuffers.
-  - Smoke test (`--smoke 3`) exits 0 on AMD Radeon 780M (RADV PHOENIX).
-- Deferred: Task 55 true instancing, Task 58 per-slot samplers, Task 64 custom Effect.
+- Phase 9 (Tasks 106–109): AlphaTest / DualTexture / EnvironmentMap / Skinned SPIR-V
+  shader pairs + dedicated pipeline layouts.
+- Phase 10 (Tasks 110–113):
+  - `vertexStart` / `startIndex` / `baseVertex` properly forwarded.
+  - True GPU instancing via `VK_VERTEX_INPUT_RATE_INSTANCE` + `GetOrCreatePipelineInstanced3D`.
+  - `FillMode::WireFrame` → `fillModeNonSolid` GPU feature + `VK_POLYGON_MODE_LINE`; all 7
+    pipeline functions encode wireframe in `Make3DKey` / `MakeExt3DKey`.
+  - `SpriteBatch::Begin(effect)` stores effect pointer; `End()` calls `Apply()` before flush.
+- Build: use `-j1` to avoid race condition in SPIR-V header generation.
 
 ### Bgfx backend (`cmake-build-bgfx`)
 - **Builds**: clean.
-- **Task 89** `Bgfx_Demo2D_SmokeTest`: ✅ — `--smoke 3` exits 0 (OpenGL 2.1 fallback renderer).
-- Tasks 65–67 ⚠️: draw calls are no-ops — needs pre-compiled bgfx shader binaries (shaderc).
-- `GetBackBufferData` stub throws (async bgfx readback not implemented).
+- Phase 11 (Task 114): shaderc toolchain set up; `colored3d` shaders compiled and embedded:
+  - `src/CNA/Internal/Backends/Bgfx/shaders/vs_colored3d.sc` + `fs_colored3d.sc` + `varying.def.sc`
+  - `compile_shaders.py` produces GLSL/ESSL/SPIR-V/WGSL variants → `bgfx_shaders.hpp`
+  - Manual `kColored3dShaders[]` struct (avoids `BGFX_EMBEDDED_SHADER` macro which requires DXBC on Linux)
+  - `colored3DProgram_` created at init from `kColored3dShaders`
+  - `DrawColoredPrimitives` submits `colored3DProgram_` (Task 115 effectively done)
+- **Tasks 116–117** remain: textured/lit 3D shaders and `GetBackBufferData` readback.
+- Smoke test (`--smoke 3`) exits 0.
 
-### What does not work yet
-- Vulkan true GPU instancing (Task 55 falls back to single-instance draw).
-- Vulkan per-slot SamplerState (Task 58 deferred — requires descriptor set refactor).
-- Vulkan custom Effect/SPIR-V loading (Task 64 deferred).
-- Bgfx actual 3D rendering — pre-compiled shaders (shaderc) required.
-- `Texture3D`/`TextureCube` `GetData` on GLES3 (no `glGetTexImage`).
+### Bgfx shaderc paths (needed to recompile shaders)
+```
+shaderc binary:   cmake-build-bgfx/_deps/bgfx_cmake-build/cmake/bgfx/shaderc
+bgfx include dir: cmake-build-bgfx/_deps/bgfx_cmake-src/bgfx/src
+```
 
 ---
 
 ## 3. Last commits
 
-**`abc9068`** — Tasks 65, 80-84: Bgfx 3D vertex/index buffers + full stencil + MRT + effect stubs.
+**`9effffc`** — Tasks 112–114: FillMode::WireFrame (Vulkan), SpriteBatch custom effect wiring,
+Bgfx shaderc toolchain + colored3d shaders embedded.
 
-**`4130035`** — Task 45: EasyGL MRT via glDrawBuffers + GetColorGLHandle.
-
-**`29f577f`** — Tasks 47, 48: Texture3D + TextureCube GPU backends.
-
-**`a63475e`** — Tasks 85-88: pixel readback, RT, Vulkan smoke setup.
-
-**HEAD** — Tasks 52–55, 61–62: Vulkan textured+lit 3D pipeline (SPIR-V), RenderTargetCube,
-MRT, and smoke test verification.
+**`6de93fa`** — Tasks 101–112: Effect system generalization (Phase 9), all 4 effect GPU variants
+on EasyGL + Vulkan, non-zero draw offsets, true Vulkan GPU instancing.
 
 ---
 
-## 4. Current blocker
+## 4. Current state of GRAPHICS_TASKS.md
 
-**None** — all 100 GRAPHICS_TASKS.md tasks are addressed.
-
-Remaining deferred items:
-- Task 55: true Vulkan GPU instancing (requires instanced pipeline + per-instance VBO layout)
-- Task 58: Vulkan per-slot SamplerState (requires descriptor set-per-slot redesign)
-- Task 64: Vulkan custom Effect (SPIR-V loading via IEffectBackend)
-
-Next work is user-directed.
+| Phase | Range | Status |
+|-------|-------|--------|
+| 1–8 | Tasks 1–100 | ✅ all complete |
+| 9 — Effect system | Tasks 101–109 | ✅ all complete |
+| 10 — Draw features | Tasks 110–113 | ✅ all complete |
+| 11 — Bgfx 3D shaders | Task 114 | ✅; Tasks 115–117 ⬜ |
+| 12 — Vulkan deferred | Tasks 118–119 | ⬜ |
+| 13 — Missing XNA classes | Tasks 120–121 | ⬜ |
+| 14 — Integration tests | Tasks 122–125 | ⬜ |
 
 ---
 
@@ -95,11 +101,10 @@ Next work is user-directed.
 
 | Status | Item |
 |--------|------|
-| **confirmed bug** | Bgfx `GetBackBufferData` always throws (async readback not implemented) |
-| **incomplete** | Vulkan `DrawInstancedPrimitivesEx` falls back to single-instance (Task 55 deferred) |
-| **incomplete** | Vulkan per-slot SamplerState (Task 58 deferred) |
-| **incomplete** | Vulkan custom Effect / SPIR-V loading (Task 64 deferred) |
-| **incomplete** | Bgfx 3D draw calls are no-ops (pre-compiled bgfx shaders required) |
+| **confirmed bug** | Bgfx `GetBackBufferData` always throws (async readback not implemented — Task 117) |
+| **incomplete** | Bgfx `DrawPrimitivesEx` textured/lit — needs Tasks 116 shaders |
+| **incomplete** | Vulkan per-slot SamplerState (Task 118 deferred — requires descriptor set refactor) |
+| **incomplete** | Vulkan custom Effect / SPIR-V loading (Task 119 deferred) |
 | **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
 | **invariant** | `Color` has vtable pointer — never cast `Color*` to `uint8_t*` for pixel I/O |
 
@@ -125,12 +130,17 @@ easygl          ← GL resource wrappers (Device, Texture, Framebuffer, Sampler,
 
 ### Vulkan 3D pipeline overview
 
-| Stride | Vertex type                | Shader pair             | Push constant use       |
-|--------|----------------------------|-------------------------|-------------------------|
-| 16     | VertexPositionColor        | colored3d vert/frag     | MVP only (first 64B)    |
-| 20     | VertexPositionTexture      | textured3d vert/frag    | MVP + texture flag      |
-| 24     | VertexPositionColorTexture | colored_textured3d      | MVP + vcEnabled flag    |
-| 32     | VertexPositionNormalTexture| lit_textured3d          | MVP + lighting (128B)   |
+| Stride | Vertex type                 | Shader pair              | Push constant use       |
+|--------|-----------------------------|--------------------------|-------------------------|
+| 16     | VertexPositionColor         | colored3d                | MVP only (first 64B)    |
+| 20     | VertexPositionTexture       | textured3d               | MVP + texture flag      |
+| 24     | VertexPositionColorTexture  | colored_textured3d       | MVP + vcEnabled flag    |
+| 32     | VertexPositionNormalTexture | lit_textured3d           | MVP + lighting (128B)   |
+| 20/24/32 | above + alpha test       | alpha_test3d             | MVP + alphaTest vec4    |
+| 20     | VertexPositionTexture       | dual_texture3d           | MVP + dual sampler      |
+| 32     | VertexPositionNormalTexture | env_map3d                | MVP + world + FS UBO    |
+| 52     | VertexPositionNormalTextureSkinned | skinned3d         | MVP + bone palette UBO  |
+| 16/32  | any                         | instanced3d              | VK_VERTEX_INPUT_RATE_INSTANCE binding=1 |
 
 Push constant layout (128 bytes = 32 floats):
 - [0..15]  = MVP matrix
@@ -141,6 +151,13 @@ Push constant layout (128 bytes = 32 floats):
 - [27]     = textureEnabled
 - [28..30] = light0Diffuse (vec3)
 - [31]     = vertexColorEnabled
+
+### Bgfx embedded shader pattern
+
+`BGFX_EMBEDDED_SHADER` macro activates DXBC on Linux (`BGFX_PLATFORM_SUPPORTS_DXBC`
+includes `BX_PLATFORM_LINUX`) but shaderc can't produce DXBC without D3D4Linux.
+Solution: build the `bgfx::EmbeddedShader` struct manually with only GL/GLES/Vulkan/WebGPU/Noop
+entries + `RendererType::Count` sentinel. `createEmbeddedShader` terminates at Count sentinel.
 
 ### Critical invariants
 
@@ -154,11 +171,9 @@ Push constant layout (128 bytes = 32 floats):
   makes the RT texture-incomplete (no mipmaps).
 - **`glReadBuffer(GL_BACK)`** — must be called explicitly before `glReadPixels` on the
   default FB on EGL/GLES3.
-- **`currentRtHeight_`** in `EasyGLGraphicsBackend` — tracks bound RT height for Y-flip
-  in `ReadBackbuffer`; kept in sync by `SetRenderTarget2D`.
+- **Vulkan build: `-j1`** — build with `-j1` to avoid race condition in shader header generation.
 - **Backend is compile-time only** — no runtime switching.
 - **XNA namespace = XNA API only** — non-XNA extensions tagged `NOXNA`.
-- **Vulkan build: `j1`** — build with `-j1` to avoid race condition in shader header generation.
 
 ---
 
@@ -166,40 +181,47 @@ Push constant layout (128 bytes = 32 floats):
 
 ```bash
 # EasyGL — build + integration tests
-cmake -B cmake-build-easygl -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-easygl --target CNA
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-easygl -R EasyGL --output-on-failure
-
-# EasyGL — individual tests
-cd cmake-build-easygl
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_test_easygl_textured_quad
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_test_easygl_render_target
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_house3d_demo --smoke 3
+cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-debug --target CNA
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug -R EasyGL --output-on-failure
 
 # Vulkan — build (use -j1 to avoid race in SPIR-V header generation)
 cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN
 cmake --build cmake-build-vulkan --target cna_demo_2d -j1
-
-# Vulkan — smoke test (must run from cmake-build-vulkan/)
 cd cmake-build-vulkan && DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
 
-# Bgfx — smoke test
+# Bgfx — build + smoke test
 cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX
 cmake --build cmake-build-bgfx --target cna_demo_2d
 cd cmake-build-bgfx && DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
+
+# Bgfx — recompile 3D shaders (run from repo root)
+python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
+    cmake-build-bgfx/_deps/bgfx_cmake-build/cmake/bgfx/shaderc \
+    cmake-build-bgfx/_deps/bgfx_cmake-src/bgfx/src
+
+# Bgfx — build shaderc (one-time, ~10 min)
+cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BGFX_BUILD_SHADERC=ON
+cmake --build cmake-build-bgfx --target shaderc
 ```
 
 ---
 
-## 8. Next tasks (ordered)
+## 8. Next tasks (ordered by priority)
 
-All 100 GRAPHICS_TASKS.md tasks addressed. Await user direction.
-
-Candidates if continuing graphics work:
-1. **Task 55 true instancing** — add `VK_VERTEX_INPUT_RATE_INSTANCE` binding + instanced pipeline
-2. **Task 58 per-slot samplers** — per-descriptor-set sampler state for slots 0–15
-3. **Task 64 custom Effect** — load arbitrary SPIR-V via `IEffectBackend`
-4. **Bgfx shaders** — compile bgfx shaders with shaderc to unblock Tasks 65–67
+| # | Task | Notes |
+|---|------|-------|
+| 115 | Bgfx: wire `DrawColoredPrimitives` with `colored3DProgram_` | Likely already done — `DrawColoredPrimitives` submits the program; verify and mark ✅ |
+| 116 | Bgfx: `textured3d`, `colored_textured3d`, `lit_textured3d` shader variants via shaderc; wire `DrawPrimitivesEx` | Add new `.sc` files; extend `compile_shaders.py` and `bgfx_shaders.hpp` |
+| 117 | Bgfx: `GetBackBufferData` — async readback via `bgfx::blit` + `bgfx::readTexture` + `bgfx::frame(true)` | Currently always throws |
+| 118 | Vulkan: per-slot SamplerState — one `VkSampler` per binding slot (0–15) | Large descriptor set refactor |
+| 119 | Vulkan: custom Effect / SPIR-V loading — `IEffectBackend::CompileProgram(vertSpv, fragSpv)` | `ShaderEffect` fully functional on Vulkan |
+| 120 | `VideoPlayer` stub — `Microsoft::Xna::Framework::Media` namespace; `Play/Pause/Stop/Dispose`; no actual decoding | API completeness stub |
+| 121 | `DxtUtil` — software DXT1/3/5 decompression; used by `Texture2D::FromStream` | Reference: FNA `DxtUtil.cs` |
+| 122 | Integration test: EasyGL — `AlphaTestEffect` alpha cutout + pixel readback | Requires Task 102 ✅ |
+| 123 | Integration test: EasyGL — `SkinnedEffect` 2-bone transform + mesh deformation | Requires Task 105 ✅ |
+| 124 | Integration test: Vulkan — `DrawInstancedPrimitives` 3 instances at different positions | Requires Task 111 ✅ |
+| 125 | Integration test: EasyGL/Vulkan — DXT1 texture via `FromStream`, pixel readback | Requires Task 121 |
 
 ---
 
@@ -209,8 +231,8 @@ Candidates if continuing graphics work:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-All 100 GRAPHICS_TASKS.md tasks are addressed. Await user direction.
-Do NOT touch sharp-runtime — another agent is working on it.
+Current status: GRAPHICS_TASKS.md Tasks 101–114 complete. Next tasks are 115–125.
+DO NOT touch sharp-runtime — another agent is working on it.
 
 Update NEXT.md after each task.
 ```
