@@ -784,6 +784,12 @@ void main()
             prog = &customProgram_;
             customEffect_->Apply();
         }
+        else if (customEffect_)
+        {
+            // Effect has no GLSL source; run OnApply() for parameter side-effects
+            // and register it as the active effect on the device.
+            customEffect_->Apply();
+        }
 
         prog->use();
 

@@ -118,6 +118,8 @@ namespace CNA::Internal::Backends::Vulkan
         void Begin() override;
         void End()   override;
 
+        void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }
+
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,
                   const Rectangle& dest, const Rectangle& src,
@@ -140,6 +142,7 @@ namespace CNA::Internal::Backends::Vulkan
     private:
         VulkanGraphicsBackend*           backend_        = nullptr;
         bool                             active_         = false;
+        Effect*                          customEffect_   = nullptr;
         std::vector<Sprite2DVertex>      vertices_;
         std::vector<uint16_t>            indices_;
         std::vector<DrawCall>            draws_;

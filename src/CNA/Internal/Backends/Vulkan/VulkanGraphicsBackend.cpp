@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Vulkan/shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <algorithm>
@@ -429,6 +430,7 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanSpriteBatchBackend::End()
     {
         if (!active_) return;
+        if (customEffect_) customEffect_->Apply();
         FlushTexture();
         active_ = false;
     }

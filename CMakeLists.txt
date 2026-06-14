@@ -88,8 +88,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
     add_compile_definitions(CNA_BACKEND_BGFX)
 
     include(FetchContent)
+    option(CNA_BGFX_BUILD_SHADERC "Build bgfx shaderc tool (needed to compile 3D shaders)" OFF)
     set(BGFX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(BGFX_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    if(NOT CNA_BGFX_BUILD_SHADERC)
+        set(BGFX_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    endif()
     set(BGFX_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(BGFX_INSTALL OFF CACHE BOOL "" FORCE)
 

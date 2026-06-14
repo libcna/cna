@@ -6,6 +6,7 @@
 
 #include "fs_ocornut_imgui.bin.h"
 #include "vs_ocornut_imgui.bin.h"
+#include "shaders/bgfx_shaders.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -601,6 +602,22 @@ namespace CNA::Internal::Backends::Bgfx
         {
             spriteProgram = CreateSpriteProgram();
             textureSampler = bgfx::createUniform("s_tex", bgfx::UniformType::Sampler);
+
+            // Create colored 3D program from embedded shaders.
+            {
+                const bgfx::RendererType::Enum rt = bgfx::getRendererType();
+                bgfx::ShaderHandle vs = bgfx::createEmbeddedShader(kColored3dShaders, rt, "vs_colored3d");
+                bgfx::ShaderHandle fs = bgfx::createEmbeddedShader(kColored3dShaders, rt, "fs_colored3d");
+                if (bgfx::isValid(vs) && bgfx::isValid(fs))
+                    colored3DProgram_ = bgfx::createProgram(vs, fs, true);
+                else
+                {
+                    if (bgfx::isValid(vs)) bgfx::destroy(vs);
+                    if (bgfx::isValid(fs)) bgfx::destroy(fs);
+                    std::cerr << "CNA: bgfx colored3D shaders not supported on "
+                              << bgfx::getRendererName(rt) << " — 3D draws will be no-ops.\n";
+                }
+            }
 
             if (!bgfx::isValid(textureSampler))
             {
