@@ -126,4 +126,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         return backend_->GetVertexCount();
     }
+
+    void VertexBuffer::SetDataRaw(const void* data, int count, int stride)
+    {
+        backend_->SetData(data, count, static_cast<std::size_t>(stride));
+    }
 }

@@ -497,11 +497,53 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 122: AlphaTestEffect GPU alpha cutout + pixel readback
+        cna_easygl_test(cna_test_alpha_test_integration
+                        examples/alpha_test_integration_test.cpp)
+        add_test(NAME EasyGL_AlphaTestEffect_AlphaCutout
+                 COMMAND cna_test_alpha_test_integration)
+        set_tests_properties(EasyGL_AlphaTestEffect_AlphaCutout PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 123: SkinnedEffect 2-bone GPU transform + mesh deformation
+        cna_easygl_test(cna_test_skinned_integration
+                        examples/skinned_effect_integration_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_BoneDeformation
+                 COMMAND cna_test_skinned_integration)
+        set_tests_properties(EasyGL_SkinnedEffect_BoneDeformation PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 125: DXT1 texture loaded via FromStream, rendered, pixel readback
+        cna_easygl_test(cna_test_dxt1_texture
+                        examples/dxt1_texture_test.cpp)
+        add_test(NAME EasyGL_DXT1_FromStream_Readback
+                 COMMAND cna_test_dxt1_texture)
+        set_tests_properties(EasyGL_DXT1_FromStream_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
-    # Vulkan integration test (Task 88)
+    # Vulkan integration tests
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
+
+        # --- helper macro: build a headless Vulkan test exe ----------------------
+        macro(cna_vulkan_test target src)
+            add_executable(${target} ${src})
+            if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+                target_link_libraries(${target} PRIVATE
+                    -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                    SHARP_RUNTIME)
+            else()
+                target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+            endif()
+            if(TARGET SDL3::SDL3main)
+                target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+            endif()
+        endmacro()
 
         enable_testing()
 
@@ -509,6 +551,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_Demo2D_SmokeTest
                  COMMAND cna_demo_2d --smoke 3)
         set_tests_properties(Vulkan_Demo2D_SmokeTest PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 124: DrawInstancedPrimitives — 3 instances at different X positions
+        cna_vulkan_test(cna_test_vulkan_instanced
+                        examples/vulkan_instanced_test.cpp)
+        add_test(NAME Vulkan_DrawInstanced_3Instances
+                 COMMAND cna_test_vulkan_instanced)
+        set_tests_properties(Vulkan_DrawInstanced_3Instances PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

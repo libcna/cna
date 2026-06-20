@@ -1026,7 +1026,7 @@ namespace CNA::Internal::Backends::Vulkan
         ci.imageColorSpace = fmt.colorSpace;
         ci.imageExtent = ext;
         ci.imageArrayLayers = 1;
-        ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         uint32_t qfi[] = { graphicsQueueFamily_, presentQueueFamily_ };
         if (graphicsQueueFamily_ != presentQueueFamily_) {
             ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
@@ -3530,6 +3530,11 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
         if (!initialized_ || swapchainImages_.empty()) return;
+
+        // If there are pending draw commands (queued inside Draw() but not yet submitted),
+        // flush them via Present() so the swapchain image contains the rendered frame.
+        if (!pending3D_.empty())
+            Present();
 
         // Wait for all GPU work to finish so the swapchain image is safe to read.
         vkDeviceWaitIdle(device_);

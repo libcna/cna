@@ -87,6 +87,18 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] int getVertexCountProperty() const;
 
         /**
+         * @brief Uploads raw vertex data with an explicit per-vertex byte stride.
+         *
+         * Use this overload when uploading GPU-compact vertex layouts that have no
+         * corresponding typed XNA vertex struct (e.g. the 52-byte skinned layout).
+         *
+         * @param data   Pointer to the raw vertex data.
+         * @param count  Number of vertices.
+         * @param stride Size of one vertex in bytes.
+         */
+        NOXNA void SetDataRaw(const void* data, int count, int stride);
+
+        /**
          * @brief Internal accessor used by the backend draw paths.
          */
         NOXNA [[nodiscard]] CNA::Internal::Backends::IVertexBufferBackend& GetBackend() const { return *backend_; }
