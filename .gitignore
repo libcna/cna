@@ -7,5 +7,6 @@ cmake-build-vulkan/*
 cmake-build-easygl/*
 .sdl-prebuilt/
 .sdl-prebuilt-emscripten/
+cmake-build-bgfx/*
 
 
