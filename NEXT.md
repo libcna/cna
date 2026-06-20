@@ -219,12 +219,20 @@ cmake --build cmake-build-bgfx --target shaderc
 
 ## 8. Next tasks (ordered by priority)
 
-**All GRAPHICS_TASKS.md tasks (101–125) and deferred tasks (118–119) are complete.**
+Tasks 126–150 added across Phases 15–18.  Recommended order:
 
-There are no outstanding planned tasks.  Possible next work:
-- Audit remaining XNA 4.0 API surface not yet ported (check AUDIT.md if it exists)
-- Add unit tests for any public methods still lacking coverage
-- Bgfx integration-test for `GetBackBufferData` (currently unverified)
+| Priority | # | Why first |
+|----------|---|-----------|
+| High | 126 | SpriteBatch unit tests — biggest silent-regression risk |
+| High | 127 | SpriteFont unit tests |
+| High | 128–131 | Remaining unit test gaps (Texture2D, RenderTarget, OcclusionQuery, GraphicsAdapter) |
+| Medium | 132 | EasyGL ShaderEffect integration test (mirrors Vulkan Task 119) |
+| Medium | 133–135 | DualTexture/EnvironmentMap integration tests |
+| Medium | 141 | `GetVertexBuffers()` — small API gap |
+| Medium | 143 | Vulkan TextureCube/Texture3D upload — prerequisite for Task 136 |
+| Low | 137–140 | Bgfx stock effects parity (AlphaTest, DualTex, Skinned, Instanced) |
+| Low | 144–145 | Model.Draw / MRT integration tests |
+| Low | 146–150 | MSAA, EffectParameter round-trips, debug labels |
 
 ---
 
@@ -234,8 +242,8 @@ There are no outstanding planned tasks.  Possible next work:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: GRAPHICS_TASKS.md all tasks 101–125 complete, deferred 118–119 complete.
-All phases done. No outstanding tasks.
+Current status: GRAPHICS_TASKS.md phases 1–14 complete (Tasks 1–125 + 118–119).
+Tasks 126–150 added (Phases 15–18) — next task to start is 126 (SpriteBatch unit tests).
 DO NOT touch sharp-runtime — another agent is working on it.
 
 Update NEXT.md after each task.

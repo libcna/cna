@@ -131,13 +131,16 @@ All 100 original tasks addressed.
 | SpriteBatch custom Effect | ~0% | ~80% |
 | Render targets (2D, Cube, MRT) | ~90% | 90% |
 | FillMode::WireFrame | ℹ️ EasyGL N/A (GLES3); ❌ Vulkan | ℹ️ EasyGL N/A; ✅ Vulkan |
-| VideoPlayer | 0% | stub |
+| VideoPlayer | 0% | ✅ FFmpeg-backed |
 | DXT texture loading | 0% | ✅ |
-| **Overall realistic coverage** | **~75%** | **~95%** |
+| ShaderEffect (GLSL + SPIR-V) | 0% | ✅ both backends |
+| Unit-test coverage | ~60% | ~60% (Phases 15–16 address this) |
+| **Overall realistic coverage** | **~75%** | **~95% API surface / ~80% GPU behaviour** |
 
-> Remaining ~5%: advanced MSAA, GraphicsDeviceManager (intentionally omitted —
-> replaced by SDL3 Game integration), .xnb content pipeline (out of scope),
-> and platform-specific Bgfx renderer quirks.
+> Remaining ~5%: advanced MSAA (Tasks 146–147), `GetVertexBuffers` (Task 141),
+> Bgfx stock effects (Tasks 137–139), Vulkan Texture3D/Cube (Task 143),
+> GraphicsDeviceManager (intentionally omitted — replaced by SDL3 Game integration),
+> .xnb content pipeline (out of scope).
 
 ---
 
@@ -145,6 +148,59 @@ All 100 original tasks addressed.
 
 | # | Blocking reason |
 |---|----------------|
-| 114–116 Bgfx shaders | Requires bgfx shaderc binaries and build system setup |
-| 118 Vulkan per-slot sampler | Large descriptor set refactor across the entire Vulkan backend |
-| 104 / 108 EnvironmentMapEffect | Cube map as input texture + reflection shader is complex |
+| ~~114–116 Bgfx shaders~~ | ✅ Done |
+| ~~118 Vulkan per-slot sampler~~ | ✅ Done |
+| ~~104 / 108 EnvironmentMapEffect~~ | ✅ Done |
+
+---
+
+## Phase 15 — Test coverage gaps
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 126 | Unit tests: SpriteBatch — constructor, Begin/End pairs, all Draw overloads, Begin sort modes, invalid-state throws | ⬜ | No GPU needed for state-machine tests; highest-priority coverage gap |
+| 127 | Unit tests: SpriteFont — constructor, MeasureString, getCharacters, getLineSpacing/setLineSpacing, getSpacing/setSpacing, getDefaultCharacter/set, invalid glyph behavior | ⬜ | No GPU needed |
+| 128 | Unit tests: Texture2D — constructor, getWidth/Height/Format, SetData/GetData round-trip, FromStream PNG round-trip | ⬜ | Requires EasyGL build; mark all overloads covered |
+| 129 | Unit tests: Texture3D, TextureCube, RenderTarget2D, RenderTargetCube — constructors, property getters, GetData/SetData per-face | ⬜ | RenderTarget tests can be headless with EasyGL |
+| 130 | Unit tests: OcclusionQuery, EffectPass, EffectPassCollection, DynamicVertexBuffer, DynamicIndexBuffer — all public API methods | ⬜ | Most can be tested without GPU via constructor + property checks |
+| 131 | Unit tests: GraphicsAdapter, GraphicsResource, DisplayMode, DisplayModeCollection, GraphicsDeviceStatus | ⬜ | Cover static factory + property getters |
+
+---
+
+## Phase 16 — Effect integration tests
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 132 | Integration test: EasyGL — ShaderEffect (GLSL) with SpriteBatch; render white 1×1 texture through red-tint fragment shader, pixel readback asserts red centre and green bg | ⬜ | Mirrors Task 119 but for EasyGL/GLSL; verifies `EasyGLSpriteBatchBackend::SetCustomEffect` |
+| 133 | Integration test: EasyGL — DualTextureEffect: two textures blended on a quad, pixel readback asserts blended output colour | ⬜ | Exercises EasyGL `prog_dual_textured_` + second texture slot |
+| 134 | Integration test: EasyGL — EnvironmentMapEffect: quad with cube-map reflection, pixel readback asserts expected lit+env colour | ⬜ | TextureCube upload + EnvironmentMapEffect GPU dispatch |
+| 135 | Integration test: Vulkan — DualTextureEffect: same as Task 133 but on Vulkan pipeline | ⬜ | Verify Vulkan dual-texture descriptor set layout and shader |
+| 136 | Integration test: Vulkan — EnvironmentMapEffect: same as Task 134 but on Vulkan cube-map pipeline | ⬜ | Requires Vulkan TextureCube (Task 143) |
+
+---
+
+## Phase 17 — Bgfx parity
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 137 | Bgfx: AlphaTestEffect dispatch in `DrawPrimitivesEx` — add alpha-test shader pair and dispatch when `useAlphaTest` is set | ⬜ | Bgfx currently ignores all stock effect flags except lighting/texture/color |
+| 138 | Bgfx: DualTextureEffect dispatch in `DrawPrimitivesEx` — add dual-texture shader pair and dispatch when `useDualTexture` is set | ⬜ | Requires second texture sampler uniform in bgfx |
+| 139 | Bgfx: SkinnedEffect dispatch in `DrawPrimitivesEx` — add skinning shader with bone UBO | ⬜ | Bone matrices passed via uniform array |
+| 140 | Bgfx: `DrawInstancedPrimitivesEx` — replace the throw; implement via `bgfx::allocInstanceDataBuffer` | ⬜ | Needs instanced shader variant |
+
+---
+
+## Phase 18 — API gaps and Vulkan completeness
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 141 | `GraphicsDevice::GetVertexBuffers()` — add method returning current vertex buffer binding list; add unit test | ⬜ | Present in FNA, absent from CNA |
+| 142 | Vulkan: `RenderTargetCube` — implement `VulkanRenderTargetCubeBackend`: 6-face cubemap image, per-face framebuffer, `SetRenderTarget(RenderTargetCube*, CubeMapFace)` | ⬜ | EasyGL already has this; Vulkan returns nullptr |
+| 143 | Vulkan: Texture3D and TextureCube upload — implement `VulkanTexture3DBackend` and `VulkanTextureCubeBackend` with SetData/GetData; prerequisite for Task 136 | ⬜ | EasyGL has these; `CreateTexture3D`/`CreateTextureCube` currently return nullptr |
+| 144 | Integration test: EasyGL — Model rendering; hard-coded Model (2 bones, 1 mesh, BasicEffect), `Model::Draw(world, view, proj)`, pixel readback asserts expected colour | ⬜ | Verifies full Model→ModelMesh→ModelMeshPart→DrawPrimitivesEx chain |
+| 145 | Integration test: EasyGL — MRT (Multi-Render-Target): `SetRenderTargets({rt0, rt1})`, draw, read back from each attachment, assert different colours | ⬜ | EasyGL MRT path via `mrtFbo_`; no integration test exists |
+| 146 | MSAA: EasyGL — respect `PresentationParameters.MultiSampleCount`; create multisampled render buffer and resolve on Present | ⬜ | Backends hardcode sample count = 1 |
+| 147 | MSAA: Vulkan — respect `PresentationParameters.MultiSampleCount`; multisampled swapchain images, resolve attachment in render pass | ⬜ | Large backend change; low priority |
+| 148 | Integration test: Vulkan — RenderTarget2D full cycle: clear to red, `GetBackBufferData` after SetRenderTarget+Present, assert red pixel | ⬜ | Vulkan off-screen RT path exists but has no dedicated integration test |
+| 149 | Unit tests: EffectParameter `SetValue`/`GetValue` round-trip for all types (bool, int, float, Vector2/3/4, Matrix, Quaternion, Texture2D/3D/Cube) | ⬜ | EffectParameterTests.cpp exists but may not cover all SetValue overloads |
+| 150 | `GraphicsDevice::SetStringMarkerEXT` — add debug-label method; no-op on most backends, `vkCmdInsertDebugUtilsLabelEXT` on Vulkan with `VK_EXT_debug_utils` | ⬜ | Low risk, useful for GPU profiler/RenderDoc sessions |
