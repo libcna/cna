@@ -222,10 +222,19 @@ namespace CNA::Internal::Backends::Bgfx
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;
         // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)
         bgfx::FrameBufferHandle mrtFbo_ = BGFX_INVALID_HANDLE;
-        // 3D colored primitives shader (BGFX_INVALID_HANDLE until pre-compiled binaries are provided)
-        bgfx::ProgramHandle colored3DProgram_ = BGFX_INVALID_HANDLE;
-        // Uniform handle for world-view-projection matrix (shared between 3D draw calls)
-        bgfx::UniformHandle wvpUniform_ = BGFX_INVALID_HANDLE;
+        // 3D shader programs (BGFX_INVALID_HANDLE until bgfx_shaders.hpp binaries are loaded)
+        bgfx::ProgramHandle colored3DProgram_         = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle textured3DProgram_        = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle coloredTextured3DProgram_ = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle litTextured3DProgram_     = BGFX_INVALID_HANDLE;
+        // Uniforms shared across 3D draw calls
+        bgfx::UniformHandle wvpUniform_         = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle diffuseColor3DUnif_ = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle ambientColor3DUnif_ = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle light0Dir3DUnif_    = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle light0Diff3DUnif_   = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle lightingEn3DUnif_   = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle texColor3DSampler_  = BGFX_INVALID_HANDLE;
 
         explicit BgfxGraphicsBackend(SDL_Window* window);
         ~BgfxGraphicsBackend() override;

@@ -24,11 +24,29 @@ SHADER_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_HPP = os.path.join(SHADER_DIR, "bgfx_shaders.hpp")
 VARYING_DEF = os.path.join(SHADER_DIR, "varying.def.sc")
 
-# (logical-name, type, source-file)
-SHADERS = [
-    ("vs_colored3d", "vertex",   "vs_colored3d.sc"),
-    ("fs_colored3d", "fragment", "fs_colored3d.sc"),
+# (c-array-name, [(logical-name, type, source-file), ...])
+# Each pair becomes one bgfx::EmbeddedShader array used with bgfx::createEmbeddedShader.
+SHADER_PAIRS = [
+    ("kColored3dShaders", [
+        ("vs_colored3d",          "vertex",   "vs_colored3d.sc"),
+        ("fs_colored3d",          "fragment", "fs_colored3d.sc"),
+    ]),
+    ("kTextured3dShaders", [
+        ("vs_textured3d",         "vertex",   "vs_textured3d.sc"),
+        ("fs_textured3d",         "fragment", "fs_textured3d.sc"),
+    ]),
+    ("kColoredTextured3dShaders", [
+        ("vs_colored_textured3d", "vertex",   "vs_colored_textured3d.sc"),
+        ("fs_colored_textured3d", "fragment", "fs_colored_textured3d.sc"),
+    ]),
+    ("kLitTextured3dShaders", [
+        ("vs_lit_textured3d",     "vertex",   "vs_lit_textured3d.sc"),
+        ("fs_lit_textured3d",     "fragment", "fs_lit_textured3d.sc"),
+    ]),
 ]
+
+# Flat list for compilation loop
+SHADERS = [(name, stype, sc) for (_, entries) in SHADER_PAIRS for (name, stype, sc) in entries]
 
 # (type, profile, platform, array-suffix, bgfx RendererType)
 # Compile only what shaderc can produce on Linux.
@@ -125,31 +143,29 @@ def main():
     for text in array_texts:
         lines.append(text)
 
-    # Build EmbeddedShader array manually to avoid BGFX_EMBEDDED_SHADER, which
-    # on Linux also activates DXBC (BX_PLATFORM_LINUX is in BGFX_PLATFORM_SUPPORTS_DXBC)
-    # but shaderc cannot produce DXBC without D3D4Linux.
-    lines.append("static const bgfx::EmbeddedShader kColored3dShaders[] =")
-    lines.append("{")
-    for (name, stype, _) in SHADERS:
-        lines.append(f"    // {name}")
-        lines.append(f"    {{")
-        lines.append(f'        "{name}",')
-        lines.append(f"        {{")
-        # Emit only the suffixes we actually compiled
-        for suffix, renderer in present.get(name, {}).items():
-            c_name = f"{name}_{suffix}"
-            lines.append(f"            {{ {renderer}, {c_name}, sizeof({c_name}) }},")
-        # Noop minimal shader (required so createEmbeddedShader finds something
-        # when the active renderer type is Noop in test/headless contexts)
-        noop_data = NOOP_VSH if stype == "vertex" else NOOP_FSH
-        lines.append(f"            {{ bgfx::RendererType::Noop, {noop_data}, 10 }},")
-        # Sentinel
-        lines.append(f"            {{ bgfx::RendererType::Count, nullptr, 0 }},")
-        lines.append(f"        }}")
-        lines.append(f"    }},")
-    lines.append("    BGFX_EMBEDDED_SHADER_END()")
-    lines.append("};")
-    lines.append("")
+    # Build one EmbeddedShader array per shader pair, manually, to avoid
+    # BGFX_EMBEDDED_SHADER which on Linux also activates DXBC
+    # (BX_PLATFORM_LINUX is in BGFX_PLATFORM_SUPPORTS_DXBC) but shaderc
+    # cannot produce DXBC without D3D4Linux.
+    for (array_name, entries) in SHADER_PAIRS:
+        lines.append(f"static const bgfx::EmbeddedShader {array_name}[] =")
+        lines.append("{")
+        for (name, stype, _) in entries:
+            lines.append(f"    // {name}")
+            lines.append(f"    {{")
+            lines.append(f'        "{name}",')
+            lines.append(f"        {{")
+            for suffix, renderer in present.get(name, {}).items():
+                c_name = f"{name}_{suffix}"
+                lines.append(f"            {{ {renderer}, {c_name}, sizeof({c_name}) }},")
+            noop_data = NOOP_VSH if stype == "vertex" else NOOP_FSH
+            lines.append(f"            {{ bgfx::RendererType::Noop, {noop_data}, 10 }},")
+            lines.append(f"            {{ bgfx::RendererType::Count, nullptr, 0 }},")
+            lines.append(f"        }}")
+            lines.append(f"    }},")
+        lines.append("    BGFX_EMBEDDED_SHADER_END()")
+        lines.append("};")
+        lines.append("")
 
     with open(OUTPUT_HPP, "w") as f:
         f.write("\n".join(lines))

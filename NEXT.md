@@ -56,14 +56,13 @@ Phases 12–14 (Tasks 115–125) remain.
 
 ### Bgfx backend (`cmake-build-bgfx`)
 - **Builds**: clean.
-- Phase 11 (Task 114): shaderc toolchain set up; `colored3d` shaders compiled and embedded:
-  - `src/CNA/Internal/Backends/Bgfx/shaders/vs_colored3d.sc` + `fs_colored3d.sc` + `varying.def.sc`
-  - `compile_shaders.py` produces GLSL/ESSL/SPIR-V/WGSL variants → `bgfx_shaders.hpp`
-  - Manual `kColored3dShaders[]` struct (avoids `BGFX_EMBEDDED_SHADER` macro which requires DXBC on Linux)
-  - `colored3DProgram_` created at init from `kColored3dShaders`
-  - `DrawColoredPrimitives` submits `colored3DProgram_` (Task 115 effectively done)
-- **Tasks 116–117** remain: textured/lit 3D shaders and `GetBackBufferData` readback.
-- Smoke test (`--smoke 3`) exits 0.
+- Phase 11 (Tasks 114–116): full 3D shader suite compiled and wired:
+  - 4 shader pairs compiled (colored3d, textured3d, colored_textured3d, lit_textured3d) — GLSL/ESSL/SPIR-V/WGSL × 32 variants
+  - `compile_shaders.py` grouped into `SHADER_PAIRS`; generates 4 separate `bgfx::EmbeddedShader` arrays
+  - `bgfx/platform.h` removed (not shipped by bgfx.cmake; `PlatformData` is in `bgfx/bgfx.h`)
+  - 3 new programs + 6 new uniforms initialized at startup; destroyed in destructor
+  - `DrawPrimitivesEx` dispatches to lit / coloredTextured / textured / colored program
+- **Task 117** remains: `GetBackBufferData` async readback.
 
 ### Bgfx shaderc paths (needed to recompile shaders)
 ```
@@ -90,7 +89,7 @@ on EasyGL + Vulkan, non-zero draw offsets, true Vulkan GPU instancing.
 | 1–8 | Tasks 1–100 | ✅ all complete |
 | 9 — Effect system | Tasks 101–109 | ✅ all complete |
 | 10 — Draw features | Tasks 110–113 | ✅ all complete |
-| 11 — Bgfx 3D shaders | Task 114 | ✅; Tasks 115–117 ⬜ |
+| 11 — Bgfx 3D shaders | Tasks 114–116 | ✅; Task 117 ⬜ |
 | 12 — Vulkan deferred | Tasks 118–119 | ⬜ |
 | 13 — Missing XNA classes | Tasks 120–121 | ⬜ |
 | 14 — Integration tests | Tasks 122–125 | ⬜ |
@@ -211,8 +210,6 @@ cmake --build cmake-build-bgfx --target shaderc
 
 | # | Task | Notes |
 |---|------|-------|
-| 115 | Bgfx: wire `DrawColoredPrimitives` with `colored3DProgram_` | Likely already done — `DrawColoredPrimitives` submits the program; verify and mark ✅ |
-| 116 | Bgfx: `textured3d`, `colored_textured3d`, `lit_textured3d` shader variants via shaderc; wire `DrawPrimitivesEx` | Add new `.sc` files; extend `compile_shaders.py` and `bgfx_shaders.hpp` |
 | 117 | Bgfx: `GetBackBufferData` — async readback via `bgfx::blit` + `bgfx::readTexture` + `bgfx::frame(true)` | Currently always throws |
 | 118 | Vulkan: per-slot SamplerState — one `VkSampler` per binding slot (0–15) | Large descriptor set refactor |
 | 119 | Vulkan: custom Effect / SPIR-V loading — `IEffectBackend::CompileProgram(vertSpv, fragSpv)` | `ShaderEffect` fully functional on Vulkan |

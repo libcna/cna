@@ -1,7 +1,6 @@
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
 
 #include <bgfx/embedded_shader.h>
-#include <bgfx/platform.h>
 #include <bx/math.h>
 
 #include "fs_ocornut_imgui.bin.h"
@@ -603,20 +602,47 @@ namespace CNA::Internal::Backends::Bgfx
             spriteProgram = CreateSpriteProgram();
             textureSampler = bgfx::createUniform("s_tex", bgfx::UniformType::Sampler);
 
-            // Create colored 3D program from embedded shaders.
+            // Create 3D programs from embedded shaders.
             {
                 const bgfx::RendererType::Enum rt = bgfx::getRendererType();
-                bgfx::ShaderHandle vs = bgfx::createEmbeddedShader(kColored3dShaders, rt, "vs_colored3d");
-                bgfx::ShaderHandle fs = bgfx::createEmbeddedShader(kColored3dShaders, rt, "fs_colored3d");
-                if (bgfx::isValid(vs) && bgfx::isValid(fs))
-                    colored3DProgram_ = bgfx::createProgram(vs, fs, true);
-                else
+
+                auto tryCreateProgram = [&](const bgfx::EmbeddedShader* shaders,
+                                            const char* vsName, const char* fsName,
+                                            const char* label) -> bgfx::ProgramHandle
                 {
+                    bgfx::ShaderHandle vs = bgfx::createEmbeddedShader(shaders, rt, vsName);
+                    bgfx::ShaderHandle fs = bgfx::createEmbeddedShader(shaders, rt, fsName);
+                    if (bgfx::isValid(vs) && bgfx::isValid(fs))
+                        return bgfx::createProgram(vs, fs, true);
                     if (bgfx::isValid(vs)) bgfx::destroy(vs);
                     if (bgfx::isValid(fs)) bgfx::destroy(fs);
-                    std::cerr << "CNA: bgfx colored3D shaders not supported on "
-                              << bgfx::getRendererName(rt) << " — 3D draws will be no-ops.\n";
-                }
+                    std::cerr << "CNA: bgfx " << label << " shaders not supported on "
+                              << bgfx::getRendererName(rt) << "\n";
+                    return BGFX_INVALID_HANDLE;
+                };
+
+                colored3DProgram_         = tryCreateProgram(kColored3dShaders,
+                                                             "vs_colored3d", "fs_colored3d",
+                                                             "colored3d");
+                textured3DProgram_        = tryCreateProgram(kTextured3dShaders,
+                                                             "vs_textured3d", "fs_textured3d",
+                                                             "textured3d");
+                coloredTextured3DProgram_ = tryCreateProgram(kColoredTextured3dShaders,
+                                                             "vs_colored_textured3d",
+                                                             "fs_colored_textured3d",
+                                                             "colored_textured3d");
+                litTextured3DProgram_     = tryCreateProgram(kLitTextured3dShaders,
+                                                             "vs_lit_textured3d",
+                                                             "fs_lit_textured3d",
+                                                             "lit_textured3d");
+
+                wvpUniform_         = bgfx::createUniform("u_wvp",            bgfx::UniformType::Mat4);
+                diffuseColor3DUnif_ = bgfx::createUniform("u_diffuseColor",   bgfx::UniformType::Vec4);
+                ambientColor3DUnif_ = bgfx::createUniform("u_ambientColor",   bgfx::UniformType::Vec4);
+                light0Dir3DUnif_    = bgfx::createUniform("u_light0Dir",      bgfx::UniformType::Vec4);
+                light0Diff3DUnif_   = bgfx::createUniform("u_light0Diffuse",  bgfx::UniformType::Vec4);
+                lightingEn3DUnif_   = bgfx::createUniform("u_lightingEnabled",bgfx::UniformType::Vec4);
+                texColor3DSampler_  = bgfx::createUniform("s_texColor",       bgfx::UniformType::Sampler);
             }
 
             if (!bgfx::isValid(textureSampler))
@@ -655,8 +681,20 @@ namespace CNA::Internal::Backends::Bgfx
 
     BgfxGraphicsBackend::~BgfxGraphicsBackend()
     {
-        if (bgfx::isValid(wvpUniform_))     { bgfx::destroy(wvpUniform_);     wvpUniform_     = BGFX_INVALID_HANDLE; }
-        if (bgfx::isValid(colored3DProgram_)) { bgfx::destroy(colored3DProgram_); colored3DProgram_ = BGFX_INVALID_HANDLE; }
+        auto destroyU = [](bgfx::UniformHandle& h) { if (bgfx::isValid(h)) { bgfx::destroy(h); h = BGFX_INVALID_HANDLE; } };
+        auto destroyP = [](bgfx::ProgramHandle& h) { if (bgfx::isValid(h)) { bgfx::destroy(h); h = BGFX_INVALID_HANDLE; } };
+
+        destroyU(wvpUniform_);
+        destroyU(diffuseColor3DUnif_);
+        destroyU(ambientColor3DUnif_);
+        destroyU(light0Dir3DUnif_);
+        destroyU(light0Diff3DUnif_);
+        destroyU(lightingEn3DUnif_);
+        destroyU(texColor3DSampler_);
+        destroyP(colored3DProgram_);
+        destroyP(textured3DProgram_);
+        destroyP(coloredTextured3DProgram_);
+        destroyP(litTextured3DProgram_);
         if (bgfx::isValid(mrtFbo_))         { bgfx::destroy(mrtFbo_);         mrtFbo_         = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(textureSampler))  { bgfx::destroy(textureSampler);  textureSampler  = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(spriteProgram))   { bgfx::destroy(spriteProgram);   spriteProgram   = BGFX_INVALID_HANDLE; }
@@ -1184,9 +1222,6 @@ namespace CNA::Internal::Backends::Bgfx
         auto& vb = static_cast<const BgfxVertexBufferBackend&>(vb_in);
         if (!bgfx::isValid(vb.handle)) return;
 
-        if (!bgfx::isValid(wvpUniform_))
-            wvpUniform_ = bgfx::createUniform("u_wvp", bgfx::UniformType::Mat4);
-
         const Matrix wvp = world * view * projection;
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
@@ -1206,13 +1241,10 @@ namespace CNA::Internal::Backends::Bgfx
                                                            const Matrix& projection,
                                                            PrimitiveType primitive, int primitiveCount)
     {
-        if (!bgfx::isValid(colored3DProgram_)) return; // shader not loaded
+        if (!bgfx::isValid(colored3DProgram_)) return;
         auto& vb = static_cast<const BgfxVertexBufferBackend&>(vb_in);
         auto& ib = static_cast<const BgfxIndexBufferBackend&>(ib_in);
         if (!bgfx::isValid(vb.handle) || !bgfx::isValid(ib.handle)) return;
-
-        if (!bgfx::isValid(wvpUniform_))
-            wvpUniform_ = bgfx::createUniform("u_wvp", bgfx::UniformType::Mat4);
 
         const Matrix wvp = world * view * projection;
         float wvp_col[16];
@@ -1228,15 +1260,74 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::submit(currentViewId_, colored3DProgram_);
     }
 
-    void BgfxGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
+    void BgfxGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb_in,
                                                const Matrix& world, const Matrix& view,
                                                const Matrix& projection,
                                                PrimitiveType primitive, int primitiveCount,
-                                               const GpuDrawParams& /*params*/)
+                                               const GpuDrawParams& params)
     {
-        // Textured/lit bgfx shader variants require pre-compiled binary shaders.
-        // Until they are available, fall back to the colored-only path.
-        DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
+        auto& vb = static_cast<const BgfxVertexBufferBackend&>(vb_in);
+        if (!bgfx::isValid(vb.handle)) return;
+
+        const Matrix wvp = world * view * projection;
+        float wvp_col[16];
+        wvp.ToColumnMajor(wvp_col);
+        bgfx::setUniform(wvpUniform_, wvp_col);
+
+        bgfx::setVertexBuffer(0, vb.handle);
+        bgfx::setStencil(stencilFront_, stencilBack_);
+        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+                                | blendFlags_ | depthFlags_ | cullFlags_)
+                               | ToTopologyFlag(primitive);
+        bgfx::setState(state);
+
+        if (params.lightingEnabled && bgfx::isValid(litTextured3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float amb[4] = { params.ambientColor[0], params.ambientColor[1],
+                             params.ambientColor[2], 0.0f };
+            bgfx::setUniform(ambientColor3DUnif_, amb);
+            float dir[4] = { params.light0Dir[0], params.light0Dir[1],
+                             params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir);
+            float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                              params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff);
+            float litEn[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(lightingEn3DUnif_, litEn);
+
+            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            {
+                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+            }
+            bgfx::submit(currentViewId_, litTextured3DProgram_);
+        }
+        else if (params.textureEnabled && params.vertexColorEnabled
+                 && bgfx::isValid(coloredTextured3DProgram_))
+        {
+            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            {
+                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+            }
+            bgfx::submit(currentViewId_, coloredTextured3DProgram_);
+        }
+        else if (params.textureEnabled && bgfx::isValid(textured3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            {
+                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+            }
+            bgfx::submit(currentViewId_, textured3DProgram_);
+        }
+        else
+        {
+            if (!bgfx::isValid(colored3DProgram_)) return;
+            bgfx::submit(currentViewId_, colored3DProgram_);
+        }
     }
 
     void BgfxGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& /*vb*/,
