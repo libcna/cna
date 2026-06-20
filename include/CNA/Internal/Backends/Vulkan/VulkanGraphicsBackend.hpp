@@ -107,6 +107,54 @@ namespace CNA::Internal::Backends::Vulkan
     };
 
     // -------------------------------------------------------------------------
+    // VulkanEffectBackend (Task 119 — SPIR-V custom Effect for Vulkan)
+    // -------------------------------------------------------------------------
+
+    class VulkanEffectBackend : public IEffectBackend
+    {
+    public:
+        explicit VulkanEffectBackend(VulkanGraphicsBackend* owner);
+        ~VulkanEffectBackend() override;
+
+        // vertSpv / fragSpv are raw SPIR-V bytecode stored in std::string.
+        bool CompileProgram(const std::string& vertSpv, const std::string& fragSpv) override;
+        void Bind()   override;
+        void Unbind() override;
+        [[nodiscard]] bool        IsValid()        const override;
+        [[nodiscard]] std::string GetCompileError() const override;
+
+        // Named-uniform helpers map to fixed push-constant slots (see contract below).
+        void SetUniformMat4(const char* name, const float* matrix) override;
+        void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
+        void SetUniformVec3(const char* name, float x, float y, float z) override;
+        void SetUniformVec2(const char* name, float x, float y) override;
+        void SetUniformFloat(const char* name, float value) override;
+        void SetUniformInt(const char* name, int value) override;
+
+        VkPipeline       GetPipeline()       const { return pipeline_;       }
+        VkPipelineLayout GetPipelineLayout() const { return pipelineLayout_; }
+        // Returns pointer to 128-byte push-constant staging area (floats 2..31 = user uniforms).
+        const float*     GetPushConst()      const { return pushConst_;      }
+
+    private:
+        VulkanGraphicsBackend* owner_;
+        VkShaderModule   vertModule_     = VK_NULL_HANDLE;
+        VkShaderModule   fragModule_     = VK_NULL_HANDLE;
+        VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+        VkPipeline       pipeline_       = VK_NULL_HANDLE;
+        std::string      compileError_;
+        // Push-constant staging: 32 floats = 128 bytes.
+        // GLSL std140 layout (push_constant block) requires mat4 alignment=16, so
+        // after vec2 vpSize (8 bytes) there are 8 bytes of padding before mat4.
+        // [0..1]   = vpSize     (bytes  0- 7) — set by sprite batch at draw time.
+        // [2..3]   = padding    (bytes  8-15) — unused, zero.
+        // [4..19]  = uMatrix    (bytes 16-79) — set via SetUniformMat4.
+        // [20..23] = uColor     (bytes 80-95) — set via SetUniformVec4 / Vec3 / Vec2.
+        // [24..31] = uFloats×8  (bytes 96-127)— set via SetUniformFloat / Int.
+        float            pushConst_[32]  = {};
+    };
+
+    // -------------------------------------------------------------------------
     // VulkanSpriteBatchBackend
     // -------------------------------------------------------------------------
 
@@ -140,15 +188,19 @@ namespace CNA::Internal::Backends::Vulkan
 
         void ConsumeDraws();  // called by backend after upload — clears vectors
 
+        // Non-null if the active custom Effect resolved to a VulkanEffectBackend.
+        VulkanEffectBackend* GetCustomEffectBackend() const { return customEffectBackend_; }
+
     private:
-        VulkanGraphicsBackend*           backend_        = nullptr;
-        bool                             active_         = false;
-        Effect*                          customEffect_   = nullptr;
+        VulkanGraphicsBackend*           backend_             = nullptr;
+        bool                             active_              = false;
+        Effect*                          customEffect_        = nullptr;
+        VulkanEffectBackend*             customEffectBackend_ = nullptr;
         std::vector<Sprite2DVertex>      vertices_;
         std::vector<uint16_t>            indices_;
         std::vector<DrawCall>            draws_;
-        const VulkanTextureBackend*      currentTexture_ = nullptr;
-        uint32_t                         batchFirstIndex_= 0;
+        const VulkanTextureBackend*      currentTexture_      = nullptr;
+        uint32_t                         batchFirstIndex_     = 0;
 
         void FlushTexture();
     };
@@ -358,6 +410,7 @@ namespace CNA::Internal::Backends::Vulkan
         friend class VulkanVertexBufferBackend;
         friend class VulkanIndexBufferBackend;
         friend class VulkanSpriteBatchBackend;
+        friend class VulkanEffectBackend;
         friend class VulkanRenderTargetBackend;
         friend class VulkanOcclusionQueryBackend;
         friend class VulkanTexture3DBackend;
@@ -655,6 +708,9 @@ namespace CNA::Internal::Backends::Vulkan
         float blendFactorR_ = 1.f, blendFactorG_ = 1.f,
               blendFactorB_ = 1.f, blendFactorA_ = 1.f;
 
+        // Custom effect set by VulkanEffectBackend::Bind() (Task 119)
+        VulkanEffectBackend* activeCustomEffect_ = nullptr;
+
         // ---- Init helpers ----
         void CreateInstance();
         void SetupDebugMessenger();
@@ -732,6 +788,10 @@ namespace CNA::Internal::Backends::Vulkan
                                int addressU, int addressV,
                                int maxAnisotropy) override;
         VkDescriptorSet GetOrCreateTexSamplerDescSet(VkImageView view, VkSampler sampler);
+
+        // --- Custom Effect / SPIR-V loading (Task 119) ---
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                             const std::string& fragSrc) override;
 
         // ---- Swapchain lifecycle ----
         void RecreateSwapchain();

@@ -430,7 +430,9 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanSpriteBatchBackend::End()
     {
         if (!active_) return;
-        if (customEffect_) customEffect_->Apply();
+        backend_->activeCustomEffect_ = nullptr;
+        if (customEffect_) customEffect_->Apply(); // may set backend_->activeCustomEffect_
+        customEffectBackend_ = backend_->activeCustomEffect_;
         FlushTexture();
         active_ = false;
     }
@@ -440,6 +442,7 @@ namespace CNA::Internal::Backends::Vulkan
         vertices_.clear();
         indices_.clear();
         draws_.clear();
+        customEffectBackend_ = nullptr;
     }
 
     void VulkanSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
@@ -1483,6 +1486,212 @@ namespace CNA::Internal::Backends::Vulkan
 
         texSamplerDescSets_[key] = ds;
         return ds;
+    }
+
+    // =========================================================================
+    // VulkanEffectBackend (Task 119 — SPIR-V custom Effect)
+    // =========================================================================
+
+    VulkanEffectBackend::VulkanEffectBackend(VulkanGraphicsBackend* owner) : owner_(owner) {}
+
+    VulkanEffectBackend::~VulkanEffectBackend()
+    {
+        if (!owner_ || !owner_->device_) return;
+        vkDeviceWaitIdle(owner_->device_);
+        if (pipeline_       != VK_NULL_HANDLE) { vkDestroyPipeline(owner_->device_, pipeline_, nullptr);       pipeline_       = VK_NULL_HANDLE; }
+        if (pipelineLayout_ != VK_NULL_HANDLE) { vkDestroyPipelineLayout(owner_->device_, pipelineLayout_, nullptr); pipelineLayout_ = VK_NULL_HANDLE; }
+        if (fragModule_     != VK_NULL_HANDLE) { vkDestroyShaderModule(owner_->device_, fragModule_, nullptr);  fragModule_     = VK_NULL_HANDLE; }
+        if (vertModule_     != VK_NULL_HANDLE) { vkDestroyShaderModule(owner_->device_, vertModule_, nullptr);  vertModule_     = VK_NULL_HANDLE; }
+        if (owner_->activeCustomEffect_ == this) owner_->activeCustomEffect_ = nullptr;
+    }
+
+    // vertSpv and fragSpv contain raw SPIR-V bytecode (must be 4-byte aligned size).
+    // Push-constant contract (128 bytes, vert+frag stages):
+    //   [0..7]    = vec2 vpSize  — set automatically by the sprite-batch runtime
+    //   [8..71]   = mat4 uMatrix — SetUniformMat4(any name, ...)
+    //   [72..87]  = vec4 uColor  — SetUniformVec4/Vec3/Vec2(any name, ...)
+    //   [88..119] = 8 floats     — SetUniformFloat / SetUniformInt (slots 0–7)
+    bool VulkanEffectBackend::CompileProgram(const std::string& vertSpv, const std::string& fragSpv)
+    {
+        compileError_.clear();
+        if (vertSpv.size() % 4 != 0 || fragSpv.size() % 4 != 0) {
+            compileError_ = "SPIR-V size must be a multiple of 4 bytes";
+            return false;
+        }
+
+        VkShaderModuleCreateInfo mci{};
+        mci.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        mci.codeSize = vertSpv.size();
+        mci.pCode    = reinterpret_cast<const uint32_t*>(vertSpv.data());
+        if (vkCreateShaderModule(owner_->device_, &mci, nullptr, &vertModule_) != VK_SUCCESS) {
+            compileError_ = "Failed to create vertex shader module"; return false;
+        }
+        mci.codeSize = fragSpv.size();
+        mci.pCode    = reinterpret_cast<const uint32_t*>(fragSpv.data());
+        if (vkCreateShaderModule(owner_->device_, &mci, nullptr, &fragModule_) != VK_SUCCESS) {
+            compileError_ = "Failed to create fragment shader module"; return false;
+        }
+
+        VkPushConstantRange pcRange{};
+        pcRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        pcRange.offset = 0;
+        pcRange.size   = 128;
+
+        VkPipelineLayoutCreateInfo pli{};
+        pli.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pli.setLayoutCount         = 1;
+        pli.pSetLayouts            = &owner_->descriptorSetLayout_;
+        pli.pushConstantRangeCount = 1;
+        pli.pPushConstantRanges    = &pcRange;
+        if (vkCreatePipelineLayout(owner_->device_, &pli, nullptr, &pipelineLayout_) != VK_SUCCESS) {
+            compileError_ = "Failed to create pipeline layout"; return false;
+        }
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;   stages[0].module = vertModule_; stages[0].pName = "main";
+        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; stages[1].module = fragModule_; stages[1].pName = "main";
+
+        // Same vertex input as Sprite2DVertex: x,y | u,v | r,g,b,a (32 bytes)
+        VkVertexInputBindingDescription bind{ 0, sizeof(Sprite2DVertex), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[3]{};
+        attrs[0] = { 0, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(Sprite2DVertex, x) };
+        attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(Sprite2DVertex, u) };
+        attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Sprite2DVertex, r) };
+
+        VkPipelineVertexInputStateCreateInfo vis{};
+        vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vis.vertexBindingDescriptionCount = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexAttributeDescriptionCount = 3; vis.pVertexAttributeDescriptions = attrs;
+
+        VkPipelineInputAssemblyStateCreateInfo ias{};
+        ias.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ias.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+        VkViewport vport{ 0, 0, (float)owner_->swapchainExtent_.width,
+                          (float)owner_->swapchainExtent_.height, 0, 1 };
+        VkRect2D sci{ {0,0}, owner_->swapchainExtent_ };
+        VkPipelineViewportStateCreateInfo vpState{};
+        vpState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vpState.viewportCount = 1; vpState.pViewports = &vport;
+        vpState.scissorCount  = 1; vpState.pScissors  = &sci;
+
+        VkPipelineRasterizationStateCreateInfo rs{};
+        rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.polygonMode = VK_POLYGON_MODE_FILL;
+        rs.cullMode    = VK_CULL_MODE_NONE;
+        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
+        rs.lineWidth   = 1.f;
+
+        VkPipelineMultisampleStateCreateInfo ms{};
+        ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineColorBlendAttachmentState cba{};
+        cba.blendEnable         = VK_TRUE;
+        cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        cba.colorBlendOp        = VK_BLEND_OP_ADD;
+        cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        cba.alphaBlendOp        = VK_BLEND_OP_ADD;
+        cba.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                  VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendStateCreateInfo cbs{};
+        cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cbs.attachmentCount = 1; cbs.pAttachments = &cba;
+
+        VkDynamicState dynStates[] = {
+            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+        };
+        VkPipelineDynamicStateCreateInfo dyn{};
+        dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+
+        VkPipelineDepthStencilStateCreateInfo dsInfo{};
+        dsInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        dsInfo.depthTestEnable  = VK_FALSE;
+        dsInfo.depthWriteEnable = VK_FALSE;
+
+        VkGraphicsPipelineCreateInfo pci{};
+        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pci.stageCount          = 2; pci.pStages = stages;
+        pci.pVertexInputState   = &vis;
+        pci.pInputAssemblyState = &ias;
+        pci.pViewportState      = &vpState;
+        pci.pRasterizationState = &rs;
+        pci.pMultisampleState   = &ms;
+        pci.pDepthStencilState  = &dsInfo;
+        pci.pColorBlendState    = &cbs;
+        pci.pDynamicState       = &dyn;
+        pci.layout              = pipelineLayout_;
+        pci.renderPass          = owner_->renderPass_;
+        pci.subpass             = 0;
+
+        if (vkCreateGraphicsPipelines(owner_->device_, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_) != VK_SUCCESS) {
+            compileError_ = "Failed to create graphics pipeline"; return false;
+        }
+        return true;
+    }
+
+    void VulkanEffectBackend::Bind()
+    {
+        if (pipeline_ != VK_NULL_HANDLE)
+            owner_->activeCustomEffect_ = this;
+    }
+
+    void VulkanEffectBackend::Unbind()
+    {
+        if (owner_->activeCustomEffect_ == this)
+            owner_->activeCustomEffect_ = nullptr;
+    }
+
+    bool VulkanEffectBackend::IsValid() const { return pipeline_ != VK_NULL_HANDLE; }
+
+    std::string VulkanEffectBackend::GetCompileError() const { return compileError_; }
+
+    void VulkanEffectBackend::SetUniformMat4(const char* /*name*/, const float* matrix)
+    {
+        // uMatrix at byte offset 16 (GLSL pads vec2 to 16 before mat4): float[4..19]
+        std::memcpy(pushConst_ + 4, matrix, 64);
+    }
+
+    void VulkanEffectBackend::SetUniformVec4(const char* /*name*/, float x, float y, float z, float w)
+    {
+        // uColor at byte offset 80: float[20..23]
+        pushConst_[20] = x; pushConst_[21] = y; pushConst_[22] = z; pushConst_[23] = w;
+    }
+
+    void VulkanEffectBackend::SetUniformVec3(const char* /*name*/, float x, float y, float z)
+    {
+        pushConst_[20] = x; pushConst_[21] = y; pushConst_[22] = z;
+    }
+
+    void VulkanEffectBackend::SetUniformVec2(const char* /*name*/, float x, float y)
+    {
+        pushConst_[20] = x; pushConst_[21] = y;
+    }
+
+    void VulkanEffectBackend::SetUniformFloat(const char* /*name*/, float value)
+    {
+        // uFloat0 at byte offset 96: float[24]
+        pushConst_[24] = value;
+    }
+
+    void VulkanEffectBackend::SetUniformInt(const char* /*name*/, int value)
+    {
+        pushConst_[24] = static_cast<float>(value);
+    }
+
+    std::unique_ptr<IEffectBackend> VulkanGraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto backend = std::make_unique<VulkanEffectBackend>(this);
+        if (!vertSrc.empty() && !fragSrc.empty())
+            backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
     }
 
     // =========================================================================
@@ -3332,7 +3541,7 @@ namespace CNA::Internal::Backends::Vulkan
         auto drawSpritesFor = [&](VulkanRTSource* targetRT,
                                   float vpW, float vpH)
         {
-            bool pipelineBound = false;
+            VkPipeline lastBoundPipeline = VK_NULL_HANDLE;
             for (auto& [batch, batchRT] : activeBatches_) {
                 if (batchRT != targetRT) continue;
                 const auto& verts = batch->GetVertices();
@@ -3345,20 +3554,40 @@ namespace CNA::Internal::Backends::Vulkan
                 std::memcpy(spriteIBPtr_[currentFrame_], inds.data(),
                             inds.size() * sizeof(uint16_t));
 
-                if (!pipelineBound) {
-                    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline2D_);
-                    pipelineBound = true;
+                // Select pipeline: custom SPIR-V effect (Task 119) or built-in 2D.
+                VkPipeline       activePipe   = pipeline2D_;
+                VkPipelineLayout activeLayout = pipelineLayout2D_;
+                const float*     customPC     = nullptr;
+                const auto*      ceb          = batch->GetCustomEffectBackend();
+                if (ceb && ceb->GetPipeline() != VK_NULL_HANDLE) {
+                    activePipe   = ceb->GetPipeline();
+                    activeLayout = ceb->GetPipelineLayout();
+                    customPC     = ceb->GetPushConst();
+                }
+
+                if (activePipe != lastBoundPipeline) {
+                    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, activePipe);
+                    lastBoundPipeline = activePipe;
                 }
                 VkDeviceSize off = 0;
                 vkCmdBindVertexBuffers(cb, 0, 1, &spriteVB_[currentFrame_], &off);
                 vkCmdBindIndexBuffer(cb, spriteIB_[currentFrame_], 0, VK_INDEX_TYPE_UINT16);
 
                 float vpSize[2] = { vpW, vpH };
-                vkCmdPushConstants(cb, pipelineLayout2D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 8, vpSize);
+                if (customPC) {
+                    // Push 128-byte block: vpSize at [0..7], user uniforms at [8..127].
+                    float fullPC[32];
+                    std::memcpy(fullPC,     vpSize,      8);
+                    std::memcpy(fullPC + 2, customPC + 2, 120);
+                    vkCmdPushConstants(cb, activeLayout,
+                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128, fullPC);
+                } else {
+                    vkCmdPushConstants(cb, pipelineLayout2D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 8, vpSize);
+                }
 
                 for (const auto& d : draws) {
                     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        pipelineLayout2D_, 0, 1, &d.descSet, 0, nullptr);
+                        activeLayout, 0, 1, &d.descSet, 0, nullptr);
                     vkCmdDrawIndexed(cb, d.indexCount, 1, d.firstIndex, 0, 0);
                 }
                 batch->ConsumeDraws();
@@ -3648,9 +3877,9 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (!initialized_ || swapchainImages_.empty()) return;
 
-        // If there are pending draw commands (queued inside Draw() but not yet submitted),
+        // If there are pending draw commands (3D queue or sprite batches not yet submitted),
         // flush them via Present() so the swapchain image contains the rendered frame.
-        if (!pending3D_.empty())
+        if (!pending3D_.empty() || !activeBatches_.empty())
             Present();
 
         // Wait for all GPU work to finish so the swapchain image is safe to read.

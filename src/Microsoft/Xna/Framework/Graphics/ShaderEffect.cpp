@@ -22,6 +22,43 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    bool ShaderEffect::IsEffectValid() const
+    {
+        return effectBackend_ && effectBackend_->IsValid();
+    }
+
+    void ShaderEffect::SetUniformMat4(const char* name, const float* matrix)
+    {
+        if (effectBackend_) effectBackend_->SetUniformMat4(name, matrix);
+    }
+
+    void ShaderEffect::SetUniformVec4(const char* name, float x, float y, float z, float w)
+    {
+        if (effectBackend_) effectBackend_->SetUniformVec4(name, x, y, z, w);
+    }
+
+    void ShaderEffect::SetUniformVec3(const char* name, float x, float y, float z)
+    {
+        if (effectBackend_) effectBackend_->SetUniformVec3(name, x, y, z);
+    }
+
+    void ShaderEffect::SetUniformVec2(const char* name, float x, float y)
+    {
+        if (effectBackend_) effectBackend_->SetUniformVec2(name, x, y);
+    }
+
+    void ShaderEffect::SetUniformFloat(const char* name, float value)
+    {
+        if (effectBackend_) effectBackend_->SetUniformFloat(name, value);
+    }
+
+    void ShaderEffect::SetUniformInt(const char* name, int value)
+    {
+        if (effectBackend_) effectBackend_->SetUniformInt(name, value);
+    }
+
+    ShaderEffect::~ShaderEffect() = default;
+
     const std::string& ShaderEffect::getVertexSourceProperty() const { return vertSrc_; }
     const std::string& ShaderEffect::getFragmentSourceProperty() const { return fragSrc_; }
     const std::string& ShaderEffect::GetVertexSource() const { return vertSrc_; }

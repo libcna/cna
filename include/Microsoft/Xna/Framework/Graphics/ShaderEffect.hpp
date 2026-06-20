@@ -30,6 +30,25 @@ namespace Microsoft::Xna::Framework::Graphics
                            const std::string& vertSrc,
                            const std::string& fragSrc);
 
+        // Destructor defined in .cpp to avoid incomplete-type error on IEffectBackend.
+        ~ShaderEffect();
+
+        /** @brief Returns true if the backend compiled the shader program successfully. */
+        NOXNA [[nodiscard]] bool IsEffectValid() const;
+
+        /** @brief Sets a column-major 4×4 matrix uniform by name. */
+        NOXNA void SetUniformMat4(const char* name, const float* matrix);
+        /** @brief Sets a vec4 uniform by name (x, y, z, w). */
+        NOXNA void SetUniformVec4(const char* name, float x, float y, float z, float w);
+        /** @brief Sets a vec3 uniform by name (x, y, z). */
+        NOXNA void SetUniformVec3(const char* name, float x, float y, float z);
+        /** @brief Sets a vec2 uniform by name (x, y). */
+        NOXNA void SetUniformVec2(const char* name, float x, float y);
+        /** @brief Sets a scalar float uniform by name. */
+        NOXNA void SetUniformFloat(const char* name, float value);
+        /** @brief Sets a scalar int uniform by name. */
+        NOXNA void SetUniformInt(const char* name, int value);
+
         /**
          * @brief Gets the GLSL vertex shader source string.
          *

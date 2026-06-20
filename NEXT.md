@@ -13,7 +13,8 @@ one of four backends: SDL_Renderer, EasyGL (OpenGL ES 3.2 via easygl + metagl),
 Vulkan, or Bgfx.
 
 **Current phase**: GRAPHICS_TASKS.md Phases 1–14 complete (Tasks 101–125 ✅),
-Task 118 (Vulkan per-slot SamplerState) complete.  Only Task 119 (Vulkan custom Effect) remains.
+Tasks 118–119 (Vulkan per-slot SamplerState + custom SPIR-V Effect) complete.
+**All deferred tasks finished.  No outstanding tasks.**
 
 **Key architectural decisions**:
 - Backend selected at compile time via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -74,7 +75,11 @@ bgfx include dir: cmake-build-bgfx/_deps/bgfx_cmake-src/bgfx/src
 
 ## 3. Last commits
 
-**HEAD** — Task 118: Vulkan per-slot SamplerState — `SamplerStateKey` cache, `slotSamplers_[16]`,
+**HEAD** — Task 119: Vulkan custom Effect / SPIR-V — `VulkanEffectBackend` with GLSL std140-aligned
+128-byte push constants; push constant offsets fixed (GLSL pads `vec2` to 16 before `mat4`);
+`cna_test_vulkan_shader_effect` passes (red tint over green background).
+
+**prev** — Task 118: Vulkan per-slot SamplerState — `SamplerStateKey` cache, `slotSamplers_[16]`,
 `GetOrCreateTexSamplerDescSet`, anisotropy support, draw paths use slot-specific sampler.
 
 **prev** — Tasks 122–125: Integration tests — AlphaTestEffect cutout, SkinnedEffect bone
@@ -97,7 +102,7 @@ VideoPlayer (confirmed complete), DxtUtil + Texture2D::FromStream DDS decoding.
 | 9 — Effect system | Tasks 101–109 | ✅ all complete |
 | 10 — Draw features | Tasks 110–113 | ✅ all complete |
 | 11 — Bgfx 3D shaders | Tasks 114–117 | ✅ all complete |
-| 12 — Vulkan deferred | Tasks 118–119 | 🔄 118 ✅ / 119 ⬜ |
+| 12 — Vulkan deferred | Tasks 118–119 | ✅ all complete |
 | 13 — Missing XNA classes | Tasks 120–121 | ✅ all complete |
 | 14 — Integration tests | Tasks 122–125 | ✅ all complete |
 
@@ -108,9 +113,8 @@ VideoPlayer (confirmed complete), DxtUtil + Texture2D::FromStream DDS decoding.
 | Status | Item |
 |--------|------|
 | **unverified** | Bgfx `GetBackBufferData` implemented via `requestScreenShot` callback + up to 3× `bgfx::frame()`; correct in single-threaded bgfx mode — not integration-tested yet |
-| **incomplete** | Bgfx `DrawPrimitivesEx` textured/lit — needs Tasks 116 shaders |
 | ✅ **done** | Vulkan per-slot SamplerState (Task 118 — `slotSamplers_[16]`, `samplerCache_`, `GetOrCreateTexSamplerDescSet`) |
-| **incomplete** | Vulkan custom Effect / SPIR-V loading (Task 119 deferred) |
+| ✅ **done** | Vulkan custom Effect / SPIR-V loading (Task 119 — `VulkanEffectBackend`, 128-byte push constants with GLSL std140 alignment, `cna_test_vulkan_shader_effect` passes) |
 | **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
 | **invariant** | `Color` has vtable pointer — never cast `Color*` to `uint8_t*` for pixel I/O |
 
@@ -215,11 +219,12 @@ cmake --build cmake-build-bgfx --target shaderc
 
 ## 8. Next tasks (ordered by priority)
 
-**Tasks 101–125 complete.  Task 118 (per-slot SamplerState) now also complete.**  Only Task 119 remains:
+**All GRAPHICS_TASKS.md tasks (101–125) and deferred tasks (118–119) are complete.**
 
-| # | Task | Notes |
-|---|------|-------|
-| 119 | Vulkan: custom Effect / SPIR-V loading — `IEffectBackend::CompileProgram(vertSpv, fragSpv)` | `ShaderEffect` fully functional on Vulkan |
+There are no outstanding planned tasks.  Possible next work:
+- Audit remaining XNA 4.0 API surface not yet ported (check AUDIT.md if it exists)
+- Add unit tests for any public methods still lacking coverage
+- Bgfx integration-test for `GetBackBufferData` (currently unverified)
 
 ---
 
@@ -229,9 +234,8 @@ cmake --build cmake-build-bgfx --target shaderc
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: GRAPHICS_TASKS.md Tasks 101–125 complete (all phases 1–14 done).
-Task 118 (Vulkan per-slot SamplerState) complete.  Only Task 119 remains.
-DO NOT touch sharp-runtime — another agent is working on it.
+Current status: GRAPHICS_TASKS.md all tasks 101–125 complete, deferred 118–119 complete.
+All phases done. No outstanding tasks.
 DO NOT touch sharp-runtime — another agent is working on it.
 
 Update NEXT.md after each task.

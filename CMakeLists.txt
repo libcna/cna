@@ -563,6 +563,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 119: ShaderEffect with SPIR-V — SpriteBatch tint via custom push constants
+        cna_vulkan_test(cna_test_vulkan_shader_effect
+                        examples/vulkan_shader_effect_test.cpp)
+        add_test(NAME Vulkan_ShaderEffect_SpirV
+                 COMMAND cna_test_vulkan_shader_effect)
+        set_tests_properties(Vulkan_ShaderEffect_SpirV PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
