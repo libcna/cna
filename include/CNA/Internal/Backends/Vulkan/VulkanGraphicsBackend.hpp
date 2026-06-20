@@ -3,6 +3,7 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include <vulkan/vulkan.h>
 #include <array>
+#include <map>
 #include <unordered_map>
 #include <vector>
 #include <stdexcept>
@@ -478,6 +479,22 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory  depthMemory_    = VK_NULL_HANDLE;
         VkImageView     depthImageView_ = VK_NULL_HANDLE;
 
+        // --- Sampler cache: one VkSampler per unique (filter,addrU,addrV,aniso) tuple ---
+        struct SamplerStateKey {
+            int filter, addressU, addressV, maxAnisotropy;
+            bool operator<(const SamplerStateKey& o) const noexcept {
+                if (filter     != o.filter)     return filter     < o.filter;
+                if (addressU   != o.addressU)   return addressU   < o.addressU;
+                if (addressV   != o.addressV)   return addressV   < o.addressV;
+                return maxAnisotropy < o.maxAnisotropy;
+            }
+        };
+        std::map<SamplerStateKey, VkSampler>                         samplerCache_;
+        VkSampler                                                     slotSamplers_[16] = {};
+        std::map<std::pair<VkImageView,VkSampler>, VkDescriptorSet>  texSamplerDescSets_;
+        bool anisotropySupported_ = false;
+        float maxSamplerAnisotropy_ = 1.f;
+
         // --- Pipeline resources (permanent) ---
         VkSampler             defaultSampler_        = VK_NULL_HANDLE;
         VkDescriptorSetLayout descriptorSetLayout_   = VK_NULL_HANDLE;
@@ -709,6 +726,12 @@ namespace CNA::Internal::Backends::Vulkan
         void CreateFrame3DBuffers();
         void EnsureFrame3DBuffers();
         VkRenderPass GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount);
+
+        // --- Per-slot SamplerState (Task 118) ---
+        void ApplySamplerState(int slot, int filter,
+                               int addressU, int addressV,
+                               int maxAnisotropy) override;
+        VkDescriptorSet GetOrCreateTexSamplerDescSet(VkImageView view, VkSampler sampler);
 
         // ---- Swapchain lifecycle ----
         void RecreateSwapchain();

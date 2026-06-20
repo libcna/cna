@@ -709,6 +709,10 @@ namespace CNA::Internal::Backends::Vulkan
         // Step 4: destroy descriptor resources.
         if (descriptorPool_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);           descriptorPool_      = VK_NULL_HANDLE; }
         if (descriptorSetLayout_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr); descriptorSetLayout_ = VK_NULL_HANDLE; }
+        texSamplerDescSets_.clear(); // descriptor sets freed with pool above
+        for (auto& [k, s] : samplerCache_)
+            if (s != VK_NULL_HANDLE) vkDestroySampler(device_, s, nullptr);
+        samplerCache_.clear();
         if (defaultSampler_      != VK_NULL_HANDLE) { vkDestroySampler(device_, defaultSampler_, nullptr);                  defaultSampler_      = VK_NULL_HANDLE; }
 
         // Step 5: destroy pipelines, render pass, and framebuffers.
@@ -962,6 +966,13 @@ namespace CNA::Internal::Backends::Vulkan
         if (supported.fillModeNonSolid) {
             feat.fillModeNonSolid     = VK_TRUE;
             fillModeNonSolidSupported_ = true;
+        }
+        if (supported.samplerAnisotropy) {
+            feat.samplerAnisotropy = VK_TRUE;
+            anisotropySupported_   = true;
+            VkPhysicalDeviceProperties props{};
+            vkGetPhysicalDeviceProperties(physicalDevice_, &props);
+            maxSamplerAnisotropy_ = props.limits.maxSamplerAnisotropy;
         }
         VkDeviceCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1338,6 +1349,7 @@ namespace CNA::Internal::Backends::Vulkan
         ci.borderColor  = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
         if (vkCreateSampler(device_, &ci, nullptr, &defaultSampler_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateSampler failed");
+        for (auto& s : slotSamplers_) s = defaultSampler_;
     }
 
     void VulkanGraphicsBackend::CreateDescriptorSetLayout()
@@ -1366,6 +1378,111 @@ namespace CNA::Internal::Backends::Vulkan
         ci.pPoolSizes = &ps;
         if (vkCreateDescriptorPool(device_, &ci, nullptr, &descriptorPool_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateDescriptorPool failed");
+    }
+
+    // =========================================================================
+    // Per-slot SamplerState (Task 118)
+    // =========================================================================
+
+    void VulkanGraphicsBackend::ApplySamplerState(int slot, int filter,
+                                                   int addressU, int addressV,
+                                                   int maxAnisotropy)
+    {
+        if (slot < 0 || slot >= 16) return;
+
+        SamplerStateKey key{ filter, addressU, addressV, maxAnisotropy };
+        auto it = samplerCache_.find(key);
+        if (it != samplerCache_.end()) {
+            slotSamplers_[slot] = it->second;
+            return;
+        }
+
+        // XNA TextureFilter int values:
+        //  0=Linear, 1=Point, 2=Anisotropic, 3=LinearMipPoint, 4=PointMipLinear,
+        //  5=MinLinearMagPointMipLinear, 6=MinLinearMagPointMipPoint,
+        //  7=MinPointMagLinearMipLinear, 8=MinPointMagLinearMipPoint
+        VkFilter magF, minF;
+        VkSamplerMipmapMode mipMode;
+        bool enableAniso = false;
+        switch (filter) {
+        case 1:  magF = VK_FILTER_NEAREST; minF = VK_FILTER_NEAREST; mipMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; break; // Point
+        case 2:  magF = VK_FILTER_LINEAR;  minF = VK_FILTER_LINEAR;  mipMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;  enableAniso = true; break; // Anisotropic
+        case 3:  magF = VK_FILTER_LINEAR;  minF = VK_FILTER_LINEAR;  mipMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; break; // LinearMipPoint
+        case 4:  magF = VK_FILTER_NEAREST; minF = VK_FILTER_NEAREST; mipMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;  break; // PointMipLinear
+        case 5:  magF = VK_FILTER_NEAREST; minF = VK_FILTER_LINEAR;  mipMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;  break; // MinLinearMagPointMipLinear
+        case 6:  magF = VK_FILTER_NEAREST; minF = VK_FILTER_LINEAR;  mipMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; break; // MinLinearMagPointMipPoint
+        case 7:  magF = VK_FILTER_LINEAR;  minF = VK_FILTER_NEAREST; mipMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;  break; // MinPointMagLinearMipLinear
+        case 8:  magF = VK_FILTER_LINEAR;  minF = VK_FILTER_NEAREST; mipMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; break; // MinPointMagLinearMipPoint
+        default: magF = VK_FILTER_LINEAR;  minF = VK_FILTER_LINEAR;  mipMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;  break; // Linear (0)
+        }
+
+        // XNA TextureAddressMode int values: 0=Wrap, 1=Clamp, 2=Mirror
+        auto toAddr = [](int a) -> VkSamplerAddressMode {
+            switch (a) {
+            case 0:  return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+            case 2:  return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+            default: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; // Clamp (1)
+            }
+        };
+
+        VkSamplerCreateInfo ci{};
+        ci.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        ci.magFilter    = magF;
+        ci.minFilter    = minF;
+        ci.addressModeU = toAddr(addressU);
+        ci.addressModeV = toAddr(addressV);
+        ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        ci.mipmapMode   = mipMode;
+        ci.borderColor  = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
+        if (enableAniso && anisotropySupported_) {
+            ci.anisotropyEnable = VK_TRUE;
+            ci.maxAnisotropy    = std::min(static_cast<float>(std::max(1, maxAnisotropy)),
+                                           maxSamplerAnisotropy_);
+        }
+
+        VkSampler sampler = VK_NULL_HANDLE;
+        if (vkCreateSampler(device_, &ci, nullptr, &sampler) != VK_SUCCESS)
+            return; // fallback: keep existing slot sampler
+        samplerCache_[key]   = sampler;
+        slotSamplers_[slot] = sampler;
+    }
+
+    VkDescriptorSet VulkanGraphicsBackend::GetOrCreateTexSamplerDescSet(VkImageView view,
+                                                                         VkSampler sampler)
+    {
+        if (view == VK_NULL_HANDLE || sampler == VK_NULL_HANDLE)
+            return defaultWhiteDescSet_;
+
+        auto key = std::make_pair(view, sampler);
+        auto it  = texSamplerDescSets_.find(key);
+        if (it != texSamplerDescSets_.end())
+            return it->second;
+
+        VkDescriptorSet ds = VK_NULL_HANDLE;
+        VkDescriptorSetAllocateInfo dsAI{};
+        dsAI.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        dsAI.descriptorPool     = descriptorPool_;
+        dsAI.descriptorSetCount = 1;
+        dsAI.pSetLayouts        = &descriptorSetLayout_;
+        if (vkAllocateDescriptorSets(device_, &dsAI, &ds) != VK_SUCCESS)
+            return defaultWhiteDescSet_;
+
+        VkDescriptorImageInfo imgInfo{};
+        imgInfo.sampler     = sampler;
+        imgInfo.imageView   = view;
+        imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet write{};
+        write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet          = ds;
+        write.dstBinding      = 0;
+        write.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.descriptorCount = 1;
+        write.pImageInfo      = &imgInfo;
+        vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+
+        texSamplerDescSets_[key] = ds;
+        return ds;
     }
 
     // =========================================================================
@@ -3843,11 +3960,10 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView v0 = vt0 ? vt0->GetImageView() : defaultWhiteView_;
             VkImageView v1 = vt1 ? vt1->GetImageView() : defaultWhiteView_;
             d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1);
-        } else if (params.texture0) {
-            const auto* vt = dynamic_cast<const VulkanTextureBackend*>(params.texture0);
-            d.descSet = vt ? vt->GetDescriptorSet() : defaultWhiteDescSet_;
         } else {
-            d.descSet = defaultWhiteDescSet_;
+            const auto* vt = params.texture0 ? dynamic_cast<const VulkanTextureBackend*>(params.texture0) : nullptr;
+            VkImageView view = vt ? vt->GetImageView() : defaultWhiteView_;
+            d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
         }
         pending3D_.push_back(std::move(d));
     }
@@ -3939,11 +4055,10 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView v0 = vt0 ? vt0->GetImageView() : defaultWhiteView_;
             VkImageView v1 = vt1 ? vt1->GetImageView() : defaultWhiteView_;
             d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1);
-        } else if (params.texture0) {
-            const auto* vt = dynamic_cast<const VulkanTextureBackend*>(params.texture0);
-            d.descSet = vt ? vt->GetDescriptorSet() : defaultWhiteDescSet_;
         } else {
-            d.descSet = defaultWhiteDescSet_;
+            const auto* vt = params.texture0 ? dynamic_cast<const VulkanTextureBackend*>(params.texture0) : nullptr;
+            VkImageView view = vt ? vt->GetImageView() : defaultWhiteView_;
+            d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
         }
         pending3D_.push_back(std::move(d));
     }

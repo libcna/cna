@@ -12,8 +12,8 @@ It is a framework/runtime, not a game.
 one of four backends: SDL_Renderer, EasyGL (OpenGL ES 3.2 via easygl + metagl),
 Vulkan, or Bgfx.
 
-**Current phase**: GRAPHICS_TASKS.md Phases 1–13 complete (Tasks 101–123 ✅),
-Phase 14 complete (Tasks 122–125 ✅).  All 125 tasks done.
+**Current phase**: GRAPHICS_TASKS.md Phases 1–14 complete (Tasks 101–125 ✅),
+Task 118 (Vulkan per-slot SamplerState) complete.  Only Task 119 (Vulkan custom Effect) remains.
 
 **Key architectural decisions**:
 - Backend selected at compile time via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -74,7 +74,10 @@ bgfx include dir: cmake-build-bgfx/_deps/bgfx_cmake-src/bgfx/src
 
 ## 3. Last commits
 
-**HEAD** — Tasks 122–125: Integration tests — AlphaTestEffect cutout, SkinnedEffect bone
+**HEAD** — Task 118: Vulkan per-slot SamplerState — `SamplerStateKey` cache, `slotSamplers_[16]`,
+`GetOrCreateTexSamplerDescSet`, anisotropy support, draw paths use slot-specific sampler.
+
+**prev** — Tasks 122–125: Integration tests — AlphaTestEffect cutout, SkinnedEffect bone
 deformation, Vulkan DrawInstancedPrimitives ×3, DXT1 FromStream readback.
 
 **prev** — Tasks 115–121: Bgfx textured/lit shaders + DrawPrimitivesEx, GetBackBufferData callback,
@@ -94,7 +97,7 @@ VideoPlayer (confirmed complete), DxtUtil + Texture2D::FromStream DDS decoding.
 | 9 — Effect system | Tasks 101–109 | ✅ all complete |
 | 10 — Draw features | Tasks 110–113 | ✅ all complete |
 | 11 — Bgfx 3D shaders | Tasks 114–117 | ✅ all complete |
-| 12 — Vulkan deferred | Tasks 118–119 | ⬜ (deferred — large refactor) |
+| 12 — Vulkan deferred | Tasks 118–119 | 🔄 118 ✅ / 119 ⬜ |
 | 13 — Missing XNA classes | Tasks 120–121 | ✅ all complete |
 | 14 — Integration tests | Tasks 122–125 | ✅ all complete |
 
@@ -106,7 +109,7 @@ VideoPlayer (confirmed complete), DxtUtil + Texture2D::FromStream DDS decoding.
 |--------|------|
 | **unverified** | Bgfx `GetBackBufferData` implemented via `requestScreenShot` callback + up to 3× `bgfx::frame()`; correct in single-threaded bgfx mode — not integration-tested yet |
 | **incomplete** | Bgfx `DrawPrimitivesEx` textured/lit — needs Tasks 116 shaders |
-| **incomplete** | Vulkan per-slot SamplerState (Task 118 deferred — requires descriptor set refactor) |
+| ✅ **done** | Vulkan per-slot SamplerState (Task 118 — `slotSamplers_[16]`, `samplerCache_`, `GetOrCreateTexSamplerDescSet`) |
 | **incomplete** | Vulkan custom Effect / SPIR-V loading (Task 119 deferred) |
 | **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
 | **invariant** | `Color` has vtable pointer — never cast `Color*` to `uint8_t*` for pixel I/O |
@@ -212,11 +215,10 @@ cmake --build cmake-build-bgfx --target shaderc
 
 ## 8. Next tasks (ordered by priority)
 
-**All Phase 14 integration tests (122–125) are complete.**  Only deferred Vulkan tasks remain:
+**Tasks 101–125 complete.  Task 118 (per-slot SamplerState) now also complete.**  Only Task 119 remains:
 
 | # | Task | Notes |
 |---|------|-------|
-| 118 | Vulkan: per-slot SamplerState — one `VkSampler` per binding slot (0–15) | Large descriptor set refactor |
 | 119 | Vulkan: custom Effect / SPIR-V loading — `IEffectBackend::CompileProgram(vertSpv, fragSpv)` | `ShaderEffect` fully functional on Vulkan |
 
 ---
@@ -228,7 +230,7 @@ Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
 Current status: GRAPHICS_TASKS.md Tasks 101–125 complete (all phases 1–14 done).
-Only deferred Vulkan Tasks 118–119 remain (large refactors).
+Task 118 (Vulkan per-slot SamplerState) complete.  Only Task 119 remains.
 DO NOT touch sharp-runtime — another agent is working on it.
 DO NOT touch sharp-runtime — another agent is working on it.
 
