@@ -253,11 +253,52 @@ namespace CNA::Internal::Backends::Bgfx
         return std::make_unique<BgfxEffectBackend>();
     }
 
-    void BgfxGraphicsBackend::ReadBackbuffer(int /*x*/, int /*y*/, int /*w*/, int /*h*/, uint8_t* /*pixels*/)
+    void BgfxGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
-        // bgfx readback is asynchronous (blit to BGFX_TEXTURE_READ_BACK + bgfx::readTexture).
-        // A synchronous XNA-style readback is not directly supported; use render-to-texture instead.
-        throw std::runtime_error("BgfxGraphicsBackend::ReadBackbuffer: async readback not yet implemented");
+        // Request a screenshot of the default backbuffer (BGFX_INVALID_HANDLE = swapchain).
+        // The callback fires after bgfx::frame() flushes the current command buffer.
+        readbackCallback_.screenshotReady = false;
+        bgfx::requestScreenShot(BGFX_INVALID_HANDLE, "cna_readback");
+
+        // Advance up to 3 frames to give the render thread time to fire the callback.
+        // In single-threaded bgfx mode (typical on Linux) the first frame() suffices.
+        for (int attempt = 0; attempt < 3 && !readbackCallback_.screenshotReady; ++attempt)
+            bgfx::frame();
+
+        if (!readbackCallback_.screenshotReady)
+            throw std::runtime_error(
+                "BgfxGraphicsBackend::ReadBackbuffer: screenshot callback did not fire");
+
+        const uint32_t pitch  = readbackCallback_.screenshotPitch;
+        const bool     yflip  = readbackCallback_.screenshotYFlip;
+        const uint32_t fbH    = readbackCallback_.screenshotHeight;
+        const uint8_t* src    = readbackCallback_.screenshotBytes.data();
+        // bgfx usually delivers BGRA8 on OpenGL; swap R↔B unless it's already RGBA8.
+        const bool swapRB = (readbackCallback_.screenshotFormat == bgfx::TextureFormat::BGRA8);
+
+        for (int row = 0; row < h; ++row)
+        {
+            const int srcRow = yflip ? (int(fbH) - 1 - (y + row)) : (y + row);
+            const uint8_t* rowSrc = src + srcRow * pitch + x * 4;
+            uint8_t* dst = pixels + row * w * 4;
+            for (int col = 0; col < w; ++col)
+            {
+                if (swapRB)
+                {
+                    dst[col * 4 + 0] = rowSrc[col * 4 + 2]; // R ← B
+                    dst[col * 4 + 1] = rowSrc[col * 4 + 1]; // G
+                    dst[col * 4 + 2] = rowSrc[col * 4 + 0]; // B ← R
+                    dst[col * 4 + 3] = rowSrc[col * 4 + 3]; // A
+                }
+                else
+                {
+                    dst[col * 4 + 0] = rowSrc[col * 4 + 0];
+                    dst[col * 4 + 1] = rowSrc[col * 4 + 1];
+                    dst[col * 4 + 2] = rowSrc[col * 4 + 2];
+                    dst[col * 4 + 3] = rowSrc[col * 4 + 3];
+                }
+            }
+        }
     }
 
     // --- BgfxOcclusionQueryBackend ---
@@ -555,6 +596,27 @@ namespace CNA::Internal::Backends::Bgfx
                                      layerDepth);
     }
 
+    void BgfxCnaCallback::fatal(const char* /*_file*/, uint16_t /*_line*/,
+                                bgfx::Fatal::Enum /*_code*/, const char* _str)
+    {
+        throw std::runtime_error(std::string("bgfx fatal: ") + (_str ? _str : "unknown"));
+    }
+
+    void BgfxCnaCallback::screenShot(const char* /*_filePath*/,
+                                      uint32_t _w, uint32_t _h, uint32_t _pitch,
+                                      bgfx::TextureFormat::Enum _format,
+                                      const void* _data, uint32_t _size, bool _yflip)
+    {
+        screenshotWidth  = _w;
+        screenshotHeight = _h;
+        screenshotPitch  = _pitch;
+        screenshotFormat = _format;
+        screenshotYFlip  = _yflip;
+        screenshotBytes.assign(static_cast<const uint8_t*>(_data),
+                               static_cast<const uint8_t*>(_data) + _size);
+        screenshotReady = true;
+    }
+
     BgfxGraphicsBackend::BgfxGraphicsBackend(SDL_Window* window) : window(window)
     {
         if (!window)
@@ -581,6 +643,7 @@ namespace CNA::Internal::Backends::Bgfx
         init.resolution.width = initialWidth;
         init.resolution.height = initialHeight;
         init.resolution.reset = BGFX_RESET_VSYNC;
+        init.callback = &readbackCallback_;
 
         if (!init.platformData.nwh)
         {

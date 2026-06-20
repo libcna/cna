@@ -62,7 +62,7 @@ Phases 12–14 (Tasks 115–125) remain.
   - `bgfx/platform.h` removed (not shipped by bgfx.cmake; `PlatformData` is in `bgfx/bgfx.h`)
   - 3 new programs + 6 new uniforms initialized at startup; destroyed in destructor
   - `DrawPrimitivesEx` dispatches to lit / coloredTextured / textured / colored program
-- **Task 117** remains: `GetBackBufferData` async readback.
+- Tasks 114–117 all complete. Phase 11 fully done.
 
 ### Bgfx shaderc paths (needed to recompile shaders)
 ```
@@ -74,11 +74,12 @@ bgfx include dir: cmake-build-bgfx/_deps/bgfx_cmake-src/bgfx/src
 
 ## 3. Last commits
 
-**`9effffc`** — Tasks 112–114: FillMode::WireFrame (Vulkan), SpriteBatch custom effect wiring,
-Bgfx shaderc toolchain + colored3d shaders embedded.
+**HEAD** — Tasks 115–121: Bgfx textured/lit shaders + DrawPrimitivesEx, GetBackBufferData callback,
+VideoPlayer (confirmed complete), DxtUtil + Texture2D::FromStream DDS decoding.
 
-**`6de93fa`** — Tasks 101–112: Effect system generalization (Phase 9), all 4 effect GPU variants
-on EasyGL + Vulkan, non-zero draw offsets, true Vulkan GPU instancing.
+**`16db778`** — Tasks 115–116: Bgfx textured/lit 3D shaders + DrawPrimitivesEx dispatch.
+
+**`e37355f`** — docs: NEXT.md handoff for Tasks 101–114.
 
 ---
 
@@ -89,9 +90,9 @@ on EasyGL + Vulkan, non-zero draw offsets, true Vulkan GPU instancing.
 | 1–8 | Tasks 1–100 | ✅ all complete |
 | 9 — Effect system | Tasks 101–109 | ✅ all complete |
 | 10 — Draw features | Tasks 110–113 | ✅ all complete |
-| 11 — Bgfx 3D shaders | Tasks 114–116 | ✅; Task 117 ⬜ |
+| 11 — Bgfx 3D shaders | Tasks 114–117 | ✅ all complete |
 | 12 — Vulkan deferred | Tasks 118–119 | ⬜ |
-| 13 — Missing XNA classes | Tasks 120–121 | ⬜ |
+| 13 — Missing XNA classes | Tasks 120–121 | ✅ all complete |
 | 14 — Integration tests | Tasks 122–125 | ⬜ |
 
 ---
@@ -100,7 +101,7 @@ on EasyGL + Vulkan, non-zero draw offsets, true Vulkan GPU instancing.
 
 | Status | Item |
 |--------|------|
-| **confirmed bug** | Bgfx `GetBackBufferData` always throws (async readback not implemented — Task 117) |
+| **unverified** | Bgfx `GetBackBufferData` implemented via `requestScreenShot` callback + up to 3× `bgfx::frame()`; correct in single-threaded bgfx mode — not integration-tested yet |
 | **incomplete** | Bgfx `DrawPrimitivesEx` textured/lit — needs Tasks 116 shaders |
 | **incomplete** | Vulkan per-slot SamplerState (Task 118 deferred — requires descriptor set refactor) |
 | **incomplete** | Vulkan custom Effect / SPIR-V loading (Task 119 deferred) |
@@ -210,15 +211,12 @@ cmake --build cmake-build-bgfx --target shaderc
 
 | # | Task | Notes |
 |---|------|-------|
-| 117 | Bgfx: `GetBackBufferData` — async readback via `bgfx::blit` + `bgfx::readTexture` + `bgfx::frame(true)` | Currently always throws |
 | 118 | Vulkan: per-slot SamplerState — one `VkSampler` per binding slot (0–15) | Large descriptor set refactor |
 | 119 | Vulkan: custom Effect / SPIR-V loading — `IEffectBackend::CompileProgram(vertSpv, fragSpv)` | `ShaderEffect` fully functional on Vulkan |
-| 120 | `VideoPlayer` stub — `Microsoft::Xna::Framework::Media` namespace; `Play/Pause/Stop/Dispose`; no actual decoding | API completeness stub |
-| 121 | `DxtUtil` — software DXT1/3/5 decompression; used by `Texture2D::FromStream` | Reference: FNA `DxtUtil.cs` |
 | 122 | Integration test: EasyGL — `AlphaTestEffect` alpha cutout + pixel readback | Requires Task 102 ✅ |
 | 123 | Integration test: EasyGL — `SkinnedEffect` 2-bone transform + mesh deformation | Requires Task 105 ✅ |
 | 124 | Integration test: Vulkan — `DrawInstancedPrimitives` 3 instances at different positions | Requires Task 111 ✅ |
-| 125 | Integration test: EasyGL/Vulkan — DXT1 texture via `FromStream`, pixel readback | Requires Task 121 |
+| 125 | Integration test: EasyGL/Vulkan — DXT1 texture via `FromStream`, pixel readback | DxtUtil ✅ |
 
 ---
 

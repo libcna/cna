@@ -3,8 +3,10 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include <bgfx/bgfx.h>
 #include <SDL3/SDL.h>
+#include <cstdarg>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace CNA::Internal::Backends::Bgfx
 {
@@ -16,6 +18,37 @@ namespace CNA::Internal::Backends::Bgfx
     }
 
     class BgfxGraphicsBackend;
+
+    /// bgfx callback implementation — captures screenshot data for ReadBackbuffer.
+    /// All methods other than fatal() and screenShot() are no-ops.
+    struct BgfxCnaCallback : public bgfx::CallbackI
+    {
+        std::vector<uint8_t> screenshotBytes;
+        uint32_t screenshotWidth  = 0;
+        uint32_t screenshotHeight = 0;
+        uint32_t screenshotPitch  = 0;
+        bool     screenshotYFlip  = false;
+        bool     screenshotReady  = false;
+
+        void fatal(const char* _file, uint16_t _line,
+                   bgfx::Fatal::Enum _code, const char* _str) override;
+        void traceVargs(const char*, uint16_t, const char*, va_list) override {}
+        void profilerBegin(const char*, uint32_t, const char*, uint16_t) override {}
+        void profilerBeginLiteral(const char*, uint32_t, const char*, uint16_t) override {}
+        void profilerEnd() override {}
+        uint32_t cacheReadSize(uint64_t) override { return 0; }
+        bool     cacheRead(uint64_t, void*, uint32_t) override { return false; }
+        void     cacheWrite(uint64_t, const void*, uint32_t) override {}
+        bgfx::TextureFormat::Enum screenshotFormat = bgfx::TextureFormat::BGRA8;
+
+        void screenShot(const char* _filePath, uint32_t _w, uint32_t _h, uint32_t _pitch,
+                        bgfx::TextureFormat::Enum _format,
+                        const void* _data, uint32_t _size, bool _yflip) override;
+        void captureBegin(uint32_t, uint32_t, uint32_t,
+                          bgfx::TextureFormat::Enum, bool) override {}
+        void captureEnd() override {}
+        void captureFrame(const void*, uint32_t) override {}
+    };
 
     /// bgfx-backed effect backend.
     /// bgfx uses pre-compiled binary shaders; CompileProgram always returns false.
@@ -220,6 +253,8 @@ namespace CNA::Internal::Backends::Bgfx
         // Stencil state (per-draw-call via bgfx::setStencil)
         uint32_t stencilFront_ = BGFX_STENCIL_NONE;
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;
+        // Callback registered at bgfx init — captures screenshot data for ReadBackbuffer
+        BgfxCnaCallback readbackCallback_;
         // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)
         bgfx::FrameBufferHandle mrtFbo_ = BGFX_INVALID_HANDLE;
         // 3D shader programs (BGFX_INVALID_HANDLE until bgfx_shaders.hpp binaries are loaded)

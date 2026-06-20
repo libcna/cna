@@ -9,6 +9,7 @@
 #include <SDL3_image/SDL_image.h>
 
 #include "CNA/Logger.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
@@ -323,6 +324,44 @@ namespace Microsoft::Xna::Framework::Graphics
     // FromStream
     // -----------------------------------------------------------------------
 
+    // Minimal DDS header parser — returns true and fills out/w/h if a supported DXT format.
+    static bool TryDecodeDds(const uint8_t* buf, std::size_t len,
+                              std::vector<uint8_t>& out, int& w, int& h)
+    {
+        // DDS magic "DDS " + 124-byte DDS_HEADER = 128 bytes minimum
+        if (len < 128) return false;
+        if (buf[0] != 'D' || buf[1] != 'D' || buf[2] != 'S' || buf[3] != ' ') return false;
+
+        // DDS_HEADER fields (all little-endian uint32)
+        auto r32 = [&](std::size_t off) -> uint32_t {
+            return static_cast<uint32_t>(buf[off])
+                 | (static_cast<uint32_t>(buf[off+1]) << 8)
+                 | (static_cast<uint32_t>(buf[off+2]) << 16)
+                 | (static_cast<uint32_t>(buf[off+3]) << 24);
+        };
+
+        const int height = static_cast<int>(r32(12));
+        const int width  = static_cast<int>(r32(16));
+        // DDS_PIXELFORMAT starts at offset 76; dwFourCC at offset 84
+        const uint32_t fourCC = r32(84);
+        const uint8_t* pixels = buf + 128;
+        const std::size_t pixLen = len - 128;
+
+        // fourCC codes: 'DXT1'=0x31545844, 'DXT3'=0x33545844, 'DXT5'=0x35545844
+        if (fourCC == 0x31545844u)
+            out = DxtUtil::DecompressDxt1(pixels, pixLen, width, height);
+        else if (fourCC == 0x33545844u)
+            out = DxtUtil::DecompressDxt3(pixels, pixLen, width, height);
+        else if (fourCC == 0x35545844u)
+            out = DxtUtil::DecompressDxt5(pixels, pixLen, width, height);
+        else
+            return false; // unsupported DDS format — fall through to SDL_image
+
+        w = width;
+        h = height;
+        return true;
+    }
+
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream)
     {
         using System::IO::intcs;
@@ -335,9 +374,21 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<bytecs> buf(static_cast<std::size_t>(len));
         stream.Read(buf.data(), 0, len);
 
-        ImageData img = ImageLoader::LoadFromMemory(
-            reinterpret_cast<const uint8_t*>(buf.data()),
-            static_cast<std::size_t>(len));
+        const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
+
+        ImageData img;
+        std::vector<uint8_t> ddsOut;
+        int ddsW = 0, ddsH = 0;
+        if (TryDecodeDds(raw, static_cast<std::size_t>(len), ddsOut, ddsW, ddsH))
+        {
+            img.width  = ddsW;
+            img.height = ddsH;
+            img.pixels = std::move(ddsOut);
+        }
+        else
+        {
+            img = ImageLoader::LoadFromMemory(raw, static_cast<std::size_t>(len));
+        }
 
         Texture2D tex;
         tex.graphicsDevice_  = &graphicsDevice;
