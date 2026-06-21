@@ -662,6 +662,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 147: MSAA 4× — multisampled swapchain + subpass resolve
+        cna_vulkan_test(cna_test_vulkan_msaa
+                        examples/vulkan_msaa_test.cpp)
+        add_test(NAME Vulkan_MSAA_4x_Readback
+                 COMMAND cna_test_vulkan_msaa)
+        set_tests_properties(Vulkan_MSAA_4x_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32

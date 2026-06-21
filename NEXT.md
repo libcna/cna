@@ -15,7 +15,7 @@ Vulkan, or Bgfx.
 **Current phase**: GRAPHICS_TASKS.md Phases 1–15 complete (Tasks 101–131 ✅),
 Tasks 132–136 complete (EasyGL/Vulkan ShaderEffect/DualTextureEffect/EnvironmentMapEffect),
 Tasks 137–145 complete (Bgfx parity, GetVertexBuffers, Model.Draw integration test, MRT integration test).
-**Phase 18 in progress. Done: 141, 142, 143, 144, 145, 146, 148, 149, 150. Remaining: 147.**
+**Phase 18 complete. Done: 141, 142, 143, 144, 145, 146, 147, 148, 149, 150. All tasks complete.**
 
 **Key architectural decisions**:
 - Backend selected at compile time via `CNA_GRAPHICS_BACKEND` CMake option.

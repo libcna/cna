@@ -453,7 +453,7 @@ namespace CNA::Internal::Backends::Vulkan
         friend class VulkanMRTProxy;
 
     public:
-        explicit VulkanGraphicsBackend(SDL_Window* window);
+        explicit VulkanGraphicsBackend(SDL_Window* window, int multiSampleCount = 1);
         ~VulkanGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -548,6 +548,14 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VkSemaphore> imageAvailableSemaphores_;
         std::vector<VkSemaphore> renderFinishedSemaphores_;
         std::vector<VkFence>     inFlightFences_;
+
+        // --- MSAA state (set at construction, fixed for backend lifetime) ---
+        VkSampleCountFlagBits    sampleCount_     = VK_SAMPLE_COUNT_1_BIT;
+        VkRenderPass             renderPassMsaa_  = VK_NULL_HANDLE;  // 3-attachment MSAA pass; null when sampleCount_==1
+        VkImage                  msaaColorImage_  = VK_NULL_HANDLE;
+        VkDeviceMemory           msaaColorMemory_ = VK_NULL_HANDLE;
+        VkImageView              msaaColorView_   = VK_NULL_HANDLE;
+        VkPipeline               pipeline2DMsaa_  = VK_NULL_HANDLE;
 
         // --- Swapchain (recreated on resize) ---
         VkSwapchainKHR           swapchain_       = VK_NULL_HANDLE;
@@ -776,21 +784,25 @@ namespace CNA::Internal::Backends::Vulkan
         void       CleanupDepthResources();
         VkPipeline GetOrCreatePipeline3D(VkPrimitiveTopology, bool depthTest, bool depthWrite,
                                          bool blend, int cullMode,
-                                         uint32_t colorAttachmentCount = 1, bool wireframe = false);
+                                         uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                         bool msaa = false);
         VkPipeline GetOrCreatePipelineExt3D(std::size_t stride, VkPrimitiveTopology,
                                             bool depthTest, bool depthWrite,
                                             bool blend, int cullMode,
-                                            uint32_t colorAttachmentCount = 1, bool wireframe = false);
+                                            uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                            bool msaa = false);
         VkPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
                                                    bool blend, int cullMode,
-                                                   uint32_t colorAttachmentCount = 1, bool wireframe = false);
+                                                   uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                                   bool msaa = false);
         void       EnsureDualTexResources();
         VkDescriptorSet GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1);
         VkPipeline GetOrCreatePipelineDualTex3D(VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
-                                                uint32_t colorAttachmentCount = 1, bool wireframe = false);
+                                                uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                                bool msaa = false);
         // EnvironmentMapEffect
         void       EnsureEnvMapResources();
         VkDescriptorSet GetOrCreateEnvMapDescSet(uint32_t frameIdx,
@@ -798,7 +810,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipeline GetOrCreatePipelineEnvMap3D(VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
-                                                uint32_t colorAttachmentCount = 1, bool wireframe = false);
+                                                uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                                bool msaa = false);
         void       FillEnvMapPushConst(float (&pc)[32], const Matrix& wvp, const Matrix& world);
         // SkinnedEffect
         void       EnsureSkinnedResources();
@@ -806,7 +819,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipeline GetOrCreatePipelineSkinned3D(VkPrimitiveTopology,
                                                  bool depthTest, bool depthWrite,
                                                  bool blend, int cullMode,
-                                                 uint32_t colorAttachmentCount = 1, bool wireframe = false);
+                                                 uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                                 bool msaa = false);
         void       EnsureDefaultWhiteTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
@@ -814,11 +828,17 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
                                                    bool blend, int cullMode,
-                                                   uint32_t colorAttachmentCount = 1, bool wireframe = false);
+                                                   uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                                   bool msaa = false);
         void FillInstancedPushConst(float (&pc)[32], const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
         void CreateFrame3DInstBuffers();
         void EnsureFrame3DInstBuffers();
+
+        void CreateMsaaColorResources();
+        void CleanupMsaaColorResources();
+        void CreateRenderPassMsaa();
+        void CreatePipeline2DMsaa();
 
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();

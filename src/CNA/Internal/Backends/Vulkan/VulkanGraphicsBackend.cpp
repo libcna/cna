@@ -637,7 +637,26 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanGraphicsBackend — construction
     // =========================================================================
 
-    VulkanGraphicsBackend::VulkanGraphicsBackend(SDL_Window* window)
+    static VkSampleCountFlagBits PickSampleCount(VkPhysicalDevice pd, int requested)
+    {
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(pd, &props);
+        VkSampleCountFlags avail = props.limits.framebufferColorSampleCounts
+                                 & props.limits.framebufferDepthSampleCounts;
+        const VkSampleCountFlagBits candidates[] = {
+            VK_SAMPLE_COUNT_64_BIT, VK_SAMPLE_COUNT_32_BIT, VK_SAMPLE_COUNT_16_BIT,
+            VK_SAMPLE_COUNT_8_BIT,  VK_SAMPLE_COUNT_4_BIT,  VK_SAMPLE_COUNT_2_BIT,
+            VK_SAMPLE_COUNT_1_BIT
+        };
+        const int counts[] = { 64, 32, 16, 8, 4, 2, 1 };
+        for (int i = 0; i < 7; ++i) {
+            if (counts[i] <= requested && (avail & candidates[i]))
+                return candidates[i];
+        }
+        return VK_SAMPLE_COUNT_1_BIT;
+    }
+
+    VulkanGraphicsBackend::VulkanGraphicsBackend(SDL_Window* window, int multiSampleCount)
         : window_(window)
     {
         if (!window_)
@@ -648,10 +667,18 @@ namespace CNA::Internal::Backends::Vulkan
         CreateSurface();
         PickPhysicalDevice();
         CreateLogicalDevice();
+        sampleCount_ = PickSampleCount(physicalDevice_, multiSampleCount);
+        if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
+            SDL_Log("[Vulkan] MSAA: %d×", static_cast<int>(sampleCount_));
         CreateSwapchain();
         CreateImageViews();
         CreateDepthResources();
         CreateRenderPass();
+        CreateRTRenderPass();
+        if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) {
+            CreateMsaaColorResources();
+            CreateRenderPassMsaa();
+        }
         CreateFramebuffers();
         CreateCommandPool();
         AllocateCommandBuffers();
@@ -660,6 +687,7 @@ namespace CNA::Internal::Backends::Vulkan
         CreateDescriptorSetLayout();
         CreateDescriptorPool();
         CreatePipeline2D();
+        if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) CreatePipeline2DMsaa();
         CreateSpriteBuffers();
         initialized_ = true;
         SDL_Log("[Vulkan] Backend initialised");
@@ -706,6 +734,8 @@ namespace CNA::Internal::Backends::Vulkan
         // Externally-owned textures.
         for (auto* tex : liveTextures_) { tex->ReleaseVulkanResources(); tex->DisconnectOwner(); }
         liveTextures_.clear();
+        // MSAA color buffer.
+        CleanupMsaaColorResources();
         // Depth buffer.
         if (depthImageView_ != VK_NULL_HANDLE) { vkDestroyImageView(device_, depthImageView_, nullptr); depthImageView_ = VK_NULL_HANDLE; }
         if (depthImage_     != VK_NULL_HANDLE) { vkDestroyImage(device_, depthImage_, nullptr);         depthImage_     = VK_NULL_HANDLE; }
@@ -760,6 +790,7 @@ namespace CNA::Internal::Backends::Vulkan
         if (defaultWhiteView_   != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteView_, nullptr);  defaultWhiteView_   = VK_NULL_HANDLE; }
         if (defaultWhiteImage_  != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultWhiteImage_, nullptr);     defaultWhiteImage_  = VK_NULL_HANDLE; }
         if (defaultWhiteMemory_ != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultWhiteMemory_, nullptr);       defaultWhiteMemory_ = VK_NULL_HANDLE; }
+        if (pipeline2DMsaa_        != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipeline2DMsaa_, nullptr);               pipeline2DMsaa_        = VK_NULL_HANDLE; }
         if (pipeline2D_            != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipeline2D_, nullptr);                   pipeline2D_            = VK_NULL_HANDLE; }
         if (pipelineLayout3D_      != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout3D_, nullptr);       pipelineLayout3D_      = VK_NULL_HANDLE; }
         if (pipelineLayoutExt3D_        != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutExt3D_, nullptr);        pipelineLayoutExt3D_        = VK_NULL_HANDLE; }
@@ -777,6 +808,7 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto fb : swapchainFramebuffers_)
             if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
         swapchainFramebuffers_.clear();
+        if (renderPassMsaa_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPassMsaa_, nullptr); renderPassMsaa_ = VK_NULL_HANDLE; }
         if (rtRenderPass_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, rtRenderPass_, nullptr); rtRenderPass_ = VK_NULL_HANDLE; }
         if (renderPass_   != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_,   nullptr); renderPass_   = VK_NULL_HANDLE; }
         for (auto& [n, rp] : mrtRenderPasses_)
@@ -1287,16 +1319,25 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::CreateFramebuffers()
     {
         swapchainFramebuffers_.resize(swapchainImageViews_.size());
+        const bool msaa = (sampleCount_ > VK_SAMPLE_COUNT_1_BIT);
         for (size_t i = 0; i < swapchainImageViews_.size(); ++i) {
-            VkImageView atts[] = { swapchainImageViews_[i], depthImageView_ };
             VkFramebufferCreateInfo ci{};
-            ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            ci.renderPass      = renderPass_;
-            ci.attachmentCount = 2;
-            ci.pAttachments    = atts;
+            ci.sType  = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             ci.width  = swapchainExtent_.width;
             ci.height = swapchainExtent_.height;
             ci.layers = 1;
+            if (msaa) {
+                // att 0 = MSAA color, att 1 = resolve (swapchain), att 2 = MSAA depth
+                VkImageView atts[] = { msaaColorView_, swapchainImageViews_[i], depthImageView_ };
+                ci.renderPass      = renderPassMsaa_;
+                ci.attachmentCount = 3;
+                ci.pAttachments    = atts;
+            } else {
+                VkImageView atts[] = { swapchainImageViews_[i], depthImageView_ };
+                ci.renderPass      = renderPass_;
+                ci.attachmentCount = 2;
+                ci.pAttachments    = atts;
+            }
             if (vkCreateFramebuffer(device_, &ci, nullptr, &swapchainFramebuffers_[i]) != VK_SUCCESS)
                 throw std::runtime_error("vkCreateFramebuffer failed");
         }
@@ -1307,11 +1348,12 @@ namespace CNA::Internal::Backends::Vulkan
         if (device_ == VK_NULL_HANDLE) return;
         for (auto fb : swapchainFramebuffers_) if (fb) vkDestroyFramebuffer(device_, fb, nullptr);
         swapchainFramebuffers_.clear();
+        CleanupMsaaColorResources();
         for (auto iv : swapchainImageViews_) if (iv) vkDestroyImageView(device_, iv, nullptr);
         swapchainImageViews_.clear();
         swapchainImages_.clear();
         if (swapchain_) { vkDestroySwapchainKHR(device_, swapchain_, nullptr); swapchain_ = VK_NULL_HANDLE; }
-        // NOTE: renderPass_ is NOT destroyed here; it is permanent for the backend's lifetime
+        // NOTE: renderPass_/renderPassMsaa_ are NOT destroyed here; permanent for backend lifetime
     }
 
     void VulkanGraphicsBackend::RecreateSwapchain()
@@ -1325,6 +1367,7 @@ namespace CNA::Internal::Backends::Vulkan
         CreateSwapchain();
         CreateImageViews();
         CreateDepthResources();
+        if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) CreateMsaaColorResources();
         CreateFramebuffers();
     }
 
@@ -1896,7 +1939,7 @@ namespace CNA::Internal::Backends::Vulkan
         imgInfo.extent        = { swapchainExtent_.width, swapchainExtent_.height, 1 };
         imgInfo.mipLevels     = 1;
         imgInfo.arrayLayers   = 1;
-        imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        imgInfo.samples       = sampleCount_;
         imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
         imgInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
@@ -1937,13 +1980,239 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     // =========================================================================
+    // MSAA color buffer resources (recreated with swapchain)
+    // =========================================================================
+
+    void VulkanGraphicsBackend::CreateMsaaColorResources()
+    {
+        VkImageCreateInfo imgInfo{};
+        imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imgInfo.imageType     = VK_IMAGE_TYPE_2D;
+        imgInfo.format        = swapchainFormat_;
+        imgInfo.extent        = { swapchainExtent_.width, swapchainExtent_.height, 1 };
+        imgInfo.mipLevels     = 1;
+        imgInfo.arrayLayers   = 1;
+        imgInfo.samples       = sampleCount_;
+        imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        imgInfo.usage         = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(device_, &imgInfo, nullptr, &msaaColorImage_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImage (MSAA color) failed");
+
+        VkMemoryRequirements memReq;
+        vkGetImageMemoryRequirements(device_, msaaColorImage_, &memReq);
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize  = memReq.size;
+        allocInfo.memoryTypeIndex = FindMemoryType(memReq.memoryTypeBits,
+                                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (vkAllocateMemory(device_, &allocInfo, nullptr, &msaaColorMemory_) != VK_SUCCESS)
+            throw std::runtime_error("vkAllocateMemory (MSAA color) failed");
+        vkBindImageMemory(device_, msaaColorImage_, msaaColorMemory_, 0);
+
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image    = msaaColorImage_;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format   = swapchainFormat_;
+        viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel   = 0;
+        viewInfo.subresourceRange.levelCount     = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount     = 1;
+        if (vkCreateImageView(device_, &viewInfo, nullptr, &msaaColorView_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImageView (MSAA color) failed");
+    }
+
+    void VulkanGraphicsBackend::CleanupMsaaColorResources()
+    {
+        if (msaaColorView_)   { vkDestroyImageView(device_, msaaColorView_, nullptr);   msaaColorView_   = VK_NULL_HANDLE; }
+        if (msaaColorImage_)  { vkDestroyImage(device_, msaaColorImage_, nullptr);      msaaColorImage_  = VK_NULL_HANDLE; }
+        if (msaaColorMemory_) { vkFreeMemory(device_, msaaColorMemory_, nullptr);       msaaColorMemory_ = VK_NULL_HANDLE; }
+    }
+
+    void VulkanGraphicsBackend::CreateRenderPassMsaa()
+    {
+        // att 0: MSAA color (rendered to, not stored — resolved to swapchain)
+        VkAttachmentDescription colorAtt{};
+        colorAtt.format         = swapchainFormat_;
+        colorAtt.samples        = sampleCount_;
+        colorAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAtt.finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        // att 1: resolve target = swapchain image (1 sample, stored, presented)
+        VkAttachmentDescription resolveAtt{};
+        resolveAtt.format         = swapchainFormat_;
+        resolveAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
+        resolveAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        resolveAtt.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+        resolveAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        resolveAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        resolveAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        resolveAtt.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        // att 2: MSAA depth
+        VkAttachmentDescription depthAtt{};
+        depthAtt.format         = depthFormat_;
+        depthAtt.samples        = sampleCount_;
+        depthAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference colorRef   { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        VkAttachmentReference resolveRef { 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        VkAttachmentReference depthRef   { 2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
+        VkSubpassDescription sub{};
+        sub.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        sub.colorAttachmentCount    = 1;
+        sub.pColorAttachments       = &colorRef;
+        sub.pResolveAttachments     = &resolveRef;
+        sub.pDepthStencilAttachment = &depthRef;
+
+        VkSubpassDependency deps[2]{};
+        deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[0].dstSubpass      = 0;
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT;
+        deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        deps[1].srcSubpass      = 0;
+        deps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[1].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        deps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps[1].srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT;
+        deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+        VkAttachmentDescription atts[] = { colorAtt, resolveAtt, depthAtt };
+        VkRenderPassCreateInfo ci{};
+        ci.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        ci.attachmentCount = 3; ci.pAttachments  = atts;
+        ci.subpassCount    = 1; ci.pSubpasses    = &sub;
+        ci.dependencyCount = 2; ci.pDependencies = deps;
+        if (vkCreateRenderPass(device_, &ci, nullptr, &renderPassMsaa_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateRenderPass (MSAA) failed");
+    }
+
+    void VulkanGraphicsBackend::CreatePipeline2DMsaa()
+    {
+        using namespace Shaders;
+
+        VkShaderModule vert = CreateShaderModule(kSprite2dVertSpv, kSprite2dVertSpv_size);
+        VkShaderModule frag = CreateShaderModule(kSprite2dFragSpv, kSprite2dFragSpv_size);
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = vert; stages[0].pName = "main";
+        stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = frag; stages[1].pName = "main";
+
+        VkVertexInputBindingDescription bind{};
+        bind.binding = 0; bind.stride = sizeof(Sprite2DVertex);
+        bind.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        VkVertexInputAttributeDescription attrs[3]{};
+        attrs[0] = { 0, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(Sprite2DVertex, x) };
+        attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(Sprite2DVertex, u) };
+        attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Sprite2DVertex, r) };
+
+        VkPipelineVertexInputStateCreateInfo vis{};
+        vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexAttributeDescriptionCount = 3; vis.pVertexAttributeDescriptions = attrs;
+
+        VkPipelineInputAssemblyStateCreateInfo ias{};
+        ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ias.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+        VkViewport vp{ 0, 0, (float)swapchainExtent_.width, (float)swapchainExtent_.height, 0, 1 };
+        VkRect2D   sc{ {0,0}, swapchainExtent_ };
+        VkPipelineViewportStateCreateInfo vs{};
+        vs.sType          = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vs.viewportCount  = 1; vs.pViewports = &vp;
+        vs.scissorCount   = 1; vs.pScissors  = &sc;
+
+        VkPipelineRasterizationStateCreateInfo rs{};
+        rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.polygonMode = VK_POLYGON_MODE_FILL;
+        rs.cullMode    = VK_CULL_MODE_NONE;
+        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
+        rs.lineWidth   = 1.f;
+
+        VkPipelineMultisampleStateCreateInfo ms{};
+        ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.rasterizationSamples = sampleCount_;
+
+        VkPipelineColorBlendAttachmentState cba{};
+        cba.blendEnable         = VK_TRUE;
+        cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        cba.colorBlendOp        = VK_BLEND_OP_ADD;
+        cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        cba.alphaBlendOp        = VK_BLEND_OP_ADD;
+        cba.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                  VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendStateCreateInfo cbs{};
+        cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cbs.attachmentCount = 1; cbs.pAttachments = &cba;
+
+        VkDynamicState dynStates[] = {
+            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+        };
+        VkPipelineDynamicStateCreateInfo dyn{};
+        dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+
+        VkPipelineDepthStencilStateCreateInfo ds2d{};
+        ds2d.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds2d.depthTestEnable  = VK_FALSE;
+        ds2d.depthWriteEnable = VK_FALSE;
+
+        VkGraphicsPipelineCreateInfo pci{};
+        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pci.stageCount          = 2; pci.pStages = stages;
+        pci.pVertexInputState   = &vis;
+        pci.pInputAssemblyState = &ias;
+        pci.pViewportState      = &vs;
+        pci.pRasterizationState = &rs;
+        pci.pMultisampleState   = &ms;
+        pci.pDepthStencilState  = &ds2d;
+        pci.pColorBlendState    = &cbs;
+        pci.pDynamicState       = &dyn;
+        pci.layout              = pipelineLayout2D_;
+        pci.renderPass          = renderPassMsaa_;
+        pci.subpass             = 0;
+
+        if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline2DMsaa_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateGraphicsPipelines (2D MSAA) failed");
+
+        vkDestroyShaderModule(device_, vert, nullptr);
+        vkDestroyShaderModule(device_, frag, nullptr);
+    }
+
+    // =========================================================================
     // 3D pipeline layout + per-variant pipeline (lazily created)
     // =========================================================================
 
-    // Encode (topology × depthTest × depthWrite × blend × cullMode) into a single uint32_t key.
+    // Encode (topology × depthTest × depthWrite × blend × cullMode × msaa) into a uint32_t key.
     static uint32_t Make3DKey(VkPrimitiveTopology topo, bool depthTest, bool depthWrite,
                               bool blend, int cullMode, uint32_t colorAttachmentCount = 1,
-                              bool wireframe = false)
+                              bool wireframe = false, bool msaa = false)
     {
         uint32_t t = 0;
         switch (topo) {
@@ -1952,19 +2221,21 @@ namespace CNA::Internal::Backends::Vulkan
         case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:      t = 2; break;
         default:                                   t = 3; break;
         }
-        // bits 0-1: topology, 2: depthTest, 3: depthWrite, 4: blend, 5-6: cullMode, 7-9: colorAttachmentCount, 10: wireframe
+        // bits 0-1: topology, 2: depthTest, 3: depthWrite, 4: blend, 5-6: cullMode,
+        // 7-9: colorAttachmentCount, 10: wireframe, 11: msaa
         const uint32_t nc = std::min(colorAttachmentCount, 8u) - 1u;
         return t | (depthTest ? 4u : 0u) | (depthWrite ? 8u : 0u) | (blend ? 16u : 0u)
                  | (static_cast<uint32_t>(cullMode & 0x3) << 5)
                  | (nc << 7)
-                 | (wireframe ? (1u << 10) : 0u);
+                 | (wireframe ? (1u << 10) : 0u)
+                 | (msaa     ? (1u << 11) : 0u);
     }
 
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline3D(VkPrimitiveTopology topo,
                                                              bool depthTest, bool depthWrite,
                                                              bool blend, int cullMode,
                                                              uint32_t colorAttachmentCount,
-                                                             bool wireframe)
+                                                             bool wireframe, bool msaa)
     {
         // Create layout once
         if (pipelineLayout3D_ == VK_NULL_HANDLE) {
@@ -1976,7 +2247,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (3D) failed");
         }
 
-        uint32_t key = Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe);
+        uint32_t key = Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
         auto it = pipelines3D_.find(key);
         if (it != pipelines3D_.end()) return it->second;
 
@@ -2023,7 +2294,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -2073,11 +2344,12 @@ namespace CNA::Internal::Backends::Vulkan
         pci.pColorBlendState    = &cbs;
         pci.pDynamicState       = &dyn;
         pci.layout              = pipelineLayout3D_;
-        // Use the right render pass: single-color uses the standard swapchain-compatible pass;
-        // N > 1 colors needs a dedicated MRT render pass.
-        pci.renderPass = (colorAttachmentCount <= 1)
-                         ? renderPass_
-                         : GetOrCreateMRTRenderPass(colorAttachmentCount);
+        // MSAA backbuffer → renderPassMsaa_; single-color non-MSAA → renderPass_;
+        // MRT → dedicated MRT render pass (always 1-sample).
+        if (colorAttachmentCount <= 1)
+            pci.renderPass = (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
+        else
+            pci.renderPass = GetOrCreateMRTRenderPass(colorAttachmentCount);
         pci.subpass             = 0;
 
         VkPipeline p = VK_NULL_HANDLE;
@@ -2153,7 +2425,7 @@ namespace CNA::Internal::Backends::Vulkan
     static uint64_t MakeExt3DKey(std::size_t stride, VkPrimitiveTopology topo,
                                   bool depthTest, bool depthWrite, bool blend,
                                   int cullMode, uint32_t colorAttachmentCount,
-                                  bool wireframe = false)
+                                  bool wireframe = false, bool msaa = false)
     {
         uint64_t s = 0;
         switch (stride) { case 20: s = 1; break; case 24: s = 2; break; case 32: s = 3; break;
@@ -2166,11 +2438,12 @@ namespace CNA::Internal::Backends::Vulkan
         default:                                   t = 3; break;
         }
         // bits 0-3: stride, 4-5: topology, 6: depthTest, 7: depthWrite, 8: blend,
-        // 9-10: cullMode, 11-13: colorAttachmentCount, 14: wireframe
+        // 9-10: cullMode, 11-13: colorAttachmentCount, 14: wireframe, 15: msaa
         const uint64_t nc = std::min(colorAttachmentCount, 8u) - 1u;
         return s | (t << 4) | (depthTest ? (1ull<<6) : 0) | (depthWrite ? (1ull<<7) : 0)
              | (blend ? (1ull<<8) : 0) | (static_cast<uint64_t>(cullMode & 3) << 9) | (nc << 11)
-             | (wireframe ? (1ull<<14) : 0);
+             | (wireframe ? (1ull<<14) : 0)
+             | (msaa      ? (1ull<<15) : 0);
     }
 
     void VulkanGraphicsBackend::EnsureDefaultWhiteTexture()
@@ -2309,7 +2582,7 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineAlphaTest3D(
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
     {
         if (pipelineLayoutAlphaTest3D_ == VK_NULL_HANDLE) {
             VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
@@ -2321,7 +2594,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (AlphaTest3D) failed");
         }
 
-        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe);
+        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
         auto it = pipelinesAlphaTest3D_.find(key);
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
@@ -2370,7 +2643,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -2402,8 +2675,9 @@ namespace CNA::Internal::Backends::Vulkan
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
 
-        VkRenderPass rp = (colorAttachmentCount > 1) ? GetOrCreateMRTRenderPass(colorAttachmentCount)
-                                                      : renderPass_;
+        VkRenderPass rp = (colorAttachmentCount > 1)
+                          ? GetOrCreateMRTRenderPass(colorAttachmentCount)
+                          : (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -2508,20 +2782,20 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineDualTex3D(
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
     {
         EnsureDualTexResources();
 
         // DualTexture always uses stride=20 (VertexPositionTexture); key encodes topology+state.
         constexpr std::size_t kDualStride = 20;
-        uint64_t key = MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe);
+        uint64_t key = MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
         using namespace Shaders;
         // Vertex shader: reuse kTextured3dVertSpv (reads MVP + diffuseColor from same PC layout).
-        VkShaderModule vert = CreateShaderModule(kTextured3dVertSpv,      kTextured3dVertSpv_size);
-        VkShaderModule frag = CreateShaderModule(kDualTexture3dFragSpv,   kDualTexture3dFragSpv_size);
+        VkShaderModule vert = CreateShaderModule(kTextured3dVertSpv,     kTextured3dVertSpv_size);
+        VkShaderModule frag = CreateShaderModule(kDualTexture3dFragSpv,  kDualTexture3dFragSpv_size);
 
         VkVertexInputBindingDescription bind{ 0, kDualStride, VK_VERTEX_INPUT_RATE_VERTEX };
         VkVertexInputAttributeDescription attrs[2]{};
@@ -2560,7 +2834,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -2590,8 +2864,9 @@ namespace CNA::Internal::Backends::Vulkan
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
 
-        VkRenderPass rp = (colorAttachmentCount > 1) ? GetOrCreateMRTRenderPass(colorAttachmentCount)
-                                                      : renderPass_;
+        VkRenderPass rp = (colorAttachmentCount > 1)
+                          ? GetOrCreateMRTRenderPass(colorAttachmentCount)
+                          : (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -2810,12 +3085,12 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineEnvMap3D(
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
     {
         EnsureEnvMapResources();
 
         constexpr std::size_t kEnvStride = 32;
-        uint64_t key = MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe);
+        uint64_t key = MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
         auto it = pipelinesEnvMap3D_.find(key);
         if (it != pipelinesEnvMap3D_.end()) return it->second;
 
@@ -2861,7 +3136,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -2891,8 +3166,9 @@ namespace CNA::Internal::Backends::Vulkan
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
 
-        VkRenderPass rp = (colorAttachmentCount > 1) ? GetOrCreateMRTRenderPass(colorAttachmentCount)
-                                                      : renderPass_;
+        VkRenderPass rp = (colorAttachmentCount > 1)
+                          ? GetOrCreateMRTRenderPass(colorAttachmentCount)
+                          : (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -3032,12 +3308,12 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineSkinned3D(
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
     {
         EnsureSkinnedResources();
 
         constexpr std::size_t kSkinnedStride = 52;
-        uint64_t key = MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe);
+        uint64_t key = MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
         auto it = pipelinesSkinned3D_.find(key);
         if (it != pipelinesSkinned3D_.end()) return it->second;
 
@@ -3085,7 +3361,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -3115,8 +3391,9 @@ namespace CNA::Internal::Backends::Vulkan
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
 
-        VkRenderPass rp = (colorAttachmentCount > 1) ? GetOrCreateMRTRenderPass(colorAttachmentCount)
-                                                      : renderPass_;
+        VkRenderPass rp = (colorAttachmentCount > 1)
+                          ? GetOrCreateMRTRenderPass(colorAttachmentCount)
+                          : (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -3144,7 +3421,7 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineInstanced3D(
         std::size_t pvStride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
     {
         // Ensure pipelineLayoutExt3D_ exists (128-byte PC + 1 descriptor set for future texture use).
         if (pipelineLayoutExt3D_ == VK_NULL_HANDLE) {
@@ -3157,7 +3434,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (Ext3D/Instanced) failed");
         }
 
-        uint64_t key = MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe);
+        uint64_t key = MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
         auto it = pipelinesInstanced3D_.find(key);
         if (it != pipelinesInstanced3D_.end()) return it->second;
 
@@ -3210,7 +3487,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo dss{};
         dss.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -3240,8 +3517,9 @@ namespace CNA::Internal::Backends::Vulkan
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
 
-        VkRenderPass rp = (colorAttachmentCount > 1) ? GetOrCreateMRTRenderPass(colorAttachmentCount)
-                                                      : renderPass_;
+        VkRenderPass rp = (colorAttachmentCount > 1)
+                          ? GetOrCreateMRTRenderPass(colorAttachmentCount)
+                          : (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -3269,7 +3547,7 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineExt3D(
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
     {
         // Create layout once — 128-byte push constants + descriptor set for texture.
         if (pipelineLayoutExt3D_ == VK_NULL_HANDLE) {
@@ -3282,7 +3560,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (Ext3D) failed");
         }
 
-        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe);
+        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
         auto it = pipelinesExt3D_.find(key);
         if (it != pipelinesExt3D_.end()) return it->second;
 
@@ -3362,7 +3640,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -3589,7 +3867,10 @@ namespace CNA::Internal::Backends::Vulkan
                             inds.size() * sizeof(uint16_t));
 
                 // Select pipeline: custom SPIR-V effect (Task 119) or built-in 2D.
-                VkPipeline       activePipe   = pipeline2D_;
+                // For backbuffer (targetRT == nullptr) with MSAA, use the MSAA pipeline variant.
+                const bool useMsaaPipe = (targetRT == nullptr) && (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
+                                         && (pipeline2DMsaa_ != VK_NULL_HANDLE);
+                VkPipeline       activePipe   = useMsaaPipe ? pipeline2DMsaa_ : pipeline2D_;
                 VkPipelineLayout activeLayout = pipelineLayout2D_;
                 const float*     customPC     = nullptr;
                 const auto*      ceb          = batch->GetCustomEffectBackend();
@@ -3669,35 +3950,36 @@ namespace CNA::Internal::Backends::Vulkan
                                 draw.instVbData.data(), draw.instVbData.size());
 
                 const uint32_t nColor = targetRT ? targetRT->GetColorAttachmentCount() : 1u;
+                const bool drawMsaa = (targetRT == nullptr) && (sampleCount_ > VK_SAMPLE_COUNT_1_BIT);
                 VkPipeline pipe;
                 if (draw.useAlphaTest) {
                     pipe = GetOrCreatePipelineAlphaTest3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
                 } else if (draw.useDualTexture) {
                     pipe = GetOrCreatePipelineDualTex3D(draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
                 } else if (draw.useEnvMap) {
                     pipe = GetOrCreatePipelineEnvMap3D(draw.topology,
                                                        draw.depthTest, draw.depthWrite,
-                                                       draw.blend, draw.cullMode, nColor, draw.wireframe);
+                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
                 } else if (draw.useSkinned) {
                     pipe = GetOrCreatePipelineSkinned3D(draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
                 } else if (draw.useInstanced) {
                     pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
                 } else if (draw.useExtParams) {
                     pipe = GetOrCreatePipelineExt3D(draw.stride, draw.topology,
                                                     draw.depthTest, draw.depthWrite,
-                                                    draw.blend, draw.cullMode, nColor, draw.wireframe);
+                                                    draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
                 } else {
                     pipe = GetOrCreatePipeline3D(draw.topology,
                                                  draw.depthTest, draw.depthWrite,
-                                                 draw.blend, draw.cullMode, nColor, draw.wireframe);
+                                                 draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
                 }
                 if (pipe != lastPipe) {
                     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
@@ -3829,15 +4111,23 @@ namespace CNA::Internal::Backends::Vulkan
         }
 
         // ---- Phase 2: backbuffer pass ----
-        VkClearValue cv[2]{};
+        const bool hasMsaa = (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) && (renderPassMsaa_ != VK_NULL_HANDLE);
+        // MSAA render pass: att0=MSAA color, att1=resolve(swapchain), att2=depth — 3 clear values.
+        // Non-MSAA render pass: att0=swapchain color, att1=depth — 2 clear values.
+        VkClearValue cv[3]{};
         cv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
-        cv[1].depthStencil = { 1.0f, 0 };
+        if (hasMsaa) {
+            cv[1].color        = {};
+            cv[2].depthStencil = { 1.0f, 0 };
+        } else {
+            cv[1].depthStencil = { 1.0f, 0 };
+        }
         VkRenderPassBeginInfo rp{};
         rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rp.renderPass      = renderPass_;
+        rp.renderPass      = hasMsaa ? renderPassMsaa_ : renderPass_;
         rp.framebuffer     = swapchainFramebuffers_[imageIndex];
         rp.renderArea      = { {0, 0}, swapchainExtent_ };
-        rp.clearValueCount = 2;
+        rp.clearValueCount = hasMsaa ? 3u : 2u;
         rp.pClearValues    = cv;
         vkCmdBeginRenderPass(cb, &rp, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -4995,7 +5285,7 @@ namespace CNA::Internal::Backends
 #ifdef CNA_BACKEND_VULKAN
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
-        return std::make_unique<Vulkan::VulkanGraphicsBackend>(args.window);
+        return std::make_unique<Vulkan::VulkanGraphicsBackend>(args.window, args.multiSampleCount);
     }
 #endif
 }
