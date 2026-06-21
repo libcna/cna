@@ -596,6 +596,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 169: Texture2D SetData/GetData partial rectangle round-trip
+        cna_easygl_test(cna_test_easygl_texture2d_partial_rect
+                        examples/easygl_texture2d_partial_rect_test.cpp)
+        add_test(NAME EasyGL_Texture2D_PartialRect_RoundTrip
+                 COMMAND cna_test_easygl_texture2d_partial_rect)
+        set_tests_properties(EasyGL_Texture2D_PartialRect_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests

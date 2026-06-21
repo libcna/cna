@@ -45,6 +45,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (level == 0) {
             if (!cpuPixels_) cpuPixels_ = std::make_shared<std::vector<uint8_t>>();
+            if (cpuPixels_->empty() && width > 0 && height > 0)
+                cpuPixels_->assign(static_cast<std::size_t>(width) * height * 4, 0);
             return *cpuPixels_;
         }
         const int idx = level - 1;

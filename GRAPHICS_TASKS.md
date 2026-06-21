@@ -248,7 +248,7 @@ All 100 original tasks addressed.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 169 | `Texture2D::SetData` / `GetData` — partial rectangle regions: set data into a sub-rectangle of a 4×4 texture, read back the full texture and verify only the target region changed | ⬜ | Add to `Texture2DTests.cpp` |
+| 169 | `Texture2D::SetData` / `GetData` — partial rectangle regions: set data into a sub-rectangle of a 4×4 texture, read back the full texture and verify only the target region changed | ✅ | `examples/easygl_texture2d_partial_rect_test.cpp`; 4×4 texture filled with red, 2×2 blue sub-rect at (1,1); GetData reads back 16 pixels — 4 blue, 12 red — all 16 PASS. Also fixed `getMipBuffer(0)` bug: buffer was not pre-sized when recreated after `MaybeFreeCpuPixels()`; now auto-assigns `width*height*4` bytes. |
 | 170 | `Texture2D::SetData` / `GetData` — `startIndex` and `elementCount` parameters: upload only a middle slice of a data array, verify correct pixels written | ⬜ | Add to `Texture2DTests.cpp` |
 | 171 | `Texture2D` mip-level `SetData` / `GetData`: upload distinct colours to mip 0 and mip 1 of a 4×4 `generateMipMaps=true` texture; read back each level and verify | ⬜ | Add to `Texture2DTests.cpp` |
 | 172 | `TextureCube` mip-level `SetData` / `GetData`: upload distinct colours per face per mip; read back and verify | ⬜ | Add to `Texture3DTextureCubeRenderTargetTests.cpp` |

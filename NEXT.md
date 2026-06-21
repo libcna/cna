@@ -227,8 +227,8 @@ Recommended execution order:
 
 | Status | # | Description |
 |--------|---|-------------|
-| ✅ done | 151–160, 166–168 | SpriteBatch stub removal, guard fixes, unit tests, SpriteEffects flip, transformMatrix |
-| **next** | **169** | **Texture2D SetData/GetData partial rectangle** |
+| ✅ done | 151–160, 166–169 | SpriteBatch stub removal, guard fixes, SpriteEffects flip, transformMatrix, Texture2D partial rect |
+| **next** | **170** | **Texture2D SetData/GetData startIndex + elementCount** |
 | queued | 169 | Texture2D SetData/GetData partial rectangle |
 | queued | 170 | Texture2D SetData/GetData startIndex + elementCount |
 | queued | 171 | Texture2D mip-level SetData/GetData |
