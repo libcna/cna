@@ -93,10 +93,10 @@ TEST(SpriteBatchTest, DefaultConstructorDoesNotThrow)
     EXPECT_NO_THROW(SpriteBatch batch);
 }
 
-TEST(SpriteBatchTest, EndWithoutBackendDoesNotThrow)
+TEST(SpriteBatchTest, EndWithoutBeginThrows)
 {
     SpriteBatch batch;
-    EXPECT_NO_THROW(batch.End());
+    EXPECT_THROW(batch.End(), std::runtime_error);
 }
 
 TEST(SpriteBatchTest, BeginWithoutBackendDoesNotThrow)
@@ -185,4 +185,119 @@ TEST(SpriteBatchTest, DrawStringVec2ScaleBeforeBeginThrows)
                          0.0f, Vector2::Zero, Vector2(1.0f, 1.0f),
                          SpriteEffects::None, 0.0f),
         std::runtime_error);
+}
+
+// -----------------------------------------------------------------------
+// Tasks 151–156: formerly-stubbed Draw overloads — guard throws
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchTest, DrawVec2ColorBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    Texture2D tex;
+    EXPECT_THROW(batch.Draw(tex, Vector2::Zero, Color::White), std::runtime_error);
+}
+
+TEST(SpriteBatchTest, DrawVec2OptSrcColorBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    Texture2D tex;
+    EXPECT_THROW(batch.Draw(tex, Vector2::Zero, std::optional<Rectangle>{}, Color::White),
+                 std::runtime_error);
+}
+
+TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriScaleEffLayerBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    Texture2D tex;
+    EXPECT_THROW(
+        batch.Draw(tex, Vector2::Zero, std::optional<Rectangle>{}, Color::White,
+                   0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f),
+        std::runtime_error);
+}
+
+TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriVec2ScaleEffLayerBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    Texture2D tex;
+    EXPECT_THROW(
+        batch.Draw(tex, Vector2::Zero, std::optional<Rectangle>{}, Color::White,
+                   0.0f, Vector2::Zero, Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f),
+        std::runtime_error);
+}
+
+TEST(SpriteBatchTest, DrawRectColorBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    Texture2D tex;
+    EXPECT_THROW(batch.Draw(tex, Rectangle(0, 0, 32, 32), Color::White), std::runtime_error);
+}
+
+TEST(SpriteBatchTest, DrawRectOptSrcColorBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    Texture2D tex;
+    EXPECT_THROW(
+        batch.Draw(tex, Rectangle(0, 0, 32, 32), std::optional<Rectangle>{}, Color::White),
+        std::runtime_error);
+}
+
+// -----------------------------------------------------------------------
+// Tasks 157–159: DrawString(StringBuilder,…) — guard throws
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchTest, DrawStringStringBuilderBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    SpriteFont font = makeEmptyFont();
+    System::Text::StringBuilder sb;
+    sb.Append("hi");
+    EXPECT_THROW(batch.DrawString(font, sb, Vector2::Zero, Color::White),
+                 std::runtime_error);
+}
+
+TEST(SpriteBatchTest, DrawStringStringBuilderScalarScaleBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    SpriteFont font = makeEmptyFont();
+    System::Text::StringBuilder sb;
+    sb.Append("hi");
+    EXPECT_THROW(
+        batch.DrawString(font, sb, Vector2::Zero, Color::White,
+                         0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f),
+        std::runtime_error);
+}
+
+TEST(SpriteBatchTest, DrawStringStringBuilderVec2ScaleBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    SpriteFont font = makeEmptyFont();
+    System::Text::StringBuilder sb;
+    sb.Append("hi");
+    EXPECT_THROW(
+        batch.DrawString(font, sb, Vector2::Zero, Color::White,
+                         0.0f, Vector2::Zero, Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f),
+        std::runtime_error);
+}
+
+// -----------------------------------------------------------------------
+// Tasks 161–166: sort-mode enum values and Begin/End guard behaviour
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchTest, BeginTwiceWithoutEndThrows)
+{
+    SpriteBatch batch;
+    batch.Begin();
+    EXPECT_THROW(batch.Begin(), std::runtime_error);
+}
+
+TEST(SpriteBatchTest, BeginEndBeginEndDoesNotThrow)
+{
+    SpriteBatch batch;
+    EXPECT_NO_THROW({
+        batch.Begin();
+        batch.End();
+        batch.Begin();
+        batch.End();
+    });
 }

@@ -82,6 +82,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         customEffect_    = effect;
         transformMatrix_ = transformMatrix;
+        sortMode_        = sortMode;
+        spriteQueue_.clear();
+        begun            = true;
 
         if (backend_)
         {
@@ -90,21 +93,22 @@ namespace Microsoft::Xna::Framework::Graphics
             if (samplerState)
                 backend_->SetSamplerFilter(static_cast<int>(samplerState->getFilterProperty()));
             backend_->Begin();
-            begun     = true;
-            sortMode_ = sortMode;
-            spriteQueue_.clear();
         }
     }
 
     void SpriteBatch::End()
     {
-        if (!backend_) return;
-        if (sortMode_ != SpriteSortMode::Immediate)
-            flushBatch();
-        backend_->End();
-        begun = false;
+        if (!begun)
+            throw std::runtime_error("End was called, but Begin has not yet been called.");
+        if (backend_)
+        {
+            if (sortMode_ != SpriteSortMode::Immediate)
+                flushBatch();
+            backend_->End();
+            backend_->SetCustomEffect(nullptr);
+        }
+        begun         = false;
         customEffect_ = nullptr;
-        backend_->SetCustomEffect(nullptr);
     }
 
     // -----------------------------------------------------------------------
@@ -230,15 +234,29 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
     {
-        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
-        (void)texture; (void)position; (void)color;
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!backend_) return;
+        const int w = texture.getWidthProperty();
+        const int h = texture.getHeightProperty();
+        pushSprite(texture,
+                   Rectangle(static_cast<intcs>(position.X), static_cast<intcs>(position.Y), w, h),
+                   Rectangle(0, 0, w, h),
+                   color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
-        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
-        (void)texture; (void)position; (void)sourceRectangle; (void)color;
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!backend_) return;
+        const int w = texture.getWidthProperty();
+        const int h = texture.getHeightProperty();
+        const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
+        const int dw = sourceRectangle.has_value() ? src.Width  : w;
+        const int dh = sourceRectangle.has_value() ? src.Height : h;
+        pushSprite(texture,
+                   Rectangle(static_cast<intcs>(position.X), static_cast<intcs>(position.Y), dw, dh),
+                   src, color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
@@ -246,9 +264,17 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, float scale,
                            SpriteEffects effects, float layerDepth)
     {
-        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
-        (void)texture; (void)position; (void)sourceRectangle; (void)color;
-        (void)rotation; (void)origin; (void)scale; (void)effects; (void)layerDepth;
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!backend_) return;
+        const int w = texture.getWidthProperty();
+        const int h = texture.getHeightProperty();
+        const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
+        const int dw = sourceRectangle.has_value() ? src.Width  : w;
+        const int dh = sourceRectangle.has_value() ? src.Height : h;
+        pushSprite(texture,
+                   Rectangle(static_cast<intcs>(position.X), static_cast<intcs>(position.Y),
+                             static_cast<intcs>(dw * scale), static_cast<intcs>(dh * scale)),
+                   src, color, rotation, origin, effects, layerDepth);
     }
 
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
@@ -256,24 +282,41 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, Vector2 scale,
                            SpriteEffects effects, float layerDepth)
     {
-        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
-        (void)texture; (void)position; (void)sourceRectangle; (void)color;
-        (void)rotation; (void)origin; (void)scale; (void)effects; (void)layerDepth;
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!backend_) return;
+        const int w = texture.getWidthProperty();
+        const int h = texture.getHeightProperty();
+        const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
+        const int dw = sourceRectangle.has_value() ? src.Width  : w;
+        const int dh = sourceRectangle.has_value() ? src.Height : h;
+        pushSprite(texture,
+                   Rectangle(static_cast<intcs>(position.X), static_cast<intcs>(position.Y),
+                             static_cast<intcs>(dw * scale.X), static_cast<intcs>(dh * scale.Y)),
+                   src, color, rotation, origin, effects, layerDepth);
     }
 
     void SpriteBatch::Draw(const Texture2D& texture,
                            const Rectangle& destinationRectangle, Color color)
     {
-        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
-        (void)texture; (void)destinationRectangle; (void)color;
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!backend_) return;
+        const int w = texture.getWidthProperty();
+        const int h = texture.getHeightProperty();
+        pushSprite(texture, destinationRectangle, Rectangle(0, 0, w, h),
+                   color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
     void SpriteBatch::Draw(const Texture2D& texture,
                            const Rectangle& destinationRectangle,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
-        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
-        (void)texture; (void)destinationRectangle; (void)sourceRectangle; (void)color;
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!backend_) return;
+        const int w = texture.getWidthProperty();
+        const int h = texture.getHeightProperty();
+        const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
+        pushSprite(texture, destinationRectangle, src,
+                   color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
     // -----------------------------------------------------------------------
@@ -382,13 +425,11 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    // CNA_STUB: DrawString(StringBuilder, ...) overloads — XNA 4.0 API surface.
     void SpriteBatch::DrawString(const SpriteFont& spriteFont,
                                  const System::Text::StringBuilder& text,
                                  Vector2 position, Color color)
     {
-        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
-        (void)spriteFont; (void)text; (void)position; (void)color;
+        DrawString(spriteFont, text.ToString(), position, color);
     }
 
     void SpriteBatch::DrawString(const SpriteFont& spriteFont,
@@ -397,9 +438,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float rotation, Vector2 origin, float scale,
                                  SpriteEffects effects, float layerDepth)
     {
-        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
-        (void)spriteFont; (void)text; (void)position; (void)color;
-        (void)rotation; (void)origin; (void)scale; (void)effects; (void)layerDepth;
+        DrawString(spriteFont, text.ToString(), position, color,
+                   rotation, origin, scale, effects, layerDepth);
     }
 
     void SpriteBatch::DrawString(const SpriteFont& spriteFont,
@@ -408,8 +448,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float rotation, Vector2 origin, Vector2 scale,
                                  SpriteEffects effects, float layerDepth)
     {
-        // CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
-        (void)spriteFont; (void)text; (void)position; (void)color;
-        (void)rotation; (void)origin; (void)scale; (void)effects; (void)layerDepth;
+        DrawString(spriteFont, text.ToString(), position, color,
+                   rotation, origin, scale, effects, layerDepth);
     }
 }
