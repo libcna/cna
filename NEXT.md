@@ -222,22 +222,27 @@ cmake --build cmake-build-bgfx --target shaderc
 
 ## 8. Next tasks (ordered by priority)
 
-Tasks 151–200 added across Phases 19–25 based on June 2026 external code review.
-Recommended order:
+Tasks 151–160 + 166 done (2026-06-21). Tasks 201–500 added externally (Phases 26–55).
+Recommended execution order:
 
-| Priority | # | Why first |
-|----------|---|-----------|
-| **High** | 151–156 | SpriteBatch `Draw` stub removal — 6 no-op overloads, trivial one-liners |
-| **High** | 157–159 | `DrawString(StringBuilder,…)` stubs — convert via `StringBuilder::ToString()` |
-| **High** | 160 | Unit tests for all 9 newly implemented overloads |
-| **High** | 161–166 | SpriteBatch sort-mode and guard tests (logic already present, just needs tests) |
-| **High** | 167–168 | SpriteEffects flip + transformMatrix pixel integration tests |
-| **High** | 169–173 | Texture SetData/GetData: partial rect, startIndex, mip levels, cube faces, 3D slices |
-| Medium | 174–176 | SurfaceFormat support table, DXT golden tests, sRGB handling |
-| Medium | 177–183 | RenderTargetUsage, device reset events, PresentationParameters round-trip |
-| Medium | 184–190 | Effect.Clone, EffectParameter guards, BasicEffect + AlphaTestEffect pixel tests |
-| Medium | 191–196 | Stock effects backend parity (DualTexture, EnvMap, Skinned, fog, EnableDefaultLighting) |
-| Low | 197–200 | PackedVector golden values, edge-case tests, docs update |
+| Status | # | Description |
+|--------|---|-------------|
+| ✅ done | 151–160, 166 | SpriteBatch stub removal, guard fixes, unit tests |
+| **next** | **167** | **Pixel test: `SpriteEffects::FlipHorizontally` + `FlipVertically` — EasyGL** |
+| **next** | **168** | **Pixel test: `transformMatrix` in `SpriteBatch::Begin` — EasyGL** |
+| queued | 169 | Texture2D SetData/GetData partial rectangle |
+| queued | 170 | Texture2D SetData/GetData startIndex + elementCount |
+| queued | 171 | Texture2D mip-level SetData/GetData |
+| queued | 172 | TextureCube mip-level SetData/GetData per face |
+| queued | 173 | Texture3D z-slice SetData/GetData |
+| queued | 174 | SurfaceFormat backend mapping table (`docs/surface-format-support.md`) |
+| queued | 175 | DXT1 golden-value decode test |
+| queued | 176 | sRGB formats: implement or explicitly throw |
+| queued | 177–183 | RenderTargetUsage, device-reset events, PresentationParameters round-trip |
+| queued | 184–190 | Effect.Clone, EffectParameter guards, BasicEffect + AlphaTestEffect pixel tests |
+| queued | 191–196 | Stock effects backend parity (DualTexture, EnvMap, Skinned, fog) |
+| queued | 197–200 | PackedVector golden-value conformance + docs update |
+| queued | 201–500 | Phases 26–55: GraphicsDevice validation, draw-call conformance, golden-image tests, FNA harness, release gate |
 
 ---
 

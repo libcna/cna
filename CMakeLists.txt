@@ -578,6 +578,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 167: SpriteEffects — FlipHorizontally, FlipVertically, FlipHV pixel readback
+        cna_easygl_test(cna_test_easygl_sprite_effects
+                        examples/easygl_sprite_effects_test.cpp)
+        add_test(NAME EasyGL_SpriteEffects_Flip
+                 COMMAND cna_test_easygl_sprite_effects)
+        set_tests_properties(EasyGL_SpriteEffects_Flip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
