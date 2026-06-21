@@ -240,7 +240,7 @@ All 100 original tasks addressed.
 | 165 | Verify `SpriteSortMode::BackToFront`: sprites sorted by descending `layerDepth`; test with same 3 draws — assert reverse delivery order | ⬜ | Requires mock/inspectable backend; deferred to later |
 | 166 | Guard tests: `Begin()` twice without `End()` must throw; `End()` without `Begin()` must throw; `Begin/End/Begin/End` cycle does not throw | ✅ | Covered by Task 160; `BeginTwiceWithoutEndThrows`, `EndWithoutBeginThrows`, `BeginEndBeginEndDoesNotThrow` — all PASSED |
 | 167 | Pixel integration test: `SpriteEffects::FlipHorizontally` and `FlipVertically` — asymmetric textures, flip, pixel readback | ✅ | `examples/easygl_sprite_effects_test.cpp`; viewport 400×100, `SamplerState::PointClamp`; 2×1 tex [Red\|Blue] for FlipH, 1×2 tex [Red/Blue] for FlipV; 8 readback assertions (left/right no-flip, left/right FlipH, top/bot no-flip, top/bot FlipV) — all 8 PASS |
-| 168 | Pixel integration test: `transformMatrix` in `SpriteBatch::Begin` — pass a translation matrix `Matrix::CreateTranslation(100,0,0)`, draw a 1×1 red texture at (0,0), read back pixel at (100,0) and assert red | ⬜ | EasyGL; verify matrix is forwarded to backend viewport transform |
+| 168 | Pixel integration test: `transformMatrix` in `SpriteBatch::Begin` — pass a translation matrix `Matrix::CreateTranslation(100,0,0)`, draw a 1×1 red texture at (0,0), read back pixel at (100,0) and assert red | ✅ | `examples/easygl_transform_matrix_test.cpp`; viewport 400×200; `CreateTranslation(100,50,0)` moves 1×1 red sprite from (0,0) to (100,50); 2 readback checks (origin=Black, translated=Red) — both PASS. Also fixed EasyGL bug: `combined = orthoM * transform_` → `transform_ * orthoM` (row-major order: transform first, then project). |
 
 ---
 

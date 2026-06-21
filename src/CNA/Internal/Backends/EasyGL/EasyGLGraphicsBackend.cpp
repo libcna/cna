@@ -830,7 +830,7 @@ void main()
             0.0f, static_cast<float>(logW),
             static_cast<float>(logH), 0.0f,
             -1.0f, 1.0f);
-        const Matrix combined = orthoM * transform_;
+        const Matrix combined = transform_ * orthoM;
         float ortho[16];
         combined.ToColumnMajor(ortho);
         const int projLoc = prog->uniform_location("projection");

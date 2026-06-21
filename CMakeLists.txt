@@ -587,6 +587,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 168: transformMatrix in SpriteBatch::Begin — translation pixel readback
+        cna_easygl_test(cna_test_easygl_transform_matrix
+                        examples/easygl_transform_matrix_test.cpp)
+        add_test(NAME EasyGL_TransformMatrix_Translation
+                 COMMAND cna_test_easygl_transform_matrix)
+        set_tests_properties(EasyGL_TransformMatrix_Translation PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
