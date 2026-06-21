@@ -225,12 +225,26 @@ TEST(Texture2DTest, SetDataNegativeLevelThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(-1, nullptr, buf, 0, 1), std::out_of_range);
 }
 
-TEST(Texture2DTest, SetDataLevelTooManyElementsThrowsOutOfRange)
+TEST(Texture2DTest, SetDataLevelExtraElementsDoesNotThrow)
 {
-    // Default texture: width=0, height=0; mipDim clamps to 1×1.
-    // With no rect the effective region is 1×1 = 1 pixel.
-    // Requesting 2 elements exceeds the region → out_of_range.
+    // Default texture: mipDim(0,0)=1, effective region is 1×1 = 1 pixel.
+    // Providing elementCount=2 (> region size) is allowed — XNA ignores extras.
     Texture2D tex;
     Color buf[2] = { Color(0,0,0,0), Color(0,0,0,0) };
-    EXPECT_THROW(tex.SetData(0, nullptr, buf, 0, 2), std::out_of_range);
+    EXPECT_NO_THROW(tex.SetData(0, nullptr, buf, 0, 2));
+}
+
+TEST(Texture2DTest, SetDataLevelInsufficientElementsThrowsOutOfRange)
+{
+    // Default texture: mipDim(0,0)=1, effective region is 1×1 = 1 pixel.
+    // Providing elementCount=0 is rejected by the elementCount <= 0 guard above,
+    // but that already throws invalid_argument. The out_of_range guard fires when
+    // 0 < elementCount < w*h. Since region=1 and elementCount must be >= 1,
+    // we test via a rect that makes the region 2 pixels on a 1-pixel texture —
+    // Rectangle(0,0,2,1) would imply w=2, h=1 → w*h=2, but we pass elementCount=1.
+    // (mipDim-clamped width is 1, so x+w=2 exceeds levelW=1; the loop still uses w=2.)
+    Texture2D tex;
+    Color buf[1] = { Color(0,0,0,0) };
+    const Rectangle wide(0, 0, 2, 1);   // w*h = 2, elementCount = 1 < 2 → throws
+    EXPECT_THROW(tex.SetData(0, &wide, buf, 0, 1), std::out_of_range);
 }

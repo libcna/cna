@@ -45,8 +45,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (level == 0) {
             if (!cpuPixels_) cpuPixels_ = std::make_shared<std::vector<uint8_t>>();
-            if (cpuPixels_->empty() && width > 0 && height > 0)
-                cpuPixels_->assign(static_cast<std::size_t>(width) * height * 4, 0);
+            if (cpuPixels_->empty())
+            {
+                const std::size_t sz =
+                    static_cast<std::size_t>(mipDim(width, 0)) * mipDim(height, 0) * 4;
+                if (sz > 0) cpuPixels_->assign(sz, 0);
+            }
             return *cpuPixels_;
         }
         const int idx = level - 1;
@@ -202,8 +206,8 @@ namespace Microsoft::Xna::Framework::Graphics
             x = rect->X; y = rect->Y;
             w = rect->Width; h = rect->Height;
         }
-        if (startIndex + elementCount > w * h)
-            throw std::out_of_range("Texture2D::SetData: not enough elements for the requested region");
+        if (elementCount < w * h)
+            throw std::out_of_range("Texture2D::SetData: elementCount is less than the number of pixels in the requested region");
 
         std::vector<uint8_t>& buf = getMipBuffer(level);
 
@@ -305,8 +309,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (x < 0 || y < 0 || x + w > levelW || y + h > levelH)
             throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
-        if (startIndex + elementCount > w * h)
-            throw std::out_of_range("Texture2D::GetData: not enough room in data array");
+        if (elementCount < w * h)
+            throw std::out_of_range("Texture2D::GetData: elementCount is less than the number of pixels in the requested region");
 
         for (int row = 0; row < h; ++row)
         {
