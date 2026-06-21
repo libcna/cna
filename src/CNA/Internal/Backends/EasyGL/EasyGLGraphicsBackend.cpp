@@ -574,6 +574,22 @@ namespace CNA::Internal::Backends::EasyGL
         return cubeTex_.native_handle();
     }
 
+    void EasyGLRenderTargetCubeBackend::BindGL() const
+    {
+        cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
+    }
+
+    void EasyGLRenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                                 const void* data, int /*dataLength*/)
+    {
+        if (face < 0 || face >= 6) return;
+        cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        cubeTex_.set_sub_image_2d(kCubeFaceTargets[face], level, x, y, w, h,
+                                   ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedByte,
+                                   data);
+    }
+
     void EasyGLRenderTargetCubeBackend::release_gl_handle_only()
     {
         fbo_.reset_handle_no_gl();

@@ -33,7 +33,7 @@ namespace Microsoft::Xna::Framework::Graphics
         TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format);
 
         /** @brief Destructor. */
-        NOXNA ~TextureCube() override = default;
+        NOXNA ~TextureCube() override;
 
         /** @brief Returns the fully qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
@@ -104,6 +104,21 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Reference to the backend ITextureCubeBackend.
          */
         NOXNA [[nodiscard]] CNA::Internal::Backends::ITextureCubeBackend& GetBackend() const { return *backend_; }
+
+    protected:
+        /**
+         * @brief Constructs a TextureCube from a pre-built backend (used by RenderTargetCube).
+         *
+         * @param device  The owning device.
+         * @param size    Width and height of each cube face in texels.
+         * @param format  Surface format.
+         * @param backend Owning pointer to the pre-built GPU backend.
+         */
+        NOXNA TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
+                          std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend);
+
+        /** @brief Returns the raw backend pointer (used by RenderTargetCube to retrieve the RT handle). */
+        NOXNA [[nodiscard]] CNA::Internal::Backends::ITextureCubeBackend* GetBackendRaw() const { return backend_.get(); }
 
     private:
         int size_;

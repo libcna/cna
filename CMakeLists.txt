@@ -524,6 +524,51 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 132: ShaderEffect (GLSL) with SpriteBatch — red-tint over green background
+        cna_easygl_test(cna_test_easygl_shader_effect
+                        examples/easygl_shader_effect_test.cpp)
+        add_test(NAME EasyGL_ShaderEffect_GLSL
+                 COMMAND cna_test_easygl_shader_effect)
+        set_tests_properties(EasyGL_ShaderEffect_GLSL PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
+        cna_easygl_test(cna_test_easygl_dual_texture
+                        examples/easygl_dual_texture_test.cpp)
+        add_test(NAME EasyGL_DualTextureEffect_Blend
+                 COMMAND cna_test_easygl_dual_texture)
+        set_tests_properties(EasyGL_DualTextureEffect_Blend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 134: EnvironmentMapEffect — emissive red, envAmount=0, pixel readback
+        cna_easygl_test(cna_test_easygl_env_map
+                        examples/easygl_env_map_test.cpp)
+        add_test(NAME EasyGL_EnvironmentMapEffect_Readback
+                 COMMAND cna_test_easygl_env_map)
+        set_tests_properties(EasyGL_EnvironmentMapEffect_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 144: Model.Draw — 2-bone model, BasicEffect VertexColor, red quad, pixel readback
+        cna_easygl_test(cna_test_easygl_model_draw
+                        examples/easygl_model_draw_test.cpp)
+        add_test(NAME EasyGL_ModelDraw_RedQuad
+                 COMMAND cna_test_easygl_model_draw)
+        set_tests_properties(EasyGL_ModelDraw_RedQuad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 145: MRT — SetRenderTargets({rt0,rt1}), draw green to attachment0, verify left=green right=blue
+        cna_easygl_test(cna_test_easygl_mrt
+                        examples/easygl_mrt_test.cpp)
+        add_test(NAME EasyGL_MRT_TwoAttachments
+                 COMMAND cna_test_easygl_mrt)
+        set_tests_properties(EasyGL_MRT_TwoAttachments PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -569,6 +614,42 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ShaderEffect_SpirV
                  COMMAND cna_test_vulkan_shader_effect)
         set_tests_properties(Vulkan_ShaderEffect_SpirV PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 135: DualTextureEffect — magenta×yellow→red pixel readback on Vulkan
+        cna_vulkan_test(cna_test_vulkan_dual_texture
+                        examples/vulkan_dual_texture_test.cpp)
+        add_test(NAME Vulkan_DualTextureEffect_Blend
+                 COMMAND cna_test_vulkan_dual_texture)
+        set_tests_properties(Vulkan_DualTextureEffect_Blend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 136: EnvironmentMapEffect — emissive=(1,0,0), envAmount=0 → red pixel on Vulkan
+        cna_vulkan_test(cna_test_vulkan_env_map
+                        examples/vulkan_env_map_test.cpp)
+        add_test(NAME Vulkan_EnvironmentMapEffect_Readback
+                 COMMAND cna_test_vulkan_env_map)
+        set_tests_properties(Vulkan_EnvironmentMapEffect_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 148: RenderTarget2D full cycle — red quad into RT, blit to backbuffer
+        cna_vulkan_test(cna_test_vulkan_rt2d
+                        examples/vulkan_rt2d_test.cpp)
+        add_test(NAME Vulkan_RenderTarget2D_FullCycle
+                 COMMAND cna_test_vulkan_rt2d)
+        set_tests_properties(Vulkan_RenderTarget2D_FullCycle PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 142: RenderTargetCube — 6-face per-face render passes
+        cna_vulkan_test(cna_test_vulkan_rtcube
+                        examples/vulkan_rtcube_test.cpp)
+        add_test(NAME Vulkan_RenderTargetCube_PerFace
+                 COMMAND cna_test_vulkan_rtcube)
+        set_tests_properties(Vulkan_RenderTargetCube_PerFace PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

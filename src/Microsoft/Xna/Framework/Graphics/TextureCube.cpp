@@ -5,12 +5,24 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    TextureCube::~TextureCube() = default;
+
     TextureCube::TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format)
         : GraphicsResource(&device)
         , size_(size)
         , format_(format)
         , levelCount_(mipMap ? 1 : 1)
         , backend_(device.GetBackend().CreateTextureCube(size, mipMap, static_cast<int>(format)))
+    {
+    }
+
+    TextureCube::TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
+                             std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend)
+        : GraphicsResource(&device)
+        , size_(size)
+        , format_(format)
+        , levelCount_(1)
+        , backend_(std::move(backend))
     {
     }
 

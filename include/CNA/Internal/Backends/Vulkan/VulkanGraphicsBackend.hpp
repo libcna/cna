@@ -34,10 +34,33 @@ namespace CNA::Internal::Backends::Vulkan
     };
 
     // -------------------------------------------------------------------------
+    // IVulkanSamplable — common interface for any Vulkan object that can be
+    // bound as a sampled texture (regular Texture2D and RenderTarget2D).
+    // -------------------------------------------------------------------------
+
+    struct IVulkanSamplable
+    {
+        virtual ~IVulkanSamplable() = default;
+        virtual VkDescriptorSet GetVkDescriptorSet() const = 0;
+        virtual VkImageView     GetVkImageView()     const = 0;
+    };
+
+    // -------------------------------------------------------------------------
+    // IVulkanCubeSamplable — common interface for Vulkan objects that can be
+    // sampled as a cube map (TextureCube and RenderTargetCube).
+    // -------------------------------------------------------------------------
+
+    struct IVulkanCubeSamplable
+    {
+        virtual ~IVulkanCubeSamplable() = default;
+        virtual VkImageView GetVkCubeImageView() const = 0;
+    };
+
+    // -------------------------------------------------------------------------
     // VulkanTextureBackend
     // -------------------------------------------------------------------------
 
-    class VulkanTextureBackend : public ITextureBackend
+    class VulkanTextureBackend : public ITextureBackend, public IVulkanSamplable
     {
     public:
         explicit VulkanTextureBackend(const ImageData& data, VulkanGraphicsBackend* owner);
@@ -47,8 +70,10 @@ namespace CNA::Internal::Backends::Vulkan
         int GetHeight() const override { return height_; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
-        VkDescriptorSet GetDescriptorSet() const { return descriptorSet_; }
-        VkImageView     GetImageView()     const { return imageView_; }
+        VkDescriptorSet GetDescriptorSet()       const { return descriptorSet_; }
+        VkImageView     GetImageView()           const { return imageView_; }
+        VkDescriptorSet GetVkDescriptorSet()     const override { return descriptorSet_; }
+        VkImageView     GetVkImageView()         const override { return imageView_; }
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
@@ -68,7 +93,8 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanRenderTargetBackend
     // -------------------------------------------------------------------------
 
-    class VulkanRenderTargetBackend : public IRenderTargetBackend, public VulkanRTSource
+    class VulkanRenderTargetBackend : public IRenderTargetBackend, public VulkanRTSource,
+                                      public IVulkanSamplable
     {
     public:
         VulkanRenderTargetBackend(int w, int h, bool hasDepth, VulkanGraphicsBackend* owner);
@@ -87,6 +113,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorSet GetDescriptorSet()         const { return descriptorSet_; }
         VkImageView     GetColorView()             const { return colorView_; }
         VkImageView     GetDepthView()             const { return depthView_; }
+        VkDescriptorSet GetVkDescriptorSet()       const override { return descriptorSet_; }
+        VkImageView     GetVkImageView()           const override { return colorView_; }
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
@@ -199,7 +227,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<Sprite2DVertex>      vertices_;
         std::vector<uint16_t>            indices_;
         std::vector<DrawCall>            draws_;
-        const VulkanTextureBackend*      currentTexture_      = nullptr;
+        const IVulkanSamplable*          currentTexture_      = nullptr;
         uint32_t                         batchFirstIndex_     = 0;
 
         void FlushTexture();
@@ -294,7 +322,7 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanTextureCubeBackend
     // -------------------------------------------------------------------------
 
-    class VulkanTextureCubeBackend : public ITextureCubeBackend
+    class VulkanTextureCubeBackend : public ITextureCubeBackend, public IVulkanCubeSamplable
     {
     public:
         VulkanTextureCubeBackend(VulkanGraphicsBackend* owner, int size);
@@ -303,8 +331,9 @@ namespace CNA::Internal::Backends::Vulkan
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
 
-        /** @brief Returns the Vulkan image view for this cube map texture. */
-        [[nodiscard]] VkImageView GetImageView() const { return imageView_; }
+        /** @brief Returns the Vulkan cube image view for sampling. */
+        [[nodiscard]] VkImageView GetImageView()        const { return imageView_; }
+        [[nodiscard]] VkImageView GetVkCubeImageView()  const override { return imageView_; }
 
     private:
         VulkanGraphicsBackend* owner_ = nullptr;
@@ -340,7 +369,8 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanRenderTargetCubeBackend
     // -------------------------------------------------------------------------
 
-    class VulkanRenderTargetCubeBackend : public IRenderTargetCubeBackend
+    class VulkanRenderTargetCubeBackend : public IRenderTargetCubeBackend,
+                                          public IVulkanCubeSamplable
     {
     public:
         VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size);
@@ -349,6 +379,9 @@ namespace CNA::Internal::Backends::Vulkan
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
+
+        // IVulkanCubeSamplable — returns a VK_IMAGE_VIEW_TYPE_CUBE view over all 6 faces.
+        [[nodiscard]] VkImageView GetVkCubeImageView() const override { return cubeView_; }
 
     private:
         struct FaceProxy : public VulkanRTSource {
@@ -365,6 +398,7 @@ namespace CNA::Internal::Backends::Vulkan
         VulkanGraphicsBackend*     owner_     = nullptr;
         VkImage                    image_     = VK_NULL_HANDLE;
         VkDeviceMemory             memory_    = VK_NULL_HANDLE;
+        VkImageView                cubeView_  = VK_NULL_HANDLE;   ///< Full-cube view for sampling.
         std::array<VkImageView, 6> faceViews_ = {};
         VkImage                    depthImage_  = VK_NULL_HANDLE;
         VkDeviceMemory             depthMemory_ = VK_NULL_HANDLE;
@@ -476,6 +510,7 @@ namespace CNA::Internal::Backends::Vulkan
         void SetDepthTestEnabled(bool)  override;
         void SetBlendEnabled(bool)      override;
         void SetDepthWriteEnabled(bool) override;
+        void SetStringMarkerEXT(const char* marker) override;
         std::unique_ptr<IVertexBufferBackend>  CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend>   CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend>   CreateIndexBuffer32(int index_capacity) override;
@@ -675,10 +710,17 @@ namespace CNA::Internal::Backends::Vulkan
             std::size_t             instVbStride      = 64;    // bytes per instance (default = mat4)
             uint32_t                instanceCount     = 1;     // number of instances
             bool                    wireframe         = false; // true = VK_POLYGON_MODE_LINE
+            // Debug marker (SetStringMarkerEXT) — if true, vbData is empty and this entry
+            // emits vkCmdInsertDebugUtilsLabelEXT instead of a draw call.
+            bool                    isMarker          = false;
+            std::string             markerLabel;
         };
         std::vector<Pending3DDraw>  pending3D_;
         // pair: (batch, target RT) where RT=nullptr means backbuffer
         std::vector<std::pair<VulkanSpriteBatchBackend*, VulkanRTSource*>> activeBatches_;
+
+        // Cached vkCmdInsertDebugUtilsLabelEXT — loaded once after device creation, nullptr if unsupported.
+        PFN_vkCmdInsertDebugUtilsLabelEXT pfnCmdInsertDebugLabel_ = nullptr;
 
         // --- Virtual (game) resolution for 2D NDC mapping ---
         int virtualWidth_  = 0;

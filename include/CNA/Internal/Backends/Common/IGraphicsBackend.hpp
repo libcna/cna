@@ -157,7 +157,9 @@ namespace CNA::Internal::Backends
 
     /// Backend handle for a cube-map render target.
     /// Each face can be activated independently for rendering.
-    class IRenderTargetCubeBackend
+    /// Inherits ITextureCubeBackend so RenderTargetCube can share a single GPU image
+    /// with its TextureCube base class (same pattern as IRenderTargetBackend : ITextureBackend).
+    class IRenderTargetCubeBackend : public ITextureCubeBackend
     {
     public:
         virtual ~IRenderTargetCubeBackend() = default;
@@ -169,6 +171,10 @@ namespace CNA::Internal::Backends
         virtual void UnbindAsRenderTarget() = 0;
         /// Returns the underlying GL texture handle so the cube map can be sampled.
         [[nodiscard]] virtual unsigned int GetGLHandle() const { return 0; }
+
+        // ITextureCubeBackend — render targets do not support CPU-side SetData; no-op by default.
+        void SetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
+                     const void* /*data*/, int /*dataLength*/) override {}
     };
 
     /// Backend handle for a compiled shader program (vertex + fragment).
@@ -526,6 +532,11 @@ namespace CNA::Internal::Backends
         virtual void SetContextRecoveryEnabled(bool /*enabled*/) {}
 
         // ---- Debug / testing ----
+
+        /// Inserts a named GPU debug label into the command stream.
+        /// Default implementation is a no-op; Vulkan backend overrides with
+        /// vkCmdInsertDebugUtilsLabelEXT when VK_EXT_debug_utils is available.
+        virtual void SetStringMarkerEXT(const char* /*marker*/) {}
 
         /// Simulates an OpenGL context loss.
         /// On Web (Emscripten): triggers WEBGL_lose_context.loseContext().

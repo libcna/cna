@@ -80,6 +80,11 @@ namespace CNA::Internal::Backends::EasyGL
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetGLHandle() const override;
 
+        // ITextureCubeBackend — bind and upload to the shared cube texture.
+        void BindGL() const override;
+        void SetData(int face, int level, int x, int y, int w, int h,
+                     const void* data, int dataLength) override;
+
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
 

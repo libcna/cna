@@ -5,24 +5,31 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Backends::IRenderTargetCubeBackend;
+    using CNA::Internal::Backends::ITextureCubeBackend;
+
     RenderTargetCube::RenderTargetCube(GraphicsDevice& device, int size,
-                                       bool mipMap, SurfaceFormat preferredFormat,
+                                       bool /*mipMap*/, SurfaceFormat preferredFormat,
                                        DepthFormat preferredDepthFormat,
                                        int preferredMultiSampleCount,
                                        RenderTargetUsage usage)
-        : TextureCube(device, size, mipMap, preferredFormat)
+        : TextureCube(device, size, preferredFormat,
+                      // IRenderTargetCubeBackend : ITextureCubeBackend — pass single backend
+                      // to TextureCube so sampling and rendering share the same GPU image.
+                      std::unique_ptr<ITextureCubeBackend>(
+                          device.backend_ ? device.backend_->CreateRenderTargetCube(size).release()
+                                          : nullptr))
         , size_(size)
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)
     {
-        if (device.backend_)
-            backend_ = device.backend_->CreateRenderTargetCube(size);
+        rtCubeBackend_ = static_cast<IRenderTargetCubeBackend*>(GetBackendRaw());
     }
 
-    CNA::Internal::Backends::IRenderTargetCubeBackend* RenderTargetCube::GetRenderTargetCubeBackend() const
+    IRenderTargetCubeBackend* RenderTargetCube::GetRenderTargetCubeBackend() const
     {
-        return backend_.get();
+        return rtCubeBackend_;
     }
 
     int RenderTargetCube::getWidthProperty() const  { return size_; }

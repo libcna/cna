@@ -65,6 +65,7 @@ namespace Microsoft::Xna::Framework::Graphics
         DepthFormat depthFormat_;
         int multiSampleCount_;
         RenderTargetUsage usage_;
-        std::unique_ptr<CNA::Internal::Backends::IRenderTargetCubeBackend> backend_;
+        // Non-owning pointer into TextureCube::backend_ (which holds unique ownership).
+        CNA::Internal::Backends::IRenderTargetCubeBackend* rtCubeBackend_ = nullptr;
     };
 }

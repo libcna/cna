@@ -12,9 +12,10 @@ It is a framework/runtime, not a game.
 one of four backends: SDL_Renderer, EasyGL (OpenGL ES 3.2 via easygl + metagl),
 Vulkan, or Bgfx.
 
-**Current phase**: GRAPHICS_TASKS.md Phases 1–14 complete (Tasks 101–125 ✅),
-Tasks 118–119 (Vulkan per-slot SamplerState + custom SPIR-V Effect) complete.
-**All deferred tasks finished.  No outstanding tasks.**
+**Current phase**: GRAPHICS_TASKS.md Phases 1–15 complete (Tasks 101–131 ✅),
+Tasks 132–136 complete (EasyGL/Vulkan ShaderEffect/DualTextureEffect/EnvironmentMapEffect),
+Tasks 137–145 complete (Bgfx parity, GetVertexBuffers, Model.Draw integration test, MRT integration test).
+**Phase 18 in progress. Done: 141, 142, 143, 144, 145, 148, 149, 150. Remaining: 146, 147.**
 
 **Key architectural decisions**:
 - Backend selected at compile time via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -105,6 +106,8 @@ VideoPlayer (confirmed complete), DxtUtil + Texture2D::FromStream DDS decoding.
 | 12 — Vulkan deferred | Tasks 118–119 | ✅ all complete |
 | 13 — Missing XNA classes | Tasks 120–121 | ✅ all complete |
 | 14 — Integration tests | Tasks 122–125 | ✅ all complete |
+| 15 — Unit test gaps | Tasks 126–131 | ✅ all complete |
+| 16 — Effect integration | Tasks 132–135 | ✅ done (136 blocked on Task 143) |
 
 ---
 
@@ -223,7 +226,7 @@ Tasks 126–150 added across Phases 15–18.  Recommended order:
 
 | Priority | # | Why first |
 |----------|---|-----------|
-| High | 126 | SpriteBatch unit tests — biggest silent-regression risk |
+| High | 126 | SpriteBatch unit tests — ✅ done (20 tests) |
 | High | 127 | SpriteFont unit tests |
 | High | 128–131 | Remaining unit test gaps (Texture2D, RenderTarget, OcclusionQuery, GraphicsAdapter) |
 | Medium | 132 | EasyGL ShaderEffect integration test (mirrors Vulkan Task 119) |
@@ -242,8 +245,8 @@ Tasks 126–150 added across Phases 15–18.  Recommended order:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: GRAPHICS_TASKS.md phases 1–14 complete (Tasks 1–125 + 118–119).
-Tasks 126–150 added (Phases 15–18) — next task to start is 126 (SpriteBatch unit tests).
+Current status: GRAPHICS_TASKS.md phases 1–15 complete + Task 132 complete (EasyGL ShaderEffect GLSL test).
+Tasks 126–150 added (Phases 15–18) — Phase 16 in progress; Task 136 blocked on Task 143 (Vulkan TextureCube upload). Next unblocked: 137 (Bgfx AlphaTestEffect) or 141 (GetVertexBuffers).
 DO NOT touch sharp-runtime — another agent is working on it.
 
 Update NEXT.md after each task.

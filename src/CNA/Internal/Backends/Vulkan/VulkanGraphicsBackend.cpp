@@ -423,7 +423,7 @@ namespace CNA::Internal::Backends::Vulkan
         if (!currentTexture_) return;
         uint32_t count = static_cast<uint32_t>(indices_.size()) - batchFirstIndex_;
         if (count == 0) return;
-        draws_.push_back({ currentTexture_->GetDescriptorSet(), batchFirstIndex_, count });
+        draws_.push_back({ currentTexture_->GetVkDescriptorSet(), batchFirstIndex_, count });
         batchFirstIndex_ = static_cast<uint32_t>(indices_.size());
     }
 
@@ -470,13 +470,15 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (!active_) throw std::runtime_error("Vulkan SpriteBatch: Draw called outside Begin/End");
 
-        auto& vkTex = static_cast<const VulkanTextureBackend&>(texture);
-        if (currentTexture_ != nullptr && currentTexture_ != &vkTex)
+        const auto* samplable = dynamic_cast<const IVulkanSamplable*>(&texture);
+        if (!samplable)
+            throw std::runtime_error("Vulkan SpriteBatch: texture is not IVulkanSamplable");
+        if (currentTexture_ != nullptr && currentTexture_ != samplable)
             FlushTexture();
-        currentTexture_ = &vkTex;
+        currentTexture_ = samplable;
 
-        float tw = static_cast<float>(vkTex.GetWidth());
-        float th = static_cast<float>(vkTex.GetHeight());
+        float tw = static_cast<float>(texture.GetWidth());
+        float th = static_cast<float>(texture.GetHeight());
 
         float u1 = std::clamp((float)src.X / tw, 0.f, 1.f);
         float v1 = std::clamp((float)src.Y / th, 0.f, 1.f);
@@ -992,6 +994,8 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("vkCreateDevice failed");
         vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
         vkGetDeviceQueue(device_, presentQueueFamily_,  0, &presentQueue_);
+        pfnCmdInsertDebugLabel_ = reinterpret_cast<PFN_vkCmdInsertDebugUtilsLabelEXT>(
+            vkGetDeviceProcAddr(device_, "vkCmdInsertDebugUtilsLabelEXT"));
     }
 
     // =========================================================================
@@ -1112,22 +1116,34 @@ namespace CNA::Internal::Backends::Vulkan
         sub.pColorAttachments       = &colorRef;
         sub.pDepthStencilAttachment = &depthRef;
 
-        VkSubpassDependency dep{};
-        dep.srcSubpass    = VK_SUBPASS_EXTERNAL;
-        dep.dstSubpass    = 0;
-        dep.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dep.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        // Use the same two subpass dependencies as rtRenderPass_ so that pipelines
+        // created against renderPass_ are also compatible with rtRenderPass_.
+        VkSubpassDependency renderPassDeps[2]{};
+        // Entry: wait for any previous shader reads (RT-as-texture) before writing.
+        renderPassDeps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
+        renderPassDeps[0].dstSubpass      = 0;
+        renderPassDeps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        renderPassDeps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        renderPassDeps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT;
+        renderPassDeps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        renderPassDeps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        // Exit: make color writes visible to subsequent fragment shader reads.
+        renderPassDeps[1].srcSubpass      = 0;
+        renderPassDeps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
+        renderPassDeps[1].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        renderPassDeps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        renderPassDeps[1].srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        renderPassDeps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT;
+        renderPassDeps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         VkAttachmentDescription atts[] = { colorAtt, depthAtt };
         VkRenderPassCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         ci.attachmentCount = 2; ci.pAttachments = atts;
         ci.subpassCount    = 1; ci.pSubpasses   = &sub;
-        ci.dependencyCount = 1; ci.pDependencies = &dep;
+        ci.dependencyCount = 2; ci.pDependencies = renderPassDeps;
         if (vkCreateRenderPass(device_, &ci, nullptr, &renderPass_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass failed");
     }
@@ -1165,23 +1181,32 @@ namespace CNA::Internal::Backends::Vulkan
         sub.pColorAttachments       = &colorRef;
         sub.pDepthStencilAttachment = &depthRef;
 
-        VkSubpassDependency dep{};
-        dep.srcSubpass    = VK_SUBPASS_EXTERNAL;
-        dep.dstSubpass    = 0;
-        dep.srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dep.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dep.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        dep.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        // Entry: wait for the previous frame's texture sample before writing.
+        VkSubpassDependency deps[2]{};
+        deps[0].srcSubpass    = VK_SUBPASS_EXTERNAL;
+        deps[0].dstSubpass    = 0;
+        deps[0].srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps[0].dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        deps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        // Exit: make color writes visible to the fragment shader in the next pass.
+        deps[1].srcSubpass    = 0;
+        deps[1].dstSubpass    = VK_SUBPASS_EXTERNAL;
+        deps[1].srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        deps[1].dstStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         VkAttachmentDescription atts[] = { colorAtt, depthAtt };
         VkRenderPassCreateInfo ci{};
         ci.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         ci.attachmentCount = 2; ci.pAttachments  = atts;
         ci.subpassCount    = 1; ci.pSubpasses    = &sub;
-        ci.dependencyCount = 1; ci.pDependencies = &dep;
+        ci.dependencyCount = 2; ci.pDependencies = deps;
         if (vkCreateRenderPass(device_, &ci, nullptr, &rtRenderPass_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass (RT) failed");
     }
@@ -1224,23 +1249,32 @@ namespace CNA::Internal::Backends::Vulkan
         sub.pColorAttachments       = colorRefs.data();
         sub.pDepthStencilAttachment = &depthRef;
 
-        VkSubpassDependency dep{};
-        dep.srcSubpass    = VK_SUBPASS_EXTERNAL;
-        dep.dstSubpass    = 0;
-        dep.srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dep.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dep.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        dep.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        VkSubpassDependency deps2[2]{};
+        // Entry: wait for texture reads before writing.
+        deps2[0].srcSubpass    = VK_SUBPASS_EXTERNAL;
+        deps2[0].dstSubpass    = 0;
+        deps2[0].srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps2[0].dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                 VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        deps2[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        deps2[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps2[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        // Exit: make color writes visible to the fragment shader in the next pass.
+        deps2[1].srcSubpass    = 0;
+        deps2[1].dstSubpass    = VK_SUBPASS_EXTERNAL;
+        deps2[1].srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        deps2[1].dstStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps2[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps2[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        deps2[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         VkRenderPassCreateInfo ci{};
         ci.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         ci.attachmentCount = static_cast<uint32_t>(atts.size());
         ci.pAttachments    = atts.data();
         ci.subpassCount    = 1; ci.pSubpasses    = &sub;
-        ci.dependencyCount = 1; ci.pDependencies = &dep;
+        ci.dependencyCount = 2; ci.pDependencies = deps2;
 
         VkRenderPass rp = VK_NULL_HANDLE;
         if (vkCreateRenderPass(device_, &ci, nullptr, &rp) != VK_SUCCESS)
@@ -3609,6 +3643,17 @@ namespace CNA::Internal::Backends::Vulkan
             VkDeviceSize instVbOff = 0;
             for (const auto& draw : pending3D_) {
                 if (draw.rt != targetRT) continue;
+                if (draw.isMarker) {
+                    if (pfnCmdInsertDebugLabel_) {
+                        VkDebugUtilsLabelEXT lbl{};
+                        lbl.sType      = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+                        lbl.pLabelName = draw.markerLabel.c_str();
+                        lbl.color[0]   = 1.0f; lbl.color[1] = 1.0f;
+                        lbl.color[2]   = 1.0f; lbl.color[3] = 1.0f;
+                        pfnCmdInsertDebugLabel_(cb, &lbl);
+                    }
+                    continue;
+                }
                 if (draw.vbData.empty()) continue;
                 if (vbOff + draw.vbData.size() > kFrame3DVBSize) continue;
                 if (!draw.ibData.empty() && ibOff + draw.ibData.size() > kFrame3DIBSize) continue;
@@ -4044,6 +4089,16 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::SetBlendEnabled(bool v)      { blendEnabled_      = v; }
     void VulkanGraphicsBackend::SetDepthWriteEnabled(bool v) { depthWriteEnabled_ = v; }
 
+    void VulkanGraphicsBackend::SetStringMarkerEXT(const char* marker)
+    {
+        if (!marker || !marker[0]) return;
+        Pending3DDraw m;
+        m.isMarker   = true;
+        m.markerLabel = marker;
+        m.rt          = currentRT_;
+        pending3D_.push_back(std::move(m));
+    }
+
     void VulkanGraphicsBackend::DrawColoredPrimitives(
         const IVertexBufferBackend& vb,
         const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -4151,22 +4206,24 @@ namespace CNA::Internal::Backends::Vulkan
         d.indexType      = VK_INDEX_TYPE_UINT16;
         d.rt             = currentRT_;
         d.stride         = stride;
-        d.useExtParams   = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned;
+        // stride==16 (VertexPositionColor) uses the colored3d pipeline (GetOrCreatePipeline3D)
+        // which expects only 64-byte MVP push constants; Ext pipeline doesn't handle stride=16.
+        d.useExtParams   = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned && stride != 16;
         d.useDualTexture = needsDualTex;
         d.useSkinned     = needsSkinned;
         if (needsSkinned) {
             EnsureSkinnedResources();
-            const auto* vt = dynamic_cast<const VulkanTextureBackend*>(params.texture0);
-            VkImageView v2d = vt ? vt->GetImageView() : defaultWhiteView_;
+            const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+            VkImageView v2d = vs ? vs->GetVkImageView() : defaultWhiteView_;
             d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
-            const auto* vt0 = dynamic_cast<const VulkanTextureBackend*>(params.texture0);
-            const auto* vtc = dynamic_cast<const VulkanTextureCubeBackend*>(params.envMap);
-            VkImageView v2d  = vt0 ? vt0->GetImageView()   : defaultWhiteView_;
-            VkImageView vcub = vtc ? vtc->GetImageView()    : defaultWhiteCubeView_;
+            const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+            const auto* vtc = dynamic_cast<const IVulkanCubeSamplable*>(params.envMap);
+            VkImageView v2d  = vs0 ? vs0->GetVkImageView()       : defaultWhiteView_;
+            VkImageView vcub = vtc ? vtc->GetVkCubeImageView()    : defaultWhiteCubeView_;
             d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub);
             // Pack UBO data: eyePos, diffuse, emissive+envMapAmount, light0Dir, light0Diff, envMapSpecular
             d.envMapUboData[0]  = params.eyePositionWorld[0];
@@ -4184,14 +4241,14 @@ namespace CNA::Internal::Backends::Vulkan
             d.envMapUboData[20] = params.envMapSpecular[0]; d.envMapUboData[21] = params.envMapSpecular[1];
             d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = 0.f;
         } else if (needsDualTex) {
-            const auto* vt0 = dynamic_cast<const VulkanTextureBackend*>(params.texture0);
-            const auto* vt1 = dynamic_cast<const VulkanTextureBackend*>(params.texture1);
-            VkImageView v0 = vt0 ? vt0->GetImageView() : defaultWhiteView_;
-            VkImageView v1 = vt1 ? vt1->GetImageView() : defaultWhiteView_;
+            const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+            const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
+            VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
+            VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
             d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1);
         } else {
-            const auto* vt = params.texture0 ? dynamic_cast<const VulkanTextureBackend*>(params.texture0) : nullptr;
-            VkImageView view = vt ? vt->GetImageView() : defaultWhiteView_;
+            const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
+            VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
             d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
         }
         pending3D_.push_back(std::move(d));
@@ -4246,22 +4303,22 @@ namespace CNA::Internal::Backends::Vulkan
         d.indexType     = ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         d.rt            = currentRT_;
         d.stride        = stride;
-        d.useExtParams  = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned;
+        d.useExtParams  = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned && stride != 16;
         d.useDualTexture = needsDualTex;
         d.useSkinned     = needsSkinned;
         if (needsSkinned) {
             EnsureSkinnedResources();
-            const auto* vt = dynamic_cast<const VulkanTextureBackend*>(params.texture0);
-            VkImageView v2d = vt ? vt->GetImageView() : defaultWhiteView_;
+            const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+            VkImageView v2d = vs ? vs->GetVkImageView() : defaultWhiteView_;
             d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
-            const auto* vt0 = dynamic_cast<const VulkanTextureBackend*>(params.texture0);
-            const auto* vtc = dynamic_cast<const VulkanTextureCubeBackend*>(params.envMap);
-            VkImageView v2d  = vt0 ? vt0->GetImageView()   : defaultWhiteView_;
-            VkImageView vcub = vtc ? vtc->GetImageView()    : defaultWhiteCubeView_;
+            const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+            const auto* vtc = dynamic_cast<const IVulkanCubeSamplable*>(params.envMap);
+            VkImageView v2d  = vs0 ? vs0->GetVkImageView()       : defaultWhiteView_;
+            VkImageView vcub = vtc ? vtc->GetVkCubeImageView()    : defaultWhiteCubeView_;
             d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub);
             d.envMapUboData[0]  = params.eyePositionWorld[0];
             d.envMapUboData[1]  = params.eyePositionWorld[1];
@@ -4279,14 +4336,14 @@ namespace CNA::Internal::Backends::Vulkan
             d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = 0.f;
         } else if (needsDualTex) {
             EnsureDualTexResources();
-            const auto* vt0 = dynamic_cast<const VulkanTextureBackend*>(params.texture0);
-            const auto* vt1 = dynamic_cast<const VulkanTextureBackend*>(params.texture1);
-            VkImageView v0 = vt0 ? vt0->GetImageView() : defaultWhiteView_;
-            VkImageView v1 = vt1 ? vt1->GetImageView() : defaultWhiteView_;
+            const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+            const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
+            VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
+            VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
             d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1);
         } else {
-            const auto* vt = params.texture0 ? dynamic_cast<const VulkanTextureBackend*>(params.texture0) : nullptr;
-            VkImageView view = vt ? vt->GetImageView() : defaultWhiteView_;
+            const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
+            VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
             d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
         }
         pending3D_.push_back(std::move(d));
@@ -4808,7 +4865,19 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("VulkanRenderTargetCubeBackend: vkAllocateMemory failed");
         vkBindImageMemory(dev, image_, memory_, 0);
 
-        // --- 6 per-face color image views ---
+        // --- Full-cube image view for sampling (VK_IMAGE_VIEW_TYPE_CUBE, all 6 layers) ---
+        {
+            VkImageViewCreateInfo cv{};
+            cv.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            cv.image    = image_;
+            cv.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+            cv.format   = owner_->swapchainFormat_;
+            cv.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6 };
+            if (vkCreateImageView(dev, &cv, nullptr, &cubeView_) != VK_SUCCESS)
+                throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImageView (cube) failed");
+        }
+
+        // --- 6 per-face color image views (for framebuffer attachments) ---
         for (int face = 0; face < 6; ++face) {
             VkImageViewCreateInfo fv{};
             fv.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -4894,6 +4963,7 @@ namespace CNA::Internal::Backends::Vulkan
             if (faceViews_[i] != VK_NULL_HANDLE)
                 vkDestroyImageView(dev, faceViews_[i], nullptr);
         }
+        if (cubeView_    != VK_NULL_HANDLE) vkDestroyImageView(dev, cubeView_, nullptr);
         if (depthView_   != VK_NULL_HANDLE) vkDestroyImageView(dev, depthView_, nullptr);
         if (depthImage_  != VK_NULL_HANDLE) vkDestroyImage(dev, depthImage_, nullptr);
         if (depthMemory_ != VK_NULL_HANDLE) vkFreeMemory(dev, depthMemory_, nullptr);
