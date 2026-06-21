@@ -970,12 +970,14 @@ void main()
     // --- EasyGLGraphicsBackend ---
 
     EasyGLGraphicsBackend::EasyGLGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                  CnaPresentationMode mode, bool contextRecoveryEnabled)
+                                                  CnaPresentationMode mode, bool contextRecoveryEnabled,
+                                                  int multiSampleCount)
         : window(window)
         , virtualWidth_(virtualWidth)
         , virtualHeight_(virtualHeight)
         , presentationMode_(mode)
         , contextRecoveryEnabled_(contextRecoveryEnabled)
+        , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
     {
         if (!window) throw std::runtime_error("EasyGLGraphicsBackend initialized with null window.");
 
@@ -1003,9 +1005,76 @@ void main()
 
         registry_.register_with_meta_gl();
 
+        if (sampleCount_ > 1)
+        {
+            int physW, physH;
+            SDL_GetWindowSize(window, &physW, &physH);
+            CreateMsaaBuffers(physW, physH);
+            msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        }
+
 #if defined(__EMSCRIPTEN__)
         metagl::InstallEmscriptenContextLossCallbacks();
 #endif
+    }
+
+    void EasyGLGraphicsBackend::CreateMsaaBuffers(int w, int h)
+    {
+        // Clamp to GL_MAX_SAMPLES so glRenderbufferStorageMultisample never errors.
+        GLint maxSamples = 0;
+        metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
+        if (maxSamples > 0 && sampleCount_ > static_cast<int>(maxSamples))
+            sampleCount_ = static_cast<int>(maxSamples);
+
+        msaaW_ = w; msaaH_ = h;
+        if (!msaaFbo_.is_created()) msaaFbo_.create();
+        if (!msaaColorRbo_.is_created()) msaaColorRbo_.create();
+        if (!msaaDepthRbo_.is_created()) msaaDepthRbo_.create();
+
+        msaaColorRbo_.bind();
+        msaaColorRbo_.set_storage_multisample(sampleCount_,
+                                               ::metagl::InternalFormat::Rgba8, w, h);
+        msaaDepthRbo_.bind();
+        msaaDepthRbo_.set_storage_multisample(sampleCount_,
+                                               ::metagl::InternalFormat::DepthComponent24, w, h);
+
+        msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                      ::metagl::FramebufferAttachment::Color0,
+                                      msaaColorRbo_.native_handle());
+        msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                      ::metagl::FramebufferAttachment::Depth,
+                                      msaaDepthRbo_.native_handle());
+    }
+
+    void EasyGLGraphicsBackend::BindDefaultFramebuffer()
+    {
+        if (sampleCount_ > 1)
+        {
+            // Recreate MSAA FBO if the window was resized.
+            int physW, physH;
+            SDL_GetWindowSize(window, &physW, &physH);
+            if (physW != msaaW_ || physH != msaaH_)
+                CreateMsaaBuffers(physW, physH);
+
+            msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        }
+        else
+        {
+            ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+        }
+    }
+
+    void EasyGLGraphicsBackend::ResolveMsaa()
+    {
+        if (sampleCount_ <= 1) return;
+        // Blit colour attachment from MSAA FBO to default framebuffer (FBO 0).
+        msaaFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::DrawFramebuffer);
+        ::easygl::Framebuffer::blit(0, 0, msaaW_, msaaH_,
+                                     0, 0, msaaW_, msaaH_,
+                                     ::metagl::ClearBufferBit::Color,
+                                     ::metagl::TextureFilter::Nearest);
     }
 
     EasyGLGraphicsBackend::~EasyGLGraphicsBackend()
@@ -1089,7 +1158,16 @@ void main()
         // When a render-target FBO is bound, the read buffer is already
         // GL_COLOR_ATTACHMENT0, so no explicit call is needed there.
         if (currentRtHeight_ == 0)
+        {
+            if (sampleCount_ > 1)
+            {
+                // Resolve MSAA FBO to FBO 0 so glReadPixels can sample the single-sample copy.
+                ResolveMsaa();
+                // Bind FBO 0 as the read source and select GL_BACK.
+                ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
+            }
             device.set_read_buffer(::easygl::ReadBuffer::Back);
+        }
 
         // Use the render-target's own height for the Y-flip when an RT is bound;
         // fall back to the window/viewport height for the default framebuffer.
@@ -1117,6 +1195,10 @@ void main()
             std::copy(bot, bot + rowBytes, top);
             std::copy(tmp.begin(), tmp.end(), bot);
         }
+
+        // After reading from FBO 0, restore the MSAA FBO as the draw target.
+        if (sampleCount_ > 1 && currentRtHeight_ == 0)
+            msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
     }
 
     void EasyGLGraphicsBackend::Clear(float r, float g, float b, float a)
@@ -1132,7 +1214,11 @@ void main()
     void EasyGLGraphicsBackend::Present()
     {
         if (metagl::IsContextLost()) return;
+        if (sampleCount_ > 1)
+            ResolveMsaa();
         SDL_GL_SwapWindow(window);
+        if (sampleCount_ > 1)
+            msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
     }
 
     void EasyGLGraphicsBackend::SetVirtualResolution(int width, int height)
@@ -1241,7 +1327,7 @@ void main()
         else
         {
             currentRtHeight_ = 0;
-            ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+            BindDefaultFramebuffer();
         }
     }
 
@@ -2485,7 +2571,8 @@ namespace CNA::Internal::Backends
     {
         return std::make_unique<EasyGL::EasyGLGraphicsBackend>(
             args.window, args.virtualWidth, args.virtualHeight,
-            args.presentationMode, args.contextRecoveryEnabled);
+            args.presentationMode, args.contextRecoveryEnabled,
+            args.multiSampleCount);
     }
 #endif
 }

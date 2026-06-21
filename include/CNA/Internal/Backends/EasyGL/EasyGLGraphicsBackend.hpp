@@ -322,6 +322,18 @@ namespace CNA::Internal::Backends::EasyGL
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         bool contextRecoveryEnabled_ = true;
 
+        // MSAA — multisampled render buffer resolved to FBO 0 on Present().
+        int sampleCount_ = 1;
+        int msaaW_       = 0;
+        int msaaH_       = 0;
+        ::easygl::Framebuffer  msaaFbo_;
+        ::easygl::Renderbuffer msaaColorRbo_;
+        ::easygl::Renderbuffer msaaDepthRbo_;
+
+        void CreateMsaaBuffers(int w, int h);
+        void BindDefaultFramebuffer();
+        void ResolveMsaa();
+
         /// Returns &registry_ when context recovery is enabled, nullptr otherwise.
         [[nodiscard]] ::easygl::ResourceRegistry* RegistryPtr() noexcept
         { return contextRecoveryEnabled_ ? &registry_ : nullptr; }
@@ -383,7 +395,8 @@ namespace CNA::Internal::Backends::EasyGL
         explicit EasyGLGraphicsBackend(SDL_Window* window,
                                        int virtualWidth = 0, int virtualHeight = 0,
                                        CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth,
-                                       bool contextRecoveryEnabled = true);
+                                       bool contextRecoveryEnabled = true,
+                                       int multiSampleCount = 1);
         ~EasyGLGraphicsBackend() override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;

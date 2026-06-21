@@ -630,6 +630,9 @@ namespace CNA::Internal::Backends
         /// shadow copy overhead at the cost of making GL context-loss recovery
         /// impossible. Safe on desktop where context loss never occurs.
         bool contextRecoveryEnabled = true;
+        /// Desired multisample count (1 = no MSAA, 4 = 4× MSAA, etc.).
+        /// Backends that do not support MSAA silently clamp to 1.
+        int multiSampleCount = 1;
     };
 
     // Factory function to be implemented by each backend

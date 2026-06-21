@@ -1011,6 +1011,12 @@ namespace Microsoft::Xna::Framework::Graphics
             backend_->SetContextRecoveryEnabled(enabled);
     }
 
+    void GraphicsDevice::SetStringMarkerEXT(const std::string& marker)
+    {
+        if (backend_)
+            backend_->SetStringMarkerEXT(marker.c_str());
+    }
+
     void GraphicsDevice::createBackend()
     {
         GraphicsBackendCreateArgs args;
@@ -1018,6 +1024,7 @@ namespace Microsoft::Xna::Framework::Graphics
         args.virtualWidth = virtualWidth_;
         args.virtualHeight = virtualHeight_;
         args.contextRecoveryEnabled = contextRecoveryEnabled_;
+        args.multiSampleCount = presentationParameters_.getMultiSampleCountProperty();
 
         backend_ = CreateGraphicsBackend(args);
 
