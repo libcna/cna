@@ -15,7 +15,7 @@ Vulkan, or Bgfx.
 **Current phase**: GRAPHICS_TASKS.md Phases 1–15 complete (Tasks 101–131 ✅),
 Tasks 132–136 complete (EasyGL/Vulkan ShaderEffect/DualTextureEffect/EnvironmentMapEffect),
 Tasks 137–145 complete (Bgfx parity, GetVertexBuffers, Model.Draw integration test, MRT integration test).
-**Phase 18 complete. Done: 141, 142, 143, 144, 145, 146, 147, 148, 149, 150. All tasks complete.**
+**Phases 1–18 complete (Tasks 1–150 all ✅). Phases 19–25 added (Tasks 151–200) based on June 2026 external code review. Phase 19 is next: SpriteBatch stub removal (Tasks 151–160).**
 
 **Key architectural decisions**:
 - Backend selected at compile time via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -222,20 +222,22 @@ cmake --build cmake-build-bgfx --target shaderc
 
 ## 8. Next tasks (ordered by priority)
 
-Tasks 126–150 added across Phases 15–18.  Recommended order:
+Tasks 151–200 added across Phases 19–25 based on June 2026 external code review.
+Recommended order:
 
 | Priority | # | Why first |
 |----------|---|-----------|
-| High | 126 | SpriteBatch unit tests — ✅ done (20 tests) |
-| High | 127 | SpriteFont unit tests |
-| High | 128–131 | Remaining unit test gaps (Texture2D, RenderTarget, OcclusionQuery, GraphicsAdapter) |
-| Medium | 132 | EasyGL ShaderEffect integration test (mirrors Vulkan Task 119) |
-| Medium | 133–135 | DualTexture/EnvironmentMap integration tests |
-| Medium | 141 | `GetVertexBuffers()` — small API gap |
-| Medium | 143 | Vulkan TextureCube/Texture3D upload — prerequisite for Task 136 |
-| Low | 137–140 | Bgfx stock effects parity (AlphaTest, DualTex, Skinned, Instanced) |
-| Low | 144–145 | Model.Draw / MRT integration tests |
-| Low | 146–150 | MSAA, EffectParameter round-trips, debug labels |
+| **High** | 151–156 | SpriteBatch `Draw` stub removal — 6 no-op overloads, trivial one-liners |
+| **High** | 157–159 | `DrawString(StringBuilder,…)` stubs — convert via `StringBuilder::ToString()` |
+| **High** | 160 | Unit tests for all 9 newly implemented overloads |
+| **High** | 161–166 | SpriteBatch sort-mode and guard tests (logic already present, just needs tests) |
+| **High** | 167–168 | SpriteEffects flip + transformMatrix pixel integration tests |
+| **High** | 169–173 | Texture SetData/GetData: partial rect, startIndex, mip levels, cube faces, 3D slices |
+| Medium | 174–176 | SurfaceFormat support table, DXT golden tests, sRGB handling |
+| Medium | 177–183 | RenderTargetUsage, device reset events, PresentationParameters round-trip |
+| Medium | 184–190 | Effect.Clone, EffectParameter guards, BasicEffect + AlphaTestEffect pixel tests |
+| Medium | 191–196 | Stock effects backend parity (DualTexture, EnvMap, Skinned, fog, EnableDefaultLighting) |
+| Low | 197–200 | PackedVector golden values, edge-case tests, docs update |
 
 ---
 

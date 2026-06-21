@@ -204,3 +204,107 @@ All 100 original tasks addressed.
 | 148 | Integration test: Vulkan — RenderTarget2D full cycle: clear to red, `GetBackBufferData` after SetRenderTarget+Present, assert red pixel | ✅ | `vulkan_rt2d_test.cpp`: BasicEffect+colored3D quad into RT, SpriteBatch blit RT→backbuffer, assert centre=(255,0,0). Fixed 3 backend bugs: (1) `IVulkanSamplable` interface so RT can be sampled by SpriteBatch, (2) stride=16 `useExtParams` bug (sent colored3D through wrong Ext3D pipeline), (3) missing RT render pass exit subpass dependency + renderPass_ dependency parity for validation clean build |
 | 149 | Unit tests: EffectParameter `SetValue`/`GetValue` round-trip for all types (bool, int, float, Vector2/3/4, Matrix, Quaternion, Texture2D/3D/Cube) | ✅ | Added 22 tests to `EffectParameterTests.cpp`: bool/int/vec2/vec4/quat array round-trips, SetValueTranspose array, Texture2D/3D/Cube null+sentinel pointer round-trips, default initial state (bool/int/float/string/tex*=null/matrix=identity) — 40 tests total, all PASSED |
 | 150 | `GraphicsDevice::SetStringMarkerEXT` — add debug-label method; no-op on most backends, `vkCmdInsertDebugUtilsLabelEXT` on Vulkan with `VK_EXT_debug_utils` | ✅ | `GraphicsDevice::SetStringMarkerEXT(string)` → `IGraphicsBackend::SetStringMarkerEXT(const char*)` (default no-op); Vulkan: `pfnCmdInsertDebugLabel_` loaded via `vkGetDeviceProcAddr` after device creation; marker queued as `Pending3DDraw{isMarker=true}` and emitted via `vkCmdInsertDebugUtilsLabelEXT` in `draw3DFor`; EasyGL/Bgfx/SDL = no-op; both builds clean |
+
+---
+
+## Phase 19 — SpriteBatch API completion
+
+> **Source of these tasks:** external code review (June 2026) identified 6 stubbed `Draw` overloads and
+> 3 stubbed `DrawString(StringBuilder,…)` overloads in `SpriteBatch.cpp`. All are marked
+> `CNA_STUB` and do nothing. These are high-traffic XNA APIs; fixing them is the best
+> return-on-investment before adding further rendering features.
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 151 | `SpriteBatch::Draw(Texture2D, Vector2, Color)` — remove stub; delegate to `pushSprite` using texture natural size as destination, full texture as source | ⬜ | One-liner; maps to `Draw(texture, Rectangle(pos.X,pos.Y,w,h), Rectangle(0,0,w,h), color)` |
+| 152 | `SpriteBatch::Draw(Texture2D, Vector2, optional<Rectangle> src, Color)` — remove stub; use texture natural size for dest, src or full texture | ⬜ | `src.has_value()` → use src; else full texture rect |
+| 153 | `SpriteBatch::Draw(Texture2D, Vector2, optional<Rectangle> src, Color, float rotation, Vector2 origin, float scale, SpriteEffects, float layerDepth)` — remove stub; compute dest from position + texture size * scale | ⬜ | Matches FNA `SpriteBatch.cs` overload; dest = `Rectangle(pos.X, pos.Y, w*scale, h*scale)` |
+| 154 | `SpriteBatch::Draw(Texture2D, Vector2, optional<Rectangle> src, Color, float rotation, Vector2 origin, Vector2 scale, SpriteEffects, float layerDepth)` — remove stub; Vector2 scale variant | ⬜ | Dest = `Rectangle(pos.X, pos.Y, w*scale.X, h*scale.Y)` |
+| 155 | `SpriteBatch::Draw(Texture2D, Rectangle dest, Color)` — remove stub; delegate to `pushSprite` with full texture source | ⬜ | `pushSprite(texture, dest, Rectangle(0,0,w,h), color, 0, Zero, None, 0)` |
+| 156 | `SpriteBatch::Draw(Texture2D, Rectangle dest, optional<Rectangle> src, Color)` — remove stub; optional source maps to full texture or given rect | ⬜ | Straightforward `pushSprite` delegation |
+| 157 | `SpriteBatch::DrawString(SpriteFont, StringBuilder, Vector2, Color)` — remove stub; convert `StringBuilder` to `std::string` via `ToString()` and delegate to the existing `DrawString(SpriteFont, string, …)` implementation | ⬜ | `System::Text::StringBuilder::ToString()` must exist in sharp-runtime; DO NOT touch sharp-runtime if it does not yet exist — report as blocked |
+| 158 | `SpriteBatch::DrawString(SpriteFont, StringBuilder, Vector2, Color, float, Vector2, float, SpriteEffects, float)` — same pattern as 157 | ⬜ | Depends on 157 |
+| 159 | `SpriteBatch::DrawString(SpriteFont, StringBuilder, Vector2, Color, float, Vector2, Vector2, SpriteEffects, float)` — same pattern as 157 | ⬜ | Depends on 157 |
+| 160 | Unit tests for all 9 newly implemented overloads (151–159): verify each overload correctly queues a sprite (check via `Deferred` mode and that `End()` does not throw); test that calling `Draw` before `Begin()` throws; add tests to `SpriteBatchTests.cpp` | ⬜ | Add to existing `tests/Microsoft/Xna/Framework/Graphics/SpriteBatchTests.cpp` |
+
+---
+
+## Phase 20 — SpriteBatch XNA behaviour conformance
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 161 | Verify `SpriteSortMode::Immediate`: sprite must be flushed inside `Draw()`, not deferred — add unit test that calls `Draw` inside `Begin/Immediate/End` and inspects that backend received draw before `End()` | ⬜ | Already implemented in `pushSprite` branch; needs test |
+| 162 | Verify `SpriteSortMode::Deferred`: sprites submitted in call order; test that order is preserved in backend | ⬜ | Already implemented; needs test |
+| 163 | Verify `SpriteSortMode::Texture`: sprites sorted by texture pointer; test with 3 draws alternating 2 textures — backend must receive both textures grouped | ⬜ | Already implemented; needs test |
+| 164 | Verify `SpriteSortMode::FrontToBack`: sprites sorted by ascending `layerDepth`; test with 3 draws at depths 0.5, 0.1, 0.9 — assert delivery order | ⬜ | Already implemented; needs test |
+| 165 | Verify `SpriteSortMode::BackToFront`: sprites sorted by descending `layerDepth`; test with same 3 draws — assert reverse delivery order | ⬜ | Already implemented; needs test |
+| 166 | Guard tests: `Begin()` twice without `End()` must throw; `End()` without `Begin()` must throw; `Draw` after `End()` must throw | ⬜ | Add to `SpriteBatchTests.cpp` |
+| 167 | Pixel integration test: `SpriteEffects::FlipHorizontally` — draw asymmetric texture (left half red, right half blue), flip horizontally, read back and assert left=blue, right=red | ⬜ | EasyGL; new `examples/easygl_sprite_effects_test.cpp` |
+| 168 | Pixel integration test: `transformMatrix` in `SpriteBatch::Begin` — pass a translation matrix `Matrix::CreateTranslation(100,0,0)`, draw a 1×1 red texture at (0,0), read back pixel at (100,0) and assert red | ⬜ | EasyGL; verify matrix is forwarded to backend viewport transform |
+
+---
+
+## Phase 21 — Texture SetData/GetData conformance
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 169 | `Texture2D::SetData` / `GetData` — partial rectangle regions: set data into a sub-rectangle of a 4×4 texture, read back the full texture and verify only the target region changed | ⬜ | Add to `Texture2DTests.cpp` |
+| 170 | `Texture2D::SetData` / `GetData` — `startIndex` and `elementCount` parameters: upload only a middle slice of a data array, verify correct pixels written | ⬜ | Add to `Texture2DTests.cpp` |
+| 171 | `Texture2D` mip-level `SetData` / `GetData`: upload distinct colours to mip 0 and mip 1 of a 4×4 `generateMipMaps=true` texture; read back each level and verify | ⬜ | Add to `Texture2DTests.cpp` |
+| 172 | `TextureCube` mip-level `SetData` / `GetData`: upload distinct colours per face per mip; read back and verify | ⬜ | Add to `Texture3DTextureCubeRenderTargetTests.cpp` |
+| 173 | `Texture3D` z-slice `SetData` / `GetData`: upload distinct colours per z-slice; read back and verify | ⬜ | Add to `Texture3DTextureCubeRenderTargetTests.cpp` |
+| 174 | `SurfaceFormat` backend mapping table: for each `SurfaceFormat` value (Color, Bgr565, Bgra5551, Bgra4444, Dxt1/3/5, Rgba1010102, Rg32, Rgba64, Alpha8, Single, Vector2/4, HalfSingle/Vector2/Vector4, HdrBlendable) — document whether EasyGL/Vulkan/Bgfx map it to a real GPU format, approximate it, or throw | ⬜ | New file `docs/surface-format-support.md` |
+| 175 | DXT golden tests: for a 4×4 DXT1 block encoding known RGBA values, decode via `DxtUtil` and compare byte-for-byte against FNA reference output | ⬜ | Add to unit tests; generate golden values from FNA |
+| 176 | sRGB formats: `ColorSrgb`, `Dxt1Srgb`, `Dxt3Srgb`, `Dxt5Srgb` — either implement GPU-side sRGB sampling flag in EasyGL (`GL_SRGB8_ALPHA8`) and Vulkan (`VK_FORMAT_R8G8B8A8_SRGB`), or explicitly throw `std::runtime_error("SurfaceFormat not supported")` with a clear message | ⬜ | Currently silently maps to wrong format |
+
+---
+
+## Phase 22 — RenderTarget and presentation correctness
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 177 | `RenderTargetUsage::DiscardContents` vs `PreserveContents` in EasyGL: verify that `DiscardContents` issues `glInvalidateFramebuffer` (or clear) and `PreserveContents` does not clear on `SetRenderTarget` | ⬜ | Add integration test; check FNA behaviour |
+| 178 | Same as 177 but Vulkan: `DiscardContents` → `VK_ATTACHMENT_LOAD_OP_CLEAR`; `PreserveContents` → `VK_ATTACHMENT_LOAD_OP_LOAD` in RT render pass | ⬜ | May require per-RT render pass creation change |
+| 179 | Same as 177 but Bgfx: map to `BGFX_CLEAR_COLOR` vs no clear flag on `bgfx::setViewClear` | ⬜ | Low priority |
+| 180 | Integration test: backbuffer → RT → backbuffer → RT → backbuffer in a single frame; verify correct render target is active at each step and final backbuffer pixel is correct | ⬜ | EasyGL; new example |
+| 181 | `RenderTargetBinding` with explicit mip level and cube face: verify that `SetRenderTargets({RenderTargetBinding(rt, 0), RenderTargetBinding(rt, 1)})` correctly targets distinct mip levels | ⬜ | Add unit test; check FNA `RenderTargetBinding` ctor |
+| 182 | `PresentationParameters` round-trip: after `GraphicsDeviceManager::ApplyChanges`, verify `GraphicsDevice.PresentationParameters` reflects the requested `BackBufferWidth`, `BackBufferHeight`, `DepthStencilFormat`, `PresentInterval`, `MultiSampleCount` | ⬜ | Unit test; no backend needed |
+| 183 | `GraphicsDevice` device-reset events: `DeviceResetting` and `DeviceReset` fire when swapchain is recreated; `ResourceDestroyed` fires on explicit resource dispose; add unit tests | ⬜ | Check FNA event semantics |
+
+---
+
+## Phase 23 — Effect system XNA accuracy
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 184 | `Effect::Clone()` for base `Effect` and all stock effects (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`): clone must produce an independent copy with the same parameter values but a separate parameter collection; modifying a parameter on the clone must not affect the original | ⬜ | Check FNA `Effect.cs Clone()`; add unit tests |
+| 185 | `Effect::CurrentTechnique`, `Techniques`, `Parameters`, `Passes` collection semantics: verify that `Techniques[0].Passes[0].Apply()` calls the correct backend draw-state setup; add unit tests for collection indexing and `Contains` | ⬜ | Add to `EffectParameterTests.cpp` or new file |
+| 186 | `EffectParameter` arrays — wrong-type and out-of-range guards: `SetValue(float[])` on an int parameter must throw or silently ignore per XNA spec; `SetValue` with more elements than declared must throw; add unit tests | ⬜ | Check FNA for throw vs. silent-ignore |
+| 187 | `EffectParameter::SetValueTranspose(Matrix)` — verify the matrix is stored transposed relative to `SetValue(Matrix)`; add unit test comparing stored values byte-for-byte | ⬜ | Already partially tested in Task 149; add edge-case test |
+| 188 | `EffectAnnotation` and annotation collections: verify that `Effect.Parameters["X"].Annotations["hint"].GetValueString()` works; add unit tests | ⬜ | Low priority — rarely used in typical XNA games |
+| 189 | Pixel integration tests for `BasicEffect` combinations — EasyGL: (a) vertex color only, (b) texture only, (c) texture + vertex color (multiply), (d) directional lighting on, (e) fog on | ⬜ | New `examples/easygl_basiceffect_combinations_test.cpp`; one readback assert per combination |
+| 190 | Pixel integration tests for `AlphaTestEffect` all `CompareFunction` modes — EasyGL: draw a pixel with alpha=128; test `Less`, `LessEqual`, `Equal`, `GreaterEqual`, `Greater`, `NotEqual`, `Always`, `Never` reference=128; assert pixel is drawn or discarded accordingly | ⬜ | New `examples/easygl_alphatest_modes_test.cpp` |
+
+---
+
+## Phase 24 — Stock effects backend parity
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 191 | `DualTextureEffect` pixel tests — Vulkan + EasyGL + Bgfx: two distinct textures, verify per-backend that the output blends both | ⬜ | Extend existing vulkan/easygl tests; add Bgfx variant |
+| 192 | `EnvironmentMapEffect` parameter accuracy — EasyGL: verify reflection vector, `EnvironmentMapAmount`, `EnvironmentMapSpecular`, `EmissiveColor` affect output correctly by reading back pixels; compare EasyGL vs. Vulkan | ⬜ | Extend `easygl_env_map_test.cpp` with multiple readback assertions |
+| 193 | `SkinnedEffect` bone count tests: (a) 1 bone identity → no vertex movement, (b) 1 bone translate → all vertices shifted, (c) 4-weight blend with two bones at 50%/50% → midpoint position; assert pixel readback per case | ⬜ | EasyGL; new `examples/easygl_skinned_effect_bones_test.cpp` |
+| 194 | `BasicEffect::EnableDefaultLighting()` — verify that after calling `EnableDefaultLighting()` the three `DirectionalLight` values match the FNA constants in `BasicEffect.cs`; add unit test comparing property values | ⬜ | No backend needed; pure C++ unit test |
+| 195 | Fog equation accuracy — `BasicEffect` fog: set `FogEnabled=true`, `FogStart=0`, `FogEnd=100`, `FogColor=red`; draw a geometry at Z=50; assert the output pixel is a blend between geometry colour and red; test EasyGL and Vulkan | ⬜ | New integration test |
+| 196 | Backend parity table: for each stock effect (Basic, AlphaTest, DualTexture, EnvironmentMap, Skinned) and `ShaderEffect`, document EasyGL / Vulkan / Bgfx / SDL status (✅ tested / ⚠️ compiles only / ❌ missing) in a new section of `docs/xna-4-api-coverage.md` | ⬜ | Documentation task; no code change |
+
+---
+
+## Phase 25 — PackedVector exactness
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 197 | Generate FNA golden values for all PackedVector types (`Alpha8`, `Bgr565`, `Bgra4444`, `Bgra5551`, `Byte4`, `Color`, `HalfSingle`, `HalfVector2`, `HalfVector4`, `NormalizedByte2`, `NormalizedByte4`, `NormalizedShort2`, `NormalizedShort4`, `Rg32`, `Rgba1010102`, `Rgba64`, `Short2`, `Short4`, `Single`, `Vector2`, `Vector4`): run FNA with known inputs and record `PackedValue` and `ToVector4()` output | ⬜ | Use FNA C# runner; save golden values as a table in `tests/PackedVectorGolden.md` |
+| 198 | Compare CNA PackedVector output against golden values from Task 197; fix rounding, saturation, or bit-packing bugs discovered | ⬜ | Depends on 197 |
+| 199 | PackedVector edge-case tests: inputs −1.0, 0.0, 1.0, values slightly outside [0,1] or [−1,1] range, `NaN`, `+Inf`, `−Inf`, half-float special values (denormals, ±0, ±Inf, NaN) | ⬜ | Add to existing PackedVector unit tests |
+| 200 | Update `docs/xna-4-api-coverage.md`: rewrite the PackedVector and stock-effects sections to reflect the actual post-Phase-18 state; remove stale "stub" labels; add backend parity table from Task 196; add overall coverage estimate table matching the June 2026 external review findings | ⬜ | Documentation task; no code change |
