@@ -563,6 +563,17 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA void SetContextRecoveryEnabled(bool enabled);
 
+        /**
+         * @brief Inserts a named debug marker at the current point in the GPU command stream.
+         *
+         * On Vulkan with VK_EXT_debug_utils, calls vkCmdInsertDebugUtilsLabelEXT so the
+         * label appears in GPU profilers (RenderDoc, NVIDIA Nsight, etc.).
+         * On all other backends this is a no-op.
+         *
+         * @param marker The label string to insert.
+         */
+        NOXNA void SetStringMarkerEXT(const std::string& marker);
+
         /** @brief Returns a reference to the active graphics backend. */
         NOXNA [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
         /**

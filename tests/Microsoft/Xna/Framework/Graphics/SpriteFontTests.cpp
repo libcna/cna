@@ -1,0 +1,282 @@
+// SPDX-License-Identifier: MS-PL
+
+#include <gtest/gtest.h>
+#include <stdexcept>
+#include <optional>
+#include <vector>
+
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+
+using Microsoft::Xna::Framework::Rectangle;
+using Microsoft::Xna::Framework::Vector2;
+using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Graphics::SpriteFont;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
+using SharpRuntime::charcs;
+
+// -----------------------------------------------------------------------
+// Test fixtures / helpers
+// -----------------------------------------------------------------------
+
+// Single-glyph font: character 'A', kern=(leftBearing=1, width=8, rightBearing=2),
+// cropping height=12, lineSpacing=16, spacing=0.
+//   MeasureString("A")  → X = abs(1)+8+2 = 11,  Y = 16
+//   MeasureString("AA") → X = 11 + (0+1)+8+2 = 22, Y = 16
+static SpriteFont makeFontA(float spacing = 0.0f,
+                             std::optional<charcs> defaultChar = std::nullopt)
+{
+    std::vector<Rectangle> glyphs   = { {0, 0, 8, 12} };
+    std::vector<Rectangle> cropping = { {0, 0, 8, 12} };
+    std::vector<charcs>    chars    = { u'A' };
+    std::vector<Vector3>   kern     = { Vector3(1.0f, 8.0f, 2.0f) };
+    return SpriteFont(Texture2D{}, glyphs, cropping, chars,
+                      /*lineSpacing=*/16, spacing, kern, defaultChar);
+}
+
+// Two-glyph font: 'A' (kern 1,8,2) and 'B' (kern 0,6,1).
+//   MeasureString("AB") with spacing=s:
+//     A first:  abs(1)+8+2 = 11
+//     B second: (s+0)+6+1  = s+7
+//     total X   = 11+s+7 = 18+s
+static SpriteFont makeFontAB(float spacing = 0.0f)
+{
+    std::vector<Rectangle> glyphs   = { {0, 0, 8, 12}, {8, 0, 6, 14} };
+    std::vector<Rectangle> cropping = { {0, 0, 8, 12}, {0, 0, 6, 14} };
+    std::vector<charcs>    chars    = { u'A', u'B' };
+    std::vector<Vector3>   kern     = { Vector3(1.0f, 8.0f, 2.0f),
+                                        Vector3(0.0f, 6.0f, 1.0f) };
+    return SpriteFont(Texture2D{}, glyphs, cropping, chars,
+                      /*lineSpacing=*/16, spacing, kern, std::nullopt);
+}
+
+// -----------------------------------------------------------------------
+// Constructor / property getters
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, ConstructorSetsLineSpacing)
+{
+    SpriteFont font = makeFontA();
+    EXPECT_EQ(font.getLineSpacingProperty(), 16);
+}
+
+TEST(SpriteFontTest, ConstructorSetsSpacing)
+{
+    SpriteFont font = makeFontA(3.0f);
+    EXPECT_FLOAT_EQ(font.getSpacingProperty(), 3.0f);
+}
+
+TEST(SpriteFontTest, ConstructorSetsDefaultCharacterNullopt)
+{
+    SpriteFont font = makeFontA();
+    EXPECT_FALSE(font.getDefaultCharacterProperty().has_value());
+}
+
+TEST(SpriteFontTest, ConstructorSetsDefaultCharacterValue)
+{
+    SpriteFont font = makeFontA(0.0f, u'A');
+    ASSERT_TRUE(font.getDefaultCharacterProperty().has_value());
+    EXPECT_EQ(font.getDefaultCharacterProperty().value(), u'A');
+}
+
+TEST(SpriteFontTest, ConstructorBuildsCharacterList)
+{
+    SpriteFont font = makeFontAB();
+    const auto& chars = font.getCharactersProperty();
+    ASSERT_EQ(chars.size(), 2u);
+    EXPECT_EQ(chars[0], u'A');
+    EXPECT_EQ(chars[1], u'B');
+}
+
+TEST(SpriteFontTest, EmptyFontHasEmptyCharacterList)
+{
+    SpriteFont font(Texture2D{}, {}, {}, {}, 0, 0.0f, {}, std::nullopt);
+    EXPECT_TRUE(font.getCharactersProperty().empty());
+}
+
+// -----------------------------------------------------------------------
+// Property setters
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, SetLineSpacing)
+{
+    SpriteFont font = makeFontA();
+    font.setLineSpacingProperty(24);
+    EXPECT_EQ(font.getLineSpacingProperty(), 24);
+}
+
+TEST(SpriteFontTest, SetSpacing)
+{
+    SpriteFont font = makeFontA();
+    font.setSpacingProperty(5.0f);
+    EXPECT_FLOAT_EQ(font.getSpacingProperty(), 5.0f);
+}
+
+TEST(SpriteFontTest, SetDefaultCharacterToValue)
+{
+    SpriteFont font = makeFontA();
+    font.setDefaultCharacterProperty(u'A');
+    ASSERT_TRUE(font.getDefaultCharacterProperty().has_value());
+    EXPECT_EQ(font.getDefaultCharacterProperty().value(), u'A');
+}
+
+TEST(SpriteFontTest, SetDefaultCharacterToNullopt)
+{
+    SpriteFont font = makeFontA(0.0f, u'A');
+    font.setDefaultCharacterProperty(std::nullopt);
+    EXPECT_FALSE(font.getDefaultCharacterProperty().has_value());
+}
+
+// -----------------------------------------------------------------------
+// MeasureString — empty string
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, MeasureEmptyStringReturnsZero)
+{
+    SpriteFont font = makeFontA();
+    Vector2 size = font.MeasureString(std::string(""));
+    EXPECT_FLOAT_EQ(size.X, 0.0f);
+    EXPECT_FLOAT_EQ(size.Y, 0.0f);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString — single character
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, MeasureSingleCharWidth)
+{
+    // A: abs(1)+8+2 = 11
+    SpriteFont font = makeFontA();
+    Vector2 size = font.MeasureString(std::string("A"));
+    EXPECT_FLOAT_EQ(size.X, 11.0f);
+}
+
+TEST(SpriteFontTest, MeasureSingleCharHeightEqualsLineSpacing)
+{
+    // cropHeight=12 < lineSpacing=16 → finalLineHeight stays 16
+    SpriteFont font = makeFontA();
+    Vector2 size = font.MeasureString(std::string("A"));
+    EXPECT_FLOAT_EQ(size.Y, 16.0f);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString — two characters, spacing
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, MeasureTwoCharsNoSpacing)
+{
+    // "AA": 11 + (0+1)+8+2 = 22
+    SpriteFont font = makeFontA(0.0f);
+    Vector2 size = font.MeasureString(std::string("AA"));
+    EXPECT_FLOAT_EQ(size.X, 22.0f);
+}
+
+TEST(SpriteFontTest, MeasureTwoCharsWithSpacing)
+{
+    // "AA" spacing=3: 11 + (3+1)+8+2 = 25
+    SpriteFont font = makeFontA(3.0f);
+    Vector2 size = font.MeasureString(std::string("AA"));
+    EXPECT_FLOAT_EQ(size.X, 25.0f);
+}
+
+TEST(SpriteFontTest, MeasureTwoDifferentCharsNoSpacing)
+{
+    // "AB": 11 + (0+0)+6+1 = 18
+    SpriteFont font = makeFontAB(0.0f);
+    Vector2 size = font.MeasureString(std::string("AB"));
+    EXPECT_FLOAT_EQ(size.X, 18.0f);
+}
+
+TEST(SpriteFontTest, MeasureTwoDifferentCharsWithSpacing)
+{
+    // "AB" spacing=2: 11 + (2+0)+6+1 = 20
+    SpriteFont font = makeFontAB(2.0f);
+    Vector2 size = font.MeasureString(std::string("AB"));
+    EXPECT_FLOAT_EQ(size.X, 20.0f);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString — height from tallest glyph crop
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, MeasureHeightFromTallestCropHeight)
+{
+    // 'B' crop height=14 > lineSpacing=16? No: 14 < 16, stays 16.
+    // Make a font where crop exceeds lineSpacing.
+    std::vector<Rectangle> glyphs   = { {0, 0, 8, 20} };
+    std::vector<Rectangle> cropping = { {0, 0, 8, 20} };
+    std::vector<charcs>    chars    = { u'A' };
+    std::vector<Vector3>   kern     = { Vector3(0.0f, 8.0f, 0.0f) };
+    SpriteFont font(Texture2D{}, glyphs, cropping, chars, 16, 0.0f, kern, std::nullopt);
+    Vector2 size = font.MeasureString(std::string("A"));
+    EXPECT_FLOAT_EQ(size.Y, 20.0f);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString — multi-line (\n)
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, MeasureMultiLineWidth)
+{
+    // "A\nAA": line1=11, line2=22 → X=22
+    SpriteFont font = makeFontA(0.0f);
+    Vector2 size = font.MeasureString(std::string("A\nAA"));
+    EXPECT_FLOAT_EQ(size.X, 22.0f);
+}
+
+TEST(SpriteFontTest, MeasureMultiLineHeight)
+{
+    // "A\nA": Y = lineSpacing + finalLineHeight = 16 + 16 = 32
+    SpriteFont font = makeFontA(0.0f);
+    Vector2 size = font.MeasureString(std::string("A\nA"));
+    EXPECT_FLOAT_EQ(size.Y, 32.0f);
+}
+
+TEST(SpriteFontTest, MeasureThreeLinesHeight)
+{
+    SpriteFont font = makeFontA(0.0f);
+    Vector2 size = font.MeasureString(std::string("A\nA\nA"));
+    EXPECT_FLOAT_EQ(size.Y, 48.0f);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString — carriage return (\r) is ignored
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, CarriageReturnIsIgnored)
+{
+    // "\r" alone: no chars rendered → same as "A" without the \r
+    SpriteFont font = makeFontA(0.0f);
+    Vector2 noR   = font.MeasureString(std::string("A"));
+    Vector2 withR = font.MeasureString(std::string("A\rA"));
+    // \r is skipped; "A\rA" measures like "AA"
+    SpriteFont font2 = makeFontA(0.0f);
+    Vector2 aa = font2.MeasureString(std::string("AA"));
+    EXPECT_FLOAT_EQ(withR.X, aa.X);
+    EXPECT_FLOAT_EQ(withR.Y, aa.Y);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString — unknown glyph behaviour
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, UnknownCharWithNoDefaultThrows)
+{
+    SpriteFont font = makeFontA();   // no default character
+    EXPECT_THROW(
+        { [[maybe_unused]] auto r = font.MeasureString(std::string("B")); },
+        std::invalid_argument);
+}
+
+TEST(SpriteFontTest, UnknownCharWithDefaultFallsBackToDefault)
+{
+    // default='A' → 'B' is rendered as 'A'
+    SpriteFont font = makeFontA(0.0f, u'A');
+    Vector2 fallback = font.MeasureString(std::string("B"));
+    Vector2 expected = font.MeasureString(std::string("A"));
+    EXPECT_FLOAT_EQ(fallback.X, expected.X);
+    EXPECT_FLOAT_EQ(fallback.Y, expected.Y);
+}

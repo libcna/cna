@@ -175,6 +175,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::VertexLayout layout;
         int vertexCount = 0;
         std::size_t stride = 0;
+        std::vector<uint8_t> cpuData; ///< CPU copy kept for per-instance reads in instanced draws.
 
         explicit BgfxVertexBufferBackend(int capacity);
         ~BgfxVertexBufferBackend() override;
@@ -262,6 +263,10 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ProgramHandle textured3DProgram_        = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle coloredTextured3DProgram_ = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle litTextured3DProgram_     = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle alphaTest3DProgram_       = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle dualTexture3DProgram_     = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle skinned3DProgram_         = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle instanced3DProgram_       = BGFX_INVALID_HANDLE;
         // Uniforms shared across 3D draw calls
         bgfx::UniformHandle wvpUniform_         = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle diffuseColor3DUnif_ = BGFX_INVALID_HANDLE;
@@ -270,6 +275,10 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle light0Diff3DUnif_   = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle lightingEn3DUnif_   = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle texColor3DSampler_  = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle alphaTestUnif_      = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle texColor3DSampler2_ = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle bonesUnif_          = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle vpInstanced3DUnif_  = BGFX_INVALID_HANDLE;
 
         explicit BgfxGraphicsBackend(SDL_Window* window);
         ~BgfxGraphicsBackend() override;

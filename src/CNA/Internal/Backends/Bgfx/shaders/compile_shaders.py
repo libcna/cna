@@ -43,6 +43,22 @@ SHADER_PAIRS = [
         ("vs_lit_textured3d",     "vertex",   "vs_lit_textured3d.sc"),
         ("fs_lit_textured3d",     "fragment", "fs_lit_textured3d.sc"),
     ]),
+    ("kAlphaTest3dShaders", [
+        ("vs_alpha_test3d",       "vertex",   "vs_alpha_test3d.sc"),
+        ("fs_alpha_test3d",       "fragment", "fs_alpha_test3d.sc"),
+    ]),
+    ("kDualTexture3dShaders", [
+        ("vs_dual_texture3d",     "vertex",   "vs_dual_texture3d.sc"),
+        ("fs_dual_texture3d",     "fragment", "fs_dual_texture3d.sc"),
+    ]),
+    ("kSkinned3dShaders", [
+        ("vs_skinned3d",          "vertex",   "vs_skinned3d.sc"),
+        ("fs_skinned3d",          "fragment", "fs_skinned3d.sc"),
+    ]),
+    ("kInstanced3dShaders", [
+        ("vs_instanced3d",        "vertex",   "vs_instanced3d.sc"),
+        ("fs_instanced3d",        "fragment", "fs_instanced3d.sc"),
+    ]),
 ]
 
 # Flat list for compilation loop

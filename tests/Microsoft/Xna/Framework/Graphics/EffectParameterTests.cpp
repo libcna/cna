@@ -247,3 +247,256 @@ TEST(EffectParameterTest, SetValueStringRoundTrip)
     EXPECT_EQ(p.GetValueString(), "hello");
 }
 
+// --- GetValueBooleanArray / SetValue(vector<bool>) ---
+
+TEST(EffectParameterTest, SetValueBoolArrayRoundTrip)
+{
+    EffectParameter p("b", "", 1, 1,
+                      EffectParameterClass::Scalar,
+                      EffectParameterType::Bool);
+    p.SetValue(std::vector<bool>{true, false, true});
+    auto got = p.GetValueBooleanArray(3);
+    ASSERT_EQ(got.size(), 3u);
+    EXPECT_TRUE(got[0]);
+    EXPECT_FALSE(got[1]);
+    EXPECT_TRUE(got[2]);
+}
+
+TEST(EffectParameterTest, GetValueBooleanArrayPartialCount)
+{
+    EffectParameter p("b", "", 1, 1,
+                      EffectParameterClass::Scalar,
+                      EffectParameterType::Bool);
+    p.SetValue(std::vector<bool>{true, false, true});
+    auto got = p.GetValueBooleanArray(2);
+    ASSERT_EQ(got.size(), 2u);
+    EXPECT_TRUE(got[0]);
+    EXPECT_FALSE(got[1]);
+}
+
+// --- GetValueInt32Array / SetValue(vector<int>) ---
+
+TEST(EffectParameterTest, SetValueInt32ArrayRoundTrip)
+{
+    EffectParameter p("i", "", 1, 1,
+                      EffectParameterClass::Scalar,
+                      EffectParameterType::Int32);
+    p.SetValue(std::vector<int>{10, -5, 100});
+    auto got = p.GetValueInt32Array(3);
+    ASSERT_EQ(got.size(), 3u);
+    EXPECT_EQ(got[0],  10);
+    EXPECT_EQ(got[1],  -5);
+    EXPECT_EQ(got[2], 100);
+}
+
+TEST(EffectParameterTest, GetValueInt32ArrayPartialCount)
+{
+    EffectParameter p("i", "", 1, 1,
+                      EffectParameterClass::Scalar,
+                      EffectParameterType::Int32);
+    p.SetValue(std::vector<int>{1, 2, 3, 4});
+    auto got = p.GetValueInt32Array(2);
+    ASSERT_EQ(got.size(), 2u);
+    EXPECT_EQ(got[0], 1);
+    EXPECT_EQ(got[1], 2);
+}
+
+// --- GetValueVector2Array / SetValue(vector<Vector2>) ---
+
+TEST(EffectParameterTest, SetValueVector2ArrayRoundTrip)
+{
+    EffectParameter p("uv", "", 1, 2,
+                      EffectParameterClass::Vector,
+                      EffectParameterType::Single);
+    std::vector<Vector2> vecs = {{1.0f, 2.0f}, {3.0f, 4.0f}};
+    p.SetValue(vecs);
+    auto got = p.GetValueVector2Array(2);
+    ASSERT_EQ(got.size(), 2u);
+    EXPECT_NEAR(got[0].X, 1.0f, 1e-5f);
+    EXPECT_NEAR(got[0].Y, 2.0f, 1e-5f);
+    EXPECT_NEAR(got[1].X, 3.0f, 1e-5f);
+    EXPECT_NEAR(got[1].Y, 4.0f, 1e-5f);
+}
+
+// --- GetValueVector4Array / SetValue(vector<Vector4>) ---
+
+TEST(EffectParameterTest, SetValueVector4ArrayRoundTrip)
+{
+    EffectParameter p("col", "", 1, 4,
+                      EffectParameterClass::Vector,
+                      EffectParameterType::Single);
+    std::vector<Vector4> vecs = {{1,0,0,1}, {0,1,0,1}, {0,0,1,1}};
+    p.SetValue(vecs);
+    auto got = p.GetValueVector4Array(3);
+    ASSERT_EQ(got.size(), 3u);
+    EXPECT_NEAR(got[0].X, 1.0f, 1e-5f);
+    EXPECT_NEAR(got[1].Y, 1.0f, 1e-5f);
+    EXPECT_NEAR(got[2].Z, 1.0f, 1e-5f);
+}
+
+// --- GetValueQuaternionArray / SetValue(vector<Quaternion>) ---
+
+TEST(EffectParameterTest, SetValueQuaternionArrayRoundTrip)
+{
+    EffectParameter p("q", "", 1, 4,
+                      EffectParameterClass::Vector,
+                      EffectParameterType::Single);
+    std::vector<Quaternion> qs = {{0.1f, 0.2f, 0.3f, 0.9f},
+                                   {0.5f, 0.5f, 0.5f, 0.5f}};
+    p.SetValue(qs);
+    auto got = p.GetValueQuaternionArray(2);
+    ASSERT_EQ(got.size(), 2u);
+    EXPECT_NEAR(got[0].X, 0.1f, 1e-5f);
+    EXPECT_NEAR(got[0].W, 0.9f, 1e-5f);
+    EXPECT_NEAR(got[1].X, 0.5f, 1e-5f);
+    EXPECT_NEAR(got[1].W, 0.5f, 1e-5f);
+}
+
+// --- SetValueTranspose(vector<Matrix>) / GetValueMatrixTransposeArray ---
+
+TEST(EffectParameterTest, SetValueTransposeArrayRoundTrip)
+{
+    auto p = MakeMatrix();
+    std::vector<Matrix> mats = {
+        Matrix::CreateTranslation(1.0f, 0.0f, 0.0f),
+        Matrix::CreateTranslation(0.0f, 2.0f, 0.0f),
+    };
+    p.SetValueTranspose(mats);
+    // GetValueMatrixTransposeArray transposes stored values back → should match originals
+    auto got = p.GetValueMatrixTransposeArray(2);
+    ASSERT_EQ(got.size(), 2u);
+    EXPECT_NEAR(got[0].M41, 1.0f, 1e-5f);
+    EXPECT_NEAR(got[1].M42, 2.0f, 1e-5f);
+}
+
+// --- GetValueTexture2D / SetValue(Texture2D*) ---
+
+TEST(EffectParameterTest, SetValueTexture2DNullRoundTrip)
+{
+    EffectParameter p("tex", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::Texture2D);
+    p.SetValue(static_cast<Texture2D*>(nullptr));
+    EXPECT_EQ(p.GetValueTexture2D(), nullptr);
+}
+
+TEST(EffectParameterTest, SetValueTexture2DNonNullRoundTrip)
+{
+    EffectParameter p("tex", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::Texture2D);
+    // Use a sentinel address (no GPU resources needed for pointer round-trip)
+    Texture2D* sentinel = reinterpret_cast<Texture2D*>(std::uintptr_t{0xDEAD});
+    p.SetValue(sentinel);
+    EXPECT_EQ(p.GetValueTexture2D(), sentinel);
+}
+
+// --- GetValueTexture3D / SetValue(Texture3D*) ---
+
+TEST(EffectParameterTest, SetValueTexture3DNullRoundTrip)
+{
+    EffectParameter p("tex3d", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::Texture3D);
+    p.SetValue(static_cast<Texture3D*>(nullptr));
+    EXPECT_EQ(p.GetValueTexture3D(), nullptr);
+}
+
+TEST(EffectParameterTest, SetValueTexture3DNonNullRoundTrip)
+{
+    EffectParameter p("tex3d", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::Texture3D);
+    Texture3D* sentinel = reinterpret_cast<Texture3D*>(std::uintptr_t{0xBEEF});
+    p.SetValue(sentinel);
+    EXPECT_EQ(p.GetValueTexture3D(), sentinel);
+}
+
+// --- GetValueTextureCube / SetValue(TextureCube*) ---
+
+TEST(EffectParameterTest, SetValueTextureCubeNullRoundTrip)
+{
+    EffectParameter p("cube", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::TextureCube);
+    p.SetValue(static_cast<TextureCube*>(nullptr));
+    EXPECT_EQ(p.GetValueTextureCube(), nullptr);
+}
+
+TEST(EffectParameterTest, SetValueTextureCubeNonNullRoundTrip)
+{
+    EffectParameter p("cube", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::TextureCube);
+    TextureCube* sentinel = reinterpret_cast<TextureCube*>(std::uintptr_t{0xCAFE});
+    p.SetValue(sentinel);
+    EXPECT_EQ(p.GetValueTextureCube(), sentinel);
+}
+
+// --- Default/initial state ---
+
+TEST(EffectParameterTest, DefaultBooleanIsFalse)
+{
+    EffectParameter p("b", "", 1, 1,
+                      EffectParameterClass::Scalar,
+                      EffectParameterType::Bool);
+    EXPECT_FALSE(p.GetValueBoolean());
+}
+
+TEST(EffectParameterTest, DefaultInt32IsZero)
+{
+    EffectParameter p("i", "", 1, 1,
+                      EffectParameterClass::Scalar,
+                      EffectParameterType::Int32);
+    EXPECT_EQ(p.GetValueInt32(), 0);
+}
+
+TEST(EffectParameterTest, DefaultSingleIsZero)
+{
+    auto p = MakeScalar();
+    EXPECT_NEAR(p.GetValueSingle(), 0.0f, 1e-7f);
+}
+
+TEST(EffectParameterTest, DefaultStringIsEmpty)
+{
+    EffectParameter p("s", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::String);
+    EXPECT_EQ(p.GetValueString(), "");
+}
+
+TEST(EffectParameterTest, DefaultTexture2DIsNull)
+{
+    EffectParameter p("tex", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::Texture2D);
+    EXPECT_EQ(p.GetValueTexture2D(), nullptr);
+}
+
+TEST(EffectParameterTest, DefaultTexture3DIsNull)
+{
+    EffectParameter p("tex3d", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::Texture3D);
+    EXPECT_EQ(p.GetValueTexture3D(), nullptr);
+}
+
+TEST(EffectParameterTest, DefaultTextureCubeIsNull)
+{
+    EffectParameter p("cube", "", 1, 1,
+                      EffectParameterClass::Object,
+                      EffectParameterType::TextureCube);
+    EXPECT_EQ(p.GetValueTextureCube(), nullptr);
+}
+
+TEST(EffectParameterTest, DefaultMatrixIsIdentity)
+{
+    auto p = MakeMatrix();
+    const Matrix got = p.GetValueMatrix();
+    EXPECT_NEAR(got.M11, 1.0f, 1e-5f);
+    EXPECT_NEAR(got.M22, 1.0f, 1e-5f);
+    EXPECT_NEAR(got.M33, 1.0f, 1e-5f);
+    EXPECT_NEAR(got.M44, 1.0f, 1e-5f);
+    EXPECT_NEAR(got.M12, 0.0f, 1e-5f);
+}
+
