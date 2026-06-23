@@ -614,6 +614,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 172: TextureCube per-face SetData/GetData round-trip
+        cna_easygl_test(cna_test_easygl_texturecube_faces
+                        examples/easygl_texturecube_faces_test.cpp)
+        add_test(NAME EasyGL_TextureCube_Faces_RoundTrip
+                 COMMAND cna_test_easygl_texturecube_faces)
+        set_tests_properties(EasyGL_TextureCube_Faces_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests

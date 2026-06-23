@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phases 1–20 substantially done (Tasks 1–171 ✅).
-Active work is Phase 21 — texture data conformance (Tasks 172–176).
+**Current phase**: Phases 1–20 substantially done (Tasks 1–172 ✅).
+Active work is Phase 21 — texture data conformance (Tasks 173–176).
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -30,12 +30,13 @@ Active work is Phase 21 — texture data conformance (Tasks 172–176).
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 21/21 EasyGL integration tests pass; ~1500 unit tests pass.
+- **Tests**: 22/22 EasyGL integration tests pass; ~1500 unit tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect SetData/GetData (Task 169)
   - Texture2D startIndex/elementCount SetData/GetData (Task 170)
   - Texture2D mip-level SetData/GetData — all 3 levels round-trip (Task 171)
+  - TextureCube 6-face SetData/GetData round-trip (Task 172)
   - getMipBuffer(0) correctly pre-sizes the buffer after MaybeFreeCpuPixels
 
 ### Vulkan backend (`cmake-build-vulkan`)
@@ -62,6 +63,7 @@ Active work is Phase 21 — texture data conformance (Tasks 172–176).
 
 | Commit | What changed |
 |---|---|
+| Task 172 | TextureCube 6-face round-trip; 24/24 PASS; fixed Color→uint8_t conversion bug in TextureCube.cpp (Color sizeof=24 has vtable at offset 0) |
 | Task 171 | Texture2D mip-level round-trip integration test; 21/21 PASS; no source fixes needed |
 | `0fd7c88` | Task 170: Texture2D startIndex/elementCount tests; fixed wrong guards in SetData and GetData (`startIndex + elementCount > w * h` → `elementCount < w * h`); getMipBuffer auto-size uses mipDim |
 | `1863722` | Task 169: Texture2D partial-rect round-trip integration test; fixed getMipBuffer(0) not pre-sizing buffer after MaybeFreeCpuPixels |
@@ -70,6 +72,7 @@ Active work is Phase 21 — texture data conformance (Tasks 172–176).
 | `04f0692` | Tasks 151–160, 166: SpriteBatch 6 Draw stubs + 3 DrawString(StringBuilder) stubs replaced; Begin/End guards fixed |
 
 **Files added:**
+- `examples/easygl_texturecube_faces_test.cpp` (Task 172)
 - `examples/easygl_texture2d_mip_test.cpp` (Task 171)
 - `examples/easygl_texture2d_partial_rect_test.cpp` (Tasks 169+170)
 - `examples/easygl_transform_matrix_test.cpp` (Task 168)
@@ -77,11 +80,12 @@ Active work is Phase 21 — texture data conformance (Tasks 172–176).
 - `docs/coverage.md` — XNA 4.0 coverage report (2026-06-21)
 
 **Files modified:**
+- `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp` — Color→uint8_t conversion fix in SetData/GetData
 - `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp` — getMipBuffer fix, guard fixes
 - `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp` — stub removals, guard fixes
 - `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` — matrix order fix
 - `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` — 2 tests updated/added
-- `CMakeLists.txt` — 3 new integration test targets
+- `CMakeLists.txt` — 4 new integration test targets
 
 ---
 
@@ -89,10 +93,8 @@ Active work is Phase 21 — texture data conformance (Tasks 172–176).
 
 **No active blocker.** All builds clean; 20/20 EasyGL integration tests pass.
 
-The next tasks (171–173) are round-trip tests for mip-level and TextureCube/Texture3D
-data upload. These follow the same pattern as 169–170 and are not expected to reveal
-new blockers, but mip-level upload in the EasyGL backend (`UpdatePixelsLevel`) has
-not been exercised by any integration test yet — it may have latent bugs.
+No active blocker. All builds clean; 22/22 EasyGL integration tests pass.
+Next task: Task 173 (Texture3D z-slice SetData/GetData). Same pattern as 172.
 
 ---
 
@@ -103,8 +105,9 @@ not been exercised by any integration test yet — it may have latent bugs.
 | **confirmed bug (fixed)** | `getMipBuffer(0)` left empty after `MaybeFreeCpuPixels`; caused UB on partial-rect SetData |
 | **confirmed bug (fixed)** | SetData/GetData guard `startIndex + elementCount > w * h` rejected valid non-zero startIndex |
 | **confirmed bug (fixed)** | EasyGL FlushBatch: `orthoM * transform_` applied projection before user transform |
+| **confirmed bug (fixed)** | `TextureCube::SetData/GetData` passed raw `Color*` (sizeof=24, vtable at offset 0) to GL; fixed via uint8_t conversion |
 | **confirmed working** | `UpdatePixelsLevel` (mip > 0 upload) — covered by Task 171 mip round-trip |
-| **incomplete** | `TextureCube::GetData` round-trip not integration-tested |
+| **confirmed working** | `TextureCube::GetData` round-trip — covered by Task 172 |
 | **incomplete** | `Texture3D::GetData` round-trip not integration-tested |
 | **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
 | **confirmed** | `Color` has vtable pointer — never cast `Color*` to `uint8_t*` for pixel I/O |
@@ -204,19 +207,6 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test in `examples/`, registered
 in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 172 — TextureCube per-face per-mip SetData/GetData
-**Goal**: Write distinct colours to each of the 6 cube faces (mip 0) and read back.
-
-**Design**:
-- `TextureCube cube(dev, 4, /*mipMap=*/false, SurfaceFormat::Color)`.
-- `SetData(CubeMapFace::PositiveX, 0, nullptr, red16, 0, 16)` etc. — 6 different colours.
-- `GetData` each face; verify each returns the correct colour.
-
-**Files**: `examples/easygl_texturecube_faces_test.cpp`, `CMakeLists.txt`,
-`GRAPHICS_TASKS.md`.
-
-**Verification**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cmake-build-debug/cna_test_easygl_texturecube_faces`
-
 ### Task 173 — Texture3D z-slice SetData/GetData
 **Goal**: Write distinct colours to each z-slice of a 2×2×4 Texture3D; read back.
 
@@ -256,10 +246,10 @@ or missing.
 - **Do not change the `Color` memory layout** — packed ABGR order is relied on by all backends.
 - **Do not convert integration tests to unit tests without a mock device** — there is no
   fake GraphicsDevice; integration tests using `Game` + EasyGL are the established pattern.
-- **Do not work on Tasks 177–200** until 172–176 are done — the texture conformance
+- **Do not work on Tasks 177–200** until 173–176 are done — the texture conformance
   track should be completed before starting RenderTarget/Effect tracks.
 - **Do not start Tasks 201–500** (deep conformance, golden-image, FNA harness) until
-  Phase 21 (Tasks 172–176) is fully complete.
+  Phase 21 (Tasks 173–176) is fully complete.
 
 ---
 
@@ -269,9 +259,9 @@ or missing.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–171 complete. Next unstarted: Task 172 (TextureCube per-face
-SetData/GetData round-trip integration test). Follow the same pattern as Task 171:
-create examples/easygl_texturecube_faces_test.cpp, register in CMakeLists.txt, build,
+Current status: Tasks 1–172 complete. Next unstarted: Task 173 (Texture3D z-slice
+SetData/GetData round-trip integration test). Follow the same pattern as Task 172:
+create examples/easygl_texture3d_slices_test.cpp, register in CMakeLists.txt, build,
 run under DISPLAY=:0 SDL_VIDEODRIVER=x11, verify PASS, update GRAPHICS_TASKS.md and
 NEXT.md, commit and push.
 ```
