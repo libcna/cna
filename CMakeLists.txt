@@ -623,6 +623,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 173: Texture3D z-slice SetData/GetData round-trip
+        cna_easygl_test(cna_test_easygl_texture3d_slices
+                        examples/easygl_texture3d_slices_test.cpp)
+        add_test(NAME EasyGL_Texture3D_Slices_RoundTrip
+                 COMMAND cna_test_easygl_texture3d_slices)
+        set_tests_properties(EasyGL_Texture3D_Slices_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests

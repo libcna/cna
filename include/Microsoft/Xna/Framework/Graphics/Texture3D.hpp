@@ -31,7 +31,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format);
 
         /** @brief Destructor. */
-        NOXNA ~Texture3D() override = default;
+        NOXNA ~Texture3D() override;
 
         /** @brief Returns the fully qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;

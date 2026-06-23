@@ -3,8 +3,13 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
+#include <cstdint>
+#include <vector>
+
 namespace Microsoft::Xna::Framework::Graphics
 {
+    Texture3D::~Texture3D() = default;
+
     Texture3D::Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format)
         : GraphicsResource(&device)
         , width_(width)
@@ -28,23 +33,42 @@ namespace Microsoft::Xna::Framework::Graphics
         return name;
     }
 
+    // Color has a vtable pointer (sizeof(Color) == 24), so we must never pass
+    // Color* directly to GL. Always unpack to plain uint8_t RGBA first.
+
+    static std::vector<uint8_t> colorsToRgba(const Color* data, int startIndex, int count)
+    {
+        std::vector<uint8_t> rgba(static_cast<std::size_t>(count) * 4);
+        for (int i = 0; i < count; ++i)
+        {
+            rgba[i * 4 + 0] = data[startIndex + i].getRProperty();
+            rgba[i * 4 + 1] = data[startIndex + i].getGProperty();
+            rgba[i * 4 + 2] = data[startIndex + i].getBProperty();
+            rgba[i * 4 + 3] = data[startIndex + i].getAProperty();
+        }
+        return rgba;
+    }
+
     void Texture3D::SetData(const Color* data, int elementCount)
     {
+        const auto rgba = colorsToRgba(data, 0, elementCount);
         SetDataPointerEXT(0, 0, 0, width_, height_, 0, depth_,
-                          data, elementCount * static_cast<int>(sizeof(Color)));
+                          rgba.data(), static_cast<int>(rgba.size()));
     }
 
     void Texture3D::SetData(const Color* data, int startIndex, int elementCount)
     {
+        const auto rgba = colorsToRgba(data, startIndex, elementCount);
         SetDataPointerEXT(0, 0, 0, width_, height_, 0, depth_,
-                          data + startIndex, elementCount * static_cast<int>(sizeof(Color)));
+                          rgba.data(), static_cast<int>(rgba.size()));
     }
 
     void Texture3D::SetData(int level, int left, int top, int right, int bottom, int front, int back,
                             const Color* data, int startIndex, int elementCount)
     {
+        const auto rgba = colorsToRgba(data, startIndex, elementCount);
         SetDataPointerEXT(level, left, top, right, bottom, front, back,
-                          data + startIndex, elementCount * static_cast<int>(sizeof(Color)));
+                          rgba.data(), static_cast<int>(rgba.size()));
     }
 
     void Texture3D::SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
@@ -56,26 +80,39 @@ namespace Microsoft::Xna::Framework::Graphics
                               data, dataLength);
     }
 
+    static void rgbaToColors(const std::vector<uint8_t>& rgba, Color* data, int startIndex, int count)
+    {
+        for (int i = 0; i < count; ++i)
+            data[startIndex + i] = Color(rgba[i * 4 + 0], rgba[i * 4 + 1],
+                                         rgba[i * 4 + 2], rgba[i * 4 + 3]);
+    }
+
     void Texture3D::GetData(Color* data, int elementCount) const
     {
-        if (backend_)
-            backend_->GetData(0, 0, 0, 0, width_, height_, depth_,
-                              data, elementCount * static_cast<int>(sizeof(Color)));
+        if (!backend_) return;
+        std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);
+        backend_->GetData(0, 0, 0, 0, width_, height_, depth_,
+                          rgba.data(), static_cast<int>(rgba.size()));
+        rgbaToColors(rgba, data, 0, elementCount);
     }
 
     void Texture3D::GetData(Color* data, int startIndex, int elementCount) const
     {
-        if (backend_)
-            backend_->GetData(0, 0, 0, 0, width_, height_, depth_,
-                              data + startIndex, elementCount * static_cast<int>(sizeof(Color)));
+        if (!backend_) return;
+        std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);
+        backend_->GetData(0, 0, 0, 0, width_, height_, depth_,
+                          rgba.data(), static_cast<int>(rgba.size()));
+        rgbaToColors(rgba, data, startIndex, elementCount);
     }
 
     void Texture3D::GetData(int level, int left, int top, int right, int bottom, int front, int back,
                             Color* data, int startIndex, int elementCount) const
     {
-        if (backend_)
-            backend_->GetData(level, left, top, front,
-                              right - left, bottom - top, back - front,
-                              data + startIndex, elementCount * static_cast<int>(sizeof(Color)));
+        if (!backend_) return;
+        std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);
+        backend_->GetData(level, left, top, front,
+                          right - left, bottom - top, back - front,
+                          rgba.data(), static_cast<int>(rgba.size()));
+        rgbaToColors(rgba, data, startIndex, elementCount);
     }
 }
