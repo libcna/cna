@@ -665,6 +665,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 180: backbuffer → RT → backbuffer → RT → backbuffer round-trip
+        cna_easygl_test(cna_test_easygl_rt_roundtrip
+                        examples/easygl_rt_roundtrip_test.cpp)
+        add_test(NAME EasyGL_RT_Roundtrip
+                 COMMAND cna_test_easygl_rt_roundtrip)
+        set_tests_properties(EasyGL_RT_Roundtrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests

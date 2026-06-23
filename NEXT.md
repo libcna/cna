@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phase 22 in progress (Tasks 174–179 ✅). Tasks 1–179 done.
-Next phase: Phase 22 continues — RenderTarget conformance (Tasks 180+).
+**Current phase**: Phase 22 in progress (Tasks 174–180 ✅). Tasks 1–180 done.
+Next phase: Phase 22 continues — RenderTarget conformance (Tasks 181+).
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -62,6 +62,7 @@ Next phase: Phase 22 continues — RenderTarget conformance (Tasks 180+).
 
 | Commit | What changed |
 |---|---|
+| Task 180 | EasyGL RT round-trip: backbuffer→RT→backbuffer→RT→backbuffer; direct FBO readback; 3/3 PASS; 26/26 EasyGL |
 | Task 179 | Bgfx RenderTargetUsage: implemented `ClearColorAndDepth` (delegates to `Clear`); `BindAsRenderTarget` calls `setViewClear(BGFX_CLEAR_NONE)` for PreserveContents; smoke test PASS |
 | Task 178 | Vulkan RenderTargetUsage: added `rtRenderPassLoad_` (LOAD_OP_LOAD); `preserveContents_` in VulkanRenderTargetBackend; `CreateRenderTarget2D` bool propagated from XNA layer; 3/3 PASS; 9/9 Vulkan pass |
 | Task 177 | RenderTargetUsage: DiscardContents clears (0,0,0,255) on SetRenderTarget; PreserveContents skips clear; 3/3 PASS; 25/25 EasyGL integration tests pass |
@@ -100,8 +101,8 @@ Next phase: Phase 22 continues — RenderTarget conformance (Tasks 180+).
 
 ## 4. Current blocker / main problem
 
-No active blocker. All builds clean; 25/25 EasyGL, 9/9 Vulkan integration tests pass.
-Next task: Task 180 (backbuffer → RT → backbuffer round-trip — see GRAPHICS_TASKS.md).
+No active blocker. All builds clean; 26/26 EasyGL, 9/9 Vulkan integration tests pass.
+Next task: Task 181 (RenderTargetBinding mip level and cube face — see GRAPHICS_TASKS.md).
 
 ---
 
@@ -214,12 +215,10 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test in `examples/`, registered
 in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 180 — backbuffer → RT → backbuffer → RT round-trip
-**Goal**: Integration test verifying correct render target is active at each step and final backbuffer pixel is correct.
+### Task 181 — `RenderTargetBinding` with mip level and cube face
+**Goal**: Verify `SetRenderTargets({RenderTargetBinding(rt, 0), RenderTargetBinding(rt, 1)})` correctly targets distinct mip levels.
 
-**Files**: new `examples/easygl_rt_roundtrip_test.cpp`.
-
-**Verification**: EasyGL integration test; 1/1 PASS.
+**Files**: add unit test; check FNA `RenderTargetBinding` ctor.
 
 ---
 
