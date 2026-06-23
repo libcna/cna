@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/NOXNA/PbrMaterial.hpp"
+#include "CNA/Graphics/PbrMaterial.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #ifdef CNA_NOXNA

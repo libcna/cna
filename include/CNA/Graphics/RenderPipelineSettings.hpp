@@ -3,9 +3,9 @@
 
 #ifdef CNA_NOXNA
 
-#include "CNA/NOXNA/TonemappingMode.hpp"
-#include "CNA/NOXNA/RenderQuality.hpp"
-#include "CNA/NOXNA/ShadowQuality.hpp"
+#include "CNA/Graphics/TonemappingMode.hpp"
+#include "CNA/Graphics/RenderQuality.hpp"
+#include "CNA/Graphics/ShadowQuality.hpp"
 
 namespace CNA::Graphics {
     /**

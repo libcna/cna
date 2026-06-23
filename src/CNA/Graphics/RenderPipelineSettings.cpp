@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/NOXNA/RenderPipelineSettings.hpp"
+#include "CNA/Graphics/RenderPipelineSettings.hpp"
 
 #ifdef CNA_NOXNA
 

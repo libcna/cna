@@ -8,7 +8,8 @@
 
 #ifdef CNA_NOXNA
 
-#include "CNA/NOXNA/NOXNA.hpp"
+#include "CNA/Graphics/RenderPipelineSettings.hpp"
+#include "CNA/Graphics/PbrMaterial.hpp"
 #include <cstdio>
 #include <cassert>
 

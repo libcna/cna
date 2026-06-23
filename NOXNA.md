@@ -230,7 +230,7 @@ namespace CNA::Graphics {
 ### File layout
 
 ```
-include/CNA/NOXNA/
+include/CNA/Graphics/
     NOXNA.hpp                  ← master include (includes all below)
     TonemappingMode.hpp        ← enum class TonemappingMode
     RenderQuality.hpp          ← enum class RenderQuality
@@ -238,7 +238,7 @@ include/CNA/NOXNA/
     RenderPipelineSettings.hpp ← pipeline config class
     PbrMaterial.hpp            ← PBR material class
 
-src/CNA/NOXNA/
+src/CNA/Graphics/
     RenderPipelineSettings.cpp
     PbrMaterial.cpp
 ```
@@ -261,9 +261,9 @@ Tasks are listed in roughly recommended implementation order.
 |---|---|---|
 | N01 | CMake `CNA_NOXNA` option; all code still builds with and without it | ✅ |
 | N02 | `TonemappingMode.hpp`, `RenderQuality.hpp`, `ShadowQuality.hpp` — one enum per file, `namespace CNA::Graphics` | ✅ |
-| N03 | `include/CNA/NOXNA/RenderPipelineSettings.hpp` + `.cpp` — config-only, no renderer | ✅ |
-| N04 | `include/CNA/NOXNA/PbrMaterial.hpp` + `.cpp` — texture slots + scalar factors, no renderer | ✅ |
-| N05 | `include/CNA/NOXNA/NOXNA.hpp` — master include, example compiles | ✅ |
+| N03 | `include/CNA/Graphics/RenderPipelineSettings.hpp` + `.cpp` — config-only, no renderer | ✅ |
+| N04 | `include/CNA/Graphics/PbrMaterial.hpp` + `.cpp` — texture slots + scalar factors, no renderer | ✅ |
+| N05 | `include/CNA/Graphics/NOXNA.hpp` — master include, example compiles | ✅ |
 | N06 | Compile test / example `examples/noxna_settings_example.cpp` | ✅ |
 
 ### Material & Shading
