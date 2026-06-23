@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
+option(CNA_NOXNA "Enable CNA NOXNA extended graphics layer (beyond XNA 4.0)" OFF)
 
 include(cmake/ThirdPartySDL.cmake)
 cna_configure_vendored_sdl()
@@ -180,6 +181,7 @@ target_compile_definitions(CNA
         PUBLIC
         SOUND_ENABLED
         XNA5
+        $<$<BOOL:${CNA_NOXNA}>:CNA_NOXNA>
 )
 
 target_link_libraries(CNA
@@ -362,6 +364,19 @@ if(CNA_BUILD_EXAMPLES)
             set_target_properties(cna_demo_input PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_input)
         endif()
+    endif()
+endif()
+
+# ---- NOXNA settings example (no window needed — pure API test) ---------------
+if(CNA_BUILD_EXAMPLES AND CNA_NOXNA)
+    add_executable(cna_example_noxna_settings examples/noxna_settings_example.cpp)
+    target_link_libraries(cna_example_noxna_settings PRIVATE CNA)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_example_noxna_settings PRIVATE SDL3::SDL3main)
+    endif()
+    if(CNA_BUILD_TESTS)
+        add_test(NAME NOXNA_Settings_Compile_Run
+                 COMMAND cna_example_noxna_settings)
     endif()
 endif()
 
