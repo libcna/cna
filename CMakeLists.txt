@@ -647,6 +647,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 176: SurfaceFormat validation — unsupported formats throw
+        cna_easygl_test(cna_test_easygl_surface_format_throws
+                        examples/easygl_surface_format_throws_test.cpp)
+        add_test(NAME EasyGL_SurfaceFormat_Throws
+                 COMMAND cna_test_easygl_surface_format_throws)
+        set_tests_properties(EasyGL_SurfaceFormat_Throws PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests

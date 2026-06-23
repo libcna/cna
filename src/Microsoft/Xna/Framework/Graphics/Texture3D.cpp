@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
@@ -16,9 +17,11 @@ namespace Microsoft::Xna::Framework::Graphics
         , height_(height)
         , depth_(depth)
         , format_(format)
-        , levelCount_(mipMap ? 1 : 1)
-        , backend_(device.GetBackend().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format)))
+        , levelCount_(1)
+        , backend_(nullptr)
     {
+        Texture::ValidateFormat(format);
+        backend_ = device.GetBackend().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
     }
 
     int Texture3D::getWidthProperty() const { return width_; }

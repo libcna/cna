@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phases 1–20 substantially done (Tasks 1–175 ✅).
-Active work is Phase 21 — texture data conformance (Task 176).
+**Current phase**: Phase 21 complete (Tasks 174–176 ✅). Tasks 1–176 done.
+Next phase: Phase 22 — RenderTarget / Effect conformance (Tasks 177+).
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -95,7 +95,7 @@ Active work is Phase 21 — texture data conformance (Task 176).
 ## 4. Current blocker / main problem
 
 No active blocker. All builds clean; 23/23 EasyGL integration tests pass.
-Next task: Task 176 (sRGB SurfaceFormats — throw or implement).
+Next task: Task 177 (first RenderTarget / Effect track task — see GRAPHICS_TASKS.md).
 
 ---
 

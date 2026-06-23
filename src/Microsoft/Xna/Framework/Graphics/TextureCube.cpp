@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
@@ -14,9 +15,11 @@ namespace Microsoft::Xna::Framework::Graphics
         : GraphicsResource(&device)
         , size_(size)
         , format_(format)
-        , levelCount_(mipMap ? 1 : 1)
-        , backend_(device.GetBackend().CreateTextureCube(size, mipMap, static_cast<int>(format)))
+        , levelCount_(1)
+        , backend_(nullptr)
     {
+        Texture::ValidateFormat(format);
+        backend_ = device.GetBackend().CreateTextureCube(size, mipMap, static_cast<int>(format));
     }
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
