@@ -3,9 +3,11 @@
 
 #ifdef CNA_NOXNA
 
-#include "CNA/NOXNA/NoxnaEnums.hpp"
+#include "CNA/NOXNA/TonemappingMode.hpp"
+#include "CNA/NOXNA/RenderQuality.hpp"
+#include "CNA/NOXNA/ShadowQuality.hpp"
 
-namespace CNA {
+namespace CNA::Graphics {
     /**
      * @brief Stores configuration for the NOXNA extended render pipeline.
      *
@@ -95,6 +97,6 @@ namespace CNA {
         bool            shadowsEnabled_  = false;
     };
 
-} // namespace CNA
+} // namespace CNA::Graphics
 
 #endif // CNA_NOXNA

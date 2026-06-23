@@ -7,7 +7,7 @@
 using Tex2D = Microsoft::Xna::Framework::Graphics::Texture2D;
 using Color = Microsoft::Xna::Framework::Color;
 
-namespace CNA {
+namespace CNA::Graphics {
 
     PbrMaterial::PbrMaterial() = default;
 
@@ -54,6 +54,6 @@ namespace CNA {
     float  PbrMaterial::getAlphaCutoff()               const { return alphaCutoff_; }
     void   PbrMaterial::setAlphaCutoff(float v)              { alphaCutoff_ = v; }
 
-} // namespace CNA
+} // namespace CNA::Graphics
 
 #endif // CNA_NOXNA

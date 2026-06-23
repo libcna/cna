@@ -12,7 +12,7 @@
 #include <cstdio>
 #include <cassert>
 
-using namespace CNA;
+using namespace CNA::Graphics;
 
 static void testRenderPipelineSettings()
 {

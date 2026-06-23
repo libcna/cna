@@ -7,7 +7,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics { class Texture2D; }
 
-namespace CNA {
+namespace CNA::Graphics {
     /**
      * @brief PBR material definition for the NOXNA extended render layer.
      *
@@ -118,6 +118,6 @@ namespace CNA {
         float  alphaCutoff_     = 0.5f;
     };
 
-} // namespace CNA
+} // namespace CNA::Graphics
 
 #endif // CNA_NOXNA

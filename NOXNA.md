@@ -34,7 +34,7 @@ CNA has two clearly separated API layers:
 
 ### Layer 2 — CNA NOXNA Extension (opt-in)
 
-- Namespace: `CNA` (the existing CNA utility namespace; NOXNA-guarded types live here)
+- Namespace: `CNA::Graphics` (NOXNA extension types live here)
 - Enabled by CMake option `CNA_NOXNA=ON`.
 - Guarded by `#ifdef CNA_NOXNA` in all headers and sources.
 - For new CNA/Nova-3D games that want modern 3D rendering.
@@ -157,7 +157,7 @@ NOXNA is needed for anything beyond this list.
 
 ```cpp
 #ifdef CNA_NOXNA
-using namespace CNA;   // CNA is the namespace for NOXNA extension types
+using namespace CNA::Graphics;
 
 // PBR material setup
 PbrMaterial mat;
@@ -218,10 +218,10 @@ cmake -DCNA_NOXNA=OFF -DCNA_GRAPHICS_BACKEND=EASYGL ..
     NOXNA void SetNormalMap(Texture2D* texture);
 #endif
 
-// Standalone NOXNA classes live in namespace CNA (not CNA::NOXNA — the
-// NOXNA identifier is already a macro defined as empty in CNAHelper.hpp).
+// Standalone NOXNA classes live in namespace CNA::Graphics.
+// (Do not use namespace CNA::NOXNA — NOXNA is a preprocessor macro.)
 #ifdef CNA_NOXNA
-namespace CNA {
+namespace CNA::Graphics {
     class PbrMaterial { ... };
 }
 #endif
@@ -231,8 +231,10 @@ namespace CNA {
 
 ```
 include/CNA/NOXNA/
-    NOXNA.hpp                  ← master include
-    NoxnaEnums.hpp             ← TonemappingMode, RenderQuality, ShadowQuality
+    NOXNA.hpp                  ← master include (includes all below)
+    TonemappingMode.hpp        ← enum class TonemappingMode
+    RenderQuality.hpp          ← enum class RenderQuality
+    ShadowQuality.hpp          ← enum class ShadowQuality
     RenderPipelineSettings.hpp ← pipeline config class
     PbrMaterial.hpp            ← PBR material class
 
@@ -241,7 +243,7 @@ src/CNA/NOXNA/
     PbrMaterial.cpp
 ```
 
-> **Note on namespace naming**: NOXNA extension types live in `namespace CNA`,
+> **Note on namespace naming**: NOXNA extension types live in `namespace CNA::Graphics`,
 > not `namespace CNA::NOXNA`. The identifier `NOXNA` is a preprocessor macro
 > (`#define NOXNA` in `CNAHelper.hpp`) and cannot be used as a namespace name
 > without macro expansion breaking the syntax.
@@ -258,7 +260,7 @@ Tasks are listed in roughly recommended implementation order.
 | # | Task | Status |
 |---|---|---|
 | N01 | CMake `CNA_NOXNA` option; all code still builds with and without it | ✅ |
-| N02 | `include/CNA/NOXNA/NoxnaEnums.hpp` — `TonemappingMode`, `RenderQuality`, `ShadowQuality` | ✅ |
+| N02 | `TonemappingMode.hpp`, `RenderQuality.hpp`, `ShadowQuality.hpp` — one enum per file, `namespace CNA::Graphics` | ✅ |
 | N03 | `include/CNA/NOXNA/RenderPipelineSettings.hpp` + `.cpp` — config-only, no renderer | ✅ |
 | N04 | `include/CNA/NOXNA/PbrMaterial.hpp` + `.cpp` — texture slots + scalar factors, no renderer | ✅ |
 | N05 | `include/CNA/NOXNA/NOXNA.hpp` — master include, example compiles | ✅ |

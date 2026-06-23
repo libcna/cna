@@ -13,7 +13,7 @@
  * @code{.cpp}
  * #ifdef CNA_NOXNA
  * #include "CNA/NOXNA/NOXNA.hpp"
- * using namespace CNA;
+ * using namespace CNA::Graphics;
  *
  * RenderPipelineSettings pipeline;
  * pipeline.setHDREnabled(true);
@@ -30,7 +30,9 @@
 
 #ifdef CNA_NOXNA
 
-#include "CNA/NOXNA/NoxnaEnums.hpp"
+#include "CNA/NOXNA/TonemappingMode.hpp"
+#include "CNA/NOXNA/RenderQuality.hpp"
+#include "CNA/NOXNA/ShadowQuality.hpp"
 #include "CNA/NOXNA/RenderPipelineSettings.hpp"
 #include "CNA/NOXNA/PbrMaterial.hpp"
 

@@ -3,7 +3,7 @@
 
 #ifdef CNA_NOXNA
 
-namespace CNA {
+namespace CNA::Graphics {
     RenderPipelineSettings::RenderPipelineSettings() = default;
 
     bool            RenderPipelineSettings::isHDREnabled()       const { return hdrEnabled_; }
@@ -36,6 +36,6 @@ namespace CNA {
     bool            RenderPipelineSettings::isShadowsEnabled()    const { return shadowsEnabled_; }
     void            RenderPipelineSettings::setShadowsEnabled(bool v)   { shadowsEnabled_ = v; }
 
-} // namespace CNA
+} // namespace CNA::Graphics
 
 #endif // CNA_NOXNA
