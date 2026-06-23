@@ -1308,6 +1308,13 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (backend_)
             backend_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetBackend() : nullptr);
+
+        if (renderTarget &&
+            renderTarget->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
+        {
+            Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                  Color(0, 0, 0, 255), 1.0f, 0);
+        }
     }
 
     void GraphicsDevice::SetRenderTarget(RenderTargetCube* renderTarget, CubeMapFace cubeMapFace)
@@ -1335,6 +1342,14 @@ namespace Microsoft::Xna::Framework::Graphics
             backends.push_back(rt ? rt->GetRenderTargetBackend() : nullptr);
         }
         backend_->SetRenderTargets(backends.data(), static_cast<int>(backends.size()));
+
+        auto* first = dynamic_cast<RenderTarget2D*>(renderTargets[0].getRenderTargetProperty());
+        if (first &&
+            first->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
+        {
+            Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                  Color(0, 0, 0, 255), 1.0f, 0);
+        }
     }
 
     std::vector<RenderTargetBinding> GraphicsDevice::GetRenderTargets() const

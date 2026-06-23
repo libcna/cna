@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phase 21 complete (Tasks 174–176 ✅). Tasks 1–176 done.
-Next phase: Phase 22 — RenderTarget / Effect conformance (Tasks 177+).
+**Current phase**: Phase 22 in progress (Tasks 174–177 ✅). Tasks 1–177 done.
+Next phase: Phase 22 continues — RenderTarget conformance (Tasks 178+).
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -62,6 +62,10 @@ Next phase: Phase 22 — RenderTarget / Effect conformance (Tasks 177+).
 
 | Commit | What changed |
 |---|---|
+| Task 177 | RenderTargetUsage: DiscardContents clears (0,0,0,255) on SetRenderTarget; PreserveContents skips clear; 3/3 PASS; 25/25 EasyGL integration tests pass |
+| Task 176 | Texture::ValidateFormat(SurfaceFormat) — throws std::runtime_error for non-Color formats; called in Texture2D/3D/Cube ctors; 16/16 PASS |
+| Task 175 | DxtUtil::DecompressDxt1Block golden decode test — found pre-existing, 6/6 PASS |
+| Task 174 | docs/surface-format-support.md — complete EasyGL/Vulkan/Bgfx/SDL format support matrix |
 | Task 173 | Texture3D z-slice round-trip; 16/16 PASS; fixed Color→uint8_t bug in Texture3D.cpp; moved ~Texture3D() to .cpp to fix incomplete-type error in test binaries |
 | Task 172 | TextureCube 6-face round-trip; 24/24 PASS; fixed Color→uint8_t conversion bug in TextureCube.cpp (Color sizeof=24 has vtable at offset 0) |
 | Task 171 | Texture2D mip-level round-trip integration test; 21/21 PASS; no source fixes needed |
@@ -94,8 +98,8 @@ Next phase: Phase 22 — RenderTarget / Effect conformance (Tasks 177+).
 
 ## 4. Current blocker / main problem
 
-No active blocker. All builds clean; 23/23 EasyGL integration tests pass.
-Next task: Task 177 (first RenderTarget / Effect track task — see GRAPHICS_TASKS.md).
+No active blocker. All builds clean; 25/25 EasyGL integration tests pass.
+Next task: Task 178 (same as 177 but Vulkan — see GRAPHICS_TASKS.md).
 
 ---
 
@@ -208,12 +212,12 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test in `examples/`, registered
 in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 175 — DXT1 golden decode test
-**Goal**: Unit-test `DxtUtil::DecompressDxt1Block` against known reference values.
+### Task 178 — `RenderTargetUsage` in Vulkan
+**Goal**: `VK_ATTACHMENT_LOAD_OP_CLEAR` for DiscardContents, `VK_ATTACHMENT_LOAD_OP_LOAD` for PreserveContents.
 
-**Files**: `tests/Microsoft/Xna/Framework/Graphics/DxtUtilTests.cpp` (new).
+**Files**: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp` (modify RT render pass creation).
 
-**Verification**: `ctest --test-dir cmake-build-debug -R DxtUtil`
+**Verification**: Vulkan integration test, 3/3 PASS.
 
 ---
 
@@ -225,10 +229,8 @@ in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 - **Do not change the `Color` memory layout** — packed ABGR order is relied on by all backends.
 - **Do not convert integration tests to unit tests without a mock device** — there is no
   fake GraphicsDevice; integration tests using `Game` + EasyGL are the established pattern.
-- **Do not work on Tasks 177–200** until 174–176 are done — the texture conformance
-  track should be completed before starting RenderTarget/Effect tracks.
 - **Do not start Tasks 201–500** (deep conformance, golden-image, FNA harness) until
-  Phase 21 (Tasks 174–176) is fully complete.
+  Phase 22 (Tasks 174–183) is fully complete.
 
 ---
 

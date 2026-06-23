@@ -656,6 +656,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 177: RenderTargetUsage DiscardContents vs PreserveContents
+        cna_easygl_test(cna_test_easygl_render_target_usage
+                        examples/easygl_render_target_usage_test.cpp)
+        add_test(NAME EasyGL_RenderTargetUsage
+                 COMMAND cna_test_easygl_render_target_usage)
+        set_tests_properties(EasyGL_RenderTargetUsage PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
