@@ -769,19 +769,42 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
 
     endif()
 
-    if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
-       AND CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
+endif()
 
-        enable_testing()
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
 
-        # Task 89: 3-frame smoke test for the Bgfx backend
-        add_test(NAME Bgfx_Demo2D_SmokeTest
-                 COMMAND cna_demo_2d --smoke 3)
-        set_tests_properties(Bgfx_Demo2D_SmokeTest PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+    enable_testing()
 
-    endif()
+    macro(cna_bgfx_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    # Task 89: 3-frame smoke test for the Bgfx backend
+    add_test(NAME Bgfx_Demo2D_SmokeTest
+             COMMAND cna_demo_2d --smoke 3)
+    set_tests_properties(Bgfx_Demo2D_SmokeTest PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 179: RenderTargetUsage DiscardContents/PreserveContents smoke test
+    cna_bgfx_test(cna_test_bgfx_render_target_usage
+                  examples/bgfx_render_target_usage_test.cpp)
+    add_test(NAME Bgfx_RenderTargetUsage
+             COMMAND cna_test_bgfx_render_target_usage)
+    set_tests_properties(Bgfx_RenderTargetUsage PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
 endif()
 

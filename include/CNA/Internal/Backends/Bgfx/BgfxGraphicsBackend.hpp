@@ -134,10 +134,11 @@ namespace CNA::Internal::Backends::Bgfx
     public:
         bgfx::FrameBufferHandle fbo = BGFX_INVALID_HANDLE;
         bgfx::TextureHandle colorTex = BGFX_INVALID_HANDLE;
-        int width = 0;
-        int height = 0;
+        int  width            = 0;
+        int  height           = 0;
+        bool preserveContents = false;
 
-        BgfxRenderTargetBackend(int w, int h, bool hasDepth);
+        BgfxRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents = false);
         ~BgfxRenderTargetBackend() override;
 
         int GetWidth()  const override { return width; }
@@ -327,7 +328,7 @@ namespace CNA::Internal::Backends::Bgfx
         void SetBlendFactor(float r, float g, float b, float a) override;
 
         // 3D pipeline — vertex/index buffers implemented; draw calls need colored3DProgram_.
-        // @note ClearColorAndDepth / SetDepth*/ SetBlend still throw (not wired to state flags yet).
+        // @note SetDepth* / SetBlend still throw (not wired to state flags yet).
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;

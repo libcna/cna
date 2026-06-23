@@ -413,8 +413,8 @@ namespace CNA::Internal::Backends::Bgfx
 
     // --- BgfxRenderTargetBackend ---
 
-    BgfxRenderTargetBackend::BgfxRenderTargetBackend(int w, int h, bool hasDepth)
-        : width(w), height(h)
+    BgfxRenderTargetBackend::BgfxRenderTargetBackend(int w, int h, bool hasDepth, bool preserve)
+        : width(w), height(h), preserveContents(preserve)
     {
         // Create color texture with render target flag
         colorTex = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h),
@@ -444,6 +444,10 @@ namespace CNA::Internal::Backends::Bgfx
     {
         bgfx::setViewFrameBuffer(1, fbo);
         bgfx::setViewRect(1, 0, 0, static_cast<uint16_t>(width), static_cast<uint16_t>(height));
+        // For PreserveContents, suppress the per-view clear that bgfx would otherwise
+        // carry over from the previous frame (set by a DiscardContents RT or explicit Clear).
+        if (preserveContents)
+            bgfx::setViewClear(1, BGFX_CLEAR_NONE, 0, 1.0f, 0);
     }
 
     void BgfxRenderTargetBackend::UnbindAsRenderTarget()
@@ -453,9 +457,9 @@ namespace CNA::Internal::Backends::Bgfx
 
     // ---
 
-    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool /*preserveContents*/)
+    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents)
     {
-        return std::make_unique<BgfxRenderTargetBackend>(w, h, hasDepth);
+        return std::make_unique<BgfxRenderTargetBackend>(w, h, hasDepth, preserveContents);
     }
 
     void BgfxGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -1197,11 +1201,15 @@ namespace CNA::Internal::Backends::Bgfx
     static void ThrowNo3DState()
     {
         throw std::runtime_error(
-            "Bgfx backend: ClearColorAndDepth / SetDepthTestEnabled / SetBlend* "
+            "Bgfx backend: SetDepthTestEnabled / SetBlend* "
             "are not yet wired into bgfx state flags.");
     }
 
-    void BgfxGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3DState(); }
+    void BgfxGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float /*depth*/)
+    {
+        Clear(r, g, b, a);
+    }
+
     void BgfxGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3DState(); }
     void BgfxGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3DState(); }
     void BgfxGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3DState(); }
