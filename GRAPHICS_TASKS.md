@@ -264,7 +264,7 @@ All 100 original tasks addressed.
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 177 | `RenderTargetUsage::DiscardContents` vs `PreserveContents` in EasyGL: verify that `DiscardContents` issues `glInvalidateFramebuffer` (or clear) and `PreserveContents` does not clear on `SetRenderTarget` | ✅ | `GraphicsDevice::SetRenderTarget` calls `Clear(0,0,0,255)` on DiscardContents; direct FBO readback test 3/3 PASS |
-| 178 | Same as 177 but Vulkan: `DiscardContents` → `VK_ATTACHMENT_LOAD_OP_CLEAR`; `PreserveContents` → `VK_ATTACHMENT_LOAD_OP_LOAD` in RT render pass | ⬜ | May require per-RT render pass creation change |
+| 178 | Same as 177 but Vulkan: `DiscardContents` → `VK_ATTACHMENT_LOAD_OP_CLEAR`; `PreserveContents` → `VK_ATTACHMENT_LOAD_OP_LOAD` in RT render pass | ✅ | Added `rtRenderPassLoad_`; `VulkanRenderTargetBackend` stores `preserveContents_`; `CreateRenderTarget2D` receives bool from XNA layer; 3/3 PASS; 9/9 Vulkan tests pass |
 | 179 | Same as 177 but Bgfx: map to `BGFX_CLEAR_COLOR` vs no clear flag on `bgfx::setViewClear` | ⬜ | Low priority |
 | 180 | Integration test: backbuffer → RT → backbuffer → RT → backbuffer in a single frame; verify correct render target is active at each step and final backbuffer pixel is correct | ⬜ | EasyGL; new example |
 | 181 | `RenderTargetBinding` with explicit mip level and cube face: verify that `SetRenderTargets({RenderTargetBinding(rt, 0), RenderTargetBinding(rt, 1)})` correctly targets distinct mip levels | ⬜ | Add unit test; check FNA `RenderTargetBinding` ctor |

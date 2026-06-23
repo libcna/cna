@@ -453,7 +453,7 @@ namespace CNA::Internal::Backends::Bgfx
 
     // ---
 
-    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth)
+    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool /*preserveContents*/)
     {
         return std::make_unique<BgfxRenderTargetBackend>(w, h, hasDepth);
     }

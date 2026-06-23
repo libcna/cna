@@ -336,7 +336,7 @@ namespace CNA::Internal::Backends
 
         /// Creates an off-screen FBO-backed render target. Returns nullptr on
         /// backends that do not support render targets.
-        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) { return nullptr; }
+        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false) { return nullptr; }
 
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.

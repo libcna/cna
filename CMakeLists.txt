@@ -740,6 +740,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 178: RenderTargetUsage DiscardContents vs PreserveContents
+        cna_vulkan_test(cna_test_vulkan_render_target_usage
+                        examples/vulkan_render_target_usage_test.cpp)
+        add_test(NAME Vulkan_RenderTargetUsage
+                 COMMAND cna_test_vulkan_render_target_usage)
+        set_tests_properties(Vulkan_RenderTargetUsage PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 142: RenderTargetCube — 6-face per-face render passes
         cna_vulkan_test(cna_test_vulkan_rtcube
                         examples/vulkan_rtcube_test.cpp)

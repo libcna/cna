@@ -303,7 +303,7 @@ namespace CNA::Internal::Backends::Bgfx
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
-        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;

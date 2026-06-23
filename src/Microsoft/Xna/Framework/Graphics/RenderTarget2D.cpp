@@ -24,7 +24,8 @@ namespace Microsoft::Xna::Framework::Graphics
         : Texture2D(device, width, height, preferredFormat, mipMap ? 1 : 1,
                     std::shared_ptr<IRenderTargetBackend>(
                         device.GetBackend().CreateRenderTarget2D(
-                            width, height, preferredDepthFormat != DepthFormat::None)))
+                            width, height, preferredDepthFormat != DepthFormat::None,
+                            usage == RenderTargetUsage::PreserveContents)))
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)

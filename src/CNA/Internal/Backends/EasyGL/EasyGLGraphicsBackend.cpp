@@ -1286,7 +1286,7 @@ void main()
         return std::make_unique<EasyGLOcclusionQueryBackend>(RegistryPtr());
     }
 
-    std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth)
+    std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool /*preserveContents*/)
     {
         return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, RegistryPtr());
     }

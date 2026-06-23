@@ -97,7 +97,7 @@ namespace CNA::Internal::Backends::Vulkan
                                       public IVulkanSamplable
     {
     public:
-        VulkanRenderTargetBackend(int w, int h, bool hasDepth, VulkanGraphicsBackend* owner);
+        VulkanRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents, VulkanGraphicsBackend* owner);
         ~VulkanRenderTargetBackend() override;
 
         int GetWidth()  const override { return width_; }
@@ -120,9 +120,10 @@ namespace CNA::Internal::Backends::Vulkan
         void DisconnectOwner() { owner_ = nullptr; }
 
     private:
-        int                     width_        = 0;
-        int                     height_       = 0;
-        bool                    hasDepth_     = false;
+        int                     width_            = 0;
+        int                     height_           = 0;
+        bool                    hasDepth_         = false;
+        bool                    preserveContents_ = false;
         VkImage                 colorImage_   = VK_NULL_HANDLE;
         VkDeviceMemory          colorMemory_  = VK_NULL_HANDLE;
         VkImageView             colorView_    = VK_NULL_HANDLE;
@@ -469,7 +470,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         std::unique_ptr<ITextureBackend>         CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend>     CreateSpriteBatch() override;
-        std::unique_ptr<IRenderTargetBackend>    CreateRenderTarget2D(int w, int h, bool hasDepth) override;
+        std::unique_ptr<IRenderTargetBackend>    CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false) override;
         void                                     SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
         // ---- Graphics state: IMPLEMENTED ----
@@ -565,8 +566,9 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VkImageView> swapchainImageViews_;
 
         // --- Render pass (permanent) + framebuffers (per swapchain image) ---
-        VkRenderPass               renderPass_   = VK_NULL_HANDLE;
-        VkRenderPass               rtRenderPass_ = VK_NULL_HANDLE;  // compatible with renderPass_ but color → SHADER_READ_ONLY_OPTIMAL
+        VkRenderPass               renderPass_       = VK_NULL_HANDLE;
+        VkRenderPass               rtRenderPass_     = VK_NULL_HANDLE;  // LOAD_OP_CLEAR, color → SHADER_READ_ONLY_OPTIMAL
+        VkRenderPass               rtRenderPassLoad_ = VK_NULL_HANDLE;  // LOAD_OP_LOAD,  color → SHADER_READ_ONLY_OPTIMAL
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
         // --- Depth buffer (recreated with swapchain) ---

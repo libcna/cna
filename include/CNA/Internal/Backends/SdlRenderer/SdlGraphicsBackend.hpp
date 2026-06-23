@@ -94,7 +94,7 @@ namespace CNA::Internal::Backends::SdlRenderer
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
-        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth) override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

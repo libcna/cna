@@ -470,7 +470,7 @@ namespace CNA::Internal::Backends::SdlRenderer
         return std::make_unique<SdlTextureBackend>(renderer, data);
     }
 
-    std::unique_ptr<IRenderTargetBackend> SdlGraphicsBackend::CreateRenderTarget2D(int w, int h, bool /*hasDepth*/)
+    std::unique_ptr<IRenderTargetBackend> SdlGraphicsBackend::CreateRenderTarget2D(int w, int h, bool /*hasDepth*/, bool /*preserveContents*/)
     {
         return std::make_unique<SdlRenderTargetBackend>(renderer, w, h);
     }

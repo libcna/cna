@@ -230,8 +230,9 @@ namespace CNA::Internal::Backends::Vulkan
     // =========================================================================
 
     VulkanRenderTargetBackend::VulkanRenderTargetBackend(int w, int h, bool /*hasDepth*/,
+                                                          bool preserveContents,
                                                           VulkanGraphicsBackend* owner)
-        : width_(w), height_(h), hasDepth_(true), owner_(owner)
+        : width_(w), height_(h), hasDepth_(true), preserveContents_(preserveContents), owner_(owner)
     {
         VkDevice dev = owner_->device_;
         const uint32_t uw = static_cast<uint32_t>(w);
@@ -386,7 +387,8 @@ namespace CNA::Internal::Backends::Vulkan
 
     VkRenderPass VulkanRenderTargetBackend::GetRenderPass() const
     {
-        return owner_ ? owner_->rtRenderPass_ : VK_NULL_HANDLE;
+        if (!owner_) return VK_NULL_HANDLE;
+        return preserveContents_ ? owner_->rtRenderPassLoad_ : owner_->rtRenderPass_;
     }
 
     void VulkanRenderTargetBackend::BindAsRenderTarget()
@@ -809,8 +811,9 @@ namespace CNA::Internal::Backends::Vulkan
             if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
         swapchainFramebuffers_.clear();
         if (renderPassMsaa_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPassMsaa_, nullptr); renderPassMsaa_ = VK_NULL_HANDLE; }
-        if (rtRenderPass_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, rtRenderPass_, nullptr); rtRenderPass_ = VK_NULL_HANDLE; }
-        if (renderPass_   != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_,   nullptr); renderPass_   = VK_NULL_HANDLE; }
+        if (rtRenderPass_     != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, rtRenderPass_,     nullptr); rtRenderPass_     = VK_NULL_HANDLE; }
+        if (rtRenderPassLoad_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, rtRenderPassLoad_, nullptr); rtRenderPassLoad_ = VK_NULL_HANDLE; }
+        if (renderPass_       != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_,       nullptr); renderPass_       = VK_NULL_HANDLE; }
         for (auto& [n, rp] : mrtRenderPasses_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
         mrtRenderPasses_.clear();
@@ -1241,6 +1244,20 @@ namespace CNA::Internal::Backends::Vulkan
         ci.dependencyCount = 2; ci.pDependencies = deps;
         if (vkCreateRenderPass(device_, &ci, nullptr, &rtRenderPass_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass (RT) failed");
+
+        // PreserveContents variant: load existing color content instead of clearing.
+        // initialLayout = SHADER_READ_ONLY_OPTIMAL matches the image state after
+        // construction (explicit transition) and after any previous RT render pass
+        // (finalLayout = SHADER_READ_ONLY_OPTIMAL). Depth uses DONT_CARE since the
+        // depth image starts in UNDEFINED and its previous content is never needed.
+        colorAtt.loadOp        = VK_ATTACHMENT_LOAD_OP_LOAD;
+        colorAtt.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        depthAtt.loadOp        = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        atts[0] = colorAtt;
+        atts[1] = depthAtt;
+        if (vkCreateRenderPass(device_, &ci, nullptr, &rtRenderPassLoad_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateRenderPass (RT load) failed");
     }
 
     VkRenderPass VulkanGraphicsBackend::GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount)
@@ -4330,9 +4347,9 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     std::unique_ptr<IRenderTargetBackend> VulkanGraphicsBackend::CreateRenderTarget2D(
-        int w, int h, bool hasDepth)
+        int w, int h, bool hasDepth, bool preserveContents)
     {
-        return std::make_unique<VulkanRenderTargetBackend>(w, h, hasDepth, this);
+        return std::make_unique<VulkanRenderTargetBackend>(w, h, hasDepth, preserveContents, this);
     }
 
     void VulkanGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
