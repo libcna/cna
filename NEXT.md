@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phases 1–20 substantially done (Tasks 1–173 ✅).
-Active work is Phase 21 — texture data conformance (Tasks 174–176).
+**Current phase**: Phases 1–20 substantially done (Tasks 1–174 ✅).
+Active work is Phase 21 — texture data conformance (Tasks 175–176).
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -94,10 +94,8 @@ Active work is Phase 21 — texture data conformance (Tasks 174–176).
 
 ## 4. Current blocker / main problem
 
-**No active blocker.** All builds clean; 20/20 EasyGL integration tests pass.
-
 No active blocker. All builds clean; 23/23 EasyGL integration tests pass.
-Next task: Task 174 (SurfaceFormat backend mapping table doc).
+Next task: Task 175 (DXT1 golden decode unit test).
 
 ---
 
@@ -209,28 +207,6 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 
 All following the same pattern: EasyGL integration test in `examples/`, registered
 in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
-
-### Task 173 — Texture3D z-slice SetData/GetData
-**Goal**: Write distinct colours to each z-slice of a 2×2×4 Texture3D; read back.
-
-**Design**:
-- `Texture3D tex(dev, 2, 2, 4, false, SurfaceFormat::Color)`.
-- `SetData(0, 0, 0, 2, 2, z, z+1, data4, 0, 4)` for each z in 0..3.
-- `GetData` and verify per-slice colour.
-
-**Files**: `examples/easygl_texture3d_slices_test.cpp`, `CMakeLists.txt`,
-`GRAPHICS_TASKS.md`.
-
-**Verification**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cmake-build-debug/cna_test_easygl_texture3d_slices`
-
-### Task 174 — SurfaceFormat backend mapping table
-**Goal**: Document per-format support for EasyGL/Vulkan/Bgfx.
-
-**Files**: New `docs/surface-format-support.md`. Read each backend's
-`CreateTexture` / `GetInternalFormat` to enumerate what is mapped, approximated,
-or missing.
-
-**Verification**: File exists and is accurate against source.
 
 ### Task 175 — DXT1 golden decode test
 **Goal**: Unit-test `DxtUtil::DecompressDxt1Block` against known reference values.
