@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phase 22 in progress (Tasks 174–180 ✅). Tasks 1–180 done.
-Next phase: Phase 22 continues — RenderTarget conformance (Tasks 181+).
+**Current phase**: Phase 22 in progress — RenderTarget conformance track.
+Tasks 1–180 done. Next unstarted: Task 181.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -30,79 +30,76 @@ Next phase: Phase 22 continues — RenderTarget conformance (Tasks 181+).
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 23/23 EasyGL integration tests pass; ~1500 unit tests pass.
+- **Tests**: 26/26 EasyGL integration tests pass; ~1515 total tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect / startIndex / mip-level SetData/GetData (Tasks 169–171)
   - TextureCube 6-face SetData/GetData round-trip (Task 172)
   - Texture3D z-slice SetData/GetData round-trip (Task 173)
-  - getMipBuffer(0) correctly pre-sizes the buffer after MaybeFreeCpuPixels
+  - RenderTargetUsage DiscardContents/PreserveContents (Task 177)
+  - Backbuffer → RT → backbuffer → RT → backbuffer round-trip (Task 180)
 
 ### Vulkan backend (`cmake-build-vulkan`)
 - **Builds**: clean.
-- MSAA 4× (subpass resolve), per-slot SamplerState, custom SPIR-V Effect, all stock
-  effects, FillMode::WireFrame — all confirmed via integration tests.
+- **Tests**: 9/9 Vulkan integration tests pass.
+- MSAA 4×, per-slot SamplerState, custom SPIR-V Effect, all stock effects,
+  FillMode::WireFrame, RenderTargetUsage DiscardContents/PreserveContents (Task 178)
+  — all confirmed via integration tests.
 
 ### Bgfx backend (`cmake-build-bgfx`)
 - **Builds**: clean.
+- `ClearColorAndDepth` now implemented (Task 179) — no longer throws on `SetRenderTarget`.
+- RenderTargetUsage smoke test passes (bind/unbind, no pixel verification).
 - EnvironmentMapEffect and ShaderEffect not implemented (falls back / returns nullptr).
-- GetBackBufferData via requestScreenShot not integration-tested.
+- `GetBackBufferData` via `requestScreenShot` not integration-tested.
 
 ### What does not work yet
 - **Framework.Net** — 0 % (NetworkSession, PacketReader/Writer entirely absent).
 - **Content pipeline (.xnb)** — 0 % (ContentManager uses custom JSON/PNG/OGG only).
 - **GamerServices** — ~5 % (stubs only).
-- **sRGB SurfaceFormats** — silently map to wrong GL/Vulkan internal format.
-- **TextureCube/Texture3D per-level round-trip tests** — not yet written (172–173).
-- **TextureCube/Texture3D per-level round-trip tests** — not yet written (172–173).
+- **sRGB SurfaceFormats** — silently map to linear GL/Vulkan internal formats.
+- **Bgfx pixel readback** — `SetDepthTestEnabled` / `SetBlendEnabled` still throw;
+  no 3D draw calls possible in Bgfx integration tests.
 
 ---
 
 ## 3. Recent changes
 
-| Commit | What changed |
+| Task / Commit | What changed |
 |---|---|
 | Task 180 | EasyGL RT round-trip: backbuffer→RT→backbuffer→RT→backbuffer; direct FBO readback; 3/3 PASS; 26/26 EasyGL |
-| Task 179 | Bgfx RenderTargetUsage: implemented `ClearColorAndDepth` (delegates to `Clear`); `BindAsRenderTarget` calls `setViewClear(BGFX_CLEAR_NONE)` for PreserveContents; smoke test PASS |
-| Task 178 | Vulkan RenderTargetUsage: added `rtRenderPassLoad_` (LOAD_OP_LOAD); `preserveContents_` in VulkanRenderTargetBackend; `CreateRenderTarget2D` bool propagated from XNA layer; 3/3 PASS; 9/9 Vulkan pass |
-| Task 177 | RenderTargetUsage: DiscardContents clears (0,0,0,255) on SetRenderTarget; PreserveContents skips clear; 3/3 PASS; 25/25 EasyGL integration tests pass |
-| Task 176 | Texture::ValidateFormat(SurfaceFormat) — throws std::runtime_error for non-Color formats; called in Texture2D/3D/Cube ctors; 16/16 PASS |
-| Task 175 | DxtUtil::DecompressDxt1Block golden decode test — found pre-existing, 6/6 PASS |
-| Task 174 | docs/surface-format-support.md — complete EasyGL/Vulkan/Bgfx/SDL format support matrix |
-| Task 173 | Texture3D z-slice round-trip; 16/16 PASS; fixed Color→uint8_t bug in Texture3D.cpp; moved ~Texture3D() to .cpp to fix incomplete-type error in test binaries |
-| Task 172 | TextureCube 6-face round-trip; 24/24 PASS; fixed Color→uint8_t conversion bug in TextureCube.cpp (Color sizeof=24 has vtable at offset 0) |
-| Task 171 | Texture2D mip-level round-trip integration test; 21/21 PASS; no source fixes needed |
-| `0fd7c88` | Task 170: Texture2D startIndex/elementCount tests; fixed wrong guards in SetData and GetData (`startIndex + elementCount > w * h` → `elementCount < w * h`); getMipBuffer auto-size uses mipDim |
-| `1863722` | Task 169: Texture2D partial-rect round-trip integration test; fixed getMipBuffer(0) not pre-sizing buffer after MaybeFreeCpuPixels |
-| `4f00b16` | Task 168: SpriteBatch::Begin transformMatrix pixel test; fixed EasyGL FlushBatch matrix multiply order (`orthoM * transform_` → `transform_ * orthoM`) |
-| `8e146e6` | Task 167: SpriteEffects FlipH/FlipV pixel integration test (400×100 viewport, PointClamp) |
-| `04f0692` | Tasks 151–160, 166: SpriteBatch 6 Draw stubs + 3 DrawString(StringBuilder) stubs replaced; Begin/End guards fixed |
+| Task 179 | Bgfx: implemented `ClearColorAndDepth` (delegates to `Clear`); `BindAsRenderTarget` calls `setViewClear(BGFX_CLEAR_NONE)` for PreserveContents; smoke test PASS |
+| Task 178 | Vulkan: added `rtRenderPassLoad_` (LOAD_OP_LOAD); `preserveContents_` in `VulkanRenderTargetBackend`; `CreateRenderTarget2D` bool propagated from XNA layer; 3/3 PASS |
+| Task 177 | EasyGL: `GraphicsDevice::SetRenderTarget` calls `Clear(0,0,0,255)` on DiscardContents; PreserveContents skips clear; 3/3 PASS |
+| Task 176 | `Texture::ValidateFormat` throws `std::runtime_error` for non-Color formats; called in Texture2D/3D/Cube ctors |
+| Task 175 | DxtUtil golden decode test found pre-existing, 6/6 PASS |
+| Task 174 | `docs/surface-format-support.md` — EasyGL/Vulkan/Bgfx/SDL format support matrix |
+| Task 173 | Texture3D z-slice round-trip; Color→uint8\_t bug fixed; ~Texture3D() moved to .cpp |
+| Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
-**Files added:**
-- `examples/easygl_texture3d_slices_test.cpp` (Task 173)
-- `examples/easygl_texturecube_faces_test.cpp` (Task 172)
-- `examples/easygl_texture2d_mip_test.cpp` (Task 171)
-- `examples/easygl_texture2d_partial_rect_test.cpp` (Tasks 169+170)
-- `examples/easygl_transform_matrix_test.cpp` (Task 168)
-- `examples/easygl_sprite_effects_test.cpp` (Task 167)
-- `docs/coverage.md` — XNA 4.0 coverage report (2026-06-21)
+**Files added (recent):**
+- `examples/easygl_rt_roundtrip_test.cpp` (Task 180)
+- `examples/bgfx_render_target_usage_test.cpp` (Task 179)
+- `examples/easygl_render_target_usage_test.cpp` (Task 177)
+- `docs/surface-format-support.md` (Task 174)
 
-**Files modified:**
-- `src/Microsoft/Xna/Framework/Graphics/Texture3D.cpp` — Color→uint8_t fix; ~Texture3D() moved here
-- `include/Microsoft/Xna/Framework/Graphics/Texture3D.hpp` — ~Texture3D() now declared only (not defaulted inline)
-- `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp` — Color→uint8_t conversion fix in SetData/GetData
-- `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp` — getMipBuffer fix, guard fixes
-- `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp` — stub removals, guard fixes
-- `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` — matrix order fix
-- `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` — 2 tests updated/added
-- `CMakeLists.txt` — 5 new integration test targets
+**Files modified (recent):**
+- `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` — `ClearColorAndDepth` implemented; `BindAsRenderTarget` for PreserveContents
+- `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp` — `rtRenderPassLoad_` added
+- `src/Microsoft/Xna/Framework/Graphics/RenderTarget2D.cpp` — passes `preserveContents` to backend
+- `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp` — `CreateRenderTarget2D` gains `bool preserveContents`
+- `CMakeLists.txt` — 3 new integration test targets (EasyGL RT usage, EasyGL RT roundtrip, Bgfx RT usage)
 
 ---
 
 ## 4. Current blocker / main problem
 
-No active blocker. All builds clean; 26/26 EasyGL, 9/9 Vulkan integration tests pass.
-Next task: Task 181 (RenderTargetBinding mip level and cube face — see GRAPHICS_TASKS.md).
+No active blocker. All three backends build clean.
+- 26/26 EasyGL integration tests pass.
+- 9/9 Vulkan integration tests pass.
+- Bgfx smoke tests pass.
+
+Next task: Task 181 (`RenderTargetBinding` with mip level and cube face).
 
 ---
 
@@ -111,15 +108,17 @@ Next task: Task 181 (RenderTargetBinding mip level and cube face — see GRAPHIC
 | Status | Item |
 |---|---|
 | **confirmed bug (fixed)** | `getMipBuffer(0)` left empty after `MaybeFreeCpuPixels`; caused UB on partial-rect SetData |
-| **confirmed bug (fixed)** | SetData/GetData guard `startIndex + elementCount > w * h` rejected valid non-zero startIndex |
+| **confirmed bug (fixed)** | SetData/GetData guard `startIndex + elementCount > w*h` rejected valid non-zero startIndex |
 | **confirmed bug (fixed)** | EasyGL FlushBatch: `orthoM * transform_` applied projection before user transform |
-| **confirmed bug (fixed)** | `TextureCube::SetData/GetData` passed raw `Color*` (sizeof=24, vtable at offset 0) to GL; fixed via uint8_t conversion |
-| **confirmed working** | `UpdatePixelsLevel` (mip > 0 upload) — covered by Task 171 mip round-trip |
-| **confirmed working** | `TextureCube::GetData` round-trip — covered by Task 172 |
-| **confirmed working** | `Texture3D::GetData` round-trip — covered by Task 173 |
+| **confirmed bug (fixed)** | `TextureCube/Texture3D::SetData/GetData` passed raw `Color*` (vtable at offset 0) to GL |
+| **confirmed bug (fixed)** | `BgfxGraphicsBackend::ClearColorAndDepth` threw unconditionally; now delegates to `Clear` |
+| **confirmed working** | `UpdatePixelsLevel` (mip > 0 upload) — Task 171 mip round-trip |
+| **confirmed working** | `TextureCube::GetData` round-trip — Task 172 |
+| **confirmed working** | `Texture3D::GetData` round-trip — Task 173 |
+| **confirmed working** | `RenderTargetUsage` DiscardContents/PreserveContents — EasyGL (177), Vulkan (178), Bgfx (179) |
 | **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
-| **confirmed** | `Color` has vtable pointer — never cast `Color*` to `uint8_t*` for pixel I/O |
-| **unverified** | Bgfx `GetBackBufferData` via `requestScreenShot` — not integration-tested |
+| **known limit** | Bgfx `SetDepthTestEnabled` / `SetBlendEnabled` / `SetDepthWriteEnabled` still throw |
+| **known limit** | Bgfx `GetBackBufferData` via `requestScreenShot` — not integration-tested |
 | **incomplete** | sRGB SurfaceFormats silently map to linear GL/Vulkan internal formats |
 | **0 %** | Framework.Net (NetworkSession, PacketReader/Writer) — no headers, no stubs |
 | **0 %** | XNA binary `.xnb` content pipeline |
@@ -145,6 +144,17 @@ metagl          ← raw GL function loader + typed enum wrappers
 easygl          ← GL resource wrappers (Device, Texture, Framebuffer, Sampler, …)
 ```
 
+### RenderTarget lifecycle (EasyGL)
+
+`SetRenderTarget(rt)` → backend binds the RT's FBO; sets `currentRtHeight_` to RT height.
+`SetRenderTarget(nullptr)` → backend binds FBO 0 (backbuffer); `currentRtHeight_` = 0.
+`GetBackBufferData` reads from whatever FBO is currently bound:
+- `currentRtHeight_ != 0` → reads from RT attachment (direct FBO readback).
+- `currentRtHeight_ == 0` → sets `GL_BACK` as read buffer, reads from FBO 0.
+
+`DiscardContents` → `GraphicsDevice::SetRenderTarget` calls `Clear(0,0,0,255)` after binding.
+`PreserveContents` → no auto-clear; Vulkan uses `VK_ATTACHMENT_LOAD_OP_LOAD`.
+
 ### Texture CPU-side shadow copy invariant
 
 `Texture2D` maintains a CPU-side shadow in `cpuPixels_` (shared_ptr).
@@ -152,14 +162,13 @@ After any constructor or 2-arg `SetData`, `MaybeFreeCpuPixels()` is called:
 - if `contextRecoveryEnabled_ == false` (default) → `cpuPixels_` is freed.
 - The 5-arg `SetData(level, rect, data, start, count)` does NOT call
   `MaybeFreeCpuPixels`, so the shadow survives across chained calls.
-- `getMipBuffer(0)` now auto-sizes to `mipDim(width,0) * mipDim(height,0) * 4`
-  when the buffer is empty, so a re-created buffer is always safe to write into.
+- `getMipBuffer(0)` auto-sizes to `mipDim(w,0) * mipDim(h,0) * 4` when empty.
 
 ### EasyGL sprite batch matrix convention
 
 `FlushBatch` computes: `combined = transform_ * orthoM` (XNA row-major order).
 `transform_` is the user matrix from `SpriteBatch::Begin`; `orthoM` is the
-screen-space orthographic projection. Applying `orthoM` first was a bug (fixed).
+screen-space orthographic projection.
 
 ### Vulkan pipeline key encoding
 
@@ -167,6 +176,8 @@ All 3D pipeline creation functions encode `drawMsaa` as the last bool argument.
 The MSAA render pass (`renderPassMsaa_`) uses 3 attachments and 3 clear values;
 the non-MSAA path uses 2. The active render pass is selected per-frame in
 `RecordCommandBuffer`.
+RT render pass `rtRenderPass_` uses `LOAD_OP_CLEAR` (DiscardContents);
+`rtRenderPassLoad_` uses `LOAD_OP_LOAD` (PreserveContents).
 
 ### Critical invariants
 
@@ -194,13 +205,13 @@ cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-vulkan -j1
 DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-vulkan -R Vulkan --output-on-failure
 
-# Bgfx — build + smoke test
-cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX
-cmake --build cmake-build-bgfx --target cna_demo_2d
-cd cmake-build-bgfx && DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_demo_2d --smoke 3
+# Bgfx — build + smoke tests
+cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-bgfx
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-bgfx -R Bgfx --output-on-failure
 
 # Run one specific integration test
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cmake-build-debug/cna_test_easygl_texture2d_partial_rect
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cmake-build-debug/cna_test_easygl_rt_roundtrip
 
 # Bgfx — recompile 3D shaders (run from repo root)
 python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
@@ -212,13 +223,67 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 
 ## 8. Next smallest tasks
 
-All following the same pattern: EasyGL integration test in `examples/`, registered
-in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
+All following the same pattern: EasyGL integration test or unit test in `tests/` or
+`examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 181 — `RenderTargetBinding` with mip level and cube face
-**Goal**: Verify `SetRenderTargets({RenderTargetBinding(rt, 0), RenderTargetBinding(rt, 1)})` correctly targets distinct mip levels.
+### Task 181 — `RenderTargetBinding` constructor and field accessors (unit test)
 
-**Files**: add unit test; check FNA `RenderTargetBinding` ctor.
+**Goal**: Verify the `RenderTargetBinding` constructors set `RenderTarget`, `ArraySlice`,
+and `CubeMapFace` correctly; and that the null constructor returns expected defaults.
+Check FNA `RenderTargetBinding.cs` for exact field names and default values.
+
+**Files**:
+- `include/Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp` (read only)
+- `tests/Microsoft/Xna/Framework/Graphics/RenderTargetBindingTests.cpp` (create or extend)
+- `CMakeLists.txt` (register test if new file)
+
+**Verification**:
+```bash
+cmake --build cmake-build-debug --target CNA
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug -R RenderTargetBinding --output-on-failure
+```
+
+---
+
+### Task 182 — `PresentationParameters` round-trip (unit test)
+
+**Goal**: After `GraphicsDeviceManager::ApplyChanges`, verify that
+`GraphicsDevice::getPresentationParametersProperty()` reflects the requested
+`BackBufferWidth`, `BackBufferHeight`, `DepthStencilFormat`, `PresentInterval`,
+`MultiSampleCount`.
+
+**Files**:
+- `tests/Microsoft/Xna/Framework/Graphics/PresentationParametersTests.cpp` (create)
+- `CMakeLists.txt`
+
+**Verification**: `ctest --test-dir cmake-build-debug -R PresentationParameters`
+
+---
+
+### Task 183 — `GraphicsDevice` device-reset events (unit test)
+
+**Goal**: Verify `DeviceResetting` and `DeviceReset` events fire when the swapchain
+is recreated; `ResourceDestroyed` fires on explicit resource dispose.
+Check FNA `GraphicsDevice.cs` for event semantics.
+
+**Files**:
+- `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`
+- `tests/Microsoft/Xna/Framework/Graphics/GraphicsDeviceEventsTests.cpp` (create)
+
+**Verification**: `ctest --test-dir cmake-build-debug -R GraphicsDeviceEvents`
+
+---
+
+### Task 184 — `Effect::Clone()` (unit test)
+
+**Goal**: Clone must produce an independent copy; modifying a parameter on the clone
+must not affect the original. Check FNA `Effect.cs Clone()`.
+
+**Files**:
+- `src/Microsoft/Xna/Framework/Graphics/Effect.cpp`
+- `tests/Microsoft/Xna/Framework/Graphics/EffectTests.cpp`
+
+**Verification**: `ctest --test-dir cmake-build-debug -R EffectClone`
 
 ---
 
@@ -229,9 +294,11 @@ in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 - **Do not refactor IGraphicsBackend** — changing the interface breaks all 4 backends at once.
 - **Do not change the `Color` memory layout** — packed ABGR order is relied on by all backends.
 - **Do not convert integration tests to unit tests without a mock device** — there is no
-  fake GraphicsDevice; integration tests using `Game` + EasyGL are the established pattern.
-- **Do not start Tasks 201–500** (deep conformance, golden-image, FNA harness) until
+  fake `GraphicsDevice`; integration tests using `Game` + EasyGL are the established pattern.
+- **Do not implement Bgfx 3D state** (`SetDepthTestEnabled`, `SetBlendEnabled`, etc.) until
   Phase 22 (Tasks 174–183) is fully complete.
+- **Do not start Tasks 201–500** (deep conformance, golden-image, FNA harness) until
+  Phase 22 and Phase 23 (effect conformance) are done.
 
 ---
 
@@ -241,8 +308,12 @@ in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–173 complete. Next unstarted: Task 174 (SurfaceFormat backend
-mapping table). Read each backend's CreateTexture / format-mapping code; write
-docs/surface-format-support.md documenting EasyGL/Vulkan/Bgfx support per format.
+Current status: Tasks 1–180 complete. Next unstarted: Task 181
+(RenderTargetBinding constructor and field accessor unit tests).
+
+Read include/Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp and
+the FNA reference at /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/RenderTargetBinding.cs.
+Write or extend tests/Microsoft/Xna/Framework/Graphics/RenderTargetBindingTests.cpp,
+register it in CMakeLists.txt if needed, build and run the tests.
 Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```
