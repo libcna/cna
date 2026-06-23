@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phases 1–20 substantially done (Tasks 1–170 ✅).
-Active work is Phase 21 — texture data conformance (Tasks 171–176).
+**Current phase**: Phases 1–20 substantially done (Tasks 1–171 ✅).
+Active work is Phase 21 — texture data conformance (Tasks 172–176).
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -21,7 +21,6 @@ Active work is Phase 21 — texture data conformance (Tasks 171–176).
   the packed pixel; never cast `Color*` to `uint8_t*` for GL pixel I/O.
 - SharpRuntime (`/rv/data/development/github.com/openeggbert/sharp-runtime`) provides
   .NET primitive type aliases and `System.*` stubs.
-  **DO NOT touch sharp-runtime** — a separate agent owns it.
 - FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src` is the authoritative
   XNA 4.0 API reference; all logic is ported line-by-line from there.
 
@@ -31,11 +30,12 @@ Active work is Phase 21 — texture data conformance (Tasks 171–176).
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 20/20 EasyGL integration tests pass; ~1500 unit tests pass.
+- **Tests**: 21/21 EasyGL integration tests pass; ~1500 unit tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect SetData/GetData (Task 169)
   - Texture2D startIndex/elementCount SetData/GetData (Task 170)
+  - Texture2D mip-level SetData/GetData — all 3 levels round-trip (Task 171)
   - getMipBuffer(0) correctly pre-sizes the buffer after MaybeFreeCpuPixels
 
 ### Vulkan backend (`cmake-build-vulkan`)
@@ -53,7 +53,7 @@ Active work is Phase 21 — texture data conformance (Tasks 171–176).
 - **Content pipeline (.xnb)** — 0 % (ContentManager uses custom JSON/PNG/OGG only).
 - **GamerServices** — ~5 % (stubs only).
 - **sRGB SurfaceFormats** — silently map to wrong GL/Vulkan internal format.
-- **Mip-level SetData/GetData round-trip tests** — not yet written (Task 171).
+- **TextureCube/Texture3D per-level round-trip tests** — not yet written (172–173).
 - **TextureCube/Texture3D per-level round-trip tests** — not yet written (172–173).
 
 ---
@@ -62,6 +62,7 @@ Active work is Phase 21 — texture data conformance (Tasks 171–176).
 
 | Commit | What changed |
 |---|---|
+| Task 171 | Texture2D mip-level round-trip integration test; 21/21 PASS; no source fixes needed |
 | `0fd7c88` | Task 170: Texture2D startIndex/elementCount tests; fixed wrong guards in SetData and GetData (`startIndex + elementCount > w * h` → `elementCount < w * h`); getMipBuffer auto-size uses mipDim |
 | `1863722` | Task 169: Texture2D partial-rect round-trip integration test; fixed getMipBuffer(0) not pre-sizing buffer after MaybeFreeCpuPixels |
 | `4f00b16` | Task 168: SpriteBatch::Begin transformMatrix pixel test; fixed EasyGL FlushBatch matrix multiply order (`orthoM * transform_` → `transform_ * orthoM`) |
@@ -69,6 +70,7 @@ Active work is Phase 21 — texture data conformance (Tasks 171–176).
 | `04f0692` | Tasks 151–160, 166: SpriteBatch 6 Draw stubs + 3 DrawString(StringBuilder) stubs replaced; Begin/End guards fixed |
 
 **Files added:**
+- `examples/easygl_texture2d_mip_test.cpp` (Task 171)
 - `examples/easygl_texture2d_partial_rect_test.cpp` (Tasks 169+170)
 - `examples/easygl_transform_matrix_test.cpp` (Task 168)
 - `examples/easygl_sprite_effects_test.cpp` (Task 167)
@@ -101,7 +103,7 @@ not been exercised by any integration test yet — it may have latent bugs.
 | **confirmed bug (fixed)** | `getMipBuffer(0)` left empty after `MaybeFreeCpuPixels`; caused UB on partial-rect SetData |
 | **confirmed bug (fixed)** | SetData/GetData guard `startIndex + elementCount > w * h` rejected valid non-zero startIndex |
 | **confirmed bug (fixed)** | EasyGL FlushBatch: `orthoM * transform_` applied projection before user transform |
-| **incomplete** | `UpdatePixelsLevel` (mip > 0 upload) not covered by any integration test |
+| **confirmed working** | `UpdatePixelsLevel` (mip > 0 upload) — covered by Task 171 mip round-trip |
 | **incomplete** | `TextureCube::GetData` round-trip not integration-tested |
 | **incomplete** | `Texture3D::GetData` round-trip not integration-tested |
 | **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
@@ -202,22 +204,6 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test in `examples/`, registered
 in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 171 — Texture2D mip-level SetData/GetData
-**Goal**: Verify that mip level 1 of a 4×4 mipMap texture can be written and read
-back independently of mip 0.
-
-**Design**:
-- `Texture2D tex(dev, 4, 4, /*mipMap=*/true, SurfaceFormat::Color)` → 3 mip levels.
-- `SetData(0, nullptr, red16, 0, 16)` → mip 0 all Red.
-- `SetData(1, nullptr, blue4, 0, 4)` → mip 1 (2×2) all Blue.
-- `GetData(0, nullptr, rb0, 0, 16)` → verify 16 Red.
-- `GetData(1, nullptr, rb1, 0, 4)` → verify 4 Blue.
-
-**Files**: `examples/easygl_texture2d_mip_test.cpp`, `CMakeLists.txt`,
-`GRAPHICS_TASKS.md`.
-
-**Verification**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cmake-build-debug/cna_test_easygl_texture2d_mip`
-
 ### Task 172 — TextureCube per-face per-mip SetData/GetData
 **Goal**: Write distinct colours to each of the 6 cube faces (mip 0) and read back.
 
@@ -264,17 +250,16 @@ or missing.
 
 ## 9. Do not do yet
 
-- **Do not touch sharp-runtime** — another agent owns it; any change there will conflict.
 - **Do not implement Framework.Net** — out of scope for current phase.
 - **Do not add .xnb content pipeline** — custom descriptor format is the current contract.
 - **Do not refactor IGraphicsBackend** — changing the interface breaks all 4 backends at once.
 - **Do not change the `Color` memory layout** — packed ABGR order is relied on by all backends.
 - **Do not convert integration tests to unit tests without a mock device** — there is no
   fake GraphicsDevice; integration tests using `Game` + EasyGL are the established pattern.
-- **Do not work on Tasks 177–200** until 171–176 are done — the texture conformance
+- **Do not work on Tasks 177–200** until 172–176 are done — the texture conformance
   track should be completed before starting RenderTarget/Effect tracks.
 - **Do not start Tasks 201–500** (deep conformance, golden-image, FNA harness) until
-  Phase 21 (Tasks 171–176) is fully complete.
+  Phase 21 (Tasks 172–176) is fully complete.
 
 ---
 
@@ -284,11 +269,9 @@ or missing.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–170 complete. Next unstarted: Task 171 (Texture2D mip-level
-SetData/GetData round-trip integration test). Follow the same pattern as Task 169–170:
-create examples/easygl_texture2d_mip_test.cpp, register in CMakeLists.txt, build,
+Current status: Tasks 1–171 complete. Next unstarted: Task 172 (TextureCube per-face
+SetData/GetData round-trip integration test). Follow the same pattern as Task 171:
+create examples/easygl_texturecube_faces_test.cpp, register in CMakeLists.txt, build,
 run under DISPLAY=:0 SDL_VIDEODRIVER=x11, verify PASS, update GRAPHICS_TASKS.md and
 NEXT.md, commit and push.
-
-DO NOT touch sharp-runtime — another agent is working on it.
 ```

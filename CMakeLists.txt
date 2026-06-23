@@ -605,6 +605,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 171: Texture2D mip-level SetData/GetData round-trip
+        cna_easygl_test(cna_test_easygl_texture2d_mip
+                        examples/easygl_texture2d_mip_test.cpp)
+        add_test(NAME EasyGL_Texture2D_Mip_RoundTrip
+                 COMMAND cna_test_easygl_texture2d_mip)
+        set_tests_properties(EasyGL_Texture2D_Mip_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
