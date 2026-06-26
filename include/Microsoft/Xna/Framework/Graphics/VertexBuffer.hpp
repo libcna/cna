@@ -53,6 +53,10 @@ namespace Microsoft::Xna::Framework::Graphics
         VertexBuffer(const VertexBuffer&) = delete;
         /** @brief Copy-assignment is not allowed. */
         VertexBuffer& operator=(const VertexBuffer&) = delete;
+        /** @brief Move-constructs a VertexBuffer, transferring GPU handle ownership. */
+        VertexBuffer(VertexBuffer&&) noexcept;
+        /** @brief Move-assigns a VertexBuffer, transferring GPU handle ownership. */
+        VertexBuffer& operator=(VertexBuffer&&) noexcept;
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;

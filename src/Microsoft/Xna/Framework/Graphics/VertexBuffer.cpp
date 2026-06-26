@@ -25,6 +25,8 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     VertexBuffer::~VertexBuffer() = default;
+    VertexBuffer::VertexBuffer(VertexBuffer&&) noexcept = default;
+    VertexBuffer& VertexBuffer::operator=(VertexBuffer&&) noexcept = default;
 
     void VertexBuffer::Dispose(bool disposing)
     {

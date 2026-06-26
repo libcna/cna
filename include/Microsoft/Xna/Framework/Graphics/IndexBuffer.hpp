@@ -46,6 +46,10 @@ namespace Microsoft::Xna::Framework::Graphics
         IndexBuffer(const IndexBuffer&) = delete;
         /** @brief Copy-assignment is not allowed. */
         IndexBuffer& operator=(const IndexBuffer&) = delete;
+        /** @brief Move-constructs an IndexBuffer, transferring GPU handle ownership. */
+        IndexBuffer(IndexBuffer&&) noexcept;
+        /** @brief Move-assigns an IndexBuffer, transferring GPU handle ownership. */
+        IndexBuffer& operator=(IndexBuffer&&) noexcept;
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;

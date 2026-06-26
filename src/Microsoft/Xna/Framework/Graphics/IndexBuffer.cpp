@@ -25,6 +25,8 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     IndexBuffer::~IndexBuffer() = default;
+    IndexBuffer::IndexBuffer(IndexBuffer&&) noexcept = default;
+    IndexBuffer& IndexBuffer::operator=(IndexBuffer&&) noexcept = default;
 
     void IndexBuffer::Dispose(bool disposing)
     {
