@@ -330,6 +330,7 @@ namespace CNA::Internal::Backends::Bgfx
         // 3D pipeline — vertex/index buffers implemented; draw calls need colored3DProgram_.
         // @note SetDepth* / SetBlend still throw (not wired to state flags yet).
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
+        void ClearDepth(float depth) override;
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;

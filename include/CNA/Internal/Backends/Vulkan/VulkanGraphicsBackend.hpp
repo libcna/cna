@@ -508,6 +508,7 @@ namespace CNA::Internal::Backends::Vulkan
                                        PrimitiveType, int, int, const GpuDrawParams&) override;
 
         void ClearColorAndDepth(float, float, float, float, float) override;
+        void ClearDepth(float) override;
         void SetDepthTestEnabled(bool)  override;
         void SetBlendEnabled(bool)      override;
         void SetDepthWriteEnabled(bool) override;

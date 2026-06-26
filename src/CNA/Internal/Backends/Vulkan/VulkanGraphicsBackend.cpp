@@ -4392,6 +4392,8 @@ namespace CNA::Internal::Backends::Vulkan
         // TODO: depth buffer support
     }
 
+    void VulkanGraphicsBackend::ClearDepth(float /*depth*/) { /* Vulkan depth-only clear not yet implemented */ }
+
     void VulkanGraphicsBackend::SetDepthTestEnabled(bool v)  { depthTestEnabled_  = v; }
     void VulkanGraphicsBackend::SetBlendEnabled(bool v)      { blendEnabled_      = v; }
     void VulkanGraphicsBackend::SetDepthWriteEnabled(bool v) { depthWriteEnabled_ = v; }

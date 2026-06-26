@@ -2443,6 +2443,14 @@ void main()
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
     }
 
+    void EasyGLGraphicsBackend::ClearDepth(float depth)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_clear_depth(depth);
+        device.set_depth_mask(true);
+        device.clear(::easygl::ClearFlags::Depth);
+    }
+
     void EasyGLGraphicsBackend::SetDepthTestEnabled(bool enabled)
     {
         device.set_depth_test_enabled(enabled);

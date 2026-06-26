@@ -1210,6 +1210,8 @@ namespace CNA::Internal::Backends::Bgfx
         Clear(r, g, b, a);
     }
 
+    void BgfxGraphicsBackend::ClearDepth(float /*depth*/) { /* Bgfx depth-only clear not yet implemented */ }
+
     void BgfxGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3DState(); }
     void BgfxGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3DState(); }
     void BgfxGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3DState(); }

@@ -423,6 +423,7 @@ namespace CNA::Internal::Backends
          * @param depth      Depth value to clear with (0..1).
          */
         virtual void ClearColorAndDepth(float r, float g, float b, float a, float depth) = 0;
+        virtual void ClearDepth(float depth) = 0;
 
         /**
          * @brief Enables or disables depth testing.

@@ -223,6 +223,14 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
+        if (hasClearFlag(options, ClearOptions::DepthBuffer))
+        {
+            if (depth < 0.0f || depth > 1.0f)
+                throw System::ArgumentOutOfRangeException(
+                    "depth", std::to_string(depth),
+                    "'depth' must be between 0.0 and 1.0.");
+        }
+
         const float r = static_cast<float>(color.getRProperty()) / 255.0f;
         const float g = static_cast<float>(color.getGProperty()) / 255.0f;
         const float b = static_cast<float>(color.getBProperty()) / 255.0f;
@@ -241,9 +249,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         else if (clearDepth)
         {
-            // Backend has no depth-only clear hook yet. Use existing color+depth
-            // path while preserving the current color argument.
-            backend_->ClearColorAndDepth(r, g, b, a, depth);
+            backend_->ClearDepth(depth);
         }
     }
 
