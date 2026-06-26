@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — stock effects backend parity.
-Tasks 1–192 done. Next unstarted: Task 193.
+Tasks 1–193 done. Next unstarted: Task 194.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -30,7 +30,7 @@ Tasks 1–192 done. Next unstarted: Task 193.
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 33/33 EasyGL integration tests pass; ~1540 total tests pass.
+- **Tests**: 34/34 EasyGL integration tests pass; ~1540 total tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect / startIndex / mip-level SetData/GetData (Tasks 169–171)
@@ -38,6 +38,7 @@ Tasks 1–192 done. Next unstarted: Task 193.
   - Texture3D z-slice SetData/GetData round-trip (Task 173)
   - RenderTargetUsage DiscardContents/PreserveContents (Task 177)
   - Backbuffer → RT → backbuffer → RT → backbuffer round-trip (Task 180)
+  - SkinnedEffect bone transforms: identity / translate / 2-bone blend (Task 193)
 
 ### Vulkan backend (`cmake-build-vulkan`)
 - **Builds**: clean.
@@ -67,6 +68,7 @@ Tasks 1–192 done. Next unstarted: Task 193.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 193 | `SkinnedEffect` bone count tests (EasyGL): `easygl_skinned_effect_bones_test.cpp`; 3 sub-tests: (a) 1 bone identity, (b) 1 bone translate(+0.5), (c) 2-bone 50/50 blend; 8/8 pixel checks PASS; 34/34 EasyGL |
 | Task 192 | `EnvironmentMapEffect` parameter accuracy (EasyGL): extended `easygl_env_map_test.cpp` with 4 sub-tests: EmissiveColor=red→red, EmissiveColor=green→green, EnvMapSpecular=blue→blue, EnvMapAmount=1 blue cube→blue; 4/4 PASS; 33/33 EasyGL |
 | Task 191 | `DualTextureEffect` pixel tests (EasyGL): 4 sub-tests prove both texture slots and diffuse multiplier work; decisive test yellow×cyan→green; 4/4 PASS; 33/33 EasyGL |
 | Task 190 | `AlphaTestEffect` all 8 `CompareFunction` modes (EasyGL): pixel.a=128/255, ref=128; drawn: Always/LessEqual/Equal/GreaterEqual; discarded: Never/Less/NotEqual/Greater; 8/8 PASS; 32/32 EasyGL |
@@ -89,10 +91,8 @@ Tasks 1–192 done. Next unstarted: Task 193.
 | Task 173 | Texture3D z-slice round-trip; Color→uint8\_t bug fixed; ~Texture3D() moved to .cpp |
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
-**Files modified (recent, not in list above):**
-- `examples/easygl_env_map_test.cpp` — extended with 3 new sub-tests (Task 192)
-
 **Files added (recent):**
+- `examples/easygl_skinned_effect_bones_test.cpp` (Task 193)
 - `examples/easygl_dualtexture_test.cpp` (Task 191)
 - `examples/easygl_alphatest_modes_test.cpp` (Task 190)
 - `examples/easygl_basiceffect_combinations_test.cpp` (Task 189)
@@ -117,11 +117,11 @@ Tasks 1–192 done. Next unstarted: Task 193.
 ## 4. Current blocker / main problem
 
 No active blocker. All three backends build clean.
-- 28/28 EasyGL integration tests pass.
+- 34/34 EasyGL integration tests pass.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 189 (`BasicEffect` pixel integration tests).
+Next task: Task 194 (`BasicEffect::EnableDefaultLighting()` unit test).
 
 ---
 
@@ -248,21 +248,19 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 193 — `SkinnedEffect` bone count tests
+### Task 194 — `BasicEffect::EnableDefaultLighting()` unit test
 
-**Goal**: EasyGL integration test for `SkinnedEffect` bone transforms:
-(a) 1 bone identity → quad stays in place → red pixel at expected position,
-(b) 1 bone translation → quad shifted → pixel at new position,
-(c) 2-bone 50/50 blend → midpoint position.
+**Goal**: No backend needed; pure C++ unit test. Verify that after calling
+`EnableDefaultLighting()` on a `BasicEffect`, the three `DirectionalLight`
+values match the FNA-defined constants from `BasicEffect.cs`.
 
 **Files**:
-- `examples/easygl_skinned_effect_bones_test.cpp` (create)
-- `CMakeLists.txt`
+- `tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp` (create or extend)
+- `CMakeLists.txt` (if new file)
 
-**Pattern**: `examples/easygl_basiceffect_combinations_test.cpp` — clear, draw, readback.
-Reference: `include/Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp`.
-
-**Verification**: `ctest --test-dir cmake-build-debug -R EasyGL_SkinnedBones`
+**Pattern**: Instantiate `BasicEffect`, call `EnableDefaultLighting()`, assert
+`DirectionalLight0.getDiffuseColorProperty()` etc. match FNA constants.
+Reference: `BasicEffect.cs` in the FNA source tree.
 
 ---
 
@@ -287,13 +285,12 @@ Reference: `include/Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp`.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–192 complete. Next unstarted: Task 193
-(SkinnedEffect bone count pixel integration test).
+Current status: Tasks 1–193 complete. Next unstarted: Task 194
+(BasicEffect::EnableDefaultLighting() unit test — no backend needed).
 
-Read include/Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp and the EasyGL
-skinned shader (grep for prog_skinned_ in EasyGLGraphicsBackend.cpp) to understand
-bone matrix layout and vertex format (VertexPositionNormalTextureBoneWeights or similar).
-Create examples/easygl_skinned_effect_bones_test.cpp with (a) identity bone,
-(b) translation bone, (c) 2-bone blend. Register in CMakeLists.txt, build and run.
-Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
+Read the FNA BasicEffect.cs (grep for EnableDefaultLighting in
+/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/) to find
+the exact constant values for the three directional lights. Create or extend
+tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp with tests asserting
+those constants. Build and run. Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```
