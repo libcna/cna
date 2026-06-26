@@ -827,6 +827,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 60
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_fullscreen_field
+                        examples/easygl_fullscreen_field_test.cpp)
+        add_test(NAME EasyGL_FullScreenField
+                 COMMAND cna_test_easygl_fullscreen_field)
+        set_tests_properties(EasyGL_FullScreenField PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
         add_test(NAME EasyGL_EffectClone

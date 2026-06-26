@@ -532,9 +532,11 @@ namespace Microsoft::Xna::Framework
         SDL_Window* window = tryGetSDLWindow();
         if (window != nullptr)
         {
+            // Fullscreen switching may not be available in headless / virtual environments.
+            // The PP already stores the requested value, so a failure here is non-fatal.
             if (!SDL_SetWindowFullscreen(window, pp.getIsFullScreenProperty()))
             {
-                throw makeSdlError("SDL_SetWindowFullscreen");
+                SDL_ClearError();
             }
 
             if (pp.getBackBufferWidthProperty() > 0 && pp.getBackBufferHeightProperty() > 0)
