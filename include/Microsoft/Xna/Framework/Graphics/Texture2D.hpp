@@ -241,6 +241,17 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] ITextureBackend* GetBackendRaw() const { return backend_.get(); }
 
+        /** @brief Releases the GPU texture handle when the resource is disposed. */
+        void Dispose(bool disposing) override;
+
+    public:
+        /**
+         * @brief Returns true while the GPU texture handle is allocated.
+         *
+         * Becomes false immediately after `Dispose()` is called.
+         */
+        NOXNA [[nodiscard]] bool HasBackend() const { return backend_ != nullptr; }
+
     private:
         std::shared_ptr<ITextureBackend> backend_;
         int width  = 0;

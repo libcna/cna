@@ -105,6 +105,17 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA [[nodiscard]] CNA::Internal::Backends::IVertexBufferBackend& GetBackend() const { return *backend_; }
 
+        /**
+         * @brief Returns true while the GPU buffer handle is allocated.
+         *
+         * Becomes false immediately after `Dispose()` is called.
+         */
+        NOXNA [[nodiscard]] bool HasBackend() const { return backend_ != nullptr; }
+
+    protected:
+        /** @brief Releases the GPU buffer handle when the resource is disposed. */
+        void Dispose(bool disposing) override;
+
     private:
         std::unique_ptr<CNA::Internal::Backends::IVertexBufferBackend> backend_;
     };

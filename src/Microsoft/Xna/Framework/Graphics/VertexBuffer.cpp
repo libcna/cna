@@ -26,6 +26,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     VertexBuffer::~VertexBuffer() = default;
 
+    void VertexBuffer::Dispose(bool disposing)
+    {
+        backend_.reset();
+        GraphicsResource::Dispose(disposing);
+    }
+
     GetTypeNameCPP(VertexBuffer, "Microsoft.Xna.Framework.Graphics.VertexBuffer")
 
     void VertexBuffer::SetData(const VertexPositionColor* vertices, int count)

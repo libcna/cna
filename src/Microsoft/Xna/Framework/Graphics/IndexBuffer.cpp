@@ -26,6 +26,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     IndexBuffer::~IndexBuffer() = default;
 
+    void IndexBuffer::Dispose(bool disposing)
+    {
+        backend_.reset();
+        GraphicsResource::Dispose(disposing);
+    }
+
     void IndexBuffer::SetData(const std::uint16_t* indices, int count)
     {
         backend_->SetData16(indices, count);

@@ -149,6 +149,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D::~Texture2D() = default;
 
+    void Texture2D::Dispose(bool disposing)
+    {
+        backend_.reset();
+        Texture::Dispose(disposing);
+    }
+
     // -----------------------------------------------------------------------
     // Properties
     // -----------------------------------------------------------------------

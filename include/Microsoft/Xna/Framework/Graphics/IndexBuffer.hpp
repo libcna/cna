@@ -75,6 +75,17 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA [[nodiscard]] CNA::Internal::Backends::IIndexBufferBackend& GetBackend() const { return *backend_; }
 
+        /**
+         * @brief Returns true while the GPU index buffer handle is allocated.
+         *
+         * Becomes false immediately after `Dispose()` is called.
+         */
+        NOXNA [[nodiscard]] bool HasBackend() const { return backend_ != nullptr; }
+
+    protected:
+        /** @brief Releases the GPU index buffer handle when the resource is disposed. */
+        void Dispose(bool disposing) override;
+
     private:
         std::unique_ptr<CNA::Internal::Backends::IIndexBufferBackend> backend_;
     };
