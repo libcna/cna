@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — GraphicsDevice conformance.
-Tasks 1–207 done. Next unstarted: Task 208.
+Tasks 1–208 done. Next unstarted: Task 209.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–207 done. Next unstarted: Task 208.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 208 | Viewport state: 10/10 EasyGL integration checks — initial VP matches backbuffer, set/get round-trip, VP stable across Clear + DrawUserPrimitives, second explicit set works, minDepth/maxDepth survive (`easygl_viewport_state_test.cpp`) |
 | Task 207 | `GraphicsDevice::Clear` overload tests: depth range guard [0,1] added (throws `ArgumentOutOfRangeException`); `IGraphicsBackend::ClearDepth(float)` added (EasyGL does GL depth-only clear; SDL/Vulkan/Bgfx stub); depth-only branch fixed to not clear color; 9/9 EasyGL checks pass (`easygl_clear_overloads_test.cpp`) |
 | Task 206 | `PointListEXT = 4` added to `PrimitiveType` enum (matches FNA); EasyGL maps to `GL_POINTS`; all `PrimitiveVerts`-equivalent switch tables updated with PointListEXT case and throwing default `InvalidOperationException("Unrecognized primitive type!")`; 6/6 EasyGL integration checks pass (`easygl_primitivetype_validation_test.cpp`) |
 | Task 205 | Draw-call range validation: added `ThrowIfNegativeOrZero`/`ThrowIfNegative` guards for primitiveCount/vertexStart/startIndex/baseVertex/instanceCount to DrawPrimitives, DrawIndexedPrimitives, DrawInstancedPrimitives, and all 4 typed DrawUserPrimitives overloads; 9/9 EasyGL integration checks pass (`easygl_draw_range_validation_test.cpp`) |
@@ -108,6 +109,7 @@ Tasks 1–207 done. Next unstarted: Task 208.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `examples/easygl_viewport_state_test.cpp` (Task 208)
 - `examples/easygl_clear_overloads_test.cpp` (Task 207)
 - `examples/easygl_primitivetype_validation_test.cpp` (Task 206)
 - `examples/easygl_draw_range_validation_test.cpp` (Task 205)
