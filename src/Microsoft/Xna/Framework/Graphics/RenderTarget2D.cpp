@@ -3,6 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -46,5 +47,18 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         static const std::string name = "Microsoft.Xna.Framework.Graphics.RenderTarget2D";
         return name;
+    }
+
+    void RenderTarget2D::Dispose(bool disposing)
+    {
+        if (!isDisposed_ && graphicsDevice_ != nullptr)
+        {
+            for (const auto& binding : graphicsDevice_->GetRenderTargets())
+            {
+                if (binding.getRenderTargetProperty() == this)
+                    throw System::InvalidOperationException("Disposing target that is still bound");
+            }
+        }
+        Texture2D::Dispose(disposing);
     }
 }

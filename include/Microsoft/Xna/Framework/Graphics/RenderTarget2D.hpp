@@ -48,6 +48,16 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destructor. */
         NOXNA ~RenderTarget2D() override = default;
 
+        /**
+         * @brief Throws InvalidOperationException if this render target is still bound to the device.
+         *
+         * Matches FNA's RenderTarget2D.Dispose behaviour: disposing a render target
+         * that is currently set on the device is a programming error.
+         *
+         * @param disposing True when called from Dispose(); false from destructor.
+         */
+        void Dispose(bool disposing) override;
+
         RenderTarget2D(const RenderTarget2D&)            = delete;
         RenderTarget2D& operator=(const RenderTarget2D&) = delete;
         RenderTarget2D(RenderTarget2D&&)                 = default;

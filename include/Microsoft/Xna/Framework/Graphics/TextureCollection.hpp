@@ -30,6 +30,16 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void operator()(int index, Texture* texture);
 
+        /**
+         * @brief Clears any slot that currently holds the given texture pointer.
+         *
+         * Called by Texture::Dispose so that disposed textures are automatically
+         * unbound from all sampler slots — matching FNA's RemoveDisposedTexture behaviour.
+         *
+         * @param tex The texture that is being disposed.
+         */
+        void RemoveDisposedTexture(const Texture* tex);
+
     private:
         std::vector<Texture*> textures_;
     };

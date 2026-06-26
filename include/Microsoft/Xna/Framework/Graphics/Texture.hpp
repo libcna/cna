@@ -31,6 +31,17 @@ namespace Microsoft::Xna::Framework::Graphics
     protected:
         explicit Texture(GraphicsDevice* device = nullptr);
 
+        /**
+         * @brief Removes this texture from all sampler slots before disposal.
+         *
+         * Matches FNA's Texture.Dispose behaviour: the texture is unbound from
+         * GraphicsDevice.Textures and GraphicsDevice.VertexTextures so that
+         * callers never hold a dangling bound texture pointer.
+         *
+         * @param disposing True when called from Dispose(); false from destructor.
+         */
+        void Dispose(bool disposing) override;
+
         SurfaceFormat format_ = SurfaceFormat::Color;
         int levelCount_ = 1;
     };

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include <stdexcept>
 #include <string>
 
@@ -27,5 +28,15 @@ namespace Microsoft::Xna::Framework::Graphics
     int Texture::getLevelCountProperty() const
     {
         return levelCount_;
+    }
+
+    void Texture::Dispose(bool disposing)
+    {
+        if (!isDisposed_ && graphicsDevice_ != nullptr)
+        {
+            graphicsDevice_->getTexturesProperty().RemoveDisposedTexture(this);
+            graphicsDevice_->getVertexTexturesProperty().RemoveDisposedTexture(this);
+        }
+        GraphicsResource::Dispose(disposing);
     }
 }

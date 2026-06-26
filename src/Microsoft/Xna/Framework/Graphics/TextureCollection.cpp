@@ -34,4 +34,13 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         textures_[static_cast<std::size_t>(index)] = texture;
     }
+
+    void TextureCollection::RemoveDisposedTexture(const Texture* tex)
+    {
+        for (auto& slot : textures_)
+        {
+            if (slot == tex)
+                slot = nullptr;
+        }
+    }
 }

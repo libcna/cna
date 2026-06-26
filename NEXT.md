@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — GraphicsDevice conformance.
-Tasks 1–213 done. Next unstarted: Task 214.
+Tasks 1–214 done. Next unstarted: Task 215.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–213 done. Next unstarted: Task 214.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 214 | Bound-resource disposal: `Texture::Dispose` removes self from all texture slots; `RenderTarget2D::Dispose` throws `InvalidOperationException` if still set; VB/IB no-cleanup matches FNA; `TextureCollection::RemoveDisposedTexture` added; 10/10 EasyGL checks pass (`easygl_bound_resource_dispose_test.cpp`) |
 | Task 213 | Double-Dispose safety: 22/22 EasyGL checks pass — 11 types (BlendState, DepthStencilState, RasterizerState, SamplerState, VertexDeclaration, VertexBuffer, IndexBuffer, Texture2D, RenderTarget2D, BasicEffect, SpriteBatch) each called Dispose() twice, no crash, IsDisposed=true confirmed (`easygl_double_dispose_test.cpp`) |
 | Task 212 | `GraphicsResource` inheritance gaps fixed: `BlendState`, `DepthStencilState`, `RasterizerState`, `SamplerState`, `VertexBuffer`, `IndexBuffer`, `SpriteBatch`, `VertexDeclaration` now all inherit `GraphicsResource`; `GetTypeName()` added to each; `SpriteBatch` redundant private `graphicsDevice_` removed (now uses base class member); new `VertexDeclaration.cpp`; 44/45 EasyGL pass (MRT pre-existing) |
 | Task 211 | `GraphicsResource` FNA audit: fixed `Dispose(bool)` ordering (event now fires *before* `isDisposed_ = true`, matching FNA); added `ToString()` override (returns Name if set, else type name); documented 2 remaining gaps — device resource tracking and `GraphicsDeviceResetting()` callback — in `docs/graphicsresource-fna-audit.md` |
