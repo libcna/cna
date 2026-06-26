@@ -291,7 +291,7 @@ All 100 original tasks addressed.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 191 | `DualTextureEffect` pixel tests — Vulkan + EasyGL + Bgfx: two distinct textures, verify per-backend that the output blends both | ⬜ | Extend existing vulkan/easygl tests; add Bgfx variant |
+| 191 | `DualTextureEffect` pixel tests — Vulkan + EasyGL + Bgfx: two distinct textures, verify per-backend that the output blends both | ✅ | `easygl_dualtexture_test.cpp`: 4 sub-tests: (a) white×blue→blue (b) red×white→red (c) white×white×green diffuse→green (d) yellow×cyan→green (proves both textures multiplied simultaneously); 4/4 PASS; 33/33 EasyGL |
 | 192 | `EnvironmentMapEffect` parameter accuracy — EasyGL: verify reflection vector, `EnvironmentMapAmount`, `EnvironmentMapSpecular`, `EmissiveColor` affect output correctly by reading back pixels; compare EasyGL vs. Vulkan | ⬜ | Extend `easygl_env_map_test.cpp` with multiple readback assertions |
 | 193 | `SkinnedEffect` bone count tests: (a) 1 bone identity → no vertex movement, (b) 1 bone translate → all vertices shifted, (c) 4-weight blend with two bones at 50%/50% → midpoint position; assert pixel readback per case | ⬜ | EasyGL; new `examples/easygl_skinned_effect_bones_test.cpp` |
 | 194 | `BasicEffect::EnableDefaultLighting()` — verify that after calling `EnableDefaultLighting()` the three `DirectionalLight` values match the FNA constants in `BasicEffect.cs`; add unit test comparing property values | ⬜ | No backend needed; pure C++ unit test |

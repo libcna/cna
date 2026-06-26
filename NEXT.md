@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phase 23 complete — effect conformance track.
-Tasks 1–190 done. Next unstarted: Task 191.
+**Current phase**: Phase 24 in progress — stock effects backend parity.
+Tasks 1–191 done. Next unstarted: Task 192.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -30,7 +30,7 @@ Tasks 1–190 done. Next unstarted: Task 191.
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 32/32 EasyGL integration tests pass; ~1540 total tests pass.
+- **Tests**: 33/33 EasyGL integration tests pass; ~1540 total tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect / startIndex / mip-level SetData/GetData (Tasks 169–171)
@@ -67,6 +67,7 @@ Tasks 1–190 done. Next unstarted: Task 191.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 191 | `DualTextureEffect` pixel tests (EasyGL): 4 sub-tests prove both texture slots and diffuse multiplier work; decisive test yellow×cyan→green; 4/4 PASS; 33/33 EasyGL |
 | Task 190 | `AlphaTestEffect` all 8 `CompareFunction` modes (EasyGL): pixel.a=128/255, ref=128; drawn: Always/LessEqual/Equal/GreaterEqual; discarded: Never/Less/NotEqual/Greater; 8/8 PASS; 32/32 EasyGL |
 | Task 189 | `BasicEffect` pixel integration tests (EasyGL): 5 sub-tests covering vertex-color-only (stride 16), texture-only (stride 20), diffuse tint (stride 20), color×texture (stride 24), directional lighting (stride 32); fog skipped — no fog in EasyGL GpuDrawParams; 5/5 PASS; 31/31 EasyGL |
 | Task 188 | `EffectAnnotation` + `EffectAnnotationCollection`: added `cachedString` ctor param; 31 tests cover all `GetValue*` types, string round-trip, collection indexing/iteration, technique/pass annotations start empty |
@@ -88,6 +89,7 @@ Tasks 1–190 done. Next unstarted: Task 191.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `examples/easygl_dualtexture_test.cpp` (Task 191)
 - `examples/easygl_alphatest_modes_test.cpp` (Task 190)
 - `examples/easygl_basiceffect_combinations_test.cpp` (Task 189)
 - `examples/easygl_effect_current_technique_test.cpp` (Task 185)
@@ -242,19 +244,20 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 191 — `DualTextureEffect` pixel tests
+### Task 192 — `EnvironmentMapEffect` parameter accuracy
 
-**Goal**: EasyGL integration test using `DualTextureEffect` with two distinct textures
-(e.g. red × blue) to verify the backend correctly samples and blends both texture layers.
+**Goal**: Extend `examples/easygl_env_map_test.cpp` with pixel readback assertions
+verifying that `EnvironmentMapAmount`, `EnvironmentMapSpecular`, and `EmissiveColor`
+each affect the output correctly.
 
 **Files**:
-- `examples/easygl_dualtexture_test.cpp` (create)
-- `CMakeLists.txt`
+- `examples/easygl_env_map_test.cpp` (extend or create new)
+- `CMakeLists.txt` (if new file)
 
 **Pattern**: `examples/easygl_basiceffect_combinations_test.cpp` — clear, draw, readback.
-Reference: `include/Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp`.
+Reference: `include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp`.
 
-**Verification**: `ctest --test-dir cmake-build-debug -R EasyGL_DualTexture`
+**Verification**: `ctest --test-dir cmake-build-debug -R EasyGL_EnvMap`
 
 ---
 
@@ -279,13 +282,13 @@ Reference: `include/Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp`.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–190 complete. Next unstarted: Task 191
-(DualTextureEffect pixel integration test).
+Current status: Tasks 1–191 complete. Next unstarted: Task 192
+(EnvironmentMapEffect parameter accuracy).
 
-Read include/Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp and
+Read include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp and
 examples/easygl_basiceffect_combinations_test.cpp as a pattern reference.
-Create examples/easygl_dualtexture_test.cpp verifying that both textures
-contribute to the output pixel.
-Register in CMakeLists.txt, build and run.
+Check if easygl_env_map_test.cpp exists; extend it or create a new file
+with pixel readback assertions for EnvironmentMapAmount/Specular/EmissiveColor.
+Register in CMakeLists.txt if needed, build and run.
 Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```
