@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — stock effects backend parity.
-Tasks 1–198 done. Next unstarted: Task 199.
+Tasks 1–199 done. Next unstarted: Task 200.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–198 done. Next unstarted: Task 199.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 199 | PackedVector edge-case tests: clamping (all types), HalfTypeHelper ±0/±∞/NaN/denormals, boundary round-trips; 28 new tests; 1666/1668 pass |
 | Task 198 | PackedVector bug fixes: `HalfTypeHelper::Convert(float)` uint32_t exp underflow (0.0f→infinity fixed); `NormalizedByte2/4` and `NormalizedShort2/4` Pack truncation→`std::lroundf`; golden file corrected for -1.0 inputs; 20 new exact-value tests; 1638/1640 pass |
 | Task 197 | PackedVector golden values: computed FNA bit-packing formulas for all 17 compound types (Alpha8→Short4) via Python; saved reference table to `tests/PackedVectorGolden.md` |
 | Task 196 | Backend parity table: added §7 to `docs/xna-4-api-coverage.md` — per-effect EasyGL/Vulkan/Bgfx/SDL status table for all 6 stock effects + ShaderEffect; known-gaps table |
@@ -137,7 +138,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 199 (PackedVector edge-case tests: inputs −1.0, 0.0, 1.0, values slightly outside [0,1] or [−1,1] range, `NaN`, `+Inf`, `−Inf`, half-float special values).
+Next task: Task 200 (update `docs/xna-4-api-coverage.md` — rewrite PackedVector and stock-effects sections).
 
 ---
 
@@ -278,7 +279,7 @@ All following the same pattern: EasyGL integration test or unit test in `tests/`
 
 **20 new tests** covering HalfSingle, HalfVector2, NormalizedByte2/4, NormalizedShort2/4 with exact packed-value assertions from the golden file.
 
-Next: Task 199 — PackedVector edge-case inputs.
+Next: Task 200 — update `docs/xna-4-api-coverage.md`.
 
 ---
 

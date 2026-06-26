@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <cmath>
+#include <limits>
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
@@ -738,4 +740,219 @@ TEST(Short4Test, EqualityFalse)
 {
     Short4 a(1.0f, 0.0f, 0.0f, 0.0f), b(0.0f, 1.0f, 0.0f, 0.0f);
     EXPECT_TRUE(a != b);
+}
+
+// =============================================================================
+// Edge-case tests — Task 199
+// =============================================================================
+
+// ── Clamping: inputs outside valid range are clamped to boundary ──────────────
+
+TEST(Alpha8EdgeTest, ClampAboveOne)
+{
+    Alpha8 a(1.5f);
+    EXPECT_EQ(a.getPackedValueProperty(), 0xFFu);
+}
+
+TEST(Alpha8EdgeTest, ClampBelowZero)
+{
+    Alpha8 a(-0.5f);
+    EXPECT_EQ(a.getPackedValueProperty(), 0x00u);
+}
+
+TEST(Bgr565EdgeTest, ClampAboveOne)
+{
+    Bgr565 v(2.0f, 0.0f, 0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), Bgr565(1.0f, 0.0f, 0.0f).getPackedValueProperty());
+}
+
+TEST(Bgr565EdgeTest, ClampBelowZero)
+{
+    Bgr565 v(-1.0f, 0.0f, 0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), Bgr565(0.0f, 0.0f, 0.0f).getPackedValueProperty());
+}
+
+TEST(NormalizedByte2EdgeTest, ClampAboveAndBelow)
+{
+    // x=1.5 clamped to 1.0 → 0x7F; y=-1.5 clamped to -1.0 → 0x81
+    NormalizedByte2 v(1.5f, -1.5f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x817Fu);
+}
+
+TEST(NormalizedByte4EdgeTest, ClampAllChannels)
+{
+    NormalizedByte4 v(2.0f, -2.0f, 1.5f, -1.5f);
+    EXPECT_EQ(v.getPackedValueProperty(), NormalizedByte4(1.0f, -1.0f, 1.0f, -1.0f).getPackedValueProperty());
+}
+
+TEST(NormalizedShort2EdgeTest, ClampAboveAndBelow)
+{
+    // x=2.0 → 0x7FFF; y=-2.0 → 0x8001
+    NormalizedShort2 v(2.0f, -2.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x80017FFFu);
+}
+
+TEST(NormalizedShort4EdgeTest, ClampAllChannels)
+{
+    NormalizedShort4 v(2.0f, -2.0f, 1.5f, -1.5f);
+    EXPECT_EQ(v.getPackedValueProperty(), NormalizedShort4(1.0f, -1.0f, 1.0f, -1.0f).getPackedValueProperty());
+}
+
+TEST(Rg32EdgeTest, ClampAboveAndBelow)
+{
+    // r=1.5 → 0xFFFF; g=-0.5 → 0x0000
+    Rg32 v(1.5f, -0.5f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x0000FFFFu);
+}
+
+TEST(Rgba1010102EdgeTest, ClampAboveOne)
+{
+    Rgba1010102 v(2.0f, 0.0f, 0.0f, 1.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), Rgba1010102(1.0f, 0.0f, 0.0f, 1.0f).getPackedValueProperty());
+}
+
+TEST(Rgba64EdgeTest, ClampAboveAndBelow)
+{
+    Rgba64 v(1.5f, -0.5f, 0.0f, 1.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), Rgba64(1.0f, 0.0f, 0.0f, 1.0f).getPackedValueProperty());
+}
+
+TEST(Short2EdgeTest, ClampLargePositive)
+{
+    // 40000 clamped to 32767 = 0x7FFF
+    Short2 v(40000.0f, 0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x00007FFFu);
+}
+
+TEST(Short2EdgeTest, ClampLargeNegative)
+{
+    // -40000 clamped to -32768 = 0x8000
+    Short2 v(0.0f, -40000.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x80000000u);
+}
+
+TEST(Short4EdgeTest, ClampAllChannels)
+{
+    Short4 v(40000.0f, -40000.0f, 32767.0f, -32768.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), Short4(32767.0f, -32768.0f, 32767.0f, -32768.0f).getPackedValueProperty());
+}
+
+// ── HalfTypeHelper special float values ──────────────────────────────────────
+
+TEST(HalfTypeHelperTest, NegativeZero)
+{
+    const uint16_t h = HalfTypeHelper::Convert(-0.0f);
+    EXPECT_EQ(h, 0x8000u);
+    // Round-trip back to -0.0f
+    const float back = HalfTypeHelper::Convert(h);
+    EXPECT_EQ(std::signbit(back), true);
+    EXPECT_EQ(back, 0.0f);
+}
+
+TEST(HalfTypeHelperTest, PositiveInfinity)
+{
+    const float inf = std::numeric_limits<float>::infinity();
+    EXPECT_EQ(HalfTypeHelper::Convert(inf), 0x7C00u);
+    EXPECT_TRUE(std::isinf(HalfTypeHelper::Convert(static_cast<uint16_t>(0x7C00u))));
+    EXPECT_GT(HalfTypeHelper::Convert(static_cast<uint16_t>(0x7C00u)), 0.0f);
+}
+
+TEST(HalfTypeHelperTest, NegativeInfinity)
+{
+    const float ninf = -std::numeric_limits<float>::infinity();
+    EXPECT_EQ(HalfTypeHelper::Convert(ninf), 0xFC00u);
+    EXPECT_TRUE(std::isinf(HalfTypeHelper::Convert(static_cast<uint16_t>(0xFC00u))));
+    EXPECT_LT(HalfTypeHelper::Convert(static_cast<uint16_t>(0xFC00u)), 0.0f);
+}
+
+TEST(HalfTypeHelperTest, NaNPreservesNaN)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const uint16_t h = HalfTypeHelper::Convert(nan);
+    // Must be a NaN half: exponent = 0x1F (all ones), mantissa != 0
+    EXPECT_EQ(h & 0x7C00u, 0x7C00u);
+    EXPECT_NE(h & 0x03FFu, 0u);
+    // Round-trip: Convert(NaN half) must produce a NaN float
+    EXPECT_TRUE(std::isnan(HalfTypeHelper::Convert(h)));
+}
+
+TEST(HalfTypeHelperTest, DenormalSmallest)
+{
+    // Smallest half-float denormal: 0x0001 = 2^-24 ≈ 5.96e-8
+    const float expected = 5.9604644775390625e-8f;
+    EXPECT_NEAR(HalfTypeHelper::Convert(static_cast<uint16_t>(0x0001u)), expected, expected * 1e-5f);
+}
+
+TEST(HalfTypeHelperTest, DenormalMid)
+{
+    // 0x0200 = 2^-15 ≈ 3.052e-5 (half denormal)
+    const float expected = 3.0517578125e-5f;
+    EXPECT_NEAR(HalfTypeHelper::Convert(static_cast<uint16_t>(0x0200u)), expected, expected * 1e-5f);
+}
+
+TEST(HalfTypeHelperTest, SmallFloatBecomesZero)
+{
+    // Floats smaller than 2^-25 round to ±0 in half-float
+    const float tiny = 1.0e-8f;
+    const uint16_t h = HalfTypeHelper::Convert(tiny);
+    EXPECT_EQ(h, 0x0000u);
+}
+
+// ── HalfSingle special values ─────────────────────────────────────────────────
+
+TEST(HalfSingleEdgeTest, PositiveInfinity)
+{
+    HalfSingle v(std::numeric_limits<float>::infinity());
+    EXPECT_EQ(v.getPackedValueProperty(), 0x7C00u);
+    EXPECT_TRUE(std::isinf(v.ToSingle()));
+    EXPECT_GT(v.ToSingle(), 0.0f);
+}
+
+TEST(HalfSingleEdgeTest, NegativeInfinity)
+{
+    HalfSingle v(-std::numeric_limits<float>::infinity());
+    EXPECT_EQ(v.getPackedValueProperty(), 0xFC00u);
+    EXPECT_TRUE(std::isinf(v.ToSingle()));
+    EXPECT_LT(v.ToSingle(), 0.0f);
+}
+
+TEST(HalfSingleEdgeTest, NegativeZeroRoundTrip)
+{
+    HalfSingle v(-0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x8000u);
+    EXPECT_EQ(std::signbit(v.ToSingle()), true);
+}
+
+// ── Boundary values 0.0, 1.0, -1.0 round-trips for normalized types ──────────
+
+TEST(NormalizedByte2EdgeTest, ZeroRoundTrip)
+{
+    NormalizedByte2 v(0.0f, 0.0f);
+    auto tv = v.ToVector4();
+    EXPECT_FLOAT_EQ(tv.X, 0.0f);
+    EXPECT_FLOAT_EQ(tv.Y, 0.0f);
+}
+
+TEST(NormalizedByte2EdgeTest, OneRoundTrip)
+{
+    NormalizedByte2 v(1.0f, 1.0f);
+    auto tv = v.ToVector4();
+    EXPECT_FLOAT_EQ(tv.X, 1.0f);
+    EXPECT_FLOAT_EQ(tv.Y, 1.0f);
+}
+
+TEST(NormalizedShort2EdgeTest, ZeroRoundTrip)
+{
+    NormalizedShort2 v(0.0f, 0.0f);
+    auto tv = v.ToVector4();
+    EXPECT_FLOAT_EQ(tv.X, 0.0f);
+    EXPECT_FLOAT_EQ(tv.Y, 0.0f);
+}
+
+TEST(NormalizedShort2EdgeTest, OneRoundTrip)
+{
+    NormalizedShort2 v(1.0f, 1.0f);
+    auto tv = v.ToVector4();
+    EXPECT_FLOAT_EQ(tv.X, 1.0f);
+    EXPECT_FLOAT_EQ(tv.Y, 1.0f);
 }
