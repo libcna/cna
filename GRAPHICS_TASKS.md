@@ -277,7 +277,7 @@ All 100 original tasks addressed.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 184 | `Effect::Clone()` for base `Effect` and all stock effects (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`): clone must produce an independent copy with the same parameter values but a separate parameter collection; modifying a parameter on the clone must not affect the original | ⬜ | Check FNA `Effect.cs Clone()`; add unit tests |
+| 184 | `Effect::Clone()` for base `Effect` and all stock effects (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`): clone must produce an independent copy with the same parameter values but a separate parameter collection; modifying a parameter on the clone must not affect the original | ✅ | EasyGL integration test via `AlphaTestEffect`; pointer distinct, Alpha+DiffuseColor independence both directions; 7/7 PASS; 29/29 EasyGL |
 | 185 | `Effect::CurrentTechnique`, `Techniques`, `Parameters`, `Passes` collection semantics: verify that `Techniques[0].Passes[0].Apply()` calls the correct backend draw-state setup; add unit tests for collection indexing and `Contains` | ⬜ | Add to `EffectParameterTests.cpp` or new file |
 | 186 | `EffectParameter` arrays — wrong-type and out-of-range guards: `SetValue(float[])` on an int parameter must throw or silently ignore per XNA spec; `SetValue` with more elements than declared must throw; add unit tests | ⬜ | Check FNA for throw vs. silent-ignore |
 | 187 | `EffectParameter::SetValueTranspose(Matrix)` — verify the matrix is stored transposed relative to `SetValue(Matrix)`; add unit test comparing stored values byte-for-byte | ⬜ | Already partially tested in Task 149; add edge-case test |

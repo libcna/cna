@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 22 in progress — RenderTarget conformance track.
-Tasks 1–183 done. Next unstarted: Task 184.
+Tasks 1–184 done. Next unstarted: Task 185.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -30,7 +30,7 @@ Tasks 1–183 done. Next unstarted: Task 184.
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 28/28 EasyGL integration tests pass; ~1515 total tests pass.
+- **Tests**: 29/29 EasyGL integration tests pass; ~1515 total tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect / startIndex / mip-level SetData/GetData (Tasks 169–171)
@@ -67,6 +67,7 @@ Tasks 1–183 done. Next unstarted: Task 184.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 184 | `Effect::Clone()` independence: `AlphaTestEffect` clone has distinct pointer, Alpha+DiffuseColor match, mutations in both directions stay isolated; 7/7 PASS; 29/29 EasyGL |
 | Task 183 | `DeviceResetting`/`DeviceReset` events: integration test verifies GDM events fire in order (Resetting→Reset) on second `ApplyChanges()`; 5/5 PASS; 28/28 EasyGL |
 | Task 182 | `PresentationParameters` round-trip: fixed `applyToExistingBackend` to call `SetPresentationParameters(pp)`; added NOXNA `GraphicsDevice::SetPresentationParameters`; 5/5 PASS; 27/27 EasyGL |
 | Task 181 | `RenderTargetBinding` unit tests: all 6 CubeMapFace values, distinct array slices, cube ctor arraySlice=0, default face; 13/13 PASS |
@@ -81,6 +82,7 @@ Tasks 1–183 done. Next unstarted: Task 184.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `examples/easygl_effect_clone_test.cpp` (Task 184)
 - `examples/easygl_device_reset_events_test.cpp` (Task 183)
 - `examples/easygl_rt_roundtrip_test.cpp` (Task 180)
 - `examples/bgfx_render_target_usage_test.cpp` (Task 179)
@@ -103,7 +105,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 184 (`Effect::Clone()`).
+Next task: Task 185 (`Effect::CurrentTechnique` / collection semantics).
 
 ---
 
@@ -230,16 +232,16 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 184 — `Effect::Clone()` (unit test)
+### Task 185 — `Effect::CurrentTechnique`, `Techniques`, `Parameters`, `Passes` collection semantics
 
-**Goal**: Clone must produce an independent copy; modifying a parameter on the clone
-must not affect the original. Check FNA `Effect.cs Clone()`.
+**Goal**: Verify that `Techniques[0].Passes[0].Apply()` calls the correct backend
+draw-state setup; add unit tests for collection indexing and `Contains`.
 
 **Files**:
-- `src/Microsoft/Xna/Framework/Graphics/Effect.cpp`
-- `tests/Microsoft/Xna/Framework/Graphics/EffectTests.cpp`
+- `tests/Microsoft/Xna/Framework/Graphics/EffectParameterTests.cpp` (or new file)
+- `CMakeLists.txt`
 
-**Verification**: `ctest --test-dir cmake-build-debug -R EffectClone`
+**Verification**: `ctest --test-dir cmake-build-debug -R EffectCollection`
 
 ---
 
@@ -264,12 +266,14 @@ must not affect the original. Check FNA `Effect.cs Clone()`.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–183 complete. Next unstarted: Task 184
-(Effect::Clone() unit test).
+Current status: Tasks 1–184 complete. Next unstarted: Task 185
+(Effect collection semantics unit tests).
 
-Read include/Microsoft/Xna/Framework/Graphics/Effect.hpp and
-the FNA reference at /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect.cs.
-Write or extend tests/Microsoft/Xna/Framework/Graphics/EffectTests.cpp to cover Clone().
-Register the test in CMakeLists.txt if needed, build and run.
+Read include/Microsoft/Xna/Framework/Graphics/EffectTechniqueCollection.hpp,
+EffectParameterCollection.hpp, and the FNA reference at
+/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/.
+Write or extend tests/Microsoft/Xna/Framework/Graphics/EffectTechniqueTests.cpp (or new file)
+to cover Techniques/Parameters collection indexing, Contains, and Passes.
+Register in CMakeLists.txt if needed, build and run.
 Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```
