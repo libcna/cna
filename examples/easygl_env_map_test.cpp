@@ -1,34 +1,31 @@
 // SPDX-License-Identifier: MS-PL
-// Task 134: EasyGL integration test — EnvironmentMapEffect cube-map reflection.
+// Task 134 (extended Task 192): EasyGL EnvironmentMapEffect pixel integration test.
 //
-// Renders a full-screen quad using EnvironmentMapEffect.  The expected pixel
-// colour is computed analytically so the test does not depend on a complex
-// cube-map image.
-//
-// Shader formula (env+mapped GLSL):
+// Shader formula:
 //   litRGB   = (uEmissiveColor + uLight0Diffuse * NdotL) * uDiffuseColor.rgb
 //   rgb      = litRGB * texColor.rgb + envColor * uEnvMapAmount + uEnvMapSpecular
 //   FragColor = vec4(rgb, uDiffuseColor.a * texColor.a)
 //
-// Parameter choices that give a predictable red output:
-//   emissiveColor    = (1, 0, 0)   — combined with ambient=0 gives uEmissiveColor=(1,0,0)
-//   diffuseColor     = (1, 1, 1)   — uDiffuseColor.rgb=(1,1,1)
-//   DirectionalLight0.DiffuseColor = (0, 0, 0) default — no light contribution
-//   texture0         = solid white  — texColor.rgb=(1,1,1)
-//   envMapAmount     = 0.0          — no cube-map contribution
-//   envMapSpecular   = (0, 0, 0)
-//   => rgb = (1,0,0)*(1,1,1) + 0 + 0 = (1,0,0) = red
+// Four sub-tests verify that EmissiveColor, EnvironmentMapAmount, and
+// EnvironmentMapSpecular each independently affect the output pixel:
 //
-// The TextureCube still needs to be a valid GPU object (avoiding sampler type
-// mismatch on the samplerCube uniform), so a 1×1 all-white cube is created.
+//   (a) EmissiveColor=red,   envAmount=0, envSpecular=0 → red
+//       (baseline: litRGB=(1,0,0)*(1,1,1)=(1,0,0), rgb=(1,0,0)*(1,1,1)+0+0=(1,0,0))
+//   (b) EmissiveColor=green, envAmount=0, envSpecular=0 → green
+//       (same path, different emissive colour — verifies setter)
+//   (c) EmissiveColor=0,     envAmount=0, envSpecular=(0,0,1) → blue
+//       (rgb = 0 + 0 + (0,0,1))
+//   (d) EmissiveColor=0,     envAmount=1, blue cube map,  envSpecular=0 → blue
+//       (rgb = 0 + (0,0,1)*1 + 0; all six cube faces are solid blue)
 //
-// Uses VertexPositionNormalTexture (stride=32): vec3 pos, vec3 normal, vec2 uv.
-// Normal = (0,0,1) (facing viewer); identity world/view/projection.
+// Uses VertexPositionNormalTexture (stride=32). World/View/Projection = identity.
+// Normal = (0,0,1), diffuseColor = white, texture0 = white 1×1.
 //
-// Exit code 0 = PASS, 1 = FAIL.
+// Exit code 0 = all PASS, 1 = any FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -45,40 +42,64 @@
 
 #include <cstdio>
 #include <memory>
-#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
+static bool colourMatch(Color got, Color want, int tol = 40)
+{
+    return std::abs((int)got.getRProperty() - (int)want.getRProperty()) <= tol
+        && std::abs((int)got.getGProperty() - (int)want.getGProperty()) <= tol
+        && std::abs((int)got.getBProperty() - (int)want.getBProperty()) <= tol;
+}
+
 class EnvMapTest : public Game
 {
-    Texture2D                    diffuseTex_;  // 1×1 white
-    std::unique_ptr<TextureCube> envCube_;     // 1×1 all-white cube (amount=0, colour irrelevant)
-    bool                         done_   = false;
-    int                          result_ = 1;
+    std::unique_ptr<GraphicsDeviceManager> gdm_;
+    bool done_   = false;
+    int  result_ = 0;
 
-protected:
-    void Initialize() override
+    void check(bool cond, const char* label, Color got, Color want)
     {
-        Game::Initialize();
-        auto& device = getGraphicsDeviceProperty();
+        if (cond)
+            std::printf("[PASS] %s: got=(%d,%d,%d)\n", label,
+                got.getRProperty(), got.getGProperty(), got.getBProperty());
+        else
+        {
+            std::printf("[FAIL] %s: got=(%d,%d,%d), expected≈(%d,%d,%d)\n", label,
+                got.getRProperty(), got.getGProperty(), got.getBProperty(),
+                want.getRProperty(), want.getGProperty(), want.getBProperty());
+            result_ = 1;
+        }
+    }
 
-        // Diffuse texture: solid white.
-        const std::vector<uint8_t> white = { 255, 255, 255, 255 };
-        diffuseTex_ = Texture2D::CreateFromPixels(device, 1, 1, white);
+    Color readCenter(GraphicsDevice& dev)
+    {
+        const auto& vp = dev.getViewportProperty();
+        const Rectangle reg(vp.getWidthProperty() / 2, vp.getHeightProperty() / 2, 1, 1);
+        Color px(0, 0, 0, 0);
+        dev.GetBackBufferData(&reg, &px, 0, 1);
+        return px;
+    }
 
-        // Cube map: 1×1 per face, all white.  Amount is 0 so the colour is
-        // irrelevant, but a real GL cube-map object avoids samplerCube type
-        // mismatch on the uniform.
-        envCube_ = std::make_unique<TextureCube>(device, 1, false, SurfaceFormat::Color);
-        const Color faceColor(255, 255, 255, 255);
+    // Fills a 1×1 TextureCube with a single solid colour on all 6 faces.
+    std::unique_ptr<TextureCube> makeSolidCube(GraphicsDevice& dev, Color col)
+    {
+        auto cube = std::make_unique<TextureCube>(dev, 1, false, SurfaceFormat::Color);
         const CubeMapFace faces[6] = {
             CubeMapFace::PositiveX, CubeMapFace::NegativeX,
             CubeMapFace::PositiveY, CubeMapFace::NegativeY,
             CubeMapFace::PositiveZ, CubeMapFace::NegativeZ,
         };
         for (CubeMapFace face : faces)
-            envCube_->SetData(face, &faceColor, 1);
+            cube->SetData(face, &col, 1);
+        return cube;
+    }
+
+protected:
+    void Initialize() override
+    {
+        Game::Initialize();
     }
 
     void Draw(const GameTime&) override
@@ -86,33 +107,26 @@ protected:
         if (done_) return;
         done_ = true;
 
-        auto& device = getGraphicsDeviceProperty();
-        const auto& vp = device.getViewportProperty();
-        const int W = vp.getWidthProperty();
-        const int H = vp.getHeightProperty();
+        auto& dev = getGraphicsDeviceProperty();
+        dev.SetDepthTestEnabled(false);
+        dev.setBlendStateProperty(BlendState::Opaque);
 
-        device.Clear(Color(0, 255, 0, 255)); // green background
-        device.SetDepthTestEnabled(false);
-        device.setBlendStateProperty(BlendState::Opaque);
+        // Shared resources.
+        const Color kBlack(  0,   0,   0, 255);
+        const Color kRed  (255,   0,   0, 255);
+        const Color kGreen(  0, 255,   0, 255);
+        const Color kBlue (  0,   0, 255, 255);
+        const Color kWhite(255, 255, 255, 255);
 
-        EnvironmentMapEffect fx(device);
+        Texture2D whiteTex(dev, 1, 1);
+        whiteTex.SetData(&kWhite, 1);
 
-        // emissiveColor = red; diffuseColor = white; light0 diffuse = black (default).
-        // Shader: litRGB = ((1,0,0) + (0,0,0)*NdotL) * (1,1,1) = (1,0,0).
-        fx.setEmissiveColorProperty(Vector3(1.0f, 0.0f, 0.0f));
-        fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
-        fx.setEnvironmentMapAmountProperty(0.0f);
-        fx.setEnvironmentMapSpecularProperty(Vector3(0.0f, 0.0f, 0.0f));
-        fx.setTextureProperty(&diffuseTex_);
-        fx.setEnvironmentMapProperty(envCube_.get());
-        fx.setWorldProperty(Matrix::getIdentityProperty());
-        fx.setViewProperty(Matrix::getIdentityProperty());
-        fx.setProjectionProperty(Matrix::getIdentityProperty());
-        fx.Apply();
+        auto whiteCube = makeSolidCube(dev, kWhite);
+        auto blueCube  = makeSolidCube(dev, kBlue);
 
-        // Full-screen quad, normal = (0,0,1) facing viewer.
+        // Full-screen NDC quad, normal = (0,0,1).
         const Vector3 n(0.0f, 0.0f, 1.0f);
-        const VertexPositionNormalTexture verts[6] = {
+        const VertexPositionNormalTexture quad[6] = {
             { Vector3(-1.0f,  1.0f, 0.0f), n, Vector2(0.0f, 1.0f) },
             { Vector3(-1.0f, -1.0f, 0.0f), n, Vector2(0.0f, 0.0f) },
             { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
@@ -120,33 +134,90 @@ protected:
             { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
             { Vector3( 1.0f,  1.0f, 0.0f), n, Vector2(1.0f, 1.0f) },
         };
-        device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
 
-        // Centre pixel: emissive=(1,0,0), light=(0,0,0), envAmount=0 → red.
-        const Rectangle centReg(W / 2, H / 2, 1, 1);
-        Color centPx(0, 0, 0, 0);
-        device.GetBackBufferData(&centReg, &centPx, 0, 1);
+        auto setupBase = [&](EnvironmentMapEffect& fx) {
+            fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            fx.setAmbientLightColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+            fx.setTextureProperty(&whiteTex);
+            fx.setEnvironmentMapProperty(whiteCube.get());
+            fx.setWorldProperty(Matrix::getIdentityProperty());
+            fx.setViewProperty(Matrix::getIdentityProperty());
+            fx.setProjectionProperty(Matrix::getIdentityProperty());
+        };
 
-        const bool pass = (centPx.getRProperty() >= 200 &&
-                           centPx.getGProperty() <= 50  &&
-                           centPx.getBProperty() <= 50);
-
-        if (pass)
+        // ── (a) EmissiveColor=red, envAmount=0 → red ─────────────────────
+        // litRGB = (1,0,0)*(1,1,1) = (1,0,0); rgb = (1,0,0)*(1,1,1)+0+0 = red.
         {
-            std::printf("[PASS] EnvironmentMapEffect: centre=(%d,%d,%d)\n",
-                        centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty());
-            result_ = 0;
+            dev.Clear(kBlack);
+            EnvironmentMapEffect fx(dev);
+            setupBase(fx);
+            fx.setEmissiveColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+            fx.setEnvironmentMapAmountProperty(0.0f);
+            fx.setEnvironmentMapSpecularProperty(Vector3(0.0f, 0.0f, 0.0f));
+            fx.Apply();
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            Color got = readCenter(dev);
+            check(colourMatch(got, kRed), "(a) EmissiveColor=red → red", got, kRed);
         }
-        else
+
+        // ── (b) EmissiveColor=green, envAmount=0 → green ─────────────────
+        // Same formula; verifies setEmissiveColorProperty setter works.
         {
-            std::printf("[FAIL] EnvironmentMapEffect: centre=(%d,%d,%d), "
-                        "expected red (R>=200, G<=50, B<=50)\n",
-                        centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty());
+            dev.Clear(kBlack);
+            EnvironmentMapEffect fx(dev);
+            setupBase(fx);
+            fx.setEmissiveColorProperty(Vector3(0.0f, 1.0f, 0.0f));
+            fx.setEnvironmentMapAmountProperty(0.0f);
+            fx.setEnvironmentMapSpecularProperty(Vector3(0.0f, 0.0f, 0.0f));
+            fx.Apply();
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            Color got = readCenter(dev);
+            check(colourMatch(got, kGreen), "(b) EmissiveColor=green → green", got, kGreen);
         }
+
+        // ── (c) EnvironmentMapSpecular=(0,0,1) → blue ────────────────────
+        // emissive=0, envAmount=0: litRGB*texColor=0; rgb = 0 + 0 + (0,0,1) = blue.
+        {
+            dev.Clear(kBlack);
+            EnvironmentMapEffect fx(dev);
+            setupBase(fx);
+            fx.setEmissiveColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+            fx.setEnvironmentMapAmountProperty(0.0f);
+            fx.setEnvironmentMapSpecularProperty(Vector3(0.0f, 0.0f, 1.0f));
+            fx.Apply();
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            Color got = readCenter(dev);
+            check(colourMatch(got, kBlue), "(c) EnvMapSpecular=blue → blue", got, kBlue);
+        }
+
+        // ── (d) EnvironmentMapAmount=1 with blue cube → blue ─────────────
+        // emissive=0, envSpecular=0; litRGB*texColor=0;
+        // rgb = 0 + blueCube * 1.0 + 0 = (0,0,1) = blue.
+        {
+            dev.Clear(kBlack);
+            EnvironmentMapEffect fx(dev);
+            setupBase(fx);
+            fx.setEnvironmentMapProperty(blueCube.get());
+            fx.setEmissiveColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+            fx.setEnvironmentMapAmountProperty(1.0f);
+            fx.setEnvironmentMapSpecularProperty(Vector3(0.0f, 0.0f, 0.0f));
+            fx.Apply();
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            Color got = readCenter(dev);
+            check(colourMatch(got, kBlue), "(d) EnvMapAmount=1 blue cube → blue", got, kBlue);
+        }
+
         Exit();
     }
 
 public:
+    EnvMapTest()
+    {
+        gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setPreferredBackBufferWidthProperty(200);
+        gdm_->setPreferredBackBufferHeightProperty(200);
+    }
+
     int getResult() const { return result_; }
 };
 

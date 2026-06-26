@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — stock effects backend parity.
-Tasks 1–191 done. Next unstarted: Task 192.
+Tasks 1–192 done. Next unstarted: Task 193.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -67,6 +67,7 @@ Tasks 1–191 done. Next unstarted: Task 192.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 192 | `EnvironmentMapEffect` parameter accuracy (EasyGL): extended `easygl_env_map_test.cpp` with 4 sub-tests: EmissiveColor=red→red, EmissiveColor=green→green, EnvMapSpecular=blue→blue, EnvMapAmount=1 blue cube→blue; 4/4 PASS; 33/33 EasyGL |
 | Task 191 | `DualTextureEffect` pixel tests (EasyGL): 4 sub-tests prove both texture slots and diffuse multiplier work; decisive test yellow×cyan→green; 4/4 PASS; 33/33 EasyGL |
 | Task 190 | `AlphaTestEffect` all 8 `CompareFunction` modes (EasyGL): pixel.a=128/255, ref=128; drawn: Always/LessEqual/Equal/GreaterEqual; discarded: Never/Less/NotEqual/Greater; 8/8 PASS; 32/32 EasyGL |
 | Task 189 | `BasicEffect` pixel integration tests (EasyGL): 5 sub-tests covering vertex-color-only (stride 16), texture-only (stride 20), diffuse tint (stride 20), color×texture (stride 24), directional lighting (stride 32); fog skipped — no fog in EasyGL GpuDrawParams; 5/5 PASS; 31/31 EasyGL |
@@ -87,6 +88,9 @@ Tasks 1–191 done. Next unstarted: Task 192.
 | Task 174 | `docs/surface-format-support.md` — EasyGL/Vulkan/Bgfx/SDL format support matrix |
 | Task 173 | Texture3D z-slice round-trip; Color→uint8\_t bug fixed; ~Texture3D() moved to .cpp |
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
+
+**Files modified (recent, not in list above):**
+- `examples/easygl_env_map_test.cpp` — extended with 3 new sub-tests (Task 192)
 
 **Files added (recent):**
 - `examples/easygl_dualtexture_test.cpp` (Task 191)
@@ -244,20 +248,21 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 192 — `EnvironmentMapEffect` parameter accuracy
+### Task 193 — `SkinnedEffect` bone count tests
 
-**Goal**: Extend `examples/easygl_env_map_test.cpp` with pixel readback assertions
-verifying that `EnvironmentMapAmount`, `EnvironmentMapSpecular`, and `EmissiveColor`
-each affect the output correctly.
+**Goal**: EasyGL integration test for `SkinnedEffect` bone transforms:
+(a) 1 bone identity → quad stays in place → red pixel at expected position,
+(b) 1 bone translation → quad shifted → pixel at new position,
+(c) 2-bone 50/50 blend → midpoint position.
 
 **Files**:
-- `examples/easygl_env_map_test.cpp` (extend or create new)
-- `CMakeLists.txt` (if new file)
+- `examples/easygl_skinned_effect_bones_test.cpp` (create)
+- `CMakeLists.txt`
 
 **Pattern**: `examples/easygl_basiceffect_combinations_test.cpp` — clear, draw, readback.
-Reference: `include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp`.
+Reference: `include/Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp`.
 
-**Verification**: `ctest --test-dir cmake-build-debug -R EasyGL_EnvMap`
+**Verification**: `ctest --test-dir cmake-build-debug -R EasyGL_SkinnedBones`
 
 ---
 
@@ -282,13 +287,13 @@ Reference: `include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp`.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–191 complete. Next unstarted: Task 192
-(EnvironmentMapEffect parameter accuracy).
+Current status: Tasks 1–192 complete. Next unstarted: Task 193
+(SkinnedEffect bone count pixel integration test).
 
-Read include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp and
-examples/easygl_basiceffect_combinations_test.cpp as a pattern reference.
-Check if easygl_env_map_test.cpp exists; extend it or create a new file
-with pixel readback assertions for EnvironmentMapAmount/Specular/EmissiveColor.
-Register in CMakeLists.txt if needed, build and run.
+Read include/Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp and the EasyGL
+skinned shader (grep for prog_skinned_ in EasyGLGraphicsBackend.cpp) to understand
+bone matrix layout and vertex format (VertexPositionNormalTextureBoneWeights or similar).
+Create examples/easygl_skinned_effect_bones_test.cpp with (a) identity bone,
+(b) translation bone, (c) 2-bone blend. Register in CMakeLists.txt, build and run.
 Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```
