@@ -1341,6 +1341,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetRenderTarget(RenderTarget2D* renderTarget)
     {
+        if (renderTarget && renderTarget->getIsDisposedProperty())
+            throw System::ObjectDisposedException(renderTarget->getNameProperty());
         if (backend_)
             backend_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetBackend() : nullptr);
 
@@ -1360,6 +1362,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetRenderTarget(RenderTargetCube* renderTarget, CubeMapFace cubeMapFace)
     {
+        if (renderTarget && renderTarget->getIsDisposedProperty())
+            throw System::ObjectDisposedException(renderTarget->getNameProperty());
         if (backend_)
             backend_->SetRenderTargetCubeFace(
                 renderTarget ? renderTarget->GetRenderTargetCubeBackend() : nullptr,

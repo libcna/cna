@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -40,6 +41,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Effect::Apply()
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException(getNameProperty());
         OnApply();
         if (device_) device_->SetCurrentEffect(this);
     }
