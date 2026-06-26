@@ -78,6 +78,20 @@ TEST(Alpha8Test, SetGetPackedValue)
     EXPECT_EQ(a.getPackedValueProperty(), 128u);
 }
 
+TEST(Alpha8Test, GoldenHalfAlpha)
+{
+    Alpha8 a(0.5f);
+    EXPECT_EQ(a.getPackedValueProperty(), 0x80u);
+    EXPECT_NEAR(a.ToVector4().W, 0.50196078f, 1e-6f);
+}
+
+TEST(Alpha8Test, GoldenQuarterAlpha)
+{
+    Alpha8 a(0.25f);
+    EXPECT_EQ(a.getPackedValueProperty(), 0x40u);
+    EXPECT_NEAR(a.ToVector4().W, 0.25098039f, 1e-6f);
+}
+
 // =============================================================================
 // Bgr565
 // =============================================================================
@@ -111,6 +125,19 @@ TEST(Bgr565Test, EqualityFalse)
 {
     Bgr565 a(1.0f, 0.0f, 0.0f), b(0.0f, 1.0f, 0.0f);
     EXPECT_TRUE(a != b);
+}
+
+TEST(Bgr565Test, GoldenRed)
+{
+    Bgr565 v(1.0f, 0.0f, 0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0xf800u);
+    EXPECT_NEAR(v.ToVector4().X, 1.0f, 1e-6f);
+}
+
+TEST(Bgr565Test, GoldenHalf)
+{
+    Bgr565 v(0.5f, 0.5f, 0.5f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x8410u);
 }
 
 // =============================================================================
@@ -228,8 +255,19 @@ TEST(HalfSingleTest, DefaultPackedZero)
     EXPECT_EQ(v.getPackedValueProperty(), 0u);
 }
 
-// HalfTypeHelper::Convert(0.0f) does not produce 0x0000 (known HalfTypeHelper bug).
-// Zero-input constructor test omitted for Half types.
+TEST(HalfSingleTest, CtorZeroPacksZero)
+{
+    HalfSingle v(0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x0000u);
+}
+
+TEST(HalfSingleTest, GoldenPackedValues)
+{
+    EXPECT_EQ(HalfSingle(1.0f).getPackedValueProperty(),  0x3c00u);
+    EXPECT_EQ(HalfSingle(-1.0f).getPackedValueProperty(), 0xbc00u);
+    EXPECT_EQ(HalfSingle(0.5f).getPackedValueProperty(),  0x3800u);
+    EXPECT_EQ(HalfSingle(0.25f).getPackedValueProperty(), 0x3400u);
+}
 
 TEST(HalfSingleTest, ToSingleRoundTrip)
 {
@@ -285,6 +323,23 @@ TEST(HalfVector2Test, EqualityFalse)
 {
     HalfVector2 a(1.0f, 0.0f), b(0.0f, 1.0f);
     EXPECT_TRUE(a != b);
+}
+
+TEST(HalfVector2Test, GoldenPackedValues)
+{
+    EXPECT_EQ(HalfVector2(1.0f, 0.0f).getPackedValueProperty(), 0x00003c00u);
+    EXPECT_EQ(HalfVector2(0.0f, 1.0f).getPackedValueProperty(), 0x3c000000u);
+    EXPECT_EQ(HalfVector2(0.5f, 0.5f).getPackedValueProperty(), 0x38003800u);
+}
+
+TEST(HalfVector2Test, GoldenToVector4)
+{
+    HalfVector2 v(1.0f, 0.5f);
+    Vector4 tv = v.ToVector4();
+    EXPECT_NEAR(tv.X, 1.0f, 1e-4f);
+    EXPECT_NEAR(tv.Y, 0.5f, 1e-4f);
+    EXPECT_FLOAT_EQ(tv.Z, 0.0f);
+    EXPECT_FLOAT_EQ(tv.W, 1.0f);
 }
 
 // =============================================================================
@@ -353,6 +408,22 @@ TEST(NormalizedByte2Test, EqualityFalse)
     EXPECT_TRUE(a != b);
 }
 
+TEST(NormalizedByte2Test, GoldenPackedValues)
+{
+    EXPECT_EQ(NormalizedByte2( 1.0f,  0.0f).getPackedValueProperty(), 0x007fu);
+    EXPECT_EQ(NormalizedByte2( 0.0f,  1.0f).getPackedValueProperty(), 0x7f00u);
+    EXPECT_EQ(NormalizedByte2(-1.0f, -1.0f).getPackedValueProperty(), 0x8181u);
+    EXPECT_EQ(NormalizedByte2( 0.5f,  0.5f).getPackedValueProperty(), 0x4040u);
+}
+
+TEST(NormalizedByte2Test, GoldenNegativeOneToVector2)
+{
+    NormalizedByte2 v(-1.0f, -1.0f);
+    auto tv = v.ToVector4();
+    EXPECT_FLOAT_EQ(tv.X, -1.0f);
+    EXPECT_FLOAT_EQ(tv.Y, -1.0f);
+}
+
 // =============================================================================
 // NormalizedByte4
 // =============================================================================
@@ -379,6 +450,23 @@ TEST(NormalizedByte4Test, EqualityFalse)
 {
     NormalizedByte4 a(1.0f, 0.0f, 0.0f, 1.0f), b(0.0f, 1.0f, 0.0f, 1.0f);
     EXPECT_TRUE(a != b);
+}
+
+TEST(NormalizedByte4Test, GoldenPackedValues)
+{
+    EXPECT_EQ(NormalizedByte4( 1.0f,  0.0f,  0.0f,  1.0f).getPackedValueProperty(), 0x7f00007fu);
+    EXPECT_EQ(NormalizedByte4( 0.5f,  0.5f,  0.5f,  0.5f).getPackedValueProperty(), 0x40404040u);
+    EXPECT_EQ(NormalizedByte4(-1.0f, -1.0f, -1.0f, -1.0f).getPackedValueProperty(), 0x81818181u);
+}
+
+TEST(NormalizedByte4Test, GoldenNegativeOneToVector4)
+{
+    NormalizedByte4 v(-1.0f, -1.0f, -1.0f, -1.0f);
+    auto tv = v.ToVector4();
+    EXPECT_FLOAT_EQ(tv.X, -1.0f);
+    EXPECT_FLOAT_EQ(tv.Y, -1.0f);
+    EXPECT_FLOAT_EQ(tv.Z, -1.0f);
+    EXPECT_FLOAT_EQ(tv.W, -1.0f);
 }
 
 // =============================================================================
@@ -417,6 +505,22 @@ TEST(NormalizedShort2Test, EqualityFalse)
     EXPECT_TRUE(a != b);
 }
 
+TEST(NormalizedShort2Test, GoldenPackedValues)
+{
+    EXPECT_EQ(NormalizedShort2( 1.0f,  0.0f).getPackedValueProperty(), 0x00007fffu);
+    EXPECT_EQ(NormalizedShort2( 0.0f,  1.0f).getPackedValueProperty(), 0x7fff0000u);
+    EXPECT_EQ(NormalizedShort2(-1.0f, -1.0f).getPackedValueProperty(), 0x80018001u);
+    EXPECT_EQ(NormalizedShort2( 0.5f,  0.5f).getPackedValueProperty(), 0x40004000u);
+}
+
+TEST(NormalizedShort2Test, GoldenNegativeOneToVector2)
+{
+    NormalizedShort2 v(-1.0f, -1.0f);
+    auto tv = v.ToVector4();
+    EXPECT_FLOAT_EQ(tv.X, -1.0f);
+    EXPECT_FLOAT_EQ(tv.Y, -1.0f);
+}
+
 // =============================================================================
 // NormalizedShort4
 // =============================================================================
@@ -443,6 +547,23 @@ TEST(NormalizedShort4Test, EqualityFalse)
 {
     NormalizedShort4 a(1.0f, 0.0f, 0.0f, 1.0f), b(0.0f, 1.0f, 0.0f, 1.0f);
     EXPECT_TRUE(a != b);
+}
+
+TEST(NormalizedShort4Test, GoldenPackedValues)
+{
+    EXPECT_EQ(NormalizedShort4( 1.0f,  0.0f,  0.0f,  1.0f).getPackedValueProperty(), 0x7fff000000007fffull);
+    EXPECT_EQ(NormalizedShort4( 0.5f,  0.5f,  0.5f,  0.5f).getPackedValueProperty(), 0x4000400040004000ull);
+    EXPECT_EQ(NormalizedShort4(-1.0f, -1.0f, -1.0f, -1.0f).getPackedValueProperty(), 0x8001800180018001ull);
+}
+
+TEST(NormalizedShort4Test, GoldenNegativeOneToVector4)
+{
+    NormalizedShort4 v(-1.0f, -1.0f, -1.0f, -1.0f);
+    auto tv = v.ToVector4();
+    EXPECT_FLOAT_EQ(tv.X, -1.0f);
+    EXPECT_FLOAT_EQ(tv.Y, -1.0f);
+    EXPECT_FLOAT_EQ(tv.Z, -1.0f);
+    EXPECT_FLOAT_EQ(tv.W, -1.0f);
 }
 
 // =============================================================================

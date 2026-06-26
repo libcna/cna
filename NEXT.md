@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — stock effects backend parity.
-Tasks 1–197 done. Next unstarted: Task 198.
+Tasks 1–198 done. Next unstarted: Task 199.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–197 done. Next unstarted: Task 198.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 198 | PackedVector bug fixes: `HalfTypeHelper::Convert(float)` uint32_t exp underflow (0.0f→infinity fixed); `NormalizedByte2/4` and `NormalizedShort2/4` Pack truncation→`std::lroundf`; golden file corrected for -1.0 inputs; 20 new exact-value tests; 1638/1640 pass |
 | Task 197 | PackedVector golden values: computed FNA bit-packing formulas for all 17 compound types (Alpha8→Short4) via Python; saved reference table to `tests/PackedVectorGolden.md` |
 | Task 196 | Backend parity table: added §7 to `docs/xna-4-api-coverage.md` — per-effect EasyGL/Vulkan/Bgfx/SDL status table for all 6 stock effects + ShaderEffect; known-gaps table |
 | Task 195 | `BasicEffect` linear fog (EasyGL): added fog fields to `GpuDrawParams`, fog uniforms+logic to 4 shaders (colored/textured/col+textured/lit+textured); `easygl_basiceffect_fog_test.cpp`; 3 PASS; 36/36 EasyGL |
@@ -136,7 +137,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 198 (compare CNA PackedVector output against golden values from Task 197; fix bugs found).
+Next task: Task 199 (PackedVector edge-case tests: inputs −1.0, 0.0, 1.0, values slightly outside [0,1] or [−1,1] range, `NaN`, `+Inf`, `−Inf`, half-float special values).
 
 ---
 
@@ -265,11 +266,19 @@ All following the same pattern: EasyGL integration test or unit test in `tests/`
 
 ### Task 197 — PackedVector golden values ✅
 
-**Done**: `tests/PackedVectorGolden.md` created.
-Derived from FNA source bit-packing formulas via Python (IEEE 754 half-float via
-`struct.pack('<e')`). All 17 compound types covered with 3–5 representative inputs each.
+**Done**: `tests/PackedVectorGolden.md` created (corrected in Task 198).
 
-Next: Task 198 — compare CNA PackedVector output against these golden values and fix bugs.
+### Task 198 — PackedVector bug fixes ✅
+
+**Bugs fixed:**
+- `HalfTypeHelper::Convert(float)`: `uint32_t exp` wrapped on negative exponents; 0.0f was packed as 0x7C00 (infinity). Fixed by rewriting to use `int32_t` arithmetic matching FNA's `Convert(int)`.
+- `NormalizedByte2/4::Pack`: used C++ truncation (`int8_t(v*127.0f)`); FNA uses `Math.Round()`. For x=0.5, CNA gave 63, FNA gives 64. Fixed with `std::lroundf`.
+- `NormalizedShort2/4::Pack`: same truncation bug. For x=0.5, CNA gave 16383, FNA gives 16384. Fixed with `std::lroundf`.
+- `tests/PackedVectorGolden.md`: corrected -1.0 input rows (Python `+0.5` formula disagrees with C# `Math.Round` for negative values; correct packed byte for -1.0 is 0x81 not 0x82).
+
+**20 new tests** covering HalfSingle, HalfVector2, NormalizedByte2/4, NormalizedShort2/4 with exact packed-value assertions from the golden file.
+
+Next: Task 199 — PackedVector edge-case inputs.
 
 ---
 

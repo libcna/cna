@@ -18,14 +18,44 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
          */
         [[nodiscard]] static uint16_t Convert(float f)
         {
-            uint32_t bits;
-            std::memcpy(&bits, &f, 4);
-            uint32_t sign     =  (bits >> 16) & 0x8000u;
-            uint32_t exp      = ((bits >> 23) & 0xFFu) - 127 + 15;
-            uint32_t mantissa =  (bits >> 13) & 0x3FFu;
-            if (exp <= 0)      return static_cast<uint16_t>(sign);
-            if (exp >= 31)     return static_cast<uint16_t>(sign | 0x7C00u);
-            return static_cast<uint16_t>(sign | (exp << 10) | mantissa);
+            int32_t i;
+            std::memcpy(&i, &f, 4);
+            return Convert(i);
+        }
+
+        /**
+         * @brief Converts a 32-bit signed integer bit pattern to a 16-bit half-precision float.
+         * @param i The 32-bit signed integer bit pattern of the source float.
+         * @return The 16-bit half-precision representation.
+         */
+        [[nodiscard]] static uint16_t Convert(int32_t i)
+        {
+            int32_t s = (i >> 16) & 0x00008000;
+            int32_t e = ((i >> 23) & 0x000000ff) - (127 - 15);
+            int32_t m = i & 0x007fffff;
+            if (e <= 0)
+            {
+                if (e < -10) return static_cast<uint16_t>(s);
+                m = m | 0x00800000;
+                int32_t t = 14 - e;
+                int32_t a = (1 << (t - 1)) - 1;
+                int32_t b = (m >> t) & 1;
+                m = (m + a + b) >> t;
+                return static_cast<uint16_t>(s | m);
+            }
+            else if (e == 0xff - (127 - 15))
+            {
+                if (m == 0) return static_cast<uint16_t>(s | 0x7c00);
+                m >>= 13;
+                return static_cast<uint16_t>(s | 0x7c00 | m | ((m == 0) ? 1 : 0));
+            }
+            else
+            {
+                m = m + 0x00000fff + ((m >> 13) & 1);
+                if ((m & 0x00800000) != 0) { m = 0; e += 1; }
+                if (e > 30) return static_cast<uint16_t>(s | 0x7c00);
+                return static_cast<uint16_t>(s | (e << 10) | (m >> 13));
+            }
         }
 
         /**

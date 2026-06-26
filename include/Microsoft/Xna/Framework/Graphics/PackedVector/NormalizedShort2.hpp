@@ -2,6 +2,7 @@
 #pragma once
 #include <cstdint>
 #include <algorithm>
+#include <cmath>
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
@@ -77,8 +78,8 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     private:
         uint32_t packedValue_;
         static uint32_t Pack(float x, float y) {
-            auto xi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(x,-1.f,1.f)*32767.f));
-            auto yi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(y,-1.f,1.f)*32767.f));
+            auto xi = static_cast<uint16_t>(static_cast<int16_t>(std::lroundf(std::clamp(x,-1.f,1.f)*32767.f)));
+            auto yi = static_cast<uint16_t>(static_cast<int16_t>(std::lroundf(std::clamp(y,-1.f,1.f)*32767.f)));
             return static_cast<uint32_t>(xi) | (static_cast<uint32_t>(yi) << 16);
         }
     };

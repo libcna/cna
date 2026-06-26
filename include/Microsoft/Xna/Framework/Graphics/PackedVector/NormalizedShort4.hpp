@@ -2,6 +2,7 @@
 #pragma once
 #include <cstdint>
 #include <algorithm>
+#include <cmath>
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
 
@@ -79,10 +80,10 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     private:
         uint64_t packedValue_;
         static uint64_t Pack(float x, float y, float z, float w) {
-            auto xi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(x,-1.f,1.f)*32767.f));
-            auto yi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(y,-1.f,1.f)*32767.f));
-            auto zi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(z,-1.f,1.f)*32767.f));
-            auto wi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(w,-1.f,1.f)*32767.f));
+            auto xi = static_cast<uint16_t>(static_cast<int16_t>(std::lroundf(std::clamp(x,-1.f,1.f)*32767.f)));
+            auto yi = static_cast<uint16_t>(static_cast<int16_t>(std::lroundf(std::clamp(y,-1.f,1.f)*32767.f)));
+            auto zi = static_cast<uint16_t>(static_cast<int16_t>(std::lroundf(std::clamp(z,-1.f,1.f)*32767.f)));
+            auto wi = static_cast<uint16_t>(static_cast<int16_t>(std::lroundf(std::clamp(w,-1.f,1.f)*32767.f)));
             return static_cast<uint64_t>(xi) | (static_cast<uint64_t>(yi)<<16) | (static_cast<uint64_t>(zi)<<32) | (static_cast<uint64_t>(wi)<<48);
         }
     };
