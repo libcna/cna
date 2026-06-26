@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 22 in progress — RenderTarget conformance track.
-Tasks 1–188 done. Next unstarted: Task 189.
+Tasks 1–189 done. Next unstarted: Task 190.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -30,7 +30,7 @@ Tasks 1–188 done. Next unstarted: Task 189.
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 30/30 EasyGL integration tests pass; ~1540 total tests pass.
+- **Tests**: 31/31 EasyGL integration tests pass; ~1540 total tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect / startIndex / mip-level SetData/GetData (Tasks 169–171)
@@ -67,6 +67,7 @@ Tasks 1–188 done. Next unstarted: Task 189.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 189 | `BasicEffect` pixel integration tests (EasyGL): 5 sub-tests covering vertex-color-only (stride 16), texture-only (stride 20), diffuse tint (stride 20), color×texture (stride 24), directional lighting (stride 32); fog skipped — no fog in EasyGL GpuDrawParams; 5/5 PASS; 31/31 EasyGL |
 | Task 188 | `EffectAnnotation` + `EffectAnnotationCollection`: added `cachedString` ctor param; 31 tests cover all `GetValue*` types, string round-trip, collection indexing/iteration, technique/pass annotations start empty |
 | Task 187 | `SetValueTranspose` edge cases: 6 new tests verify raw layout (col-major) differs from `SetValue` (row-major), `GetValueMatrix` returns `Transpose(m)`, equivalence with `SetValue(Transpose(m))`; 52/52 pass |
 | Task 186 | `EffectParameter` array guards: FNA silently ignores type mismatch and excess elements; NaN stored without throw (FNA non-debug mode); 6 new tests, 46/46 EffectParameter tests pass |
@@ -86,6 +87,7 @@ Tasks 1–188 done. Next unstarted: Task 189.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `examples/easygl_basiceffect_combinations_test.cpp` (Task 189)
 - `examples/easygl_effect_current_technique_test.cpp` (Task 185)
 - `tests/Microsoft/Xna/Framework/Graphics/EffectCollectionTests.cpp` (Task 185)
 - `examples/easygl_effect_clone_test.cpp` (Task 184)
@@ -238,17 +240,19 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 189 — `BasicEffect` pixel integration tests
+### Task 190 — `AlphaTestEffect` all `CompareFunction` modes
 
-**Goal**: EasyGL integration test drawing a triangle with BasicEffect under 5 combinations:
-(a) vertex color only, (b) texture only, (c) texture + vertex color (multiply),
-(d) directional lighting on, (e) fog on. One pixel readback assert per combination.
+**Goal**: EasyGL integration test drawing a pixel with alpha=128; test all 8 `CompareFunction`
+values (`Less`, `LessEqual`, `Equal`, `GreaterEqual`, `Greater`, `NotEqual`, `Always`, `Never`)
+with reference=128; assert pixel is drawn or discarded for each mode.
 
 **Files**:
-- `examples/easygl_basiceffect_combinations_test.cpp` (create)
+- `examples/easygl_alphatest_modes_test.cpp` (create)
 - `CMakeLists.txt`
 
-**Verification**: `ctest --test-dir cmake-build-debug -R EasyGL_BasicEffectCombinations`
+**Pattern**: `examples/easygl_basiceffect_combinations_test.cpp` — clear, draw, readback.
+
+**Verification**: `ctest --test-dir cmake-build-debug -R EasyGL_AlphaTestModes`
 
 ---
 
@@ -273,13 +277,13 @@ All following the same pattern: EasyGL integration test or unit test in `tests/`
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–188 complete. Next unstarted: Task 189
-(BasicEffect pixel integration tests).
+Current status: Tasks 1–189 complete. Next unstarted: Task 190
+(AlphaTestEffect CompareFunction modes pixel integration test).
 
-Read include/Microsoft/Xna/Framework/Graphics/BasicEffect.hpp and
-examples/easygl_effect_clone_test.cpp as a pattern reference.
-Create examples/easygl_basiceffect_combinations_test.cpp covering
-vertex-color-only, texture-only, texture+vertex-color, lighting, and fog.
+Read include/Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp and
+examples/easygl_basiceffect_combinations_test.cpp as a pattern reference.
+Create examples/easygl_alphatest_modes_test.cpp covering all 8 CompareFunction
+values with alpha=128 and reference=128.
 Register in CMakeLists.txt, build and run.
 Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```
