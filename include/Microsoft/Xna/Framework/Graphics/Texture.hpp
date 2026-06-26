@@ -10,6 +10,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class Texture : public GraphicsResource
     {
     public:
+        using GraphicsResource::Dispose;
+
         /** @brief Returns the surface format of the texture data. */
         [[nodiscard]] SurfaceFormat getFormatProperty() const;
 

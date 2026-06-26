@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — GraphicsDevice conformance.
-Tasks 1–220 done. Next unstarted: Task 221.
+Tasks 1–222 done. Next unstarted: Task 223.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–220 done. Next unstarted: Task 221.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 221+222 | `PresentationParameters` audit: fixed default dimensions bug (1024×768→800×480 to match `GraphicsDeviceManager::DefaultBackBuffer*`); fixed C++ name-hiding bug (`Texture`/`Texture2D`/`RenderTarget2D::Dispose(bool)` hid base `Dispose()` — added `using` declarations); added `SetDisplayOrientation`, `SetDeviceWindowHandle` setter tests; extended `CloneCopiesAllFields` to cover all 10 fields; 26/26 unit tests pass; Task 222 covered by same test pass |
 | Task 220 | `docs/graphics-resource-lifetime.md` created: GPU handle ownership model, Dispose(bool) override chain, GraphicsDevice tracking list + safe disposal order, ResourceCreated/Destroyed event wiring, move semantics + pimpl incomplete-type caveat, resources-without-device rules, backend-specific caveats (EasyGL, Vulkan, Bgfx, SDL_Renderer) |
 | Task 214 | Bound-resource disposal: `Texture::Dispose` removes self from all texture slots; `RenderTarget2D::Dispose` throws `InvalidOperationException` if still set; VB/IB no-cleanup matches FNA; `TextureCollection::RemoveDisposedTexture` added; 10/10 EasyGL checks pass (`easygl_bound_resource_dispose_test.cpp`) |
 | Task 213 | Double-Dispose safety: 22/22 EasyGL checks pass — 11 types (BlendState, DepthStencilState, RasterizerState, SamplerState, VertexDeclaration, VertexBuffer, IndexBuffer, Texture2D, RenderTarget2D, BasicEffect, SpriteBatch) each called Dispose() twice, no crash, IsDisposed=true confirmed (`easygl_double_dispose_test.cpp`) |
@@ -347,6 +348,6 @@ All 19 properties, 6 events, and core methods confirmed present. Intentional C++
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–220 complete. Next unstarted: Task 221
-(Audit PresentationParameters fields/properties against FNA/XNA; document missing fields or add them).
+Current status: Tasks 1–222 complete. Next unstarted: Task 223
+(Implement or document PresentationInterval mapping for SDL/EasyGL/Vulkan/Bgfx — VSync behavior).
 ```

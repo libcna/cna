@@ -15,6 +15,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class RenderTarget2D : public Texture2D, public IRenderTarget
     {
     public:
+        using Texture2D::Dispose;
+
         /**
          * @brief Creates a RenderTarget2D with default format and no depth buffer.
          * @param device The graphics device to create the render target on.

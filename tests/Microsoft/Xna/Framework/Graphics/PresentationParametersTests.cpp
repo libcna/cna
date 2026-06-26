@@ -28,13 +28,13 @@ TEST(PresentationParametersTest, DefaultBackBufferFormat)
 TEST(PresentationParametersTest, DefaultBackBufferWidth)
 {
     PresentationParameters pp;
-    EXPECT_EQ(pp.getBackBufferWidthProperty(), 1024);
+    EXPECT_EQ(pp.getBackBufferWidthProperty(), 800);
 }
 
 TEST(PresentationParametersTest, DefaultBackBufferHeight)
 {
     PresentationParameters pp;
-    EXPECT_EQ(pp.getBackBufferHeightProperty(), 768);
+    EXPECT_EQ(pp.getBackBufferHeightProperty(), 480);
 }
 
 TEST(PresentationParametersTest, DefaultDepthStencilFormat)
@@ -173,6 +173,20 @@ TEST(PresentationParametersTest, SetRenderTargetUsage)
     EXPECT_EQ(pp.getRenderTargetUsageProperty(), RenderTargetUsage::PreserveContents);
 }
 
+TEST(PresentationParametersTest, SetDisplayOrientation)
+{
+    PresentationParameters pp;
+    pp.setDisplayOrientationProperty(DisplayOrientation::LandscapeLeft);
+    EXPECT_EQ(pp.getDisplayOrientationProperty(), DisplayOrientation::LandscapeLeft);
+}
+
+TEST(PresentationParametersTest, SetDeviceWindowHandle)
+{
+    PresentationParameters pp;
+    pp.setDeviceWindowHandleProperty(0xDEADBEEFu);
+    EXPECT_EQ(pp.getDeviceWindowHandleProperty(), 0xDEADBEEFu);
+}
+
 // --- Clone ---
 
 TEST(PresentationParametersTest, CloneCopiesAllFields)
@@ -184,6 +198,10 @@ TEST(PresentationParametersTest, CloneCopiesAllFields)
     pp.setIsFullScreenProperty(true);
     pp.setDepthStencilFormatProperty(DepthFormat::Depth24);
     pp.setMultiSampleCountProperty(2);
+    pp.setPresentationIntervalProperty(PresentInterval::Two);
+    pp.setDisplayOrientationProperty(DisplayOrientation::Portrait);
+    pp.setRenderTargetUsageProperty(RenderTargetUsage::PreserveContents);
+    pp.setDeviceWindowHandleProperty(0xCAFEBABEu);
 
     PresentationParameters clone = pp.Clone();
     EXPECT_EQ(clone.getBackBufferWidthProperty(),  1920);
@@ -192,6 +210,10 @@ TEST(PresentationParametersTest, CloneCopiesAllFields)
     EXPECT_TRUE(clone.getIsFullScreenProperty());
     EXPECT_EQ(clone.getDepthStencilFormatProperty(), DepthFormat::Depth24);
     EXPECT_EQ(clone.getMultiSampleCountProperty(), 2);
+    EXPECT_EQ(clone.getPresentationIntervalProperty(), PresentInterval::Two);
+    EXPECT_EQ(clone.getDisplayOrientationProperty(), DisplayOrientation::Portrait);
+    EXPECT_EQ(clone.getRenderTargetUsageProperty(), RenderTargetUsage::PreserveContents);
+    EXPECT_EQ(clone.getDeviceWindowHandleProperty(), 0xCAFEBABEu);
 }
 
 TEST(PresentationParametersTest, CloneIsIndependent)

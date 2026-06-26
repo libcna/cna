@@ -28,6 +28,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class Texture2D : public Texture
     {
     public:
+        using Texture::Dispose;
+
         /** @brief Constructs a default, uninitialized Texture2D. */
         Texture2D();
 

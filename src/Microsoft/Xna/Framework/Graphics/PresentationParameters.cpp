@@ -5,8 +5,8 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     PresentationParameters::PresentationParameters()
         : backBufferFormat_(SurfaceFormat::Color),
-          backBufferHeight_(768),
-          backBufferWidth_(1024),
+          backBufferHeight_(480),  // matches GraphicsDeviceManager::DefaultBackBufferHeight
+          backBufferWidth_(800),   // matches GraphicsDeviceManager::DefaultBackBufferWidth
           deviceWindowHandle_(0),
           depthStencilFormat_(DepthFormat::None),
           isFullScreen_(false),
