@@ -1,6 +1,6 @@
 # XNA 4.0 API Coverage Audit
 
-**Date:** 2026-06-08  
+**Date:** 2026-06-26  
 **Reference:** FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src`  
 **CNA headers:** `include/Microsoft/Xna/Framework/`
 
@@ -217,7 +217,54 @@ CNA's `ContentManager` is not XNB-based. It uses file-extension readers instead 
 
 ---
 
-## 7. Recommended Implementation Order
+## 7. Stock Effect Backend Parity (Task 196)
+
+This section documents which rendering backends support each stock XNA 4.0 effect and
+`ShaderEffect`, and at what level. Updated 2026-06-26.
+
+### Status symbols
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Pixel-tested — integration test draws geometry and reads back pixels; output verified. |
+| ⚠️ | Compiles and links; effect object created and applied; **no pixel readback test**. |
+| ❌ | Not implemented; calling the effect throws or is silently ignored. |
+| N/A | Backend is 2D-only; 3D stock effects do not apply. |
+
+### Backend overview
+
+| Backend | CMake option | Notes |
+|---------|-------------|-------|
+| **EasyGL** | `EASYGL` | OpenGL ES 3.2 via SDL3 window; primary backend; all stock effects shader-implemented. |
+| **Vulkan** | `VULKAN` | Custom SPIR-V pipelines; selected effects pixel-tested; others compile-only. |
+| **Bgfx** | `BGFX` | Community fork of bgfx; `SetDepthTestEnabled`/`SetBlendEnabled` still throw — no 3D pixel tests possible yet. |
+| **SDL\_Renderer** | `SDL_RENDERER` | 2D-only; all 3D calls throw `std::runtime_error`. Stock effects are N/A. |
+
+### Per-effect status
+
+| Effect | EasyGL | Vulkan | Bgfx | SDL\_Renderer | Notes |
+|--------|--------|--------|------|---------------|-------|
+| `BasicEffect` | ✅ | ⚠️ | ⚠️ | N/A | **EasyGL:** pixel-tested across all 4 shader variants (vertex-colour stride=16, texture stride=20, col+texture stride=24, lit+texture stride=32); fog, default lighting, and all property setters verified (Tasks 22, 189, 194, 195). **Vulkan:** used in `Vulkan_DrawInstanced_3Instances`, `Vulkan_RenderTarget2D_FullCycle`, `Vulkan_RenderTargetUsage` — compiles and applies correctly but no dedicated Basic-only pixel verification. **Bgfx:** shader compiled; no pixel test because `SetDepthTestEnabled` throws. |
+| `AlphaTestEffect` | ✅ | ⚠️ | ⚠️ | N/A | **EasyGL:** all 8 `CompareFunction` values pixel-tested at reference=pixel=128 (Tasks 118, 190). **Vulkan/Bgfx:** shader compiled; no pixel tests. |
+| `DualTextureEffect` | ✅ | ✅ | ⚠️ | N/A | **EasyGL:** 4 sub-tests incl. yellow×cyan→green (Tasks 136, 191). **Vulkan:** `Vulkan_DualTextureEffect_Blend` pixel-tests blend of two textures. **Bgfx:** dedicated shader compiled; no pixel test. |
+| `EnvironmentMapEffect` | ✅ | ✅ | ❌ | N/A | **EasyGL:** 4 sub-tests verifying EmissiveColor, EnvMapAmount, EnvMapSpecular independently (Tasks 134, 192). **Vulkan:** `Vulkan_EnvironmentMapEffect_Readback` pixel-tested. **Bgfx:** `CreateEffectBackend` returns a no-op stub; no SPIR-V/bgfx shaders compiled for this effect. |
+| `SkinnedEffect` | ✅ | ⚠️ | ⚠️ | N/A | **EasyGL:** stride-52 bone-weighted vertices tested with identity / translate / 2-bone-blend bones; pixel readback verifies vertex displacement (Tasks 134, 193). **Vulkan/Bgfx:** skinned shader compiled (`kSkinned3dShaders`); no pixel tests. |
+| `ShaderEffect` (custom GLSL / SPIR-V) | ✅ | ✅ | ❌ | N/A | **EasyGL:** custom GLSL shader compiled and pixel-tested (`EasyGL_ShaderEffect_GLSL`, Task 140). **Vulkan:** custom SPIR-V shader compiled and pixel-tested (`Vulkan_ShaderEffect_SpirV`). **Bgfx:** `CreateEffectBackend` returns a no-op stub; vertex/fragment sources ignored. |
+
+### Known gaps
+
+| Gap | Priority | Notes |
+|-----|----------|-------|
+| Vulkan `BasicEffect` pixel test | Medium | No dedicated test; only incidentally exercised via instanced/RT tests. |
+| Vulkan `AlphaTestEffect` pixel test | Medium | `CompareFunction` modes not pixel-verified on Vulkan. |
+| Vulkan `SkinnedEffect` pixel test | Medium | Bone displacement not pixel-verified on Vulkan. |
+| Bgfx 3D state (`SetDepthTestEnabled` / `SetBlendEnabled`) | High | Throws unconditionally; blocks all 3D pixel tests on Bgfx. |
+| Bgfx `EnvironmentMapEffect` / `ShaderEffect` | Low | No shaders compiled; needs dedicated bgfx shader authoring. |
+| EasyGL fog for `AlphaTestEffect` | Low | `AlphaTestEffect::FillGpuDrawParams` does not yet populate fog fields (fog only wired to `BasicEffect`). |
+
+---
+
+## 9. Recommended Implementation Order
 
 1. **Math / common framework types** — ✅ Done: Color, Vector2/3/4, Matrix, Quaternion, BoundingBox/Sphere/Frustum, Ray, Plane, Curve, MathHelper, Point, Rectangle, GameTime.
 
@@ -235,7 +282,7 @@ CNA's `ContentManager` is not XNB-based. It uses file-extension readers instead 
 
 ---
 
-## 8. Summary
+## 10. Summary
 
 ### What was added by this audit
 

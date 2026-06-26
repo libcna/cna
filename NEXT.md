@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — stock effects backend parity.
-Tasks 1–195 done. Next unstarted: Task 196.
+Tasks 1–196 done. Next unstarted: Task 197.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–195 done. Next unstarted: Task 196.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 196 | Backend parity table: added §7 to `docs/xna-4-api-coverage.md` — per-effect EasyGL/Vulkan/Bgfx/SDL status table for all 6 stock effects + ShaderEffect; known-gaps table |
 | Task 195 | `BasicEffect` linear fog (EasyGL): added fog fields to `GpuDrawParams`, fog uniforms+logic to 4 shaders (colored/textured/col+textured/lit+textured); `easygl_basiceffect_fog_test.cpp`; 3 PASS; 36/36 EasyGL |
 | Task 194 | `BasicEffect::EnableDefaultLighting()` exact constants (EasyGL): fixed Light2.SpecularColor bug (was Zero, now `(0.3231373,0.3607844,0.3937255)`) and Light2.DiffuseColor.Y typo; `easygl_basiceffect_default_lighting_test.cpp`; 14/14 PASS; 35/35 EasyGL |
 | Task 193 | `SkinnedEffect` bone count tests (EasyGL): `easygl_skinned_effect_bones_test.cpp`; 3 sub-tests: (a) 1 bone identity, (b) 1 bone translate(+0.5), (c) 2-bone 50/50 blend; 8/8 pixel checks PASS; 34/34 EasyGL |
@@ -133,7 +134,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 196 (see next smallest tasks below).
+Next task: Task 197 (PackedVector golden values — see next smallest tasks below).
 
 ---
 
@@ -260,11 +261,27 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 196 — next task (check GRAPHICS_TASKS.md)
+### Task 197 — PackedVector golden values
 
-Read `GRAPHICS_TASKS.md` for the next ⬜ task after 195 and implement it following
-the same pattern: integrate test or unit test, register in CMakeLists.txt, build, run,
-update GRAPHICS_TASKS.md and NEXT.md, commit and push.
+**Goal**: Run a small C# FNA program that prints `PackedValue` (uint) and `ToVector4()`
+(four floats) for known inputs on all PackedVector types. Save results in
+`tests/PackedVectorGolden.md` as a reference table for Task 198.
+
+**PackedVector types** (all in `Microsoft.Xna.Framework.Graphics.PackedVector`):
+`Alpha8`, `Bgr565`, `Bgra4444`, `Bgra5551`, `Byte4`, `HalfSingle`, `HalfVector2`,
+`HalfVector4`, `NormalizedByte2`, `NormalizedByte4`, `NormalizedShort2`,
+`NormalizedShort4`, `Rg32`, `Rgba1010102`, `Rgba64`, `Short2`, `Short4`.
+(Also `Single` and `Vector2`/`Vector4` are packed-vector types that wrap primitives.)
+
+**Note**: `Color` already has golden tests; `Single`/`Vector2`/`Vector4` pack values
+trivially. Focus on the 17 compound types above.
+
+**Approach**: Use a C# script via `dotnet-script` or `csc` against the FNA DLL, or
+by reading FNA source and computing the bit layouts manually from the source.
+FNA source is at `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/PackedVector/`.
+
+**Files**:
+- `tests/PackedVectorGolden.md` (create)
 
 ---
 
@@ -289,10 +306,9 @@ update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–195 complete. Next unstarted: Task 196.
+Current status: Tasks 1–196 complete. Next unstarted: Task 197
+(PackedVector golden values — see §Task 197 above).
 
-Read GRAPHICS_TASKS.md to find Task 196, then implement it following the established
-pattern. Fog is now implemented in EasyGL (Task 195). The fog depth uses model-space Z
-(correct when World=View=Identity). NDC Z range is [-1, 1] — keep test geometry within
-that range.
+Task 196 was a documentation task: §7 "Stock Effect Backend Parity" added to
+`docs/xna-4-api-coverage.md`. No code changed; no build needed.
 ```
