@@ -1577,16 +1577,13 @@ void main()
     void EasyGLGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
     {
         if (metagl::IsContextLost()) return;
-        if (w <= 0 || h <= 0)
-        {
-            device.set_scissor_test_enabled(false);
-            return;
-        }
+        if (w <= 0 || h <= 0) return; // invalid rect — leave scissor state unchanged
         // OpenGL scissor origin is bottom-left; convert from top-left XNA coordinates.
         int physW, physH;
         getPhysicalSize(physW, physH);
         device.set_scissor(x, physH - y - h, w, h);
-        device.set_scissor_test_enabled(true);
+        // Do NOT enable/disable scissor test here — that is controlled exclusively
+        // by ApplyRasterizerState via RasterizerState.ScissorTestEnable.
     }
 
     void EasyGLGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
