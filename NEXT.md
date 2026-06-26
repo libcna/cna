@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 22 in progress — RenderTarget conformance track.
-Tasks 1–184 done. Next unstarted: Task 185.
+Tasks 1–185 done. Next unstarted: Task 186.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -30,7 +30,7 @@ Tasks 1–184 done. Next unstarted: Task 185.
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 29/29 EasyGL integration tests pass; ~1515 total tests pass.
+- **Tests**: 30/30 EasyGL integration tests pass; ~1540 total tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect / startIndex / mip-level SetData/GetData (Tasks 169–171)
@@ -67,6 +67,7 @@ Tasks 1–184 done. Next unstarted: Task 185.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 185 | `Effect::CurrentTechnique` + collection semantics: added `GetParameterBySemantic`; new `EffectCollectionTests.cpp` (38 tests); EasyGL test verifies get/set + `Passes[0].Apply()`; 7/7 PASS; 30/30 EasyGL |
 | Task 184 | `Effect::Clone()` independence: `AlphaTestEffect` clone has distinct pointer, Alpha+DiffuseColor match, mutations in both directions stay isolated; 7/7 PASS; 29/29 EasyGL |
 | Task 183 | `DeviceResetting`/`DeviceReset` events: integration test verifies GDM events fire in order (Resetting→Reset) on second `ApplyChanges()`; 5/5 PASS; 28/28 EasyGL |
 | Task 182 | `PresentationParameters` round-trip: fixed `applyToExistingBackend` to call `SetPresentationParameters(pp)`; added NOXNA `GraphicsDevice::SetPresentationParameters`; 5/5 PASS; 27/27 EasyGL |
@@ -82,6 +83,8 @@ Tasks 1–184 done. Next unstarted: Task 185.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `examples/easygl_effect_current_technique_test.cpp` (Task 185)
+- `tests/Microsoft/Xna/Framework/Graphics/EffectCollectionTests.cpp` (Task 185)
 - `examples/easygl_effect_clone_test.cpp` (Task 184)
 - `examples/easygl_device_reset_events_test.cpp` (Task 183)
 - `examples/easygl_rt_roundtrip_test.cpp` (Task 180)
@@ -105,7 +108,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 185 (`Effect::CurrentTechnique` / collection semantics).
+Next task: Task 186 (`EffectParameter` array guards).
 
 ---
 
@@ -232,16 +235,15 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 185 — `Effect::CurrentTechnique`, `Techniques`, `Parameters`, `Passes` collection semantics
+### Task 186 — `EffectParameter` array guards
 
-**Goal**: Verify that `Techniques[0].Passes[0].Apply()` calls the correct backend
-draw-state setup; add unit tests for collection indexing and `Contains`.
+**Goal**: `SetValue(float[])` on a parameter with fewer declared elements than the
+array length must throw or silently truncate per XNA spec. Check FNA for throw-vs-ignore.
 
 **Files**:
-- `tests/Microsoft/Xna/Framework/Graphics/EffectParameterTests.cpp` (or new file)
-- `CMakeLists.txt`
+- `tests/Microsoft/Xna/Framework/Graphics/EffectParameterTests.cpp`
 
-**Verification**: `ctest --test-dir cmake-build-debug -R EffectCollection`
+**Verification**: `ctest --test-dir cmake-build-debug -R EffectParameter`
 
 ---
 
@@ -266,14 +268,12 @@ draw-state setup; add unit tests for collection indexing and `Contains`.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–184 complete. Next unstarted: Task 185
-(Effect collection semantics unit tests).
+Current status: Tasks 1–185 complete. Next unstarted: Task 186
+(EffectParameter array out-of-range and wrong-type guards).
 
-Read include/Microsoft/Xna/Framework/Graphics/EffectTechniqueCollection.hpp,
-EffectParameterCollection.hpp, and the FNA reference at
-/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/.
-Write or extend tests/Microsoft/Xna/Framework/Graphics/EffectTechniqueTests.cpp (or new file)
-to cover Techniques/Parameters collection indexing, Contains, and Passes.
-Register in CMakeLists.txt if needed, build and run.
-Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
+Read tests/Microsoft/Xna/Framework/Graphics/EffectParameterTests.cpp and the FNA
+reference at /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/EffectParameter.cs.
+Check FNA's SetValue(float[]) behaviour for mismatch (throw vs. silently truncate).
+Extend EffectParameterTests.cpp with the missing guard tests.
+Build and run. Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```

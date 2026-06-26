@@ -64,6 +64,22 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA void Add(EffectParameter param);
 
+        /**
+         * @brief Gets the first parameter whose semantic matches the given string.
+         *
+         * @param semantic The HLSL semantic string to search for.
+         * @return Pointer to the matching parameter, or nullptr if not found.
+         */
+        [[nodiscard]] EffectParameter* GetParameterBySemantic(const std::string& semantic);
+
+        /**
+         * @brief Gets the first parameter whose semantic matches the given string (const overload).
+         *
+         * @param semantic The HLSL semantic string to search for.
+         * @return Const pointer to the matching parameter, or nullptr if not found.
+         */
+        [[nodiscard]] const EffectParameter* GetParameterBySemantic(const std::string& semantic) const;
+
         /** @brief Mutable iterator type for range-for support. */
         using iterator = std::vector<EffectParameter>::iterator;
         /** @brief Const iterator type for range-for support. */

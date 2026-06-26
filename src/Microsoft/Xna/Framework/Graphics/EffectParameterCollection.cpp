@@ -23,6 +23,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void EffectParameterCollection::Add(EffectParameter param) { elements_.push_back(std::move(param)); }
 
+    EffectParameter* EffectParameterCollection::GetParameterBySemantic(const std::string& semantic)
+    {
+        for (auto& e : elements_)
+            if (e.getSemanticProperty() == semantic) return &e;
+        return nullptr;
+    }
+    const EffectParameter* EffectParameterCollection::GetParameterBySemantic(const std::string& semantic) const
+    {
+        for (const auto& e : elements_)
+            if (e.getSemanticProperty() == semantic) return &e;
+        return nullptr;
+    }
+
     EffectParameterCollection::iterator EffectParameterCollection::begin() { return elements_.begin(); }
     EffectParameterCollection::iterator EffectParameterCollection::end()   { return elements_.end(); }
     EffectParameterCollection::const_iterator EffectParameterCollection::begin() const { return elements_.begin(); }
