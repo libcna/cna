@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 22 in progress — RenderTarget conformance track.
-Tasks 1–187 done. Next unstarted: Task 188.
+Tasks 1–188 done. Next unstarted: Task 189.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -67,6 +67,7 @@ Tasks 1–187 done. Next unstarted: Task 188.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 188 | `EffectAnnotation` + `EffectAnnotationCollection`: added `cachedString` ctor param; 31 tests cover all `GetValue*` types, string round-trip, collection indexing/iteration, technique/pass annotations start empty |
 | Task 187 | `SetValueTranspose` edge cases: 6 new tests verify raw layout (col-major) differs from `SetValue` (row-major), `GetValueMatrix` returns `Transpose(m)`, equivalence with `SetValue(Transpose(m))`; 52/52 pass |
 | Task 186 | `EffectParameter` array guards: FNA silently ignores type mismatch and excess elements; NaN stored without throw (FNA non-debug mode); 6 new tests, 46/46 EffectParameter tests pass |
 | Task 185 | `Effect::CurrentTechnique` + collection semantics: added `GetParameterBySemantic`; new `EffectCollectionTests.cpp` (38 tests); EasyGL test verifies get/set + `Passes[0].Apply()`; 7/7 PASS; 30/30 EasyGL |
@@ -110,7 +111,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 188 (`EffectAnnotation` collection unit tests).
+Next task: Task 189 (`BasicEffect` pixel integration tests).
 
 ---
 
@@ -237,16 +238,17 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 188 — `EffectAnnotation` and annotation collections
+### Task 189 — `BasicEffect` pixel integration tests
 
-**Goal**: Verify `Effect.Parameters["X"].Annotations["hint"].GetValueString()` works.
-Add unit tests for `EffectAnnotationCollection`.
+**Goal**: EasyGL integration test drawing a triangle with BasicEffect under 5 combinations:
+(a) vertex color only, (b) texture only, (c) texture + vertex color (multiply),
+(d) directional lighting on, (e) fog on. One pixel readback assert per combination.
 
 **Files**:
-- `include/Microsoft/Xna/Framework/Graphics/EffectAnnotation.hpp`
-- `tests/Microsoft/Xna/Framework/Graphics/EffectAnnotationTests.cpp` (create)
+- `examples/easygl_basiceffect_combinations_test.cpp` (create)
+- `CMakeLists.txt`
 
-**Verification**: `ctest --test-dir cmake-build-debug -R EffectAnnotation`
+**Verification**: `ctest --test-dir cmake-build-debug -R EasyGL_BasicEffectCombinations`
 
 ---
 
@@ -271,12 +273,13 @@ Add unit tests for `EffectAnnotationCollection`.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–187 complete. Next unstarted: Task 188
-(EffectAnnotation collection unit tests).
+Current status: Tasks 1–188 complete. Next unstarted: Task 189
+(BasicEffect pixel integration tests).
 
-Read include/Microsoft/Xna/Framework/Graphics/EffectAnnotation.hpp and
-include/Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp.
-Check FNA reference at /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/EffectAnnotation.cs.
-Create tests/Microsoft/Xna/Framework/Graphics/EffectAnnotationTests.cpp.
-Build and run. Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
+Read include/Microsoft/Xna/Framework/Graphics/BasicEffect.hpp and
+examples/easygl_effect_clone_test.cpp as a pattern reference.
+Create examples/easygl_basiceffect_combinations_test.cpp covering
+vertex-color-only, texture-only, texture+vertex-color, lighting, and fog.
+Register in CMakeLists.txt, build and run.
+Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```

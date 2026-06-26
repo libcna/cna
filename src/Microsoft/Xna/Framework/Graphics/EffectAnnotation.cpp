@@ -8,11 +8,13 @@ namespace Microsoft::Xna::Framework::Graphics
                                        int rowCount, int columnCount,
                                        EffectParameterClass paramClass,
                                        EffectParameterType paramType,
-                                       std::vector<float> data)
+                                       std::vector<float> data,
+                                       std::string cachedString)
         : name_(std::move(name)), semantic_(std::move(semantic))
         , rowCount_(rowCount), columnCount_(columnCount)
         , paramClass_(paramClass), paramType_(paramType)
         , data_(std::move(data))
+        , cachedString_(std::move(cachedString))
     {
     }
 

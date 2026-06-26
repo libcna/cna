@@ -24,21 +24,24 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /**
-         * @brief Constructs an EffectAnnotation with all metadata and optional float data.
+         * @brief Constructs an EffectAnnotation with all metadata, optional float data, and
+         *        optional cached string value.
          *
-         * @param name       Name of the annotation.
-         * @param semantic   Semantic string of the annotation.
-         * @param rowCount   Number of rows (for matrix annotations).
-         * @param columnCount Number of columns (for matrix annotations).
-         * @param paramClass Classification of the annotation value.
-         * @param paramType  Data type of the annotation value.
-         * @param data       Raw float data backing this annotation (default: empty).
+         * @param name         Name of the annotation.
+         * @param semantic     Semantic string of the annotation.
+         * @param rowCount     Number of rows (for matrix annotations).
+         * @param columnCount  Number of columns (for matrix annotations).
+         * @param paramClass   Classification of the annotation value.
+         * @param paramType    Data type of the annotation value.
+         * @param data         Raw float data backing this annotation (default: empty).
+         * @param cachedString Cached string value returned by GetValueString() (default: empty).
          */
         EffectAnnotation(std::string name, std::string semantic,
                          int rowCount, int columnCount,
                          EffectParameterClass paramClass,
                          EffectParameterType paramType,
-                         std::vector<float> data = {});
+                         std::vector<float> data = {},
+                         std::string cachedString = "");
 
         /**
          * @brief Gets the name of this annotation.
