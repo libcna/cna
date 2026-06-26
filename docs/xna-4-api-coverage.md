@@ -1,6 +1,6 @@
 # XNA 4.0 API Coverage Audit
 
-**Date:** 2026-06-26  
+**Date:** 2026-06-26 (updated 2026-06-26 — Tasks 197–199)  
 **Reference:** FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src`  
 **CNA headers:** `include/Microsoft/Xna/Framework/`
 
@@ -40,7 +40,7 @@ This document compares the CNA public C++ API surface against:
 | `Microsoft::Xna::Framework::Design` | ✅ | ❌ | Intentionally excluded (see §6) |
 | `Microsoft::Xna::Framework::GamerServices` | ❌ (not in FNA) | ⚠️ | Stub – Guide only (see §5) |
 | `Microsoft::Xna::Framework::Graphics` | ✅ | ✅ | Implemented / Stub |
-| `Microsoft::Xna::Framework::Graphics::PackedVector` | ✅ | ✅ | Stub |
+| `Microsoft::Xna::Framework::Graphics::PackedVector` | ✅ | ✅ | Implemented |
 | `Microsoft::Xna::Framework::Input` | ✅ | ✅ | Implemented |
 | `Microsoft::Xna::Framework::Input::Touch` | ✅ | ✅ | Stub |
 | `Microsoft::Xna::Framework::Media` | ✅ | ✅ | Implemented / Stub |
@@ -102,13 +102,36 @@ so that XNA 4.0 game code that references them can at least compile:
 
 ### `Microsoft::Xna::Framework::Graphics` — Stock Effects
 
-- `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`: headers exist with full API shape. GPU-side shader logic is stub/no-op for non-EasyGL backends.
-- **Status:** Stub (API surface complete)
+- `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`: API surface complete; GPU shader logic fully implemented in EasyGL (pixel-tested, all property setters verified). Vulkan has working shaders for most effects but fewer pixel-test coverage points. Bgfx compiles effect objects but 3D rendering is blocked by unimplemented depth/blend state. See §7 for full backend parity table.
+- **Status:** Implemented (EasyGL); Partial (Vulkan); Blocked (Bgfx)
 
 ### `Microsoft::Xna::Framework::Graphics::PackedVector::*`
 
-- All 13 packed vector types have headers. Most are API-only stubs without implementation.
-- **Status:** Stub
+All 17 XNA 4.0 PackedVector types are fully implemented:
+
+| Type | Packed width | Status |
+|------|-------------|--------|
+| `Alpha8` | 8-bit | ✅ Implemented |
+| `Bgr565` | 16-bit | ✅ Implemented |
+| `Bgra4444` | 16-bit | ✅ Implemented |
+| `Bgra5551` | 16-bit | ✅ Implemented |
+| `Byte4` | 32-bit | ✅ Implemented |
+| `HalfSingle` | 16-bit half-float | ✅ Implemented |
+| `HalfVector2` | 32-bit (2× half) | ✅ Implemented |
+| `HalfVector4` | 64-bit (4× half) | ✅ Implemented |
+| `NormalizedByte2` | 16-bit (2× snorm8) | ✅ Implemented |
+| `NormalizedByte4` | 32-bit (4× snorm8) | ✅ Implemented |
+| `NormalizedShort2` | 32-bit (2× snorm16) | ✅ Implemented |
+| `NormalizedShort4` | 64-bit (4× snorm16) | ✅ Implemented |
+| `Rg32` | 32-bit (2× unorm16) | ✅ Implemented |
+| `Rgba1010102` | 32-bit (10-10-10-2) | ✅ Implemented |
+| `Rgba64` | 64-bit (4× unorm16) | ✅ Implemented |
+| `Short2` | 32-bit (2× int16) | ✅ Implemented |
+| `Short4` | 64-bit (4× int16) | ✅ Implemented |
+
+`HalfTypeHelper` implements the full FNA IEEE 754 half-float algorithm including subnormals, ±∞, ±0, and NaN (Tasks 197–199). Pack rounding uses `std::lroundf` matching FNA's `Math.Round` for signed-normalized types (Tasks 198). Golden-value tests and edge-case tests (clamping, specials) all pass.
+
+- **Status:** Implemented
 
 ### `Microsoft::Xna::Framework::Audio` — Stub classes
 
@@ -264,7 +287,41 @@ This section documents which rendering backends support each stock XNA 4.0 effec
 
 ---
 
-## 9. Recommended Implementation Order
+## 8. Overall Coverage Estimate
+
+Coverage is estimated as the fraction of public XNA 4.0 API surface that is usable
+(not merely declared) in a typical 2D or 3D game on the EasyGL backend.
+
+| Subsystem | Estimated coverage | Notes |
+|-----------|-------------------|-------|
+| Math types (`Vector2/3/4`, `Matrix`, `Color`, `BoundingBox`, etc.) | ~98 % | All types implemented; minor numeric-precision edge cases only |
+| `GraphicsDevice` (core device + state) | ~85 % | Missing: some query/counter methods; sRGB SurfaceFormats silently linear |
+| `SpriteBatch` | ~95 % | All overloads; all `SpriteEffects`; `transformMatrix`; tested |
+| `Texture2D / Texture3D / TextureCube` | ~90 % | All mip levels, partial rects, all 6 cube faces; sRGB formats not fully mapped |
+| `RenderTarget2D / RenderTargetCube` | ~90 % | DiscardContents/PreserveContents; MRT; round-trip tested |
+| `VertexBuffer / IndexBuffer` | ~90 % | All typed + raw paths; skinned stride 52; tested |
+| `BasicEffect` | ~95 % | All 4 shader variants; lighting; fog; all property setters |
+| `AlphaTestEffect` | ~90 % | All 8 `CompareFunction` modes pixel-tested; fog not wired |
+| `DualTextureEffect` | ~90 % | Both texture slots + diffuse multiplier pixel-tested |
+| `EnvironmentMapEffect` | ~90 % | EmissiveColor, EnvMapAmount, EnvMapSpecular pixel-tested |
+| `SkinnedEffect` | ~85 % | Bone identity/translate/blend pixel-tested; full skinned pipeline |
+| `ShaderEffect` (custom GLSL/SPIR-V) | ~80 % | EasyGL GLSL and Vulkan SPIR-V tested; no HLSL path |
+| `PackedVector` (all 17 types) | ~100 % | Full Pack/Unpack with correct rounding; golden-value + edge-case tests |
+| `SpriteFont` / `Model` | ~80 % | Functional for typical use; some edge-case APIs stubs |
+| `SoundEffect / SoundEffectInstance` | ~85 % | SDL_mixer backend; basic playback; 3D audio partial |
+| `MediaPlayer / VideoPlayer` | ~85 % | FFmpeg video; SDL_mixer audio; Album/Artist/Genre stub |
+| `ContentManager` | ~65 % | File-extension readers; no XNB; no ServiceProvider property |
+| `StorageDevice / StorageContainer` | ~90 % | Native filesystem; full XNA API shape |
+| `GamePad / Keyboard / Mouse` | ~90 % | SDL3 backend; tested |
+| `Input::Touch` | ~10 % | API declared; no SDL3 touch backend wired |
+| `GamerServices` | ~5 % | `Guide` stub only |
+| `Audio (XACT)` — AudioEngine/SoundBank | ~0 % | Headers exist; XACT not implemented |
+| `Framework.Net` (NetworkSession, etc.) | 0 % | Xbox Live exclusive; intentionally excluded |
+| **Overall (EasyGL backend, 2D+3D game)** | **~80 %** | Main gaps: Touch, GamerServices, XACT, XNB content pipeline |
+
+---
+
+## 10. Recommended Implementation Order
 
 1. **Math / common framework types** — ✅ Done: Color, Vector2/3/4, Matrix, Quaternion, BoundingBox/Sphere/Frustum, Ray, Plane, Curve, MathHelper, Point, Rectangle, GameTime.
 
@@ -274,7 +331,7 @@ This section documents which rendering backends support each stock XNA 4.0 effec
 
 4. **Graphics 2D** — ✅ Done: SpriteBatch, Texture2D, SpriteFont, BlendState, RasterizerState, SamplerState.
 
-5. **Graphics 3D** — ✅ Partial: VertexBuffer/IndexBuffer, Model, BasicEffect, DrawInstanced. PackedVector types and some stock effects remain stubs.
+5. **Graphics 3D** — ✅ Done: VertexBuffer/IndexBuffer, Model, all 5 stock effects (EasyGL pixel-tested), all 17 PackedVector types fully implemented.
 
 6. **Content / Media / Storage** — ✅ Partial: ContentManager (file-extension approach), MediaPlayer, VideoPlayer done. `ResourceContentManager` stub needed.
 
@@ -282,24 +339,31 @@ This section documents which rendering backends support each stock XNA 4.0 effec
 
 ---
 
-## 10. Summary
+## 11. Summary
 
-### What was added by this audit
+### What was added by this audit and subsequent tasks
 
-- `docs/xna-4-api-coverage.md` (this file)
+- `docs/xna-4-api-coverage.md` (this file; updated Tasks 196, 200)
 - `include/Microsoft/Xna/Framework/Content/ResourceContentManager.hpp` — stub
 - `src/Microsoft/Xna/Framework/Content/ResourceContentManager.cpp` — stub
 - `include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp` — stub
 - `src/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.cpp` — stub
 - `include/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp` — stub
+- All 17 PackedVector types fully implemented with correct FNA Pack/Unpack math (Tasks 197–199)
+- `tests/PackedVectorGolden.md` — FNA bit-packing reference table for all 17 types
+- §7 Stock Effect Backend Parity table (Task 196)
+- §8 Overall Coverage Estimate table (Task 200)
 
-### What remains missing
+### What remains missing or incomplete
 
 - `Design` namespace TypeConverter classes (intentionally excluded)
 - `GamerServices` rich API (Gamer, SignedInGamer, etc.) — stubs can be added on demand
 - `ContentReader` XNB-based class (deferred; CNA uses non-XNB approach)
 - `ContentSerializerAttribute` family (intentionally excluded)
 - XACT audio system (AudioEngine, SoundBank, WaveBank, Cue) — headers exist, behavior is stub
+- SDL3 touch backend for `TouchPanel`
+- Vulkan pixel tests for BasicEffect, AlphaTestEffect, SkinnedEffect
+- Bgfx 3D state (depth test / blend enable) blocks all Bgfx 3D pixel tests
 
 ### What is intentionally excluded
 
@@ -315,8 +379,9 @@ See build run in task notes. Build must remain clean after each stub addition.
 
 ### Recommended next steps
 
-1. Add compile-compatibility stubs for `Gamer` / `SignedInGamer` / `GamerCollection` if target games need them.
+1. Wire up SDL3 touch backend for `TouchPanel` (currently 0 % functional).
 2. Implement XACT audio (AudioEngine, SoundBank, WaveBank) via SDL_mixer or OpenAL.
-3. Wire up SDL3 touch backend for `TouchPanel`.
-4. Complete PackedVector implementations (Pack/Unpack math).
-5. Fix pre-existing `GamePadInputTest` axis scaling failure.
+3. Add Vulkan pixel tests for `BasicEffect`, `AlphaTestEffect`, `SkinnedEffect` (see §7 known gaps).
+4. Unblock Bgfx 3D state (`SetDepthTestEnabled`, `SetBlendEnabled`) to enable 3D pixel tests on Bgfx.
+5. Add compile-compatibility stubs for `Gamer` / `SignedInGamer` / `GamerCollection` if target games need them.
+6. Audit `GraphicsDevice` public methods against FNA for any missing overloads or validation differences.
