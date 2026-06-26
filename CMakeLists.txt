@@ -763,6 +763,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_double_dispose
+                        examples/easygl_double_dispose_test.cpp)
+        add_test(NAME EasyGL_DoubleDispose
+                 COMMAND cna_test_easygl_double_dispose)
+        set_tests_properties(EasyGL_DoubleDispose PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
         add_test(NAME EasyGL_EffectClone
