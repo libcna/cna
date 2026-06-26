@@ -961,6 +961,11 @@ namespace Microsoft::Xna::Framework::Graphics
         return typeName;
     }
 
+    void GraphicsDevice::SetPresentationParameters(const PresentationParameters& pp)
+    {
+        presentationParameters_ = pp;
+    }
+
     SDL_Renderer* GraphicsDevice::GetRendererInternal() const
     {
         return backend_ != nullptr ? backend_->GetRendererInternal() : nullptr;

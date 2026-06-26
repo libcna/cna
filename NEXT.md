@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 22 in progress — RenderTarget conformance track.
-Tasks 1–181 done. Next unstarted: Task 182.
+Tasks 1–182 done. Next unstarted: Task 183.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -67,6 +67,7 @@ Tasks 1–181 done. Next unstarted: Task 182.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 182 | `PresentationParameters` round-trip: fixed `applyToExistingBackend` to call `SetPresentationParameters(pp)`; added NOXNA `GraphicsDevice::SetPresentationParameters`; 5/5 PASS; 27/27 EasyGL |
 | Task 181 | `RenderTargetBinding` unit tests: all 6 CubeMapFace values, distinct array slices, cube ctor arraySlice=0, default face; 13/13 PASS |
 | Task 180 | EasyGL RT round-trip: backbuffer→RT→backbuffer→RT→backbuffer; direct FBO readback; 3/3 PASS; 26/26 EasyGL |
 | Task 179 | Bgfx: implemented `ClearColorAndDepth` (delegates to `Clear`); `BindAsRenderTarget` calls `setViewClear(BGFX_CLEAR_NONE)` for PreserveContents; smoke test PASS |
@@ -96,11 +97,11 @@ Tasks 1–181 done. Next unstarted: Task 182.
 ## 4. Current blocker / main problem
 
 No active blocker. All three backends build clean.
-- 26/26 EasyGL integration tests pass.
+- 27/27 EasyGL integration tests pass.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 182 (`PresentationParameters` round-trip unit test).
+Next task: Task 183 (`GraphicsDevice` device-reset events).
 
 ---
 
@@ -227,30 +228,16 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 182 — `PresentationParameters` round-trip (unit test)
-
-**Goal**: After `GraphicsDeviceManager::ApplyChanges`, verify that
-`GraphicsDevice::getPresentationParametersProperty()` reflects the requested
-`BackBufferWidth`, `BackBufferHeight`, `DepthStencilFormat`, `PresentInterval`,
-`MultiSampleCount`.
-
-**Files**:
-- `tests/Microsoft/Xna/Framework/Graphics/PresentationParametersTests.cpp` (create)
-- `CMakeLists.txt`
-
-**Verification**: `ctest --test-dir cmake-build-debug -R PresentationParameters`
-
----
-
 ### Task 183 — `GraphicsDevice` device-reset events (unit test)
 
-**Goal**: Verify `DeviceResetting` and `DeviceReset` events fire when the swapchain
-is recreated; `ResourceDestroyed` fires on explicit resource dispose.
+**Goal**: Verify `DeviceResetting` and `DeviceReset` events fire when
+`GraphicsDeviceManager::ApplyChanges` runs on an existing device.
 Check FNA `GraphicsDevice.cs` for event semantics.
 
 **Files**:
 - `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`
-- `tests/Microsoft/Xna/Framework/Graphics/GraphicsDeviceEventsTests.cpp` (create)
+- `tests/Microsoft/Xna/Framework/Graphics/GraphicsDeviceEventsTests.cpp` (create or extend)
+- `CMakeLists.txt`
 
 **Verification**: `ctest --test-dir cmake-build-debug -R GraphicsDeviceEvents`
 

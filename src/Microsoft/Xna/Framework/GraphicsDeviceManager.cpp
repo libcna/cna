@@ -527,6 +527,8 @@ namespace Microsoft::Xna::Framework
 
         auto& pp = gdi.getPresentationParametersProperty();
 
+        graphicsDevice_->SetPresentationParameters(pp);
+
         SDL_Window* window = tryGetSDLWindow();
         if (window != nullptr)
         {

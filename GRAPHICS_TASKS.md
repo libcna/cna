@@ -268,7 +268,7 @@ All 100 original tasks addressed.
 | 179 | Same as 177 but Bgfx: map to `BGFX_CLEAR_COLOR` vs no clear flag on `bgfx::setViewClear` | ✅ | Implemented `ClearColorAndDepth` (delegates to `Clear`); `BindAsRenderTarget` calls `setViewClear(BGFX_CLEAR_NONE)` for PreserveContents; smoke test PASS |
 | 180 | Integration test: backbuffer → RT → backbuffer → RT → backbuffer in a single frame; verify correct render target is active at each step and final backbuffer pixel is correct | ✅ | 3/3 PASS; 26/26 EasyGL |
 | 181 | `RenderTargetBinding` with explicit mip level and cube face: verify that `SetRenderTargets({RenderTargetBinding(rt, 0), RenderTargetBinding(rt, 1)})` correctly targets distinct mip levels | ✅ | 13/13 unit tests PASS; all 6 CubeMapFace values, distinct array slices, default field checks |
-| 182 | `PresentationParameters` round-trip: after `GraphicsDeviceManager::ApplyChanges`, verify `GraphicsDevice.PresentationParameters` reflects the requested `BackBufferWidth`, `BackBufferHeight`, `DepthStencilFormat`, `PresentInterval`, `MultiSampleCount` | ⬜ | Unit test; no backend needed |
+| 182 | `PresentationParameters` round-trip: after `GraphicsDeviceManager::ApplyChanges`, verify `GraphicsDevice.PresentationParameters` reflects the requested `BackBufferWidth`, `BackBufferHeight`, `DepthStencilFormat`, `PresentInterval`, `MultiSampleCount` | ✅ | Fixed `applyToExistingBackend` to call `SetPresentationParameters(pp)`; added `GraphicsDevice::SetPresentationParameters` NOXNA helper; 5/5 PASS; 27/27 EasyGL |
 | 183 | `GraphicsDevice` device-reset events: `DeviceResetting` and `DeviceReset` fire when swapchain is recreated; `ResourceDestroyed` fires on explicit resource dispose; add unit tests | ⬜ | Check FNA event semantics |
 
 ---

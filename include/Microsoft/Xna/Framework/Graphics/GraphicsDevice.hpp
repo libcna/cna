@@ -598,6 +598,17 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the fully qualified .NET type name of this class. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
+        /**
+         * @brief Stores the given presentation parameters without triggering a full device reset.
+         *
+         * Used by GraphicsDeviceManager::applyToExistingBackend so that callers can
+         * read the current parameters back via getPresentationParametersProperty() after
+         * applying preferred settings.
+         *
+         * @param pp The presentation parameters to store.
+         */
+        NOXNA void SetPresentationParameters(const PresentationParameters& pp);
+
     private:
         SDL_Window* window_;
         bool ownsWindow_;
