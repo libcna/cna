@@ -70,16 +70,21 @@ namespace Microsoft::Xna::Framework::Graphics
         Dispose(true);
     }
 
+    std::string GraphicsResource::ToString() const
+    {
+        return name_.empty() ? Object::ToString() : name_;
+    }
+
     void GraphicsResource::Dispose(bool disposing)
     {
         if (isDisposed_)
         {
             return;
         }
-        isDisposed_ = true;
         if (disposing)
         {
             Disposing.Raise(this, System::EventArgs::Empty);
         }
+        isDisposed_ = true;
     }
 }

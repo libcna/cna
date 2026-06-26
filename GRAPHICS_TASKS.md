@@ -336,7 +336,7 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                      | Status | Notes                              |
 | --- | --------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------- |
-| 211 | Audit `GraphicsResource` base behavior against FNA: `GraphicsDevice`, `Name`, `Tag`, `IsDisposed`, events | ⬜      | Document differences               |
+| 211 | Audit `GraphicsResource` base behavior against FNA: `GraphicsDevice`, `Name`, `Tag`, `IsDisposed`, events | ✅      | Fixed `Dispose(bool)` event-before-flag ordering; added `ToString()` override (returns Name if set, else type name); documented 2 gaps: device resource tracking (`AddResourceReference`/`RemoveResourceReference` not implemented) and `GraphicsDeviceResetting()` callback; all intentional C++ deviations listed in `docs/graphicsresource-fna-audit.md` |
 | 212 | Ensure all Graphics resources derive consistently from `GraphicsResource` where XNA/FNA does              | ⬜      | Fix inheritance gaps               |
 | 213 | Add unit tests for double `Dispose()` on all major resource types                                         | ⬜      | Must not crash                     |
 | 214 | Add tests for disposing resources while bound to `GraphicsDevice`                                         | ⬜      | Texture, VB, IB, RT                |

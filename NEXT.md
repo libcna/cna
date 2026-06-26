@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — GraphicsDevice conformance.
-Tasks 1–210 done. Next unstarted: Task 211.
+Tasks 1–211 done. Next unstarted: Task 212.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–210 done. Next unstarted: Task 211.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 211 | `GraphicsResource` FNA audit: fixed `Dispose(bool)` ordering (event now fires *before* `isDisposed_ = true`, matching FNA); added `ToString()` override (returns Name if set, else type name); documented 2 remaining gaps — device resource tracking and `GraphicsDeviceResetting()` callback — in `docs/graphicsresource-fna-audit.md` |
 | Task 210 | Disposed-resource guards: `Effect::Apply()` and `SetRenderTarget(RT2D/RTCube)` now throw `ObjectDisposedException` if resource is disposed; `TextureCollection` guard was already present; VB/IB skipped (not yet `GraphicsResource` — Task 212); 3/3 EasyGL checks pass (`easygl_disposed_resource_test.cpp`) |
 | Task 209 | Scissor rectangle: fixed EasyGL bug where `SetScissorRect` unconditionally enabled scissor test (now only sets rect; enable/disable owned by `ApplyRasterizerState`); 7/7 EasyGL pixel-readback checks — scissor-off=full draw, scissor-on=right-half clip, re-disable=full draw, rect round-trip (`easygl_scissor_test.cpp`) |
 | Task 208 | Viewport state: 10/10 EasyGL integration checks — initial VP matches backbuffer, set/get round-trip, VP stable across Clear + DrawUserPrimitives, second explicit set works, minDepth/maxDepth survive (`easygl_viewport_state_test.cpp`) |
@@ -111,6 +112,7 @@ Tasks 1–210 done. Next unstarted: Task 211.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `docs/graphicsresource-fna-audit.md` (Task 211)
 - `examples/easygl_disposed_resource_test.cpp` (Task 210)
 - `examples/easygl_scissor_test.cpp` (Task 209)
 - `examples/easygl_viewport_state_test.cpp` (Task 208)

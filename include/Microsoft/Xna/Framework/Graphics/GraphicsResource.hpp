@@ -48,6 +48,12 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void setTagProperty(System::Object* value);
 
+        /**
+         * @brief Returns the Name if set, otherwise returns the type name.
+         * @return Name or type name string.
+         */
+        [[nodiscard]] std::string ToString() const override;
+
         /** @brief Releases all resources held by this object. */
         void Dispose() override;
 
