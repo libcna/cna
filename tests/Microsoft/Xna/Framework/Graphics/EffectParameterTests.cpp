@@ -2,6 +2,8 @@
 // Task 25: EffectParameter unit tests.
 
 #include <gtest/gtest.h>
+#include <cmath>
+#include <limits>
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -498,5 +500,86 @@ TEST(EffectParameterTest, DefaultMatrixIsIdentity)
     EXPECT_NEAR(got.M33, 1.0f, 1e-5f);
     EXPECT_NEAR(got.M44, 1.0f, 1e-5f);
     EXPECT_NEAR(got.M12, 0.0f, 1e-5f);
+}
+
+// --- Task 186: array guards — type mismatch and excess-element behaviour ---
+//
+// FNA silently accepts SetValue(float) regardless of the declared ParameterType
+// and does not check array length against RowCount/ColumnCount.  CNA matches
+// this behaviour (FNA non-debug mode).
+
+// SetValue(float) on an Int32-declared parameter must not throw.
+// The float is stored in floatData_ and readable via GetValueSingle().
+// intData_ is untouched, so GetValueInt32() still returns 0.
+TEST(EffectParameterTest, SetValueFloatOnInt32ParamNoThrow)
+{
+    EffectParameter p("i", "", 1, 1,
+                      EffectParameterClass::Scalar,
+                      EffectParameterType::Int32);
+    EXPECT_NO_THROW(p.SetValue(3.14f));
+    EXPECT_NEAR(p.GetValueSingle(), 3.14f, 1e-5f);
+    EXPECT_EQ(p.GetValueInt32(), 0);   // intData_ was never written
+}
+
+// SetValue(bool) on a Single-declared parameter must not throw.
+TEST(EffectParameterTest, SetValueBoolOnSingleParamNoThrow)
+{
+    auto p = MakeScalar("x");
+    EXPECT_NO_THROW(p.SetValue(true));
+    // After SetValue(bool), intData_ = {1}; floatData_ is still {0}
+    EXPECT_EQ(p.GetValueBoolean(), true);
+    EXPECT_NEAR(p.GetValueSingle(), 0.0f, 1e-5f);
+}
+
+// SetValue(float[]) with more elements than ColumnCount must not throw;
+// all elements are stored and retrievable.
+TEST(EffectParameterTest, SetValueFloatArrayExcessElementsNoThrow)
+{
+    // 1×1 scalar — ColumnCount=1, RowCount=1 — but we push 5 floats
+    auto p = MakeScalar("x");
+    std::vector<float> vals = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+    EXPECT_NO_THROW(p.SetValue(vals));
+    auto got = p.GetValueSingleArray(5);
+    ASSERT_EQ(static_cast<int>(got.size()), 5);
+    for (int i = 0; i < 5; ++i)
+        EXPECT_NEAR(got[static_cast<std::size_t>(i)], vals[static_cast<std::size_t>(i)], 1e-5f);
+}
+
+// SetValue(float[]) with fewer elements than ColumnCount must not throw;
+// only the supplied elements are stored; GetValueSingleArray caps at what is available.
+TEST(EffectParameterTest, SetValueFloatArrayFewerElementsNoThrow)
+{
+    // 1×4 vector — ColumnCount=4 — but we only supply 2 values
+    EffectParameter p("v", "", 1, 4,
+                      EffectParameterClass::Vector,
+                      EffectParameterType::Single);
+    std::vector<float> vals = {7.0f, 8.0f};
+    EXPECT_NO_THROW(p.SetValue(vals));
+    auto got = p.GetValueSingleArray(2);
+    ASSERT_EQ(static_cast<int>(got.size()), 2);
+    EXPECT_NEAR(got[0], 7.0f, 1e-5f);
+    EXPECT_NEAR(got[1], 8.0f, 1e-5f);
+}
+
+// NaN does NOT throw in CNA (matches FNA non-debug mode); the NaN is stored.
+TEST(EffectParameterTest, SetValueNaNDoesNotThrow)
+{
+    auto p = MakeScalar("x");
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_NO_THROW(p.SetValue(nan));
+    EXPECT_TRUE(std::isnan(p.GetValueSingle()));
+}
+
+// NaN in a float array does NOT throw in CNA (matches FNA non-debug mode).
+TEST(EffectParameterTest, SetValueFloatArrayWithNaNDoesNotThrow)
+{
+    auto p = MakeScalar("x");
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    std::vector<float> vals = {1.0f, nan, 3.0f};
+    EXPECT_NO_THROW(p.SetValue(vals));
+    auto got = p.GetValueSingleArray(3);
+    EXPECT_NEAR(got[0], 1.0f, 1e-5f);
+    EXPECT_TRUE(std::isnan(got[1]));
+    EXPECT_NEAR(got[2], 3.0f, 1e-5f);
 }
 

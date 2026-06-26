@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 22 in progress — RenderTarget conformance track.
-Tasks 1–185 done. Next unstarted: Task 186.
+Tasks 1–186 done. Next unstarted: Task 187.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -67,6 +67,7 @@ Tasks 1–185 done. Next unstarted: Task 186.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 186 | `EffectParameter` array guards: FNA silently ignores type mismatch and excess elements; NaN stored without throw (FNA non-debug mode); 6 new tests, 46/46 EffectParameter tests pass |
 | Task 185 | `Effect::CurrentTechnique` + collection semantics: added `GetParameterBySemantic`; new `EffectCollectionTests.cpp` (38 tests); EasyGL test verifies get/set + `Passes[0].Apply()`; 7/7 PASS; 30/30 EasyGL |
 | Task 184 | `Effect::Clone()` independence: `AlphaTestEffect` clone has distinct pointer, Alpha+DiffuseColor match, mutations in both directions stay isolated; 7/7 PASS; 29/29 EasyGL |
 | Task 183 | `DeviceResetting`/`DeviceReset` events: integration test verifies GDM events fire in order (Resetting→Reset) on second `ApplyChanges()`; 5/5 PASS; 28/28 EasyGL |
@@ -108,7 +109,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 186 (`EffectParameter` array guards).
+Next task: Task 187 (`EffectParameter::SetValueTranspose` edge cases).
 
 ---
 
@@ -235,10 +236,10 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 186 — `EffectParameter` array guards
+### Task 187 — `EffectParameter::SetValueTranspose` edge cases
 
-**Goal**: `SetValue(float[])` on a parameter with fewer declared elements than the
-array length must throw or silently truncate per XNA spec. Check FNA for throw-vs-ignore.
+**Goal**: Verify the matrix is stored transposed relative to `SetValue(Matrix)`.
+Check FNA `EffectParameter.cs SetValueTranspose` for row-major vs column-major.
 
 **Files**:
 - `tests/Microsoft/Xna/Framework/Graphics/EffectParameterTests.cpp`
@@ -268,12 +269,12 @@ array length must throw or silently truncate per XNA spec. Check FNA for throw-v
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–185 complete. Next unstarted: Task 186
-(EffectParameter array out-of-range and wrong-type guards).
+Current status: Tasks 1–186 complete. Next unstarted: Task 187
+(SetValueTranspose edge cases).
 
 Read tests/Microsoft/Xna/Framework/Graphics/EffectParameterTests.cpp and the FNA
 reference at /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/EffectParameter.cs.
-Check FNA's SetValue(float[]) behaviour for mismatch (throw vs. silently truncate).
-Extend EffectParameterTests.cpp with the missing guard tests.
+Check FNA's SetValueTranspose vs SetValue(Matrix) — which fields map where.
+Extend EffectParameterTests.cpp with byte-for-byte transpose edge-case tests.
 Build and run. Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```
