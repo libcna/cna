@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — GraphicsDevice conformance.
-Tasks 1–201 done. Next unstarted: Task 202.
+Tasks 1–202 done. Next unstarted: Task 203.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–201 done. Next unstarted: Task 202.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 202 | GraphicsDevice validation: `Present()` throws `InvalidOperationException` when RT bound; `SetVertexBuffers(>16)` throws `ArgumentOutOfRangeException`; `GetBackBufferData(nullptr)` throws `invalid_argument`; `TextureCollection` throws `ObjectDisposedException` for disposed textures; `SetRenderTarget(RT2D/RTCube)` now updates `renderTargetBound_` flag; 8 unit tests + 4 EasyGL integration test checks all pass |
 | Task 201 | `docs/graphicsdevice-fna-audit.md` created: 3 missing XNA methods (`Present(rect,rect,IntPtr)`, `Clear(ClearOptions,Vector4,float,int)`, `GetRenderTargetsNoAllocEXT`); 7 CNA non-XNA members missing `NOXNA` tag documented; all 19 properties/6 events confirmed present; intentional C++ deviations (generics→typed overloads, params→vector) noted |
 | Task 200 | `docs/xna-4-api-coverage.md` update: PackedVector Stub→Implemented, stock-effects status corrected per backend, §8 Overall Coverage Estimate added (~80% EasyGL), §10/§11 recommended order and summary updated |
 | Task 199 | PackedVector edge-case tests: clamping (all types), HalfTypeHelper ±0/±∞/NaN/denormals, boundary round-trips; 28 new tests; 1666/1668 pass |
@@ -102,6 +103,8 @@ Tasks 1–201 done. Next unstarted: Task 202.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `tests/Microsoft/Xna/Framework/Graphics/GraphicsDeviceValidationTests.cpp` (Task 202)
+- `examples/easygl_device_validation_test.cpp` (Task 202)
 - `docs/graphicsdevice-fna-audit.md` (Task 201)
 - `tests/PackedVectorGolden.md` (Task 197)
 - `examples/easygl_basiceffect_fog_test.cpp` (Task 195)
@@ -141,7 +144,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 202 (add validation for null `VertexBuffer`, null `IndexBuffer`, null `Texture`, null `Effect`, and invalid render target arguments; match FNA/XNA exception style).
+Next task: Task 203 (verify draw calls throw when no vertex buffer is bound; add unit tests).
 
 ---
 
@@ -322,7 +325,6 @@ All 19 properties, 6 events, and core methods confirmed present. Intentional C++
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–201 complete. Next unstarted: Task 202
-(add validation for null VertexBuffer, null IndexBuffer, null Texture, null Effect,
-and invalid render target arguments; match FNA/XNA exception style as closely as possible).
+Current status: Tasks 1–202 complete. Next unstarted: Task 203
+(verify draw calls throw when no vertex buffer is bound and the API requires one; add unit tests).
 ```
