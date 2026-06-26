@@ -1879,27 +1879,39 @@ void main()
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec4 aColor;\n"
 "uniform mat4 uWVP;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
 "out vec4 vColor;\n"
+"out float vFogFactor;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
+"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
 "precision mediump float;\n"
 "in vec4 vColor;\n"
+"in float vFogFactor;\n"
 "uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    FragColor=vColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_colored_.prog, vsrc, fsrc, "colored");
-        prog_colored_.loc_wvp       = prog_colored_.prog.uniform_location("uWVP");
-        prog_colored_.loc_alphatest = prog_colored_.prog.uniform_location("uAlphaTest");
-        prog_colored_.ready         = true;
+        prog_colored_.loc_wvp         = prog_colored_.prog.uniform_location("uWVP");
+        prog_colored_.loc_alphatest   = prog_colored_.prog.uniform_location("uAlphaTest");
+        prog_colored_.loc_fog_enabled = prog_colored_.prog.uniform_location("uFogEnabled");
+        prog_colored_.loc_fog_color   = prog_colored_.prog.uniform_location("uFogColor");
+        prog_colored_.loc_fog_start   = prog_colored_.prog.uniform_location("uFogStart");
+        prog_colored_.loc_fog_end     = prog_colored_.prog.uniform_location("uFogEnd");
+        prog_colored_.ready           = true;
         CNA_RENDER_LOG("colored3D ready loc_wvp=" << prog_colored_.loc_wvp);
     }
 
@@ -1913,31 +1925,43 @@ void main()
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec2 aUV;\n"
 "uniform mat4 uWVP;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
 "out vec2 vUV;\n"
+"out float vFogFactor;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
+"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
 "precision mediump float;\n"
 "in vec2 vUV;\n"
+"in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    FragColor=texture(uTexture,vUV)*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_textured_.prog, vsrc, fsrc, "textured");
-        prog_textured_.loc_wvp       = prog_textured_.prog.uniform_location("uWVP");
-        prog_textured_.loc_diffuse   = prog_textured_.prog.uniform_location("uDiffuseColor");
-        prog_textured_.loc_texture   = prog_textured_.prog.uniform_location("uTexture");
-        prog_textured_.loc_alphatest = prog_textured_.prog.uniform_location("uAlphaTest");
-        prog_textured_.ready         = true;
+        prog_textured_.loc_wvp         = prog_textured_.prog.uniform_location("uWVP");
+        prog_textured_.loc_diffuse     = prog_textured_.prog.uniform_location("uDiffuseColor");
+        prog_textured_.loc_texture     = prog_textured_.prog.uniform_location("uTexture");
+        prog_textured_.loc_alphatest   = prog_textured_.prog.uniform_location("uAlphaTest");
+        prog_textured_.loc_fog_enabled = prog_textured_.prog.uniform_location("uFogEnabled");
+        prog_textured_.loc_fog_color   = prog_textured_.prog.uniform_location("uFogColor");
+        prog_textured_.loc_fog_start   = prog_textured_.prog.uniform_location("uFogStart");
+        prog_textured_.loc_fog_end     = prog_textured_.prog.uniform_location("uFogEnd");
+        prog_textured_.ready           = true;
         CNA_RENDER_LOG("textured3D ready loc_wvp=" << prog_textured_.loc_wvp);
     }
 
@@ -1952,32 +1976,44 @@ void main()
 "layout(location=1) in vec4 aColor;\n"
 "layout(location=2) in vec2 aUV;\n"
 "uniform mat4 uWVP;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
 "out vec4 vColor;\n"
 "out vec2 vUV;\n"
+"out float vFogFactor;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
+"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
 "precision mediump float;\n"
 "in vec4 vColor;\n"
 "in vec2 vUV;\n"
+"in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    FragColor=texture(uTexture,vUV)*vColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_col_textured_.prog, vsrc, fsrc, "col+textured");
-        prog_col_textured_.loc_wvp       = prog_col_textured_.prog.uniform_location("uWVP");
-        prog_col_textured_.loc_texture   = prog_col_textured_.prog.uniform_location("uTexture");
-        prog_col_textured_.loc_alphatest = prog_col_textured_.prog.uniform_location("uAlphaTest");
-        prog_col_textured_.ready         = true;
+        prog_col_textured_.loc_wvp         = prog_col_textured_.prog.uniform_location("uWVP");
+        prog_col_textured_.loc_texture     = prog_col_textured_.prog.uniform_location("uTexture");
+        prog_col_textured_.loc_alphatest   = prog_col_textured_.prog.uniform_location("uAlphaTest");
+        prog_col_textured_.loc_fog_enabled = prog_col_textured_.prog.uniform_location("uFogEnabled");
+        prog_col_textured_.loc_fog_color   = prog_col_textured_.prog.uniform_location("uFogColor");
+        prog_col_textured_.loc_fog_start   = prog_col_textured_.prog.uniform_location("uFogStart");
+        prog_col_textured_.loc_fog_end     = prog_col_textured_.prog.uniform_location("uFogEnd");
+        prog_col_textured_.ready           = true;
         CNA_RENDER_LOG("col+textured3D ready loc_wvp=" << prog_col_textured_.loc_wvp);
     }
 
@@ -1993,24 +2029,31 @@ void main()
 "layout(location=2) in vec2 aUV;\n"
 "uniform mat4 uWVP;\n"
 "uniform mat3 uNormalMatrix;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
 "out vec3 vNormal;\n"
 "out vec2 vUV;\n"
+"out float vFogFactor;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vNormal=uNormalMatrix*aNormal;\n"
 "    vUV=aUV;\n"
+"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
 "precision mediump float;\n"
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
+"in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
@@ -2019,18 +2062,23 @@ void main()
 "    FragColor=texture(uTexture,vUV)*vec4(litRGB,uDiffuseColor.a);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
-        prog_lit_textured_.loc_wvp       = prog_lit_textured_.prog.uniform_location("uWVP");
-        prog_lit_textured_.loc_normalmat = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
-        prog_lit_textured_.loc_diffuse   = prog_lit_textured_.prog.uniform_location("uDiffuseColor");
-        prog_lit_textured_.loc_ambient   = prog_lit_textured_.prog.uniform_location("uAmbientColor");
-        prog_lit_textured_.loc_l0dir     = prog_lit_textured_.prog.uniform_location("uLight0Dir");
-        prog_lit_textured_.loc_l0diff    = prog_lit_textured_.prog.uniform_location("uLight0Diffuse");
-        prog_lit_textured_.loc_texture   = prog_lit_textured_.prog.uniform_location("uTexture");
-        prog_lit_textured_.loc_alphatest = prog_lit_textured_.prog.uniform_location("uAlphaTest");
-        prog_lit_textured_.ready         = true;
+        prog_lit_textured_.loc_wvp         = prog_lit_textured_.prog.uniform_location("uWVP");
+        prog_lit_textured_.loc_normalmat   = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
+        prog_lit_textured_.loc_diffuse     = prog_lit_textured_.prog.uniform_location("uDiffuseColor");
+        prog_lit_textured_.loc_ambient     = prog_lit_textured_.prog.uniform_location("uAmbientColor");
+        prog_lit_textured_.loc_l0dir       = prog_lit_textured_.prog.uniform_location("uLight0Dir");
+        prog_lit_textured_.loc_l0diff      = prog_lit_textured_.prog.uniform_location("uLight0Diffuse");
+        prog_lit_textured_.loc_texture     = prog_lit_textured_.prog.uniform_location("uTexture");
+        prog_lit_textured_.loc_alphatest   = prog_lit_textured_.prog.uniform_location("uAlphaTest");
+        prog_lit_textured_.loc_fog_enabled = prog_lit_textured_.prog.uniform_location("uFogEnabled");
+        prog_lit_textured_.loc_fog_color   = prog_lit_textured_.prog.uniform_location("uFogColor");
+        prog_lit_textured_.loc_fog_start   = prog_lit_textured_.prog.uniform_location("uFogStart");
+        prog_lit_textured_.loc_fog_end     = prog_lit_textured_.prog.uniform_location("uFogEnd");
+        prog_lit_textured_.ready           = true;
         CNA_RENDER_LOG("lit+textured3D ready loc_wvp=" << prog_lit_textured_.loc_wvp);
     }
 
@@ -2365,6 +2413,17 @@ void main()
             p.prog.set_uniform(p.loc_alphatest,
                 params.alphaTest[0], params.alphaTest[1],
                 params.alphaTest[2], params.alphaTest[3]);
+
+        // Linear fog (BasicEffect and AlphaTestEffect shaders)
+        if (p.loc_fog_enabled >= 0)
+            p.prog.set_uniform(p.loc_fog_enabled, params.fogEnabled ? 1.0f : 0.0f);
+        if (p.loc_fog_color >= 0)
+            p.prog.set_uniform(p.loc_fog_color,
+                params.fogColor[0], params.fogColor[1], params.fogColor[2]);
+        if (p.loc_fog_start >= 0)
+            p.prog.set_uniform(p.loc_fog_start, params.fogStart);
+        if (p.loc_fog_end >= 0)
+            p.prog.set_uniform(p.loc_fog_end, params.fogEnd);
     }
 
     void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)

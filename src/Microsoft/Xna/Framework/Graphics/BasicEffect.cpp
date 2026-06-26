@@ -43,6 +43,13 @@ namespace Microsoft::Xna::Framework::Graphics
         p.light0Diffuse[0] = ld.X;  p.light0Diffuse[1] = ld.Y;  p.light0Diffuse[2] = ld.Z;
 
         World.ToColumnMajor(p.worldColMajor);
+
+        p.fogEnabled   = fogEnabled_;
+        p.fogColor[0]  = fogColor_.X;
+        p.fogColor[1]  = fogColor_.Y;
+        p.fogColor[2]  = fogColor_.Z;
+        p.fogStart     = fogStart_;
+        p.fogEnd       = fogEnd_;
     }
 
     // IEffectLights

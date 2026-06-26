@@ -272,6 +272,14 @@ namespace CNA::Internal::Backends
         float boneTransforms[72 * 16] = {};
         /// SkinnedEffect: number of valid entries in boneTransforms (0 = none).
         int boneCount = 0;
+        /// BasicEffect fog: when true the fog uniforms below are used.
+        bool  fogEnabled      = false;
+        /// BasicEffect fog: RGB blend colour.
+        float fogColor[3]     = {0, 0, 0};
+        /// BasicEffect fog: distance at which fog begins (eye-space Z).
+        float fogStart        = 0.0f;
+        /// BasicEffect fog: distance at which fog reaches full density (eye-space Z).
+        float fogEnd          = 1.0f;
         bool textureEnabled      = false;
         bool vertexColorEnabled  = true;
         bool lightingEnabled     = false;
