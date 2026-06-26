@@ -547,6 +547,24 @@ namespace Microsoft::Xna::Framework::Graphics
                                        const std::uint32_t* indexData, int indexOffset, int primitiveCount);
 
         // --- NOXNA helpers (not in XNA 4.0) ---
+
+        /**
+         * @brief Fires ResourceCreated for the given resource.
+         *
+         * Called by GraphicsResource constructors when a device is attached.
+         * @param resource The newly created resource.
+         */
+        NOXNA void OnResourceCreated(System::Object* resource);
+
+        /**
+         * @brief Fires ResourceDestroyed with the given name and tag.
+         *
+         * Called by GraphicsResource::Dispose before the resource is marked disposed.
+         * @param name The Name of the resource being destroyed.
+         * @param tag  The Tag of the resource being destroyed (may be nullptr).
+         */
+        NOXNA void OnResourceDestroyed(const std::string& name, System::Object* tag);
+
         /** @brief Enables or disables depth testing. */
         NOXNA void SetDepthTestEnabled(bool enabled);
         /** @brief Enables or disables blending. */

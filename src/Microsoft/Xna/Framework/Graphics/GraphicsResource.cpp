@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     GraphicsResource::GraphicsResource(GraphicsDevice* device)
         : graphicsDevice_(device)
     {
+        if (graphicsDevice_)
+            graphicsDevice_->OnResourceCreated(this);
     }
 
     GraphicsResource::GraphicsResource(const GraphicsResource& other)
@@ -85,6 +88,8 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             Disposing.Raise(this, System::EventArgs::Empty);
         }
+        if (graphicsDevice_)
+            graphicsDevice_->OnResourceDestroyed(name_, tag_);
         isDisposed_ = true;
     }
 }

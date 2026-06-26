@@ -3,6 +3,8 @@
 
 #include "System/EventArgs.hpp"
 
+namespace System { class Object; }
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief Provides event data for the GraphicsDevice.ResourceCreated event. */
@@ -13,12 +15,13 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Constructs a ResourceCreatedEventArgs with the given resource pointer.
          * @param resource Pointer to the newly created resource object (default nullptr).
          */
-        explicit ResourceCreatedEventArgs(void* resource = nullptr) : resource_(resource) {}
+        explicit ResourceCreatedEventArgs(System::Object* resource = nullptr)
+            : resource_(resource) {}
 
         /** @brief Returns a pointer to the newly created resource object. */
-        [[nodiscard]] void* getResourceProperty() const { return resource_; }
+        [[nodiscard]] System::Object* getResourceProperty() const { return resource_; }
 
     private:
-        void* resource_;
+        System::Object* resource_;
     };
 }

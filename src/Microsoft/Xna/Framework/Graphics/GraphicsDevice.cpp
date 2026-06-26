@@ -312,6 +312,18 @@ namespace Microsoft::Xna::Framework::Graphics
         isDisposed_ = true;
     }
 
+    void GraphicsDevice::OnResourceCreated(System::Object* resource)
+    {
+        if (!ResourceCreated.Empty())
+            ResourceCreated.Raise(this, ResourceCreatedEventArgs(resource));
+    }
+
+    void GraphicsDevice::OnResourceDestroyed(const std::string& name, System::Object* tag)
+    {
+        if (!ResourceDestroyed.Empty())
+            ResourceDestroyed.Raise(this, ResourceDestroyedEventArgs(name, tag));
+    }
+
     void GraphicsDevice::SetDepthTestEnabled(bool enabled)
     {
         if (backend_ != nullptr) backend_->SetDepthTestEnabled(enabled);
