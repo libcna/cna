@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "System/ObjectDisposedException.hpp"
+
 #include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -24,6 +27,10 @@ namespace Microsoft::Xna::Framework::Graphics
         if (index < 0 || index >= MaxTextures)
         {
             throw std::out_of_range("Texture index out of range.");
+        }
+        if (texture != nullptr && texture->getIsDisposedProperty())
+        {
+            throw System::ObjectDisposedException(texture->getNameProperty());
         }
         textures_[static_cast<std::size_t>(index)] = texture;
     }

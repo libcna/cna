@@ -639,6 +639,7 @@ namespace Microsoft::Xna::Framework::Graphics
         SamplerStateCollection vertexSamplerStates_;
 
         std::vector<RenderTargetBinding> currentRenderTargets_;
+        bool renderTargetBound_ = false;
         std::vector<VertexBufferBinding> currentVertexBuffers_;
 
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const;

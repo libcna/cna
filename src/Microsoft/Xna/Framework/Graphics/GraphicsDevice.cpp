@@ -24,6 +24,10 @@
 #include <string>
 #include <vector>
 
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     using CNA::Internal::Backends::CreateGraphicsBackend;
@@ -250,6 +254,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Present()
     {
+        if (renderTargetBound_)
+            throw System::InvalidOperationException("Cannot present while render targets are bound");
+
         if (backend_ != nullptr)
         {
             backend_->Present();
@@ -1278,6 +1285,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount)
     {
+        if (data == nullptr)
+            throw std::invalid_argument("data");
+
         int x, y, w, h;
         if (rect)
         {
@@ -1314,6 +1324,12 @@ namespace Microsoft::Xna::Framework::Graphics
         if (backend_)
             backend_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetBackend() : nullptr);
 
+        currentRenderTargets_.clear();
+        renderTargetBound_ = (renderTarget != nullptr);
+        if (renderTarget != nullptr)
+            currentRenderTargets_.push_back(RenderTargetBinding(
+                static_cast<Texture*>(renderTarget)));
+
         if (renderTarget &&
             renderTarget->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
@@ -1328,11 +1344,15 @@ namespace Microsoft::Xna::Framework::Graphics
             backend_->SetRenderTargetCubeFace(
                 renderTarget ? renderTarget->GetRenderTargetCubeBackend() : nullptr,
                 static_cast<int>(cubeMapFace));
+
+        currentRenderTargets_.clear();
+        renderTargetBound_ = (renderTarget != nullptr);
     }
 
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
     {
         currentRenderTargets_ = renderTargets;
+        renderTargetBound_ = !renderTargets.empty();
         if (!backend_) return;
         if (renderTargets.empty())
         {
@@ -1369,6 +1389,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers)
     {
+        constexpr int kMaxVertexBufferBindings = 16; // XNA4 HiDef spec limit
+        if (static_cast<int>(vertexBuffers.size()) > kMaxVertexBufferBindings)
+            throw System::ArgumentOutOfRangeException(
+                "vertexBuffers",
+                std::to_string(vertexBuffers.size()),
+                "Max Vertex Buffers supported is " + std::to_string(kMaxVertexBufferBindings));
+
         currentVertexBuffers_ = vertexBuffers;
         if (!vertexBuffers.empty())
             currentVertexBuffer_ = vertexBuffers[0].getVertexBufferProperty();
