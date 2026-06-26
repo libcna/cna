@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 22 in progress — RenderTarget conformance track.
-Tasks 1–180 done. Next unstarted: Task 181.
+Tasks 1–181 done. Next unstarted: Task 182.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -67,6 +67,7 @@ Tasks 1–180 done. Next unstarted: Task 181.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 181 | `RenderTargetBinding` unit tests: all 6 CubeMapFace values, distinct array slices, cube ctor arraySlice=0, default face; 13/13 PASS |
 | Task 180 | EasyGL RT round-trip: backbuffer→RT→backbuffer→RT→backbuffer; direct FBO readback; 3/3 PASS; 26/26 EasyGL |
 | Task 179 | Bgfx: implemented `ClearColorAndDepth` (delegates to `Clear`); `BindAsRenderTarget` calls `setViewClear(BGFX_CLEAR_NONE)` for PreserveContents; smoke test PASS |
 | Task 178 | Vulkan: added `rtRenderPassLoad_` (LOAD_OP_LOAD); `preserveContents_` in `VulkanRenderTargetBackend`; `CreateRenderTarget2D` bool propagated from XNA layer; 3/3 PASS |
@@ -99,7 +100,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 181 (`RenderTargetBinding` with mip level and cube face).
+Next task: Task 182 (`PresentationParameters` round-trip unit test).
 
 ---
 
@@ -225,25 +226,6 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
-
-### Task 181 — `RenderTargetBinding` constructor and field accessors (unit test)
-
-**Goal**: Verify the `RenderTargetBinding` constructors set `RenderTarget`, `ArraySlice`,
-and `CubeMapFace` correctly; and that the null constructor returns expected defaults.
-Check FNA `RenderTargetBinding.cs` for exact field names and default values.
-
-**Files**:
-- `include/Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp` (read only)
-- `tests/Microsoft/Xna/Framework/Graphics/RenderTargetBindingTests.cpp` (create or extend)
-- `CMakeLists.txt` (register test if new file)
-
-**Verification**:
-```bash
-cmake --build cmake-build-debug --target CNA
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug -R RenderTargetBinding --output-on-failure
-```
-
----
 
 ### Task 182 — `PresentationParameters` round-trip (unit test)
 
