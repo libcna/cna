@@ -683,6 +683,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_device_reset_events
+                        examples/easygl_device_reset_events_test.cpp)
+        add_test(NAME EasyGL_DeviceResetEvents
+                 COMMAND cna_test_easygl_device_reset_events)
+        set_tests_properties(EasyGL_DeviceResetEvents PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests

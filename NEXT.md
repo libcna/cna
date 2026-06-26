@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 22 in progress — RenderTarget conformance track.
-Tasks 1–182 done. Next unstarted: Task 183.
+Tasks 1–183 done. Next unstarted: Task 184.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -30,7 +30,7 @@ Tasks 1–182 done. Next unstarted: Task 183.
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 26/26 EasyGL integration tests pass; ~1515 total tests pass.
+- **Tests**: 28/28 EasyGL integration tests pass; ~1515 total tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect / startIndex / mip-level SetData/GetData (Tasks 169–171)
@@ -67,6 +67,7 @@ Tasks 1–182 done. Next unstarted: Task 183.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 183 | `DeviceResetting`/`DeviceReset` events: integration test verifies GDM events fire in order (Resetting→Reset) on second `ApplyChanges()`; 5/5 PASS; 28/28 EasyGL |
 | Task 182 | `PresentationParameters` round-trip: fixed `applyToExistingBackend` to call `SetPresentationParameters(pp)`; added NOXNA `GraphicsDevice::SetPresentationParameters`; 5/5 PASS; 27/27 EasyGL |
 | Task 181 | `RenderTargetBinding` unit tests: all 6 CubeMapFace values, distinct array slices, cube ctor arraySlice=0, default face; 13/13 PASS |
 | Task 180 | EasyGL RT round-trip: backbuffer→RT→backbuffer→RT→backbuffer; direct FBO readback; 3/3 PASS; 26/26 EasyGL |
@@ -80,6 +81,7 @@ Tasks 1–182 done. Next unstarted: Task 183.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `examples/easygl_device_reset_events_test.cpp` (Task 183)
 - `examples/easygl_rt_roundtrip_test.cpp` (Task 180)
 - `examples/bgfx_render_target_usage_test.cpp` (Task 179)
 - `examples/easygl_render_target_usage_test.cpp` (Task 177)
@@ -97,11 +99,11 @@ Tasks 1–182 done. Next unstarted: Task 183.
 ## 4. Current blocker / main problem
 
 No active blocker. All three backends build clean.
-- 27/27 EasyGL integration tests pass.
+- 28/28 EasyGL integration tests pass.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 183 (`GraphicsDevice` device-reset events).
+Next task: Task 184 (`Effect::Clone()`).
 
 ---
 
@@ -228,21 +230,6 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 183 — `GraphicsDevice` device-reset events (unit test)
-
-**Goal**: Verify `DeviceResetting` and `DeviceReset` events fire when
-`GraphicsDeviceManager::ApplyChanges` runs on an existing device.
-Check FNA `GraphicsDevice.cs` for event semantics.
-
-**Files**:
-- `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`
-- `tests/Microsoft/Xna/Framework/Graphics/GraphicsDeviceEventsTests.cpp` (create or extend)
-- `CMakeLists.txt`
-
-**Verification**: `ctest --test-dir cmake-build-debug -R GraphicsDeviceEvents`
-
----
-
 ### Task 184 — `Effect::Clone()` (unit test)
 
 **Goal**: Clone must produce an independent copy; modifying a parameter on the clone
@@ -277,12 +264,12 @@ must not affect the original. Check FNA `Effect.cs Clone()`.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–180 complete. Next unstarted: Task 181
-(RenderTargetBinding constructor and field accessor unit tests).
+Current status: Tasks 1–183 complete. Next unstarted: Task 184
+(Effect::Clone() unit test).
 
-Read include/Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp and
-the FNA reference at /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/RenderTargetBinding.cs.
-Write or extend tests/Microsoft/Xna/Framework/Graphics/RenderTargetBindingTests.cpp,
-register it in CMakeLists.txt if needed, build and run the tests.
+Read include/Microsoft/Xna/Framework/Graphics/Effect.hpp and
+the FNA reference at /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect.cs.
+Write or extend tests/Microsoft/Xna/Framework/Graphics/EffectTests.cpp to cover Clone().
+Register the test in CMakeLists.txt if needed, build and run.
 Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```
