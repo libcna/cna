@@ -715,6 +715,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_draw_range_validation
+                        examples/easygl_draw_range_validation_test.cpp)
+        add_test(NAME EasyGL_DrawRangeValidation
+                 COMMAND cna_test_easygl_draw_range_validation)
+        set_tests_properties(EasyGL_DrawRangeValidation PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
         add_test(NAME EasyGL_EffectClone

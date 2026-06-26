@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — GraphicsDevice conformance.
-Tasks 1–204 done. Next unstarted: Task 205.
+Tasks 1–205 done. Next unstarted: Task 206.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–204 done. Next unstarted: Task 205.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 205 | Draw-call range validation: added `ThrowIfNegativeOrZero`/`ThrowIfNegative` guards for primitiveCount/vertexStart/startIndex/baseVertex/instanceCount to DrawPrimitives, DrawIndexedPrimitives, DrawInstancedPrimitives, and all 4 typed DrawUserPrimitives overloads; 9/9 EasyGL integration checks pass (`easygl_draw_range_validation_test.cpp`) |
 | Task 204 | Indexed draw-call no-IB validation tests: `DrawIndexedPrimitives` and `DrawInstancedPrimitives` throw `std::runtime_error` when `currentIndexBuffer_` is null (VB bound to satisfy first guard); 2/2 EasyGL integration checks pass (`easygl_draw_noindexbuffer_test.cpp`) |
 | Task 203 | Draw-call no-VB validation tests: `DrawPrimitives`, `DrawIndexedPrimitives`, `DrawInstancedPrimitives` all throw `std::runtime_error` when `currentVertexBuffer_` is null; 3/3 EasyGL integration checks pass (`easygl_draw_novertexbuffer_test.cpp`) |
 | Task 202 | GraphicsDevice validation: `Present()` throws `InvalidOperationException` when RT bound; `SetVertexBuffers(>16)` throws `ArgumentOutOfRangeException`; `GetBackBufferData(nullptr)` throws `invalid_argument`; `TextureCollection` throws `ObjectDisposedException` for disposed textures; `SetRenderTarget(RT2D/RTCube)` now updates `renderTargetBound_` flag; 8 unit tests + 4 EasyGL integration test checks all pass |
@@ -105,6 +106,7 @@ Tasks 1–204 done. Next unstarted: Task 205.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `examples/easygl_draw_range_validation_test.cpp` (Task 205)
 - `examples/easygl_draw_noindexbuffer_test.cpp` (Task 204)
 - `examples/easygl_draw_novertexbuffer_test.cpp` (Task 203)
 - `tests/Microsoft/Xna/Framework/Graphics/GraphicsDeviceValidationTests.cpp` (Task 202)

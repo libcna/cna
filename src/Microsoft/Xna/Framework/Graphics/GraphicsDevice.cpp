@@ -378,6 +378,9 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawPrimitives: no effect has been applied.");
 
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
+
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p;
@@ -414,6 +417,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no effect has been applied.");
+
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(baseVertex, "baseVertex");
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -458,6 +465,11 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error(
                 "GraphicsDevice::DrawInstancedPrimitives: no effect has been applied.");
 
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(baseVertex, "baseVertex");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
+
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p;
@@ -494,6 +506,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
 
         // Compute vertex count from primitive type.
         int vertsPerPrimitive = 0;
@@ -643,6 +657,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const VertexPositionColor* data, int offset, int count)
     {
         if (!backend_ || !currentEffect_) return;
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
         std::vector<GpuVPC> packed(static_cast<std::size_t>(n));
         for (int i = 0; i < n; ++i)
@@ -665,6 +680,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const VertexPositionTexture* data, int offset, int count)
     {
         if (!backend_ || !currentEffect_) return;
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
         std::vector<GpuVPT> packed(static_cast<std::size_t>(n));
         for (int i = 0; i < n; ++i)
@@ -686,6 +702,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const VertexPositionColorTexture* data, int offset, int count)
     {
         if (!backend_ || !currentEffect_) return;
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
         std::vector<GpuVPCT> packed(static_cast<std::size_t>(n));
         for (int i = 0; i < n; ++i)
@@ -709,6 +726,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const VertexPositionNormalTexture* data, int offset, int count)
     {
         if (!backend_ || !currentEffect_) return;
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
         std::vector<GpuVPNT> packed(static_cast<std::size_t>(n));
         for (int i = 0; i < n; ++i)
