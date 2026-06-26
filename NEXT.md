@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — stock effects backend parity.
-Tasks 1–196 done. Next unstarted: Task 197.
+Tasks 1–197 done. Next unstarted: Task 198.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–196 done. Next unstarted: Task 197.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 197 | PackedVector golden values: computed FNA bit-packing formulas for all 17 compound types (Alpha8→Short4) via Python; saved reference table to `tests/PackedVectorGolden.md` |
 | Task 196 | Backend parity table: added §7 to `docs/xna-4-api-coverage.md` — per-effect EasyGL/Vulkan/Bgfx/SDL status table for all 6 stock effects + ShaderEffect; known-gaps table |
 | Task 195 | `BasicEffect` linear fog (EasyGL): added fog fields to `GpuDrawParams`, fog uniforms+logic to 4 shaders (colored/textured/col+textured/lit+textured); `easygl_basiceffect_fog_test.cpp`; 3 PASS; 36/36 EasyGL |
 | Task 194 | `BasicEffect::EnableDefaultLighting()` exact constants (EasyGL): fixed Light2.SpecularColor bug (was Zero, now `(0.3231373,0.3607844,0.3937255)`) and Light2.DiffuseColor.Y typo; `easygl_basiceffect_default_lighting_test.cpp`; 14/14 PASS; 35/35 EasyGL |
@@ -97,6 +98,7 @@ Tasks 1–196 done. Next unstarted: Task 197.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `tests/PackedVectorGolden.md` (Task 197)
 - `examples/easygl_basiceffect_fog_test.cpp` (Task 195)
 - `examples/easygl_basiceffect_default_lighting_test.cpp` (Task 194)
 - `examples/easygl_skinned_effect_bones_test.cpp` (Task 193)
@@ -134,7 +136,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 197 (PackedVector golden values — see next smallest tasks below).
+Next task: Task 198 (compare CNA PackedVector output against golden values from Task 197; fix bugs found).
 
 ---
 
@@ -261,27 +263,13 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 197 — PackedVector golden values
+### Task 197 — PackedVector golden values ✅
 
-**Goal**: Run a small C# FNA program that prints `PackedValue` (uint) and `ToVector4()`
-(four floats) for known inputs on all PackedVector types. Save results in
-`tests/PackedVectorGolden.md` as a reference table for Task 198.
+**Done**: `tests/PackedVectorGolden.md` created.
+Derived from FNA source bit-packing formulas via Python (IEEE 754 half-float via
+`struct.pack('<e')`). All 17 compound types covered with 3–5 representative inputs each.
 
-**PackedVector types** (all in `Microsoft.Xna.Framework.Graphics.PackedVector`):
-`Alpha8`, `Bgr565`, `Bgra4444`, `Bgra5551`, `Byte4`, `HalfSingle`, `HalfVector2`,
-`HalfVector4`, `NormalizedByte2`, `NormalizedByte4`, `NormalizedShort2`,
-`NormalizedShort4`, `Rg32`, `Rgba1010102`, `Rgba64`, `Short2`, `Short4`.
-(Also `Single` and `Vector2`/`Vector4` are packed-vector types that wrap primitives.)
-
-**Note**: `Color` already has golden tests; `Single`/`Vector2`/`Vector4` pack values
-trivially. Focus on the 17 compound types above.
-
-**Approach**: Use a C# script via `dotnet-script` or `csc` against the FNA DLL, or
-by reading FNA source and computing the bit layouts manually from the source.
-FNA source is at `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/PackedVector/`.
-
-**Files**:
-- `tests/PackedVectorGolden.md` (create)
+Next: Task 198 — compare CNA PackedVector output against these golden values and fix bugs.
 
 ---
 
@@ -306,9 +294,10 @@ FNA source is at `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/PackedVec
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–196 complete. Next unstarted: Task 197
-(PackedVector golden values — see §Task 197 above).
+Current status: Tasks 1–197 complete. Next unstarted: Task 198
+(compare CNA PackedVector output against Task 197 golden values; fix bugs).
 
-Task 196 was a documentation task: §7 "Stock Effect Backend Parity" added to
-`docs/xna-4-api-coverage.md`. No code changed; no build needed.
+Task 197 was a documentation/analysis task: computed FNA bit-packing golden values
+for all 17 PackedVector types via Python; saved to `tests/PackedVectorGolden.md`.
+No code changed; no build needed.
 ```
