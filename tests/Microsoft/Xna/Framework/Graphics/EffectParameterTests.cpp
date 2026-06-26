@@ -583,3 +583,124 @@ TEST(EffectParameterTest, SetValueFloatArrayWithNaNDoesNotThrow)
     EXPECT_NEAR(got[2], 3.0f, 1e-5f);
 }
 
+// --- Task 187: SetValueTranspose edge cases ---
+//
+// CNA stores SetValue(Matrix) in row-major order:
+//   floatData_ = {M11,M12,M13,M14, M21,M22,...}
+//
+// SetValueTranspose(m) is implemented as SetValue(Transpose(m)), so it stores
+// column-major order of m:
+//   floatData_ = {M11,M21,M31,M41, M12,M22,...}
+//
+// This matches FNA's semantic: SetValueTranspose uploads the matrix pre-transposed
+// so that the GPU shader (which transposes on read) sees the original m.
+
+// Helper: fully-asymmetric 4×4 matrix with all distinct elements.
+static Matrix MakeAsymmetric()
+{
+    return Matrix(
+         1.0f,  2.0f,  3.0f,  4.0f,
+         5.0f,  6.0f,  7.0f,  8.0f,
+         9.0f, 10.0f, 11.0f, 12.0f,
+        13.0f, 14.0f, 15.0f, 16.0f
+    );
+}
+
+// Raw layout: SetValue stores row-major; SetValueTranspose stores column-major.
+// For the asymmetric matrix, floatData_[1] (second element) differs between the two.
+TEST(EffectParameterTest, SetValueTransposeRawLayoutDiffersFromSetValue)
+{
+    auto p = MakeMatrix();
+    const Matrix m = MakeAsymmetric();
+
+    p.SetValue(m);
+    const auto rowMajor = p.GetValueSingleArray(16);  // {M11,M12,M13,M14,...}
+
+    p.SetValueTranspose(m);
+    const auto colMajor = p.GetValueSingleArray(16);  // {M11,M21,M31,M41,...}
+
+    // Element [1]: row-major has M12=2, column-major has M21=5.
+    EXPECT_NEAR(rowMajor[1], 2.0f, 1e-5f);   // M12
+    EXPECT_NEAR(colMajor[1], 5.0f, 1e-5f);   // M21
+
+    // Element [4]: row-major has M21=5, column-major has M12=2.
+    EXPECT_NEAR(rowMajor[4], 5.0f, 1e-5f);   // M21
+    EXPECT_NEAR(colMajor[4], 2.0f, 1e-5f);   // M12
+}
+
+// GetValueMatrix() after SetValueTranspose(m) returns Transpose(m), not m.
+TEST(EffectParameterTest, SetValueTransposeGetValueMatrixReturnsTranspose)
+{
+    auto p = MakeMatrix();
+    const Matrix m = MakeAsymmetric();
+    p.SetValueTranspose(m);
+
+    const Matrix got = p.GetValueMatrix();
+    const Matrix expected = Matrix::Transpose(m);
+
+    // Spot-check off-diagonal elements to confirm transposition.
+    EXPECT_NEAR(got.M12, expected.M12, 1e-5f);  // expected.M12 = m.M21 = 5
+    EXPECT_NEAR(got.M21, expected.M21, 1e-5f);  // expected.M21 = m.M12 = 2
+    EXPECT_NEAR(got.M14, expected.M14, 1e-5f);  // expected.M14 = m.M41 = 13
+    EXPECT_NEAR(got.M41, expected.M41, 1e-5f);  // expected.M41 = m.M14 = 4
+}
+
+// GetValueMatrix() after SetValue(m) returns m exactly.
+TEST(EffectParameterTest, SetValueGetValueMatrixRoundTrip)
+{
+    auto p = MakeMatrix();
+    const Matrix m = MakeAsymmetric();
+    p.SetValue(m);
+
+    const Matrix got = p.GetValueMatrix();
+    EXPECT_NEAR(got.M12, m.M12, 1e-5f);
+    EXPECT_NEAR(got.M21, m.M21, 1e-5f);
+    EXPECT_NEAR(got.M14, m.M14, 1e-5f);
+    EXPECT_NEAR(got.M41, m.M41, 1e-5f);
+}
+
+// GetValueMatrixTranspose() after SetValue(m) returns Transpose(m).
+TEST(EffectParameterTest, SetValueGetValueMatrixTransposeReturnsTranspose)
+{
+    auto p = MakeMatrix();
+    const Matrix m = MakeAsymmetric();
+    p.SetValue(m);
+
+    const Matrix got = p.GetValueMatrixTranspose();
+    EXPECT_NEAR(got.M12, m.M21, 1e-5f);   // transpose swaps row/col indices
+    EXPECT_NEAR(got.M21, m.M12, 1e-5f);
+    EXPECT_NEAR(got.M14, m.M41, 1e-5f);
+    EXPECT_NEAR(got.M41, m.M14, 1e-5f);
+}
+
+// SetValueTranspose(m) is equivalent to SetValue(Transpose(m)).
+TEST(EffectParameterTest, SetValueTransposeEquivalentToSetValueOfTranspose)
+{
+    auto p1 = MakeMatrix();
+    auto p2 = MakeMatrix();
+    const Matrix m = MakeAsymmetric();
+
+    p1.SetValueTranspose(m);
+    p2.SetValue(Matrix::Transpose(m));
+
+    const auto raw1 = p1.GetValueSingleArray(16);
+    const auto raw2 = p2.GetValueSingleArray(16);
+    ASSERT_EQ(raw1.size(), raw2.size());
+    for (std::size_t i = 0; i < raw1.size(); ++i)
+        EXPECT_NEAR(raw1[i], raw2[i], 1e-5f) << "mismatch at index " << i;
+}
+
+// Double SetValueTranspose round-trip: SetValueTranspose → GetValueMatrixTranspose → m.
+TEST(EffectParameterTest, SetValueTransposeDoubleTransposeRoundTrip)
+{
+    auto p = MakeMatrix();
+    const Matrix m = MakeAsymmetric();
+    p.SetValueTranspose(m);
+    const Matrix got = p.GetValueMatrixTranspose();
+    EXPECT_NEAR(got.M11, m.M11, 1e-5f);
+    EXPECT_NEAR(got.M12, m.M12, 1e-5f);
+    EXPECT_NEAR(got.M21, m.M21, 1e-5f);
+    EXPECT_NEAR(got.M34, m.M34, 1e-5f);
+    EXPECT_NEAR(got.M43, m.M43, 1e-5f);
+}
+
