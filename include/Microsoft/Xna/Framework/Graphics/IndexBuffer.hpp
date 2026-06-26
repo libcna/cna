@@ -5,8 +5,9 @@
 #include <memory>
 
 #include "CNA/CNAHelper.hpp"
-#include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 
 namespace CNA::Internal::Backends
 {
@@ -15,10 +16,8 @@ namespace CNA::Internal::Backends
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    class GraphicsDevice;
-
     /** @brief Index buffer storing 16-bit or 32-bit indices for indexed draw calls. */
-    class IndexBuffer
+    class IndexBuffer : public GraphicsResource
     {
     public:
         /**
@@ -41,12 +40,15 @@ namespace Microsoft::Xna::Framework::Graphics
                     BufferUsage bufferUsage);
 
         /** @brief Destructor. */
-        NOXNA ~IndexBuffer();
+        NOXNA ~IndexBuffer() override;
 
         /** @brief Copying is not allowed. */
         IndexBuffer(const IndexBuffer&) = delete;
         /** @brief Copy-assignment is not allowed. */
         IndexBuffer& operator=(const IndexBuffer&) = delete;
+
+        /** @brief Returns the fully-qualified .NET type name of this object. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Uploads 16-bit index data to the buffer (replaces previous content).

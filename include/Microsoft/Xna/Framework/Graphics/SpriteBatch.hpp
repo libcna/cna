@@ -38,7 +38,7 @@ namespace Microsoft::Xna::Framework::Graphics
     using namespace CNA::Internal::Backends;
 
     /** @brief High-performance batched sprite rendering engine matching XNA 4.0 SpriteBatch. */
-    class SpriteBatch
+    class SpriteBatch : public GraphicsResource
     {
     private:
         struct SpriteInfo {
@@ -53,7 +53,6 @@ namespace Microsoft::Xna::Framework::Graphics
         };
 
         std::unique_ptr<ISpriteBatchBackend> backend_;
-        GraphicsDevice* graphicsDevice_ = nullptr;
         bool begun = false;
         SpriteSortMode sortMode_    = SpriteSortMode::Deferred;
         Matrix transformMatrix_     = Matrix::getIdentityProperty();
@@ -79,7 +78,10 @@ namespace Microsoft::Xna::Framework::Graphics
         SpriteBatch();
 
         /** @brief Destructor. */
-        NOXNA ~SpriteBatch();
+        NOXNA ~SpriteBatch() override;
+
+        /** @brief Returns the fully-qualified .NET type name of this object. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Begins a sprite batch with default settings (AlphaBlend, LinearClamp, no depth). */
         void Begin();

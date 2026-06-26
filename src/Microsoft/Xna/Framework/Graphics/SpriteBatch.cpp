@@ -21,13 +21,15 @@ namespace Microsoft::Xna::Framework::Graphics
     // -----------------------------------------------------------------------
 
     SpriteBatch::SpriteBatch(GraphicsDevice& graphicsDevice)
-        : backend_(graphicsDevice.GetBackend().CreateSpriteBatch()),
-          graphicsDevice_(&graphicsDevice)
+        : GraphicsResource(&graphicsDevice)
+        , backend_(graphicsDevice.GetBackend().CreateSpriteBatch())
     {
     }
 
     SpriteBatch::SpriteBatch() = default;
     SpriteBatch::~SpriteBatch() = default;
+
+    GetTypeNameCPP(SpriteBatch, "Microsoft.Xna.Framework.Graphics.SpriteBatch")
 
     // -----------------------------------------------------------------------
     // Begin / End

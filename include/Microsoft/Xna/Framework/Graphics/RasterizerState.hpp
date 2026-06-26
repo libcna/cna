@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief Defines rasterizer state for the graphics pipeline. */
-    class RasterizerState
+    class RasterizerState : public GraphicsResource
     {
     public:
         /** @brief Preset: cull clockwise-wound faces. */
@@ -19,6 +21,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Creates a RasterizerState with XNA-compatible default values. */
         RasterizerState();
+
+        /** @brief Returns the fully-qualified .NET type name of this object. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets the culling mode for rasterized faces.

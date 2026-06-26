@@ -5,12 +5,13 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
-#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
-#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 namespace CNA::Internal::Backends
 {
@@ -19,10 +20,8 @@ namespace CNA::Internal::Backends
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    class GraphicsDevice;
-
     /** @brief GPU vertex buffer for storing vertex data. */
-    class VertexBuffer
+    class VertexBuffer : public GraphicsResource
     {
     public:
         /**
@@ -48,12 +47,15 @@ namespace Microsoft::Xna::Framework::Graphics
                      BufferUsage bufferUsage);
 
         /** @brief Destructor. */
-        NOXNA ~VertexBuffer();
+        NOXNA ~VertexBuffer() override;
 
         /** @brief Copying is not allowed. */
         VertexBuffer(const VertexBuffer&) = delete;
         /** @brief Copy-assignment is not allowed. */
         VertexBuffer& operator=(const VertexBuffer&) = delete;
+
+        /** @brief Returns the fully-qualified .NET type name of this object. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Uploads VertexPositionColor vertex data to the GPU buffer.

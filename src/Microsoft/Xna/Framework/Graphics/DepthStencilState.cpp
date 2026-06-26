@@ -81,4 +81,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
     StencilOperation DepthStencilState::getCounterClockwiseStencilPassProperty() const { return counterClockwiseStencilPass_; }
     void DepthStencilState::setCounterClockwiseStencilPassProperty(StencilOperation v) { counterClockwiseStencilPass_ = v; }
+
+    GetTypeNameCPP(DepthStencilState, "Microsoft.Xna.Framework.Graphics.DepthStencilState")
 }

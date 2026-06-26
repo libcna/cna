@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief Defines sampler state for texture sampling. */
-    class SamplerState
+    class SamplerState : public GraphicsResource
     {
     public:
         /** @brief Preset: anisotropic filtering with clamp addressing on all axes. */
@@ -25,6 +27,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Creates a SamplerState with XNA-compatible default values. */
         SamplerState();
+
+        /** @brief Returns the fully-qualified .NET type name of this object. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets the texture address mode for the U (horizontal) coordinate.

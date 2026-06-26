@@ -6,7 +6,8 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     IndexBuffer::IndexBuffer(GraphicsDevice& device, int indexCount)
-        : backend_(device.GetBackend().CreateIndexBuffer16(indexCount))
+        : GraphicsResource(&device)
+        , backend_(device.GetBackend().CreateIndexBuffer16(indexCount))
     {
     }
 
@@ -14,7 +15,8 @@ namespace Microsoft::Xna::Framework::Graphics
                              IndexElementSize indexElementSize,
                              int indexCount,
                              BufferUsage /*bufferUsage*/)
-        : backend_(nullptr)
+        : GraphicsResource(&device)
+        , backend_(nullptr)
     {
         if (indexElementSize == IndexElementSize::ThirtyTwoBits)
             backend_ = device.GetBackend().CreateIndexBuffer32(indexCount);
@@ -38,4 +40,6 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         return backend_->GetIndexCount();
     }
+
+    GetTypeNameCPP(IndexBuffer, "Microsoft.Xna.Framework.Graphics.IndexBuffer")
 }

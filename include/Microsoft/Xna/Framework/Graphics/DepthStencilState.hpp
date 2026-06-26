@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief Defines depth-stencil state for the graphics pipeline. */
-    class DepthStencilState
+    class DepthStencilState : public GraphicsResource
     {
     public:
         /** @brief Preset: depth test and write both enabled with LessEqual comparison (XNA default). */
@@ -19,6 +21,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Creates a DepthStencilState with XNA-compatible default values. */
         DepthStencilState();
+
+        /** @brief Returns the fully-qualified .NET type name of this object. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets whether depth buffering is enabled.

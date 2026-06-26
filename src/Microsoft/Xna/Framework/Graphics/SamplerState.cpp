@@ -53,4 +53,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
     float SamplerState::getMipMapLevelOfDetailBiasProperty() const { return mipMapLevelOfDetailBias_; }
     void SamplerState::setMipMapLevelOfDetailBiasProperty(float v) { mipMapLevelOfDetailBias_ = v; }
+
+    GetTypeNameCPP(SamplerState, "Microsoft.Xna.Framework.Graphics.SamplerState")
 }

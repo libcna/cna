@@ -10,7 +10,8 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     VertexBuffer::VertexBuffer(GraphicsDevice& device, int vertexCount)
-        : backend_(device.GetBackend().CreateVertexBuffer(vertexCount))
+        : GraphicsResource(&device)
+        , backend_(device.GetBackend().CreateVertexBuffer(vertexCount))
     {
     }
 
@@ -18,11 +19,14 @@ namespace Microsoft::Xna::Framework::Graphics
                                const VertexDeclaration& /*vertexDeclaration*/,
                                int vertexCount,
                                BufferUsage /*bufferUsage*/)
-        : backend_(device.GetBackend().CreateVertexBuffer(vertexCount))
+        : GraphicsResource(&device)
+        , backend_(device.GetBackend().CreateVertexBuffer(vertexCount))
     {
     }
 
     VertexBuffer::~VertexBuffer() = default;
+
+    GetTypeNameCPP(VertexBuffer, "Microsoft.Xna.Framework.Graphics.VertexBuffer")
 
     void VertexBuffer::SetData(const VertexPositionColor* vertices, int count)
     {

@@ -40,4 +40,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
     float RasterizerState::getSlopeScaleDepthBiasProperty() const { return slopeScaleDepthBias_; }
     void RasterizerState::setSlopeScaleDepthBiasProperty(float v) { slopeScaleDepthBias_ = v; }
+
+    GetTypeNameCPP(RasterizerState, "Microsoft.Xna.Framework.Graphics.RasterizerState")
 }

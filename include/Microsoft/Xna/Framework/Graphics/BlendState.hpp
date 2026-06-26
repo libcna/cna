@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief Represents a sprite and 3D blending configuration. */
-    class BlendState
+    class BlendState : public GraphicsResource
     {
     public:
         /** @brief Preset: additive blending (source added on top of destination). */
@@ -23,6 +25,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Creates a BlendState with XNA-compatible default values. */
         BlendState();
+
+        /** @brief Returns the fully-qualified .NET type name of this object. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets the blend function for the alpha channel.

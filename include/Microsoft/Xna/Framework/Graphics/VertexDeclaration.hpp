@@ -4,6 +4,8 @@
 #include <initializer_list>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -11,11 +13,14 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief Describes the byte layout of a single vertex (stride + element list).
      */
-    class VertexDeclaration
+    class VertexDeclaration : public GraphicsResource
     {
     public:
         /** @brief Constructs an empty VertexDeclaration with zero stride. */
         VertexDeclaration() = default;
+
+        /** @brief Returns the fully-qualified .NET type name of this object. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Constructs a VertexDeclaration with an explicit stride and element list.

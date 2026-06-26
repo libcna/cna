@@ -68,4 +68,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
     int BlendState::getMultiSampleMaskProperty() const { return multiSampleMask_; }
     void BlendState::setMultiSampleMaskProperty(int v) { multiSampleMask_ = v; }
+
+    GetTypeNameCPP(BlendState, "Microsoft.Xna.Framework.Graphics.BlendState")
 }
