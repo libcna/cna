@@ -707,6 +707,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_draw_noindexbuffer
+                        examples/easygl_draw_noindexbuffer_test.cpp)
+        add_test(NAME EasyGL_DrawNoIndexBuffer
+                 COMMAND cna_test_easygl_draw_noindexbuffer)
+        set_tests_properties(EasyGL_DrawNoIndexBuffer PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
         add_test(NAME EasyGL_EffectClone
