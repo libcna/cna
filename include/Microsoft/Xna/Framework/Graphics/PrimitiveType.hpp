@@ -13,6 +13,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Renders a list of isolated straight line segments. */
         LineList = 2,
         /** @brief Renders the vertices as a single polyline. */
-        LineStrip = 3
+        LineStrip = 3,
+        /** @brief Treats each vertex as a single point. Vertex n defines point n. N points are drawn. */
+        PointListEXT = 4
     };
 }

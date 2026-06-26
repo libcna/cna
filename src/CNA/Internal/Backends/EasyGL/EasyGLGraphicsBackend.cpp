@@ -21,6 +21,7 @@
 #define CNA_RENDER_LOG(msg) do { } while (0)
 #endif
 #include <stdexcept>
+#include "System/InvalidOperationException.hpp"
 #include <algorithm>
 #include <memory>
 #include <vector>
@@ -1452,24 +1453,28 @@ void main()
         {
             switch (pt)
             {
-            case PrimitiveType::TriangleList: return ::easygl::PrimitiveType::Triangles;
+            case PrimitiveType::TriangleList:  return ::easygl::PrimitiveType::Triangles;
             case PrimitiveType::TriangleStrip: return ::easygl::PrimitiveType::TriangleStrip;
-            case PrimitiveType::LineList: return ::easygl::PrimitiveType::Lines;
-            case PrimitiveType::LineStrip: return ::easygl::PrimitiveType::LineStrip;
+            case PrimitiveType::LineList:      return ::easygl::PrimitiveType::Lines;
+            case PrimitiveType::LineStrip:     return ::easygl::PrimitiveType::LineStrip;
+            case PrimitiveType::PointListEXT:  return ::easygl::PrimitiveType::Points;
+            default:
+                throw System::InvalidOperationException("Unrecognized primitive type!");
             }
-            return ::easygl::PrimitiveType::Triangles;
         }
 
         int VertexCountForPrimitives(PrimitiveType pt, int primitiveCount)
         {
             switch (pt)
             {
-            case PrimitiveType::TriangleList: return primitiveCount * 3;
+            case PrimitiveType::TriangleList:  return primitiveCount * 3;
             case PrimitiveType::TriangleStrip: return primitiveCount + 2;
-            case PrimitiveType::LineList: return primitiveCount * 2;
-            case PrimitiveType::LineStrip: return primitiveCount + 1;
+            case PrimitiveType::LineList:       return primitiveCount * 2;
+            case PrimitiveType::LineStrip:      return primitiveCount + 1;
+            case PrimitiveType::PointListEXT:   return primitiveCount;
+            default:
+                throw System::InvalidOperationException("Unrecognized primitive type!");
             }
-            return 0;
         }
     }
 

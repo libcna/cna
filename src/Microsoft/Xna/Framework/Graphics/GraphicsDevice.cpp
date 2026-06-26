@@ -509,27 +509,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
 
-        // Compute vertex count from primitive type.
-        int vertsPerPrimitive = 0;
+        // Compute vertex count from primitive type (mirrors FNA PrimitiveVerts).
+        int totalVerts;
         switch (primitiveType)
         {
-            case PrimitiveType::TriangleList: vertsPerPrimitive = 3; break;
-            case PrimitiveType::TriangleStrip: vertsPerPrimitive = 1; break; // n+2 total, approx
-            case PrimitiveType::LineList:    vertsPerPrimitive = 2; break;
-            case PrimitiveType::LineStrip:   vertsPerPrimitive = 1; break;
+            case PrimitiveType::TriangleList:  totalVerts = primitiveCount * 3; break;
+            case PrimitiveType::TriangleStrip: totalVerts = primitiveCount + 2; break;
+            case PrimitiveType::LineList:      totalVerts = primitiveCount * 2; break;
+            case PrimitiveType::LineStrip:     totalVerts = primitiveCount + 1; break;
+            case PrimitiveType::PointListEXT:  totalVerts = primitiveCount;     break;
             default:
-                throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: unsupported PrimitiveType.");
+                throw System::InvalidOperationException("Unrecognized primitive type!");
         }
-
-        int totalVerts;
-        if (primitiveType == PrimitiveType::TriangleList || primitiveType == PrimitiveType::LineList)
-            totalVerts = primitiveCount * vertsPerPrimitive;
-        else if (primitiveType == PrimitiveType::TriangleStrip)
-            totalVerts = primitiveCount + 2;
-        else if (primitiveType == PrimitiveType::LineStrip)
-            totalVerts = primitiveCount + 1;
-        else
-            totalVerts = primitiveCount;
 
         // vertexData points to an array of VertexPositionColor starting at vertexOffset.
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
@@ -583,8 +574,9 @@ namespace Microsoft::Xna::Framework::Graphics
             case PrimitiveType::TriangleStrip: indexCount = primitiveCount + 2; break;
             case PrimitiveType::LineList:      indexCount = primitiveCount * 2; break;
             case PrimitiveType::LineStrip:     indexCount = primitiveCount + 1; break;
+            case PrimitiveType::PointListEXT:  indexCount = primitiveCount;     break;
             default:
-                throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: unsupported PrimitiveType.");
+                throw System::InvalidOperationException("Unrecognized primitive type!");
         }
 
         // Pack vertices from caller array (assumed VertexPositionColor layout).
@@ -636,7 +628,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 case PrimitiveType::TriangleStrip: return primitiveCount + 2;
                 case PrimitiveType::LineList:      return primitiveCount * 2;
                 case PrimitiveType::LineStrip:     return primitiveCount + 1;
-                default: return primitiveCount;
+                case PrimitiveType::PointListEXT:  return primitiveCount;
+                default:
+                    throw System::InvalidOperationException("Unrecognized primitive type!");
             }
         }
 
@@ -758,7 +752,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 case PrimitiveType::TriangleStrip: return primitiveCount + 2;
                 case PrimitiveType::LineList:      return primitiveCount * 2;
                 case PrimitiveType::LineStrip:     return primitiveCount + 1;
-                default: return primitiveCount;
+                case PrimitiveType::PointListEXT:  return primitiveCount;
+                default:
+                    throw System::InvalidOperationException("Unrecognized primitive type!");
             }
         }
     }
