@@ -239,6 +239,7 @@ namespace CNA::Internal::Backends::Bgfx
         uint16_t cachedHeight = 0;
         uint32_t clearRgba = 0x000000ff;
         bool initialized = false;
+        uint32_t resetFlags_ = BGFX_RESET_VSYNC;
 
         // Stored graphics state applied per-draw in bgfx
         uint64_t blendFlags_  = BGFX_STATE_BLEND_ALPHA;
@@ -281,7 +282,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle bonesUnif_          = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle vpInstanced3DUnif_  = BGFX_INVALID_HANDLE;
 
-        explicit BgfxGraphicsBackend(SDL_Window* window);
+        explicit BgfxGraphicsBackend(SDL_Window* window, int swapInterval = 1);
         ~BgfxGraphicsBackend() override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
@@ -293,6 +294,7 @@ namespace CNA::Internal::Backends::Bgfx
         void SetPresentationMode(int /*mode*/) override
         {
         } // no-op: Bgfx has no logical presentation
+        void SetSwapInterval(int interval) override;
         SDL_Window* GetWindowInternal() const override { return window; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 

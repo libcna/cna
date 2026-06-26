@@ -658,8 +658,9 @@ namespace CNA::Internal::Backends::Vulkan
         return VK_SAMPLE_COUNT_1_BIT;
     }
 
-    VulkanGraphicsBackend::VulkanGraphicsBackend(SDL_Window* window, int multiSampleCount)
+    VulkanGraphicsBackend::VulkanGraphicsBackend(SDL_Window* window, int multiSampleCount, int swapInterval)
         : window_(window)
+        , swapInterval_(swapInterval)
     {
         if (!window_)
             throw std::runtime_error("VulkanGraphicsBackend: null window");
@@ -1055,8 +1056,21 @@ namespace CNA::Internal::Backends::Vulkan
         vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &mn, nullptr);
         std::vector<VkPresentModeKHR> modes(mn);
         vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &mn, modes.data());
+        // Choose present mode based on swapInterval_:
+        //   0 (Immediate) → prefer IMMEDIATE, fall back to MAILBOX, then FIFO
+        //   2 (Two)       → prefer FIFO_RELAXED, fall back to FIFO
+        //   1 (Default/One) → FIFO (guaranteed VSync, always available)
         VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
-        for (auto m : modes) if (m == VK_PRESENT_MODE_MAILBOX_KHR) { mode = m; break; }
+        if (swapInterval_ == 0)
+        {
+            for (auto m : modes) if (m == VK_PRESENT_MODE_IMMEDIATE_KHR) { mode = m; break; }
+            if (mode == VK_PRESENT_MODE_FIFO_KHR)
+                for (auto m : modes) if (m == VK_PRESENT_MODE_MAILBOX_KHR) { mode = m; break; }
+        }
+        else if (swapInterval_ == 2)
+        {
+            for (auto m : modes) if (m == VK_PRESENT_MODE_FIFO_RELAXED_KHR) { mode = m; break; }
+        }
 
         VkExtent2D ext;
         if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
@@ -5304,7 +5318,7 @@ namespace CNA::Internal::Backends
 #ifdef CNA_BACKEND_VULKAN
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
-        return std::make_unique<Vulkan::VulkanGraphicsBackend>(args.window, args.multiSampleCount);
+        return std::make_unique<Vulkan::VulkanGraphicsBackend>(args.window, args.multiSampleCount, args.swapInterval);
     }
 #endif
 }

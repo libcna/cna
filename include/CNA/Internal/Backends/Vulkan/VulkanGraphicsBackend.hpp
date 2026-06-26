@@ -454,7 +454,7 @@ namespace CNA::Internal::Backends::Vulkan
         friend class VulkanMRTProxy;
 
     public:
-        explicit VulkanGraphicsBackend(SDL_Window* window, int multiSampleCount = 1);
+        explicit VulkanGraphicsBackend(SDL_Window* window, int multiSampleCount = 1, int swapInterval = 1);
         ~VulkanGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -558,6 +558,9 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory           msaaColorMemory_ = VK_NULL_HANDLE;
         VkImageView              msaaColorView_   = VK_NULL_HANDLE;
         VkPipeline               pipeline2DMsaa_  = VK_NULL_HANDLE;
+
+        // --- Swap interval (set at construction; Vulkan requires swapchain recreation to change) ---
+        int swapInterval_ = 1;
 
         // --- Swapchain (recreated on resize) ---
         VkSwapchainKHR           swapchain_       = VK_NULL_HANDLE;

@@ -321,6 +321,7 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Sampler samplers_[kMaxSamplerSlots];
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         bool contextRecoveryEnabled_ = true;
+        int swapInterval_ = 1;
 
         // MSAA — multisampled render buffer resolved to FBO 0 on Present().
         int sampleCount_ = 1;
@@ -400,10 +401,12 @@ namespace CNA::Internal::Backends::EasyGL
                                        int virtualWidth = 0, int virtualHeight = 0,
                                        CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth,
                                        bool contextRecoveryEnabled = true,
-                                       int multiSampleCount = 1);
+                                       int multiSampleCount = 1,
+                                       int swapInterval = 1);
         ~EasyGLGraphicsBackend() override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
+        void SetSwapInterval(int interval) override;
         void GetViewportSize(int& width, int& height) override;
         void getLogicalSize(int& width, int& height) const;
         void getPhysicalSize(int& width, int& height) const;

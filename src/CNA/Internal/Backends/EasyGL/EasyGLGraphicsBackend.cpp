@@ -972,13 +972,14 @@ void main()
 
     EasyGLGraphicsBackend::EasyGLGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                                                   CnaPresentationMode mode, bool contextRecoveryEnabled,
-                                                  int multiSampleCount)
+                                                  int multiSampleCount, int swapInterval)
         : window(window)
         , virtualWidth_(virtualWidth)
         , virtualHeight_(virtualHeight)
         , presentationMode_(mode)
         , contextRecoveryEnabled_(contextRecoveryEnabled)
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
+        , swapInterval_(swapInterval)
     {
         if (!window) throw std::runtime_error("EasyGLGraphicsBackend initialized with null window.");
 
@@ -1003,6 +1004,8 @@ void main()
         device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
         std::cout << "EasyGLGraphicsBackend initialized with OpenGL "
             << device.capabilities().context_info().version_string << std::endl;
+
+        SDL_GL_SetSwapInterval(swapInterval_);
 
         registry_.register_with_meta_gl();
 
@@ -1231,6 +1234,12 @@ void main()
     void EasyGLGraphicsBackend::SetPresentationMode(int mode)
     {
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
+    }
+
+    void EasyGLGraphicsBackend::SetSwapInterval(int interval)
+    {
+        swapInterval_ = interval;
+        SDL_GL_SetSwapInterval(interval);
     }
 
     void EasyGLGraphicsBackend::getLogicalSize(int& width, int& height) const
@@ -2641,7 +2650,7 @@ namespace CNA::Internal::Backends
         return std::make_unique<EasyGL::EasyGLGraphicsBackend>(
             args.window, args.virtualWidth, args.virtualHeight,
             args.presentationMode, args.contextRecoveryEnabled,
-            args.multiSampleCount);
+            args.multiSampleCount, args.swapInterval);
     }
 #endif
 }

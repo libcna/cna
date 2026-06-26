@@ -238,7 +238,7 @@ namespace CNA::Internal::Backends::SdlRenderer
     }
 
     SdlGraphicsBackend::SdlGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                           CnaPresentationMode mode)
+                                           CnaPresentationMode mode, int swapInterval)
         : window(window), logicalWidth(virtualWidth), logicalHeight(virtualHeight), presentationMode_(mode)
     {
         if (!window) throw std::runtime_error("SdlGraphicsBackend initialized with null window.");
@@ -251,7 +251,8 @@ namespace CNA::Internal::Backends::SdlRenderer
         {
             throw std::runtime_error(std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
         }
-        if (!SDL_SetRenderVSync(renderer, 1))
+        // SDL3 SDL_SetRenderVSync only supports 0 (off) or 1 (on) — map Two→1, Immediate→0.
+        if (!SDL_SetRenderVSync(renderer, swapInterval > 0 ? 1 : 0))
         {
             std::cerr << "Warning: SDL_SetRenderVSync failed: " << SDL_GetError() << std::endl;
         }
@@ -380,6 +381,12 @@ namespace CNA::Internal::Backends::SdlRenderer
         {
             applyLogicalPresentation(renderer, logicalWidth, logicalHeight, presentationMode_);
         }
+    }
+
+    void SdlGraphicsBackend::SetSwapInterval(int interval)
+    {
+        if (renderer)
+            SDL_SetRenderVSync(renderer, interval > 0 ? 1 : 0);
     }
 
     void SdlGraphicsBackend::GetViewportSize(int& width, int& height)
@@ -529,7 +536,7 @@ namespace CNA::Internal::Backends
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
         return std::make_unique<SdlRenderer::SdlGraphicsBackend>(args.window, args.virtualWidth, args.virtualHeight,
-                                                                 args.presentationMode);
+                                                                 args.presentationMode, args.swapInterval);
     }
 #endif
 }

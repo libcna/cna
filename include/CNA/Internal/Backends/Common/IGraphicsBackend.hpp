@@ -317,6 +317,9 @@ namespace CNA::Internal::Backends
         /// Updates the backend presentation/scaling mode at runtime.
         /// Called by GraphicsDevice when GraphicsDeviceManager::ApplyChanges() is used.
         virtual void SetPresentationMode(int mode) = 0;
+        /// Updates the swap interval at runtime (0=immediate, 1=VSync, 2=half-rate).
+        /// Backends that cannot change VSync at runtime (e.g. Vulkan) silently ignore this.
+        virtual void SetSwapInterval(int /*interval*/) {}
         /// Converts a point from physical window coordinates to logical (virtual)
         /// game coordinates. Returns true on success. Default: no-op (returns false).
         virtual bool TransformWindowToLogical(float windowX, float windowY,
@@ -642,6 +645,12 @@ namespace CNA::Internal::Backends
         /// Desired multisample count (1 = no MSAA, 4 = 4× MSAA, etc.).
         /// Backends that do not support MSAA silently clamp to 1.
         int multiSampleCount = 1;
+        /// Swap interval for vertical sync.
+        ///   0 = immediate (no VSync)
+        ///   1 = wait for 1 vertical retrace (VSync, default)
+        ///   2 = wait for 2 vertical retraces (half refresh rate)
+        /// Corresponds to PresentInterval: Default/One→1, Two→2, Immediate→0.
+        int swapInterval = 1;
     };
 
     // Factory function to be implemented by each backend

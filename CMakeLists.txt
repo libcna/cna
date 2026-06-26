@@ -819,6 +819,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 60
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_present_interval
+                        examples/easygl_present_interval_test.cpp)
+        add_test(NAME EasyGL_PresentInterval
+                 COMMAND cna_test_easygl_present_interval)
+        set_tests_properties(EasyGL_PresentInterval PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
         add_test(NAME EasyGL_EffectClone

@@ -40,6 +40,16 @@ namespace Microsoft::Xna::Framework::Graphics
             return std::runtime_error(std::string(operation) + " failed: " + SDL_GetError());
         }
 
+        int toSwapInterval(PresentInterval pi)
+        {
+            switch (pi)
+            {
+                case PresentInterval::Immediate: return 0;
+                case PresentInterval::Two:       return 2;
+                default:                         return 1; // Default and One
+            }
+        }
+
         [[nodiscard]] bool hasClearFlag(ClearOptions options, ClearOptions flag)
         {
             return (static_cast<int>(options) & static_cast<int>(flag)) != 0;
@@ -1031,6 +1041,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetPresentationParameters(const PresentationParameters& pp)
     {
         presentationParameters_ = pp;
+        if (backend_)
+            backend_->SetSwapInterval(toSwapInterval(pp.getPresentationIntervalProperty()));
     }
 
     SDL_Renderer* GraphicsDevice::GetRendererInternal() const
@@ -1097,6 +1109,7 @@ namespace Microsoft::Xna::Framework::Graphics
         args.virtualHeight = virtualHeight_;
         args.contextRecoveryEnabled = contextRecoveryEnabled_;
         args.multiSampleCount = presentationParameters_.getMultiSampleCountProperty();
+        args.swapInterval = toSwapInterval(presentationParameters_.getPresentationIntervalProperty());
 
         backend_ = CreateGraphicsBackend(args);
 

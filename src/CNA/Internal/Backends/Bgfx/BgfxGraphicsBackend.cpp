@@ -621,7 +621,9 @@ namespace CNA::Internal::Backends::Bgfx
         screenshotReady = true;
     }
 
-    BgfxGraphicsBackend::BgfxGraphicsBackend(SDL_Window* window) : window(window)
+    BgfxGraphicsBackend::BgfxGraphicsBackend(SDL_Window* window, int swapInterval)
+        : window(window)
+        , resetFlags_(swapInterval > 0 ? BGFX_RESET_VSYNC : BGFX_RESET_NONE)
     {
         if (!window)
         {
@@ -646,7 +648,7 @@ namespace CNA::Internal::Backends::Bgfx
         init.platformData = CreatePlatformData(window);
         init.resolution.width = initialWidth;
         init.resolution.height = initialHeight;
-        init.resolution.reset = BGFX_RESET_VSYNC;
+        init.resolution.reset = resetFlags_;
         init.callback = &readbackCallback_;
 
         if (!init.platformData.nwh)
@@ -817,7 +819,7 @@ namespace CNA::Internal::Backends::Bgfx
         {
             cachedWidth = newWidth;
             cachedHeight = newHeight;
-            bgfx::reset(cachedWidth, cachedHeight, BGFX_RESET_VSYNC);
+            bgfx::reset(cachedWidth, cachedHeight, resetFlags_);
         }
 
         bgfx::setViewRect(spriteViewId, 0, 0, cachedWidth, cachedHeight);
@@ -841,6 +843,12 @@ namespace CNA::Internal::Backends::Bgfx
     {
         EnsureViewState();
         bgfx::frame();
+    }
+
+    void BgfxGraphicsBackend::SetSwapInterval(int interval)
+    {
+        resetFlags_ = (interval > 0) ? BGFX_RESET_VSYNC : BGFX_RESET_NONE;
+        bgfx::reset(cachedWidth, cachedHeight, resetFlags_);
     }
 
     void BgfxGraphicsBackend::GetViewportSize(int& width, int& height)
@@ -1546,7 +1554,7 @@ namespace CNA::Internal::Backends
 #ifdef CNA_BACKEND_BGFX
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
-        return std::make_unique<Bgfx::BgfxGraphicsBackend>(args.window);
+        return std::make_unique<Bgfx::BgfxGraphicsBackend>(args.window, args.swapInterval);
     }
 #endif
 }
