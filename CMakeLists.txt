@@ -739,6 +739,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_basiceffect_default_lighting
+                        examples/easygl_basiceffect_default_lighting_test.cpp)
+        add_test(NAME EasyGL_BasicEffectDefaultLighting
+                 COMMAND cna_test_easygl_basiceffect_default_lighting)
+        set_tests_properties(EasyGL_BasicEffectDefaultLighting PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests

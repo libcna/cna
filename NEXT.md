@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 24 in progress — stock effects backend parity.
-Tasks 1–193 done. Next unstarted: Task 194.
+Tasks 1–194 done. Next unstarted: Task 195.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -30,7 +30,7 @@ Tasks 1–193 done. Next unstarted: Task 194.
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 34/34 EasyGL integration tests pass; ~1540 total tests pass.
+- **Tests**: 35/35 EasyGL integration tests pass; ~1540 total tests pass.
 - Recently confirmed working:
   - SpriteBatch all overloads, SpriteEffects flip, transformMatrix translation
   - Texture2D partial-rect / startIndex / mip-level SetData/GetData (Tasks 169–171)
@@ -39,6 +39,7 @@ Tasks 1–193 done. Next unstarted: Task 194.
   - RenderTargetUsage DiscardContents/PreserveContents (Task 177)
   - Backbuffer → RT → backbuffer → RT → backbuffer round-trip (Task 180)
   - SkinnedEffect bone transforms: identity / translate / 2-bone blend (Task 193)
+  - BasicEffect::EnableDefaultLighting() exact FNA constants (Task 194)
 
 ### Vulkan backend (`cmake-build-vulkan`)
 - **Builds**: clean.
@@ -68,6 +69,7 @@ Tasks 1–193 done. Next unstarted: Task 194.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 194 | `BasicEffect::EnableDefaultLighting()` exact constants (EasyGL): fixed Light2.SpecularColor bug (was Zero, now `(0.3231373,0.3607844,0.3937255)`) and Light2.DiffuseColor.Y typo; `easygl_basiceffect_default_lighting_test.cpp`; 14/14 PASS; 35/35 EasyGL |
 | Task 193 | `SkinnedEffect` bone count tests (EasyGL): `easygl_skinned_effect_bones_test.cpp`; 3 sub-tests: (a) 1 bone identity, (b) 1 bone translate(+0.5), (c) 2-bone 50/50 blend; 8/8 pixel checks PASS; 34/34 EasyGL |
 | Task 192 | `EnvironmentMapEffect` parameter accuracy (EasyGL): extended `easygl_env_map_test.cpp` with 4 sub-tests: EmissiveColor=red→red, EmissiveColor=green→green, EnvMapSpecular=blue→blue, EnvMapAmount=1 blue cube→blue; 4/4 PASS; 33/33 EasyGL |
 | Task 191 | `DualTextureEffect` pixel tests (EasyGL): 4 sub-tests prove both texture slots and diffuse multiplier work; decisive test yellow×cyan→green; 4/4 PASS; 33/33 EasyGL |
@@ -92,7 +94,11 @@ Tasks 1–193 done. Next unstarted: Task 194.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `examples/easygl_basiceffect_default_lighting_test.cpp` (Task 194)
 - `examples/easygl_skinned_effect_bones_test.cpp` (Task 193)
+
+**Files modified (recent):**
+- `src/Microsoft/Xna/Framework/Graphics/BasicEffect.cpp` — fixed `EnableDefaultLighting`: Light2.SpecularColor was Zero (bug); Light2.DiffuseColor.Y was 0.3607843 (typo)
 - `examples/easygl_dualtexture_test.cpp` (Task 191)
 - `examples/easygl_alphatest_modes_test.cpp` (Task 190)
 - `examples/easygl_basiceffect_combinations_test.cpp` (Task 189)
@@ -117,11 +123,11 @@ Tasks 1–193 done. Next unstarted: Task 194.
 ## 4. Current blocker / main problem
 
 No active blocker. All three backends build clean.
-- 34/34 EasyGL integration tests pass.
+- 35/35 EasyGL integration tests pass.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 194 (`BasicEffect::EnableDefaultLighting()` unit test).
+Next task: Task 195 (Fog equation accuracy — BasicEffect fog pixel test).
 
 ---
 
@@ -248,19 +254,19 @@ python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \
 All following the same pattern: EasyGL integration test or unit test in `tests/` or
 `examples/`, registered in `CMakeLists.txt`, GRAPHICS\_TASKS.md marked ✅, NEXT.md updated.
 
-### Task 194 — `BasicEffect::EnableDefaultLighting()` unit test
+### Task 195 — Fog equation accuracy
 
-**Goal**: No backend needed; pure C++ unit test. Verify that after calling
-`EnableDefaultLighting()` on a `BasicEffect`, the three `DirectionalLight`
-values match the FNA-defined constants from `BasicEffect.cs`.
+**Goal**: EasyGL integration test. Set `FogEnabled=true`, `FogStart=0`, `FogEnd=1`,
+`FogColor=red`. Draw a geometry at Z=0.5. Assert the output pixel is a blend between
+geometry colour and red, proving fog interpolation is working.
+
+**Note**: EasyGL currently has no fog fields in `GpuDrawParams`. If fog is not
+implemented in EasyGL, document this as a known limit and skip/stub the test rather
+than marking FAIL.
 
 **Files**:
-- `tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp` (create or extend)
-- `CMakeLists.txt` (if new file)
-
-**Pattern**: Instantiate `BasicEffect`, call `EnableDefaultLighting()`, assert
-`DirectionalLight0.getDiffuseColorProperty()` etc. match FNA constants.
-Reference: `BasicEffect.cs` in the FNA source tree.
+- `examples/easygl_basiceffect_fog_test.cpp` (create)
+- `CMakeLists.txt`
 
 ---
 
@@ -285,12 +291,14 @@ Reference: `BasicEffect.cs` in the FNA source tree.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–193 complete. Next unstarted: Task 194
-(BasicEffect::EnableDefaultLighting() unit test — no backend needed).
+Current status: Tasks 1–194 complete. Next unstarted: Task 195
+(Fog equation accuracy — BasicEffect fog pixel integration test).
 
-Read the FNA BasicEffect.cs (grep for EnableDefaultLighting in
-/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/) to find
-the exact constant values for the three directional lights. Create or extend
-tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp with tests asserting
-those constants. Build and run. Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
+Check if EasyGL GpuDrawParams has fog fields (grep for fog in
+src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp and the fragment shader).
+If fog is not implemented in EasyGL, document as known limit and create a stub test
+that exits 0 with a SKIP message. If it is implemented, create
+examples/easygl_basiceffect_fog_test.cpp: draw a blue quad at Z=0.5 with
+FogStart=0, FogEnd=1, FogColor=red; verify centre pixel is a reddish blend (not pure blue).
+Update GRAPHICS_TASKS.md and NEXT.md, commit and push.
 ```

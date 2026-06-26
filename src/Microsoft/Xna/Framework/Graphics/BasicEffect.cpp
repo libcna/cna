@@ -98,9 +98,9 @@ namespace Microsoft::Xna::Framework::Graphics
         DirectionalLight1.setSpecularColorProperty(Vector3::Zero);
         DirectionalLight1.setEnabledProperty(true);
 
-        DirectionalLight2.setDiffuseColorProperty(Vector3{0.3231373f, 0.3607843f, 0.3937255f});
+        DirectionalLight2.setDiffuseColorProperty(Vector3{0.3231373f, 0.3607844f, 0.3937255f});
         DirectionalLight2.setDirectionProperty(Vector3{0.4545195f, -0.7660444f, 0.4545195f});
-        DirectionalLight2.setSpecularColorProperty(Vector3::Zero);
+        DirectionalLight2.setSpecularColorProperty(Vector3{0.3231373f, 0.3607844f, 0.3937255f});
         DirectionalLight2.setEnabledProperty(true);
     }
 
