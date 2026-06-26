@@ -583,6 +583,14 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA void RemoveResourceReference(GraphicsResource* resource);
 
+        /**
+         * @brief Returns the number of live resources currently tracked by this device.
+         *
+         * Intended for debug and test use only.
+         * @return Count of registered, not-yet-disposed resources.
+         */
+        NOXNA [[nodiscard]] std::size_t GetTrackedResourceCount() const { return resources_.size(); }
+
         /** @brief Enables or disables depth testing. */
         NOXNA void SetDepthTestEnabled(bool enabled);
         /** @brief Enables or disables blending. */
