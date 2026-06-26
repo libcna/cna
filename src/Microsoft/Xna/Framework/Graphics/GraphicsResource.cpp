@@ -8,7 +8,10 @@ namespace Microsoft::Xna::Framework::Graphics
         : graphicsDevice_(device)
     {
         if (graphicsDevice_)
+        {
+            graphicsDevice_->AddResourceReference(this);
             graphicsDevice_->OnResourceCreated(this);
+        }
     }
 
     GraphicsResource::GraphicsResource(const GraphicsResource& other)
@@ -89,7 +92,10 @@ namespace Microsoft::Xna::Framework::Graphics
             Disposing.Raise(this, System::EventArgs::Empty);
         }
         if (graphicsDevice_)
+        {
             graphicsDevice_->OnResourceDestroyed(name_, tag_);
+            graphicsDevice_->RemoveResourceReference(this);
+        }
         isDisposed_ = true;
     }
 }

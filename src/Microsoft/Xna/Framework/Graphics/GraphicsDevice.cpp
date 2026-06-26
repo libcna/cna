@@ -306,6 +306,15 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
+        // Copy and clear the resource list before iterating.
+        // This makes RemoveResourceReference a no-op when called re-entrantly
+        // from within the resources' own Dispose() methods (matches FNA pattern).
+        std::vector<GraphicsResource*> toDispose = std::move(resources_);
+        resources_.clear();
+
+        for (GraphicsResource* res : toDispose)
+            static_cast<System::IDisposable*>(res)->Dispose();
+
         Disposing.Raise(this, System::EventArgs::Empty);
         destroyNativeResources();
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
@@ -322,6 +331,25 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!ResourceDestroyed.Empty())
             ResourceDestroyed.Raise(this, ResourceDestroyedEventArgs(name, tag));
+    }
+
+    void GraphicsDevice::AddResourceReference(GraphicsResource* resource)
+    {
+        resources_.push_back(resource);
+    }
+
+    void GraphicsDevice::RemoveResourceReference(GraphicsResource* resource)
+    {
+        for (std::size_t i = 0; i < resources_.size(); ++i)
+        {
+            if (resources_[i] == resource)
+            {
+                // Unordered removal — list order does not matter
+                resources_[i] = resources_.back();
+                resources_.pop_back();
+                return;
+            }
+        }
     }
 
     void GraphicsDevice::SetDepthTestEnabled(bool enabled)

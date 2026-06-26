@@ -565,6 +565,24 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA void OnResourceDestroyed(const std::string& name, System::Object* tag);
 
+        /**
+         * @brief Registers a resource for tracking.
+         *
+         * Called by GraphicsResource constructor. The device will dispose registered
+         * resources before its own backend is destroyed, preventing use-after-free.
+         * @param resource The resource to track.
+         */
+        NOXNA void AddResourceReference(GraphicsResource* resource);
+
+        /**
+         * @brief Unregisters a previously tracked resource.
+         *
+         * Called by GraphicsResource::Dispose(bool). Safe to call during device disposal
+         * (the tracking list is cleared before iteration).
+         * @param resource The resource to remove.
+         */
+        NOXNA void RemoveResourceReference(GraphicsResource* resource);
+
         /** @brief Enables or disables depth testing. */
         NOXNA void SetDepthTestEnabled(bool enabled);
         /** @brief Enables or disables blending. */
@@ -659,6 +677,7 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<RenderTargetBinding> currentRenderTargets_;
         bool renderTargetBound_ = false;
         std::vector<VertexBufferBinding> currentVertexBuffers_;
+        std::vector<GraphicsResource*> resources_;
 
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const;
         [[nodiscard]] SDL_Window* GetWindowInternal() const;

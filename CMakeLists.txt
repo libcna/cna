@@ -803,6 +803,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_device_dispose_order
+                        examples/easygl_device_dispose_order_test.cpp)
+        add_test(NAME EasyGL_DeviceDisposeOrder
+                 COMMAND cna_test_easygl_device_dispose_order)
+        set_tests_properties(EasyGL_DeviceDisposeOrder PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
         add_test(NAME EasyGL_EffectClone
