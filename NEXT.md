@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phase 24 in progress — stock effects backend parity.
-Tasks 1–200 done. Next unstarted: Task 201.
+**Current phase**: Phase 24 in progress — GraphicsDevice conformance.
+Tasks 1–201 done. Next unstarted: Task 202.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -70,6 +70,7 @@ Tasks 1–200 done. Next unstarted: Task 201.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 201 | `docs/graphicsdevice-fna-audit.md` created: 3 missing XNA methods (`Present(rect,rect,IntPtr)`, `Clear(ClearOptions,Vector4,float,int)`, `GetRenderTargetsNoAllocEXT`); 7 CNA non-XNA members missing `NOXNA` tag documented; all 19 properties/6 events confirmed present; intentional C++ deviations (generics→typed overloads, params→vector) noted |
 | Task 200 | `docs/xna-4-api-coverage.md` update: PackedVector Stub→Implemented, stock-effects status corrected per backend, §8 Overall Coverage Estimate added (~80% EasyGL), §10/§11 recommended order and summary updated |
 | Task 199 | PackedVector edge-case tests: clamping (all types), HalfTypeHelper ±0/±∞/NaN/denormals, boundary round-trips; 28 new tests; 1666/1668 pass |
 | Task 198 | PackedVector bug fixes: `HalfTypeHelper::Convert(float)` uint32_t exp underflow (0.0f→infinity fixed); `NormalizedByte2/4` and `NormalizedShort2/4` Pack truncation→`std::lroundf`; golden file corrected for -1.0 inputs; 20 new exact-value tests; 1638/1640 pass |
@@ -101,6 +102,7 @@ Tasks 1–200 done. Next unstarted: Task 201.
 | Task 172 | TextureCube 6-face round-trip; Color→uint8\_t conversion bug fixed |
 
 **Files added (recent):**
+- `docs/graphicsdevice-fna-audit.md` (Task 201)
 - `tests/PackedVectorGolden.md` (Task 197)
 - `examples/easygl_basiceffect_fog_test.cpp` (Task 195)
 - `examples/easygl_basiceffect_default_lighting_test.cpp` (Task 194)
@@ -139,7 +141,7 @@ No active blocker. All three backends build clean.
 - 9/9 Vulkan integration tests pass.
 - Bgfx smoke tests pass.
 
-Next task: Task 201 (audit all public `GraphicsDevice` methods against FNA `GraphicsDevice.cs`; list missing overloads and validation differences; create `docs/graphicsdevice-fna-audit.md`).
+Next task: Task 202 (add validation for null `VertexBuffer`, null `IndexBuffer`, null `Texture`, null `Effect`, and invalid render target arguments; match FNA/XNA exception style).
 
 ---
 
@@ -270,6 +272,23 @@ All following the same pattern: EasyGL integration test or unit test in `tests/`
 
 **Done**: `tests/PackedVectorGolden.md` created (corrected in Task 198).
 
+### Task 201 — GraphicsDevice FNA audit ✅
+
+`docs/graphicsdevice-fna-audit.md` created. Key findings:
+
+**Missing XNA API (need implementation):**
+- `Present(Rectangle?, Rectangle?, IntPtr)` — window-handle present overload
+- `Clear(ClearOptions, Vector4, float, int)` — Vector4 color overload
+- `GetRenderTargetsNoAllocEXT(RenderTargetBinding[])` — zero-alloc read
+
+**Missing NOXNA tags (non-XNA members exposed without tagging):**
+- `Clear(float, float, float, float)`, `Clear(Color, float depth)` — convenience overloads
+- `SetIndexBuffer()`, `GetIndexBuffer()`, `GetVertexBuffer()` — non-XNA aliases
+- `Indices()` / `Indices(indexBuffer)` method forms — duplicate of property pair
+- `Reset(pp, GraphicsAdapter*)` pointer variant
+
+All 19 properties, 6 events, and core methods confirmed present. Intentional C++ deviations (generics→typed overloads, params→vector, Color-only GetBackBufferData) documented.
+
 ### Task 198 — PackedVector bug fixes ✅
 
 **Bugs fixed:**
@@ -279,8 +298,6 @@ All following the same pattern: EasyGL integration test or unit test in `tests/`
 - `tests/PackedVectorGolden.md`: corrected -1.0 input rows (Python `+0.5` formula disagrees with C# `Math.Round` for negative values; correct packed byte for -1.0 is 0x81 not 0x82).
 
 **20 new tests** covering HalfSingle, HalfVector2, NormalizedByte2/4, NormalizedShort2/4 with exact packed-value assertions from the golden file.
-
-Next: Task 201 — `docs/graphicsdevice-fna-audit.md`.
 
 ---
 
@@ -294,7 +311,7 @@ Next: Task 201 — `docs/graphicsdevice-fna-audit.md`.
   fake `GraphicsDevice`; integration tests using `Game` + EasyGL are the established pattern.
 - **Do not implement Bgfx 3D state** (`SetDepthTestEnabled`, `SetBlendEnabled`, etc.) until
   Phase 22 (Tasks 174–183) is fully complete.
-- **Do not start Tasks 201–500** (deep conformance, golden-image, FNA harness) until
+- **Do not start Tasks 202–500** (deep conformance, golden-image, FNA harness) until
   Phase 22 and Phase 23 (effect conformance) are done.
 
 ---
@@ -305,10 +322,7 @@ Next: Task 201 — `docs/graphicsdevice-fna-audit.md`.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–197 complete. Next unstarted: Task 198
-(compare CNA PackedVector output against Task 197 golden values; fix bugs).
-
-Task 197 was a documentation/analysis task: computed FNA bit-packing golden values
-for all 17 PackedVector types via Python; saved to `tests/PackedVectorGolden.md`.
-No code changed; no build needed.
+Current status: Tasks 1–201 complete. Next unstarted: Task 202
+(add validation for null VertexBuffer, null IndexBuffer, null Texture, null Effect,
+and invalid render target arguments; match FNA/XNA exception style as closely as possible).
 ```
