@@ -180,6 +180,28 @@ TEST(PresentationParametersTest, SetMultiSampleCount)
     EXPECT_EQ(pp.getMultiSampleCountProperty(), 4);
 }
 
+TEST(PresentationParametersTest, SetMultiSampleCountZero)
+{
+    PresentationParameters pp;
+    pp.setMultiSampleCountProperty(4);
+    pp.setMultiSampleCountProperty(0);
+    EXPECT_EQ(pp.getMultiSampleCountProperty(), 0);
+}
+
+TEST(PresentationParametersTest, SetMultiSampleCountOne)
+{
+    PresentationParameters pp;
+    pp.setMultiSampleCountProperty(1);
+    EXPECT_EQ(pp.getMultiSampleCountProperty(), 1);
+}
+
+TEST(PresentationParametersTest, SetMultiSampleCountEight)
+{
+    PresentationParameters pp;
+    pp.setMultiSampleCountProperty(8);
+    EXPECT_EQ(pp.getMultiSampleCountProperty(), 8);
+}
+
 TEST(PresentationParametersTest, SetPresentationInterval)
 {
     PresentationParameters pp;

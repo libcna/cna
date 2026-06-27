@@ -54,6 +54,7 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 | blend state | **missing** | `ApplyBlendState` does not call `glColorMask`. XNA `BlendState.ColorWriteChannels` (restricting R/G/B/A writes) is silently ignored — CNA always writes all four channels. |
 | stencil state | **missing** | Two-sided stencil mode uses the front-face stencil read mask for the back-face stencil function. XNA supports separate front/back stencil read masks; only the write mask is per-face here. |
 | `EasyGLEffectBackend` | **missing** | `SpriteBatch` has a 65 535-index limit (`uint16_t pending_indices_`). Batches larger than 16 383 quads silently wrap/corrupt indices. XNA `SpriteBatch` supports larger batches. |
+| `EasyGLGraphicsBackend.cpp:975–982` | **limit** | `MultiSampleCount` is applied only at backend construction via `GraphicsBackendCreateArgs::multiSampleCount`. There is no `IGraphicsBackend::SetMultiSampleCount()`. Changing `GDM::PreferMultiSampling` or `PresentationParameters::MultiSampleCount` after the device is created updates the PP field but does NOT change the active MSAA sample count — that would require recreating the backend. |
 
 ---
 
