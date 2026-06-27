@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 28 — PresentationParameters and GraphicsDeviceManager
-conformance (Tasks 221–230). Tasks 221–225 complete.
+conformance (Tasks 221–230). Tasks 221–225, 227 complete.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -46,6 +46,7 @@ conformance (Tasks 221–230). Tasks 221–225 complete.
   - `Texture`/`Texture2D`/`RenderTarget2D` C++ name-hiding bug fixed (`using` declarations)
   - `IsFullScreen` stored correctly in device PP regardless of backend fullscreen capability
   - `GraphicsDeviceManager` registers as `IGraphicsDeviceManager` + `IGraphicsDeviceService`; `Game::DoInitialize()` calls `CreateDevice()` automatically
+  - `BackBufferWidth/Height` changes via GDM and direct PP path tested; PP always stores correctly; viewport HEIGHT = virtualHeight in FixedHeightDynamicWidth mode
 
 ### Vulkan backend (`cmake-build-vulkan`)
 - **Builds**: clean.
@@ -68,6 +69,7 @@ conformance (Tasks 221–230). Tasks 221–225 complete.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 227 | `easygl_backbuffer_resize_test.cpp`: PP dimensions correct after GDM resize and direct `SetPresentationParameters`; viewport HEIGHT = virtualHeight; 12/12 PASS. `docs/easygl_bugs.md` added: full EasyGL bug audit (MRT leak, Clear/scissor wrong when RT bound, anisotropy ignored, missing ColorWriteMask, missing preserveContents, missing mipmap for 3D/cube, no context-recovery for 3D/cube textures, glDrawElementsBaseVertex without extension check, and more) |
 | Task 225 | GDM service registration: `registerServices()` now calls `game_->getServicesProperty().AddService<IGraphicsDeviceManager>(this)` and `AddService<IGraphicsDeviceService>(this)`; duplicate-registration guard throws `invalid_argument`; `unregisterServices()` removes both entries (null-guard for GDM without a Game); `Game::DoInitialize()` now finds GDM and calls `CreateDevice()` automatically — matching FNA behavior. Also fixed `StorageDeviceNotConnectedException`+`StorageDevice.cpp` to use `std::exception_ptr` following sharp-runtime API change |
 | Task 224 | `IsFullScreen` field consistency: `SDL_SetWindowFullscreen` failure changed from throw to `SDL_ClearError()` soft-skip; `easygl_fullscreen_field_test.cpp` verifies field round-trip through GDM setter + `ApplyChanges()` + `ToggleFullScreen()`; 7/7 PASS |
 | Task 223 | `PresentationInterval` → VSync mapping: `swapInterval` added to `GraphicsBackendCreateArgs`; `IGraphicsBackend::SetSwapInterval` virtual method; EasyGL calls `SDL_GL_SetSwapInterval`; SDL_Renderer calls `SDL_SetRenderVSync`; Vulkan picks present mode at swapchain creation; Bgfx uses `resetFlags_` + `bgfx::reset`; runtime change via `GraphicsDevice::SetPresentationParameters`; 10/10 smoke-test PASS |
@@ -80,6 +82,8 @@ conformance (Tasks 221–230). Tasks 221–225 complete.
 - `src/Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.cpp`
 - `src/Microsoft/Xna/Framework/Storage/StorageDevice.cpp`
 - `examples/easygl_fullscreen_field_test.cpp` (new, Task 224)
+- `examples/easygl_backbuffer_resize_test.cpp` (new, Task 227)
+- `docs/easygl_bugs.md` (new, Task 227)
 
 ---
 
@@ -219,15 +223,6 @@ git log --oneline -20
 All tasks follow the same pattern: implement/test → build EasyGL → run relevant test →
 update GRAPHICS_TASKS.md + NEXT.md → commit + push.
 
-### Task 227 — Backbuffer resize through PP
-**Goal**: Verify that changing `BackBufferWidth`/`BackBufferHeight` via
-`GDM::setPreferredBackBufferWidth/Height` + `ApplyChanges()` updates the viewport and
-backend logical size correctly. Test both the GDM path and direct
-`GraphicsDevice::SetPresentationParameters`.
-**Files**: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
-`examples/easygl_backbuffer_resize_test.cpp` (new)
-**Verify**: New EasyGL integration test passes.
-
 ### Task 228 — Depth/stencil format changes after device creation
 **Goal**: Verify that changing `DepthStencilFormat` via `PresentationParameters` and
 applying it does not crash and stores the new format in the device PP.
@@ -283,9 +278,9 @@ and `SetData` overloads.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–225 complete. Next unstarted: Task 227
-(Verify BackBufferWidth/Height changes via GDM ApplyChanges() update the
-viewport and backend logical size; add EasyGL integration test).
+Current status: Tasks 1–225 and 227 complete. Next unstarted: Task 228
+(Verify that changing DepthStencilFormat via PresentationParameters
+does not crash and stores the new format in the device PP; unit or EasyGL integration test).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit and push to develop.
