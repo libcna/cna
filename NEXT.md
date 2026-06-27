@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current phase**: Phase 28 — PresentationParameters and GraphicsDeviceManager
-conformance (Tasks 221–230). Tasks 221–224 complete.
+conformance (Tasks 221–230). Tasks 221–225 complete.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -35,7 +35,7 @@ conformance (Tasks 221–230). Tasks 221–224 complete.
   - `EasyGL_MRT_TwoAttachments` (test 1655) — MRT framebuffer attachment bug.
   - `easy-gl-resource-smoke-tests` (test 1694) — upstream easygl assertion failure
     in `test_texture_upload_sets_unpack_alignment_wrap_and_unit0_binding`.
-- Recently confirmed working (Tasks 215–224):
+- Recently confirmed working (Tasks 215–225):
   - GPU handle released on `Dispose()` (not on C++ destructor)
   - Move semantics for `VertexBuffer` and `IndexBuffer` (no double-free)
   - `ResourceCreated`/`ResourceDestroyed` events fired from `GraphicsResource`
@@ -45,6 +45,7 @@ conformance (Tasks 221–230). Tasks 221–224 complete.
   - `PresentationInterval` → VSync mapping implemented across all four backends
   - `Texture`/`Texture2D`/`RenderTarget2D` C++ name-hiding bug fixed (`using` declarations)
   - `IsFullScreen` stored correctly in device PP regardless of backend fullscreen capability
+  - `GraphicsDeviceManager` registers as `IGraphicsDeviceManager` + `IGraphicsDeviceService`; `Game::DoInitialize()` calls `CreateDevice()` automatically
 
 ### Vulkan backend (`cmake-build-vulkan`)
 - **Builds**: clean.
@@ -60,10 +61,6 @@ conformance (Tasks 221–230). Tasks 221–224 complete.
 - **GamerServices** — ~5 % (stubs only).
 - **sRGB SurfaceFormats** — silently map to linear GL/Vulkan internal formats.
 - **Bgfx pixel readback** — `SetDepthTestEnabled` / `SetBlendEnabled` still throw.
-- **GDM not registered as IGraphicsDeviceManager service** — `Game::DoInitialize()`
-  cannot find GDM through `Services_.GetService<IGraphicsDeviceManager>()`. Its
-  `CreateDevice()` is only reachable if called directly. `ApplyChanges()` must be
-  called manually in `Initialize()` overrides when GDM prefs change after construction.
 
 ---
 
@@ -71,44 +68,18 @@ conformance (Tasks 221–230). Tasks 221–224 complete.
 
 | Task / Commit | What changed |
 |---|---|
-| Task 224 | `IsFullScreen` field consistency: `SDL_SetWindowFullscreen` failure changed from throw to `SDL_ClearError()` soft-skip — backends that cannot switch fullscreen no longer crash; `easygl_fullscreen_field_test.cpp` verifies field round-trip through GDM setter + `ApplyChanges()` + `ToggleFullScreen()`; 7/7 PASS |
-| Task 223 | `PresentationInterval` → VSync mapping: `swapInterval` added to `GraphicsBackendCreateArgs`; `IGraphicsBackend::SetSwapInterval` virtual method; EasyGL calls `SDL_GL_SetSwapInterval`; SDL_Renderer calls `SDL_SetRenderVSync`; Vulkan picks present mode at swapchain creation; Bgfx uses `resetFlags_` + `bgfx::reset`; runtime change via `GraphicsDevice::SetPresentationParameters`; 10/10 smoke-test PASS (`easygl_present_interval_test.cpp`) |
-| Task 221+222 | `PresentationParameters` audit: fixed default dimensions bug (1024×768→800×480); fixed C++ name-hiding bug (`Texture`/`Texture2D`/`RenderTarget2D::Dispose(bool)` hid base `Dispose()`; added `using` declarations); added `SetDisplayOrientation`, `SetDeviceWindowHandle` tests; extended `CloneCopiesAllFields` to all 10 fields; 26/26 unit tests pass |
-| Task 220 | `docs/graphics-resource-lifetime.md` created: GPU handle ownership, Dispose(bool) chain, GraphicsDevice tracking, move semantics caveat, backend-specific caveats |
-| Task 219 | Resource leak-check: `GetTrackedResourceCount()` NOXNA added; 80 resources created/disposed; 7/7 PASS (`easygl_resource_leak_test.cpp`) |
-| Task 218 | `GraphicsDevice::resources_` tracking list; `AddResourceReference`/`RemoveResourceReference`; copy-and-clear disposal pattern; 11/11 PASS (`easygl_device_dispose_order_test.cpp`) |
-| Task 217 | `ResourceCreated`/`ResourceDestroyed` events wired through `GraphicsResource` ctor/`Dispose(bool)`; 9/9 PASS (`easygl_resource_events_test.cpp`) |
-| Task 216 | Move semantics for `VertexBuffer` and `IndexBuffer`: declared in `.hpp`, `= default` in `.cpp` (pimpl incomplete-type); 21/21 PASS (`easygl_move_semantics_test.cpp`) |
-| Task 215 | `Dispose(bool)` override in `VertexBuffer`, `IndexBuffer`, `Texture2D` calls `backend_.reset()` before base; `HasBackend()` NOXNA accessor; 16/16 PASS (`easygl_handle_release_test.cpp`) |
+| Task 225 | GDM service registration: `registerServices()` now calls `game_->getServicesProperty().AddService<IGraphicsDeviceManager>(this)` and `AddService<IGraphicsDeviceService>(this)`; duplicate-registration guard throws `invalid_argument`; `unregisterServices()` removes both entries (null-guard for GDM without a Game); `Game::DoInitialize()` now finds GDM and calls `CreateDevice()` automatically — matching FNA behavior. Also fixed `StorageDeviceNotConnectedException`+`StorageDevice.cpp` to use `std::exception_ptr` following sharp-runtime API change |
+| Task 224 | `IsFullScreen` field consistency: `SDL_SetWindowFullscreen` failure changed from throw to `SDL_ClearError()` soft-skip; `easygl_fullscreen_field_test.cpp` verifies field round-trip through GDM setter + `ApplyChanges()` + `ToggleFullScreen()`; 7/7 PASS |
+| Task 223 | `PresentationInterval` → VSync mapping: `swapInterval` added to `GraphicsBackendCreateArgs`; `IGraphicsBackend::SetSwapInterval` virtual method; EasyGL calls `SDL_GL_SetSwapInterval`; SDL_Renderer calls `SDL_SetRenderVSync`; Vulkan picks present mode at swapchain creation; Bgfx uses `resetFlags_` + `bgfx::reset`; runtime change via `GraphicsDevice::SetPresentationParameters`; 10/10 smoke-test PASS |
+| Task 221+222 | `PresentationParameters` audit: fixed default dimensions bug (1024×768→800×480); fixed C++ name-hiding bug; added tests; 26/26 unit tests pass |
+| Task 220 | `docs/graphics-resource-lifetime.md` created |
 
-**Files added (Tasks 215–224):**
-- `docs/graphics-resource-lifetime.md`
-- `examples/easygl_handle_release_test.cpp`
-- `examples/easygl_move_semantics_test.cpp`
-- `examples/easygl_resource_events_test.cpp`
-- `examples/easygl_device_dispose_order_test.cpp`
-- `examples/easygl_resource_leak_test.cpp`
-- `examples/easygl_present_interval_test.cpp`
-- `examples/easygl_fullscreen_field_test.cpp`
-
-**Files modified (Tasks 215–224):**
-- `include/Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp` / `.cpp`
-- `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp` / `.cpp`
-- `include/Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp` / `.cpp`
-- `include/Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp` / `.cpp`
-- `include/Microsoft/Xna/Framework/Graphics/Texture.hpp`
-- `include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp` / `.cpp`
-- `include/Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp` / `.cpp`
-- `include/Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp` / `.cpp`
-- `include/Microsoft/Xna/Framework/Graphics/ResourceCreatedEventArgs.hpp`
-- `include/Microsoft/Xna/Framework/Graphics/ResourceDestroyedEventArgs.hpp`
-- `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp`
-- `include/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp` / `.cpp`
-- `include/CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.hpp` / `.cpp`
-- `include/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp` / `.cpp`
-- `include/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp` / `.cpp`
+**Files modified (Tasks 224–225):**
 - `src/Microsoft/Xna/Framework/GraphicsDeviceManager.cpp`
-- `tests/Microsoft/Xna/Framework/Graphics/PresentationParametersTests.cpp`
+- `include/Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp`
+- `src/Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.cpp`
+- `src/Microsoft/Xna/Framework/Storage/StorageDevice.cpp`
+- `examples/easygl_fullscreen_field_test.cpp` (new, Task 224)
 
 ---
 
@@ -123,14 +94,12 @@ No hard blocker. Two pre-existing test failures exist but are not caused by rece
 
 2. **`easy-gl-resource-smoke-tests`** (test 1694): Upstream easygl library assertion.
    - Assertion: `g_state.last_active_texture == GL_TEXTURE0` in `SmokeResourceTests.cpp:336`.
-   - Affected: `vendor/easy-gl` or linked easygl dependency — not in CNA code directly.
+   - Affected: `vendor/easy-gl` — not in CNA code directly.
    - Not investigated yet.
 
-**Architectural gap (discovered Task 223, documented Task 224)**: `GraphicsDeviceManager`
-does not register itself as `IGraphicsDeviceManager` in `Game::Services_`. This means
-`Game::DoInitialize()` cannot call `GDM::CreateDevice()` automatically. Workaround: call
-`gdm_->ApplyChanges()` from `Game::Initialize()` after changing GDM preferences. Documented
-in `registerServices()` comments (`GraphicsDeviceManager.cpp:491`). Target: Task 225.
+**Note**: The `easygl_present_interval_test.cpp` still has a manual `gdm_->ApplyChanges()`
+call in its `Initialize()` override (now a harmless no-op since `CreateDevice()` is called
+first by `DoInitialize()`). It can be cleaned up but is not a blocker.
 
 ---
 
@@ -140,7 +109,6 @@ in `registerServices()` comments (`GraphicsDeviceManager.cpp:491`). Target: Task
 |---|---|
 | **confirmed pre-existing** | `EasyGL_MRT_TwoAttachments` fails — MRT FBO setup bug in EasyGL backend |
 | **confirmed pre-existing** | `easy-gl-resource-smoke-tests` fails — upstream easygl `GL_TEXTURE0` assertion |
-| **architectural gap** | `GDM` not registered as `IGraphicsDeviceManager` service — `Game::DoInitialize()` skips `CreateDevice()` (Task 225) |
 | **missing NOXNA tags** | 7 non-XNA members on `GraphicsDevice` are missing `NOXNA` (documented in `docs/graphicsdevice-fna-audit.md`) |
 | **missing XNA methods** | `Present(Rectangle?,Rectangle?,IntPtr)`, `Clear(ClearOptions,Vector4,float,int)`, `GetRenderTargetsNoAllocEXT` (Task 201 audit) |
 | **missing callback** | `GraphicsDeviceResetting()` callback on `GraphicsResource` not yet called (Gap 2 from Task 211 audit) |
@@ -180,26 +148,22 @@ easygl          ← GL resource wrappers (Device, Texture, Framebuffer, Sampler,
 - GPU handle is freed when `Dispose()` is called (via `backend_.reset()` in `Dispose(bool)` override), not when the C++ object is destroyed.
 - `Dispose(bool)` override chain: derived class resets backend → calls base `Dispose(bool)`.
 - `GraphicsDevice::resources_` tracks all live resources; disposal uses copy-and-clear pattern to avoid re-entrancy.
-- `ResourceCreated` fires in `GraphicsResource` ctor (after `AddResourceReference`).
-- `ResourceDestroyed` fires in `GraphicsResource::Dispose(bool)` (before `RemoveResourceReference`).
 - See `docs/graphics-resource-lifetime.md` for the full specification.
 
 ### PresentationParameters / GDM wiring
 
-- `GDM` ctor calls `ApplyChanges()` once during construction with default prefs.
-- `GDM` does NOT register itself as `IGraphicsDeviceManager` service (documented gap — Task 225).
-- After changing GDM preferences post-construction, `gdm_->ApplyChanges()` must be called explicitly.
-- `GraphicsDevice::SetPresentationParameters(pp)` stores the PP AND calls `backend_->SetSwapInterval(toSwapInterval(pp.getPresentationIntervalProperty()))`.
+- `GDM(Game*)` ctor: registers as `IGraphicsDeviceManager` + `IGraphicsDeviceService`, calls `ApplyChanges()` with default prefs.
+- `Game::DoInitialize()` → `Services_.GetService<IGraphicsDeviceManager>()` → `CreateDevice()` — this applies any prefs set between GDM ctor and `Run()`.
+- `GraphicsDevice::SetPresentationParameters(pp)` stores the PP AND calls `backend_->SetSwapInterval(toSwapInterval(...))`.
 - `PresentInterval::Default/One → swapInterval=1`, `Two → 2`, `Immediate → 0`.
 - `IsFullScreen` is stored in the PP before `SDL_SetWindowFullscreen` is called. Backend failure to switch fullscreen is non-fatal (SDL_ClearError); the stored value is always correct.
+- `unregisterServices()` is called from `Dispose(bool)` — null-guards `game_` pointer.
 
 ### RenderTarget lifecycle (EasyGL)
 
 `SetRenderTarget(rt)` → backend binds the RT's FBO; sets `currentRtHeight_` to RT height.
 `SetRenderTarget(nullptr)` → backend binds FBO 0 (backbuffer); `currentRtHeight_` = 0.
 `GetBackBufferData` reads from whatever FBO is currently bound.
-`DiscardContents` → `GraphicsDevice::SetRenderTarget` calls `Clear(0,0,0,255)` after binding.
-`PreserveContents` → no auto-clear; Vulkan uses `VK_ATTACHMENT_LOAD_OP_LOAD`.
 
 ### Critical invariants
 
@@ -208,7 +172,8 @@ easygl          ← GL resource wrappers (Device, Texture, Framebuffer, Sampler,
 - **Backend is compile-time only** — no runtime switching.
 - **XNA namespace = XNA API only** — non-XNA extensions tagged `NOXNA`.
 - **FNA is authoritative** — do not deviate from FNA logic without a `//` comment.
-- **`Texture`/`Texture2D`/`RenderTarget2D`** must each have `using BaseClass::Dispose;` to prevent C++ name-hiding of `Dispose()` by `Dispose(bool)` overrides.
+- **`Texture`/`Texture2D`/`RenderTarget2D`** must each have `using BaseClass::Dispose;` to prevent C++ name-hiding.
+- **sharp-runtime inner-exception ctors use `std::exception_ptr`** — not `const std::exception&`.
 
 ---
 
@@ -254,17 +219,6 @@ git log --oneline -20
 All tasks follow the same pattern: implement/test → build EasyGL → run relevant test →
 update GRAPHICS_TASKS.md + NEXT.md → commit + push.
 
-### Task 225 — GDM service registration gap
-**Goal**: Register `GraphicsDeviceManager` as both `IGraphicsDeviceManager` and
-`IGraphicsDeviceService` in `registerServices()` so `Game::DoInitialize()` can
-call `GDM::CreateDevice()` automatically — matching FNA behavior and removing the
-need for manual `gdm_->ApplyChanges()` calls in test `Initialize()` overrides.
-**Files**: `src/Microsoft/Xna/Framework/GraphicsDeviceManager.cpp`,
-`include/Microsoft/Xna/Framework/Game.hpp`, `src/Microsoft/Xna/Framework/Game.cpp`,
-`include/Microsoft/Xna/Framework/GameServiceContainer.hpp`
-**Verify**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cmake-build-debug/cna_test_easygl_present_interval`
-(test should pass without the explicit `gdm_->ApplyChanges()` call in `Initialize()`)
-
 ### Task 227 — Backbuffer resize through PP
 **Goal**: Verify that changing `BackBufferWidth`/`BackBufferHeight` via
 `GDM::setPreferredBackBufferWidth/Height` + `ApplyChanges()` updates the viewport and
@@ -280,6 +234,13 @@ applying it does not crash and stores the new format in the device PP.
 **Files**: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
 `tests/Microsoft/Xna/Framework/Graphics/PresentationParametersTests.cpp`
 **Verify**: Unit test or EasyGL integration test passes.
+
+### Task 229 — MSAA count changes
+**Goal**: Verify that changing `MultiSampleCount` via `PresentationParameters` is
+either accepted (EasyGL backend supports it) or explicitly rejected with a clear error.
+**Files**: `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`,
+`examples/easygl_msaa_change_test.cpp` (new)
+**Verify**: New EasyGL integration test passes.
 
 ### Task 231 — VertexBuffer/IndexBuffer/DynamicBuffer API audit
 **Goal**: Compare `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`,
@@ -311,8 +272,8 @@ and `SetData` overloads.
 - **Do not fix the MRT bug** until Phase 28 (PresentationParameters) is complete and a
   proper reproduction test is written.
 - **Do not implement Bgfx 3D state** (`SetDepthTestEnabled`, `SetBlendEnabled`) — deferred.
-- **Do not make speculative changes to the GDM service registration** beyond Task 225 scope —
-  the service container and `Game::DoInitialize()` paths need careful audit before widening.
+- **Do not remove the manual `gdm_->ApplyChanges()` from `easygl_present_interval_test.cpp`**
+  yet — it is harmless as a no-op and removing it is a cosmetic-only change.
 
 ---
 
@@ -322,10 +283,9 @@ and `SetData` overloads.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–224 complete. Next unstarted: Task 225
-(GDM service registration gap: register GraphicsDeviceManager as IGraphicsDeviceManager
-and IGraphicsDeviceService in registerServices() so Game::DoInitialize() can call
-GDM::CreateDevice() automatically — matches FNA behavior).
+Current status: Tasks 1–225 complete. Next unstarted: Task 227
+(Verify BackBufferWidth/Height changes via GDM ApplyChanges() update the
+viewport and backend logical size; add EasyGL integration test).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit and push to develop.
