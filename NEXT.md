@@ -11,8 +11,8 @@ It is a framework/runtime, not a game.
 **Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
-**Current phase**: Phase 28 — PresentationParameters and GraphicsDeviceManager
-conformance (Tasks 221–230). Tasks 221–225, 227 complete.
+**Current development phase**: Phase 30 — VertexDeclaration and vertex format accuracy
+(Tasks 241–250). Tasks 241, 242, and 248 complete; Tasks 243–247, 249–250 pending.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -23,6 +23,7 @@ conformance (Tasks 221–230). Tasks 221–225, 227 complete.
   .NET primitive type aliases and `System.*` stubs.
 - FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src` is the authoritative
   XNA 4.0 API reference; all logic is ported line-by-line from there.
+- `NOXNA` macro tags any member that is not part of the XNA 4.0 public API.
 
 ---
 
@@ -30,96 +31,89 @@ conformance (Tasks 221–230). Tasks 221–225, 227 complete.
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Tests**: 53/54 EasyGL integration tests pass; 1694/1696 total tests pass.
-- Pre-existing failures (not caused by recent work):
-  - `EasyGL_MRT_TwoAttachments` (test 1655) — MRT framebuffer attachment bug.
-  - `easy-gl-resource-smoke-tests` (test 1694) — upstream easygl assertion failure
-    in `test_texture_upload_sets_unpack_alignment_wrap_and_unit0_binding`.
-- Recently confirmed working (Tasks 215–225):
-  - GPU handle released on `Dispose()` (not on C++ destructor)
-  - Move semantics for `VertexBuffer` and `IndexBuffer` (no double-free)
-  - `ResourceCreated`/`ResourceDestroyed` events fired from `GraphicsResource`
-  - `GraphicsDevice` tracks resources and disposes them before backend teardown
-  - Resource leak-check: 80 resources created/disposed with zero handle leaks
-  - `PresentationParameters` fully conforms to FNA (all 10 fields, correct 800×480 defaults)
-  - `PresentationInterval` → VSync mapping implemented across all four backends
-  - `Texture`/`Texture2D`/`RenderTarget2D` C++ name-hiding bug fixed (`using` declarations)
-  - `IsFullScreen` stored correctly in device PP regardless of backend fullscreen capability
-  - `GraphicsDeviceManager` registers as `IGraphicsDeviceManager` + `IGraphicsDeviceService`; `Game::DoInitialize()` calls `CreateDevice()` automatically
-  - `BackBufferWidth/Height` changes via GDM and direct PP path tested; PP always stores correctly; viewport HEIGHT = virtualHeight in FixedHeightDynamicWidth mode
+- **Unit tests (CnaTests)**: 1715/1715 pass.
+- **Integration tests**: 60 EasyGL integration test executables built; 2 pre-existing
+  failures exist (see Known bugs).
+- **Vulkan tests**: 11/11 pass (in `cmake-build-vulkan`).
 
-### Vulkan backend (`cmake-build-vulkan`)
-- **Builds**: clean.
-- **Tests**: 11/11 Vulkan integration tests pass.
-
-### Bgfx backend (`cmake-build-bgfx`)
-- **Builds**: clean.
-- Smoke tests pass; pixel readback and 3D state incomplete.
+### Recently verified working (Phases 27–30, Tasks 211–248):
+- `GraphicsResource` base class wired to all 8 major resource types; disposal chain correct.
+- `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`, `DynamicIndexBuffer`:
+  FNA API-conformant; `SetDataOptions` (Discard/NoOverwrite) wired in EasyGL;
+  disposed-buffer guards throw `ObjectDisposedException`.
+- `PresentationParameters`: correct 800×480 defaults, all 10 fields, fully tested.
+- `PresentationInterval` → VSync mapping across all 4 backends.
+- GDM registers as `IGraphicsDeviceManager` + `IGraphicsDeviceService`; `Game::DoInitialize()` calls `CreateDevice()` automatically.
+- `IsFullScreen`: stored in PP regardless of backend capability; fullscreen failure soft-skips.
+- `VertexDeclaration`, `VertexElement`, `VertexElementFormat`, `VertexElementUsage`:
+  FNA-conformant; all 4 built-in vertex structs have `Equals`, `GetHashCode`, `ToString`;
+  enum numeric values 0–11/0–12 tested; `GetTypeName` fixed (was returning escaped-quoted string).
+- Vulkan depth bias (`RasterizerState.DepthBias` / `SlopeScaleDepthBias`): wired end-to-end;
+  `ReadBackbuffer` stable (checks `SubmitFrame()` return value; 20/20 passes).
+- Vulkan vertex format helper: `VertexElementFormatToVk()` + `VertexElementFormatSize()` for
+  all 12 `VertexElementFormat` values; 30/30 pixel-readback tests pass.
 
 ### What does not work yet
-- **Framework.Net** — 0 % (NetworkSession, PacketReader/Writer entirely absent).
-- **Content pipeline (.xnb)** — 0 % (ContentManager uses custom JSON/PNG/OGG only).
-- **GamerServices** — ~5 % (stubs only).
-- **sRGB SurfaceFormats** — silently map to linear GL/Vulkan internal formats.
-- **Bgfx pixel readback** — `SetDepthTestEnabled` / `SetBlendEnabled` still throw.
+- **MRT (Multiple Render Targets)**: `EasyGL_MRT_TwoAttachments` fails — pre-existing FBO bug.
+- **`VertexBuffer::GetData` / `IndexBuffer::GetData`**: not in the CNA API; no VBO readback.
+- **`RasterizerState.DepthBias` / `SlopeScaleDepthBias`** on EasyGL and Bgfx: accepted but ignored (no `glPolygonOffset` wiring).
+- **`FillMode::WireFrame`** on EasyGL/GLES3: not supported (`glPolygonMode` unavailable on GLES).
+- **Bgfx `SetDepthTestEnabled` / `SetBlendEnabled`**: still throw.
+- **SpriteBatch multiple Begin/End per frame**: only the last batch renders (Vulkan; others unknown).
+- **Framework.Net** (NetworkSession, PacketReader/Writer): 0%.
+- **Content pipeline (.xnb)**: 0% — CNA uses custom JSON/PNG/OGG descriptors.
+- **GamerServices**: ~5% (Guide.Show no-op only).
+- **sRGB SurfaceFormats**: silently mapped to linear GL/Vulkan internal formats.
+- **Bgfx pixel readback**: not integration-tested.
+- **WebGPU backend**: phases 56–69 planned; vendor headers added (`vendor/wgpu-native/`) but no CMake integration yet.
 
 ---
 
 ## 3. Recent changes
 
-| Task / Commit | What changed |
-|---|---|
-| Task 328 | Depth bias plumbed end-to-end. `IGraphicsBackend::ApplyRasterizerState` extended with `depthBias`/`slopeScaleDepthBias`; `GraphicsDevice` passes them; all 4 backend overrides updated (EasyGL/Bgfx accept-but-ignore for now). Vulkan: all 7 3D pipelines set `depthBiasEnable=VK_TRUE` + declare `VK_DYNAMIC_STATE_DEPTH_BIAS`; `vkCmdSetDepthBias(depthBias, 0, slopeScaleDepthBias)` emitted per 3D draw (FNA `glPolygonOffset(slope, bias)` mapping). `vulkan_depth_bias_test.cpp` (new): coplanar-triangle test proving both DepthBias and SlopeScaleDepthBias flip the LESS depth-test outcome; 4/4 PASS. Also fixed `ReadBackbuffer`: now checks `SubmitFrame()` return value — if it returns false (swapchain out-of-date, e.g. Wayland startup race), output is zeroed and staging is NOT marked valid, so the caller's retry loop works correctly. Verified 20/20 stable. |
-| Task 327 | `vulkan_fill_mode_test.cpp` (new): pixel-readback integration test proving `FillMode::WireFrame` maps to `VK_POLYGON_MODE_LINE`; 3/3 PASS. Also fixed `ReadBackbuffer` race with presentation engine: copy now happens inside `RecordCommandBuffer` BEFORE `vkQueuePresentKHR` using a persistent `readbackStagingBuf_`; old one-time-command-buffer approach removed. |
-| Task 227 | `easygl_backbuffer_resize_test.cpp`: PP dimensions correct after GDM resize and direct `SetPresentationParameters`; viewport HEIGHT = virtualHeight; 12/12 PASS. `docs/easygl_bugs.md` added: full EasyGL bug audit (MRT leak, Clear/scissor wrong when RT bound, anisotropy ignored, missing ColorWriteMask, missing preserveContents, missing mipmap for 3D/cube, no context-recovery for 3D/cube textures, glDrawElementsBaseVertex without extension check, and more) |
-| Task 225 | GDM service registration: `registerServices()` now calls `game_->getServicesProperty().AddService<IGraphicsDeviceManager>(this)` and `AddService<IGraphicsDeviceService>(this)`; duplicate-registration guard throws `invalid_argument`; `unregisterServices()` removes both entries (null-guard for GDM without a Game); `Game::DoInitialize()` now finds GDM and calls `CreateDevice()` automatically — matching FNA behavior. Also fixed `StorageDeviceNotConnectedException`+`StorageDevice.cpp` to use `std::exception_ptr` following sharp-runtime API change |
-| Task 224 | `IsFullScreen` field consistency: `SDL_SetWindowFullscreen` failure changed from throw to `SDL_ClearError()` soft-skip; `easygl_fullscreen_field_test.cpp` verifies field round-trip through GDM setter + `ApplyChanges()` + `ToggleFullScreen()`; 7/7 PASS |
-| Task 223 | `PresentationInterval` → VSync mapping: `swapInterval` added to `GraphicsBackendCreateArgs`; `IGraphicsBackend::SetSwapInterval` virtual method; EasyGL calls `SDL_GL_SetSwapInterval`; SDL_Renderer calls `SDL_SetRenderVSync`; Vulkan picks present mode at swapchain creation; Bgfx uses `resetFlags_` + `bgfx::reset`; runtime change via `GraphicsDevice::SetPresentationParameters`; 10/10 smoke-test PASS |
-| Task 221+222 | `PresentationParameters` audit: fixed default dimensions bug (1024×768→800×480); fixed C++ name-hiding bug; added tests; 26/26 unit tests pass |
-| Task 220 | `docs/graphics-resource-lifetime.md` created |
+### Tasks 241–242 (Phase 30, this session — not yet committed)
+- **`include/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp`**: added `Equals`, `GetHashCode`.
+- **`include/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp`**: added `Equals`, `GetHashCode`.
+- **`include/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp`**: added `Equals`, `GetHashCode`.
+- **`include/Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp`**: added `operator==`, `operator!=`, `Equals`, `GetHashCode`, `ToString` declaration (were missing; other 3 structs already had them).
+- **`src/Microsoft/Xna/Framework/Graphics/VertexPositionColor.cpp`**: new file — `ToString` implementation.
+- **`src/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.cpp`**: fixed `ToString` to use actual field values (was a type-placeholder string).
+- **`src/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.cpp`**: fixed `ToString` (same).
+- **`src/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.cpp`**: fixed `ToString` (same).
+- **`src/Microsoft/Xna/Framework/Graphics/VertexDeclaration.cpp`**: fixed `GetTypeName()` — `GetTypeNameCPP` macro's `#NAME` stringizes a quoted arg with escaped quotes; replaced with manual implementation matching the pattern used by other classes.
+- **`tests/…/VertexPositionColorTests.cpp`**: added Equals, GetHashCode, ToString tests.
+- **`tests/…/VertexPositionNormalTextureTests.cpp`**: added Equals, GetHashCode, ToString tests.
+- **`tests/…/VertexPositionTextureTests.cpp`**: added Equals, GetHashCode, ToString tests.
+- **`tests/…/VertexPositionColorTextureTests.cpp`**: added Equals, GetHashCode, ToString tests.
+- **`tests/…/VertexElementTests.cpp`**: added 12 `VertexElementFormat` numeric value tests (0–11) and 13 `VertexElementUsage` numeric value tests (0–12).
+- **`tests/…/VertexDeclarationTests.cpp`**: added `GetTypeName` test.
+- **`GRAPHICS_TASKS.md`**: Tasks 241 and 242 marked ✅.
 
-**Files modified (Task 328):**
-- `examples/vulkan_depth_bias_test.cpp` (new)
-- `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp` (`ApplyRasterizerState` + depthBias params)
-- `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp` (pass depthBias/slopeScale)
-- `include/CNA/Internal/Backends/{EasyGL,Bgfx,Vulkan}/*.hpp` + `src/.../{EasyGL,Bgfx,Vulkan}/*.cpp` (override signatures)
-- Vulkan `*.hpp` (depthBias_/slopeScaleDepthBias_ members + Pending3DDraw fields), `*.cpp` (7 pipelines + per-draw `vkCmdSetDepthBias`)
-- `CMakeLists.txt` (`cna_test_vulkan_depth_bias` + `Vulkan_DepthBias` test)
-
-**Files modified (Task 327):**
-- `examples/vulkan_fill_mode_test.cpp` (new)
-- `include/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp` (readback staging members)
-- `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp` (`RecordCommandBuffer` deferred copy + `ReadBackbuffer` rewrite + destructor cleanup)
-- `CMakeLists.txt` (`cna_test_vulkan_fill_mode` + `Vulkan_FillMode_WireFrame` test)
-
-**Files modified (Tasks 224–225):**
-- `src/Microsoft/Xna/Framework/GraphicsDeviceManager.cpp`
-- `include/Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp`
-- `src/Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.cpp`
-- `src/Microsoft/Xna/Framework/Storage/StorageDevice.cpp`
-- `examples/easygl_fullscreen_field_test.cpp` (new, Task 224)
-- `examples/easygl_backbuffer_resize_test.cpp` (new, Task 227)
-- `docs/easygl_bugs.md` (new, Task 227)
+### Tasks 231–240, 248, 327–328 (previous session — committed in `7c5a5a9`)
+- Buffer API audit: `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`, `DynamicIndexBuffer` FNA-conformant.
+- Vulkan depth bias end-to-end; `ReadBackbuffer` stability fix.
+- Vulkan vertex format helper + 30 pixel-readback tests.
+- EasyGL/metagl API compatibility fixes (metagl renaming: `TextureWrap→TextureWrapMode`, `TextureFilter→BlitFilter`, `FramebufferAttachment→to_framebuffer_attachment(ColorAttachment::*)`, etc.).
 
 ---
 
 ## 4. Current blocker / main problem
 
-No hard blocker. Two pre-existing test failures exist but are not caused by recent work:
+**No hard blocker.** The session ended cleanly with 1715/1715 unit tests passing.
 
-1. **`EasyGL_MRT_TwoAttachments`** (test 1655): Multiple Render Target test fails.
-   - Suspected: FBO attachment count or draw buffer setup in EasyGL backend.
+Two pre-existing integration test failures remain (not caused by recent work):
+
+1. **`EasyGL_MRT_TwoAttachments`**: Multiple Render Target FBO attachment bug.
+   - Symptom: pixel readback after MRT draw reads zeros.
    - Affected: `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`, `SetRenderTargets`.
-   - Not investigated yet.
+   - Not yet investigated.
 
-2. **`easy-gl-resource-smoke-tests`** (test 1694): Upstream easygl library assertion.
-   - Assertion: `g_state.last_active_texture == GL_TEXTURE0` in `SmokeResourceTests.cpp:336`.
-   - Affected: `vendor/easy-gl` — not in CNA code directly.
-   - Not investigated yet.
+2. **`easy-gl-resource-smoke-tests`**: Upstream easygl assertion.
+   - Assertion: `g_state.last_active_texture == GL_TEXTURE0` in `vendor/easy-gl` smoke tests.
+   - Not a CNA code issue; not investigated.
 
-**Note**: The `easygl_present_interval_test.cpp` still has a manual `gdm_->ApplyChanges()`
-call in its `Initialize()` override (now a harmless no-op since `CreateDevice()` is called
-first by `DoInitialize()`). It can be cleaned up but is not a blocker.
+**Pending commit**: Tasks 241–242 changes are unstaged in working tree. Run
+`git status` to confirm before committing.
 
 ---
 
@@ -129,19 +123,21 @@ first by `DoInitialize()`). It can be cleaned up but is not a blocker.
 |---|---|
 | **confirmed pre-existing** | `EasyGL_MRT_TwoAttachments` fails — MRT FBO setup bug in EasyGL backend |
 | **confirmed pre-existing** | `easy-gl-resource-smoke-tests` fails — upstream easygl `GL_TEXTURE0` assertion |
+| **confirmed bug** | `GetTypeNameCPP` macro: passing a string literal (with quotes) as `NAME` arg causes `#NAME` to embed escaped quotes in the returned string. `VertexDeclaration` fixed manually; other files using the macro with quoted strings (`IndexBuffer`, `SpriteBatch`, `VertexBuffer`, `DepthStencilState`, etc.) are likely broken. Not yet audited. |
+| **confirmed bug (Vulkan)** | `SpriteBatch` multiple `Begin/End` per frame: only the last batch renders; earlier batches silently discarded. Workaround: merge all sprites into one `Begin/End`. See `known_bugs.md`. |
 | **missing NOXNA tags** | 7 non-XNA members on `GraphicsDevice` are missing `NOXNA` (documented in `docs/graphicsdevice-fna-audit.md`) |
-| **missing XNA methods** | `Present(Rectangle?,Rectangle?,IntPtr)`, `Clear(ClearOptions,Vector4,float,int)`, `GetRenderTargetsNoAllocEXT` (Task 201 audit) |
-| **missing callback** | `GraphicsDeviceResetting()` callback on `GraphicsResource` not yet called (Gap 2 from Task 211 audit) |
+| **missing XNA methods** | `Present(Rectangle?,Rectangle?,IntPtr)`, `Clear(ClearOptions,Vector4,float,int)`, `GetRenderTargetsNoAllocEXT` |
+| **incomplete** | `VertexBuffer::GetData` / `IndexBuffer::GetData` not in CNA API; no VBO/IBO readback |
 | **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
-| **known limit** | `RasterizerState.DepthBias`/`SlopeScaleDepthBias` applied on Vulkan only; EasyGL/Bgfx accept the params but ignore them (no `glPolygonOffset` wiring yet) |
+| **known limit** | `RasterizerState.DepthBias`/`SlopeScaleDepthBias` applied on Vulkan only; EasyGL/Bgfx accept but ignore |
 | **known limit** | Bgfx `SetDepthTestEnabled` / `SetBlendEnabled` / `SetDepthWriteEnabled` still throw |
-| **known limit** | Bgfx `GetBackBufferData` not integration-tested |
 | **known limit** | Vulkan `SetSwapInterval` does not recreate swapchain at runtime (applied only at creation) |
 | **known limit** | SDL_Renderer `PresentInterval::Two` maps to VSync=1 (SDL3 has no swap interval 2) |
-| **incomplete** | sRGB SurfaceFormats silently map to linear GL/Vulkan internal formats |
+| **incomplete** | sRGB `SurfaceFormats` silently map to linear GL/Vulkan internal formats |
 | **0 %** | Framework.Net (NetworkSession, PacketReader/Writer) |
 | **0 %** | XNA binary `.xnb` content pipeline |
 | **~5 %** | GamerServices (Guide.Show no-op only) |
+| **planned, not started** | WebGPU backend (Phases 56–69); `vendor/wgpu-native/` headers present but no CMake wiring |
 
 ---
 
@@ -164,50 +160,53 @@ easygl          ← GL resource wrappers (Device, Texture, Framebuffer, Sampler,
 ```
 
 ### GraphicsResource lifetime rules
-
 - `backend_` is a `unique_ptr` held by the derived class (VB, IB, Texture2D, etc.).
-- GPU handle is freed when `Dispose()` is called (via `backend_.reset()` in `Dispose(bool)` override), not when the C++ object is destroyed.
-- `Dispose(bool)` override chain: derived class resets backend → calls base `Dispose(bool)`.
-- `GraphicsDevice::resources_` tracks all live resources; disposal uses copy-and-clear pattern to avoid re-entrancy.
-- See `docs/graphics-resource-lifetime.md` for the full specification.
+- GPU handle freed when `Dispose()` is called (via `backend_.reset()` in `Dispose(bool)`),
+  not when the C++ object is destroyed.
+- `GraphicsDevice::resources_` tracks all live resources; disposal uses copy-and-clear pattern.
+- `Texture`, `Texture2D`, `RenderTarget2D` must each have `using BaseClass::Dispose;` to
+  prevent C++ name-hiding.
 
 ### PresentationParameters / GDM wiring
+- `GDM(Game*)` ctor: registers as `IGraphicsDeviceManager` + `IGraphicsDeviceService`; calls `ApplyChanges()`.
+- `Game::DoInitialize()` → `Services_.GetService<IGraphicsDeviceManager>()` → `CreateDevice()`.
+- `GraphicsDevice::SetPresentationParameters(pp)` stores the PP AND calls `backend_->SetSwapInterval(...)`.
+- `IsFullScreen` is stored in the PP before `SDL_SetWindowFullscreen`. Backend failure is non-fatal.
 
-- `GDM(Game*)` ctor: registers as `IGraphicsDeviceManager` + `IGraphicsDeviceService`, calls `ApplyChanges()` with default prefs.
-- `Game::DoInitialize()` → `Services_.GetService<IGraphicsDeviceManager>()` → `CreateDevice()` — this applies any prefs set between GDM ctor and `Run()`.
-- `GraphicsDevice::SetPresentationParameters(pp)` stores the PP AND calls `backend_->SetSwapInterval(toSwapInterval(...))`.
-- `PresentInterval::Default/One → swapInterval=1`, `Two → 2`, `Immediate → 0`.
-- `IsFullScreen` is stored in the PP before `SDL_SetWindowFullscreen` is called. Backend failure to switch fullscreen is non-fatal (SDL_ClearError); the stored value is always correct.
-- `unregisterServices()` is called from `Dispose(bool)` — null-guards `game_` pointer.
-
-### RenderTarget lifecycle (EasyGL)
-
-`SetRenderTarget(rt)` → backend binds the RT's FBO; sets `currentRtHeight_` to RT height.
-`SetRenderTarget(nullptr)` → backend binds FBO 0 (backbuffer); `currentRtHeight_` = 0.
-`GetBackBufferData` reads from whatever FBO is currently bound.
+### Vertex type conventions
+- `VertexPositionColor`, `VertexPositionTexture`, `VertexPositionNormalTexture`, `VertexPositionColorTexture`
+  all have `operator==`, `operator!=`, `Equals`, `GetHashCode` (returns 0, FNA TODO), `ToString`.
+- `ToString` format: `{{Position:X Y Z Color:R G B A}}` (double braces, no quotes).
+- `VertexDeclaration::GetTypeName()`: returns `"Microsoft.Xna.Framework.Graphics.VertexDeclaration"`.
+- **Warning**: `GetTypeNameCPP(CLASS, "...")` macro is broken when the NAME arg is a quoted string
+  literal — the `#NAME` stringization adds extra escaped quotes. Use manual `GetTypeName()` implementations.
 
 ### Critical invariants
-
-- **`Color` has a vtable pointer** — use `uint8_t[]` + `Color(r,g,b,a)` for pixel I/O.
+- **`Color` has a vtable pointer** — use `uint8_t[]` + `Color(r,g,b,a)` for pixel I/O, never cast.
 - **Vulkan build: `-j1`** — race condition in SPIR-V header generation.
 - **Backend is compile-time only** — no runtime switching.
 - **XNA namespace = XNA API only** — non-XNA extensions tagged `NOXNA`.
 - **FNA is authoritative** — do not deviate from FNA logic without a `//` comment.
-- **`Texture`/`Texture2D`/`RenderTarget2D`** must each have `using BaseClass::Dispose;` to prevent C++ name-hiding.
 - **sharp-runtime inner-exception ctors use `std::exception_ptr`** — not `const std::exception&`.
+- **`GLOB_RECURSE "src/*.cpp"`** in `CMakeLists.txt` — new `.cpp` files under `src/` are auto-included.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# EasyGL — configure + build + all integration tests
+# EasyGL — configure + build
 cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-debug
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug -R EasyGL --output-on-failure
+cmake --build cmake-build-debug -j$(nproc)
 
-# EasyGL — unit tests only (no display needed)
-ctest --test-dir cmake-build-debug --exclude-regex "EasyGL|easy-gl" --output-on-failure
+# Unit tests only (no display needed)
+./cmake-build-debug/CnaTests
+
+# Run unit tests via ctest (excludes EasyGL integration tests)
+ctest --test-dir cmake-build-debug --exclude-regex "EasyGL|easy-gl"
+
+# EasyGL integration tests (requires display)
+DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug -R EasyGL --output-on-failure
 
 # All tests
 DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug --output-on-failure
@@ -222,57 +221,91 @@ cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-bgfx
 DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-bgfx -R Bgfx --output-on-failure
 
-# Run specific integration tests
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cmake-build-debug/cna_test_easygl_present_interval
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cmake-build-debug/cna_test_easygl_fullscreen_field
-
-# Run PresentationParameters unit tests
+# Run specific test suites
+./cmake-build-debug/CnaTests --gtest_filter="VertexPosition*:VertexDeclaration*:VertexElement*"
 ./cmake-build-debug/CnaTests --gtest_filter="PresentationParameters*"
 
 # Check git history
-git log --oneline -20
+git log --oneline -15
+
+# Commit pending work (Tasks 241-242)
+git -c commit.gpgsign=false add \
+  include/Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp \
+  include/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp \
+  include/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp \
+  include/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp \
+  src/Microsoft/Xna/Framework/Graphics/VertexPositionColor.cpp \
+  src/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.cpp \
+  src/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.cpp \
+  src/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.cpp \
+  src/Microsoft/Xna/Framework/Graphics/VertexDeclaration.cpp \
+  tests/Microsoft/Xna/Framework/Graphics/ \
+  GRAPHICS_TASKS.md NEXT.md
+git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit — Equals/GetHashCode/ToString + enum numeric tests"
 ```
 
 ---
 
 ## 8. Next smallest tasks
 
-All tasks follow the same pattern: implement/test → build EasyGL → run relevant test →
-update GRAPHICS_TASKS.md + NEXT.md → commit + push.
+### Task 243 — Custom vertex declarations with unusual offsets
+**Goal**: Verify `VertexDeclaration` handles non-zero-starting offsets and padding gaps
+correctly (auto-stride from non-zero initial offset, elements not in offset order).
+**Files**: `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp`
+**Verify**: `./cmake-build-debug/CnaTests --gtest_filter="VertexDeclarationTest*"`
 
-### Task 241 — VertexDeclaration / VertexElement / VertexElementFormat / VertexElementUsage audit
-**Goal**: Compare `VertexDeclaration`, `VertexElement`, `VertexElementFormat`, and
-`VertexElementUsage` against FNA — equality, hash, stride, element ordering, and all
-enum values must match.
-**Files**: `include/Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp`,
-`include/Microsoft/Xna/Framework/Graphics/VertexElement.hpp`,
-`tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp` (new or extend)
-**Verify**: Build + unit tests pass.
+### Task 244 — Multiple texture coordinate channels
+**Goal**: Verify `VertexElement` with `VertexElementUsage::TextureCoordinate` and
+`usageIndex` 0, 1, 2 stores and retrieves the index correctly in a `VertexDeclaration`.
+**Files**: `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp`
+**Verify**: `./cmake-build-debug/CnaTests --gtest_filter="VertexDeclarationTest*"`
 
-### Task 242 — Built-in vertex struct tests
-**Goal**: Verify `VertexPositionColor`, `VertexPositionTexture`,
-`VertexPositionNormalTexture`, `VertexPositionColorTexture` — packed size, stride,
-declaration element layout.
-**Files**: `tests/Microsoft/Xna/Framework/Graphics/VertexStructTests.cpp` (new)
-**Verify**: Unit tests pass.
+### Task 245 — Color and byte element format sizes
+**Goal**: Verify auto-stride calculation handles `Byte4` (4 bytes), `Short2` (4 bytes),
+`NormalizedShort4` (8 bytes), `HalfVector2` (4 bytes) correctly.
+**Files**: `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp`,
+`src/Microsoft/Xna/Framework/Graphics/VertexDeclaration.cpp` (auto-stride `GetTypeSize`)
+**Verify**: `./cmake-build-debug/CnaTests --gtest_filter="VertexDeclarationTest*"`
+
+### Task 246 — Audit `GetTypeNameCPP` macro usage across all .cpp files
+**Goal**: Find all uses of `GetTypeNameCPP(CLASS, "...")` with a quoted string literal
+and replace them with the manual `GetTypeName()` pattern to avoid the `#NAME`
+double-quoting bug.
+**Files**: `src/` (grep for `GetTypeNameCPP`), affected `.cpp` files
+**Verify**: `./cmake-build-debug/CnaTests` — existing `GetTypeName` tests must pass.
+
+### Task 329 — Vulkan scissor test enable/disable interaction
+**Goal**: Pixel-readback test verifying that enabling `ScissorTestEnable` on
+`RasterizerState` and setting `GraphicsDevice::ScissorRectangle` clips correctly.
+**Files**: `examples/vulkan_scissor_test.cpp` (new), `CMakeLists.txt`
+**Verify**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-vulkan -R vulkan_scissor`
+
+### Task 247 — EasyGL draw test with each `VertexElementFormat`
+**Goal**: Integration test drawing a quad with each non-trivial vertex format
+(`Vector2`, `Vector3`, `Vector4`, `Color`, `Byte4`, `Short2`/`Short4`) and
+verifying pixel output.
+**Files**: `examples/easygl_vertex_formats_test.cpp` (new), `CMakeLists.txt`
+**Verify**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug -R easygl_vertex_formats`
 
 ---
 
 ## 9. Do not do yet
 
-- **Do not implement Framework.Net** — out of scope for current phase.
-- **Do not add .xnb content pipeline** — custom descriptor format is the current contract.
-- **Do not refactor IGraphicsBackend** — changing the interface breaks all 4 backends at once.
-- **Do not change the `Color` memory layout** — packed ABGR order is relied on by all backends.
+- **Do not investigate the MRT bug** (`EasyGL_MRT_TwoAttachments`) until a minimal
+  reproduction is written first — the current failure is inside a large integration test.
+- **Do not investigate `easy-gl-resource-smoke-tests`** — it is an upstream easygl issue.
+- **Do not implement `VertexBuffer::GetData` / `IndexBuffer::GetData`** — requires
+  VBO readback which EasyGL does not expose; adding it would need new `IGraphicsBackend` methods.
+- **Do not start the WebGPU backend** — `vendor/wgpu-native/` headers are present but
+  no CMake wiring exists; starting it now would destabilize the existing build.
+- **Do not fix the SpriteBatch multiple Begin/End Vulkan bug** until a focused
+  minimal reproduction test is written.
+- **Do not refactor `IGraphicsBackend`** — any interface change breaks all 4 backends at once.
+- **Do not change the `Color` memory layout** — packed ABGR order relied on by all backends.
 - **Do not convert integration tests to unit tests without a mock device** — there is no
   fake `GraphicsDevice`; integration tests using `Game` + EasyGL are the established pattern.
-- **Do not investigate the `easy-gl-resource-smoke-tests` failure** until the upstream
-  easygl library is updated; it is not a CNA issue.
-- **Do not fix the MRT bug** until Phase 28 (PresentationParameters) is complete and a
-  proper reproduction test is written.
-- **Do not implement Bgfx 3D state** (`SetDepthTestEnabled`, `SetBlendEnabled`) — deferred.
-- **Do not remove the manual `gdm_->ApplyChanges()` from `easygl_present_interval_test.cpp`**
-  yet — it is harmless as a no-op and removing it is a cosmetic-only change.
+- **Do not implement Framework.Net or the .xnb content pipeline** — out of scope.
+- **Do not mass-fix `GetTypeNameCPP` callers in one commit** — audit each file individually.
 
 ---
 
@@ -282,9 +315,14 @@ declaration element layout.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Task 328 complete (Vulkan depth bias + slope-scale depth bias; ReadBackbuffer stability fix; 20/20 depth bias stable).
-Next: Task 329 (scissor test enable/disable interaction with GraphicsDevice.ScissorRectangle — pixel test).
+Current status: Tasks 241+242 complete (vertex type audit — Equals/GetHashCode/ToString
+on all 4 VertexPosition* structs; VertexElementFormat/Usage numeric value tests;
+VertexDeclaration::GetTypeName fixed; 1715/1715 unit tests pass).
+Changes are uncommitted — commit them first, then continue.
+
+Next: Task 243 (custom VertexDeclaration with unusual offsets) or
+      Task 246 (audit GetTypeNameCPP macro usage for double-quoting bug).
 
 After finishing: build cmake-build-debug, run the affected tests, update
-GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit and push to develop.
+GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.
 ```

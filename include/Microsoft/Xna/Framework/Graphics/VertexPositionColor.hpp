@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
+#include <string>
+
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
@@ -61,5 +64,48 @@ namespace Microsoft::Xna::Framework::Graphics
                 });
             return decl;
         }
+
+        /**
+         * @brief Tests equality by comparing Position and Color.
+         * @param left  Left operand.
+         * @param right Right operand.
+         * @return True if Position and Color are equal.
+         */
+        [[nodiscard]] friend bool operator==(const VertexPositionColor& left,
+                                             const VertexPositionColor& right)
+        {
+            return left.Color == right.Color && left.Position == right.Position;
+        }
+
+        /**
+         * @brief Tests inequality.
+         * @param left  Left operand.
+         * @param right Right operand.
+         * @return True if any field differs.
+         */
+        [[nodiscard]] friend bool operator!=(const VertexPositionColor& left,
+                                             const VertexPositionColor& right)
+        {
+            return !(left == right);
+        }
+
+        /**
+         * @brief Compares this vertex to another for equality.
+         * @param other The vertex to compare against.
+         * @return True if Position and Color are equal.
+         */
+        [[nodiscard]] bool Equals(const VertexPositionColor& other) const { return *this == other; }
+
+        /**
+         * @brief Returns a hash code. Consistent with FNA (always 0).
+         * @return 0.
+         */
+        [[nodiscard]] std::size_t GetHashCode() const { return 0; }
+
+        /**
+         * @brief Returns a human-readable description of this vertex.
+         * @return String of the form "{{Position:... Color:...}}".
+         */
+        [[nodiscard]] std::string ToString() const;
     };
 }

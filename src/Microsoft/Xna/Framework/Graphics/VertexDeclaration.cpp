@@ -5,7 +5,11 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    GetTypeNameCPP(VertexDeclaration, "Microsoft.Xna.Framework.Graphics.VertexDeclaration")
+    const std::string& VertexDeclaration::GetTypeName() const
+    {
+        static const std::string typeName = "Microsoft.Xna.Framework.Graphics.VertexDeclaration";
+        return typeName;
+    }
 
     static int GetTypeSize(VertexElementFormat fmt)
     {

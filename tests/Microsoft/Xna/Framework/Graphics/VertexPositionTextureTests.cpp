@@ -89,3 +89,45 @@ TEST(VertexPositionTextureTest, DeclarationTexCoordElement)
     EXPECT_EQ(elems[1].getVertexElementFormatProperty(), VertexElementFormat::Vector2);
     EXPECT_EQ(elems[1].getVertexElementUsageProperty(),  VertexElementUsage::TextureCoordinate);
 }
+
+// --- Equals ---
+
+TEST(VertexPositionTextureTest, EqualsMethod)
+{
+    VertexPositionTexture a(Vector3(1, 2, 3), Vector2(0.5f, 0.5f));
+    VertexPositionTexture b(Vector3(1, 2, 3), Vector2(0.5f, 0.5f));
+    EXPECT_TRUE(a.Equals(b));
+    VertexPositionTexture c(Vector3(1, 2, 4), Vector2(0.5f, 0.5f));
+    EXPECT_FALSE(a.Equals(c));
+}
+
+// --- GetHashCode ---
+
+TEST(VertexPositionTextureTest, GetHashCodeConsistent)
+{
+    VertexPositionTexture a(Vector3(1, 2, 3), Vector2(0.5f, 0.5f));
+    VertexPositionTexture b(Vector3(1, 2, 3), Vector2(0.5f, 0.5f));
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+// --- ToString ---
+
+TEST(VertexPositionTextureTest, ToStringContainsPosition)
+{
+    VertexPositionTexture v(Vector3(1, 2, 3), Vector2(0.5f, 0.5f));
+    EXPECT_NE(v.ToString().find("Position:"), std::string::npos);
+}
+
+TEST(VertexPositionTextureTest, ToStringContainsTextureCoordinate)
+{
+    VertexPositionTexture v(Vector3(0, 0, 0), Vector2(0.3f, 0.7f));
+    EXPECT_NE(v.ToString().find("TextureCoordinate:"), std::string::npos);
+}
+
+TEST(VertexPositionTextureTest, ToStringDoubleBraces)
+{
+    VertexPositionTexture v(Vector3(0, 0, 0), Vector2(0, 0));
+    const std::string s = v.ToString();
+    EXPECT_EQ(s.substr(0, 2), "{{");
+    EXPECT_EQ(s.substr(s.size() - 2), "}}");
+}

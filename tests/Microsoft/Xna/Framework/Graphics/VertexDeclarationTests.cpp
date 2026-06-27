@@ -178,3 +178,11 @@ TEST(VertexDeclarationTest, AutoStrideElementsPreserved)
     EXPECT_EQ(vd.GetVertexElements()[0].getOffsetProperty(), 0);
     EXPECT_EQ(vd.GetVertexElements()[1].getOffsetProperty(), 12);
 }
+
+// ── GetTypeName ─────────────────────────────────────────────────────────────
+
+TEST(VertexDeclarationTest, GetTypeNameReturnsXnaName)
+{
+    VertexDeclaration vd;
+    EXPECT_EQ(vd.GetTypeName(), "Microsoft.Xna.Framework.Graphics.VertexDeclaration");
+}

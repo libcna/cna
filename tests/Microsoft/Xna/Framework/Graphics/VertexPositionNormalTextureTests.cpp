@@ -113,3 +113,51 @@ TEST(VertexPositionNormalTextureTest, DeclarationTexCoordElement)
     EXPECT_EQ(elems[2].getVertexElementFormatProperty(), VertexElementFormat::Vector2);
     EXPECT_EQ(elems[2].getVertexElementUsageProperty(),  VertexElementUsage::TextureCoordinate);
 }
+
+// --- Equals ---
+
+TEST(VertexPositionNormalTextureTest, EqualsMethod)
+{
+    VertexPositionNormalTexture a(Vector3(1, 2, 3), Vector3(0, 1, 0), Vector2(0.5f, 0.5f));
+    VertexPositionNormalTexture b(Vector3(1, 2, 3), Vector3(0, 1, 0), Vector2(0.5f, 0.5f));
+    EXPECT_TRUE(a.Equals(b));
+    VertexPositionNormalTexture c(Vector3(1, 2, 3), Vector3(0, 0, 1), Vector2(0.5f, 0.5f));
+    EXPECT_FALSE(a.Equals(c));
+}
+
+// --- GetHashCode ---
+
+TEST(VertexPositionNormalTextureTest, GetHashCodeConsistent)
+{
+    VertexPositionNormalTexture a(Vector3(1, 2, 3), Vector3(0, 1, 0), Vector2(0.5f, 0.5f));
+    VertexPositionNormalTexture b(Vector3(1, 2, 3), Vector3(0, 1, 0), Vector2(0.5f, 0.5f));
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+// --- ToString ---
+
+TEST(VertexPositionNormalTextureTest, ToStringContainsPosition)
+{
+    VertexPositionNormalTexture v(Vector3(1, 2, 3), Vector3(0, 1, 0), Vector2(0.5f, 0.5f));
+    EXPECT_NE(v.ToString().find("Position:"), std::string::npos);
+}
+
+TEST(VertexPositionNormalTextureTest, ToStringContainsNormal)
+{
+    VertexPositionNormalTexture v(Vector3(0, 0, 0), Vector3(0, 1, 0), Vector2(0, 0));
+    EXPECT_NE(v.ToString().find("Normal:"), std::string::npos);
+}
+
+TEST(VertexPositionNormalTextureTest, ToStringContainsTextureCoordinate)
+{
+    VertexPositionNormalTexture v(Vector3(0, 0, 0), Vector3(0, 1, 0), Vector2(0, 0));
+    EXPECT_NE(v.ToString().find("TextureCoordinate:"), std::string::npos);
+}
+
+TEST(VertexPositionNormalTextureTest, ToStringDoubleBraces)
+{
+    VertexPositionNormalTexture v(Vector3(0, 0, 0), Vector3(0, 1, 0), Vector2(0, 0));
+    const std::string s = v.ToString();
+    EXPECT_EQ(s.substr(0, 2), "{{");
+    EXPECT_EQ(s.substr(s.size() - 2), "}}");
+}

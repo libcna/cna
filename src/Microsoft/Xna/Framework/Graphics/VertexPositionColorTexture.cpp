@@ -18,6 +18,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::string VertexPositionColorTexture::ToString() const
     {
-        return "{Position: Vector3 Color: Color TextureCoordinate: Vector2}";
+        return "{{Position:" + Position.ToString()
+             + " Color:" + Color.ToString()
+             + " TextureCoordinate:" + TextureCoordinate.ToString()
+             + "}}";
     }
 }

@@ -75,3 +75,67 @@ TEST(VertexPositionColorTest, DeclarationColorOffset)
 }
 
 // sizeof(VertexPositionColor) is 40 rather than the XNA-expected 16 due to the Color vtable issue above.
+
+// --- Equality ---
+
+TEST(VertexPositionColorTest, EqualityTrue)
+{
+    VertexPositionColor a(Vector3(1, 2, 3), Color(255, 0, 0, 255));
+    VertexPositionColor b(Vector3(1, 2, 3), Color(255, 0, 0, 255));
+    EXPECT_TRUE(a == b);
+    EXPECT_FALSE(a != b);
+}
+
+TEST(VertexPositionColorTest, EqualityFalsePosition)
+{
+    VertexPositionColor a(Vector3(1, 0, 0), Color(255, 0, 0, 255));
+    VertexPositionColor b(Vector3(0, 0, 0), Color(255, 0, 0, 255));
+    EXPECT_FALSE(a == b);
+    EXPECT_TRUE(a != b);
+}
+
+TEST(VertexPositionColorTest, EqualityFalseColor)
+{
+    VertexPositionColor a(Vector3(0, 0, 0), Color(255, 0, 0, 255));
+    VertexPositionColor b(Vector3(0, 0, 0), Color(0, 255, 0, 255));
+    EXPECT_FALSE(a == b);
+    EXPECT_TRUE(a != b);
+}
+
+TEST(VertexPositionColorTest, EqualsMethod)
+{
+    VertexPositionColor a(Vector3(1, 2, 3), Color(10, 20, 30, 255));
+    VertexPositionColor b(Vector3(1, 2, 3), Color(10, 20, 30, 255));
+    EXPECT_TRUE(a.Equals(b));
+}
+
+// --- GetHashCode ---
+
+TEST(VertexPositionColorTest, GetHashCodeConsistent)
+{
+    VertexPositionColor a(Vector3(1, 2, 3), Color(255, 0, 0, 255));
+    VertexPositionColor b(Vector3(1, 2, 3), Color(255, 0, 0, 255));
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+// --- ToString ---
+
+TEST(VertexPositionColorTest, ToStringContainsPosition)
+{
+    VertexPositionColor v(Vector3(1, 2, 3), Color(255, 0, 0, 255));
+    EXPECT_NE(v.ToString().find("Position:"), std::string::npos);
+}
+
+TEST(VertexPositionColorTest, ToStringContainsColor)
+{
+    VertexPositionColor v(Vector3(0, 0, 0), Color(10, 20, 30, 255));
+    EXPECT_NE(v.ToString().find("Color:"), std::string::npos);
+}
+
+TEST(VertexPositionColorTest, ToStringDoubleBraces)
+{
+    VertexPositionColor v(Vector3(0, 0, 0), Color(255, 255, 255, 255));
+    const std::string s = v.ToString();
+    EXPECT_EQ(s.substr(0, 2), "{{");
+    EXPECT_EQ(s.substr(s.size() - 2), "}}");
+}

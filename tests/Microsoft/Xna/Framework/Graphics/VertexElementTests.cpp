@@ -192,3 +192,132 @@ TEST(VertexElementTest, ToStringDefaultFormat)
     EXPECT_NE(s.find("Usage:TextureCoordinate"), std::string::npos);
     EXPECT_NE(s.find("UsageIndex: 1"), std::string::npos);
 }
+
+// ── VertexElementFormat numeric values ──────────────────────────────────────
+
+TEST(VertexElementFormatTest, SingleIsZero)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::Single), 0);
+}
+
+TEST(VertexElementFormatTest, Vector2IsOne)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::Vector2), 1);
+}
+
+TEST(VertexElementFormatTest, Vector3IsTwo)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::Vector3), 2);
+}
+
+TEST(VertexElementFormatTest, Vector4IsThree)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::Vector4), 3);
+}
+
+TEST(VertexElementFormatTest, ColorIsFour)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::Color), 4);
+}
+
+TEST(VertexElementFormatTest, Byte4IsFive)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::Byte4), 5);
+}
+
+TEST(VertexElementFormatTest, Short2IsSix)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::Short2), 6);
+}
+
+TEST(VertexElementFormatTest, Short4IsSeven)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::Short4), 7);
+}
+
+TEST(VertexElementFormatTest, NormalizedShort2IsEight)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::NormalizedShort2), 8);
+}
+
+TEST(VertexElementFormatTest, NormalizedShort4IsNine)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::NormalizedShort4), 9);
+}
+
+TEST(VertexElementFormatTest, HalfVector2IsTen)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::HalfVector2), 10);
+}
+
+TEST(VertexElementFormatTest, HalfVector4IsEleven)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementFormat::HalfVector4), 11);
+}
+
+// ── VertexElementUsage numeric values ───────────────────────────────────────
+
+TEST(VertexElementUsageTest, PositionIsZero)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::Position), 0);
+}
+
+TEST(VertexElementUsageTest, ColorIsOne)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::Color), 1);
+}
+
+TEST(VertexElementUsageTest, TextureCoordinateIsTwo)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::TextureCoordinate), 2);
+}
+
+TEST(VertexElementUsageTest, NormalIsThree)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::Normal), 3);
+}
+
+TEST(VertexElementUsageTest, BinormalIsFour)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::Binormal), 4);
+}
+
+TEST(VertexElementUsageTest, TangentIsFive)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::Tangent), 5);
+}
+
+TEST(VertexElementUsageTest, BlendIndicesIsSix)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::BlendIndices), 6);
+}
+
+TEST(VertexElementUsageTest, BlendWeightIsSeven)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::BlendWeight), 7);
+}
+
+TEST(VertexElementUsageTest, DepthIsEight)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::Depth), 8);
+}
+
+TEST(VertexElementUsageTest, FogIsNine)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::Fog), 9);
+}
+
+TEST(VertexElementUsageTest, PointSizeIsTen)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::PointSize), 10);
+}
+
+TEST(VertexElementUsageTest, SampleIsEleven)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::Sample), 11);
+}
+
+TEST(VertexElementUsageTest, TessellateFactorIsTwelve)
+{
+    EXPECT_EQ(static_cast<int>(VertexElementUsage::TessellateFactor), 12);
+}

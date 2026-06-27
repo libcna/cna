@@ -70,6 +70,17 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         bool operator!=(const VertexPositionColorTexture& o) const { return !(*this == o); }
         /**
+         * @brief Returns true if the given vertex equals this vertex.
+         * @param other The other vertex to compare.
+         * @return True if all fields are equal.
+         */
+        [[nodiscard]] bool Equals(const VertexPositionColorTexture& other) const { return *this == other; }
+        /**
+         * @brief Returns a hash code for this vertex.
+         * @return Always returns 0 (FNA TODO).
+         */
+        [[nodiscard]] std::size_t GetHashCode() const { return 0; }
+        /**
          * @brief Returns a string representation of this vertex.
          * @return A string listing Position, Color, and TextureCoordinate values.
          */
