@@ -13,7 +13,7 @@ layout(push_constant) uniform PC {
 void main() {
     vec4 pos = pc.mvp * vec4(inPos, 1.0);
     pos.y = -pos.y;                      // Vulkan NDC Y is inverted vs OpenGL
-    pos.z = (pos.z + pos.w) * 0.5;      // remap Z from [-w,+w] to [0,+w]
+    // Z already in [0,+w] from XNA DirectX-convention projection — no remap needed.
     gl_Position = pos;
     fragColor   = inColor;
 }

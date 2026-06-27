@@ -22,7 +22,6 @@ layout(push_constant) uniform PC {
 void main() {
     vec4 pos = pc.mvp * vec4(inPos, 1.0);
     pos.y = -pos.y;
-    pos.z = (pos.z + pos.w) * 0.5;
     gl_Position = pos;
     fragUV = inUV;
     // Mix vertex color and diffuse based on vertexColorEnabled flag.
