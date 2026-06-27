@@ -23,6 +23,16 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
+         * @brief Constructs a VertexDeclaration from an element list, computing stride automatically.
+         *
+         * The stride is computed as the maximum of (element.Offset + sizeof(element.Format))
+         * across all elements, matching FNA's VertexDeclaration(params VertexElement[]).
+         *
+         * @param elements Initializer list of vertex attribute descriptors.
+         */
+        explicit VertexDeclaration(std::initializer_list<VertexElement> elements);
+
+        /**
          * @brief Constructs a VertexDeclaration with an explicit stride and element list.
          * @param vertexStride Size in bytes of one vertex.
          * @param elements     Initializer list of vertex attribute descriptors.

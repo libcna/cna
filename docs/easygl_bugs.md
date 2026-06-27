@@ -58,6 +58,17 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 
 ---
 
+## Missing VertexBuffer / IndexBuffer readback
+
+| | Status | Description |
+|---|---|---|
+| `VertexBuffer::GetData<T>` | **missing** | Not declared or implemented in CNA. FNA exposes three overloads that read vertex data back from the GPU via `FNA3D_GetVertexBufferData`. In CNA neither `IVertexBufferBackend` nor `IIndexBufferBackend` has a readback method, so `GetData` cannot be added without an `IGraphicsBackend` interface change. |
+| `IndexBuffer::GetData<T>` | **missing** | Same as above — no `FNA3D_GetIndexBufferData` equivalent in the backend interface. |
+| `VertexBuffer::SetData` GPU offsetInBytes | **missing** | The `(int offsetInBytes, T[], int startIndex, int elementCount, int vertexStride)` overload (and the `DynamicVertexBuffer` variant with `SetDataOptions`) writes to a specific byte offset inside the GPU buffer. `IVertexBufferBackend::SetData` only supports writing at offset 0. Implementing this correctly requires adding an `offsetInBytes` parameter to the backend interface. |
+| `IndexBuffer::SetData` GPU offsetInBytes | **missing** | Same — `IIndexBufferBackend` has no offsetInBytes variant. |
+
+---
+
 ## Viewport / coordinate system notes
 
 - **`GetViewportSize` returns the LOGICAL size, not the physical framebuffer size.**

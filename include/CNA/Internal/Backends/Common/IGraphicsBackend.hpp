@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -30,6 +31,7 @@ namespace CNA::Internal::Backends
     using Matrix = Microsoft::Xna::Framework::Matrix;
     using Effect = Microsoft::Xna::Framework::Graphics::Effect;
     using ImageData = CNA::Internal::Graphics::ImageData;
+    using SetDataOptions = Microsoft::Xna::Framework::Graphics::SetDataOptions;
 
     /**
      * @brief Backend handle for a vertex buffer.
@@ -57,6 +59,27 @@ namespace CNA::Internal::Backends
         virtual void SetData(const void* data,
                              int vertex_count,
                              std::size_t stride_in_bytes) = 0;
+
+        /**
+         * @brief Uploads vertex data with an explicit streaming hint.
+         *
+         * Backends may use @p options to select a more efficient upload path
+         * (e.g. buffer orphaning for `Discard`, `glBufferSubData` for
+         * `NoOverwrite`). The default implementation ignores @p options.
+         *
+         * @param data            Packed vertex data.
+         * @param vertex_count    Number of vertices.
+         * @param stride_in_bytes Size of one vertex in bytes.
+         * @param options         Streaming hint.
+         */
+        virtual void SetDataWithOptions(const void* data,
+                                        int vertex_count,
+                                        std::size_t stride_in_bytes,
+                                        SetDataOptions options)
+        {
+            SetData(data, vertex_count, stride_in_bytes);
+        }
+
         [[nodiscard]] virtual int GetVertexCount() const = 0;
     };
 
@@ -72,6 +95,19 @@ namespace CNA::Internal::Backends
         {
             throw std::runtime_error("SetData32 not supported by this backend");
         }
+
+        /** @brief Uploads 16-bit index data with a streaming hint. Default ignores @p options. */
+        virtual void SetData16WithOptions(const void* data, int index_count, SetDataOptions options)
+        {
+            SetData16(data, index_count);
+        }
+
+        /** @brief Uploads 32-bit index data with a streaming hint. Default ignores @p options. */
+        virtual void SetData32WithOptions(const void* data, int index_count, SetDataOptions options)
+        {
+            SetData32(data, index_count);
+        }
+
         [[nodiscard]] virtual int  GetIndexCount()   const = 0;
         [[nodiscard]] virtual bool IsThirtyTwoBit()  const { return false; }
     };
@@ -397,8 +433,15 @@ namespace CNA::Internal::Backends
                                             int ccwStencilFail, int ccwStencilDepthFail) {}
 
         /// Applies a RasterizerState to the backend. Default: no-op.
+        /// @param cullMode            Raw CullMode int value.
+        /// @param fillMode            Raw FillMode int value.
+        /// @param scissorTestEnable   Whether the scissor test is enabled.
+        /// @param depthBias           Constant depth bias (XNA DepthBias).
+        /// @param slopeScaleDepthBias Slope-scaled depth bias (XNA SlopeScaleDepthBias).
         virtual void ApplyRasterizerState(int cullMode, int fillMode,
-                                          bool scissorTestEnable) {}
+                                          bool scissorTestEnable,
+                                          float depthBias = 0.0f,
+                                          float slopeScaleDepthBias = 0.0f) {}
 
         /// Applies a SamplerState to the given texture slot. Default: no-op.
         /// @param slot         Texture unit index (0–15).

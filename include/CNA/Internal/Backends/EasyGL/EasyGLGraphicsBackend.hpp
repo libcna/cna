@@ -51,6 +51,7 @@ namespace CNA::Internal::Backends::EasyGL
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
+        [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
 
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
@@ -263,6 +264,8 @@ namespace CNA::Internal::Backends::EasyGL
         explicit EasyGLVertexBufferBackend(int vertex_capacity, ::easygl::ResourceRegistry* registry);
         ~EasyGLVertexBufferBackend() override;
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
+                                SetDataOptions options) override;
         int GetVertexCount() const override { return vertex_count; }
         [[nodiscard]] std::size_t GetStride() const { return stride_in_bytes_; }
 
@@ -272,9 +275,11 @@ namespace CNA::Internal::Backends::EasyGL
     private:
         void InitializeLayout();
         void ApplyLayout(std::size_t stride);
+        void uploadWithOptions(const void* data, std::size_t byte_count, SetDataOptions options);
         ::easygl::ResourceRegistry* registry_ = nullptr;
         std::vector<uint8_t> cpu_data_;
         std::size_t stride_in_bytes_ = 0;
+        bool gpu_allocated_ = false;
     };
 
     /**
@@ -296,6 +301,8 @@ namespace CNA::Internal::Backends::EasyGL
         ~EasyGLIndexBufferBackend() override;
         void SetData16(const void* data, int index_count) override;
         void SetData32(const void* data, int index_count) override;
+        void SetData16WithOptions(const void* data, int index_count, SetDataOptions options) override;
+        void SetData32WithOptions(const void* data, int index_count, SetDataOptions options) override;
         int  GetIndexCount()  const override { return index_count; }
         bool IsThirtyTwoBit() const override { return thirtyTwoBit; }
 
@@ -448,7 +455,8 @@ namespace CNA::Internal::Backends::EasyGL
                                     bool twoSidedStencilMode,
                                     int ccwStencilFunc, int ccwStencilPass,
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
-        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable) override;
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias, float slopeScaleDepthBias) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
         void SetBlendFactor(float r, float g, float b, float a) override;

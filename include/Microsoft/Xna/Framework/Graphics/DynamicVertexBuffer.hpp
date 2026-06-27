@@ -3,6 +3,7 @@
 
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -22,17 +23,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             const VertexDeclaration& vertexDeclaration,
                             int vertexCount,
                             BufferUsage bufferUsage)
-            : VertexBuffer(device, vertexDeclaration, vertexCount, bufferUsage)
-        {
-        }
-
-        /**
-         * @brief Constructs a DynamicVertexBuffer with the given device and vertex count.
-         * @param device      The graphics device.
-         * @param vertexCount Capacity in vertices.
-         */
-        DynamicVertexBuffer(GraphicsDevice& device, int vertexCount)
-            : VertexBuffer(device, vertexCount)
+            : VertexBuffer(device, vertexDeclaration, vertexCount, bufferUsage, true)
         {
         }
 
@@ -43,13 +34,79 @@ namespace Microsoft::Xna::Framework::Graphics
         System::EventHandler<System::EventArgs> ContentLost;
 
         /**
-         * @brief Uploads vertex data with Discard semantics (equivalent to SetData).
-         * @param vertices Pointer to the source vertex array.
-         * @param count    Number of vertices to upload.
+         * @brief Uploads VertexPositionColor vertices with streaming semantics.
+         *
+         * The @p options hint is stored for API conformance but is currently ignored
+         * by all CNA backends — all writes go to the buffer beginning.
+         *
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         * @param options      Streaming hint (Discard / NoOverwrite / None).
          */
-        void SetDataDiscard(const VertexPositionColor* vertices, int count)
+        void SetData(const VertexPositionColor* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
         {
-            SetData(vertices, count);
+            VertexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
+        }
+
+        /**
+         * @brief Uploads VertexPositionColorTexture vertices with streaming semantics.
+         *
+         * The @p options hint is stored for API conformance but is currently ignored
+         * by all CNA backends — all writes go to the buffer beginning.
+         *
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         * @param options      Streaming hint (Discard / NoOverwrite / None).
+         */
+        void SetData(const VertexPositionColorTexture* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
+        {
+            VertexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
+        }
+
+        /**
+         * @brief Uploads VertexPositionNormalTexture vertices with streaming semantics.
+         *
+         * The @p options hint is stored for API conformance but is currently ignored
+         * by all CNA backends — all writes go to the buffer beginning.
+         *
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         * @param options      Streaming hint (Discard / NoOverwrite / None).
+         */
+        void SetData(const VertexPositionNormalTexture* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
+        {
+            VertexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
+        }
+
+        /**
+         * @brief Uploads VertexPositionTexture vertices with streaming semantics.
+         *
+         * The @p options hint is stored for API conformance but is currently ignored
+         * by all CNA backends — all writes go to the buffer beginning.
+         *
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         * @param options      Streaming hint (Discard / NoOverwrite / None).
+         */
+        void SetData(const VertexPositionTexture* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
+        {
+            VertexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
         }
     };
 }

@@ -62,7 +62,7 @@ namespace CNA::Internal::Backends::EasyGL
     // --- EasyGLTexture3DBackend ---
 
     static constexpr int kTexLinear       = static_cast<int>(::metagl::TextureMagFilter::Linear);
-    static constexpr int kTexClampToEdge  = static_cast<int>(::metagl::TextureWrap::ClampToEdge);
+    static constexpr int kTexClampToEdge  = static_cast<int>(::metagl::TextureWrapMode::ClampToEdge);
 
     EasyGLTexture3DBackend::EasyGLTexture3DBackend(int w, int h, int depth, bool /*mipMap*/, int /*surfaceFormat*/)
         : width_(w), height_(h), depth_(depth)
@@ -136,13 +136,13 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Framebuffer fbo;
         fbo.create();
         fbo.bind(::easygl::FramebufferTarget::Framebuffer);
-        fbo.set_read_buffer(::easygl::ReadBuffer::ColorAttachment0);
+        fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
 
         for (int slice = z; slice < z + depth; ++slice)
         {
             fbo.attach_texture_layer(::easygl::FramebufferTarget::Framebuffer,
-                                     ::metagl::FramebufferAttachment::Color0,
-                                     tex_.native_handle(), level, slice);
+                                     ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                     tex_, level, slice);
             ::metagl::glReadPixels(x, y, w, h,
                                    ::metagl::PixelFormat::Rgba,
                                    ::metagl::PixelType::UnsignedByte,
@@ -178,10 +178,10 @@ namespace CNA::Internal::Backends::EasyGL
         fbo.create();
         fbo.bind(::easygl::FramebufferTarget::Framebuffer);
         fbo.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                              ::metagl::FramebufferAttachment::Color0,
+                              ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                               kCubeFaceTargets[face],
-                              tex_.native_handle(), level);
-        fbo.set_read_buffer(::easygl::ReadBuffer::ColorAttachment0);
+                              tex_, level);
+        fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
 
         ::metagl::glReadPixels(x, y, w, h,
                                ::metagl::PixelFormat::Rgba,
@@ -429,18 +429,18 @@ namespace CNA::Internal::Backends::EasyGL
                                 static_cast<int>(::metagl::TextureMagFilter::Linear));
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
                                 ::metagl::TextureParameter::WrapS,
-                                static_cast<int>(::metagl::TextureWrap::ClampToEdge));
+                                static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
                                 ::metagl::TextureParameter::WrapT,
-                                static_cast<int>(::metagl::TextureWrap::ClampToEdge));
+                                static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
 
         fbo_.create();
         // glFramebufferTexture2D operates on the currently bound FBO; bind ours first.
         fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
         fbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                               ::metagl::FramebufferAttachment::Color0,
+                               ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                                ::easygl::TextureTarget::Texture2D,
-                               colorTex_.native_handle(), 0);
+                               colorTex_, 0);
 
         if (hasDepth_)
         {
@@ -449,7 +449,7 @@ namespace CNA::Internal::Backends::EasyGL
             depthRbo_.set_storage(::metagl::InternalFormat::DepthComponent24, width_, height_);
             fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                      ::metagl::FramebufferAttachment::Depth,
-                                     depthRbo_.native_handle());
+                                     depthRbo_);
         }
 
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
@@ -532,10 +532,10 @@ namespace CNA::Internal::Backends::EasyGL
                                static_cast<int>(::metagl::TextureMagFilter::Linear));
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::metagl::TextureParameter::WrapS,
-                               static_cast<int>(::metagl::TextureWrap::ClampToEdge));
+                               static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::metagl::TextureParameter::WrapT,
-                               static_cast<int>(::metagl::TextureWrap::ClampToEdge));
+                               static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
 
         fbo_.create();
 
@@ -547,7 +547,7 @@ namespace CNA::Internal::Backends::EasyGL
             fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
             fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                       ::metagl::FramebufferAttachment::Depth,
-                                      depthRbo_.native_handle());
+                                      depthRbo_);
         }
 
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
@@ -560,9 +560,9 @@ namespace CNA::Internal::Backends::EasyGL
         const auto faceTarget = static_cast<::easygl::TextureTarget>(
             static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX) + face);
         fbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                                ::metagl::FramebufferAttachment::Color0,
+                                ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                                 faceTarget,
-                                cubeTex_.native_handle(), 0);
+                                cubeTex_, 0);
     }
 
     void EasyGLRenderTargetCubeBackend::UnbindAsRenderTarget()
@@ -1044,11 +1044,11 @@ void main()
 
         msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
         msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
-                                      ::metagl::FramebufferAttachment::Color0,
-                                      msaaColorRbo_.native_handle());
+                                      ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                      msaaColorRbo_);
         msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                       ::metagl::FramebufferAttachment::Depth,
-                                      msaaDepthRbo_.native_handle());
+                                      msaaDepthRbo_);
     }
 
     void EasyGLGraphicsBackend::BindDefaultFramebuffer()
@@ -1078,7 +1078,7 @@ void main()
         ::easygl::Framebuffer::blit(0, 0, msaaW_, msaaH_,
                                      0, 0, msaaW_, msaaH_,
                                      ::metagl::ClearBufferBit::Color,
-                                     ::metagl::TextureFilter::Nearest);
+                                     ::metagl::BlitFilter::Nearest);
     }
 
     EasyGLGraphicsBackend::~EasyGLGraphicsBackend()
@@ -1366,19 +1366,21 @@ void main()
         const int n = count < kMaxMRT ? count : kMaxMRT;
         for (int i = 0; i < n; ++i)
         {
-            unsigned int texHandle = rts[i]->GetColorGLHandle();
-            const auto attachment = static_cast<::metagl::FramebufferAttachment>(
-                static_cast<int>(::metagl::FramebufferAttachment::Color0) + i);
+            const auto* eglRT = static_cast<const EasyGLRenderTargetBackend*>(rts[i]);
+            const auto colorAttach = static_cast<::metagl::ColorAttachment>(
+                static_cast<GLenum>(::metagl::ColorAttachment::Color0) + static_cast<GLenum>(i));
             mrtFbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                                      attachment,
+                                      ::metagl::to_framebuffer_attachment(colorAttach),
                                       ::easygl::TextureTarget::Texture2D,
-                                      texHandle, 0);
+                                      eglRT->GetEasyGLColorTexture(), 0);
         }
 
         ::easygl::DrawBuffer drawBufs[kMaxMRT];
-        for (int i = 0; i < n; ++i)
-            drawBufs[i] = static_cast<::easygl::DrawBuffer>(
-                static_cast<int>(::metagl::DrawBuffer::ColorAttachment0) + i);
+        for (int i = 0; i < n; ++i) {
+            const auto colorAttach = static_cast<::metagl::ColorAttachment>(
+                static_cast<GLenum>(::metagl::ColorAttachment::Color0) + static_cast<GLenum>(i));
+            drawBufs[i] = ::metagl::to_draw_buffer(colorAttach);
+        }
         mrtFbo_.set_draw_buffers(std::span<const ::easygl::DrawBuffer>(drawBufs, n));
     }
 
@@ -1564,7 +1566,9 @@ void main()
     }
 
     void EasyGLGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
-                                                      bool scissorTestEnable)
+                                                      bool scissorTestEnable,
+                                                      float /*depthBias*/,
+                                                      float /*slopeScaleDepthBias*/)
     {
         if (metagl::IsContextLost()) return;
         // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
@@ -1657,19 +1661,19 @@ void main()
             magF = ::easygl::TextureMagFilter::Linear;
             break;
         }
-        s.set_parameter(::easygl::TextureParameter::MinFilter, static_cast<int>(minF));
-        s.set_parameter(::easygl::TextureParameter::MagFilter, static_cast<int>(magF));
+        s.set_parameter(::easygl::SamplerParameter::MinFilter, static_cast<int>(minF));
+        s.set_parameter(::easygl::SamplerParameter::MagFilter, static_cast<int>(magF));
 
         // TextureAddressMode → GL wrap: Wrap=0→Repeat, Clamp=1→ClampToEdge, Mirror=2→MirroredRepeat
         auto toWrap = [](int mode) -> int {
             switch (mode) {
-            case 1:  return static_cast<int>(::easygl::TextureWrap::ClampToEdge);
-            case 2:  return static_cast<int>(::easygl::TextureWrap::MirroredRepeat);
-            default: return static_cast<int>(::easygl::TextureWrap::Repeat);
+            case 1:  return static_cast<int>(::easygl::TextureWrapMode::ClampToEdge);
+            case 2:  return static_cast<int>(::easygl::TextureWrapMode::MirroredRepeat);
+            default: return static_cast<int>(::easygl::TextureWrapMode::Repeat);
             }
         };
-        s.set_parameter(::easygl::TextureParameter::WrapS, toWrap(addressU));
-        s.set_parameter(::easygl::TextureParameter::WrapT, toWrap(addressV));
+        s.set_parameter(::easygl::SamplerParameter::WrapS, toWrap(addressU));
+        s.set_parameter(::easygl::SamplerParameter::WrapT, toWrap(addressV));
 
         s.bind(static_cast<unsigned int>(slot));
     }
@@ -1778,6 +1782,30 @@ void main()
         }
     }
 
+    void EasyGLVertexBufferBackend::uploadWithOptions(const void* data,
+                                                      std::size_t byte_count,
+                                                      SetDataOptions options)
+    {
+        vbo.bind(::easygl::BufferTarget::Array);
+        if (options == SetDataOptions::Discard) {
+            // Orphan strategy: discard old storage without stalling the GPU pipeline.
+            const std::size_t total = static_cast<std::size_t>(capacity) * stride_in_bytes_;
+            vbo.set_data(::easygl::BufferTarget::Array, nullptr,
+                         total > 0 ? total : byte_count,
+                         ::easygl::BufferUsage::DynamicDraw);
+            vbo.set_sub_data(::easygl::BufferTarget::Array, data, byte_count, 0);
+            gpu_allocated_ = true;
+        } else if (options == SetDataOptions::NoOverwrite && gpu_allocated_) {
+            // NoOverwrite: driver hint that no in-flight data is overwritten.
+            vbo.set_sub_data(::easygl::BufferTarget::Array, data, byte_count, 0);
+        } else {
+            // None (or first-ever upload): standard glBufferData.
+            vbo.set_data(::easygl::BufferTarget::Array, data, byte_count,
+                         ::easygl::BufferUsage::DynamicDraw);
+            gpu_allocated_ = true;
+        }
+    }
+
     void EasyGLVertexBufferBackend::SetData(const void* data, int count, std::size_t stride_in_bytes)
     {
         vertex_count = count;
@@ -1788,11 +1816,28 @@ void main()
             const auto* bytes = static_cast<const uint8_t*>(data);
             cpu_data_.assign(bytes, bytes + byte_count);
         }
-        vbo.bind(::easygl::BufferTarget::Array);
-        vbo.set_data(::easygl::BufferTarget::Array, data, byte_count);
+        uploadWithOptions(data, byte_count, SetDataOptions::None);
         ApplyLayout(stride_in_bytes_);
         CNA_RENDER_LOG("VertexBuffer SetData: count=" << count << " stride=" << stride_in_bytes
             << " bytes=" << byte_count);
+    }
+
+    void EasyGLVertexBufferBackend::SetDataWithOptions(const void* data, int count,
+                                                       std::size_t stride_in_bytes,
+                                                       SetDataOptions options)
+    {
+        vertex_count = count;
+        stride_in_bytes_ = stride_in_bytes;
+        const std::size_t byte_count = static_cast<std::size_t>(count) * stride_in_bytes;
+        if (registry_)
+        {
+            const auto* bytes = static_cast<const uint8_t*>(data);
+            cpu_data_.assign(bytes, bytes + byte_count);
+        }
+        uploadWithOptions(data, byte_count, options);
+        ApplyLayout(stride_in_bytes_);
+        CNA_RENDER_LOG("VertexBuffer SetDataWithOptions: count=" << count
+            << " stride=" << stride_in_bytes << " options=" << static_cast<int>(options));
     }
 
     EasyGLIndexBufferBackend::EasyGLIndexBufferBackend(int index_capacity, bool is32bit,
@@ -1852,6 +1897,60 @@ void main()
         ibo.bind(::easygl::BufferTarget::ElementArray);
         ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count);
         CNA_RENDER_LOG("IndexBuffer SetData32: count=" << count);
+    }
+
+    void EasyGLIndexBufferBackend::SetData16WithOptions(const void* data, int count,
+                                                        SetDataOptions options)
+    {
+        index_count = count;
+        const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint16_t);
+        if (registry_)
+        {
+            const auto* bytes = static_cast<const uint8_t*>(data);
+            cpu_data_.assign(bytes, bytes + byte_count);
+        }
+        ibo.bind(::easygl::BufferTarget::ElementArray);
+        if (options == SetDataOptions::Discard) {
+            const std::size_t total = static_cast<std::size_t>(capacity) * sizeof(std::uint16_t);
+            ibo.set_data(::easygl::BufferTarget::ElementArray, nullptr,
+                         total > 0 ? total : byte_count,
+                         ::easygl::BufferUsage::DynamicDraw);
+            ibo.set_sub_data(::easygl::BufferTarget::ElementArray, data, byte_count, 0);
+        } else if (options == SetDataOptions::NoOverwrite && !cpu_data_.empty()) {
+            ibo.set_sub_data(::easygl::BufferTarget::ElementArray, data, byte_count, 0);
+        } else {
+            ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count,
+                         ::easygl::BufferUsage::DynamicDraw);
+        }
+        CNA_RENDER_LOG("IndexBuffer SetData16WithOptions: count=" << count
+            << " options=" << static_cast<int>(options));
+    }
+
+    void EasyGLIndexBufferBackend::SetData32WithOptions(const void* data, int count,
+                                                        SetDataOptions options)
+    {
+        index_count = count;
+        const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint32_t);
+        if (registry_)
+        {
+            const auto* bytes = static_cast<const uint8_t*>(data);
+            cpu_data_.assign(bytes, bytes + byte_count);
+        }
+        ibo.bind(::easygl::BufferTarget::ElementArray);
+        if (options == SetDataOptions::Discard) {
+            const std::size_t total = static_cast<std::size_t>(capacity) * sizeof(std::uint32_t);
+            ibo.set_data(::easygl::BufferTarget::ElementArray, nullptr,
+                         total > 0 ? total : byte_count,
+                         ::easygl::BufferUsage::DynamicDraw);
+            ibo.set_sub_data(::easygl::BufferTarget::ElementArray, data, byte_count, 0);
+        } else if (options == SetDataOptions::NoOverwrite && !cpu_data_.empty()) {
+            ibo.set_sub_data(::easygl::BufferTarget::ElementArray, data, byte_count, 0);
+        } else {
+            ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count,
+                         ::easygl::BufferUsage::DynamicDraw);
+        }
+        CNA_RENDER_LOG("IndexBuffer SetData32WithOptions: count=" << count
+            << " options=" << static_cast<int>(options));
     }
 
     namespace
@@ -2373,7 +2472,7 @@ void main()
 
         // Bone palette (SkinnedEffect)
         if (p.loc_bones >= 0 && params.boneCount > 0)
-            ::metagl::glUniformMatrix4fv(p.loc_bones, params.boneCount, 0, params.boneTransforms);
+            ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{p.loc_bones}, params.boneCount, 0, params.boneTransforms);
 
         if (p.loc_envmap_amount >= 0)
             p.prog.set_uniform(p.loc_envmap_amount, params.envMapAmount);

@@ -1141,7 +1141,9 @@ namespace CNA::Internal::Backends::Bgfx
     }
 
     void BgfxGraphicsBackend::ApplyRasterizerState(int cullMode, int /*fillMode*/,
-                                                    bool scissorTestEnable)
+                                                    bool scissorTestEnable,
+                                                    float /*depthBias*/,
+                                                    float /*slopeScaleDepthBias*/)
     {
         // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
         switch (cullMode)

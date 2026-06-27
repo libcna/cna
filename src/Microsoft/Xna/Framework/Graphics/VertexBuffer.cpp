@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <cassert>
 #include <cstdint>
@@ -10,17 +11,28 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     VertexBuffer::VertexBuffer(GraphicsDevice& device, int vertexCount)
-        : GraphicsResource(&device)
-        , backend_(device.GetBackend().CreateVertexBuffer(vertexCount))
+        : VertexBuffer(device, VertexDeclaration{}, vertexCount, BufferUsage::None, false)
     {
     }
 
     VertexBuffer::VertexBuffer(GraphicsDevice& device,
-                               const VertexDeclaration& /*vertexDeclaration*/,
+                               const VertexDeclaration& vertexDeclaration,
                                int vertexCount,
-                               BufferUsage /*bufferUsage*/)
+                               BufferUsage bufferUsage)
+        : VertexBuffer(device, vertexDeclaration, vertexCount, bufferUsage, false)
+    {
+    }
+
+    VertexBuffer::VertexBuffer(GraphicsDevice& device,
+                               const VertexDeclaration& vertexDeclaration,
+                               int vertexCount,
+                               BufferUsage bufferUsage,
+                               bool /*dynamic*/)
         : GraphicsResource(&device)
         , backend_(device.GetBackend().CreateVertexBuffer(vertexCount))
+        , vertexDeclaration_(vertexDeclaration)
+        , bufferUsage_(bufferUsage)
+        , vertexCount_(vertexCount)
     {
     }
 
@@ -36,8 +48,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GetTypeNameCPP(VertexBuffer, "Microsoft.Xna.Framework.Graphics.VertexBuffer")
 
-    void VertexBuffer::SetData(const VertexPositionColor* vertices, int count)
+    void VertexBuffer::SetData(const VertexPositionColor* data, int count)
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
         // VertexPositionColor contains a Color member that inherits from a virtual
         // base class (IPackedVector), so sizeof(Color) == 16 (vtable + data + padding)
         // and sizeof(VertexPositionColor) == 32, not 16. The EasyGL 3D shader pipeline
@@ -51,19 +65,26 @@ namespace Microsoft::Xna::Framework::Graphics
 
         std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i) {
-            packed[i].x = vertices[i].Position.X;
-            packed[i].y = vertices[i].Position.Y;
-            packed[i].z = vertices[i].Position.Z;
-            packed[i].r = vertices[i].Color.getRProperty();
-            packed[i].g = vertices[i].Color.getGProperty();
-            packed[i].b = vertices[i].Color.getBProperty();
-            packed[i].a = vertices[i].Color.getAProperty();
+            packed[i].x = data[i].Position.X;
+            packed[i].y = data[i].Position.Y;
+            packed[i].z = data[i].Position.Z;
+            packed[i].r = data[i].Color.getRProperty();
+            packed[i].g = data[i].Color.getGProperty();
+            packed[i].b = data[i].Color.getBProperty();
+            packed[i].a = data[i].Color.getAProperty();
         }
         backend_->SetData(packed.data(), count, sizeof(GpuVertex));
     }
 
-    void VertexBuffer::SetData(const VertexPositionColorTexture* vertices, int count)
+    void VertexBuffer::SetData(const VertexPositionColor* data, int startIndex, int elementCount)
     {
+        SetData(data + startIndex, elementCount);
+    }
+
+    void VertexBuffer::SetData(const VertexPositionColorTexture* data, int count)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
         // VertexPositionColorTexture has a virtual base (IVertexType) so its sizeof
         // includes a vtable pointer. Pack into the GPU layout: float3 + ubyte4 + float2 = 24 bytes.
         struct GpuVertex {
@@ -75,21 +96,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
         std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i) {
-            packed[i].x = vertices[i].Position.X;
-            packed[i].y = vertices[i].Position.Y;
-            packed[i].z = vertices[i].Position.Z;
-            packed[i].r = vertices[i].Color.getRProperty();
-            packed[i].g = vertices[i].Color.getGProperty();
-            packed[i].b = vertices[i].Color.getBProperty();
-            packed[i].a = vertices[i].Color.getAProperty();
-            packed[i].u = vertices[i].TextureCoordinate.X;
-            packed[i].v = vertices[i].TextureCoordinate.Y;
+            packed[i].x = data[i].Position.X;
+            packed[i].y = data[i].Position.Y;
+            packed[i].z = data[i].Position.Z;
+            packed[i].r = data[i].Color.getRProperty();
+            packed[i].g = data[i].Color.getGProperty();
+            packed[i].b = data[i].Color.getBProperty();
+            packed[i].a = data[i].Color.getAProperty();
+            packed[i].u = data[i].TextureCoordinate.X;
+            packed[i].v = data[i].TextureCoordinate.Y;
         }
         backend_->SetData(packed.data(), count, sizeof(GpuVertex));
     }
 
-    void VertexBuffer::SetData(const VertexPositionNormalTexture* vertices, int count)
+    void VertexBuffer::SetData(const VertexPositionColorTexture* data, int startIndex, int elementCount)
     {
+        SetData(data + startIndex, elementCount);
+    }
+
+    void VertexBuffer::SetData(const VertexPositionNormalTexture* data, int count)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
         // VertexPositionNormalTexture has a virtual base (IVertexType). Pack into
         // GPU layout: float3 position + float3 normal + float2 texcoord = 32 bytes.
         struct GpuVertex {
@@ -101,20 +129,27 @@ namespace Microsoft::Xna::Framework::Graphics
 
         std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i) {
-            packed[i].x  = vertices[i].Position.X;
-            packed[i].y  = vertices[i].Position.Y;
-            packed[i].z  = vertices[i].Position.Z;
-            packed[i].nx = vertices[i].Normal.X;
-            packed[i].ny = vertices[i].Normal.Y;
-            packed[i].nz = vertices[i].Normal.Z;
-            packed[i].u  = vertices[i].TextureCoordinate.X;
-            packed[i].v  = vertices[i].TextureCoordinate.Y;
+            packed[i].x  = data[i].Position.X;
+            packed[i].y  = data[i].Position.Y;
+            packed[i].z  = data[i].Position.Z;
+            packed[i].nx = data[i].Normal.X;
+            packed[i].ny = data[i].Normal.Y;
+            packed[i].nz = data[i].Normal.Z;
+            packed[i].u  = data[i].TextureCoordinate.X;
+            packed[i].v  = data[i].TextureCoordinate.Y;
         }
         backend_->SetData(packed.data(), count, sizeof(GpuVertex));
     }
 
-    void VertexBuffer::SetData(const VertexPositionTexture* vertices, int count)
+    void VertexBuffer::SetData(const VertexPositionNormalTexture* data, int startIndex, int elementCount)
     {
+        SetData(data + startIndex, elementCount);
+    }
+
+    void VertexBuffer::SetData(const VertexPositionTexture* data, int count)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
         // VertexPositionTexture has a virtual base (IVertexType). Pack into
         // GPU layout: float3 position + float2 texcoord = 20 bytes.
         struct GpuVertex {
@@ -125,22 +160,92 @@ namespace Microsoft::Xna::Framework::Graphics
 
         std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i) {
-            packed[i].x = vertices[i].Position.X;
-            packed[i].y = vertices[i].Position.Y;
-            packed[i].z = vertices[i].Position.Z;
-            packed[i].u = vertices[i].TextureCoordinate.X;
-            packed[i].v = vertices[i].TextureCoordinate.Y;
+            packed[i].x = data[i].Position.X;
+            packed[i].y = data[i].Position.Y;
+            packed[i].z = data[i].Position.Z;
+            packed[i].u = data[i].TextureCoordinate.X;
+            packed[i].v = data[i].TextureCoordinate.Y;
         }
         backend_->SetData(packed.data(), count, sizeof(GpuVertex));
     }
 
-    int VertexBuffer::getVertexCountProperty() const
+    void VertexBuffer::SetData(const VertexPositionTexture* data, int startIndex, int elementCount)
     {
-        return backend_->GetVertexCount();
+        SetData(data + startIndex, elementCount);
     }
 
     void VertexBuffer::SetDataRaw(const void* data, int count, int stride)
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
         backend_->SetData(data, count, static_cast<std::size_t>(stride));
+    }
+
+    void VertexBuffer::SetDataWithOptions(const VertexPositionColor* data, int startIndex,
+                                          int elementCount, SetDataOptions options)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; };
+        static_assert(sizeof(GpuVertex) == 16);
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        for (int i = 0; i < elementCount; ++i) {
+            const auto& v = data[startIndex + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Color.getRProperty(), v.Color.getGProperty(),
+                          v.Color.getBProperty(), v.Color.getAProperty() };
+        }
+        backend_->SetDataWithOptions(packed.data(), elementCount, sizeof(GpuVertex), options);
+    }
+
+    void VertexBuffer::SetDataWithOptions(const VertexPositionColorTexture* data, int startIndex,
+                                          int elementCount, SetDataOptions options)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
+        static_assert(sizeof(GpuVertex) == 24);
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        for (int i = 0; i < elementCount; ++i) {
+            const auto& v = data[startIndex + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Color.getRProperty(), v.Color.getGProperty(),
+                          v.Color.getBProperty(), v.Color.getAProperty(),
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        backend_->SetDataWithOptions(packed.data(), elementCount, sizeof(GpuVertex), options);
+    }
+
+    void VertexBuffer::SetDataWithOptions(const VertexPositionNormalTexture* data, int startIndex,
+                                          int elementCount, SetDataOptions options)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        struct GpuVertex { float x, y, z, nx, ny, nz, u, v; };
+        static_assert(sizeof(GpuVertex) == 32);
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        for (int i = 0; i < elementCount; ++i) {
+            const auto& v = data[startIndex + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.Normal.X, v.Normal.Y, v.Normal.Z,
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        backend_->SetDataWithOptions(packed.data(), elementCount, sizeof(GpuVertex), options);
+    }
+
+    void VertexBuffer::SetDataWithOptions(const VertexPositionTexture* data, int startIndex,
+                                          int elementCount, SetDataOptions options)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        struct GpuVertex { float x, y, z, u, v; };
+        static_assert(sizeof(GpuVertex) == 20);
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        for (int i = 0; i < elementCount; ++i) {
+            const auto& v = data[startIndex + i];
+            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
+                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+        }
+        backend_->SetDataWithOptions(packed.data(), elementCount, sizeof(GpuVertex), options);
     }
 }

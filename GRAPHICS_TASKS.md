@@ -370,16 +370,16 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                             | Status | Notes                              |
 | --- | ------------------------------------------------------------------------------------------------ | ------ | ---------------------------------- |
-| 231 | Audit `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`, `DynamicIndexBuffer` API against FNA | ⬜      | Include constructors and overloads |
-| 232 | Add tests for `VertexBuffer::SetData` with offset, startIndex, elementCount, vertexStride        | ⬜      | Catch stride bugs                  |
-| 233 | Add tests for `VertexBuffer::GetData` if exposed                                                 | ⬜      | Verify CPU/GPU round-trip          |
-| 234 | Add tests for `IndexBuffer::SetData` with 16-bit and 32-bit index formats                        | ⬜      | Include offset paths               |
-| 235 | Add tests for `IndexBuffer::GetData` if exposed                                                  | ⬜      | Verify exact values                |
-| 236 | Implement `DynamicVertexBuffer::SetDataOptions` behavior: `None`, `Discard`, `NoOverwrite`       | ⬜      | Backend-specific mapping           |
-| 237 | Implement `DynamicIndexBuffer::SetDataOptions` behavior: `None`, `Discard`, `NoOverwrite`        | ⬜      | Backend-specific mapping           |
-| 238 | Add stress test for repeatedly updating dynamic buffers every frame                              | ⬜      | EasyGL/Vulkan/Bgfx                 |
-| 239 | Validate buffer usage flags: `BufferUsage::WriteOnly` and any other supported values             | ⬜      | Match FNA where possible           |
-| 240 | Verify disposed buffers cannot be rebound or updated                                             | ⬜      | Unit test                          |
+| 231 | Audit `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`, `DynamicIndexBuffer` API against FNA | ✅      | Added `getBufferUsageProperty`, `getVertexDeclarationProperty`, `getIndexElementSizeProperty`; protected `dynamic` ctors; startIndex/elementCount SetData overloads; DynamicVB/IB SetDataOptions overloads; 56/56 EasyGL pass |
+| 232 | Add tests for `VertexBuffer::SetData` with offset, startIndex, elementCount, vertexStride        | ✅      | `easygl_vertexbuffer_setdata_test.cpp`; 14/14 PASS; also tests IndexBuffer and Dynamic* properties |
+| 233 | Add tests for `VertexBuffer::GetData` if exposed                                                 | N/A     | GetData not in CNA API; no backend VBO readback; gap documented in `docs/easygl_bugs.md` |
+| 234 | Add tests for `IndexBuffer::SetData` with 16-bit and 32-bit index formats                        | ✅      | Covered by Task 232 (tests 7a, 7b, 8 in `easygl_vertexbuffer_setdata_test.cpp`); GPU offsetInBytes documented as missing |
+| 235 | Add tests for `IndexBuffer::GetData` if exposed                                                  | N/A     | Same as 233 — GetData not in CNA API; gap documented in `docs/easygl_bugs.md` |
+| 236 | Implement `DynamicVertexBuffer::SetDataOptions` behavior: `None`, `Discard`, `NoOverwrite`       | ✅      | EasyGL: `Discard`=orphan+sub_data, `NoOverwrite`=sub_data, `None`=BufferData; all other backends use default no-op; 57/57 EasyGL pass |
+| 237 | Implement `DynamicIndexBuffer::SetDataOptions` behavior: `None`, `Discard`, `NoOverwrite`        | ✅      | Implemented together with Task 236 — same GL strategy for IBOs; `SetData16/32WithOptions` in EasyGL backend |
+| 238 | Add stress test for repeatedly updating dynamic buffers every frame                              | ✅      | `easygl_dynamic_buffer_stress_test.cpp`; 12 frames × None/Discard/NoOverwrite; pixel readback verifies each frame; 36/36 PASS |
+| 239 | Validate buffer usage flags: `BufferUsage::WriteOnly` and any other supported values             | ✅      | `easygl_buffer_usage_test.cpp`; 15/15 PASS; deviations: GL usage hint not forwarded (always DynamicDraw), GetData WriteOnly enforcement absent (no GetData in CNA) |
+| 240 | Verify disposed buffers cannot be rebound or updated                                             | ✅      | `easygl_disposed_buffer_test.cpp`; 17/17 PASS; guards in VB/IB SetData/SetDataRaw/SetDataWithOptions and GraphicsDevice::SetVertexBuffer/SetIndexBuffer; throws ObjectDisposedException |
 
 ---
 
@@ -394,7 +394,7 @@ All 100 original tasks addressed.
 | 245 | Verify color element formats: `Color`, `Byte4`, normalized formats                                                             | ⬜      | Backend attribute mapping          |
 | 246 | Verify tangent/binormal usages if present                                                                                      | ⬜      | Needed for future NOXNA/PBR too    |
 | 247 | Add backend test drawing with each supported vertex element format                                                             | ⬜      | EasyGL first                       |
-| 248 | Add Vulkan vertex input mapping tests for all supported formats                                                                | ⬜      | Prevent silent wrong locations     |
+| 248 | Add Vulkan vertex input mapping tests for all supported formats                                                                | ✅      | `VulkanVertexFormatHelper.hpp`: `VertexElementFormatToVk()` + `VertexElementFormatSize()` for all 12 VEF values; `vulkan_vertex_format_test.cpp`: 30/30 PASS — mapping table (24 cases) + pixel readback for stride 16/20/24/32 |
 | 249 | Add Bgfx vertex layout mapping tests for all supported formats                                                                 | ⬜      | Match bgfx layout limitations      |
 | 250 | Document unsupported vertex formats and fallback behavior                                                                      | ⬜      | `docs/vertex-format-support.md`    |
 
@@ -529,8 +529,8 @@ All 100 original tasks addressed.
 | 324 | Pixel test: cull clockwise                                                                                   | ⬜      | Verify expected triangle disappears           |
 | 325 | Pixel test: cull counter-clockwise                                                                           | ⬜      | Verify expected triangle disappears           |
 | 326 | Verify `FillMode::Solid`                                                                                     | ⬜      | Baseline                                      |
-| 327 | Verify `FillMode::WireFrame` on Vulkan/Bgfx and documented unsupported behavior on GLES/EasyGL if applicable | ⬜      | Avoid false support                           |
-| 328 | Verify depth bias and slope-scale depth bias                                                                 | ⬜      | Shadow-like test                              |
+| 327 | Verify `FillMode::WireFrame` on Vulkan/Bgfx and documented unsupported behavior on GLES/EasyGL if applicable | ✅      | Avoid false support                           |
+| 328 | Verify depth bias and slope-scale depth bias                                                                 | ✅      | Shadow-like test                              |
 | 329 | Verify scissor test enable/disable interaction with `GraphicsDevice.ScissorRectangle`                        | ⬜      | Pixel test                                    |
 | 330 | Verify state object immutability/freeze behavior after binding                                               | ⬜      | XNA-compatible if implemented                 |
 
@@ -822,3 +822,232 @@ All 100 original tasks addressed.
 | 498 | Build and run at least 5 small FNA/XNA sample ports on CNA                                                                                | ⬜      | Real compatibility proof                |
 | 499 | Produce final Graphics compatibility report with percentages based on tests, not estimates                                                | ⬜      | `docs/graphics-compatibility-report.md` |
 | 500 | Declare `Microsoft.Xna.Framework.Graphics` 1.0 compatibility milestone only if Tasks 491–499 pass or deviations are explicitly documented | ⬜      | Release gate                            |
+
+---
+
+## Phase 56 — WebGPU backend: infrastructure and CMake setup
+
+> WebGPU backend uses **wgpu-native v29** (C API header `webgpu.h` + `wgpu.h`).
+> Installed at `vendor/wgpu-native/`. Shaders are written in **WGSL** (not SPIR-V).
+> Push constants do not exist in WebGPU — replaced by uniform buffers (bind group 0, binding 0).
+> Backend selection: `-DCNA_GRAPHICS_BACKEND=WEBGPU`, build dir `cmake-build-webgpu`.
+>
+> Strategy: mirror the Vulkan backend structure, adapt to WebGPU API differences.
+> Estimated total effort: ~4–6 weeks (Tasks 501–750).
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 501 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; find `vendor/wgpu-native` headers + libs; define `CNA_BACKEND_WEBGPU` | ⬜ | Mirror VULKAN block in CMakeLists.txt |
+| 502 | Create `include/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | ⬜ | ~12 nested backend classes |
+| 503 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — stub all methods (throw not-implemented) | ⬜ | Compiles clean, no functionality yet |
+| 504 | SDL3 surface creation: obtain `WGPUSurface` via `SDL_GetProperty(SDL_PROP_WINDOW_WGPU_SURFACE_POINTER)` or `wgpuInstanceCreateSurface` | ⬜ | Prerequisite for all rendering |
+| 505 | `WGPUInstance` + `WGPUAdapter` + `WGPUDevice` + `WGPUQueue` initialization via `wgpuCreateInstance` / `wgpuInstanceRequestAdapter` / `wgpuAdapterRequestDevice` | ⬜ | All synchronous in wgpu-native |
+| 506 | Swap chain: `WGPUSurface` configure + `wgpuSurfaceGetCurrentTexture` + `wgpuTextureCreateView` for backbuffer | ⬜ | Replaces `vkAcquireNextImageKHR` |
+| 507 | Command encoder: `wgpuDeviceCreateCommandEncoder` + `wgpuCommandEncoderFinish` + `wgpuQueueSubmit` per frame | ⬜ | Replaces Vulkan command buffer recording |
+| 508 | Render pass: `wgpuCommandEncoderBeginRenderPass` with color attachment (backbuffer view) + depth attachment | ⬜ | Equivalent to `vkCmdBeginRenderPass` |
+| 509 | `Clear()`: set clear color in `WGPURenderPassColorAttachment.clearValue`; implement depth clear in pass descriptor | ⬜ | |
+| 510 | `Present()`: `wgpuSurfacePresent()` after queue submit | ⬜ | |
+
+---
+
+## Phase 57 — WebGPU backend: uniform buffer system (replaces push constants)
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 511 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ⬜ | Central UBO for MVP + effect params |
+| 512 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | ⬜ | |
+| 513 | `WGPUBindGroupLayout` for slot 0 binding 0 (uniform buffer) — shared across all 3D pipelines | ⬜ | |
+| 514 | `WGPUBindGroup` creation and per-draw update for MVP matrix | ⬜ | |
+| 515 | `WGPUBindGroupLayout` for slot 1 binding 0 (texture sampler) — for textured pipelines | ⬜ | |
+| 516 | `WGPUSampler` creation mapping `SamplerState` (filter, address mode) → WGPU descriptor | ⬜ | |
+| 517 | `WGPUPipelineLayout` combining UBO bind group layout + texture bind group layout | ⬜ | |
+
+---
+
+## Phase 58 — WebGPU backend: WGSL shaders
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 520 | Write `sprite2d.wgsl` — 2D sprite vertex + fragment shader (pos + UV + RGBA tint); embed as C++ string literal | ⬜ | Equivalent to `sprite2d.vert/frag.glsl` |
+| 521 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ⬜ | stride=16 |
+| 522 | Write `textured3d.wgsl` — 3D vertex (float3 pos + float2 UV); texture2D sampler in fragment | ⬜ | stride=20 |
+| 523 | Write `colored_textured3d.wgsl` — float3 + ubyte4 color + float2 UV; multiply tex×color in fragment | ⬜ | stride=24 |
+| 524 | Write `lit_textured3d.wgsl` — float3 pos + float3 normal + float2 UV; Blinn-Phong lighting in fragment | ⬜ | stride=32 |
+| 525 | Write `alpha_test3d.wgsl` — per-pixel alpha discard matching XNA AlphaTestEffect semantics | ⬜ | |
+| 526 | Write `dual_texture3d.wgsl` — two texture samplers, multiply/blend in fragment | ⬜ | |
+| 527 | Write `env_map3d.wgsl` — cube map sampler + reflection vector from normal | ⬜ | |
+| 528 | Write `skinned3d.wgsl` — bone palette as uniform array (max 72 mat4); blend 4 weights+indices | ⬜ | |
+| 529 | Write `instanced3d.wgsl` — per-instance mat4 world transform in second vertex buffer binding | ⬜ | |
+| 530 | Compile-time validation: embed all WGSL as `constexpr const char*` in `webgpu_shaders.hpp`; validate via `wgpuDeviceCreateShaderModule` at startup | ⬜ | Catch WGSL errors early |
+
+---
+
+## Phase 59 — WebGPU backend: render pipeline creation
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 535 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | ⬜ | Reusable for all pipelines |
+| 536 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
+| 537 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ⬜ | |
+| 538 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ⬜ | |
+| 539 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | ⬜ | |
+| 540 | `GetOrCreatePipelineAlphaTest3D()` — alpha discard variant | ⬜ | |
+| 541 | `GetOrCreatePipelineDualTex3D()` — two-texture variant | ⬜ | |
+| 542 | `GetOrCreatePipelineEnvMap3D()` — cube map variant | ⬜ | |
+| 543 | `GetOrCreatePipelineSkinned3D()` — bone palette variant | ⬜ | |
+| 544 | `GetOrCreatePipelineInstanced3D()` — per-instance binding variant | ⬜ | |
+| 545 | Depth-stencil: `WGPUDepthStencilState` mapping `DepthFormat` + `CompareFunction` + `StencilOperation` | ⬜ | |
+| 546 | Blend state: `WGPUBlendState` mapping `BlendFunction` + `BlendFactor` (Opaque, AlphaBlend, Additive, NonPremultiplied) | ⬜ | |
+| 547 | Rasterizer: `WGPUPrimitiveState` mapping `CullMode`, `FillMode` (WireFrame via `topology=LineStrip` fallback or unsupported) | ⬜ | |
+
+---
+
+## Phase 60 — WebGPU backend: vertex and index buffers
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 550 | `WebGPUVertexBufferBackend`: create `WGPUBuffer` (vertex, size=capacity×stride) with `COPY_DST` usage | ⬜ | |
+| 551 | `SetData()`: upload via `wgpuQueueWriteBuffer(queue, buffer, 0, data, byteSize)` | ⬜ | Simpler than Vulkan staging |
+| 552 | `SetDataWithOptions()`: `Discard` = reallocate buffer; `NoOverwrite` = `wgpuQueueWriteBuffer` at offset | ⬜ | |
+| 553 | `WebGPUIndexBufferBackend`: 16-bit and 32-bit index buffers via `WGPUIndexFormat` | ⬜ | |
+| 554 | `SetData16()` / `SetData32()`: `wgpuQueueWriteBuffer` | ⬜ | |
+| 555 | Disposed guard in all SetData methods (throw `ObjectDisposedException`) | ⬜ | Match Task 240 pattern |
+| 556 | `SetVertexBuffer(wgpuRenderPassSetVertexBuffer)` + `SetIndexBuffer(wgpuRenderPassSetIndexBuffer)` in draw dispatch | ⬜ | |
+
+---
+
+## Phase 61 — WebGPU backend: textures
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 560 | `WebGPUTextureBackend`: `WGPUTexture` (2D, RGBA8Unorm, COPY_DST + TEXTURE_BINDING) + `WGPUTextureView` | ⬜ | |
+| 561 | `SetData()`: `wgpuQueueWriteTexture()` with `WGPUImageCopyTexture` + `WGPUTextureDataLayout` | ⬜ | |
+| 562 | `GetData()`: `WGPUBuffer` (MAP_READ) + `wgpuCommandEncoderCopyTextureToBuffer` + `wgpuBufferMapAsync` + poll | ⬜ | Async → synchronous via polling |
+| 563 | Mip levels: generate via `wgpuCommandEncoderCopyTextureToTexture` per level or leave as mip=1 (document) | ⬜ | |
+| 564 | `WebGPURenderTargetBackend`: `WGPUTexture` (RENDER_ATTACHMENT + TEXTURE_BINDING) + depth texture | ⬜ | |
+| 565 | `SetRenderTarget(rt)` / `SetRenderTarget(nullptr)`: switch render pass target between RT and swapchain view | ⬜ | |
+| 566 | `GetBackBufferData()`: readback via MAP_READ buffer + `wgpuCommandEncoderCopyTextureToBuffer` | ⬜ | |
+| 567 | `WebGPUTextureCubeBackend`: `WGPUTexture` (dimension=2D, arrayLayerCount=6, CUBE_COMPATIBLE) | ⬜ | |
+| 568 | `WebGPUTexture3DBackend`: `WGPUTexture` (dimension=3D) | ⬜ | |
+| 569 | MSAA: `WGPUTexture` with `sampleCount=4`; resolve in render pass via `resolveTarget` | ⬜ | |
+
+---
+
+## Phase 62 — WebGPU backend: 2D rendering (SpriteBatch)
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 575 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | ⬜ | |
+| 576 | Upload sprite quads via `wgpuQueueWriteBuffer` per batch | ⬜ | |
+| 577 | Per-batch draw: set pipeline, bind groups (UBO + texture), vertex buffer, draw | ⬜ | |
+| 578 | Viewport UBO (2 floats: width, height) in sprite UBO slot | ⬜ | Replaces Vulkan sprite push constants |
+| 579 | Sprite sort modes: Immediate, Deferred, Texture, FrontToBack, BackToFront — mirror Vulkan implementation | ⬜ | |
+
+---
+
+## Phase 63 — WebGPU backend: 3D draw dispatch
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 585 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ⬜ | |
+| 586 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ⬜ | |
+| 587 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | ⬜ | Mirror Vulkan dispatch logic |
+| 588 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ⬜ | |
+| 589 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ⬜ | |
+| 590 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ⬜ | |
+| 591 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ⬜ | Match Task 110 |
+
+---
+
+## Phase 64 — WebGPU backend: Effects
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 595 | `WebGPUEffectBackend`: `BasicEffect` wires to `FillGpuDrawParams` → UBO upload | ⬜ | |
+| 596 | `AlphaTestEffect`: UBO alpha test params (function, reference) | ⬜ | |
+| 597 | `DualTextureEffect`: second texture bind group | ⬜ | |
+| 598 | `EnvironmentMapEffect`: cube map bind group + reflection UBO params | ⬜ | |
+| 599 | `SkinnedEffect`: bone palette as large UBO (72 × mat4 = 4608 bytes) in separate bind group | ⬜ | WebGPU min UBO size: 65536 bytes — fits |
+| 600 | `ShaderEffect` (custom WGSL): `wgpuDeviceCreateShaderModule` from user-provided WGSL source string | ⬜ | NOXNA extension |
+
+---
+
+## Phase 65 — WebGPU backend: state management
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 605 | `SetDepthTestEnabled()` / `SetDepthWriteEnabled()`: bake into pipeline key | ⬜ | WebGPU requires pipeline rebuild on change |
+| 606 | `SetBlendState()`: map `BlendState` preset → `WGPUBlendState` | ⬜ | |
+| 607 | `SetRasterizerState()`: `CullMode` → `WGPUCullMode`; `FillMode::WireFrame` unsupported (log warning) | ⬜ | WebGPU has no polygon mode |
+| 608 | `SetScissorRectangle()`: `wgpuRenderPassEncoderSetScissorRect` | ⬜ | |
+| 609 | `SetViewport()`: `wgpuRenderPassEncoderSetViewport` | ⬜ | |
+| 610 | `SetSamplerState()`: per-slot `WGPUSampler` cache (filter + address mode key) | ⬜ | |
+| 611 | `SetDepthStencilState()`: stencil ops → `WGPUStencilFaceState` | ⬜ | |
+| 612 | `OcclusionQuery`: `WGPUQuerySet` (type=Occlusion) + `wgpuRenderPassEncoderBeginOcclusionQuery` | ⬜ | |
+
+---
+
+## Phase 66 — WebGPU backend: Multiple Render Targets
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 615 | MRT render pass: `WGPURenderPassDescriptor` with array of `WGPURenderPassColorAttachment` (up to 4) | ⬜ | |
+| 616 | `GetOrCreateMRTRenderPipeline(colorAttachmentCount)`: pipeline with matching `targetCount` in fragment state | ⬜ | |
+| 617 | `SetRenderTargets(vector<RenderTarget2D*>)`: configure MRT pass descriptor | ⬜ | |
+
+---
+
+## Phase 67 — WebGPU backend: integration tests
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 620 | `cmake-build-webgpu` directory; `cna_webgpu_test` macro in CMakeLists.txt | ⬜ | Mirror `cna_vulkan_test` |
+| 621 | Smoke test: init device, clear to blue, `GetBackBufferData`, assert pixel | ⬜ | `webgpu_smoke_test.cpp` |
+| 622 | 2D sprite test: `SpriteBatch` draw white 1×1 texture → assert pixel | ⬜ | |
+| 623 | 3D colored quad: stride=16 VPC, red quad, assert center pixel | ⬜ | `webgpu_vertex_format_test.cpp` |
+| 624 | 3D textured quad: stride=20 VPT, green texture, assert center pixel | ⬜ | |
+| 625 | 3D colored+textured: stride=24 VPCT, blue vertex + white tex | ⬜ | |
+| 626 | 3D lit textured: stride=32 VPNT, magenta tex, no lighting | ⬜ | |
+| 627 | `AlphaTestEffect`: draw with alpha < threshold → pixel transparent | ⬜ | |
+| 628 | `DualTextureEffect`: two textures → multiply blend | ⬜ | |
+| 629 | `EnvironmentMapEffect`: emissive color only (envAmount=0) → red pixel | ⬜ | |
+| 630 | `SkinnedEffect`: identity bone palette → same as lit textured | ⬜ | |
+| 631 | Instanced draw: 3 instances at different positions, assert 3 pixels | ⬜ | |
+| 632 | RenderTarget2D: draw red into RT, blit to backbuffer → assert red | ⬜ | |
+| 633 | MSAA 4x: draw red quad with MSAA, resolve, assert pixel | ⬜ | |
+| 634 | OcclusionQuery: draw occluded geometry, assert query result = 0 | ⬜ | |
+| 635 | VertexBuffer dispose guard: assert `ObjectDisposedException` after `Dispose()` | ⬜ | |
+| 636 | Dynamic buffer stress: 12 frames × None/Discard/NoOverwrite | ⬜ | |
+| 637 | WebGPU vertex format mapping table test (mirror Task 248 for WebGPU) | ⬜ | `WGPUVertexFormat` enum |
+
+---
+
+## Phase 68 — WebGPU backend: advanced and parity
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 640 | `SetStringMarkerEXT()`: no-op (WebGPU has no debug labels in wgpu-native C API yet) | ⬜ | Document deviation |
+| 641 | `DebugSimulateContextLoss()`: destroy and recreate device (wgpu-native supports `wgpuDeviceDestroy`) | ⬜ | |
+| 642 | `PresentationInterval` → vsync: `wgpuSurfaceConfigure.presentMode` (Fifo=VSync, Immediate=no VSync, Mailbox=adaptive) | ⬜ | |
+| 643 | `IsFullScreen` via `SDL_SetWindowFullscreen` — same as other backends | ⬜ | |
+| 644 | `BackBufferWidth/Height` changes: reconfigure swap chain via `wgpuSurfaceConfigure` | ⬜ | |
+| 645 | DXT1/DXT3/DXT5 compressed texture upload: `WGPUTextureFormat_BC1RGBAUnorm` etc. | ⬜ | Requires `wgpuAdapterHasFeature(BC_texture_compression)` |
+| 646 | Texture3D: `WGPUTextureDimension_3D` + layered upload | ⬜ | |
+| 647 | TextureCube: `WGPUTexture` arrayLayerCount=6 + `WGPUTextureViewDimension_Cube` | ⬜ | |
+| 648 | RenderTargetCube: `WGPUTexture` cube + per-face `WGPUTextureView` as render attachment | ⬜ | |
+| 649 | `FillMode::WireFrame`: document as unsupported in WebGPU (no polygon mode); add to deviations doc | ⬜ | |
+| 650 | WebGPU vertex format helper: `WGPUVertexFormat WebGPUVertexFormatFromVEF(VertexElementFormat)` (mirror Task 248) | ⬜ | |
+
+---
+
+## Phase 69 — WebGPU: documentation and future (Emscripten/WASM)
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| 655 | `docs/webgpu-backend.md`: architecture, deviations from Vulkan, WGSL shader map, UBO layout | ⬜ | |
+| 656 | `docs/webgpu-vs-vulkan-deviations.md`: push constants → UBO, no wireframe, async→sync strategy | ⬜ | |
+| 657 | Emscripten target: configure CNA for `emcc` build with `-sUSE_WEBGPU=1`; WebGPU backend routes to browser `navigator.gpu` | ⬜ | True browser WASM target |
+| 658 | Emscripten: SDL3 Emscripten port + WebGPU surface via `emscripten_webgpu_get_device()` | ⬜ | |
+| 659 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | ⬜ | |
+| 660 | Emscripten: run 2D smoke test in headless Chrome via `--headless=new --enable-features=WebGPU` | ⬜ | CI-friendly |
+| 661 | Cross-backend pixel comparison: same scene rendered on EasyGL/Vulkan/Bgfx/WebGPU — assert pixel-level parity | ⬜ | |

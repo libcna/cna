@@ -835,6 +835,10 @@ namespace CNA::Internal::Backends::Vulkan
             }
         }
 
+        // Deferred readback staging buffer.
+        if (readbackStagingBuf_ != VK_NULL_HANDLE) { vkDestroyBuffer(device_, readbackStagingBuf_, nullptr); readbackStagingBuf_ = VK_NULL_HANDLE; }
+        if (readbackStagingMem_ != VK_NULL_HANDLE) { vkFreeMemory(device_, readbackStagingMem_, nullptr);    readbackStagingMem_ = VK_NULL_HANDLE; }
+
         // Step 6: destroy command pool (before swapchain).
         if (commandPool_ != VK_NULL_HANDLE) { vkDestroyCommandPool(device_, commandPool_, nullptr); commandPool_ = VK_NULL_HANDLE; }
 
@@ -1168,23 +1172,33 @@ namespace CNA::Internal::Backends::Vulkan
         // Use the same two subpass dependencies as rtRenderPass_ so that pipelines
         // created against renderPass_ are also compatible with rtRenderPass_.
         VkSubpassDependency renderPassDeps[2]{};
-        // Entry: wait for any previous shader reads (RT-as-texture) before writing.
+        // Entry: wait for previous shader reads (RT-as-texture) AND the previous frame's
+        // depth-buffer writes before this frame clears/tests depth. The depth image is
+        // shared across frames, so without the depth scope the loadOp CLEAR can race a
+        // prior frame's depth writes, intermittently corrupting depth-tested draws.
         renderPassDeps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
         renderPassDeps[0].dstSubpass      = 0;
-        renderPassDeps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        renderPassDeps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         renderPassDeps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                                             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        renderPassDeps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT;
-        renderPassDeps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+        renderPassDeps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT |
                                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        renderPassDeps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         renderPassDeps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-        // Exit: make color writes visible to subsequent fragment shader reads.
+        // Exit: make color writes (and the finalLayout=PRESENT_SRC transition) visible to
+        // subsequent fragment-shader reads (RT-as-texture) AND transfer reads (the deferred
+        // GetBackBufferData copy reads the swapchain image at the TRANSFER stage).
         renderPassDeps[1].srcSubpass      = 0;
         renderPassDeps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
         renderPassDeps[1].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        renderPassDeps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        renderPassDeps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                            VK_PIPELINE_STAGE_TRANSFER_BIT;
         renderPassDeps[1].srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        renderPassDeps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT;
+        renderPassDeps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
         renderPassDeps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         VkAttachmentDescription atts[] = { colorAtt, depthAtt };
@@ -2111,21 +2125,30 @@ namespace CNA::Internal::Backends::Vulkan
         sub.pDepthStencilAttachment = &depthRef;
 
         VkSubpassDependency deps[2]{};
+        // Entry: wait for previous shader reads (RT-as-texture) AND the previous frame's
+        // depth-buffer writes (shared depth image) before clearing/testing depth this frame.
         deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
         deps[0].dstSubpass      = 0;
-        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT;
-        deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+        deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT |
                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        // Exit: synchronize the resolve write + finalLayout=PRESENT_SRC transition against
+        // both fragment-shader reads (RT-as-texture) and transfer reads (deferred readback copy).
         deps[1].srcSubpass      = 0;
         deps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
         deps[1].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        deps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT;
         deps[1].srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        deps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT;
+        deps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
         deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         VkAttachmentDescription atts[] = { colorAtt, resolveAtt, depthAtt };
@@ -2322,6 +2345,7 @@ namespace CNA::Internal::Backends::Vulkan
         rs.cullMode    = vkCull;
         rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
         rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -2358,10 +2382,11 @@ namespace CNA::Internal::Backends::Vulkan
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
             VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+            VK_DYNAMIC_STATE_DEPTH_BIAS,
         };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 4; dyn.pDynamicStates = dynStates;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -2671,6 +2696,7 @@ namespace CNA::Internal::Backends::Vulkan
         rs.cullMode    = vkCull;
         rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
         rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -2701,10 +2727,11 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.attachmentCount = nColor;
         cbs.pAttachments    = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -2862,6 +2889,7 @@ namespace CNA::Internal::Backends::Vulkan
         rs.cullMode    = vkCull;
         rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
         rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -2890,10 +2918,11 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -3164,6 +3193,7 @@ namespace CNA::Internal::Backends::Vulkan
         rs.cullMode    = vkCull;
         rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
         rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -3192,10 +3222,11 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -3389,6 +3420,7 @@ namespace CNA::Internal::Backends::Vulkan
         rs.cullMode    = vkCull;
         rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
         rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -3417,10 +3449,11 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -3515,6 +3548,7 @@ namespace CNA::Internal::Backends::Vulkan
         rs.cullMode    = vkCull;
         rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
         rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -3543,10 +3577,11 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -3668,6 +3703,7 @@ namespace CNA::Internal::Backends::Vulkan
         rs.cullMode    = vkCull;
         rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
         rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -3701,10 +3737,11 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkDynamicState dynStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+            VK_DYNAMIC_STATE_DEPTH_BIAS,
         };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 4; dyn.pDynamicStates = dynStates;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -3869,6 +3906,7 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::Clear(float r, float g, float b, float a)
     {
         clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
+        readbackStagingValid_ = false;  // new frame content invalidates the readback cache
     }
 
     void VulkanGraphicsBackend::RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex)
@@ -4016,6 +4054,9 @@ namespace CNA::Internal::Backends::Vulkan
                     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
                     lastPipe = pipe;
                 }
+                // All 3D pipelines declare VK_DYNAMIC_STATE_DEPTH_BIAS, so the dynamic
+                // depth bias must be set before each draw. Zero values = no bias.
+                vkCmdSetDepthBias(cb, draw.depthBias, 0.0f, draw.slopeScaleDepthBias);
                 if (draw.useAlphaTest) {
                     vkCmdPushConstants(cb, pipelineLayoutAlphaTest3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -4190,20 +4231,103 @@ namespace CNA::Internal::Backends::Vulkan
         pending3D_.clear();
 
         vkCmdEndRenderPass(cb);
+
+        // If ReadBackbuffer queued a deferred readback, copy the swapchain image
+        // to the staging buffer NOW — before vkQueuePresentKHR hands the image to
+        // the presentation engine. This eliminates the CPU/display-engine race.
+        if (readbackPending_)
+        {
+            const VkDeviceSize needed = static_cast<VkDeviceSize>(readbackW_) * readbackH_ * 4;
+            if (readbackStagingBuf_ == VK_NULL_HANDLE
+                || readbackAllocW_ < readbackW_ || readbackAllocH_ < readbackH_)
+            {
+                if (readbackStagingBuf_ != VK_NULL_HANDLE)
+                {
+                    vkDestroyBuffer(device_, readbackStagingBuf_, nullptr);
+                    vkFreeMemory(device_, readbackStagingMem_, nullptr);
+                }
+                CreateBuffer(needed,
+                             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                             readbackStagingBuf_, readbackStagingMem_, nullptr);
+                readbackAllocW_ = readbackW_;
+                readbackAllocH_ = readbackH_;
+            }
+
+            auto layoutBarrier = [&](VkImage img,
+                                     VkImageLayout oldL, VkImageLayout newL,
+                                     VkAccessFlags srcA, VkAccessFlags dstA,
+                                     VkPipelineStageFlags src, VkPipelineStageFlags dst)
+            {
+                VkImageMemoryBarrier b{};
+                b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                b.oldLayout           = oldL;
+                b.newLayout           = newL;
+                b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.image               = img;
+                b.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+                b.srcAccessMask       = srcA;
+                b.dstAccessMask       = dstA;
+                vkCmdPipelineBarrier(cb, src, dst, 0, 0, nullptr, 0, nullptr, 1, &b);
+            };
+
+            // The render pass ended with finalLayout = PRESENT_SRC_KHR.
+            // Transition to TRANSFER_SRC_OPTIMAL for the copy.
+            const VkImage swImg = swapchainImages_[imageIndex];
+            layoutBarrier(swImg,
+                          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                          VK_ACCESS_TRANSFER_READ_BIT,
+                          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+            VkBufferImageCopy region{};
+            region.bufferOffset      = 0;
+            region.bufferRowLength   = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource  = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+            region.imageOffset       = { readbackX_, readbackY_, 0 };
+            region.imageExtent       = { static_cast<uint32_t>(readbackW_),
+                                         static_cast<uint32_t>(readbackH_), 1 };
+            vkCmdCopyImageToBuffer(cb, swImg,
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   readbackStagingBuf_, 1, &region);
+
+            // Transition back to PRESENT_SRC_KHR for vkQueuePresentKHR.
+            layoutBarrier(swImg,
+                          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                          VK_ACCESS_TRANSFER_READ_BIT,
+                          VK_ACCESS_MEMORY_READ_BIT,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT,
+                          VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+            readbackPending_ = false;
+        }
+
         if (vkEndCommandBuffer(cb) != VK_SUCCESS)
             throw std::runtime_error("vkEndCommandBuffer failed");
     }
 
     void VulkanGraphicsBackend::Present()
     {
-        if (!initialized_) return;
+        if (SubmitFrame(false)) {
+            // Non-deferred path already presented inside SubmitFrame.
+        }
+    }
+
+    bool VulkanGraphicsBackend::SubmitFrame(bool deferSwap)
+    {
+        if (!initialized_) return false;
 
         vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
 
         uint32_t imageIndex = 0;
         VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
             imageAvailableSemaphores_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) { RecreateSwapchain(); return; }
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) { RecreateSwapchain(); return false; }
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
             throw std::runtime_error("vkAcquireNextImageKHR failed");
 
@@ -4223,6 +4347,16 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkQueueSubmit(graphicsQueue_, 1, &si, inFlightFences_[currentFrame_]) != VK_SUCCESS)
             throw std::runtime_error("vkQueueSubmit failed");
 
+        if (deferSwap) {
+            // Wait for render + readback copy to complete, but hold the image. The caller
+            // (ReadBackbuffer) reads the staging buffer before the image is presented, so
+            // presentation-engine timing can never corrupt the captured pixels.
+            vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
+            deferredPresentImageIndex_ = imageIndex;
+            hasDeferredPresent_        = true;
+            return true;
+        }
+
         VkSwapchainKHR sc[] = { swapchain_ };
         VkPresentInfoKHR pi{};
         pi.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -4237,102 +4371,92 @@ namespace CNA::Internal::Backends::Vulkan
 
         lastPresentedImageIndex_ = imageIndex;
         currentFrame_ = (currentFrame_ + 1) % MaxFramesInFlight;
+        return true;
+    }
+
+    void VulkanGraphicsBackend::FinishDeferredPresent()
+    {
+        if (!hasDeferredPresent_) return;
+        hasDeferredPresent_ = false;
+
+        uint32_t imageIndex = deferredPresentImageIndex_;
+        VkSemaphore signalSems[] = { renderFinishedSemaphores_[currentFrame_] };
+        VkSwapchainKHR sc[] = { swapchain_ };
+        VkPresentInfoKHR pi{};
+        pi.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        // The submit already completed (fence-waited), so the renderFinished semaphore is
+        // signalled and the present will not block.
+        pi.waitSemaphoreCount = 1; pi.pWaitSemaphores = signalSems;
+        pi.swapchainCount     = 1; pi.pSwapchains     = sc;
+        pi.pImageIndices      = &imageIndex;
+        VkResult result = vkQueuePresentKHR(presentQueue_, &pi);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+            RecreateSwapchain();
+        else if (result != VK_SUCCESS)
+            throw std::runtime_error("vkQueuePresentKHR failed");
+
+        lastPresentedImageIndex_ = imageIndex;
+        currentFrame_ = (currentFrame_ + 1) % MaxFramesInFlight;
     }
 
     void VulkanGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
         if (!initialized_ || swapchainImages_.empty()) return;
 
-        // If there are pending draw commands (3D queue or sprite batches not yet submitted),
-        // flush them via Present() so the swapchain image contains the rendered frame.
-        if (!pending3D_.empty() || !activeBatches_.empty())
-            Present();
+        const int fullW = static_cast<int>(swapchainExtent_.width);
+        const int fullH = static_cast<int>(swapchainExtent_.height);
+        if (fullW <= 0 || fullH <= 0) return;
 
-        // Wait for all GPU work to finish so the swapchain image is safe to read.
-        vkDeviceWaitIdle(device_);
+        // Capture the WHOLE backbuffer into the staging buffer only when there is new
+        // work to render, or when the cache is stale (a new frame was cleared). This lets
+        // several GetBackBufferData() reads of the same frame be served from the cache
+        // without re-presenting — re-presenting an empty queue would re-render a cleared
+        // frame and destroy the content of all but the first read.
+        const bool hasNewWork = !pending3D_.empty() || !activeBatches_.empty();
+        if (hasNewWork || !readbackStagingValid_) {
+            // Deferred copy: RecordCommandBuffer copies the whole swapchain image into
+            // readbackStagingBuf_ before vkQueuePresentKHR. SubmitFrame(true) renders and
+            // waits for the GPU but HOLDS the present, so we read the staging buffer below
+            // BEFORE the image is handed to the presentation engine — no race possible.
+            readbackX_ = 0; readbackY_ = 0; readbackW_ = fullW; readbackH_ = fullH;
+            readbackPending_ = true;
+            if (!SubmitFrame(true)) {
+                // Swapchain out-of-date (common on first frame under Wayland/RADV); the
+                // staging buffer was not written. Zero the output so the caller can detect
+                // a blank frame and retry, rather than seeing stale data.
+                readbackPending_ = false;
+                std::memset(pixels, 0, static_cast<std::size_t>(w) * h * 4);
+                return;
+            }
+            readbackStagingValid_ = true;
+        }
 
-        const VkDeviceSize bufSize = static_cast<VkDeviceSize>(w) * h * 4;
-        VkBuffer      stagingBuf = VK_NULL_HANDLE;
-        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
-        CreateBuffer(bufSize,
-                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     stagingBuf, stagingMem);
-
-        VkImage srcImage = swapchainImages_[lastPresentedImageIndex_];
-
-        // One-time command buffer: PRESENT_SRC_KHR → TRANSFER_SRC → copy → PRESENT_SRC_KHR
-        VkCommandBuffer cb = BeginOneTimeCommands();
-
-        auto barrier = [&](VkImage img,
-                           VkImageLayout oldLayout, VkImageLayout newLayout,
-                           VkAccessFlags srcAccess, VkAccessFlags dstAccess,
-                           VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
-        {
-            VkImageMemoryBarrier b{};
-            b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            b.oldLayout           = oldLayout;
-            b.newLayout           = newLayout;
-            b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            b.image               = img;
-            b.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-            b.srcAccessMask       = srcAccess;
-            b.dstAccessMask       = dstAccess;
-            vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
-        };
-
-        // Transition swapchain image to TRANSFER_SRC_OPTIMAL.
-        barrier(srcImage,
-                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                VK_ACCESS_MEMORY_READ_BIT,
-                VK_ACCESS_TRANSFER_READ_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-        VkBufferImageCopy region{};
-        region.bufferOffset      = 0;
-        region.bufferRowLength   = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource  = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-        region.imageOffset       = { x, y, 0 };
-        region.imageExtent       = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
-        vkCmdCopyImageToBuffer(cb, srcImage,
-                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               stagingBuf, 1, &region);
-
-        // Transition swapchain image back to PRESENT_SRC_KHR.
-        barrier(srcImage,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                VK_ACCESS_TRANSFER_READ_BIT,
-                VK_ACCESS_MEMORY_READ_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-        EndOneTimeCommands(cb);
-
-        // Map and copy — also handle BGRA → RGBA channel swap.
+        // Serve the requested sub-region from the cached full-frame staging buffer,
+        // handling the BGRA → RGBA channel swap.
+        const VkDeviceSize fullSize = static_cast<VkDeviceSize>(fullW) * fullH * 4;
         void* mapped = nullptr;
-        vkMapMemory(device_, stagingMem, 0, bufSize, 0, &mapped);
+        vkMapMemory(device_, readbackStagingMem_, 0, fullSize, 0, &mapped);
         const auto* src = static_cast<const uint8_t*>(mapped);
         const bool isBGRA = (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
                              swapchainFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
-        if (isBGRA) {
-            for (int i = 0; i < w * h; ++i) {
-                pixels[i * 4 + 0] = src[i * 4 + 2]; // R ← B
-                pixels[i * 4 + 1] = src[i * 4 + 1]; // G ← G
-                pixels[i * 4 + 2] = src[i * 4 + 0]; // B ← R
-                pixels[i * 4 + 3] = src[i * 4 + 3]; // A ← A
+        for (int row = 0; row < h; ++row) {
+            const int sy = y + row;
+            for (int col = 0; col < w; ++col) {
+                const int sx = x + col;
+                uint8_t* d = pixels + (static_cast<std::size_t>(row) * w + col) * 4;
+                if (sx < 0 || sx >= fullW || sy < 0 || sy >= fullH) {
+                    d[0] = d[1] = d[2] = d[3] = 0;
+                    continue;
+                }
+                const uint8_t* s = src + (static_cast<std::size_t>(sy) * fullW + sx) * 4;
+                if (isBGRA) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; }
+                else        { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
             }
-        } else {
-            std::memcpy(pixels, src, static_cast<std::size_t>(bufSize));
         }
-        vkUnmapMemory(device_, stagingMem);
+        vkUnmapMemory(device_, readbackStagingMem_);
 
-        vkDestroyBuffer(device_, stagingBuf, nullptr);
-        vkFreeMemory(device_, stagingMem, nullptr);
+        // Now that the pixels are safely captured, present the held image.
+        FinishDeferredPresent();
     }
 
     void VulkanGraphicsBackend::GetViewportSize(int& width, int& height)
@@ -4403,10 +4527,11 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float /*depth*/)
     {
         clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
+        readbackStagingValid_ = false;  // new frame content invalidates the readback cache
         // TODO: depth buffer support
     }
 
-    void VulkanGraphicsBackend::ClearDepth(float /*depth*/) { /* Vulkan depth-only clear not yet implemented */ }
+    void VulkanGraphicsBackend::ClearDepth(float /*depth*/) { readbackStagingValid_ = false; /* Vulkan depth-only clear not yet implemented */ }
 
     void VulkanGraphicsBackend::SetDepthTestEnabled(bool v)  { depthTestEnabled_  = v; }
     void VulkanGraphicsBackend::SetBlendEnabled(bool v)      { blendEnabled_      = v; }
@@ -4445,6 +4570,8 @@ namespace CNA::Internal::Backends::Vulkan
         d.blend      = blendEnabled_;
         d.cullMode   = cullMode_;
         d.wireframe  = fillModeWireframe_;
+        d.depthBias  = depthBias_;
+        d.slopeScaleDepthBias = slopeScaleDepthBias_;
         d.indexType  = VK_INDEX_TYPE_UINT16;  // non-indexed, not used
         d.rt         = currentRT_;
         pending3D_.push_back(std::move(d));
@@ -4480,6 +4607,8 @@ namespace CNA::Internal::Backends::Vulkan
         d.blend      = blendEnabled_;
         d.cullMode   = cullMode_;
         d.wireframe  = fillModeWireframe_;
+        d.depthBias  = depthBias_;
+        d.slopeScaleDepthBias = slopeScaleDepthBias_;
         d.indexType  = vulkanIB.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         d.rt         = currentRT_;
         pending3D_.push_back(std::move(d));
@@ -4526,6 +4655,8 @@ namespace CNA::Internal::Backends::Vulkan
         d.blend          = blendEnabled_;
         d.cullMode       = cullMode_;
         d.wireframe  = fillModeWireframe_;
+        d.depthBias  = depthBias_;
+        d.slopeScaleDepthBias = slopeScaleDepthBias_;
         d.indexType      = VK_INDEX_TYPE_UINT16;
         d.rt             = currentRT_;
         d.stride         = stride;
@@ -4623,6 +4754,8 @@ namespace CNA::Internal::Backends::Vulkan
         d.blend         = blendEnabled_;
         d.cullMode      = cullMode_;
         d.wireframe  = fillModeWireframe_;
+        d.depthBias  = depthBias_;
+        d.slopeScaleDepthBias = slopeScaleDepthBias_;
         d.indexType     = ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         d.rt            = currentRT_;
         d.stride        = stride;
@@ -4723,6 +4856,8 @@ namespace CNA::Internal::Backends::Vulkan
         d.blend        = blendEnabled_;
         d.cullMode     = cullMode_;
         d.wireframe  = fillModeWireframe_;
+        d.depthBias  = depthBias_;
+        d.slopeScaleDepthBias = slopeScaleDepthBias_;
         d.indexType    = ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         d.rt           = currentRT_;
         d.stride       = pvStride;
@@ -4761,13 +4896,18 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     void VulkanGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
-                                                      bool scissorTestEnable)
+                                                      bool scissorTestEnable,
+                                                      float depthBias, float slopeScaleDepthBias)
     {
         // XNA CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
         // XNA FillMode: Solid=0, WireFrame=1
-        cullMode_          = cullMode;
-        fillModeWireframe_ = (fillMode == 1) && fillModeNonSolidSupported_;
-        scissorEnabled_    = scissorTestEnable;
+        cullMode_            = cullMode;
+        fillModeWireframe_   = (fillMode == 1) && fillModeNonSolidSupported_;
+        scissorEnabled_      = scissorTestEnable;
+        // DepthBias maps to vkCmdSetDepthBias constant factor, SlopeScaleDepthBias to the
+        // slope factor — matching FNA's glPolygonOffset(slopeScaleDepthBias, depthBias).
+        depthBias_           = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
     }
 
     void VulkanGraphicsBackend::SetScissorRect(int x, int y, int w, int h)

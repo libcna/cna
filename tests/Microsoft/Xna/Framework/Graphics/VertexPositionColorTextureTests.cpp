@@ -73,23 +73,23 @@ TEST(VertexPositionColorTextureTest, DeclarationElementCount)
 TEST(VertexPositionColorTextureTest, DeclarationPositionElement)
 {
     const auto& elems = VertexPositionColorTexture::getVertexDeclarationStatic().GetVertexElements();
-    EXPECT_EQ(elems[0].Offset, 0);
-    EXPECT_EQ(elems[0].VertexElementFormatValue, VertexElementFormat::Vector3);
-    EXPECT_EQ(elems[0].VertexElementUsageValue,  VertexElementUsage::Position);
+    EXPECT_EQ(elems[0].getOffsetProperty(), 0);
+    EXPECT_EQ(elems[0].getVertexElementFormatProperty(), VertexElementFormat::Vector3);
+    EXPECT_EQ(elems[0].getVertexElementUsageProperty(),  VertexElementUsage::Position);
 }
 
 TEST(VertexPositionColorTextureTest, DeclarationColorElement)
 {
     const auto& elems = VertexPositionColorTexture::getVertexDeclarationStatic().GetVertexElements();
-    EXPECT_EQ(elems[1].Offset, 12);
-    EXPECT_EQ(elems[1].VertexElementFormatValue, VertexElementFormat::Color);
-    EXPECT_EQ(elems[1].VertexElementUsageValue,  VertexElementUsage::Color);
+    EXPECT_EQ(elems[1].getOffsetProperty(), 12);
+    EXPECT_EQ(elems[1].getVertexElementFormatProperty(), VertexElementFormat::Color);
+    EXPECT_EQ(elems[1].getVertexElementUsageProperty(),  VertexElementUsage::Color);
 }
 
 TEST(VertexPositionColorTextureTest, DeclarationTexCoordElement)
 {
     const auto& elems = VertexPositionColorTexture::getVertexDeclarationStatic().GetVertexElements();
-    EXPECT_EQ(elems[2].Offset, 16);
-    EXPECT_EQ(elems[2].VertexElementFormatValue, VertexElementFormat::Vector2);
-    EXPECT_EQ(elems[2].VertexElementUsageValue,  VertexElementUsage::TextureCoordinate);
+    EXPECT_EQ(elems[2].getOffsetProperty(), 16);
+    EXPECT_EQ(elems[2].getVertexElementFormatProperty(), VertexElementFormat::Vector2);
+    EXPECT_EQ(elems[2].getVertexElementUsageProperty(),  VertexElementUsage::TextureCoordinate);
 }

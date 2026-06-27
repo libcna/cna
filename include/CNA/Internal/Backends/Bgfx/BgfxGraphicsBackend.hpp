@@ -323,7 +323,8 @@ namespace CNA::Internal::Backends::Bgfx
                                     int ccwStencilFunc, int ccwStencilPass,
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode,
-                                  bool scissorTestEnable) override;
+                                  bool scissorTestEnable,
+                                  float depthBias, float slopeScaleDepthBias) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;

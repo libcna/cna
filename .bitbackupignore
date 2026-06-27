@@ -1,0 +1,12 @@
+# cmake build dirs
+cmake-build-bgfx/*
+cmake-build-debug/*
+cmake-build-release/*
+cmake-build-vulkan/*
+
+# third party submodules (SDL, googletest)
+third_party/*
+vendor/*
+
+# sdl prebuilt binaries
+.sdl-prebuilt/*

@@ -50,7 +50,7 @@ conformance (Tasks 221–230). Tasks 221–225, 227 complete.
 
 ### Vulkan backend (`cmake-build-vulkan`)
 - **Builds**: clean.
-- **Tests**: 9/9 Vulkan integration tests pass.
+- **Tests**: 11/11 Vulkan integration tests pass.
 
 ### Bgfx backend (`cmake-build-bgfx`)
 - **Builds**: clean.
@@ -69,12 +69,28 @@ conformance (Tasks 221–230). Tasks 221–225, 227 complete.
 
 | Task / Commit | What changed |
 |---|---|
+| Task 328 | Depth bias plumbed end-to-end. `IGraphicsBackend::ApplyRasterizerState` extended with `depthBias`/`slopeScaleDepthBias`; `GraphicsDevice` passes them; all 4 backend overrides updated (EasyGL/Bgfx accept-but-ignore for now). Vulkan: all 7 3D pipelines set `depthBiasEnable=VK_TRUE` + declare `VK_DYNAMIC_STATE_DEPTH_BIAS`; `vkCmdSetDepthBias(depthBias, 0, slopeScaleDepthBias)` emitted per 3D draw (FNA `glPolygonOffset(slope, bias)` mapping). `vulkan_depth_bias_test.cpp` (new): coplanar-triangle test proving both DepthBias and SlopeScaleDepthBias flip the LESS depth-test outcome; 4/4 PASS. Also fixed `ReadBackbuffer`: now checks `SubmitFrame()` return value — if it returns false (swapchain out-of-date, e.g. Wayland startup race), output is zeroed and staging is NOT marked valid, so the caller's retry loop works correctly. Verified 20/20 stable. |
+| Task 327 | `vulkan_fill_mode_test.cpp` (new): pixel-readback integration test proving `FillMode::WireFrame` maps to `VK_POLYGON_MODE_LINE`; 3/3 PASS. Also fixed `ReadBackbuffer` race with presentation engine: copy now happens inside `RecordCommandBuffer` BEFORE `vkQueuePresentKHR` using a persistent `readbackStagingBuf_`; old one-time-command-buffer approach removed. |
 | Task 227 | `easygl_backbuffer_resize_test.cpp`: PP dimensions correct after GDM resize and direct `SetPresentationParameters`; viewport HEIGHT = virtualHeight; 12/12 PASS. `docs/easygl_bugs.md` added: full EasyGL bug audit (MRT leak, Clear/scissor wrong when RT bound, anisotropy ignored, missing ColorWriteMask, missing preserveContents, missing mipmap for 3D/cube, no context-recovery for 3D/cube textures, glDrawElementsBaseVertex without extension check, and more) |
 | Task 225 | GDM service registration: `registerServices()` now calls `game_->getServicesProperty().AddService<IGraphicsDeviceManager>(this)` and `AddService<IGraphicsDeviceService>(this)`; duplicate-registration guard throws `invalid_argument`; `unregisterServices()` removes both entries (null-guard for GDM without a Game); `Game::DoInitialize()` now finds GDM and calls `CreateDevice()` automatically — matching FNA behavior. Also fixed `StorageDeviceNotConnectedException`+`StorageDevice.cpp` to use `std::exception_ptr` following sharp-runtime API change |
 | Task 224 | `IsFullScreen` field consistency: `SDL_SetWindowFullscreen` failure changed from throw to `SDL_ClearError()` soft-skip; `easygl_fullscreen_field_test.cpp` verifies field round-trip through GDM setter + `ApplyChanges()` + `ToggleFullScreen()`; 7/7 PASS |
 | Task 223 | `PresentationInterval` → VSync mapping: `swapInterval` added to `GraphicsBackendCreateArgs`; `IGraphicsBackend::SetSwapInterval` virtual method; EasyGL calls `SDL_GL_SetSwapInterval`; SDL_Renderer calls `SDL_SetRenderVSync`; Vulkan picks present mode at swapchain creation; Bgfx uses `resetFlags_` + `bgfx::reset`; runtime change via `GraphicsDevice::SetPresentationParameters`; 10/10 smoke-test PASS |
 | Task 221+222 | `PresentationParameters` audit: fixed default dimensions bug (1024×768→800×480); fixed C++ name-hiding bug; added tests; 26/26 unit tests pass |
 | Task 220 | `docs/graphics-resource-lifetime.md` created |
+
+**Files modified (Task 328):**
+- `examples/vulkan_depth_bias_test.cpp` (new)
+- `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp` (`ApplyRasterizerState` + depthBias params)
+- `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp` (pass depthBias/slopeScale)
+- `include/CNA/Internal/Backends/{EasyGL,Bgfx,Vulkan}/*.hpp` + `src/.../{EasyGL,Bgfx,Vulkan}/*.cpp` (override signatures)
+- Vulkan `*.hpp` (depthBias_/slopeScaleDepthBias_ members + Pending3DDraw fields), `*.cpp` (7 pipelines + per-draw `vkCmdSetDepthBias`)
+- `CMakeLists.txt` (`cna_test_vulkan_depth_bias` + `Vulkan_DepthBias` test)
+
+**Files modified (Task 327):**
+- `examples/vulkan_fill_mode_test.cpp` (new)
+- `include/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp` (readback staging members)
+- `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp` (`RecordCommandBuffer` deferred copy + `ReadBackbuffer` rewrite + destructor cleanup)
+- `CMakeLists.txt` (`cna_test_vulkan_fill_mode` + `Vulkan_FillMode_WireFrame` test)
 
 **Files modified (Tasks 224–225):**
 - `src/Microsoft/Xna/Framework/GraphicsDeviceManager.cpp`
@@ -117,6 +133,7 @@ first by `DoInitialize()`). It can be cleaned up but is not a blocker.
 | **missing XNA methods** | `Present(Rectangle?,Rectangle?,IntPtr)`, `Clear(ClearOptions,Vector4,float,int)`, `GetRenderTargetsNoAllocEXT` (Task 201 audit) |
 | **missing callback** | `GraphicsDeviceResetting()` callback on `GraphicsResource` not yet called (Gap 2 from Task 211 audit) |
 | **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
+| **known limit** | `RasterizerState.DepthBias`/`SlopeScaleDepthBias` applied on Vulkan only; EasyGL/Bgfx accept the params but ignore them (no `glPolygonOffset` wiring yet) |
 | **known limit** | Bgfx `SetDepthTestEnabled` / `SetBlendEnabled` / `SetDepthWriteEnabled` still throw |
 | **known limit** | Bgfx `GetBackBufferData` not integration-tested |
 | **known limit** | Vulkan `SetSwapInterval` does not recreate swapchain at runtime (applied only at creation) |
@@ -223,34 +240,21 @@ git log --oneline -20
 All tasks follow the same pattern: implement/test → build EasyGL → run relevant test →
 update GRAPHICS_TASKS.md + NEXT.md → commit + push.
 
-### Task 228 — Depth/stencil format changes after device creation
-**Goal**: Verify that changing `DepthStencilFormat` via `PresentationParameters` and
-applying it does not crash and stores the new format in the device PP.
-**Files**: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
-`tests/Microsoft/Xna/Framework/Graphics/PresentationParametersTests.cpp`
-**Verify**: Unit test or EasyGL integration test passes.
+### Task 241 — VertexDeclaration / VertexElement / VertexElementFormat / VertexElementUsage audit
+**Goal**: Compare `VertexDeclaration`, `VertexElement`, `VertexElementFormat`, and
+`VertexElementUsage` against FNA — equality, hash, stride, element ordering, and all
+enum values must match.
+**Files**: `include/Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp`,
+`include/Microsoft/Xna/Framework/Graphics/VertexElement.hpp`,
+`tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp` (new or extend)
+**Verify**: Build + unit tests pass.
 
-### Task 229 — MSAA count changes
-**Goal**: Verify that changing `MultiSampleCount` via `PresentationParameters` is
-either accepted (EasyGL backend supports it) or explicitly rejected with a clear error.
-**Files**: `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`,
-`examples/easygl_msaa_change_test.cpp` (new)
-**Verify**: New EasyGL integration test passes.
-
-### Task 231 — VertexBuffer/IndexBuffer/DynamicBuffer API audit
-**Goal**: Compare `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`,
-`DynamicIndexBuffer` against FNA — document or implement missing constructors
-and `SetData` overloads.
-**Files**: `include/Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp`,
-`src/Microsoft/Xna/Framework/Graphics/VertexBuffer.cpp`, FNA reference.
-**Verify**: Build + existing EasyGL tests still pass.
-
-### Task 232 — VertexBuffer::SetData stride and offset tests
-**Goal**: Add unit or EasyGL tests for `SetData` with non-zero `startIndex`,
-`elementCount < total`, and explicit `vertexStride`.
-**Files**: `tests/Microsoft/Xna/Framework/Graphics/VertexBufferTests.cpp` (new or extend),
-`examples/easygl_vertexbuffer_setdata_test.cpp` (new)
-**Verify**: New tests pass.
+### Task 242 — Built-in vertex struct tests
+**Goal**: Verify `VertexPositionColor`, `VertexPositionTexture`,
+`VertexPositionNormalTexture`, `VertexPositionColorTexture` — packed size, stride,
+declaration element layout.
+**Files**: `tests/Microsoft/Xna/Framework/Graphics/VertexStructTests.cpp` (new)
+**Verify**: Unit tests pass.
 
 ---
 
@@ -278,9 +282,8 @@ and `SetData` overloads.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 1–225 and 227 complete. Next unstarted: Task 228
-(Verify that changing DepthStencilFormat via PresentationParameters
-does not crash and stores the new format in the device PP; unit or EasyGL integration test).
+Current status: Task 328 complete (Vulkan depth bias + slope-scale depth bias; ReadBackbuffer stability fix; 20/20 depth bias stable).
+Next: Task 329 (scissor test enable/disable interaction with GraphicsDevice.ScissorRectangle — pixel test).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit and push to develop.

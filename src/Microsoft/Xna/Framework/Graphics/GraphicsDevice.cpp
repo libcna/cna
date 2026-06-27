@@ -379,11 +379,15 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer)
     {
+        if (vertexBuffer && vertexBuffer->getIsDisposedProperty())
+            throw System::ObjectDisposedException(vertexBuffer->getNameProperty());
         currentVertexBuffer_ = vertexBuffer;
     }
 
     void GraphicsDevice::SetIndexBuffer(const IndexBuffer* indexBuffer)
     {
+        if (indexBuffer && indexBuffer->getIsDisposedProperty())
+            throw System::ObjectDisposedException(indexBuffer->getNameProperty());
         currentIndexBuffer_ = indexBuffer;
     }
 
@@ -1307,7 +1311,9 @@ namespace Microsoft::Xna::Framework::Graphics
             backend_->ApplyRasterizerState(
                 (int)value.getCullModeProperty(),
                 (int)value.getFillModeProperty(),
-                value.getScissorTestEnableProperty());
+                value.getScissorTestEnableProperty(),
+                value.getDepthBiasProperty(),
+                value.getSlopeScaleDepthBiasProperty());
     }
 
     Rectangle GraphicsDevice::getScissorRectangleProperty() const { return scissorRectangle_; }

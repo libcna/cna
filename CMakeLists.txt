@@ -859,6 +859,38 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 60
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_vertexbuffer_setdata
+                        examples/easygl_vertexbuffer_setdata_test.cpp)
+        add_test(NAME EasyGL_VbSetData
+                 COMMAND cna_test_easygl_vertexbuffer_setdata)
+        set_tests_properties(EasyGL_VbSetData PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_easygl_test(cna_test_easygl_dynamic_buffer_stress
+                        examples/easygl_dynamic_buffer_stress_test.cpp)
+        add_test(NAME EasyGL_DynamicBufferStress
+                 COMMAND cna_test_easygl_dynamic_buffer_stress)
+        set_tests_properties(EasyGL_DynamicBufferStress PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_easygl_test(cna_test_easygl_buffer_usage
+                        examples/easygl_buffer_usage_test.cpp)
+        add_test(NAME EasyGL_BufferUsage
+                 COMMAND cna_test_easygl_buffer_usage)
+        set_tests_properties(EasyGL_BufferUsage PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_easygl_test(cna_test_easygl_disposed_buffer
+                        examples/easygl_disposed_buffer_test.cpp)
+        add_test(NAME EasyGL_DisposedBuffer
+                 COMMAND cna_test_easygl_disposed_buffer)
+        set_tests_properties(EasyGL_DisposedBuffer PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
         add_test(NAME EasyGL_EffectClone
@@ -1022,6 +1054,30 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_MSAA_4x_Readback
                  COMMAND cna_test_vulkan_msaa)
         set_tests_properties(Vulkan_MSAA_4x_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_vulkan_test(cna_test_vulkan_vertex_format
+                        examples/vulkan_vertex_format_test.cpp)
+        add_test(NAME Vulkan_VertexFormat_AllStrides
+                 COMMAND cna_test_vulkan_vertex_format)
+        set_tests_properties(Vulkan_VertexFormat_AllStrides PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_vulkan_test(cna_test_vulkan_fill_mode
+                        examples/vulkan_fill_mode_test.cpp)
+        add_test(NAME Vulkan_FillMode_WireFrame
+                 COMMAND cna_test_vulkan_fill_mode)
+        set_tests_properties(Vulkan_FillMode_WireFrame PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_vulkan_test(cna_test_vulkan_depth_bias
+                        examples/vulkan_depth_bias_test.cpp)
+        add_test(NAME Vulkan_DepthBias
+                 COMMAND cna_test_vulkan_depth_bias)
+        set_tests_properties(Vulkan_DepthBias PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstdint>
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -22,17 +24,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            IndexElementSize indexElementSize,
                            int indexCount,
                            BufferUsage bufferUsage)
-            : IndexBuffer(device, indexElementSize, indexCount, bufferUsage)
-        {
-        }
-
-        /**
-         * @brief Constructs a DynamicIndexBuffer with the given device and 16-bit index count.
-         * @param device     The graphics device.
-         * @param indexCount Number of indices the buffer can hold.
-         */
-        DynamicIndexBuffer(GraphicsDevice& device, int indexCount)
-            : IndexBuffer(device, indexCount)
+            : IndexBuffer(device, indexElementSize, indexCount, bufferUsage, true)
         {
         }
 
@@ -43,13 +35,41 @@ namespace Microsoft::Xna::Framework::Graphics
         System::EventHandler<System::EventArgs> ContentLost;
 
         /**
-         * @brief Uploads index data with Discard semantics (equivalent to SetData).
-         * @param indices Pointer to the source 16-bit index array.
-         * @param count   Number of indices to upload.
+         * @brief Uploads a slice of 16-bit indices with streaming semantics.
+         *
+         * The @p options hint is accepted for API conformance but is currently
+         * ignored by all CNA backends — all writes go to the buffer beginning.
+         *
+         * @param data         Pointer to the source 16-bit index array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of indices to upload.
+         * @param options      Streaming hint (Discard / NoOverwrite / None).
          */
-        void SetDataDiscard(const std::uint16_t* indices, int count)
+        void SetData(const std::uint16_t* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
         {
-            SetData(indices, count);
+            IndexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
+        }
+
+        /**
+         * @brief Uploads a slice of 32-bit indices with streaming semantics.
+         *
+         * The @p options hint is accepted for API conformance but is currently
+         * ignored by all CNA backends — all writes go to the buffer beginning.
+         *
+         * @param data         Pointer to the source 32-bit index array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of indices to upload.
+         * @param options      Streaming hint (Discard / NoOverwrite / None).
+         */
+        void SetData(const std::uint32_t* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
+        {
+            IndexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
         }
     };
 }

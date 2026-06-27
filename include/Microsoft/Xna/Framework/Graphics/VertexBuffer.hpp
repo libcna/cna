@@ -7,6 +7,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
@@ -25,11 +26,15 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /**
-         * @brief Creates an empty vertex buffer with capacity for `vertexCount` vertices.
+         * @brief Creates an empty vertex buffer with capacity for @p vertexCount vertices.
+         *
+         * Uses a default (empty) VertexDeclaration and `BufferUsage::None`.
+         * Prefer the full constructor when vertex layout metadata is needed.
+         *
          * @param device      Owning graphics device.
          * @param vertexCount Number of vertices the buffer can hold.
          */
-        VertexBuffer(GraphicsDevice& device, int vertexCount);
+        NOXNA VertexBuffer(GraphicsDevice& device, int vertexCount);
 
         /**
          * @brief Constructs a vertex buffer from a vertex declaration.
@@ -61,36 +66,85 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the fully-qualified .NET type name of this object. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
+        using GraphicsResource::Dispose;
+
         /**
-         * @brief Uploads VertexPositionColor vertex data to the GPU buffer.
-         * @param vertices Pointer to the source vertex array.
-         * @param count    Number of vertices to upload.
+         * @brief Returns the usage hint this buffer was created with.
+         * @return The BufferUsage value passed to the constructor.
          */
-        void SetData(const VertexPositionColor* vertices, int count);
+        [[nodiscard]] BufferUsage getBufferUsageProperty() const { return bufferUsage_; }
+
         /**
-         * @brief Uploads VertexPositionColorTexture vertex data to the GPU buffer.
-         * @param vertices Pointer to the source vertex array.
-         * @param count    Number of vertices to upload.
+         * @brief Returns the vertex declaration describing the layout of each vertex.
+         * @return Const reference to the stored VertexDeclaration.
          */
-        void SetData(const VertexPositionColorTexture* vertices, int count);
-        /**
-         * @brief Uploads VertexPositionNormalTexture vertex data to the GPU buffer.
-         * @param vertices Pointer to the source vertex array.
-         * @param count    Number of vertices to upload.
-         */
-        void SetData(const VertexPositionNormalTexture* vertices, int count);
-        /**
-         * @brief Uploads VertexPositionTexture vertex data to the GPU buffer.
-         * @param vertices Pointer to the source vertex array.
-         * @param count    Number of vertices to upload.
-         */
-        void SetData(const VertexPositionTexture* vertices, int count);
+        [[nodiscard]] const VertexDeclaration& getVertexDeclarationProperty() const { return vertexDeclaration_; }
 
         /**
          * @brief Returns the number of vertices this buffer was created to hold.
          * @return The vertex capacity of the buffer.
          */
-        [[nodiscard]] int getVertexCountProperty() const;
+        [[nodiscard]] int getVertexCountProperty() const { return vertexCount_; }
+
+        /**
+         * @brief Uploads VertexPositionColor vertex data to the GPU buffer.
+         * @param data  Pointer to the source vertex array.
+         * @param count Number of vertices to upload.
+         */
+        void SetData(const VertexPositionColor* data, int count);
+
+        /**
+         * @brief Uploads a slice of VertexPositionColor vertex data to the GPU buffer.
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         */
+        void SetData(const VertexPositionColor* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads VertexPositionColorTexture vertex data to the GPU buffer.
+         * @param data  Pointer to the source vertex array.
+         * @param count Number of vertices to upload.
+         */
+        void SetData(const VertexPositionColorTexture* data, int count);
+
+        /**
+         * @brief Uploads a slice of VertexPositionColorTexture vertex data to the GPU buffer.
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         */
+        void SetData(const VertexPositionColorTexture* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads VertexPositionNormalTexture vertex data to the GPU buffer.
+         * @param data  Pointer to the source vertex array.
+         * @param count Number of vertices to upload.
+         */
+        void SetData(const VertexPositionNormalTexture* data, int count);
+
+        /**
+         * @brief Uploads a slice of VertexPositionNormalTexture vertex data to the GPU buffer.
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         */
+        void SetData(const VertexPositionNormalTexture* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads VertexPositionTexture vertex data to the GPU buffer.
+         * @param data  Pointer to the source vertex array.
+         * @param count Number of vertices to upload.
+         */
+        void SetData(const VertexPositionTexture* data, int count);
+
+        /**
+         * @brief Uploads a slice of VertexPositionTexture vertex data to the GPU buffer.
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         */
+        void SetData(const VertexPositionTexture* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads raw vertex data with an explicit per-vertex byte stride.
@@ -117,10 +171,54 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA [[nodiscard]] bool HasBackend() const { return backend_ != nullptr; }
 
     protected:
+        /**
+         * @brief Uploads typed vertex data with a streaming hint.
+         *
+         * Called by DynamicVertexBuffer to forward `SetDataOptions` to the backend.
+         * Packs the typed struct into the compact GPU layout before uploading.
+         *
+         * @param data         Source vertex array.
+         * @param startIndex   First element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         * @param options      Streaming hint passed to the backend.
+         */
+        void SetDataWithOptions(const VertexPositionColor* data, int startIndex,
+                                int elementCount, SetDataOptions options);
+        /** @brief Uploads VertexPositionColorTexture data with a streaming hint. */
+        void SetDataWithOptions(const VertexPositionColorTexture* data, int startIndex,
+                                int elementCount, SetDataOptions options);
+        /** @brief Uploads VertexPositionNormalTexture data with a streaming hint. */
+        void SetDataWithOptions(const VertexPositionNormalTexture* data, int startIndex,
+                                int elementCount, SetDataOptions options);
+        /** @brief Uploads VertexPositionTexture data with a streaming hint. */
+        void SetDataWithOptions(const VertexPositionTexture* data, int startIndex,
+                                int elementCount, SetDataOptions options);
+
+        /**
+         * @brief Protected constructor used by DynamicVertexBuffer to pass the dynamic flag.
+         *
+         * The @p dynamic hint is accepted for XNA API conformance but is currently
+         * ignored by all CNA backends — static and dynamic VBOs use the same GPU path.
+         *
+         * @param device            Owning graphics device.
+         * @param vertexDeclaration Vertex layout description.
+         * @param vertexCount       Number of vertices the buffer can hold.
+         * @param bufferUsage       Usage hint.
+         * @param dynamic           True when the buffer content will be updated frequently.
+         */
+        VertexBuffer(GraphicsDevice& device,
+                     const VertexDeclaration& vertexDeclaration,
+                     int vertexCount,
+                     BufferUsage bufferUsage,
+                     bool dynamic);
+
         /** @brief Releases the GPU buffer handle when the resource is disposed. */
         void Dispose(bool disposing) override;
 
     private:
         std::unique_ptr<CNA::Internal::Backends::IVertexBufferBackend> backend_;
+        VertexDeclaration vertexDeclaration_;
+        BufferUsage bufferUsage_{BufferUsage::None};
+        int vertexCount_{0};
     };
 }

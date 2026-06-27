@@ -486,7 +486,8 @@ namespace CNA::Internal::Backends::Vulkan
                                     int ccwStencilFunc, int ccwStencilPass,
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode,
-                                  bool scissorTestEnable) override;
+                                  bool scissorTestEnable,
+                                  float depthBias, float slopeScaleDepthBias) override;
 
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
@@ -724,6 +725,8 @@ namespace CNA::Internal::Backends::Vulkan
             std::size_t             instVbStride      = 64;    // bytes per instance (default = mat4)
             uint32_t                instanceCount     = 1;     // number of instances
             bool                    wireframe         = false; // true = VK_POLYGON_MODE_LINE
+            float                   depthBias         = 0.0f;  // XNA DepthBias (vkCmdSetDepthBias constant)
+            float                   slopeScaleDepthBias = 0.0f; // XNA SlopeScaleDepthBias (slope factor)
             // Debug marker (SetStringMarkerEXT) — if true, vbData is empty and this entry
             // emits vkCmdInsertDebugUtilsLabelEXT instead of a draw call.
             bool                    isMarker          = false;
@@ -757,12 +760,30 @@ namespace CNA::Internal::Backends::Vulkan
         bool     scissorEnabled_            = false;
         bool     fillModeWireframe_         = false; // current XNA FillMode::WireFrame state
         bool     fillModeNonSolidSupported_ = false; // VkPhysicalDeviceFeatures.fillModeNonSolid
+        float    depthBias_                 = 0.0f;  // XNA RasterizerState.DepthBias
+        float    slopeScaleDepthBias_       = 0.0f;  // XNA RasterizerState.SlopeScaleDepthBias
         int32_t  scissorX_ = 0, scissorY_ = 0;
         uint32_t scissorW_ = 0, scissorH_ = 0;
 
         // BlendFactor state (Task 63)
         float blendFactorR_ = 1.f, blendFactorG_ = 1.f,
               blendFactorB_ = 1.f, blendFactorA_ = 1.f;
+
+        // Deferred readback: copy swapchain image to staging BEFORE vkQueuePresentKHR
+        // so the presentation engine never races with the CPU read.
+        bool         readbackPending_    = false;
+        int          readbackX_          = 0;
+        int          readbackY_          = 0;
+        int          readbackW_          = 0;
+        int          readbackH_          = 0;
+        VkBuffer     readbackStagingBuf_ = VK_NULL_HANDLE;
+        VkDeviceMemory readbackStagingMem_ = VK_NULL_HANDLE;
+        int          readbackAllocW_     = 0;  // last allocated staging width
+        int          readbackAllocH_     = 0;  // last allocated staging height
+        // True when readbackStagingBuf_ holds a full, current copy of the backbuffer.
+        // Lets multiple GetBackBufferData() reads of one frame be served from the cache
+        // without re-presenting (which would re-render an empty frame). Invalidated by Clear*.
+        bool         readbackStagingValid_ = false;
 
         // Custom effect set by VulkanEffectBackend::Bind() (Task 119)
         VulkanEffectBackend* activeCustomEffect_ = nullptr;
@@ -867,6 +888,16 @@ namespace CNA::Internal::Backends::Vulkan
 
         // ---- Frame recording ----
         void RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex);
+
+        // Submits one frame (render + optional deferred readback copy). When deferSwap is
+        // true the swapchain image is acquired, rendered and the GPU is waited on, but
+        // vkQueuePresentKHR is NOT issued — letting ReadBackbuffer read the staging buffer
+        // BEFORE the image is handed to the presentation engine. FinishDeferredPresent()
+        // then presents the held image. Returns false if the swapchain was recreated.
+        bool SubmitFrame(bool deferSwap);
+        void FinishDeferredPresent();
+        uint32_t deferredPresentImageIndex_ = 0;
+        bool     hasDeferredPresent_        = false;
 
         // ---- Memory / resource helpers (also used by texture/buffer backends) ----
         uint32_t FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags props) const;

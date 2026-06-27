@@ -61,17 +61,17 @@ TEST(VertexPositionColorTest, DeclarationElementCount)
 TEST(VertexPositionColorTest, DeclarationPositionOffset)
 {
     const auto& elems = VertexPositionColor::getVertexDeclarationStatic().GetVertexElements();
-    EXPECT_EQ(elems[0].Offset, 0);
-    EXPECT_EQ(elems[0].VertexElementFormatValue, VertexElementFormat::Vector3);
-    EXPECT_EQ(elems[0].VertexElementUsageValue,  VertexElementUsage::Position);
+    EXPECT_EQ(elems[0].getOffsetProperty(), 0);
+    EXPECT_EQ(elems[0].getVertexElementFormatProperty(), VertexElementFormat::Vector3);
+    EXPECT_EQ(elems[0].getVertexElementUsageProperty(),  VertexElementUsage::Position);
 }
 
 TEST(VertexPositionColorTest, DeclarationColorOffset)
 {
     const auto& elems = VertexPositionColor::getVertexDeclarationStatic().GetVertexElements();
-    EXPECT_EQ(elems[1].Offset, 12);
-    EXPECT_EQ(elems[1].VertexElementFormatValue, VertexElementFormat::Color);
-    EXPECT_EQ(elems[1].VertexElementUsageValue,  VertexElementUsage::Color);
+    EXPECT_EQ(elems[1].getOffsetProperty(), 12);
+    EXPECT_EQ(elems[1].getVertexElementFormatProperty(), VertexElementFormat::Color);
+    EXPECT_EQ(elems[1].getVertexElementUsageProperty(),  VertexElementUsage::Color);
 }
 
 // sizeof(VertexPositionColor) is 40 rather than the XNA-expected 16 due to the Color vtable issue above.
