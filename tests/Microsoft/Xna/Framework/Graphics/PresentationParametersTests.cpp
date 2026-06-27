@@ -145,6 +145,27 @@ TEST(PresentationParametersTest, SetDepthStencilFormat)
     EXPECT_EQ(pp.getDepthStencilFormatProperty(), DepthFormat::Depth24);
 }
 
+TEST(PresentationParametersTest, SetDepthStencilFormatNone)
+{
+    PresentationParameters pp;
+    pp.setDepthStencilFormatProperty(DepthFormat::None);
+    EXPECT_EQ(pp.getDepthStencilFormatProperty(), DepthFormat::None);
+}
+
+TEST(PresentationParametersTest, SetDepthStencilFormatDepth16)
+{
+    PresentationParameters pp;
+    pp.setDepthStencilFormatProperty(DepthFormat::Depth16);
+    EXPECT_EQ(pp.getDepthStencilFormatProperty(), DepthFormat::Depth16);
+}
+
+TEST(PresentationParametersTest, SetDepthStencilFormatDepth24Stencil8)
+{
+    PresentationParameters pp;
+    pp.setDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
+    EXPECT_EQ(pp.getDepthStencilFormatProperty(), DepthFormat::Depth24Stencil8);
+}
+
 TEST(PresentationParametersTest, SetIsFullScreen)
 {
     PresentationParameters pp;
