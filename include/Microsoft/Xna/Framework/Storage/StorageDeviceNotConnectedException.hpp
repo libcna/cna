@@ -28,7 +28,7 @@ namespace Microsoft::Xna::Framework::Storage
          * @param innerException Exception that caused this one.
          */
         StorageDeviceNotConnectedException(const std::string& message,
-                                           const std::exception& innerException);
+                                           std::exception_ptr innerException);
 
         /** @brief Destroys the exception. */
         ~StorageDeviceNotConnectedException() override = default;

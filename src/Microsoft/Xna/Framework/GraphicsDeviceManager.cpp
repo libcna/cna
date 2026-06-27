@@ -490,10 +490,14 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::registerServices()
     {
-        // FNA calls game.Services.AddService(typeof(IGraphicsDeviceManager), this) and
-        // AddService(typeof(IGraphicsDeviceService), this). CNA omits this because
-        // Game::getGraphicsDeviceProperty() falls back to its own GraphicsDevice_ when
-        // no service is registered, so the game loop works without the service registry.
+        if (game_->getServicesProperty().GetService<IGraphicsDeviceManager>() != nullptr)
+        {
+            throw std::invalid_argument(
+                "A GraphicsDeviceManager is already registered with this Game.");
+        }
+
+        game_->getServicesProperty().AddService<IGraphicsDeviceManager>(this);
+        game_->getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(this);
 
         // Wire window resize → viewport update.
         game_->getWindowProperty().ClientSizeChanged +=
@@ -505,7 +509,13 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::unregisterServices()
     {
-        // TODO: unregister services once Game::getServicesProperty() is available in CNA.
+        if (game_ == nullptr)
+        {
+            return;
+        }
+
+        game_->getServicesProperty().RemoveService<IGraphicsDeviceManager>();
+        game_->getServicesProperty().RemoveService<Graphics::IGraphicsDeviceService>();
     }
 
     SDL_Window* GraphicsDeviceManager::tryGetSDLWindow() const

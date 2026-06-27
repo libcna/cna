@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::Storage
         : System::Runtime::InteropServices::ExternalException(message) {}
 
     StorageDeviceNotConnectedException::StorageDeviceNotConnectedException(
-        const std::string& message, const std::exception& innerException)
+        const std::string& message, std::exception_ptr innerException)
         : System::Runtime::InteropServices::ExternalException(message, innerException) {}
 
 } // namespace Microsoft::Xna::Framework::Storage

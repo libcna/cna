@@ -110,7 +110,8 @@ namespace Microsoft::Xna::Framework::Storage
         catch (const std::exception& e)
         {
             throw StorageDeviceNotConnectedException(
-                "The storage device bound to the container is not connected.", e);
+                "The storage device bound to the container is not connected.",
+                std::make_exception_ptr(e));
         }
     }
 
@@ -139,7 +140,8 @@ namespace Microsoft::Xna::Framework::Storage
         catch (const std::exception& e)
         {
             throw StorageDeviceNotConnectedException(
-                "The storage device bound to the container is not connected.", e);
+                "The storage device bound to the container is not connected.",
+                std::make_exception_ptr(e));
         }
     }
 
