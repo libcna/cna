@@ -20,6 +20,21 @@ namespace Microsoft::Xna::Framework
         {
             return std::runtime_error(std::string(operation) + " failed: " + SDL_GetError());
         }
+
+        // Matches FNA (SDL3_FNAPlatform.SupportsOrientations): only iOS and Android
+        // care about device orientation. On desktop platforms the back buffer keeps
+        // the requested PreferredBackBufferWidth x Height verbatim (no landscape swap),
+        // which is the XNA 4.0 / FNA desktop behaviour.
+        bool platformSupportsOrientations()
+        {
+            const char* platform = SDL_GetPlatform();
+            if (platform == nullptr)
+            {
+                return false;
+            }
+            const std::string name(platform);
+            return name == "iOS" || name == "Android";
+        }
     }
 
     GraphicsDeviceManager::GraphicsDeviceManager()
@@ -29,7 +44,7 @@ namespace Microsoft::Xna::Framework
           drawBegun_(false),
           disposed_(false),
           prefsChanged_(true),
-          supportsOrientations_(true),
+          supportsOrientations_(platformSupportsOrientations()),
           useResizedBackBuffer_(false),
           resizedBackBufferWidth_(0),
           resizedBackBufferHeight_(0),
