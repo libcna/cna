@@ -71,7 +71,14 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 ## 3. Recent changes
 
-### Tasks 241–242 (Phase 30, this session — not yet committed)
+### Task 662 (cross-cutting, this session — not yet committed)
+- **`sharp-runtime/include/System/Object.hpp`**: fixed `GetTypeNameCPP` macro — changed `#NAME` to `NAME` so that a quoted string literal argument is passed through verbatim (no longer wrapped in extra escaped quotes by `#` stringization).
+- **`src/Microsoft/Xna/Framework/Audio/SoundEffectInstance.cpp`**: fixed unquoted caller → `"Microsoft.Xna.Framework.Audio.SoundEffectInstance"`.
+- **`src/Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.cpp`**: fixed unquoted caller → `"Microsoft.Xna.Framework.Audio.DynamicSoundEffectInstance"`.
+- **`GRAPHICS_TASKS.md`**: Task 662 added and marked ✅.
+- 1715/1715 unit tests pass.
+
+### Tasks 241–242 (Phase 30 — committed in `312a1f6`)
 - **`include/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp`**: added `Equals`, `GetHashCode`.
 - **`include/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp`**: added `Equals`, `GetHashCode`.
 - **`include/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp`**: added `Equals`, `GetHashCode`.
@@ -87,7 +94,6 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 - **`tests/…/VertexPositionColorTextureTests.cpp`**: added Equals, GetHashCode, ToString tests.
 - **`tests/…/VertexElementTests.cpp`**: added 12 `VertexElementFormat` numeric value tests (0–11) and 13 `VertexElementUsage` numeric value tests (0–12).
 - **`tests/…/VertexDeclarationTests.cpp`**: added `GetTypeName` test.
-- **`GRAPHICS_TASKS.md`**: Tasks 241 and 242 marked ✅.
 
 ### Tasks 231–240, 248, 327–328 (previous session — committed in `7c5a5a9`)
 - Buffer API audit: `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`, `DynamicIndexBuffer` FNA-conformant.
@@ -112,8 +118,7 @@ Two pre-existing integration test failures remain (not caused by recent work):
    - Assertion: `g_state.last_active_texture == GL_TEXTURE0` in `vendor/easy-gl` smoke tests.
    - Not a CNA code issue; not investigated.
 
-**Pending commit**: Tasks 241–242 changes are unstaged in working tree. Run
-`git status` to confirm before committing.
+**Pending commit**: Task 662 (GetTypeNameCPP fix) changes are unstaged in working tree.
 
 ---
 
@@ -123,7 +128,7 @@ Two pre-existing integration test failures remain (not caused by recent work):
 |---|---|
 | **confirmed pre-existing** | `EasyGL_MRT_TwoAttachments` fails — MRT FBO setup bug in EasyGL backend |
 | **confirmed pre-existing** | `easy-gl-resource-smoke-tests` fails — upstream easygl `GL_TEXTURE0` assertion |
-| **confirmed bug** | `GetTypeNameCPP` macro: passing a string literal (with quotes) as `NAME` arg causes `#NAME` to embed escaped quotes in the returned string. `VertexDeclaration` fixed manually; other files using the macro with quoted strings (`IndexBuffer`, `SpriteBatch`, `VertexBuffer`, `DepthStencilState`, etc.) are likely broken. Not yet audited. |
+| **fixed (Task 662)** | `GetTypeNameCPP` macro: `#NAME` replaced by `NAME` in sharp-runtime; `SoundEffectInstance` and `DynamicSoundEffectInstance` unquoted callers corrected. Remaining Audio callers (`AudioEngine`, `Cue`, `SoundBank`, `WaveBank`, `Accelerometer`) still use `::` namespace separator instead of `.` — inconsistent with Graphics callers but not broken. |
 | **confirmed bug (Vulkan)** | `SpriteBatch` multiple `Begin/End` per frame: only the last batch renders; earlier batches silently discarded. Workaround: merge all sprites into one `Begin/End`. See `known_bugs.md`. |
 | **missing NOXNA tags** | 7 non-XNA members on `GraphicsDevice` are missing `NOXNA` (documented in `docs/graphicsdevice-fna-audit.md`) |
 | **missing XNA methods** | `Present(Rectangle?,Rectangle?,IntPtr)`, `Clear(ClearOptions,Vector4,float,int)`, `GetRenderTargetsNoAllocEXT` |
@@ -267,13 +272,6 @@ correctly (auto-stride from non-zero initial offset, elements not in offset orde
 `src/Microsoft/Xna/Framework/Graphics/VertexDeclaration.cpp` (auto-stride `GetTypeSize`)
 **Verify**: `./cmake-build-debug/CnaTests --gtest_filter="VertexDeclarationTest*"`
 
-### Task 246 — Audit `GetTypeNameCPP` macro usage across all .cpp files
-**Goal**: Find all uses of `GetTypeNameCPP(CLASS, "...")` with a quoted string literal
-and replace them with the manual `GetTypeName()` pattern to avoid the `#NAME`
-double-quoting bug.
-**Files**: `src/` (grep for `GetTypeNameCPP`), affected `.cpp` files
-**Verify**: `./cmake-build-debug/CnaTests` — existing `GetTypeName` tests must pass.
-
 ### Task 329 — Vulkan scissor test enable/disable interaction
 **Goal**: Pixel-readback test verifying that enabling `ScissorTestEnable` on
 `RasterizerState` and setting `GraphicsDevice::ScissorRectangle` clips correctly.
@@ -305,7 +303,7 @@ verifying pixel output.
 - **Do not convert integration tests to unit tests without a mock device** — there is no
   fake `GraphicsDevice`; integration tests using `Game` + EasyGL are the established pattern.
 - **Do not implement Framework.Net or the .xnb content pipeline** — out of scope.
-- **Do not mass-fix `GetTypeNameCPP` callers in one commit** — audit each file individually.
+- **Audio callers of `GetTypeNameCPP`** still use `::` namespace separator instead of `.` — inconsistent but not broken; do not fix unless normalizing all callers in a dedicated task.
 
 ---
 
@@ -315,13 +313,11 @@ verifying pixel output.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 241+242 complete (vertex type audit — Equals/GetHashCode/ToString
-on all 4 VertexPosition* structs; VertexElementFormat/Usage numeric value tests;
-VertexDeclaration::GetTypeName fixed; 1715/1715 unit tests pass).
-Changes are uncommitted — commit them first, then continue.
+Current status: Tasks 241+242 committed (`312a1f6`); Task 662 (GetTypeNameCPP macro fix)
+complete — macro changed in sharp-runtime, 2 unquoted callers corrected; 1715/1715 pass.
+Task 662 changes are uncommitted — commit them first, then continue.
 
-Next: Task 243 (custom VertexDeclaration with unusual offsets) or
-      Task 246 (audit GetTypeNameCPP macro usage for double-quoting bug).
+Next: Task 243 (custom VertexDeclaration with unusual offsets).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.

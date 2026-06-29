@@ -397,6 +397,7 @@ All 100 original tasks addressed.
 | 248 | Add Vulkan vertex input mapping tests for all supported formats                                                                | ✅      | `VulkanVertexFormatHelper.hpp`: `VertexElementFormatToVk()` + `VertexElementFormatSize()` for all 12 VEF values; `vulkan_vertex_format_test.cpp`: 30/30 PASS — mapping table (24 cases) + pixel readback for stride 16/20/24/32 |
 | 249 | Add Bgfx vertex layout mapping tests for all supported formats                                                                 | ⬜      | Match bgfx layout limitations      |
 | 250 | Document unsupported vertex formats and fallback behavior                                                                      | ⬜      | `docs/vertex-format-support.md`    |
+| 662 | Audit and fix `GetTypeNameCPP` macro — change `#NAME` → `NAME` in sharp-runtime; fix unquoted callers (`SoundEffectInstance`, `DynamicSoundEffectInstance`) | ✅ | `sharp-runtime/include/System/Object.hpp`: removed `#` from `#NAME` (string literal passthrough, no extra quoting); `SoundEffectInstance.cpp` + `DynamicSoundEffectInstance.cpp`: added quoted dot-notation names; 1715/1715 tests pass |
 
 ---
 

@@ -434,5 +434,5 @@ namespace Microsoft::Xna::Framework::Audio
 #endif
     }
 
-    GetTypeNameCPP(SoundEffectInstance, SoundEffectInstance)
+    GetTypeNameCPP(SoundEffectInstance, "Microsoft.Xna.Framework.Audio.SoundEffectInstance")
 }

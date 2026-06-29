@@ -370,5 +370,5 @@ namespace Microsoft::Xna::Framework::Audio
 #endif
     }
 
-    GetTypeNameCPP(DynamicSoundEffectInstance, DynamicSoundEffectInstance)
+    GetTypeNameCPP(DynamicSoundEffectInstance, "Microsoft.Xna.Framework.Audio.DynamicSoundEffectInstance")
 }
