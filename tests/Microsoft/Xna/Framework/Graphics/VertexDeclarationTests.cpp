@@ -187,6 +187,74 @@ TEST(VertexDeclarationTest, GetTypeNameReturnsXnaName)
     EXPECT_EQ(vd.GetTypeName(), "Microsoft.Xna.Framework.Graphics.VertexDeclaration");
 }
 
+// ── Task 246: tangent and binormal usages ────────────────────────────────────
+
+TEST(VertexDeclarationTest, TangentUsageStoredInDeclaration)
+{
+    VertexDeclaration vd({
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Tangent, 0),
+    });
+    EXPECT_EQ(vd.GetVertexElements()[0].getVertexElementUsageProperty(),
+              VertexElementUsage::Tangent);
+}
+
+TEST(VertexDeclarationTest, BinormalUsageStoredInDeclaration)
+{
+    VertexDeclaration vd({
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Binormal, 0),
+    });
+    EXPECT_EQ(vd.GetVertexElements()[0].getVertexElementUsageProperty(),
+              VertexElementUsage::Binormal);
+}
+
+// Tangent Vector3 at offset 0 → stride = 12
+TEST(VertexDeclarationTest, AutoStrideTangentVector3)
+{
+    VertexDeclaration vd({
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Tangent, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 12);
+}
+
+// Binormal Vector3 at offset 0 → stride = 12
+TEST(VertexDeclarationTest, AutoStrideBinormalVector3)
+{
+    VertexDeclaration vd({
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Binormal, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 12);
+}
+
+// Position(12) + Normal(12) + Tangent at 24(12) → stride = 36
+TEST(VertexDeclarationTest, AutoStridePositionNormalTangent)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal,   0),
+        VertexElement(24, VertexElementFormat::Vector3, VertexElementUsage::Tangent,  0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 36);
+    EXPECT_EQ(vd.GetVertexElements()[2].getVertexElementUsageProperty(),
+              VertexElementUsage::Tangent);
+}
+
+// Full PBR-style vertex: Pos(12)+Normal(12)+Tangent(12)+Binormal(12)+TexCoord(8)
+// offsets: 0, 12, 24, 36, 48 → stride = 56
+TEST(VertexDeclarationTest, FullPbrVertexDeclaration)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position,         0),
+        VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal,            0),
+        VertexElement(24, VertexElementFormat::Vector3, VertexElementUsage::Tangent,           0),
+        VertexElement(36, VertexElementFormat::Vector3, VertexElementUsage::Binormal,          0),
+        VertexElement(48, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 56);
+    EXPECT_EQ(vd.GetVertexElements().size(), 5u);
+    EXPECT_EQ(vd.GetVertexElements()[2].getVertexElementUsageProperty(), VertexElementUsage::Tangent);
+    EXPECT_EQ(vd.GetVertexElements()[3].getVertexElementUsageProperty(), VertexElementUsage::Binormal);
+}
+
 // ── Task 245: color and byte/short/half element format sizes ─────────────────
 // Each test places a single element at offset 0 and checks that the auto-stride
 // equals the expected byte size for that format (matches FNA GetTypeSize).

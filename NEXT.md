@@ -71,6 +71,11 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 ## 3. Recent changes
 
+### Task 246 (Phase 30, this session — not yet committed)
+- **`tests/…/VertexDeclarationTests.cpp`**: 6 new tests — Tangent/Binormal usage stored and retrieved, auto-stride for Tangent/Binormal Vector3, Pos+Normal+Tangent declaration, full PBR vertex (Pos+Normal+Tangent+Binormal+TexCoord, stride=56).
+- **`GRAPHICS_TASKS.md`**: Task 246 marked ✅.
+- 1745/1745 unit tests pass.
+
 ### Task 245 (Phase 30, this session — not yet committed)
 - **`tests/…/VertexDeclarationTests.cpp`**: 11 new tests — per-format auto-stride for all 8 compact formats (Color, Byte4, Short2, Short4, NormalizedShort2, NormalizedShort4, HalfVector2, HalfVector4) + 3 combination tests (Vector3+Byte4, Vector3+NormalizedShort4, Vector3+HalfVector2).
 - **`GRAPHICS_TASKS.md`**: Task 245 marked ✅.
@@ -309,10 +314,10 @@ verifying pixel output.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 243+244+245 complete — 24 new VertexDeclaration tests; 1739/1739 pass.
+Current status: Tasks 243–246 complete — 30 new VertexDeclaration tests; 1745/1745 pass.
 Changes are uncommitted.
 
-Next: Task 246 (tangent/binormal usages) or Task 247 (EasyGL draw test per VertexElementFormat).
+Next: Task 247 (EasyGL draw integration test per VertexElementFormat).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.
