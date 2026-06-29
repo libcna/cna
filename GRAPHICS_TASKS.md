@@ -532,7 +532,7 @@ All 100 original tasks addressed.
 | 326 | Verify `FillMode::Solid`                                                                                     | ⬜      | Baseline                                      |
 | 327 | Verify `FillMode::WireFrame` on Vulkan/Bgfx and documented unsupported behavior on GLES/EasyGL if applicable | ✅      | Avoid false support                           |
 | 328 | Verify depth bias and slope-scale depth bias                                                                 | ✅      | Shadow-like test                              |
-| 329 | Verify scissor test enable/disable interaction with `GraphicsDevice.ScissorRectangle`                        | ⬜      | Pixel test                                    |
+| 329 | Verify scissor test enable/disable interaction with `GraphicsDevice.ScissorRectangle`                        | ✅      | `vulkan_scissor_test.cpp`: 4/4 PASS — no-scissor (both quadrants red), scissor=top-left (inside red, outside green); `Vulkan_ScissorTest` ctest added |
 | 330 | Verify state object immutability/freeze behavior after binding                                               | ⬜      | XNA-compatible if implemented                 |
 
 ---

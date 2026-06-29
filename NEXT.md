@@ -75,6 +75,11 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 ## 3. Recent changes
 
+### Task 329 (cross-cutting, this session)
+- **`examples/vulkan_scissor_test.cpp`** (new): 2-frame test — frame 0 no scissor (both quadrants red), frame 1 scissor=top-left 32×32 (inside red, outside green); 4/4 PASS; blank-frame retry ≤20 attempts.
+- **`CMakeLists.txt`**: `cna_test_vulkan_scissor` + `Vulkan_ScissorTest` ctest added.
+- **`GRAPHICS_TASKS.md`**: Task 329 marked ✅.
+
 ### Task 250 (Phase 30, this session)
 - **`docs/vertex-format-support.md`** (new): per-backend tables for all 12 `VertexElementFormat` and 13 `VertexElementUsage` values across EasyGL/Vulkan/Bgfx/SDL_Renderer; stride-keyed layout fallback behavior documented; SDL_Renderer limitations; future-work section.
 - **`GRAPHICS_TASKS.md`**: Task 250 marked ✅. Phase 30 complete.
@@ -293,11 +298,10 @@ git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit �
 
 ## 8. Next smallest tasks
 
-### Task 329 — Vulkan scissor test enable/disable interaction
-**Goal**: Pixel-readback test verifying that enabling `ScissorTestEnable` on
-`RasterizerState` and setting `GraphicsDevice::ScissorRectangle` clips correctly.
-**Files**: `examples/vulkan_scissor_test.cpp` (new), `CMakeLists.txt`
-**Verify**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-vulkan -R vulkan_scissor`
+### Task 330 — Vulkan viewport resize / setScissorRectangle edge cases
+**Goal**: Pixel-readback test verifying behaviour when `ScissorRectangle` is set to full-backbuffer extent, zero size, and when it is reset after being active.
+**Files**: `examples/vulkan_scissor_edge_test.cpp` (new), `CMakeLists.txt`
+**Verify**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-vulkan -R Vulkan_ScissorEdge`
 
 ---
 
@@ -327,9 +331,9 @@ git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit �
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Phase 30 complete (Tasks 241–250); 1745/1745 unit tests pass.
+Current status: Phase 30 complete (Tasks 241–250); Task 329 complete; 1745/1745 unit tests pass.
 
-Next: Task 329 (Vulkan scissor test) or start Phase 31 (DrawUserPrimitives variants).
+Next: Phase 31 (DrawUserPrimitives variants, Tasks 251–260) or Task 330 (scissor edge cases).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.

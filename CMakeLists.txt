@@ -1090,6 +1090,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 329: ScissorTestEnable + ScissorRectangle pixel-readback test
+        cna_vulkan_test(cna_test_vulkan_scissor
+                        examples/vulkan_scissor_test.cpp)
+        add_test(NAME Vulkan_ScissorTest
+                 COMMAND cna_test_vulkan_scissor)
+        set_tests_properties(Vulkan_ScissorTest PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
