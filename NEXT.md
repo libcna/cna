@@ -1,333 +1,242 @@
-# NEXT.md — CNA handoff document
+# NEXT.md — CNA Project Handoff
 
 ---
 
 ## 1. Project summary
 
-**CNA** is a C++23 reimplementation of the XNA 4.0 programming model
-(`Microsoft::Xna::Framework`) built on SDL3 with a pluggable graphics backend.
-It is a framework/runtime, not a game.
+**CNA** is a C++23 reimplementation of the XNA 4.0 programming model (`Microsoft::Xna::Framework`),
+built on SDL3 with a pluggable 3D graphics backend layer (EasyGL/OpenGL ES 3.2, Vulkan, Bgfx,
+SDL_Renderer). It is a framework/runtime — not a game — designed so that XNA/FNA game code can be
+ported to C++ with minimal API-surface changes.
 
-**Main goal**: let C++ applications use the XNA 4.0 API while delegating rendering
-to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
-
-**Current development phase**: Phase 30 — VertexDeclaration and vertex format accuracy
-(Tasks 241–250). All tasks complete ✅.
-
-**Key architectural decisions**:
-- Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
-- `IGraphicsBackend` is the sole contract between the XNA API layer and any backend.
-- `Color` inherits `IPackedVectorT<UInt32>` (virtual base) — vtable pointer precedes
-  the packed pixel; never cast `Color*` to `uint8_t*` for GL pixel I/O.
-- SharpRuntime (`/rv/data/development/github.com/openeggbert/sharp-runtime`) provides
-  .NET primitive type aliases and `System.*` stubs.
-- FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src` is the authoritative
-  XNA 4.0 API reference; all logic is ported line-by-line from there.
-- `NOXNA` macro tags any member that is not part of the XNA 4.0 public API.
+- **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
+  pixel-readback integration tests.
+- **Current development phase:** Phase 31 — User primitives and draw-call variants (Tasks 251–260).
+  Phase 30 (VertexDeclaration / vertex format accuracy, Tasks 241–250) is complete.
+- **Key architectural decision:** Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
+  (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). The EasyGL backend is primary (most tested).
+  The `sharp-runtime` library (sibling repo) provides all `System.*` types and primitive aliases
+  (`bytecs`, `String`, etc.) that the XNA API surface depends on.
 
 ---
 
 ## 2. Current status
 
-### EasyGL backend (`cmake-build-debug`) — primary backend
-- **Builds**: clean.
-- **Unit tests (CnaTests)**: 1757/1757 pass.
-- **Integration tests**: 60 EasyGL integration test executables built; 2 pre-existing
-  failures exist (see Known bugs).
-- **Vulkan tests**: 11/11 pass (in `cmake-build-vulkan`).
+### EasyGL backend (`cmake-build-debug`) — primary
+- **Builds:** clean.
+- **Unit tests (`CnaTests`):** 1757/1757 pass.
+- **Integration tests:** ~60 EasyGL integration test executables registered in CMake; most pass.
+  Two pre-existing failures: `easygl_device_dispose_order_test` and one pixel-readback test
+  related to the SpriteBatch multiple-Begin/End bug (see Known Bugs).
 
-### Recently verified working (Phases 27–30, Tasks 211–250):
-- `GraphicsResource` base class wired to all 8 major resource types; disposal chain correct.
-- `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`, `DynamicIndexBuffer`:
-  FNA API-conformant; `SetDataOptions` (Discard/NoOverwrite) wired in EasyGL;
-  disposed-buffer guards throw `ObjectDisposedException`.
-- `PresentationParameters`: correct 800×480 defaults, all 10 fields, fully tested.
-- `PresentationInterval` → VSync mapping across all 4 backends.
-- GDM registers as `IGraphicsDeviceManager` + `IGraphicsDeviceService`; `Game::DoInitialize()` calls `CreateDevice()` automatically.
-- `IsFullScreen`: stored in PP regardless of backend capability; fullscreen failure soft-skips.
-- `VertexDeclaration`, `VertexElement`, `VertexElementFormat`, `VertexElementUsage`:
-  FNA-conformant; all 4 built-in vertex structs have `Equals`, `GetHashCode`, `ToString`;
-  enum numeric values 0–11/0–12 tested; `GetTypeName` fixed (was returning escaped-quoted string).
-- Vulkan depth bias (`RasterizerState.DepthBias` / `SlopeScaleDepthBias`): wired end-to-end;
-  `ReadBackbuffer` stable (checks `SubmitFrame()` return value; 20/20 passes).
-- Vulkan vertex format helper: `VertexElementFormatToVk()` + `VertexElementFormatSize()` for
-  all 12 `VertexElementFormat` values; 30/30 pixel-readback tests pass.
-- Bgfx vertex format helper: `VertexElementFormatToBgfx()` + `VertexElementUsageToBgfxAttrib()` +
-  `VertexElementFormatSize()` for all 12 VEF/13 VEU values; `Bgfx_VertexFormatMapping` 1/1 PASS.
-- `docs/vertex-format-support.md`: per-backend format/usage tables, stride fallback behavior,
-  SDL_Renderer limitations, future-work section.
+### Vulkan backend (`cmake-build-vulkan`)
+- **Builds:** clean (single-threaded `-j1` required for link stability).
+- **Vulkan integration tests:** 13 registered; 11/11 historically pass. Latest additions:
+  `vulkan_scissor_test` (Task 329, 4/4 pixel checks).
 
-### What does not work yet
-- **MRT (Multiple Render Targets)**: `EasyGL_MRT_TwoAttachments` fails — pre-existing FBO bug.
-- **`VertexBuffer::GetData` / `IndexBuffer::GetData`**: not in the CNA API; no VBO readback.
-- **`RasterizerState.DepthBias` / `SlopeScaleDepthBias`** on EasyGL and Bgfx: accepted but ignored (no `glPolygonOffset` wiring).
-- **`FillMode::WireFrame`** on EasyGL/GLES3: not supported (`glPolygonMode` unavailable on GLES).
-- **Bgfx `SetDepthTestEnabled` / `SetBlendEnabled`**: still throw.
-- **SpriteBatch multiple Begin/End per frame**: only the last batch renders (Vulkan; others unknown).
-- **Framework.Net** (NetworkSession, PacketReader/Writer): 0%.
-- **Content pipeline (.xnb)**: 0% — CNA uses custom JSON/PNG/OGG descriptors.
-- **GamerServices**: ~5% (Guide.Show no-op only).
-- **sRGB SurfaceFormats**: silently mapped to linear GL/Vulkan internal formats.
-- **Bgfx pixel readback**: not integration-tested.
-- **WebGPU backend**: phases 56–69 planned; vendor headers added (`vendor/wgpu-native/`) but no CMake integration yet.
+### Bgfx backend (`cmake-build-bgfx`)
+- Builds when configured. `Bgfx_VertexFormatMapping` test (Task 249): 47/47 mapping checks pass.
+  No pixel-readback for Bgfx (no readback API).
+
+### Recently implemented (Phases 30–31, Tasks 241–251, 329)
+- Full VertexDeclaration test suite (compact formats, multi-channel UV, unusual offsets, tangent/binormal).
+- EasyGL vertex format integration test covering strides 16/20/24/32 with pixel readback.
+- Bgfx vertex layout mapping helper (`BgfxVertexFormatHelper.hpp`) for all 12 VEF + 13 VEU values.
+- `docs/vertex-format-support.md` — per-backend table for all formats and usages.
+- Vulkan scissor test (`vulkan_scissor_test.cpp`) — ScissorTestEnable + ScissorRectangle pixel readback.
+- `DrawUserPrimitives` audit (Task 251): fixed silent-return bug in 4 typed overloads (now throw on
+  missing effect); added VertexDeclaration-based overload matching FNA's second generic overload;
+  exposed `GraphicsDevice::PrimitiveVerts()` as public NOXNA static; 12/12 unit tests.
+
+### What does NOT work yet
+- Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
+- `DrawUserIndexedPrimitives` typed overloads have not been audited against FNA (Task 252).
+- No pixel-readback tests for `DrawUserPrimitives` (Tasks 255–256 pending).
+- No pixel-readback tests for `DrawUserIndexedPrimitives` (Tasks 257–258 pending).
+- Bgfx backend lacks pixel readback — integration tests there are smoke-only.
+- 376 tasks still ⬜ out of 539 in `GRAPHICS_TASKS.md`.
 
 ---
 
 ## 3. Recent changes
 
-### Task 251 (Phase 31, this session)
-- **`include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`**: Added `DrawUserPrimitives(PrimitiveType, const void*, int, int, const VertexDeclaration&)` overload matching FNA's second generic overload; exposed `NOXNA static int PrimitiveVerts(PrimitiveType, int)` for unit testing.
-- **`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`**: Fixed all 4 typed overloads to throw `std::runtime_error` when no effect applied (was silently returning); added VertexDeclaration-based overload implementation; moved vertex-count logic into public `PrimitiveVerts()`.
-- **`tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp`** (new): 12 tests covering all 5 topologies, invalid type, zero count, and API surface compile-check. 12/12 PASS.
-- **`GRAPHICS_TASKS.md`**: Task 251 marked ✅.
-
-### Task 329 (cross-cutting, this session)
-- **`examples/vulkan_scissor_test.cpp`** (new): 2-frame test — frame 0 no scissor (both quadrants red), frame 1 scissor=top-left 32×32 (inside red, outside green); 4/4 PASS; blank-frame retry ≤20 attempts.
-- **`CMakeLists.txt`**: `cna_test_vulkan_scissor` + `Vulkan_ScissorTest` ctest added.
-- **`GRAPHICS_TASKS.md`**: Task 329 marked ✅.
-
-### Task 250 (Phase 30, this session)
-- **`docs/vertex-format-support.md`** (new): per-backend tables for all 12 `VertexElementFormat` and 13 `VertexElementUsage` values across EasyGL/Vulkan/Bgfx/SDL_Renderer; stride-keyed layout fallback behavior documented; SDL_Renderer limitations; future-work section.
-- **`GRAPHICS_TASKS.md`**: Task 250 marked ✅. Phase 30 complete.
-
-### Task 249 (Phase 30, this session)
-- **`include/CNA/Internal/Backends/Bgfx/BgfxVertexFormatHelper.hpp`** (new): `BgfxAttribInfo` struct; `VertexElementFormatToBgfx()` for all 12 VEF values; `VertexElementUsageToBgfxAttrib()` for all 13 VEU values (unsupported usages return `bgfx::Attrib::Count`); `VertexElementFormatSize()` matching FNA sizes.
-- **`examples/bgfx_vertex_format_test.cpp`** (new): 47 mapping/size checks + 4 VertexBuffer creation smoke tests (stride 16/20/24/32); `Bgfx_VertexFormatMapping` 1/1 PASS.
-- **`CMakeLists.txt`**: `cna_test_bgfx_vertex_format` + `Bgfx_VertexFormatMapping` ctest added.
-- **`GRAPHICS_TASKS.md`**: Task 249 marked ✅.
-
-### Task 247 (Phase 30, this session — not yet committed)
-- **`examples/easygl_vertex_formats_test.cpp`** (new): 4 sub-tests — stride=16 (Vector3+Color), stride=20 (Vector3+Vector2), stride=24 (Vector3+Color+Vector2), stride=32 (Vector3+Vector3+Vector2); all via VertexBuffer+DrawPrimitives; 4/4 PASS, centre=(255,0,0) each.
-- **`CMakeLists.txt`**: `cna_test_easygl_vertex_formats` + `EasyGL_VertexFormats_AllStrides` ctest added.
-- **`GRAPHICS_TASKS.md`**: Task 247 marked ✅.
-- 1745/1745 unit tests pass.
-
-### Task 246 (Phase 30, this session — not yet committed)
-- **`tests/…/VertexDeclarationTests.cpp`**: 6 new tests — Tangent/Binormal usage stored and retrieved, auto-stride for Tangent/Binormal Vector3, Pos+Normal+Tangent declaration, full PBR vertex (Pos+Normal+Tangent+Binormal+TexCoord, stride=56).
-- **`GRAPHICS_TASKS.md`**: Task 246 marked ✅.
-- 1745/1745 unit tests pass.
-
-### Task 245 (Phase 30, this session — not yet committed)
-- **`tests/…/VertexDeclarationTests.cpp`**: 11 new tests — per-format auto-stride for all 8 compact formats (Color, Byte4, Short2, Short4, NormalizedShort2, NormalizedShort4, HalfVector2, HalfVector4) + 3 combination tests (Vector3+Byte4, Vector3+NormalizedShort4, Vector3+HalfVector2).
-- **`GRAPHICS_TASKS.md`**: Task 245 marked ✅.
-- 1739/1739 unit tests pass.
-
-### Task 244 (Phase 30, this session — not yet committed)
-- **`tests/…/VertexDeclarationTests.cpp`**: 6 new tests — usageIndex 0/1/2 stored independently for TextureCoordinate, usageIndex independent of other usages, auto-stride with 3 TexCoord channels, mixed decl with 2 TexCoord channels.
-- **`GRAPHICS_TASKS.md`**: Task 244 marked ✅.
-- 1728/1728 unit tests pass.
-
-### Task 243 (Phase 30, this session — not yet committed)
-- **`tests/…/VertexDeclarationTests.cpp`**: 7 new tests — non-zero starting offset, leading padding, inter-element gap, out-of-order offsets (stride still correct), insertion order preservation, explicit stride with trailing padding, explicit stride with non-zero-start element.
-- **`GRAPHICS_TASKS.md`**: Task 243 marked ✅.
-- 1722/1722 unit tests pass.
-
-### Task 662 (cross-cutting, this session — not yet committed)
-- **`sharp-runtime/include/System/Object.hpp`**: fixed `GetTypeNameCPP` macro — changed `#NAME` to `NAME` so that a quoted string literal argument is passed through verbatim (no longer wrapped in extra escaped quotes by `#` stringization).
-- **`src/Microsoft/Xna/Framework/Audio/SoundEffectInstance.cpp`**: fixed unquoted caller → `"Microsoft.Xna.Framework.Audio.SoundEffectInstance"`.
-- **`src/Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.cpp`**: fixed unquoted caller → `"Microsoft.Xna.Framework.Audio.DynamicSoundEffectInstance"`.
-- **`GRAPHICS_TASKS.md`**: Task 662 added and marked ✅.
-- 1715/1715 unit tests pass.
-
-### Tasks 241–242 (Phase 30 — committed in `312a1f6`)
-- **`include/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp`**: added `Equals`, `GetHashCode`.
-- **`include/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp`**: added `Equals`, `GetHashCode`.
-- **`include/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp`**: added `Equals`, `GetHashCode`.
-- **`include/Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp`**: added `operator==`, `operator!=`, `Equals`, `GetHashCode`, `ToString` declaration (were missing; other 3 structs already had them).
-- **`src/Microsoft/Xna/Framework/Graphics/VertexPositionColor.cpp`**: new file — `ToString` implementation.
-- **`src/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.cpp`**: fixed `ToString` to use actual field values (was a type-placeholder string).
-- **`src/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.cpp`**: fixed `ToString` (same).
-- **`src/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.cpp`**: fixed `ToString` (same).
-- **`src/Microsoft/Xna/Framework/Graphics/VertexDeclaration.cpp`**: fixed `GetTypeName()` — `GetTypeNameCPP` macro's `#NAME` stringizes a quoted arg with escaped quotes; replaced with manual implementation matching the pattern used by other classes.
-- **`tests/…/VertexPositionColorTests.cpp`**: added Equals, GetHashCode, ToString tests.
-- **`tests/…/VertexPositionNormalTextureTests.cpp`**: added Equals, GetHashCode, ToString tests.
-- **`tests/…/VertexPositionTextureTests.cpp`**: added Equals, GetHashCode, ToString tests.
-- **`tests/…/VertexPositionColorTextureTests.cpp`**: added Equals, GetHashCode, ToString tests.
-- **`tests/…/VertexElementTests.cpp`**: added 12 `VertexElementFormat` numeric value tests (0–11) and 13 `VertexElementUsage` numeric value tests (0–12).
-- **`tests/…/VertexDeclarationTests.cpp`**: added `GetTypeName` test.
-
-### Tasks 231–240, 248, 327–328 (previous session — committed in `7c5a5a9`)
-- Buffer API audit: `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`, `DynamicIndexBuffer` FNA-conformant.
-- Vulkan depth bias end-to-end; `ReadBackbuffer` stability fix.
-- Vulkan vertex format helper + 30 pixel-readback tests.
-- EasyGL/metagl API compatibility fixes (metagl renaming: `TextureWrap→TextureWrapMode`, `TextureFilter→BlitFilter`, `FramebufferAttachment→to_framebuffer_attachment(ColorAttachment::*)`, etc.).
+| Task | Files | Change |
+|------|-------|--------|
+| 251 | `GraphicsDevice.hpp/.cpp`, `DrawUserPrimitivesTests.cpp` | Fixed 4 typed overloads to throw on missing effect; added VertexDeclaration overload; exposed `PrimitiveVerts()` public static; 12/12 tests |
+| 329 | `examples/vulkan_scissor_test.cpp`, `CMakeLists.txt` | 2-frame scissor pixel-readback test (no scissor → both quadrants red; scissor top-left 32×32 → inside red, outside green) |
+| 250 | `docs/vertex-format-support.md` | Per-backend tables for all 12 VEF + 13 VEU values; stride-keyed layout limitation documented |
+| 249 | `include/CNA/Internal/Backends/Bgfx/BgfxVertexFormatHelper.hpp`, `examples/bgfx_vertex_format_test.cpp` | Bgfx mapping helper + 47-check mapping test + 4 VertexBuffer smoke tests |
+| 247 | `examples/easygl_vertex_formats_test.cpp` | EasyGL strides 16/20/24/32 pixel-readback test |
+| 241–246 | `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp` | Vertex declaration audit: compact format, multi-channel UV, unusual offset, tangent/binormal, Equals/Hash/ToString |
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No hard blocker.** The session ended cleanly with 1715/1715 unit tests passing.
+**No single hard blocker** at this moment. The project is healthy and builds cleanly.
 
-Two pre-existing integration test failures remain (not caused by recent work):
+The next natural friction point is Task 252: auditing `DrawUserIndexedPrimitives` against FNA.
+The typed overloads (8 overloads: 4 × VPC/VPT/VPCT/VPNT × 16-bit/32-bit) were written before the
+Task 251 audit revealed that missing-effect was silently ignored. The same bug likely exists there.
+Additionally, FNA has a second generic overload for indexed primitives (with explicit
+`VertexDeclaration`) which may be missing in CNA.
 
-1. **`EasyGL_MRT_TwoAttachments`**: Multiple Render Target FBO attachment bug.
-   - Symptom: pixel readback after MRT draw reads zeros.
-   - Affected: `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`, `SetRenderTargets`.
-   - Not yet investigated.
-
-2. **`easy-gl-resource-smoke-tests`**: Upstream easygl assertion.
-   - Assertion: `g_state.last_active_texture == GL_TEXTURE0` in `vendor/easy-gl` smoke tests.
-   - Not a CNA code issue; not investigated.
-
-**Pending commit**: Task 662 (GetTypeNameCPP fix) changes are unstaged in working tree.
+Affected files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
+`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
 
 ---
 
 ## 5. Known bugs and limitations
 
-| Status | Item |
-|---|---|
-| **confirmed pre-existing** | `EasyGL_MRT_TwoAttachments` fails — MRT FBO setup bug in EasyGL backend |
-| **confirmed pre-existing** | `easy-gl-resource-smoke-tests` fails — upstream easygl `GL_TEXTURE0` assertion |
-| **fixed (Task 662)** | `GetTypeNameCPP` macro: `#NAME` replaced by `NAME` in sharp-runtime; `SoundEffectInstance` and `DynamicSoundEffectInstance` unquoted callers corrected. Remaining Audio callers (`AudioEngine`, `Cue`, `SoundBank`, `WaveBank`, `Accelerometer`) still use `::` namespace separator instead of `.` — inconsistent with Graphics callers but not broken. |
-| **confirmed bug (Vulkan)** | `SpriteBatch` multiple `Begin/End` per frame: only the last batch renders; earlier batches silently discarded. Workaround: merge all sprites into one `Begin/End`. See `known_bugs.md`. |
-| **missing NOXNA tags** | 7 non-XNA members on `GraphicsDevice` are missing `NOXNA` (documented in `docs/graphicsdevice-fna-audit.md`) |
-| **missing XNA methods** | `Present(Rectangle?,Rectangle?,IntPtr)`, `Clear(ClearOptions,Vector4,float,int)`, `GetRenderTargetsNoAllocEXT` |
-| **incomplete** | `VertexBuffer::GetData` / `IndexBuffer::GetData` not in CNA API; no VBO/IBO readback |
-| **known limit** | EasyGL `FillMode::WireFrame` — no `glPolygonMode` on GLES3 |
-| **known limit** | `RasterizerState.DepthBias`/`SlopeScaleDepthBias` applied on Vulkan only; EasyGL/Bgfx accept but ignore |
-| **known limit** | Bgfx `SetDepthTestEnabled` / `SetBlendEnabled` / `SetDepthWriteEnabled` still throw |
-| **known limit** | Vulkan `SetSwapInterval` does not recreate swapchain at runtime (applied only at creation) |
-| **known limit** | SDL_Renderer `PresentInterval::Two` maps to VSync=1 (SDL3 has no swap interval 2) |
-| **incomplete** | sRGB `SurfaceFormats` silently map to linear GL/Vulkan internal formats |
-| **0 %** | Framework.Net (NetworkSession, PacketReader/Writer) |
-| **0 %** | XNA binary `.xnb` content pipeline |
-| **~5 %** | GamerServices (Guide.Show no-op only) |
-| **planned, not started** | WebGPU backend (Phases 56–69); `vendor/wgpu-native/` headers present but no CMake wiring |
+| Status | Issue |
+|--------|-------|
+| **Confirmed bug** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. Workaround: merge all sprite draws into one Begin/End. |
+| **Suspected bug** | `DrawUserIndexedPrimitives` typed overloads (8 overloads) likely have the same silent-return-on-missing-effect bug that was fixed in `DrawUserPrimitives` (Task 251). Not yet verified. |
+| **Incomplete** | `DrawUserPrimitives` and `DrawUserIndexedPrimitives`: no pixel-readback integration tests yet (Tasks 255–258). |
+| **Incomplete** | Bgfx backend: stride-keyed layout only covers strides 16/20/24/32/52; arbitrary VertexDeclaration layouts not supported. |
+| **Incomplete** | EasyGL backend: same stride-keyed limitation as Bgfx. |
+| **Incomplete** | Vulkan backend: Tangent and Binormal `VertexElementUsage` values are not mapped (no Vulkan semantic equivalent). |
+| **Incomplete** | VertexElementUsage Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently return `bgfx::Attrib::Count` / no-op. |
+| **Incomplete** | Texture2D completeness audit not started (Phase 32, Tasks 261–270). |
+| **Needs verification** | `easygl_device_dispose_order_test` pre-existing failure — root cause unknown. |
+| **Incomplete** | SDL_Renderer backend: `CreateVertexBuffer` always throws `ThrowNo3D`. No 3D support at all. |
 
 ---
 
 ## 6. Architecture notes
 
-### Module map
+### Main modules
 
-```
-Microsoft::Xna::Framework::*            ← XNA public API (include/ + src/)
-  └─ GraphicsDevice                     ← delegates to IGraphicsBackend*
-       └─ IGraphicsBackend              ← include/CNA/Internal/Backends/Common/
-            ├─ EasyGLGraphicsBackend    ← src/CNA/Internal/Backends/EasyGL/
-            ├─ VulkanGraphicsBackend    ← src/CNA/Internal/Backends/Vulkan/
-            ├─ BgfxGraphicsBackend      ← src/CNA/Internal/Backends/Bgfx/
-            └─ SDLGraphicsBackend       ← src/CNA/Internal/Backends/SDL/
-
-SharpRuntime    ← /rv/data/development/github.com/openeggbert/sharp-runtime
-metagl          ← raw GL function loader + typed enum wrappers
-easygl          ← GL resource wrappers (Device, Texture, Framebuffer, Sampler, …)
-```
-
-### GraphicsResource lifetime rules
-- `backend_` is a `unique_ptr` held by the derived class (VB, IB, Texture2D, etc.).
-- GPU handle freed when `Dispose()` is called (via `backend_.reset()` in `Dispose(bool)`),
-  not when the C++ object is destroyed.
-- `GraphicsDevice::resources_` tracks all live resources; disposal uses copy-and-clear pattern.
-- `Texture`, `Texture2D`, `RenderTarget2D` must each have `using BaseClass::Dispose;` to
-  prevent C++ name-hiding.
-
-### PresentationParameters / GDM wiring
-- `GDM(Game*)` ctor: registers as `IGraphicsDeviceManager` + `IGraphicsDeviceService`; calls `ApplyChanges()`.
-- `Game::DoInitialize()` → `Services_.GetService<IGraphicsDeviceManager>()` → `CreateDevice()`.
-- `GraphicsDevice::SetPresentationParameters(pp)` stores the PP AND calls `backend_->SetSwapInterval(...)`.
-- `IsFullScreen` is stored in the PP before `SDL_SetWindowFullscreen`. Backend failure is non-fatal.
-
-### Vertex type conventions
-- `VertexPositionColor`, `VertexPositionTexture`, `VertexPositionNormalTexture`, `VertexPositionColorTexture`
-  all have `operator==`, `operator!=`, `Equals`, `GetHashCode` (returns 0, FNA TODO), `ToString`.
-- `ToString` format: `{{Position:X Y Z Color:R G B A}}` (double braces, no quotes).
-- `VertexDeclaration::GetTypeName()`: returns `"Microsoft.Xna.Framework.Graphics.VertexDeclaration"`.
-- **Warning**: `GetTypeNameCPP(CLASS, "...")` macro is broken when the NAME arg is a quoted string
-  literal — the `#NAME` stringization adds extra escaped quotes. Use manual `GetTypeName()` implementations.
+| Layer | Location | Notes |
+|-------|----------|-------|
+| XNA public API | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
+| Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, `IVertexBuffer`, etc. |
+| EasyGL backend | `src/CNA/Internal/Backends/EasyGL/` | Primary; OpenGL ES 3.2 via EasyGL wrapper |
+| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | Uses VulkanVertexFormatHelper.hpp for per-format mapping |
+| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | Uses BgfxVertexFormatHelper.hpp; no readback |
+| CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging, math |
+| sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types, primitive aliases |
 
 ### Critical invariants
-- **`Color` has a vtable pointer** — use `uint8_t[]` + `Color(r,g,b,a)` for pixel I/O, never cast.
-- **Vulkan build: `-j1`** — race condition in SPIR-V header generation.
-- **Backend is compile-time only** — no runtime switching.
-- **XNA namespace = XNA API only** — non-XNA extensions tagged `NOXNA`.
-- **FNA is authoritative** — do not deviate from FNA logic without a `//` comment.
-- **sharp-runtime inner-exception ctors use `std::exception_ptr`** — not `const std::exception&`.
-- **`GLOB_RECURSE "src/*.cpp"`** in `CMakeLists.txt` — new `.cpp` files under `src/` are auto-included.
+
+- **`NOXNA` macro** tags every non-XNA extension in public headers.
+- **C# properties** → `getXProperty()` / `setXProperty()` convention (never public fields for XNA API).
+- **Static readonly** → `static const` in `.hpp` + definition in `.cpp`.
+- **Type aliases** from `SharpRuntime/SharpRuntimeHelper.hpp` (`bytecs`, `Single`, `String`, …) must
+  be used on XNA API surfaces — never raw `uint8_t`, `float`, `std::string` directly.
+- **Backend selection** is compile-time: no runtime branch between backends in the same binary.
+- **Stride-keyed vertex layout:** EasyGL, Vulkan, and Bgfx currently build VAO/pipeline/layout from
+  a map keyed by vertex stride. This means only strides 16/20/24/32/52 work correctly for 3D.
+  Arbitrary `VertexDeclaration` layouts are a future task.
+- **Doxygen required** on every public `.hpp` member: full `/** @brief … @param … @return */` block.
+- **SPDX header** `// SPDX-License-Identifier: MS-PL` required at top of every `.hpp` and `.cpp`.
+
+### Data flow (3D draw call)
+
+```
+Game calls GraphicsDevice::DrawUserPrimitives(...)
+  → validates effect applied
+  → calls VertexCountForUserPrimitives() / PrimitiveVerts()
+  → copies vertex data into transient IVertexBuffer via backend_->CreateVertexBuffer()
+  → calls backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, gpuParams)
+  → backend maps VertexDeclaration stride → VAO/pipeline/layout
+  → GPU draw
+```
+
+### FNA reference
+
+The authoritative behavioral reference is at `/rv/data/library/github.com/FNA-XNA/FNA/src`.
+When CNA diverges from FNA intentionally, document it with an inline `//` comment in the `.cpp`.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# EasyGL — configure + build
+# Configure (EasyGL — primary)
 cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-debug -j$(nproc)
 
-# Unit tests only (no display needed)
-./cmake-build-debug/CnaTests
-
-# Run unit tests via ctest (excludes EasyGL integration tests)
-ctest --test-dir cmake-build-debug --exclude-regex "EasyGL|easy-gl"
-
-# EasyGL integration tests (requires display)
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug -R EasyGL --output-on-failure
-
-# All tests
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug --output-on-failure
-
-# Vulkan — build (use -j1 to avoid SPIR-V race)
+# Configure (Vulkan)
 cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-vulkan -j1
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-vulkan -R Vulkan --output-on-failure
 
-# Bgfx — build + smoke tests
+# Configure (Bgfx)
 cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-bgfx
-DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-bgfx -R Bgfx --output-on-failure
 
-# Run specific test suites
-./cmake-build-debug/CnaTests --gtest_filter="VertexPosition*:VertexDeclaration*:VertexElement*"
-./cmake-build-debug/CnaTests --gtest_filter="PresentationParameters*"
+# Build CNA library (EasyGL)
+cmake --build cmake-build-debug --target CNA -j$(nproc)
 
-# Check git history
-git log --oneline -15
+# Build all tests (EasyGL)
+cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 
-# Commit pending work (Tasks 241-242)
-git -c commit.gpgsign=false add \
-  include/Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp \
-  include/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp \
-  include/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp \
-  include/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp \
-  src/Microsoft/Xna/Framework/Graphics/VertexPositionColor.cpp \
-  src/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.cpp \
-  src/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.cpp \
-  src/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.cpp \
-  src/Microsoft/Xna/Framework/Graphics/VertexDeclaration.cpp \
-  tests/Microsoft/Xna/Framework/Graphics/ \
-  GRAPHICS_TASKS.md NEXT.md
-git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit — Equals/GetHashCode/ToString + enum numeric tests"
+# Run unit tests
+/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests
+
+# Run specific test suite
+/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests --gtest_filter="PrimitiveVertsTest.*"
+
+# Build Vulkan (single-threaded to avoid linker races)
+cmake --build cmake-build-vulkan --target CNA -j1
+
+# Run a specific integration test (headless, EasyGL)
+/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/cna_test_easygl_vertex_formats
+
+# CTest (all registered tests, EasyGL build)
+cd cmake-build-debug && ctest --output-on-failure
 ```
 
 ---
 
 ## 8. Next smallest tasks
 
-### Task 330 — Vulkan viewport resize / setScissorRectangle edge cases
-**Goal**: Pixel-readback test verifying behaviour when `ScissorRectangle` is set to full-backbuffer extent, zero size, and when it is reset after being active.
-**Files**: `examples/vulkan_scissor_edge_test.cpp` (new), `CMakeLists.txt`
-**Verify**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-vulkan -R Vulkan_ScissorEdge`
+In priority order:
+
+1. **Task 252 — Audit `DrawUserIndexedPrimitives` overloads against FNA**
+   - Goal: same audit as Task 251 — check all 8 typed overloads for the silent-return bug; check
+     whether a VertexDeclaration + raw-pointer overload is missing; fix and add unit tests.
+   - Files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
+     `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
+     `tests/Microsoft/Xna/Framework/Graphics/DrawUserIndexedPrimitivesTests.cpp` (new).
+   - Verification: `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` → all pass.
+
+2. **Task 255 — Pixel-readback test for `DrawUserPrimitives` with `VertexPositionColor`**
+   - Goal: EasyGL integration test: draw a colored triangle via `DrawUserPrimitives<VertexPositionColor>`,
+     read back a pixel from the centre, assert color matches.
+   - Files: `examples/easygl_draw_user_primitives_vpc_test.cpp` (new), `CMakeLists.txt`.
+   - Verification: build + run test executable → exit 0.
+
+3. **Task 256 — Pixel-readback test for `DrawUserPrimitives` with custom `VertexDeclaration`**
+   - Goal: same as Task 255 but using the new VertexDeclaration-based overload with a custom struct.
+   - Files: `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt`.
+   - Verification: build + run test executable → exit 0.
+
+4. **Task 259 — Validate user primitive arrays for null / invalid offsets / invalid count**
+   - Goal: unit tests verifying that `DrawUserPrimitives` throws `std::invalid_argument` or
+     `System::ArgumentOutOfRangeException` for null data, negative offset, negative count.
+   - Files: `tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp` (extend).
+   - Verification: `CnaTests --gtest_filter="DrawUserPrimitivesValidation.*"`.
+
+5. **Task 261 — Audit every `Texture2D` constructor and method against FNA** (Phase 32 start)
+   - Goal: compare `Texture2D.hpp/.cpp` with FNA's `Texture2D.cs`; document missing overloads,
+     wrong signatures, missing bounds checks.
+   - Files: `include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp`,
+     `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp`.
+   - Verification: compile + produce a written audit list.
 
 ---
 
 ## 9. Do not do yet
 
-- **Do not investigate the MRT bug** (`EasyGL_MRT_TwoAttachments`) until a minimal
-  reproduction is written first — the current failure is inside a large integration test.
-- **Do not investigate `easy-gl-resource-smoke-tests`** — it is an upstream easygl issue.
-- **Do not implement `VertexBuffer::GetData` / `IndexBuffer::GetData`** — requires
-  VBO readback which EasyGL does not expose; adding it would need new `IGraphicsBackend` methods.
-- **Do not start the WebGPU backend** — `vendor/wgpu-native/` headers are present but
-  no CMake wiring exists; starting it now would destabilize the existing build.
-- **Do not fix the SpriteBatch multiple Begin/End Vulkan bug** until a focused
-  minimal reproduction test is written.
-- **Do not refactor `IGraphicsBackend`** — any interface change breaks all 4 backends at once.
-- **Do not change the `Color` memory layout** — packed ABGR order relied on by all backends.
-- **Do not convert integration tests to unit tests without a mock device** — there is no
-  fake `GraphicsDevice`; integration tests using `Game` + EasyGL are the established pattern.
-- **Do not implement Framework.Net or the .xnb content pipeline** — out of scope.
-- **Audio callers of `GetTypeNameCPP`** still use `::` namespace separator instead of `.` — inconsistent but not broken; do not fix unless normalizing all callers in a dedicated task.
+- **No Texture2D implementation changes** until the Task 261 audit is complete — the scope is unknown.
+- **No refactor of the stride-keyed vertex layout system** — it is load-bearing for all 3D tests;
+  changes need their own dedicated phase with full regression testing.
+- **No changes to the Bgfx backend draw path** — pixel readback is unavailable there, so correctness
+  cannot be verified.
+- **No SpriteBatch Vulkan multi-batch fix** until the root cause is isolated — a wrong fix could
+  break single-batch rendering silently.
+- **No API renames or namespace moves** — XNA API names are frozen by spec.
+- **No mass Doxygen cleanup passes** — add Doxygen only when touching a file for another reason.
+- **No new sharp-runtime types** unless a concrete CNA task requires them.
+- **No broad `GetData`/`SetData` rewrite** — wait for Phase 32 audit to determine actual scope.
 
 ---
 
@@ -335,12 +244,15 @@ git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit �
 
 ```
 Read NEXT.md first. Open only the files needed for the first task.
-Do not refactor unrelated code. Do not expand scope.
+Do not refactor unrelated code. Do not expand scope beyond the task.
 
-Current status: Phase 30 complete (Tasks 241–250); Task 251 complete (Phase 31 start); Task 329 complete; 1757/1757 unit tests pass.
+Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress (Task 251 done);
+Task 329 complete; 1757/1757 unit tests pass.
 
-Next: Phase 31 continues — Task 252 (audit DrawUserIndexedPrimitives overloads against FNA) or Task 255/256 (pixel-readback tests for DrawUserPrimitives).
-
-After finishing: build cmake-build-debug, run the affected tests, update
-GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.
+Next: Task 252 — audit DrawUserIndexedPrimitives overloads against FNA.
+Check all 8 typed overloads for the silent-return-on-missing-effect bug (same as Task 251).
+Check if the VertexDeclaration + raw-pointer overload is present; add it if missing.
+Add unit tests in DrawUserIndexedPrimitivesTests.cpp.
+Build: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
+Update GRAPHICS_TASKS.md (mark 252 ✅) and NEXT.md after finishing.
 ```
