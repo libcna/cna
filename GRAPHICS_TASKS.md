@@ -405,7 +405,7 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                           | Status | Notes              |
 | --- | ---------------------------------------------------------------------------------------------- | ------ | ------------------ |
-| 251 | Audit all `DrawUserPrimitives` overloads against FNA                                           | ⬜      | API and behavior   |
+| 251 | Audit all `DrawUserPrimitives` overloads against FNA                                           | ✅      | Fixed typed overloads to throw on missing effect; added VertexDeclaration overload; exposed `PrimitiveVerts()` as public NOXNA static; 12/12 unit tests pass (`DrawUserPrimitivesTests.cpp`) |
 | 252 | Audit all `DrawUserIndexedPrimitives` overloads against FNA                                    | ⬜      | API and behavior   |
 | 253 | Implement missing `DrawUserPrimitives` overloads by staging data into transient vertex buffers | ⬜      | EasyGL/Vulkan/Bgfx |
 | 254 | Implement missing `DrawUserIndexedPrimitives` overloads by staging data into transient VB/IB   | ⬜      | EasyGL/Vulkan/Bgfx |

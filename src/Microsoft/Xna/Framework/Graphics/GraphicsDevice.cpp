@@ -677,21 +677,26 @@ namespace Microsoft::Xna::Framework::Graphics
     // DrawUserPrimitives — typed overloads
     // -----------------------------------------------------------------------
 
+    // Public NOXNA static — mirrors FNA's private PrimitiveVerts().
+    int GraphicsDevice::PrimitiveVerts(PrimitiveType type, int primitiveCount)
+    {
+        switch (type)
+        {
+            case PrimitiveType::TriangleList:  return primitiveCount * 3;
+            case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+            case PrimitiveType::LineList:      return primitiveCount * 2;
+            case PrimitiveType::LineStrip:     return primitiveCount + 1;
+            case PrimitiveType::PointListEXT:  return primitiveCount;
+            default:
+                throw System::InvalidOperationException("Unrecognized primitive type!");
+        }
+    }
+
     namespace
     {
-        // Returns the vertex count implied by a primitive type and count.
         int VertexCountForUserPrimitives(PrimitiveType type, int primitiveCount)
         {
-            switch (type)
-            {
-                case PrimitiveType::TriangleList:  return primitiveCount * 3;
-                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
-                case PrimitiveType::LineList:      return primitiveCount * 2;
-                case PrimitiveType::LineStrip:     return primitiveCount + 1;
-                case PrimitiveType::PointListEXT:  return primitiveCount;
-                default:
-                    throw System::InvalidOperationException("Unrecognized primitive type!");
-            }
+            return GraphicsDevice::PrimitiveVerts(type, primitiveCount);
         }
 
         // GPU-layout packed structs (no vtable, exact stride).
@@ -710,7 +715,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionColor* data, int offset, int count)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
         std::vector<GpuVPC> packed(static_cast<std::size_t>(n));
@@ -733,7 +740,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionTexture* data, int offset, int count)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
         std::vector<GpuVPT> packed(static_cast<std::size_t>(n));
@@ -755,7 +764,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionColorTexture* data, int offset, int count)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
         std::vector<GpuVPCT> packed(static_cast<std::size_t>(n));
@@ -779,7 +790,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionNormalTexture* data, int offset, int count)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
         std::vector<GpuVPNT> packed(static_cast<std::size_t>(n));
@@ -796,6 +809,29 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
+    }
+
+    // DrawUserPrimitives — explicit VertexDeclaration (FNA second generic overload)
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
+                                            const void* vertexData, int vertexOffset,
+                                            int primitiveCount,
+                                            const VertexDeclaration& vertexDeclaration)
+    {
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        const int n      = VertexCountForUserPrimitives(type, primitiveCount);
+        const int stride = vertexDeclaration.getVertexStrideProperty();
+        // Apply vertexOffset in bytes then upload n vertices worth of raw data.
+        const auto* src = static_cast<const std::uint8_t*>(vertexData)
+                          + static_cast<std::ptrdiff_t>(vertexOffset) * stride;
+        auto vb = backend_->CreateVertexBuffer(n);
+        vb->SetData(src, n, static_cast<std::size_t>(stride));
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        backend_->DrawPrimitivesEx(*vb, world, view, proj, type, primitiveCount, p);
     }
 
     // -----------------------------------------------------------------------

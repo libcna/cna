@@ -31,7 +31,7 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 ### EasyGL backend (`cmake-build-debug`) — primary backend
 - **Builds**: clean.
-- **Unit tests (CnaTests)**: 1715/1715 pass.
+- **Unit tests (CnaTests)**: 1757/1757 pass.
 - **Integration tests**: 60 EasyGL integration test executables built; 2 pre-existing
   failures exist (see Known bugs).
 - **Vulkan tests**: 11/11 pass (in `cmake-build-vulkan`).
@@ -74,6 +74,12 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 ---
 
 ## 3. Recent changes
+
+### Task 251 (Phase 31, this session)
+- **`include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`**: Added `DrawUserPrimitives(PrimitiveType, const void*, int, int, const VertexDeclaration&)` overload matching FNA's second generic overload; exposed `NOXNA static int PrimitiveVerts(PrimitiveType, int)` for unit testing.
+- **`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`**: Fixed all 4 typed overloads to throw `std::runtime_error` when no effect applied (was silently returning); added VertexDeclaration-based overload implementation; moved vertex-count logic into public `PrimitiveVerts()`.
+- **`tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp`** (new): 12 tests covering all 5 topologies, invalid type, zero count, and API surface compile-check. 12/12 PASS.
+- **`GRAPHICS_TASKS.md`**: Task 251 marked ✅.
 
 ### Task 329 (cross-cutting, this session)
 - **`examples/vulkan_scissor_test.cpp`** (new): 2-frame test — frame 0 no scissor (both quadrants red), frame 1 scissor=top-left 32×32 (inside red, outside green); 4/4 PASS; blank-frame retry ≤20 attempts.
@@ -331,9 +337,9 @@ git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit �
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Phase 30 complete (Tasks 241–250); Task 329 complete; 1745/1745 unit tests pass.
+Current status: Phase 30 complete (Tasks 241–250); Task 251 complete (Phase 31 start); Task 329 complete; 1757/1757 unit tests pass.
 
-Next: Phase 31 (DrawUserPrimitives variants, Tasks 251–260) or Task 330 (scissor edge cases).
+Next: Phase 31 continues — Task 252 (audit DrawUserIndexedPrimitives overloads against FNA) or Task 255/256 (pixel-readback tests for DrawUserPrimitives).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.

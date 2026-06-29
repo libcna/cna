@@ -383,13 +383,35 @@ namespace Microsoft::Xna::Framework::Graphics
                                      int primitiveCount, int instanceCount);
         /**
          * @brief Draws non-indexed primitives from a user-supplied raw vertex buffer.
+         *
+         * The vertex data is assumed to be in VertexPositionColor packed layout (stride=16).
+         * To supply a different layout use the overload that accepts a VertexDeclaration.
+         *
          * @param primitiveType  The type of primitive to draw.
-         * @param vertexData     Pointer to the raw vertex data.
+         * @param vertexData     Pointer to the raw vertex data (assumed VertexPositionColor layout).
          * @param vertexOffset   Offset into @p vertexData (in vertices) to start drawing from.
          * @param primitiveCount Number of primitives to draw.
          */
         void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData,
                                 int vertexOffset, int primitiveCount);
+
+        /**
+         * @brief Draws non-indexed primitives from a user-supplied raw vertex buffer with an
+         *        explicit VertexDeclaration describing the vertex layout.
+         *
+         * Corresponds to FNA's DrawUserPrimitives&lt;T&gt;(primitiveType, T[], vertexOffset,
+         * primitiveCount, VertexDeclaration) overload.  The raw bytes are uploaded to a
+         * transient vertex buffer using the stride from @p vertexDeclaration.
+         *
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the raw vertex data.
+         * @param vertexOffset       Offset into @p vertexData (in vertices).
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         */
+        void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData,
+                                int vertexOffset, int primitiveCount,
+                                const VertexDeclaration& vertexDeclaration);
         /**
          * @brief Draws non-indexed primitives from a user-supplied VertexPositionColor array.
          * @param primitiveType  The type of primitive to draw.
@@ -547,6 +569,20 @@ namespace Microsoft::Xna::Framework::Graphics
                                        const std::uint32_t* indexData, int indexOffset, int primitiveCount);
 
         // --- NOXNA helpers (not in XNA 4.0) ---
+
+        /**
+         * @brief Returns the number of vertices required to draw @p primitiveCount primitives
+         *        of the given @p primitiveType.
+         *
+         * Mirrors the FNA-internal PrimitiveVerts() helper. Exposed here so that tests and
+         * calling code can validate vertex-array sizes without performing a draw call.
+         *
+         * @param primitiveType  The primitive topology.
+         * @param primitiveCount Number of primitives.
+         * @return Total vertex count.
+         * @throws System::InvalidOperationException if @p primitiveType is unrecognised.
+         */
+        NOXNA static int PrimitiveVerts(PrimitiveType primitiveType, int primitiveCount);
 
         /**
          * @brief Fires ResourceCreated for the given resource.
