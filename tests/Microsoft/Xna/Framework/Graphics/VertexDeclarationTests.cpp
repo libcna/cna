@@ -186,3 +186,80 @@ TEST(VertexDeclarationTest, GetTypeNameReturnsXnaName)
     VertexDeclaration vd;
     EXPECT_EQ(vd.GetTypeName(), "Microsoft.Xna.Framework.Graphics.VertexDeclaration");
 }
+
+// ── Task 243: unusual offsets ────────────────────────────────────────────────
+
+// Auto-stride with a single element that does not start at offset 0.
+// stride = max(4 + 4) = 8
+TEST(VertexDeclarationTest, AutoStrideNonZeroStart)
+{
+    VertexDeclaration vd({
+        VertexElement(4, VertexElementFormat::Single, VertexElementUsage::Position, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 8);
+}
+
+// Auto-stride with a large leading padding before the only element.
+// stride = max(8 + 8) = 16
+TEST(VertexDeclarationTest, AutoStrideLeadingPadding)
+{
+    VertexDeclaration vd({
+        VertexElement(8, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 16);
+}
+
+// Auto-stride where there is an explicit gap (padding) between two elements.
+// elem0: offset=0, Vector2 (8B) → end=8; elem1: offset=12, Single (4B) → end=16
+// stride = max(8, 16) = 16; bytes 8..11 are padding
+TEST(VertexDeclarationTest, AutoStridePaddingGapBetweenElements)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector2, VertexElementUsage::Position,         0),
+        VertexElement(12, VertexElementFormat::Single,  VertexElementUsage::TextureCoordinate, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 16);
+}
+
+// Auto-stride with elements supplied in reverse offset order.
+// elem0: offset=12, Color (4B) → end=16; elem1: offset=0, Vector3 (12B) → end=12
+// stride = max(16, 12) = 16
+TEST(VertexDeclarationTest, AutoStrideElementsOutOfOffsetOrder)
+{
+    VertexDeclaration vd({
+        VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color,    0),
+        VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 16);
+}
+
+// GetVertexElements() preserves insertion order even when offsets are not ascending.
+TEST(VertexDeclarationTest, ElementInsertionOrderPreservedWhenOutOfOffset)
+{
+    VertexDeclaration vd({
+        VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color,    0),
+        VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    EXPECT_EQ(vd.GetVertexElements()[0].getOffsetProperty(), 12);
+    EXPECT_EQ(vd.GetVertexElements()[1].getOffsetProperty(), 0);
+}
+
+// Explicit stride is respected even when the element layout ends before it.
+// Elements cover only 12 bytes; explicit stride=24 adds 12 bytes of trailing padding.
+TEST(VertexDeclarationTest, ExplicitStrideAllowsTrailingPadding)
+{
+    VertexDeclaration vd(24, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 24);
+}
+
+// Explicit stride is respected even when the first element has a non-zero offset.
+// The layout has 4 bytes of leading padding + Vector3 (12B) = 16B used, stride=32.
+TEST(VertexDeclarationTest, ExplicitStrideWithNonZeroStartElement)
+{
+    VertexDeclaration vd(32, {
+        VertexElement(4, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 32);
+}

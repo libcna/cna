@@ -71,6 +71,11 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 ## 3. Recent changes
 
+### Task 243 (Phase 30, this session — not yet committed)
+- **`tests/…/VertexDeclarationTests.cpp`**: 7 new tests — non-zero starting offset, leading padding, inter-element gap, out-of-order offsets (stride still correct), insertion order preservation, explicit stride with trailing padding, explicit stride with non-zero-start element.
+- **`GRAPHICS_TASKS.md`**: Task 243 marked ✅.
+- 1722/1722 unit tests pass.
+
 ### Task 662 (cross-cutting, this session — not yet committed)
 - **`sharp-runtime/include/System/Object.hpp`**: fixed `GetTypeNameCPP` macro — changed `#NAME` to `NAME` so that a quoted string literal argument is passed through verbatim (no longer wrapped in extra escaped quotes by `#` stringization).
 - **`src/Microsoft/Xna/Framework/Audio/SoundEffectInstance.cpp`**: fixed unquoted caller → `"Microsoft.Xna.Framework.Audio.SoundEffectInstance"`.
@@ -253,12 +258,6 @@ git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit �
 
 ## 8. Next smallest tasks
 
-### Task 243 — Custom vertex declarations with unusual offsets
-**Goal**: Verify `VertexDeclaration` handles non-zero-starting offsets and padding gaps
-correctly (auto-stride from non-zero initial offset, elements not in offset order).
-**Files**: `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp`
-**Verify**: `./cmake-build-debug/CnaTests --gtest_filter="VertexDeclarationTest*"`
-
 ### Task 244 — Multiple texture coordinate channels
 **Goal**: Verify `VertexElement` with `VertexElementUsage::TextureCoordinate` and
 `usageIndex` 0, 1, 2 stores and retrieves the index correctly in a `VertexDeclaration`.
@@ -313,11 +312,10 @@ verifying pixel output.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 241+242 committed (`312a1f6`); Task 662 (GetTypeNameCPP macro fix)
-complete — macro changed in sharp-runtime, 2 unquoted callers corrected; 1715/1715 pass.
-Task 662 changes are uncommitted — commit them first, then continue.
+Current status: Task 662 committed (`74e1ec8`); Task 243 complete — 7 new VertexDeclaration
+tests for unusual offsets; 1722/1722 pass. Task 243 changes are uncommitted.
 
-Next: Task 243 (custom VertexDeclaration with unusual offsets).
+Next: Task 244 (multiple texture coordinate channels in VertexDeclaration).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.

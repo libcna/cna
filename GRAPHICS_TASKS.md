@@ -389,7 +389,7 @@ All 100 original tasks addressed.
 | --- | ------------------------------------------------------------------------------------------------------------------------------ | ------ | ---------------------------------- |
 | 241 | Audit `VertexDeclaration`, `VertexElement`, `VertexElementFormat`, and `VertexElementUsage` against FNA                        | ✅      | Include equality/hash behavior     |
 | 242 | Add tests for all built-in vertex structs: `VertexPositionColor`, `VertexPositionTexture`, `VertexPositionNormalTexture`, etc. | ✅      | Size, stride, declaration elements |
-| 243 | Verify custom vertex declarations with unusual offsets                                                                         | ⬜      | Position not at offset 0           |
+| 243 | Verify custom vertex declarations with unusual offsets                                                                         | ✅      | 7 tests: non-zero start, leading padding, gap between elements, out-of-order offsets, insertion order preserved, explicit stride with trailing padding and non-zero start; 1722/1722 pass |
 | 244 | Verify multiple texture coordinate channels                                                                                    | ⬜      | TextureCoordinate0/1/2             |
 | 245 | Verify color element formats: `Color`, `Byte4`, normalized formats                                                             | ⬜      | Backend attribute mapping          |
 | 246 | Verify tangent/binormal usages if present                                                                                      | ⬜      | Needed for future NOXNA/PBR too    |
