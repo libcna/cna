@@ -1129,6 +1129,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+    # Task 249: Bgfx vertex layout mapping tests — all 12 VertexElementFormat values
+    cna_bgfx_test(cna_test_bgfx_vertex_format
+                  examples/bgfx_vertex_format_test.cpp)
+    add_test(NAME Bgfx_VertexFormatMapping
+             COMMAND cna_test_bgfx_vertex_format)
+    set_tests_properties(Bgfx_VertexFormatMapping PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
 endif()
 
 if(CNA_BUILD_TESTS)

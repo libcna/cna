@@ -12,7 +12,7 @@ It is a framework/runtime, not a game.
 to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 **Current development phase**: Phase 30 — VertexDeclaration and vertex format accuracy
-(Tasks 241–250). Tasks 241, 242, and 248 complete; Tasks 243–247, 249–250 pending.
+(Tasks 241–250). Tasks 241–249 complete; Task 250 pending.
 
 **Key architectural decisions**:
 - Backend selected at **compile time** via `CNA_GRAPHICS_BACKEND` CMake option.
@@ -36,7 +36,7 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
   failures exist (see Known bugs).
 - **Vulkan tests**: 11/11 pass (in `cmake-build-vulkan`).
 
-### Recently verified working (Phases 27–30, Tasks 211–248):
+### Recently verified working (Phases 27–30, Tasks 211–249):
 - `GraphicsResource` base class wired to all 8 major resource types; disposal chain correct.
 - `VertexBuffer`, `DynamicVertexBuffer`, `IndexBuffer`, `DynamicIndexBuffer`:
   FNA API-conformant; `SetDataOptions` (Discard/NoOverwrite) wired in EasyGL;
@@ -52,6 +52,8 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
   `ReadBackbuffer` stable (checks `SubmitFrame()` return value; 20/20 passes).
 - Vulkan vertex format helper: `VertexElementFormatToVk()` + `VertexElementFormatSize()` for
   all 12 `VertexElementFormat` values; 30/30 pixel-readback tests pass.
+- Bgfx vertex format helper: `VertexElementFormatToBgfx()` + `VertexElementUsageToBgfxAttrib()` +
+  `VertexElementFormatSize()` for all 12 VEF/13 VEU values; `Bgfx_VertexFormatMapping` 1/1 PASS.
 
 ### What does not work yet
 - **MRT (Multiple Render Targets)**: `EasyGL_MRT_TwoAttachments` fails — pre-existing FBO bug.
@@ -70,6 +72,12 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 ---
 
 ## 3. Recent changes
+
+### Task 249 (Phase 30, this session)
+- **`include/CNA/Internal/Backends/Bgfx/BgfxVertexFormatHelper.hpp`** (new): `BgfxAttribInfo` struct; `VertexElementFormatToBgfx()` for all 12 VEF values; `VertexElementUsageToBgfxAttrib()` for all 13 VEU values (unsupported usages return `bgfx::Attrib::Count`); `VertexElementFormatSize()` matching FNA sizes.
+- **`examples/bgfx_vertex_format_test.cpp`** (new): 47 mapping/size checks + 4 VertexBuffer creation smoke tests (stride 16/20/24/32); `Bgfx_VertexFormatMapping` 1/1 PASS.
+- **`CMakeLists.txt`**: `cna_test_bgfx_vertex_format` + `Bgfx_VertexFormatMapping` ctest added.
+- **`GRAPHICS_TASKS.md`**: Task 249 marked ✅.
 
 ### Task 247 (Phase 30, this session — not yet committed)
 - **`examples/easygl_vertex_formats_test.cpp`** (new): 4 sub-tests — stride=16 (Vector3+Color), stride=20 (Vector3+Vector2), stride=24 (Vector3+Color+Vector2), stride=32 (Vector3+Vector3+Vector2); all via VertexBuffer+DrawPrimitives; 4/4 PASS, centre=(255,0,0) each.
@@ -279,23 +287,16 @@ git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit �
 
 ## 8. Next smallest tasks
 
-### Task 249 — Bgfx vertex layout mapping tests
-**Goal**: Verify that all supported `VertexElementFormat` values map correctly to Bgfx attribute types in the Bgfx backend; add unit or integration tests.
-**Files**: `tests/` or `examples/bgfx_vertex_format_test.cpp`, `CMakeLists.txt`
-**Verify**: `ctest --test-dir cmake-build-bgfx -R Bgfx_Vertex`
+### Task 250 — Document unsupported vertex formats and fallback behavior
+**Goal**: Create `docs/vertex-format-support.md` documenting which `VertexElementFormat` and `VertexElementUsage` values are supported/unsupported per backend (EasyGL, Vulkan, Bgfx, SDL), and what the fallback behavior is for unsupported formats.
+**Files**: `docs/vertex-format-support.md` (new)
+**Verify**: Documentation review; no build required.
 
 ### Task 329 — Vulkan scissor test enable/disable interaction
 **Goal**: Pixel-readback test verifying that enabling `ScissorTestEnable` on
 `RasterizerState` and setting `GraphicsDevice::ScissorRectangle` clips correctly.
 **Files**: `examples/vulkan_scissor_test.cpp` (new), `CMakeLists.txt`
 **Verify**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-vulkan -R vulkan_scissor`
-
-### Task 247 — EasyGL draw test with each `VertexElementFormat`
-**Goal**: Integration test drawing a quad with each non-trivial vertex format
-(`Vector2`, `Vector3`, `Vector4`, `Color`, `Byte4`, `Short2`/`Short4`) and
-verifying pixel output.
-**Files**: `examples/easygl_vertex_formats_test.cpp` (new), `CMakeLists.txt`
-**Verify**: `DISPLAY=:0 SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-debug -R easygl_vertex_formats`
 
 ---
 
@@ -325,9 +326,10 @@ verifying pixel output.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 243–247 complete; 1745/1745 unit tests pass. Changes uncommitted.
+Current status: Tasks 243–249 complete; 1745/1745 unit tests pass; Bgfx_VertexFormatMapping 1/1 PASS.
+Changes uncommitted.
 
-Next: Task 249 (Bgfx vertex layout mapping tests) or Task 250 (document unsupported vertex formats).
+Next: Task 250 (document unsupported vertex formats — `docs/vertex-format-support.md`).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.
