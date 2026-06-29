@@ -187,6 +187,82 @@ TEST(VertexDeclarationTest, GetTypeNameReturnsXnaName)
     EXPECT_EQ(vd.GetTypeName(), "Microsoft.Xna.Framework.Graphics.VertexDeclaration");
 }
 
+// ── Task 244: multiple texture coordinate channels ───────────────────────────
+
+// usageIndex=0 is stored and retrieved correctly.
+TEST(VertexDeclarationTest, TexCoordUsageIndexZeroStored)
+{
+    VertexDeclaration vd({
+        VertexElement(0, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    EXPECT_EQ(vd.GetVertexElements()[0].getUsageIndexProperty(), 0);
+}
+
+// Two TextureCoordinate channels: usageIndex 0 and 1 are stored independently.
+TEST(VertexDeclarationTest, TexCoordTwoChannelsUsageIndices)
+{
+    VertexDeclaration vd({
+        VertexElement(0, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(8, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+    });
+    EXPECT_EQ(vd.GetVertexElements()[0].getUsageIndexProperty(), 0);
+    EXPECT_EQ(vd.GetVertexElements()[1].getUsageIndexProperty(), 1);
+}
+
+// Three TextureCoordinate channels: usageIndex 0, 1, 2 all stored correctly.
+TEST(VertexDeclarationTest, TexCoordThreeChannelsUsageIndices)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(8,  VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 2),
+    });
+    EXPECT_EQ(vd.GetVertexElements()[0].getUsageIndexProperty(), 0);
+    EXPECT_EQ(vd.GetVertexElements()[1].getUsageIndexProperty(), 1);
+    EXPECT_EQ(vd.GetVertexElements()[2].getUsageIndexProperty(), 2);
+}
+
+// usageIndex is independent of VertexElementUsage — Position and Color with index 0
+// do not affect TextureCoordinate usageIndex.
+TEST(VertexDeclarationTest, TexCoordUsageIndexIndependentOfOtherUsages)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position,         0),
+        VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color,             0),
+        VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+    });
+    EXPECT_EQ(vd.GetVertexElements()[2].getUsageIndexProperty(), 1);
+    EXPECT_EQ(vd.GetVertexElements()[2].getVertexElementUsageProperty(),
+              VertexElementUsage::TextureCoordinate);
+}
+
+// Auto-stride with three Vector2 texture coordinate channels.
+// 3 × Vector2 (8B) packed: stride = max(0+8, 8+8, 16+8) = 24
+TEST(VertexDeclarationTest, AutoStrideThreeTexCoordChannels)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(8,  VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 2),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 24);
+    EXPECT_EQ(vd.GetVertexElements().size(), 3u);
+}
+
+// Mixed: Position + Normal + two texture coordinates; usageIndex 0 and 1 preserved.
+TEST(VertexDeclarationTest, MixedDeclWithTwoTexCoordChannels)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position,         0),
+        VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal,            0),
+        VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(32, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 40);
+    EXPECT_EQ(vd.GetVertexElements()[2].getUsageIndexProperty(), 0);
+    EXPECT_EQ(vd.GetVertexElements()[3].getUsageIndexProperty(), 1);
+}
+
 // ── Task 243: unusual offsets ────────────────────────────────────────────────
 
 // Auto-stride with a single element that does not start at offset 0.

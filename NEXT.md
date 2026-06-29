@@ -71,6 +71,11 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 ## 3. Recent changes
 
+### Task 244 (Phase 30, this session — not yet committed)
+- **`tests/…/VertexDeclarationTests.cpp`**: 6 new tests — usageIndex 0/1/2 stored independently for TextureCoordinate, usageIndex independent of other usages, auto-stride with 3 TexCoord channels, mixed decl with 2 TexCoord channels.
+- **`GRAPHICS_TASKS.md`**: Task 244 marked ✅.
+- 1728/1728 unit tests pass.
+
 ### Task 243 (Phase 30, this session — not yet committed)
 - **`tests/…/VertexDeclarationTests.cpp`**: 7 new tests — non-zero starting offset, leading padding, inter-element gap, out-of-order offsets (stride still correct), insertion order preservation, explicit stride with trailing padding, explicit stride with non-zero-start element.
 - **`GRAPHICS_TASKS.md`**: Task 243 marked ✅.
@@ -258,12 +263,6 @@ git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit �
 
 ## 8. Next smallest tasks
 
-### Task 244 — Multiple texture coordinate channels
-**Goal**: Verify `VertexElement` with `VertexElementUsage::TextureCoordinate` and
-`usageIndex` 0, 1, 2 stores and retrieves the index correctly in a `VertexDeclaration`.
-**Files**: `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp`
-**Verify**: `./cmake-build-debug/CnaTests --gtest_filter="VertexDeclarationTest*"`
-
 ### Task 245 — Color and byte element format sizes
 **Goal**: Verify auto-stride calculation handles `Byte4` (4 bytes), `Short2` (4 bytes),
 `NormalizedShort4` (8 bytes), `HalfVector2` (4 bytes) correctly.
@@ -312,10 +311,10 @@ verifying pixel output.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Task 662 committed (`74e1ec8`); Task 243 complete — 7 new VertexDeclaration
-tests for unusual offsets; 1722/1722 pass. Task 243 changes are uncommitted.
+Current status: Tasks 243+244 complete — 13 new VertexDeclaration tests; 1728/1728 pass.
+Changes are uncommitted.
 
-Next: Task 244 (multiple texture coordinate channels in VertexDeclaration).
+Next: Task 245 (color and byte element format sizes — auto-stride for Byte4, Short2, etc.).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.
