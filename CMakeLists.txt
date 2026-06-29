@@ -955,6 +955,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 247: draw quad with each supported VertexElementFormat via VertexBuffer
+        cna_easygl_test(cna_test_easygl_vertex_formats
+                        examples/easygl_vertex_formats_test.cpp)
+        add_test(NAME EasyGL_VertexFormats_AllStrides
+                 COMMAND cna_test_easygl_vertex_formats)
+        set_tests_properties(EasyGL_VertexFormats_AllStrides PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests

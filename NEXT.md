@@ -71,6 +71,12 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 ## 3. Recent changes
 
+### Task 247 (Phase 30, this session — not yet committed)
+- **`examples/easygl_vertex_formats_test.cpp`** (new): 4 sub-tests — stride=16 (Vector3+Color), stride=20 (Vector3+Vector2), stride=24 (Vector3+Color+Vector2), stride=32 (Vector3+Vector3+Vector2); all via VertexBuffer+DrawPrimitives; 4/4 PASS, centre=(255,0,0) each.
+- **`CMakeLists.txt`**: `cna_test_easygl_vertex_formats` + `EasyGL_VertexFormats_AllStrides` ctest added.
+- **`GRAPHICS_TASKS.md`**: Task 247 marked ✅.
+- 1745/1745 unit tests pass.
+
 ### Task 246 (Phase 30, this session — not yet committed)
 - **`tests/…/VertexDeclarationTests.cpp`**: 6 new tests — Tangent/Binormal usage stored and retrieved, auto-stride for Tangent/Binormal Vector3, Pos+Normal+Tangent declaration, full PBR vertex (Pos+Normal+Tangent+Binormal+TexCoord, stride=56).
 - **`GRAPHICS_TASKS.md`**: Task 246 marked ✅.
@@ -273,6 +279,11 @@ git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit �
 
 ## 8. Next smallest tasks
 
+### Task 249 — Bgfx vertex layout mapping tests
+**Goal**: Verify that all supported `VertexElementFormat` values map correctly to Bgfx attribute types in the Bgfx backend; add unit or integration tests.
+**Files**: `tests/` or `examples/bgfx_vertex_format_test.cpp`, `CMakeLists.txt`
+**Verify**: `ctest --test-dir cmake-build-bgfx -R Bgfx_Vertex`
+
 ### Task 329 — Vulkan scissor test enable/disable interaction
 **Goal**: Pixel-readback test verifying that enabling `ScissorTestEnable` on
 `RasterizerState` and setting `GraphicsDevice::ScissorRectangle` clips correctly.
@@ -314,10 +325,9 @@ verifying pixel output.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 243–246 complete — 30 new VertexDeclaration tests; 1745/1745 pass.
-Changes are uncommitted.
+Current status: Tasks 243–247 complete; 1745/1745 unit tests pass. Changes uncommitted.
 
-Next: Task 247 (EasyGL draw integration test per VertexElementFormat).
+Next: Task 249 (Bgfx vertex layout mapping tests) or Task 250 (document unsupported vertex formats).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.
