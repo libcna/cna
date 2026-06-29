@@ -187,6 +187,49 @@ TEST(VertexDeclarationTest, GetTypeNameReturnsXnaName)
     EXPECT_EQ(vd.GetTypeName(), "Microsoft.Xna.Framework.Graphics.VertexDeclaration");
 }
 
+// ── Task 245: color and byte/short/half element format sizes ─────────────────
+// Each test places a single element at offset 0 and checks that the auto-stride
+// equals the expected byte size for that format (matches FNA GetTypeSize).
+
+TEST(VertexDeclarationTest, AutoStrideColorFormat)       { EXPECT_EQ(VertexDeclaration({ VertexElement(0, VertexElementFormat::Color,             VertexElementUsage::Color,            0) }).getVertexStrideProperty(),  4); }
+TEST(VertexDeclarationTest, AutoStrideByte4Format)       { EXPECT_EQ(VertexDeclaration({ VertexElement(0, VertexElementFormat::Byte4,             VertexElementUsage::BlendIndices,     0) }).getVertexStrideProperty(),  4); }
+TEST(VertexDeclarationTest, AutoStrideShort2Format)      { EXPECT_EQ(VertexDeclaration({ VertexElement(0, VertexElementFormat::Short2,            VertexElementUsage::TextureCoordinate,0) }).getVertexStrideProperty(),  4); }
+TEST(VertexDeclarationTest, AutoStrideShort4Format)      { EXPECT_EQ(VertexDeclaration({ VertexElement(0, VertexElementFormat::Short4,            VertexElementUsage::TextureCoordinate,0) }).getVertexStrideProperty(),  8); }
+TEST(VertexDeclarationTest, AutoStrideNormalizedShort2)  { EXPECT_EQ(VertexDeclaration({ VertexElement(0, VertexElementFormat::NormalizedShort2,  VertexElementUsage::TextureCoordinate,0) }).getVertexStrideProperty(),  4); }
+TEST(VertexDeclarationTest, AutoStrideNormalizedShort4)  { EXPECT_EQ(VertexDeclaration({ VertexElement(0, VertexElementFormat::NormalizedShort4,  VertexElementUsage::TextureCoordinate,0) }).getVertexStrideProperty(),  8); }
+TEST(VertexDeclarationTest, AutoStrideHalfVector2Format) { EXPECT_EQ(VertexDeclaration({ VertexElement(0, VertexElementFormat::HalfVector2,       VertexElementUsage::TextureCoordinate,0) }).getVertexStrideProperty(),  4); }
+TEST(VertexDeclarationTest, AutoStrideHalfVector4Format) { EXPECT_EQ(VertexDeclaration({ VertexElement(0, VertexElementFormat::HalfVector4,       VertexElementUsage::TextureCoordinate,0) }).getVertexStrideProperty(),  8); }
+
+// Combined: Vector3(12) + Byte4 at 12 → stride = 16
+TEST(VertexDeclarationTest, AutoStridePositionPlusByte4)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position,     0),
+        VertexElement(12, VertexElementFormat::Byte4,   VertexElementUsage::BlendIndices, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 16);
+}
+
+// Combined: Vector3(12) + NormalizedShort4 at 12 → stride = 20
+TEST(VertexDeclarationTest, AutoStridePositionPlusNormalizedShort4)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector3,           VertexElementUsage::Position,         0),
+        VertexElement(12, VertexElementFormat::NormalizedShort4,  VertexElementUsage::TextureCoordinate, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 20);
+}
+
+// Combined: Vector3(12) + HalfVector2 at 12 → stride = 16
+TEST(VertexDeclarationTest, AutoStridePositionPlusHalfVector2)
+{
+    VertexDeclaration vd({
+        VertexElement(0,  VertexElementFormat::Vector3,    VertexElementUsage::Position,         0),
+        VertexElement(12, VertexElementFormat::HalfVector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    EXPECT_EQ(vd.getVertexStrideProperty(), 16);
+}
+
 // ── Task 244: multiple texture coordinate channels ───────────────────────────
 
 // usageIndex=0 is stored and retrieved correctly.

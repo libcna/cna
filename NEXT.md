@@ -71,6 +71,11 @@ to one of four backends: SDL\_Renderer, EasyGL (OpenGL ES 3.2), Vulkan, or Bgfx.
 
 ## 3. Recent changes
 
+### Task 245 (Phase 30, this session — not yet committed)
+- **`tests/…/VertexDeclarationTests.cpp`**: 11 new tests — per-format auto-stride for all 8 compact formats (Color, Byte4, Short2, Short4, NormalizedShort2, NormalizedShort4, HalfVector2, HalfVector4) + 3 combination tests (Vector3+Byte4, Vector3+NormalizedShort4, Vector3+HalfVector2).
+- **`GRAPHICS_TASKS.md`**: Task 245 marked ✅.
+- 1739/1739 unit tests pass.
+
 ### Task 244 (Phase 30, this session — not yet committed)
 - **`tests/…/VertexDeclarationTests.cpp`**: 6 new tests — usageIndex 0/1/2 stored independently for TextureCoordinate, usageIndex independent of other usages, auto-stride with 3 TexCoord channels, mixed decl with 2 TexCoord channels.
 - **`GRAPHICS_TASKS.md`**: Task 244 marked ✅.
@@ -263,13 +268,6 @@ git -c commit.gpgsign=false commit -m "feat(Tasks 241-242): vertex type audit �
 
 ## 8. Next smallest tasks
 
-### Task 245 — Color and byte element format sizes
-**Goal**: Verify auto-stride calculation handles `Byte4` (4 bytes), `Short2` (4 bytes),
-`NormalizedShort4` (8 bytes), `HalfVector2` (4 bytes) correctly.
-**Files**: `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp`,
-`src/Microsoft/Xna/Framework/Graphics/VertexDeclaration.cpp` (auto-stride `GetTypeSize`)
-**Verify**: `./cmake-build-debug/CnaTests --gtest_filter="VertexDeclarationTest*"`
-
 ### Task 329 — Vulkan scissor test enable/disable interaction
 **Goal**: Pixel-readback test verifying that enabling `ScissorTestEnable` on
 `RasterizerState` and setting `GraphicsDevice::ScissorRectangle` clips correctly.
@@ -311,10 +309,10 @@ verifying pixel output.
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope.
 
-Current status: Tasks 243+244 complete — 13 new VertexDeclaration tests; 1728/1728 pass.
+Current status: Tasks 243+244+245 complete — 24 new VertexDeclaration tests; 1739/1739 pass.
 Changes are uncommitted.
 
-Next: Task 245 (color and byte element format sizes — auto-stride for Byte4, Short2, etc.).
+Next: Task 246 (tangent/binormal usages) or Task 247 (EasyGL draw test per VertexElementFormat).
 
 After finishing: build cmake-build-debug, run the affected tests, update
 GRAPHICS_TASKS.md (mark task ✅) and NEXT.md, then commit.
