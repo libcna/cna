@@ -4,6 +4,7 @@
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 
 #include <algorithm>
 #include <string>
@@ -627,6 +628,21 @@ namespace CNA::Internal::Input
                             keyList.c_str());
                 }
 #endif
+                break;
+            }
+        case SDL_EVENT_TEXT_INPUT:
+            {
+                // SDL delivers UTF-8 text in event.text.text. CNA's TextInput callback is
+                // char-based (byte-oriented), so forward each UTF-8 byte in order: a consumer
+                // appending them to a std::string reconstructs the original UTF-8 text.
+                // (FNA decodes to UTF-16 because C# strings are UTF-16; CNA uses UTF-8 std::string.)
+                if (const char* text = event.text.text)
+                {
+                    for (const char* p = text; *p != '\0'; ++p)
+                    {
+                        Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(*p);
+                    }
+                }
                 break;
             }
         case SDL_EVENT_FINGER_DOWN:
