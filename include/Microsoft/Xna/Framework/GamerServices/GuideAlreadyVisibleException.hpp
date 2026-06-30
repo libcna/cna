@@ -10,37 +10,37 @@
 namespace Microsoft::Xna::Framework::GamerServices
 {
     /**
-     * @brief The exception that is thrown when a GamerServices API is called on a platform that does not support it.
+     * @brief The exception that is thrown when the Guide is already visible.
      */
-    class GamerServicesNotAvailableException : public System::Exception
+    class GuideAlreadyVisibleException : public System::Exception
     {
     public:
-        /** @brief Initializes a new instance of GamerServicesNotAvailableException with a default message. */
-        GamerServicesNotAvailableException();
+        /** @brief Initializes a new instance of GuideAlreadyVisibleException with a default message. */
+        GuideAlreadyVisibleException();
 
         /**
-         * @brief Initializes a new instance of GamerServicesNotAvailableException with the specified message.
+         * @brief Initializes a new instance of GuideAlreadyVisibleException with the specified message.
          *
          * @param message A string that describes the error.
          */
-        explicit GamerServicesNotAvailableException(const std::string& message);
+        explicit GuideAlreadyVisibleException(const std::string& message);
 
         /**
-         * @brief Initializes a new instance of GamerServicesNotAvailableException with the specified message and inner exception.
+         * @brief Initializes a new instance of GuideAlreadyVisibleException with the specified message and inner exception.
          *
          * @param message A string that describes the error.
          * @param innerException The exception that is the cause of the current exception.
          */
-        GamerServicesNotAvailableException(const std::string& message, std::exception_ptr innerException);
+        GuideAlreadyVisibleException(const std::string& message, std::exception_ptr innerException);
 
     protected:
         /**
-         * @brief Initializes a new instance of GamerServicesNotAvailableException with serialization data.
+         * @brief Initializes a new instance of GuideAlreadyVisibleException with serialization data.
          *
          * @param info The object that holds the serialized object data.
          * @param context The contextual information about the source or destination.
          */
-        GamerServicesNotAvailableException(
+        GuideAlreadyVisibleException(
             System::Runtime::Serialization::SerializationInfo& info,
             System::Runtime::Serialization::StreamingContext& context
         );
