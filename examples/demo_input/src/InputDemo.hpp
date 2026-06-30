@@ -15,10 +15,13 @@
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/GestureType.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "CNA/CNAHelper.hpp"
+
+#include <string>
 
 class InputDemo : public Microsoft::Xna::Framework::Game
 {
@@ -53,7 +56,16 @@ private:
     void DrawMouse(int ox, int oy, const MsState& ms);
     void DrawGamePad(int ox, int oy, const GpState& gp);
     void DrawTouchPoints(const TC& touches);
+    void DrawTextPanel(int ox, int oy, int w, int h);
 
     Microsoft::Xna::Framework::Graphics::SpriteBatch* spriteBatch_ = nullptr;
     Microsoft::Xna::Framework::Graphics::Texture2D pixel_;
+
+    // Text input (TextInputEXT) demo state.
+    std::string textBuffer_;   // committed characters typed via TextInputEXT::TextInput
+    std::string editBuffer_;   // in-progress IME composition via TextInputEXT::TextEditing
+    int  lastTextChar_ = -1;   // byte value of the most recent TextInput char (for the bit display)
+    bool textInputActive_ = false;
+    bool prevToggleKey_ = false;
+    int  frame_ = 0;
 };

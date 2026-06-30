@@ -183,7 +183,7 @@ violations in the internal layer, and very thin test coverage.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 780 | `examples/demo_input`: add a text-entry panel that subscribes to `TextInputEXT::TextInput`/`TextEditing` and toggles `StartTextInput`/`StopTextInput` — exercises the Phase I1 path end-to-end (currently text input has zero demo coverage) | ⬜ | |
+| 780 | `examples/demo_input`: add a text-entry panel that subscribes to `TextInputEXT::TextInput`/`TextEditing` and toggles `StartTextInput`/`StopTextInput` — exercises the Phase I1 path end-to-end (currently text input has zero demo coverage) | ✅ | `DrawTextPanel`: buffer cells (Backspace/Enter editing), last-byte 8 bit-LEDs, IME draft, active indicator, blinking caret; F1 toggles Start/Stop. Builds; runs crash-free 4s under native backend. Visual confirm needs a display (no Wayland screenshot tool here). |
 | 781 | `examples/demo_input`: add vibration/rumble feedback and multi-pad rendering (`PlayerIndex::Two/Three/Four`); currently only `PlayerIndex::One` and no rumble | ⬜ | |
 | 782 | Integration test: drive synthetic `SDL_EVENT_FINGER_*` through the bridge and assert a `GestureSample` (Tap, Flick) is dequeued via `TouchPanel::ReadGesture` — proves the Phase I2 wiring | ⬜ | |
 | 783 | Integration/manual check: relative mouse mode + `SetPosition` cursor warp behave correctly (Phase I4) | ⬜ | |

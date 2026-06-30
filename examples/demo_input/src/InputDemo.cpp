@@ -1,5 +1,6 @@
 #include "InputDemo.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include "Microsoft/Xna/Framework/Input/GamePadButtons.hpp"
@@ -55,6 +56,11 @@ InputDemo::InputDemo()
 
 InputDemo::~InputDemo()
 {
+    // Detach the text-input callbacks before destruction so no event can call into a
+    // destroyed InputDemo, and stop text input mode.
+    TextInputEXT::TextInput = nullptr;
+    TextInputEXT::TextEditing = nullptr;
+    TextInputEXT::StopTextInput();
     delete spriteBatch_;
 }
 
@@ -70,6 +76,33 @@ void InputDemo::LoadContent()
     pixel_ = Graphics::Texture2D(getGraphicsDeviceProperty(), 1, 1);
     Color white{255, 255, 255, 255};
     pixel_.SetData(&white, 1);
+
+    // Text input: collect committed characters and IME composition draft. The window
+    // handle is published by GraphicsDevice during initialization, so StartTextInput
+    // here targets the real window.
+    TextInputEXT::TextInput = [this](char c)
+    {
+        lastTextChar_ = static_cast<unsigned char>(c);
+        switch (static_cast<unsigned char>(c))
+        {
+        case 8:  // Backspace control char (synthesized from the Back key)
+            if (!textBuffer_.empty()) textBuffer_.pop_back();
+            break;
+        case 13: // Enter control char clears the line
+            textBuffer_.clear();
+            break;
+        default:
+            if (textBuffer_.size() < 64) textBuffer_ += c;
+            break;
+        }
+    };
+    TextInputEXT::TextEditing = [this](const std::string& text, int, int)
+    {
+        editBuffer_ = text;
+    };
+
+    TextInputEXT::StartTextInput();
+    textInputActive_ = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,10 +112,24 @@ void InputDemo::LoadContent()
 void InputDemo::Update(GameTime& gameTime)
 {
     (void)gameTime;
-    if (Keyboard::GetState().IsKeyDown(Keys::Escape))
+    ++frame_;
+
+    const KbState kb = Keyboard::GetState();
+    if (kb.IsKeyDown(Keys::Escape))
     {
         Exit();
     }
+
+    // F1 toggles text input on/off, exercising StartTextInput / StopTextInput end-to-end.
+    const bool toggle = kb.IsKeyDown(Keys::F1);
+    if (toggle && !prevToggleKey_)
+    {
+        textInputActive_ = !textInputActive_;
+        if (textInputActive_) TextInputEXT::StartTextInput();
+        else                  TextInputEXT::StopTextInput();
+    }
+    prevToggleKey_ = toggle;
+
     TouchPanel::Update();
 }
 
@@ -107,11 +154,13 @@ void InputDemo::Draw(const GameTime& gameTime)
     DrawRect(10,  10,  440, 380, SECT_BG);  // keyboard section
     DrawRect(10,  400, 440, 190, SECT_BG);  // mouse section
     DrawRect(460, 10,  330, 580, SECT_BG);  // gamepad section
+    DrawRect(10,  600, 1004, 158, SECT_BG); // text input section
 
     DrawKeyboard(20, 20, kb);
     DrawMouse(20, 410, ms);
     DrawGamePad(470, 20, gp);
     DrawTouchPoints(tc);
+    DrawTextPanel(10, 600, 1004, 158);
 
     spriteBatch_->End();
 }
@@ -328,6 +377,63 @@ void InputDemo::DrawTouchPoints(const TC& touches)
         DrawRect(tx - 18, ty - 18, 36, 36, Color{255, 200, 0, 80});
         // Inner dot
         DrawRect(tx - 8,  ty - 8,  16, 16, TOUCH_CLR);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Text input section (TextInputEXT)
+// ---------------------------------------------------------------------------
+
+void InputDemo::DrawTextPanel(int ox, int oy, int w, int h)
+{
+    (void)h;
+    const Color HEADER_ON  {0,   200, 80,  255};
+    const Color HEADER_OFF {160, 30,  30,  255};
+    const Color CELL_PRINT {70,  220, 70,  255};
+    const Color CELL_CTRL  {220, 140, 0,   255};
+    const Color EDIT_CELL  {220, 220, 60,  255};
+    const Color CARET      {255, 255, 255, 255};
+
+    // Active indicator — reflects SDL's real text-input state (falls back to the toggle
+    // flag when no window is available).
+    const bool active = TextInputEXT::IsTextInputActive() || textInputActive_;
+    DrawRect(ox + 12, oy + 12, 26, 26, active ? HEADER_ON : HEADER_OFF);
+
+    // Most recent TextInput byte as 8 bit-LEDs (MSB..LSB) so the actual value is verifiable
+    // (e.g. 'A' = 0100_0001, Backspace = 0000_1000, paste = 0001_0110).
+    const int bx = ox + w - 8 * 22 - 14;
+    for (int b = 0; b < 8; ++b)
+    {
+        const bool on = lastTextChar_ >= 0 && ((lastTextChar_ >> (7 - b)) & 1);
+        DrawRect(bx + b * 22, oy + 12, 18, 18, on ? CELL_PRINT : KEY_OFF);
+    }
+
+    // Committed text buffer: one cell per character (green = printable, orange = control/UTF-8).
+    constexpr int CW = 12, CH = 26, GAP = 2;
+    const int cellsX   = ox + 12;
+    const int cellsY   = oy + 56;
+    const int maxCells = (w - 24) / (CW + GAP);
+    const int total    = static_cast<int>(textBuffer_.size());
+    const int shown    = std::min(total, maxCells);
+    const int start    = total - shown;
+    for (int i = 0; i < shown; ++i)
+    {
+        const unsigned char ch = static_cast<unsigned char>(textBuffer_[start + i]);
+        const bool printable = ch >= 32 && ch < 127;
+        DrawRect(cellsX + i * (CW + GAP), cellsY, CW, CH, printable ? CELL_PRINT : CELL_CTRL);
+    }
+    // Blinking caret while text input is active.
+    if (active && (frame_ / 30) % 2 == 0)
+    {
+        DrawRect(cellsX + shown * (CW + GAP), cellsY, 3, CH, CARET);
+    }
+
+    // IME composition draft (TextEditing) rendered below as yellow cells.
+    const int editY     = oy + 100;
+    const int editShown = std::min(static_cast<int>(editBuffer_.size()), maxCells);
+    for (int i = 0; i < editShown; ++i)
+    {
+        DrawRect(cellsX + i * (CW + GAP), editY, CW, CH, EDIT_CELL);
     }
 }
 
