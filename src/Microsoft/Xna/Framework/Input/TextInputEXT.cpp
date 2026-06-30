@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 
+#include <SDL3/SDL.h>
+
+namespace
+{
+    // WindowHandle stores an SDL_Window* as an integer (FNA models it as IntPtr).
+    inline SDL_Window* ToSdlWindow(std::uintptr_t handle)
+    {
+        return reinterpret_cast<SDL_Window*>(handle);
+    }
+}
+
 namespace Microsoft::Xna::Framework::Input
 {
     std::function<void(char)>                      TextInputEXT::TextInput   = nullptr;
@@ -24,10 +35,20 @@ namespace Microsoft::Xna::Framework::Input
 
     void TextInputEXT::StartTextInput()
     {
+        // Guard against a null window: WindowHandle is not populated until the window
+        // is created (plan_input.md Task 703). FNA passes the handle straight through.
+        if (SDL_Window* window = ToSdlWindow(WindowHandle))
+        {
+            SDL_StartTextInput(window);
+        }
     }
 
     void TextInputEXT::StopTextInput()
     {
+        if (SDL_Window* window = ToSdlWindow(WindowHandle))
+        {
+            SDL_StopTextInput(window);
+        }
     }
 
     void TextInputEXT::SetInputRectangle(const Microsoft::Xna::Framework::Rectangle& /*rectangle*/)
