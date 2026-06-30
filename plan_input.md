@@ -61,8 +61,8 @@ violations in the internal layer, and very thin test coverage.
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 700 | Wire `StartTextInput()`/`StopTextInput()` to `SDL_StartTextInput(window)` / `SDL_StopTextInput(window)` using `WindowHandle` (cast `uintptr_t`→`SDL_Window*`). Replace empty bodies at `TextInputEXT.cpp:25–31` | ✅ | `ToSdlWindow()` helper casts `WindowHandle`; null-guarded (handle unset until Task 703). TU compiles clean. End-to-end needs 703 (populate handle) + 704 (event). |
-| 701 | Wire `SetInputRectangle(Rectangle)` to `SDL_SetTextInputArea`. Replace empty body `TextInputEXT.cpp:33–35` | ⬜ | |
-| 702 | Wire `IsTextInputActive()`→`SDL_TextInputActive`, `IsScreenKeyboardShown(IntPtr)`→`SDL_ScreenKeyboardShown`. Replace `return false` stubs `TextInputEXT.cpp:10–23` | ⬜ | |
+| 701 | Wire `SetInputRectangle(Rectangle)` to `SDL_SetTextInputArea`. Replace empty body `TextInputEXT.cpp:33–35` | ✅ | Builds `SDL_Rect` from `rectangle.X/Y/Width/Height`, cursor offset 0 (matches FNA `SetTextInputRectangle`). Null-guarded. |
+| 702 | Wire `IsTextInputActive()`→`SDL_TextInputActive`, `IsScreenKeyboardShown(IntPtr)`→`SDL_ScreenKeyboardShown`. Replace `return false` stubs `TextInputEXT.cpp:10–23` | ✅ | Both query SDL3 via `WindowHandle`; null-guarded → `false` until handle set (Task 703). |
 | 703 | Populate `TextInputEXT::WindowHandle` at window creation and clear it at destruction (mirror FNA `SDL3_FNAPlatform.cs:463–465`); currently never assigned | ⬜ | |
 | 704 | Handle `SDL_EVENT_TEXT_INPUT` in `SdlInputBridge::ProcessEvent`: UTF-8 decode `event.text.text` → per-char `TextInputEXT::INTERNAL_OnTextInput` (FNA `1162–1184`) | ⬜ | |
 | 705 | Handle `SDL_EVENT_TEXT_EDITING`: decode → `INTERNAL_OnTextEditing(text, start, length)`, including the empty/null composition path (FNA `1186–1204`) | ⬜ | |

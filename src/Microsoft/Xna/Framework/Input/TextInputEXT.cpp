@@ -20,6 +20,10 @@ namespace Microsoft::Xna::Framework::Input
 
     bool TextInputEXT::IsTextInputActive()
     {
+        if (SDL_Window* window = ToSdlWindow(WindowHandle))
+        {
+            return SDL_TextInputActive(window);
+        }
         return false;
     }
 
@@ -28,8 +32,12 @@ namespace Microsoft::Xna::Framework::Input
         return IsScreenKeyboardShown(WindowHandle);
     }
 
-    bool TextInputEXT::IsScreenKeyboardShown(std::uintptr_t /*window*/)
+    bool TextInputEXT::IsScreenKeyboardShown(std::uintptr_t window)
     {
+        if (SDL_Window* w = ToSdlWindow(window))
+        {
+            return SDL_ScreenKeyboardShown(w);
+        }
         return false;
     }
 
@@ -51,8 +59,18 @@ namespace Microsoft::Xna::Framework::Input
         }
     }
 
-    void TextInputEXT::SetInputRectangle(const Microsoft::Xna::Framework::Rectangle& /*rectangle*/)
+    void TextInputEXT::SetInputRectangle(const Microsoft::Xna::Framework::Rectangle& rectangle)
     {
+        if (SDL_Window* window = ToSdlWindow(WindowHandle))
+        {
+            SDL_Rect rect;
+            rect.x = rectangle.X;
+            rect.y = rectangle.Y;
+            rect.w = rectangle.Width;
+            rect.h = rectangle.Height;
+            // Cursor offset 0: FNA passes 0 here as well (no IME cursor hint).
+            SDL_SetTextInputArea(window, &rect, 0);
+        }
     }
 
     void TextInputEXT::INTERNAL_OnTextInput(char c)
