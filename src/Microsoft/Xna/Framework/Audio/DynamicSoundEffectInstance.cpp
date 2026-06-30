@@ -2,10 +2,12 @@
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
 
 #include <algorithm>
-#include <stdexcept>
 
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
@@ -34,11 +36,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     DynamicSoundEffectInstance::~DynamicSoundEffectInstance()
     {
-        if (!disposed_)
+        if (!getIsDisposedProperty())
         {
-            Stop();
-            DestroyStream();
-            disposed_ = true;
+            Dispose();
         }
     }
 
@@ -55,14 +55,14 @@ namespace Microsoft::Xna::Framework::Audio
         return false;
     }
 
-    void DynamicSoundEffectInstance::setIsLoopedProperty(bool /*value*/)
+    void DynamicSoundEffectInstance::setIsLoopedProperty(const bool& /*looped*/)
     {
-        // Dynamic instances cannot loop.
+        // No-op: DynamicSoundEffectInstance cannot be looped.
     }
 
-    bool DynamicSoundEffectInstance::getIsDisposedProperty() const
+    void DynamicSoundEffectInstance::setIsLoopedProperty(bool&& /*looped*/)
     {
-        return disposed_;
+        // No-op: DynamicSoundEffectInstance cannot be looped.
     }
 
     SoundState DynamicSoundEffectInstance::getStateProperty() const
@@ -99,9 +99,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     void DynamicSoundEffectInstance::Play()
     {
-        if (disposed_)
+        if (getIsDisposedProperty())
         {
-            throw std::runtime_error("Cannot Play a disposed DynamicSoundEffectInstance");
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         }
 
         SoundState current = getStateProperty();
@@ -199,6 +199,17 @@ namespace Microsoft::Xna::Framework::Audio
         streams.erase(std::remove(streams.begin(), streams.end(), this), streams.end());
     }
 
+    void DynamicSoundEffectInstance::Dispose()
+    {
+        if (getIsDisposedProperty())
+        {
+            return;
+        }
+        Stop();                          // stops/destroys the dynamic track and deregisters from the dispatcher
+        DestroyStream();                 // frees the SDL audio stream
+        SoundEffectInstance::Dispose();  // releases the base track (none) and marks the instance disposed
+    }
+
     // --- buffer submission ---
 
     void DynamicSoundEffectInstance::SubmitBuffer(
@@ -215,7 +226,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (offset < 0 || count < 0 ||
             offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
         {
-            throw std::out_of_range("buffer range");
+            throw System::ArgumentOutOfRangeException("count");
         }
 
         std::vector<SharpRuntime::bytecs> chunk(
@@ -249,7 +260,14 @@ namespace Microsoft::Xna::Framework::Audio
         if (offset < 0 || count < 0 ||
             offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
         {
-            throw std::out_of_range("buffer range");
+            throw System::ArgumentOutOfRangeException("count");
+        }
+
+        // The format may only switch from int to float while stopped; otherwise the live
+        // S16 stream would be fed F32 bytes. EnsureStream rebuilds the stream on the next Play.
+        if (!isFloat_ && getStateProperty() != SoundState::Stopped)
+        {
+            throw System::InvalidOperationException("Submit a float buffer before Playing!");
         }
 
         isFloat_ = true;
@@ -323,7 +341,12 @@ namespace Microsoft::Xna::Framework::Audio
     void DynamicSoundEffectInstance::EnsureStream()
     {
 #ifdef SOUND_ENABLED
-        if (audioStream_) return;
+        if (audioStream_ && streamIsFloat_ == isFloat_) return;
+        if (audioStream_)
+        {
+            // The sample format changed (int -> float) since the stream was created; rebuild it.
+            DestroyStream();
+        }
 
         SDL_AudioSpec spec{};
         spec.format   = isFloat_ ? SDL_AUDIO_F32LE : SDL_AUDIO_S16LE;
@@ -332,6 +355,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         // dst_spec nullptr → SDL3 uses the device's native format for output conversion.
         audioStream_ = SDL_CreateAudioStream(&spec, nullptr);
+        streamIsFloat_ = isFloat_;
 #endif
     }
 

@@ -56,16 +56,15 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Attempting to set IsLooped on a dynamic instance has no effect.
          *
-         * @param value Ignored.
+         * @param looped Ignored.
          */
-        void setIsLoopedProperty(bool value);
+        void setIsLoopedProperty(const bool& looped) override;
 
-        /**
-         * @brief Gets whether this instance has been disposed.
-         *
-         * @return true if disposed; otherwise false.
-         */
-        [[nodiscard]] bool getIsDisposedProperty() const;
+        /** @brief Attempting to set IsLooped on a dynamic instance has no effect (move overload). */
+        NOXNA void setIsLoopedProperty(bool&& looped) override;
+
+        /** @brief Stops playback, releases the dynamic audio stream, and disposes the instance. */
+        void Dispose() override;
 
         /**
          * @brief Converts a byte count to playback duration for this instance's format.
@@ -141,11 +140,13 @@ namespace Microsoft::Xna::Framework::Audio
          */
         [[nodiscard]] SoundState getStateProperty() const override;
 
+        GetTypeNameHPP()
+
     private:
         SharpRuntime::intcs sampleRate_;
         AudioChannels       channels_;
         bool                isFloat_ = false;
-        bool                disposed_ = false;
+        bool                streamIsFloat_ = false; // format the live audioStream_ was created with
 
         void* dynamicTrack_   = nullptr;
         void* audioStream_    = nullptr; // SDL_AudioStream*
@@ -159,7 +160,5 @@ namespace Microsoft::Xna::Framework::Audio
         void EnsureStream();
         void DestroyStream();
         void SubmitQueuedToStream();
-
-        GetTypeNameHPP()
     };
 }

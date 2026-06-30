@@ -103,7 +103,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @return true if disposed; otherwise false.
          */
-        [[nodiscard]] bool getIsDisposedProperty() const;
+        [[nodiscard]] virtual bool getIsDisposedProperty() const;
 
         /**
          * @brief Gets the playback volume. Range [0, 1].
