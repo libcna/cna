@@ -165,6 +165,11 @@ file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
 # Exclude backend sources from main CNA library to avoid double compilation and conflicts
 list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/Backends/.*")
 
+# Exclude Net / GamerServices sources — they live in CNA_GamerServices and CNA_Net targets
+list(FILTER CNA_SOURCES EXCLUDE REGEX "src/Microsoft/Xna/Framework/GamerServices/.*")
+list(FILTER CNA_SOURCES EXCLUDE REGEX "src/Microsoft/Xna/Framework/Net/.*")
+list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/Net/.*")
+
 # Exclude FFmpeg-dependent sources on platforms where FFmpeg is unavailable
 if(EMSCRIPTEN OR ANDROID)
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Media/VideoDecoder\\.cpp$")
@@ -213,6 +218,34 @@ if(NOT EMSCRIPTEN AND NOT ANDROID)
         ${LIBAVFORMAT_INCLUDE_DIRS}
         ${LIBAVUTIL_INCLUDE_DIRS}
         ${LIBSWRESAMPLE_INCLUDE_DIRS}
+    )
+endif()
+
+# --- GamerServices + Net ---
+if(CNA_ENABLE_NET)
+    file(GLOB_RECURSE CNA_GAMERSERVICES_SOURCES CONFIGURE_DEPENDS
+        "src/Microsoft/Xna/Framework/GamerServices/*.cpp"
+    )
+    add_library(CNA_GamerServices STATIC ${CNA_GAMERSERVICES_SOURCES})
+    target_include_directories(CNA_GamerServices
+        PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(CNA_GamerServices PUBLIC CNA)
+
+    file(GLOB_RECURSE CNA_NET_SOURCES CONFIGURE_DEPENDS
+        "src/Microsoft/Xna/Framework/Net/*.cpp"
+        "src/CNA/Internal/Net/*.cpp"
+    )
+    add_library(CNA_Net STATIC ${CNA_NET_SOURCES})
+    target_include_directories(CNA_Net
+        PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(CNA_Net
+        PUBLIC
+        CNA_GamerServices
+        enet
     )
 endif()
 
@@ -1175,6 +1208,10 @@ if(CNA_BUILD_TESTS)
             gtest_main
             SDL3::SDL3
     )
+
+    if(CNA_ENABLE_NET)
+        target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
+    endif()
 
     if(TARGET easy-gl)
         target_link_libraries(CnaTests PRIVATE easy-gl)
