@@ -1,242 +1,259 @@
-# NEXT.md — CNA Project Handoff
+# NEXT.md — CNA Project Handoff (feature/input branch)
+
+> This handoff covers the **Input subsystem porting** work that is the active focus of the
+> `feature/input` branch. The broader Graphics work is tracked separately in `GRAPHICS_TASKS.md`
+> (and was the subject of the previous handoff); it is **not** the current focus here.
 
 ---
 
 ## 1. Project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model (`Microsoft::Xna::Framework`),
-built on SDL3 with a pluggable 3D graphics backend layer (EasyGL/OpenGL ES 3.2, Vulkan, Bgfx,
-SDL_Renderer). It is a framework/runtime — not a game — designed so that XNA/FNA game code can be
-ported to C++ with minimal API-surface changes.
+built on **SDL3** with a pluggable 3D graphics backend layer (EasyGL/OpenGL ES, Vulkan, Bgfx,
+SDL_Renderer). It is a framework/runtime — not a game — so XNA/FNA game code can be ported to C++
+with minimal API-surface changes.
 
-- **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
-  pixel-readback integration tests.
-- **Current development phase:** Phase 31 — User primitives and draw-call variants (Tasks 251–260).
-  Phase 30 (VertexDeclaration / vertex format accuracy, Tasks 241–250) is complete.
-- **Key architectural decision:** Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
-  (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). The EasyGL backend is primary (most tested).
-  The `sharp-runtime` library (sibling repo) provides all `System.*` types and primitive aliases
-  (`bytecs`, `String`, etc.) that the XNA API surface depends on.
+- **Main goal (this branch):** Port `Microsoft::Xna::Framework::Input` and `…::Input::Touch` from
+  the FNA reference to CNA — not just API surface, but **FNA-faithful runtime behavior** wired to
+  SDL3, CHECKLIST-compliant, and covered by tests. The plan is `plan_input.md` (Phases I1–I7,
+  tasks 700–783).
+- **Current development phase:** **Phase I1 (TextInputEXT SDL3 wiring) is complete.** Next up is
+  **Phase I2 (Touch & gesture pipeline)**, the highest-impact remaining gap.
+- **Key architectural decisions:**
+  - The authoritative behavioral reference is the FNA source tree at
+    `/rv/data/library/github.com/FNA-XNA/FNA/src`.
+  - Non-XNA members inside the `Microsoft::Xna` namespace are tagged with the `NOXNA` marker macro.
+    FNA's `EXT`-suffixed additions are non-XNA; a wholly-non-XNA class is tagged `NOXNA class`.
+  - Real input behavior flows through an internal bridge: SDL3 events →
+    `CNA::Internal::Input::SdlInputBridge` → `InputManager` → XNA state objects.
+  - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`. EasyGL is the primary/tested backend.
 
 ---
 
 ## 2. Current status
 
-### EasyGL backend (`cmake-build-debug`) — primary
-- **Builds:** clean.
-- **Unit tests (`CnaTests`):** 1757/1757 pass.
-- **Integration tests:** ~60 EasyGL integration test executables registered in CMake; most pass.
-  Two pre-existing failures: `easygl_device_dispose_order_test` and one pixel-readback test
-  related to the SpriteBatch multiple-Begin/End bug (see Known Bugs).
+### Build
+- **EasyGL build (`cmake-build-debug`):** clean. **This build dir is configured for `cna_input`**
+  (it was previously mis-wired to the sibling `…/openeggbert/cna` checkout and was reconfigured).
+- **Vulkan (`cmake-build-vulkan`) and Bgfx (`cmake-build-bgfx`) build dirs are still wired to the
+  sibling `…/openeggbert/cna` repo** — see Section 4. They were not used or fixed for input work.
 
-### Vulkan backend (`cmake-build-vulkan`)
-- **Builds:** clean (single-threaded `-j1` required for link stability).
-- **Vulkan integration tests:** 13 registered; 11/11 historically pass. Latest additions:
-  `vulkan_scissor_test` (Task 329, 4/4 pixel checks).
+### Tests
+- **1774 / 1774 unit tests pass** (last EasyGL run, `cmake-build-debug/CnaTests`). This includes:
+  - `TextInputEXTTest` — 9 tests (static API, dispatch, window-handle property, null-guards).
+  - `SdlInputBridgeTextInputTest` — 8 tests (synthetic SDL events through `ProcessEvent`:
+    TEXT_INPUT/EDITING dispatch, control-char synthesis, Ctrl+V paste + suppress lifecycle).
 
-### Bgfx backend (`cmake-build-bgfx`)
-- Builds when configured. `Bgfx_VertexFormatMapping` test (Task 249): 47/47 mapping checks pass.
-  No pixel-readback for Bgfx (no readback API).
+### Apps / libraries available
+- `CNA` static library (XNA 4.0 API surface).
+- `CnaTests` (Google Test unit suite).
+- `cna_demo_input` — interactive input demo (keyboard, mouse, gamepad, touch, **and a new text
+  input panel**). Builds; runs crash-free.
 
-### Recently implemented (Phases 30–31, Tasks 241–251, 329)
-- Full VertexDeclaration test suite (compact formats, multi-channel UV, unusual offsets, tangent/binormal).
-- EasyGL vertex format integration test covering strides 16/20/24/32 with pixel readback.
-- Bgfx vertex layout mapping helper (`BgfxVertexFormatHelper.hpp`) for all 12 VEF + 13 VEU values.
-- `docs/vertex-format-support.md` — per-backend table for all formats and usages.
-- Vulkan scissor test (`vulkan_scissor_test.cpp`) — ScissorTestEnable + ScissorRectangle pixel readback.
-- `DrawUserPrimitives` audit (Task 251): fixed silent-return bug in 4 typed overloads (now throw on
-  missing effect); added VertexDeclaration-based overload matching FNA's second generic overload;
-  exposed `GraphicsDevice::PrimitiveVerts()` as public NOXNA static; 12/12 unit tests.
+### Recently implemented (Phase I1 — tasks 700–708, + extras)
+- `TextInputEXT` fully wired to SDL3: `StartTextInput`/`StopTextInput`/`SetInputRectangle`/
+  `IsTextInputActive`/`IsScreenKeyboardShown`.
+- Window handle published to `TextInputEXT` by `GraphicsDevice` at window create/destroy.
+- `SdlInputBridge` dispatches `SDL_EVENT_TEXT_INPUT` and `SDL_EVENT_TEXT_EDITING`, and synthesizes
+  control-character `TextInput` for Home/End/Back/Tab/Enter/Delete and Ctrl+V (with suppress).
+- `TextInputEXT` tagged as a `NOXNA` FNA extension; `WindowHandle` converted to a property.
+- New `demo_input` text panel (font-free: buffer cells, last-byte bit-LEDs, IME draft, caret;
+  F1 toggles Start/Stop).
 
 ### What does NOT work yet
-- Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
-- `DrawUserIndexedPrimitives` typed overloads have not been audited against FNA (Task 252).
-- No pixel-readback tests for `DrawUserPrimitives` (Tasks 255–256 pending).
-- No pixel-readback tests for `DrawUserIndexedPrimitives` (Tasks 257–258 pending).
-- Bgfx backend lacks pixel readback — integration tests there are smoke-only.
-- 376 tasks still ⬜ out of 539 in `GRAPHICS_TASKS.md`.
+- **Touch gestures are dead end-to-end** (Tap/DoubleTap/Hold/Drag/Flick/Pinch). The full
+  `GestureDetector` is ported but unreachable — SDL finger events never reach it (Phase I2).
+- **Mouse:** `SetPosition` does not warp the cursor; relative-mouse-mode is a dead flag; `ClickedEXT`
+  never fires (Phase I4).
+- **Keyboard:** `GetPressedKeys()` order is non-deterministic; SDL keycode→Keys map is incomplete;
+  `GetKeyFromScancodeEXT` is an identity stub (Phase I5).
+- **GamePad:** EXT buttons (Misc1/Paddles/TouchPad) never reach state; `PacketNumber` is always 0;
+  LightBar/Gyro/Accelerometer EXT reads are stubs (Phase I3).
+- **demo_input text panel is not visually verified** (see Section 5).
 
 ---
 
 ## 3. Recent changes
 
-| Task | Files | Change |
-|------|-------|--------|
-| 251 | `GraphicsDevice.hpp/.cpp`, `DrawUserPrimitivesTests.cpp` | Fixed 4 typed overloads to throw on missing effect; added VertexDeclaration overload; exposed `PrimitiveVerts()` public static; 12/12 tests |
-| 329 | `examples/vulkan_scissor_test.cpp`, `CMakeLists.txt` | 2-frame scissor pixel-readback test (no scissor → both quadrants red; scissor top-left 32×32 → inside red, outside green) |
-| 250 | `docs/vertex-format-support.md` | Per-backend tables for all 12 VEF + 13 VEU values; stride-keyed layout limitation documented |
-| 249 | `include/CNA/Internal/Backends/Bgfx/BgfxVertexFormatHelper.hpp`, `examples/bgfx_vertex_format_test.cpp` | Bgfx mapping helper + 47-check mapping test + 4 VertexBuffer smoke tests |
-| 247 | `examples/easygl_vertex_formats_test.cpp` | EasyGL strides 16/20/24/32 pixel-readback test |
-| 241–246 | `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp` | Vertex declaration audit: compact format, multi-channel UV, unusual offset, tangent/binormal, Equals/Hash/ToString |
+All on `feature/input` (most recent first):
+
+| Commit | Change |
+|--------|--------|
+| `53bc88e` | Task 780: text input panel in `demo_input` (`InputDemo.hpp/.cpp`) |
+| `41852ef` | Bridge-level test `SdlInputBridgeTextInputTests.cpp` (Tasks 704–706) |
+| `d31e7d1` | Task 708: `TextInputEXTTests.cpp` — completes Phase I1 |
+| `deb0835` | Task 706: control-char synthesis + Ctrl+V suppress (`SdlInputBridge.cpp`) |
+| `d8f750a` | Task 705: dispatch `SDL_EVENT_TEXT_EDITING` |
+| `3827c35` | Task 704: dispatch `SDL_EVENT_TEXT_INPUT` |
+| `03a6e56` | Task 703: publish window handle to `TextInputEXT` (`GraphicsDevice.cpp`) |
+| `02dea2d` | Task 707: `TextInputEXT` → `NOXNA` class + `WindowHandle` property |
+| `483243a` | Tasks 701–702: `SetInputRectangle` + `Is*` queries → SDL3 |
+| `07e99c4` | Task 700: `Start`/`StopTextInput` → SDL3 |
+| `c3a1c9c` | Added `plan_input.md` (Phases I1–I7, tasks 700–783) |
+
+- **Files added:** `plan_input.md`, `tests/.../Input/TextInputEXTTests.cpp`,
+  `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`.
+- **Files modified:** `TextInputEXT.hpp/.cpp`, `SdlInputBridge.cpp`, `GraphicsDevice.cpp`,
+  `demo_input/src/InputDemo.hpp/.cpp`.
+- **Behavior changed:** `SdlInputBridge` no longer drops key repeats outright (it re-emits text
+  control chars on repeat while leaving pressed-key state unchanged).
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No single hard blocker** at this moment. The project is healthy and builds cleanly.
+**There is no hard blocker on the EasyGL track** — it builds clean and all 1774 unit tests pass.
+Two practical issues matter for the next session:
 
-The next natural friction point is Task 252: auditing `DrawUserIndexedPrimitives` against FNA.
-The typed overloads (8 overloads: 4 × VPC/VPT/VPCT/VPNT × 16-bit/32-bit) were written before the
-Task 251 audit revealed that missing-effect was silently ignored. The same bug likely exists there.
-Additionally, FNA has a second generic overload for indexed primitives (with explicit
-`VertexDeclaration`) which may be missing in CNA.
+1. **Vulkan/Bgfx build dirs are mis-wired (practical gotcha).**
+   - **Symptom:** `cmake-build-vulkan/CMakeCache.txt` and `cmake-build-bgfx/CMakeCache.txt` have
+     `CMAKE_HOME_DIRECTORY=/rv/data/development/github.com/openeggbert/cna` (the **sibling** repo),
+     not this `cna_input` checkout. Building there compiles the wrong source tree and will not
+     include input changes.
+   - **Affected:** any Vulkan/Bgfx verification of input work.
+   - **Already tried:** `cmake-build-debug` (EasyGL) hit the same problem and was fixed by
+     `rm -rf cmake-build-debug && cmake -S … -B … -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL …`.
+     The Vulkan/Bgfx dirs have **not** been reconfigured.
 
-Affected files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
-`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
+2. **Highest-impact functional gap: Touch gestures are non-functional end-to-end** (the main
+   reason to start Phase I2). SDL finger events feed only `InputManager::SetTouchState`; they never
+   call `TouchPanel::INTERNAL_onTouchEvent`, so `GestureDetector` never runs. See `plan_input.md`
+   Phase I2 (tasks 710–722). Affected: `SdlInputBridge.cpp` (~finger-event cases), `TouchPanel.cpp`,
+   `FrameworkDispatcher.cpp` (the `touchDeviceExists_` gate on `TouchPanel::Update()`).
 
 ---
 
 ## 5. Known bugs and limitations
 
-| Status | Issue |
-|--------|-------|
-| **Confirmed bug** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. Workaround: merge all sprite draws into one Begin/End. |
-| **Suspected bug** | `DrawUserIndexedPrimitives` typed overloads (8 overloads) likely have the same silent-return-on-missing-effect bug that was fixed in `DrawUserPrimitives` (Task 251). Not yet verified. |
-| **Incomplete** | `DrawUserPrimitives` and `DrawUserIndexedPrimitives`: no pixel-readback integration tests yet (Tasks 255–258). |
-| **Incomplete** | Bgfx backend: stride-keyed layout only covers strides 16/20/24/32/52; arbitrary VertexDeclaration layouts not supported. |
-| **Incomplete** | EasyGL backend: same stride-keyed limitation as Bgfx. |
-| **Incomplete** | Vulkan backend: Tangent and Binormal `VertexElementUsage` values are not mapped (no Vulkan semantic equivalent). |
-| **Incomplete** | VertexElementUsage Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently return `bgfx::Attrib::Count` / no-op. |
-| **Incomplete** | Texture2D completeness audit not started (Phase 32, Tasks 261–270). |
-| **Needs verification** | `easygl_device_dispose_order_test` pre-existing failure — root cause unknown. |
-| **Incomplete** | SDL_Renderer backend: `CreateVertexBuffer` always throws `ThrowNo3D`. No 3D support at all. |
+| Status | Item |
+|--------|------|
+| **Confirmed** | Touch gestures never fire from real input — SDL finger events bypass `TouchPanel::INTERNAL_onTouchEvent` / `GestureDetector`; `TouchPanel::Update()` is gated behind `touchDeviceExists_`, set only by the never-called `SetFinger`. |
+| **Confirmed** | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
+| **Incomplete** | Mouse: `SetPosition` no warp; `IsRelativeMouseModeEXT` dead; `ClickedEXT` never fires; dead `INTERNAL_*` fields (Phase I4). |
+| **Incomplete** | Keyboard: `GetPressedKeys()` unordered; SDL keycode→Keys map missing F13–F24/Apps/Volume/locale fallbacks; `GetKeyFromScancodeEXT` is identity stub; no scancode mode (Phase I5). |
+| **Incomplete** | GamePad: EXT buttons unmapped; `PacketNumber`=0; LightBar/Gyro/Accelerometer stubs; `GamePadCapabilities` uses raw public fields instead of properties (Phase I3). |
+| **Needs verification** | `demo_input` text panel not visually confirmed: it builds and runs crash-free ~4s under the native backend, but no Wayland screenshot tool is available here and forcing the X11 driver makes SDL exit. A human at a display should run it and type. |
+| **Intentional deviation** | `TextInputEXT::TextInput` is `char`-based, so `SDL_EVENT_TEXT_INPUT` is forwarded **per UTF-8 byte** (appending rebuilds the UTF-8 string). FNA decodes to UTF-16 because C# strings are UTF-16. |
+| **Pre-existing (not from input work)** | Working tree shows `D .claude/settings.json` (deleted) and untracked `vendor/wgpu-native/`. These predate this branch's input work and were **not** committed. |
 
 ---
 
 ## 6. Architecture notes
 
-### Main modules
-
+### Main modules (input)
 | Layer | Location | Notes |
 |-------|----------|-------|
-| XNA public API | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
-| Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, `IVertexBuffer`, etc. |
-| EasyGL backend | `src/CNA/Internal/Backends/EasyGL/` | Primary; OpenGL ES 3.2 via EasyGL wrapper |
-| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | Uses VulkanVertexFormatHelper.hpp for per-format mapping |
-| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | Uses BgfxVertexFormatHelper.hpp; no readback |
-| CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging, math |
-| sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types, primitive aliases |
+| XNA public API | `include/Microsoft/Xna/Framework/Input/**` | Must match XNA 4.0 / FNA; FNA `EXT` additions tagged `NOXNA`. |
+| Internal bridge | `src/CNA/Internal/Input/SdlInputBridge.cpp` | Single entry point `ProcessEvent(const SDL_Event&)`; knows SDL types. |
+| Internal state | `src/CNA/Internal/Input/InputManager.cpp` | Accumulates per-device state; exposes `GetKeyboardState/GetMouseState/GetRawGamePadState/GetTouchState`. |
+| Gesture engine | `src/CNA/Internal/Input/GestureDetector.cpp` | Full ported state machine — currently unreachable (Phase I2). |
+| FNA reference | `/rv/data/library/github.com/FNA-XNA/FNA/src/Input` | Authoritative behavior. |
 
-### Critical invariants
-
-- **`NOXNA` macro** tags every non-XNA extension in public headers.
-- **C# properties** → `getXProperty()` / `setXProperty()` convention (never public fields for XNA API).
-- **Static readonly** → `static const` in `.hpp` + definition in `.cpp`.
-- **Type aliases** from `SharpRuntime/SharpRuntimeHelper.hpp` (`bytecs`, `Single`, `String`, …) must
-  be used on XNA API surfaces — never raw `uint8_t`, `float`, `std::string` directly.
-- **Backend selection** is compile-time: no runtime branch between backends in the same binary.
-- **Stride-keyed vertex layout:** EasyGL, Vulkan, and Bgfx currently build VAO/pipeline/layout from
-  a map keyed by vertex stride. This means only strides 16/20/24/32/52 work correctly for 3D.
-  Arbitrary `VertexDeclaration` layouts are a future task.
-- **Doxygen required** on every public `.hpp` member: full `/** @brief … @param … @return */` block.
-- **SPDX header** `// SPDX-License-Identifier: MS-PL` required at top of every `.hpp` and `.cpp`.
-
-### Data flow (3D draw call)
-
+### Data flow (input)
 ```
-Game calls GraphicsDevice::DrawUserPrimitives(...)
-  → validates effect applied
-  → calls VertexCountForUserPrimitives() / PrimitiveVerts()
-  → copies vertex data into transient IVertexBuffer via backend_->CreateVertexBuffer()
-  → calls backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, gpuParams)
-  → backend maps VertexDeclaration stride → VAO/pipeline/layout
-  → GPU draw
+SDL_PollEvent  (Game::PollEvents)
+  → SdlInputBridge::ProcessEvent(event)        // switch on event.type
+      → InputManager::Set*State(...)           // keyboard / mouse / gamepad / touch snapshot
+      → TextInputEXT::INTERNAL_OnText*(...)     // text input / editing (Phase I1)
+      → (Phase I2 target) TouchPanel::INTERNAL_onTouchEvent(...) → GestureDetector
+  → Keyboard/Mouse/GamePad/TouchPanel::GetState()  read by game code each frame
 ```
 
-### FNA reference
-
-The authoritative behavioral reference is at `/rv/data/library/github.com/FNA-XNA/FNA/src`.
-When CNA diverges from FNA intentionally, document it with an inline `//` comment in the `.cpp`.
+### Invariants / boundaries that must stay stable
+- `NOXNA` marks every non-XNA member in the `Microsoft::Xna` namespace; include `CNA/CNAHelper.hpp`
+  where it is used. A wholly-non-XNA class uses `NOXNA class` (precedent: `ShaderEffect`).
+- `// SPDX-License-Identifier: MS-PL` at the top of every `.hpp` and `.cpp`.
+- C# properties → `getXProperty()` / `setXProperty()` (no public fields for XNA API).
+- XNA/FNA API names are frozen — no renames.
+- The window handle is published by `GraphicsDevice` at create/destroy; `TextInputEXT` reads it via
+  `getWindowHandleProperty()`. (Note: `Mouse.WindowHandle` and `TouchPanel.WindowHandle` are **not**
+  yet published — a follow-up, since FNA sets all three together in `DisposeWindow`.)
+- `SdlInputBridge::ProcessEvent` is the single SDL-event funnel; do not add a second event path.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# Configure (EasyGL — primary)
-cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+# Configure EasyGL build for THIS repo (already done; redo only if the cache is wrong)
+cmake -S /rv/data/development/github.com/openeggbert/cna_input \
+      -B /rv/data/development/github.com/openeggbert/cna_input/cmake-build-debug \
+      -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
 
-# Configure (Vulkan)
-cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
+# Build library / tests / demo
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
+cmake --build cmake-build-debug --target cna_demo_input -j"$(nproc)"
 
-# Configure (Bgfx)
-cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
+# Run all unit tests
+./cmake-build-debug/CnaTests
 
-# Build CNA library (EasyGL)
-cmake --build cmake-build-debug --target CNA -j$(nproc)
+# Run the input/text test suites specifically
+./cmake-build-debug/CnaTests --gtest_filter='TextInputEXTTest.*:SdlInputBridgeTextInputTest.*:*Input*:*Touch*'
 
-# Build all tests (EasyGL)
-cmake --build cmake-build-debug --target CnaTests -j$(nproc)
+# Run the input demo (needs a display; F1 toggles text input, Esc exits)
+./cmake-build-debug/cna_demo_input
 
-# Run unit tests
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests
-
-# Run specific test suite
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests --gtest_filter="PrimitiveVertsTest.*"
-
-# Build Vulkan (single-threaded to avoid linker races)
-cmake --build cmake-build-vulkan --target CNA -j1
-
-# Run a specific integration test (headless, EasyGL)
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/cna_test_easygl_vertex_formats
-
-# CTest (all registered tests, EasyGL build)
-cd cmake-build-debug && ctest --output-on-failure
+# Verify a build dir's source wiring (should print …/cna_input)
+grep CMAKE_HOME_DIRECTORY cmake-build-debug/CMakeCache.txt
 ```
+
+> No project-wide lint/format target was observed. Doxygen config (`Doxyfile`) exists but is not a
+> build/verify step.
 
 ---
 
 ## 8. Next smallest tasks
 
-In priority order:
+In priority order. Each is one focused session.
 
-1. **Task 252 — Audit `DrawUserIndexedPrimitives` overloads against FNA**
-   - Goal: same audit as Task 251 — check all 8 typed overloads for the silent-return bug; check
-     whether a VertexDeclaration + raw-pointer overload is missing; fix and add unit tests.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
-     `tests/Microsoft/Xna/Framework/Graphics/DrawUserIndexedPrimitivesTests.cpp` (new).
-   - Verification: `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` → all pass.
+1. **Task 710 — Route SDL finger events into the gesture pipeline** (start of Phase I2).
+   - Goal: in `SdlInputBridge::ProcessEvent` finger cases, also call
+     `TouchPanel::INTERNAL_onTouchEvent(touchId, state, x, y, dx, dy)` (normalized coords + deltas)
+     alongside the existing `InputManager::SetTouchState`, so `GestureDetector` receives input.
+   - Files: `src/CNA/Internal/Input/SdlInputBridge.cpp`, `…/Input/Touch/TouchPanel.{hpp,cpp}`.
+   - Verify: build `CnaTests`; add a bridge-level test feeding synthetic `SDL_EVENT_FINGER_*` and
+     asserting a `GestureSample` is dequeued via `TouchPanel::ReadGesture` (mirror
+     `SdlInputBridgeTextInputTests.cpp`). `./cmake-build-debug/CnaTests --gtest_filter='*Gesture*'`.
 
-2. **Task 255 — Pixel-readback test for `DrawUserPrimitives` with `VertexPositionColor`**
-   - Goal: EasyGL integration test: draw a colored triangle via `DrawUserPrimitives<VertexPositionColor>`,
-     read back a pixel from the centre, assert color matches.
-   - Files: `examples/easygl_draw_user_primitives_vpc_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: build + run test executable → exit 0.
+2. **Task 712 — Fix the `TouchPanel::Update()` gate so gestures can tick.**
+   - Goal: `FrameworkDispatcher.cpp` only calls `TouchPanel::Update()` when `touchDeviceExists_` is
+     true, but that flag is set solely by the never-called `SetFinger`. Set it on the real input path.
+   - Files: `…/Input/Touch/TouchPanel.cpp`, `…/Framework/FrameworkDispatcher.cpp`.
+   - Verify: extend the Task-710 gesture test to require `Hold`/`Flick` (which need `OnUpdate`).
 
-3. **Task 256 — Pixel-readback test for `DrawUserPrimitives` with custom `VertexDeclaration`**
-   - Goal: same as Task 255 but using the new VertexDeclaration-based overload with a custom struct.
-   - Files: `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: build + run test executable → exit 0.
+3. **Task 717 — GestureDetector CHECKLIST hygiene (tiny).**
+   - Goal: change `GestureDetector` SPDX `MIT`→`MS-PL`; remove forbidden "ported from FNA / MonoGame"
+     comments (CLAUDE.md forbids them).
+   - Files: `include/CNA/Internal/Input/GestureDetector.hpp`, `src/CNA/Internal/Input/GestureDetector.cpp`.
+   - Verify: `cmake --build cmake-build-debug --target CNA`.
 
-4. **Task 259 — Validate user primitive arrays for null / invalid offsets / invalid count**
-   - Goal: unit tests verifying that `DrawUserPrimitives` throws `std::invalid_argument` or
-     `System::ArgumentOutOfRangeException` for null data, negative offset, negative count.
-   - Files: `tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp` (extend).
-   - Verification: `CnaTests --gtest_filter="DrawUserPrimitivesValidation.*"`.
+4. **Task 715 — `TouchLocation::ToString`/`GetHashCode` FNA fidelity + tests.**
+   - Goal: `ToString()` → `"{Position:…}"`; reconcile `GetHashCode()` to FNA's `Id + Position`.
+   - Files: `…/Input/Touch/TouchLocation.{hpp,cpp}`, `tests/.../Input/TouchInputTests.cpp`.
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter='*Touch*'`.
 
-5. **Task 261 — Audit every `Texture2D` constructor and method against FNA** (Phase 32 start)
-   - Goal: compare `Texture2D.hpp/.cpp` with FNA's `Texture2D.cs`; document missing overloads,
-     wrong signatures, missing bounds checks.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp`.
-   - Verification: compile + produce a written audit list.
+5. **Task 716 — `TouchPanel::ReadGesture()` throws `System::InvalidOperationException`** (instead of
+   `std::logic_error`); add a test for the empty-queue throw.
+   - Files: `…/Input/Touch/TouchPanel.cpp`, `tests/.../Input/TouchInputTests.cpp`.
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter='*Touch*'`.
 
 ---
 
 ## 9. Do not do yet
 
-- **No Texture2D implementation changes** until the Task 261 audit is complete — the scope is unknown.
-- **No refactor of the stride-keyed vertex layout system** — it is load-bearing for all 3D tests;
-  changes need their own dedicated phase with full regression testing.
-- **No changes to the Bgfx backend draw path** — pixel readback is unavailable there, so correctness
-  cannot be verified.
-- **No SpriteBatch Vulkan multi-batch fix** until the root cause is isolated — a wrong fix could
-  break single-batch rendering silently.
-- **No API renames or namespace moves** — XNA API names are frozen by spec.
-- **No mass Doxygen cleanup passes** — add Doxygen only when touching a file for another reason.
-- **No new sharp-runtime types** unless a concrete CNA task requires them.
-- **No broad `GetData`/`SetData` rewrite** — wait for Phase 32 audit to determine actual scope.
+- **Do not reconfigure or commit build directories.** `cmake-build-*` are gitignored; if Vulkan/Bgfx
+  builds are needed, reconfigure them locally for `cna_input`, but do not commit the dirs.
+- **Do not commit the pre-existing working-tree changes** (`D .claude/settings.json`, untracked
+  `vendor/wgpu-native/`) — they are unrelated to the input work.
+- **Do not start Mouse/Keyboard/GamePad phases (I3–I5) before Touch (I2)** — touch is the largest
+  functional gap and the agreed next focus.
+- **No API renames or namespace moves** — XNA/FNA names are frozen.
+- **No broad refactor of `SdlInputBridge` or `InputManager`** — keep the single-funnel design;
+  add cases, do not restructure.
+- **No graphics changes** on this branch — graphics is tracked in `GRAPHICS_TASKS.md` on its own track.
+- **Do not change the `TextInputEXT` char-based callback signature** to widen it (UTF-16/char32) —
+  that is a deliberate, documented deviation and would ripple through the public EXT API.
 
 ---
 
@@ -246,13 +263,16 @@ In priority order:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
-Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress (Task 251 done);
-Task 329 complete; 1757/1757 unit tests pass.
+Context: on branch feature/input. Phase I1 (TextInputEXT SDL3 wiring, tasks 700-708) is complete;
+1774/1774 unit tests pass on the EasyGL build (cmake-build-debug, which is correctly wired to
+cna_input). Touch gestures are dead end-to-end (Phase I2) — that is the next focus.
 
-Next: Task 252 — audit DrawUserIndexedPrimitives overloads against FNA.
-Check all 8 typed overloads for the silent-return-on-missing-effect bug (same as Task 251).
-Check if the VertexDeclaration + raw-pointer overload is present; add it if missing.
-Add unit tests in DrawUserIndexedPrimitivesTests.cpp.
-Build: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
-Update GRAPHICS_TASKS.md (mark 252 ✅) and NEXT.md after finishing.
+Next: Task 710 — in SdlInputBridge::ProcessEvent finger cases, also call
+TouchPanel::INTERNAL_onTouchEvent(...) so GestureDetector receives input. Then add a bridge-level
+test feeding synthetic SDL_EVENT_FINGER_* events and asserting a GestureSample via
+TouchPanel::ReadGesture (mirror SdlInputBridgeTextInputTests.cpp).
+
+Build/test: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
+            ./cmake-build-debug/CnaTests --gtest_filter='*Touch*:*Gesture*'
+Make one small verified change, then update NEXT.md (and plan_input.md task status) before finishing.
 ```
