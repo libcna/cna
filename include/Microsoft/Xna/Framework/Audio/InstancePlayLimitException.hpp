@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "System/Runtime/InteropServices/ExternalException.hpp"
 #include <exception>
-#include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Thrown when the maximum number of simultaneous sound instances is exceeded. */
-    class InstancePlayLimitException final : public std::runtime_error
+    class InstancePlayLimitException final
+        : public System::Runtime::InteropServices::ExternalException
     {
     public:
-        /** @brief Constructs an InstancePlayLimitException with a default message. */
-        InstancePlayLimitException()
-            : std::runtime_error("Sound instance play limit exceeded") {}
+        /** @brief Constructs an InstancePlayLimitException with the default external-component message. */
+        InstancePlayLimitException() = default;
 
         /**
          * @brief Constructs an InstancePlayLimitException with the given message.
@@ -21,7 +22,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @param message Error description.
          */
         explicit InstancePlayLimitException(const std::string& message)
-            : std::runtime_error(message) {}
+            : System::Runtime::InteropServices::ExternalException(message) {}
 
         /**
          * @brief Constructs an InstancePlayLimitException with a message and an inner exception.
@@ -30,16 +31,6 @@ namespace Microsoft::Xna::Framework::Audio
          * @param innerException Underlying exception that caused this one.
          */
         InstancePlayLimitException(const std::string& message, std::exception_ptr innerException)
-            : std::runtime_error(message), innerException_(innerException) {}
-
-        /**
-         * @brief Returns the inner exception that caused this exception, if any.
-         *
-         * @return Inner exception pointer, or null.
-         */
-        [[nodiscard]] std::exception_ptr InnerException() const { return innerException_; }
-
-    private:
-        std::exception_ptr innerException_;
+            : System::Runtime::InteropServices::ExternalException(message, std::move(innerException)) {}
     };
 }

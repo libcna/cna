@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "System/Runtime/InteropServices/ExternalException.hpp"
 #include <exception>
-#include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Thrown when no audio hardware is available on the current system. */
-    class NoAudioHardwareException final : public std::runtime_error
+    class NoAudioHardwareException final
+        : public System::Runtime::InteropServices::ExternalException
     {
     public:
-        /** @brief Constructs a NoAudioHardwareException with a default message. */
-        NoAudioHardwareException()
-            : std::runtime_error("No audio hardware is available") {}
+        /** @brief Constructs a NoAudioHardwareException with the default external-component message. */
+        NoAudioHardwareException() = default;
 
         /**
          * @brief Constructs a NoAudioHardwareException with the given message.
@@ -21,7 +22,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @param message Error description.
          */
         explicit NoAudioHardwareException(const std::string& message)
-            : std::runtime_error(message) {}
+            : System::Runtime::InteropServices::ExternalException(message) {}
 
         /**
          * @brief Constructs a NoAudioHardwareException with a message and an inner exception.
@@ -30,16 +31,6 @@ namespace Microsoft::Xna::Framework::Audio
          * @param innerException Underlying exception that caused this one.
          */
         NoAudioHardwareException(const std::string& message, std::exception_ptr innerException)
-            : std::runtime_error(message), innerException_(innerException) {}
-
-        /**
-         * @brief Returns the inner exception that caused this exception, if any.
-         *
-         * @return Inner exception pointer, or null.
-         */
-        [[nodiscard]] std::exception_ptr InnerException() const { return innerException_; }
-
-    private:
-        std::exception_ptr innerException_;
+            : System::Runtime::InteropServices::ExternalException(message, std::move(innerException)) {}
     };
 }
