@@ -25,6 +25,7 @@ namespace Microsoft::Xna::Framework::Audio
         // These members are protected so DynamicSoundEffectInstance can manage its own state.
         void* track_        = nullptr;
         bool  playing_      = false;
+        bool  hasStarted_   = false; // true once Play() has been called; never reset (gates IsLooped)
         SoundState State_   = SoundState::Stopped;
 
     private:
@@ -90,11 +91,11 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Multi-listener overload; only a single listener is supported.
          *
-         * Throws std::runtime_error if listenerCount > 1.
-         *
-         * @param listeners    Array of listener descriptions.
+         * @param listeners     Array of listener descriptions.
          * @param listenerCount Number of listeners (must be 1).
          * @param emitter       Position and orientation of the sound emitter.
+         * @throws System::ArgumentNullException if @p listeners is null.
+         * @throws System::NotSupportedException if @p listenerCount is not 1.
          */
         void Apply3D(const AudioListener* listeners, int listenerCount, const AudioEmitter& emitter);
 
@@ -113,7 +114,7 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] float getVolumeProperty() const;
 
         /**
-         * @brief Sets the playback volume. Range [0, 1].
+         * @brief Sets the playback volume. Values are passed through unclamped (matching FNA).
          *
          * @param volume New volume value.
          */
@@ -133,6 +134,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets the stereo pan. Range [-1 (left), 1 (right)].
          *
          * @param pan New pan value.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
+         * @throws System::ArgumentOutOfRangeException if @p pan is outside [-1, 1].
          */
         void setPanProperty(const float& pan);
 
@@ -167,6 +170,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets whether the sound loops continuously.
          *
          * @param looped New loop flag.
+         * @throws System::InvalidOperationException if the instance has already been played.
          */
         virtual void setIsLoopedProperty(const bool& looped);
 

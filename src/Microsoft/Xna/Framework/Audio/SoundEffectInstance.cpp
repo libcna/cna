@@ -6,8 +6,13 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
 #include <utility>
+
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
@@ -78,6 +83,7 @@ namespace Microsoft::Xna::Framework::Audio
         : soundEffect_(other.soundEffect_)
         , track_(other.track_)
         , playing_(other.playing_)
+        , hasStarted_(other.hasStarted_)
         , State_(other.State_)
         , IsLooped_(other.IsLooped_)
         , isDisposed_(other.isDisposed_)
@@ -88,6 +94,7 @@ namespace Microsoft::Xna::Framework::Audio
         other.soundEffect_ = nullptr;
         other.track_       = nullptr;
         other.playing_     = false;
+        other.hasStarted_  = false;
         other.State_       = SoundState::Stopped;
         other.isDisposed_  = true;
     }
@@ -102,6 +109,7 @@ namespace Microsoft::Xna::Framework::Audio
             soundEffect_ = other.soundEffect_;
             track_       = other.track_;
             playing_     = other.playing_;
+            hasStarted_  = other.hasStarted_;
             State_       = other.State_;
             IsLooped_    = other.IsLooped_;
             isDisposed_  = other.isDisposed_;
@@ -112,6 +120,7 @@ namespace Microsoft::Xna::Framework::Audio
             other.soundEffect_ = nullptr;
             other.track_       = nullptr;
             other.playing_     = false;
+            other.hasStarted_  = false;
             other.State_       = SoundState::Stopped;
             other.isDisposed_  = true;
         }
@@ -135,8 +144,11 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (isDisposed_)
         {
-            throw std::runtime_error("Cannot Play a disposed SoundEffectInstance");
+            throw System::ObjectDisposedException("SoundEffectInstance");
         }
+
+        // Once started, IsLooped can no longer be changed (matches FNA's hasStarted gate).
+        hasStarted_ = true;
 
 #ifdef SOUND_ENABLED
         // If paused, resume instead of restarting.
@@ -300,12 +312,16 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::Apply3D(const AudioListener* listeners, int listenerCount,
                                       const AudioEmitter& emitter)
     {
+        if (listeners == nullptr)
+        {
+            throw System::ArgumentNullException("listeners");
+        }
         if (listenerCount == 1)
         {
             Apply3D(listeners[0], emitter);
             return;
         }
-        throw std::runtime_error("Only one AudioListener is supported");
+        throw System::NotSupportedException("Only one listener is supported.");
     }
 
     bool SoundEffectInstance::getIsDisposedProperty() const
@@ -320,7 +336,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::setVolumeProperty(const float& volume)
     {
-        Volume_ = (volume < 0.0f) ? 0.0f : ((volume > 1.0f) ? 1.0f : volume);
+        Volume_ = volume; // FNA passes the value straight through, without clamping
 
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrack(track_);
@@ -343,7 +359,15 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::setPanProperty(const float& pan)
     {
-        Pan_ = (pan < -1.0f) ? -1.0f : ((pan > 1.0f) ? 1.0f : pan);
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
+        if (pan > 1.0f || pan < -1.0f)
+        {
+            throw System::ArgumentOutOfRangeException("value");
+        }
+        Pan_ = pan;
 
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrack(track_);
@@ -395,11 +419,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::setIsLoopedProperty(const bool& looped)
     {
-        if (playing_)
+        if (hasStarted_)
         {
-            throw std::runtime_error(
-                "Cannot change IsLooped while a SoundEffectInstance is playing"
-            );
+            throw System::InvalidOperationException();
         }
         IsLooped_ = looped;
     }

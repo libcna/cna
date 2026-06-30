@@ -1,0 +1,195 @@
+// SPDX-License-Identifier: MS-PL
+#include <gtest/gtest.h>
+
+#include <cstdlib>
+#include <memory>
+#include <sstream>
+#include <vector>
+
+#include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/TimeSpan.hpp"
+
+using Microsoft::Xna::Framework::Audio::AudioChannels;
+using Microsoft::Xna::Framework::Audio::SoundEffect;
+using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
+
+namespace
+{
+    // Builds a SoundEffect from a small silent PCM buffer under the SDL dummy driver.
+    // Returns nullptr if no audio device can be opened (the caller should skip).
+    std::unique_ptr<SoundEffect> makeEffect()
+    {
+        ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+        try
+        {
+            std::vector<unsigned char> pcm(4 * 1024, 0); // 1024 stereo S16 frames
+            return std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
+        }
+        catch (...)
+        {
+            return nullptr;
+        }
+    }
+}
+
+// ===================== static sample math (headless) =====================
+
+TEST(SoundEffectTest, GetSampleSizeInBytesOneSecond)
+{
+    // 1 s of 16-bit stereo @ 44100 = 44100 * 2 * 2 = 176400 bytes.
+    EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(
+                  System::TimeSpan::FromSeconds(1.0), 44100, AudioChannels::Stereo),
+              176400);
+}
+
+TEST(SoundEffectTest, GetSampleDurationOneSecond)
+{
+    const System::TimeSpan d =
+        SoundEffect::GetSampleDuration(176400, 44100, AudioChannels::Stereo);
+    EXPECT_NEAR(d.getTotalSecondsProperty(), 1.0, 1e-9);
+}
+
+TEST(SoundEffectTest, GetSampleDurationTruncatesToWholeMilliseconds)
+{
+    // 1000 stereo frames = 4000 bytes; 1000/44100 s = 22.6757 ms -> FNA truncates to 22 ms.
+    const System::TimeSpan d =
+        SoundEffect::GetSampleDuration(4000, 44100, AudioChannels::Stereo);
+    EXPECT_NEAR(d.getTotalSecondsProperty(), 0.022, 1e-6);
+}
+
+TEST(SoundEffectTest, GetSampleDurationZeroForBadFormat)
+{
+    EXPECT_EQ(SoundEffect::GetSampleDuration(1000, 0, AudioChannels::Stereo).getTotalSecondsProperty(),
+              0.0);
+}
+
+// ===================== static properties (headless) =====================
+
+TEST(SoundEffectTest, MasterVolumePassesThroughUnclamped)
+{
+    const float saved = SoundEffect::getMasterVolumeProperty();
+    SoundEffect::setMasterVolumeProperty(0.5f);
+    EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 0.5f);
+    SoundEffect::setMasterVolumeProperty(2.0f); // FNA does not clamp
+    EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 2.0f);
+    SoundEffect::setMasterVolumeProperty(1.25f); // move overload
+    EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 1.25f);
+    SoundEffect::setMasterVolumeProperty(saved);
+}
+
+TEST(SoundEffectTest, DistanceScaleRejectsNonPositive)
+{
+    const float saved = SoundEffect::getDistanceScaleProperty();
+    SoundEffect::setDistanceScaleProperty(2.0f);
+    EXPECT_FLOAT_EQ(SoundEffect::getDistanceScaleProperty(), 2.0f);
+    EXPECT_THROW(SoundEffect::setDistanceScaleProperty(0.0f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect::setDistanceScaleProperty(-1.0f), System::ArgumentOutOfRangeException);
+    SoundEffect::setDistanceScaleProperty(saved);
+}
+
+TEST(SoundEffectTest, DopplerScaleRejectsNegative)
+{
+    const float saved = SoundEffect::getDopplerScaleProperty();
+    SoundEffect::setDopplerScaleProperty(0.0f);
+    EXPECT_FLOAT_EQ(SoundEffect::getDopplerScaleProperty(), 0.0f);
+    EXPECT_THROW(SoundEffect::setDopplerScaleProperty(-0.1f), System::ArgumentOutOfRangeException);
+    SoundEffect::setDopplerScaleProperty(saved);
+}
+
+TEST(SoundEffectTest, SpeedOfSoundRoundTrip)
+{
+    const float saved = SoundEffect::getSpeedOfSoundProperty();
+    SoundEffect::setSpeedOfSoundProperty(300.0f);
+    EXPECT_FLOAT_EQ(SoundEffect::getSpeedOfSoundProperty(), 300.0f);
+    SoundEffect::setSpeedOfSoundProperty(saved);
+}
+
+// ===================== buffer-range constructor (headless) =====================
+
+TEST(SoundEffectTest, BufferRangeConstructorThrowsOnBadRange)
+{
+    std::vector<unsigned char> pcm(16, 0);
+    // Range check runs before any device access, so this is safe headlessly.
+    EXPECT_THROW(SoundEffect(pcm, 8, 16, 44100, AudioChannels::Stereo, 0, 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect(pcm, -1, 4, 44100, AudioChannels::Stereo, 0, 0),
+                 System::ArgumentOutOfRangeException);
+}
+
+// ===================== FromStream (headless) =====================
+
+TEST(SoundEffectTest, FromStreamEmptyThrowsNotSupported)
+{
+    std::istringstream empty;
+    EXPECT_THROW((void)SoundEffect::FromStream(empty), System::NotSupportedException);
+}
+
+TEST(SoundEffectTest, FromStreamGarbageThrowsNotSupported)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1); // FromStream reaches the mixer for non-empty data
+    std::istringstream garbage("this is not audio data at all");
+    try
+    {
+        SoundEffect* loaded = SoundEffect::FromStream(garbage);
+        delete loaded; // unreachable on the expected throw; avoids a leak otherwise
+        FAIL() << "expected an exception";
+    }
+    catch (const System::NotSupportedException&)
+    {
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+}
+
+// ===================== instance methods (need audio device) =====================
+
+TEST(SoundEffectTest, ConstructFromBufferAndProperties)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    EXPECT_FALSE(fx->getIsDisposedProperty());
+    EXPECT_GT(fx->getDurationProperty().getTotalSecondsProperty(), 0.0);
+}
+
+TEST(SoundEffectTest, NameGetSet)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    fx->setNameProperty("explosion");
+    EXPECT_EQ(fx->getNameProperty(), "explosion");
+    fx->setNameProperty(std::string("boom")); // move overload
+    EXPECT_EQ(fx->getNameProperty(), "boom");
+}
+
+TEST(SoundEffectTest, CreateInstanceProducesBoundInstance)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    SoundEffectInstance inst = fx->CreateInstance();
+    EXPECT_FALSE(inst.getIsDisposedProperty());
+}
+
+TEST(SoundEffectTest, PlayReturnsTrue)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    EXPECT_TRUE(fx->Play());
+    EXPECT_TRUE(fx->Play(0.5f, 0.0f, 0.25f));
+}
+
+TEST(SoundEffectTest, DisposeIsIdempotentAndPlayReturnsFalse)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    fx->Dispose();
+    EXPECT_TRUE(fx->getIsDisposedProperty());
+    EXPECT_NO_THROW(fx->Dispose());
+    EXPECT_FALSE(fx->Play());
+}

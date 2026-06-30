@@ -8,7 +8,6 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
-#include "Microsoft/Xna/Framework/Audio/SoundEffectI.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "System/IDisposable.hpp"
 #include "System/TimeSpan.hpp"
@@ -17,7 +16,7 @@
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Represents a loaded sound effect asset. */
-    class SoundEffect final : public SoundEffectI, public System::IDisposable
+    class SoundEffect final : public System::IDisposable
     {
         friend class SoundEffectInstance;
 
@@ -129,7 +128,9 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] static float getMasterVolumeProperty();
 
         /**
-         * @brief Sets the global master volume applied to all sound effects. Clamped to [0, 1].
+         * @brief Sets the global master volume applied to all sound effects.
+         *
+         * Values are passed through unclamped (matching FNA).
          *
          * @param v New master volume.
          */
@@ -193,7 +194,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @return A new SoundEffectInstance bound to this effect.
          */
-        [[nodiscard]] SoundEffectInstance CreateInstance() const override;
+        [[nodiscard]] SoundEffectInstance CreateInstance() const;
 
         /**
          * @brief Plays the sound effect once at full volume with default pitch and pan.

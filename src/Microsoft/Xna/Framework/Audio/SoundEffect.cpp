@@ -2,8 +2,10 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 
 #include <istream>
-#include <stdexcept>
 #include <vector>
+
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
@@ -39,27 +41,6 @@ namespace Microsoft::Xna::Framework::Audio
         {
             MIX_DestroyTrack(track);
         }
-
-        std::shared_ptr<MIX_Audio> LoadAudioFromMemory(
-            const void* data,
-            std::size_t len,
-            bool ownBuffer)
-        {
-            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
-
-            MIX_Audio* raw = ownBuffer
-                ? MIX_LoadAudioNoCopy(mixer, data, len, true)
-                : MIX_LoadAudioNoCopy(mixer, data, len, false);
-
-            if (!raw)
-            {
-                throw std::runtime_error(
-                    std::string("Failed to load audio from buffer: ") + SDL_GetError()
-                );
-            }
-
-            return {raw, [](MIX_Audio* p) { if (p) MIX_DestroyAudio(p); }};
-        }
     }
 #endif
 
@@ -86,7 +67,7 @@ namespace Microsoft::Xna::Framework::Audio
         MIX_Audio* raw = MIX_LoadAudio(mixer, assetName.c_str(), true);
         if (!raw)
         {
-            throw std::runtime_error(
+            throw System::NotSupportedException(
                 "Failed to load sound: " + assetName + " — " + SDL_GetError()
             );
         }
@@ -129,7 +110,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (count < 0 || offset < 0 ||
             offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
         {
-            throw std::out_of_range("buffer range");
+            throw System::ArgumentOutOfRangeException("count");
         }
 
 #ifdef SOUND_ENABLED
@@ -148,7 +129,7 @@ namespace Microsoft::Xna::Framework::Audio
         );
         if (!raw)
         {
-            throw std::runtime_error(
+            throw System::NotSupportedException(
                 std::string("Failed to create sound from buffer: ") + SDL_GetError()
             );
         }
@@ -212,7 +193,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffect::setMasterVolumeProperty(const float& v)
     {
-        MasterVolume_ = (v < 0.0f) ? 0.0f : ((v > 1.0f) ? 1.0f : v);
+        MasterVolume_ = v; // FNA passes the value straight through, without clamping
     }
 
     void SoundEffect::setMasterVolumeProperty(float&& v)
@@ -229,7 +210,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (value <= 0.0f)
         {
-            throw std::out_of_range("DistanceScale must be > 0");
+            throw System::ArgumentOutOfRangeException("value <= 0.0f");
         }
         DistanceScale_ = value;
     }
@@ -243,7 +224,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (value < 0.0f)
         {
-            throw std::out_of_range("DopplerScale must be >= 0");
+            throw System::ArgumentOutOfRangeException("value < 0.0f");
         }
         DopplerScale_ = value;
     }
@@ -355,16 +336,17 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs sampleRate,
         AudioChannels channels)
     {
-        // 16-bit PCM: 2 bytes per sample
-        const int bytesPerFrame = static_cast<int>(channels) * 2;
-        if (bytesPerFrame <= 0 || sampleRate <= 0)
+        const int ch = static_cast<int>(channels);
+        if (ch <= 0 || sampleRate <= 0)
         {
             return System::TimeSpan::Zero;
         }
-        const int frames = sizeInBytes / bytesPerFrame;
-        return System::TimeSpan::FromSeconds(
-            static_cast<double>(frames) / sampleRate
+        // Matches FNA: truncate to whole milliseconds. 16-bit PCM => 2 bytes per sample.
+        const int samples = sizeInBytes / 2;
+        const int ms = static_cast<int>(
+            (samples / ch) / (sampleRate / 1000.0f)
         );
+        return System::TimeSpan::FromMilliseconds(ms);
     }
 
     SharpRuntime::intcs SoundEffect::GetSampleSizeInBytes(
@@ -390,14 +372,14 @@ namespace Microsoft::Xna::Framework::Audio
 
         if (bytes.empty())
         {
-            throw std::runtime_error("SoundEffect::FromStream: empty stream");
+            throw System::NotSupportedException("SoundEffect::FromStream: empty stream");
         }
 
 #ifdef SOUND_ENABLED
         SDL_IOStream* io = SDL_IOFromConstMem(bytes.data(), bytes.size());
         if (!io)
         {
-            throw std::runtime_error(
+            throw System::NotSupportedException(
                 std::string("SoundEffect::FromStream: SDL_IOFromConstMem failed: ") + SDL_GetError()
             );
         }
@@ -406,7 +388,7 @@ namespace Microsoft::Xna::Framework::Audio
         MIX_Audio* raw   = MIX_LoadAudio_IO(mixer, io, true, true); // predecode=true, closeio=true
         if (!raw)
         {
-            throw std::runtime_error(
+            throw System::NotSupportedException(
                 std::string("SoundEffect::FromStream: MIX_LoadAudio_IO failed: ") + SDL_GetError()
             );
         }
