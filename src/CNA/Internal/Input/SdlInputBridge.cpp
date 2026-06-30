@@ -645,6 +645,25 @@ namespace CNA::Internal::Input
                 }
                 break;
             }
+        case SDL_EVENT_TEXT_EDITING:
+            {
+                // IME composition draft text (UTF-8). Pass the bytes straight through to
+                // CNA's UTF-8 std::string callback. FNA passes null for an empty composition;
+                // CNA maps that to an empty string with start/length 0 (std::string& can't be null).
+                if (event.edit.text != nullptr && event.edit.text[0] != '\0')
+                {
+                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditing(
+                        std::string(event.edit.text),
+                        event.edit.start,
+                        event.edit.length);
+                }
+                else
+                {
+                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditing(
+                        std::string(), 0, 0);
+                }
+                break;
+            }
         case SDL_EVENT_FINGER_DOWN:
             {
                 const int touchId = get_or_create_touch_id(event.tfinger.fingerID);
