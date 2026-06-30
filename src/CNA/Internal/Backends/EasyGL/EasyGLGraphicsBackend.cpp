@@ -26,6 +26,7 @@
 #include <memory>
 #include <vector>
 #include <cmath>
+#include <cstring>
 #include <SDL3/SDL.h>
 #include "Microsoft/Xna/Framework/Color.hpp"
 
@@ -1584,7 +1585,9 @@ void main()
                                                 : ::easygl::CullFace::Front);
         }
         device.set_scissor_test_enabled(scissorTestEnable);
-        // FillMode::WireFrame not supported in OpenGL ES — silently ignored
+        // OpenGL ES has no glPolygonMode; FillMode::WireFrame (1) is emulated at draw
+        // time by re-expanding triangles into GL_LINES (see DrawWireframe).
+        wireframe_ = (fillMode == 1);
     }
 
     void EasyGLGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
@@ -2004,11 +2007,12 @@ void main()
 "precision mediump float;\n"
 "in vec4 vColor;\n"
 "in float vFogFactor;\n"
+"uniform vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
-"    FragColor=vColor;\n"
+"    FragColor=vColor*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -2016,6 +2020,7 @@ void main()
 
         CompileAndLink(prog_colored_.prog, vsrc, fsrc, "colored");
         prog_colored_.loc_wvp         = prog_colored_.prog.uniform_location("uWVP");
+        prog_colored_.loc_diffuse     = prog_colored_.prog.uniform_location("uDiffuseColor");
         prog_colored_.loc_alphatest   = prog_colored_.prog.uniform_location("uAlphaTest");
         prog_colored_.loc_fog_enabled = prog_colored_.prog.uniform_location("uFogEnabled");
         prog_colored_.loc_fog_color   = prog_colored_.prog.uniform_location("uFogColor");
@@ -2594,6 +2599,71 @@ void main()
         return std::make_unique<EasyGLIndexBufferBackend>(index_capacity, true, RegistryPtr());
     }
 
+    bool EasyGLGraphicsBackend::DrawWireframe(const EasyGLVertexBufferBackend& vb,
+                                              const EasyGLIndexBufferBackend* ib,
+                                              PrimitiveType primitive, int primitiveCount,
+                                              int startIndex, int baseVertex, int firstVertex)
+    {
+        // Only triangle geometry needs expanding; line/point primitives are already "wireframe".
+        if (primitive != PrimitiveType::TriangleList &&
+            primitive != PrimitiveType::TriangleStrip)
+            return false;
+        if (primitiveCount <= 0) return true;
+
+        // Source vertex index at sequence position `pos` within this draw.
+        auto readSrc = [&](int pos) -> std::uint32_t {
+            if (!ib) return static_cast<std::uint32_t>(firstVertex + pos);
+            const auto& bytes = ib->GetCpuBytes();
+            if (ib->IsThirtyTwoBit()) {
+                std::uint32_t v;
+                std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 4, 4);
+                return v;
+            }
+            std::uint16_t v;
+            std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 2, 2);
+            return static_cast<std::uint32_t>(v);
+        };
+
+        wireframeScratch_.clear();
+        auto edge = [&](std::uint32_t a, std::uint32_t b) {
+            wireframeScratch_.push_back(a);
+            wireframeScratch_.push_back(b);
+        };
+        if (primitive == PrimitiveType::TriangleList) {
+            for (int t = 0; t < primitiveCount; ++t) {
+                const std::uint32_t a = readSrc(3 * t);
+                const std::uint32_t b = readSrc(3 * t + 1);
+                const std::uint32_t c = readSrc(3 * t + 2);
+                edge(a, b); edge(b, c); edge(c, a);
+            }
+        } else { // TriangleStrip: primitiveCount triangles over primitiveCount+2 vertices
+            for (int t = 0; t < primitiveCount; ++t) {
+                const std::uint32_t a = readSrc(t);
+                const std::uint32_t b = readSrc(t + 1);
+                const std::uint32_t c = readSrc(t + 2);
+                edge(a, b); edge(b, c); edge(c, a);
+            }
+        }
+
+        if (!wireframeIboCreated_) { wireframeIbo_.create(); wireframeIboCreated_ = true; }
+        vb.vao.bind();
+        wireframeIbo_.bind(::easygl::BufferTarget::ElementArray);
+        wireframeIbo_.set_data(::easygl::BufferTarget::ElementArray,
+                               wireframeScratch_.data(),
+                               wireframeScratch_.size() * sizeof(std::uint32_t),
+                               ::easygl::BufferUsage::DynamicDraw);
+        const int lineIndexCount = static_cast<int>(wireframeScratch_.size());
+        if (baseVertex == 0) {
+            device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
+                                 ::easygl::DataType::UnsignedInt, nullptr);
+        } else {
+            ::metagl::glDrawElementsBaseVertex(::easygl::PrimitiveType::Lines, lineIndexCount,
+                                               ::easygl::DataType::UnsignedInt, nullptr, baseVertex);
+        }
+        vb.vao.unbind();
+        return true;
+    }
+
     void EasyGLGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb_in,
                                                       const Matrix& world,
                                                       const Matrix& view,
@@ -2611,10 +2681,17 @@ void main()
         prog_colored_.prog.use();
         if (prog_colored_.loc_wvp >= 0)
             prog_colored_.prog.set_uniform_matrix4(prog_colored_.loc_wvp, wvp_col);
+        // This path carries no BasicEffect diffuse; output the raw vertex colors
+        // (uDiffuseColor would otherwise default to 0 and render everything black).
+        if (prog_colored_.loc_diffuse >= 0)
+            prog_colored_.prog.set_uniform(prog_colored_.loc_diffuse, 1.0f, 1.0f, 1.0f, 1.0f);
 
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawColoredPrimitives: prim=" << static_cast<int>(primitive)
             << " count=" << primitiveCount << " verts=" << vertex_count);
+
+        if (wireframe_ && DrawWireframe(vb, nullptr, primitive, primitiveCount, 0, 0, 0))
+            return;
 
         vb.vao.bind();
         device.draw_arrays(ToEasyGl(primitive), 0, vertex_count);
@@ -2640,10 +2717,17 @@ void main()
         prog_colored_.prog.use();
         if (prog_colored_.loc_wvp >= 0)
             prog_colored_.prog.set_uniform_matrix4(prog_colored_.loc_wvp, wvp_col);
+        // This path carries no BasicEffect diffuse; output the raw vertex colors
+        // (uDiffuseColor would otherwise default to 0 and render everything black).
+        if (prog_colored_.loc_diffuse >= 0)
+            prog_colored_.prog.set_uniform(prog_colored_.loc_diffuse, 1.0f, 1.0f, 1.0f, 1.0f);
 
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedColoredPrimitives: prim=" << static_cast<int>(primitive)
             << " count=" << primitiveCount << " indices=" << index_count);
+
+        if (wireframe_ && DrawWireframe(vb, &ib, primitive, primitiveCount, 0, 0, 0))
+            return;
 
         vb.vao.bind();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
@@ -2671,6 +2755,10 @@ void main()
         CNA_RENDER_LOG("DrawPrimitivesEx: stride=" << vb.GetStride()
             << " prim=" << static_cast<int>(primitive) << " verts=" << vertex_count);
 
+        if (wireframe_ && DrawWireframe(vb, nullptr, primitive, primitiveCount,
+                                        0, 0, params.vertexStart))
+            return;
+
         vb.vao.bind();
         device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
         vb.vao.unbind();
@@ -2695,6 +2783,10 @@ void main()
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedPrimitivesEx: stride=" << vb.GetStride()
             << " prim=" << static_cast<int>(primitive) << " indices=" << index_count);
+
+        if (wireframe_ && DrawWireframe(vb, &ib, primitive, primitiveCount,
+                                        params.startIndex, params.baseVertex, 0))
+            return;
 
         vb.vao.bind();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);

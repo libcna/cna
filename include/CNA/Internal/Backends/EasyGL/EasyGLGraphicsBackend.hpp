@@ -306,6 +306,10 @@ namespace CNA::Internal::Backends::EasyGL
         int  GetIndexCount()  const override { return index_count; }
         bool IsThirtyTwoBit() const override { return thirtyTwoBit; }
 
+        /// CPU shadow copy of the index data (populated when a registry is present).
+        /// Used by the EasyGL wireframe emulation to build line indices.
+        [[nodiscard]] const std::vector<uint8_t>& GetCpuBytes() const { return cpu_data_; }
+
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
 
@@ -390,6 +394,21 @@ namespace CNA::Internal::Backends::EasyGL
 
         // Height of the currently bound render target; 0 = default framebuffer.
         int currentRtHeight_ = 0;
+
+        // FillMode::WireFrame emulation (OpenGL ES has no glPolygonMode):
+        // when active, triangle draws are re-expanded into GL_LINES.
+        bool wireframe_ = false;
+        ::easygl::Buffer wireframeIbo_;        ///< scratch element buffer of line indices
+        bool wireframeIboCreated_ = false;
+        std::vector<std::uint32_t> wireframeScratch_;  ///< CPU build buffer (32-bit line indices)
+
+        // Draw the given triangle geometry as a wireframe (GL_LINES). Returns false when the
+        // primitive is not a triangle list/strip (caller should fall back to a normal draw).
+        // ib == nullptr means a non-indexed draw (sequential vertices from firstVertex).
+        bool DrawWireframe(const EasyGLVertexBufferBackend& vb,
+                           const EasyGLIndexBufferBackend* ib,
+                           PrimitiveType primitive, int primitiveCount,
+                           int startIndex, int baseVertex, int firstVertex);
 
         void EnsureColored3DProgram();
         void EnsureTextured3DProgram();
