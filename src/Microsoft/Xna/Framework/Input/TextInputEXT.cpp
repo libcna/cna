@@ -16,11 +16,21 @@ namespace Microsoft::Xna::Framework::Input
 {
     std::function<void(char)>                      TextInputEXT::TextInput   = nullptr;
     std::function<void(const std::string&, int, int)> TextInputEXT::TextEditing = nullptr;
-    std::uintptr_t                                  TextInputEXT::WindowHandle = 0;
+    std::uintptr_t                                  TextInputEXT::windowHandle_ = 0;
+
+    std::uintptr_t TextInputEXT::getWindowHandleProperty()
+    {
+        return windowHandle_;
+    }
+
+    void TextInputEXT::setWindowHandleProperty(std::uintptr_t value)
+    {
+        windowHandle_ = value;
+    }
 
     bool TextInputEXT::IsTextInputActive()
     {
-        if (SDL_Window* window = ToSdlWindow(WindowHandle))
+        if (SDL_Window* window = ToSdlWindow(windowHandle_))
         {
             return SDL_TextInputActive(window);
         }
@@ -29,7 +39,7 @@ namespace Microsoft::Xna::Framework::Input
 
     bool TextInputEXT::IsScreenKeyboardShown()
     {
-        return IsScreenKeyboardShown(WindowHandle);
+        return IsScreenKeyboardShown(windowHandle_);
     }
 
     bool TextInputEXT::IsScreenKeyboardShown(std::uintptr_t window)
@@ -45,7 +55,7 @@ namespace Microsoft::Xna::Framework::Input
     {
         // Guard against a null window: WindowHandle is not populated until the window
         // is created (plan_input.md Task 703). FNA passes the handle straight through.
-        if (SDL_Window* window = ToSdlWindow(WindowHandle))
+        if (SDL_Window* window = ToSdlWindow(windowHandle_))
         {
             SDL_StartTextInput(window);
         }
@@ -53,7 +63,7 @@ namespace Microsoft::Xna::Framework::Input
 
     void TextInputEXT::StopTextInput()
     {
-        if (SDL_Window* window = ToSdlWindow(WindowHandle))
+        if (SDL_Window* window = ToSdlWindow(windowHandle_))
         {
             SDL_StopTextInput(window);
         }
@@ -61,7 +71,7 @@ namespace Microsoft::Xna::Framework::Input
 
     void TextInputEXT::SetInputRectangle(const Microsoft::Xna::Framework::Rectangle& rectangle)
     {
-        if (SDL_Window* window = ToSdlWindow(WindowHandle))
+        if (SDL_Window* window = ToSdlWindow(windowHandle_))
         {
             SDL_Rect rect;
             rect.x = rectangle.X;
