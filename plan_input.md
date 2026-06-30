@@ -47,7 +47,7 @@ violations in the internal layer, and very thin test coverage.
 | Mouse | ✅ complete | ✅ motion/button/wheel → `MouseState` | ⚠️ `SetPosition` doesn't warp; relative-mode dead; `ClickedEXT` never fires; dead `INTERNAL_*` fields | ❌ none |
 | GamePad | ✅ complete | ✅ hotplug + button/axis + rumble + caps | ⚠️ EXT buttons unmapped; `PacketNumber`=0; LED/gyro/accel stubbed | ⚠️ integration only |
 | Touch | ✅ complete | ⚠️ fingers → `GetState` only; **gesture pipeline dead** | ⚠️ `SetFinger`/`Update` unreachable; `DisplayWidth/Height` never set | ⚠️ 3 tests |
-| TextInput | ✅ surface | ❌ **fully unwired**; all bodies no-op | ⚠️ events never raised | ❌ none |
+| TextInput | ✅ surface | ✅ SDL3 wired (Start/Stop/SetRect/active) + TEXT_INPUT/EDITING dispatch + control-char synthesis | ✅ events raised; Ctrl+V suppress | ✅ 9 tests | **(Phase I1 complete)** |
 | MouseCursor | ⚠️ MonoGame ext | ✅ system cursors only | ⚠️ no `FromTexture2D`/`Dispose`; SPDX/NOXNA wrong | ❌ none |
 
 ---
@@ -68,7 +68,7 @@ violations in the internal layer, and very thin test coverage.
 | 705 | Handle `SDL_EVENT_TEXT_EDITING`: decode → `INTERNAL_OnTextEditing(text, start, length)`, including the empty/null composition path (FNA `1186–1204`) | ✅ | Passes UTF-8 `event.edit.text` + `start`/`length`; empty/null composition → empty string with 0/0 (FNA's `null` maps to empty `std::string&`). |
 | 706 | Control-character synthesis on `KEY_DOWN` (incl. repeat): emit `TextInput` for Home/End/Back/Tab/Enter/Delete and Ctrl+V, with a `textInputSuppress` flag to avoid double paste. Port `TextInputBindings`/`TextInputCharacters` (FNA `FNAPlatform.cs:261–280`, `SDL3_FNAPlatform.cs:903–953`). Note: bridge currently drops key repeats entirely (`SdlInputBridge.cpp:570–573`) | ✅ | `kTextInputCharacters[7]` + `text_input_binding_index` helpers; KEY block no longer drops repeats (state set only on first press, text re-emitted on repeat); `g_textInputSuppress` gates the TEXT_INPUT case for Ctrl+V. |
 | 707 | TextInputEXT CHECKLIST fixes: add `#include "CNA/CNAHelper.hpp"`; `NOXNA`-tag `INTERNAL_OnTextInput`/`INTERNAL_OnTextEditing` (FNA-internal, non-XNA); convert public field `WindowHandle` → `getWindowHandleProperty()`/`setWindowHandleProperty()` | ✅ | Whole class is non-XNA → tagged `NOXNA class` + every public member `NOXNA` + `@note NOXNA` (per `ShaderEffect` precedent). `WindowHandle` → property w/ private `windowHandle_`. 1757/1757 tests pass. |
-| 708 | New `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`: event dispatch via `INTERNAL_OnTextInput`/`OnTextEditing`, subscriber lambda fires, `IsTextInputActive` default, `WindowHandle` round-trip | ⬜ | |
+| 708 | New `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`: event dispatch via `INTERNAL_OnTextInput`/`OnTextEditing`, subscriber lambda fires, `IsTextInputActive` default, `WindowHandle` round-trip | ✅ | 9 tests (`TextInputEXTTest.*`): char/editing dispatch, empty composition, no-subscriber safety, handle round-trip, `Is*` false without window, Start/Stop/SetRect no-op guards. Suite 1757→1766. |
 
 ---
 
