@@ -4,255 +4,217 @@
 
 ## 1. Project summary
 
-**CNA** is a C++23 reimplementation of the XNA 4.0 programming model (`Microsoft::Xna::Framework`),
-built on SDL3 with a pluggable 3D graphics backend layer (EasyGL/OpenGL ES 3.2, Vulkan, Bgfx,
-SDL_Renderer). It is a framework/runtime — not a game — designed so that XNA/FNA game code can be
-ported to C++ with minimal API-surface changes.
+**CNA** is a C++ reimplementation of the XNA 4.0 programming model built on SDL3
+and a pluggable graphics backend. The namespace is `Microsoft::Xna::Framework`
+(and `Microsoft::Devices` for sensors/vibration). It targets desktop Linux,
+Android, and iOS.
 
-- **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
-  pixel-readback integration tests.
-- **Current development phase:** Phase 31 — User primitives and draw-call variants (Tasks 251–260).
-  Phase 30 (VertexDeclaration / vertex format accuracy, Tasks 241–250) is complete.
-- **Key architectural decision:** Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
-  (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). The EasyGL backend is primary (most tested).
-  The `sharp-runtime` library (sibling repo) provides all `System.*` types and primitive aliases
-  (`bytecs`, `String`, etc.) that the XNA API surface depends on.
+**Current phase:** `feature/devices` — implementing the full
+`Microsoft::Devices::Sensors` namespace (Accelerometer, Compass, Gyroscope,
+Motion, VibrateController) according to the XNA / Windows Phone 7 API spec.
+Plan: `plan_devices.md` (31 tasks).
+
+**Key architectural rules:**
+- Public API names must match XNA 4.0 exactly.
+- C# properties → `getXProperty()` / `setXProperty()`.
+- Non-XNA extensions tagged `NOXNA`.
+- Tests live under `tests/` mirroring the namespace path, using Google Test.
+- Backend selection: compile-time via `CNA_GRAPHICS_BACKEND`.
 
 ---
 
 ## 2. Current status
 
-### EasyGL backend (`cmake-build-debug`) — primary
-- **Builds:** clean.
-- **Unit tests (`CnaTests`):** 1757/1757 pass.
-- **Integration tests:** ~60 EasyGL integration test executables registered in CMake; most pass.
-  Two pre-existing failures: `easygl_device_dispose_order_test` and one pixel-readback test
-  related to the SpriteBatch multiple-Begin/End bug (see Known Bugs).
+**Build:** `CNA` library and `CnaTests` build cleanly with EASYGL backend
+(`cmake-build-debug`).
 
-### Vulkan backend (`cmake-build-vulkan`)
-- **Builds:** clean (single-threaded `-j1` required for link stability).
-- **Vulkan integration tests:** 13 registered; 11/11 historically pass. Latest additions:
-  `vulkan_scissor_test` (Task 329, 4/4 pixel checks).
+**Tests:** 11/11 `AccelerometerReadingTests` pass. All previously existing tests
+continue to pass.
 
-### Bgfx backend (`cmake-build-bgfx`)
-- Builds when configured. `Bgfx_VertexFormatMapping` test (Task 249): 47/47 mapping checks pass.
-  No pixel-readback for Bgfx (no readback API).
+**Working:**
+- Full SDL3-backed `Accelerometer` implementation (Start/Stop/Dispose, event
+  watch, Android axis remap).
+- `AccelerometerReading` — complete: constructors, getters/setters, `operator==`,
+  `operator!=`, `ToString()`, `GetHashCode()`, `GetTypeName()`.
+- `SensorBase<T>`, `SensorReadingEventArgs<T>`, `ISensorReading`, `SensorState` —
+  complete.
+- `SensorFailedException`, `AccelerometerFailedException` — implemented, no tests yet.
 
-### Recently implemented (Phases 30–31, Tasks 241–251, 329)
-- Full VertexDeclaration test suite (compact formats, multi-channel UV, unusual offsets, tangent/binormal).
-- EasyGL vertex format integration test covering strides 16/20/24/32 with pixel readback.
-- Bgfx vertex layout mapping helper (`BgfxVertexFormatHelper.hpp`) for all 12 VEF + 13 VEU values.
-- `docs/vertex-format-support.md` — per-backend table for all formats and usages.
-- Vulkan scissor test (`vulkan_scissor_test.cpp`) — ScissorTestEnable + ScissorRectangle pixel readback.
-- `DrawUserPrimitives` audit (Task 251): fixed silent-return bug in 4 typed overloads (now throw on
-  missing effect); added VertexDeclaration-based overload matching FNA's second generic overload;
-  exposed `GraphicsDevice::PrimitiveVerts()` as public NOXNA static; 12/12 unit tests.
-
-### What does NOT work yet
-- Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
-- `DrawUserIndexedPrimitives` typed overloads have not been audited against FNA (Task 252).
-- No pixel-readback tests for `DrawUserPrimitives` (Tasks 255–256 pending).
-- No pixel-readback tests for `DrawUserIndexedPrimitives` (Tasks 257–258 pending).
-- Bgfx backend lacks pixel readback — integration tests there are smoke-only.
-- 376 tasks still ⬜ out of 539 in `GRAPHICS_TASKS.md`.
+**Not yet done (per plan_devices.md):**
+- Tasks 3–31: tests for exceptions, CalibrationEventArgs, Compass, Gyroscope,
+  AttitudeReading, MotionReading, Motion, VibrateController, CMake update, final
+  build+test verification.
 
 ---
 
 ## 3. Recent changes
 
-| Task | Files | Change |
-|------|-------|--------|
-| 251 | `GraphicsDevice.hpp/.cpp`, `DrawUserPrimitivesTests.cpp` | Fixed 4 typed overloads to throw on missing effect; added VertexDeclaration overload; exposed `PrimitiveVerts()` public static; 12/12 tests |
-| 329 | `examples/vulkan_scissor_test.cpp`, `CMakeLists.txt` | 2-frame scissor pixel-readback test (no scissor → both quadrants red; scissor top-left 32×32 → inside red, outside green) |
-| 250 | `docs/vertex-format-support.md` | Per-backend tables for all 12 VEF + 13 VEU values; stride-keyed layout limitation documented |
-| 249 | `include/CNA/Internal/Backends/Bgfx/BgfxVertexFormatHelper.hpp`, `examples/bgfx_vertex_format_test.cpp` | Bgfx mapping helper + 47-check mapping test + 4 VertexBuffer smoke tests |
-| 247 | `examples/easygl_vertex_formats_test.cpp` | EasyGL strides 16/20/24/32 pixel-readback test |
-| 241–246 | `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp` | Vertex declaration audit: compact format, multi-channel UV, unusual offset, tangent/binormal, Equals/Hash/ToString |
+- `include/Microsoft/Devices/Sensors/AccelerometerReading.hpp` — added
+  `operator==`, `operator!=`, `ToString()`, `GetHashCode()`, `GetTypeName()`,
+  `#include "CNA/CNAHelper.hpp"`, `#include <string>`.
+- `src/Microsoft/Devices/Sensors/AccelerometerReading.cpp` — implemented the
+  four new methods; added `<functional>` and `<sstream>` includes.
+- `tests/Microsoft/Devices/Sensors/AccelerometerReadingTests.cpp` — replaced
+  empty file with 11 complete test cases.
+- `plan_devices.md` — added at repo root; 31-task plan covering all missing
+  `Microsoft::Devices::Sensors` types plus `VibrateController`.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No single hard blocker** at this moment. The project is healthy and builds cleanly.
+No blocker. The cmake-build-debug directory had a stale CMakeCache pointing to
+the old source path `/rv/data/development/github.com/openeggbert/cna`. It was
+fixed by deleting `CMakeCache.txt` and reconfiguring:
 
-The next natural friction point is Task 252: auditing `DrawUserIndexedPrimitives` against FNA.
-The typed overloads (8 overloads: 4 × VPC/VPT/VPCT/VPNT × 16-bit/32-bit) were written before the
-Task 251 audit revealed that missing-effect was silently ignored. The same bug likely exists there.
-Additionally, FNA has a second generic overload for indexed primitives (with explicit
-`VertexDeclaration`) which may be missing in CNA.
+```bash
+cmake -S /rv/data/development/github.com/openeggbert/cna_devices \
+      -B /rv/data/development/github.com/openeggbert/cna_devices/cmake-build-debug \
+      -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+```
 
-Affected files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
-`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
+This must be done once after a fresh clone or if the cache is stale. The cmake
+build dirs for bgfx and vulkan may have the same stale-cache problem.
 
 ---
 
 ## 5. Known bugs and limitations
 
-| Status | Issue |
-|--------|-------|
-| **Confirmed bug** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. Workaround: merge all sprite draws into one Begin/End. |
-| **Suspected bug** | `DrawUserIndexedPrimitives` typed overloads (8 overloads) likely have the same silent-return-on-missing-effect bug that was fixed in `DrawUserPrimitives` (Task 251). Not yet verified. |
-| **Incomplete** | `DrawUserPrimitives` and `DrawUserIndexedPrimitives`: no pixel-readback integration tests yet (Tasks 255–258). |
-| **Incomplete** | Bgfx backend: stride-keyed layout only covers strides 16/20/24/32/52; arbitrary VertexDeclaration layouts not supported. |
-| **Incomplete** | EasyGL backend: same stride-keyed limitation as Bgfx. |
-| **Incomplete** | Vulkan backend: Tangent and Binormal `VertexElementUsage` values are not mapped (no Vulkan semantic equivalent). |
-| **Incomplete** | VertexElementUsage Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently return `bgfx::Attrib::Count` / no-op. |
-| **Incomplete** | Texture2D completeness audit not started (Phase 32, Tasks 261–270). |
-| **Needs verification** | `easygl_device_dispose_order_test` pre-existing failure — root cause unknown. |
-| **Incomplete** | SDL_Renderer backend: `CreateVertexBuffer` always throws `ThrowNo3D`. No 3D support at all. |
+- `AccelerometerTests.cpp` does not exist yet — the SDL3 Accelerometer class is
+  untested (requires hardware or SDL mock). **incomplete**
+- `SensorFailedException` and `AccelerometerFailedException` have no tests yet.
+  **incomplete**
+- `Compass`, `Gyroscope`, `Motion`, `VibrateController` are entirely missing.
+  **incomplete**
+- `Motion` will remain a stub (`NotSupported`) until SDL3 gains magnetometer
+  support. **by design / known limitation**
+- `AccelerometerReadingEventArgs` (WP7 7.0 legacy) is missing. **incomplete**
+- cmake-build-vulkan and cmake-build-bgfx may have the same stale-cache issue as
+  cmake-build-debug had. **suspected / needs verification**
 
 ---
 
 ## 6. Architecture notes
 
-### Main modules
-
-| Layer | Location | Notes |
-|-------|----------|-------|
-| XNA public API | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
-| Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, `IVertexBuffer`, etc. |
-| EasyGL backend | `src/CNA/Internal/Backends/EasyGL/` | Primary; OpenGL ES 3.2 via EasyGL wrapper |
-| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | Uses VulkanVertexFormatHelper.hpp for per-format mapping |
-| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | Uses BgfxVertexFormatHelper.hpp; no readback |
-| CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging, math |
-| sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types, primitive aliases |
-
-### Critical invariants
-
-- **`NOXNA` macro** tags every non-XNA extension in public headers.
-- **C# properties** → `getXProperty()` / `setXProperty()` convention (never public fields for XNA API).
-- **Static readonly** → `static const` in `.hpp` + definition in `.cpp`.
-- **Type aliases** from `SharpRuntime/SharpRuntimeHelper.hpp` (`bytecs`, `Single`, `String`, …) must
-  be used on XNA API surfaces — never raw `uint8_t`, `float`, `std::string` directly.
-- **Backend selection** is compile-time: no runtime branch between backends in the same binary.
-- **Stride-keyed vertex layout:** EasyGL, Vulkan, and Bgfx currently build VAO/pipeline/layout from
-  a map keyed by vertex stride. This means only strides 16/20/24/32/52 work correctly for 3D.
-  Arbitrary `VertexDeclaration` layouts are a future task.
-- **Doxygen required** on every public `.hpp` member: full `/** @brief … @param … @return */` block.
-- **SPDX header** `// SPDX-License-Identifier: MS-PL` required at top of every `.hpp` and `.cpp`.
-
-### Data flow (3D draw call)
-
 ```
-Game calls GraphicsDevice::DrawUserPrimitives(...)
-  → validates effect applied
-  → calls VertexCountForUserPrimitives() / PrimitiveVerts()
-  → copies vertex data into transient IVertexBuffer via backend_->CreateVertexBuffer()
-  → calls backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, gpuParams)
-  → backend maps VertexDeclaration stride → VAO/pipeline/layout
-  → GPU draw
+include/Microsoft/Devices/Sensors/   ← XNA WP7 sensor API headers
+src/Microsoft/Devices/Sensors/       ← sensor implementations (SDL3-backed)
+tests/Microsoft/Devices/Sensors/     ← Google Test suites per class
+include/Microsoft/Devices/           ← VibrateController (not yet present)
+src/Microsoft/Devices/               ← VibrateController impl (not yet present)
 ```
 
-### FNA reference
+**Sensor pattern (Accelerometer is the reference implementation):**
+- Static `g_sensor_` / `g_sensorId_` hold the single open SDL sensor handle.
+- `static int instanceCount_` enforces the ≤ 10 simultaneous instance limit.
+- `static bool eventWatchRegistered_` guards the SDL event filter lifecycle.
+- `Start()` opens the sensor and registers the SDL event watch.
+- `Stop()` unregisters from the started-instances list.
+- `Dispose(bool)` calls `Stop()`, decrements counter, closes the sensor handle
+  when the last instance is disposed.
+- `ProcessSensorUpdateEvent()` is called from the SDL event filter on every
+  `SDL_EVENT_SENSOR_UPDATE`.
 
-The authoritative behavioral reference is at `/rv/data/library/github.com/FNA-XNA/FNA/src`.
-When CNA diverges from FNA intentionally, document it with an inline `//` comment in the `.cpp`.
+**Gyroscope** should follow this pattern exactly, using `SDL_SENSOR_GYRO`.
+
+**Compass and Motion** are stubs (SDL3 has no magnetometer API).
+
+**SensorBase<T>** (template, header-only) owns `CurrentValue`, `IsDataValid`,
+`TimeBetweenUpdates`, `CurrentValueChanged`, and `Dispose()` — concrete sensors
+override `Start()`, `Stop()`, and `Dispose(bool)`.
+
+**Invariants:**
+- `GetTypeName()` returns `.`-separated .NET names
+  (e.g. `"Microsoft.Devices.Sensors.AccelerometerReading"`).
+- `GetHashCode()` returns `std::size_t`.
+- Every public API member in every `.hpp` has a Doxygen `/** @brief */` block.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# Configure (EasyGL — primary)
-cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+# Configure (run once, or after stale-cache issue):
+cmake -S /rv/data/development/github.com/openeggbert/cna_devices \
+      -B /rv/data/development/github.com/openeggbert/cna_devices/cmake-build-debug \
+      -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
 
-# Configure (Vulkan)
-cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
-
-# Configure (Bgfx)
-cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
-
-# Build CNA library (EasyGL)
+# Build library:
 cmake --build cmake-build-debug --target CNA -j$(nproc)
 
-# Build all tests (EasyGL)
+# Build tests:
 cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 
-# Run unit tests
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests
-
-# Run specific test suite
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests --gtest_filter="PrimitiveVertsTest.*"
-
-# Build Vulkan (single-threaded to avoid linker races)
-cmake --build cmake-build-vulkan --target CNA -j1
-
-# Run a specific integration test (headless, EasyGL)
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/cna_test_easygl_vertex_formats
-
-# CTest (all registered tests, EasyGL build)
+# Run all tests:
 cd cmake-build-debug && ctest --output-on-failure
+
+# Run only Devices/Sensors tests:
+cd cmake-build-debug && ctest --output-on-failure -R "AccelerometerReading|SensorFailed|AccelerometerFailed"
+
+# Run a single test suite:
+./cmake-build-debug/CnaTests --gtest_filter="AccelerometerReadingTests*"
 ```
 
 ---
 
 ## 8. Next smallest tasks
 
-In priority order:
+Tasks are numbered per `plan_devices.md`.
 
-1. **Task 252 — Audit `DrawUserIndexedPrimitives` overloads against FNA**
-   - Goal: same audit as Task 251 — check all 8 typed overloads for the silent-return bug; check
-     whether a VertexDeclaration + raw-pointer overload is missing; fix and add unit tests.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
-     `tests/Microsoft/Xna/Framework/Graphics/DrawUserIndexedPrimitivesTests.cpp` (new).
-   - Verification: `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` → all pass.
+1. **Task 3 — Tests: SensorFailedException**
+   - Goal: write `SensorFailedExceptionTests.cpp`; cover default ctor, `const char*`
+     ctor, catch as `System::Exception`.
+   - Files: `tests/Microsoft/Devices/Sensors/SensorFailedExceptionTests.cpp` (new)
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="SensorFailedExceptionTests*"`
 
-2. **Task 255 — Pixel-readback test for `DrawUserPrimitives` with `VertexPositionColor`**
-   - Goal: EasyGL integration test: draw a colored triangle via `DrawUserPrimitives<VertexPositionColor>`,
-     read back a pixel from the centre, assert color matches.
-   - Files: `examples/easygl_draw_user_primitives_vpc_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: build + run test executable → exit 0.
+2. **Task 4 — Tests: AccelerometerFailedException**
+   - Goal: write `AccelerometerFailedExceptionTests.cpp`; cover both ctors, catch
+     as `SensorFailedException` and `System::Exception`.
+   - Files: `tests/Microsoft/Devices/Sensors/AccelerometerFailedExceptionTests.cpp` (new)
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="AccelerometerFailedExceptionTests*"`
 
-3. **Task 256 — Pixel-readback test for `DrawUserPrimitives` with custom `VertexDeclaration`**
-   - Goal: same as Task 255 but using the new VertexDeclaration-based overload with a custom struct.
-   - Files: `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: build + run test executable → exit 0.
+3. **Task 5 — Implement AccelerometerReadingEventArgs**
+   - Goal: add WP7 7.0 legacy class with `X/Y/Z : double`, `Timestamp`,
+     `operator==`, `ToString`, `GetHashCode`, `GetTypeName`.
+   - Files: `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp`,
+     `src/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.cpp` (both new)
+   - Verify: build `CNA` target cleanly.
 
-4. **Task 259 — Validate user primitive arrays for null / invalid offsets / invalid count**
-   - Goal: unit tests verifying that `DrawUserPrimitives` throws `std::invalid_argument` or
-     `System::ArgumentOutOfRangeException` for null data, negative offset, negative count.
-   - Files: `tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp` (extend).
-   - Verification: `CnaTests --gtest_filter="DrawUserPrimitivesValidation.*"`.
+4. **Task 6 — Tests: AccelerometerReadingEventArgs**
+   - Files: `tests/Microsoft/Devices/Sensors/AccelerometerReadingEventArgsTests.cpp` (new)
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="AccelerometerReadingEventArgsTests*"`
 
-5. **Task 261 — Audit every `Texture2D` constructor and method against FNA** (Phase 32 start)
-   - Goal: compare `Texture2D.hpp/.cpp` with FNA's `Texture2D.cs`; document missing overloads,
-     wrong signatures, missing bounds checks.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp`.
-   - Verification: compile + produce a written audit list.
+5. **Task 7 — Implement CalibrationEventArgs**
+   - Goal: trivial `EventArgs` subclass; needed by `Compass.Calibrate` and
+     `Motion.Calibrate` events.
+   - Files: `include/Microsoft/Devices/Sensors/CalibrationEventArgs.hpp`,
+     `src/Microsoft/Devices/Sensors/CalibrationEventArgs.cpp` (both new)
 
 ---
 
 ## 9. Do not do yet
 
-- **No Texture2D implementation changes** until the Task 261 audit is complete — the scope is unknown.
-- **No refactor of the stride-keyed vertex layout system** — it is load-bearing for all 3D tests;
-  changes need their own dedicated phase with full regression testing.
-- **No changes to the Bgfx backend draw path** — pixel readback is unavailable there, so correctness
-  cannot be verified.
-- **No SpriteBatch Vulkan multi-batch fix** until the root cause is isolated — a wrong fix could
-  break single-batch rendering silently.
-- **No API renames or namespace moves** — XNA API names are frozen by spec.
-- **No mass Doxygen cleanup passes** — add Doxygen only when touching a file for another reason.
-- **No new sharp-runtime types** unless a concrete CNA task requires them.
-- **No broad `GetData`/`SetData` rewrite** — wait for Phase 32 audit to determine actual scope.
+- Do not add camera, radio, or phone-hardware types to `Microsoft::Devices`.
+- Do not implement sensor fusion in `Motion` — keep it as a `NotSupported` stub
+  until SDL3 gains magnetometer access.
+- Do not restructure `SensorBase<T>` or `ISensorReading` — they are stable and
+  used by production code.
+- Do not touch the graphics, audio, or input subsystems — they are unrelated to
+  the current phase.
+- Do not delete or rename existing `.cpp` or `.hpp` files without checking that
+  nothing else references them.
+- Do not run `cmake --build` without first checking that `CMakeCache.txt`
+  references the correct source directory.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Open only the files needed for the first task.
-Do not refactor unrelated code. Do not expand scope beyond the task.
-
-Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress (Task 251 done);
-Task 329 complete; 1757/1757 unit tests pass.
-
-Next: Task 252 — audit DrawUserIndexedPrimitives overloads against FNA.
-Check all 8 typed overloads for the silent-return-on-missing-effect bug (same as Task 251).
-Check if the VertexDeclaration + raw-pointer overload is present; add it if missing.
-Add unit tests in DrawUserIndexedPrimitivesTests.cpp.
-Build: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
-Update GRAPHICS_TASKS.md (mark 252 ✅) and NEXT.md after finishing.
+Read NEXT.md first.
+Then inspect only the files listed for the first task in section 8.
+Do not refactor unrelated code.
+Make one small, verified improvement (implement or test one class at a time).
+Run the relevant build/test command from section 7 after each change.
+Update NEXT.md after finishing.
 ```
