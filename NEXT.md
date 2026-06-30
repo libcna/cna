@@ -13,10 +13,13 @@ ported to C++ with minimal API-surface changes.
   pixel-readback integration tests.
 - **Current development phase:** Phase 31 — User primitives and draw-call variants (Tasks 251–260).
   Phase 30 (VertexDeclaration / vertex format accuracy, Tasks 241–250) is complete.
-- **Key architectural decision:** Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
-  (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). The EasyGL backend is primary (most tested).
-  The `sharp-runtime` library (sibling repo) provides all `System.*` types and primitive aliases
-  (`bytecs`, `String`, etc.) that the XNA API surface depends on.
+- **Key architectural decisions:**
+  - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
+    (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).
+  - The `sharp-runtime` library (sibling repo at `../sharp-runtime/`) provides all `System.*` types
+    and primitive aliases (`bytecs`, `String`, etc.) used on the XNA API surface.
+  - Stride-keyed vertex layout: backends currently build VAO/pipeline/layout from a map keyed
+    by vertex stride. Only strides 16/20/24/32/52 work for 3D — arbitrary layouts are future work.
 
 ---
 
@@ -24,44 +27,40 @@ ported to C++ with minimal API-surface changes.
 
 ### EasyGL backend (`cmake-build-debug`) — primary
 - **Builds:** clean.
-- **Unit tests (`CnaTests`):** 1757/1757 pass.
-- **Integration tests:** ~60 EasyGL integration test executables registered in CMake; most pass.
-  Two pre-existing failures: `easygl_device_dispose_order_test` and one pixel-readback test
-  related to the SpriteBatch multiple-Begin/End bug (see Known Bugs).
+- **Unit tests (`CnaTests`):** 1772/1772 pass.
+- **Integration tests:** ~62 EasyGL integration test executables registered in CMake; most pass.
+  Two pre-existing failures: `easygl_device_dispose_order_test` (root cause unknown) and one
+  pixel-readback test related to the SpriteBatch multiple-Begin/End bug (see Known Bugs).
 
 ### Vulkan backend (`cmake-build-vulkan`)
 - **Builds:** clean (single-threaded `-j1` required for link stability).
-- **Vulkan integration tests:** 13 registered; 11/11 historically pass. Latest additions:
+- **Vulkan integration tests:** 13 registered; 11/11 historically pass. Latest:
   `vulkan_scissor_test` (Task 329, 4/4 pixel checks).
 
 ### Bgfx backend (`cmake-build-bgfx`)
 - Builds when configured. `Bgfx_VertexFormatMapping` test (Task 249): 47/47 mapping checks pass.
   No pixel-readback for Bgfx (no readback API).
 
-### Recently implemented (Phases 30–31, Tasks 241–252, 329)
-- Full VertexDeclaration test suite (compact formats, multi-channel UV, unusual offsets, tangent/binormal).
-- EasyGL vertex format integration test covering strides 16/20/24/32 with pixel readback.
-- Bgfx vertex layout mapping helper (`BgfxVertexFormatHelper.hpp`) for all 12 VEF + 13 VEU values.
-- `docs/vertex-format-support.md` — per-backend table for all formats and usages.
-- Vulkan scissor test (`vulkan_scissor_test.cpp`) — ScissorTestEnable + ScissorRectangle pixel readback.
-- `DrawUserPrimitives` audit (Task 251): fixed silent-return bug in 4 typed overloads (now throw on
-  missing effect); added VertexDeclaration-based overload matching FNA's second generic overload;
-  exposed `GraphicsDevice::PrimitiveVerts()` as public NOXNA static; 12/12 unit tests.
-- `DrawUserIndexedPrimitives` audit (Task 252): fixed silent-return bug in all 8 typed overloads (now
-  throw on missing effect + validate primitiveCount); added VertexDeclaration overloads for 16-bit and
-  32-bit indices matching FNA's second generic overloads; 15/15 unit tests.
-- `DrawUserPrimitives` VPC pixel-readback (Task 255): EasyGL integration test — full-NDC red quad via
-  typed VPC overload; tests vertexOffset=0 and vertexOffset=1; centre=(255,0,0) 2/2 PASS.
-- `DrawUserPrimitives` custom VD pixel-readback (Task 256): custom 16-byte MyVertex struct +
-  VertexDeclaration overload; vertexOffset=0 and vertexOffset=1; centre=(255,0,0) 2/2 PASS.
+### Recently implemented (Phase 31, Tasks 251–256, 329)
+- **Task 251** — `DrawUserPrimitives` FNA audit: fixed silent-return bug in 4 typed overloads;
+  added VertexDeclaration overload; exposed `PrimitiveVerts()` as public NOXNA static; 12/12 unit tests.
+- **Task 252** — `DrawUserIndexedPrimitives` FNA audit: fixed silent-return bug in all 8 typed
+  overloads (VPC/VPT/VPCT/VPNT × 16-bit/32-bit); added `primitiveCount` validation; added 2 new
+  VertexDeclaration overloads (16-bit + 32-bit) matching FNA's second generic overloads; 15/15 unit tests.
+- **Task 255** — `DrawUserPrimitives<VertexPositionColor>` pixel-readback: EasyGL integration test;
+  vertexOffset=0 and vertexOffset=1; centre=(255,0,0) 2/2 PASS.
+- **Task 256** — `DrawUserPrimitives` custom `VertexDeclaration` pixel-readback: custom 16-byte
+  `MyVertex` struct; vertexOffset=0 and vertexOffset=1; centre=(255,0,0) 2/2 PASS.
+- **Task 329** — Vulkan scissor test: `ScissorTestEnable` + `ScissorRectangle` pixel readback; 4/4 PASS.
+- **Phase 30** — Full VertexDeclaration test suite, EasyGL vertex format integration test (strides
+  16/20/24/32), Bgfx vertex layout mapping helper, `docs/vertex-format-support.md`.
 
 ### What does NOT work yet
+- `DrawUserIndexedPrimitives`: no pixel-readback integration tests (Tasks 257–258 pending).
 - Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
-- `DrawUserIndexedPrimitives` typed overloads have not been audited against FNA (Task 252).
-- No pixel-readback tests for `DrawUserPrimitives` (Tasks 255–256 pending).
-- No pixel-readback tests for `DrawUserIndexedPrimitives` (Tasks 257–258 pending).
-- Bgfx backend lacks pixel readback — integration tests there are smoke-only.
-- 376 tasks still ⬜ out of 539 in `GRAPHICS_TASKS.md`.
+- Texture2D completeness audit not started (Phase 32, Tasks 261–270).
+- Bgfx and EasyGL stride-keyed layout: arbitrary `VertexDeclaration` strides beyond 16/20/24/32/52.
+- 372 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
 
 ---
 
@@ -69,29 +68,21 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
-| 256 | `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt` | DrawUserPrimitives custom VD pixel-readback; offset=0 + offset=1; centre=(255,0,0) 2/2 PASS |
+| 256 | `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt` | DrawUserPrimitives custom VD pixel-readback; custom MyVertex + VD overload; offset=0 + offset=1; 2/2 PASS |
 | 255 | `examples/easygl_draw_user_primitives_vpc_test.cpp` (new), `CMakeLists.txt` | DrawUserPrimitives VPC pixel-readback; offset=0 + offset=1; centre=(255,0,0) 2/2 PASS |
-| 252 | `GraphicsDevice.hpp/.cpp`, `DrawUserIndexedPrimitivesTests.cpp` (new) | Fixed 8 typed overloads silent-return bug; added VertexDeclaration+16-bit and VertexDeclaration+32-bit overloads; primitiveCount validation; 15/15 tests |
-| 251 | `GraphicsDevice.hpp/.cpp`, `DrawUserPrimitivesTests.cpp` | Fixed 4 typed overloads to throw on missing effect; added VertexDeclaration overload; exposed `PrimitiveVerts()` public static; 12/12 tests |
-| 329 | `examples/vulkan_scissor_test.cpp`, `CMakeLists.txt` | 2-frame scissor pixel-readback test (no scissor → both quadrants red; scissor top-left 32×32 → inside red, outside green) |
-| 250 | `docs/vertex-format-support.md` | Per-backend tables for all 12 VEF + 13 VEU values; stride-keyed layout limitation documented |
-| 249 | `include/CNA/Internal/Backends/Bgfx/BgfxVertexFormatHelper.hpp`, `examples/bgfx_vertex_format_test.cpp` | Bgfx mapping helper + 47-check mapping test + 4 VertexBuffer smoke tests |
-| 247 | `examples/easygl_vertex_formats_test.cpp` | EasyGL strides 16/20/24/32 pixel-readback test |
-| 241–246 | `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp` | Vertex declaration audit: compact format, multi-channel UV, unusual offset, tangent/binormal, Equals/Hash/ToString |
+| 252 | `GraphicsDevice.hpp/.cpp`, `DrawUserIndexedPrimitivesTests.cpp` (new) | Fixed 8 typed overloads silent-return bug; added 2 VD overloads; primitiveCount validation; 15/15 unit tests |
+| 251 | `GraphicsDevice.hpp/.cpp`, `DrawUserPrimitivesTests.cpp` (new) | Fixed 4 typed overloads; VD overload; `PrimitiveVerts()` public static; 12/12 tests |
+| 329 | `examples/vulkan_scissor_test.cpp`, `CMakeLists.txt` | Vulkan scissor pixel-readback; 4/4 PASS |
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No single hard blocker** at this moment. The project is healthy and builds cleanly.
+**No single hard blocker.** The project builds cleanly on all three backends and all 1772 unit tests pass.
 
-**No single hard blocker** at this moment. The project is healthy and builds cleanly.
-
-**No single hard blocker.** The project is healthy and builds cleanly.
-
-The next natural task is Task 257: pixel-readback test for `DrawUserIndexedPrimitives` with
-`VertexPositionColor` + 16-bit indices. This exercises the indexed draw path end-to-end and
-confirms the Task 252 bug fixes produce correct rendered output.
+The next natural friction point is **Task 257**: pixel-readback integration test for
+`DrawUserIndexedPrimitives` with `VertexPositionColor` + 16-bit indices. The typed indexed draw
+path has been audited and bug-fixed (Task 252) but has no pixel-readback verification yet.
 
 ---
 
@@ -100,15 +91,14 @@ confirms the Task 252 bug fixes produce correct rendered output.
 | Status | Issue |
 |--------|-------|
 | **Confirmed bug** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. Workaround: merge all sprite draws into one Begin/End. |
-| **Fixed** | `DrawUserIndexedPrimitives` typed overloads (8 overloads) silent-return bug — fixed in Task 252; all now throw on missing effect. |
-| **Incomplete** | `DrawUserPrimitives` and `DrawUserIndexedPrimitives`: no pixel-readback integration tests yet (Tasks 255–258). |
-| **Incomplete** | Bgfx backend: stride-keyed layout only covers strides 16/20/24/32/52; arbitrary VertexDeclaration layouts not supported. |
-| **Incomplete** | EasyGL backend: same stride-keyed limitation as Bgfx. |
-| **Incomplete** | Vulkan backend: Tangent and Binormal `VertexElementUsage` values are not mapped (no Vulkan semantic equivalent). |
-| **Incomplete** | VertexElementUsage Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently return `bgfx::Attrib::Count` / no-op. |
-| **Incomplete** | Texture2D completeness audit not started (Phase 32, Tasks 261–270). |
 | **Needs verification** | `easygl_device_dispose_order_test` pre-existing failure — root cause unknown. |
+| **Incomplete** | `DrawUserIndexedPrimitives`: no pixel-readback integration tests yet (Tasks 257–258). |
+| **Incomplete** | EasyGL and Bgfx backends: stride-keyed vertex layout supports only strides 16/20/24/32/52; arbitrary `VertexDeclaration` layouts silently use wrong VAO/pipeline. |
+| **Incomplete** | Vulkan backend: `Tangent` and `Binormal` `VertexElementUsage` values not mapped (no Vulkan semantic equivalent). |
+| **Incomplete** | `VertexElementUsage` Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently no-op or return `bgfx::Attrib::Count`. |
+| **Incomplete** | Texture2D completeness audit not started (Phase 32, Tasks 261–270). |
 | **Incomplete** | SDL_Renderer backend: `CreateVertexBuffer` always throws `ThrowNo3D`. No 3D support at all. |
+| **Incomplete** | Bgfx backend lacks pixel readback — integration tests there are smoke-only. |
 
 ---
 
@@ -121,8 +111,8 @@ confirms the Task 252 bug fixes produce correct rendered output.
 | XNA public API | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
 | Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, `IVertexBuffer`, etc. |
 | EasyGL backend | `src/CNA/Internal/Backends/EasyGL/` | Primary; OpenGL ES 3.2 via EasyGL wrapper |
-| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | Uses VulkanVertexFormatHelper.hpp for per-format mapping |
-| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | Uses BgfxVertexFormatHelper.hpp; no readback |
+| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | Uses `VulkanVertexFormatHelper.hpp` for per-format mapping |
+| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | Uses `BgfxVertexFormatHelper.hpp`; no readback |
 | CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging, math |
 | sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types, primitive aliases |
 
@@ -135,26 +125,29 @@ confirms the Task 252 bug fixes produce correct rendered output.
   be used on XNA API surfaces — never raw `uint8_t`, `float`, `std::string` directly.
 - **Backend selection** is compile-time: no runtime branch between backends in the same binary.
 - **Stride-keyed vertex layout:** EasyGL, Vulkan, and Bgfx currently build VAO/pipeline/layout from
-  a map keyed by vertex stride. This means only strides 16/20/24/32/52 work correctly for 3D.
-  Arbitrary `VertexDeclaration` layouts are a future task.
+  a map keyed by vertex stride. Only strides 16/20/24/32/52 work correctly for 3D.
 - **Doxygen required** on every public `.hpp` member: full `/** @brief … @param … @return */` block.
 - **SPDX header** `// SPDX-License-Identifier: MS-PL` required at top of every `.hpp` and `.cpp`.
+- **Effect must be applied before any draw call** — all `DrawUser*` overloads now throw
+  `std::runtime_error` when `currentEffect_` is null (fixed in Tasks 251–252).
 
-### Data flow (3D draw call)
+### Data flow (indexed user primitives draw call)
 
 ```
-Game calls GraphicsDevice::DrawUserPrimitives(...)
-  → validates effect applied
-  → calls VertexCountForUserPrimitives() / PrimitiveVerts()
-  → copies vertex data into transient IVertexBuffer via backend_->CreateVertexBuffer()
-  → calls backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, gpuParams)
-  → backend maps VertexDeclaration stride → VAO/pipeline/layout
-  → GPU draw
+Game calls GraphicsDevice::DrawUserIndexedPrimitives(type, vertices, vOffset, numVerts, indices, iOffset, primCount)
+  → validates backend_ non-null (silent return if null)
+  → validates currentEffect_ non-null (throws if null)
+  → validates primCount > 0 (throws ArgumentOutOfRangeException)
+  → computes index count via IndexCountForPrimitives(type, primCount)
+  → packs vertex data into typed GpuV* struct
+  → creates transient IVertexBuffer + IIndexBuffer via backend_->CreateVertexBuffer/CreateIndexBuffer16/32
+  → calls backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, gpuParams)
+  → backend maps vertex stride → VAO/pipeline/layout → GPU draw
 ```
 
 ### FNA reference
 
-The authoritative behavioral reference is at `/rv/data/library/github.com/FNA-XNA/FNA/src`.
+Authoritative behavioral reference: `/rv/data/library/github.com/FNA-XNA/FNA/src`.
 When CNA diverges from FNA intentionally, document it with an inline `//` comment in the `.cpp`.
 
 ---
@@ -174,20 +167,20 @@ cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
 # Build CNA library (EasyGL)
 cmake --build cmake-build-debug --target CNA -j$(nproc)
 
-# Build all tests (EasyGL)
+# Build all unit tests (EasyGL)
 cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 
 # Run unit tests
 /rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests
 
-# Run specific test suite
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests --gtest_filter="PrimitiveVertsTest.*"
+# Run a specific test suite
+/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests --gtest_filter="DrawUserIndexedPrimitives*"
 
 # Build Vulkan (single-threaded to avoid linker races)
 cmake --build cmake-build-vulkan --target CNA -j1
 
-# Run a specific integration test (headless, EasyGL)
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/cna_test_easygl_vertex_formats
+# Run a specific EasyGL integration test (headless)
+DISPLAY=:0 /rv/data/development/github.com/openeggbert/cna/cmake-build-debug/cna_test_easygl_draw_user_primitives_vpc
 
 # CTest (all registered tests, EasyGL build)
 cd cmake-build-debug && ctest --output-on-failure
@@ -199,37 +192,38 @@ cd cmake-build-debug && ctest --output-on-failure
 
 In priority order:
 
-1. **Task 252 — Audit `DrawUserIndexedPrimitives` overloads against FNA**
-   - Goal: same audit as Task 251 — check all 8 typed overloads for the silent-return bug; check
-     whether a VertexDeclaration + raw-pointer overload is missing; fix and add unit tests.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
-     `tests/Microsoft/Xna/Framework/Graphics/DrawUserIndexedPrimitivesTests.cpp` (new).
-   - Verification: `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` → all pass.
+1. **Task 257 — Pixel-readback test for `DrawUserIndexedPrimitives` with VPC + 16-bit indices**
+   - Goal: EasyGL integration test — draw a red quad via `DrawUserIndexedPrimitives` (typed
+     `VertexPositionColor` + `uint16_t` overload), read back centre pixel, assert red.
+     Also test `vertexOffset` and `indexOffset` non-zero to verify offset arithmetic.
+   - Files: `examples/easygl_draw_user_indexed_primitives_vpc_test.cpp` (new), `CMakeLists.txt`.
+   - Verification: `cmake --build cmake-build-debug --target cna_test_easygl_draw_user_indexed_primitives_vpc && DISPLAY=:0 ./cmake-build-debug/cna_test_easygl_draw_user_indexed_primitives_vpc`
 
-2. **Task 255 — Pixel-readback test for `DrawUserPrimitives` with `VertexPositionColor`**
-   - Goal: EasyGL integration test: draw a colored triangle via `DrawUserPrimitives<VertexPositionColor>`,
-     read back a pixel from the centre, assert color matches.
-   - Files: `examples/easygl_draw_user_primitives_vpc_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: build + run test executable → exit 0.
+2. **Task 258 — Pixel-readback test for `DrawUserIndexedPrimitives` with 32-bit indices**
+   - Goal: Same as Task 257 but using the `uint32_t` index overload.
+   - Files: `examples/easygl_draw_user_indexed_primitives_32_test.cpp` (new), `CMakeLists.txt`.
+   - Verification: build + run → exit 0.
 
-3. **Task 256 — Pixel-readback test for `DrawUserPrimitives` with custom `VertexDeclaration`**
-   - Goal: same as Task 255 but using the new VertexDeclaration-based overload with a custom struct.
-   - Files: `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: build + run test executable → exit 0.
-
-4. **Task 259 — Validate user primitive arrays for null / invalid offsets / invalid count**
-   - Goal: unit tests verifying that `DrawUserPrimitives` throws `std::invalid_argument` or
-     `System::ArgumentOutOfRangeException` for null data, negative offset, negative count.
+3. **Task 259 — Validate `DrawUserPrimitives` argument guards**
+   - Goal: Unit tests verifying that `DrawUserPrimitives` typed overloads throw
+     `System::ArgumentOutOfRangeException` for `primitiveCount <= 0`.
    - Files: `tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp` (extend).
-   - Verification: `CnaTests --gtest_filter="DrawUserPrimitivesValidation.*"`.
+   - Verification: `CnaTests --gtest_filter="DrawUserPrimitivesValidation.*"` → all pass.
 
-5. **Task 261 — Audit every `Texture2D` constructor and method against FNA** (Phase 32 start)
-   - Goal: compare `Texture2D.hpp/.cpp` with FNA's `Texture2D.cs`; document missing overloads,
-     wrong signatures, missing bounds checks.
+4. **Task 261 — Audit `Texture2D` constructors and methods against FNA** (Phase 32 start)
+   - Goal: Compare `Texture2D.hpp/.cpp` with FNA's `Texture2D.cs`; document every missing
+     overload, wrong signature, or missing bounds check. Produce an audit list in AUDIT.md or
+     inline in the task notes. Do not implement yet.
    - Files: `include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp`.
-   - Verification: compile + produce a written audit list.
+     `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp`,
+     `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs`.
+   - Verification: compile (no code changes expected) + written audit list.
+
+5. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
+   - Goal: Replace `std::vector` allocations in `DrawUserPrimitives` / `DrawUserIndexedPrimitives`
+     with a per-device scratch buffer or stack allocation for small counts.
+   - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
+   - Verification: unit tests still 1772/1772; integration pixel-readback tests still pass.
 
 ---
 
@@ -255,12 +249,15 @@ In priority order:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
-Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress (Tasks 251, 252, 255, 256 done);
-Task 329 complete; 1772/1772 unit tests pass.
+Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress
+(Tasks 251, 252, 255, 256, 329 done); 1772/1772 unit tests pass.
 
-Next: Task 257 — pixel-readback test for DrawUserIndexedPrimitives with VertexPositionColor + 16-bit indices.
-Draw a red quad via DrawUserIndexedPrimitives (typed VPC + uint16_t overload), read back centre, assert red.
+Next: Task 257 — pixel-readback integration test for DrawUserIndexedPrimitives
+with VertexPositionColor + uint16_t indices (typed VPC overload).
+Draw a full-NDC red quad using 4 vertices + 6 indices, read back centre, assert red.
+Also test non-zero vertexOffset and indexOffset.
 Files: examples/easygl_draw_user_indexed_primitives_vpc_test.cpp (new), CMakeLists.txt.
-Build: cmake --build cmake-build-debug --target cna_test_easygl_draw_user_indexed_primitives_vpc
+Register as cna_test_easygl_draw_user_indexed_primitives_vpc.
+Verification: DISPLAY=:0 ./cmake-build-debug/cna_test_easygl_draw_user_indexed_primitives_vpc → exit 0.
 Update GRAPHICS_TASKS.md (mark 257 ✅) and NEXT.md after finishing.
 ```
