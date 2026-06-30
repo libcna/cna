@@ -406,10 +406,10 @@ All 100 original tasks addressed.
 | #   | Task                                                                                           | Status | Notes              |
 | --- | ---------------------------------------------------------------------------------------------- | ------ | ------------------ |
 | 251 | Audit all `DrawUserPrimitives` overloads against FNA                                           | ✅      | Fixed typed overloads to throw on missing effect; added VertexDeclaration overload; exposed `PrimitiveVerts()` as public NOXNA static; 12/12 unit tests pass (`DrawUserPrimitivesTests.cpp`) |
-| 252 | Audit all `DrawUserIndexedPrimitives` overloads against FNA                                    | ⬜      | API and behavior   |
+| 252 | Audit all `DrawUserIndexedPrimitives` overloads against FNA                                    | ✅      | Fixed silent-return bug in 8 typed overloads (now throw on missing effect); added VertexDeclaration overloads (16-bit + 32-bit) matching FNA's second generic overloads; added `primitiveCount` validation; 15/15 unit tests |
 | 253 | Implement missing `DrawUserPrimitives` overloads by staging data into transient vertex buffers | ⬜      | EasyGL/Vulkan/Bgfx |
 | 254 | Implement missing `DrawUserIndexedPrimitives` overloads by staging data into transient VB/IB   | ⬜      | EasyGL/Vulkan/Bgfx |
-| 255 | Add tests for `DrawUserPrimitives` with `VertexPositionColor`                                  | ⬜      | Pixel readback     |
+| 255 | Add tests for `DrawUserPrimitives` with `VertexPositionColor`                                  | ✅      | `examples/easygl_draw_user_primitives_vpc_test.cpp`; full-NDC red quad via typed VPC overload; 2 sub-tests (offset=0, offset=1); centre=(255,0,0) 2/2 PASS |
 | 256 | Add tests for `DrawUserPrimitives` with custom vertex declaration                              | ⬜      | Pixel readback     |
 | 257 | Add tests for `DrawUserIndexedPrimitives` with 16-bit indices                                  | ⬜      | Pixel readback     |
 | 258 | Add tests for `DrawUserIndexedPrimitives` with 32-bit indices                                  | ⬜      | Pixel readback     |

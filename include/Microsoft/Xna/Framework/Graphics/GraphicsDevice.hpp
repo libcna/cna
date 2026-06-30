@@ -568,6 +568,46 @@ namespace Microsoft::Xna::Framework::Graphics
                                        const VertexPositionNormalTexture* vertexData, int vertexOffset, int numVertices,
                                        const std::uint32_t* indexData, int indexOffset, int primitiveCount);
 
+        /**
+         * @brief Draws indexed primitives from user-supplied arrays with an explicit vertex layout (16-bit indices).
+         *
+         * Matches FNA's second generic overload: `DrawUserIndexedPrimitives<T>(…, short[], …, VertexDeclaration)`.
+         * Use this when the vertex type does not implement IVertexType and the layout must be supplied explicitly.
+         *
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the raw vertex array.
+         * @param vertexOffset       Offset into @p vertexData (in vertices).
+         * @param numVertices        Number of vertices in @p vertexData.
+         * @param indexData          Pointer to the 16-bit index array.
+         * @param indexOffset        Offset into @p indexData (in indices).
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the vertex layout (stride and element semantics).
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const void* vertexData, int vertexOffset, int numVertices,
+                                       const std::uint16_t* indexData, int indexOffset, int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+
+        /**
+         * @brief Draws indexed primitives from user-supplied arrays with an explicit vertex layout (32-bit indices).
+         *
+         * Matches FNA's second generic overload: `DrawUserIndexedPrimitives<T>(…, int[], …, VertexDeclaration)`.
+         * Use this when the vertex type does not implement IVertexType and the layout must be supplied explicitly.
+         *
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the raw vertex array.
+         * @param vertexOffset       Offset into @p vertexData (in vertices).
+         * @param numVertices        Number of vertices in @p vertexData.
+         * @param indexData          Pointer to the 32-bit index array.
+         * @param indexOffset        Offset into @p indexData (in indices).
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the vertex layout (stride and element semantics).
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const void* vertexData, int vertexOffset, int numVertices,
+                                       const std::uint32_t* indexData, int indexOffset, int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+
         // --- NOXNA helpers (not in XNA 4.0) ---
 
         /**

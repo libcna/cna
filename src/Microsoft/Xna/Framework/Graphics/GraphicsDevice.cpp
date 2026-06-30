@@ -859,7 +859,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColor* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
         std::vector<GpuVPC> packed(static_cast<std::size_t>(numVerts));
         for (int i = 0; i < numVerts; ++i)
@@ -884,7 +887,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
         std::vector<GpuVPT> packed(static_cast<std::size_t>(numVerts));
         for (int i = 0; i < numVerts; ++i)
@@ -908,7 +914,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
         std::vector<GpuVPCT> packed(static_cast<std::size_t>(numVerts));
         for (int i = 0; i < numVerts; ++i)
@@ -934,7 +943,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
         std::vector<GpuVPNT> packed(static_cast<std::size_t>(numVerts));
         for (int i = 0; i < numVerts; ++i)
@@ -961,7 +973,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColor* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
         std::vector<GpuVPC> packed(static_cast<std::size_t>(numVerts));
         for (int i = 0; i < numVerts; ++i)
@@ -986,7 +1001,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
         std::vector<GpuVPT> packed(static_cast<std::size_t>(numVerts));
         for (int i = 0; i < numVerts; ++i)
@@ -1010,7 +1028,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
         std::vector<GpuVPCT> packed(static_cast<std::size_t>(numVerts));
         for (int i = 0; i < numVerts; ++i)
@@ -1036,7 +1057,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!backend_ || !currentEffect_) return;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
         std::vector<GpuVPNT> packed(static_cast<std::size_t>(numVerts));
         for (int i = 0; i < numVerts; ++i)
@@ -1055,6 +1079,56 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+    }
+
+    // DrawUserIndexedPrimitives — explicit VertexDeclaration (FNA second generic overloads)
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const void* vertexData, int vOffset, int numVerts,
+                                                   const std::uint16_t* indexData, int iOffset, int primCount,
+                                                   const VertexDeclaration& vd)
+    {
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
+        const int ic     = IndexCountForPrimitives(type, primCount);
+        const int stride = vd.getVertexStrideProperty();
+        const auto* src  = static_cast<const std::uint8_t*>(vertexData)
+                           + static_cast<std::ptrdiff_t>(vOffset) * stride;
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(src, numVerts, static_cast<std::size_t>(stride));
+        std::vector<std::uint16_t> idx(indexData + iOffset, indexData + iOffset + ic);
+        auto ib = backend_->CreateIndexBuffer16(ic);
+        ib->SetData16(idx.data(), ic);
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
+                                                   const void* vertexData, int vOffset, int numVerts,
+                                                   const std::uint32_t* indexData, int iOffset, int primCount,
+                                                   const VertexDeclaration& vd)
+    {
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
+        const int ic     = IndexCountForPrimitives(type, primCount);
+        const int stride = vd.getVertexStrideProperty();
+        const auto* src  = static_cast<const std::uint8_t*>(vertexData)
+                           + static_cast<std::ptrdiff_t>(vOffset) * stride;
+        auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetData(src, numVerts, static_cast<std::size_t>(stride));
+        std::vector<std::uint32_t> idx(indexData + iOffset, indexData + iOffset + ic);
+        auto ib = backend_->CreateIndexBuffer32(ic);
+        ib->SetData32(idx.data(), ic);
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
     }
 
     CNA::Internal::Backends::IGraphicsBackend& GraphicsDevice::GetBackend() const

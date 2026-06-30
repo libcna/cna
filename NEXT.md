@@ -38,7 +38,7 @@ ported to C++ with minimal API-surface changes.
 - Builds when configured. `Bgfx_VertexFormatMapping` test (Task 249): 47/47 mapping checks pass.
   No pixel-readback for Bgfx (no readback API).
 
-### Recently implemented (Phases 30–31, Tasks 241–251, 329)
+### Recently implemented (Phases 30–31, Tasks 241–252, 329)
 - Full VertexDeclaration test suite (compact formats, multi-channel UV, unusual offsets, tangent/binormal).
 - EasyGL vertex format integration test covering strides 16/20/24/32 with pixel readback.
 - Bgfx vertex layout mapping helper (`BgfxVertexFormatHelper.hpp`) for all 12 VEF + 13 VEU values.
@@ -47,6 +47,11 @@ ported to C++ with minimal API-surface changes.
 - `DrawUserPrimitives` audit (Task 251): fixed silent-return bug in 4 typed overloads (now throw on
   missing effect); added VertexDeclaration-based overload matching FNA's second generic overload;
   exposed `GraphicsDevice::PrimitiveVerts()` as public NOXNA static; 12/12 unit tests.
+- `DrawUserIndexedPrimitives` audit (Task 252): fixed silent-return bug in all 8 typed overloads (now
+  throw on missing effect + validate primitiveCount); added VertexDeclaration overloads for 16-bit and
+  32-bit indices matching FNA's second generic overloads; 15/15 unit tests.
+- `DrawUserPrimitives` VPC pixel-readback (Task 255): EasyGL integration test — full-NDC red quad via
+  typed VPC overload; tests vertexOffset=0 and vertexOffset=1; centre=(255,0,0) 2/2 PASS.
 
 ### What does NOT work yet
 - Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
@@ -62,6 +67,8 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 255 | `examples/easygl_draw_user_primitives_vpc_test.cpp` (new), `CMakeLists.txt` | DrawUserPrimitives VPC pixel-readback; offset=0 + offset=1; centre=(255,0,0) 2/2 PASS |
+| 252 | `GraphicsDevice.hpp/.cpp`, `DrawUserIndexedPrimitivesTests.cpp` (new) | Fixed 8 typed overloads silent-return bug; added VertexDeclaration+16-bit and VertexDeclaration+32-bit overloads; primitiveCount validation; 15/15 tests |
 | 251 | `GraphicsDevice.hpp/.cpp`, `DrawUserPrimitivesTests.cpp` | Fixed 4 typed overloads to throw on missing effect; added VertexDeclaration overload; exposed `PrimitiveVerts()` public static; 12/12 tests |
 | 329 | `examples/vulkan_scissor_test.cpp`, `CMakeLists.txt` | 2-frame scissor pixel-readback test (no scissor → both quadrants red; scissor top-left 32×32 → inside red, outside green) |
 | 250 | `docs/vertex-format-support.md` | Per-backend tables for all 12 VEF + 13 VEU values; stride-keyed layout limitation documented |
@@ -75,14 +82,13 @@ ported to C++ with minimal API-surface changes.
 
 **No single hard blocker** at this moment. The project is healthy and builds cleanly.
 
-The next natural friction point is Task 252: auditing `DrawUserIndexedPrimitives` against FNA.
-The typed overloads (8 overloads: 4 × VPC/VPT/VPCT/VPNT × 16-bit/32-bit) were written before the
-Task 251 audit revealed that missing-effect was silently ignored. The same bug likely exists there.
-Additionally, FNA has a second generic overload for indexed primitives (with explicit
-`VertexDeclaration`) which may be missing in CNA.
+**No single hard blocker** at this moment. The project is healthy and builds cleanly.
 
-Affected files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
-`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
+**No single hard blocker.** The project is healthy and builds cleanly.
+
+The next natural task is Task 256: pixel-readback test for `DrawUserPrimitives` using the
+explicit `VertexDeclaration` overload (raw vertex data + custom struct). This exercises the
+same backend path as Task 255 but via the new VD overload added in Task 251.
 
 ---
 
@@ -91,7 +97,7 @@ Affected files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
 | Status | Issue |
 |--------|-------|
 | **Confirmed bug** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. Workaround: merge all sprite draws into one Begin/End. |
-| **Suspected bug** | `DrawUserIndexedPrimitives` typed overloads (8 overloads) likely have the same silent-return-on-missing-effect bug that was fixed in `DrawUserPrimitives` (Task 251). Not yet verified. |
+| **Fixed** | `DrawUserIndexedPrimitives` typed overloads (8 overloads) silent-return bug — fixed in Task 252; all now throw on missing effect. |
 | **Incomplete** | `DrawUserPrimitives` and `DrawUserIndexedPrimitives`: no pixel-readback integration tests yet (Tasks 255–258). |
 | **Incomplete** | Bgfx backend: stride-keyed layout only covers strides 16/20/24/32/52; arbitrary VertexDeclaration layouts not supported. |
 | **Incomplete** | EasyGL backend: same stride-keyed limitation as Bgfx. |
@@ -246,13 +252,12 @@ In priority order:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
-Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress (Task 251 done);
-Task 329 complete; 1757/1757 unit tests pass.
+Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress (Tasks 251, 252, 255 done);
+Task 329 complete; 1772/1772 unit tests pass.
 
-Next: Task 252 — audit DrawUserIndexedPrimitives overloads against FNA.
-Check all 8 typed overloads for the silent-return-on-missing-effect bug (same as Task 251).
-Check if the VertexDeclaration + raw-pointer overload is present; add it if missing.
-Add unit tests in DrawUserIndexedPrimitivesTests.cpp.
-Build: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
-Update GRAPHICS_TASKS.md (mark 252 ✅) and NEXT.md after finishing.
+Next: Task 256 — pixel-readback test for DrawUserPrimitives via explicit VertexDeclaration overload.
+Use a custom packed struct + VertexDeclaration; call DrawUserPrimitives(type, data, offset, count, vd).
+Files: examples/easygl_draw_user_primitives_custom_test.cpp (new), CMakeLists.txt.
+Build: cmake --build cmake-build-debug --target cna_test_easygl_draw_user_primitives_custom
+Update GRAPHICS_TASKS.md (mark 256 ✅) and NEXT.md after finishing.
 ```
