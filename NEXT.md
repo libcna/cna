@@ -11,177 +11,166 @@ ported to C++ with minimal API-surface changes.
 
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
   pixel-readback integration tests.
-- **Current development phase:** Phase 31 — User primitives and draw-call variants (Tasks 251–260).
-  Phase 30 (VertexDeclaration / vertex format accuracy, Tasks 241–250) is complete.
-- **Key architectural decision:** Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
-  (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). The EasyGL backend is primary (most tested).
-  The `sharp-runtime` library (sibling repo) provides all `System.*` types and primitive aliases
-  (`bytecs`, `String`, etc.) that the XNA API surface depends on.
+- **Current development phase:** Phase Net — porting `GamerServices`, `Net`, and `Avatar` namespaces
+  from FNA.NetStub to C++, backed by ENet (reliable UDP) instead of Xbox Live.
+  Previous graphics phases (1–31) are complete.
+- **Important architectural decisions:**
+  - Graphics backend selection is compile-time via `CNA_GRAPHICS_BACKEND`.
+  - `CNA_GamerServices` and `CNA_Net` are separate CMake static libraries; they are excluded from
+    the main `CNA` GLOB so they do not contaminate the graphics-only build.
+  - GamerServices/Net/Avatar will **not** be binary-compatible with the original Xbox Live SDK — they
+    are a reimplementation of the XNA API shape backed by ENet.
+  - `sharp-runtime` (sibling repo) provides all `System.*` types. Only **new** files are added there;
+    existing files must not be modified (another Claude Code instance works on it in parallel).
 
 ---
 
 ## 2. Current status
 
-### EasyGL backend (`cmake-build-debug`) — primary
-- **Builds:** clean.
-- **Unit tests (`CnaTests`):** 1757/1757 pass.
-- **Integration tests:** ~60 EasyGL integration test executables registered in CMake; most pass.
-  Two pre-existing failures: `easygl_device_dispose_order_test` and one pixel-readback test
-  related to the SpriteBatch multiple-Begin/End bug (see Known Bugs).
+### Build
+- `cmake-build-debug` (EasyGL): **clean build**, all targets including `CNA_GamerServices`,
+  `CNA_Net`, and `CnaTests`.
+- **1830 / 1830 unit tests pass** (including all new GamerServices tests).
 
-### Vulkan backend (`cmake-build-vulkan`)
-- **Builds:** clean (single-threaded `-j1` required for link stability).
-- **Vulkan integration tests:** 13 registered; 11/11 historically pass. Latest additions:
-  `vulkan_scissor_test` (Task 329, 4/4 pixel checks).
+### What is done in the Net phase so far
 
-### Bgfx backend (`cmake-build-bgfx`)
-- Builds when configured. `Bgfx_VertexFormatMapping` test (Task 249): 47/47 mapping checks pass.
-  No pixel-readback for Bgfx (no readback API).
+| Task group | What was done |
+|---|---|
+| Task 0.1 | ENet 1.3.17 vendored under `third_party/enet/` |
+| Task 0.6–0.7 | CMake targets `CNA_GamerServices` and `CNA_Net` added; placeholder `.cpp` files |
+| Task 1.1 | sharp-runtime prerequisites checked; `SerializationInfo.hpp` and `StreamingContext.hpp` stubs added |
+| Task 2.1–2.10 | All 10 GamerServices enums ported |
+| Task 2.11–2.16 | All 6 GamerServices exceptions ported (`NetworkException`, `NetworkNotAvailableException`, `GamerPrivilegeException`, `GamerServicesNotAvailableException`, `GameUpdateRequiredException`, `GuideAlreadyVisibleException`) |
+| Task 2.17–2.22 | 6 GamerServices data structures: `PropertyDictionary`, `LeaderboardIdentity`, `GamerPresence`, `GamerPrivileges`, `GameDefaults`, `Achievement` |
+| Task 2.23–2.25 | 3 event arg classes: `SignedInEventArgs`, `SignedOutEventArgs`, `InviteAcceptedEventArgs` |
+| Task 2.26–2.30 | Collections: `GamerCollection<T>` (template), `AchievementCollection`, `FriendGamer`, `FriendCollection`, `SignedInGamerCollection`; minimal `Gamer` stub |
 
-### Recently implemented (Phases 30–31, Tasks 241–251, 329)
-- Full VertexDeclaration test suite (compact formats, multi-channel UV, unusual offsets, tangent/binormal).
-- EasyGL vertex format integration test covering strides 16/20/24/32 with pixel readback.
-- Bgfx vertex layout mapping helper (`BgfxVertexFormatHelper.hpp`) for all 12 VEF + 13 VEU values.
-- `docs/vertex-format-support.md` — per-backend table for all formats and usages.
-- Vulkan scissor test (`vulkan_scissor_test.cpp`) — ScissorTestEnable + ScissorRectangle pixel readback.
-- `DrawUserPrimitives` audit (Task 251): fixed silent-return bug in 4 typed overloads (now throw on
-  missing effect); added VertexDeclaration-based overload matching FNA's second generic overload;
-  exposed `GraphicsDevice::PrimitiveVerts()` as public NOXNA static; 12/12 unit tests.
+### What is NOT done yet in the Net phase
 
-### What does NOT work yet
-- Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
-- `DrawUserIndexedPrimitives` typed overloads have not been audited against FNA (Task 252).
-- No pixel-readback tests for `DrawUserPrimitives` (Tasks 255–256 pending).
-- No pixel-readback tests for `DrawUserIndexedPrimitives` (Tasks 257–258 pending).
-- Bgfx backend lacks pixel readback — integration tests there are smoke-only.
-- 376 tasks still ⬜ out of 539 in `GRAPHICS_TASKS.md`.
+- **`Gamer` (complete)** — stub exists (`Gamer.hpp`/`Gamer.cpp`), needs full port (Task 2.31).
+- **`GamerProfile`, `LeaderboardEntry`, `LeaderboardWriter`, `LeaderboardReader`, `SignedInGamer`** — not started (Tasks 2.31–2.36).
+- **`GamerServicesDispatcher`, `GamerServicesComponent` (complete), `Guide` (complete)** — stubs exist but not fully implemented (Tasks 2.37–2.40).
+- **Phase 3: Net enums** (15 files) — not started.
+- **Phase 4: Net core classes** (`NetworkSession`, etc.) — not started.
+- **Phase 5: ENet backend** — not started.
+- **Phase 6: Platform support** — not started.
+- **Phase 7: Integration tests** — not started.
+- **Phase 8: Avatar** — deferred.
 
 ---
 
 ## 3. Recent changes
 
-| Task | Files | Change |
-|------|-------|--------|
-| 251 | `GraphicsDevice.hpp/.cpp`, `DrawUserPrimitivesTests.cpp` | Fixed 4 typed overloads to throw on missing effect; added VertexDeclaration overload; exposed `PrimitiveVerts()` public static; 12/12 tests |
-| 329 | `examples/vulkan_scissor_test.cpp`, `CMakeLists.txt` | 2-frame scissor pixel-readback test (no scissor → both quadrants red; scissor top-left 32×32 → inside red, outside green) |
-| 250 | `docs/vertex-format-support.md` | Per-backend tables for all 12 VEF + 13 VEU values; stride-keyed layout limitation documented |
-| 249 | `include/CNA/Internal/Backends/Bgfx/BgfxVertexFormatHelper.hpp`, `examples/bgfx_vertex_format_test.cpp` | Bgfx mapping helper + 47-check mapping test + 4 VertexBuffer smoke tests |
-| 247 | `examples/easygl_vertex_formats_test.cpp` | EasyGL strides 16/20/24/32 pixel-readback test |
-| 241–246 | `tests/Microsoft/Xna/Framework/Graphics/VertexDeclarationTests.cpp` | Vertex declaration audit: compact format, multi-channel UV, unusual offset, tangent/binormal, Equals/Hash/ToString |
+| Commit | Files | Change |
+|---|---|---|
+| Task 2.26–2.30 | `GamerCollection.hpp` (template), `AchievementCollection.hpp/.cpp`, `FriendGamer.hpp/.cpp`, `FriendCollection.hpp/.cpp`, `SignedInGamerCollection.hpp/.cpp`, `Gamer.hpp/.cpp` | Collections hierarchy + Gamer stub; 14 tests |
+| Task 2.23–2.25 | `SignedInEventArgs.hpp/.cpp`, `SignedOutEventArgs.hpp/.cpp`, `InviteAcceptedEventArgs.hpp/.cpp` | Event arg classes using forward-declared `SignedInGamer*`; 7 tests |
+| Task 2.17–2.22 | `PropertyDictionary.hpp/.cpp`, `LeaderboardIdentity.hpp/.cpp`, `GamerPresence.hpp/.cpp`, `GamerPrivileges.hpp/.cpp`, `GameDefaults.hpp/.cpp`, `Achievement.hpp/.cpp` | Data structures; 23 tests |
+| Task 2.11–2.16 | 6 exception headers + `.cpp` + `GamerServicesExceptionsTests.cpp` | Exceptions inheriting `System::Exception`; 34 tests |
+| Task 2.1–2.10 | 10 enum headers + `GamerServicesEnumsTests.cpp` | All GamerServices enums; 11 tests |
+| Task 0.1, 0.6–0.7 | `third_party/enet/`, `cmake/ThirdPartyENet.cmake`, `CMakeLists.txt` | ENet + CMake targets |
+| sharp-runtime | `System/Runtime/Serialization/SerializationInfo.hpp`, `StreamingContext.hpp` | New stubs only |
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No single hard blocker** at this moment. The project is healthy and builds cleanly.
+**No hard blocker.** Build is clean and all 1830 tests pass.
 
-The next natural friction point is Task 252: auditing `DrawUserIndexedPrimitives` against FNA.
-The typed overloads (8 overloads: 4 × VPC/VPT/VPCT/VPNT × 16-bit/32-bit) were written before the
-Task 251 audit revealed that missing-effect was silently ignored. The same bug likely exists there.
-Additionally, FNA has a second generic overload for indexed primitives (with explicit
-`VertexDeclaration`) which may be missing in CNA.
-
-Affected files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
-`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
+The natural next step is completing the main gamer class hierarchy before moving to the Net layer.
+`Gamer` exists as a minimal stub — it compiles but lacks the full XNA API surface (`LeaderboardWriter`
+property, `GamerAction` async pattern, `Dispose()`, `GetHashCode()`/`ToString()`). `SignedInGamer`
+does not exist yet, blocking completion of `SignedInEventArgs` tests (currently using `nullptr`
+stand-ins) and the collections that are typed on `SignedInGamer*`.
 
 ---
 
 ## 5. Known bugs and limitations
 
 | Status | Issue |
-|--------|-------|
-| **Confirmed bug** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. Workaround: merge all sprite draws into one Begin/End. |
-| **Suspected bug** | `DrawUserIndexedPrimitives` typed overloads (8 overloads) likely have the same silent-return-on-missing-effect bug that was fixed in `DrawUserPrimitives` (Task 251). Not yet verified. |
-| **Incomplete** | `DrawUserPrimitives` and `DrawUserIndexedPrimitives`: no pixel-readback integration tests yet (Tasks 255–258). |
-| **Incomplete** | Bgfx backend: stride-keyed layout only covers strides 16/20/24/32/52; arbitrary VertexDeclaration layouts not supported. |
-| **Incomplete** | EasyGL backend: same stride-keyed limitation as Bgfx. |
-| **Incomplete** | Vulkan backend: Tangent and Binormal `VertexElementUsage` values are not mapped (no Vulkan semantic equivalent). |
-| **Incomplete** | VertexElementUsage Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently return `bgfx::Attrib::Count` / no-op. |
-| **Incomplete** | Texture2D completeness audit not started (Phase 32, Tasks 261–270). |
-| **Needs verification** | `easygl_device_dispose_order_test` pre-existing failure — root cause unknown. |
-| **Incomplete** | SDL_Renderer backend: `CreateVertexBuffer` always throws `ThrowNo3D`. No 3D support at all. |
+|---|---|
+| **Incomplete** | `Gamer` stub is missing: `Dispose()`, `IDisposable` base, `LeaderboardWriter` property, async `GamerAction` inner class, `ToString()`, `GetHashCode()`. |
+| **Incomplete** | `SignedInGamer` not yet ported — blocks `SignedInEventArgs`/`SignedOutEventArgs` real tests, full `SignedInGamerCollection` usage. |
+| **Incomplete** | `GamerServicesComponent.hpp` and `Guide.hpp` exist as stubs; method bodies not implemented. |
+| **Incomplete** | `GamerServicesDispatcher` not yet ported at all. |
+| **Incomplete** | Phase 3–7 (Net enums, core Net classes, ENet backend, platform, integration tests) not started. |
+| **Incomplete** | `FriendCollection` and `SignedInGamerCollection` store raw pointers — ownership model not yet defined. |
+| **Incomplete** | `PropertyDictionary` uses `std::any` internally; `GetValueStream` returns a raw `Stream*` — lifetime management unspecified. |
+| **Incomplete** | `GamerCollection<T>` template has no range-based-for adapter returning raw `T&` — returns `T*` from `begin()`/`end()`. |
+| **Confirmed bug (graphics)** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. |
+| **Suspected bug (graphics)** | `DrawUserIndexedPrimitives` typed overloads likely have the silent-return-on-missing-effect bug (not yet audited — Task 252). |
 
 ---
 
 ## 6. Architecture notes
 
-### Main modules
+### Module map
 
 | Layer | Location | Notes |
-|-------|----------|-------|
-| XNA public API | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
-| Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, `IVertexBuffer`, etc. |
-| EasyGL backend | `src/CNA/Internal/Backends/EasyGL/` | Primary; OpenGL ES 3.2 via EasyGL wrapper |
-| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | Uses VulkanVertexFormatHelper.hpp for per-format mapping |
-| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | Uses BgfxVertexFormatHelper.hpp; no readback |
-| CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging, math |
-| sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types, primitive aliases |
+|---|---|---|
+| XNA public API (graphics) | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
+| XNA public API (GamerServices) | `include/Microsoft/Xna/Framework/GamerServices/` | Same rule; internal ctors → `private` + `CreateInternal()` factory |
+| XNA public API (Net) | `include/Microsoft/Xna/Framework/Net/` | Not started |
+| Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, etc. |
+| ENet backend (future) | `src/CNA/Internal/Net/` | `ENetBackend.cpp` placeholder only |
+| CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging |
+| sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types; only add new files |
 
-### Critical invariants
+### Key invariants
 
-- **`NOXNA` macro** tags every non-XNA extension in public headers.
-- **C# properties** → `getXProperty()` / `setXProperty()` convention (never public fields for XNA API).
-- **Static readonly** → `static const` in `.hpp` + definition in `.cpp`.
-- **Type aliases** from `SharpRuntime/SharpRuntimeHelper.hpp` (`bytecs`, `Single`, `String`, …) must
-  be used on XNA API surfaces — never raw `uint8_t`, `float`, `std::string` directly.
-- **Backend selection** is compile-time: no runtime branch between backends in the same binary.
-- **Stride-keyed vertex layout:** EasyGL, Vulkan, and Bgfx currently build VAO/pipeline/layout from
-  a map keyed by vertex stride. This means only strides 16/20/24/32/52 work correctly for 3D.
-  Arbitrary `VertexDeclaration` layouts are a future task.
-- **Doxygen required** on every public `.hpp` member: full `/** @brief … @param … @return */` block.
-- **SPDX header** `// SPDX-License-Identifier: MS-PL` required at top of every `.hpp` and `.cpp`.
+- **`NOXNA` macro** tags every non-XNA extension in public headers (e.g. `CreateInternal()`, `begin()`/`end()`).
+- **C# `internal` constructors** → `private` in C++, exposed via a `NOXNA static CreateInternal(…)` factory.
+- **C# properties** → `getXProperty()` / `setXProperty()` convention.
+- **`System::Exception`** is the base class for all GamerServices exceptions (not `std::runtime_error`).
+- **GamerCollection<T>** stores raw `T*` pointers — gamers are not owned by the collection.
+- **AchievementCollection** owns `Achievement` values by value (`std::vector<Achievement>`).
+- **PropertyDictionary** uses `std::any`; typed GetValue/SetValue methods use `std::any_cast<T>`.
+- **Template headers** (e.g. `GamerCollection.hpp`) contain full implementation — no `.cpp` counterpart.
+- **SPDX header** `// SPDX-License-Identifier: MS-PL` at top of every `.hpp` and `.cpp`.
+- **Doxygen** `/** @brief … @param … @return */` required on every public member.
+- sharp-runtime: **only add new files**, never modify existing ones.
 
-### Data flow (3D draw call)
+### GamerServices class dependency order
 
 ```
-Game calls GraphicsDevice::DrawUserPrimitives(...)
-  → validates effect applied
-  → calls VertexCountForUserPrimitives() / PrimitiveVerts()
-  → copies vertex data into transient IVertexBuffer via backend_->CreateVertexBuffer()
-  → calls backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, gpuParams)
-  → backend maps VertexDeclaration stride → VAO/pipeline/layout
-  → GPU draw
+Enums (done) → Exceptions (done) → Data structs (done) → EventArgs (done)
+→ Gamer (stub) → GamerCollection<T> (done) → FriendGamer / SignedInGamer (partial)
+→ FriendCollection / SignedInGamerCollection (done, but use stubs)
+→ GamerProfile / LeaderboardEntry / LeaderboardWriter / LeaderboardReader (not started)
+→ SignedInGamer (not started)
+→ GamerServicesDispatcher / GamerServicesComponent / Guide (stub/incomplete)
+→ Net enums → Net core → ENet backend
 ```
-
-### FNA reference
-
-The authoritative behavioral reference is at `/rv/data/library/github.com/FNA-XNA/FNA/src`.
-When CNA diverges from FNA intentionally, document it with an inline `//` comment in the `.cpp`.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# Configure (EasyGL — primary)
-cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+# Working directory
+cd /rv/data/development/github.com/openeggbert/cna_net
 
-# Configure (Vulkan)
-cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
+# Build GamerServices library
+cmake --build cmake-build-debug --target CNA_GamerServices
 
-# Configure (Bgfx)
-cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
+# Build all (library + Net + tests)
+cmake --build cmake-build-debug --target CnaTests
 
-# Build CNA library (EasyGL)
-cmake --build cmake-build-debug --target CNA -j$(nproc)
+# Run all tests
+cmake-build-debug/CnaTests
 
-# Build all tests (EasyGL)
-cmake --build cmake-build-debug --target CnaTests -j$(nproc)
+# Run only GamerServices tests
+cmake-build-debug/CnaTests --gtest_filter="*GamerServices*:*Achievement*:*FriendGamer*:*LeaderboardIdentity*:*GamerPresence*:*GamerPrivileges*:*GameDefaults*:*NetworkException*:*SignedIn*:*SignedOut*:*InviteAccepted*"
 
-# Run unit tests
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests
+# FNA reference source
+ls /rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/GamerServices/
+ls /rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/Net/
 
-# Run specific test suite
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/CnaTests --gtest_filter="PrimitiveVertsTest.*"
+# XNA HTML docs
+ls /rv/data/development/github.com/openeggbert/xna4-spec/web/
 
-# Build Vulkan (single-threaded to avoid linker races)
-cmake --build cmake-build-vulkan --target CNA -j1
-
-# Run a specific integration test (headless, EasyGL)
-/rv/data/development/github.com/openeggbert/cna/cmake-build-debug/cna_test_easygl_vertex_formats
-
-# CTest (all registered tests, EasyGL build)
-cd cmake-build-debug && ctest --output-on-failure
+# sharp-runtime include root
+ls /rv/data/development/github.com/openeggbert/sharp-runtime/include/System/
 ```
 
 ---
@@ -190,69 +179,74 @@ cd cmake-build-debug && ctest --output-on-failure
 
 In priority order:
 
-1. **Task 252 — Audit `DrawUserIndexedPrimitives` overloads against FNA**
-   - Goal: same audit as Task 251 — check all 8 typed overloads for the silent-return bug; check
-     whether a VertexDeclaration + raw-pointer overload is missing; fix and add unit tests.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
-     `tests/Microsoft/Xna/Framework/Graphics/DrawUserIndexedPrimitivesTests.cpp` (new).
-   - Verification: `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` → all pass.
+1. **Task 2.31 — Complete `Gamer` + port `GamerProfile`**
+   - Goal: extend `Gamer.hpp/.cpp` with `Dispose()`, `IDisposable`, `LeaderboardWriter` property stub,
+     `GetHashCode()`/`ToString()`; then port `GamerProfile.cs` as a derived class.
+   - Files: `include/Microsoft/Xna/Framework/GamerServices/Gamer.hpp/.cpp`, new `GamerProfile.hpp/.cpp`.
+   - Reference: `/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/GamerServices/Gamer.cs`, `GamerProfile.cs`.
+   - Verification: `cmake --build cmake-build-debug --target CnaTests && cmake-build-debug/CnaTests`.
 
-2. **Task 255 — Pixel-readback test for `DrawUserPrimitives` with `VertexPositionColor`**
-   - Goal: EasyGL integration test: draw a colored triangle via `DrawUserPrimitives<VertexPositionColor>`,
-     read back a pixel from the centre, assert color matches.
-   - Files: `examples/easygl_draw_user_primitives_vpc_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: build + run test executable → exit 0.
+2. **Task 2.32–2.34 — Port `LeaderboardEntry`, `LeaderboardWriter`, `LeaderboardReader`**
+   - Goal: three data/API classes needed before `SignedInGamer` can compile cleanly.
+   - Files: 3 new header + cpp pairs in `include/Microsoft/Xna/Framework/GamerServices/`.
+   - Reference: the corresponding `.cs` files in `FNA.NetStub/src/GamerServices/`.
+   - Verification: build + new tests pass.
 
-3. **Task 256 — Pixel-readback test for `DrawUserPrimitives` with custom `VertexDeclaration`**
-   - Goal: same as Task 255 but using the new VertexDeclaration-based overload with a custom struct.
-   - Files: `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: build + run test executable → exit 0.
+3. **Task 2.35 — Port `SignedInGamer`**
+   - Goal: the central class tying `GamerPresence`, `GamerPrivileges`, `GameDefaults`, events, and
+     `FriendCollection` together; replaces forward-declared stubs in event args and collections.
+   - Files: `include/Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp/.cpp`.
+   - Reference: `/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/GamerServices/SignedInGamer.cs`.
+   - Verification: update event args tests to use a real `SignedInGamer`; all pass.
 
-4. **Task 259 — Validate user primitive arrays for null / invalid offsets / invalid count**
-   - Goal: unit tests verifying that `DrawUserPrimitives` throws `std::invalid_argument` or
-     `System::ArgumentOutOfRangeException` for null data, negative offset, negative count.
-   - Files: `tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp` (extend).
-   - Verification: `CnaTests --gtest_filter="DrawUserPrimitivesValidation.*"`.
+4. **Task 2.36–2.40 — Complete `GamerServicesDispatcher`, `GamerServicesComponent`, `Guide`**
+   - Goal: static service classes that are the public entry points for GamerServices on the game side.
+   - Files: new/extended headers + cpp in `GamerServices/`.
+   - Reference: the corresponding `.cs` files.
+   - Verification: build clean, smoke tests.
 
-5. **Task 261 — Audit every `Texture2D` constructor and method against FNA** (Phase 32 start)
-   - Goal: compare `Texture2D.hpp/.cpp` with FNA's `Texture2D.cs`; document missing overloads,
-     wrong signatures, missing bounds checks.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp`.
-   - Verification: compile + produce a written audit list.
+5. **Task 3.1–3.15 — Port all Net enums**
+   - Goal: 8 Net enums (`NetworkSessionType`, `NetworkSessionState`, `NetworkSessionEndReason`,
+     `NetworkSessionJoinError`, `SendDataOptions`, `QualityOfService` etc.) plus their headers.
+   - Files: new headers under `include/Microsoft/Xna/Framework/Net/`.
+   - Reference: `/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/Net/`.
+   - Verification: build + enum value tests pass.
 
 ---
 
 ## 9. Do not do yet
 
-- **No Texture2D implementation changes** until the Task 261 audit is complete — the scope is unknown.
-- **No refactor of the stride-keyed vertex layout system** — it is load-bearing for all 3D tests;
-  changes need their own dedicated phase with full regression testing.
-- **No changes to the Bgfx backend draw path** — pixel readback is unavailable there, so correctness
-  cannot be verified.
-- **No SpriteBatch Vulkan multi-batch fix** until the root cause is isolated — a wrong fix could
-  break single-batch rendering silently.
-- **No API renames or namespace moves** — XNA API names are frozen by spec.
-- **No mass Doxygen cleanup passes** — add Doxygen only when touching a file for another reason.
-- **No new sharp-runtime types** unless a concrete CNA task requires them.
-- **No broad `GetData`/`SetData` rewrite** — wait for Phase 32 audit to determine actual scope.
+- **No ENet backend implementation** until the full XNA Net API surface is declared — wiring ENet
+  to an incomplete API wastes effort.
+- **No Phase 8 (Avatar)** work yet — Avatar depends on graphics systems not yet audited, and has
+  low priority relative to completing GamerServices/Net.
+- **No changes to graphics-layer code** during the Net phase — the graphics phase (31) is healthy
+  and should not be disturbed.
+- **No modifications to existing sharp-runtime files** — another Claude Code instance may be editing
+  them in parallel; only add new files.
+- **No public-field shortcuts** — do not replace `getXProperty()`/`setXProperty()` with public fields
+  to save time; the convention must be consistent.
+- **No raw `std::runtime_error` base** for new exceptions — all new exceptions must inherit
+  `System::Exception` as established in Tasks 2.11–2.16.
+- **No speculative template instantiation** for `GamerCollection<T>` beyond `FriendGamer` and
+  `SignedInGamer` until those types are fully ported.
+- **No Avatar work** while core GamerServices/Net classes are incomplete.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Open only the files needed for the first task.
+Read NEXT.md first. Open only the files needed for the first task listed in section 8.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
-Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress (Task 251 done);
-Task 329 complete; 1757/1757 unit tests pass.
+Current status: Tasks 2.1–2.30 complete (enums, exceptions, data structs, event args,
+collections, Gamer stub); 1830/1830 unit tests pass; CNA_GamerServices and CNA_Net targets build.
 
-Next: Task 252 — audit DrawUserIndexedPrimitives overloads against FNA.
-Check all 8 typed overloads for the silent-return-on-missing-effect bug (same as Task 251).
-Check if the VertexDeclaration + raw-pointer overload is present; add it if missing.
-Add unit tests in DrawUserIndexedPrimitivesTests.cpp.
-Build: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
-Update GRAPHICS_TASKS.md (mark 252 ✅) and NEXT.md after finishing.
+Next: Task 2.31 — extend the minimal Gamer stub into a full port, then port GamerProfile.
+Reference: /rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/GamerServices/Gamer.cs
+           /rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/GamerServices/GamerProfile.cs
+Build: cmake --build cmake-build-debug --target CnaTests
+Run:   cmake-build-debug/CnaTests
+Update NEXT.md after finishing.
 ```
