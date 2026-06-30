@@ -22,7 +22,8 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Sets the Doppler effect scale for this emitter.
          *
-         * @param value New Doppler scale (must be >= 0).
+         * @param value New Doppler scale (must be greater than or equal to 0.0f).
+         * @throws System::ArgumentOutOfRangeException if @p value is negative.
          */
         void setDopplerScaleProperty(float value);
 
