@@ -410,7 +410,7 @@ All 100 original tasks addressed.
 | 253 | Implement missing `DrawUserPrimitives` overloads by staging data into transient vertex buffers | ⬜      | EasyGL/Vulkan/Bgfx |
 | 254 | Implement missing `DrawUserIndexedPrimitives` overloads by staging data into transient VB/IB   | ⬜      | EasyGL/Vulkan/Bgfx |
 | 255 | Add tests for `DrawUserPrimitives` with `VertexPositionColor`                                  | ✅      | `examples/easygl_draw_user_primitives_vpc_test.cpp`; full-NDC red quad via typed VPC overload; 2 sub-tests (offset=0, offset=1); centre=(255,0,0) 2/2 PASS |
-| 256 | Add tests for `DrawUserPrimitives` with custom vertex declaration                              | ⬜      | Pixel readback     |
+| 256 | Add tests for `DrawUserPrimitives` with custom vertex declaration                              | ✅      | `examples/easygl_draw_user_primitives_custom_test.cpp`; custom 16-byte MyVertex struct + VertexDeclaration overload; 2 sub-tests (offset=0, offset=1); centre=(255,0,0) 2/2 PASS |
 | 257 | Add tests for `DrawUserIndexedPrimitives` with 16-bit indices                                  | ⬜      | Pixel readback     |
 | 258 | Add tests for `DrawUserIndexedPrimitives` with 32-bit indices                                  | ⬜      | Pixel readback     |
 | 259 | Validate user primitive arrays for null, invalid offsets, invalid primitive count              | ⬜      | Unit tests         |

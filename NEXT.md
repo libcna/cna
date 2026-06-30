@@ -52,6 +52,8 @@ ported to C++ with minimal API-surface changes.
   32-bit indices matching FNA's second generic overloads; 15/15 unit tests.
 - `DrawUserPrimitives` VPC pixel-readback (Task 255): EasyGL integration test — full-NDC red quad via
   typed VPC overload; tests vertexOffset=0 and vertexOffset=1; centre=(255,0,0) 2/2 PASS.
+- `DrawUserPrimitives` custom VD pixel-readback (Task 256): custom 16-byte MyVertex struct +
+  VertexDeclaration overload; vertexOffset=0 and vertexOffset=1; centre=(255,0,0) 2/2 PASS.
 
 ### What does NOT work yet
 - Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
@@ -67,6 +69,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 256 | `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt` | DrawUserPrimitives custom VD pixel-readback; offset=0 + offset=1; centre=(255,0,0) 2/2 PASS |
 | 255 | `examples/easygl_draw_user_primitives_vpc_test.cpp` (new), `CMakeLists.txt` | DrawUserPrimitives VPC pixel-readback; offset=0 + offset=1; centre=(255,0,0) 2/2 PASS |
 | 252 | `GraphicsDevice.hpp/.cpp`, `DrawUserIndexedPrimitivesTests.cpp` (new) | Fixed 8 typed overloads silent-return bug; added VertexDeclaration+16-bit and VertexDeclaration+32-bit overloads; primitiveCount validation; 15/15 tests |
 | 251 | `GraphicsDevice.hpp/.cpp`, `DrawUserPrimitivesTests.cpp` | Fixed 4 typed overloads to throw on missing effect; added VertexDeclaration overload; exposed `PrimitiveVerts()` public static; 12/12 tests |
@@ -86,9 +89,9 @@ ported to C++ with minimal API-surface changes.
 
 **No single hard blocker.** The project is healthy and builds cleanly.
 
-The next natural task is Task 256: pixel-readback test for `DrawUserPrimitives` using the
-explicit `VertexDeclaration` overload (raw vertex data + custom struct). This exercises the
-same backend path as Task 255 but via the new VD overload added in Task 251.
+The next natural task is Task 257: pixel-readback test for `DrawUserIndexedPrimitives` with
+`VertexPositionColor` + 16-bit indices. This exercises the indexed draw path end-to-end and
+confirms the Task 252 bug fixes produce correct rendered output.
 
 ---
 
@@ -252,12 +255,12 @@ In priority order:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
-Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress (Tasks 251, 252, 255 done);
+Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress (Tasks 251, 252, 255, 256 done);
 Task 329 complete; 1772/1772 unit tests pass.
 
-Next: Task 256 — pixel-readback test for DrawUserPrimitives via explicit VertexDeclaration overload.
-Use a custom packed struct + VertexDeclaration; call DrawUserPrimitives(type, data, offset, count, vd).
-Files: examples/easygl_draw_user_primitives_custom_test.cpp (new), CMakeLists.txt.
-Build: cmake --build cmake-build-debug --target cna_test_easygl_draw_user_primitives_custom
-Update GRAPHICS_TASKS.md (mark 256 ✅) and NEXT.md after finishing.
+Next: Task 257 — pixel-readback test for DrawUserIndexedPrimitives with VertexPositionColor + 16-bit indices.
+Draw a red quad via DrawUserIndexedPrimitives (typed VPC + uint16_t overload), read back centre, assert red.
+Files: examples/easygl_draw_user_indexed_primitives_vpc_test.cpp (new), CMakeLists.txt.
+Build: cmake --build cmake-build-debug --target cna_test_easygl_draw_user_indexed_primitives_vpc
+Update GRAPHICS_TASKS.md (mark 257 ✅) and NEXT.md after finishing.
 ```
