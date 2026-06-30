@@ -19,8 +19,83 @@ namespace
     using Microsoft::Xna::Framework::PlayerIndex;
     using Microsoft::Xna::Framework::Input::ButtonState;
     using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
+    using Microsoft::Xna::Framework::Input::Keys;
 
     constexpr std::size_t MaxSupportedGamePads = 4;
+
+    // --- Text input control-character synthesis ---
+    // SDL does not deliver TEXT_INPUT events for these control keys, so FNA synthesizes
+    // them on KEY_DOWN. Indices match kTextInputCharacters.
+    // (FNAPlatform.cs:261-280, SDL3_FNAPlatform.cs:903-953)
+    constexpr char kTextInputCharacters[7] = {
+        static_cast<char>(2),   // Home
+        static_cast<char>(3),   // End
+        static_cast<char>(8),   // Back (Backspace)
+        static_cast<char>(9),   // Tab
+        static_cast<char>(13),  // Enter
+        static_cast<char>(127), // Delete
+        static_cast<char>(22)   // Ctrl+V (Paste)
+    };
+
+    // True while the matching control character is held (index 6 = Ctrl+V).
+    bool g_textInputControlDown[7] = {};
+    // Suppresses the literal 'v' TEXT_INPUT that SDL emits alongside a Ctrl+V paste.
+    bool g_textInputSuppress = false;
+
+    std::optional<int> text_input_binding_index(const Keys key)
+    {
+        switch (key)
+        {
+        case Keys::Home:   return 0;
+        case Keys::End:    return 1;
+        case Keys::Back:   return 2;
+        case Keys::Tab:    return 3;
+        case Keys::Enter:  return 4;
+        case Keys::Delete: return 5;
+        default:           return std::nullopt;
+        }
+    }
+
+    bool control_key_held()
+    {
+        const auto kb = CNA::Internal::Input::InputManager::GetKeyboardState();
+        return kb.IsKeyDown(Keys::LeftControl) || kb.IsKeyDown(Keys::RightControl);
+    }
+
+    void handle_text_input_key_down(const Keys key, const bool repeat)
+    {
+        using Microsoft::Xna::Framework::Input::TextInputEXT;
+        if (const auto idx = text_input_binding_index(key))
+        {
+            if (!repeat)
+            {
+                g_textInputControlDown[*idx] = true;
+            }
+            TextInputEXT::INTERNAL_OnTextInput(kTextInputCharacters[*idx]);
+        }
+        else if (control_key_held() && key == Keys::V)
+        {
+            if (!repeat)
+            {
+                g_textInputControlDown[6] = true;
+                g_textInputSuppress = true;
+            }
+            TextInputEXT::INTERNAL_OnTextInput(kTextInputCharacters[6]);
+        }
+    }
+
+    void handle_text_input_key_up(const Keys key)
+    {
+        if (const auto idx = text_input_binding_index(key))
+        {
+            g_textInputControlDown[*idx] = false;
+        }
+        else if ((!control_key_held() && g_textInputControlDown[6]) || key == Keys::V)
+        {
+            g_textInputControlDown[6] = false;
+            g_textInputSuppress = false;
+        }
+    }
 
     std::array<SDL_Gamepad*, MaxSupportedGamePads>& get_opened_gamepads()
     {
@@ -568,11 +643,6 @@ namespace CNA::Internal::Input
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
             {
-                if (event.type == SDL_EVENT_KEY_DOWN && event.key.repeat)
-                {
-                    break;
-                }
-
                 const auto key = try_convert_sdl_key(event.key.key);
 
 #ifdef __ANDROID__
@@ -608,8 +678,26 @@ namespace CNA::Internal::Input
                     break;
                 }
 
-                const bool pressed = event.type == SDL_EVENT_KEY_DOWN;
-                InputManager::SetKeyState(key.value(), pressed);
+                const bool pressed  = event.type == SDL_EVENT_KEY_DOWN;
+                const bool isRepeat = pressed && event.key.repeat;
+
+                // Repeats keep the key down (state already set); FNA only re-emits text
+                // input on repeat, so skip the pressed-key state update for repeats.
+                if (!isRepeat)
+                {
+                    InputManager::SetKeyState(key.value(), pressed);
+                }
+
+                // Synthesize TextInput for control keys SDL doesn't deliver as TEXT_INPUT
+                // (Home/End/Back/Tab/Enter/Delete and Ctrl+V).
+                if (pressed)
+                {
+                    handle_text_input_key_down(key.value(), isRepeat);
+                }
+                else
+                {
+                    handle_text_input_key_up(key.value());
+                }
 
 #ifdef __ANDROID__
                 {
@@ -632,6 +720,12 @@ namespace CNA::Internal::Input
             }
         case SDL_EVENT_TEXT_INPUT:
             {
+                // Suppress the literal character SDL emits alongside a synthesized paste
+                // (Ctrl+V): the paste control char (22) was already sent on KEY_DOWN.
+                if (g_textInputSuppress)
+                {
+                    break;
+                }
                 // SDL delivers UTF-8 text in event.text.text. CNA's TextInput callback is
                 // char-based (byte-oriented), so forward each UTF-8 byte in order: a consumer
                 // appending them to a std::string reconstructs the original UTF-8 text.
