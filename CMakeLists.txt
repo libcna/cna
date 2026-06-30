@@ -8,9 +8,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
 option(CNA_NOXNA "Enable CNA NOXNA extended graphics layer (beyond XNA 4.0)" OFF)
+option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
 
 include(cmake/ThirdPartySDL.cmake)
 cna_configure_vendored_sdl()
+
+if(CNA_ENABLE_NET)
+    include(cmake/ThirdPartyENet.cmake)
+    cna_configure_vendored_enet()
+endif()
 
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
 add_subdirectory(../sharp-runtime SHARP_RUNTIME)
