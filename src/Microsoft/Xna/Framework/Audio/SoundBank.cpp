@@ -5,12 +5,15 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <exception>
 #include <fstream>
 #include <iostream>
-#include <stdexcept>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Audio
@@ -32,9 +35,9 @@ namespace Microsoft::Xna::Framework::Audio
         : engine_(audioEngine)
     {
         if (!audioEngine)
-            throw std::invalid_argument("audioEngine must not be null");
+            throw System::ArgumentNullException("audioEngine");
         if (filename.empty())
-            throw std::invalid_argument("filename must not be empty");
+            throw System::ArgumentNullException("filename");
 
         std::ifstream f(filename, std::ios::binary | std::ios::ate);
         if (!f.is_open())
@@ -68,7 +71,14 @@ namespace Microsoft::Xna::Framework::Audio
     // ── Properties ────────────────────────────────────────────────────────────
 
     bool SoundBank::getIsDisposedProperty() const { return isDisposed_; }
-    bool SoundBank::getIsInUseProperty()    const { return false; }
+
+    bool SoundBank::getIsInUseProperty() const
+    {
+        for (const auto& faf : fireAndForget_)
+            if (faf.cue && faf.cue->getIsPlayingProperty())
+                return true;
+        return false;
+    }
 
     const CNA::Internal::Audio::XsbData* SoundBank::GetXsbData() const
     {
@@ -80,22 +90,18 @@ namespace Microsoft::Xna::Framework::Audio
     Cue* SoundBank::GetCue(const std::string& name)
     {
         if (name.empty())
-            throw std::invalid_argument("name must not be empty");
+            throw System::ArgumentNullException("name");
         if (isDisposed_)
-            throw std::runtime_error("SoundBank is disposed");
-
-        uint16_t cueIndex = 0xFFFF;
+            throw System::ObjectDisposedException("SoundBank");
 
         if (xactImpl_)
         {
             auto it = xactImpl_->data.cueNameMap.find(name);
             if (it != xactImpl_->data.cueNameMap.end())
-                cueIndex = it->second;
-            else
-                std::cerr << "[SoundBank] Cue not found: " << name << "\n";
+                return new Cue(name, this, it->second);
         }
 
-        return new Cue(name, this, cueIndex);
+        throw System::InvalidOperationException("Invalid cue name!");
     }
 
     // ── PlayCue ───────────────────────────────────────────────────────────────
@@ -103,9 +109,9 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundBank::PlayCue(const std::string& name)
     {
         if (name.empty())
-            throw std::invalid_argument("name must not be empty");
+            throw System::ArgumentNullException("name");
         if (isDisposed_)
-            throw std::runtime_error("SoundBank is disposed");
+            throw System::ObjectDisposedException("SoundBank");
 
         // Sweep fire-and-forget cues older than 5 seconds. Destroying a Cue
         // whose sound has already finished is effectively a no-op (the SDL3_mixer
@@ -148,5 +154,5 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
-    GetTypeNameCPP(SoundBank, "Microsoft::Xna::Framework::Audio::SoundBank")
+    GetTypeNameCPP(SoundBank, "Microsoft.Xna.Framework.Audio.SoundBank")
 }

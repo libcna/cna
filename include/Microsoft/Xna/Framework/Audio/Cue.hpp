@@ -18,6 +18,7 @@ namespace Microsoft::Xna::Framework::Audio
     class AudioListener;
     class SoundBank;
     class SoundEffectInstance;
+    class WaveBank;
 
     /** @brief Represents a named sound cue loaded from a SoundBank. */
     class Cue final : public System::Object, public System::IDisposable
@@ -127,6 +128,10 @@ namespace Microsoft::Xna::Framework::Audio
             std::unique_ptr<SoundEffectInstance> instance;
         };
         std::vector<PlaybackInstance> active_;
+
+        // WaveBanks this cue has registered with (see WaveBank::RegisterCue), so their
+        // IsInUse can see this cue while it is playing; unregistered in StopInternal.
+        std::vector<WaveBank*> waveBanksUsed_;
 
         void StopInternal(bool immediate);
 

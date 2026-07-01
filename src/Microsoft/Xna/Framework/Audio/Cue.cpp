@@ -191,6 +191,12 @@ namespace Microsoft::Xna::Framework::Audio
             inst->Play();
 
             active_.push_back({std::move(inst)});
+
+            if (std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())
+            {
+                wb->RegisterCue(this);
+                waveBanksUsed_.push_back(wb);
+            }
         }
 
         state_ = State::Playing;
@@ -229,6 +235,10 @@ namespace Microsoft::Xna::Framework::Audio
             if (pi.instance) pi.instance->Stop(immediate);
         active_.clear();
         state_ = State::Stopped;
+
+        for (auto* wb : waveBanksUsed_)
+            if (wb) wb->UnregisterCue(this);
+        waveBanksUsed_.clear();
 
         if (bank_ && bank_->engine_)
             bank_->engine_->UnregisterCue(this);

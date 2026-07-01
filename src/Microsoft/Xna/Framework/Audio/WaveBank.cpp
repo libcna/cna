@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
+#include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "System/ArgumentNullException.hpp"
 
+#include <algorithm>
+#include <exception>
 #include <fstream>
 #include <iostream>
 #include <optional>
 #include <sstream>
-#include <stdexcept>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Audio
@@ -112,14 +115,33 @@ namespace Microsoft::Xna::Framework::Audio
     // ── Constructors ──────────────────────────────────────────────────────────
 
     WaveBank::WaveBank(AudioEngine* audioEngine,
-                       const std::string& filename)
+                       const std::string& nonStreamingWaveBankFilename)
         : engine_(audioEngine)
     {
         if (!audioEngine)
-            throw std::invalid_argument("audioEngine must not be null");
-        if (filename.empty())
-            throw std::invalid_argument("filename must not be empty");
+            throw System::ArgumentNullException("audioEngine");
+        if (nonStreamingWaveBankFilename.empty())
+            throw System::ArgumentNullException("nonStreamingWaveBankFilename");
 
+        Init(nonStreamingWaveBankFilename);
+    }
+
+    WaveBank::WaveBank(AudioEngine* audioEngine,
+                       const std::string& streamingWaveBankFilename,
+                       SharpRuntime::intcs /*offset*/,
+                       SharpRuntime::shortcs /*packetSize*/)
+        : engine_(audioEngine)
+    {
+        if (!audioEngine)
+            throw System::ArgumentNullException("audioEngine");
+        if (streamingWaveBankFilename.empty())
+            throw System::ArgumentNullException("streamingWaveBankFilename");
+
+        Init(streamingWaveBankFilename);
+    }
+
+    void WaveBank::Init(const std::string& filename)
+    {
         // Load entire file into memory
         std::ifstream f(filename, std::ios::binary | std::ios::ate);
         if (!f.is_open())
@@ -138,20 +160,12 @@ namespace Microsoft::Xna::Framework::Audio
                       << " bank=\"" << xwb.bankName << "\""
                       << " entries=" << xwb.entries.size() << "\n";
             xactImpl_ = std::make_unique<XactWaveBankImpl>(std::move(xwb));
-            audioEngine->RegisterWaveBank(this);
+            engine_->RegisterWaveBank(this);
         }
         catch (const std::exception& ex)
         {
             std::cerr << "[WaveBank] XWB parse error (" << filename << "): " << ex.what() << "\n";
         }
-    }
-
-    WaveBank::WaveBank(AudioEngine* audioEngine,
-                       const std::string& filename,
-                       SharpRuntime::intcs /*offset*/,
-                       SharpRuntime::shortcs /*packetSize*/)
-        : WaveBank(audioEngine, filename)
-    {
     }
 
     WaveBank::~WaveBank()
@@ -163,7 +177,25 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool WaveBank::getIsDisposedProperty() const { return isDisposed_; }
     bool WaveBank::getIsPreparedProperty() const { return !isDisposed_ && xactImpl_ != nullptr; }
-    bool WaveBank::getIsInUseProperty()    const { return false; }
+
+    bool WaveBank::getIsInUseProperty() const
+    {
+        for (const auto* cue : activeCues_)
+            if (cue && cue->getIsPlayingProperty())
+                return true;
+        return false;
+    }
+
+    void WaveBank::RegisterCue(Cue* cue)
+    {
+        if (!cue) return;
+        activeCues_.push_back(cue);
+    }
+
+    void WaveBank::UnregisterCue(Cue* cue)
+    {
+        activeCues_.erase(std::remove(activeCues_.begin(), activeCues_.end(), cue), activeCues_.end());
+    }
 
     // ── Private accessors (used by AudioEngine / Cue) ─────────────────────────
 
@@ -255,10 +287,11 @@ namespace Microsoft::Xna::Framework::Audio
         {
             Disposing.Raise(this, System::EventArgs::Empty);
             if (engine_) engine_->UnregisterWaveBank(this);
+            activeCues_.clear();
             xactImpl_.reset();
             isDisposed_ = true;
         }
     }
 
-    GetTypeNameCPP(WaveBank, "Microsoft::Xna::Framework::Audio::WaveBank")
+    GetTypeNameCPP(WaveBank, "Microsoft.Xna.Framework.Audio.WaveBank")
 }

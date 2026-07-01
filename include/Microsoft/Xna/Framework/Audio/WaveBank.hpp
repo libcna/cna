@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -13,6 +14,7 @@
 namespace Microsoft::Xna::Framework::Audio
 {
     class AudioEngine;
+    class Cue;
     class SoundEffect;
 
     /** @brief Manages a bank of wave data loaded from a .XWB WaveBank file. */
@@ -27,6 +29,8 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param audioEngine                  The audio engine that owns this bank.
          * @param nonStreamingWaveBankFilename Path to the .XWB WaveBank file.
+         * @throws System::ArgumentNullException if @p audioEngine is null or
+         *         @p nonStreamingWaveBankFilename is empty.
          */
         WaveBank(AudioEngine* audioEngine, const std::string& nonStreamingWaveBankFilename);
 
@@ -37,6 +41,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @param streamingWaveBankFilename  Path to the streaming .XWB WaveBank file.
          * @param offset                     Byte offset into the file where the wave data begins.
          * @param packetSize                 Size of streaming packets.
+         * @throws System::ArgumentNullException if @p audioEngine is null or
+         *         @p streamingWaveBankFilename is empty.
          */
         WaveBank(AudioEngine* audioEngine,
                  const std::string& streamingWaveBankFilename,
@@ -64,14 +70,17 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] bool getIsPreparedProperty() const;
 
         /**
-         * @brief Gets whether any cue is currently using this wave bank.
+         * @brief Gets whether any cue is currently playing a SoundEffectInstance sourced
+         * from this wave bank.
          *
-         * @return true if in use; otherwise false.
+         * @return true if a cue produced from this bank is still playing; otherwise false.
          */
         [[nodiscard]] bool getIsInUseProperty() const;
 
         /** @brief Releases this wave bank and all its wave data. */
         void Dispose() override;
+
+        GetTypeNameHPP()
 
     private:
         friend class AudioEngine;
@@ -82,6 +91,8 @@ namespace Microsoft::Xna::Framework::Audio
 
         struct XactWaveBankImpl;
         std::unique_ptr<XactWaveBankImpl> xactImpl_;
+
+        void Init(const std::string& filename);
 
         /** @brief Returns the bank name parsed from the .XWB file header. */
         const std::string& getBankName() const;
@@ -96,6 +107,10 @@ namespace Microsoft::Xna::Framework::Audio
          */
         const SoundEffect* GetSoundEffect(unsigned short waveIndex);
 
-        GetTypeNameHPP()
+        // Cues currently playing a SoundEffectInstance sourced from this bank
+        // (registered/unregistered by Cue::Play / Cue::StopInternal).
+        std::vector<Cue*> activeCues_;
+        void RegisterCue(Cue* cue);
+        void UnregisterCue(Cue* cue);
     };
 }

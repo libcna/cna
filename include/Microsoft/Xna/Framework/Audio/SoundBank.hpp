@@ -32,6 +32,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param audioEngine The audio engine that owns this bank.
          * @param filename    Path to the .XSB SoundBank file.
+         * @throws System::ArgumentNullException if @p audioEngine is null or @p filename is empty.
          */
         SoundBank(AudioEngine* audioEngine, const std::string& filename);
 
@@ -51,7 +52,10 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Gets whether this sound bank is still in use by active cues.
          *
-         * @return true if any cue from this bank is still active; otherwise false.
+         * Reflects only fire-and-forget cues owned by this bank (created internally by
+         * PlayCue); cues obtained via GetCue are owned by the caller and not tracked here.
+         *
+         * @return true if an owned cue is still playing; otherwise false.
          */
         [[nodiscard]] bool getIsInUseProperty() const;
 
@@ -60,6 +64,9 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param name Cue name as defined in the .XSB file.
          * @return Pointer to the new Cue (caller is responsible for disposal).
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::ObjectDisposedException if the bank has been disposed.
+         * @throws System::InvalidOperationException if @p name is not a valid cue name.
          */
         [[nodiscard]] Cue* GetCue(const std::string& name);
 
@@ -67,6 +74,9 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Plays the named cue as a fire-and-forget sound.
          *
          * @param name Cue name as defined in the .XSB file.
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::ObjectDisposedException if the bank has been disposed.
+         * @throws System::InvalidOperationException if @p name is not a valid cue name.
          */
         void PlayCue(const std::string& name);
 
@@ -76,6 +86,9 @@ namespace Microsoft::Xna::Framework::Audio
          * @param name     Cue name as defined in the .XSB file.
          * @param listener Position and orientation of the audio listener.
          * @param emitter  Position and orientation of the sound emitter.
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::ObjectDisposedException if the bank has been disposed.
+         * @throws System::InvalidOperationException if @p name is not a valid cue name.
          */
         void PlayCue(const std::string& name,
                      const AudioListener& listener,
@@ -83,6 +96,8 @@ namespace Microsoft::Xna::Framework::Audio
 
         /** @brief Releases the sound bank and all its cue resources. */
         void Dispose() override;
+
+        GetTypeNameHPP()
 
     private:
         friend class Cue;
@@ -103,7 +118,5 @@ namespace Microsoft::Xna::Framework::Audio
             std::chrono::steady_clock::time_point created;
         };
         std::vector<FireAndForget> fireAndForget_;
-
-        GetTypeNameHPP()
     };
 }
