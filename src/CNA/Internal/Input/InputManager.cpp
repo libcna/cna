@@ -47,6 +47,12 @@ namespace CNA::Internal::Input
             float RightThumbstickY = 0.0f;
             float LeftTrigger      = 0.0f;
             float RightTrigger     = 0.0f;
+
+            // FNA increments PacketNumber whenever a poll of the device's raw state
+            // differs from the previous poll. CNA is event-driven rather than
+            // poll-driven, so the equivalent is tracked here: bumped whenever a Set*
+            // call below actually changes a stored value (connection, button, or axis).
+            int PacketNumber = 0;
         };
 
         struct InternalTouchLocationState
@@ -170,6 +176,10 @@ namespace CNA::Internal::Input
         auto& gamePadState = getInternalInputState().GamePads[slot.value()];
         if (isConnected)
         {
+            if (!gamePadState.IsConnected)
+            {
+                gamePadState.PacketNumber += 1;
+            }
             gamePadState.IsConnected = true;
             return;
         }
@@ -193,10 +203,13 @@ namespace CNA::Internal::Input
         const bool pressed = (state == Microsoft::Xna::Framework::Input::ButtonState::Pressed);
 
         auto setFlag = [&](Buttons flag) {
+            const Buttons before = gamePadState.Buttons_;
             if (pressed)
                 gamePadState.Buttons_ |= flag;
             else
                 gamePadState.Buttons_ &= ~flag;
+            if (gamePadState.Buttons_ != before)
+                gamePadState.PacketNumber += 1;
         };
 
         switch (button)
@@ -238,25 +251,32 @@ namespace CNA::Internal::Input
         }
 
         auto& gamePadState = getInternalInputState().GamePads[slot.value()];
+
+        auto setAxis = [&](float& field, const float newValue) {
+            if (newValue != field)
+                gamePadState.PacketNumber += 1;
+            field = newValue;
+        };
+
         switch (axis)
         {
         case GamePadAxis::LeftThumbstickX:
-            gamePadState.LeftThumbstickX = clamp_signed_unit(value);
+            setAxis(gamePadState.LeftThumbstickX, clamp_signed_unit(value));
             break;
         case GamePadAxis::LeftThumbstickY:
-            gamePadState.LeftThumbstickY = clamp_signed_unit(value);
+            setAxis(gamePadState.LeftThumbstickY, clamp_signed_unit(value));
             break;
         case GamePadAxis::RightThumbstickX:
-            gamePadState.RightThumbstickX = clamp_signed_unit(value);
+            setAxis(gamePadState.RightThumbstickX, clamp_signed_unit(value));
             break;
         case GamePadAxis::RightThumbstickY:
-            gamePadState.RightThumbstickY = clamp_signed_unit(value);
+            setAxis(gamePadState.RightThumbstickY, clamp_signed_unit(value));
             break;
         case GamePadAxis::LeftTrigger:
-            gamePadState.LeftTrigger = clamp_positive_unit(value);
+            setAxis(gamePadState.LeftTrigger, clamp_positive_unit(value));
             break;
         case GamePadAxis::RightTrigger:
-            gamePadState.RightTrigger = clamp_positive_unit(value);
+            setAxis(gamePadState.RightTrigger, clamp_positive_unit(value));
             break;
         }
     }
@@ -364,6 +384,7 @@ namespace CNA::Internal::Input
         raw.rightY       = g.RightThumbstickY;
         raw.leftTrigger  = g.LeftTrigger;
         raw.rightTrigger = g.RightTrigger;
+        raw.packetNumber = g.PacketNumber;
         return raw;
     }
 }

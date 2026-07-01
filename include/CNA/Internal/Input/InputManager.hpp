@@ -24,6 +24,7 @@ namespace CNA::Internal::Input
         float rightY      = 0.0f;
         float leftTrigger  = 0.0f;
         float rightTrigger = 0.0f;
+        int packetNumber   = 0;
     };
 
     /**

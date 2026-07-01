@@ -43,7 +43,9 @@ namespace Microsoft::Xna::Framework::Input
         const GamePadButtons  buttons(raw.buttons);
         const GamePadDPad     dpad = GamePadDPad::FromButtons(raw.buttons);
 
-        return GamePadState(thumbSticks, triggers, buttons, dpad);
+        GamePadState state(thumbSticks, triggers, buttons, dpad);
+        state.setPacketNumberProperty(raw.packetNumber);
+        return state;
     }
 
     bool GamePad::SetVibration(PlayerIndex playerIndex, float leftMotor, float rightMotor)

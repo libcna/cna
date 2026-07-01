@@ -57,6 +57,7 @@ namespace Microsoft::Xna::Framework::Input
 
     bool GamePadState::getIsConnectedProperty() const { return isConnected_; }
     int  GamePadState::getPacketNumberProperty() const { return packetNumber_; }
+    void GamePadState::setPacketNumberProperty(int value) { packetNumber_ = value; }
 
     const GamePadButtons&    GamePadState::getButtonsProperty()     const { return buttons_; }
     const GamePadDPad&       GamePadState::getDPadProperty()        const { return dPad_; }
