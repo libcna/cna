@@ -3,6 +3,9 @@
 #include <gtest/gtest.h>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <vector>
 
@@ -505,4 +508,132 @@ TEST_F(Texture2DFromStreamResizeTest, ZoomFillsExactRequestedSize)
 
     EXPECT_EQ(loaded.getWidthProperty(), 4);
     EXPECT_EQ(loaded.getHeightProperty(), 4);
+}
+
+// -----------------------------------------------------------------------
+// SaveAsPng — round-trip verification (Task 263)
+//
+// Task 262's format tests already prove FromStream can decode a PNG produced
+// by SaveAsPng, using a single solid colour. These tests go further: error
+// guards, multi-pixel spatial correctness (catches row/column transposition
+// bugs a solid-colour test can't), alpha preservation, non-square sizes, the
+// save-time resize path, and the filename-based NOXNA overload.
+// -----------------------------------------------------------------------
+
+class SaveAsPngTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+};
+
+TEST_F(SaveAsPngTest, NullStreamThrowsInvalidArgument)
+{
+    Texture2D tex; // default-constructed; null-stream guard fires before the CPU-pixels guard
+    EXPECT_THROW(tex.SaveAsPng(nullptr, 0, 0), std::invalid_argument);
+}
+
+TEST_F(SaveAsPngTest, NoCpuPixelDataThrowsRuntimeError)
+{
+    Texture2D tex; // no SetData / backend -> cpuPixels_ is empty
+    MemoryStream stream;
+    EXPECT_THROW(tex.SaveAsPng(&stream, 0, 0), std::runtime_error);
+}
+
+TEST_F(SaveAsPngTest, RoundTripPreservesDistinctPixelsAndAlpha)
+{
+    // 2x2, four distinct colours (including a semi-transparent one) in row-major order:
+    // (0,0)=red, (1,0)=green, (0,1)=blue, (1,1)=translucent yellow.
+    Texture2D src(gd, 2, 2);
+    std::vector<Color> pixels = {
+        Color(255, 0, 0, 255),
+        Color(0, 255, 0, 255),
+        Color(0, 0, 255, 255),
+        Color(255, 255, 0, 128),
+    };
+    src.SetData(pixels.data(), 4);
+
+    MemoryStream writeStream;
+    src.SaveAsPng(&writeStream, 2, 2);
+    auto bytes = writeStream.GetBuffer();
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    ASSERT_EQ(loaded.getWidthProperty(), 2);
+    ASSERT_EQ(loaded.getHeightProperty(), 2);
+
+    Color out[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
+    loaded.GetData(out, 0, 4);
+    for (int i = 0; i < 4; ++i)
+    {
+        EXPECT_EQ(out[i].getRProperty(), pixels[i].getRProperty()) << "pixel " << i;
+        EXPECT_EQ(out[i].getGProperty(), pixels[i].getGProperty()) << "pixel " << i;
+        EXPECT_EQ(out[i].getBProperty(), pixels[i].getBProperty()) << "pixel " << i;
+        EXPECT_EQ(out[i].getAProperty(), pixels[i].getAProperty()) << "pixel " << i;
+    }
+}
+
+TEST_F(SaveAsPngTest, RoundTripNonSquareSizePreservesDimensions)
+{
+    Texture2D src(gd, 3, 5);
+    std::vector<Color> magenta(15, Color(255, 0, 255, 255));
+    src.SetData(magenta.data(), 15);
+
+    MemoryStream writeStream;
+    src.SaveAsPng(&writeStream, 3, 5);
+    auto bytes = writeStream.GetBuffer();
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 3);
+    EXPECT_EQ(loaded.getHeightProperty(), 5);
+}
+
+TEST_F(SaveAsPngTest, SaveWithDifferentTargetSizeResizesOutput)
+{
+    // Source is 2x2; ask SaveAsPng to encode it at 6x4 — the encoded PNG should be 6x4.
+    Texture2D src(gd, 2, 2);
+    std::vector<Color> cyan(4, Color(0, 255, 255, 255));
+    src.SetData(cyan.data(), 4);
+
+    MemoryStream writeStream;
+    src.SaveAsPng(&writeStream, 6, 4);
+    auto bytes = writeStream.GetBuffer();
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 6);
+    EXPECT_EQ(loaded.getHeightProperty(), 4);
+}
+
+TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
+{
+    Texture2D src(gd, 2, 2);
+    std::vector<Color> orange(4, Color(255, 128, 0, 255));
+    src.SetData(orange.data(), 4);
+
+    auto tmpDir = std::filesystem::temp_directory_path() / "cna_saveaspng_test";
+    std::filesystem::create_directories(tmpDir);
+    const std::string path = (tmpDir / "out.png").string();
+
+    src.SaveAsPng(path);
+
+    std::ifstream in(path, std::ios::binary);
+    ASSERT_TRUE(in.good());
+    std::vector<System::IO::bytecs> bytes(
+        (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    ASSERT_FALSE(bytes.empty());
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 2);
+    EXPECT_EQ(loaded.getHeightProperty(), 2);
+    Color px[1] = { Color(0, 0, 0, 0) };
+    loaded.GetData(px, 0, 1);
+    EXPECT_EQ(px[0].getRProperty(), 255);
+    EXPECT_EQ(px[0].getGProperty(), 128);
+    EXPECT_EQ(px[0].getBProperty(), 0);
 }
