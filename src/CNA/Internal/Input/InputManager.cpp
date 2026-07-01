@@ -216,6 +216,12 @@ namespace CNA::Internal::Input
         case GamePadButton::DPadLeft:     setFlag(Buttons::DPadLeft);     break;
         case GamePadButton::DPadRight:    setFlag(Buttons::DPadRight);    break;
         case GamePadButton::BigButton:    setFlag(Buttons::BigButton);    break;
+        case GamePadButton::Misc1EXT:     setFlag(Buttons::Misc1EXT);     break;
+        case GamePadButton::Paddle1EXT:   setFlag(Buttons::Paddle1EXT);   break;
+        case GamePadButton::Paddle2EXT:   setFlag(Buttons::Paddle2EXT);   break;
+        case GamePadButton::Paddle3EXT:   setFlag(Buttons::Paddle3EXT);   break;
+        case GamePadButton::Paddle4EXT:   setFlag(Buttons::Paddle4EXT);   break;
+        case GamePadButton::TouchPadEXT:  setFlag(Buttons::TouchPadEXT);  break;
         }
     }
 

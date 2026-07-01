@@ -62,6 +62,12 @@ namespace CNA::Internal::Input
         DPadLeft,
         DPadRight,
         BigButton,
+        Misc1EXT,
+        Paddle1EXT,
+        Paddle2EXT,
+        Paddle3EXT,
+        Paddle4EXT,
+        TouchPadEXT,
     };
 
     /**

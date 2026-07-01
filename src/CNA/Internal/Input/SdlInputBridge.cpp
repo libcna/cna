@@ -193,6 +193,18 @@ namespace
             return GamePadButton::DPadRight;
         case SDL_GAMEPAD_BUTTON_GUIDE:
             return GamePadButton::BigButton;
+        case SDL_GAMEPAD_BUTTON_MISC1:
+            return GamePadButton::Misc1EXT;
+        case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1:
+            return GamePadButton::Paddle1EXT;
+        case SDL_GAMEPAD_BUTTON_LEFT_PADDLE1:
+            return GamePadButton::Paddle2EXT;
+        case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2:
+            return GamePadButton::Paddle3EXT;
+        case SDL_GAMEPAD_BUTTON_LEFT_PADDLE2:
+            return GamePadButton::Paddle4EXT;
+        case SDL_GAMEPAD_BUTTON_TOUCHPAD:
+            return GamePadButton::TouchPadEXT;
         default:
             return std::nullopt;
         }
