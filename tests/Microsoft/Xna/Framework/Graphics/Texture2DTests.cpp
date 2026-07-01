@@ -52,6 +52,55 @@ TEST(Texture2DTest, DefaultConstructorLevelCountIsOne)
 }
 
 // -----------------------------------------------------------------------
+// LevelCount — mipmapped vs non-mipmapped construction (Task 267)
+//
+// FNA's Texture.CalculateMipLevels formula: levels = 1 + the number of times
+// max(width, height) can be halved (integer division) before reaching 1.
+// Expected values below are computed by hand-tracing that formula.
+// -----------------------------------------------------------------------
+
+class LevelCountTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+};
+
+TEST_F(LevelCountTest, SimpleTwoArgConstructorIsAlwaysOne)
+{
+    // Texture2D(device, w, h) always matches FNA's mipMap=false delegating overload.
+    EXPECT_EQ(Texture2D(gd, 8, 8).getLevelCountProperty(), 1);
+    EXPECT_EQ(Texture2D(gd, 3, 5).getLevelCountProperty(), 1);
+    EXPECT_EQ(Texture2D(gd, 1, 1).getLevelCountProperty(), 1);
+}
+
+TEST_F(LevelCountTest, MipMapFalseIsAlwaysOneRegardlessOfSize)
+{
+    EXPECT_EQ(Texture2D(gd, 8, 8, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
+    EXPECT_EQ(Texture2D(gd, 100, 37, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
+    EXPECT_EQ(Texture2D(gd, 1, 1, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
+}
+
+TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
+{
+    EXPECT_EQ(Texture2D(gd, 1, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 1);
+    EXPECT_EQ(Texture2D(gd, 2, 2, true, SurfaceFormat::Color).getLevelCountProperty(), 2);
+    EXPECT_EQ(Texture2D(gd, 4, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
+    EXPECT_EQ(Texture2D(gd, 16, 16, true, SurfaceFormat::Color).getLevelCountProperty(), 5);
+}
+
+TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
+{
+    EXPECT_EQ(Texture2D(gd, 8, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+    EXPECT_EQ(Texture2D(gd, 1, 8, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+}
+
+TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
+{
+    EXPECT_EQ(Texture2D(gd, 3, 5, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
+    EXPECT_EQ(Texture2D(gd, 7, 11, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+}
+
+// -----------------------------------------------------------------------
 // getBoundsProperty
 // -----------------------------------------------------------------------
 

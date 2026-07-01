@@ -12,9 +12,9 @@ ported to C++ with minimal API-surface changes.
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
   pixel-readback integration tests.
 - **Current development phase:** Phase 32 — Texture2D completeness (Tasks 261–270) in progress
-  (Tasks 261, 262, 263, 264, 266 done). Phase 31 (Tasks 251–260) core work complete; only Task
-  260 (optional perf work) remains open. Phase 30 (VertexDeclaration / vertex format accuracy,
-  Tasks 241–250) is complete.
+  (Tasks 261, 262, 263, 264, 266, 267 done). Phase 31 (Tasks 251–260) core work complete; only
+  Task 260 (optional perf work) remains open. Phase 30 (VertexDeclaration / vertex format
+  accuracy, Tasks 241–250) is complete.
 - **Key architectural decisions:**
   - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).
@@ -29,7 +29,7 @@ ported to C++ with minimal API-surface changes.
 
 ### EasyGL backend (`cmake-build-debug`) — primary
 - **Builds:** clean.
-- **Unit tests (`CnaTests`):** 1808/1808 pass.
+- **Unit tests (`CnaTests`):** 1813/1813 pass.
 - **Integration tests:** ~62 EasyGL integration test executables registered in CMake; most pass.
   Two pre-existing failures: `easygl_device_dispose_order_test` (root cause unknown) and one
   pixel-readback test related to the SpriteBatch multiple-Begin/End bug (see Known Bugs).
@@ -96,8 +96,11 @@ ported to C++ with minimal API-surface changes.
 - **NOXNA tags fix** — Tagged `Texture2D(const std::string& assetName)` and
   `Texture2D(const std::string& assetName, GraphicsDevice&)` with `NOXNA` (neither is part of the
   FNA/XNA `Texture2D` API), matching the project's own precedent
-  (`SoundEffect(const std::string&)`). Purely a marker-macro addition — no behavior change;
-  1808/1808 total pass.
+  (`SoundEffect(const std::string&)`). Purely a marker-macro addition — no behavior change.
+- **Task 267** — Verified `LevelCount` behavior: the 2-arg constructor and `mipMap=false` always
+  yield `LevelCount == 1`; `mipMap=true` matches FNA's `CalculateMipLevels` formula for square
+  power-of-two (1x1→1, 2x2→2, 4x4→3, 16x16→5), non-square power-of-two (8x4→4, 1x8→4), and
+  non-power-of-two sizes (3x5→3, 7x11→4). 5 new unit tests; 1813/1813 total pass.
 - **Phase 30** — Full VertexDeclaration test suite, EasyGL vertex format integration test (strides
   16/20/24/32), Bgfx vertex layout mapping helper, `docs/vertex-format-support.md`.
 
@@ -109,7 +112,9 @@ ported to C++ with minimal API-surface changes.
   `DrawUserPrimitives` was in scope for Task 259).
 - Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
 - Bgfx and EasyGL stride-keyed layout: arbitrary `VertexDeclaration` strides beyond 16/20/24/32/52.
-- 365 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
+- Task 268 (non-power-of-two textures across backends) and Task 269 (edge sampling clamp/wrap)
+  not yet started — likely need pixel-readback integration tests, not just unit tests.
+- 364 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
 
 ---
 
@@ -117,6 +122,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 267 | `Texture2DTests.cpp` (extended), `GRAPHICS_TASKS.md` | LevelCount verification: 2-arg ctor / mipMap=false always 1; mipMap=true matches FNA's CalculateMipLevels for square/non-square/NPOT sizes. 5 new unit tests; 1813/1813 total pass. |
 | — | `Texture2D.hpp`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Tagged the 2 assetName constructors `NOXNA` (Task 261 audit finding). No behavior change; 1808/1808 total pass. |
 | 264 | `Texture2D.cpp`, `Texture2DTests.cpp` (extended), `AUDIT.md`, `GRAPHICS_TASKS.md` | SaveAsJpeg round-trip verification (tolerance-based, alpha-drop confirmed); fixed hardcoded JPEG quality=100 by adding FNA_GRAPHICS_JPEG_SAVE_QUALITY env-var support. 8 new unit tests; 1808/1808 total pass. |
 | 263 | `Texture2DTests.cpp` (extended), `GRAPHICS_TASKS.md` | SaveAsPng round-trip verification: error guards, multi-pixel+alpha exact match, non-square size, save-time resize, filename overload via temp file. 6 new unit tests; 1800/1800 total pass. |
@@ -139,7 +145,8 @@ ported to C++ with minimal API-surface changes.
 **No single hard blocker.** All Task 261 audit findings are now resolved except two: missing EXT
 statics (`SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`)
 and Color-only `SurfaceFormat` support. Neither is memory-unsafe — they're missing-API gaps that
-can be picked up incrementally per Phase 32 task without urgency. All 1808 unit tests pass.
+can be picked up incrementally per Phase 32 task without urgency. `LevelCount` behavior is now
+verified (Task 267). All 1813 unit tests pass.
 
 ---
 
@@ -249,18 +256,18 @@ cd cmake-build-debug && ctest --output-on-failure
 
 In priority order:
 
-1. **Task 267 — Verify `LevelCount` behavior for mipmapped and non-mipmapped textures**
-   - Goal: Unit tests confirming `getLevelCountProperty()` matches FNA's `CalculateMipLevels`
-     formula for various width/height combinations, and that the non-mipmapped constructor
-     always yields `LevelCount == 1`.
-   - Files: `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp`.
-   - Verification: new unit tests pass.
-
-2. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
+1. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
    - Goal: Replace `std::vector` allocations in `DrawUserPrimitives` / `DrawUserIndexedPrimitives`
      with a per-device scratch buffer or stack allocation for small counts.
    - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
-   - Verification: unit tests still 1808/1808; integration pixel-readback tests still pass.
+   - Verification: unit tests still 1813/1813; integration pixel-readback tests still pass.
+
+2. **Task 270 — Add CPU-side shadow storage only where required for `GetData`; document cost**
+   - Goal: Audit where `cpuPixels_`/mip-level shadow buffers are retained vs freed
+     (`MaybeFreeCpuPixels`, `contextRecoveryEnabled_`), confirm `GetData` still works correctly
+     when context recovery is disabled, and document the memory-cost tradeoff.
+   - Files: `Texture2D.cpp`, likely a new `docs/` note.
+   - Verification: existing + new unit tests pass; no unexpected memory growth.
 
 3. **Task 268/269 — Non-power-of-two textures and edge sampling** (larger, needs backend work)
    - Goal: Verify NPOT textures (e.g. 3x5, 7x11) work across all backends, and that texture
@@ -275,9 +282,9 @@ In priority order:
 
 - **No broad Texture2D rewrite** — the Task 261 audit is complete (see `AUDIT.md`); the 2 OOB
   bugs (Task 266), FromStream format support/resize overload (Task 262), SaveAsPng/SaveAsJpeg
-  verification (Tasks 263–264), and the NOXNA tag fix are all done; the remaining findings
-  (missing EXT statics, Color-only format support) should land incrementally per Phase 32 task,
-  not as one large refactor.
+  verification (Tasks 263–264), the NOXNA tag fix, and LevelCount verification (Task 267) are all
+  done; the remaining findings (missing EXT statics, Color-only format support) should land
+  incrementally per Phase 32 task, not as one large refactor.
 - **No refactor of the stride-keyed vertex layout system** — it is load-bearing for all 3D tests;
   changes need their own dedicated phase with full regression testing.
 - **No changes to the Bgfx backend draw path** — pixel readback is unavailable there, so correctness
@@ -298,19 +305,22 @@ Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
 Current status: Phase 30 complete; Phase 31 core work done (Tasks 251,252,255,256,257,258,259,329);
-Phase 32 in progress (Tasks 261, 262, 263, 264, 266 done + NOXNA tag fix). 1808/1808 unit tests pass.
+Phase 32 in progress (Tasks 261,262,263,264,266,267 done + NOXNA tag fix). 1813/1813 unit tests
+pass.
 
 Tasks 261 (audit), 266 (OOB-bug fixes), 262 (FromStream format verification + resize/crop
 overload), 263 (SaveAsPng round-trip verification), 264 (SaveAsJpeg round-trip verification +
-JPEG quality env-var fix), and the NOXNA tag fix are all closed. Remaining Task 261 findings:
+JPEG quality env-var fix), the NOXNA tag fix, and 267 (LevelCount verification) are all closed.
+Remaining Task 261 findings:
 - Missing SetDataPointerEXT/GetDataPointerEXT/TextureDataFromStreamEXT/DDSFromStreamEXT.
 - SurfaceFormat support is effectively Color-only (ValidateFormat throws for everything else).
 Neither is memory-unsafe — both are missing-API gaps (see AUDIT.md "Texture2D detailed audit").
 
-Next: Task 267 — verify LevelCount behavior for mipmapped and non-mipmapped textures. Add unit
-tests confirming getLevelCountProperty() matches FNA's CalculateMipLevels formula for various
-width/height combinations, and that the non-mipmapped constructor always yields LevelCount == 1.
-Files: tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp.
-Verification: new unit tests pass; CnaTests still all pass.
-Update GRAPHICS_TASKS.md (mark 267 ✅) and NEXT.md after finishing.
+Next: Task 260 — optimize user primitive staging in DrawUserPrimitives/DrawUserIndexedPrimitives
+to avoid a per-draw heap allocation (replace the std::vector staging buffer with a per-device
+scratch buffer or stack allocation for small counts). This is the last open Phase 31 item.
+Files: src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp.
+Verification: unit tests still 1813/1813; integration pixel-readback tests (Tasks 255-258) still
+pass.
+Update GRAPHICS_TASKS.md (mark 260 ✅) and NEXT.md after finishing.
 ```
