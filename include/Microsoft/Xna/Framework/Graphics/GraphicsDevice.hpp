@@ -763,6 +763,13 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<VertexBufferBinding> currentVertexBuffers_;
         std::vector<GraphicsResource*> resources_;
 
+        // Reusable byte buffers for DrawUserPrimitives / DrawUserIndexedPrimitives staging,
+        // avoiding a heap allocation on every draw call once capacity has grown to fit.
+        std::vector<std::uint8_t> userVertexScratch_;
+        std::vector<std::uint8_t> userIndexScratch_;
+        [[nodiscard]] void* AcquireUserVertexScratch(std::size_t bytes);
+        [[nodiscard]] void* AcquireUserIndexScratch(std::size_t bytes);
+
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const;
         [[nodiscard]] SDL_Window* GetWindowInternal() const;
 

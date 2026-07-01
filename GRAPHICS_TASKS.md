@@ -414,7 +414,7 @@ All 100 original tasks addressed.
 | 257 | Add tests for `DrawUserIndexedPrimitives` with 16-bit indices                                  | ✅      | `examples/easygl_draw_user_indexed_primitives_vpc_test.cpp`; full-NDC red quad via typed VPC + uint16_t overload; 2 sub-tests (vertexOffset=0/indexOffset=0, vertexOffset=1/indexOffset=1); centre=(255,0,0) 2/2 PASS |
 | 258 | Add tests for `DrawUserIndexedPrimitives` with 32-bit indices                                  | ✅      | `examples/easygl_draw_user_indexed_primitives_32_test.cpp`; full-NDC red quad via typed VPC + uint32_t overload; 2 sub-tests (vertexOffset=0/indexOffset=0, vertexOffset=1/indexOffset=1); centre=(255,0,0) 2/2 PASS |
 | 259 | Validate user primitive arrays for null, invalid offsets, invalid primitive count              | ✅      | `DrawUserPrimitivesTests.cpp` extended: primitiveCount<=0 throws `ArgumentOutOfRangeException` for all 5 `DrawUserPrimitives` overloads (VPC/VPT/VPCT/VPNT + VertexDeclaration), zero and negative counts; 10/10 new unit tests |
-| 260 | Optimize user primitive staging to avoid unnecessary heap allocation per draw                  | ⬜      | Performance task   |
+| 260 | Optimize user primitive staging to avoid unnecessary heap allocation per draw                  | ✅      | Added 2 per-device reusable scratch buffers (`userVertexScratch_`/`userIndexScratch_`, grow-only `resize`) shared by all 4 `DrawUserPrimitives` + 8 `DrawUserIndexedPrimitives` typed overloads + 2 indexed VertexDeclaration overloads; replaces 22 per-call `std::vector` heap allocations with buffer reuse once capacity stabilizes. 1813/1813 unit tests + 8/8 pixel-readback checks (Tasks 255–258) still pass — no rendering regression. |
 
 ---
 

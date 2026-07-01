@@ -19,6 +19,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -711,6 +712,21 @@ namespace Microsoft::Xna::Framework::Graphics
         static_assert(sizeof(GpuVPNT) == 32);
     }
 
+    // Grows the scratch buffer only when the requested size exceeds current capacity, so
+    // steady-state DrawUserPrimitives/DrawUserIndexedPrimitives calls (same or shrinking vertex
+    // counts) reuse the existing allocation instead of allocating on every draw.
+    void* GraphicsDevice::AcquireUserVertexScratch(std::size_t bytes)
+    {
+        if (userVertexScratch_.size() < bytes) userVertexScratch_.resize(bytes);
+        return userVertexScratch_.data();
+    }
+
+    void* GraphicsDevice::AcquireUserIndexScratch(std::size_t bytes)
+    {
+        if (userIndexScratch_.size() < bytes) userIndexScratch_.resize(bytes);
+        return userIndexScratch_.data();
+    }
+
     // DrawUserPrimitives — VertexPositionColor
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionColor* data, int offset, int count)
@@ -720,7 +736,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
-        std::vector<GpuVPC> packed(static_cast<std::size_t>(n));
+        auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPC)));
         for (int i = 0; i < n; ++i)
         {
             const auto& v = data[offset + i];
@@ -729,7 +745,7 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.Color.getBProperty(), v.Color.getAProperty() };
         }
         auto vb = backend_->CreateVertexBuffer(n);
-        vb->SetData(packed.data(), n, sizeof(GpuVPC));
+        vb->SetData(packed, n, sizeof(GpuVPC));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -745,7 +761,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
-        std::vector<GpuVPT> packed(static_cast<std::size_t>(n));
+        auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPT)));
         for (int i = 0; i < n; ++i)
         {
             const auto& v = data[offset + i];
@@ -753,7 +769,7 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.TextureCoordinate.X, v.TextureCoordinate.Y };
         }
         auto vb = backend_->CreateVertexBuffer(n);
-        vb->SetData(packed.data(), n, sizeof(GpuVPT));
+        vb->SetData(packed, n, sizeof(GpuVPT));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -769,7 +785,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
-        std::vector<GpuVPCT> packed(static_cast<std::size_t>(n));
+        auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPCT)));
         for (int i = 0; i < n; ++i)
         {
             const auto& v = data[offset + i];
@@ -779,7 +795,7 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.TextureCoordinate.X, v.TextureCoordinate.Y };
         }
         auto vb = backend_->CreateVertexBuffer(n);
-        vb->SetData(packed.data(), n, sizeof(GpuVPCT));
+        vb->SetData(packed, n, sizeof(GpuVPCT));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -795,7 +811,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
         const int n = VertexCountForUserPrimitives(type, count);
-        std::vector<GpuVPNT> packed(static_cast<std::size_t>(n));
+        auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPNT)));
         for (int i = 0; i < n; ++i)
         {
             const auto& v = data[offset + i];
@@ -804,7 +820,7 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.TextureCoordinate.X, v.TextureCoordinate.Y };
         }
         auto vb = backend_->CreateVertexBuffer(n);
-        vb->SetData(packed.data(), n, sizeof(GpuVPNT));
+        vb->SetData(packed, n, sizeof(GpuVPNT));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -864,7 +880,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
-        std::vector<GpuVPC> packed(static_cast<std::size_t>(numVerts));
+        auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
             const auto& v = vertices[vOffset + i];
@@ -872,11 +888,12 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.Color.getRProperty(), v.Color.getGProperty(),
                           v.Color.getBProperty(), v.Color.getAProperty() };
         }
-        std::vector<std::uint16_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
+        std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = backend_->CreateVertexBuffer(numVerts);
-        vb->SetData(packed.data(), numVerts, sizeof(GpuVPC));
+        vb->SetData(packed, numVerts, sizeof(GpuVPC));
         auto ib = backend_->CreateIndexBuffer16(ic);
-        ib->SetData16(idx.data(), ic);
+        ib->SetData16(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -892,18 +909,19 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
-        std::vector<GpuVPT> packed(static_cast<std::size_t>(numVerts));
+        auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
             const auto& v = vertices[vOffset + i];
             packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
                           v.TextureCoordinate.X, v.TextureCoordinate.Y };
         }
-        std::vector<std::uint16_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
+        std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = backend_->CreateVertexBuffer(numVerts);
-        vb->SetData(packed.data(), numVerts, sizeof(GpuVPT));
+        vb->SetData(packed, numVerts, sizeof(GpuVPT));
         auto ib = backend_->CreateIndexBuffer16(ic);
-        ib->SetData16(idx.data(), ic);
+        ib->SetData16(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -919,7 +937,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
-        std::vector<GpuVPCT> packed(static_cast<std::size_t>(numVerts));
+        auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
             const auto& v = vertices[vOffset + i];
@@ -928,11 +946,12 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.Color.getBProperty(), v.Color.getAProperty(),
                           v.TextureCoordinate.X, v.TextureCoordinate.Y };
         }
-        std::vector<std::uint16_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
+        std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = backend_->CreateVertexBuffer(numVerts);
-        vb->SetData(packed.data(), numVerts, sizeof(GpuVPCT));
+        vb->SetData(packed, numVerts, sizeof(GpuVPCT));
         auto ib = backend_->CreateIndexBuffer16(ic);
-        ib->SetData16(idx.data(), ic);
+        ib->SetData16(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -948,7 +967,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
-        std::vector<GpuVPNT> packed(static_cast<std::size_t>(numVerts));
+        auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
             const auto& v = vertices[vOffset + i];
@@ -956,11 +975,12 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.Normal.X, v.Normal.Y, v.Normal.Z,
                           v.TextureCoordinate.X, v.TextureCoordinate.Y };
         }
-        std::vector<std::uint16_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
+        std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = backend_->CreateVertexBuffer(numVerts);
-        vb->SetData(packed.data(), numVerts, sizeof(GpuVPNT));
+        vb->SetData(packed, numVerts, sizeof(GpuVPNT));
         auto ib = backend_->CreateIndexBuffer16(ic);
-        ib->SetData16(idx.data(), ic);
+        ib->SetData16(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -978,7 +998,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
-        std::vector<GpuVPC> packed(static_cast<std::size_t>(numVerts));
+        auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
             const auto& v = vertices[vOffset + i];
@@ -986,11 +1006,12 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.Color.getRProperty(), v.Color.getGProperty(),
                           v.Color.getBProperty(), v.Color.getAProperty() };
         }
-        std::vector<std::uint32_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
+        std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = backend_->CreateVertexBuffer(numVerts);
-        vb->SetData(packed.data(), numVerts, sizeof(GpuVPC));
+        vb->SetData(packed, numVerts, sizeof(GpuVPC));
         auto ib = backend_->CreateIndexBuffer32(ic);
-        ib->SetData32(idx.data(), ic);
+        ib->SetData32(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -1006,18 +1027,19 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
-        std::vector<GpuVPT> packed(static_cast<std::size_t>(numVerts));
+        auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
             const auto& v = vertices[vOffset + i];
             packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
                           v.TextureCoordinate.X, v.TextureCoordinate.Y };
         }
-        std::vector<std::uint32_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
+        std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = backend_->CreateVertexBuffer(numVerts);
-        vb->SetData(packed.data(), numVerts, sizeof(GpuVPT));
+        vb->SetData(packed, numVerts, sizeof(GpuVPT));
         auto ib = backend_->CreateIndexBuffer32(ic);
-        ib->SetData32(idx.data(), ic);
+        ib->SetData32(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -1033,7 +1055,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
-        std::vector<GpuVPCT> packed(static_cast<std::size_t>(numVerts));
+        auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
             const auto& v = vertices[vOffset + i];
@@ -1042,11 +1064,12 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.Color.getBProperty(), v.Color.getAProperty(),
                           v.TextureCoordinate.X, v.TextureCoordinate.Y };
         }
-        std::vector<std::uint32_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
+        std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = backend_->CreateVertexBuffer(numVerts);
-        vb->SetData(packed.data(), numVerts, sizeof(GpuVPCT));
+        vb->SetData(packed, numVerts, sizeof(GpuVPCT));
         auto ib = backend_->CreateIndexBuffer32(ic);
-        ib->SetData32(idx.data(), ic);
+        ib->SetData32(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -1062,7 +1085,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int ic = IndexCountForPrimitives(type, primCount);
-        std::vector<GpuVPNT> packed(static_cast<std::size_t>(numVerts));
+        auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
             const auto& v = vertices[vOffset + i];
@@ -1070,11 +1093,12 @@ namespace Microsoft::Xna::Framework::Graphics
                           v.Normal.X, v.Normal.Y, v.Normal.Z,
                           v.TextureCoordinate.X, v.TextureCoordinate.Y };
         }
-        std::vector<std::uint32_t> idx(indices + iOffset, indices + iOffset + ic);
+        auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
+        std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = backend_->CreateVertexBuffer(numVerts);
-        vb->SetData(packed.data(), numVerts, sizeof(GpuVPNT));
+        vb->SetData(packed, numVerts, sizeof(GpuVPNT));
         auto ib = backend_->CreateIndexBuffer32(ic);
-        ib->SetData32(idx.data(), ic);
+        ib->SetData32(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -1098,9 +1122,10 @@ namespace Microsoft::Xna::Framework::Graphics
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = backend_->CreateVertexBuffer(numVerts);
         vb->SetData(src, numVerts, static_cast<std::size_t>(stride));
-        std::vector<std::uint16_t> idx(indexData + iOffset, indexData + iOffset + ic);
+        auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
+        std::copy(indexData + iOffset, indexData + iOffset + ic, idx);
         auto ib = backend_->CreateIndexBuffer16(ic);
-        ib->SetData16(idx.data(), ic);
+        ib->SetData16(idx, ic);
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
@@ -1122,9 +1147,10 @@ namespace Microsoft::Xna::Framework::Graphics
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = backend_->CreateVertexBuffer(numVerts);
         vb->SetData(src, numVerts, static_cast<std::size_t>(stride));
-        std::vector<std::uint32_t> idx(indexData + iOffset, indexData + iOffset + ic);
+        auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
+        std::copy(indexData + iOffset, indexData + iOffset + ic, idx);
         auto ib = backend_->CreateIndexBuffer32(ic);
-        ib->SetData32(idx.data(), ic);
+        ib->SetData32(idx, ic);
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
