@@ -6,6 +6,7 @@
 #include <queue>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/GestureType.hpp"
@@ -102,15 +103,19 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Gets whether a touch device is currently known to exist.
+         * @note NOXNA — FNA declares `TouchDeviceExists` `internal`, not part of the
+         *       public XNA `TouchPanel` API. Exposed for the platform input bridge and
+         *       `FrameworkDispatcher`'s `Update()` gate.
          * @return True if a touch device exists; false otherwise.
          */
-        [[nodiscard]] static bool getTouchDeviceExistsProperty();
+        NOXNA [[nodiscard]] static bool getTouchDeviceExistsProperty();
 
         /**
          * @brief Sets whether a touch device is currently known to exist.
+         * @note NOXNA — see getTouchDeviceExistsProperty().
          * @param value True if a touch device exists; false otherwise.
          */
-        static void setTouchDeviceExistsProperty(bool value);
+        NOXNA static void setTouchDeviceExistsProperty(bool value);
 
         /**
          * @brief Returns touch panel capabilities.

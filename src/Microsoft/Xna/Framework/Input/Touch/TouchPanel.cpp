@@ -7,6 +7,7 @@
 
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/GestureDetector.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch
 {
@@ -118,6 +119,14 @@ namespace Microsoft::Xna::Framework::Input::Touch
             return TouchCollection(validTouches_);
         }
 
+        // Intentional deviation from FNA: FNA populates touches_ exclusively via SetFinger,
+        // driven by a per-frame platform poll (FNAPlatform.UpdateTouchPanelState() ->
+        // SDL_GetTouchFingers()) that Update() runs every tick. CNA's SdlInputBridge is
+        // event-driven (dispatches discrete SDL_Event values) rather than poll-driven, so
+        // SetFinger/touches_ are not fed by the real input path and stay empty in production.
+        // Fall back to InputManager's event-driven touch snapshot so GetState() still reports
+        // real touches. SetFinger/touches_ remain exercised by tests and available for a future
+        // poll-based platform path.
         return CNA::Internal::Input::InputManager::GetTouchState();
     }
 
@@ -125,7 +134,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
         if (gestures_.empty())
         {
-            throw std::logic_error("No gesture is available.");
+            throw System::InvalidOperationException();
         }
 
         GestureSample result = gestures_.front();
@@ -191,6 +200,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
                 touches_[slot] = TouchLocation(
                     previous.getIdProperty(),
                     TouchLocationState::Released,
+                    previous.getPositionProperty(),
+                    previous.getStateProperty(),
                     previous.getPositionProperty()
                 );
 
@@ -227,7 +238,9 @@ namespace Microsoft::Xna::Framework::Input::Touch
             touches_[slot] = TouchLocation(
                 fingerId,
                 TouchLocationState::Moved,
-                fingerPos
+                fingerPos,
+                previous.getStateProperty(),
+                previous.getPositionProperty()
             );
 
             updateInputManagerTouch(fingerId, TouchLocationState::Moved, fingerPos);
