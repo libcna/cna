@@ -90,18 +90,18 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 
 ### Fáze 0 — Bootstrap testů a build
 
-- [ ] **T-0A — Založit audio test infrastrukturu.**
+- [x] **T-0A — Založit audio test infrastrukturu.**
   Vytvořit `tests/Microsoft/Xna/Framework/Audio/` + první kostru (`CMakeLists` netřeba měnit — GLOB).
   Ověřit, že prázdný `*_test.cpp` se zaregistruje do `CnaTests` a projde build.
   *Accept:* `cmake --build cmake-build-debug --target CnaTests` přeloží a spustí novou (zatím triviální) test fixturu. (zdroj: A10/B11/C6)
 
 ### Fáze 1 — Compliance sweep (nízká námaha, vysoká hodnota)
 
-- [ ] **T-1A — SPDX do interních audio souborů.** `XactTypes.hpp`, `AudioMixer.hpp`, `XactParser.cpp`,
+- [x] **T-1A — SPDX do interních audio souborů.** `XactTypes.hpp`, `AudioMixer.hpp`, `XactParser.cpp`,
   `AudioMixer.cpp` → 1. řádek `// SPDX-License-Identifier: MS-PL`.
   *Accept:* všechny 4 začínají SPDX; build beze změny. (B1, X3)
 
-- [ ] **T-1B — `GetTypeName()` tečková konvence.** `AudioEngine.cpp:268`, `SoundBank.cpp:151`,
+- [x] **T-1B — `GetTypeName()` tečková konvence.** `AudioEngine.cpp:268`, `SoundBank.cpp:151`,
   `WaveBank.cpp:263`, `Cue.cpp:249`: `::` → `.`.
   *Accept:* test ověří `GetTypeName()=="Microsoft.Xna.Framework.Audio.<Class>"` pro všechny 4. (B2, X2)
 
@@ -109,14 +109,15 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   chybí. Přidat `GetTypeNameHPP()` v hpp a `GetTypeNameCPP(Microphone, "Microsoft.Xna.Framework.Audio.Microphone")` v cpp.
   *Accept:* `mic->GetTypeName()=="Microsoft.Xna.Framework.Audio.Microphone"`. (C2)
 
-- [ ] **T-1D — Mapování výjimek na `System::*` (datové/3D/mic třídy).**
-  `AudioEmitter::setDopplerScaleProperty` (`AudioEmitter.cpp:26`) → `ArgumentOutOfRangeException`;
+- [ ] **T-1D — Mapování výjimek na `System::*` (datové/3D/mic třídy). ČÁSTEČNĚ HOTOVO.**
+  `AudioEmitter::setDopplerScaleProperty` (`AudioEmitter.cpp:26`) → `ArgumentOutOfRangeException` — **hotovo**.
   `Microphone::setBufferDurationProperty` → `ArgumentOutOfRangeException`;
-  oba `Microphone::GetData` bounds-checky → `ArgumentException`.
+  oba `Microphone::GetData` bounds-checky → `ArgumentException` — **zbývá**: `Microphone.cpp:64,98,103`
+  dnes stále hází `std::out_of_range` (ověřeno 2026-07-01).
   *FNA:* AudioEmitter.cs:33, Microphone.cs:62,171-179.
   *Accept:* testy ověří přesný `System::` typ pro každou chybovou větev; validní vstup nehází. (C3, X1)
 
-- [ ] **T-1E — Mapování výjimek na `System::*` (core playback).**
+- [x] **T-1E — Mapování výjimek na `System::*` (core playback).**
   SoundEffect.cpp:232,246 → `ArgumentOutOfRangeException`; :393,400,409 → `NotSupportedException`;
   :132 → `ArgumentException`. SoundEffectInstance.cpp:138 → `ObjectDisposedException` (nebo odebrat);
   :308 → `NotSupportedException`; :400 → `InvalidOperationException`.
@@ -124,14 +125,14 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *FNA:* SoundEffect.cs:82,98,412; SoundEffectInstance.cs:39,277.
   *Accept:* testy na přesný typ u každé větve. (A3, X1)
 
-- [ ] **T-1F — Mapování výjimek na `System::*` (XACT).**
+- [x] **T-1F — Mapování výjimek na `System::*` (XACT).**
   `std::invalid_argument`→`ArgumentNullException`; disposed→`ObjectDisposedException`;
   invalid-name→`InvalidOperationException`. Sites: AudioEngine.cpp:48,119,121,139,147,155;
   SoundBank.cpp:35,37,83,85,108; WaveBank.cpp:119,121; Cue.cpp:65,67,73,81,89.
   *FNA:* AudioEngine.cs:119/273, SoundBank.cs:66/174, WaveBank.cs:77, Cue.cs:170/202.
   *Accept:* testy na přesný typ (null/empty arg, invalid name, use-after-dispose). (B3, X1)
 
-- [ ] **T-1G — Rebáze tří audio výjimek na sharp-runtime báze.**
+- [x] **T-1G — Rebáze tří audio výjimek na sharp-runtime báze.**
   `InstancePlayLimitException`, `NoAudioHardwareException` → `System::Runtime::InteropServices::ExternalException`;
   `NoMicrophoneConnectedException` → `System::Exception`. Odstranit ručně psané `innerException_`/
   `InnerException()` (báze už má `getInnerExceptionProperty()`); 3 ctory (default, `(message)`,
@@ -147,7 +148,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 
 ### Fáze 2 — Opravy reálných chyb
 
-- [ ] **T-2A — Opravit override `DynamicSoundEffectInstance::setIsLoopedProperty`.**
+- [x] **T-2A — Opravit override `DynamicSoundEffectInstance::setIsLoopedProperty`.**
   Derived signatura musí přesně odpovídat bázovým virtuálům (`const bool&` a NOXNA `bool&&`) + `override`,
   nebo sjednotit bázi na jeden kanonický setter. Dnes signatura `bool` hodnotou **skrývá** místo override,
   takže přes `SoundEffectInstance&` se volá bázová verze, která při přehrávání hází.
@@ -155,21 +156,21 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* přes `SoundEffectInstance&` je set IsLooped na dynamické instanci no-op a `getIsLoopedProperty()==false`,
   i během přehrávání (nehází). (A1)
 
-- [ ] **T-2B — `DynamicSoundEffectInstance::Dispose()` override + sjednocení disposed flagu.**
+- [x] **T-2B — `DynamicSoundEffectInstance::Dispose()` override + sjednocení disposed flagu.**
   Override `Dispose()`: Stop → `DestroyStream()` → odregistrovat z `FrameworkDispatcher::Streams` → chain báze.
   Zrušit samostatný `disposed_`; `getIsDisposedProperty()` opřít o bázový flag.
   *FNA:* DynamicSoundEffectInstance.cs:237-247.
   *Accept:* po `Dispose()` jsou `dynamicTrack_`/`audioStream_` null a `getIsDisposedProperty()==true`;
   druhé `Dispose()` je bezpečné (idempotentní). (A2)
 
-- [ ] **T-2C — `SubmitFloatBufferEXT` guard + přepnutí formátu float/stream.**
+- [x] **T-2C — `SubmitFloatBufferEXT` guard + přepnutí formátu float/stream.**
   Házet `InvalidOperationException("Submit a float buffer before Playing!")`, pokud `State != Stopped`
   a stream je stále int-formát; `EnsureStream` musí reflektovat `isFloat_` (re-create streamu při změně
   formátu před prvním Play). Dnes S16 stream krmený F32 byty → mismatch.
   *FNA:* DynamicSoundEffectInstance.cs:194-199.
   *Accept:* float submit po Play na int-instanci hází; float-před-Play vytvoří F32LE stream; testy obě větve. (A4)
 
-- [ ] **T-2D — Opravit compact-XWB `dataLength`.** `XactParser.cpp:424-426`: délku počítat z po sobě
+- [x] **T-2D — Opravit compact-XWB `dataLength`.** `XactParser.cpp:424-426`: délku počítat z po sobě
   jdoucích offsetů minus deviace, ne z `dev` samotného; poslední entry `segLength[4]-offset`. Také
   zkontrolovat větev `entryMetaDataSize < 24` (439-449), která dnes všem entry nastavuje celý datový segment.
   *Accept:* parser unit test na známém compact `.xwb` dá správné délky (počet PCM vzorků sedí). (B6)
@@ -183,15 +184,18 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   re-seeku na `0x32` (641-647).
   *Accept:* XGS test parsuje kategorie/proměnné identicky; bez změny chování. (B8)
 
-- [ ] **T-2G — AudioCategory: opravit `Equals` + doplnit `Equals(Object)` + opravit doxygen.**
+- [x] **T-2G — AudioCategory: opravit `Equals` + doplnit `Equals(Object)` + opravit doxygen.**
   `Equals` porovnávat dle `name_` (jako FNA name-hash), ne `parent_+index_` (`AudioCategory.cpp:43`).
   Aktualizovat hpp doxygen (`AudioCategory.hpp:25-36`) — popsat reálné směrování kategorií, ne „no-op".
   *FNA:* AudioCategory.cs:109-126.
   *Accept:* equality testy equal/unequal dle jména; konzistence `==`/`!=`/`GetHashCode`. (B10)
+  *Pozn.:* `Equals(Object)` záměrně nedoplněno — `AudioCategory` nedědí `System::Object` (stejně jako
+  `Vector2` a další `IEquatable`-only hodnotové typy v projektu), takže C# `Equals(object)` override
+  zde nemá ekvivalent.
 
 ### Fáze 3 — Věrnost API a chování
 
-- [ ] **T-3A — Throw na neplatné jméno (XACT lookupy).**
+- [x] **T-3A — Throw na neplatné jméno (XACT lookupy).**
   `AudioEngine::GetCategory` (`:131`) a `SoundBank::GetCue` (`:95-98`) místo stub-návratu házet
   `InvalidOperationException`; `AudioEngine::SetGlobalVariable` (`:158`) a `Cue::SetVariable`/`GetVariable`
   validovat jméno proti parsované sadě.
@@ -199,26 +203,26 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* test valid→úspěch, invalid→`InvalidOperationException`; `Cue::GetVariable("Distance")` na
   vestavěné proměnné nehází (doplnit built-in cue proměnné). (B4)
 
-- [ ] **T-3B — Reálné `IsInUse` pro SoundBank a WaveBank.**
+- [x] **T-3B — Reálné `IsInUse` pro SoundBank a WaveBank.**
   `SoundBank.cpp:71` → true, dokud hraje vlastněný cue/fire-and-forget; `WaveBank.cpp:166` → true,
   dokud hraje jím vyprodukovaná `SoundEffectInstance`.
   *FNA:* SoundBank.cs:28-36, WaveBank.cs:39-47.
   *Accept:* test: přehraj cue → `IsInUse==true`; po stop/elapse → `false`. (B5)
 
-- [ ] **T-3C — Pan/Volume sémantika v SoundEffectInstance.**
+- [x] **T-3C — Pan/Volume sémantika v SoundEffectInstance.**
   Pan setter: `ObjectDisposedException` při disposed a `ArgumentOutOfRangeException` při `|value|>1`
   (místo tichého klampu); rozhodnout Volume klamp vs. pass-through (FNA pass-through). Pokud klamp
   zůstane jako vědomá SDL-volba, zapsat do tabulky odchylek.
   *FNA:* SoundEffectInstance.cs:46-83,124-142.
   *Accept:* chování dle rozhodnutí; testy in-range, out-of-range, disposed. (A5)
 
-- [ ] **T-3D — `RendererDetail::Equals` + doplnit doxygen.**
+- [x] **T-3D — `RendererDetail::Equals` + doplnit doxygen.**
   Přidat `[[nodiscard]] bool Equals(const RendererDetail&) const` (dle `rendererId_`, konzistentní s `operator==`);
   doplnit `@return`/`@param` u `ToString`/`GetHashCode`/`operator==`/`operator!=`.
   *FNA:* RendererDetail.cs:48-52.
   *Accept:* `Equals` true pro stejný `RendererId`, jinak false; test equal/unequal. (C4)
 
-- [ ] **T-3E — Vyřešit `SoundEffectI`.**
+- [x] **T-3E — Vyřešit `SoundEffectI`.**
   Preferováno: smazat `SoundEffectI.hpp`, `CreateInstance()` dát přímo na `SoundEffect` (bez pure-virtual),
   upravit include v SoundEffect.hpp a Cue.cpp. Pokud zachovat, přesunout do `CNA::` namespace a otagovat `NOXNA`.
   *Důvod:* není XNA API a jediný volající (`Cue.cpp:186`) drží konkrétní `SoundEffect*`.
@@ -274,52 +278,52 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 > má ≥1 test; out-ref/array overloady testovat zvlášť; `==`/`!=`/`Equals` equal i unequal; `ToString`
 > formát; `GetHashCode` konzistence; `GetTypeName` přesnou hodnotu.
 
-- [ ] **T-5A — SoundEffectTests** — oba ctory; `GetSampleDuration`/`GetSampleSizeInBytes` (round-trip + nula);
+- [x] **T-5A — SoundEffectTests** — oba ctory; `GetSampleDuration`/`GetSampleSizeInBytes` (round-trip + nula);
   `Duration`; `Name` get/set (+ move overload); `IsDisposed`; static `MasterVolume`/`DistanceScale`(≤0 hází)/
   `DopplerScale`(<0 hází)/`SpeedOfSound`; `CreateInstance`; `Play()`/`Play(v,p,pan)`; `Dispose` idempotentní;
   `FromStream` (validní wave + ne-wave `NotSupportedException` + prázdný). (A10)
 
-- [ ] **T-5B — SoundEffectInstanceTests** — `Play`/`Pause`/`Resume`/`Stop`/`Stop(bool)`; přechody `State`;
+- [x] **T-5B — SoundEffectInstanceTests** — `Play`/`Pause`/`Resume`/`Stop`/`Stop(bool)`; přechody `State`;
   `Volume`/`Pan`/`Pitch` get/set (+ move overloady, range); `IsLooped` get/set (+ throw-while-started);
   `Apply3D(listener,emitter)`; `Apply3D(array,count)` (count==1 + >1 `NotSupportedException`); `IsDisposed`;
   `Dispose` idempotentní; `GetTypeName`. (A10)
 
-- [ ] **T-5C — DynamicSoundEffectInstanceTests** — ctor; `PendingBufferCount`; `IsLooped` vždy false + setter
+- [x] **T-5C — DynamicSoundEffectInstanceTests** — ctor; `PendingBufferCount`; `IsLooped` vždy false + setter
   no-op (přes bázovou ref, viz T-2A); `GetSampleDuration`/`GetSampleSizeInBytes`; `Play`/`Stop`;
   `SubmitBuffer` ×2 (+ range); `SubmitFloatBufferEXT` ×2 (+ range + `InvalidOperationException` guard, T-2C);
   `BufferNeeded` při hladovění; `Dispose` (T-2B); `GetTypeName`; `Update`. (A10)
 
-- [ ] **T-5D — SoundStateTests** — hodnoty a pořadí Playing/Paused/Stopped. (A10)
+- [x] **T-5D — SoundStateTests** — hodnoty a pořadí Playing/Paused/Stopped. (A10)
 
-- [ ] **T-5E — AudioEngineTests** — `ContentVersion`; oba ctory; `IsDisposed`; `RendererDetails`;
+- [x] **T-5E — AudioEngineTests** — `ContentVersion`; oba ctory; `IsDisposed`; `RendererDetails`;
   `GetCategory` (valid+invalid); `GetGlobalVariable`/`SetGlobalVariable` (valid+invalid); `Update`;
   `Dispose`+`Disposing` event; `GetTypeName`. (B11)
 
-- [ ] **T-5F — SoundBankTests** — ctor (valid/null/empty); `IsDisposed`; `IsInUse`; `GetCue` (valid+invalid);
+- [x] **T-5F — SoundBankTests** — ctor (valid/null/empty); `IsDisposed`; `IsInUse`; `GetCue` (valid+invalid);
   `PlayCue` (2-arg) a `PlayCue` (3-arg) zvlášť; `Dispose`+event; `GetTypeName`. (B11)
 
-- [ ] **T-5G — WaveBankTests** — oba ctory zvlášť; `IsDisposed`/`IsPrepared`/`IsInUse`; `Dispose`+event; `GetTypeName`. (B11)
+- [x] **T-5G — WaveBankTests** — oba ctory zvlášť; `IsDisposed`/`IsPrepared`/`IsInUse`; `Dispose`+event; `GetTypeName`. (B11)
 
-- [ ] **T-5H — CueTests** — všech 9 stav/Name properties; `Apply3D`; `GetVariable`/`SetVariable` (valid+invalid,
+- [x] **T-5H — CueTests** — všech 9 stav/Name properties; `Apply3D`; `GetVariable`/`SetVariable` (valid+invalid,
   mimo sadu); `Play`/`Pause`/`Resume`/`Stop(AsAuthored)` a `Stop(Immediate)` zvlášť; `Dispose`+event; `GetTypeName`. (B11)
 
-- [ ] **T-5I — AudioCategoryTests** — `Name`; `Pause`/`Resume`/`SetVolume`/`Stop` (obě options);
+- [x] **T-5I — AudioCategoryTests** — `Name`; `Pause`/`Resume`/`SetVolume`/`Stop` (obě options);
   `Equals` equal+unequal; `GetHashCode` konzistence; `operator==`/`operator!=`. (B11)
 
-- [ ] **T-5J — AudioEmitterTests / AudioListenerTests** — defaulty (DopplerScale 1.0, Forward/Up/Zero);
+- [x] **T-5J — AudioEmitterTests / AudioListenerTests** — defaulty (DopplerScale 1.0, Forward/Up/Zero);
   každý getter/setter round-trip; negativní DopplerScale hází. (C6)
 
-- [ ] **T-5K — Enum testy** — `AudioChannels`, `AudioStopOptions`, `MicrophoneState` (číselné hodnoty). (C6)
+- [x] **T-5K — Enum testy** — `AudioChannels`, `AudioStopOptions`, `MicrophoneState` (číselné hodnoty). (C6)
 
-- [ ] **T-5L — RendererDetailTests** — `ToString`, `GetHashCode` konzistence, `operator==`/`!=`, `Equals` equal+unequal. (C6)
+- [x] **T-5L — RendererDetailTests** — `ToString`, `GetHashCode` konzistence, `operator==`/`!=`, `Equals` equal+unequal. (C6)
 
 - [ ] **T-5M — MicrophoneTests** — `Default` null-safe při prázdném `All`; `BufferDuration` valid/invalid;
   `GetSampleDuration`/`GetSampleSizeInBytes` round-trip; `GetData` bounds; `GetTypeName`; stavový automat (T-4A). (C6)
 
-- [ ] **T-5N — Exception testy** — pro `InstancePlayLimitException`/`NoAudioHardwareException`/
+- [x] **T-5N — Exception testy** — pro `InstancePlayLimitException`/`NoAudioHardwareException`/
   `NoMicrophoneConnectedException`: všechny 3 ctory, base-of asserty, inner-exception round-trip. (C1)
 
-- [ ] **T-5O — XactParser testy (NOXNA internal)** — round-trip parse minimálních `.xgs`/`.xsb`/`.xwb`
+- [x] **T-5O — XactParser testy (NOXNA internal)** — round-trip parse minimálních `.xgs`/`.xsb`/`.xwb`
   fixtur: počty kategorií/proměnných/cue/entry + jedna délka PCM vzorku (regrese na T-2D/T-2E). (B11)
 
 ### Fáze 6 — Dokumentace a uzávěrka
