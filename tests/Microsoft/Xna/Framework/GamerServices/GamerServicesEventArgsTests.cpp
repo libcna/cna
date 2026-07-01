@@ -4,43 +4,55 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInEventArgs.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedOutEventArgs.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 
-// SignedInGamer is not yet ported; use nullptr as a stand-in for the pointer.
+namespace {
+    SignedInGamer MakeSignedInGamer() {
+        return SignedInGamer::CreateInternal("tag1");
+    }
+}
 
 TEST(SignedInEventArgsTest, StoresGamer) {
-    SignedInEventArgs args(nullptr);
-    EXPECT_EQ(nullptr, args.getGamerProperty());
+    auto gamer = MakeSignedInGamer();
+    SignedInEventArgs args(&gamer);
+    EXPECT_EQ(&gamer, args.getGamerProperty());
 }
 
 TEST(SignedInEventArgsTest, InheritsEventArgs) {
-    SignedInEventArgs args(nullptr);
+    auto gamer = MakeSignedInGamer();
+    SignedInEventArgs args(&gamer);
     EXPECT_NE(nullptr, dynamic_cast<System::EventArgs*>(&args));
 }
 
 TEST(SignedOutEventArgsTest, StoresGamer) {
-    SignedOutEventArgs args(nullptr);
-    EXPECT_EQ(nullptr, args.getGamerProperty());
+    auto gamer = MakeSignedInGamer();
+    SignedOutEventArgs args(&gamer);
+    EXPECT_EQ(&gamer, args.getGamerProperty());
 }
 
 TEST(SignedOutEventArgsTest, InheritsEventArgs) {
-    SignedOutEventArgs args(nullptr);
+    auto gamer = MakeSignedInGamer();
+    SignedOutEventArgs args(&gamer);
     EXPECT_NE(nullptr, dynamic_cast<System::EventArgs*>(&args));
 }
 
 TEST(InviteAcceptedEventArgsTest, StoresGamerAndFlag) {
-    InviteAcceptedEventArgs args(nullptr, true);
-    EXPECT_EQ(nullptr, args.getGamerProperty());
+    auto gamer = MakeSignedInGamer();
+    InviteAcceptedEventArgs args(&gamer, true);
+    EXPECT_EQ(&gamer, args.getGamerProperty());
     EXPECT_TRUE(args.getIsCurrentSessionProperty());
 }
 
 TEST(InviteAcceptedEventArgsTest, FlagFalse) {
-    InviteAcceptedEventArgs args(nullptr, false);
+    auto gamer = MakeSignedInGamer();
+    InviteAcceptedEventArgs args(&gamer, false);
     EXPECT_FALSE(args.getIsCurrentSessionProperty());
 }
 
 TEST(InviteAcceptedEventArgsTest, InheritsEventArgs) {
-    InviteAcceptedEventArgs args(nullptr, false);
+    auto gamer = MakeSignedInGamer();
+    InviteAcceptedEventArgs args(&gamer, false);
     EXPECT_NE(nullptr, dynamic_cast<System::EventArgs*>(&args));
 }

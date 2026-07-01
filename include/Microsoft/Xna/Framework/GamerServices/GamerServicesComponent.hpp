@@ -9,10 +9,7 @@ namespace Microsoft::Xna::Framework::GamerServices
      * @brief A GameComponent that must be added to Game.Components to enable GamerServices.
      *
      * On PC, XNA 4.0 required this component to be registered before calling any
-     * Guide or Gamer API. CNA provides a no-op stub; GamerServices are not available
-     * on any CNA platform.
-     *
-     * @note CNA_STUB: XNA 4.0 API surface placeholder. Behavior is not implemented yet.
+     * Guide or Gamer API.
      */
     class GamerServicesComponent : public Microsoft::Xna::Framework::GameComponent
     {
@@ -24,11 +21,14 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         explicit GamerServicesComponent(Microsoft::Xna::Framework::Game& game);
 
-        /** @brief No-op stub. Does not initialize any real GamerServices infrastructure. */
+        /**
+         * @brief Initializes GamerServicesDispatcher with the owning game's window handle
+         * and service container.
+         */
         void Initialize() override;
 
         /**
-         * @brief No-op stub. Does not process any GamerServices updates.
+         * @brief Drives GamerServicesDispatcher's per-frame update.
          *
          * @param gameTime Current game timing state.
          */

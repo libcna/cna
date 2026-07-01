@@ -319,6 +319,37 @@ All 19 types audited. Missing Vector-form constructors added.
 
 | Class | Status | Notes |
 |---|---|---|
-| Guide | ✅ | Stub |
-| GamerServicesComponent | ✅ | Stub added |
 | GamerServicesNotAvailableException | ✅ | Stub added |
+| Gamer | ✅ | Full port; abstract base, tests via FriendGamer subclass |
+| GamerProfile | ✅ | Full port; tests complete |
+| LeaderboardEntry | ✅ | Full port; tests complete; `operator==`/`operator!=` added (NOXNA — required by `ReadOnlyCollection<T>`, not present in FNA) |
+| LeaderboardWriter | ✅ | Full port; `GetLeaderboard` always throws (matches FNA stub) |
+| LeaderboardReader | ✅ | Full port; tests complete |
+| SignedInGamer | ✅ | Full port; tests complete |
+| GamerServicesDispatcher | ✅ | Full port: `IsInitialized`, `WindowHandle`, `InstallingTitleUpdate` event, `Initialize()` (creates 4 stub `SignedInGamer`s, fires `OnSignIn`), `Update()`, `UpdateAsync()`. `Initialize()` deliberately not exercised by the automated test suite (sets process-lifetime static state) |
+| GamerServicesComponent | ✅ | Full port — wires `Initialize()`/`Update()` to `GamerServicesDispatcher`; no tests (requires a live `Game`, same as `GameComponent`) |
+| Guide | ✅ | Full port — replaced the old `DEF_PROP`-based stub (which had an invented, non-FNA `Show(PlayerIndex)` method); tests complete except the always-empty `Show*` no-ops verified only for non-throw |
+
+---
+
+## `Microsoft::Xna::Framework::Net`
+
+| Class | Status | Notes |
+|---|---|---|
+| NetworkSessionType (enum) | ✅ | Complete |
+| NetworkSessionState (enum) | ✅ | Complete |
+| NetworkSessionEndReason (enum) | ✅ | Complete |
+| NetworkSessionJoinError (enum) | ✅ | Complete |
+| SendDataOptions (enum) | ✅ | Complete; FNA marks `[Flags]` but values are sequential (0-4), not real bit flags — ported plain, no bitwise operators added |
+| NetworkSessionProperties | ✅ | Full port; implements `System::Collections::Generic::IList<std::optional<int>>`. Preserves two FNA quirks faithfully: the indexer setter appends instead of extending when given an out-of-range index (FNA's own "TODO: Expand list to index size?"), and `IsReadOnly` always returns `true` despite `Add`/`Remove`/`Clear` being fully functional |
+| QualityOfService | ✅ | Full port; all-defaults data class |
+| AvailableNetworkSession | ✅ | Full port; `operator==`/`operator!=` added (NOXNA — required by `ReadOnlyCollection<T>`, not present in FNA; compares only scalar fields, excludes non-equatable `QualityOfService`/`NetworkSessionProperties` members) |
+| AvailableNetworkSessionCollection | ✅ | Full port; `Dispose()` only flips `IsDisposed` — sharp-runtime's `ReadOnlyCollection<T>` copies into private storage with no derived-class mutator, unlike FNA's reference-wrapping `ReadOnlyCollection<T>` whose `Dispose()` empties the underlying shared list too |
+| GameEndedEventArgs | ✅ | Full port |
+| GameStartedEventArgs | ✅ | Full port |
+| GamerJoinedEventArgs | ✅ | Full port; `NetworkGamer*` stored as forward-declared pointer (`NetworkGamer` not yet ported) |
+| GamerLeftEventArgs | ✅ | Full port; `NetworkGamer*` forward-declared |
+| HostChangedEventArgs | ✅ | Full port; `NetworkGamer*` forward-declared (OldHost/NewHost) |
+| NetworkSessionEndedEventArgs | ✅ | Full port |
+| WriteLeaderboardsEventArgs | ✅ | Full port; internal ctor → private + `CreateInternal()` factory |
+| NetworkSessionJoinException | ✅ | Full port; `: GamerServices::NetworkException`, mirrors its 4-ctor + protected serialization-ctor pattern exactly |
