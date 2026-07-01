@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 namespace CNA::Internal::Audio
 {
@@ -404,26 +405,35 @@ namespace CNA::Internal::Audio
 
         if (isCompact)
         {
-            // Compact format: 32-bit per entry
-            // dwOffset: 21 bits, dwLengthDeviation: 11 bits
+            // Compact format: 32-bit per entry: dwOffset (21 bits, units of `alignment`),
+            // dwLengthDeviation (11 bits). The deviation is how many bytes shorter than the
+            // aligned span the real audio is, not the length itself, so the length must come
+            // from the gap to the next entry's offset (or to the end of the wave-data segment
+            // for the last entry) minus that deviation.
+            std::vector<uint32_t> rawOffsetUnits(entryCount);
+            std::vector<uint32_t> deviations(entryCount);
             for (uint32_t i = 0; i < entryCount; ++i)
             {
                 uint32_t ce = ctx.u32();
-                uint32_t offset = (ce & 0x1FFFFFu) * alignment;
-                uint32_t dev    = (ce >> 21) & 0x7FFu;
+                rawOffsetUnits[i] = ce & 0x1FFFFFu;
+                deviations[i]     = (ce >> 21) & 0x7FFu;
                 ctx.skip(entryMetaDataSize - 4); // advance past entry
+            }
+
+            uint8_t wba = static_cast<uint8_t>((compactFormat >> 23) & 0xFFu);
+            for (uint32_t i = 0; i < entryCount; ++i)
+            {
+                uint32_t offset = rawOffsetUnits[i] * alignment;
 
                 result.entries[i].format        = static_cast<XwbFormat>(compactFormat & 0x3u);
                 result.entries[i].channels      = static_cast<uint8_t>(((compactFormat >> 2) & 0x7u) + 1);
                 result.entries[i].sampleRate    = (compactFormat >> 5) & 0x3FFFFu;
-                uint8_t wba                     = static_cast<uint8_t>((compactFormat >> 23) & 0xFFu);
                 result.entries[i].bitsPerSample = ((compactFormat >> 31) & 1u) ? 16 : 8;
                 result.entries[i].blockAlign    = wba;
 
                 result.entries[i].dataOffset    = segOffset[4] + offset;
-                // For last entry use remaining length; otherwise compute from next
                 result.entries[i].dataLength    = (i + 1 < entryCount)
-                    ? (((ce >> 21) & 0x7FF) == 0 ? 0 : dev)
+                    ? (rawOffsetUnits[i + 1] * alignment - offset - deviations[i])
                     : (segLength[4] - offset);
             }
         }

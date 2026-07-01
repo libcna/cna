@@ -31,7 +31,7 @@ built on SDL3. It is a framework/runtime, not a game.
 
 - **Build:** EasyGL `cmake-build-debug` builds clean, including all audio. (`SOUND_ENABLED` is on;
   SDL3_mixer is linked.)
-- **Unit tests:** `CnaTests` **1839 / 1839 pass** (up from 1757 at the start of this branch; **+82
+- **Unit tests:** `CnaTests` **1840 / 1840 pass** (up from 1757 at the start of this branch; **+83
   audio tests added**). No regressions.
 - **Build-dir note (important):** `cna_audio/cmake-build-debug` was previously configured against the
   sibling checkout `../cna` (wrong source tree). It has been wiped and reconfigured to build
@@ -53,8 +53,9 @@ built on SDL3. It is a framework/runtime, not a game.
   but has "stub behavior", wrong exception types (`std::*` not `System::*`), `GetTypeName` using `::`
   instead of `.`, `IsInUse` hard-coded `false`, and lookups that return stubs instead of throwing.
   **Zero tests.**
-- **`XactParser`** has a confirmed data bug (compact `.xwb` length), dead code, and a fragile track-event
-  walker (see §5). **Zero tests.**
+- **`XactParser`** compact `.xwb` length bug is fixed and covered by one round-trip test (T-2D/T-5O);
+  the dead XGS first-pass code and the fragile track-event walker are still open (see §5). Coverage is
+  otherwise minimal (1 test).
 - **`Microphone`** is a stub — no SDL audio capture; missing `GetTypeName`.
 - **`RendererDetail`** missing `Equals`; no tests (only constructible via `AudioEngine`).
 - 3D positional audio / Doppler: accepted SDL_mixer limitation (stored, not applied).
@@ -65,7 +66,8 @@ built on SDL3. It is a framework/runtime, not a game.
 
 | Commit | Area | Change |
 |--------|------|--------|
-| _(pending)_ | Internal audio | T-1A: added `// SPDX-License-Identifier: MS-PL` to `XactTypes.hpp`, `AudioMixer.hpp`, `XactParser.cpp`, `AudioMixer.cpp`. No behavior change; 1839 tests still pass. |
+| _(pending)_ | `XactParser` | T-2D/T-5O: fixed compact `.xwb` per-entry `dataLength` — now derived from the gap to the next entry's offset minus the 11-bit deviation (last entry: remaining wave-data segment, unchanged), instead of using the raw deviation value as the length. Added `XactParserTests.cpp` round-trip test on a synthetic 3-entry compact fixture; confirmed it fails against the pre-fix code (verified via `git stash`). +1 test. |
+| `704aae5` | Internal audio | T-1A: added `// SPDX-License-Identifier: MS-PL` to `XactTypes.hpp`, `AudioMixer.hpp`, `XactParser.cpp`, `AudioMixer.cpp`. No behavior change; 1839 tests still pass. |
 | `aca2712` | `SoundEffect`, `SoundEffectInstance` | Pan disposed/range throws; Volume + MasterVolume pass-through (FNA); IsLooped `hasStarted_` gate → `InvalidOperationException`; Apply3D null/`>1` throws; all exceptions → `System::` types; `GetSampleDuration` truncates to whole ms (FNA); removed non-XNA `SoundEffectI` interface; removed dead `LoadAudioFromMemory`. +29 tests. |
 | `7b3d8fa` | `DynamicSoundEffectInstance` | Fixed `setIsLoopedProperty` to override **both** base virtuals (was hiding); added `Dispose()` override + made base `getIsDisposedProperty()` virtual (fixes stream/track leak, single disposed flag); `SubmitFloatBufferEXT` guard + stream-format rebuild; exceptions → `System::`; moved `GetTypeName` to public. +15 tests. |
 | `443b501` | `AudioEmitter` + enums/data | `AudioEmitter.DopplerScale` → `ArgumentOutOfRangeException`; tests for AudioEmitter/AudioListener + 4 enums. +26 tests. |
@@ -76,17 +78,16 @@ built on SDL3. It is a framework/runtime, not a game.
 
 ## 4. Current blocker / main problem
 
-**No hard blocker** — the build is clean and all 1839 unit tests pass.
+**No hard blocker** — the build is clean and all 1840 unit tests pass.
 
-The most important *substantive* problem is that the **XACT cluster is the largest unverified area**:
-- `src/CNA/Internal/Audio/XactParser.cpp` has a **confirmed data bug**: compact `.xwb` per-entry
-  `dataLength` is computed from the 11-bit deviation alone instead of consecutive entry offsets,
-  so **compact wavebanks decode to truncated/garbage audio** (`plan_audio.md` task **T-2D**).
-- There are **no tests** for any XACT class or for the parser, so `AudioEngine`/`SoundBank`/`WaveBank`/
-  `Cue` playback fidelity is currently unverified.
+The most important *substantive* problem is that the **XACT cluster is still the largest unverified
+area**: `AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory` have zero tests, wrong exception
+types, and stub-like lookups (see §5). The compact-`.xwb` length bug (T-2D) is now fixed and
+regression-tested; the remaining `XactParser` issues (dead XGS first-pass code T-2F, fragile track-event
+walker T-2E) are still open and still untested beyond the one T-5O fixture.
 
-No failing command today; the risk is silent incorrectness, not a crash. Suggested first probe: build a
-minimal `.xgs`/`.xsb`/`.xwb` fixture and write a parser round-trip test (T-2D / T-5O) to expose the bug.
+No failing command today; the risk is silent incorrectness, not a crash. Suggested next probe: extend
+`XactParserTests.cpp` to cover the XSB track-event walker (T-2E) or start on `AudioEngine` (T-1F/T-1B/T-3A).
 
 ---
 
@@ -94,7 +95,7 @@ minimal `.xgs`/`.xsb`/`.xwb` fixture and write a parser round-trip test (T-2D / 
 
 | Status | Issue | Ref |
 |--------|-------|-----|
-| **Confirmed bug** | `XactParser` compact `.xwb` `dataLength` wrong → garbage audio for compact wavebanks | T-2D |
+| **Done** | ~~`XactParser` compact `.xwb` `dataLength` wrong → garbage audio for compact wavebanks~~ | T-2D |
 | **Confirmed (dead code)** | `XactParser` XGS first-pass category loop is dead/buggy; correct reparse follows it | T-2F |
 | **Suspected bug** | `XactParser` track-event walker `break`s on unknown events (PITCH/VOLUME/MARKER) → first PlayWave missed in multi-event tracks | T-2E |
 | **Incomplete** | `AudioEngine`/`SoundBank`/`WaveBank`/`Cue` throw `std::*` not `System::*`; `GetTypeName` uses `::` not `.` | T-1F, T-1B |
@@ -177,38 +178,32 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks (ordered; see `plan_audio.md` for full detail)
 
-_T-1A (SPDX headers on internal audio files) is done — see §3/§5._
+_T-1A (SPDX headers) and T-2D/T-5O (compact `.xwb` length fix + parser test) are done — see §3/§5._
 
-1. **T-2D + T-5O — Fix compact `.xwb` length and add the first parser test.**
-   - Goal: compute per-entry length from consecutive offsets (last = segment − offset), not from the
-     11-bit deviation; add a round-trip parser test on a minimal `.xwb` fixture asserting PCM lengths.
-   - Files: `src/CNA/Internal/Audio/XactParser.cpp`; new `tests/.../Audio/XactParserTests.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter='XactParser*'`.
-
-2. **T-1F + T-1B + T-3A + T-5E — Complete `AudioEngine` (and `RendererDetail` T-3D/T-5L, coupled).**
+1. **T-1F + T-1B + T-3A + T-5E — Complete `AudioEngine` (and `RendererDetail` T-3D/T-5L, coupled).**
    - Goal: map exceptions to `System::`; fix `GetTypeName` to dots; throw `InvalidOperationException`
      on unknown category/variable names; add `RendererDetail::Equals`; full `AudioEngineTests`/
      `RendererDetailTests` (RendererDetail instances obtained via `AudioEngine::RendererDetails`).
    - Files: `…/Audio/AudioEngine.{hpp,cpp}`, `…/Audio/RendererDetail.{hpp,cpp}`; new tests.
    - Verify: `./cmake-build-debug/CnaTests --gtest_filter='AudioEngineTest.*:RendererDetailTest.*'`.
 
-3. **T-1F + T-3A/B + T-5F/G — `SoundBank` and `WaveBank`.**
+2. **T-1F + T-3A/B + T-5F/G — `SoundBank` and `WaveBank`.**
    - Goal: `System::` exceptions; `GetTypeName` dots; throw on bad cue name; real `IsInUse`; tests.
    - Files: `…/Audio/SoundBank.{hpp,cpp}`, `…/Audio/WaveBank.{hpp,cpp}`; new tests.
    - Verify: `./cmake-build-debug/CnaTests --gtest_filter='SoundBankTest.*:WaveBankTest.*'`.
 
-4. **T-1F + T-3A + T-5H — `Cue`.**
+3. **T-1F + T-3A + T-5H — `Cue`.**
    - Goal: `System::` exceptions; `GetTypeName` dots; validate variable names; `Apply3D`
      `ObjectDisposedException`; tests.
    - Files: `…/Audio/Cue.{hpp,cpp}`; new tests.
    - Verify: `./cmake-build-debug/CnaTests --gtest_filter='CueTest.*'`.
 
-5. **T-2G + T-5I — `AudioCategory`.**
+4. **T-2G + T-5I — `AudioCategory`.**
    - Goal: `Equals` by Name (FNA); fix stale "no-op" doxygen; tests.
    - Files: `…/Audio/AudioCategory.{hpp,cpp}`; new tests.
    - Verify: `./cmake-build-debug/CnaTests --gtest_filter='AudioCategoryTest.*'`.
 
-6. **T-1C + T-5M — `Microphone` compliance (capture T-4A deferred).**
+5. **T-1C + T-5M — `Microphone` compliance (capture T-4A deferred).**
    - Goal: add `GetTypeName`; map `Microphone` exceptions to `System::`; tests for the headless
      surface. (Real SDL capture, T-4A, is a separate larger task.)
    - Files: `…/Audio/Microphone.{hpp,cpp}`; new tests.
@@ -238,8 +233,9 @@ Read NEXT.md first, then plan_audio.md for the detailed audio task list.
 Open only the files needed for the first task. Do not refactor unrelated code.
 Do not touch the Media namespace or the sibling ../cna checkout.
 
-Make ONE small, verified improvement (start with task #1 in NEXT.md §8: fix the compact
-.xwb length bug in XactParser.cpp with a round-trip parser test, T-2D/T-5O).
+Make ONE small, verified improvement (start with task #1 in NEXT.md §8: complete AudioEngine
+and RendererDetail — System:: exceptions, dotted GetTypeName, throw-on-bad-name, Equals, tests;
+T-1F/T-1B/T-3A/T-5E/T-3D/T-5L).
 
 Build and test:
   cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
