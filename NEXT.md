@@ -41,7 +41,7 @@ ported to C++ with minimal API-surface changes.
 - Builds when configured. `Bgfx_VertexFormatMapping` test (Task 249): 47/47 mapping checks pass.
   No pixel-readback for Bgfx (no readback API).
 
-### Recently implemented (Phase 31, Tasks 251–256, 329)
+### Recently implemented (Phase 31, Tasks 251–258, 329)
 - **Task 251** — `DrawUserPrimitives` FNA audit: fixed silent-return bug in 4 typed overloads;
   added VertexDeclaration overload; exposed `PrimitiveVerts()` as public NOXNA static; 12/12 unit tests.
 - **Task 252** — `DrawUserIndexedPrimitives` FNA audit: fixed silent-return bug in all 8 typed
@@ -51,16 +51,22 @@ ported to C++ with minimal API-surface changes.
   vertexOffset=0 and vertexOffset=1; centre=(255,0,0) 2/2 PASS.
 - **Task 256** — `DrawUserPrimitives` custom `VertexDeclaration` pixel-readback: custom 16-byte
   `MyVertex` struct; vertexOffset=0 and vertexOffset=1; centre=(255,0,0) 2/2 PASS.
+- **Task 257** — `DrawUserIndexedPrimitives<VertexPositionColor>` (16-bit indices) pixel-readback:
+  EasyGL integration test; vertexOffset=0/indexOffset=0 and vertexOffset=1/indexOffset=1 sub-tests;
+  centre=(255,0,0) 2/2 PASS.
+- **Task 258** — `DrawUserIndexedPrimitives<VertexPositionColor>` (32-bit indices) pixel-readback:
+  EasyGL integration test; vertexOffset=0/indexOffset=0 and vertexOffset=1/indexOffset=1 sub-tests;
+  centre=(255,0,0) 2/2 PASS.
 - **Task 329** — Vulkan scissor test: `ScissorTestEnable` + `ScissorRectangle` pixel readback; 4/4 PASS.
 - **Phase 30** — Full VertexDeclaration test suite, EasyGL vertex format integration test (strides
   16/20/24/32), Bgfx vertex layout mapping helper, `docs/vertex-format-support.md`.
 
 ### What does NOT work yet
-- `DrawUserIndexedPrimitives`: no pixel-readback integration tests (Tasks 257–258 pending).
+- `DrawUserPrimitives` argument-guard unit tests for `primitiveCount <= 0` not yet added (Task 259 pending).
 - Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
 - Texture2D completeness audit not started (Phase 32, Tasks 261–270).
 - Bgfx and EasyGL stride-keyed layout: arbitrary `VertexDeclaration` strides beyond 16/20/24/32/52.
-- 372 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
+- 371 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
 
 ---
 
@@ -68,6 +74,8 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 258 | `examples/easygl_draw_user_indexed_primitives_32_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` | DrawUserIndexedPrimitives VPC (32-bit indices) pixel-readback; vertexOffset=0/indexOffset=0 + vertexOffset=1/indexOffset=1; centre=(255,0,0) 2/2 PASS; 1772/1772 unit tests still pass |
+| 257 | `examples/easygl_draw_user_indexed_primitives_vpc_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` | DrawUserIndexedPrimitives VPC (16-bit indices) pixel-readback; vertexOffset=0/indexOffset=0 + vertexOffset=1/indexOffset=1; centre=(255,0,0) 2/2 PASS; 1772/1772 unit tests still pass |
 | 256 | `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt` | DrawUserPrimitives custom VD pixel-readback; custom MyVertex + VD overload; offset=0 + offset=1; 2/2 PASS |
 | 255 | `examples/easygl_draw_user_primitives_vpc_test.cpp` (new), `CMakeLists.txt` | DrawUserPrimitives VPC pixel-readback; offset=0 + offset=1; centre=(255,0,0) 2/2 PASS |
 | 252 | `GraphicsDevice.hpp/.cpp`, `DrawUserIndexedPrimitivesTests.cpp` (new) | Fixed 8 typed overloads silent-return bug; added 2 VD overloads; primitiveCount validation; 15/15 unit tests |
@@ -80,9 +88,11 @@ ported to C++ with minimal API-surface changes.
 
 **No single hard blocker.** The project builds cleanly on all three backends and all 1772 unit tests pass.
 
-The next natural friction point is **Task 257**: pixel-readback integration test for
-`DrawUserIndexedPrimitives` with `VertexPositionColor` + 16-bit indices. The typed indexed draw
-path has been audited and bug-fixed (Task 252) but has no pixel-readback verification yet.
+The next natural friction point is **Task 259**: unit tests validating that `DrawUserPrimitives`
+typed overloads throw `System::ArgumentOutOfRangeException` for `primitiveCount <= 0`. Both
+`DrawUserPrimitives` and `DrawUserIndexedPrimitives` now have full pixel-readback coverage for
+16-bit and 32-bit index paths (Tasks 255–258); argument-guard coverage is the remaining gap in
+Phase 31 before moving to Texture2D (Phase 32).
 
 ---
 
@@ -92,7 +102,7 @@ path has been audited and bug-fixed (Task 252) but has no pixel-readback verific
 |--------|-------|
 | **Confirmed bug** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. Workaround: merge all sprite draws into one Begin/End. |
 | **Needs verification** | `easygl_device_dispose_order_test` pre-existing failure — root cause unknown. |
-| **Incomplete** | `DrawUserIndexedPrimitives`: no pixel-readback integration tests yet (Tasks 257–258). |
+| **Incomplete** | `DrawUserPrimitives`/`DrawUserIndexedPrimitives` argument-guard unit tests for `primitiveCount <= 0` not yet added (Task 259). |
 | **Incomplete** | EasyGL and Bgfx backends: stride-keyed vertex layout supports only strides 16/20/24/32/52; arbitrary `VertexDeclaration` layouts silently use wrong VAO/pipeline. |
 | **Incomplete** | Vulkan backend: `Tangent` and `Binormal` `VertexElementUsage` values not mapped (no Vulkan semantic equivalent). |
 | **Incomplete** | `VertexElementUsage` Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently no-op or return `bgfx::Attrib::Count`. |
@@ -192,25 +202,13 @@ cd cmake-build-debug && ctest --output-on-failure
 
 In priority order:
 
-1. **Task 257 — Pixel-readback test for `DrawUserIndexedPrimitives` with VPC + 16-bit indices**
-   - Goal: EasyGL integration test — draw a red quad via `DrawUserIndexedPrimitives` (typed
-     `VertexPositionColor` + `uint16_t` overload), read back centre pixel, assert red.
-     Also test `vertexOffset` and `indexOffset` non-zero to verify offset arithmetic.
-   - Files: `examples/easygl_draw_user_indexed_primitives_vpc_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: `cmake --build cmake-build-debug --target cna_test_easygl_draw_user_indexed_primitives_vpc && DISPLAY=:0 ./cmake-build-debug/cna_test_easygl_draw_user_indexed_primitives_vpc`
-
-2. **Task 258 — Pixel-readback test for `DrawUserIndexedPrimitives` with 32-bit indices**
-   - Goal: Same as Task 257 but using the `uint32_t` index overload.
-   - Files: `examples/easygl_draw_user_indexed_primitives_32_test.cpp` (new), `CMakeLists.txt`.
-   - Verification: build + run → exit 0.
-
-3. **Task 259 — Validate `DrawUserPrimitives` argument guards**
+1. **Task 259 — Validate `DrawUserPrimitives` argument guards**
    - Goal: Unit tests verifying that `DrawUserPrimitives` typed overloads throw
      `System::ArgumentOutOfRangeException` for `primitiveCount <= 0`.
    - Files: `tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp` (extend).
    - Verification: `CnaTests --gtest_filter="DrawUserPrimitivesValidation.*"` → all pass.
 
-4. **Task 261 — Audit `Texture2D` constructors and methods against FNA** (Phase 32 start)
+2. **Task 261 — Audit `Texture2D` constructors and methods against FNA** (Phase 32 start)
    - Goal: Compare `Texture2D.hpp/.cpp` with FNA's `Texture2D.cs`; document every missing
      overload, wrong signature, or missing bounds check. Produce an audit list in AUDIT.md or
      inline in the task notes. Do not implement yet.
@@ -219,7 +217,7 @@ In priority order:
      `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs`.
    - Verification: compile (no code changes expected) + written audit list.
 
-5. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
+3. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
    - Goal: Replace `std::vector` allocations in `DrawUserPrimitives` / `DrawUserIndexedPrimitives`
      with a per-device scratch buffer or stack allocation for small counts.
    - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
@@ -250,14 +248,11 @@ Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
 Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress
-(Tasks 251, 252, 255, 256, 329 done); 1772/1772 unit tests pass.
+(Tasks 251, 252, 255, 256, 257, 258, 329 done); 1772/1772 unit tests pass.
 
-Next: Task 257 — pixel-readback integration test for DrawUserIndexedPrimitives
-with VertexPositionColor + uint16_t indices (typed VPC overload).
-Draw a full-NDC red quad using 4 vertices + 6 indices, read back centre, assert red.
-Also test non-zero vertexOffset and indexOffset.
-Files: examples/easygl_draw_user_indexed_primitives_vpc_test.cpp (new), CMakeLists.txt.
-Register as cna_test_easygl_draw_user_indexed_primitives_vpc.
-Verification: DISPLAY=:0 ./cmake-build-debug/cna_test_easygl_draw_user_indexed_primitives_vpc → exit 0.
-Update GRAPHICS_TASKS.md (mark 257 ✅) and NEXT.md after finishing.
+Next: Task 259 — unit tests validating that DrawUserPrimitives typed overloads throw
+System::ArgumentOutOfRangeException for primitiveCount <= 0.
+Files: tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp (extend).
+Verification: CnaTests --gtest_filter="DrawUserPrimitivesValidation.*" → all pass.
+Update GRAPHICS_TASKS.md (mark 259 ✅) and NEXT.md after finishing.
 ```

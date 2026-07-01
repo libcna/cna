@@ -982,6 +982,24 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 257: DrawUserIndexedPrimitives<VertexPositionColor> (16-bit indices) pixel-readback
+        cna_easygl_test(cna_test_easygl_draw_user_indexed_primitives_vpc
+                        examples/easygl_draw_user_indexed_primitives_vpc_test.cpp)
+        add_test(NAME EasyGL_DrawUserIndexedPrimitives_VPC
+                 COMMAND cna_test_easygl_draw_user_indexed_primitives_vpc)
+        set_tests_properties(EasyGL_DrawUserIndexedPrimitives_VPC PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 258: DrawUserIndexedPrimitives<VertexPositionColor> (32-bit indices) pixel-readback
+        cna_easygl_test(cna_test_easygl_draw_user_indexed_primitives_32
+                        examples/easygl_draw_user_indexed_primitives_32_test.cpp)
+        add_test(NAME EasyGL_DrawUserIndexedPrimitives_32
+                 COMMAND cna_test_easygl_draw_user_indexed_primitives_32)
+        set_tests_properties(EasyGL_DrawUserIndexedPrimitives_32 PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
