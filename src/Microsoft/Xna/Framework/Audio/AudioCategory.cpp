@@ -40,7 +40,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool AudioCategory::Equals(const AudioCategory& other) const
     {
-        return parent_ == other.parent_ && index_ == other.index_;
+        return name_ == other.name_;
     }
 
     int AudioCategory::GetHashCode() const
