@@ -484,6 +484,17 @@ namespace CNA::Internal::Input
         return SDL_RumbleGamepadTriggers(gamepad, left, right, 0);
     }
 
+    void SdlInputBridge::SetLightBar(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex,
+        Microsoft::Xna::Framework::Color color
+    )
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return;
+        SDL_SetGamepadLED(gamepad, color.getRProperty(), color.getGProperty(), color.getBProperty());
+    }
+
     std::string SdlInputBridge::GetGUID(Microsoft::Xna::Framework::PlayerIndex playerIndex)
     {
         SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);

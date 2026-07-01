@@ -58,7 +58,7 @@ namespace Microsoft::Xna::Framework::Input
 
     void GamePad::SetLightBarEXT(PlayerIndex playerIndex, const Microsoft::Xna::Framework::Color& color)
     {
-        (void)playerIndex; (void)color;
+        CNA::Internal::Input::SdlInputBridge::SetLightBar(playerIndex, color);
     }
 
     bool GamePad::SetTriggerVibrationEXT(PlayerIndex playerIndex, float leftTrigger, float rightTrigger)

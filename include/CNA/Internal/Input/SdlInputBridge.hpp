@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <string>
 
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
@@ -41,6 +42,15 @@ namespace CNA::Internal::Input
             Microsoft::Xna::Framework::PlayerIndex playerIndex,
             float leftTrigger,
             float rightTrigger
+        );
+
+        /**
+         * @brief Sets the light bar color on the gamepad for the given player, if supported.
+         * No-op if the player has no connected gamepad.
+         */
+        static void SetLightBar(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex,
+            Microsoft::Xna::Framework::Color color
         );
 
         /**
