@@ -135,6 +135,27 @@ namespace Microsoft::Xna::Framework::Graphics
         static Texture2D FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream);
 
         /**
+         * @brief Creates a Texture2D by decoding image data from a stream, resized or cropped
+         *        to a requested size.
+         *
+         * When @p zoom is false, the decoded image is scaled down to fit within a
+         * @p width x @p height box while preserving its aspect ratio (the resulting texture may
+         * be smaller than @p width or @p height in one dimension). When @p zoom is true, the
+         * image is scaled up to cover the box and centre-cropped so the resulting texture is
+         * exactly @p width x @p height.
+         *
+         * @param graphicsDevice The device to create the texture on.
+         * @param stream         The input stream containing encoded image data.
+         * @param width          Requested width in pixels.
+         * @param height         Requested height in pixels.
+         * @param zoom           False to fit within the box preserving aspect ratio; true to
+         *                       scale-and-crop to exactly fill the box.
+         * @return The decoded, resized Texture2D.
+         */
+        static Texture2D FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
+                                    int width, int height, bool zoom);
+
+        /**
          * @brief Saves the texture as a PNG image to the given stream.
          * @param stream  Output stream to write the PNG data to.
          * @param width   Width to encode (should match the texture width).
@@ -263,6 +284,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.
         void MaybeFreeCpuPixels();
+
+        /// Builds a Texture2D from already-decoded RGBA8 pixel data; shared by both FromStream overloads.
+        static Texture2D MakeTextureFromPixels(GraphicsDevice& device, int w, int h,
+                                               std::vector<std::uint8_t>&& rgba);
 
         void storeCpuPixels(const uint8_t* rgba, int pixelCount);
         std::vector<uint8_t>& getMipBuffer(int level);

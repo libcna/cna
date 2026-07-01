@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <cstdint>
+#include <cstdlib>
 #include <stdexcept>
 #include <vector>
 
@@ -9,12 +11,14 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "System/IO/MemoryStream.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using System::IO::MemoryStream;
 
 // -----------------------------------------------------------------------
 // Default constructor — dimensions and base-class properties
@@ -328,4 +332,177 @@ TEST_F(SetDataSimpleGuardTest, ExactElementCountDoesNotThrow)
     Texture2D tex(gd, 2, 2);
     Color buf[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
     EXPECT_NO_THROW(tex.SetData(buf, 4));
+}
+
+// -----------------------------------------------------------------------
+// FromStream — format support verification (Task 262)
+//
+// Round-trips through Texture2D::SaveAsPng/SaveAsJpeg (PNG/JPEG) and a
+// hand-built minimal file (BMP) to empirically confirm which encoded
+// formats Texture2D::FromStream can decode via the linked SDL3_image build.
+// -----------------------------------------------------------------------
+
+namespace
+{
+    // Minimal uncompressed 24bpp BMP, solid colour, no padding beyond the
+    // mandatory 4-byte row alignment. width/height must keep row bytes a
+    // multiple of 4 for this helper's simplicity (e.g. 2x2 uses 2-byte padding).
+    std::vector<std::uint8_t> BuildSolidColorBmp(int w, int h, std::uint8_t r, std::uint8_t g, std::uint8_t b)
+    {
+        const int rowBytes = w * 3;
+        const int rowPad = (4 - (rowBytes % 4)) % 4;
+        const int rowStride = rowBytes + rowPad;
+        const int pixelDataSize = rowStride * h;
+        const int pixelDataOffset = 14 + 40;
+        const int fileSize = pixelDataOffset + pixelDataSize;
+
+        std::vector<std::uint8_t> buf(static_cast<std::size_t>(fileSize), 0);
+
+        auto w32 = [&](int off, std::uint32_t v) {
+            buf[off + 0] = static_cast<std::uint8_t>(v & 0xFF);
+            buf[off + 1] = static_cast<std::uint8_t>((v >> 8) & 0xFF);
+            buf[off + 2] = static_cast<std::uint8_t>((v >> 16) & 0xFF);
+            buf[off + 3] = static_cast<std::uint8_t>((v >> 24) & 0xFF);
+        };
+        auto w16 = [&](int off, std::uint16_t v) {
+            buf[off + 0] = static_cast<std::uint8_t>(v & 0xFF);
+            buf[off + 1] = static_cast<std::uint8_t>((v >> 8) & 0xFF);
+        };
+
+        // BITMAPFILEHEADER (14 bytes)
+        buf[0] = 'B'; buf[1] = 'M';
+        w32(2, static_cast<std::uint32_t>(fileSize));
+        w32(10, static_cast<std::uint32_t>(pixelDataOffset));
+
+        // BITMAPINFOHEADER (40 bytes)
+        w32(14, 40);
+        w32(18, static_cast<std::uint32_t>(w));
+        w32(22, static_cast<std::uint32_t>(h)); // positive height => bottom-up rows
+        w16(26, 1);   // planes
+        w16(28, 24);  // bitCount
+        w32(30, 0);   // compression = BI_RGB
+
+        for (int row = 0; row < h; ++row)
+        {
+            const int base = pixelDataOffset + row * rowStride;
+            for (int col = 0; col < w; ++col)
+            {
+                buf[base + col * 3 + 0] = b;
+                buf[base + col * 3 + 1] = g;
+                buf[base + col * 3 + 2] = r;
+            }
+        }
+        return buf;
+    }
+}
+
+class Texture2DFromStreamFormatTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+
+    static bool IsCloseTo(Color c, std::uint8_t r, std::uint8_t g, std::uint8_t b, int tolerance)
+    {
+        return std::abs(c.getRProperty() - r) <= tolerance &&
+               std::abs(c.getGProperty() - g) <= tolerance &&
+               std::abs(c.getBProperty() - b) <= tolerance;
+    }
+};
+
+TEST_F(Texture2DFromStreamFormatTest, PngRoundTripDecodesCorrectSizeAndColor)
+{
+    Texture2D src(gd, 4, 4);
+    std::vector<Color> red(16, Color(255, 0, 0, 255));
+    src.SetData(red.data(), 16);
+
+    MemoryStream writeStream;
+    src.SaveAsPng(&writeStream, 4, 4);
+    auto bytes = writeStream.GetBuffer();
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 4);
+    EXPECT_EQ(loaded.getHeightProperty(), 4);
+    Color px[1] = { Color(0, 0, 0, 0) };
+    loaded.GetData(px, 0, 1);
+    EXPECT_TRUE(IsCloseTo(px[0], 255, 0, 0, 5)); // PNG is lossless
+}
+
+TEST_F(Texture2DFromStreamFormatTest, JpegRoundTripDecodesCorrectSizeAndColor)
+{
+    Texture2D src(gd, 4, 4);
+    std::vector<Color> green(16, Color(0, 255, 0, 255));
+    src.SetData(green.data(), 16);
+
+    MemoryStream writeStream;
+    src.SaveAsJpeg(&writeStream, 4, 4);
+    auto bytes = writeStream.GetBuffer();
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 4);
+    EXPECT_EQ(loaded.getHeightProperty(), 4);
+    Color px[1] = { Color(0, 0, 0, 0) };
+    loaded.GetData(px, 0, 1);
+    EXPECT_TRUE(IsCloseTo(px[0], 0, 255, 0, 40)); // JPEG is lossy — wider tolerance
+}
+
+TEST_F(Texture2DFromStreamFormatTest, BmpDecodesCorrectSizeAndColor)
+{
+    auto bytes = BuildSolidColorBmp(2, 2, 0, 0, 255); // solid blue
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 2);
+    EXPECT_EQ(loaded.getHeightProperty(), 2);
+    Color px[1] = { Color(0, 0, 0, 0) };
+    loaded.GetData(px, 0, 1);
+    EXPECT_TRUE(IsCloseTo(px[0], 0, 0, 255, 0)); // BMP is uncompressed — exact
+}
+
+// -----------------------------------------------------------------------
+// FromStream(device, stream, width, height, zoom) — resize/crop overload (Task 262)
+//
+// Source is an 8x4 (landscape) solid-colour PNG so the fit-vs-cover branch in
+// the width/height computation is exercised (matches FNA3D_Image_Load's
+// forceW/forceH/zoom logic — see Texture2D.cpp).
+// -----------------------------------------------------------------------
+
+class Texture2DFromStreamResizeTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+    std::vector<std::uint8_t> pngBytes;
+
+    void SetUp() override
+    {
+        Texture2D src(gd, 8, 4);
+        std::vector<Color> yellow(32, Color(255, 255, 0, 255));
+        src.SetData(yellow.data(), 32);
+
+        MemoryStream writeStream;
+        src.SaveAsPng(&writeStream, 8, 4);
+        pngBytes = writeStream.GetBuffer();
+    }
+};
+
+TEST_F(Texture2DFromStreamResizeTest, FitPreservesAspectRatio)
+{
+    // scaleWidth = (8>4) = true; scale = 4/8 = 0.5 -> finalW=4, finalH=2.
+    MemoryStream readStream(pngBytes.data(), static_cast<System::IO::intcs>(pngBytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream, 4, 4, false);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 4);
+    EXPECT_EQ(loaded.getHeightProperty(), 2);
+}
+
+TEST_F(Texture2DFromStreamResizeTest, ZoomFillsExactRequestedSize)
+{
+    MemoryStream readStream(pngBytes.data(), static_cast<System::IO::intcs>(pngBytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream, 4, 4, true);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 4);
+    EXPECT_EQ(loaded.getHeightProperty(), 4);
 }

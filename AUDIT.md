@@ -187,7 +187,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | StencilOperation (enum) | ✅ | Complete |
 | SurfaceFormat (enum) | ✅ | Complete |
 | Texture | ✅ | API complete |
-| Texture2D | 🔄 | Detailed re-audit (Task 261, Phase 32); 2 memory-safety bugs fixed (Task 266). Still open: missing `NOXNA` tags, a missing FromStream overload, missing EXT statics, and Color-only format support — see below |
+| Texture2D | 🔄 | Detailed re-audit (Task 261, Phase 32); 2 memory-safety bugs fixed (Task 266); missing `FromStream(w,h,zoom)` overload added + format support verified (Task 262). Still open: missing `NOXNA` tags, missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`, and Color-only format support — see below |
 | Texture3D | ✅ | API complete |
 | TextureAddressMode (enum) | ✅ | Complete |
 | TextureCollection | ✅ | API complete |
@@ -248,9 +248,11 @@ No code was changed for this task — audit only. Findings below feed Phase 32 t
 
 #### Missing overloads / methods (present in FNA, absent in CNA)
 
-3. `static Texture2D FromStream(GraphicsDevice&, Stream&, int width, int height, bool zoom)` —
-   the resize/crop-while-decoding overload is completely missing; only the simple 2-arg `FromStream`
-   exists in `Texture2D.hpp`.
+3. **~~`static Texture2D FromStream(GraphicsDevice&, Stream&, int width, int height, bool zoom)`~~
+   ADDED (Task 262).** Implements FNA3D's resize/crop-while-decoding semantics via
+   `SDL_CreateSurfaceFrom` + `SDL_BlitSurfaceScaled`. Also verified (Task 262) that
+   `FromStream` correctly decodes PNG, JPEG, and BMP via the linked SDL3_image build, in
+   addition to the pre-existing DDS/DXT1/3/5 support — see `docs/texture-stream-formats.md`.
 4. `SetDataPointerEXT(int level, Rectangle? rect, IntPtr data, int dataLength)` — no equivalent.
    The closest CNA method, `SetDataRGBA(const uint8_t*, int pixelCount)` (NOXNA), has a different
    signature (no `level`, no `rect`, always targets the full level-0 image) and does not validate

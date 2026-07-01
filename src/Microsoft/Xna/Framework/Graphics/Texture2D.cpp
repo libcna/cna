@@ -380,7 +380,10 @@ namespace Microsoft::Xna::Framework::Graphics
         return true;
     }
 
-    Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream)
+    // Reads the entire stream and decodes it into RGBA8 pixel data — DDS/DXT1/3/5 via
+    // DxtUtil, everything else via SDL_image (PNG/JPG/BMP/GIF/... — whatever SDL3_image was
+    // built with; see docs/texture-stream-formats.md for the formats verified by CI).
+    static ImageData DecodeStreamToImageData(System::IO::Stream& stream)
     {
         using System::IO::intcs;
         using System::IO::bytecs;
@@ -407,16 +410,101 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             img = ImageLoader::LoadFromMemory(raw, static_cast<std::size_t>(len));
         }
+        return img;
+    }
+
+    Texture2D Texture2D::MakeTextureFromPixels(GraphicsDevice& device, int w, int h,
+                                               std::vector<std::uint8_t>&& rgba)
+    {
+        ImageData img;
+        img.width  = w;
+        img.height = h;
+        img.pixels = std::move(rgba);
 
         Texture2D tex;
-        tex.graphicsDevice_  = &graphicsDevice;
-        tex.width    = img.width;
-        tex.height   = img.height;
-        tex.backend_   = graphicsDevice.GetBackend().CreateTexture(img);
-        tex.cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
+        tex.graphicsDevice_ = &device;
+        tex.width           = w;
+        tex.height          = h;
+        tex.backend_        = device.GetBackend().CreateTexture(img);
+        tex.cpuPixels_      = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
         tex.backend_->ShareCpuPixels(tex.cpuPixels_);
         tex.MaybeFreeCpuPixels();
         return tex;
+    }
+
+    Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream)
+    {
+        ImageData img = DecodeStreamToImageData(stream);
+        return MakeTextureFromPixels(graphicsDevice, img.width, img.height, std::move(img.pixels));
+    }
+
+    Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
+                                    int width, int height, bool zoom)
+    {
+        ImageData img = DecodeStreamToImageData(stream);
+
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(
+            img.width, img.height, SDL_PIXELFORMAT_RGBA32, img.pixels.data(), img.width * 4);
+        if (!surface)
+            throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
+
+        // Mirrors FNA3D_Image_Load's forceW/forceH/zoom resize-and-crop logic.
+        const bool scaleWidth = zoom ? (surface->w < surface->h) : (surface->w > surface->h);
+        const float scale = scaleWidth ? (static_cast<float>(width)  / static_cast<float>(surface->w))
+                                       : (static_cast<float>(height) / static_cast<float>(surface->h));
+
+        int finalW, finalH;
+        SDL_Rect crop{0, 0, surface->w, surface->h};
+        if (zoom)
+        {
+            finalW = width;
+            finalH = height;
+            if (scaleWidth)
+            {
+                crop.x = 0;
+                crop.y = surface->h / 2 - static_cast<int>((height / scale) / 2);
+                crop.w = surface->w;
+                crop.h = static_cast<int>(height / scale);
+            }
+            else
+            {
+                crop.x = surface->w / 2 - static_cast<int>((width / scale) / 2);
+                crop.y = 0;
+                crop.w = static_cast<int>(width / scale);
+                crop.h = surface->h;
+            }
+        }
+        else
+        {
+            finalW = static_cast<int>(surface->w * scale);
+            finalH = static_cast<int>(surface->h * scale);
+        }
+
+        SDL_Surface* scaled = SDL_CreateSurface(finalW, finalH, SDL_PIXELFORMAT_RGBA32);
+        if (!scaled)
+        {
+            SDL_DestroySurface(surface);
+            throw std::runtime_error(std::string("SDL_CreateSurface failed: ") + SDL_GetError());
+        }
+        SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_NONE);
+        const bool blitOk = zoom
+            ? SDL_BlitSurfaceScaled(surface, &crop, scaled, nullptr, SDL_SCALEMODE_LINEAR)
+            : SDL_BlitSurfaceScaled(surface, nullptr, scaled, nullptr, SDL_SCALEMODE_LINEAR);
+        if (!blitOk)
+        {
+            SDL_DestroySurface(scaled);
+            SDL_DestroySurface(surface);
+            throw std::runtime_error(std::string("SDL_BlitSurfaceScaled failed: ") + SDL_GetError());
+        }
+
+        std::vector<uint8_t> finalPixels(
+            static_cast<uint8_t*>(scaled->pixels),
+            static_cast<uint8_t*>(scaled->pixels) + static_cast<std::size_t>(finalW) * finalH * 4);
+
+        SDL_DestroySurface(scaled);
+        SDL_DestroySurface(surface);
+
+        return MakeTextureFromPixels(graphicsDevice, finalW, finalH, std::move(finalPixels));
     }
 
     // -----------------------------------------------------------------------
