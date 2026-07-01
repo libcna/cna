@@ -135,5 +135,10 @@ namespace Microsoft::Xna::Framework::Audio
         // Active-cue registration for category operations
         void RegisterCue(Cue* cue);
         void UnregisterCue(Cue* cue);
+
+        // Used by Cue::GetVariable/SetVariable to validate a per-cue-instance variable
+        // name against the engine's parsed global variable set (XACT per-cue variables
+        // are the same named global variables, just individually overridable per cue).
+        bool IsValidVariableName(const std::string& name) const;
     };
 }

@@ -272,5 +272,10 @@ namespace Microsoft::Xna::Framework::Audio
         v.erase(std::remove(v.begin(), v.end(), cue), v.end());
     }
 
+    bool AudioEngine::IsValidVariableName(const std::string& name) const
+    {
+        return xactImpl_ && xactImpl_->globalVariables.find(name) != xactImpl_->globalVariables.end();
+    }
+
     GetTypeNameCPP(AudioEngine, "Microsoft.Xna.Framework.Audio.AudioEngine")
 }

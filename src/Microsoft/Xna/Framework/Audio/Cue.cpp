@@ -6,12 +6,14 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <random>
-#include <stdexcept>
 #include <utility>
 
 namespace Microsoft::Xna::Framework::Audio
@@ -30,6 +32,15 @@ namespace Microsoft::Xna::Framework::Audio
         {
             static std::mt19937 rng{std::random_device{}()};
             return rng;
+        }
+
+        // Standard per-cue 3D variables that XACT projects always define (used by
+        // FACT3DApply); always valid even if the parsed .xgs/.xsb data doesn't declare
+        // them, since CNA's XactParser only sees what a hand-authored test fixture
+        // includes, unlike the real XACT Auditioning Tool which adds these by default.
+        bool IsBuiltInCueVariable(const std::string& name)
+        {
+            return name == "Distance" || name == "DopplerPitchScalar" || name == "OrientationAngle";
         }
     }
 
@@ -62,15 +73,35 @@ namespace Microsoft::Xna::Framework::Audio
 
     float Cue::GetVariable(const std::string& name) const
     {
-        if (name.empty()) throw std::invalid_argument("name must not be empty");
+        if (name.empty())
+            throw System::ArgumentNullException("name");
+
         auto it = variables_.find(name);
-        if (it == variables_.end()) throw std::runtime_error("Invalid variable: " + name);
-        return it->second;
+        if (it != variables_.end())
+            return it->second;
+
+        if (IsBuiltInCueVariable(name))
+            return 0.0f;
+
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        if (eng && eng->IsValidVariableName(name))
+            return eng->GetGlobalVariable(name);
+
+        throw System::InvalidOperationException("Invalid variable name!");
     }
 
     void Cue::SetVariable(const std::string& name, float value)
     {
-        if (name.empty()) throw std::invalid_argument("name must not be empty");
+        if (name.empty())
+            throw System::ArgumentNullException("name");
+
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        bool valid = variables_.find(name) != variables_.end()
+                  || IsBuiltInCueVariable(name)
+                  || (eng && eng->IsValidVariableName(name));
+        if (!valid)
+            throw System::InvalidOperationException("Invalid variable name!");
+
         variables_[name] = value;
     }
 
@@ -78,7 +109,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Cue::Apply3D(const AudioListener& /*listener*/, const AudioEmitter& /*emitter*/)
     {
-        if (isDisposed_) throw std::runtime_error("Cue is disposed");
+        if (isDisposed_) throw System::ObjectDisposedException("Cue");
         // SDL3_mixer has no per-cue 3D audio; would need Apply3D on each instance.
     }
 
@@ -86,7 +117,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Cue::Play()
     {
-        if (isDisposed_) throw std::runtime_error("Cue is disposed");
+        if (isDisposed_) throw System::ObjectDisposedException("Cue");
 
         // Resolve waves to play
         using namespace CNA::Internal::Audio;
@@ -256,5 +287,5 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
-    GetTypeNameCPP(Cue, "Microsoft::Xna::Framework::Audio::Cue")
+    GetTypeNameCPP(Cue, "Microsoft.Xna.Framework.Audio.Cue")
 }

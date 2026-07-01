@@ -69,26 +69,37 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param listener Position and orientation of the audio listener.
          * @param emitter  Position and orientation of the sound emitter.
+         * @throws System::ObjectDisposedException if the cue has been disposed.
          */
         void Apply3D(const AudioListener& listener, const AudioEmitter& emitter);
 
         /**
          * @brief Gets the value of a per-cue XACT variable.
          *
-         * @param name Variable name as defined in the SoundBank.
+         * @param name Variable name as defined in the SoundBank, or one of the built-in
+         *        3D variables ("Distance", "DopplerPitchScalar", "OrientationAngle").
          * @return Current value of the variable.
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::InvalidOperationException if @p name is not a valid variable name.
          */
         [[nodiscard]] float GetVariable(const std::string& name) const;
 
         /**
          * @brief Sets the value of a per-cue XACT variable.
          *
-         * @param name  Variable name.
+         * @param name  Variable name as defined in the SoundBank, or one of the built-in
+         *        3D variables ("Distance", "DopplerPitchScalar", "OrientationAngle").
          * @param value New value.
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::InvalidOperationException if @p name is not a valid variable name.
          */
         void SetVariable(const std::string& name, float value);
 
-        /** @brief Starts playback of this cue. */
+        /**
+         * @brief Starts playback of this cue.
+         *
+         * @throws System::ObjectDisposedException if the cue has been disposed.
+         */
         void Play();
 
         /** @brief Pauses playback of this cue. */
@@ -106,6 +117,8 @@ namespace Microsoft::Xna::Framework::Audio
 
         /** @brief Releases this cue and all associated playback resources. */
         void Dispose() override;
+
+        GetTypeNameHPP()
 
     private:
         friend class SoundBank;
@@ -134,7 +147,5 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<WaveBank*> waveBanksUsed_;
 
         void StopInternal(bool immediate);
-
-        GetTypeNameHPP()
     };
 }

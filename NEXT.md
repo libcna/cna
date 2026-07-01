@@ -31,7 +31,7 @@ built on SDL3. It is a framework/runtime, not a game.
 
 - **Build:** EasyGL `cmake-build-debug` builds clean, including all audio. (`SOUND_ENABLED` is on;
   SDL3_mixer is linked.)
-- **Unit tests:** `CnaTests` **1903 / 1903 pass** (up from 1757 at the start of this branch; **+146
+- **Unit tests:** `CnaTests` **1931 / 1931 pass** (up from 1757 at the start of this branch; **+174
   audio tests added**). No regressions.
 - **Build-dir note (important):** `cna_audio/cmake-build-debug` was previously configured against the
   sibling checkout `../cna` (wrong source tree). It has been wiped and reconfigured to build
@@ -55,19 +55,24 @@ built on SDL3. It is a framework/runtime, not a game.
   `IsPrepared`, `IsInUse` (real: tracks `Cue`s currently playing a `SoundEffectInstance` sourced from
   this bank via `RegisterCue`/`UnregisterCue`, wired from `Cue::Play`/`StopInternal`), `Dispose`+
   `Disposing`, `GetTypeName`. Verified end-to-end with a synthetic `.xwb`+`.xsb`+`Cue` playback test.
+- `Cue` — all 9 state properties + `Name`, `Apply3D`, `GetVariable`/`SetVariable` (valid engine
+  variable, built-in 3D variables, local override, empty name, name outside the known set),
+  `Play`/`Pause`/`Resume`/`Stop` (`AsAuthored` and `Immediate` separately), `Dispose`+`Disposing`,
+  `GetTypeName`.
 - Device-dependent tests run under the **SDL "dummy" audio driver** (`SDL_AUDIODRIVER=dummy`); on a
   host with no audio device they `GTEST_SKIP` instead of failing.
 
 ### Audio that does NOT work / is not done yet
-- **`Cue`, `AudioCategory`** (last two XACT classes): compile and run but have "stub behavior", wrong
-  exception types (`std::*` not `System::*`), `GetTypeName` using `::` instead of `.` (Cue only —
-  AudioCategory isn't a `System::Object`), and `Cue::*Variable` accepting any name instead of
-  validating. **Zero tests.**
+- **`AudioCategory`** (last remaining XACT class): compiles and runs but `Equals` compares parent+index
+  instead of Name (FNA compares Name); stale "no-op" doxygen. **Zero tests.**
 - **`XactParser`** compact `.xwb` length bug is fixed and covered by one round-trip test (T-2D/T-5O);
   the dead XGS first-pass code and the fragile track-event walker are still open (see §5). Coverage is
   otherwise minimal (1 test).
 - **`Microphone`** is a stub — no SDL audio capture; missing `GetTypeName`.
-- 3D positional audio / Doppler: accepted SDL_mixer limitation (stored, not applied).
+- 3D positional audio / Doppler: accepted SDL_mixer limitation (stored, not applied). `Cue::Apply3D` is
+  a no-op beyond the disposed check; the three standard 3D variables (`Distance`,
+  `DopplerPitchScalar`, `OrientationAngle`) are readable/writable but never computed from a real
+  listener/emitter.
 
 ---
 
@@ -75,7 +80,8 @@ built on SDL3. It is a framework/runtime, not a game.
 
 | Commit | Area | Change |
 |--------|------|--------|
-| _(pending)_ | `SoundBank`, `WaveBank`, `Cue` (wiring only) | T-1F/T-3A/T-3B: exceptions → `System::`; `GetTypeName` dotted and moved from `private` to `public` (same misplacement bug as `AudioEngine`, found in both files); `GetCue` throws `InvalidOperationException` on unknown cue names instead of returning a `0xFFFF`-sentinel stub cue. Fixed a real fidelity bug: `WaveBank`'s streaming ctor delegated to the non-streaming ctor for validation, so an empty streaming filename raised `ArgumentNullException("nonStreamingWaveBankFilename")` instead of `"streamingWaveBankFilename"` — replaced delegation with a shared private `Init()` (mirrors `AudioEngine::Init`) so each ctor validates with its own FNA param name. Implemented real `IsInUse`: `SoundBank` checks its own fire-and-forget `Cue`s' playing state (cues obtained via `GetCue` are caller-owned and intentionally not tracked — documented deviation from FNA, which tracks all cues at the FACT-engine level); `WaveBank` gained `RegisterCue`/`UnregisterCue` (mirroring `AudioEngine`'s existing pattern) plus minimal wiring in `Cue::Play`/`StopInternal` (`Cue.hpp`/`.cpp`, registration only — Cue's own exception/GetTypeName work is still open, see below) since WaveBank has no other way to know which `SoundEffectInstance`s it produced are playing. +32 tests (`SoundBankTests.cpp` 19, `WaveBankTests.cpp` 13, including a synthetic `.xwb`+`.xsb` fixture that exercises real `AudioEngine`→`SoundBank`→`WaveBank`→`Cue` playback end-to-end to verify the new registration wiring actually works, not just compiles). |
+| _(pending)_ | `Cue`, `AudioEngine` (helper) | T-1F/T-3A: exceptions → `System::`; `GetTypeName` dotted and moved from `private` to `public` (same recurring misplacement bug, now fixed in every XACT class); `GetVariable`/`SetVariable` validate the name against `AudioEngine`'s parsed global variable set (a per-cue XACT variable is the same named global variable, individually overridable per cue — CNA doesn't track the per-name cue-overridable bit, so any known global name is accepted) via a new private `AudioEngine::IsValidVariableName` helper, plus a small built-in set (`Distance`, `DopplerPitchScalar`, `OrientationAngle` — the three variables real XACT projects always define for 3D audio, which a hand-built test `.xgs` fixture wouldn't otherwise include) that never throws. A cue-local `SetVariable` call always shadows the engine's global default on subsequent `GetVariable` calls. +28 tests (`CueTests.cpp`, including a real `.xgs`+`.xsb` fixture pair so the "valid engine variable" path is exercised against actual parsed data, not just the built-in set). |
+| `7be3513` | `SoundBank`, `WaveBank`, `Cue` (wiring only) | T-1F/T-3A/T-3B: exceptions → `System::`; `GetTypeName` dotted and moved from `private` to `public` (same misplacement bug as `AudioEngine`, found in both files); `GetCue` throws `InvalidOperationException` on unknown cue names instead of returning a `0xFFFF`-sentinel stub cue. Fixed a real fidelity bug: `WaveBank`'s streaming ctor delegated to the non-streaming ctor for validation, so an empty streaming filename raised `ArgumentNullException("nonStreamingWaveBankFilename")` instead of `"streamingWaveBankFilename"` — replaced delegation with a shared private `Init()` (mirrors `AudioEngine::Init`) so each ctor validates with its own FNA param name. Implemented real `IsInUse`: `SoundBank` checks its own fire-and-forget `Cue`s' playing state (cues obtained via `GetCue` are caller-owned and intentionally not tracked — documented deviation from FNA, which tracks all cues at the FACT-engine level); `WaveBank` gained `RegisterCue`/`UnregisterCue` (mirroring `AudioEngine`'s existing pattern) plus minimal wiring in `Cue::Play`/`StopInternal` (`Cue.hpp`/`.cpp`, registration only — Cue's own exception/GetTypeName work is still open, see below) since WaveBank has no other way to know which `SoundEffectInstance`s it produced are playing. +32 tests (`SoundBankTests.cpp` 19, `WaveBankTests.cpp` 13, including a synthetic `.xwb`+`.xsb` fixture that exercises real `AudioEngine`→`SoundBank`→`WaveBank`→`Cue` playback end-to-end to verify the new registration wiring actually works, not just compiles). |
 | `0494439` | `AudioEngine`, `RendererDetail` | T-1F/T-1B/T-3A/T-3D: exceptions → `System::` (`ArgumentNullException`/`ObjectDisposedException`/`InvalidOperationException`); `GetCategory`/`GetGlobalVariable`/`SetGlobalVariable` now throw `InvalidOperationException` on unknown names instead of returning a stub or silently inserting (`SetGlobalVariable` previously never validated the name at all); `GetTypeName` dotted and moved from `private` to `public` (was misplaced, contradicting the class's own convention); added `RendererDetail::Equals` (`operator==` now delegates to it) with a `NOXNA`-tagged test-only friend accessor since the ctor is private to `AudioEngine`. +31 tests (`AudioEngineTests.cpp`, `RendererDetailTests.cpp`). |
 | `2bafede` | `XactParser` | T-2D/T-5O: fixed compact `.xwb` per-entry `dataLength` — now derived from the gap to the next entry's offset minus the 11-bit deviation (last entry: remaining wave-data segment, unchanged), instead of using the raw deviation value as the length. Added `XactParserTests.cpp` round-trip test on a synthetic 3-entry compact fixture; confirmed it fails against the pre-fix code (verified via `git stash`). +1 test. |
 | `704aae5` | Internal audio | T-1A: added `// SPDX-License-Identifier: MS-PL` to `XactTypes.hpp`, `AudioMixer.hpp`, `XactParser.cpp`, `AudioMixer.cpp`. No behavior change; 1839 tests still pass. |
@@ -89,7 +95,7 @@ built on SDL3. It is a framework/runtime, not a game.
 
 ## 4. Current blocker / main problem
 
-**No hard blocker** — the build is clean and all 1903 unit tests pass.
+**No hard blocker** — the build is clean and all 1931 unit tests pass.
 
 **Note for the next session:** this branch's build depends on the sibling `../sharp-runtime` repo,
 which has (separately from this branch) been under active, uncommitted, incremental development during
@@ -99,15 +105,15 @@ that unrelated work landed. If a fresh build ever fails inside `SHARP_RUNTIME/CM
 than `CNA`/`CnaTests`, suspect the sibling repo's transient state first (check `git status`/`git log -1
 --format=%cd` there), not the audio code — do not "fix" sharp-runtime files from this branch.
 
-The most important *substantive* problem is that **`Cue` and `AudioCategory` are the last two untested
-XACT classes**: wrong exception types, unvalidated variable names (`Cue`), and no tests (see §5).
-`AudioEngine`, `RendererDetail`, `SoundBank`, and `WaveBank` are now done. The compact-`.xwb` length bug
-(T-2D) is fixed and regression-tested; the remaining `XactParser` issues (dead XGS first-pass code T-2F,
-fragile track-event walker T-2E) are still open and still untested beyond the one T-5O fixture.
+The most important *substantive* problem is that **`AudioCategory` is the last untested XACT class**:
+`Equals` compares parent+index instead of Name (FNA compares Name), and it has zero tests (see §5).
+Every other XACT class (`AudioEngine`, `RendererDetail`, `SoundBank`, `WaveBank`, `Cue`) is now done.
+The compact-`.xwb` length bug (T-2D) is fixed and regression-tested; the remaining `XactParser` issues
+(dead XGS first-pass code T-2F, fragile track-event walker T-2E) are still open and still untested
+beyond the one T-5O fixture.
 
-No failing command today; the risk is silent incorrectness, not a crash. Suggested next probe: `Cue`
-(T-1F/T-3A/T-5H) — same exception/GetTypeName pattern just applied to `SoundBank`/`WaveBank`, plus
-variable-name validation and built-in cue variables (see T-3A in `plan_audio.md`).
+No failing command today; the risk is silent incorrectness, not a crash. Suggested next probe:
+`AudioCategory` (T-2G/T-5I) — small, self-contained: fix `Equals`, fix stale doxygen, add tests.
 
 ---
 
@@ -118,15 +124,15 @@ variable-name validation and built-in cue variables (see T-3A in `plan_audio.md`
 | **Done** | ~~`XactParser` compact `.xwb` `dataLength` wrong → garbage audio for compact wavebanks~~ | T-2D |
 | **Confirmed (dead code)** | `XactParser` XGS first-pass category loop is dead/buggy; correct reparse follows it | T-2F |
 | **Suspected bug** | `XactParser` track-event walker `break`s on unknown events (PITCH/VOLUME/MARKER) → first PlayWave missed in multi-event tracks | T-2E |
-| **Incomplete** | `Cue` throws `std::*` not `System::*`; `GetTypeName` uses `::` not `.` and is declared `private` (same misplacement bug already fixed in `AudioEngine`/`SoundBank`/`WaveBank`) | T-1F, T-1B |
-| **Incomplete** | `Cue::GetVariable`/`SetVariable` accept any name instead of throwing `InvalidOperationException`; no built-in cue variables (e.g. `"Distance"`) | T-3A |
 | **Incomplete** | `Microphone` capture is a stub (no SDL recording); missing `GetTypeName` override | T-1C, T-4A |
 | **Incomplete** | `AudioCategory::Equals` compares parent+index, not Name (FNA compares Name); stale "no-op" doxygen | T-2G |
 | **Done** | ~~SPDX header missing in `XactTypes.hpp`, `XactParser.cpp`, `AudioMixer.hpp/.cpp`~~ | T-1A |
 | **Done** | ~~`AudioEngine` throws `std::*` not `System::*`; `GetTypeName` uses `::` not `.`; `GetCategory`/`SetGlobalVariable` stub instead of throwing~~ | T-1F, T-1B, T-3A |
 | **Done** | ~~`RendererDetail` missing `Equals`; no tests~~ | T-3D, T-5L |
 | **Done** | ~~`SoundBank`/`WaveBank` throw `std::*` not `System::*`; `GetTypeName` uses `::` not `.`; `GetCue` stub instead of throwing; `IsInUse` hard-coded `false`~~ | T-1F, T-1B, T-3A, T-3B |
+| **Done** | ~~`Cue` throws `std::*` not `System::*`; `GetTypeName` uses `::` not `.` and was declared `private`; `GetVariable`/`SetVariable` accepted any name instead of validating~~ | T-1F, T-1B, T-3A |
 | **Accepted deviation** | `SoundBank::IsInUse` reflects only fire-and-forget cues it owns (created by `PlayCue`); cues obtained via `GetCue` are caller-owned per its own doc comment and are not tracked, unlike FNA's FACT-engine-level tracking of all cues from the bank | T-3B |
+| **Accepted deviation** | `Cue::GetVariable`/`SetVariable` validate against `AudioEngine`'s global variable set (plus a built-in 3D-variable set), not a separate per-cue-instance-overridable catalog — CNA's `XactParser` doesn't track the `ACCESSIBILITY_CUE` bit that would distinguish per-cue-overridable variables from category/global-only ones | T-3A |
 | **Accepted limitation** | SDL_mixer: 3D HRTF + Doppler stored, not applied; streaming wavebanks loaded fully into memory | plan §2 |
 | **Minor / intentional** | `SoundEffect::GetSampleDuration` truncates to whole ms (FNA); `DynamicSoundEffectInstance::GetSampleDuration` keeps full precision (float-aware EXT path) | — |
 | **Needs verification** | Device-dependent audio tests rely on the SDL `dummy` driver; they skip when no device is available | — |
@@ -201,26 +207,15 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 ## 8. Next smallest tasks (ordered; see `plan_audio.md` for full detail)
 
 _T-1A (SPDX headers), T-2D/T-5O (compact `.xwb` length fix + parser test), T-1F/T-1B/T-3A/T-3D
-(AudioEngine + RendererDetail), and T-1F/T-3A/T-3B/T-5F/T-5G (SoundBank + WaveBank) are done — see §3/§5.
-Note: `Cue.hpp`/`.cpp` already gained a small amount of wiring (WaveBank registration) as part of the
-SoundBank/WaveBank task — the exception/GetTypeName/variable-validation work below is what remains._
+(AudioEngine + RendererDetail), T-1F/T-3A/T-3B/T-5F/T-5G (SoundBank + WaveBank), and T-1F/T-3A/T-5H
+(Cue) are done — see §3/§5. `AudioCategory` is now the only untested XACT class._
 
-1. **T-1F + T-3A + T-5H — `Cue`.**
-   - Goal: `System::` exceptions; `GetTypeName` dots (also move from `private` to `public` — check
-     first, don't assume; this bug has now been found in every XACT class touched so far); validate
-     variable names via `InvalidOperationException`, adding built-in cue variables (e.g. `"Distance"`)
-     that must not throw; `Apply3D` `ObjectDisposedException`; tests for all 9 state properties, Name,
-     Apply3D, GetVariable/SetVariable (valid+invalid+built-in), Play/Pause/Resume/Stop (AsAuthored and
-     Immediate separately), Dispose+event, GetTypeName.
-   - Files: `…/Audio/Cue.{hpp,cpp}`; new tests.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter='CueTest.*'`.
-
-2. **T-2G + T-5I — `AudioCategory`.**
+1. **T-2G + T-5I — `AudioCategory`.**
    - Goal: `Equals` by Name (FNA); fix stale "no-op" doxygen; tests.
    - Files: `…/Audio/AudioCategory.{hpp,cpp}`; new tests.
    - Verify: `./cmake-build-debug/CnaTests --gtest_filter='AudioCategoryTest.*'`.
 
-3. **T-1C + T-5M — `Microphone` compliance (capture T-4A deferred).**
+2. **T-1C + T-5M — `Microphone` compliance (capture T-4A deferred).**
    - Goal: add `GetTypeName`; map `Microphone` exceptions to `System::`; tests for the headless
      surface. (Real SDL capture, T-4A, is a separate larger task.)
    - Files: `…/Audio/Microphone.{hpp,cpp}`; new tests.
@@ -250,11 +245,10 @@ Read NEXT.md first, then plan_audio.md for the detailed audio task list.
 Open only the files needed for the first task. Do not refactor unrelated code.
 Do not touch the Media namespace or the sibling ../cna checkout.
 
-Make ONE small, verified improvement (start with task #1 in NEXT.md §8: Cue — System:: exceptions,
-dotted+public GetTypeName, variable-name validation with built-in variables, tests; T-1F/T-3A/T-5H).
-Cue.hpp/.cpp already has minor WaveBank-registration wiring from the SoundBank/WaveBank task; don't
-revert it. Check GetTypeName's visibility (private vs public) before assuming the existing declaration
-is correct — this exact bug has now been found and fixed in every XACT class touched so far.
+Make ONE small, verified improvement (start with task #1 in NEXT.md §8: AudioCategory — Equals by
+Name per FNA, fix stale "no-op" doxygen, tests; T-2G/T-5I). This is the last untested XACT class;
+after it, only Microphone compliance (T-1C/T-5M) and XactParser hardening (T-2E/T-2F) remain on the
+audio task list.
 
 Build and test:
   cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
