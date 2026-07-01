@@ -4,10 +4,13 @@
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
+#include <exception>
 #include <fstream>
 #include <iostream>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -45,7 +48,7 @@ namespace Microsoft::Xna::Framework::Audio
                              const std::string& /*rendererId*/)
     {
         if (settingsFile.empty())
-            throw std::invalid_argument("settingsFile must not be empty");
+            throw System::ArgumentNullException("settingsFile");
 
         Init(settingsFile);
     }
@@ -116,9 +119,9 @@ namespace Microsoft::Xna::Framework::Audio
     AudioCategory AudioEngine::GetCategory(const std::string& name)
     {
         if (name.empty())
-            throw std::invalid_argument("name must not be empty");
+            throw System::ArgumentNullException("name");
         if (isDisposed_)
-            throw std::runtime_error("AudioEngine is disposed");
+            throw System::ObjectDisposedException("AudioEngine");
 
         if (xactImpl_)
         {
@@ -127,16 +130,15 @@ namespace Microsoft::Xna::Framework::Audio
                 return AudioCategory(this, it->second, name);
         }
 
-        // Unknown category — return stub with an out-of-range index so operations are no-ops
-        return AudioCategory(this, static_cast<unsigned short>(0xFFFF), name);
+        throw System::InvalidOperationException("Invalid category name!");
     }
 
     float AudioEngine::GetGlobalVariable(const std::string& name) const
     {
         if (name.empty())
-            throw std::invalid_argument("name must not be empty");
+            throw System::ArgumentNullException("name");
         if (isDisposed_)
-            throw std::runtime_error("AudioEngine is disposed");
+            throw System::ObjectDisposedException("AudioEngine");
 
         if (xactImpl_)
         {
@@ -144,18 +146,23 @@ namespace Microsoft::Xna::Framework::Audio
             if (it != xactImpl_->globalVariables.end())
                 return it->second;
         }
-        throw std::runtime_error("Invalid global variable name: " + name);
+        throw System::InvalidOperationException("Invalid variable name!");
     }
 
     void AudioEngine::SetGlobalVariable(const std::string& name, float value)
     {
         if (name.empty())
-            throw std::invalid_argument("name must not be empty");
+            throw System::ArgumentNullException("name");
         if (isDisposed_)
-            throw std::runtime_error("AudioEngine is disposed");
+            throw System::ObjectDisposedException("AudioEngine");
 
         if (xactImpl_)
-            xactImpl_->globalVariables[name] = value;
+        {
+            auto it = xactImpl_->globalVariables.find(name);
+            if (it == xactImpl_->globalVariables.end())
+                throw System::InvalidOperationException("Invalid variable name!");
+            it->second = value;
+        }
     }
 
     void AudioEngine::Update()
@@ -265,5 +272,5 @@ namespace Microsoft::Xna::Framework::Audio
         v.erase(std::remove(v.begin(), v.end(), cue), v.end());
     }
 
-    GetTypeNameCPP(AudioEngine, "Microsoft::Xna::Framework::Audio::AudioEngine")
+    GetTypeNameCPP(AudioEngine, "Microsoft.Xna.Framework.Audio.AudioEngine")
 }

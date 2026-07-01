@@ -101,6 +101,8 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Releases all audio resources and marks the engine disposed. */
         void Dispose() override;
 
+        GetTypeNameHPP()
+
     private:
         friend class AudioCategory;
         friend class WaveBank;
@@ -133,7 +135,5 @@ namespace Microsoft::Xna::Framework::Audio
         // Active-cue registration for category operations
         void RegisterCue(Cue* cue);
         void UnregisterCue(Cue* cue);
-
-        GetTypeNameHPP()
     };
 }
