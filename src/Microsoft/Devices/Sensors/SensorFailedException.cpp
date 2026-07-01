@@ -7,7 +7,7 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    SensorFailedException::SensorFailedException() : Exception()
+    SensorFailedException::SensorFailedException() : Exception("Sensor failed.")
     {
     }
 

@@ -7,7 +7,7 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    AccelerometerFailedException::AccelerometerFailedException() : SensorFailedException()
+    AccelerometerFailedException::AccelerometerFailedException() : SensorFailedException("Accelerometer failed.")
     {
     }
 

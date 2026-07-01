@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: MS-PL
+
+#pragma once
+
+#include "CNA/CNAHelper.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
+#include "Microsoft/Devices/Sensors/CompassReading.hpp"
+#include "Microsoft/Devices/Sensors/SensorBase.hpp"
+#include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
+#include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "System/EventHandler.hpp"
+
+namespace Microsoft::Devices::Sensors
+{
+    /**
+     * @brief Provides access to the device compass sensor.
+     *
+     * @note SDL3 exposes no magnetometer/compass API on any supported platform.
+     * getIsSupportedProperty() always returns false, and Start() always fails
+     * with SensorFailedException.
+     */
+    class Compass final : public SensorBase<CompassReading>
+    {
+    private:
+        static int instanceCount_;
+
+        static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
+
+        SensorState state_;
+        bool started_;
+
+    public:
+        /**
+         * @brief Gets whether the current platform supports the compass sensor.
+         *
+         * @return true if supported; otherwise false.
+         */
+        static bool getIsSupportedProperty();
+
+        /**
+         * @brief Gets the current state of the compass.
+         *
+         * @return Current sensor state.
+         */
+        [[nodiscard]] SensorState getStateProperty() const;
+
+    public:
+        /**
+         * @brief Creates a new instance of the Compass object.
+         *
+         * @throws SensorFailedException If the maximum number of simultaneous instances is exceeded.
+         */
+        Compass();
+
+        /**
+         * @brief Destroys the compass object.
+         */
+        ~Compass() override;
+
+        /**
+         * @brief Starts data acquisition from the compass.
+         *
+         * @throws ObjectDisposedException If the object was already disposed.
+         * @throws SensorFailedException Always, since no platform currently exposes a compass sensor.
+         */
+        void Start() override;
+
+        /**
+         * @brief Stops data acquisition from the compass.
+         *
+         * @throws ObjectDisposedException If the object was already disposed.
+         */
+        void Stop() override;
+
+        /**
+         * @brief Disposes the compass resources.
+         *
+         * @param disposing True when called from Dispose(); false when called from destructor path.
+         */
+        void Dispose(bool disposing) override;
+
+        /**
+         * @brief Brings the base class's no-argument Dispose() into scope.
+         *
+         * Without this, declaring Dispose(bool) here would hide the
+         * inherited public Dispose() override of System::IDisposable.
+         */
+        using SensorBase<CompassReading>::Dispose;
+
+        GetTypeNameHPP()
+
+        /**
+         * @brief Event raised when the compass detects that it requires calibration.
+         */
+        System::EventHandler<CalibrationEventArgs> Calibrate;
+    };
+} // namespace Microsoft::Devices::Sensors
