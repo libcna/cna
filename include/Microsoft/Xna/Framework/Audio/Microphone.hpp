@@ -40,9 +40,6 @@ namespace Microsoft::Xna::Framework::Audio
          */
         [[nodiscard]] static Microphone* getDefaultProperty();
 
-        /** @brief Cached microphone list used by the framework dispatcher. */
-        NOXNA static std::vector<Microphone*>* micList;
-
         /**
          * @brief Gets the duration threshold used for BufferReady notifications.
          *
@@ -54,6 +51,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets the duration threshold used for BufferReady notifications.
          *
          * @param value New buffer duration.
+         * @throws System::ArgumentOutOfRangeException if the millisecond component of
+         *         @p value is outside [100, 999] or is not a multiple of 10.
          */
         void setBufferDurationProperty(System::TimeSpan value);
 
@@ -93,6 +92,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @param offset Byte offset within the buffer to start writing.
          * @param count  Maximum number of bytes to read.
          * @return Number of bytes actually read.
+         * @throws System::ArgumentException if @p offset is negative or beyond @p buffer,
+         *         or if @p count is not positive or @p offset + @p count exceeds @p buffer.
          */
         SharpRuntime::intcs GetData(std::vector<SharpRuntime::bytecs>& buffer, SharpRuntime::intcs offset,
                                     SharpRuntime::intcs count);
@@ -122,17 +123,26 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Checks whether enough data is queued and raises BufferReady when needed. */
         NOXNA void CheckBuffer();
 
-        /** @brief Fixed capture sample rate used by XNA microphone capture. */
-        NOXNA static constexpr SharpRuntime::intcs SAMPLERATE = 44100;
+        /** @brief Calls CheckBuffer() on every known microphone (used by FrameworkDispatcher::Update). */
+        NOXNA static void CheckAllBuffers();
+
+        GetTypeNameHPP()
 
     private:
         friend class MicrophoneFactory;
+        // Production Microphone instances only come from a real capture backend, which does not
+        // exist yet; tests need a way to construct an isolated instance directly.
+        NOXNA friend struct MicrophoneTestAccess;
 
         Microphone(SharpRuntime::uintcs id, std::string name);
 
         System::TimeSpan bufferDuration_;
         SharpRuntime::uintcs handle_;
         MicrophoneState state_;
+
+        // FNA internals (Microphone.cs: micList, SAMPLERATE are both `internal`), not CNA additions.
+        static std::vector<Microphone*>* micList;
+        static constexpr SharpRuntime::intcs SAMPLERATE = 44100;
 
         static std::vector<std::unique_ptr<Microphone>> microphoneStorage_;
 

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <algorithm>
-#include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -59,9 +60,11 @@ namespace Microsoft::Xna::Framework::Audio
     {
         const auto milliseconds = value.getMillisecondsProperty();
 
+        // getMillisecondsProperty() is the sub-second component, bounded to [-999, 999], so the
+        // "> 1000" branch below can never be true; kept as-is to match FNA (Microphone.cs:60).
         if (milliseconds < 100 || milliseconds > 1000 || milliseconds % 10 != 0)
         {
-            throw std::out_of_range("BufferDuration");
+            throw System::ArgumentOutOfRangeException("BufferDuration");
         }
 
         bufferDuration_ = value;
@@ -95,12 +98,12 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (offset < 0 || offset > static_cast<SharpRuntime::intcs>(buffer.size()))
         {
-            throw std::out_of_range("offset");
+            throw System::ArgumentException("offset");
         }
 
         if (count <= 0 || offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
         {
-            throw std::out_of_range("count");
+            throw System::ArgumentException("count");
         }
 
         (void)handle_;
@@ -146,9 +149,25 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
+    void Microphone::CheckAllBuffers()
+    {
+        if (micList != nullptr)
+        {
+            for (Microphone* microphone : *micList)
+            {
+                if (microphone != nullptr)
+                {
+                    microphone->CheckBuffer();
+                }
+            }
+        }
+    }
+
     SharpRuntime::intcs Microphone::GetQueuedBytes() const
     {
         // Platform capture should report the number of queued capture bytes.
         return 0;
     }
+
+    GetTypeNameCPP(Microphone, "Microsoft.Xna.Framework.Audio.Microphone")
 }

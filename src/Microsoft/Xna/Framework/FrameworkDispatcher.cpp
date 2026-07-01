@@ -34,16 +34,7 @@ namespace Microsoft::Xna::Framework
             }
         }
 
-        if (Audio::Microphone::micList != nullptr)
-        {
-            for (Audio::Microphone* microphone : *Audio::Microphone::micList)
-            {
-                if (microphone != nullptr)
-                {
-                    microphone->CheckBuffer();
-                }
-            }
-        }
+        Audio::Microphone::CheckAllBuffers();
 
         Media::MediaPlayer::Update();
 

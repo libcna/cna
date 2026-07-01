@@ -105,15 +105,15 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `WaveBank.cpp:263`, `Cue.cpp:249`: `::` → `.`.
   *Accept:* test ověří `GetTypeName()=="Microsoft.Xna.Framework.Audio.<Class>"` pro všechny 4. (B2, X2)
 
-- [ ] **T-1C — Doplnit `GetTypeName()` do `Microphone`.** Třída dědí `System::Object`, ale override
+- [x] **T-1C — Doplnit `GetTypeName()` do `Microphone`.** Třída dědí `System::Object`, ale override
   chybí. Přidat `GetTypeNameHPP()` v hpp a `GetTypeNameCPP(Microphone, "Microsoft.Xna.Framework.Audio.Microphone")` v cpp.
   *Accept:* `mic->GetTypeName()=="Microsoft.Xna.Framework.Audio.Microphone"`. (C2)
 
-- [ ] **T-1D — Mapování výjimek na `System::*` (datové/3D/mic třídy). ČÁSTEČNĚ HOTOVO.**
-  `AudioEmitter::setDopplerScaleProperty` (`AudioEmitter.cpp:26`) → `ArgumentOutOfRangeException` — **hotovo**.
+- [x] **T-1D — Mapování výjimek na `System::*` (datové/3D/mic třídy).**
+  `AudioEmitter::setDopplerScaleProperty` (`AudioEmitter.cpp:26`) → `ArgumentOutOfRangeException` — hotovo.
   `Microphone::setBufferDurationProperty` → `ArgumentOutOfRangeException`;
-  oba `Microphone::GetData` bounds-checky → `ArgumentException` — **zbývá**: `Microphone.cpp:64,98,103`
-  dnes stále hází `std::out_of_range` (ověřeno 2026-07-01).
+  oba `Microphone::GetData` bounds-checky → `ArgumentException` — hotovo (2026-07-01);
+  `Microphone.cpp:64,98,103` už nehází `std::out_of_range`.
   *FNA:* AudioEmitter.cs:33, Microphone.cs:62,171-179.
   *Accept:* testy ověří přesný `System::` typ pro každou chybovou větev; validní vstup nehází. (C3, X1)
 
@@ -141,9 +141,11 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* test/`static_assert` `is_base_of<System::Exception, T>` (+ `ExternalException` u prvních dvou);
   `getMessageProperty()`/`getInnerExceptionProperty()` fungují; `catch(const System::Exception&)` chytí. (C1, X1)
 
-- [ ] **T-1H — Microphone: NOXNA/viditelnost interních členů.** `micList` a `SAMPLERATE` (FNA `internal`)
+- [x] **T-1H — Microphone: NOXNA/viditelnost interních členů.** `micList` a `SAMPLERATE` (FNA `internal`)
   zprivátnit a odstranit z nich `NOXNA` (jsou to FNA internals, ne CNA rozšíření). Přístup pro
-  FrameworkDispatcher případně přes `friend`.
+  FrameworkDispatcher řešeno **bez friend** — nová veřejná `NOXNA static void CheckAllBuffers()` na
+  `Microphone` zapouzdřuje null-check + iteraci + `CheckBuffer()`; `FrameworkDispatcher.cpp` teď volá
+  jen `Audio::Microphone::CheckAllBuffers()` místo ručního procházení `micList`.
   *FNA:* Microphone.cs:104,120,142. *Accept:* překládá se pro všechny volající; žádné public interní členy. (C7)
 
 ### Fáze 2 — Opravy reálných chyb
@@ -317,8 +319,10 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 
 - [x] **T-5L — RendererDetailTests** — `ToString`, `GetHashCode` konzistence, `operator==`/`!=`, `Equals` equal+unequal. (C6)
 
-- [ ] **T-5M — MicrophoneTests** — `Default` null-safe při prázdném `All`; `BufferDuration` valid/invalid;
+- [x] **T-5M — MicrophoneTests** — `Default` null-safe při prázdném `All`; `BufferDuration` valid/invalid;
   `GetSampleDuration`/`GetSampleSizeInBytes` round-trip; `GetData` bounds; `GetTypeName`; stavový automat (T-4A). (C6)
+  *Pozn.:* stavový automat testován jen v rozsahu dnešní implementace (Start/Stop mění `State`); reálný
+  capture-driven stavový přechod čeká na T-4A.
 
 - [x] **T-5N — Exception testy** — pro `InstancePlayLimitException`/`NoAudioHardwareException`/
   `NoMicrophoneConnectedException`: všechny 3 ctory, base-of asserty, inner-exception round-trip. (C1)
