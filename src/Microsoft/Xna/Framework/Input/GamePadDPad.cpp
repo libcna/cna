@@ -33,13 +33,17 @@ namespace Microsoft::Xna::Framework::Input
     ButtonState GamePadDPad::getRightProperty() const { return right_; }
     ButtonState GamePadDPad::getUpProperty() const    { return up_; }
 
-    GamePadDPad GamePadDPad::FromButtons(Buttons buttons)
+    GamePadDPad GamePadDPad::FromButtonArray(std::initializer_list<Buttons> buttons)
     {
+        Buttons mask = static_cast<Buttons>(0);
+        for (Buttons b : buttons)
+            mask |= b;
+
         return GamePadDPad(
-            flagToState(buttons, Buttons::DPadUp),
-            flagToState(buttons, Buttons::DPadDown),
-            flagToState(buttons, Buttons::DPadLeft),
-            flagToState(buttons, Buttons::DPadRight)
+            flagToState(mask, Buttons::DPadUp),
+            flagToState(mask, Buttons::DPadDown),
+            flagToState(mask, Buttons::DPadLeft),
+            flagToState(mask, Buttons::DPadRight)
         );
     }
 

@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::Input
 
         const GamePadTriggers triggers(raw.leftTrigger, raw.rightTrigger, deadZoneMode);
         const GamePadButtons  buttons(raw.buttons);
-        const GamePadDPad     dpad = GamePadDPad::FromButtons(raw.buttons);
+        const GamePadDPad     dpad = GamePadDPad::FromButtonArray({raw.buttons});
 
         GamePadState state(thumbSticks, triggers, buttons, dpad);
         state.setPacketNumberProperty(raw.packetNumber);

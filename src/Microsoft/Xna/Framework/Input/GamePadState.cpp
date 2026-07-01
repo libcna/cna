@@ -50,8 +50,8 @@ namespace Microsoft::Xna::Framework::Input
         : GamePadState(
               GamePadThumbSticks(leftThumbStick, rightThumbStick),
               GamePadTriggers(leftTrigger, rightTrigger),
-              GamePadButtons::FromButtons(buttons),
-              GamePadDPad::FromButtons(GamePadButtons::FromButtons(buttons).buttons_))
+              GamePadButtons::FromButtonArray(buttons),
+              GamePadDPad::FromButtonArray(buttons))
     {
     }
 
