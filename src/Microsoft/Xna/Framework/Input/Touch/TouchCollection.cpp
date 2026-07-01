@@ -22,6 +22,13 @@ namespace Microsoft::Xna::Framework::Input::Touch
     bool TouchCollection::getIsConnectedProperty() const { return TouchPanel::getTouchDeviceExistsProperty(); }
     bool TouchCollection::getIsReadOnlyProperty()  const { return true; }
 
+    TouchLocation& TouchCollection::operator[](std::size_t index)
+    {
+        if (index >= touches_.size())
+            throw std::out_of_range("TouchCollection index out of range");
+        return touches_[index];
+    }
+
     const TouchLocation& TouchCollection::operator[](std::size_t index) const
     {
         if (index >= touches_.size())
