@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <algorithm>
 #include <string>
@@ -760,11 +761,22 @@ namespace CNA::Internal::Input
             }
         case SDL_EVENT_FINGER_DOWN:
             {
+                // Windows only notices a touch screen once it's touched (FNA SDL3_FNAPlatform.cs:972).
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::setTouchDeviceExistsProperty(true);
+
                 const int touchId = get_or_create_touch_id(event.tfinger.fingerID);
                 InputManager::SetTouchState(
                     touchId,
                     TouchLocationState::Pressed,
                     to_touch_pixel_position(event.tfinger)
+                );
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
+                    touchId,
+                    TouchLocationState::Pressed,
+                    event.tfinger.x,
+                    event.tfinger.y,
+                    0.0f,
+                    0.0f
                 );
                 break;
             }
@@ -775,6 +787,14 @@ namespace CNA::Internal::Input
                     touchId,
                     TouchLocationState::Moved,
                     to_touch_pixel_position(event.tfinger)
+                );
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
+                    touchId,
+                    TouchLocationState::Moved,
+                    event.tfinger.x,
+                    event.tfinger.y,
+                    event.tfinger.dx,
+                    event.tfinger.dy
                 );
                 break;
             }
@@ -788,6 +808,14 @@ namespace CNA::Internal::Input
                     touchId,
                     TouchLocationState::Released,
                     to_touch_pixel_position(event.tfinger)
+                );
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
+                    touchId,
+                    TouchLocationState::Released,
+                    event.tfinger.x,
+                    event.tfinger.y,
+                    0.0f,
+                    0.0f
                 );
                 release_touch_id_mapping(event.tfinger.fingerID);
                 break;
