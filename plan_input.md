@@ -108,7 +108,7 @@ violations in the internal layer, and very thin test coverage.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 725 | Implement `GamePad::SetLightBarEXT`: add `SdlInputBridge::SetLightBar` → `SDL_SetGamepadLED(device, R, G, B)`; wire from the no-op at `GamePad.cpp:59–62` | ⬜ | |
+| 725 | Implement `GamePad::SetLightBarEXT`: add `SdlInputBridge::SetLightBar` → `SDL_SetGamepadLED(device, R, G, B)`; wire from the no-op at `GamePad.cpp:59–62` | ✅ | `SdlInputBridge::SetLightBar(PlayerIndex, Color)` added (mirrors `SetVibration`'s null-guarded `get_sdl_gamepad_for_player` pattern); calls `SDL_SetGamepadLED(gamepad, R, G, B)`. Matches FNA `SDL3_FNAPlatform.cs:1982-1994`. No dedicated test yet — deferred to task 740 (batched GamePad EXT method tests), consistent with `SetVibration`/`GetGyroEXT`/etc. having no coverage until that task. 1812/1812 tests pass (no new tests). |
 | 726 | Implement `GamePad::GetGyroEXT` via `SDL_GetGamepadSensorData(SDL_SENSOR_GYRO)`; replace `return false` stub `GamePad.cpp:69–74` (caps already report `HasGyroEXT`) | ⬜ | |
 | 727 | Implement `GamePad::GetAccelerometerEXT` via `SDL_GetGamepadSensorData(SDL_SENSOR_ACCEL)`; replace stub `GamePad.cpp:76–81` | ⬜ | |
 | 728 | Map EXT buttons: extend `InputManager::GamePadButton` enum + `try_convert_sdl_gamepad_button` (`SdlInputBridge.cpp:85–122`) for `MISC1`→`Misc1EXT`, `RIGHT_PADDLE1`→`Paddle1EXT`, `LEFT_PADDLE1`→`Paddle2EXT`, `RIGHT_PADDLE2`→`Paddle3EXT`, `LEFT_PADDLE2`→`Paddle4EXT`, `TOUCHPAD`→`TouchPadEXT`, so they reach `GamePadState.Buttons` | ⬜ | |
