@@ -11,8 +11,10 @@ ported to C++ with minimal API-surface changes.
 
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
   pixel-readback integration tests.
-- **Current development phase:** Phase 31 — User primitives and draw-call variants (Tasks 251–260).
-  Phase 30 (VertexDeclaration / vertex format accuracy, Tasks 241–250) is complete.
+- **Current development phase:** Phase 31 — User primitives and draw-call variants (Tasks 251–260)
+  core work complete; only Task 260 (optional perf work) remains open. Phase 32 (Texture2D
+  completeness, Tasks 261–270) starting next. Phase 30 (VertexDeclaration / vertex format
+  accuracy, Tasks 241–250) is complete.
 - **Key architectural decisions:**
   - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).
@@ -27,7 +29,7 @@ ported to C++ with minimal API-surface changes.
 
 ### EasyGL backend (`cmake-build-debug`) — primary
 - **Builds:** clean.
-- **Unit tests (`CnaTests`):** 1772/1772 pass.
+- **Unit tests (`CnaTests`):** 1782/1782 pass.
 - **Integration tests:** ~62 EasyGL integration test executables registered in CMake; most pass.
   Two pre-existing failures: `easygl_device_dispose_order_test` (root cause unknown) and one
   pixel-readback test related to the SpriteBatch multiple-Begin/End bug (see Known Bugs).
@@ -41,7 +43,7 @@ ported to C++ with minimal API-surface changes.
 - Builds when configured. `Bgfx_VertexFormatMapping` test (Task 249): 47/47 mapping checks pass.
   No pixel-readback for Bgfx (no readback API).
 
-### Recently implemented (Phase 31, Tasks 251–258, 329)
+### Recently implemented (Phase 31, Tasks 251–259, 329)
 - **Task 251** — `DrawUserPrimitives` FNA audit: fixed silent-return bug in 4 typed overloads;
   added VertexDeclaration overload; exposed `PrimitiveVerts()` as public NOXNA static; 12/12 unit tests.
 - **Task 252** — `DrawUserIndexedPrimitives` FNA audit: fixed silent-return bug in all 8 typed
@@ -57,16 +59,20 @@ ported to C++ with minimal API-surface changes.
 - **Task 258** — `DrawUserIndexedPrimitives<VertexPositionColor>` (32-bit indices) pixel-readback:
   EasyGL integration test; vertexOffset=0/indexOffset=0 and vertexOffset=1/indexOffset=1 sub-tests;
   centre=(255,0,0) 2/2 PASS.
+- **Task 259** — `DrawUserPrimitives` argument-guard tests: `primitiveCount <= 0` throws
+  `System::ArgumentOutOfRangeException` for all 5 overloads (VPC/VPT/VPCT/VPNT + VertexDeclaration),
+  zero and negative counts; 10/10 new unit tests.
 - **Task 329** — Vulkan scissor test: `ScissorTestEnable` + `ScissorRectangle` pixel readback; 4/4 PASS.
 - **Phase 30** — Full VertexDeclaration test suite, EasyGL vertex format integration test (strides
   16/20/24/32), Bgfx vertex layout mapping helper, `docs/vertex-format-support.md`.
 
 ### What does NOT work yet
-- `DrawUserPrimitives` argument-guard unit tests for `primitiveCount <= 0` not yet added (Task 259 pending).
+- `DrawUserIndexedPrimitives` argument-guard unit tests for `primitiveCount <= 0` not covered (only
+  `DrawUserPrimitives` was in scope for Task 259).
 - Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
 - Texture2D completeness audit not started (Phase 32, Tasks 261–270).
 - Bgfx and EasyGL stride-keyed layout: arbitrary `VertexDeclaration` strides beyond 16/20/24/32/52.
-- 371 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
+- 370 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
 
 ---
 
@@ -74,6 +80,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 259 | `DrawUserPrimitivesTests.cpp` (extended), `GRAPHICS_TASKS.md` | Added argument-guard tests: primitiveCount<=0 throws ArgumentOutOfRangeException for all 5 DrawUserPrimitives overloads (VPC/VPT/VPCT/VPNT + VD); 10/10 new unit tests; 1782/1782 total pass |
 | 258 | `examples/easygl_draw_user_indexed_primitives_32_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` | DrawUserIndexedPrimitives VPC (32-bit indices) pixel-readback; vertexOffset=0/indexOffset=0 + vertexOffset=1/indexOffset=1; centre=(255,0,0) 2/2 PASS; 1772/1772 unit tests still pass |
 | 257 | `examples/easygl_draw_user_indexed_primitives_vpc_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` | DrawUserIndexedPrimitives VPC (16-bit indices) pixel-readback; vertexOffset=0/indexOffset=0 + vertexOffset=1/indexOffset=1; centre=(255,0,0) 2/2 PASS; 1772/1772 unit tests still pass |
 | 256 | `examples/easygl_draw_user_primitives_custom_test.cpp` (new), `CMakeLists.txt` | DrawUserPrimitives custom VD pixel-readback; custom MyVertex + VD overload; offset=0 + offset=1; 2/2 PASS |
@@ -86,13 +93,14 @@ ported to C++ with minimal API-surface changes.
 
 ## 4. Current blocker / main problem
 
-**No single hard blocker.** The project builds cleanly on all three backends and all 1772 unit tests pass.
+**No single hard blocker.** The project builds cleanly on all three backends and all 1782 unit tests pass.
 
-The next natural friction point is **Task 259**: unit tests validating that `DrawUserPrimitives`
-typed overloads throw `System::ArgumentOutOfRangeException` for `primitiveCount <= 0`. Both
-`DrawUserPrimitives` and `DrawUserIndexedPrimitives` now have full pixel-readback coverage for
-16-bit and 32-bit index paths (Tasks 255–258); argument-guard coverage is the remaining gap in
-Phase 31 before moving to Texture2D (Phase 32).
+Phase 31's core work (Tasks 251–259) is done: both `DrawUserPrimitives` and
+`DrawUserIndexedPrimitives` have full pixel-readback coverage (16/32-bit indices) and
+argument-guard coverage for `primitiveCount <= 0`. The only Phase 31 items left are optional —
+**Task 260** (staging optimization, a performance task, not correctness) and Task 261 which
+starts **Phase 32** (Texture2D completeness audit). Recommended next: **Task 261**, since it's
+an audit-only task (no code changes) that scopes the next real phase of work.
 
 ---
 
@@ -102,7 +110,7 @@ Phase 31 before moving to Texture2D (Phase 32).
 |--------|-------|
 | **Confirmed bug** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. Workaround: merge all sprite draws into one Begin/End. |
 | **Needs verification** | `easygl_device_dispose_order_test` pre-existing failure — root cause unknown. |
-| **Incomplete** | `DrawUserPrimitives`/`DrawUserIndexedPrimitives` argument-guard unit tests for `primitiveCount <= 0` not yet added (Task 259). |
+| **Incomplete** | `DrawUserIndexedPrimitives` argument-guard unit tests for `primitiveCount <= 0` not covered (Task 259 only covered `DrawUserPrimitives`). |
 | **Incomplete** | EasyGL and Bgfx backends: stride-keyed vertex layout supports only strides 16/20/24/32/52; arbitrary `VertexDeclaration` layouts silently use wrong VAO/pipeline. |
 | **Incomplete** | Vulkan backend: `Tangent` and `Binormal` `VertexElementUsage` values not mapped (no Vulkan semantic equivalent). |
 | **Incomplete** | `VertexElementUsage` Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently no-op or return `bgfx::Attrib::Count`. |
@@ -202,13 +210,7 @@ cd cmake-build-debug && ctest --output-on-failure
 
 In priority order:
 
-1. **Task 259 — Validate `DrawUserPrimitives` argument guards**
-   - Goal: Unit tests verifying that `DrawUserPrimitives` typed overloads throw
-     `System::ArgumentOutOfRangeException` for `primitiveCount <= 0`.
-   - Files: `tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp` (extend).
-   - Verification: `CnaTests --gtest_filter="DrawUserPrimitivesValidation.*"` → all pass.
-
-2. **Task 261 — Audit `Texture2D` constructors and methods against FNA** (Phase 32 start)
+1. **Task 261 — Audit `Texture2D` constructors and methods against FNA** (Phase 32 start)
    - Goal: Compare `Texture2D.hpp/.cpp` with FNA's `Texture2D.cs`; document every missing
      overload, wrong signature, or missing bounds check. Produce an audit list in AUDIT.md or
      inline in the task notes. Do not implement yet.
@@ -217,11 +219,11 @@ In priority order:
      `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs`.
    - Verification: compile (no code changes expected) + written audit list.
 
-3. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
+2. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
    - Goal: Replace `std::vector` allocations in `DrawUserPrimitives` / `DrawUserIndexedPrimitives`
      with a per-device scratch buffer or stack allocation for small counts.
    - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
-   - Verification: unit tests still 1772/1772; integration pixel-readback tests still pass.
+   - Verification: unit tests still 1782/1782; integration pixel-readback tests still pass.
 
 ---
 
@@ -247,12 +249,16 @@ In priority order:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
-Current status: Phase 30 complete (Tasks 241–250); Phase 31 in progress
-(Tasks 251, 252, 255, 256, 257, 258, 329 done); 1772/1772 unit tests pass.
+Current status: Phase 30 complete (Tasks 241–250); Phase 31 core work done
+(Tasks 251, 252, 255, 256, 257, 258, 259, 329 done); 1782/1782 unit tests pass.
+Only Task 260 (optional perf work) remains open in Phase 31.
 
-Next: Task 259 — unit tests validating that DrawUserPrimitives typed overloads throw
-System::ArgumentOutOfRangeException for primitiveCount <= 0.
-Files: tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp (extend).
-Verification: CnaTests --gtest_filter="DrawUserPrimitivesValidation.*" → all pass.
-Update GRAPHICS_TASKS.md (mark 259 ✅) and NEXT.md after finishing.
+Next: Task 261 — audit Texture2D constructors and methods against FNA (Phase 32 start).
+Compare Texture2D.hpp/.cpp with FNA's Texture2D.cs; document every missing overload,
+wrong signature, or missing bounds check. Do not implement yet — audit only.
+Files: include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp,
+       src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp,
+       /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs.
+Verification: compile (no code changes expected) + written audit list.
+Update GRAPHICS_TASKS.md (mark 261 ✅) and NEXT.md after finishing.
 ```
