@@ -94,6 +94,13 @@ namespace CNA::Internal::Input
      *
      * Currently supports Mouse, basic Keyboard, basic TouchPanel and basic GamePad state.
      *
+     * Architecturally, this is event-driven rather than poll-driven: FNA's platform layer
+     * (e.g. SDL3_FNAPlatform) re-queries SDL fresh on every `Get*State()` call, while this
+     * class only accumulates whatever `SdlInputBridge::ProcessEvent` has pushed in via
+     * `Set*State()`. State returned by the `Get*State()` methods here is only as current as
+     * the last `Game::Tick()` (which unconditionally pumps SDL events once per frame, before
+     * `Update()`/`Draw()` run — see `Game::PollEvents()`).
+     *
      * @note Status: PARTIAL
      */
     class InputManager
