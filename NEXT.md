@@ -92,14 +92,19 @@ ported to C++ with minimal API-surface changes.
   semi-transparent source decodes back fully opaque (JPEG has no alpha channel). **Also fixed**
   the Task 261 audit finding that `SaveAsJpeg` hardcoded quality=100: added a
   `GetJpegSaveQuality()` helper that reads `FNA_GRAPHICS_JPEG_SAVE_QUALITY`, matching FNA exactly.
-  8 new unit tests; 1808/1808 total pass.
+  8 new unit tests.
+- **NOXNA tags fix** — Tagged `Texture2D(const std::string& assetName)` and
+  `Texture2D(const std::string& assetName, GraphicsDevice&)` with `NOXNA` (neither is part of the
+  FNA/XNA `Texture2D` API), matching the project's own precedent
+  (`SoundEffect(const std::string&)`). Purely a marker-macro addition — no behavior change;
+  1808/1808 total pass.
 - **Phase 30** — Full VertexDeclaration test suite, EasyGL vertex format integration test (strides
   16/20/24/32), Bgfx vertex layout mapping helper, `docs/vertex-format-support.md`.
 
 ### What does NOT work yet
-- `Texture2D`: missing `NOXNA` tags on 2 assetName constructors, missing
-  `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`, and
-  Color-only format support — all found in Task 261, still open (see `AUDIT.md`).
+- `Texture2D`: missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/
+  `DDSFromStreamEXT`, and Color-only format support — found in Task 261, still open (see
+  `AUDIT.md`).
 - `DrawUserIndexedPrimitives` argument-guard unit tests for `primitiveCount <= 0` not covered (only
   `DrawUserPrimitives` was in scope for Task 259).
 - Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
@@ -112,6 +117,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| — | `Texture2D.hpp`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Tagged the 2 assetName constructors `NOXNA` (Task 261 audit finding). No behavior change; 1808/1808 total pass. |
 | 264 | `Texture2D.cpp`, `Texture2DTests.cpp` (extended), `AUDIT.md`, `GRAPHICS_TASKS.md` | SaveAsJpeg round-trip verification (tolerance-based, alpha-drop confirmed); fixed hardcoded JPEG quality=100 by adding FNA_GRAPHICS_JPEG_SAVE_QUALITY env-var support. 8 new unit tests; 1808/1808 total pass. |
 | 263 | `Texture2DTests.cpp` (extended), `GRAPHICS_TASKS.md` | SaveAsPng round-trip verification: error guards, multi-pixel+alpha exact match, non-square size, save-time resize, filename overload via temp file. 6 new unit tests; 1800/1800 total pass. |
 | 262 | `Texture2D.hpp/.cpp`, `Texture2DTests.cpp`, `docs/texture-stream-formats.md` (new), `AUDIT.md`, `GRAPHICS_TASKS.md` | Verified PNG/JPEG/BMP FromStream decoding (round-trip tests); added missing FromStream(device,stream,width,height,zoom) overload matching FNA3D resize/crop semantics. 5 new unit tests; 1794/1794 total pass. |
@@ -130,16 +136,10 @@ ported to C++ with minimal API-surface changes.
 
 ## 4. Current blocker / main problem
 
-**No single hard blocker.** The 2 memory-safety bugs found by the Task 261 audit are fixed
-(Task 266); `FromStream` format support + the missing resize/crop overload are done (Task 262);
-`SaveAsPng` and `SaveAsJpeg` are both round-trip verified (Tasks 263–264), and the hardcoded JPEG
-quality is fixed. All 1808 unit tests pass.
-
-The remaining Task 261 findings are lower-severity and still open: 2 constructors missing `NOXNA`
-tags, missing EXT statics (`SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/
-`DDSFromStreamEXT`), and Color-only `SurfaceFormat` support. None of these are memory-unsafe —
-they're missing-API gaps — so they can be picked up incrementally per Phase 32 task without
-urgency. The `NOXNA` tag fix is the smallest/cheapest remaining item.
+**No single hard blocker.** All Task 261 audit findings are now resolved except two: missing EXT
+statics (`SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`)
+and Color-only `SurfaceFormat` support. Neither is memory-unsafe — they're missing-API gaps that
+can be picked up incrementally per Phase 32 task without urgency. All 1808 unit tests pass.
 
 ---
 
@@ -155,7 +155,7 @@ urgency. The `NOXNA` tag fix is the smallest/cheapest remaining item.
 | **Incomplete** | `VertexElementUsage` Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently no-op or return `bgfx::Attrib::Count`. |
 | **Incomplete** | SDL_Renderer backend: `CreateVertexBuffer` always throws `ThrowNo3D`. No 3D support at all. |
 | **Incomplete** | Bgfx backend lacks pixel readback — integration tests there are smoke-only. |
-| **Incomplete** | `Texture2D`: 2 constructors missing `NOXNA` tags; missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`; `SurfaceFormat` support is effectively Color-only. Found in Task 261 audit (see `AUDIT.md`), not yet addressed — not memory-unsafe, just missing API surface. |
+| **Incomplete** | `Texture2D`: missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`; `SurfaceFormat` support is effectively Color-only. Found in Task 261 audit (see `AUDIT.md`), not yet addressed — not memory-unsafe, just missing API surface. |
 
 ---
 
@@ -249,27 +249,20 @@ cd cmake-build-debug && ctest --output-on-failure
 
 In priority order:
 
-1. **Add missing `NOXNA` tags** (small, mechanical, from the Task 261 audit)
-   - Goal: Tag `Texture2D(const std::string& assetName)` and
-     `Texture2D(const std::string& assetName, GraphicsDevice&)` with `NOXNA`, matching the
-     project's own precedent (`SoundEffect(const std::string&)` is already `NOXNA`).
-   - Files: `include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp`.
-   - Verification: compiles; no behavior change (NOXNA is a marker macro only).
-
-2. **Task 267 — Verify `LevelCount` behavior for mipmapped and non-mipmapped textures**
+1. **Task 267 — Verify `LevelCount` behavior for mipmapped and non-mipmapped textures**
    - Goal: Unit tests confirming `getLevelCountProperty()` matches FNA's `CalculateMipLevels`
      formula for various width/height combinations, and that the non-mipmapped constructor
      always yields `LevelCount == 1`.
    - Files: `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp`.
    - Verification: new unit tests pass.
 
-3. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
+2. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
    - Goal: Replace `std::vector` allocations in `DrawUserPrimitives` / `DrawUserIndexedPrimitives`
      with a per-device scratch buffer or stack allocation for small counts.
    - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
    - Verification: unit tests still 1808/1808; integration pixel-readback tests still pass.
 
-4. **Task 268/269 — Non-power-of-two textures and edge sampling** (larger, needs backend work)
+3. **Task 268/269 — Non-power-of-two textures and edge sampling** (larger, needs backend work)
    - Goal: Verify NPOT textures (e.g. 3x5, 7x11) work across all backends, and that texture
      sampling at edges respects clamp/wrap `TextureAddressMode`. Likely needs pixel-readback
      integration tests, not just unit tests.
@@ -281,10 +274,10 @@ In priority order:
 ## 9. Do not do yet
 
 - **No broad Texture2D rewrite** — the Task 261 audit is complete (see `AUDIT.md`); the 2 OOB
-  bugs (Task 266), FromStream format support/resize overload (Task 262), and SaveAsPng/SaveAsJpeg
-  verification (Tasks 263–264) are done; remaining findings (missing NOXNA tags, missing EXT
-  statics, Color-only format support) should land incrementally per Phase 32 task, not as one
-  large refactor.
+  bugs (Task 266), FromStream format support/resize overload (Task 262), SaveAsPng/SaveAsJpeg
+  verification (Tasks 263–264), and the NOXNA tag fix are all done; the remaining findings
+  (missing EXT statics, Color-only format support) should land incrementally per Phase 32 task,
+  not as one large refactor.
 - **No refactor of the stride-keyed vertex layout system** — it is load-bearing for all 3D tests;
   changes need their own dedicated phase with full regression testing.
 - **No changes to the Bgfx backend draw path** — pixel readback is unavailable there, so correctness
@@ -305,21 +298,19 @@ Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
 Current status: Phase 30 complete; Phase 31 core work done (Tasks 251,252,255,256,257,258,259,329);
-Phase 32 in progress (Tasks 261, 262, 263, 264, 266 done). 1808/1808 unit tests pass.
+Phase 32 in progress (Tasks 261, 262, 263, 264, 266 done + NOXNA tag fix). 1808/1808 unit tests pass.
 
 Tasks 261 (audit), 266 (OOB-bug fixes), 262 (FromStream format verification + resize/crop
-overload), 263 (SaveAsPng round-trip verification), and 264 (SaveAsJpeg round-trip verification +
-JPEG quality env-var fix) are all closed. Remaining Task 261 findings are missing-API gaps, not
-memory-safety bugs (see AUDIT.md "Texture2D detailed audit"):
-- 2 constructors missing NOXNA tags (Texture2D(assetName), Texture2D(assetName, device)).
+overload), 263 (SaveAsPng round-trip verification), 264 (SaveAsJpeg round-trip verification +
+JPEG quality env-var fix), and the NOXNA tag fix are all closed. Remaining Task 261 findings:
 - Missing SetDataPointerEXT/GetDataPointerEXT/TextureDataFromStreamEXT/DDSFromStreamEXT.
 - SurfaceFormat support is effectively Color-only (ValidateFormat throws for everything else).
+Neither is memory-unsafe — both are missing-API gaps (see AUDIT.md "Texture2D detailed audit").
 
-Next: tag Texture2D(const std::string& assetName) and Texture2D(const std::string& assetName,
-GraphicsDevice&) with NOXNA, matching the project's own precedent (SoundEffect(const std::string&)
-is already NOXNA). Purely mechanical — no behavior change. Then Task 267 (verify LevelCount
-behavior) or Task 260 (optional perf work).
-Files: include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp.
-Verification: compiles; CnaTests still all pass.
-Update GRAPHICS_TASKS.md and NEXT.md after finishing.
+Next: Task 267 — verify LevelCount behavior for mipmapped and non-mipmapped textures. Add unit
+tests confirming getLevelCountProperty() matches FNA's CalculateMipLevels formula for various
+width/height combinations, and that the non-mipmapped constructor always yields LevelCount == 1.
+Files: tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp.
+Verification: new unit tests pass; CnaTests still all pass.
+Update GRAPHICS_TASKS.md (mark 267 ✅) and NEXT.md after finishing.
 ```

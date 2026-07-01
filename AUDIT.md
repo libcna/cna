@@ -187,7 +187,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | StencilOperation (enum) | ✅ | Complete |
 | SurfaceFormat (enum) | ✅ | Complete |
 | Texture | ✅ | API complete |
-| Texture2D | 🔄 | Detailed re-audit (Task 261, Phase 32); 2 memory-safety bugs fixed (Task 266); missing `FromStream(w,h,zoom)` overload added + format support verified (Task 262). Still open: missing `NOXNA` tags, missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`, and Color-only format support — see below |
+| Texture2D | 🔄 | Detailed re-audit (Task 261, Phase 32); 2 memory-safety bugs fixed (Task 266); missing `FromStream(w,h,zoom)` overload added + format support verified (Task 262); `SaveAsPng`/`SaveAsJpeg` round-trip verified + JPEG quality fixed (Tasks 263–264); missing `NOXNA` tags fixed. Still open: missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`, and Color-only format support — see below |
 | Texture3D | ✅ | API complete |
 | TextureAddressMode (enum) | ✅ | Complete |
 | TextureCollection | ✅ | API complete |
@@ -270,16 +270,17 @@ No code was changed for this task — audit only. Findings below feed Phase 32 t
    throwing on unsupported formats) — this is a behavioral divergence worth documenting even
    though it's arguably a usability improvement.
 
-#### Missing `NOXNA` tags (CLAUDE.md compliance)
+#### Missing `NOXNA` tags (CLAUDE.md compliance) — FIXED
 
-8. `Texture2D(const std::string& assetName)` and
-   `Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)`
-   (`Texture2D.hpp:40,46`) are **not part of the FNA/XNA 4.0 `Texture2D` API** — real XNA loads
-   textures via `Texture2D.FromStream` or the content pipeline, never a direct filename constructor.
-   These are CNA-only conveniences and per CLAUDE.md must be wrapped in `NOXNA`, exactly like the
-   project's own established precedent: `SoundEffect(const std::string& assetName)`
-   (`Audio/SoundEffect.hpp:49`) **is** correctly marked `NOXNA explicit`. The two `Texture2D`
-   constructors are missing this marker — a straightforward, mechanical fix.
+8. **~~`Texture2D(const std::string& assetName)` and
+   `Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)` missing `NOXNA`~~
+   FIXED.** These constructors (`Texture2D.hpp:40,46`) are **not part of the FNA/XNA 4.0
+   `Texture2D` API** — real XNA loads textures via `Texture2D.FromStream` or the content
+   pipeline, never a direct filename constructor. They are CNA-only conveniences and per
+   CLAUDE.md must be wrapped in `NOXNA`, exactly like the project's own established precedent:
+   `SoundEffect(const std::string& assetName)` (`Audio/SoundEffect.hpp:49`) is correctly marked
+   `NOXNA explicit`. Both `Texture2D` constructors are now tagged `NOXNA` the same way. Purely a
+   marker-macro addition — no behavior change; 1808/1808 unit tests still pass.
 
 #### Format support gap (affects the whole SetData/GetData story)
 

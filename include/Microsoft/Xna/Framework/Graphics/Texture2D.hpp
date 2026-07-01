@@ -37,13 +37,13 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Loads a Texture2D from a file asset by name.
          * @param assetName Path to the image file.
          */
-        explicit Texture2D(const std::string& assetName);
+        NOXNA explicit Texture2D(const std::string& assetName);
         /**
          * @brief Loads a Texture2D from a file asset using the given device.
          * @param assetName     Path to the image file.
          * @param graphicsDevice The device to upload the texture to.
          */
-        Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice);
+        NOXNA Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice);
 
         /**
          * @brief Creates an empty Texture2D with Color format.
