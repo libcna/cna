@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 #include <array>
 #include <optional>
@@ -23,6 +24,31 @@ namespace
     using Microsoft::Xna::Framework::Input::Keys;
 
     constexpr std::size_t MaxSupportedGamePads = 4;
+
+    // Mirrors FNA's GamePad.GAMEPAD_COUNT / FNA_GAMEPAD_NUM_GAMEPADS env override
+    // (GamePad.cs:34-53). FNA's comment notes that going *above* the default also
+    // requires adding more PlayerIndex names; CNA's PlayerIndex is frozen XNA API
+    // (only One-Four), so an override above MaxSupportedGamePads is clamped down.
+    // The practically useful direction — reducing/disabling gamepad tracking — works.
+    std::size_t effective_gamepad_count()
+    {
+        static const std::size_t count = []() -> std::size_t {
+            if (const char* envValue = std::getenv("FNA_GAMEPAD_NUM_GAMEPADS"))
+            {
+                try
+                {
+                    const long parsed = std::stol(envValue);
+                    if (parsed >= 0)
+                        return std::min(static_cast<std::size_t>(parsed), MaxSupportedGamePads);
+                }
+                catch (...)
+                {
+                }
+            }
+            return MaxSupportedGamePads;
+        }();
+        return count;
+    }
 
     // --- Text input control-character synthesis ---
     // SDL does not deliver TEXT_INPUT events for these control keys, so FNA synthesizes
@@ -138,7 +164,8 @@ namespace
     std::optional<std::size_t> try_find_free_gamepad_slot()
     {
         const auto& openedGamePads = get_opened_gamepads();
-        for (std::size_t slot = 0; slot < openedGamePads.size(); ++slot)
+        const std::size_t limit = effective_gamepad_count();
+        for (std::size_t slot = 0; slot < limit; ++slot)
         {
             if (openedGamePads[slot] == nullptr)
             {
