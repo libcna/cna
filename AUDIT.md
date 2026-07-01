@@ -187,7 +187,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | StencilOperation (enum) | ✅ | Complete |
 | SurfaceFormat (enum) | ✅ | Complete |
 | Texture | ✅ | API complete |
-| Texture2D | 🔄 | Detailed re-audit (Task 261, Phase 32) found 2 memory-safety bugs, missing `NOXNA` tags, a missing FromStream overload, missing EXT statics, and Color-only format support — see below |
+| Texture2D | 🔄 | Detailed re-audit (Task 261, Phase 32); 2 memory-safety bugs fixed (Task 266). Still open: missing `NOXNA` tags, a missing FromStream overload, missing EXT statics, and Color-only format support — see below |
 | Texture3D | ✅ | API complete |
 | TextureAddressMode (enum) | ✅ | Complete |
 | TextureCollection | ✅ | API complete |
@@ -213,31 +213,38 @@ Line-by-line comparison of `include/.../Texture2D.hpp` + `src/.../Texture2D.cpp`
 `FNA/src/Graphics/Texture2D.cs` (635 lines) and the shared helpers in `FNA/src/Graphics/Texture.cs`.
 No code was changed for this task — audit only. Findings below feed Phase 32 tasks 262–270.
 
-#### Confirmed bugs (highest priority — candidates for an immediate follow-up fix task)
+#### Confirmed bugs — FIXED in Task 266
 
-1. **Heap buffer overflow — OOB write** in
+1. **~~Heap buffer overflow — OOB write~~ FIXED.**
    `Texture2D::SetData(int level, const Rectangle* rect, const Color* data, int startIndex, int elementCount)`
-   (`Texture2D.cpp:197-252`). The method validates `elementCount < w*h` but never validates that the
-   `rect` (`x, y, w, h`) actually fits inside the mip level's dimensions (`levelW`, `levelH`). The write
+   (`Texture2D.cpp:197-252`) validated `elementCount < w*h` but never validated that the
+   `rect` (`x, y, w, h`) actually fit inside the mip level's dimensions (`levelW`, `levelH`). The write
    loop computes `dst = ((y+row)*levelW + (x+col)) * 4` and writes directly into `buf` (sized
    `levelW*levelH*4`) with no clamping — a caller-supplied `Rectangle` with `x+w > levelW` or
-   `y+h > levelH` (or negative `x`/`y`) writes past the end of the CPU-side mip buffer.
-   The sibling method `GetData(int level, const Rectangle* rect, ...)` **does** have this exact check
-   (`Texture2D.cpp:317`: `if (x < 0 || y < 0 || x + w > levelW || y + h > levelH) throw ...`), so the
-   omission in `SetData` is an asymmetry, not an intentional design choice. This is precisely the gap
-   Phase 32 **Task 266** ("Implement exact bounds checking for `SetData<T>` rectangles") anticipates.
+   `y+h > levelH` (or negative `x`/`y`) would write past the end of the CPU-side mip buffer.
+   The sibling method `GetData(int level, const Rectangle* rect, ...)` already had this exact check
+   (`Texture2D.cpp:317`), so the omission in `SetData` was an asymmetry, not an intentional design
+   choice. **Fix (Task 266):** added the identical bounds check to `SetData`, throwing
+   `std::out_of_range("Texture2D::SetData: rectangle out of texture bounds")` before any write.
+   Regression tests: `SetDataLevelRectXOutOfBoundsThrowsOutOfRange`,
+   `SetDataLevelRectYOutOfBoundsThrowsOutOfRange`, `SetDataLevelRectNegativeXThrowsOutOfRange`,
+   `SetDataLevelRectNegativeYThrowsOutOfRange`, `SetDataLevelRectWithinBoundsDoesNotThrow`.
 
-2. **Heap buffer overflow — OOB read** in `Texture2D::SetData(const Color* data, int elementCount)`
-   (`Texture2D.cpp:177-195`, the simple 2-arg overload). It builds an `ImageData` with
-   `img.width = width; img.height = height;` (the texture's full dimensions) but sizes
-   `img.pixels` to only `elementCount * 4` bytes. If a caller passes `elementCount < width*height`,
-   the resulting `ImageData` claims full-size dimensions over an undersized buffer. The EasyGL backend's
-   `EasyGLTextureBackend` constructor (`EasyGLGraphicsBackend.cpp:342`) calls
-   `texture.set_image_2d(..., width, height, data.pixels.data())`, which reads `width*height*4` bytes
-   from `data.pixels.data()` regardless of the vector's actual size — an out-of-bounds read.
-   FNA's equivalent (`SetData<T>(T[] data)`, delegating to the 5-arg overload) explicitly validates
-   `requiredBytes > availableBytes` and throws `ArgumentOutOfRangeException` before touching the
-   texture; CNA has no equivalent check on this overload.
+2. **~~Heap buffer overflow — OOB read~~ FIXED.**
+   `Texture2D::SetData(const Color* data, int elementCount)` (`Texture2D.cpp:177-195`, the simple
+   2-arg overload) built an `ImageData` with `img.width = width; img.height = height;` (the texture's
+   full dimensions) but sized `img.pixels` to only `elementCount * 4` bytes. If a caller passed
+   `elementCount < width*height`, the resulting `ImageData` claimed full-size dimensions over an
+   undersized buffer. The EasyGL backend's `EasyGLTextureBackend` constructor
+   (`EasyGLGraphicsBackend.cpp:342`) calls `texture.set_image_2d(..., width, height, data.pixels.data())`,
+   which reads `width*height*4` bytes from `data.pixels.data()` regardless of the vector's actual
+   size — an out-of-bounds read. FNA's equivalent (`SetData<T>(T[] data)`, delegating to the 5-arg
+   overload) explicitly validates `requiredBytes > availableBytes` and throws
+   `ArgumentOutOfRangeException` before touching the texture. **Fix (Task 266):** added a
+   `elementCount < width*height` check that throws `std::out_of_range`, and the pixel buffer /
+   loop bound are now always sized to exactly `width*height` (matching `img.width`/`img.height`),
+   eliminating the size mismatch. Regression tests (`SetDataSimpleGuardTest` fixture, requires a
+   real `GraphicsDevice`): `InsufficientElementCountThrowsOutOfRange`, `ExactElementCountDoesNotThrow`.
 
 #### Missing overloads / methods (present in FNA, absent in CNA)
 

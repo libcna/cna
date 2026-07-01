@@ -427,7 +427,7 @@ All 100 original tasks addressed.
 | 263 | Verify `Texture2D::SaveAsPng` if present                                     | ⬜      | Add round-trip test                     |
 | 264 | Verify `Texture2D::SaveAsJpeg` if present                                    | ⬜      | Add round-trip test                     |
 | 265 | Implement exact bounds checking for `GetData<T>` rectangles                  | ⬜      | Match FNA exceptions                    |
-| 266 | Implement exact bounds checking for `SetData<T>` rectangles                  | ⬜      | Match FNA exceptions                    |
+| 266 | Implement exact bounds checking for `SetData<T>` rectangles                  | ✅      | Fixed both OOB bugs from Task 261 audit: (1) `SetData(level,rect,...)` now throws `std::out_of_range` when rect exceeds mip-level bounds (mirrors `GetData`'s existing check); (2) `SetData(Color*,elementCount)` now throws `std::out_of_range` when `elementCount < width*height` instead of building a size-mismatched `ImageData`. 7 new unit tests (5 rect-bounds + 2 buffer-size); 1789/1789 total pass. |
 | 267 | Verify `LevelCount` behavior for mipmapped and non-mipmapped textures        | ⬜      | Unit tests                              |
 | 268 | Verify non-power-of-two textures across all backends                         | ⬜      | 3×5, 7×11                               |
 | 269 | Verify texture sampling at edges for clamp/wrap modes                        | ⬜      | Pixel tests                             |

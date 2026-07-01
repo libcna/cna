@@ -177,11 +177,14 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(const Color* data, int elementCount)
     {
         if (!graphicsDevice_ || !data || elementCount <= 0) return;
+        const int total = width * height;
+        if (elementCount < total)
+            throw std::out_of_range("Texture2D::SetData: elementCount is less than the number of pixels in the texture");
         ImageData img;
         img.width  = width;
         img.height = height;
-        img.pixels.resize(static_cast<std::size_t>(elementCount) * 4);
-        for (int i = 0; i < elementCount; ++i)
+        img.pixels.resize(static_cast<std::size_t>(total) * 4);
+        for (int i = 0; i < total; ++i)
         {
             img.pixels[i * 4 + 0] = data[i].getRProperty();
             img.pixels[i * 4 + 1] = data[i].getGProperty();
@@ -213,6 +216,8 @@ namespace Microsoft::Xna::Framework::Graphics
             x = rect->X; y = rect->Y;
             w = rect->Width; h = rect->Height;
         }
+        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH)
+            throw std::out_of_range("Texture2D::SetData: rectangle out of texture bounds");
         if (elementCount < w * h)
             throw std::out_of_range("Texture2D::SetData: elementCount is less than the number of pixels in the requested region");
 
