@@ -13,6 +13,14 @@ namespace Microsoft::Devices
      * VibrateController is a pure static utility: it has no instance state,
      * does not derive from SensorBase<T> or System::IDisposable, and is
      * never instantiated.
+     *
+     * This targets the phone/device vibration motor only. On desktop, a
+     * connected game controller's rumble motors are deliberately excluded
+     * from device selection so that this class never competes with
+     * Microsoft::Xna::Framework::Input::GamePad::SetVibration() for the same
+     * physical actuator; if the only haptic-capable device present is a game
+     * controller, Start() is a silent no-op, matching the behavior of a
+     * desktop machine with no vibration hardware at all.
      */
     class VibrateController final
     {

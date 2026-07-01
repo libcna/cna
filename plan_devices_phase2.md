@@ -224,7 +224,7 @@ large/small motor magnitudes — same shape as `GamePad::SetVibration`), and
 from the current `VibrateController` — it only ever calls
 `SDL_PlayHapticRumble(g_haptic, 1.0f, ms)` (hardcoded full strength).
 
-### Task P2-8 — Review: haptic-device conflict with GamePad
+### Task P2-8 — Review: haptic-device conflict with GamePad ✅ Done
 
 **Finding:** `VibrateController::OpenFirstHapticDevice()`
 (`src/Microsoft/Devices/VibrateController.cpp`) opens whichever device
@@ -256,6 +256,44 @@ that `GamePad`'s rumble path also targets.
    crashing, but the two APIs are unaware of each other").
 4. Either way, add a code comment + `NEXT.md`/`AUDIT.md` note recording the
    decision, so it isn't silently rediscovered again.
+
+**Resolution:** Confirmed the risk mechanistically (no real gamepad hardware
+was available to physically reproduce it in this dev container) by reading
+the vendored SDL3 Linux haptic backend directly:
+`third_party/SDL/src/haptic/linux/SDL_syshaptic.c`'s `SDL_SYS_HapticInit()`
+scans `/dev/input/event0..31` independently of the joystick subsystem,
+opening each node with its own fd and probing `EV_IsHaptic()` via
+`ioctl(EVIOCGBIT(EV_FF, ...))`. A rumble-capable game controller therefore
+*is* enumerated by `SDL_GetHaptics()` as its own device, with zero
+correlation to the `SDL_JoystickID`/`SDL_Gamepad` that `GamePad::SetVibration`
+(`SDL_RumbleGamepad`) separately manages — confirming the risk is real, not
+theoretical.
+
+**Fix implemented** (not just documented — a clean-enough approach was
+found): `VibrateController.cpp` now has `IsConnectedGamepadHapticDevice()`,
+which cross-references each candidate `SDL_HapticID`'s name
+(`SDL_GetHapticNameForID`) against every currently connected joystick's name
+(`SDL_GetJoysticks()` + `SDL_GetJoystickNameForID()`, both non-invasive — no
+joystick is opened just to check). `OpenFirstHapticDevice()` skips any
+haptic device whose name matches a connected joystick. Name-matching was
+chosen over ID correlation because SDL3 exposes no direct
+`SDL_HapticID`-to-`SDL_JoystickID` mapping without opening the joystick
+(`SDL_OpenHapticFromJoystick` requires an already-open `SDL_Joystick*`), and
+opening every connected joystick just to probe it was judged too invasive
+for what should be a lightweight `Start()` call. Residual caveat (documented
+in code, not fixed): two physically distinct controllers that happen to
+report the identical product name would both be excluded/included together;
+accepted as a rare edge case not worth the complexity of a more invasive fix.
+
+Net effect: if the *only* haptic-capable device present is a game
+controller, `VibrateController::Start()` now correctly falls into its
+existing silent no-op path (matching "no phone hardware present" desktop
+semantics) instead of ever moving the controller's motors — leaving
+`GamePad::SetVibration` as the sole path for controller rumble. Verified:
+`CNA` + `CnaTests` build clean, `VibrateControllerTests` 6/6 pass, full
+`ctest` still at the same pre-existing 64 headless `EasyGL_*` failures (no
+regressions). `VibrateController.hpp`'s class doc comment and
+`VibrateControllerTests.cpp` both updated with notes on this behavior.
 
 ### Task P2-9 — Confirm hardcoded full-strength rumble is intentional
 

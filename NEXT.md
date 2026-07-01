@@ -18,11 +18,11 @@ column added to its Task Summary table). Follow-up plan now open:
 (`Accelerometer.hpp` Dispose() name-hiding + missing tests,
 `GetTypeNameCPP` dot-convention fix), CHECKLIST.md compliance spot-check,
 cross-platform (Vulkan/BGFX desktop + Android/iOS) build verification, and
-(Phase 6) a `VibrateController` review + `NOXNA` extensions: a real
-device-conflict risk with `GamePad::SetVibration` was found (see Phase 6
-Task P2-8), plus proposed `NOXNA` additions exposing more of SDL3's haptic
-API (variable intensity, capability query, dual-motor left/right rumble)
-beyond WP7's minimal `Start(TimeSpan)`/`Stop()` surface.
+(Phase 6) a `VibrateController` review + `NOXNA` extensions. Phase 6 Task
+P2-8 is **done**: confirmed and fixed a real device-conflict risk with
+`GamePad::SetVibration` (see Section 3/Section 5). Tasks P2-9 through P2-13
+(proposed `NOXNA` additions exposing more of SDL3's haptic API — variable
+intensity, capability query, dual-motor left/right rumble) are still open.
 
 **Key architectural rules:**
 - Public API names must match XNA 4.0 exactly.
@@ -246,6 +246,17 @@ plan's scope (not fixed here).
   test cases per plan_devices.md Task 28 coverage list.
 - Task 29 (CMakeLists.txt): no edit needed — confirmed `GLOB_RECURSE` already
   covers all new files.
+- `plan_devices_phase2.md` Task P2-8 — `include/Microsoft/Devices/VibrateController.hpp`
+  (class doc comment updated) and `src/Microsoft/Devices/VibrateController.cpp`
+  (added `IsConnectedGamepadHapticDevice()` + updated `OpenFirstHapticDevice()`
+  to skip haptic devices that are also connected joysticks/gamepads, by
+  cross-referencing device names via `SDL_GetHapticNameForID()` /
+  `SDL_GetJoystickNameForID()`). Fixes a confirmed real risk:
+  `VibrateController::Start()` could otherwise buzz a connected haptic-capable
+  gamepad on desktop instead of safely no-opping, competing with
+  `GamePad::SetVibration`. `tests/Microsoft/Devices/VibrateControllerTests.cpp`
+  updated with a note explaining why this specific behavior can't be
+  unit-tested without real gamepad hardware.
 
 ---
 
@@ -378,7 +389,11 @@ cd cmake-build-debug && ctest --output-on-failure -R "AccelerometerReading|Senso
 ## 8. Next smallest tasks
 
 `plan_devices.md` is fully complete (31/31 tasks). The active follow-up plan
-is `plan_devices_phase2.md` — read it first. Its first actionable task:
+is `plan_devices_phase2.md` — read it first. Task P2-8 (Phase 6,
+`VibrateController`/`GamePad` haptic-device conflict) was already done out
+of sequence at the user's request — see Section 3. The next tasks in plan
+order are P2-3/P2-4 below; P2-9 through P2-13 (remaining Phase 6 `NOXNA`
+vibration extensions) are also open whenever prioritized.
 
 1. **Task P2-3 — Fix `Accelerometer.hpp` Dispose() name-hiding bug + write
    `AccelerometerTests.cpp`**

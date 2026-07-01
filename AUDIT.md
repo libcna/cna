@@ -356,7 +356,7 @@ check the "✅ complete" claims below against).
 | SensorFailedException | ✅ | Full tests |
 | SensorReadingEventArgs\<T\> | ✅ | Complete |
 | SensorState (enum) | ✅ | Complete |
-| VibrateController | ✅ | Static-only, SDL3 haptic-backed (`Microsoft::Devices` namespace, not `Sensors`). Full tests for the XNA-compliant surface. **Under further review in `plan_devices_phase2.md` Phase 6**: possible device-conflict with `GamePad::SetVibration` on desktop (both can target the same haptic-capable gamepad via different SDL3 APIs — `SDL_GetHaptics`/`SDL_OpenHaptic` vs `SDL_RumbleGamepad`), plus proposed `NOXNA` extensions (variable intensity, `getIsSupportedProperty()`, dual-motor left/right rumble) to expose more of SDL3's haptic capabilities than WP7's minimal API ever needed. |
+| VibrateController | ✅ | Static-only, SDL3 haptic-backed (`Microsoft::Devices` namespace, not `Sensors`). Full tests for the XNA-compliant surface. **Fixed (`plan_devices_phase2.md` Task P2-8):** confirmed via the vendored SDL3 Linux haptic backend that a rumble-capable gamepad is enumerated by `SDL_GetHaptics()` independently of `GamePad::SetVibration`'s `SDL_RumbleGamepad` path; `VibrateController.cpp` now skips haptic devices whose name matches a connected joystick, so it never competes with `GamePad` for the same physical motor. Remaining Phase 6 items (P2-9 through P2-13): proposed `NOXNA` extensions — variable intensity, `getIsSupportedProperty()`, dual-motor left/right rumble — not yet implemented. |
 
 **Known bug (not yet fixed):** `Accelerometer.hpp` declares `Dispose(bool) override`
 without `using SensorBase<AccelerometerReading>::Dispose;`, hiding the inherited

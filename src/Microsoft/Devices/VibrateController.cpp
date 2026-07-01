@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_haptic.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_joystick.h>
 
 namespace Microsoft::Devices
 {
@@ -43,7 +44,50 @@ namespace Microsoft::Devices
             return SDL_InitSubSystem(SDL_INIT_HAPTIC);
         }
 
-        // Opens the first enumerable haptic device, if any.
+        // Returns true if a haptic device's name matches a currently
+        // connected joystick/gamepad's name.
+        //
+        // On Linux (and likely similarly on other desktop backends), a
+        // rumble-capable game controller is enumerated by SDL_GetHaptics()
+        // as its own independent haptic device, entirely separate from the
+        // joystick/gamepad subsystem that
+        // Microsoft::Xna::Framework::Input::GamePad::SetVibration() uses
+        // (SDL_RumbleGamepad). SDL provides no direct SDL_HapticID <->
+        // SDL_JoystickID correlation, so device name is the most reliable
+        // signal available without invasively opening every connected
+        // joystick just to probe it.
+        bool IsConnectedGamepadHapticDevice(SDL_HapticID hapticId)
+        {
+            const char* hapticName = SDL_GetHapticNameForID(hapticId);
+            if (hapticName == nullptr)
+            {
+                return false;
+            }
+
+            int joystickCount = 0;
+            SDL_JoystickID* joysticks = SDL_GetJoysticks(&joystickCount);
+            if (joysticks == nullptr)
+            {
+                return false;
+            }
+
+            bool matchesGamepad = false;
+            for (int i = 0; i < joystickCount; ++i)
+            {
+                const char* joystickName = SDL_GetJoystickNameForID(joysticks[i]);
+                if (joystickName != nullptr && SDL_strcmp(joystickName, hapticName) == 0)
+                {
+                    matchesGamepad = true;
+                    break;
+                }
+            }
+
+            SDL_free(joysticks);
+            return matchesGamepad;
+        }
+
+        // Opens the first enumerable haptic device that is not also a
+        // connected joystick/gamepad, if any.
         //
         // NOTE: on Android, SDL3's bundled Android haptic backend automatically
         // polls Context.VIBRATOR_SERVICE and registers the phone's own
@@ -67,7 +111,22 @@ namespace Microsoft::Devices
                 return nullptr;
             }
 
-            SDL_Haptic* opened = SDL_OpenHaptic(haptics[0]);
+            SDL_Haptic* opened = nullptr;
+
+            for (int i = 0; i < hapticCount; ++i)
+            {
+                if (IsConnectedGamepadHapticDevice(haptics[i]))
+                {
+                    continue;
+                }
+
+                opened = SDL_OpenHaptic(haptics[i]);
+                if (opened != nullptr)
+                {
+                    break;
+                }
+            }
+
             SDL_free(haptics);
             return opened;
         }
