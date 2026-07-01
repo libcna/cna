@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #ifdef CNA_BACKEND_BGFX
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
@@ -150,6 +151,10 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             throw makeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO)");
         }
+
+        // The Touch Panel needs this for normalized-to-pixel touch coordinate scaling.
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayHeightProperty(virtualHeight_);
 
         createOrAttachWindow();
         applyPresentationParametersToWindow();
@@ -298,6 +303,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         virtualWidth_ = presentationParameters_.getBackBufferWidthProperty();
         virtualHeight_ = presentationParameters_.getBackBufferHeightProperty();
+
+        // The Touch Panel needs this too, for the same reason as the constructor.
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayHeightProperty(virtualHeight_);
 
         applyPresentationParametersToWindow();
 
