@@ -2,7 +2,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -593,6 +595,19 @@ namespace Microsoft::Xna::Framework::Graphics
     // SaveAsJpeg
     // -----------------------------------------------------------------------
 
+    // Mirrors FNA's Texture2D.SaveAsJpeg quality lookup: FNA_GRAPHICS_JPEG_SAVE_QUALITY env var,
+    // falling back to 100 if unset or unparseable.
+    static int GetJpegSaveQuality()
+    {
+        const char* qualityString = std::getenv("FNA_GRAPHICS_JPEG_SAVE_QUALITY");
+        if (qualityString && *qualityString)
+        {
+            try { return std::stoi(qualityString); }
+            catch (...) { /* fall through to default */ }
+        }
+        return 100;
+    }
+
     void Texture2D::SaveAsJpeg(System::IO::Stream* stream, int targetWidth, int targetHeight) const
     {
         if (!stream)
@@ -627,7 +642,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error(std::string("SDL_IOFromDynamicMem failed: ") + SDL_GetError());
         }
 
-        if (!IMG_SaveJPG_IO(src, dst, false, 100))
+        if (!IMG_SaveJPG_IO(src, dst, false, GetJpegSaveQuality()))
         {
             SDL_CloseIO(dst);
             SDL_DestroySurface(surface);
@@ -662,7 +677,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!surface)
             throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
 
-        if (!IMG_SaveJPG(surface, filename.c_str(), 100))
+        if (!IMG_SaveJPG(surface, filename.c_str(), GetJpegSaveQuality()))
         {
             SDL_DestroySurface(surface);
             throw std::runtime_error(std::string("IMG_SaveJPG failed: ") + SDL_GetError());

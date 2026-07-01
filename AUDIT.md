@@ -300,9 +300,11 @@ No code was changed for this task — audit only. Findings below feed Phase 32 t
     5-arg overload). This inconsistency is already encoded as expected behavior in
     `Texture2DTests.cpp` (`SetDataSimpleWithNullDataDoesNotThrow`,
     `SetDataSimpleWithZeroCountDoesNotThrow`), so any fix must update those tests too.
-11. `SaveAsJpeg` hardcodes JPEG quality to 100 (`IMG_SaveJPG_IO(..., 100)`), ignoring FNA's
-    `FNA_GRAPHICS_JPEG_SAVE_QUALITY` environment-variable override. Likely an acceptable
-    simplification, but noted since Phase 32 Task 264 asks to verify `SaveAsJpeg`.
+11. **~~`SaveAsJpeg` hardcodes JPEG quality to 100~~ FIXED (Task 264).** Added a
+    `GetJpegSaveQuality()` helper (`Texture2D.cpp`) that reads `FNA_GRAPHICS_JPEG_SAVE_QUALITY`,
+    falling back to 100 if unset or unparseable — matches FNA's `SaveAsJpeg` exactly. Both
+    `SaveAsJpeg` overloads (stream and filename) now call it instead of hardcoding `100`.
+    Verified via `SaveAsJpegTest.QualityEnvVarIsHonoredWithoutThrowing`.
 
 #### Confirmed correct / faithful to FNA
 

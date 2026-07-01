@@ -12,8 +12,8 @@ ported to C++ with minimal API-surface changes.
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
   pixel-readback integration tests.
 - **Current development phase:** Phase 32 — Texture2D completeness (Tasks 261–270) in progress
-  (Tasks 261, 262, 263, 266 done). Phase 31 (Tasks 251–260) core work complete; only Task 260
-  (optional perf work) remains open. Phase 30 (VertexDeclaration / vertex format accuracy,
+  (Tasks 261, 262, 263, 264, 266 done). Phase 31 (Tasks 251–260) core work complete; only Task
+  260 (optional perf work) remains open. Phase 30 (VertexDeclaration / vertex format accuracy,
   Tasks 241–250) is complete.
 - **Key architectural decisions:**
   - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
@@ -29,7 +29,7 @@ ported to C++ with minimal API-surface changes.
 
 ### EasyGL backend (`cmake-build-debug`) — primary
 - **Builds:** clean.
-- **Unit tests (`CnaTests`):** 1800/1800 pass.
+- **Unit tests (`CnaTests`):** 1808/1808 pass.
 - **Integration tests:** ~62 EasyGL integration test executables registered in CMake; most pass.
   Two pre-existing failures: `easygl_device_dispose_order_test` (root cause unknown) and one
   pixel-readback test related to the SpriteBatch multiple-Begin/End bug (see Known Bugs).
@@ -86,8 +86,13 @@ ported to C++ with minimal API-surface changes.
   multi-pixel round-trip with a semi-transparent pixel (exact match on all 4 channels for all 4
   pixels — catches spatial/transposition bugs a single-solid-colour test would miss); non-square
   size (3x5); the save-time resize path (`SaveAsPng(stream, targetW, targetH)` scaling the
-  output); and the filename-based `NOXNA` overload via a real temp file. 6 new unit tests;
-  1800/1800 total pass.
+  output); and the filename-based `NOXNA` overload via a real temp file. 6 new unit tests.
+- **Task 264** — Verified `Texture2D::SaveAsJpeg`: same coverage as Task 263 but with a colour
+  tolerance (JPEG is lossy) instead of exact match, plus a dedicated test confirming a
+  semi-transparent source decodes back fully opaque (JPEG has no alpha channel). **Also fixed**
+  the Task 261 audit finding that `SaveAsJpeg` hardcoded quality=100: added a
+  `GetJpegSaveQuality()` helper that reads `FNA_GRAPHICS_JPEG_SAVE_QUALITY`, matching FNA exactly.
+  8 new unit tests; 1808/1808 total pass.
 - **Phase 30** — Full VertexDeclaration test suite, EasyGL vertex format integration test (strides
   16/20/24/32), Bgfx vertex layout mapping helper, `docs/vertex-format-support.md`.
 
@@ -95,13 +100,11 @@ ported to C++ with minimal API-surface changes.
 - `Texture2D`: missing `NOXNA` tags on 2 assetName constructors, missing
   `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`, and
   Color-only format support — all found in Task 261, still open (see `AUDIT.md`).
-- `Texture2D::SaveAsJpeg` not yet verified with round-trip tests (Task 264 pending); also ignores
-  FNA's `FNA_GRAPHICS_JPEG_SAVE_QUALITY` env var (hardcodes quality=100).
 - `DrawUserIndexedPrimitives` argument-guard unit tests for `primitiveCount <= 0` not covered (only
   `DrawUserPrimitives` was in scope for Task 259).
 - Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
 - Bgfx and EasyGL stride-keyed layout: arbitrary `VertexDeclaration` strides beyond 16/20/24/32/52.
-- 366 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
+- 365 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
 
 ---
 
@@ -109,6 +112,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 264 | `Texture2D.cpp`, `Texture2DTests.cpp` (extended), `AUDIT.md`, `GRAPHICS_TASKS.md` | SaveAsJpeg round-trip verification (tolerance-based, alpha-drop confirmed); fixed hardcoded JPEG quality=100 by adding FNA_GRAPHICS_JPEG_SAVE_QUALITY env-var support. 8 new unit tests; 1808/1808 total pass. |
 | 263 | `Texture2DTests.cpp` (extended), `GRAPHICS_TASKS.md` | SaveAsPng round-trip verification: error guards, multi-pixel+alpha exact match, non-square size, save-time resize, filename overload via temp file. 6 new unit tests; 1800/1800 total pass. |
 | 262 | `Texture2D.hpp/.cpp`, `Texture2DTests.cpp`, `docs/texture-stream-formats.md` (new), `AUDIT.md`, `GRAPHICS_TASKS.md` | Verified PNG/JPEG/BMP FromStream decoding (round-trip tests); added missing FromStream(device,stream,width,height,zoom) overload matching FNA3D resize/crop semantics. 5 new unit tests; 1794/1794 total pass. |
 | 266 | `Texture2D.cpp`, `Texture2DTests.cpp`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Fixed both Task 261 OOB bugs: SetData(level,rect,...) rect-bounds check (mirrors GetData); SetData(Color*,elementCount) buffer-size check. 7 new unit tests; 1789/1789 total pass. |
@@ -128,14 +132,14 @@ ported to C++ with minimal API-surface changes.
 
 **No single hard blocker.** The 2 memory-safety bugs found by the Task 261 audit are fixed
 (Task 266); `FromStream` format support + the missing resize/crop overload are done (Task 262);
-`SaveAsPng` is round-trip verified (Task 263). All 1800 unit tests pass.
+`SaveAsPng` and `SaveAsJpeg` are both round-trip verified (Tasks 263–264), and the hardcoded JPEG
+quality is fixed. All 1808 unit tests pass.
 
 The remaining Task 261 findings are lower-severity and still open: 2 constructors missing `NOXNA`
 tags, missing EXT statics (`SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/
 `DDSFromStreamEXT`), and Color-only `SurfaceFormat` support. None of these are memory-unsafe —
 they're missing-API gaps — so they can be picked up incrementally per Phase 32 task without
-urgency. The `NOXNA` tag fix is the smallest/cheapest remaining item; Task 264 (verify
-`SaveAsJpeg`) is the next natural Phase 32 step.
+urgency. The `NOXNA` tag fix is the smallest/cheapest remaining item.
 
 ---
 
@@ -245,38 +249,42 @@ cd cmake-build-debug && ctest --output-on-failure
 
 In priority order:
 
-1. **Task 264 — Verify `Texture2D::SaveAsJpeg`**
-   - Goal: Add round-trip tests analogous to Task 263's `SaveAsPng` coverage (error guards,
-     multi-pixel round trip with tolerance since JPEG is lossy, non-square size, save-time
-     resize, filename overload). Consider whether to honor `FNA_GRAPHICS_JPEG_SAVE_QUALITY` like
-     FNA does (found missing in the Task 261 audit) — decide during implementation whether that's
-     in scope or a separate follow-up.
-   - Files: `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp`,
-     `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp` (only if the quality env var is added).
-   - Verification: new unit tests pass; `CnaTests` still all pass.
-
-2. **Add missing `NOXNA` tags** (small, mechanical, from the Task 261 audit)
+1. **Add missing `NOXNA` tags** (small, mechanical, from the Task 261 audit)
    - Goal: Tag `Texture2D(const std::string& assetName)` and
      `Texture2D(const std::string& assetName, GraphicsDevice&)` with `NOXNA`, matching the
      project's own precedent (`SoundEffect(const std::string&)` is already `NOXNA`).
    - Files: `include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp`.
    - Verification: compiles; no behavior change (NOXNA is a marker macro only).
 
+2. **Task 267 — Verify `LevelCount` behavior for mipmapped and non-mipmapped textures**
+   - Goal: Unit tests confirming `getLevelCountProperty()` matches FNA's `CalculateMipLevels`
+     formula for various width/height combinations, and that the non-mipmapped constructor
+     always yields `LevelCount == 1`.
+   - Files: `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp`.
+   - Verification: new unit tests pass.
+
 3. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
    - Goal: Replace `std::vector` allocations in `DrawUserPrimitives` / `DrawUserIndexedPrimitives`
      with a per-device scratch buffer or stack allocation for small counts.
    - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
-   - Verification: unit tests still 1800/1800; integration pixel-readback tests still pass.
+   - Verification: unit tests still 1808/1808; integration pixel-readback tests still pass.
+
+4. **Task 268/269 — Non-power-of-two textures and edge sampling** (larger, needs backend work)
+   - Goal: Verify NPOT textures (e.g. 3x5, 7x11) work across all backends, and that texture
+     sampling at edges respects clamp/wrap `TextureAddressMode`. Likely needs pixel-readback
+     integration tests, not just unit tests.
+   - Files: TBD after scoping; likely `examples/` integration tests.
+   - Verification: pixel-readback tests pass on EasyGL (primary backend).
 
 ---
 
 ## 9. Do not do yet
 
 - **No broad Texture2D rewrite** — the Task 261 audit is complete (see `AUDIT.md`); the 2 OOB
-  bugs (Task 266), FromStream format support/resize overload (Task 262), and SaveAsPng
-  verification (Task 263) are done; remaining findings (missing NOXNA tags, missing EXT statics,
-  Color-only format support, SaveAsJpeg verification) should land incrementally per Phase 32
-  task, not as one large refactor.
+  bugs (Task 266), FromStream format support/resize overload (Task 262), and SaveAsPng/SaveAsJpeg
+  verification (Tasks 263–264) are done; remaining findings (missing NOXNA tags, missing EXT
+  statics, Color-only format support) should land incrementally per Phase 32 task, not as one
+  large refactor.
 - **No refactor of the stride-keyed vertex layout system** — it is load-bearing for all 3D tests;
   changes need their own dedicated phase with full regression testing.
 - **No changes to the Bgfx backend draw path** — pixel readback is unavailable there, so correctness
@@ -297,21 +305,21 @@ Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
 Current status: Phase 30 complete; Phase 31 core work done (Tasks 251,252,255,256,257,258,259,329);
-Phase 32 in progress (Tasks 261, 262, 263, 266 done). 1800/1800 unit tests pass.
+Phase 32 in progress (Tasks 261, 262, 263, 264, 266 done). 1808/1808 unit tests pass.
 
 Tasks 261 (audit), 266 (OOB-bug fixes), 262 (FromStream format verification + resize/crop
-overload), and 263 (SaveAsPng round-trip verification) are all closed. Remaining Task 261 findings
-are missing-API gaps, not memory-safety bugs (see AUDIT.md "Texture2D detailed audit"):
+overload), 263 (SaveAsPng round-trip verification), and 264 (SaveAsJpeg round-trip verification +
+JPEG quality env-var fix) are all closed. Remaining Task 261 findings are missing-API gaps, not
+memory-safety bugs (see AUDIT.md "Texture2D detailed audit"):
 - 2 constructors missing NOXNA tags (Texture2D(assetName), Texture2D(assetName, device)).
 - Missing SetDataPointerEXT/GetDataPointerEXT/TextureDataFromStreamEXT/DDSFromStreamEXT.
 - SurfaceFormat support is effectively Color-only (ValidateFormat throws for everything else).
-- SaveAsJpeg not yet round-trip verified (Task 264) and ignores FNA_GRAPHICS_JPEG_SAVE_QUALITY.
 
-Next: Task 264 — verify Texture2D::SaveAsJpeg with round-trip tests analogous to Task 263's
-SaveAsPng coverage (error guards, multi-pixel round trip with tolerance since JPEG is lossy,
-non-square size, save-time resize, filename overload). Reuse the SaveAsPngTest fixture pattern
-in Texture2DTests.cpp.
-Files: tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp.
-Verification: new unit tests pass; CnaTests still all pass.
-Update GRAPHICS_TASKS.md (mark 264 ✅) and NEXT.md after finishing.
+Next: tag Texture2D(const std::string& assetName) and Texture2D(const std::string& assetName,
+GraphicsDevice&) with NOXNA, matching the project's own precedent (SoundEffect(const std::string&)
+is already NOXNA). Purely mechanical — no behavior change. Then Task 267 (verify LevelCount
+behavior) or Task 260 (optional perf work).
+Files: include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp.
+Verification: compiles; CnaTests still all pass.
+Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```

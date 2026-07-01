@@ -637,3 +637,174 @@ TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
     EXPECT_EQ(px[0].getGProperty(), 128);
     EXPECT_EQ(px[0].getBProperty(), 0);
 }
+
+// -----------------------------------------------------------------------
+// SaveAsJpeg — round-trip verification (Task 264)
+//
+// Mirrors the SaveAsPngTest coverage above, adapted for JPEG: lossy colour
+// tolerance instead of exact match, and no alpha preservation (JPEG has no
+// alpha channel — FNA/SDL_image round-trips it back as fully opaque).
+// Also verifies FNA_GRAPHICS_JPEG_SAVE_QUALITY is honoured (Task 261 audit
+// found CNA previously hardcoded quality=100, ignoring FNA's env var).
+// -----------------------------------------------------------------------
+
+class SaveAsJpegTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+
+    static bool IsCloseTo(Color c, std::uint8_t r, std::uint8_t g, std::uint8_t b, int tolerance)
+    {
+        return std::abs(c.getRProperty() - r) <= tolerance &&
+               std::abs(c.getGProperty() - g) <= tolerance &&
+               std::abs(c.getBProperty() - b) <= tolerance;
+    }
+};
+
+TEST_F(SaveAsJpegTest, NullStreamThrowsInvalidArgument)
+{
+    Texture2D tex;
+    EXPECT_THROW(tex.SaveAsJpeg(nullptr, 0, 0), std::invalid_argument);
+}
+
+TEST_F(SaveAsJpegTest, NoCpuPixelDataThrowsRuntimeError)
+{
+    Texture2D tex;
+    MemoryStream stream;
+    EXPECT_THROW(tex.SaveAsJpeg(&stream, 0, 0), std::runtime_error);
+}
+
+TEST_F(SaveAsJpegTest, RoundTripPreservesDistinctPixelsWithinTolerance)
+{
+    // 2x2, four distinct opaque colours in row-major order.
+    Texture2D src(gd, 2, 2);
+    std::vector<Color> pixels = {
+        Color(255, 0, 0, 255),
+        Color(0, 255, 0, 255),
+        Color(0, 0, 255, 255),
+        Color(255, 255, 0, 255),
+    };
+    src.SetData(pixels.data(), 4);
+
+    MemoryStream writeStream;
+    src.SaveAsJpeg(&writeStream, 2, 2);
+    auto bytes = writeStream.GetBuffer();
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    ASSERT_EQ(loaded.getWidthProperty(), 2);
+    ASSERT_EQ(loaded.getHeightProperty(), 2);
+
+    Color out[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
+    loaded.GetData(out, 0, 4);
+    for (int i = 0; i < 4; ++i)
+    {
+        EXPECT_TRUE(IsCloseTo(out[i], pixels[i].getRProperty(), pixels[i].getGProperty(),
+                              pixels[i].getBProperty(), 40)) << "pixel " << i;
+    }
+}
+
+TEST_F(SaveAsJpegTest, RoundTripDropsAlphaChannel)
+{
+    // JPEG has no alpha channel; a semi-transparent source must decode back fully opaque.
+    Texture2D src(gd, 1, 1);
+    Color translucent[1] = { Color(200, 100, 50, 100) };
+    src.SetData(translucent, 1);
+
+    MemoryStream writeStream;
+    src.SaveAsJpeg(&writeStream, 1, 1);
+    auto bytes = writeStream.GetBuffer();
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    Color px[1] = { Color(0, 0, 0, 0) };
+    loaded.GetData(px, 0, 1);
+    EXPECT_EQ(px[0].getAProperty(), 255);
+}
+
+TEST_F(SaveAsJpegTest, RoundTripNonSquareSizePreservesDimensions)
+{
+    Texture2D src(gd, 3, 5);
+    std::vector<Color> magenta(15, Color(255, 0, 255, 255));
+    src.SetData(magenta.data(), 15);
+
+    MemoryStream writeStream;
+    src.SaveAsJpeg(&writeStream, 3, 5);
+    auto bytes = writeStream.GetBuffer();
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 3);
+    EXPECT_EQ(loaded.getHeightProperty(), 5);
+}
+
+TEST_F(SaveAsJpegTest, SaveWithDifferentTargetSizeResizesOutput)
+{
+    Texture2D src(gd, 2, 2);
+    std::vector<Color> cyan(4, Color(0, 255, 255, 255));
+    src.SetData(cyan.data(), 4);
+
+    MemoryStream writeStream;
+    src.SaveAsJpeg(&writeStream, 6, 4);
+    auto bytes = writeStream.GetBuffer();
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 6);
+    EXPECT_EQ(loaded.getHeightProperty(), 4);
+}
+
+TEST_F(SaveAsJpegTest, FilenameOverloadWritesReadableFile)
+{
+    Texture2D src(gd, 2, 2);
+    std::vector<Color> orange(4, Color(255, 128, 0, 255));
+    src.SetData(orange.data(), 4);
+
+    auto tmpDir = std::filesystem::temp_directory_path() / "cna_saveasjpeg_test";
+    std::filesystem::create_directories(tmpDir);
+    const std::string path = (tmpDir / "out.jpg").string();
+
+    src.SaveAsJpeg(path);
+
+    std::ifstream in(path, std::ios::binary);
+    ASSERT_TRUE(in.good());
+    std::vector<System::IO::bytecs> bytes(
+        (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    ASSERT_FALSE(bytes.empty());
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 2);
+    EXPECT_EQ(loaded.getHeightProperty(), 2);
+    Color px[1] = { Color(0, 0, 0, 0) };
+    loaded.GetData(px, 0, 1);
+    EXPECT_TRUE(IsCloseTo(px[0], 255, 128, 0, 40));
+}
+
+TEST_F(SaveAsJpegTest, QualityEnvVarIsHonoredWithoutThrowing)
+{
+    // FNA_GRAPHICS_JPEG_SAVE_QUALITY: verify the env-var path (Task 264 fix for the Task 261
+    // audit finding that quality was hardcoded to 100) parses and applies without throwing.
+    setenv("FNA_GRAPHICS_JPEG_SAVE_QUALITY", "50", 1);
+
+    Texture2D src(gd, 2, 2);
+    std::vector<Color> red(4, Color(255, 0, 0, 255));
+    src.SetData(red.data(), 4);
+
+    MemoryStream writeStream;
+    EXPECT_NO_THROW(src.SaveAsJpeg(&writeStream, 2, 2));
+    auto bytes = writeStream.GetBuffer();
+
+    unsetenv("FNA_GRAPHICS_JPEG_SAVE_QUALITY");
+
+    ASSERT_FALSE(bytes.empty());
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, readStream);
+    EXPECT_EQ(loaded.getWidthProperty(), 2);
+    EXPECT_EQ(loaded.getHeightProperty(), 2);
+}
