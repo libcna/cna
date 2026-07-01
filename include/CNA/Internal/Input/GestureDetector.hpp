@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -9,9 +8,8 @@ namespace CNA::Internal::Input
     /**
      * @brief Internal gesture recognition state machine.
      *
-     * Ported from FNA GestureDetector.cs. Detects Tap, DoubleTap, Hold,
-     * HorizontalDrag, VerticalDrag, FreeDrag, Flick, DragComplete, Pinch,
-     * and PinchComplete gestures.
+     * Detects Tap, DoubleTap, Hold, HorizontalDrag, VerticalDrag, FreeDrag,
+     * Flick, DragComplete, Pinch, and PinchComplete gestures.
      *
      * Call OnPressed/OnMoved/OnReleased from touch events and OnUpdate each frame.
      * Recognized gestures are enqueued in TouchPanel via TouchPanel::EnqueueGesture.

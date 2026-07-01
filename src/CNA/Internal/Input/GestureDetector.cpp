@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/GestureDetector.hpp"
 
 #include "Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp"
