@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 namespace CNA::Internal::Input
 {
@@ -57,6 +58,26 @@ namespace CNA::Internal::Input
          * @brief Returns the SDL GUID string for the gamepad at the given player slot.
          */
         static std::string GetGUID(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+
+        /**
+         * @brief Reads gyroscope sensor data for the gamepad at the given player, enabling
+         * the sensor on first use. Returns false if no gamepad is connected or the sensor
+         * is unavailable.
+         */
+        static bool GetGyro(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex,
+            Microsoft::Xna::Framework::Vector3& gyro
+        );
+
+        /**
+         * @brief Reads accelerometer sensor data for the gamepad at the given player, enabling
+         * the sensor on first use. Returns false if no gamepad is connected or the sensor
+         * is unavailable.
+         */
+        static bool GetAccelerometer(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex,
+            Microsoft::Xna::Framework::Vector3& accel
+        );
 
         /**
          * @brief Queries SDL for the actual hardware capabilities of the gamepad.

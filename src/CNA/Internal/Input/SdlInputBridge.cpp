@@ -456,6 +456,34 @@ namespace CNA::Internal::Input
         return get_opened_gamepads()[slot];
     }
 
+    static bool read_gamepad_sensor(
+        SDL_Gamepad* gamepad,
+        const SDL_SensorType type,
+        Microsoft::Xna::Framework::Vector3& out
+    )
+    {
+        if (gamepad == nullptr)
+        {
+            out = Microsoft::Xna::Framework::Vector3::Zero;
+            return false;
+        }
+
+        if (!SDL_GamepadSensorEnabled(gamepad, type))
+        {
+            SDL_SetGamepadSensorEnabled(gamepad, type, true);
+        }
+
+        float data[3] = {};
+        if (!SDL_GetGamepadSensorData(gamepad, type, data, 3))
+        {
+            out = Microsoft::Xna::Framework::Vector3::Zero;
+            return false;
+        }
+
+        out = Microsoft::Xna::Framework::Vector3(data[0], data[1], data[2]);
+        return true;
+    }
+
     bool SdlInputBridge::SetVibration(
         Microsoft::Xna::Framework::PlayerIndex playerIndex,
         float leftMotor,
@@ -507,6 +535,22 @@ namespace CNA::Internal::Input
         char buf[33] = {};
         SDL_GUIDToString(guid, buf, static_cast<int>(sizeof(buf)));
         return std::string(buf);
+    }
+
+    bool SdlInputBridge::GetGyro(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex,
+        Microsoft::Xna::Framework::Vector3& gyro
+    )
+    {
+        return read_gamepad_sensor(get_sdl_gamepad_for_player(playerIndex), SDL_SENSOR_GYRO, gyro);
+    }
+
+    bool SdlInputBridge::GetAccelerometer(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex,
+        Microsoft::Xna::Framework::Vector3& accel
+    )
+    {
+        return read_gamepad_sensor(get_sdl_gamepad_for_player(playerIndex), SDL_SENSOR_ACCEL, accel);
     }
 
     static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)

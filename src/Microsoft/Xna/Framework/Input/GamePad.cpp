@@ -68,15 +68,11 @@ namespace Microsoft::Xna::Framework::Input
 
     bool GamePad::GetGyroEXT(PlayerIndex playerIndex, Microsoft::Xna::Framework::Vector3& gyro)
     {
-        (void)playerIndex;
-        gyro = Microsoft::Xna::Framework::Vector3::Zero;
-        return false;
+        return CNA::Internal::Input::SdlInputBridge::GetGyro(playerIndex, gyro);
     }
 
     bool GamePad::GetAccelerometerEXT(PlayerIndex playerIndex, Microsoft::Xna::Framework::Vector3& accel)
     {
-        (void)playerIndex;
-        accel = Microsoft::Xna::Framework::Vector3::Zero;
-        return false;
+        return CNA::Internal::Input::SdlInputBridge::GetAccelerometer(playerIndex, accel);
     }
 }
