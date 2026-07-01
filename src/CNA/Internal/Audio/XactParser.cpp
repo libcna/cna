@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/XactTypes.hpp"
 
 #include <cassert>
