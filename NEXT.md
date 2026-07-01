@@ -4,305 +4,195 @@
 
 ## 1. Project summary
 
-**CNA** is a C++ reimplementation of the XNA 4.0 programming model built on SDL3
-and a pluggable graphics backend. The namespace is `Microsoft::Xna::Framework`
-(and `Microsoft::Devices` for sensors/vibration). It targets desktop Linux,
-Android, and iOS.
+**CNA** is a C++23 reimplementation of the XNA 4.0 programming model, built on
+SDL3 and a pluggable graphics backend (`EASYGL` / `VULKAN` / `BGFX`). It
+preserves XNA-style public APIs (`Microsoft::Xna::Framework`,
+`Microsoft::Devices`) while using modern C++ internally. It targets desktop
+Linux/Windows/macOS, Android, and iOS.
 
-**Current phase:** `feature/devices` — implementing the full
-`Microsoft::Devices::Sensors` namespace (Accelerometer, Compass, Gyroscope,
-Motion, VibrateController) according to the XNA / Windows Phone 7 API spec.
-Plan: `plan_devices.md` (31 tasks) — **all 31 tasks are now complete** (status
-column added to its Task Summary table). Follow-up plan now open:
-`plan_devices_phase2.md` — API-completeness audit, known-bug fixes
-(`Accelerometer.hpp` Dispose() name-hiding + missing tests,
-`GetTypeNameCPP` dot-convention fix), CHECKLIST.md compliance spot-check,
-cross-platform (Vulkan/BGFX desktop + Android/iOS) build verification, and
-(Phase 6) a `VibrateController` review + `NOXNA` extensions. Phase 6 Task
-P2-8 is **done**: confirmed and fixed a real device-conflict risk with
-`GamePad::SetVibration` (see Section 3/Section 5). Tasks P2-9 through P2-13
-(proposed `NOXNA` additions exposing more of SDL3's haptic API — variable
-intensity, capability query, dual-motor left/right rumble) are still open.
+**Main goal (current phase):** implement the full `Microsoft::Devices`
+namespace — `Microsoft::Devices::Sensors` (Accelerometer, Compass, Gyroscope,
+Motion, and their reading/event-args/exception types) plus
+`Microsoft::Devices::VibrateController` — matching the Windows Phone 7 XNA
+API spec. Branch: `feature/devices`.
 
-**Key architectural rules:**
-- Public API names must match XNA 4.0 exactly.
-- C# properties → `getXProperty()` / `setXProperty()`.
-- Non-XNA extensions tagged `NOXNA`.
-- Tests live under `tests/` mirroring the namespace path, using Google Test.
-- Backend selection: compile-time via `CNA_GRAPHICS_BACKEND`.
+**Important architectural decisions:**
+- Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
+  the documented WP7 SDK) exactly; C# properties become `getXProperty()` /
+  `setXProperty()`.
+- Non-XNA extensions are tagged `NOXNA` on the public declaration.
+- `Microsoft::Devices::Sensors::SensorBase<T>` (header-only template) is the
+  shared base for all sensor classes (`CurrentValue`, `IsDataValid`,
+  `TimeBetweenUpdates`, `CurrentValueChanged`, `Dispose()`).
+- `VibrateController` is a static-only utility class (no instances, no
+  `SensorBase<T>`/`IDisposable`) — it does not follow the sensor pattern.
+- FNA (the usual local reference tree for XNA behavior) implements **no**
+  equivalent of `Microsoft::Devices` at all (it's WP7-only) — this namespace
+  has no local reference tree to diff against; API completeness is judged
+  from documented WP7 SDK knowledge instead.
+- Tests live under `tests/` mirroring the `include`/`src` namespace path
+  1:1, using Google Test, one file per class.
 
 ---
 
 ## 2. Current status
 
-**Build:** `CNA` library and `CnaTests` build cleanly with EASYGL backend
-(`cmake-build-debug`).
+**Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
+(`cmake-build-debug`) as of the last verified build (during Task P2-8 work).
 
-**Tests:** 11/11 `AccelerometerReadingTests` + 3/3 `SensorFailedExceptionTests`
-+ 4/4 `AccelerometerFailedExceptionTests` + 14/14
-`AccelerometerReadingEventArgsTests` + 3/3 `CalibrationEventArgsTests` + 13/13
-`CompassReadingTests` + 7/7 `CompassTests` + 11/11 `GyroscopeReadingTests` +
-7/7 `GyroscopeTests` + 14/14 `AttitudeReadingTests` + 13/13
-`MotionReadingTests` + 7/7 `MotionTests` + 6/6 `VibrateControllerTests` pass
-(1935 total ctest cases). All previously existing tests continue to pass
-(the only ctest failures are pre-existing `EasyGL_*` graphics tests that
-can't run headless — no display/GPU in this environment — unrelated to this
-work; failure count held steady at 64 throughout this entire phase).
+**Tests:** last full `ctest` run: **1935 tests total, 97% passing.** The only
+failures are a fixed set of **64 pre-existing `EasyGL_*` graphics tests**
+that cannot run headless (no display/GPU in this dev environment) — present
+before this phase began and unrelated to `Microsoft::Devices` work. No
+regressions have been introduced across the whole phase.
 
 **Working:**
-- Full SDL3-backed `Accelerometer` implementation (Start/Stop/Dispose, event
-  watch, Android axis remap).
-- `AccelerometerReading` — complete: constructors, getters/setters, `operator==`,
-  `operator!=`, `ToString()`, `GetHashCode()`, `GetTypeName()`.
-- `SensorBase<T>`, `SensorReadingEventArgs<T>`, `ISensorReading`, `SensorState` —
-  complete.
-- `SensorFailedException` — complete: fixed default constructor to pass
-  `"Sensor failed."` (was previously empty, contradicting its own "default
-  message" doc comment and plan_devices.md Task 3's requirement that `what()`
-  be non-empty); 3 tests added (default ctor, `const char*` ctor, catch as
-  `System::Exception`).
-- `AccelerometerFailedException` — complete: fixed default constructor to pass
-  its own specific message `"Accelerometer failed."` (was delegating to
-  `SensorFailedException()`'s empty message); 4 tests added (default ctor
-  doesn't throw, `const char*` ctor, catch as `SensorFailedException`, catch as
-  `System::Exception`).
-- `AccelerometerReadingEventArgs` — complete: WP7 7.0 legacy event args
-  (`X`/`Y`/`Z : double`, `Timestamp`), inherits `System::EventArgs`, not wired to
-  the current `Accelerometer` (see class doc comment). 14 tests added covering
-  both constructors, all getter/setter pairs, `operator==`/`operator!=`,
-  `ToString()`, `GetHashCode()`, `GetTypeName()`, usable as `EventArgs&`.
-- `CalibrationEventArgs` — complete: trivial empty `EventArgs` subclass for
-  `Compass.Calibrate` / `Motion.Calibrate` (not yet wired to those classes,
-  which don't exist yet). 3 tests added (default ctor, usable as `EventArgs&`,
-  `GetTypeName()`).
-- `CompassReading` — complete: `ISensorReading`-derived reading with
-  `HeadingAccuracy`, `MagneticHeading`, `MagnetometerReading : Vector3`,
-  `Timestamp` (override), `TrueHeading`; built directly on the
-  `AccelerometerReading` pattern. 13 tests added covering both constructors,
-  all getter/setter pairs, `operator==`/`!=`, `ToString()`, `GetHashCode()`,
-  `GetTypeName()`.
-- `Compass` — complete: `SensorBase<CompassReading>`-derived class mirroring
-  the `Accelerometer` pattern. SDL3 has no magnetometer API on any platform, so
-  `getIsSupportedProperty()` always returns `false`, `getStateProperty()` is
-  always `NotSupported`, and `Start()` always throws `SensorFailedException`.
-  Has the `Calibrate` event (`System::EventHandler<CalibrationEventArgs>`,
-  currently never raised since the sensor is unsupported). 7 tests added per
-  plan_devices.md Task 13 coverage list. Required a name-hiding fix (`using
-  SensorBase<CompassReading>::Dispose;`) — see Section 5 for details and the
-  matching bug found in `Accelerometer.hpp`.
-- `GyroscopeReading` — complete: `ISensorReading`-derived reading with
-  `RotationRate : Vector3` (radians/second per axis) and `Timestamp`
-  (override); built directly on the `AccelerometerReading` pattern. 11 tests
-  added covering both constructors, both getter/setter pairs,
-  `operator==`/`!=`, `ToString()`, `GetHashCode()`, `GetTypeName()`.
-- `Gyroscope` — complete: real SDL3-backed `SensorBase<GyroscopeReading>`
-  implementation, mirrors `Accelerometer` exactly (same static
-  `g_sensor_`/`g_sensorId_`/`instanceCount_`/`eventWatchRegistered_`/
-  `startedInstances_` pattern, `SDL_SENSOR_GYRO` instead of `SDL_SENSOR_ACCEL`,
-  no gravity normalization since SDL already reports rad/s, same
-  Android landscape axis remap duplicated as
-  `ConvertAndroidGyroscopeToXnaLandscape`). Unlike `Accelerometer`, failures
-  throw plain `SensorFailedException` (no dedicated `GyroscopeFailedException`
-  class — not requested by the plan). Includes the `using
-  SensorBase<GyroscopeReading>::Dispose;` fix proactively (see Section 5).
-  `GetTypeName()` uses the dot-separated convention. 7 tests added; they
-  branch on the live `getIsSupportedProperty()` result so they pass both
-  headless (no gyroscope hardware, as in this dev container) and on real
-  hardware.
-- `AttitudeReading` — complete: `ISensorReading`-derived reading with
-  `Pitch`/`Roll`/`Yaw : float`, `Quaternion`, `RotationMatrix`, `Timestamp`
-  (override). Default ctor sets `Quaternion::Identity` and
-  `Matrix::getIdentityProperty()` explicitly (both types' own default
-  constructors are all-zero, not identity, matching real XNA struct-default
-  semantics — `Quaternion` has no default constructor at all). 14 tests added
-  covering both constructors, all getter/setter pairs, `operator==`/`!=`,
-  `ToString()`, `GetHashCode()`, `GetTypeName()`.
-- `MotionReading` — complete: `ISensorReading`-derived fused reading composing
-  `Attitude : AttitudeReading`, `DeviceAcceleration`/`DeviceRotationRate`/
-  `Gravity : Vector3`, `Timestamp`. Reuses `AttitudeReading::operator==` and
-  `GetHashCode()` directly. 13 tests added covering both constructors, all
-  getter/setter pairs, `operator==`/`!=`, `ToString()`, `GetHashCode()`,
-  `GetTypeName()`.
-- `Motion` — complete: `SensorBase<MotionReading>`-derived class, same stub
-  shape as `Compass` (Motion needs Accelerometer + Compass + Gyroscope; SDL3
-  has no magnetometer, so Compass — and therefore Motion — is unsupported
-  everywhere). `getIsSupportedProperty()` always `false`,
-  `getStateProperty()` always `NotSupported`, `Start()` always throws
-  `SensorFailedException("Motion is not supported on this platform.")`.
-  Includes a `// TODO` marking where sensor fusion should be wired up once
-  compass support exists, and the `using SensorBase<MotionReading>::Dispose;`
-  fix proactively. Has the `Calibrate` event. 7 tests added per
-  plan_devices.md Task 25 coverage list.
-- `VibrateController` — complete: pure static utility class in
-  `Microsoft::Devices` (NOT `Microsoft::Devices::Sensors`) —
-  `VibrateController() = delete`, `static Start(TimeSpan)` / `static Stop()`,
-  no `SensorBase<T>`/`IDisposable` involvement at all (confirmed from the
-  plan: no instance state, no `SensorState`, no instance-count limit).
-  `Start()` silently clamps duration to `[TimeSpan::Zero,
-  TimeSpan::FromSeconds(5)]` (WP7-documented max) and drives SDL3's haptic
-  API (`SDL_GetHaptics`/`SDL_OpenHaptic`/`SDL_InitHapticRumble`/
-  `SDL_PlayHapticRumble`; `Stop()` uses `SDL_StopHapticEffects`). **Important
-  finding:** `plan_devices.md`'s Task 27 spec named SDL2-era function names
-  (`SDL_HapticRumbleInit`, `SDL_HapticStopAll`, `SDL_AndroidSendMessage`) that
-  don't exist in the vendored SDL3 — verified the real names against
-  `.sdl-prebuilt/install/include/SDL3/SDL_haptic.h` before implementing. Also
-  found that **no `#ifdef __ANDROID__` branch is needed at all**: SDL3's
-  vendored Android haptic backend
-  (`third_party/SDL/src/haptic/android/SDL_syshaptic.c` +
-  `SDLHapticHandler.java`) already auto-registers the phone's vibration motor
-  via `Context.VIBRATOR_SERVICE` as a haptic device, so the same
-  `SDL_PlayHapticRumble` call reaches `Vibrator.vibrate(ms)` on Android with
-  no custom JNI/Java bridge code — this repo has no such bridge, and none was
-  needed. 6 tests added per plan_devices.md Task 28 coverage list, all
-  `EXPECT_NO_THROW` (headless dev container has no haptic hardware, so every
-  call takes the silent-no-op path — by design, matches the test spec).
-- **Task 29 (CMakeLists.txt update) needed no changes**: both
-  `CNA_SOURCES`/`CNA_TEST_SOURCES` are collected via
-  `file(GLOB_RECURSE ... CONFIGURE_DEPENDS "src/*.cpp" | "tests/*.cpp")` in
-  the root `CMakeLists.txt` (lines ~156, ~1157) — every new file from this
-  entire phase (Tasks 1–28) was picked up automatically on each reconfigure.
-  No manual registration was ever required, despite the plan's literal
-  "add new files to CMakeLists.txt" wording.
-- **Tasks 30–31 (final build + test verification): done** — `CNA` and
-  `CnaTests` build cleanly; full `ctest` run shows 1935 total tests, 97%
-  pass, and the only failures are the same pre-existing 64 headless
-  `EasyGL_*` graphics tests present since before this phase began.
+- Full `Microsoft::Devices::Sensors` namespace: `Accelerometer` (real,
+  SDL3-backed — `SDL_SENSOR_ACCEL`, Android landscape axis remap),
+  `AccelerometerReading`, `AccelerometerReadingEventArgs` (WP7 7.0 legacy),
+  `AccelerometerFailedException`, `SensorFailedException`, `SensorBase<T>`,
+  `SensorReadingEventArgs<T>`, `ISensorReading`, `SensorState`,
+  `CalibrationEventArgs`, `CompassReading`/`Compass` (stub, see below),
+  `GyroscopeReading`/`Gyroscope` (real, SDL3-backed — `SDL_SENSOR_GYRO`),
+  `AttitudeReading`, `MotionReading`, `Motion` (stub, see below). All have
+  passing test suites.
+- `Microsoft::Devices::VibrateController` — static-only, SDL3 haptic-backed
+  (`SDL_GetHaptics`/`SDL_OpenHaptic`/`SDL_InitHapticRumble`/
+  `SDL_PlayHapticRumble`/`SDL_StopHapticEffects`). Now filters out haptic
+  devices that are also connected gamepads, so it can't compete with
+  `GamePad::SetVibration` (different SDL3 API path). Full tests.
 
-**Not yet done:** Nothing from `plan_devices.md` — all 31 tasks complete. See
-Section 5 for follow-up items discovered during this phase but out of the
-plan's scope (not fixed here).
+**Does not work / not done yet:**
+- `Accelerometer` has **no test file** (`AccelerometerTests.cpp` doesn't
+  exist) — the only sensor class in this phase without one.
+- `Accelerometer.hpp` has an unfixed `Dispose()` C++ name-hiding bug (see
+  Section 4).
+- `Compass` and `Motion` are permanent stubs — SDL3 exposes no magnetometer
+  API on any platform, so both are always `SensorState::NotSupported` and
+  `Start()` always throws. This is by design, not a gap, until SDL3 gains
+  magnetometer support.
+- Cross-platform builds (Vulkan/BGFX desktop backends, Android, iOS) have
+  **not** been verified this phase — only the Linux desktop `EASYGL` build
+  has been built and tested. No `cmake-build-vulkan`/`cmake-build-bgfx`
+  directory currently exists in this checkout, and no Android NDK / iOS
+  toolchain is available in this dev container.
 
 ---
 
 ## 3. Recent changes
 
-- `include/Microsoft/Devices/Sensors/AccelerometerReading.hpp` — added
-  `operator==`, `operator!=`, `ToString()`, `GetHashCode()`, `GetTypeName()`,
-  `#include "CNA/CNAHelper.hpp"`, `#include <string>`.
-- `src/Microsoft/Devices/Sensors/AccelerometerReading.cpp` — implemented the
-  four new methods; added `<functional>` and `<sstream>` includes.
-- `tests/Microsoft/Devices/Sensors/AccelerometerReadingTests.cpp` — replaced
-  empty file with 11 complete test cases.
-- `plan_devices.md` — added at repo root; 31-task plan covering all missing
-  `Microsoft::Devices::Sensors` types plus `VibrateController`.
-- `src/Microsoft/Devices/Sensors/SensorFailedException.cpp` (Task 3) — fixed
-  default constructor to pass `"Sensor failed."` instead of an empty message.
-- `tests/Microsoft/Devices/Sensors/SensorFailedExceptionTests.cpp` (Task 3,
-  new) — 3 test cases: default ctor message non-empty, `const char*` ctor
-  message match, catch as `System::Exception`.
-- `src/Microsoft/Devices/Sensors/AccelerometerFailedException.cpp` (Task 4) —
-  fixed default constructor to pass `"Accelerometer failed."` instead of
-  delegating to the (formerly empty) base default message.
-- `tests/Microsoft/Devices/Sensors/AccelerometerFailedExceptionTests.cpp`
-  (Task 4, new) — 4 test cases: default ctor doesn't throw, `const char*` ctor
-  message match, catch as `SensorFailedException`, catch as `System::Exception`.
-- `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp`,
-  `src/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.cpp` (Task 5,
-  both new) — WP7 7.0 legacy `Accelerometer.ReadingChanged` event args class.
-- `tests/Microsoft/Devices/Sensors/AccelerometerReadingEventArgsTests.cpp`
-  (Task 6, new) — 14 test cases per plan_devices.md Task 6 coverage list.
-- `include/Microsoft/Devices/Sensors/CalibrationEventArgs.hpp`,
-  `src/Microsoft/Devices/Sensors/CalibrationEventArgs.cpp` (Task 7, both new).
-- `tests/Microsoft/Devices/Sensors/CalibrationEventArgsTests.cpp` (Task 8,
-  new) — 3 test cases per plan_devices.md Task 8 coverage list.
-- `include/Microsoft/Devices/Sensors/CompassReading.hpp`,
-  `src/Microsoft/Devices/Sensors/CompassReading.cpp` (Task 9, both new).
-- `tests/Microsoft/Devices/Sensors/CompassReadingTests.cpp` (Task 10, new) —
-  13 test cases per plan_devices.md Task 10 coverage list.
-- `include/Microsoft/Devices/Sensors/Compass.hpp`,
-  `src/Microsoft/Devices/Sensors/Compass.cpp` (Tasks 11–12, both new) —
-  `SensorBase<CompassReading>` class; includes a `using
-  SensorBase<CompassReading>::Dispose;` to un-hide the base no-arg `Dispose()`
-  (see bug note in Section 5).
-- `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (Task 13, new) — 7 test
-  cases per plan_devices.md Task 13 coverage list.
-- `include/Microsoft/Devices/Sensors/GyroscopeReading.hpp`,
-  `src/Microsoft/Devices/Sensors/GyroscopeReading.cpp` (Task 14, both new).
-- `tests/Microsoft/Devices/Sensors/GyroscopeReadingTests.cpp` (Task 15, new)
-  — 11 test cases per plan_devices.md Task 15 coverage list.
-- `include/Microsoft/Devices/Sensors/Gyroscope.hpp`,
-  `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (Tasks 16–17, both new) —
-  real SDL3-backed sensor mirroring `Accelerometer`.
-- `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (Task 18, new) — 7
-  test cases per plan_devices.md Task 18 coverage list.
-- `include/Microsoft/Devices/Sensors/AttitudeReading.hpp`,
-  `src/Microsoft/Devices/Sensors/AttitudeReading.cpp` (Task 19, both new).
-- `tests/Microsoft/Devices/Sensors/AttitudeReadingTests.cpp` (Task 20, new)
-  — 14 test cases per plan_devices.md Task 20 coverage list.
-- `include/Microsoft/Devices/Sensors/MotionReading.hpp`,
-  `src/Microsoft/Devices/Sensors/MotionReading.cpp` (Task 21, both new).
-- `tests/Microsoft/Devices/Sensors/MotionReadingTests.cpp` (Task 22, new) —
-  13 test cases per plan_devices.md Task 22 coverage list.
-- `include/Microsoft/Devices/Sensors/Motion.hpp`,
-  `src/Microsoft/Devices/Sensors/Motion.cpp` (Tasks 23–24, both new) —
-  `SensorBase<MotionReading>` stub class mirroring `Compass`.
-- `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (Task 25, new) — 7 test
-  cases per plan_devices.md Task 25 coverage list.
-- `include/Microsoft/Devices/VibrateController.hpp`,
-  `src/Microsoft/Devices/VibrateController.cpp` (Tasks 26–27, both new) —
-  static-only SDL3-haptic-backed vibration control, `Microsoft::Devices`
-  namespace (not `Sensors`).
-- `tests/Microsoft/Devices/VibrateControllerTests.cpp` (Task 28, new) — 6
-  test cases per plan_devices.md Task 28 coverage list.
-- Task 29 (CMakeLists.txt): no edit needed — confirmed `GLOB_RECURSE` already
-  covers all new files.
-- `plan_devices_phase2.md` Task P2-8 — `include/Microsoft/Devices/VibrateController.hpp`
-  (class doc comment updated) and `src/Microsoft/Devices/VibrateController.cpp`
-  (added `IsConnectedGamepadHapticDevice()` + updated `OpenFirstHapticDevice()`
-  to skip haptic devices that are also connected joysticks/gamepads, by
-  cross-referencing device names via `SDL_GetHapticNameForID()` /
-  `SDL_GetJoystickNameForID()`). Fixes a confirmed real risk:
-  `VibrateController::Start()` could otherwise buzz a connected haptic-capable
-  gamepad on desktop instead of safely no-opping, competing with
-  `GamePad::SetVibration`. `tests/Microsoft/Devices/VibrateControllerTests.cpp`
-  updated with a note explaining why this specific behavior can't be
-  unit-tested without real gamepad hardware.
+- `plan_devices.md` (31 tasks: full `Microsoft::Devices::Sensors` +
+  `VibrateController`) — **all 31 tasks complete**; a Status column was
+  added to its Task Summary table.
+- `AUDIT.md` — added a `Microsoft::Devices::Sensors` / `Microsoft::Devices`
+  section (previously entirely missing, since FNA has no equivalent to diff
+  against for this namespace).
+- `plan_devices_phase2.md` (new) — follow-up plan: API-completeness audit,
+  known-bug fixes, `CHECKLIST.md` compliance spot-check, cross-platform
+  build verification, and a `VibrateController` review + proposed `NOXNA`
+  vibration-API extensions.
+- **Task P2-8 (done):** fixed a confirmed real bug —
+  `VibrateController::Start()` could open and buzz a connected haptic-capable
+  gamepad on desktop instead of safely no-opping, because `SDL_GetHaptics()`
+  enumerates such controllers independently of the
+  `GamePad::SetVibration`/`SDL_RumbleGamepad` path (confirmed by reading the
+  vendored SDL3 Linux haptic backend,
+  `third_party/SDL/src/haptic/linux/SDL_syshaptic.c`). Fix: added
+  `IsConnectedGamepadHapticDevice()` in
+  `src/Microsoft/Devices/VibrateController.cpp`, which skips haptic devices
+  whose name matches a connected joystick before opening one. Files changed:
+  `include/Microsoft/Devices/VibrateController.hpp` (doc comment),
+  `src/Microsoft/Devices/VibrateController.cpp`,
+  `tests/Microsoft/Devices/VibrateControllerTests.cpp` (explanatory note —
+  no new test possible without real gamepad hardware).
+- Bug found (not yet fixed): `Compass`, `Gyroscope`, and `Motion` all needed
+  a `using SensorBase<T>::Dispose;` declaration added, because declaring
+  `Dispose(bool) override` hides the inherited public no-arg `Dispose()`
+  (C++ name-hiding). The identical bug exists in `Accelerometer.hpp` and is
+  still unfixed (see Section 4/5).
+
+Full per-class implementation history (constructors, tests added, etc.) for
+all 31 `plan_devices.md` tasks is in `git log` and the plan files themselves
+— not repeated here to keep this document short.
 
 ---
 
 ## 4. Current blocker / main problem
 
-No blocker. The cmake-build-debug directory had a stale CMakeCache pointing to
-the old source path `/rv/data/development/github.com/openeggbert/cna`. It was
-fixed by deleting `CMakeCache.txt` and reconfiguring:
+No blocker prevents work from continuing. The most important known problem:
 
-```bash
-cmake -S /rv/data/development/github.com/openeggbert/cna_devices \
-      -B /rv/data/development/github.com/openeggbert/cna_devices/cmake-build-debug \
-      -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
-```
+**Symptom:** `include/Microsoft/Devices/Sensors/Accelerometer.hpp` declares
+`void Dispose(bool disposing) override;` without a `using
+SensorBase<AccelerometerReading>::Dispose;` declaration. This C++ name-hiding
+means the inherited public no-arg `Dispose()` (the actual
+`System::IDisposable` contract method, defined in `SensorBase<T>`) is hidden
+for any `Accelerometer` instance — calling `accel.Dispose()` fails to
+compile for any external caller.
 
-This must be done once after a fresh clone or if the cache is stale. The cmake
-build dirs for bgfx and vulkan may have the same stale-cache problem.
+**Failing scenario (not yet reduced to a committed failing test):** any code
+that does `Accelerometer a; a.Dispose();` fails to compile with an
+"ambiguous"/"no matching function" style error, because only the
+`Dispose(bool)` overload is visible through the derived class.
+
+**Affected files:** `include/Microsoft/Devices/Sensors/Accelerometer.hpp`.
+
+**Suspected cause:** this bug predates the current phase and was simply
+never triggered, because `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
+does not exist — no code anywhere calls `Accelerometer::Dispose()` the
+no-arg way. The same bug was independently found (and fixed) in `Compass`,
+`Gyroscope`, and `Motion` while writing their test files, which is what
+surfaced it for `Accelerometer` too.
+
+**What has been tried:** nothing yet for `Accelerometer` specifically — the
+fix is well-understood and already applied three times elsewhere in this
+codebase (see `include/Microsoft/Devices/Sensors/Compass.hpp` for the exact
+one-line pattern to copy). This is Task P2-3 in `plan_devices_phase2.md`.
 
 ---
 
 ## 5. Known bugs and limitations
 
-- `AccelerometerTests.cpp` does not exist yet — the SDL3 Accelerometer class is
-  untested (requires hardware or SDL mock). **incomplete**
-- **`Accelerometer.hpp` has a name-hiding bug:** declaring `void Dispose(bool
-  disposing) override;` without a `using SensorBase<AccelerometerReading>::Dispose;`
-  hides the inherited public no-arg `Dispose()` (the actual `System::IDisposable`
-  contract method) — `accel.Dispose()` currently fails to compile for any
-  caller. Found while fixing the identical bug in `Compass.hpp` (Task 11–13).
-  Undetected until now because no test exercises it. Fix: add the same
-  one-line `using` declaration when `AccelerometerTests.cpp` is written.
-  **incomplete / bug**
-- `GetTypeNameCPP(...)` NAME-string convention is inconsistent across the
-  codebase: some files use dot-separated .NET-style names (e.g.
-  `"Microsoft.Xna.Framework.Graphics.IndexBuffer"`, matching Section 6's
-  documented invariant), others use `::` (e.g. `Accelerometer.cpp`, `Cue.cpp`,
-  `AudioEngine.cpp`, `SoundBank.cpp`, `WaveBank.cpp`, `DateTime.cpp`,
-  `DateTimeOffset.cpp` — grep `GetTypeNameCPP` to find all). All Devices/Sensors
-  classes written in this phase (`CompassReading`, `AccelerometerReadingEventArgs`,
-  `CalibrationEventArgs`, `Compass`) use the dot convention. Not fixed — a
-  pre-existing, cross-cutting issue outside the devices-phase scope.
-  **inconsistent / needs a dedicated cleanup pass**
-- `Compass` and `Motion` will remain stubs (`NotSupported`) until SDL3 gains
-  magnetometer support. **by design / known limitation**
-- cmake-build-vulkan and cmake-build-bgfx may have the same stale-cache issue as
-  cmake-build-debug had. **suspected / needs verification**
+- **Confirmed bug, not yet fixed:** `Accelerometer.hpp` `Dispose()`
+  name-hiding (see Section 4). Fix: `plan_devices_phase2.md` Task P2-3.
+- **Incomplete:** `AccelerometerTests.cpp` does not exist — `Accelerometer`
+  is the only sensor class with zero test coverage. Same task (P2-3).
+- **Confirmed inconsistency, not fixed:** `GetTypeNameCPP(...)` NAME-string
+  convention is inconsistent across the codebase — some files use
+  dot-separated .NET-style names (the documented invariant, see Section 6),
+  others use `::` (`Accelerometer.cpp`, `Cue.cpp`, `AudioEngine.cpp`,
+  `SoundBank.cpp`, `WaveBank.cpp`, `DateTime.cpp`, `DateTimeOffset.cpp` —
+  grep `GetTypeNameCPP` to find all). All classes added during this phase
+  use the dot convention correctly. Fixing `Accelerometer.cpp` specifically
+  is Task P2-4; the rest is a separate, larger, cross-cutting cleanup
+  outside this phase's scope.
+- **By design, not a bug:** `Compass` and `Motion` are permanent
+  `SensorState::NotSupported` stubs — SDL3 has no magnetometer API on any
+  platform.
+- **By design, not a bug:** `VibrateController::Start()` always rumbles at
+  full strength (`1.0f`) — matches the real WP7 API, which has no intensity
+  concept (WP7-era vibration motors were single-intensity on/off). A `NOXNA`
+  variable-intensity overload is proposed but not implemented
+  (`plan_devices_phase2.md` Task P2-10).
+- **Accepted limitation:** `VibrateController`'s gamepad-exclusion filter
+  (Task P2-8, Section 3) matches by device name; two physically distinct
+  controllers reporting an identical product name would both be
+  excluded/included together. Judged too rare to justify a more invasive
+  fix (would require opening every connected joystick just to probe it).
+- **Needs verification:** cross-platform builds — Vulkan/BGFX desktop
+  backends, Android, iOS — have not been exercised this phase (only Linux
+  `EASYGL` desktop). Android/iOS specifically are blocked in this dev
+  container (no NDK/toolchain present). See `plan_devices_phase2.md` Tasks
+  P2-6/P2-7.
+- **Needs verification:** `cmake-build-vulkan`/`cmake-build-bgfx` build
+  directories may have the same stale-`CMakeCache.txt` issue that
+  `cmake-build-debug` once had (fixed by deleting the cache and
+  reconfiguring) — not yet re-checked since neither directory currently
+  exists in this checkout.
+- **Unknown:** whether `Microsoft::Devices::Sensors`'s public API surface,
+  as implemented, is 100% complete against the real WP7 Mango SDK — it was
+  filled in from general reference knowledge, not diffed against a local
+  source tree (none exists). Independent verification is proposed as
+  `plan_devices_phase2.md` Task P2-2.
 
 ---
 
@@ -317,52 +207,67 @@ src/Microsoft/Devices/               ← VibrateController.cpp
 tests/Microsoft/Devices/             ← VibrateControllerTests.cpp
 ```
 
-**Sensor pattern (Accelerometer is the reference implementation):**
-- Static `g_sensor_` / `g_sensorId_` hold the single open SDL sensor handle.
-- `static int instanceCount_` enforces the ≤ 10 simultaneous instance limit.
-- `static bool eventWatchRegistered_` guards the SDL event filter lifecycle.
-- `Start()` opens the sensor and registers the SDL event watch.
-- `Stop()` unregisters from the started-instances list.
-- `Dispose(bool)` calls `Stop()`, decrements counter, closes the sensor handle
-  when the last instance is disposed.
-- `ProcessSensorUpdateEvent()` is called from the SDL event filter on every
-  `SDL_EVENT_SENSOR_UPDATE`.
+**`SensorBase<T>`** (header-only template) owns `CurrentValue`,
+`IsDataValid`, `TimeBetweenUpdates`, `CurrentValueChanged`, and `Dispose()`.
+Concrete sensors override `Start()`, `Stop()`, and `Dispose(bool)`.
 
-**Gyroscope** is implemented (`Gyroscope.hpp`/`.cpp`), following this pattern
-exactly with `SDL_SENSOR_GYRO` instead of `SDL_SENSOR_ACCEL`.
+**Invariant — must not be forgotten again:** any class overriding
+`Dispose(bool)` **must** add `using SensorBase<T>::Dispose;`, or C++
+name-hiding silently breaks the inherited public no-arg `Dispose()`. This
+exact bug has been found (and fixed) three times already (`Compass`,
+`Gyroscope`, `Motion`) and is still present, unfixed, in `Accelerometer.hpp`.
 
-**Compass** and **Motion** are implemented as stubs: SDL3 has no magnetometer
-API, so both are always `SensorState::NotSupported` and `Start()` always
-throws `SensorFailedException`. `Motion.cpp` has a `// TODO` marking where
-real sensor fusion (Accelerometer + Compass + Gyroscope) should be wired up
-once compass support exists.
+**Sensor pattern (real, SDL3-backed — `Accelerometer`/`Gyroscope`):** static
+`g_sensor_`/`g_sensorId_` hold the single open SDL sensor handle; static
+`instanceCount_` enforces a ≤10 simultaneous-instance limit; static
+`eventWatchRegistered_` guards the SDL event filter lifecycle. `Start()`
+opens the sensor and registers the SDL event watch; `Stop()` unregisters;
+`Dispose(bool)` stops, decrements the counter, and closes the sensor handle
+when the last instance is disposed. `ProcessSensorUpdateEvent()` runs from
+the SDL event filter on every `SDL_EVENT_SENSOR_UPDATE`, with an
+Android-specific landscape axis remap (duplicated per-class, not shared —
+see each `.cpp`'s `ConvertAndroid*ToXnaLandscape()`).
 
-**VibrateController** (`include/Microsoft/Devices/VibrateController.hpp`,
-`src/Microsoft/Devices/VibrateController.cpp`) is a static-only class (no
-`SensorBase<T>`, no instances) that drives SDL3's haptic API directly —
-`SDL_GetHaptics`/`SDL_OpenHaptic`/`SDL_InitHapticRumble`/
-`SDL_PlayHapticRumble`/`SDL_StopHapticEffects`. One code path serves both
-Desktop and Android (SDL3's Android backend auto-exposes the phone's
-vibration motor as a haptic device — no `#ifdef __ANDROID__` needed). All
-calls silently no-op when no haptic device is available (e.g. this headless
-dev container).
+**Stub pattern (`Compass`/`Motion`):** always `SensorState::NotSupported`;
+`Start()` always throws `SensorFailedException`; still expose the
+`Calibrate` event for API completeness even though it's never raised.
 
-**SensorBase<T>** (template, header-only) owns `CurrentValue`, `IsDataValid`,
-`TimeBetweenUpdates`, `CurrentValueChanged`, and `Dispose()` — concrete sensors
-override `Start()`, `Stop()`, and `Dispose(bool)`.
+**`VibrateController`:** static-only (`= delete`d default constructor, no
+`SensorBase<T>`, no `IDisposable`), lives directly in `Microsoft::Devices`
+(not `::Sensors`). Drives SDL3's haptic API directly rather than the sensor
+pattern. As of Task P2-8, deliberately excludes haptic devices that are also
+connected joysticks/gamepads from device selection, to avoid competing with
+`GamePad::SetVibration` (a separate SDL3 subsystem — `SDL_RumbleGamepad` on
+an `SDL_Gamepad*`, unrelated to the generic `SDL_Haptic*` API).
 
-**Invariants:**
-- `GetTypeName()` returns `.`-separated .NET names
-  (e.g. `"Microsoft.Devices.Sensors.AccelerometerReading"`).
-- `GetHashCode()` returns `std::size_t`.
-- Every public API member in every `.hpp` has a Doxygen `/** @brief */` block.
+**`GetTypeName()` invariant:** must return `.`-separated fully-qualified
+.NET names (e.g. `"Microsoft.Devices.Sensors.Compass"`), tagged `NOXNA`.
+Classes deriving `System::Object` (via `SensorBase<T>`) use the
+`GetTypeNameHPP()`/`GetTypeNameCPP(Class, "Name")` macro pair; classes that
+don't (e.g. `AccelerometerReading`-style value types) declare a plain
+`NOXNA std::string GetTypeName() const;` method instead. `GetHashCode()`
+returns `std::size_t` for these value types (not the `int` used by
+`System::Object::GetHashCode()`).
+
+**Boundaries — do not cross:**
+- `third_party/SDL` is vendored and has its **own `CLAUDE.md` forbidding
+  AI-authored code contributions** to that project. It is safe (and useful)
+  to *read* for research (this is how the P2-8 fix was verified), but never
+  edit.
+- Do not restructure `SensorBase<T>` or `ISensorReading` — stable, used by
+  production code.
+- Do not expand `Microsoft::Devices` scope to camera, radio, or
+  phone-call/photo-picker APIs — explicitly out of scope (not sensor or
+  vibration functionality).
+- Do not implement sensor fusion in `Motion` — it stays a `NotSupported`
+  stub until SDL3 itself gains magnetometer access.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# Configure (run once, or after stale-cache issue):
+# Configure (only needed once, or if CMakeCache.txt is stale/points elsewhere):
 cmake -S /rv/data/development/github.com/openeggbert/cna_devices \
       -B /rv/data/development/github.com/openeggbert/cna_devices/cmake-build-debug \
       -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
@@ -376,63 +281,85 @@ cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 # Run all tests:
 cd cmake-build-debug && ctest --output-on-failure
 
-# Run only Devices/Sensors tests:
-cd cmake-build-debug && ctest --output-on-failure -R "AccelerometerReading|SensorFailed|AccelerometerFailed"
-# (AccelerometerReading matches both AccelerometerReadingTests and AccelerometerReadingEventArgsTests)
+# Run only Devices/Sensors + VibrateController tests:
+cd cmake-build-debug && ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController"
 
-# Run a single test suite:
-./cmake-build-debug/CnaTests --gtest_filter="AccelerometerReadingTests*"
+# Run one suite directly:
+./cmake-build-debug/CnaTests --gtest_filter="GyroscopeTests*"
+
+# Reproduce the Section 4 blocker (expected to fail to compile):
+# Add `Accelerometer a; a.Dispose();` to any .cpp under tests/ and build —
+# it will not compile until the `using SensorBase<AccelerometerReading>::Dispose;`
+# fix (Task P2-3) is applied.
 ```
 
 ---
 
 ## 8. Next smallest tasks
 
-`plan_devices.md` is fully complete (31/31 tasks). The active follow-up plan
-is `plan_devices_phase2.md` — read it first. Task P2-8 (Phase 6,
-`VibrateController`/`GamePad` haptic-device conflict) was already done out
-of sequence at the user's request — see Section 3. The next tasks in plan
-order are P2-3/P2-4 below; P2-9 through P2-13 (remaining Phase 6 `NOXNA`
-vibration extensions) are also open whenever prioritized.
+Numbered per `plan_devices_phase2.md`.
 
-1. **Task P2-3 — Fix `Accelerometer.hpp` Dispose() name-hiding bug + write
-   `AccelerometerTests.cpp`**
-   - Add `using SensorBase<AccelerometerReading>::Dispose;` to
-     `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (same fix already
-     applied to `Compass`/`Gyroscope`/`Motion`).
-   - Write `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`, modeled
-     on `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (branches on
-     live `getIsSupportedProperty()` so it passes both headless and on real
-     hardware).
+1. **Task P2-3 — Fix `Accelerometer.hpp` Dispose() name-hiding + write `AccelerometerTests.cpp`**
+   - Goal: add `using SensorBase<AccelerometerReading>::Dispose;` (copy the
+     exact pattern from `include/Microsoft/Devices/Sensors/Compass.hpp`);
+     write a new test file modeled on
+     `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (branches on the
+     live `getIsSupportedProperty()` result so it passes both headless and
+     on real hardware).
    - Files: `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (edit),
-     `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (new)
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests*"`
+     `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (new).
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests*"`,
+     then full `ctest --output-on-failure`.
 
 2. **Task P2-4 — Fix `Accelerometer.cpp`'s `GetTypeNameCPP` to the
-   dot-separated convention** (`"Microsoft.Devices.Sensors.Accelerometer"`,
-   not `"Microsoft::Devices::Sensors::Accelerometer"`). Small, do right after
-   P2-3 since both touch the same file.
+   dot-separated convention**
+   - Goal: change `GetTypeNameCPP(Accelerometer, "Microsoft::Devices::Sensors::Accelerometer")`
+     to use `.` separators, matching every other class from this phase.
+     Small; do right after P2-3 since both touch the same file.
+   - Files: `src/Microsoft/Devices/Sensors/Accelerometer.cpp`.
+   - Verify: build `CNA` + `CnaTests`, run `AccelerometerTests*` (add a
+     `GetTypeName()` assertion if the test doesn't already have one).
 
-See `plan_devices_phase2.md` for the full task list (API-completeness audit,
-CHECKLIST.md compliance spot-check, Vulkan/BGFX build verification,
-Android/iOS cross-compilation notes — the last one is blocked in this
-environment, no NDK/iOS toolchain available).
+3. **Task P2-10 — NOXNA: `VibrateController::Start(duration, intensity)` overload**
+   - Goal: expose SDL3's already-available rumble-strength parameter (see
+     Section 5's "by design" note) as a `NOXNA` overload, clamped to
+     `[0.0f, 1.0f]`; the existing XNA-compliant `Start(TimeSpan)` should
+     delegate to it with `intensity = 1.0f`.
+   - Files: `include/Microsoft/Devices/VibrateController.hpp`,
+     `src/Microsoft/Devices/VibrateController.cpp`.
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="VibrateControllerTests*"`.
+
+4. **Task P2-11 — NOXNA: `VibrateController::getIsSupportedProperty()`**
+   - Goal: let calling code check haptic availability ahead of time (every
+     `Sensors` class already has this; `VibrateController` doesn't).
+   - Files: same as above.
+   - Verify: same as above.
+
+Full remaining list (P2-2, P2-5 through P2-9 [P2-8 done], P2-12/13,
+Phase 5 cross-platform verification) is in `plan_devices_phase2.md`.
 
 ---
 
 ## 9. Do not do yet
 
-- Do not add camera, radio, or phone-hardware types to `Microsoft::Devices`.
-- Do not implement sensor fusion in `Motion` — keep it as a `NotSupported` stub
-  until SDL3 gains magnetometer access.
-- Do not restructure `SensorBase<T>` or `ISensorReading` — they are stable and
-  used by production code.
-- Do not touch the graphics, audio, or input subsystems — they are unrelated to
-  the current phase.
-- Do not delete or rename existing `.cpp` or `.hpp` files without checking that
-  nothing else references them.
-- Do not run `cmake --build` without first checking that `CMakeCache.txt`
-  references the correct source directory.
+- Do not refactor or restructure `SensorBase<T>` or `ISensorReading` —
+  stable, used by production code.
+- Do not perform the cross-cutting `GetTypeNameCPP` dot/colon cleanup beyond
+  `Accelerometer.cpp` (Task P2-4) — the rest touches unrelated files
+  (`Cue.cpp`, `AudioEngine.cpp`, etc.) and needs its own scoped plan.
+- Do not expand `Microsoft::Devices` to camera, radio, or phone-hardware
+  APIs (`PhotoCamera`, `CameraButtons`, `PhotoChooserTask`, etc.) — not
+  sensor/vibration functionality, explicitly out of scope.
+- Do not implement real sensor fusion in `Motion` — keep it a
+  `NotSupported` stub until SDL3 gains magnetometer access.
+- Do not edit anything under `third_party/SDL` — vendored, has its own
+  `CLAUDE.md` forbidding AI-authored contributions; read-only for research.
+- Do not attempt Android/iOS cross-compilation in this environment — no
+  NDK/toolchain is available; that verification needs a different
+  environment or CI.
+- Do not run `cmake --build` without first checking `CMakeCache.txt` points
+  at the correct source directory (this repo has hit stale-cache issues
+  before).
 
 ---
 
