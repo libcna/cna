@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Input/GamePadTriggers.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include "System/Single.hpp"
 
 #include <cmath>
 
@@ -48,7 +49,7 @@ namespace Microsoft::Xna::Framework::Input
 
     int GamePadTriggers::GetHashCode() const
     {
-        return static_cast<int>(left_ * 1000.0f) + static_cast<int>(right_ * 1000.0f) * 31;
+        return System::Single::GetHashCode(left_) + System::Single::GetHashCode(right_);
     }
 
     bool operator==(const GamePadTriggers& left, const GamePadTriggers& right)
