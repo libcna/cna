@@ -6,13 +6,48 @@
 #include <string>
 #include <vector>
 
+using CNA::Internal::Audio::ParseXsb;
 using CNA::Internal::Audio::ParseXwb;
+using CNA::Internal::Audio::XsbData;
 using CNA::Internal::Audio::XwbData;
 using CNA::Internal::Audio::XwbFormat;
 
 namespace
 {
+    void AppendU8(std::vector<uint8_t>& buf, uint8_t value)
+    {
+        buf.push_back(value);
+    }
+
+    void AppendU16(std::vector<uint8_t>& buf, uint16_t value)
+    {
+        uint8_t bytes[2];
+        std::memcpy(bytes, &value, 2);
+        buf.insert(buf.end(), bytes, bytes + 2);
+    }
+
+    void AppendS16(std::vector<uint8_t>& buf, int16_t value)
+    {
+        uint8_t bytes[2];
+        std::memcpy(bytes, &value, 2);
+        buf.insert(buf.end(), bytes, bytes + 2);
+    }
+
     void AppendU32(std::vector<uint8_t>& buf, uint32_t value)
+    {
+        uint8_t bytes[4];
+        std::memcpy(bytes, &value, 4);
+        buf.insert(buf.end(), bytes, bytes + 4);
+    }
+
+    void AppendS32(std::vector<uint8_t>& buf, int32_t value)
+    {
+        uint8_t bytes[4];
+        std::memcpy(bytes, &value, 4);
+        buf.insert(buf.end(), bytes, bytes + 4);
+    }
+
+    void AppendF32(std::vector<uint8_t>& buf, float value)
     {
         uint8_t bytes[4];
         std::memcpy(bytes, &value, 4);
@@ -85,6 +120,106 @@ namespace
 
         return data;
     }
+
+    // Builds one PITCH-family track event using the "equation" (non-ramp) form — a stand-in
+    // for any non-PlayWave event (PITCH/VOLUME/MARKER) the track-event walker must skip over.
+    std::vector<uint8_t> BuildPitchEventBytes()
+    {
+        std::vector<uint8_t> e;
+        AppendU32(e, 7u);       // evtInfo: type=FACTEVENT_PITCH (7), timestamp=0
+        AppendU16(e, 0);        // randomOffset
+        AppendU8(e, 0xFF);      // separator
+        AppendU8(e, 0);         // settings: RAMP bit clear -> equation form
+        AppendU8(e, 0x04);      // equation.flags (EVENT_EQUATION_VALUE)
+        AppendF32(e, 0.0f);     // value1
+        AppendF32(e, 0.0f);     // value2
+        for (int i = 0; i < 5; ++i) e.push_back(0); // unknown
+        return e;
+    }
+
+    // Builds one basic (non-variation) PlayWave track event.
+    std::vector<uint8_t> BuildPlayWaveEventBytes(uint16_t waveIdx, uint8_t wbIdx, uint8_t loopCnt)
+    {
+        std::vector<uint8_t> e;
+        AppendU32(e, 1u);       // evtInfo: type=FACTEVENT_PLAYWAVE (1), timestamp=0
+        AppendU16(e, 0);        // randomOffset
+        AppendU8(e, 0xFF);      // separator
+        AppendU8(e, 0);         // flags
+        AppendU16(e, waveIdx);
+        AppendU8(e, wbIdx);
+        AppendU8(e, loopCnt);
+        AppendU16(e, 0);        // position
+        AppendU16(e, 0);        // angle
+        return e;
+    }
+
+    // Minimal .xsb with zero cues/wavebanks and one complex sound whose single track's event
+    // list is exactly `events` (each pre-encoded via the Build*EventBytes helpers above).
+    // Regression fixture for T-2E.
+    std::vector<uint8_t> BuildXsbWithComplexTrack(const std::vector<std::vector<uint8_t>>& events)
+    {
+        constexpr uint32_t headerSize     = 74;
+        constexpr uint32_t bankNameSize   = 64;
+        constexpr uint32_t baseOffset     = headerSize + bankNameSize; // 138
+        constexpr uint32_t soundEntrySize = 19; // flags+cat+vol+pitch+prio+len(9) + trackCount+track(10)
+
+        const uint32_t soundOffset       = baseOffset;
+        const uint32_t trackEventsOffset = soundOffset + soundEntrySize;
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 0);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset (must sit at header byte 0x32)
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, -1); // cueNameIndexOffset (unused, totalCues == 0)
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "TestSoundBank", bankNameSize);
+
+        // Sound: flags(COMPLEX), categoryIndex, volume, pitchCents, priority, soundLength(skip)
+        AppendU8(data, 0x01); // SOUND_FLAG_COMPLEX
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume byte
+        AppendS16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+
+        // One track: volume byte, code (absolute offset to its event array), filterData, frequency
+        AppendU8(data, 1);
+        AppendU8(data, 0xFF);
+        AppendU32(data, trackEventsOffset);
+        AppendU16(data, 0); // filterData
+        AppendU16(data, 0); // frequency
+
+        // Track event array: eventCount followed by each event's raw bytes
+        AppendU8(data, static_cast<uint8_t>(events.size()));
+        for (const auto& e : events)
+            data.insert(data.end(), e.begin(), e.end());
+
+        return data;
+    }
 }
 
 TEST(XactParserTest, CompactWaveBankComputesLengthsFromConsecutiveOffsets)
@@ -114,4 +249,27 @@ TEST(XactParserTest, CompactWaveBankComputesLengthsFromConsecutiveOffsets)
     const auto& first = wb.entries[0];
     const uint32_t bytesPerSample = static_cast<uint32_t>(first.bitsPerSample / 8) * first.channels;
     EXPECT_EQ(first.dataLength / bytesPerSample, 5u);
+}
+
+TEST(XactParserTest, ComplexTrackSkipsNonPlayEventToFindPlayWave)
+{
+    const XsbData xsb = ParseXsb(
+        BuildXsbWithComplexTrack({ BuildPitchEventBytes(), BuildPlayWaveEventBytes(42, 7, 3) }));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 7);
+    EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 42u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].loopCount, 3);
+}
+
+TEST(XactParserTest, ComplexTrackWithOnlyPlayWaveEventStillResolves)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithComplexTrack({ BuildPlayWaveEventBytes(99, 2, 1) }));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 2);
+    EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 99u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].loopCount, 1);
 }

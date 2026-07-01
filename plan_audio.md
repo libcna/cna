@@ -177,9 +177,11 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   zkontrolovat větev `entryMetaDataSize < 24` (439-449), která dnes všem entry nastavuje celý datový segment.
   *Accept:* parser unit test na známém compact `.xwb` dá správné délky (počet PCM vzorků sedí). (B6)
 
-- [ ] **T-2E — Zpevnit walker track-eventů.** `XactParser.cpp:122-214`: místo `break` na neznámém eventu
+- [x] **T-2E — Zpevnit walker track-eventů.** `XactParser.cpp:122-214`: místo `break` na neznámém eventu
   (202-209) přeskakovat PITCH/VOLUME/MARKER/repeat, ať se najde první PlayWave i ve víceeventovém tracku.
   *Accept:* `.xsb` s úvodním ne-play eventem vyřeší vlnu; regresní test pro jednoduchý jedno-event track. (B7)
+  *Pozn.:* přesné délky PITCH/VOLUME(REPEATING)/MARKER(REPEATING) eventů ověřeny proti FAudio
+  (`FACT_internal.c:2390-2432`); pouze skutečně neznámý typ eventu dál dělá `break`.
 
 - [ ] **T-2F — Odstranit mrtvý XGS first-pass a redundantní re-seek.**
   Smazat `XactParser.cpp:270-289` (ponechat 292-310); `variationOffset` brát z hlavičky (ř. 536) místo

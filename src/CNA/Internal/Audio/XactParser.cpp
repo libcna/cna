@@ -116,6 +116,14 @@ namespace CNA::Internal::Audio
     static constexpr uint8_t  FACTEVENT_PLAYWAVETRACKVARIATION      = 3;
     static constexpr uint8_t  FACTEVENT_PLAYWAVEEFFECTVARIATION     = 4;
     static constexpr uint8_t  FACTEVENT_PLAYWAVETRACKEFFECTVARIATION = 6;
+    static constexpr uint8_t  FACTEVENT_PITCH                       = 7;
+    static constexpr uint8_t  FACTEVENT_VOLUME                      = 8;
+    static constexpr uint8_t  FACTEVENT_MARKER                      = 9;
+    static constexpr uint8_t  FACTEVENT_PITCHREPEATING              = 16;
+    static constexpr uint8_t  FACTEVENT_VOLUMEREPEATING             = 17;
+    static constexpr uint8_t  FACTEVENT_MARKERREPEATING             = 18;
+
+    static constexpr uint8_t  EVENT_SETTINGS_RAMP = 0x01;
 
     // ── Track event parser ────────────────────────────────────────────────────
 
@@ -201,12 +209,41 @@ namespace CNA::Internal::Audio
                 result = {wbIdx, waveIdx, loopCnt, trackVol};
                 break;
             }
+            else if (type == FACTEVENT_PITCH || type == FACTEVENT_VOLUME ||
+                     type == FACTEVENT_PITCHREPEATING || type == FACTEVENT_VOLUMEREPEATING)
+            {
+                uint8_t settings = ctx.u8();
+                if (settings & EVENT_SETTINGS_RAMP)
+                {
+                    ctx.f32(); ctx.f32(); ctx.f32(); // initialValue, initialSlope, slopeDelta
+                    ctx.u16(); // duration
+                }
+                else
+                {
+                    ctx.u8(); // equation flags
+                    ctx.f32(); ctx.f32(); // value1, value2
+                    ctx.skip(5); // unknown
+
+                    if (type == FACTEVENT_PITCHREPEATING || type == FACTEVENT_VOLUMEREPEATING)
+                    {
+                        ctx.u16(); ctx.u16(); // repeats, frequency
+                    }
+                }
+                // Not a play event — keep scanning the track for one.
+            }
+            else if (type == FACTEVENT_MARKER)
+            {
+                ctx.u32(); // marker
+            }
+            else if (type == FACTEVENT_MARKERREPEATING)
+            {
+                ctx.u32(); // marker
+                ctx.u16(); ctx.u16(); // repeats, frequency
+            }
             else
             {
-                // Other event types (PITCH, VOLUME, MARKER, repeating): skip
-                // FAudio parses them individually; we skip the whole block.
-                // Use the event record length embedded in evtInfo timestamp area
-                // to advance. Since this is complex, we break on unknown events.
+                // Genuinely unrecognized event type — its length can't be determined, so
+                // stop scanning rather than misreading the remaining bytes as event headers.
                 break;
             }
         }
