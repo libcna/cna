@@ -11,10 +11,10 @@ ported to C++ with minimal API-surface changes.
 
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
   pixel-readback integration tests.
-- **Current development phase:** Phase 31 — User primitives and draw-call variants (Tasks 251–260)
-  core work complete; only Task 260 (optional perf work) remains open. Phase 32 (Texture2D
-  completeness, Tasks 261–270) starting next. Phase 30 (VertexDeclaration / vertex format
-  accuracy, Tasks 241–250) is complete.
+- **Current development phase:** Phase 32 — Texture2D completeness (Tasks 261–270) has started
+  (Task 261 audit done). Phase 31 (Tasks 251–260) core work complete; only Task 260 (optional
+  perf work) remains open. Phase 30 (VertexDeclaration / vertex format accuracy, Tasks 241–250)
+  is complete.
 - **Key architectural decisions:**
   - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).
@@ -63,16 +63,29 @@ ported to C++ with minimal API-surface changes.
   `System::ArgumentOutOfRangeException` for all 5 overloads (VPC/VPT/VPCT/VPNT + VertexDeclaration),
   zero and negative counts; 10/10 new unit tests.
 - **Task 329** — Vulkan scissor test: `ScissorTestEnable` + `ScissorRectangle` pixel readback; 4/4 PASS.
+- **Task 261** (Phase 32 start) — Full `Texture2D` audit vs FNA (audit only, zero code changes).
+  Found **2 confirmed memory-safety bugs**: (1) `SetData(int level, const Rectangle*, ...)` has no
+  bounds check that `rect` fits inside the mip level, unlike the equivalent `GetData` overload —
+  an out-of-range `Rectangle` causes a heap buffer **overflow write**; (2) the simple
+  `SetData(const Color*, int elementCount)` builds an `ImageData` claiming full texture dimensions
+  over an undersized pixel buffer when `elementCount < width*height`, causing an out-of-bounds
+  **read** in the EasyGL backend's `set_image_2d` call. Also found: 2 constructors missing `NOXNA`
+  tags (`Texture2D(assetName)`, `Texture2D(assetName, device)` — not in the FNA API surface);
+  missing `FromStream(w,h,zoom)` overload; missing `SetDataPointerEXT`/`GetDataPointerEXT`/
+  `TextureDataFromStreamEXT`/`DDSFromStreamEXT`; `SurfaceFormat` support is effectively Color-only
+  (`ValidateFormat` throws for everything else). Full writeup in `AUDIT.md` under
+  "Texture2D detailed audit (Task 261, Phase 32)".
 - **Phase 30** — Full VertexDeclaration test suite, EasyGL vertex format integration test (strides
   16/20/24/32), Bgfx vertex layout mapping helper, `docs/vertex-format-support.md`.
 
 ### What does NOT work yet
+- **The 2 memory-safety bugs found in Task 261 are not yet fixed** — audit was scoped to
+  documentation only. Recommend a fast-follow fix task before continuing deeper into Phase 32.
 - `DrawUserIndexedPrimitives` argument-guard unit tests for `primitiveCount <= 0` not covered (only
   `DrawUserPrimitives` was in scope for Task 259).
 - Multiple `SpriteBatch::Begin()/End()` per frame on Vulkan (only last batch renders).
-- Texture2D completeness audit not started (Phase 32, Tasks 261–270).
 - Bgfx and EasyGL stride-keyed layout: arbitrary `VertexDeclaration` strides beyond 16/20/24/32/52.
-- 370 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
+- 369 tasks still ⬜ out of 536 in `GRAPHICS_TASKS.md`.
 
 ---
 
@@ -80,6 +93,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 261 | `AUDIT.md` (extended), `GRAPHICS_TASKS.md` | Detailed Texture2D vs FNA audit; found 2 OOB memory bugs (SetData rect-bounds write, SetData(Color*,int) size-mismatch read), 2 missing NOXNA tags, 4 missing methods/overloads, Color-only format support. No code changed. |
 | 259 | `DrawUserPrimitivesTests.cpp` (extended), `GRAPHICS_TASKS.md` | Added argument-guard tests: primitiveCount<=0 throws ArgumentOutOfRangeException for all 5 DrawUserPrimitives overloads (VPC/VPT/VPCT/VPNT + VD); 10/10 new unit tests; 1782/1782 total pass |
 | 258 | `examples/easygl_draw_user_indexed_primitives_32_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` | DrawUserIndexedPrimitives VPC (32-bit indices) pixel-readback; vertexOffset=0/indexOffset=0 + vertexOffset=1/indexOffset=1; centre=(255,0,0) 2/2 PASS; 1772/1772 unit tests still pass |
 | 257 | `examples/easygl_draw_user_indexed_primitives_vpc_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` | DrawUserIndexedPrimitives VPC (16-bit indices) pixel-readback; vertexOffset=0/indexOffset=0 + vertexOffset=1/indexOffset=1; centre=(255,0,0) 2/2 PASS; 1772/1772 unit tests still pass |
@@ -93,14 +107,17 @@ ported to C++ with minimal API-surface changes.
 
 ## 4. Current blocker / main problem
 
-**No single hard blocker.** The project builds cleanly on all three backends and all 1782 unit tests pass.
+**Two confirmed memory-safety bugs**, found by the Task 261 audit but deliberately left unfixed
+(the task was scoped to audit only). Both are reachable from the public `Texture2D` API:
 
-Phase 31's core work (Tasks 251–259) is done: both `DrawUserPrimitives` and
-`DrawUserIndexedPrimitives` have full pixel-readback coverage (16/32-bit indices) and
-argument-guard coverage for `primitiveCount <= 0`. The only Phase 31 items left are optional —
-**Task 260** (staging optimization, a performance task, not correctness) and Task 261 which
-starts **Phase 32** (Texture2D completeness audit). Recommended next: **Task 261**, since it's
-an audit-only task (no code changes) that scopes the next real phase of work.
+1. `Texture2D::SetData(int level, const Rectangle* rect, ...)` has no bounds check that `rect`
+   fits inside the mip level — an out-of-range rect causes a **heap buffer overflow write**.
+2. `Texture2D::SetData(const Color* data, int elementCount)` with `elementCount < width*height`
+   causes a **heap buffer overflow read** in the EasyGL backend.
+
+Recommend fixing both **before** proceeding deeper into Phase 32 (Tasks 262–270 build on top of
+`SetData`/`GetData`, so shipping more Texture2D work on top of known OOB bugs compounds the risk).
+See `AUDIT.md` → "Texture2D detailed audit" findings #1–#2 for exact line numbers and repro logic.
 
 ---
 
@@ -114,7 +131,8 @@ an audit-only task (no code changes) that scopes the next real phase of work.
 | **Incomplete** | EasyGL and Bgfx backends: stride-keyed vertex layout supports only strides 16/20/24/32/52; arbitrary `VertexDeclaration` layouts silently use wrong VAO/pipeline. |
 | **Incomplete** | Vulkan backend: `Tangent` and `Binormal` `VertexElementUsage` values not mapped (no Vulkan semantic equivalent). |
 | **Incomplete** | `VertexElementUsage` Depth/Fog/PointSize/Sample/TessellateFactor: unsupported in all 3D backends; currently no-op or return `bgfx::Attrib::Count`. |
-| **Incomplete** | Texture2D completeness audit not started (Phase 32, Tasks 261–270). |
+| **Confirmed bug** | `Texture2D::SetData(int level, const Rectangle* rect, ...)` — no bounds check that `rect` fits inside the mip level; out-of-range rect causes a heap buffer overflow **write**. Found in Task 261 audit, not yet fixed. |
+| **Confirmed bug** | `Texture2D::SetData(const Color* data, int elementCount)` with `elementCount < width*height` — heap buffer overflow **read** in the EasyGL backend. Found in Task 261 audit, not yet fixed. |
 | **Incomplete** | SDL_Renderer backend: `CreateVertexBuffer` always throws `ThrowNo3D`. No 3D support at all. |
 | **Incomplete** | Bgfx backend lacks pixel readback — integration tests there are smoke-only. |
 
@@ -210,16 +228,28 @@ cd cmake-build-debug && ctest --output-on-failure
 
 In priority order:
 
-1. **Task 261 — Audit `Texture2D` constructors and methods against FNA** (Phase 32 start)
-   - Goal: Compare `Texture2D.hpp/.cpp` with FNA's `Texture2D.cs`; document every missing
-     overload, wrong signature, or missing bounds check. Produce an audit list in AUDIT.md or
-     inline in the task notes. Do not implement yet.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp`,
-     `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs`.
-   - Verification: compile (no code changes expected) + written audit list.
+1. **Task 266 — Fix the 2 confirmed OOB bugs from the Task 261 audit** (fast-follow; this is
+   exactly the bounds-checking gap Task 266 already anticipated in `GRAPHICS_TASKS.md`)
+   - Goal: (a) Add rect-bounds validation to `Texture2D::SetData(int level, const Rectangle*, ...)`
+     mirroring the check already present in `GetData` (`Texture2D.cpp:317`) — throw
+     `std::out_of_range` when `x < 0 || y < 0 || x + w > levelW || y + h > levelH`.
+     (b) In `SetData(const Color* data, int elementCount)`, validate `elementCount >= width*height`
+     before building the `ImageData` (throw, matching FNA's `ArgumentOutOfRangeException` for
+     insufficient data), or size `img.width`/`img.height` to match the actual data provided.
+   - Files: `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp`,
+     `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` (add regression tests for both).
+   - Verification: new unit tests covering out-of-range rects and undersized elementCount both
+     throw instead of corrupting memory; `CnaTests` still all pass; run under ASan/valgrind if
+     available to confirm the OOB is gone.
 
-2. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
+2. **Task 262 — Verify `Texture2D::FromStream` supports PNG/JPG/BMP formats**
+   - Goal: Document actual supported formats (SDL_image codecs) and add the missing
+     `FromStream(GraphicsDevice&, Stream&, int width, int height, bool zoom)` overload found
+     missing in the Task 261 audit.
+   - Files: `Texture2D.hpp/.cpp`.
+   - Verification: unit/integration test round-tripping a resized load.
+
+3. **Task 260 — Optimize user primitive staging (avoid per-draw heap allocation)**
    - Goal: Replace `std::vector` allocations in `DrawUserPrimitives` / `DrawUserIndexedPrimitives`
      with a per-device scratch buffer or stack allocation for small counts.
    - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`.
@@ -229,7 +259,9 @@ In priority order:
 
 ## 9. Do not do yet
 
-- **No Texture2D implementation changes** until the Task 261 audit is complete — the scope is unknown.
+- **No broad Texture2D rewrite** — the Task 261 audit is complete and scoped the work (see
+  `AUDIT.md`), but fixes should land incrementally per Phase 32 task (266 first — the 2 OOB bugs),
+  not as one large refactor.
 - **No refactor of the stride-keyed vertex layout system** — it is load-bearing for all 3D tests;
   changes need their own dedicated phase with full regression testing.
 - **No changes to the Bgfx backend draw path** — pixel readback is unavailable there, so correctness
@@ -249,16 +281,25 @@ In priority order:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
-Current status: Phase 30 complete (Tasks 241–250); Phase 31 core work done
-(Tasks 251, 252, 255, 256, 257, 258, 259, 329 done); 1782/1782 unit tests pass.
-Only Task 260 (optional perf work) remains open in Phase 31.
+Current status: Phase 30 complete; Phase 31 core work done (Tasks 251,252,255,256,257,258,259,329);
+Phase 32 started (Task 261 audit done). 1782/1782 unit tests pass — no code changed by Task 261.
 
-Next: Task 261 — audit Texture2D constructors and methods against FNA (Phase 32 start).
-Compare Texture2D.hpp/.cpp with FNA's Texture2D.cs; document every missing overload,
-wrong signature, or missing bounds check. Do not implement yet — audit only.
-Files: include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp,
-       src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp,
-       /rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Texture2D.cs.
-Verification: compile (no code changes expected) + written audit list.
-Update GRAPHICS_TASKS.md (mark 261 ✅) and NEXT.md after finishing.
+Task 261 found 2 CONFIRMED memory-safety bugs in Texture2D::SetData (see AUDIT.md "Texture2D
+detailed audit"): (1) SetData(level, rect, ...) has no bounds check that rect fits the mip level
+(GetData has this check, SetData doesn't) — OOB heap write. (2) SetData(Color*, elementCount) with
+elementCount < width*height builds an ImageData with mismatched dimensions vs buffer size — OOB
+heap read in the EasyGL backend's set_image_2d call.
+
+Next: Task 266 — fix both OOB bugs before continuing Phase 32.
+(a) Add the missing rect-bounds check to SetData(int level, const Rectangle*, const Color*, int, int)
+    mirroring GetData's existing check at Texture2D.cpp:317: throw std::out_of_range when
+    x<0 || y<0 || x+w>levelW || y+h>levelH.
+(b) In SetData(const Color* data, int elementCount), validate elementCount >= width*height before
+    building the ImageData; throw std::out_of_range (matching the level-based overload's exception
+    type) if insufficient.
+Files: src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp,
+       tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp (add regression tests for both).
+Verification: new unit tests for out-of-range rect and undersized elementCount both throw;
+CnaTests still 1782+/1782+ pass.
+Update GRAPHICS_TASKS.md (mark 266 ✅) and NEXT.md after finishing.
 ```

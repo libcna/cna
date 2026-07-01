@@ -422,7 +422,7 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                         | Status | Notes                                   |
 | --- | ---------------------------------------------------------------------------- | ------ | --------------------------------------- |
-| 261 | Audit every `Texture2D` constructor and method against FNA                   | ⬜      | Include protected/internal constructors |
+| 261 | Audit every `Texture2D` constructor and method against FNA                   | ✅      | See `AUDIT.md` "Texture2D detailed audit". Found: OOB write bug in `SetData(level,rect,...)` (missing rect-bounds check, feeds Task 266); OOB read bug in `SetData(Color*,int)`; missing `NOXNA` tags on 2 assetName ctors; missing `FromStream(w,h,zoom)` overload; missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`; Color-only format support (feeds Tasks 265/266/268/269). No code changed — audit only. |
 | 262 | Verify `Texture2D::FromStream` supports PNG, JPG, BMP if FNA/XNA-compatible  | ⬜      | Document actual formats                 |
 | 263 | Verify `Texture2D::SaveAsPng` if present                                     | ⬜      | Add round-trip test                     |
 | 264 | Verify `Texture2D::SaveAsJpeg` if present                                    | ⬜      | Add round-trip test                     |

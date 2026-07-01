@@ -187,7 +187,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | StencilOperation (enum) | ✅ | Complete |
 | SurfaceFormat (enum) | ✅ | Complete |
 | Texture | ✅ | API complete |
-| Texture2D | ✅ | API complete |
+| Texture2D | 🔄 | Detailed re-audit (Task 261, Phase 32) found 2 memory-safety bugs, missing `NOXNA` tags, a missing FromStream overload, missing EXT statics, and Color-only format support — see below |
 | Texture3D | ✅ | API complete |
 | TextureAddressMode (enum) | ✅ | Complete |
 | TextureCollection | ✅ | API complete |
@@ -204,6 +204,109 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | VertexPositionNormalTexture | ✅ | API complete |
 | VertexPositionTexture | ✅ | API complete |
 | Viewport | ✅ | API complete |
+
+---
+
+### Texture2D detailed audit (Task 261, Phase 32)
+
+Line-by-line comparison of `include/.../Texture2D.hpp` + `src/.../Texture2D.cpp` against
+`FNA/src/Graphics/Texture2D.cs` (635 lines) and the shared helpers in `FNA/src/Graphics/Texture.cs`.
+No code was changed for this task — audit only. Findings below feed Phase 32 tasks 262–270.
+
+#### Confirmed bugs (highest priority — candidates for an immediate follow-up fix task)
+
+1. **Heap buffer overflow — OOB write** in
+   `Texture2D::SetData(int level, const Rectangle* rect, const Color* data, int startIndex, int elementCount)`
+   (`Texture2D.cpp:197-252`). The method validates `elementCount < w*h` but never validates that the
+   `rect` (`x, y, w, h`) actually fits inside the mip level's dimensions (`levelW`, `levelH`). The write
+   loop computes `dst = ((y+row)*levelW + (x+col)) * 4` and writes directly into `buf` (sized
+   `levelW*levelH*4`) with no clamping — a caller-supplied `Rectangle` with `x+w > levelW` or
+   `y+h > levelH` (or negative `x`/`y`) writes past the end of the CPU-side mip buffer.
+   The sibling method `GetData(int level, const Rectangle* rect, ...)` **does** have this exact check
+   (`Texture2D.cpp:317`: `if (x < 0 || y < 0 || x + w > levelW || y + h > levelH) throw ...`), so the
+   omission in `SetData` is an asymmetry, not an intentional design choice. This is precisely the gap
+   Phase 32 **Task 266** ("Implement exact bounds checking for `SetData<T>` rectangles") anticipates.
+
+2. **Heap buffer overflow — OOB read** in `Texture2D::SetData(const Color* data, int elementCount)`
+   (`Texture2D.cpp:177-195`, the simple 2-arg overload). It builds an `ImageData` with
+   `img.width = width; img.height = height;` (the texture's full dimensions) but sizes
+   `img.pixels` to only `elementCount * 4` bytes. If a caller passes `elementCount < width*height`,
+   the resulting `ImageData` claims full-size dimensions over an undersized buffer. The EasyGL backend's
+   `EasyGLTextureBackend` constructor (`EasyGLGraphicsBackend.cpp:342`) calls
+   `texture.set_image_2d(..., width, height, data.pixels.data())`, which reads `width*height*4` bytes
+   from `data.pixels.data()` regardless of the vector's actual size — an out-of-bounds read.
+   FNA's equivalent (`SetData<T>(T[] data)`, delegating to the 5-arg overload) explicitly validates
+   `requiredBytes > availableBytes` and throws `ArgumentOutOfRangeException` before touching the
+   texture; CNA has no equivalent check on this overload.
+
+#### Missing overloads / methods (present in FNA, absent in CNA)
+
+3. `static Texture2D FromStream(GraphicsDevice&, Stream&, int width, int height, bool zoom)` —
+   the resize/crop-while-decoding overload is completely missing; only the simple 2-arg `FromStream`
+   exists in `Texture2D.hpp`.
+4. `SetDataPointerEXT(int level, Rectangle? rect, IntPtr data, int dataLength)` — no equivalent.
+   The closest CNA method, `SetDataRGBA(const uint8_t*, int pixelCount)` (NOXNA), has a different
+   signature (no `level`, no `rect`, always targets the full level-0 image) and does not validate
+   that `pixelCount` matches `width*height` before calling `backend_->UpdatePixels` (same class of
+   bug as finding #2, lower severity since it's a NOXNA extension, not core XNA surface).
+5. `GetDataPointerEXT(int level, Rectangle? rect, IntPtr data, int dataLengthBytes)` — no equivalent
+   at all, not even a NOXNA one.
+6. `static void TextureDataFromStreamEXT(Stream, out width, out height, out byte[] pixels, ...)` —
+   missing entirely.
+7. `static Texture2D DDSFromStreamEXT(GraphicsDevice&, Stream&)` — missing as a *named* method.
+   CNA does decode DDS/DXT1/3/5, but the logic is folded silently into `FromStream()`
+   (`TryDecodeDds` helper, `Texture2D.cpp:341-376`) rather than exposed as its own public static
+   method matching FNA's API surface. Functionally similar, but the public shape differs and
+   `FromStream` in FNA does **not** auto-detect DDS (it always goes through the image decoder,
+   throwing on unsupported formats) — this is a behavioral divergence worth documenting even
+   though it's arguably a usability improvement.
+
+#### Missing `NOXNA` tags (CLAUDE.md compliance)
+
+8. `Texture2D(const std::string& assetName)` and
+   `Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)`
+   (`Texture2D.hpp:40,46`) are **not part of the FNA/XNA 4.0 `Texture2D` API** — real XNA loads
+   textures via `Texture2D.FromStream` or the content pipeline, never a direct filename constructor.
+   These are CNA-only conveniences and per CLAUDE.md must be wrapped in `NOXNA`, exactly like the
+   project's own established precedent: `SoundEffect(const std::string& assetName)`
+   (`Audio/SoundEffect.hpp:49`) **is** correctly marked `NOXNA explicit`. The two `Texture2D`
+   constructors are missing this marker — a straightforward, mechanical fix.
+
+#### Format support gap (affects the whole SetData/GetData story)
+
+9. `Texture::ValidateFormat()` throws for anything other than `SurfaceFormat::Color`, so the
+   `Texture2D(GraphicsDevice&, int, int, bool, SurfaceFormat)` constructor can only actually produce
+   Color-format textures today, even though FNA supports DXT1/3/5, Bgra4444/5551, Bgr565,
+   Rgba1010102, Rg32, Rgba64, Single/Vector2/Vector4, Half* formats, etc. This also explains why
+   CNA's `SetData`/`GetData` are hardcoded to `Color*` (4 bytes/pixel) instead of FNA's generic
+   `SetData<T>`/`GetData<T>` pattern (validated against the format's actual byte size via
+   `Texture.GetFormatSizeEXT`/`ValidateGetDataFormat`, which have no CNA equivalent at all). This is
+   the root scope item behind Phase 32 tasks 265/266/268/269.
+
+#### Behavioral deviations (lower priority)
+
+10. `SetData(const Color*, int elementCount)` silently returns (no exception) when `data == nullptr`
+    or `elementCount <= 0`, while `SetData(int level, ...)` throws `std::invalid_argument` for the
+    same conditions. FNA's real `SetData<T>(T[] data)` always throws (it delegates to the validated
+    5-arg overload). This inconsistency is already encoded as expected behavior in
+    `Texture2DTests.cpp` (`SetDataSimpleWithNullDataDoesNotThrow`,
+    `SetDataSimpleWithZeroCountDoesNotThrow`), so any fix must update those tests too.
+11. `SaveAsJpeg` hardcodes JPEG quality to 100 (`IMG_SaveJPG_IO(..., 100)`), ignoring FNA's
+    `FNA_GRAPHICS_JPEG_SAVE_QUALITY` environment-variable override. Likely an acceptable
+    simplification, but noted since Phase 32 Task 264 asks to verify `SaveAsJpeg`.
+
+#### Confirmed correct / faithful to FNA
+
+- Public constructors `(GraphicsDevice&, int, int)` and `(GraphicsDevice&, int, int, bool, SurfaceFormat)`
+  structurally match FNA's two public constructors (the FNA `ArgumentNullException` for a null
+  `graphicsDevice` doesn't apply — CNA takes a reference, matching the project's established
+  "null guards omitted for C++ references" convention in `CHECKLIST.md`).
+- `CalculateMipLevels` (private free function, `Texture2D.cpp:118`) is mathematically equivalent to
+  FNA's `Texture.CalculateMipLevels` (both count halvings of `max(width,height)` until reaching 1).
+- `GetData` overloads (3-arg, 2-arg, and the level+rect 5-arg form) correctly mirror FNA's three
+  `GetData<T>` overloads, including the rect-bounds check missing from `SetData` (finding #1).
+- `Width`/`Height` read-only property convention (`getWidthProperty()`/`getHeightProperty()`,
+  no public setters) matches FNA's `{ get; private set; }`.
 
 ---
 
