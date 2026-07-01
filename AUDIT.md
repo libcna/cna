@@ -322,3 +322,49 @@ All 19 types audited. Missing Vector-form constructors added.
 | Guide | ✅ | Stub |
 | GamerServicesComponent | ✅ | Stub added |
 | GamerServicesNotAvailableException | ✅ | Stub added |
+
+---
+
+## `Microsoft::Devices::Sensors` and `Microsoft::Devices`
+
+**Note on methodology:** unlike every other section in this file, this namespace
+has **no FNA equivalent** — FNA does not implement `Microsoft.Devices` at all
+(it's a Windows Phone 7 API, not part of core XNA/FNA). This section was
+therefore audited against the documented WP7 Mango (OS 7.1) SDK API surface
+from general reference knowledge, not by diffing against a local FNA source
+tree. Tracked in `plan_devices.md` (31/31 tasks complete) and
+`plan_devices_phase2.md` (follow-up: independent verification of this list
+against authoritative WP7 SDK docs, since no local reference tree exists to
+check the "✅ complete" claims below against).
+
+| Class / Enum | Status | Notes |
+|---|---|---|
+| Accelerometer | ✅ | Real SDL3-backed (`SDL_SENSOR_ACCEL`); Android landscape axis remap. No tests yet (`AccelerometerTests.cpp` missing) — see `plan_devices_phase2.md`. |
+| AccelerometerFailedException | ✅ | Full tests |
+| AccelerometerReading | ✅ | Full tests |
+| AccelerometerReadingEventArgs | ✅ | WP7 7.0 legacy; not wired to current `Accelerometer` (7.1 `SensorBase` pattern used instead). Full tests |
+| AttitudeReading | ✅ | Full tests |
+| CalibrationEventArgs | ✅ | Full tests |
+| Compass | ✅ | Stub — SDL3 exposes no magnetometer API on any platform; always `NotSupported`. Full tests |
+| CompassReading | ✅ | Full tests |
+| Gyroscope | ✅ | Real SDL3-backed (`SDL_SENSOR_GYRO`), mirrors `Accelerometer`. Full tests |
+| GyroscopeReading | ✅ | Full tests |
+| ISensorReading | ✅ | Complete |
+| Motion | ✅ | Stub — requires Compass (unsupported); always `NotSupported`. `// TODO` marks where sensor fusion should be wired once compass support exists. Full tests |
+| MotionReading | ✅ | Full tests |
+| SensorBase\<T\> | ✅ | Complete |
+| SensorFailedException | ✅ | Full tests |
+| SensorReadingEventArgs\<T\> | ✅ | Complete |
+| SensorState (enum) | ✅ | Complete |
+| VibrateController | ✅ | Static-only, SDL3 haptic-backed (`Microsoft::Devices` namespace, not `Sensors`). Full tests for the XNA-compliant surface. **Under further review in `plan_devices_phase2.md` Phase 6**: possible device-conflict with `GamePad::SetVibration` on desktop (both can target the same haptic-capable gamepad via different SDL3 APIs — `SDL_GetHaptics`/`SDL_OpenHaptic` vs `SDL_RumbleGamepad`), plus proposed `NOXNA` extensions (variable intensity, `getIsSupportedProperty()`, dual-motor left/right rumble) to expose more of SDL3's haptic capabilities than WP7's minimal API ever needed. |
+
+**Known bug (not yet fixed):** `Accelerometer.hpp` declares `Dispose(bool) override`
+without `using SensorBase<AccelerometerReading>::Dispose;`, hiding the inherited
+public no-arg `Dispose()` (C++ name-hiding) — `accel.Dispose()` fails to compile
+for any caller. The identical bug was found and fixed in `Compass`/`Gyroscope`/
+`Motion` during this audit. See `plan_devices_phase2.md` Task P2-3.
+
+**Explicitly out of scope** (per project decision, not omissions): camera
+(`PhotoCamera`, `CameraButtons`, `CameraCaptureTask`), media/photo pickers
+(`PhotoChooserTask`), radio, phone-call APIs, and `Microsoft.Devices.Environment`
+(device identity/type info) — none of these are sensor or vibration APIs.

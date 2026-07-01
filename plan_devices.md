@@ -570,36 +570,40 @@ Report: pass/fail per test suite, any failures with full output.
 
 ## Task Summary
 
-| # | Task | Phase |
-|---|---|---|
-| 1 | AccelerometerReading: add `==`, `ToString`, `GetHashCode`, `GetTypeName` | 1 |
-| 2 | Tests: AccelerometerReading | 1 |
-| 3 | Tests: SensorFailedException | 2 |
-| 4 | Tests: AccelerometerFailedException | 2 |
-| 5 | Implement AccelerometerReadingEventArgs (.hpp + .cpp) | 3 |
-| 6 | Tests: AccelerometerReadingEventArgs | 3 |
-| 7 | Implement CalibrationEventArgs (.hpp + .cpp) | 4 |
-| 8 | Tests: CalibrationEventArgs | 4 |
-| 9 | Implement CompassReading (.hpp + .cpp) | 5 |
-| 10 | Tests: CompassReading | 5 |
-| 11 | Implement Compass (.hpp) | 6 |
-| 12 | Implement Compass (.cpp) — stub, `NotSupported` | 6 |
-| 13 | Tests: Compass | 6 |
-| 14 | Implement GyroscopeReading (.hpp + .cpp) | 7 |
-| 15 | Tests: GyroscopeReading | 7 |
-| 16 | Implement Gyroscope (.hpp) | 8 |
-| 17 | Implement Gyroscope (.cpp) — SDL3 `SDL_SENSOR_GYRO` | 8 |
-| 18 | Tests: Gyroscope | 8 |
-| 19 | Implement AttitudeReading (.hpp + .cpp) | 9 |
-| 20 | Tests: AttitudeReading | 9 |
-| 21 | Implement MotionReading (.hpp + .cpp) | 10 |
-| 22 | Tests: MotionReading | 10 |
-| 23 | Implement Motion (.hpp) | 11 |
-| 24 | Implement Motion (.cpp) — stub, `NotSupported` | 11 |
-| 25 | Tests: Motion | 11 |
-| 26 | Implement VibrateController (.hpp) | 12 |
-| 27 | Implement VibrateController (.cpp) — SDL3 haptic | 12 |
-| 28 | Tests: VibrateController | 12 |
-| 29 | Update CMakeLists.txt | 13 |
-| 30 | Build (debug) | 14 |
-| 31 | Run tests | 14 |
+**Status: 31/31 complete.** See `plan_devices_phase2.md` for follow-up work
+(code review / API-completeness audit, known-bug fixes, cross-platform build
+verification) opened after this plan finished.
+
+| # | Task | Phase | Status |
+|---|---|---|---|
+| 1 | AccelerometerReading: add `==`, `ToString`, `GetHashCode`, `GetTypeName` | 1 | ✅ |
+| 2 | Tests: AccelerometerReading | 1 | ✅ |
+| 3 | Tests: SensorFailedException | 2 | ✅ |
+| 4 | Tests: AccelerometerFailedException | 2 | ✅ |
+| 5 | Implement AccelerometerReadingEventArgs (.hpp + .cpp) | 3 | ✅ |
+| 6 | Tests: AccelerometerReadingEventArgs | 3 | ✅ |
+| 7 | Implement CalibrationEventArgs (.hpp + .cpp) | 4 | ✅ |
+| 8 | Tests: CalibrationEventArgs | 4 | ✅ |
+| 9 | Implement CompassReading (.hpp + .cpp) | 5 | ✅ |
+| 10 | Tests: CompassReading | 5 | ✅ |
+| 11 | Implement Compass (.hpp) | 6 | ✅ |
+| 12 | Implement Compass (.cpp) — stub, `NotSupported` | 6 | ✅ |
+| 13 | Tests: Compass | 6 | ✅ |
+| 14 | Implement GyroscopeReading (.hpp + .cpp) | 7 | ✅ |
+| 15 | Tests: GyroscopeReading | 7 | ✅ |
+| 16 | Implement Gyroscope (.hpp) | 8 | ✅ |
+| 17 | Implement Gyroscope (.cpp) — SDL3 `SDL_SENSOR_GYRO` | 8 | ✅ |
+| 18 | Tests: Gyroscope | 8 | ✅ |
+| 19 | Implement AttitudeReading (.hpp + .cpp) | 9 | ✅ |
+| 20 | Tests: AttitudeReading | 9 | ✅ |
+| 21 | Implement MotionReading (.hpp + .cpp) | 10 | ✅ |
+| 22 | Tests: MotionReading | 10 | ✅ |
+| 23 | Implement Motion (.hpp) | 11 | ✅ |
+| 24 | Implement Motion (.cpp) — stub, `NotSupported` | 11 | ✅ |
+| 25 | Tests: Motion | 11 | ✅ |
+| 26 | Implement VibrateController (.hpp) | 12 | ✅ |
+| 27 | Implement VibrateController (.cpp) — SDL3 haptic | 12 | ✅ |
+| 28 | Tests: VibrateController | 12 | ✅ |
+| 29 | Update CMakeLists.txt | 13 | ✅ (no-op — `GLOB_RECURSE` already covers new files) |
+| 30 | Build (debug) | 14 | ✅ |
+| 31 | Run tests | 14 | ✅ (1935 tests, only pre-existing headless `EasyGL_*` failures) |

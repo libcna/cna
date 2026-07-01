@@ -12,9 +12,17 @@ Android, and iOS.
 **Current phase:** `feature/devices` — implementing the full
 `Microsoft::Devices::Sensors` namespace (Accelerometer, Compass, Gyroscope,
 Motion, VibrateController) according to the XNA / Windows Phone 7 API spec.
-Plan: `plan_devices.md` (31 tasks) — **all 31 tasks are now complete.** See
-Section 5 for known gaps found along the way that are worth a follow-up phase
-(they were out of `plan_devices.md`'s scope, so not fixed here).
+Plan: `plan_devices.md` (31 tasks) — **all 31 tasks are now complete** (status
+column added to its Task Summary table). Follow-up plan now open:
+`plan_devices_phase2.md` — API-completeness audit, known-bug fixes
+(`Accelerometer.hpp` Dispose() name-hiding + missing tests,
+`GetTypeNameCPP` dot-convention fix), CHECKLIST.md compliance spot-check,
+cross-platform (Vulkan/BGFX desktop + Android/iOS) build verification, and
+(Phase 6) a `VibrateController` review + `NOXNA` extensions: a real
+device-conflict risk with `GamePad::SetVibration` was found (see Phase 6
+Task P2-8), plus proposed `NOXNA` additions exposing more of SDL3's haptic
+API (variable intensity, capability query, dual-motor left/right rumble)
+beyond WP7's minimal `Start(TimeSpan)`/`Stop()` surface.
 
 **Key architectural rules:**
 - Public API names must match XNA 4.0 exactly.
@@ -369,30 +377,31 @@ cd cmake-build-debug && ctest --output-on-failure -R "AccelerometerReading|Senso
 
 ## 8. Next smallest tasks
 
-`plan_devices.md` is fully complete (31/31 tasks). There is no active plan
-file for the next phase. The most valuable next steps are the follow-up
-items discovered during this phase (Section 5) — no new plan document exists
-for these yet, so treat the items below as a proposed starting point rather
-than a numbered plan:
+`plan_devices.md` is fully complete (31/31 tasks). The active follow-up plan
+is `plan_devices_phase2.md` — read it first. Its first actionable task:
 
-1. **Write `AccelerometerTests.cpp`** (SDL3 `Accelerometer` class has no test
-   coverage at all — the only sensor implementation without one).
-   - While writing it, you will hit the same `Dispose()` name-hiding compile
-     error found in `Compass`/`Gyroscope`/`Motion`: add `using
-     SensorBase<AccelerometerReading>::Dispose;` to
-     `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (see Section 5).
-   - Model the test file on `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`
-     (branches on live `getIsSupportedProperty()` so it passes both headless
-     and on real hardware).
+1. **Task P2-3 — Fix `Accelerometer.hpp` Dispose() name-hiding bug + write
+   `AccelerometerTests.cpp`**
+   - Add `using SensorBase<AccelerometerReading>::Dispose;` to
+     `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (same fix already
+     applied to `Compass`/`Gyroscope`/`Motion`).
+   - Write `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`, modeled
+     on `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (branches on
+     live `getIsSupportedProperty()` so it passes both headless and on real
+     hardware).
+   - Files: `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (edit),
+     `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (new)
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests*"`
 
-2. **`GetTypeNameCPP(...)` naming-convention cleanup** (optional, larger,
-   cross-cutting — see Section 5 for the full file list). Not specific to
-   the devices phase; would need its own scoped plan since it touches
-   `Cue.cpp`, `AudioEngine.cpp`, `SoundBank.cpp`, `WaveBank.cpp`,
-   `DateTime.cpp`, `DateTimeOffset.cpp`, and `Accelerometer.cpp`.
+2. **Task P2-4 — Fix `Accelerometer.cpp`'s `GetTypeNameCPP` to the
+   dot-separated convention** (`"Microsoft.Devices.Sensors.Accelerometer"`,
+   not `"Microsoft::Devices::Sensors::Accelerometer"`). Small, do right after
+   P2-3 since both touch the same file.
 
-3. Ask the user what the next feature phase should be — devices/sensors is
-   done; there's no committed plan for what comes after.
+See `plan_devices_phase2.md` for the full task list (API-completeness audit,
+CHECKLIST.md compliance spot-check, Vulkan/BGFX build verification,
+Android/iOS cross-compilation notes — the last one is blocked in this
+environment, no NDK/iOS toolchain available).
 
 ---
 
