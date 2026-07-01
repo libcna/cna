@@ -183,10 +183,12 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Pozn.:* přesné délky PITCH/VOLUME(REPEATING)/MARKER(REPEATING) eventů ověřeny proti FAudio
   (`FACT_internal.c:2390-2432`); pouze skutečně neznámý typ eventu dál dělá `break`.
 
-- [ ] **T-2F — Odstranit mrtvý XGS first-pass a redundantní re-seek.**
+- [x] **T-2F — Odstranit mrtvý XGS first-pass a redundantní re-seek.**
   Smazat `XactParser.cpp:270-289` (ponechat 292-310); `variationOffset` brát z hlavičky (ř. 536) místo
   re-seeku na `0x32` (641-647).
   *Accept:* XGS test parsuje kategorie/proměnné identicky; bez změny chování. (B8)
+  *Pozn.:* nový `XactParserTest.XgsParsesCategoryAndVariable` ověřen na PŮVODNÍM (pre-cleanup) i novém
+  kódu se stejným výsledkem (`git stash`) — potvrzeno bez změny chování.
 
 - [x] **T-2G — AudioCategory: opravit `Equals` + doplnit `Equals(Object)` + opravit doxygen.**
   `Equals` porovnávat dle `name_` (jako FNA name-hash), ne `parent_+index_` (`AudioCategory.cpp:43`).

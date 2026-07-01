@@ -31,7 +31,7 @@ built on SDL3. It is a framework/runtime, not a game.
 
 - **Build:** EasyGL `cmake-build-debug` builds clean, including all audio. (`SOUND_ENABLED` is on;
   SDL3_mixer is linked.)
-- **Unit tests:** `CnaTests` **1968 / 1968 pass** (up from 1757 at the start of this branch; **+211
+- **Unit tests:** `CnaTests` **1969 / 1969 pass** (up from 1757 at the start of this branch; **+212
   audio tests added**). No regressions.
 - **Build-dir note (important):** `cna_audio/cmake-build-debug` was previously configured against the
   sibling checkout `../cna` (wrong source tree). It has been wiped and reconfigured to build
@@ -73,16 +73,17 @@ built on SDL3. It is a framework/runtime, not a game.
 - Device-dependent tests run under the **SDL "dummy" audio driver** (`SDL_AUDIODRIVER=dummy`); on a
   host with no audio device they `GTEST_SKIP` instead of failing.
 
-- `XactParser` — track-event walker now skips PITCH/VOLUME/MARKER (and their repeating variants)
-  instead of `break`-ing, so a `PlayWave` event later in the same track is still found (byte layouts
-  verified against FAudio, `FACT_internal.c:2390-2432`). Only a genuinely unrecognized event type still
-  stops the scan (its length can't be determined safely). +2 tests (`XactParserTests.cpp`); one
-  confirmed to fail against the pre-fix code before the fix landed.
+- `XactParser` — all three confirmed/suspected bugs from the original audit are fixed and
+  regression-tested: compact-`.xwb` `dataLength` (T-2D), the track-event walker `break`-on-unknown-event
+  bug (T-2E — now correctly skips PITCH/VOLUME/MARKER and their repeating variants, byte layouts
+  verified against FAudio's `FACT_internal.c:2390-2432`), and the dead/buggy XGS first-pass category
+  loop (T-2F — deleted; `variationOffset` is now captured once from its sequential header read instead
+  of being discarded and re-read later via a hardcoded `0x32` seek). 4 tests total in
+  `XactParserTests.cpp` (compact `.xwb`, two track-event-walker cases, one XGS category/variable case);
+  the T-2F cleanup's test was verified to pass identically against the pre-cleanup code via `git stash`,
+  confirming no behavior changed.
 
 ### Audio that does NOT work / is not done yet
-- **`XactParser`** compact `.xwb` length bug (T-2D) and the track-event walker bug (T-2E) are both
-  fixed and regression-tested; the dead XGS first-pass code (T-2F) is still open (see §5). Coverage
-  otherwise remains minimal (3 tests total).
 - **`Microphone`** capture itself is still a stub — no real SDL recording (`getAllProperty()` always
   empty, `GetData` always returns 0 bytes). Compliance (exceptions/GetTypeName/visibility/tests) is
   done; only the actual capture backend (T-4A) remains, a separate larger task.
@@ -104,7 +105,8 @@ built on SDL3. It is a framework/runtime, not a game.
 
 | Commit | Area | Change |
 |--------|------|--------|
-| _(pending)_ | `XactParser` | T-2E: track-event walker no longer `break`s on the first non-PlayWave event (PITCH/VOLUME/MARKER/their `*REPEATING` variants) — it now skips exactly the right number of bytes for each (byte layouts cross-checked against FAudio's own track-event reader, `FACT_internal.c:2390-2432`, e.g. the "equation" PITCH/VOLUME form is settings(1)+flags(1)+value1(f32)+value2(f32)+5 unknown bytes, +2 more u16s for the `*REPEATING` variants; MARKER is a plain u32, `MARKERREPEATING` adds two u16s) and keeps scanning, so a `PlayWave` later in the same track is still found. Only a truly unrecognized event type (not one of the 10 known FACTEVENT_* values) still stops the scan, since its length genuinely can't be determined. Added a hand-built two-event (PITCH then PlayWave) `.xsb` fixture in `XactParserTests.cpp` and confirmed it failed against the pre-fix code (`wavebankIndex`/`waveIndex`/`loopCount` all came back as the `0xFF`/`0xFFFF`/`0` stub default) before applying the fix; a second fixture confirms the simple single-PlayWave-event case still works. +2 tests. |
+| _(pending)_ | `XactParser` | T-2F: deleted the dead/buggy XGS first-pass category-parsing loop (its results were unconditionally discarded and re-parsed correctly right afterward by a second, already-existing loop — the first pass also had an admitted bug per its own inline comments, re-reading `instanceLimit` incorrectly). Also removed the redundant `variationOffset` re-seek in `ParseXsb`: the value was already read once sequentially from the header and discarded (`ctx.s32(); // variationOffset (handle below after sounds)`), then re-read later via a hardcoded `hc.seek(0x32)` — now it's simply captured into a variable at its one sequential read site (confirmed the two reads land at the identical byte offset by hand, since `0x32 == 50` decimal matches the cumulative header size up to that field). Pure cleanup, no behavior change — added `XactParserTest.XgsParsesCategoryAndVariable` (a direct `ParseXgs` test with a 1-category/1-variable fixture, since no test exercised `ParseXgs` at the parser level before) and verified via `git stash` that it passes identically against both the pre-cleanup and post-cleanup code. +1 test. This was the last item from the original `plan_audio.md` audit's "real bugs" and "compliance sweep" phases — only real SDL microphone capture (T-4A, a distinct larger feature) remains on the whole audio task list. |
+| `54778b1` | `XactParser` | T-2E: track-event walker no longer `break`s on the first non-PlayWave event (PITCH/VOLUME/MARKER/their `*REPEATING` variants) — it now skips exactly the right number of bytes for each (byte layouts cross-checked against FAudio's own track-event reader, `FACT_internal.c:2390-2432`, e.g. the "equation" PITCH/VOLUME form is settings(1)+flags(1)+value1(f32)+value2(f32)+5 unknown bytes, +2 more u16s for the `*REPEATING` variants; MARKER is a plain u32, `MARKERREPEATING` adds two u16s) and keeps scanning, so a `PlayWave` later in the same track is still found. Only a truly unrecognized event type (not one of the 10 known FACTEVENT_* values) still stops the scan, since its length genuinely can't be determined. Added a hand-built two-event (PITCH then PlayWave) `.xsb` fixture in `XactParserTests.cpp` and confirmed it failed against the pre-fix code (`wavebankIndex`/`waveIndex`/`loopCount` all came back as the `0xFF`/`0xFFFF`/`0` stub default) before applying the fix; a second fixture confirms the simple single-PlayWave-event case still works. +2 tests. |
 | `270bbb4` | `Microphone`, `FrameworkDispatcher` | T-1C/T-1D(remainder)/T-1H/T-5M: `GetTypeName` added (dotted, public — was entirely absent despite deriving from `System::Object`); `setBufferDurationProperty`'s `std::out_of_range` → `System::ArgumentOutOfRangeException`, both `GetData` bounds checks → `System::ArgumentException` (matching FNA's literal `ArgumentException("offset")`/`("count")`, an XNA quirk — bounds errors that read like `ArgumentOutOfRangeException` but aren't, kept as-is per behavior fidelity). `micList`/`SAMPLERATE` moved to `private` and un-`NOXNA`-tagged (they're FNA `internal`s, not CNA additions); `FrameworkDispatcher.cpp`'s direct `micList` null-check-and-iterate block replaced with a new `Microphone::CheckAllBuffers()` (avoids a cross-namespace `friend` declaration, verified behavior-preserving against `FrameworkDispatcherTests.cpp`). Found and documented a real dead-code quirk while porting: `setBufferDurationProperty`'s `milliseconds > 1000` branch is unreachable since `TimeSpan::getMillisecondsProperty()` is bounded to `[-999,999]` (sub-second component, not total) — faithfully kept, matching FNA (`Microphone.cs:60`), not "fixed". Added a `NOXNA`-tagged `MicrophoneTestAccess` friend (same pattern as `RendererDetail`/T-3D) since the constructor is private with no reachable factory. +24 tests (`MicrophoneTests.cpp`). Real SDL capture (T-4A) remains deferred. |
 | `ec6a930` | `AudioCategory` | T-2G: `Equals` now compares by `name_` (FNA compares `Name`'s hash — CNA compares the string directly, which is behaviorally equivalent without FNA's theoretical hash-collision edge case) instead of `parent_+index_`, fixing an actual Equals/GetHashCode contract violation (`GetHashCode` was already name-based, so two categories with the same name but obtained as different `AudioCategory` instances had equal hashes but compared unequal). Rewrote the stale "no-op on SDL3_mixer backend" doxygen: `Pause`/`Resume`/`Stop` actually do route to every active `Cue` in the category with real, immediate effect (via `AudioEngine::{Pause,Resume,Stop}CategoryInternal`) — only `SetVolume` doesn't retroactively affect already-playing sounds, which is now documented as its own specific gap rather than lumped into a blanket "no-op" claim. +11 tests (`AudioCategoryTests.cpp`). This was the last untested XACT class. |
 | `24af33c` | `Cue`, `AudioEngine` (helper) | T-1F/T-3A: exceptions → `System::`; `GetTypeName` dotted and moved from `private` to `public` (same recurring misplacement bug, now fixed in every XACT class); `GetVariable`/`SetVariable` validate the name against `AudioEngine`'s parsed global variable set (a per-cue XACT variable is the same named global variable, individually overridable per cue — CNA doesn't track the per-name cue-overridable bit, so any known global name is accepted) via a new private `AudioEngine::IsValidVariableName` helper, plus a small built-in set (`Distance`, `DopplerPitchScalar`, `OrientationAngle` — the three variables real XACT projects always define for 3D audio, which a hand-built test `.xgs` fixture wouldn't otherwise include) that never throws. A cue-local `SetVariable` call always shadows the engine's global default on subsequent `GetVariable` calls. +28 tests (`CueTests.cpp`, including a real `.xgs`+`.xsb` fixture pair so the "valid engine variable" path is exercised against actual parsed data, not just the built-in set). |
@@ -122,7 +124,7 @@ built on SDL3. It is a framework/runtime, not a game.
 
 ## 4. Current blocker / main problem
 
-**No hard blocker** — the build is clean and all 1968 unit tests pass.
+**No hard blocker** — the build is clean and all 1969 unit tests pass.
 
 **Note for the next session:** this branch's build depends on the sibling `../sharp-runtime` repo,
 which has (separately from this branch) been under active, uncommitted, incremental development during
@@ -132,17 +134,19 @@ that unrelated work landed. If a fresh build ever fails inside `SHARP_RUNTIME/CM
 than `CNA`/`CnaTests`, suspect the sibling repo's transient state first (check `git status`/`git log -1
 --format=%cd` there), not the audio code — do not "fix" sharp-runtime files from this branch.
 
-**The entire XACT cluster is exception-fidelity-complete and unit-tested, `Microphone`'s compliance
-layer is done, and both confirmed `XactParser` data bugs (T-2D compact-`.xwb` length, T-2E track-event
-walker) are fixed and regression-tested.** What's left on the audio task list is one small
-behavior-preserving cleanup (T-2F: dead XGS first-pass code) and real SDL microphone capture (T-4A, a
-separate larger feature task, not a compliance fix).
+**Milestone: the entire `plan_audio.md` compliance/bugfix plan is done, except real SDL microphone
+capture.** The whole XACT cluster (`AudioEngine`, `RendererDetail`, `SoundBank`, `WaveBank`, `Cue`,
+`AudioCategory`) is exception-fidelity-complete and unit-tested; `Microphone`'s compliance layer
+(`GetTypeName`, exceptions, visibility) is done; and all three `XactParser` bugs identified in the
+original audit (T-2D compact-`.xwb` length, T-2E track-event walker, T-2F dead XGS first-pass code) are
+fixed and regression-tested. **T-4A (real SDL microphone capture) is the only thing left on the audio
+task list**, and it's a distinct, larger feature (implement actual device enumeration and streaming
+capture), not an incremental fix — see plan_audio.md's own task description for scope.
 
-No failing command today; the risk is silent incorrectness, not a crash. Suggested next probe: T-2F —
-delete the dead/buggy first-pass XGS category loop (the correct reparse right after it already does the
-real work) and read `variationOffset` from the header once instead of re-seeking to a hardcoded `0x32`;
-add an XGS category/variable parsing test first if none exists yet, to catch any accidental behavior
-change from the cleanup.
+No failing command today. Before starting T-4A, it's worth deciding scope with the user first: it's a
+meaningfully bigger unit of work than everything done so far this branch (real `SDL_AudioStream`
+capture wiring, device enumeration, `GetData`/`GetQueuedBytes` actually returning real bytes) rather
+than a same-shaped "exceptions + GetTypeName + tests" pass.
 
 ---
 
@@ -151,7 +155,7 @@ change from the cleanup.
 | Status | Issue | Ref |
 |--------|-------|-----|
 | **Done** | ~~`XactParser` compact `.xwb` `dataLength` wrong → garbage audio for compact wavebanks~~ | T-2D |
-| **Confirmed (dead code)** | `XactParser` XGS first-pass category loop is dead/buggy; correct reparse follows it | T-2F |
+| **Done** | ~~`XactParser` XGS first-pass category loop is dead/buggy; correct reparse follows it~~ | T-2F |
 | **Done** | ~~`XactParser` track-event walker `break`s on unknown events (PITCH/VOLUME/MARKER) → first PlayWave missed in multi-event tracks~~ | T-2E |
 | **Incomplete** | `Microphone` capture itself is a stub — no real SDL recording, `All`/`GetData` never produce real devices/bytes | T-4A |
 | **Done** | ~~SPDX header missing in `XactTypes.hpp`, `XactParser.cpp`, `AudioMixer.hpp/.cpp`~~ | T-1A |
@@ -238,18 +242,24 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks (ordered; see `plan_audio.md` for full detail)
 
-_T-1A (SPDX headers), T-2D/T-5O (compact `.xwb` length fix + parser test), T-1F/T-1B/T-3A/T-3D
-(AudioEngine + RendererDetail), T-1F/T-3A/T-3B/T-5F/T-5G (SoundBank + WaveBank), T-1F/T-3A/T-5H (Cue),
-T-2G/T-5I (AudioCategory), T-1C/T-1D/T-1H/T-5M (Microphone compliance), and T-2E (track-event walker)
-are done — see §3/§5. Only T-2F (small cleanup) and real SDL microphone capture (T-4A) remain._
+_Every incremental fix/compliance task from `plan_audio.md` is done — see §3/§5. The only remaining
+item on the whole audio task list is T-4A, a distinct larger feature (real SDL microphone capture), not
+a same-shaped small task. Recommend discussing scope/approach with the user before starting it rather
+than picking a "next smallest task" here._
 
-1. **T-2F — Remove dead XGS first-pass + redundant re-seek.**
-   - Goal: delete the dead/buggy first-pass category loop in `XactParser.cpp` (the correct reparse
-     that follows it already does the real work); read `variationOffset` from the header once instead
-     of re-seeking to a hardcoded `0x32`. Behavior-preserving cleanup — add a test first if none covers
-     XGS category/variable parsing yet, to catch any accidental behavior change.
-   - Files: `src/CNA/Internal/Audio/XactParser.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter='XactParserTest.*:AudioEngineTest.*'`.
+1. **T-4A — Real microphone capture via SDL3 (stub → full).**
+   - Goal (per `plan_audio.md`): `getAllProperty()` should enumerate real recording devices;
+     `Start`/`Stop` should open/close an `SDL_AudioStream` (44100/mono/S16); `GetData` should read via
+     `SDL_GetAudioStreamData`, `GetQueuedBytes` via `SDL_GetAudioStreamAvailable`; keep
+     `CheckBuffer`/`BufferReady` working as today. Accept criteria: with a capture device, `All` is
+     non-empty and `Start()`→`GetData()` returns >0 bytes after sound; without one, everything degrades
+     gracefully (empty `All`, `Default` null) — this already works today since it's the current stub
+     behavior. Needs a state-machine + bounds test extension in `MicrophoneTests.cpp`
+     (capture-dependent asserts should be skippable in CI, matching the `SDL_AUDIODRIVER=dummy` pattern
+     used elsewhere in this branch).
+   - Files: `include/Microsoft/Xna/Framework/Audio/Microphone.hpp`,
+     `src/Microsoft/Xna/Framework/Audio/Microphone.cpp`; extend `MicrophoneTests.cpp`.
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter='MicrophoneTest.*'`.
 
 ---
 
@@ -260,8 +270,9 @@ are done — see §3/§5. Only T-2F (small cleanup) and real SDL microphone capt
 - **No instance-tracking / Dispose-cascade redesign** of `CreateInstance` — value semantics is a
   documented deviation (plan D1); changing it is a deliberate decision, not a drive-by fix.
 - **No real 3D HRTF or Doppler** — SDL_mixer cannot do it; keep them as documented stored-not-applied.
-- **No broad `XactParser` rewrite** — fix the targeted data bugs (T-2D/E/F) only; the parser is
-  load-bearing and untested.
+- **No broad `XactParser` rewrite** — the three known data bugs (T-2D/E/F) are now all fixed; don't
+  use T-4A or anything else as an excuse to restructure the parser beyond what a task actually needs.
+  It's load-bearing and coverage is still thin (4 tests).
 - **No touching the sibling `../cna` checkout or its build dir** — it is a separate clone.
 - **No API renames / namespace moves** — XNA names are frozen.
 - **No mass Doxygen/format passes** — add docs only when touching a file for another reason.
@@ -275,12 +286,11 @@ Read NEXT.md first, then plan_audio.md for the detailed audio task list.
 Open only the files needed for the first task. Do not refactor unrelated code.
 Do not touch the Media namespace or the sibling ../cna checkout.
 
-Make ONE small, verified improvement (start with task #1 in NEXT.md §8: T-2F — delete the dead XGS
-first-pass category loop in XactParser.cpp and read variationOffset from the header once instead of
-re-seeking to a hardcoded 0x32; add an XGS category/variable test first if none exists, since this is
-meant to be behavior-preserving). The entire XACT cluster, Microphone's compliance layer, and both
-confirmed XactParser data bugs (T-2D, T-2E) are done; after T-2F, only real SDL capture (T-4A, a
-separate larger feature) remains on the audio task list.
+Every incremental fix/compliance task from plan_audio.md is done (whole XACT cluster, Microphone
+compliance, all three XactParser bugs T-2D/T-2E/T-2F). The only thing left on the audio task list is
+T-4A (real SDL microphone capture) — a distinct, larger feature, not a same-shaped small task. Discuss
+scope with the user before diving in rather than assuming the same "exceptions + GetTypeName + tests"
+shape as everything before it; see NEXT.md §8 for the plan_audio.md-sourced acceptance criteria.
 
 Build and test:
   cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"

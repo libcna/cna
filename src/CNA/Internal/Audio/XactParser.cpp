@@ -305,30 +305,8 @@ namespace CNA::Internal::Audio
                 catNames.push_back(nc.cstr());
         }
 
-        // Category data (10 bytes each at categoryOffset)
-        result.categories.resize(categoryCount);
-        {
-            Ctx cc = ctx;
-            cc.seek(categoryOffset);
-            for (uint16_t i = 0; i < categoryCount; ++i)
-            {
-                auto& cat = result.categories[i];
-                cat.name          = (i < catNames.size()) ? catNames[i] : ("cat" + std::to_string(i));
-                cat.instanceLimit = cc.u8();
-                cat.fadeInMS      = cc.u16();
-                cat.fadeOutMS     = cc.u16();
-                cat.instanceLimit = cc.u8() >> 3; // maxInstanceBehavior packed here — overwrite
-                // Actually re-read: FAudio reads instanceLimit first (1 byte), then fadeInMS, fadeOutMS, maxInstanceBehavior
-                // Let me reparse correctly:
-                // We already advanced 5 bytes (1+2+2). Now read parentCategory, volume, visibility.
-                cat.parentIndex   = cc.u16();
-                cat.volume        = ReadVolByteAsAmplitude(cc);
-                cc.u8(); // visibility
-            }
-        }
-
-        // Fix: the above category parsing has a bug (reread instanceLimit). Reparse properly.
-        result.categories.clear();
+        // Category data (10 bytes each at categoryOffset): instanceLimit, fadeInMS, fadeOutMS,
+        // maxInstanceBehavior (skip), parentIndex, volume, visibility.
         result.categories.resize(categoryCount);
         {
             Ctx cc = ctx;
@@ -581,7 +559,7 @@ namespace CNA::Internal::Audio
         int32_t cueComplexOffset    = ctx.s32();
         int32_t cueNameOffset       = ctx.s32();
         ctx.s32(); // unknown
-        ctx.s32(); // variationOffset (handle below after sounds)
+        int32_t variationOffset     = ctx.s32();
         ctx.s32(); // transitionOffset
         int32_t wavebankNameOffset  = ctx.s32();
         ctx.s32(); // cueHashOffset
@@ -683,16 +661,6 @@ namespace CNA::Internal::Audio
         std::unordered_map<uint32_t, uint32_t> soundCodeMap;
         for (uint32_t i = 0; i < soundCount; ++i)
             soundCodeMap[soundCodes[i]] = i;
-
-        // ── Re-read variationOffset from header ──────────────────────────────
-        // (we already advanced past it; re-read from original header position)
-        int32_t variationOffset = -1;
-        {
-            Ctx hc = ctx;
-            // variationOffset is at position 0x32 in the XSB header
-            hc.seek(0x32);
-            variationOffset = hc.s32();
-        }
 
         // ── Variation tables ─────────────────────────────────────────────────
         std::unordered_map<uint32_t, uint32_t> varCodeMap;

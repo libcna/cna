@@ -6,8 +6,10 @@
 #include <string>
 #include <vector>
 
+using CNA::Internal::Audio::ParseXgs;
 using CNA::Internal::Audio::ParseXsb;
 using CNA::Internal::Audio::ParseXwb;
+using CNA::Internal::Audio::XgsData;
 using CNA::Internal::Audio::XsbData;
 using CNA::Internal::Audio::XwbData;
 using CNA::Internal::Audio::XwbFormat;
@@ -59,6 +61,75 @@ namespace
         const std::size_t start = buf.size();
         buf.resize(start + totalSize, 0);
         std::memcpy(buf.data() + start, text.data(), text.size());
+    }
+
+    void AppendCStr(std::vector<uint8_t>& buf, const std::string& s)
+    {
+        buf.insert(buf.end(), s.begin(), s.end());
+        buf.push_back(0);
+    }
+
+    // Minimal .xgs with one category ("Default") and one variable ("Volume", initial 0.5) —
+    // direct regression coverage for ParseXgs's category/variable parsing (T-2F cleanup safety net).
+    std::vector<uint8_t> BuildXgsFixture()
+    {
+        constexpr uint32_t headerSize       = 65;
+        constexpr uint32_t categoryDataSize = 10;
+        constexpr uint32_t variableDataSize = 13;
+
+        const uint32_t categoryOffset     = headerSize;
+        const uint32_t variableOffset     = categoryOffset + categoryDataSize;
+        const uint32_t categoryNameOffset = variableOffset + variableDataSize;
+        const std::string categoryName    = "Default";
+        const uint32_t variableNameOffset = categoryNameOffset + static_cast<uint32_t>(categoryName.size()) + 1;
+        const std::string variableName    = "Volume";
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 3);   // platform
+
+        AppendU16(data, 1); // categoryCount
+        AppendU16(data, 1); // variableCount
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 0); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        AppendU32(data, categoryOffset);
+        AppendU32(data, variableOffset);
+        AppendU32(data, 0); // blob1Offset
+        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, 0); // blob2Offset
+        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, categoryNameOffset);
+        AppendU32(data, variableNameOffset);
+
+        // Category: instanceLimit, fadeInMS, fadeOutMS, maxInstanceBehavior(skip), parentIndex, volume, visibility
+        AppendU8(data, 255);
+        AppendU16(data, 100);
+        AppendU16(data, 200);
+        AppendU8(data, 0);
+        AppendU16(data, 0xFFFF);
+        AppendU8(data, 0xFF);
+        AppendU8(data, 0);
+
+        // Variable: accessibility, initialValue, minValue, maxValue
+        AppendU8(data, 0x03);
+        AppendF32(data, 0.5f);
+        AppendF32(data, 0.0f);
+        AppendF32(data, 1.0f);
+
+        AppendCStr(data, categoryName);
+        AppendCStr(data, variableName);
+
+        return data;
     }
 
     // Minimal compact .xwb with 3 entries: two whose length must be derived from the gap to
@@ -272,4 +343,27 @@ TEST(XactParserTest, ComplexTrackWithOnlyPlayWaveEventStillResolves)
     EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 2);
     EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 99u);
     EXPECT_EQ(xsb.sounds[0].waves[0].loopCount, 1);
+}
+
+TEST(XactParserTest, XgsParsesCategoryAndVariable)
+{
+    const XgsData xgs = ParseXgs(BuildXgsFixture());
+
+    ASSERT_EQ(xgs.categories.size(), 1u);
+    const auto& cat = xgs.categories[0];
+    EXPECT_EQ(cat.name, "Default");
+    EXPECT_EQ(cat.instanceLimit, 255);
+    EXPECT_EQ(cat.fadeInMS, 100);
+    EXPECT_EQ(cat.fadeOutMS, 200);
+    EXPECT_EQ(cat.parentIndex, 0xFFFF);
+
+    ASSERT_EQ(xgs.variables.size(), 1u);
+    const auto& var = xgs.variables[0];
+    EXPECT_EQ(var.name, "Volume");
+    EXPECT_FLOAT_EQ(var.initialValue, 0.5f);
+    EXPECT_FLOAT_EQ(var.minValue, 0.0f);
+    EXPECT_FLOAT_EQ(var.maxValue, 1.0f);
+
+    EXPECT_EQ(xgs.categoryNameMap.at("Default"), 0);
+    EXPECT_EQ(xgs.variableNameMap.at("Volume"), 0);
 }
