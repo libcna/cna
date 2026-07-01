@@ -287,19 +287,27 @@ In priority order — the start of Phase I4 (Mouse). Each is one focused session
      window/back-buffer coordinate scaling (`Mouse.cs:107–116`); stop relying solely on
      `InputManager` state mutation, which the next motion event just overwrites.
    - Files: `src/Microsoft/Xna/Framework/Input/Mouse.cpp`, `SdlInputBridge.{hpp,cpp}`.
+   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Mouse*'`
 
 2. **Task 746 — Implement `Mouse::IsRelativeMouseModeEXT` as a real property.**
    - Goal: back it with `SDL_SetWindowRelativeMouseMode`/`SDL_GetWindowRelativeMouseMode`; feed
      relative deltas into `GetMouseState`. Currently a dead `bool` with no SDL wiring.
+   - Files: `src/Microsoft/Xna/Framework/Input/Mouse.cpp`, `SdlInputBridge.{hpp,cpp}`.
+   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Mouse*'`
 
 3. **Task 747 — Resolve the back-buffer scaling fields in `Mouse::GetState`.**
    - Goal: either implement FNA-style scaling using `INTERNAL_BackBufferWidth/Height/WindowWidth/
      Height/MouseWheel`, or remove those dead fields and document the existing
      `TransformWindowToLogical` deviation (`SdlInputBridge.cpp:226`) instead.
+   - Files: `src/Microsoft/Xna/Framework/Input/Mouse.{hpp,cpp}`.
+   - Verify: `cmake --build cmake-build-debug --target CNA -j"$(nproc)"` (behavior decision + doc/code
+     change; add a regression test if scaling is implemented rather than removed).
 
 4. **Task 748 — Wire `ClickedEXT`.**
    - Goal: have `SdlInputBridge` call `Mouse::INTERNAL_onClicked(button)` on mouse-button-down;
      currently never invoked.
+   - Files: `src/CNA/Internal/Input/SdlInputBridge.cpp`, `Mouse.{hpp,cpp}`.
+   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Mouse*'`
 
 Full Phase I4 task list (745–755, including `MouseCursor` CHECKLIST fixes, `FromTexture2D`,
 `Dispose`, and the dedicated `MouseInputTests.cpp` test task 755) is in `plan_input.md`.
