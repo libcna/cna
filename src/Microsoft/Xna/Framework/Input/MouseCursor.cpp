@@ -60,19 +60,81 @@ namespace Microsoft::Xna::Framework::Input
         return MouseCursor(cursor, /*owning=*/true);
     }
 
-    // Static instances — created lazily on first program use via static initialisation.
-    MouseCursor MouseCursor::Arrow      = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_DEFAULT);
-    MouseCursor MouseCursor::Crosshair  = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_CROSSHAIR);
-    MouseCursor MouseCursor::Hand       = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_POINTER);
-    MouseCursor MouseCursor::IBeam      = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_TEXT);
-    MouseCursor MouseCursor::No         = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_NOT_ALLOWED);
-    MouseCursor MouseCursor::SizeAll    = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_MOVE);
-    MouseCursor MouseCursor::SizeNESW   = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_NESW_RESIZE);
-    MouseCursor MouseCursor::SizeNS     = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_NS_RESIZE);
-    MouseCursor MouseCursor::SizeNWSE   = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_NWSE_RESIZE);
-    MouseCursor MouseCursor::SizeWE     = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_EW_RESIZE);
-    MouseCursor MouseCursor::Wait       = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_WAIT);
-    MouseCursor MouseCursor::WaitCursor = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_PROGRESS);
+    // Stock cursors are lazily constructed function-local statics (Meyer's singleton),
+    // matching MonoGame's `static MouseCursor() { PlatformInitalize(); }` lazy static
+    // constructor. Building them as plain static member initializers instead would run
+    // SDL_CreateSystemCursor at static-init time, before SDL_Init() has necessarily run.
+    MouseCursor& MouseCursor::getArrowProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_DEFAULT);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getCrosshairProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_CROSSHAIR);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getHandProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_POINTER);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getIBeamProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_TEXT);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getNoProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_NOT_ALLOWED);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeAllProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_MOVE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeNESWProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_NESW_RESIZE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeNSProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_NS_RESIZE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeNWSEProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_NWSE_RESIZE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeWEProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_EW_RESIZE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getWaitProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_WAIT);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getWaitArrowProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_PROGRESS);
+        return instance;
+    }
 
     MouseCursor::MouseCursor()
         : sdlCursor_(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT))

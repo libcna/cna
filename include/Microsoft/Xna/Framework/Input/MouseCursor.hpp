@@ -12,7 +12,9 @@ namespace Microsoft::Xna::Framework::Input
     /**
      * @brief Represents a mouse cursor image.
      *
-     * Wraps an SDL_Cursor* and provides the standard XNA system cursor constants.
+     * Wraps an SDL_Cursor* and provides the standard stock system cursors as lazily-created,
+     * process-lifetime singletons (each getXProperty() below constructs its SDL cursor on first
+     * access, matching MonoGame's static-constructor-triggered lazy initialization).
      *
      * @note NOXNA — this is a MonoGame-derived CNA extension. No MouseCursor type exists
      * in XNA 4.0 or FNA.
@@ -60,30 +62,66 @@ namespace Microsoft::Xna::Framework::Input
          */
         NOXNA [[nodiscard]] SDL_Cursor* GetSDLCursor() const { return sdlCursor_; }
 
-        /** @brief Standard arrow cursor. */
-        NOXNA static MouseCursor Arrow;
-        /** @brief Crosshair cursor. */
-        NOXNA static MouseCursor Crosshair;
-        /** @brief Hand/pointer cursor. */
-        NOXNA static MouseCursor Hand;
-        /** @brief I-beam text cursor. */
-        NOXNA static MouseCursor IBeam;
-        /** @brief No/deny cursor. */
-        NOXNA static MouseCursor No;
-        /** @brief Size-all cursor. */
-        NOXNA static MouseCursor SizeAll;
-        /** @brief Size northeast/southwest cursor. */
-        NOXNA static MouseCursor SizeNESW;
-        /** @brief Size north/south cursor. */
-        NOXNA static MouseCursor SizeNS;
-        /** @brief Size northwest/southeast cursor. */
-        NOXNA static MouseCursor SizeNWSE;
-        /** @brief Size west/east cursor. */
-        NOXNA static MouseCursor SizeWE;
-        /** @brief Wait/busy cursor. */
-        NOXNA static MouseCursor Wait;
-        /** @brief Wait cursor (arrow with hourglass). */
-        NOXNA static MouseCursor WaitCursor;
+        /**
+         * @brief Gets the default arrow cursor.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getArrowProperty();
+        /**
+         * @brief Gets the crosshair ("+") cursor.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getCrosshairProperty();
+        /**
+         * @brief Gets the hand cursor, usually used for web links.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getHandProperty();
+        /**
+         * @brief Gets the cursor that appears when the mouse is over text editing regions.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getIBeamProperty();
+        /**
+         * @brief Gets the cursor that points that something is invalid, usually a cross.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getNoProperty();
+        /**
+         * @brief Gets the size-all cursor which points in all directions.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getSizeAllProperty();
+        /**
+         * @brief Gets the northeast/southwest ("/") cursor.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getSizeNESWProperty();
+        /**
+         * @brief Gets the vertical north/south ("|") cursor.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getSizeNSProperty();
+        /**
+         * @brief Gets the northwest/southeast ("\") cursor.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getSizeNWSEProperty();
+        /**
+         * @brief Gets the horizontal west/east ("-") cursor.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getSizeWEProperty();
+        /**
+         * @brief Gets the waiting cursor that appears while the application/system is busy.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getWaitProperty();
+        /**
+         * @brief Gets the cross between Arrow and Wait cursors.
+         * @return Reference to the shared stock cursor instance.
+         */
+        NOXNA [[nodiscard]] static MouseCursor& getWaitArrowProperty();
 
     private:
         SDL_Cursor* sdlCursor_  = nullptr;
