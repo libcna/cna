@@ -17,6 +17,9 @@ namespace Microsoft::Xna::Framework::Audio
     class SoundEffectInstance : public System::Object, public System::IDisposable
     {
         friend class SoundEffect;
+        // Tests need read access to the underlying MIX_Track handle to verify Play() idempotency
+        // (that a repeated call while already playing doesn't restart the track).
+        NOXNA friend struct SoundEffectInstanceTestAccess;
 
     protected:
         /** @brief Default constructor for use by DynamicSoundEffectInstance. */

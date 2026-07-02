@@ -17,12 +17,29 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <SDL3_mixer/SDL_mixer.h>
+
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
 using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundState;
+
+namespace Microsoft::Xna::Framework::Audio
+{
+    // Test-only accessor for SoundEffectInstance's protected track_ handle (see
+    // SoundEffectInstance.hpp), used to verify Play() idempotency at the SDL_mixer level.
+    struct SoundEffectInstanceTestAccess
+    {
+        static MIX_Track* GetTrack(const SoundEffectInstance& instance)
+        {
+            return static_cast<MIX_Track*>(instance.track_);
+        }
+    };
+}
+
+using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
 
 // All SoundEffectInstance tests need a SoundEffect, whose construction opens the
 // (dummy) audio device. The fixture skips every test if no device is available.
@@ -127,6 +144,27 @@ TEST_F(SoundEffectInstanceTest, PlayStopTransitions)
     EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
     inst.Stop();
     EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+}
+
+TEST_F(SoundEffectInstanceTest, RepeatedPlayWhileAlreadyPlayingDoesNotRestartTrack)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+
+    // Simulate playback having progressed partway through (the fixture's PCM buffer is 2048
+    // stereo S16 frames, so 500 is comfortably in bounds), then call Play() again while still
+    // Playing. FNA no-ops in this case; a naive re-Play would call MIX_PlayTrack again, which
+    // (per SDL_mixer docs) restarts mixing from MIX_PROP_PLAY_START_FRAME_NUMBER's default of 0.
+    ASSERT_TRUE(MIX_SetTrackPlaybackPosition(track, 500));
+    inst.Play();
+
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+    EXPECT_GE(MIX_GetTrackPlaybackPosition(track), 500);
 }
 
 TEST_F(SoundEffectInstanceTest, PauseResume)

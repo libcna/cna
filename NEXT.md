@@ -33,7 +33,7 @@ framework/runtime, not a game.
 ## 2. Current status
 
 - **Build:** EasyGL `cmake-build-debug` builds clean (`SOUND_ENABLED` on, SDL3_mixer linked).
-- **Tests:** `CnaTests` **1975 / 1975 pass** (1757 at branch start; +218 audio tests this branch).
+- **Tests:** `CnaTests` **1976 / 1976 pass** (1757 at branch start; +219 audio tests this branch).
   No known regressions.
 - **Works now (ported, FNA-faithful, unit-tested):**
   - `SoundEffect`, `SoundEffectInstance`, `DynamicSoundEffectInstance` — full playback API.
@@ -77,7 +77,20 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
-- _(uncommitted)_ — **IN-1** (`plan_audio.md` Fáze 7): fixed `ParseXsb`'s DSP-block skip
+- _(uncommitted)_ — **CP-1** (`plan_audio.md` Fáze 7): `SoundEffectInstance::Play()` now no-ops
+  when already `Playing`, matching FNA's `if (State == SoundState.Playing) { return; }` guard. A
+  repeated `Play()` call used to unconditionally re-run `MIX_SetTrackAudio`/`MIX_PlayTrack`, which
+  (per SDL_mixer docs) restarts mixing from frame 0 -- audible playback would jump back to the
+  start any time game code called `Play()` on an already-playing instance (e.g. re-triggering the
+  same one-shot SFX). `DynamicSoundEffectInstance::Play()` already had its own equivalent guard in
+  its override, so it wasn't affected -- only the base class was missing it. Added a
+  `SoundEffectInstanceTestAccess` friend (mirrors `MicrophoneTestAccess`) to read the protected
+  `track_` handle from tests, and
+  `SoundEffectInstanceTest.RepeatedPlayWhileAlreadyPlayingDoesNotRestartTrack`, which seeks the
+  track to a non-zero `MIX_SetTrackPlaybackPosition`, calls `Play()` again, and asserts the
+  position wasn't reset. Verified via `git stash` that it fails against the pre-fix code (position
+  resets to 0) and passes with the fix. +1 test (1975→1976).
+- `8acd86e` — **IN-1** (`plan_audio.md` Fáze 7): fixed `ParseXsb`'s DSP-block skip
   (`XactParser.cpp:650-661`). It used to read a 2-byte field and treat it as a self-inclusive skip
   length (`skip(dspLen - 2)`), but FAudio marks that field unused — the real layout is
   `unused_u16, dspCodeCount_u8, dspCodeCount * u32`. A `.xsb` with `SOUND_FLAG_HAS_DSP` set and a
@@ -303,12 +316,12 @@ original Fáze 0–6 compliance/bugfix plan is done. **But the task list is NOT 
 (`CP-1..14`, `XA-1..5`, `IN-1..6`, `MC-1..5`).
 
 **Next smallest task = pick ONE item from `plan_audio.md` Fáze 7**, ordered roughly by severity
-within each cluster (real bugs first, then compliance, then test gaps). **`IN-1` is done** (fixed
-this session, see §3) — it's no longer a candidate. The Fáze 7 intro block lists the remaining
-most severe findings across all 4 clusters if you want a starting point instead of reading the
-whole section. **`CP-1`** (`SoundEffectInstance::Play()` not idempotent — repeat calls restart
-playback instead of no-op) is a good next pick: real, narrowly-scoped, clear FNA reference and
-accept criteria already written.
+within each cluster (real bugs first, then compliance, then test gaps). **`IN-1` and `CP-1` are
+done** (fixed this session, see §3) — neither is a candidate anymore. The Fáze 7 intro block lists
+the remaining most severe findings across all 4 clusters if you want a starting point instead of
+reading the whole section. **`CP-3`** (`Apply3D` silently overwrites the public `Volume`/`Pan`
+properties instead of computing a separate output matrix like FNA) is a good next pick: same file
+as CP-1, real behavior bug, clear FNA reference and accept criteria already written.
 
 Do NOT re-run another full audit before working through some of Fáze 7 first — that would just
 duplicate what's already found. Untasked candidates that are NOT bugs, for later:
@@ -342,12 +355,12 @@ duplicate what's already found. Untasked candidates that are NOT bugs, for later
 ```
 Read NEXT.md first, then plan_audio.md §4 Fáze 7 for the current task list (30 items, prefixes
 CP/XA/IN/MC). T-4A (real microphone capture) is fully done. plan_audio.md's original Fáze 0-6 is
-done. Fáze 7 is NOT done -- that's where the real next work is. IN-1 is already fixed.
+done. Fáze 7 is NOT done -- that's where the real next work is. IN-1 and CP-1 are already fixed.
 
 1. Confirm the current build/test state matches NEXT.md §2 (build clean, all tests pass) --
    rebuild and rerun ./cmake-build-debug/CnaTests to check for drift since this was last updated.
 2. Pick exactly ONE task from plan_audio.md Fáze 7 (start with the top-priority list at the start
-   of that section if unsure -- CP-1 is a good, narrowly-scoped next pick). Do not pick more than
+   of that section if unsure -- CP-3 is a good next pick, same file as CP-1). Do not pick more than
    one, and do not re-run a fresh audit -- Fáze 7 already has the remaining items queued.
 3. Inspect only the files that task names. Do not refactor unrelated code. Do not touch the Media
    namespace or the sibling ../cna / ../sharp-runtime checkouts. Keep audio exceptions as System::

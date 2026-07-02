@@ -147,6 +147,13 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
 
+        // Already playing: no-op, matching FNA exactly (a naive re-Play would otherwise restart
+        // the track from the beginning instead of leaving ongoing playback untouched).
+        if (getStateProperty() == SoundState::Playing)
+        {
+            return;
+        }
+
         // Once started, IsLooped can no longer be changed (matches FNA's hasStarted gate).
         hasStarted_ = true;
 

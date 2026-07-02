@@ -389,7 +389,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 
 #### 7.1 Core Playback (SoundEffect, SoundEffectInstance, DynamicSoundEffectInstance)
 
-- [ ] **CP-1 — `SoundEffectInstance::Play()` není idempotentní při opakovaném volání za běhu.**
+- [x] **CP-1 — `SoundEffectInstance::Play()` není idempotentní při opakovaném volání za běhu.** *(hotovo 2026-07-02.)*
   FNA má explicitní `if (State == SoundState.Playing) { return; }` na začátku `Play()`. CNA tuto
   kontrolu nemá — opakované `Play()` na již hrající instanci znovu volá `MIX_SetTrackAudio`/
   `MIX_PlayTrack`, čímž restartuje přehrávání od začátku místo no-opu.
@@ -397,6 +397,12 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *CNA:* SoundEffectInstance.cpp:143-232 (chybí guard).
   *Accept:* opakované `Play()` během `State==Playing` nezmění pozici přehrávání (test s odposlechem,
   že se track nepřehraje od nuly / že se nevolá znovu `MIX_SetTrackAudio`).
+  *Pozn.:* přidán `SoundEffectInstanceTestAccess` (friend, mirror `MicrophoneTestAccess`) pro čtení
+  `track_` v testu. Nový `SoundEffectInstanceTest.RepeatedPlayWhileAlreadyPlayingDoesNotRestartTrack`
+  nastaví `MIX_SetTrackPlaybackPosition` na nenulovou pozici, zavolá `Play()` znovu a ověří
+  `MIX_GetTrackPlaybackPosition` zůstává >= té pozice; ověřeno přes `git stash`, že bez opravy
+  test selže (pozice se resetuje na 0), s opravou projde. `DynamicSoundEffectInstance::Play()`
+  má vlastní override s guardem už hotovým — CP-1 se ho netýkal.
 
 - [ ] **CP-2 — `SoundEffect::Play(volume, pitch, pan)` nevaliduje/neklampuje pan a pitch.**
   FNA interně dělá `instance.Pitch = pitch;` (klamp na [-1,1]) a `instance.Pan = pan;` (hází
