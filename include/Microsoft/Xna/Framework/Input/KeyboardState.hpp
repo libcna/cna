@@ -40,6 +40,13 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] KeyState getItem(Keys key) const;
 
         /**
+         * @brief Returns the state of a specified key. Mirrors FNA's `this[Keys]` indexer.
+         * @param key The key to query.
+         * @return KeyState::Down if pressed; KeyState::Up otherwise.
+         */
+        [[nodiscard]] KeyState operator[](Keys key) const;
+
+        /**
          * @brief Gets whether the given key is currently being pressed.
          * @param key The key to query.
          * @return True if the key is pressed; false otherwise.

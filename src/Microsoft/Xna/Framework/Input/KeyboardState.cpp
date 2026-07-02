@@ -51,6 +51,11 @@ namespace Microsoft::Xna::Framework::Input
         return IsKeyDown(key) ? KeyState::Down : KeyState::Up;
     }
 
+    KeyState KeyboardState::operator[](const Keys key) const
+    {
+        return getItem(key);
+    }
+
     bool KeyboardState::Equals(const KeyboardState& other) const
     {
         return pressedKeys_ == other.pressedKeys_;
