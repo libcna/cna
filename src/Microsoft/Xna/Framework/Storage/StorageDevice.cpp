@@ -2,7 +2,9 @@
 // Copyright (c) Robert Vokac and contributors
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
+#include "System/Threading/EventWaitHandle.hpp"
 
+#include <any>
 #include <filesystem>
 #include <stdexcept>
 
@@ -20,20 +22,30 @@ namespace Microsoft::Xna::Framework::Storage
     {
     public:
         std::optional<PlayerIndex> playerIndex;
-        void* asyncState = nullptr;
+        std::any asyncState;
+        // All StorageDevice operations here complete synchronously, so this handle is always
+        // signalled -- matches getCompletedSynchronouslyProperty() below.
+        mutable System::Threading::EventWaitHandle asyncWaitHandle{
+            true, System::Threading::EventResetMode::ManualReset};
 
         bool getIsCompletedProperty()           const override { return true; }
         bool getCompletedSynchronouslyProperty() const override { return true; }
+        const std::any& getAsyncStateProperty() const override { return asyncState; }
+        System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override { return asyncWaitHandle; }
     };
 
     class ContainerResult final : public System::IAsyncResult
     {
     public:
         std::string displayName;
-        void* asyncState = nullptr;
+        std::any asyncState;
+        mutable System::Threading::EventWaitHandle asyncWaitHandle{
+            true, System::Threading::EventResetMode::ManualReset};
 
         bool getIsCompletedProperty()           const override { return true; }
         bool getCompletedSynchronouslyProperty() const override { return true; }
+        const std::any& getAsyncStateProperty() const override { return asyncState; }
+        System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override { return asyncWaitHandle; }
     };
 
     // -------------------------------------------------------------------------
