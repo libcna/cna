@@ -6,8 +6,10 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -16,8 +18,9 @@ using Microsoft::Xna::Framework::Audio::MicrophoneState;
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    // Test-only accessor for Microphone's private constructor (see Microphone.hpp). Production
-    // instances only ever come from a real capture backend, which does not exist yet.
+    // Test-only accessor for Microphone's private constructor (see Microphone.hpp). Lets tests
+    // build an isolated instance with a caller-chosen (possibly invalid) handle, independent of
+    // whatever getAllProperty() enumerates on the current machine/driver.
     struct MicrophoneTestAccess
     {
         static Microphone Make(SharpRuntime::uintcs id, std::string name)
@@ -171,9 +174,10 @@ TEST(MicrophoneTest, GetSampleDurationOfZeroBytesIsZero)
 
 TEST(MicrophoneTest, GetDataSingleArgOverloadDelegatesAndReturnsZero)
 {
+    // Never Start()-ed, so no capture stream is open: falls through to the zero-fill stub.
     Microphone mic = MakeMic();
     std::vector<SharpRuntime::bytecs> buffer(10);
-    EXPECT_EQ(mic.GetData(buffer), 0); // no capture backend, so 0 bytes are ever available
+    EXPECT_EQ(mic.GetData(buffer), 0);
 }
 
 TEST(MicrophoneTest, GetDataValidRangeReturnsZero)
@@ -222,6 +226,78 @@ TEST(MicrophoneTest, CheckBufferDoesNotThrowWithNoSubscribers)
 TEST(MicrophoneTest, CheckAllBuffersDoesNotThrowWithEmptyList)
 {
     EXPECT_NO_THROW(Microphone::CheckAllBuffers());
+}
+
+// ===================== Real capture (SDL dummy driver opens a genuinely working device) =====================
+
+// Unlike MakeMic() (an isolated instance with an arbitrary, invalid handle), the "Default
+// Device" entry from getAllProperty() opens for real even under the SDL dummy driver -- its
+// RecordDevice callback continuously produces silence, so Start()/GetData() behave exactly like
+// a real capture device. That makes these tests deterministic in headless CI with no GTEST_SKIP
+// needed for the dummy-driver case; the skip only guards the case where no device at all is
+// available (e.g. a build without SOUND_ENABLED).
+class MicrophoneCaptureTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        mic_ = Microphone::getDefaultProperty();
+    }
+
+    // Always stop, even on assertion failure mid-test, so the next test starts from a clean
+    // (Stopped, no open stream) state -- getDefaultProperty() returns the same cached singleton
+    // to every test in this binary.
+    void TearDown() override
+    {
+        if (mic_ != nullptr)
+        {
+            mic_->Stop();
+        }
+    }
+
+    Microphone* mic_ = nullptr;
+};
+
+#define REQUIRE_MIC() do { if (mic_ == nullptr) GTEST_SKIP() << "no microphone device available"; } while (0)
+
+TEST_F(MicrophoneCaptureTest, StartTransitionsToStartedOnRealDevice)
+{
+    REQUIRE_MIC();
+    mic_->Start();
+    EXPECT_EQ(mic_->getStateProperty(), MicrophoneState::Started);
+}
+
+TEST_F(MicrophoneCaptureTest, StopTransitionsBackToStoppedOnRealDevice)
+{
+    REQUIRE_MIC();
+    mic_->Start();
+    mic_->Stop();
+    EXPECT_EQ(mic_->getStateProperty(), MicrophoneState::Stopped);
+}
+
+TEST_F(MicrophoneCaptureTest, RepeatedStartStopCyclesDoNotCrash)
+{
+    REQUIRE_MIC();
+    EXPECT_NO_THROW(mic_->Start());
+    EXPECT_NO_THROW(mic_->Stop());
+    EXPECT_NO_THROW(mic_->Start());
+    EXPECT_NO_THROW(mic_->Stop());
+}
+
+TEST_F(MicrophoneCaptureTest, GetDataReturnsNonZeroBytesAfterCapture)
+{
+    REQUIRE_MIC();
+    mic_->Start();
+
+    std::vector<SharpRuntime::bytecs> buffer(4096);
+    SharpRuntime::intcs read = 0;
+    for (int attempt = 0; attempt < 20 && read <= 0; ++attempt)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        read = mic_->GetData(buffer);
+    }
+
+    EXPECT_GT(read, 0);
 }
 
 // ===================== GetTypeName =====================
