@@ -141,8 +141,19 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ArgumentException("count");
         }
 
-        // Platform capture should fill the requested buffer range and return bytes read.
-        // For now no capture backend is connected, so no bytes are available.
+#ifdef SOUND_ENABLED
+        if (captureStream_ != nullptr)
+        {
+            const int read = SDL_GetAudioStreamData(captureStream_, buffer.data() + offset, count);
+            if (read > 0)
+            {
+                return static_cast<SharpRuntime::intcs>(read);
+            }
+        }
+#endif
+
+        // No capture stream is open, or nothing was available to read: leave the caller with a
+        // predictable (silent) buffer rather than stale/uninitialized bytes.
         std::fill(buffer.begin() + offset, buffer.begin() + offset + count, SharpRuntime::bytecs{0});
         return 0;
     }
@@ -228,7 +239,20 @@ namespace Microsoft::Xna::Framework::Audio
 
     SharpRuntime::intcs Microphone::GetQueuedBytes() const
     {
-        // Platform capture should report the number of queued capture bytes.
+#ifdef SOUND_ENABLED
+        if (captureStream_ != nullptr)
+        {
+            // FNA (SDL3_FNAPlatform.GetMicrophoneQueuedBytes) uses SDL_GetAudioStreamQueued, but
+            // SDL3's own docs say to prefer SDL_GetAudioStreamAvailable for "how much can I read
+            // right now" -- which is what CheckBuffer()/GetData() actually need here.
+            const int available = SDL_GetAudioStreamAvailable(captureStream_);
+            if (available > 0)
+            {
+                return static_cast<SharpRuntime::intcs>(available);
+            }
+        }
+#endif
+
         return 0;
     }
 

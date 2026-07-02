@@ -40,16 +40,20 @@ framework/runtime, not a game.
     XACT cluster: `System::` exceptions throughout, dotted+public `GetTypeName`, real (non-stub)
     `IsInUse`/`GetCue`/`GetCategory`/`Equals` behavior.
   - `Microphone` — compliance layer (`GetTypeName`, `System::` exceptions, visibility) **plus real
-    device enumeration and stream lifecycle** (T-4A steps 1–2): `getAllProperty()` calls
+    capture, end to end** (T-4A steps 1–3): `getAllProperty()` calls
     `SDL_GetAudioRecordingDevices`/`SDL_GetAudioDeviceName` and returns a "Default Device" entry
     (bound to the SDL default-recording sentinel) followed by each real named device. `Start()`
     opens a real 44100 Hz/mono/S16 `SDL_AudioStream` via `SDL_OpenAudioDeviceStream` and resumes
-    it; `Stop()` destroys it (closing the underlying device too). Verified against both the SDL
-    `dummy` driver (always reports exactly one synthetic device; an arbitrary/invalid test handle
-    fails to open without crashing) and the real `pulseaudio` driver on this machine (2 real
-    hardware mics + the synthetic default = 3 entries; `Start()`/`Stop()` cycle correctly and
-    repeatedly against the real default device). `GetData`/`GetQueuedBytes` still always return 0
-    — no byte reading is wired up yet (T-4A steps 3–4, see §8).
+    it; `Stop()` destroys it (closing the underlying device too). `GetData` reads real bytes via
+    `SDL_GetAudioStreamData`; `GetQueuedBytes` (used by `CheckBuffer`) uses
+    `SDL_GetAudioStreamAvailable` (a deliberate deviation from FNA's `SDL_GetAudioStreamQueued` —
+    SDL3's own docs recommend `Available` for "how much can I read right now"). Verified against
+    both the SDL `dummy` driver (always reports exactly one synthetic device; an arbitrary/invalid
+    test handle fails to open/read without crashing) and the real `pulseaudio` driver on this
+    machine (2 real hardware mics + the synthetic default = 3 entries; polling `GetData()` every
+    100ms after `Start()` on the real default device returns full 4096-byte chunks of live audio
+    once the stream warms up). Only remaining gap: no capture-dependent tests yet (T-4A step 4,
+    see §8).
   - `XactParser` — all three data bugs found in the original audit are fixed: compact-`.xwb`
     length, track-event-walker `break`-on-unknown-event, dead XGS first-pass code.
   - Data classes/enums: `AudioEmitter`, `AudioListener`, `AudioChannels`, `AudioStopOptions`,
@@ -61,9 +65,8 @@ framework/runtime, not a game.
     its result for the process lifetime, so the driver must be fixed before the *first* call
     regardless of gtest run order.
 - **Does NOT work yet:**
-  - `Microphone` real capture: `GetData` always returns 0 bytes and `GetQueuedBytes` always
-    returns 0, even while a real stream is open and running (T-4A steps 1–2 are done; steps 3–4
-    remain, see §8).
+  - `Microphone` real capture is functionally complete (T-4A steps 1–3 done); only remaining gap
+    is test coverage for the real-capture path (T-4A step 4, see §8).
   - 3D positional audio / Doppler: architectural SDL_mixer limitation, values are stored but never
     computed/applied.
   - `AudioCategory::SetVolume` only affects a category's *future* `Play()` calls, not sounds
@@ -73,7 +76,16 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
-- _(uncommitted)_ — T-4A step 2: `Microphone::Start()`/`Stop()` now open/close a real
+- _(uncommitted)_ — T-4A step 3: `Microphone::GetData` now reads real bytes from `captureStream_`
+  via `SDL_GetAudioStreamData` (falling back to the existing zero-fill stub when there's no
+  stream, or nothing was available); `GetQueuedBytes` uses `SDL_GetAudioStreamAvailable` instead
+  of FNA's `SDL_GetAudioStreamQueued` (documented deviation: SDL3's own docs recommend
+  `Available` for "how much can I read right now", which is what `CheckBuffer`/`GetData` actually
+  need). Existing bounds checks in `GetData` untouched. No new tests yet — step 4 covers
+  capture-dependent tests. Verified manually against this machine's real `pulseaudio` driver:
+  polling `GetData()` every 100ms after `Start()` returns full 4096-byte chunks of live audio
+  once the stream warms up (77824 bytes read over a 2s window). 1970/1970 pass (no count change).
+- `75bbf4a` — T-4A step 2: `Microphone::Start()`/`Stop()` now open/close a real
   `SDL_AudioStream` capture stream via `SDL_OpenAudioDeviceStream` (44100 Hz/mono/S16, using
   `handle_` from enumeration) + `SDL_ResumeAudioStreamDevice`/`SDL_DestroyAudioStream`. A failed
   open (e.g. a stale/invalid handle) is tolerated silently, matching FNA (which never checks
@@ -85,8 +97,7 @@ framework/runtime, not a game.
   genuinely used elsewhere now). Verified against the SDL `dummy` driver (existing tests, no
   crash on an invalid test handle) and manually against this machine's real `pulseaudio` driver
   (`Default Device`: `Start()`/`Stop()`/`Start()`/`Stop()` cycles correctly, states transition
-  Stopped→Started→Stopped as expected). No new tests yet — step 4 covers capture-dependent tests.
-  1970/1970 pass (no count change).
+  Stopped→Started→Stopped as expected). 1970/1970 pass (no count change).
 - `d63946d` — T-4A step 1: `Microphone::getAllProperty()` now enumerates real SDL3 recording
   devices (`SDL_GetAudioRecordingDevices`/`SDL_GetAudioDeviceName`) instead of always being empty;
   leads with a synthetic "Default Device" entry per FNA's `SDL3_FNAPlatform.GetMicrophones`, but
@@ -240,18 +251,16 @@ capture), broken down below into session-sized steps rather than one big task._
 1. ~~**Enumerate real capture devices.**~~ **Done** (`d63946d`). Handles are raw
    `SDL_AudioDeviceID`s (or the default-recording sentinel for entry 0).
 
-2. ~~**Wire `Start()`/`Stop()` to a real `SDL_AudioStream` capture stream.**~~ **Done this
-   session** (uncommitted). `captureStream_` (private `SDL_AudioStream*` field) is opened via
+2. ~~**Wire `Start()`/`Stop()` to a real `SDL_AudioStream` capture stream.**~~ **Done**
+   (`75bbf4a`). `captureStream_` (private `SDL_AudioStream*` field) is opened via
    `SDL_OpenAudioDeviceStream`/`SDL_ResumeAudioStreamDevice` in `Start()`, closed via
-   `SDL_DestroyAudioStream` in `Stop()`; `~Microphone()` also releases it. No byte reading yet.
+   `SDL_DestroyAudioStream` in `Stop()`; `~Microphone()` also releases it.
 
-3. **Wire `GetData`/`GetQueuedBytes` to the real stream.**
-   - Goal: `GetData` reads via `SDL_GetAudioStreamData`, `GetQueuedBytes` via
-     `SDL_GetAudioStreamAvailable`, replacing today's always-0-bytes stub. Keep existing bounds
-     checks unchanged.
-   - Files: `Microphone.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter='MicrophoneTest.*'`; manually confirm
-     `Start()` → speak/make noise → `GetData()` returns >0 bytes on a machine with a microphone.
+3. ~~**Wire `GetData`/`GetQueuedBytes` to the real stream.**~~ **Done this session**
+   (uncommitted). `GetData` reads via `SDL_GetAudioStreamData`; `GetQueuedBytes` uses
+   `SDL_GetAudioStreamAvailable` (not FNA's `SDL_GetAudioStreamQueued` — see §3 for why). Existing
+   bounds checks in `GetData` untouched. Manually confirmed >0-byte reads on this machine's real
+   default microphone.
 
 4. **Extend `MicrophoneTests.cpp` for real capture.**
    - Goal: add capture-dependent tests (state transitions through real `Start`/`Stop`, non-zero
@@ -287,10 +296,12 @@ Read NEXT.md first, then plan_audio.md for background if needed.
 Inspect only the files needed for the first task in NEXT.md §8. Do not refactor unrelated code.
 Do not touch the Media namespace or the sibling ../cna / ../sharp-runtime checkouts.
 
-Make ONE small, verified improvement: task #3 in NEXT.md §8 (wire GetData()/GetQueuedBytes() to
-the real SDL_AudioStream opened by Start()). Tasks #1 (enumeration) and #2 (Start/Stop stream
-lifecycle) are done. This is step 3 of T-4A (real microphone capture) — the only remaining item
-on the audio task list; everything else in plan_audio.md is done.
+Make ONE small, verified improvement: task #4 in NEXT.md §8 (extend MicrophoneTests.cpp with
+capture-dependent tests -- state transitions through real Start/Stop, non-zero GetData after
+capture -- that GTEST_SKIP when no real device is available). Tasks #1-3 (enumeration, Start/Stop
+lifecycle, GetData/GetQueuedBytes) are done -- real microphone capture is functionally complete.
+This is the last step of T-4A and closes out the audio task list; everything else in
+plan_audio.md is done.
 
 Build and test:
   cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
