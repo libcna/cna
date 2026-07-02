@@ -481,6 +481,34 @@ namespace
         case SDLK_DELETE:   return Keys::Delete;
         case SDLK_PRINTSCREEN: return Keys::PrintScreen;
         case SDLK_PAUSE:       return Keys::Pause;
+        case SDLK_F13: return Keys::F13;
+        case SDLK_F14: return Keys::F14;
+        case SDLK_F15: return Keys::F15;
+        case SDLK_F16: return Keys::F16;
+        case SDLK_F17: return Keys::F17;
+        case SDLK_F18: return Keys::F18;
+        case SDLK_F19: return Keys::F19;
+        case SDLK_F20: return Keys::F20;
+        case SDLK_F21: return Keys::F21;
+        case SDLK_F22: return Keys::F22;
+        case SDLK_F23: return Keys::F23;
+        case SDLK_F24: return Keys::F24;
+        case SDLK_APPLICATION: return Keys::Apps;
+        case SDLK_MENU:        return Keys::Apps;
+        case SDLK_SLEEP:       return Keys::Sleep;
+        case SDLK_VOLUMEUP:    return Keys::VolumeUp;
+        case SDLK_VOLUMEDOWN:  return Keys::VolumeDown;
+        case SDLK_KP_CLEAR:    return Keys::OemClear;
+        case SDLK_KP_PERIOD:   return Keys::OemPeriod;
+        // Locale keyboard-layout fallbacks: SDL reports the character these physical keys
+        // produce on non-US layouts, which differs from the US-layout keycode already mapped
+        // above for the same physical key.
+        case 0x00B2: return Keys::OemTilde;     // '²' — AZERTY
+        case '|':    return Keys::OemPipe;      // Norwegian
+        case '+':    return Keys::OemPlus;      // Norwegian
+        case 0x00F8: return Keys::OemSemicolon; // 'ø' — Norwegian
+        case 0x00E6: return Keys::OemQuotes;    // 'æ' — Norwegian
+        case 0x00E9: return std::nullopt;       // 'é' — BEPO; no real Keys mapping exists yet
         default: return std::nullopt;
         }
     }
