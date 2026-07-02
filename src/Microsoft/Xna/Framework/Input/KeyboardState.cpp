@@ -5,6 +5,8 @@
 
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 
+#include <algorithm>
+
 namespace Microsoft::Xna::Framework::Input
 {
     KeyboardState::KeyboardState() = default;
@@ -31,7 +33,15 @@ namespace Microsoft::Xna::Framework::Input
 
     std::vector<Keys> KeyboardState::GetPressedKeys() const
     {
-        return {pressedKeys_.begin(), pressedKeys_.end()};
+        std::vector<Keys> keys(pressedKeys_.begin(), pressedKeys_.end());
+        // FNA returns keys in ascending numeric order (KeyboardState.cs's GetPressedKeys()
+        // walks its keys0..keys7 bitfields from bit 0 upward); pressedKeys_ is an
+        // unordered_set, so iteration order is otherwise unspecified.
+        std::sort(keys.begin(), keys.end(), [](const Keys a, const Keys b)
+        {
+            return static_cast<int>(a) < static_cast<int>(b);
+        });
+        return keys;
     }
 
     KeyState KeyboardState::getItem(const Keys key) const
