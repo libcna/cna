@@ -64,8 +64,13 @@ namespace
 
     constexpr const char* kWaveBankName = "TestWaveBank";
 
-    // Minimal compact .xwb with one PCM16 mono entry (200 bytes of silence).
-    std::vector<uint8_t> BuildXwbFixtureBytes()
+    // Minimal compact .xwb with one mono PCM entry (200 bytes of silence). Defaults to PCM16
+    // (direct SoundEffect(buffer) construction path); pass eightBitPcm=true to instead exercise
+    // WaveBank::GetSoundEffect's WAV-wrapping SoundEffect::FromStream path (regression coverage
+    // for XA-2, a leak in that branch) -- give it a distinct bankName so it doesn't collide with
+    // "TestWaveBank" in AudioEngine::RegisterWaveBank's name-keyed registry.
+    std::vector<uint8_t> BuildXwbFixtureBytes(const std::string& bankName = kWaveBankName,
+                                               bool eightBitPcm = false)
     {
         constexpr uint32_t headerSize       = 48;
         constexpr uint32_t bankDataSize     = 96;
@@ -97,30 +102,31 @@ namespace
 
         AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
         AppendU32(data, entryCount);
-        AppendPadded(data, kWaveBankName, 64);
+        AppendPadded(data, bankName, 64);
         AppendU32(data, entryMetaDataSize);
         AppendU32(data, 0); // entryNameElementSize
         AppendU32(data, alignment);
         const uint32_t compactFormat =
-              (0u)          // format tag: PCM
-            | (0u << 2)     // channels - 1 = 0 -> mono
-            | (44100u << 5) // sample rate
-            | (2u << 23)    // wBlockAlign
-            | (1u << 31);   // bits-per-sample flag -> 16-bit
+              (0u)                                  // format tag: PCM
+            | (0u << 2)                              // channels - 1 = 0 -> mono
+            | (44100u << 5)                          // sample rate
+            | ((eightBitPcm ? 1u : 2u) << 23)         // wBlockAlign: bytes/sample (mono)
+            | ((eightBitPcm ? 0u : 1u) << 31);        // bits-per-sample flag -> 8-bit or 16-bit
         AppendU32(data, compactFormat);
         for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
 
         AppendU32(data, 0u); // entry 0: offset=0, deviation=0 (last/only entry: length = segLength[4])
 
         for (uint32_t i = 0; i < waveDataLength; ++i)
-            data.push_back(0);
+            data.push_back(eightBitPcm ? 0x80 : 0x00); // silence: 8-bit unsigned midpoint, or 16-bit zero
 
         return data;
     }
 
     // Minimal .xsb with one wavebank reference, one simple sound pointing at wave 0
-    // of that bank, and one simple cue named "Boom" playing that sound.
-    std::vector<uint8_t> BuildXsbFixtureBytes()
+    // of that bank, and one simple cue playing that sound.
+    std::vector<uint8_t> BuildXsbFixtureBytes(const std::string& wavebankName = kWaveBankName,
+                                               const std::string& cueName = "Boom")
     {
         constexpr uint32_t headerSize   = 74;
         constexpr uint32_t bankNameSize = 64;
@@ -131,7 +137,6 @@ namespace
         const uint32_t cueSimpleOffset    = soundOffset + 12;
         const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
         const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
-        const std::string cueName         = "Boom";
 
         std::vector<uint8_t> data;
 
@@ -165,7 +170,7 @@ namespace
 
         AppendPadded(data, "TestSoundBank", bankNameSize);
 
-        AppendPadded(data, kWaveBankName, 64); // wavebank name table (1 entry)
+        AppendPadded(data, wavebankName, 64); // wavebank name table (1 entry)
 
         // Sound: flags, categoryIndex, volume, pitchCents, priority, soundLength(skip),
         // then (not complex) waveIdx, wbIdx.
@@ -213,6 +218,25 @@ namespace
     {
         static const std::string path =
             WriteFixture("cna_wavebank_test", "fixture.xsb", BuildXsbFixtureBytes());
+        return path;
+    }
+
+    constexpr const char* kWaveBank8BitName = "TestWaveBank8Bit";
+    constexpr const char* kCue8BitName      = "Boom8Bit";
+
+    const std::string& Xwb8BitFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "fixture8bit.xwb",
+            BuildXwbFixtureBytes(kWaveBank8BitName, /*eightBitPcm=*/true));
+        return path;
+    }
+
+    const std::string& Xsb8BitFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "fixture8bit.xsb",
+            BuildXsbFixtureBytes(kWaveBank8BitName, kCue8BitName));
         return path;
     }
 
@@ -316,6 +340,40 @@ TEST(WaveBankTest, IsInUseTrueWhilePlayingThenFalseAfterStop)
         SoundBank sb(&engine, XsbFixturePath());
 
         std::unique_ptr<Cue> cue(sb.GetCue("Boom"));
+        cue->Play();
+
+        if (!wb.getIsInUseProperty())
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not exercise WaveBank playback";
+        }
+
+        EXPECT_TRUE(wb.getIsInUseProperty());
+        cue->Stop(AudioStopOptions::Immediate);
+        EXPECT_FALSE(wb.getIsInUseProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise WaveBank playback";
+    }
+}
+
+// Regression coverage for XA-2: WaveBank::GetSoundEffect's 8-bit-PCM branch wraps the raw wave
+// data in a WAV and goes through SoundEffect::FromStream (unlike the 16-bit PCM path above, which
+// constructs a SoundEffect directly). FromStream used to leak the heap SoundEffect it returns.
+TEST(WaveBankTest, GetSoundEffectFor8BitPcmEntrySucceeds)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, Xwb8BitFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+        SoundBank sb(&engine, Xsb8BitFixturePath());
+
+        std::unique_ptr<Cue> cue(sb.GetCue(kCue8BitName));
         cue->Play();
 
         if (!wb.getIsInUseProperty())

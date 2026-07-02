@@ -534,15 +534,25 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   kombinace se safety-net timeoutem (řádově minuty, ne 5 s); test simulující dlouho hrající cue
   prokazující, že se nezastaví předčasně.
 
-- [ ] **XA-2 — `WaveBank::GetSoundEffect` uniká heap-alokovaný `SoundEffect` z `FromStream` pro
-  8-bit PCM a ADPCM vlny.** `cached.emplace(*SoundEffect::FromStream(ss))` dereferencuje
-  `SoundEffect*` vrácený z `new SoundEffect(...)` a zkopíruje ho do `std::optional`; původní heap
-  objekt se nikdy neuvolní (`delete` chybí). Leak nastává při každém prvním přístupu k libovolné
-  8-bit PCM nebo ADPCM položce ve wavebance.
+- [x] **XA-2 — `WaveBank::GetSoundEffect` uniká heap-alokovaný `SoundEffect` z `FromStream` pro
+  8-bit PCM a ADPCM vlny.** *(hotovo 2026-07-02.)* `cached.emplace(*SoundEffect::FromStream(ss))`
+  dereferencuje `SoundEffect*` vrácený z `new SoundEffect(...)` a zkopíruje ho do `std::optional`;
+  původní heap objekt se nikdy neuvolní (`delete` chybí). Leak nastává při každém prvním přístupu
+  k libovolné 8-bit PCM nebo ADPCM položce ve wavebance.
   *CNA:* WaveBank.cpp:253, WaveBank.cpp:263.
   *Accept:* výsledek `FromStream` se buď obalí do `std::unique_ptr` a přesune/zkopíruje bez leaku,
   nebo se hned po zkopírování do `cached` smaže; test (ASan/leak-check) prokazující, že opakované
   `GetSoundEffect` na stejném indexu nedělá nový leak.
+  *Pozn.:* obě místa (8-bit PCM ř. 253, ADPCM ř. 263 — identický vzor) obalena do
+  `std::unique_ptr<SoundEffect>`, hodnota přesunuta (`std::move`) do `cached`. Nový
+  `WaveBankTest.GetSoundEffectFor8BitPcmEntrySucceeds` (fixture builder zparametrizován o
+  `bankName`/`eightBitPcm`, resp. `wavebankName`/`cueName`, nová jména aby nekolidovala s
+  existující `"TestWaveBank"` registrací ve sdíleném `AudioEngine`) reálně přehraje 8-bit PCM
+  vlnu. Leak empiricky ověřen samostatným ASan+LeakSanitizer buildem (`cmake-build-asan`,
+  smazán po ověření, není součástí repa): **před opravou** LeakSanitizer nahlásí přesně
+  `WaveBank.cpp:253` → `SoundEffect::FromStream` (136 B, 3 alokace); **po opravě** beze stop.
+  ADPCM (ř. 263) používá identický fix, ale nemá vlastní fixture (ADPCM parsing nemá žádné testy
+  vůbec — sledováno pod IN-6, ne znovu zde).
 
 - [ ] **XA-3 — `Cue::Play` ignoruje autorské `weightMin`/`weightMax` a typ výběru variace, vždy
   vybírá uniformně náhodně.** `XsbVariEntry::weightMin/weightMax` jsou parserem načtené, ale

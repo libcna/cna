@@ -33,7 +33,7 @@ framework/runtime, not a game.
 ## 2. Current status
 
 - **Build:** EasyGL `cmake-build-debug` builds clean (`SOUND_ENABLED` on, SDL3_mixer linked).
-- **Tests:** `CnaTests` **1978 / 1978 pass** (1757 at branch start; +221 audio tests this branch).
+- **Tests:** `CnaTests` **1979 / 1979 pass** (1757 at branch start; +222 audio tests this branch).
   No known regressions.
 - **Works now (ported, FNA-faithful, unit-tested):**
   - `SoundEffect`, `SoundEffectInstance`, `DynamicSoundEffectInstance` — full playback API.
@@ -77,7 +77,21 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
-- _(uncommitted)_ — **CP-3** (`plan_audio.md` Fáze 7): `Apply3D` no longer overwrites the public
+- _(uncommitted)_ — **XA-2** (`plan_audio.md` Fáze 7): fixed a memory leak in
+  `WaveBank::GetSoundEffect`'s 8-bit-PCM and ADPCM branches. Both did
+  `cached.emplace(*SoundEffect::FromStream(ss))` -- `FromStream` returns a heap `SoundEffect*` the
+  caller owns, but the code only ever dereferenced and copied it, never freeing the original
+  allocation. Now wrapped in `std::unique_ptr` and moved into the cache. Parameterized
+  `WaveBankTests.cpp`'s fixture builders (`bankName`/`eightBitPcm`, `wavebankName`/`cueName`) to
+  add `WaveBankTest.GetSoundEffectFor8BitPcmEntrySucceeds`, using distinct fixture names so it
+  doesn't collide with the existing `"TestWaveBank"` entry in the shared `AudioEngine`'s
+  name-keyed `RegisterWaveBank` registry. Empirically verified the leak with a scratch
+  AddressSanitizer+LeakSanitizer build (`cmake-build-asan`, configured/built/deleted this session,
+  not part of the repo): pre-fix, LeakSanitizer reports 136 bytes across 3 allocations with a
+  stack trace pointing exactly at `WaveBank.cpp:253` -> `SoundEffect::FromStream`; post-fix,
+  clean. ADPCM (line 263) got the identical fix but no dedicated fixture -- ADPCM parsing has zero
+  test coverage at all, tracked separately under `IN-6`, not duplicated here. +1 test (1978->1979).
+- `6280c51` — **CP-3** (`plan_audio.md` Fáze 7): `Apply3D` no longer overwrites the public
   `Volume`/`Pan` properties. It used to call `setVolumeProperty()`/`setPanProperty()` directly, so
   after `Apply3D` ran, `getVolumeProperty()`/`getPanProperty()` silently stopped reflecting
   whatever the caller had explicitly set -- the 3D-computed distance/pan approximation now applies
@@ -329,13 +343,15 @@ original Fáze 0–6 compliance/bugfix plan is done. **But the task list is NOT 
 (`CP-1..14`, `XA-1..5`, `IN-1..6`, `MC-1..5`).
 
 **Next smallest task = pick ONE item from `plan_audio.md` Fáze 7**, ordered roughly by severity
-within each cluster (real bugs first, then compliance, then test gaps). **`IN-1`, `CP-1`, `CP-3`
-are done** (fixed this session, see §3) — none are candidates anymore. The Fáze 7 intro block
-lists the remaining most severe findings across all 4 clusters if you want a starting point
-instead of reading the whole section. **`XA-2`** (`WaveBank::GetSoundEffect` leaks a heap
-`SoundEffect` for 8-bit PCM/ADPCM entries) is a good next pick: small, mechanical, no design
-decision needed (unlike `CP-7`, which is entangled with the still-open `T-3G`/`D5` ownership
-question — don't start that one without deciding D5 first).
+within each cluster (real bugs first, then compliance, then test gaps). **`IN-1`, `CP-1`, `CP-3`,
+`XA-2` are done** (fixed this session, see §3) — none are candidates anymore. The Fáze 7 intro
+block lists the remaining most severe findings across all 4 clusters if you want a starting point
+instead of reading the whole section. **`XA-1`** (`SoundBank::PlayCue` force-stops fire-and-forget
+cues after 5s of wall-clock time regardless of whether they're still playing, so any long
+one-shot/music cue gets cut off) is a good next pick: real behavior bug, and `plan_audio.md` §6
+`D6` already has a clear default direction (delete by `!IsPlaying`, not elapsed time). Avoid
+`CP-7` until `D5` (ownership) is decided, and `MC-3` until `D8` (buffer-zero-on-error semantics)
+is decided.
 
 Do NOT re-run another full audit before working through some of Fáze 7 first — that would just
 duplicate what's already found. Untasked candidates that are NOT bugs, for later:
@@ -369,14 +385,16 @@ duplicate what's already found. Untasked candidates that are NOT bugs, for later
 ```
 Read NEXT.md first, then plan_audio.md §4 Fáze 7 for the current task list (30 items, prefixes
 CP/XA/IN/MC). T-4A (real microphone capture) is fully done. plan_audio.md's original Fáze 0-6 is
-done. Fáze 7 is NOT done -- that's where the real next work is. IN-1, CP-1, CP-3 are already fixed.
+done. Fáze 7 is NOT done -- that's where the real next work is. IN-1, CP-1, CP-3, XA-2 are already
+fixed.
 
 1. Confirm the current build/test state matches NEXT.md §2 (build clean, all tests pass) --
    rebuild and rerun ./cmake-build-debug/CnaTests to check for drift since this was last updated.
 2. Pick exactly ONE task from plan_audio.md Fáze 7 (start with the top-priority list at the start
-   of that section if unsure -- XA-2, a small mechanical memory leak fix, is a good next pick;
-   avoid CP-7 until the D5 ownership question is decided, see §6). Do not pick more than one, and
-   do not re-run a fresh audit -- Fáze 7 already has the remaining items queued.
+   of that section if unsure -- XA-1 is a good next pick, a real behavior bug with a clear default
+   direction already written in plan_audio.md §6 D6; avoid CP-7 until D5 and MC-3 until D8 are
+   decided, see §6). Do not pick more than one, and do not re-run a fresh audit -- Fáze 7 already
+   has the remaining items queued.
 3. Inspect only the files that task names. Do not refactor unrelated code. Do not touch the Media
    namespace or the sibling ../cna / ../sharp-runtime checkouts. Keep audio exceptions as System::
    types, GetTypeName dotted and public, SPDX + Doxygen present.

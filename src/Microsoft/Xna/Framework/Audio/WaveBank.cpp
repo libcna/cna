@@ -10,6 +10,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -250,7 +251,10 @@ namespace Microsoft::Xna::Framework::Audio
                                            entry.channels, entry.sampleRate, 8);
                     std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
                     std::istringstream ss(s);
-                    cached.emplace(*SoundEffect::FromStream(ss));
+                    // FromStream returns a heap SoundEffect* the caller owns; wrap it so the
+                    // allocation is freed once its value has been moved into the cache.
+                    std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
+                    cached.emplace(std::move(*loaded));
                 }
             }
             else if (entry.format == XwbFormat::ADPCM)
@@ -260,7 +264,8 @@ namespace Microsoft::Xna::Framework::Audio
                                           entry.blockAlign, entry.samplesPerBlock);
                 std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
                 std::istringstream ss(s);
-                cached.emplace(*SoundEffect::FromStream(ss));
+                std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
+                cached.emplace(std::move(*loaded));
             }
             else
             {
