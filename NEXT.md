@@ -32,25 +32,35 @@ framework/runtime, not a game.
 ## 2. Current status
 
 - **Build:** EasyGL `cmake-build-debug` builds clean (`SOUND_ENABLED` on, SDL3_mixer linked).
-- **Tests:** `CnaTests` **1969 / 1969 pass** (1757 at branch start; +212 audio tests this branch).
+- **Tests:** `CnaTests` **1970 / 1970 pass** (1757 at branch start; +213 audio tests this branch).
   No known regressions.
 - **Works now (ported, FNA-faithful, unit-tested):**
   - `SoundEffect`, `SoundEffectInstance`, `DynamicSoundEffectInstance` — full playback API.
   - `AudioEngine`, `RendererDetail`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory` — the entire
     XACT cluster: `System::` exceptions throughout, dotted+public `GetTypeName`, real (non-stub)
     `IsInUse`/`GetCue`/`GetCategory`/`Equals` behavior.
-  - `Microphone` — compliance layer only (`GetTypeName`, `System::` exceptions, visibility). Real
-    capture is not implemented (see below).
+  - `Microphone` — compliance layer (`GetTypeName`, `System::` exceptions, visibility) **plus real
+    device enumeration** (T-4A step 1, this session): `getAllProperty()` now calls
+    `SDL_GetAudioRecordingDevices`/`SDL_GetAudioDeviceName` and returns a "Default Device" entry
+    (bound to the SDL default-recording sentinel) followed by each real named device. Verified
+    against both the SDL `dummy` driver (always reports exactly one synthetic device) and the real
+    `pulseaudio` driver on this machine (2 real hardware mics + the synthetic default = 3 entries).
+    `Start`/`Stop`/`GetData`/`GetQueuedBytes` are still stubs — no device is opened yet (T-4A
+    steps 2–4, see §8).
   - `XactParser` — all three data bugs found in the original audit are fixed: compact-`.xwb`
     length, track-event-walker `break`-on-unknown-event, dead XGS first-pass code.
   - Data classes/enums: `AudioEmitter`, `AudioListener`, `AudioChannels`, `AudioStopOptions`,
     `MicrophoneState`, `SoundState`. Audio exceptions: `InstancePlayLimitException`,
     `NoAudioHardwareException`, `NoMicrophoneConnectedException`.
   - Device-dependent tests run under the SDL `dummy` audio driver; they `GTEST_SKIP` on hosts with
-    no audio device instead of failing.
+    no audio device instead of failing. `MicrophoneTests.cpp` instead pins `SDL_AUDIODRIVER=dummy`
+    via a file-scope static initializer (not a fixture `SetUp()`) because `getAllProperty()` caches
+    its result for the process lifetime, so the driver must be fixed before the *first* call
+    regardless of gtest run order.
 - **Does NOT work yet:**
-  - `Microphone` real capture: `getAllProperty()` is always empty, `GetData` always returns 0
-    bytes — no SDL recording device is ever opened. This is the only remaining task (T-4A).
+  - `Microphone` real capture: `Start()`/`Stop()` don't open/close a real SDL capture stream yet,
+    so `GetData` always returns 0 bytes and `GetQueuedBytes` always returns 0. Enumeration
+    (T-4A step 1) is done; steps 2–4 remain (see §8).
   - 3D positional audio / Doppler: architectural SDL_mixer limitation, values are stored but never
     computed/applied.
   - `AudioCategory::SetVolume` only affects a category's *future* `Play()` calls, not sounds
@@ -60,6 +70,15 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
+- _(uncommitted)_ — T-4A step 1: `Microphone::getAllProperty()` now enumerates real SDL3 recording
+  devices (`SDL_GetAudioRecordingDevices`/`SDL_GetAudioDeviceName`) instead of always being empty;
+  leads with a synthetic "Default Device" entry per FNA's `SDL3_FNAPlatform.GetMicrophones`, but
+  does **not** open any device at enumeration time (deviation: CNA opens capture devices lazily in
+  `Start()`, matching `AudioMixer`'s lazy-open convention — see `Microphone.cpp` comment). Updated
+  `MicrophoneTests.cpp`'s two static-discovery tests, which asserted an always-empty list; that
+  assumption no longer holds since the SDL `dummy` driver itself always reports one recording
+  device. Added a file-scope static initializer to pin `SDL_AUDIODRIVER=dummy` before any test
+  runs (`getAllProperty()`'s result is cached for the process lifetime). Net +1 test (1969→1970).
 - `b8e2eec` — T-2F: deleted dead/buggy XGS first-pass category loop in `XactParser.cpp`; removed
   a redundant `variationOffset` re-seek (now captured once at its sequential read site). Added
   `XactParserTest.XgsParsesCategoryAndVariable`, verified identical pass/fail via `git stash`
@@ -201,17 +220,8 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 _All plan_audio.md compliance/bugfix tasks are done. What remains is T-4A (real microphone
 capture), broken down below into session-sized steps rather than one big task._
 
-1. **Enumerate real capture devices.**
-   - Goal: make `Microphone::getAllProperty()` populate `microphoneStorage_` from real SDL3
-     recording devices (e.g. `SDL_GetAudioRecordingDevices`) instead of always being empty.
-     Decide how instances get constructed — `getAllProperty()` is itself a `Microphone` member so
-     it can call the private constructor directly; the existing `friend class MicrophoneFactory;`
-     declaration has no matching class anywhere in the repo and can be replaced or left alone.
-   - Files: `include/Microsoft/Xna/Framework/Audio/Microphone.hpp`,
-     `src/Microsoft/Xna/Framework/Audio/Microphone.cpp`.
-   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='MicrophoneTest.*'`
-     (existing tests must still pass headless); manually confirm `Microphone::getAllProperty()` is
-     non-empty on a machine with a real microphone.
+1. ~~**Enumerate real capture devices.**~~ **Done this session** (uncommitted). Handles are raw
+   `SDL_AudioDeviceID`s (or the default-recording sentinel for entry 0) — nothing is opened yet.
 
 2. **Wire `Start()`/`Stop()` to a real `SDL_AudioStream` capture stream.**
    - Goal: `Start()` opens a 44100 Hz/mono/S16 SDL3 audio capture stream for this device; `Stop()`
@@ -263,9 +273,10 @@ Read NEXT.md first, then plan_audio.md for background if needed.
 Inspect only the files needed for the first task in NEXT.md §8. Do not refactor unrelated code.
 Do not touch the Media namespace or the sibling ../cna / ../sharp-runtime checkouts.
 
-Make ONE small, verified improvement: task #1 in NEXT.md §8 (enumerate real SDL3 capture devices
-in Microphone::getAllProperty()). This is the first step of T-4A (real microphone capture) — the
-only remaining item on the audio task list; everything else in plan_audio.md is done.
+Make ONE small, verified improvement: task #2 in NEXT.md §8 (wire Start()/Stop() to a real
+SDL_AudioStream capture stream). Task #1 (real device enumeration) is done. This is step 2 of
+T-4A (real microphone capture) — the only remaining item on the audio task list; everything else
+in plan_audio.md is done.
 
 Build and test:
   cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"

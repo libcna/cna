@@ -6,6 +6,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <cstdlib>
 #include <string>
 #include <utility>
 #include <vector>
@@ -34,18 +35,40 @@ namespace
     {
         return MicrophoneTestAccess::Make(1, name);
     }
+
+    // Microphone::getAllProperty() caches its result for the lifetime of the process (matching
+    // FNA's `micList` caching), so the SDL audio driver must be pinned before the *first* call
+    // anywhere in this binary. A static initializer runs before any TEST body, guaranteeing this
+    // regardless of gtest run order -- unlike a fixture SetUp(), which only helps if that
+    // fixture's test happens to run first.
+    const bool g_forceDummyAudioDriver = []
+    {
+        ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+        return true;
+    }();
 }
 
-// ===================== Static discovery (no capture backend) =====================
+// ===================== Static discovery (SDL dummy driver always reports one device) =====================
 
-TEST(MicrophoneTest, AllIsEmptyWithNoCaptureBackend)
+TEST(MicrophoneTest, AllIsNonEmptyUnderDummyAudioDriver)
 {
-    EXPECT_TRUE(Microphone::getAllProperty().empty());
+    // The SDL "dummy" driver (forced above) always exposes exactly one recording device, so
+    // real enumeration never sees zero microphones here, unlike a genuine headless machine.
+    EXPECT_FALSE(Microphone::getAllProperty().empty());
 }
 
-TEST(MicrophoneTest, DefaultIsNullWithNoCaptureBackend)
+TEST(MicrophoneTest, DefaultDeviceEntryIsNamedDefaultDevice)
 {
-    EXPECT_EQ(Microphone::getDefaultProperty(), nullptr);
+    const auto& all = Microphone::getAllProperty();
+    ASSERT_FALSE(all.empty());
+    EXPECT_EQ(all[0]->Name, "Default Device");
+}
+
+TEST(MicrophoneTest, DefaultPropertyIsFirstEntryOfAll)
+{
+    const auto& all = Microphone::getAllProperty();
+    ASSERT_FALSE(all.empty());
+    EXPECT_EQ(Microphone::getDefaultProperty(), all[0]);
 }
 
 // ===================== Name / state =====================

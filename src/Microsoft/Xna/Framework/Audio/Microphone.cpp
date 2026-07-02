@@ -5,6 +5,10 @@
 
 #include <algorithm>
 
+#ifdef SOUND_ENABLED
+#include <SDL3/SDL.h>
+#endif
+
 namespace Microsoft::Xna::Framework::Audio
 {
     std::vector<std::unique_ptr<Microphone>> Microphone::microphoneStorage_;
@@ -24,8 +28,29 @@ namespace Microsoft::Xna::Framework::Audio
         {
             microphoneStorage_.clear();
 
-            // Platform microphone enumeration should populate microphoneStorage_ here.
-            // Until platform capture exists, the list is empty, matching systems with no microphones.
+#ifdef SOUND_ENABLED
+            SDL_InitSubSystem(SDL_INIT_AUDIO);
+
+            int numDev = 0;
+            SDL_AudioDeviceID* devices = SDL_GetAudioRecordingDevices(&numDev);
+            if (numDev >= 1)
+            {
+                // FNA (SDL3_FNAPlatform.GetMicrophones) always leads with a synthetic "Default
+                // Device" entry bound to the SDL default-recording sentinel. Unlike FNA, no
+                // device is opened here: CNA opens capture devices lazily in Start() (matching
+                // AudioMixer's lazy-open convention for playback), not at enumeration time.
+                microphoneStorage_.push_back(std::unique_ptr<Microphone>(
+                    new Microphone(SDL_AUDIO_DEVICE_DEFAULT_RECORDING, "Default Device")));
+
+                for (int i = 0; i < numDev; ++i)
+                {
+                    const char* name = SDL_GetAudioDeviceName(devices[i]);
+                    microphoneStorage_.push_back(std::unique_ptr<Microphone>(
+                        new Microphone(devices[i], name != nullptr ? name : "")));
+                }
+            }
+            SDL_free(devices);
+#endif
 
             static std::vector<Microphone*> list;
             list.clear();
