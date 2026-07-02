@@ -18,6 +18,14 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
+    namespace
+    {
+        // Force-sweep a still-playing fire-and-forget cue after this long, purely as a safety
+        // net against unbounded growth (see FireAndForget's comment in SoundBank.hpp) -- far
+        // longer than any normal one-shot SFX, so it never affects ordinary playback.
+        constexpr std::chrono::minutes kFireAndForgetSafetyNet{5};
+    }
+
     // ── Internal impl ─────────────────────────────────────────────────────────
 
     struct SoundBank::XactSoundBankImpl
@@ -113,17 +121,21 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_)
             throw System::ObjectDisposedException("SoundBank");
 
-        // Sweep fire-and-forget cues older than 5 seconds. Destroying a Cue
-        // whose sound has already finished is effectively a no-op (the SDL3_mixer
-        // track is stopped, then destroyed — both harmless on a completed track).
+        // Sweep fire-and-forget cues that have finished playing (destroying a Cue whose sound
+        // has already stopped is effectively a no-op) plus any still-playing entry past the
+        // safety-net timeout -- NOT simply "older than N seconds", which would cut off any
+        // one-shot or music cue longer than that regardless of whether it was still playing.
         auto now = std::chrono::steady_clock::now();
         fireAndForget_.erase(
             std::remove_if(
                 fireAndForget_.begin(), fireAndForget_.end(),
                 [&now](const FireAndForget& faf)
                 {
-                    return std::chrono::duration_cast<std::chrono::seconds>(
-                               now - faf.created).count() >= 5;
+                    if (faf.cue && faf.cue->getIsPlayingProperty())
+                    {
+                        return now - faf.created >= kFireAndForgetSafetyNet;
+                    }
+                    return true;
                 }),
             fireAndForget_.end());
 

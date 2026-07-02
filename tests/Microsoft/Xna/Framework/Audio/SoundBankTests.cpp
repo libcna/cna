@@ -12,6 +12,7 @@
 #include "System/Object.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -26,6 +27,31 @@ using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
 using Microsoft::Xna::Framework::Audio::SoundBank;
+
+namespace Microsoft::Xna::Framework::Audio
+{
+    // Test-only accessor for SoundBank's private fire-and-forget cue list (see SoundBank.hpp),
+    // used to test PlayCue()'s sweep logic precisely without a real-time wait.
+    struct SoundBankTestAccess
+    {
+        static std::size_t FireAndForgetCount(const SoundBank& bank)
+        {
+            return bank.fireAndForget_.size();
+        }
+
+        // Backdates the most recently added fire-and-forget entry's creation time, so sweep
+        // behavior at a specific age can be tested deterministically.
+        static void BackdateLastFireAndForget(SoundBank& bank, std::chrono::steady_clock::duration age)
+        {
+            if (!bank.fireAndForget_.empty())
+            {
+                bank.fireAndForget_.back().created = std::chrono::steady_clock::now() - age;
+            }
+        }
+    };
+}
+
+using Microsoft::Xna::Framework::Audio::SoundBankTestAccess;
 
 namespace
 {
@@ -280,15 +306,52 @@ TEST(SoundBankTest, IsInUseFalseWithNoFireAndForgetCues)
 
 TEST(SoundBankTest, IsInUseTrueAfterPlayCueThenFalseAfterDispose)
 {
-    // Fire-and-forget cues are only swept by elapsed time (>=5s) on the next PlayCue
-    // call, so Dispose (which clears them immediately) is used here as the
-    // deterministic "stop" trigger instead of a real-time sleep.
+    // Cue never self-transitions out of Playing without an explicit Stop() (see Cue.cpp), so a
+    // fire-and-forget cue stays "in use" indefinitely here; Dispose (which clears the list
+    // immediately) is used as the deterministic "stop" trigger instead of a real-time wait.
     SoundBank bank(&SharedEngine(), XsbFixturePath());
     bank.PlayCue("Explosion");
     ASSERT_TRUE(bank.getIsInUseProperty());
 
     bank.Dispose();
     EXPECT_FALSE(bank.getIsInUseProperty());
+}
+
+// Regression coverage for XA-2's XA-1 sibling bug: PlayCue()'s sweep used to remove any
+// fire-and-forget cue older than 5 seconds regardless of whether it was still playing, cutting
+// off any one-shot or music cue longer than that. It must now only remove entries that have
+// actually finished playing (or exceeded the long safety-net timeout -- see the next test).
+TEST(SoundBankTest, FireAndForgetCueSurvivesSweepPastOldFiveSecondThresholdWhileStillPlaying)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    bank.PlayCue("Explosion");
+    ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u);
+
+    // Backdate well past the OLD buggy 5-second threshold, but nowhere near the new 5-minute
+    // safety net -- exactly the scenario the bug got wrong: a long-but-still-playing cue.
+    SoundBankTestAccess::BackdateLastFireAndForget(bank, std::chrono::seconds(30));
+
+    bank.PlayCue("Explosion"); // triggers the sweep again
+    EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 2u); // first entry must have survived
+
+    bank.Dispose();
+}
+
+TEST(SoundBankTest, FireAndForgetCueIsForceSweptPastSafetyNetEvenIfStillPlaying)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    bank.PlayCue("Explosion");
+    ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u);
+
+    // Past the 5-minute safety net (plan_audio.md Fáze 7 D6): must be force-swept even though
+    // Cue never reports itself as finished, so a caller that only ever PlayCue()s a
+    // looping/very-long cue can't grow this list unbounded.
+    SoundBankTestAccess::BackdateLastFireAndForget(bank, std::chrono::minutes(10));
+
+    bank.PlayCue("Explosion");
+    EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u); // old entry swept; only the new one remains
+
+    bank.Dispose();
 }
 
 // ===================== GetTypeName =====================

@@ -33,7 +33,7 @@ framework/runtime, not a game.
 ## 2. Current status
 
 - **Build:** EasyGL `cmake-build-debug` builds clean (`SOUND_ENABLED` on, SDL3_mixer linked).
-- **Tests:** `CnaTests` **1979 / 1979 pass** (1757 at branch start; +222 audio tests this branch).
+- **Tests:** `CnaTests` **1981 / 1981 pass** (1757 at branch start; +224 audio tests this branch).
   No known regressions.
 - **Works now (ported, FNA-faithful, unit-tested):**
   - `SoundEffect`, `SoundEffectInstance`, `DynamicSoundEffectInstance` — full playback API.
@@ -77,7 +77,22 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
-- _(uncommitted)_ — **XA-2** (`plan_audio.md` Fáze 7): fixed a memory leak in
+- _(uncommitted)_ — **XA-1** (`plan_audio.md` Fáze 7, resolves `D6`): `SoundBank::PlayCue`'s
+  fire-and-forget sweep used to remove any cue older than 5 seconds regardless of whether it was
+  still playing, so any one-shot or music cue longer than that got force-stopped. It now only
+  removes entries that have actually finished (`!IsPlaying`), plus a 5-minute safety-net timeout
+  as a backstop against unbounded growth from a caller that only ever `PlayCue()`s a
+  looping/very-long cue (`kFireAndForgetSafetyNet`, new named constant replacing the old raw `5`
+  literal). Added a `SoundBankTestAccess` friend (mirrors the pattern from `CP-1`/`MC`) exposing
+  `FireAndForgetCount`/`BackdateLastFireAndForget` -- `Cue` never self-transitions out of
+  `Playing` without an explicit `Stop()` (no real playback-finished detection), so backdating a
+  fire-and-forget entry's creation time is the only fast, deterministic way to exercise the
+  5s/5min boundaries without an actual multi-second sleep. Verified via `git stash` that
+  `FireAndForgetCueSurvivesSweepPastOldFiveSecondThresholdWhileStillPlaying` fails against the
+  pre-fix code (a 30s-old still-playing entry gets swept) and passes with the fix; a second test
+  covers the safety net itself. +2 tests (1979->1981), both sub-millisecond (no real-time wait
+  needed).
+- `b8f1a1f` — **XA-2** (`plan_audio.md` Fáze 7): fixed a memory leak in
   `WaveBank::GetSoundEffect`'s 8-bit-PCM and ADPCM branches. Both did
   `cached.emplace(*SoundEffect::FromStream(ss))` -- `FromStream` returns a heap `SoundEffect*` the
   caller owns, but the code only ever dereferenced and copied it, never freeing the original
@@ -344,14 +359,14 @@ original Fáze 0–6 compliance/bugfix plan is done. **But the task list is NOT 
 
 **Next smallest task = pick ONE item from `plan_audio.md` Fáze 7**, ordered roughly by severity
 within each cluster (real bugs first, then compliance, then test gaps). **`IN-1`, `CP-1`, `CP-3`,
-`XA-2` are done** (fixed this session, see §3) — none are candidates anymore. The Fáze 7 intro
-block lists the remaining most severe findings across all 4 clusters if you want a starting point
-instead of reading the whole section. **`XA-1`** (`SoundBank::PlayCue` force-stops fire-and-forget
-cues after 5s of wall-clock time regardless of whether they're still playing, so any long
-one-shot/music cue gets cut off) is a good next pick: real behavior bug, and `plan_audio.md` §6
-`D6` already has a clear default direction (delete by `!IsPlaying`, not elapsed time). Avoid
-`CP-7` until `D5` (ownership) is decided, and `MC-3` until `D8` (buffer-zero-on-error semantics)
-is decided.
+`XA-2`, `XA-1` are done** (fixed this session, see §3; `D6` resolved) — none are candidates
+anymore. The Fáze 7 intro block lists the remaining most severe findings across all 4 clusters if
+you want a starting point instead of reading the whole section. **`IN-2`** (non-compact `.xwb`
+entries with `entryMetaDataSize < 24` read past their own bounds into adjacent memory) is a good
+next pick: real robustness bug in the same cluster as `IN-1`, `plan_audio.md` §6 `D7` already
+covers the "throw, don't silently clamp" direction for it and its sibling `IN-3` (worth doing
+together if picking `IN-2`, since `D7` applies to both). Avoid `CP-7` until `D5` (ownership) is
+decided, and `MC-3` until `D8` (buffer-zero-on-error semantics) is decided.
 
 Do NOT re-run another full audit before working through some of Fáze 7 first — that would just
 duplicate what's already found. Untasked candidates that are NOT bugs, for later:
@@ -385,16 +400,16 @@ duplicate what's already found. Untasked candidates that are NOT bugs, for later
 ```
 Read NEXT.md first, then plan_audio.md §4 Fáze 7 for the current task list (30 items, prefixes
 CP/XA/IN/MC). T-4A (real microphone capture) is fully done. plan_audio.md's original Fáze 0-6 is
-done. Fáze 7 is NOT done -- that's where the real next work is. IN-1, CP-1, CP-3, XA-2 are already
-fixed.
+done. Fáze 7 is NOT done -- that's where the real next work is. IN-1, CP-1, CP-3, XA-2, XA-1 are
+already fixed (D6 resolved).
 
 1. Confirm the current build/test state matches NEXT.md §2 (build clean, all tests pass) --
    rebuild and rerun ./cmake-build-debug/CnaTests to check for drift since this was last updated.
 2. Pick exactly ONE task from plan_audio.md Fáze 7 (start with the top-priority list at the start
-   of that section if unsure -- XA-1 is a good next pick, a real behavior bug with a clear default
-   direction already written in plan_audio.md §6 D6; avoid CP-7 until D5 and MC-3 until D8 are
-   decided, see §6). Do not pick more than one, and do not re-run a fresh audit -- Fáze 7 already
-   has the remaining items queued.
+   of that section if unsure -- IN-2 is a good next pick, same cluster as IN-1, and plan_audio.md
+   §6 D7 already covers the "throw, don't clamp" direction for it and its sibling IN-3; avoid CP-7
+   until D5 and MC-3 until D8 are decided, see §6). Do not pick more than one, and do not re-run a
+   fresh audit -- Fáze 7 already has the remaining items queued.
 3. Inspect only the files that task names. Do not refactor unrelated code. Do not touch the Media
    namespace or the sibling ../cna / ../sharp-runtime checkouts. Keep audio exceptions as System::
    types, GetTypeName dotted and public, SPDX + Doxygen present.

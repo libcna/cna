@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
+
 #include <chrono>
 #include <memory>
 #include <string>
@@ -110,13 +112,20 @@ namespace Microsoft::Xna::Framework::Audio
 
         const CNA::Internal::Audio::XsbData* GetXsbData() const;
 
-        // Fire-and-forget cues from PlayCue() — kept alive until the sound
-        // duration has elapsed, then swept on the next PlayCue() call.
+        // Fire-and-forget cues from PlayCue() — kept alive while playing (FNA has no C#-visible
+        // handle for these; FACT tracks cue lifetime natively), swept once IsPlaying goes false
+        // on the next PlayCue() call. A long safety-net timeout also force-sweeps a still-playing
+        // entry so a caller that only ever PlayCue()s a looping/very long cue can't grow this
+        // list unbounded; ordinary finite-duration cues are always swept via IsPlaying first.
         struct FireAndForget
         {
             std::unique_ptr<Cue> cue;
             std::chrono::steady_clock::time_point created;
         };
         std::vector<FireAndForget> fireAndForget_;
+
+        // Tests need to inspect fireAndForget_'s size and backdate entries to exercise the sweep
+        // logic's time-based branches without a real-time wait.
+        NOXNA friend struct SoundBankTestAccess;
     };
 }

@@ -521,18 +521,29 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 
 #### 7.2 XACT (AudioEngine, SoundBank, WaveBank, Cue, AudioCategory, RendererDetail)
 
-- [ ] **XA-1 — `SoundBank::PlayCue` čistí fire-and-forget cues podle uplynulého času, ne podle
-  stavu přehrávání — dlouhé zvuky se přeruší.** `fireAndForget_` se ve `PlayCue` maže podmínkou
-  `now - faf.created >= 5s` bez ohledu na to, zda `faf.cue->getIsPlayingProperty()` je stále `true`
-  (na rozdíl od `getIsInUseProperty()`, která správně kontroluje `IsPlaying`). Jakýkoli
-  fire-and-forget cue/hudba delší než 5 s se při dalším `PlayCue` na stejné bance nuceně
-  zastaví/zničí, i když ještě hraje.
+- [x] **XA-1 — `SoundBank::PlayCue` čistí fire-and-forget cues podle uplynulého času, ne podle
+  stavu přehrávání — dlouhé zvuky se přeruší.** *(hotovo 2026-07-02.)* `fireAndForget_` se ve
+  `PlayCue` mazal podmínkou `now - faf.created >= 5s` bez ohledu na to, zda
+  `faf.cue->getIsPlayingProperty()` je stále `true` (na rozdíl od `getIsInUseProperty()`, která
+  správně kontroluje `IsPlaying`). Jakýkoli fire-and-forget cue/hudba delší než 5 s se při dalším
+  `PlayCue` na stejné bance nuceně zastavil/zničil, i když ještě hrál.
   *FNA:* SoundBank.cs:28-36 (`IsInUse` dle skutečného stavu), SoundBank.cs:105-119 (destruktor drží
   objekt naživu, dokud `IsInUse`).
   *CNA:* SoundBank.cpp:116-135.
   *Accept:* sweep podmínka se změní na „již nehraje" (`!faf.cue->getIsPlayingProperty()`), případně
   kombinace se safety-net timeoutem (řádově minuty, ne 5 s); test simulující dlouho hrající cue
   prokazující, že se nezastaví předčasně.
+  *Pozn.:* sweep teď maže jen dokončené cues (`!IsPlaying`) plus cokoliv za `kFireAndForgetSafetyNet`
+  = 5 minut (D6 default), i kdyby pořád „hrálo" — pojistka proti neomezenému růstu, pokud volající
+  jen pořád `PlayCue`uje smyčkovaný/velmi dlouhý cue. Přidán `SoundBankTestAccess` (friend, mirror
+  `SoundEffectInstanceTestAccess`/`MicrophoneTestAccess`) s `FireAndForgetCount`/
+  `BackdateLastFireAndForget` — protože `Cue` se sám nikdy nevrací ze stavu `Playing` bez explicitního
+  `Stop()` (žádná reálná detekce dohrání), jediný způsob, jak rychle a deterministicky (bez
+  reálného čekání) otestovat 5s/5min hranice, je uměle „posunout" čas vzniku záznamu. Nový
+  `FireAndForgetCueSurvivesSweepPastOldFiveSecondThresholdWhileStillPlaying` ověřen přes `git stash`
+  — bez opravy selže (staré chování smaže 30s starý, stále hrající záznam), s opravou projde.
+  Druhý test `FireAndForgetCueIsForceSweptPastSafetyNetEvenIfStillPlaying` ověřuje samotnou
+  pojistku (nediskriminuje staré/nové chování, obě smetou 10 min starý záznam).
 
 - [x] **XA-2 — `WaveBank::GetSoundEffect` uniká heap-alokovaný `SoundEffect` z `FromStream` pro
   8-bit PCM a ADPCM vlny.** *(hotovo 2026-07-02.)* `cached.emplace(*SoundEffect::FromStream(ss))`
@@ -744,7 +755,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 | D3 | Streaming WaveBank (T-3F) | Zatím doložená odchylka (vše do paměti); skutečný streaming jako pozdější úkol |
 | D4 | Rozsah `AudioEngine::Update` / FACT DoWork (T-4D) | Minimálně per-cue volume re-apply; zbytek dokumentovaně no-op |
 | D5 | Vlastnictví `SoundEffect` vs. `SoundEffectInstance` — dangling-safe kontrakt vs. sdílené vlastnictví (CP-7) | Provázáno s D1/T-3G; pokud D1 zůstane „hodnota bez trackingu", alespoň zdokumentovat kontrakt v Doxygenu; sdílené vlastnictví (`shared_ptr`) jen pokud D1 padne na tracking |
-| D6 | Fire-and-forget cue cleanup: čas vs. stav přehrávání (XA-1) | Sladit s FNA — mazat podle `!IsPlaying`, ne podle uplynulého času; ponechat časový safety-net jen jako krajní pojistku (řádově minuty) |
+| D6 | ~~Fire-and-forget cue cleanup: čas vs. stav přehrávání (XA-1)~~ | **Rozhodnuto a implementováno 2026-07-02** — mazat podle `!IsPlaying`, časový safety-net (5 min) jen jako krajní pojistka. |
 | D7 | Chování parseru na poškozená/adverzní XACT data — throw vs. saturující clamp (IN-2, IN-3) | Throw (`InvalidOperationException`/`ArgumentException`) je bezpečnější než tiché clampování na 0 — sladí se s projektovým pravidlem „no silent data corruption"; zdokumentovat v CHECKLIST, pokud se zvolí clamp |
 | D8 | `Microphone::GetData` chování bufferu při chybě/no-op — nulovat vs. nechat nedotčené (MC-3) | Sladit s FNA (nechat nedotčené) kvůli předvídatelnosti API; pokud zůstane nulování, zapsat do CHECKLIST jako vědomou odchylku |
 
