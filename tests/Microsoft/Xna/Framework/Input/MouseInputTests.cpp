@@ -1,0 +1,485 @@
+// SPDX-License-Identifier: MS-PL
+//
+// Task 755: unit tests for MouseState, Mouse, and MouseCursor.
+//
+// MouseCursor::FromTexture2D is NOT covered here: building a Texture2D with real CPU-side
+// pixel data (or a non-Color/ColorSrgb SurfaceFormat) requires a GraphicsDevice, and
+// GraphicsDevice's constructor creates a real SDL window and graphics backend — out of scope
+// for this headless unit-test binary, matching the precedent already established in
+// OcclusionQueryDynamicBufferTests.cpp for other GraphicsDevice-dependent classes.
+
+#include <gtest/gtest.h>
+
+#include <cstdint>
+#include <utility>
+
+#include <SDL3/SDL.h>
+
+#include "CNA/Internal/Input/InputManager.hpp"
+#include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
+#include "Microsoft/Xna/Framework/Input/MouseState.hpp"
+
+using namespace Microsoft::Xna::Framework::Input;
+
+namespace
+{
+    void ResetMouseState()
+    {
+        CNA::Internal::Input::InputManager::SetMousePosition(0, 0);
+        CNA::Internal::Input::InputManager::SetMouseButtonState(
+            CNA::Internal::Input::MouseButton::Left, ButtonState::Released);
+        CNA::Internal::Input::InputManager::SetMouseButtonState(
+            CNA::Internal::Input::MouseButton::Right, ButtonState::Released);
+        CNA::Internal::Input::InputManager::SetMouseButtonState(
+            CNA::Internal::Input::MouseButton::Middle, ButtonState::Released);
+        CNA::Internal::Input::InputManager::SetMouseButtonState(
+            CNA::Internal::Input::MouseButton::XButton1, ButtonState::Released);
+        CNA::Internal::Input::InputManager::SetMouseButtonState(
+            CNA::Internal::Input::MouseButton::XButton2, ButtonState::Released);
+        CNA::Internal::Input::InputManager::SetMouseRelativeMode(false);
+        Mouse::WindowHandle = 0;
+        Mouse::ClickedEXT   = nullptr;
+    }
+}
+
+// ===========================================================================
+// MouseState
+// ===========================================================================
+
+TEST(MouseStateTest, DefaultConstructorAllValuesAtRest)
+{
+    const MouseState state;
+
+    EXPECT_EQ(state.getXProperty(), 0);
+    EXPECT_EQ(state.getYProperty(), 0);
+    EXPECT_EQ(state.getScrollWheelValueProperty(), 0);
+    EXPECT_EQ(state.getLeftButtonProperty(), ButtonState::Released);
+    EXPECT_EQ(state.getRightButtonProperty(), ButtonState::Released);
+    EXPECT_EQ(state.getMiddleButtonProperty(), ButtonState::Released);
+    EXPECT_EQ(state.getXButton1Property(), ButtonState::Released);
+    EXPECT_EQ(state.getXButton2Property(), ButtonState::Released);
+}
+
+TEST(MouseStateTest, EightArgConstructorSetsEveryFieldInTheRightSlot)
+{
+    // Ctor order is (x, y, scrollWheel, leftButton, middleButton, rightButton, xButton1,
+    // xButton2) — alternate Pressed/Released so an accidental parameter swap fails this test.
+    const MouseState state(10, 20, 30,
+                            ButtonState::Pressed, ButtonState::Released, ButtonState::Pressed,
+                            ButtonState::Released, ButtonState::Pressed);
+
+    EXPECT_EQ(state.getXProperty(), 10);
+    EXPECT_EQ(state.getYProperty(), 20);
+    EXPECT_EQ(state.getScrollWheelValueProperty(), 30);
+    EXPECT_EQ(state.getLeftButtonProperty(), ButtonState::Pressed);
+    EXPECT_EQ(state.getMiddleButtonProperty(), ButtonState::Released);
+    EXPECT_EQ(state.getRightButtonProperty(), ButtonState::Pressed);
+    EXPECT_EQ(state.getXButton1Property(), ButtonState::Released);
+    EXPECT_EQ(state.getXButton2Property(), ButtonState::Pressed);
+}
+
+TEST(MouseStateTest, EqualsAndOperatorsReturnTrueForIdenticalStates)
+{
+    const MouseState a(1, 2, 3, ButtonState::Pressed, ButtonState::Released, ButtonState::Pressed,
+                        ButtonState::Released, ButtonState::Pressed);
+    const MouseState b(1, 2, 3, ButtonState::Pressed, ButtonState::Released, ButtonState::Pressed,
+                        ButtonState::Released, ButtonState::Pressed);
+
+    EXPECT_TRUE(a.Equals(b));
+    EXPECT_TRUE(a == b);
+    EXPECT_FALSE(a != b);
+}
+
+TEST(MouseStateTest, EqualsAndOperatorsReturnFalseWhenPositionDiffers)
+{
+    const MouseState a(1, 2, 3, ButtonState::Released, ButtonState::Released, ButtonState::Released,
+                        ButtonState::Released, ButtonState::Released);
+    const MouseState b(9, 2, 3, ButtonState::Released, ButtonState::Released, ButtonState::Released,
+                        ButtonState::Released, ButtonState::Released);
+
+    EXPECT_FALSE(a.Equals(b));
+    EXPECT_FALSE(a == b);
+    EXPECT_TRUE(a != b);
+}
+
+TEST(MouseStateTest, EqualsAndOperatorsReturnFalseWhenScrollWheelDiffers)
+{
+    const MouseState a(1, 2, 3, ButtonState::Released, ButtonState::Released, ButtonState::Released,
+                        ButtonState::Released, ButtonState::Released);
+    const MouseState b(1, 2, 99, ButtonState::Released, ButtonState::Released, ButtonState::Released,
+                        ButtonState::Released, ButtonState::Released);
+
+    EXPECT_FALSE(a.Equals(b));
+    EXPECT_TRUE(a != b);
+}
+
+TEST(MouseStateTest, EqualsAndOperatorsReturnFalseWhenAButtonDiffers)
+{
+    const MouseState a(1, 2, 3, ButtonState::Released, ButtonState::Released, ButtonState::Released,
+                        ButtonState::Released, ButtonState::Released);
+    const MouseState b(1, 2, 3, ButtonState::Pressed, ButtonState::Released, ButtonState::Released,
+                        ButtonState::Released, ButtonState::Released);
+
+    EXPECT_FALSE(a.Equals(b));
+    EXPECT_TRUE(a != b);
+}
+
+TEST(MouseStateTest, GetHashCodeMatchesFormula)
+{
+    const MouseState state(3, 5, 7, ButtonState::Released, ButtonState::Released,
+                            ButtonState::Released, ButtonState::Released, ButtonState::Released);
+
+    const int expected = 3 ^ (5 * 31) ^ (7 * 17);
+    EXPECT_EQ(state.GetHashCode(), expected);
+}
+
+TEST(MouseStateTest, GetHashCodeIsConsistentForEqualStates)
+{
+    const MouseState a(3, 5, 7, ButtonState::Pressed, ButtonState::Released, ButtonState::Released,
+                        ButtonState::Released, ButtonState::Released);
+    const MouseState b(3, 5, 7, ButtonState::Pressed, ButtonState::Released, ButtonState::Released,
+                        ButtonState::Released, ButtonState::Released);
+
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(MouseStateTest, ToStringFormatsNoneWhenNoButtonsPressed)
+{
+    const MouseState state(1, 2, 3, ButtonState::Released, ButtonState::Released,
+                            ButtonState::Released, ButtonState::Released, ButtonState::Released);
+
+    EXPECT_EQ(state.ToString(), "[MouseState X=1, Y=2, Buttons=None, Wheel=3]");
+}
+
+TEST(MouseStateTest, ToStringFormatsMultiplePressedButtonsInLeftRightMiddleXButton1XButton2Order)
+{
+    // leftButton=Pressed, xButton2=Pressed; middle/right/xButton1 stay Released.
+    const MouseState state(0, 0, 0, ButtonState::Pressed, ButtonState::Released,
+                            ButtonState::Released, ButtonState::Released, ButtonState::Pressed);
+
+    EXPECT_EQ(state.ToString(), "[MouseState X=0, Y=0, Buttons=Left XButton2, Wheel=0]");
+}
+
+// ===========================================================================
+// Mouse
+// ===========================================================================
+
+TEST(MouseTest, GetStateReflectsPositionAndButtonsFromInputManager)
+{
+    ResetMouseState();
+
+    CNA::Internal::Input::InputManager::SetMousePosition(15, 25);
+    CNA::Internal::Input::InputManager::SetMouseButtonState(
+        CNA::Internal::Input::MouseButton::Left, ButtonState::Pressed);
+    CNA::Internal::Input::InputManager::SetMouseButtonState(
+        CNA::Internal::Input::MouseButton::XButton2, ButtonState::Pressed);
+
+    const auto state = Mouse::GetState();
+
+    EXPECT_EQ(state.getXProperty(), 15);
+    EXPECT_EQ(state.getYProperty(), 25);
+    EXPECT_EQ(state.getLeftButtonProperty(), ButtonState::Pressed);
+    EXPECT_EQ(state.getRightButtonProperty(), ButtonState::Released);
+    EXPECT_EQ(state.getXButton2Property(), ButtonState::Pressed);
+
+    ResetMouseState();
+}
+
+TEST(MouseTest, GetStateReflectsScrollWheelDelta)
+{
+    ResetMouseState();
+
+    // ScrollWheelValue is cumulative for the process lifetime (matches XNA), so assert on the
+    // delta rather than an absolute value.
+    const int before = Mouse::GetState().getScrollWheelValueProperty();
+    CNA::Internal::Input::InputManager::AddScrollWheelDelta(120);
+    const int after = Mouse::GetState().getScrollWheelValueProperty();
+
+    EXPECT_EQ(after - before, 120);
+
+    ResetMouseState();
+}
+
+TEST(MouseTest, SetPositionUpdatesGetState)
+{
+    ResetMouseState();
+
+    Mouse::SetPosition(42, 84);
+    const auto state = Mouse::GetState();
+
+    EXPECT_EQ(state.getXProperty(), 42);
+    EXPECT_EQ(state.getYProperty(), 84);
+
+    ResetMouseState();
+}
+
+TEST(MouseTest, InternalOnClickedFiresClickedEXTWithButtonIndex)
+{
+    ResetMouseState();
+
+    int firedButton = -1;
+    Mouse::ClickedEXT = [&firedButton](const int button) { firedButton = button; };
+
+    Mouse::INTERNAL_onClicked(2);
+
+    EXPECT_EQ(firedButton, 2);
+
+    ResetMouseState();
+}
+
+TEST(MouseTest, InternalOnClickedIsSafeWithNoSubscriber)
+{
+    ResetMouseState();
+
+    EXPECT_NO_THROW(Mouse::INTERNAL_onClicked(0));
+
+    ResetMouseState();
+}
+
+TEST(MouseTest, GetIsRelativeMouseModeEXTDefaultsToFalseWithNoWindow)
+{
+    ResetMouseState();
+
+    EXPECT_FALSE(Mouse::getIsRelativeMouseModeEXTProperty());
+
+    ResetMouseState();
+}
+
+TEST(MouseTest, RelativeModeAccumulatesDeltaAndDrainsOnRead)
+{
+    ResetMouseState();
+
+    CNA::Internal::Input::InputManager::SetMouseRelativeMode(true);
+    CNA::Internal::Input::InputManager::AddMouseRelativeDelta(3.0f, -4.0f);
+    CNA::Internal::Input::InputManager::AddMouseRelativeDelta(1.0f, 1.0f);
+
+    const auto first = Mouse::GetState();
+    EXPECT_EQ(first.getXProperty(), 4);
+    EXPECT_EQ(first.getYProperty(), -3);
+
+    // Draining semantics (mirrors FNA's SDL_GetRelativeMouseState): a second read with no new
+    // motion in between returns 0,0.
+    const auto second = Mouse::GetState();
+    EXPECT_EQ(second.getXProperty(), 0);
+    EXPECT_EQ(second.getYProperty(), 0);
+
+    ResetMouseState();
+}
+
+TEST(MouseTest, IsRelativeMouseModeEXTRoundTripsThroughRealWindow)
+{
+    ResetMouseState();
+
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Window* window = SDL_CreateWindow("MouseInputTests", 64, 64, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+
+    Mouse::WindowHandle = reinterpret_cast<std::uintptr_t>(window);
+
+    Mouse::setIsRelativeMouseModeEXTProperty(true);
+    EXPECT_TRUE(Mouse::getIsRelativeMouseModeEXTProperty());
+
+    Mouse::setIsRelativeMouseModeEXTProperty(false);
+    EXPECT_FALSE(Mouse::getIsRelativeMouseModeEXTProperty());
+
+    SDL_DestroyWindow(window);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    ResetMouseState();
+}
+
+TEST(MouseTest, SetPositionIsNoOpWhenRelativeModeEnabled)
+{
+    ResetMouseState();
+
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Window* window = SDL_CreateWindow("MouseInputTests2", 64, 64, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+
+    Mouse::WindowHandle = reinterpret_cast<std::uintptr_t>(window);
+    CNA::Internal::Input::InputManager::SetMousePosition(7, 7);
+
+    Mouse::setIsRelativeMouseModeEXTProperty(true);
+    Mouse::SetPosition(99, 99); // must be a no-op while relative mode is on (Mouse.cs:99-103)
+    Mouse::setIsRelativeMouseModeEXTProperty(false);
+
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getXProperty(), 7);
+    EXPECT_EQ(state.getYProperty(), 7);
+
+    SDL_DestroyWindow(window);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    ResetMouseState();
+}
+
+// ===========================================================================
+// MouseCursor
+// ===========================================================================
+
+TEST(MouseCursorTest, StockCursorsAreNonNullWhenVideoAvailable)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    EXPECT_NE(MouseCursor::getArrowProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getCrosshairProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getHandProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getIBeamProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getNoProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getSizeAllProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getSizeNESWProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getSizeNSProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getSizeNWSEProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getSizeWEProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getWaitProperty().GetSDLCursor(), nullptr);
+    EXPECT_NE(MouseCursor::getWaitArrowProperty().GetSDLCursor(), nullptr);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, StockCursorGetterReturnsTheSameInstanceOnRepeatedCalls)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Cursor* first  = MouseCursor::getArrowProperty().GetSDLCursor();
+    SDL_Cursor* second = MouseCursor::getArrowProperty().GetSDLCursor();
+    EXPECT_EQ(first, second);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, DefaultConstructorCreatesNonNullOwningCursor)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    const MouseCursor cursor;
+    EXPECT_NE(cursor.GetSDLCursor(), nullptr);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, DisposeReleasesHandleAndIsIdempotent)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+    if (!raw)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
+    }
+
+    MouseCursor cursor(raw, /*owning=*/true);
+    EXPECT_EQ(cursor.GetSDLCursor(), raw);
+
+    cursor.Dispose();
+    EXPECT_EQ(cursor.GetSDLCursor(), nullptr);
+
+    EXPECT_NO_THROW(cursor.Dispose());
+    EXPECT_EQ(cursor.GetSDLCursor(), nullptr);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, NonOwningConstructorDoesNotDestroyCursorOnDestruction)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+    if (!raw)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
+    }
+
+    {
+        const MouseCursor cursor(raw, /*owning=*/false);
+        EXPECT_EQ(cursor.GetSDLCursor(), raw);
+    }
+    // cursor's destructor ran Dispose(), but owning_=false means SDL_DestroyCursor was NOT
+    // called on `raw` — the test still owns its cleanup.
+    SDL_DestroyCursor(raw);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, MoveConstructorTransfersOwnershipAndNullsSource)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+    if (!raw)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
+    }
+
+    MouseCursor original(raw, /*owning=*/true);
+    const MouseCursor moved(std::move(original));
+
+    // Regression coverage for task 752's fix: the old defaulted move ctor bitwise-copied the
+    // raw pointer without nulling the source, so both objects believed they owned it.
+    EXPECT_EQ(moved.GetSDLCursor(), raw);
+    EXPECT_EQ(original.GetSDLCursor(), nullptr);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, MoveAssignmentDisposesPreviousHandleAndTransfersOwnership)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Cursor* rawA = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+    SDL_Cursor* rawB = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR);
+    if (!rawA || !rawB)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
+    }
+
+    MouseCursor a(rawA, /*owning=*/true);
+    MouseCursor b(rawB, /*owning=*/true);
+
+    a = std::move(b);
+
+    EXPECT_EQ(a.GetSDLCursor(), rawB);
+    EXPECT_EQ(b.GetSDLCursor(), nullptr);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
