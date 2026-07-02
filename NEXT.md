@@ -307,11 +307,10 @@ session:
    than the old `XOR(key*31)` approximation. Verified against a hand-computed expected value
    (ad-hoc, not committed); dedicated test coverage deferred to task 768. 1892/1892 tests pass.
 
-3. **Task 762 — Add `KeyState operator[](Keys) const`.**
-   - Goal: mirror FNA's `this[Keys]` indexer; keep/alias the existing `getItem` method rather than
-     removing it (check for existing callers first).
-   - Files: `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`,
-     `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`.
+3. **Task 762 — DONE.** Added `[[nodiscard]] KeyState operator[](Keys) const`, a one-line delegate
+   to the existing `getItem(Keys)` (matching FNA's `this[Keys key]` indexer, `KeyboardState.cs:28-34`
+   — identical logic already existed in `getItem`). `getItem` kept unchanged/unremoved. Verified
+   ad-hoc (not committed); dedicated test coverage deferred to task 768. 1892/1892 tests pass.
 
 4. **Task 763 — Complete the SDL keycode→`Keys` map.**
    - Goal: `try_convert_sdl_key` (`SdlInputBridge.cpp:258–369`) is missing `F13–F24`,
@@ -369,12 +368,15 @@ KeyboardState::GetPressedKeys() now sorts by ascending numeric Keys value before
 (std::sort on a vector copy of the existing unordered_set storage), matching FNA's bit-0-upward walk.
 Task 761 is done too: GetHashCode() now ports FNA's exact keys0^keys1^...^keys7 formula
 (reconstructing FNA's 8x32-bit word layout from pressedKeys_ on the fly), replacing the old
-XOR(key*31) approximation.
+XOR(key*31) approximation. Task 762 is done: added KeyState operator[](Keys) const, a one-line
+delegate to the existing getItem(Keys), mirroring FNA's this[Keys] indexer.
 
-Next: Task 762 — add KeyState operator[](Keys) const mirroring FNA's this[Keys] indexer (keep the
-existing getItem method too). Then Task 763 (complete the SDL keycode->Keys map: F13-F24, Apps, volume keys,
-locale fallbacks) follow the same pattern used throughout Phases I1-I4. Full Phase I5 task list
-(760-768) is in plan_input.md.
+Next: Task 763 — complete the SDL keycode->Keys map (try_convert_sdl_key, SdlInputBridge.cpp:258-369)
+is missing F13-F24, APPLICATION/MENU->Apps, SLEEP, VOLUMEUP/VOLUMEDOWN, KP_CLEAR->OemClear,
+KP_PERIOD->OemPeriod, and AZERTY/Norwegian/BEPO locale fallbacks. Port from FNA's keyMap
+(SDL3_FNAPlatform.cs:2360-2489). Then Task 764 (GetKeyFromScancodeEXT) and Task 765 (scancode mode)
+follow the same pattern used throughout Phases I1-I4. Full Phase I5 task list (760-768) is in
+plan_input.md.
 
 Build/test: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
             ./cmake-build-debug/CnaTests --gtest_filter='*Keyboard*'
