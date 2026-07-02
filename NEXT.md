@@ -327,8 +327,19 @@ session:
    tests pass (no regressions; no new committed tests — task 768 covers `KeyboardState`'s own API,
    not this keycode table).
 
-Full Phase I5 task list (760–768, including `GetKeyFromScancodeEXT` (764), scancode mode (765),
-`ToString` (766), and the expanded `KeyboardInputTests.cpp` (768)) is in `plan_input.md`.
+5. **Task 764 — DONE.** `Keyboard::GetKeyFromScancodeEXT` now ports FNA's non-scancode-mode branch
+   (`SDL3_FNAPlatform.cs:2743-2769` — the `UseScancodes` branch is task 765's scope and doesn't exist
+   in CNA yet, so this always takes the FNA-equivalent "false" path, matching CNA's current
+   always-off default). New `SdlInputBridge::GetKeyFromScancode(Keys)`: `try_convert_keys_to_sdl_scancode`
+   (a new reverse map mirroring FNA's `INTERNAL_xnaMap` in full, `Keys`→`SDL_Scancode`) →
+   `SDL_GetKeyFromScancode(scancode, SDL_KMOD_NONE, true)` (asks SDL what the *current* keyboard
+   layout produces at that physical position) → the existing `try_convert_sdl_key` (task 763) back
+   to a `Keys` value, falling back to `Keys::None` on any missed lookup. Verified ad-hoc (not
+   committed): common keys round-trip to themselves on this environment's default US layout. No
+   regressions, 1892/1892 tests pass.
+
+Full Phase I5 task list (760–768, including scancode mode (765), `ToString` (766), and the expanded
+`KeyboardInputTests.cpp` (768)) is in `plan_input.md`.
 
 ---
 
@@ -381,13 +392,17 @@ delegate to the existing getItem(Keys), mirroring FNA's this[Keys] indexer. Task
 try_convert_sdl_key (SdlInputBridge.cpp) now has every entry from FNA's INTERNAL_keyMap that was
 missing (F13-F24, APPLICATION/MENU->Apps, SLEEP, VOLUMEUP/VOLUMEDOWN, KP_CLEAR->OemClear,
 KP_PERIOD->OemPeriod, and the AZERTY/Norwegian/BEPO locale fallbacks) - verified via an ad-hoc
-synthetic-SDL_Event harness, not committed.
+synthetic-SDL_Event harness, not committed. Task 764 is done too: Keyboard::GetKeyFromScancodeEXT now
+ports FNA's non-scancode-mode branch via a new SdlInputBridge::GetKeyFromScancode(Keys), which adds a
+try_convert_keys_to_sdl_scancode reverse map (Keys->SDL_Scancode, mirroring FNA's INTERNAL_xnaMap)
+and reuses try_convert_sdl_key for the return trip.
 
-Next: Task 764 — implement Keyboard::GetKeyFromScancodeEXT properly: port FNA's GetKeyFromScancode
-(xnaMap->SDL_GetKeyFromScancode->keyMap). Currently an identity no-op stub (Keyboard.cpp:22-25).
-Then Task 765 (scancode mode: port INTERNAL_scanMap + FNA_KEYBOARD_USE_SCANCODES env switch)
-follows the same pattern used throughout Phases I1-I4. Full Phase I5 task list (760-768) is in
-plan_input.md.
+Next: Task 765 — add scancode mode: port FNA's INTERNAL_scanMap (a direct SDL_Scancode->Keys map,
+the mirror image of task 764's new Keys->SDL_Scancode try_convert_keys_to_sdl_scancode) plus the
+FNA_KEYBOARD_USE_SCANCODES env switch into the key-conversion path (entirely absent today - CNA
+always behaves as if UseScancodes is false). Then Task 766 (KeyboardState::ToString) and Task 767
+(consider `enum class Keys : int` for explicit FNA-matching underlying type - cosmetic) follow the
+same pattern used throughout Phases I1-I4. Full Phase I5 task list (760-768) is in plan_input.md.
 
 Build/test: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
             ./cmake-build-debug/CnaTests --gtest_filter='*Keyboard*'
