@@ -14,6 +14,8 @@
 #include "System/TimeSpan.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
+struct SDL_AudioStream;
+
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Represents a microphone capture device. */
@@ -25,6 +27,14 @@ namespace Microsoft::Xna::Framework::Audio
 
         /** @brief Raised when enough captured data is available to be read. */
         System::EventHandler<System::EventArgs> BufferReady;
+
+        /** @brief Destructor; closes this device's capture stream if it is still open. */
+        ~Microphone() override;
+
+        Microphone(const Microphone&) = delete;
+        Microphone& operator=(const Microphone&) = delete;
+        Microphone(Microphone&&) = delete;
+        Microphone& operator=(Microphone&&) = delete;
 
         /**
          * @brief Gets the list of all available microphone devices.
@@ -139,6 +149,7 @@ namespace Microsoft::Xna::Framework::Audio
         System::TimeSpan bufferDuration_;
         SharpRuntime::uintcs handle_;
         MicrophoneState state_;
+        SDL_AudioStream* captureStream_ = nullptr;
 
         // FNA internals (Microphone.cs: micList, SAMPLERATE are both `internal`), not CNA additions.
         static std::vector<Microphone*>* micList;

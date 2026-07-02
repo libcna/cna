@@ -22,6 +22,16 @@ namespace Microsoft::Xna::Framework::Audio
     {
     }
 
+    Microphone::~Microphone()
+    {
+#ifdef SOUND_ENABLED
+        if (captureStream_ != nullptr)
+        {
+            SDL_DestroyAudioStream(captureStream_);
+        }
+#endif
+    }
+
     const std::vector<Microphone*>& Microphone::getAllProperty()
     {
         if (micList == nullptr)
@@ -131,8 +141,6 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ArgumentException("count");
         }
 
-        (void)handle_;
-
         // Platform capture should fill the requested buffer range and return bytes read.
         // For now no capture backend is connected, so no bytes are available.
         std::fill(buffer.begin() + offset, buffer.begin() + offset + count, SharpRuntime::bytecs{0});
@@ -158,11 +166,41 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Microphone::Start()
     {
+#ifdef SOUND_ENABLED
+        if (captureStream_ == nullptr)
+        {
+            SDL_InitSubSystem(SDL_INIT_AUDIO);
+
+            SDL_AudioSpec want{};
+            want.format = SDL_AUDIO_S16;
+            want.channels = static_cast<int>(AudioChannels::Mono);
+            want.freq = SAMPLERATE;
+
+            // FNA opens the device (and a bound stream) once, up front, at enumeration time
+            // (SDL3_FNAPlatform.GetMicrophones). CNA defers that to here to keep enumeration
+            // free of side effects; a failed open is tolerated silently, matching FNA, which
+            // never checks FNAPlatform.StartMicrophone's result either.
+            captureStream_ = SDL_OpenAudioDeviceStream(handle_, &want, nullptr, nullptr);
+            if (captureStream_ != nullptr)
+            {
+                SDL_ResumeAudioStreamDevice(captureStream_);
+            }
+        }
+#endif
+
         state_ = MicrophoneState::Started;
     }
 
     void Microphone::Stop()
     {
+#ifdef SOUND_ENABLED
+        if (captureStream_ != nullptr)
+        {
+            SDL_DestroyAudioStream(captureStream_);
+            captureStream_ = nullptr;
+        }
+#endif
+
         state_ = MicrophoneState::Stopped;
     }
 
