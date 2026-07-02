@@ -201,6 +201,32 @@ TEST_F(SoundEffectInstanceTest, Apply3DArrayOverload)
     EXPECT_THROW(inst.Apply3D(nullptr, 1, emitter), System::ArgumentNullException);
 }
 
+TEST_F(SoundEffectInstanceTest, Apply3DDoesNotModifyVolumeOrPanProperties)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.setVolumeProperty(0.42f);
+    inst.setPanProperty(-0.75f);
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f}); // off to one side, well outside DistanceScale
+    inst.Apply3D(listener, emitter);
+
+    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.42f);
+    EXPECT_FLOAT_EQ(inst.getPanProperty(), -0.75f);
+}
+
+TEST_F(SoundEffectInstanceTest, Apply3DAfterDisposeThrows)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Dispose();
+    AudioListener listener;
+    AudioEmitter emitter;
+    EXPECT_THROW(inst.Apply3D(listener, emitter), System::ObjectDisposedException);
+}
+
 TEST_F(SoundEffectInstanceTest, DisposeIsIdempotent)
 {
     REQUIRE_DEVICE();

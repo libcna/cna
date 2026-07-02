@@ -84,10 +84,13 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Applies 3D spatial audio properties using listener and emitter positions.
          *
-         * SDL3_mixer does not support full 3D audio; this is a distance and pan approximation.
+         * SDL3_mixer does not support full 3D audio; this is a distance and pan approximation
+         * applied directly to the underlying track. It does not modify the Volume or Pan
+         * properties, which continue to report only what was last set through their setters.
          *
          * @param listener Position and orientation of the audio listener.
          * @param emitter  Position and orientation of the sound emitter.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
          */
         void Apply3D(const AudioListener& listener, const AudioEmitter& emitter);
 

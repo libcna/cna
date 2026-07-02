@@ -295,6 +295,11 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::Apply3D(const AudioListener& listener, const AudioEmitter& emitter)
     {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
+
         // SDL3_mixer does not support full 3D spatial audio (Doppler, HRTF, orientation).
         // This is a simplified linear distance/pan approximation.
 
@@ -307,13 +312,22 @@ namespace Microsoft::Xna::Framework::Audio
         const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
 
         const float distScale = SoundEffect::getDistanceScaleProperty();
-        const float vol = 1.0f / (1.0f + distance / (distScale > 0.0f ? distScale : 1.0f));
-        setVolumeProperty(std::clamp(vol, 0.0f, 1.0f));
+        const float atten = std::clamp(
+            1.0f / (1.0f + distance / (distScale > 0.0f ? distScale : 1.0f)), 0.0f, 1.0f);
 
         const float pan = (distance > 0.0f)
             ? std::clamp(dx / distance, -1.0f, 1.0f)
             : 0.0f;
-        setPanProperty(pan);
+
+#ifdef SOUND_ENABLED
+        // Applied directly to the underlying track, not through setVolumeProperty()/
+        // setPanProperty(): FNA computes a separate 3D output matrix (dspSettings) that combines
+        // multiplicatively with the voice's own Volume at the audio-engine level and never
+        // touches INTERNAL_volume/INTERNAL_pan, so Volume/Pan continue to report exactly what the
+        // caller last set via the setters, unaffected by 3D positioning.
+        ApplyTrackProperties(AsTrack(track_), atten * Volume_,
+                              SoundEffect::getMasterVolumeProperty(), pan, Pitch_);
+#endif
     }
 
     void SoundEffectInstance::Apply3D(const AudioListener* listeners, int listenerCount,

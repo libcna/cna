@@ -413,15 +413,24 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* `Play(v, pitch>1, pan>1)` hází `ArgumentOutOfRangeException` (pan) resp. klampuje pitch
   na [-1,1] stejně jako property setter; test na obě větve.
 
-- [ ] **CP-3 — `Apply3D(listener, emitter)` přepisuje veřejné `Volume`/`Pan`, místo aby počítal jen
-  samostatnou výstupní matici jako FNA.** FNA aktualizuje pouze interní `dspSettings`, getterů
-  `Volume`/`Pan` se 3D pozicování vůbec nedotýká. CNA volá `setVolumeProperty(...)`/
-  `setPanProperty(...)` přímo, takže po `Apply3D` už `getVolumeProperty()`/`getPanProperty()`
-  nevrací hodnotu, kterou uživatel nastavil.
+- [x] **CP-3 — `Apply3D(listener, emitter)` přepisuje veřejné `Volume`/`Pan`, místo aby počítal jen
+  samostatnou výstupní matici jako FNA.** *(hotovo 2026-07-02.)* FNA aktualizuje pouze interní
+  `dspSettings`, getterů `Volume`/`Pan` se 3D pozicování vůbec nedotýká. CNA volá
+  `setVolumeProperty(...)`/`setPanProperty(...)` přímo, takže po `Apply3D` už
+  `getVolumeProperty()`/`getPanProperty()` nevrací hodnotu, kterou uživatel nastavil.
   *FNA:* SoundEffectInstance.cs:221-264 (bez zásahu do `INTERNAL_pan`/`INTERNAL_volume`).
   *CNA:* SoundEffectInstance.cpp:289-310.
   *Accept:* po `setVolumeProperty(X)` + `Apply3D(...)` je `getVolumeProperty()==X` (3D atenuace se
   aplikuje jinam, ne na veřejnou property); testy na obě.
+  *Pozn.:* opraveno aplikací 3D útlumu/panu přímo na `MIX_Track` (sdílený `ApplyTrackProperties`
+  helper, `atten * Volume_` — multiplikativně s Volume, přesně jako FNA kombinuje `INTERNAL_volume`
+  s `dspSettings` matricí na úrovni audio enginu), místo volání `setVolumeProperty`/`setPanProperty`.
+  Při refaktoru objeven vedlejší nález: `Apply3D` dosud neházel `ObjectDisposedException` explicitně
+  (fungovalo to jen nepřímo přes `setPanProperty`'s disposed-check, který by refaktorem zmizel) —
+  přidán explicitní disposed-check + `@throws` doxygen + `Apply3DAfterDisposeThrows` test, aby se
+  toto chování při refaktoru nezregresovalo. Ověřeno přes `git stash`, že
+  `Apply3DDoesNotModifyVolumeOrPanProperties` bez opravy selže (Volume/Pan se přepíšou), s opravou
+  projde.
 
 - [ ] **CP-4 — `DynamicSoundEffectInstance::PendingBufferCount`/`Update()` mění sémantiku oproti FNA
   — počet se nuluje ihned po předání dat do SDL streamu, ne až po skutečném přehrání hardwarem.**

@@ -33,7 +33,7 @@ framework/runtime, not a game.
 ## 2. Current status
 
 - **Build:** EasyGL `cmake-build-debug` builds clean (`SOUND_ENABLED` on, SDL3_mixer linked).
-- **Tests:** `CnaTests` **1976 / 1976 pass** (1757 at branch start; +219 audio tests this branch).
+- **Tests:** `CnaTests` **1978 / 1978 pass** (1757 at branch start; +221 audio tests this branch).
   No known regressions.
 - **Works now (ported, FNA-faithful, unit-tested):**
   - `SoundEffect`, `SoundEffectInstance`, `DynamicSoundEffectInstance` — full playback API.
@@ -77,7 +77,20 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
-- _(uncommitted)_ — **CP-1** (`plan_audio.md` Fáze 7): `SoundEffectInstance::Play()` now no-ops
+- _(uncommitted)_ — **CP-3** (`plan_audio.md` Fáze 7): `Apply3D` no longer overwrites the public
+  `Volume`/`Pan` properties. It used to call `setVolumeProperty()`/`setPanProperty()` directly, so
+  after `Apply3D` ran, `getVolumeProperty()`/`getPanProperty()` silently stopped reflecting
+  whatever the caller had explicitly set -- the 3D-computed distance/pan approximation now applies
+  straight to the underlying `MIX_Track` (via the existing `ApplyTrackProperties` helper,
+  multiplying the computed attenuation into `Volume_` the same way FNA's separate `dspSettings`
+  matrix combines multiplicatively with `INTERNAL_volume` at the audio-engine level, rather than
+  overwriting it). While refactoring, found `Apply3D` never explicitly threw
+  `ObjectDisposedException` -- it only worked by accident, via the `setPanProperty()` call it made
+  internally, which the refactor was about to remove. Added an explicit disposed check (now
+  documented in the header's `@throws`) plus `Apply3DAfterDisposeThrows` so that behavior isn't
+  lost. Added `Apply3DDoesNotModifyVolumeOrPanProperties`; verified via `git stash` that it fails
+  against the pre-fix code (Volume/Pan get clobbered) and passes with the fix. +2 tests (1976→1978).
+- `800d1e9` — **CP-1** (`plan_audio.md` Fáze 7): `SoundEffectInstance::Play()` now no-ops
   when already `Playing`, matching FNA's `if (State == SoundState.Playing) { return; }` guard. A
   repeated `Play()` call used to unconditionally re-run `MIX_SetTrackAudio`/`MIX_PlayTrack`, which
   (per SDL_mixer docs) restarts mixing from frame 0 -- audible playback would jump back to the
@@ -316,12 +329,13 @@ original Fáze 0–6 compliance/bugfix plan is done. **But the task list is NOT 
 (`CP-1..14`, `XA-1..5`, `IN-1..6`, `MC-1..5`).
 
 **Next smallest task = pick ONE item from `plan_audio.md` Fáze 7**, ordered roughly by severity
-within each cluster (real bugs first, then compliance, then test gaps). **`IN-1` and `CP-1` are
-done** (fixed this session, see §3) — neither is a candidate anymore. The Fáze 7 intro block lists
-the remaining most severe findings across all 4 clusters if you want a starting point instead of
-reading the whole section. **`CP-3`** (`Apply3D` silently overwrites the public `Volume`/`Pan`
-properties instead of computing a separate output matrix like FNA) is a good next pick: same file
-as CP-1, real behavior bug, clear FNA reference and accept criteria already written.
+within each cluster (real bugs first, then compliance, then test gaps). **`IN-1`, `CP-1`, `CP-3`
+are done** (fixed this session, see §3) — none are candidates anymore. The Fáze 7 intro block
+lists the remaining most severe findings across all 4 clusters if you want a starting point
+instead of reading the whole section. **`XA-2`** (`WaveBank::GetSoundEffect` leaks a heap
+`SoundEffect` for 8-bit PCM/ADPCM entries) is a good next pick: small, mechanical, no design
+decision needed (unlike `CP-7`, which is entangled with the still-open `T-3G`/`D5` ownership
+question — don't start that one without deciding D5 first).
 
 Do NOT re-run another full audit before working through some of Fáze 7 first — that would just
 duplicate what's already found. Untasked candidates that are NOT bugs, for later:
@@ -355,13 +369,14 @@ duplicate what's already found. Untasked candidates that are NOT bugs, for later
 ```
 Read NEXT.md first, then plan_audio.md §4 Fáze 7 for the current task list (30 items, prefixes
 CP/XA/IN/MC). T-4A (real microphone capture) is fully done. plan_audio.md's original Fáze 0-6 is
-done. Fáze 7 is NOT done -- that's where the real next work is. IN-1 and CP-1 are already fixed.
+done. Fáze 7 is NOT done -- that's where the real next work is. IN-1, CP-1, CP-3 are already fixed.
 
 1. Confirm the current build/test state matches NEXT.md §2 (build clean, all tests pass) --
    rebuild and rerun ./cmake-build-debug/CnaTests to check for drift since this was last updated.
 2. Pick exactly ONE task from plan_audio.md Fáze 7 (start with the top-priority list at the start
-   of that section if unsure -- CP-3 is a good next pick, same file as CP-1). Do not pick more than
-   one, and do not re-run a fresh audit -- Fáze 7 already has the remaining items queued.
+   of that section if unsure -- XA-2, a small mechanical memory leak fix, is a good next pick;
+   avoid CP-7 until the D5 ownership question is decided, see §6). Do not pick more than one, and
+   do not re-run a fresh audit -- Fáze 7 already has the remaining items queued.
 3. Inspect only the files that task names. Do not refactor unrelated code. Do not touch the Media
    namespace or the sibling ../cna / ../sharp-runtime checkouts. Keep audio exceptions as System::
    types, GetTypeName dotted and public, SPDX + Doxygen present.
