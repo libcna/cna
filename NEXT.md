@@ -17,10 +17,9 @@ with minimal API-surface changes.
   the FNA reference to CNA — not just API surface, but **FNA-faithful runtime behavior** wired to
   SDL3, CHECKLIST-compliant, and covered by tests. The plan is `plan_input.md` (Phases I1–I7,
   tasks 700–783).
-- **Current development phase:** **Phase I1 (TextInputEXT), Phase I2 (Touch & gesture pipeline),
-  and Phase I3 (GamePad behavior/FNA fidelity) are all complete. Phase I4 (Mouse behavior and
-  MouseCursor) is implementation-complete (tasks 745–754)** — only the batched test task (755)
-  remains before Phase I5 (Keyboard) starts.
+- **Current development phase:** **Phases I1–I4 are all complete** (TextInputEXT; Touch & gesture
+  pipeline; GamePad behavior/FNA fidelity; Mouse behavior and MouseCursor). **Phase I5 (Keyboard
+  fidelity and SDL key mapping) is next**, starting at task 760.
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -45,21 +44,10 @@ with minimal API-surface changes.
   sibling `…/openeggbert/cna` repo** — see Section 4. They were not used or fixed for input work.
 
 ### Tests
-- **1866 / 1866 unit tests pass** (EasyGL build, `cmake-build-debug/CnaTests`). GamePad-related
-  additions this phase (58 tests total across 5 new files, plus 1 added to the existing
-  `GamePadInputTests.cpp` for `PacketNumber`):
-  - `GamePadButtonsTests.cpp` — `GamePadButtonsTest` (7) + `GamePadDPadTest` (7): constructors, all
-    named getters, `FromButtonArray` (multi-flag/cross-element/empty), equality, `GetHashCode`.
-  - `GamePadStateTests.cpp` — 10 tests: both constructors, trigger/stick→button packing,
-    `IsButtonDown`/`IsButtonUp`, equality (incl. `PacketNumber`), `GetHashCode`, `ToString`.
-  - `GamePadThumbSticksTests.cpp` — 9 tests: construction/equality/hash, plus `IndependentAxes`/
-    `Circular` dead-zone math (incl. the private `ExcludeCircularDeadZone`) driven indirectly
-    through `InputManager` + `GamePad::GetState`.
-  - `GamePadTriggersTests.cpp` — 7 tests: construction, `WithinEpsilon`-based equality (with a
-    worked-out ULP argument for why the test values are chosen), `GetHashCode`, dead-zone ctor.
-  - `GamePadTests.cpp` — 13 tests: `ExcludeAxisDeadZone` math, `GamePad`'s no-hardware fallback
-    paths (`GetCapabilities`/`SetVibration`/EXT methods), and a full `GamePadCapabilities`
-    getter/setter round-trip (36 properties).
+- **1892 / 1892 unit tests pass** (EasyGL build, `cmake-build-debug/CnaTests`), verified stable under
+  `--gtest_shuffle --gtest_repeat=10`. Phase I4 added 26 tests in the new
+  `MouseInputTests.cpp` (`MouseStateTest` 10, `MouseTest` 9, `MouseCursorTest` 7) — see
+  `plan_input.md` task 755 for full per-suite detail.
 
 ### Apps / libraries available
 - `CNA` static library (XNA 4.0 API surface).
@@ -67,45 +55,43 @@ with minimal API-surface changes.
 - `cna_demo_input` — interactive input demo (keyboard, mouse, gamepad, touch, text input panel).
   Builds; runs crash-free.
 
-### Recently implemented (Phase I3 — tasks 725–740)
-- `GamePad::SetLightBarEXT`/`GetGyroEXT`/`GetAccelerometerEXT` wired to real SDL3 calls
-  (`SDL_SetGamepadLED`, `SDL_Get/SetGamepadSensorEnabled` + `SDL_GetGamepadSensorData`).
-- EXT buttons (Misc1/Paddle1–4/TouchPad) now reach `GamePadState.Buttons` via new
-  `InputManager::GamePadButton` entries and matching SDL button-conversion cases.
-- `GamePadState.PacketNumber` now increments on real state changes. **Architectural deviation from
-  FNA:** tracked at the raw `InputManager` layer (bumped when a connection/button/axis value
-  actually changes) rather than by comparing freshly-built `GamePadState`s like FNA's poll loop —
-  comparing *built* states would falsely bump the counter depending on which `GamePadDeadZone` mode
-  a caller uses, since dead-zone mode changes the built button flags for the same raw state.
-- `GamePadCapabilities` reworked: 34 raw public `bool` fields (+ `GamePadType_`) → 36 private fields
-  with `getXProperty()`/`NOXNA setXProperty()` pairs; the 10 EXT properties are `NOXNA` on both
-  getter and setter. Implementation moved out of the header into a new `GamePadCapabilities.cpp`.
-- `GamePadButtons::FromButtons`/`GamePadDPad::FromButtons` renamed to `FromButtonArray` (matching
-  FNA's internal names); `GamePadDPad::FromButtonArray` now takes `std::initializer_list<Buttons>`
-  instead of a single combined value, matching FNA's `params Buttons[]` signature exactly —
-  `GamePadState`'s 5-arg public constructor now passes the same list to both `FromButtonArray` calls
-  directly, removing a previous CNA-only round-trip workaround.
-- FNA-fidelity fixes: `GamePadThumbSticks`/`GamePadTriggers.GetHashCode` (were truncated `*1000`
-  formulas, now match FNA's `Vector2`/float-hash-based formulas exactly); `GamePadState.ToString()`
-  now returns the fixed fully-qualified type name, matching FNA's `base.ToString()` (FNA never
-  overrides `ToString` on this struct).
-- Optional `FNA_GAMEPAD_NUM_GAMEPADS` env override added, clamped to 4 (CNA's `PlayerIndex` is
-  frozen XNA API with exactly 4 values, so an override above 4 has no addressable slot — the
-  practically useful direction, reducing/disabling gamepad tracking, works).
+### Recently implemented (Phase I4 — tasks 745–755, now complete)
+- `Mouse::SetPosition` really warps the OS cursor via `SDL_WarpMouseInWindow`, with FNA's
+  relative-mode early-return guard (task 745).
+- `Mouse::IsRelativeMouseModeEXT` is a real `getIsRelativeMouseModeEXTProperty()`/
+  `NOXNA setIsRelativeMouseModeEXTProperty(bool)` pair backed by `SDL_Get/SetWindowRelativeMouseMode`;
+  relative motion deltas from `SDL_EVENT_MOUSE_MOTION`'s `xrel`/`yrel` feed `InputManager`, which
+  reports them as `GetMouseState()`'s `X`/`Y` (drained on read) while relative mode is active
+  (task 746).
+- FNA's dead `INTERNAL_WindowWidth/Height`/`INTERNAL_BackBufferWidth/Height`/`INTERNAL_MouseWheel`
+  fields were removed rather than wired up — CNA already solves window↔logical coordinates more
+  generally via `SdlInputBridge::to_logical_position`/`IGraphicsBackend::TransformWindowToLogical`.
+  **Known limitation:** `SetPosition` has no inverse (logical→window) transform, so its warp target
+  is off by the scale factor on a letterboxed/scaled window; documented in-source (`Mouse.cpp`),
+  fixing it for real is a graphics-layer change (task 747).
+- `ClickedEXT` now fires: `SdlInputBridge` calls `Mouse::INTERNAL_onClicked(event.button.button - 1)`
+  on `SDL_EVENT_MOUSE_BUTTON_DOWN` (task 748).
+- `MouseCursor` is now fully CHECKLIST-compliant: correct SPDX header, full `NOXNA` tagging (750);
+  `FromTexture2D(const Texture2D&, int, int)` via `SDL_CreateColorCursor`, ported from MonoGame's SDL
+  backend since FNA has no `MouseCursor` (751); implements `System::IDisposable` with an idempotent
+  `Dispose()` (752) — this also surfaced and fixed a latent double-`SDL_DestroyCursor` bug in the
+  old defaulted move ctor/assignment; the 11 stock cursors are now lazily-constructed
+  `getXProperty()` singletons (Meyer's singleton) instead of eagerly-initialized static fields, with
+  `WaitCursor` renamed to `WaitArrow` to match MonoGame (753); the `Handle`/status decision is
+  recorded in `AUDIT.md` — **kept**, `GetSDLCursor()` already serves as the `Handle` equivalent (754).
+- New `MouseInputTests.cpp` (task 755, 26 tests) — see Section 2's Tests note above.
+- **Unrelated build blocker hit and fixed along the way:** the sibling `sharp-runtime` checkout
+  committed a `System::IAsyncResult` interface addition that broke this repo's `StorageDevice.cpp`
+  — see Section 5's "Fixed" row for the pattern if this happens again.
 
 ### What does NOT work yet
-- **Mouse:** Phase I4 behavior (745-748) and every `MouseCursor` CHECKLIST task (750-754) are now
-  done — see `plan_input.md`'s Phase I4 table for full per-task detail. `MouseCursor`'s overall status
-  decision is recorded in `AUDIT.md`: **kept** as a MonoGame-derived `NOXNA` extension. Only remaining
-  known limitation (task 747's resolution): `SetPosition` has no inverse (logical→window) coordinate
-  transform, so on a letterboxed/scaled window (render resolution ≠ window size) the OS cursor warp
-  target will be off by the scale factor — documented in-source (`Mouse.cpp`); fixing it for real
-  requires a graphics-layer change (`IGraphicsBackend` inverse transform), out of scope here. Next up
-  is the batched `MouseInputTests.cpp` test task (755), the last task in Phase I4.
-- **Keyboard:** `GetPressedKeys()` order is non-deterministic; SDL keycode→Keys map is incomplete;
-  `GetKeyFromScancodeEXT` is an identity stub (Phase I5).
-- **demo_input text panel is not visually verified** (see Section 5; carried over from Phase I1,
-  unrelated to gamepad work).
+- **Keyboard (Phase I5, next focus):** `GetPressedKeys()` order is non-deterministic; SDL
+  keycode→Keys map is incomplete (missing F13–F24, Apps, Volume keys, locale fallbacks);
+  `GetKeyFromScancodeEXT` is an identity stub; no scancode mode; `GetHashCode()` is not FNA-faithful;
+  no `operator[]` indexer. See Section 8.
+- **Mouse:** one known limitation carried over from Phase I4 — `SetPosition` has no inverse
+  (logical→window) coordinate transform (see above); everything else is done.
+- **demo_input text panel is not visually verified** (see Section 5; carried over from Phase I1).
 - **Minor, out of scope for Phase I3:** `TouchPanel::GetCapabilities()` still passes `MAX_TOUCHES`
   unconditionally in both branches (noted in the Phase I2 handoff, not yet fixed — see Section 5).
 
@@ -113,28 +99,29 @@ with minimal API-surface changes.
 
 ## 3. Recent changes
 
-All on `feature/input` (most recent first). Phase I4 (this session) grouped commits by related
-tasks rather than one-commit-per-task like Phase I3 did; each `feat(Tasks N-M)` commit has a paired
+All on `feature/input` (most recent first). Phase I4 grouped commits by related tasks rather than
+one-commit-per-task like Phase I3 did; each `feat(Tasks N-M)` commit has a paired
 `docs: mark Tasks N-M complete` commit immediately after it in `git log`.
 
 | Commit | Change |
 |--------|--------|
+| `92911c9` (docs) | Task 754: record `MouseCursor` status decision in `AUDIT.md`; condense NEXT.md |
+| `cf5db14` (docs) | mark Task 753 complete in `plan_input.md`; condense NEXT.md handoff |
+| `4d833be` | feat(Task 753): lazy stock-cursor construction; rename `WaitCursor`→`WaitArrow` |
 | `0936afa` (docs) | mark Task 752 complete in `plan_input.md`; NEXT.md handoff update |
 | `70b3955` | feat(Task 752): `MouseCursor::Dispose()` / `System::IDisposable`, + latent move-ctor double-free fix |
 | `8ab03d9` (docs) | mark Tasks 745-751 complete in `plan_input.md`; NEXT.md handoff update |
 | `e8bac2e` | feat(Tasks 750-751): `MouseCursor` CHECKLIST fixes (SPDX/NOXNA) and `FromTexture2D` |
 | `e295db9` | feat(Tasks 745-748): real Mouse behavior — cursor warp, relative mode, `ClickedEXT` |
 | `088f4a4` | fix: implement `IAsyncResult.AsyncState/AsyncWaitHandle` in `StorageDevice`'s result types (unrelated sharp-runtime-triggered build blocker) |
-| `af2174a` | docs: add per-task verification commands to NEXT.md's Phase I4 task list (previous session) |
-| `3c6be52` | docs: rewrite NEXT.md as Phase I3 complete handoff (previous session) |
 
-Task 753 (stock-cursor lazy-init + `WaitCursor`→`WaitArrow` rename) is done in the working tree as of
-this handoff but not yet committed — commit/push it (or fold it into the next task's commit) before
-moving on if it's still uncommitted when you resume.
+Task 755 (`MouseInputTests.cpp`, 26 tests, closes out Phase I4) is done in the working tree as of
+this handoff but **not yet committed** — commit/push it before starting Phase I5 if it's still
+uncommitted when you resume.
 
-- **Files added (Phase I4 so far):** none — all changes are to existing Mouse/MouseCursor/StorageDevice files.
+- **Files added:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`.
 - **Files modified:** `Mouse.{hpp,cpp}`, `MouseCursor.{hpp,cpp}`, `InputManager.{hpp,cpp}`,
-  `SdlInputBridge.cpp`, `StorageDevice.cpp`, `plan_input.md`, `NEXT.md`.
+  `SdlInputBridge.cpp`, `StorageDevice.cpp`, `AUDIT.md`, `plan_input.md`, `NEXT.md`.
 - **Behavior changed:** `Mouse::SetPosition` now really warps the OS cursor; `IsRelativeMouseModeEXT`
   is real and feeds relative deltas into `GetMouseState()`; `ClickedEXT` fires; `MouseCursor` supports
   custom cursors (`FromTexture2D`), proper disposal, and lazy stock-cursor construction.
@@ -143,8 +130,8 @@ moving on if it's still uncommitted when you resume.
 
 ## 4. Current blocker / main problem
 
-**There is no hard blocker on the EasyGL track** — it builds clean and all 1866 unit tests pass.
-One practical issue carries over, and Phase I4 is the next real gap:
+**There is no hard blocker on the EasyGL track** — it builds clean and all 1892 unit tests pass.
+One practical issue carries over, and Phase I5 is the next real gap:
 
 1. **Vulkan/Bgfx build dirs are mis-wired (practical gotcha, unchanged from last handoff).**
    - **Symptom:** `cmake-build-vulkan/CMakeCache.txt` and `cmake-build-bgfx/CMakeCache.txt` have
@@ -156,10 +143,15 @@ One practical issue carries over, and Phase I4 is the next real gap:
      `rm -rf cmake-build-<x> && cmake -S … -B … -G Ninja -DCNA_GRAPHICS_BACKEND=<X> …`.
      The Vulkan/Bgfx dirs have **not** been reconfigured.
 
-2. **Next functional focus: Phase I4's last task — `MouseInputTests.cpp` (task 755).** Every other
-   Phase I4 task (745–754: Mouse behavior + full `MouseCursor` CHECKLIST compliance) is done. Only
-   test coverage remains before Phase I4 closes out. See `plan_input.md` Phase I4.
-   Affected: new `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`.
+2. **Next functional focus: Phase I5 (Keyboard fidelity and SDL key mapping).** `KeyboardState` is
+   populated from SDL3 key events and `Keys`/`KeyState` values match FNA exactly, but:
+   `GetPressedKeys()` iterates an `unordered_set` (nondeterministic order — XNA/FNA contract requires
+   ascending numeric order); the SDL keycode→`Keys` map is missing F13–F24, `Apps`, volume keys, and
+   locale fallbacks; `GetKeyFromScancodeEXT` is an identity no-op stub; there's no scancode mode; and
+   `GetHashCode()`/`ToString()`/the `operator[]` indexer all need attention. See `plan_input.md`
+   Phase I5 (tasks 760–768). Affected: `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`,
+   `src/Microsoft/Xna/Framework/Input/{KeyboardState,Keyboard}.cpp`,
+   `src/CNA/Internal/Input/SdlInputBridge.cpp`.
 
 ---
 
@@ -168,8 +160,7 @@ One practical issue carries over, and Phase I4 is the next real gap:
 | Status | Item |
 |--------|------|
 | **Confirmed** | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
-| **Incomplete** | Mouse/MouseCursor: all Phase I4 implementation tasks (745–754) are done. Only the batched `Mouse`/`MouseCursor` test task (755) remains before Phase I4 closes. |
-| **Incomplete** | Keyboard: `GetPressedKeys()` unordered; SDL keycode→Keys map missing F13–F24/Apps/Volume/locale fallbacks; `GetKeyFromScancodeEXT` is identity stub; no scancode mode (Phase I5). |
+| **Incomplete** | Keyboard: `GetPressedKeys()` unordered; SDL keycode→Keys map missing F13–F24/Apps/Volume/locale fallbacks; `GetKeyFromScancodeEXT` is identity stub; no scancode mode (Phase I5, next focus). |
 | **Needs verification** | `demo_input` text panel not visually confirmed: it builds and runs crash-free ~4s under the native backend, but no Wayland screenshot tool is available here and forcing the X11 driver makes SDL exit. A human at a display should run it and type. |
 | **Intentional deviation** | `GamePadState.PacketNumber` is tracked at the raw `InputManager` layer (bumped on real connection/button/axis changes) rather than by comparing freshly-built `GamePadState`s like FNA's poll loop; documented in-source (`InputManager.cpp`). |
 | **Intentional deviation** | `TouchPanel::GetState()` falls back to `InputManager::GetTouchState()` because CNA's `SdlInputBridge` is event-driven, not poll-driven like FNA's `UpdateTouchPanelState()`/`SetFinger` path; documented in-source (`TouchPanel.cpp`). |
@@ -180,8 +171,8 @@ One practical issue carries over, and Phase I4 is the next real gap:
 | **Intentional deviation** | `Mouse::SetPosition`/`GetState` do not replicate FNA's `INTERNAL_WindowWidth/Height ÷ INTERNAL_BackBufferWidth/Height` faux-backbuffer scale (`Mouse.cs:107-116`) — those fields were removed (task 747). CNA already solves window↔logical coordinates more generally via `SdlInputBridge::to_logical_position`/`IGraphicsBackend::TransformWindowToLogical`, which `GetState()` benefits from for free; but there is no inverse (logical→window) transform yet, so `SetPosition`'s `SDL_WarpMouseInWindow` target will be off by the scale factor on a letterboxed/scaled window. Documented in-source (`Mouse.cpp`). Fixing it needs a graphics-layer `IGraphicsBackend` addition, out of scope for this branch. |
 | **Intentional deviation** | `InputManager::GetMouseState()` reports relative-mode `X`/`Y` from a float delta accumulator fed by every `SDL_EVENT_MOUSE_MOTION`'s `xrel`/`yrel` (drained to `0` on each read), rather than FNA's `SDL_GetRelativeMouseState` poll — the equivalent for CNA's event-driven model (see the `InputManager` class doc, task 735). Documented in-source (`InputManager.cpp`). |
 | **Pre-existing (not from input work)** | Working tree shows `D .claude/settings.json` (deleted) and untracked `vendor/wgpu-native/`. These predate this branch's input work and were **not** committed. |
-| **Fixed** | `MouseCursor`'s move constructor/assignment were `= default`, which bitwise-copied the raw `sdlCursor_` pointer without nulling the moved-from source — a moved-from cursor and its target both believed they owned the same `SDL_Cursor*`, so both destructors would eventually double-`SDL_DestroyCursor` it. Not reachable via any code path in this repo (every call site returns a prvalue, elided under C++17 rather than actually moved), but fixed while implementing task 752's `Dispose()` since the same lines were already being touched. |
-| **Fixed (unrelated to Mouse work, but blocked all builds)** | The sibling `sharp-runtime` checkout committed (`d61ffb8`) a `System::IAsyncResult` interface addition (`AsyncState`/`AsyncWaitHandle`, full 4-member .NET interface) mid-session, which broke this repo's `StorageDevice.cpp` (`ContainerResult`/`SelectorResult` didn't implement the two new pure-virtual overrides — `CNA` target wouldn't link). Fixed alongside task 750: `void* asyncState` → `std::any asyncState` (same values, no `Begin*` signature change) and a `mutable System::Threading::EventWaitHandle waitHandle{true, ManualReset}` (both classes always report `getIsCompletedProperty() == true`), matching the pattern `sharp-runtime`'s own commit used in its test implementers. If a future `sharp-runtime` interface change breaks this repo's build again the same way, this is the pattern to follow: implement the missing overrides in the CNA-side consumer, don't touch `sharp-runtime`. |
+| **Fixed** | `MouseCursor`'s move constructor/assignment were `= default`, which bitwise-copied the raw `sdlCursor_` pointer without nulling the moved-from source — a moved-from cursor and its target both believed they owned the same `SDL_Cursor*`, so both destructors would eventually double-`SDL_DestroyCursor` it. Not reachable via any code path in this repo (every call site returns a prvalue, elided under C++17 rather than actually moved), but fixed while implementing task 752's `Dispose()` since the same lines were already being touched. Regression-tested in `MouseInputTests.cpp`. |
+| **Fixed (unrelated to Mouse work, but blocked all builds)** | The sibling `sharp-runtime` checkout committed (`d61ffb8`) a `System::IAsyncResult` interface addition (`AsyncState`/`AsyncWaitHandle`, full 4-member .NET interface) mid-session, which broke this repo's `StorageDevice.cpp` (`ContainerResult`/`SelectorResult` didn't implement the two new pure-virtual overrides — `CNA` target wouldn't link). Fixed: `void* asyncState` → `std::any asyncState` (same values, no `Begin*` signature change) and a `mutable System::Threading::EventWaitHandle waitHandle{true, ManualReset}` (both classes always report `getIsCompletedProperty() == true`), matching the pattern `sharp-runtime`'s own commit used in its test implementers. **If a future `sharp-runtime` interface change breaks this repo's build again the same way:** check `cd ../sharp-runtime && git status --short && git log -1` before assuming it's transient — if the relevant file is committed (not mid-edit), it's a real, permanent break needing the same kind of fix here, not a wait-and-retry. |
 
 ---
 
@@ -212,13 +203,18 @@ SDL_PollEvent  (Game::PollEvents, called once per frame from Game::Tick())
 
 ### Invariants / boundaries that must stay stable
 - `NOXNA` marks every non-XNA member in the `Microsoft::Xna` namespace; include `CNA/CNAHelper.hpp`
-  where it is used. A wholly-non-XNA class uses `NOXNA class` (precedent: `ShaderEffect`).
+  where it is used. A wholly-non-XNA class uses `NOXNA class` (precedent: `ShaderEffect`, `MouseCursor`).
 - `// SPDX-License-Identifier: MS-PL` at the top of every `.hpp` and `.cpp`.
 - C# properties → `getXProperty()` / `setXProperty()` (no public fields for XNA API). FNA's
   `{ get; internal set; }` pattern maps to a `NOXNA`-tagged public setter (precedent:
   `TextInputEXT::setWindowHandleProperty`, `TouchPanel::setTouchDeviceExistsProperty`,
-  `GamePadState::setPacketNumberProperty`, all of `GamePadCapabilities`'s 36 setters) — **not** a
-  `friend`-based private setter; there is no precedent anywhere in CNA for the friend approach.
+  `GamePadState::setPacketNumberProperty`, all of `GamePadCapabilities`'s 36 setters,
+  `Mouse::setIsRelativeMouseModeEXTProperty`) — **not** a `friend`-based private setter; there is no
+  precedent anywhere in CNA for the friend approach.
+- A read-only C# auto-property with lazy static-constructor semantics (e.g. MonoGame's
+  `MouseCursor.Arrow { get; private set; }`) maps to a `getXProperty()` backed by a function-local
+  `static` variable (Meyer's singleton) — not a plain static field — since a plain C++ static data
+  member can't be lazily initialized (see `MouseCursor`'s 11 stock-cursor getters, task 753).
 - XNA/FNA API names are frozen — no renames, and no adding enum values to frozen types (e.g.
   `PlayerIndex` stays at exactly 4 values even where FNA's own `GAMEPAD_COUNT` env var nominally
   allows going higher).
@@ -232,11 +228,20 @@ SDL_PollEvent  (Game::PollEvents, called once per frame from Game::Tick())
 - `SdlInputBridge::ProcessEvent` is the single SDL-event funnel; do not add a second event path.
 - `GestureDetector`'s state machine lives in file-static variables with **no reset hook** — tests
   that drive it must fully release every finger they press and drain the gesture queue between
-  cases (see `GestureDetectorTests.cpp`'s fixture for the established pattern).
+  cases (see `GestureDetectorTests.cpp`'s fixture for the established pattern). `MouseCursor`'s
+  stock-cursor singletons have the same "no reset" property — tests that need a real SDL window
+  (e.g. relative-mouse-mode round-trips) must init/quit `SDL_INIT_VIDEO` symmetrically and restore
+  any static fields they touched (`Mouse::WindowHandle`, `Mouse::ClickedEXT`) — see
+  `MouseInputTests.cpp`'s `ResetMouseState()` helper and the `GameWindowTests.cpp` precedent for the
+  `SDL_InitSubSystem(...)`-fails-so-`GTEST_SKIP()` pattern.
 - Private dead-zone-mode constructors (`GamePadThumbSticks`/`GamePadTriggers`'s 3-arg ctors,
   friended to `GamePad` only) are only reachable in tests via `InputManager::SetGamePadAxisValue` +
   `GamePad::GetState(playerIndex, deadZoneMode)` — see `GamePadThumbSticksTests.cpp`/
   `GamePadTriggersTests.cpp` for the pattern.
+- Classes that require a `GraphicsDevice` to construct (which creates a real SDL window + graphics
+  backend) are **not** unit-tested in `CnaTests` — see `OcclusionQueryDynamicBufferTests.cpp`'s and
+  `MouseInputTests.cpp`'s header comments for the precedent. `MouseCursor::FromTexture2D` is
+  deliberately untested for this reason.
 
 ---
 
@@ -256,8 +261,8 @@ cmake --build cmake-build-debug --target cna_demo_input -j"$(nproc)"
 # Run all unit tests
 ./cmake-build-debug/CnaTests
 
-# Run the GamePad test suites specifically
-./cmake-build-debug/CnaTests --gtest_filter='*GamePad*'
+# Run the Keyboard test suite specifically
+./cmake-build-debug/CnaTests --gtest_filter='*Keyboard*'
 
 # Run the input demo (needs a display; F1 toggles text input, Esc exits)
 ./cmake-build-debug/cna_demo_input
@@ -271,39 +276,50 @@ grep CMAKE_HOME_DIRECTORY cmake-build-debug/CMakeCache.txt
 >
 > Note: builds in this environment occasionally trigger a large rebuild pass (`-- GLOB mismatch! /
 > Re-running CMake...`) unrelated to the change being made — this has coincided with a sibling
-> `sharp-runtime` checkout being edited concurrently in another session on this machine. If a build
-> fails on an unrelated `sharp-runtime` file (e.g. `Decimal.cpp`, `DateTime.cpp`), it has always
-> resolved itself on retry once the other session's edit settles; it is not this branch's problem.
+> `sharp-runtime` checkout being edited concurrently in another session on this machine. Most of the
+> time this resolves itself on retry once the other session's edit settles — but not always: if the
+> failure is in a `sharp-runtime`-consumed interface (not just an isolated file), check whether the
+> other session already **committed** the change (`cd ../sharp-runtime && git log -1`); if so, it's a
+> permanent break needing a real fix on the `cna_input` side (see Section 5's "Fixed (unrelated...)"
+> row for the pattern), not a wait-and-retry.
 
 ---
 
 ## 8. Next smallest tasks
 
-Tasks 745–754 (all of Phase I4's Mouse behavior + `MouseCursor` CHECKLIST work) are **done**. Full
-per-task detail is in `plan_input.md`'s Phase I4 table — read that instead of a duplicated summary
-here. Highlights worth knowing before touching this code:
-- `Mouse::SetPosition`'s OS-cursor warp has a known letterbox-scaling limitation, documented in-source
-  in `Mouse.cpp` (task 747).
-- `MouseCursor`'s move ctor/assignment had a latent double-`SDL_DestroyCursor` bug (fixed in task 752;
-  see Section 5's "Fixed" row).
-- `MouseCursor`'s 11 stock cursors are lazy `getXProperty()` singletons now, not static fields (753).
-- `MouseCursor`'s overall status decision (kept, as a MonoGame `NOXNA` extension) is recorded in
-  `AUDIT.md`'s `Microsoft::Xna::Framework::Input` table (754).
-- An unrelated sharp-runtime `IAsyncResult` build blocker was hit and fixed along the way — see
-  Section 5's "Fixed (unrelated...)" row if a future sharp-runtime change breaks the build similarly.
+Phase I4 (tasks 745–755) is **fully complete**. Phase I5 (Keyboard fidelity and SDL key mapping) is
+next — full task list in `plan_input.md` (tasks 760–768). In priority order, each is one focused
+session:
 
-**Next task to pick up — Task 755 (closes out Phase I4):** new
-`tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp` (auto-discovered via the `tests/*.cpp`
-glob) covering:
-- `MouseState`: 8 getters, both constructors, `==`/`!=`, `Equals` (equal + unequal), `GetHashCode`
-  consistency, `ToString` format (including multi-button and `None`).
-- `Mouse`: `GetState`, `SetPosition` (task 745), `getIsRelativeMouseModeEXTProperty`/
-  `setIsRelativeMouseModeEXTProperty` + relative-delta accumulation (task 746), `INTERNAL_onClicked`→
-  `ClickedEXT` (task 748).
-- `MouseCursor`: stock cursors non-null (task 753's lazy singletons), `FromTexture2D` (task 751,
-  including the `std::invalid_argument` format-validation path), `Dispose()` idempotency (task 752).
-- Files: new `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`.
-- Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Mouse*'`
+1. **Task 760 — Fix `KeyboardState::GetPressedKeys()` ordering.**
+   - Goal: must return keys sorted ascending by numeric value (XNA/FNA contract; FNA iterates bits
+     0→255). Currently backed by an `unordered_set`, so iteration order is nondeterministic
+     (`KeyboardState.cpp:32–35`).
+   - Files: `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`.
+   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Keyboard*'`
+
+2. **Task 761 — `KeyboardState::GetHashCode()` FNA fidelity.**
+   - Goal: FNA's formula is `keys0 ^ keys1 ^ … ^ keys7` over an 8×32-bit field covering all 256 key
+     values. CNA currently uses `XOR(key*31)`. Either port FNA's formula exactly, or document the
+     deviation in-source and in `plan_input.md` if an exact port isn't practical.
+   - Files: `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`,
+     `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`.
+
+3. **Task 762 — Add `KeyState operator[](Keys) const`.**
+   - Goal: mirror FNA's `this[Keys]` indexer; keep/alias the existing `getItem` method rather than
+     removing it (check for existing callers first).
+   - Files: `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`,
+     `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`.
+
+4. **Task 763 — Complete the SDL keycode→`Keys` map.**
+   - Goal: `try_convert_sdl_key` (`SdlInputBridge.cpp:258–369`) is missing `F13–F24`,
+     `APPLICATION`/`MENU`→`Apps`, `SLEEP`, `VOLUMEUP`/`VOLUMEDOWN`, `KP_CLEAR`→`OemClear`,
+     `KP_PERIOD`→`OemPeriod`, and AZERTY/Norwegian/BEPO locale fallbacks. Port from FNA's `keyMap`
+     (`SDL3_FNAPlatform.cs:2360–2489`).
+   - Files: `src/CNA/Internal/Input/SdlInputBridge.cpp`.
+
+Full Phase I5 task list (760–768, including `GetKeyFromScancodeEXT` (764), scancode mode (765),
+`ToString` (766), and the expanded `KeyboardInputTests.cpp` (768)) is in `plan_input.md`.
 
 ---
 
@@ -313,8 +329,6 @@ glob) covering:
   builds are needed, reconfigure them locally for `cna_input`, but do not commit the dirs.
 - **Do not commit the pre-existing working-tree changes** (`D .claude/settings.json`, untracked
   `vendor/wgpu-native/`) — they are unrelated to the input work.
-- **Do not start Keyboard phase (I5) before Mouse (I4)** — Mouse is the agreed next focus per
-  `plan_input.md`'s phase ordering.
 - **No API renames or namespace moves** — XNA/FNA names are frozen. This includes not adding values
   to frozen enums like `PlayerIndex`, and not adding parameters to FNA's public constructors even
   when convenient (see the `GamePadState`/`PacketNumber` precedent in Section 6).
@@ -325,6 +339,9 @@ glob) covering:
   that is a deliberate, documented deviation and would ripple through the public EXT API.
 - **Do not silently "fix" the `GetCapabilities()` `MAX_TOUCHES` deviation** noted in Section 5 as part
   of unrelated work — it needs its own small task/PR since it changes public-facing behavior.
+- **Do not attempt to unit-test `GraphicsDevice`-dependent construction** (e.g. `Texture2D` with real
+  pixel data) in `CnaTests` — it requires a real SDL window + graphics backend; use a separate
+  integration test executable instead, matching `OcclusionQueryDynamicBufferTests.cpp`'s precedent.
 
 ---
 
@@ -334,28 +351,25 @@ glob) covering:
 Read NEXT.md first. Open only the files needed for the first task.
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
-Context: on branch feature/input. Phase I1 (TextInputEXT), Phase I2 (Touch & gesture pipeline), and
-Phase I3 (GamePad behavior/FNA fidelity, tasks 725-740) are all complete. Phase I4 (Mouse) is
-implementation-complete too: every task 745-754 (Mouse behavior: SetPosition warp,
-IsRelativeMouseModeEXT, back-buffer scale field removal, ClickedEXT; MouseCursor CHECKLIST
-compliance: SPDX/NOXNA, FromTexture2D, Dispose/IDisposable, lazy stock-cursor init +
-WaitCursor->WaitArrow rename, Handle/AUDIT.md status decision) is done, committed, and pushed. Full
-per-task detail is in plan_input.md's Phase I4 table and NEXT.md Section 8 — read those instead of
-relying on a summary here. 1866/1866 unit tests pass on the EasyGL build (cmake-build-debug, correctly
-wired to cna_input). One unrelated build blocker was hit and fixed this session: a sharp-runtime
-System::IAsyncResult interface change broke this repo's StorageDevice.cpp — see Section 5's "Fixed"
-row if a future sharp-runtime change breaks the build the same way again.
+Context: on branch feature/input. Phases I1-I4 are all complete (TextInputEXT; Touch & gesture
+pipeline; GamePad behavior/FNA fidelity, tasks 725-740; Mouse behavior and MouseCursor, tasks
+745-755 — MouseInputTests.cpp added 26 tests, all committed/pushed except possibly task 755 itself,
+check git status). 1892/1892 unit tests pass on the EasyGL build (cmake-build-debug, correctly wired
+to cna_input), verified stable under --gtest_shuffle --gtest_repeat=10. Full per-task detail for
+Phase I4 is in plan_input.md — read that instead of relying on a summary here. One unrelated build
+blocker was hit and fixed during Phase I4: a sharp-runtime System::IAsyncResult interface change
+broke this repo's StorageDevice.cpp — see NEXT.md Section 5's "Fixed" row and Section 7's note if a
+future sharp-runtime change breaks the build the same way again (check git log in ../sharp-runtime
+before assuming it's transient).
 
-Next: Task 755 — the last task in Phase I4. New tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp
-(auto-discovered via the tests/*.cpp glob) covering MouseState (getters, both constructors,
-==/!=/Equals/GetHashCode/ToString), Mouse (GetState, SetPosition, IsRelativeMouseModeEXT property +
-relative-delta accumulation, INTERNAL_onClicked->ClickedEXT), and MouseCursor (stock cursors non-null,
-FromTexture2D including its std::invalid_argument validation path, Dispose idempotency) — every task
-from 745 onward is still untested; dedicated coverage was deliberately deferred to this one task,
-matching the task-740 precedent from Phase I3. Completing this closes out Phase I4; Phase I5
-(Keyboard) is next after that.
+Next: Phase I5 (Keyboard fidelity and SDL key mapping), starting at Task 760 — fix
+KeyboardState::GetPressedKeys() ordering (must be ascending by numeric key value, matching FNA's bit
+0->255 iteration; currently backed by an unordered_set, so order is nondeterministic,
+KeyboardState.cpp:32-35). Then Task 761 (GetHashCode FNA fidelity), Task 762 (operator[] indexer),
+and Task 763 (complete the SDL keycode->Keys map: F13-F24, Apps, volume keys, locale fallbacks) follow
+the same pattern used throughout Phases I1-I4. Full Phase I5 task list (760-768) is in plan_input.md.
 
 Build/test: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
-            ./cmake-build-debug/CnaTests --gtest_filter='*Mouse*'
+            ./cmake-build-debug/CnaTests --gtest_filter='*Keyboard*'
 Make one small verified change, then update NEXT.md (and plan_input.md task status) before finishing.
 ```
