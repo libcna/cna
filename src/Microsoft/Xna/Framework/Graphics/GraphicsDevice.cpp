@@ -627,6 +627,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
 
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+
         // Compute total index count from primitive type (mirrors FNA PrimitiveVerts).
         int indexCount = 0;
         switch (primitiveType)
