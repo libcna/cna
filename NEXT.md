@@ -291,12 +291,13 @@ Phase I4 (tasks 745–755) is **fully complete**. Phase I5 (Keyboard fidelity an
 next — full task list in `plan_input.md` (tasks 760–768). In priority order, each is one focused
 session:
 
-1. **Task 760 — Fix `KeyboardState::GetPressedKeys()` ordering.**
-   - Goal: must return keys sorted ascending by numeric value (XNA/FNA contract; FNA iterates bits
-     0→255). Currently backed by an `unordered_set`, so iteration order is nondeterministic
-     (`KeyboardState.cpp:32–35`).
-   - Files: `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`.
-   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Keyboard*'`
+1. **Task 760 — DONE.** `GetPressedKeys()` now copies `pressedKeys_` into a `std::vector` and
+   `std::sort`s it by numeric `Keys` value ascending before returning, matching FNA's bit-0-upward
+   `AddKeysToArray` walk (`KeyboardState.cs:134-189,320-330`). Kept the existing `unordered_set`
+   storage — sorting on read is sufficient for the ordering contract; porting FNA's 8×32-bit
+   bitfield storage is a bigger change than this task calls for. Verified with an ad-hoc (not
+   committed) multi-key check; dedicated multi-key-ordering test coverage deferred to task 768,
+   matching the task-740/755 batching precedent. 1892/1892 tests pass (no regressions).
 
 2. **Task 761 — `KeyboardState::GetHashCode()` FNA fidelity.**
    - Goal: FNA's formula is `keys0 ^ keys1 ^ … ^ keys7` over an 8×32-bit field covering all 256 key
@@ -362,12 +363,16 @@ broke this repo's StorageDevice.cpp — see NEXT.md Section 5's "Fixed" row and 
 future sharp-runtime change breaks the build the same way again (check git log in ../sharp-runtime
 before assuming it's transient).
 
-Next: Phase I5 (Keyboard fidelity and SDL key mapping), starting at Task 760 — fix
-KeyboardState::GetPressedKeys() ordering (must be ascending by numeric key value, matching FNA's bit
-0->255 iteration; currently backed by an unordered_set, so order is nondeterministic,
-KeyboardState.cpp:32-35). Then Task 761 (GetHashCode FNA fidelity), Task 762 (operator[] indexer),
-and Task 763 (complete the SDL keycode->Keys map: F13-F24, Apps, volume keys, locale fallbacks) follow
-the same pattern used throughout Phases I1-I4. Full Phase I5 task list (760-768) is in plan_input.md.
+Phase I5 (Keyboard fidelity and SDL key mapping) is in progress. Task 760 is done:
+KeyboardState::GetPressedKeys() now sorts by ascending numeric Keys value before returning
+(std::sort on a vector copy of the existing unordered_set storage), matching FNA's bit-0-upward walk.
+
+Next: Task 761 — KeyboardState::GetHashCode() FNA fidelity (FNA's formula is
+keys0^keys1^...^keys7 over an 8x32-bit field covering all 256 key values; CNA currently uses
+XOR(key*31) — either port FNA's formula exactly or document the deviation). Then Task 762
+(operator[] indexer) and Task 763 (complete the SDL keycode->Keys map: F13-F24, Apps, volume keys,
+locale fallbacks) follow the same pattern used throughout Phases I1-I4. Full Phase I5 task list
+(760-768) is in plan_input.md.
 
 Build/test: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
             ./cmake-build-debug/CnaTests --gtest_filter='*Keyboard*'
