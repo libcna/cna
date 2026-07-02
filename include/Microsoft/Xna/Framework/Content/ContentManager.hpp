@@ -179,7 +179,7 @@ namespace Microsoft::Xna::Framework::Content
     private:
         /**
          * @brief Resolves the full filesystem path for an asset, trying reader extensions
-         *        when the asset name has no extension.
+         *        when the literal asset path does not exist.
          *
          * @tparam T       Asset type.
          * @param assetName Relative asset name.
@@ -193,8 +193,15 @@ namespace Microsoft::Xna::Framework::Content
         {
             const std::string base = BuildAssetPath(assetName);
 
-            // If assetName already has an extension, use the path as-is.
-            if (std::filesystem::path(assetName).has_extension())
+            // If the literal path already exists, use it as-is. This covers
+            // assetName with an explicit, correct extension. Checking
+            // existence rather than std::filesystem::path::has_extension()
+            // matters because asset names can legitimately contain a '.'
+            // that is not a file extension (e.g. localized names like
+            // "Flag.en-US"), which has_extension() would otherwise
+            // misinterpret as already-resolved and never try appending
+            // a reader extension.
+            if (std::filesystem::exists(base))
             {
                 return base;
             }
