@@ -18,6 +18,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class Texture3D : public GraphicsResource
     {
     public:
+        using GraphicsResource::Dispose;
+
         /**
          * @brief Creates a 3D texture with the given dimensions and format.
          *
@@ -130,6 +132,10 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void GetData(int level, int left, int top, int right, int bottom, int front, int back,
                      Color* data, int startIndex, int elementCount) const;
+
+    protected:
+        /** @brief Releases the backend 3D texture handle when the resource is disposed. */
+        void Dispose(bool disposing) override;
 
     private:
         int width_;
