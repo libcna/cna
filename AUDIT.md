@@ -255,6 +255,7 @@ All 19 types audited. Missing Vector-form constructors added.
 | Keys (enum) | ✅ | Complete |
 | KeyState (enum) | ✅ | Complete |
 | Mouse | ✅ | API complete |
+| MouseCursor | ✅ | MonoGame-derived `NOXNA` extension — no `MouseCursor` type exists in FNA or XNA 4.0. **Status decision (Task 754): kept**, not dropped — it is the standard way MonoGame/FNA-family games set custom and stock OS cursors, and CNA's `Mouse::SetCursor(MouseCursor&)` already depends on it. CHECKLIST-compliant as of Phase I4 tasks 750-753 (correct SPDX, full `NOXNA` tagging, `FromTexture2D`, `Dispose`/`IDisposable`, lazy stock-cursor construction, `WaitCursor`→`WaitArrow` rename). No separate `Handle` property was added: the existing `NOXNA GetSDLCursor() const` (returning `SDL_Cursor*`) already serves as MonoGame's `IntPtr Handle` equivalent — a second handle accessor returning the same pointer reinterpreted as a generic integer would be pure duplication with no current consumer. |
 | MouseState | ✅ | API complete |
 | TextInputEXT | ✅ | API complete |
 
