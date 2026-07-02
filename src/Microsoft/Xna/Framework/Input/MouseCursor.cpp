@@ -1,6 +1,10 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
+
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -8,6 +12,52 @@ namespace Microsoft::Xna::Framework::Input
     {
         SDL_Cursor* c = SDL_CreateSystemCursor(id);
         return MouseCursor(c, /*owning=*/true);
+    }
+
+    MouseCursor MouseCursor::FromTexture2D(const Graphics::Texture2D& texture, const int originX, const int originY)
+    {
+        const auto format = texture.getFormatProperty();
+        if (format != Graphics::SurfaceFormat::Color && format != Graphics::SurfaceFormat::ColorSrgb)
+        {
+            throw std::invalid_argument(
+                "MouseCursor::FromTexture2D: only SurfaceFormat::Color or ColorSrgb textures are accepted for mouse cursors");
+        }
+
+        const int width  = texture.getWidthProperty();
+        const int height = texture.getHeightProperty();
+
+        std::vector<Color> pixels(
+            static_cast<std::size_t>(width) * static_cast<std::size_t>(height), Color::Transparent);
+        texture.GetData(pixels.data(), static_cast<int>(pixels.size()));
+
+        // Color carries a vtable pointer (IPackedVectorT), so it is not a tightly
+        // packed RGBA8 buffer — extract each pixel's packed value into a raw array
+        // before handing it to SDL. PackedValue's byte layout (R,G,B,A; see
+        // Color.cpp) matches SDL_PIXELFORMAT_RGBA32 exactly.
+        std::vector<uint32_t> rgba(pixels.size());
+        for (std::size_t i = 0; i < pixels.size(); ++i)
+        {
+            rgba[i] = pixels[i].getPackedValueProperty();
+        }
+
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(
+            width, height, SDL_PIXELFORMAT_RGBA32,
+            rgba.data(), width * static_cast<int>(sizeof(uint32_t)));
+        if (surface == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("MouseCursor::FromTexture2D: SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
+        }
+
+        SDL_Cursor* cursor = SDL_CreateColorCursor(surface, originX, originY);
+        SDL_DestroySurface(surface);
+        if (cursor == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("MouseCursor::FromTexture2D: SDL_CreateColorCursor failed: ") + SDL_GetError());
+        }
+
+        return MouseCursor(cursor, /*owning=*/true);
     }
 
     // Static instances — created lazily on first program use via static initialisation.
