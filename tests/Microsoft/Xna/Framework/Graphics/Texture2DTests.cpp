@@ -185,6 +185,16 @@ TEST(Texture2DTest, GetDataNoCpuPixelsThrowsRuntimeError)
     EXPECT_THROW(tex.GetData(buf, 0, 1), std::runtime_error);
 }
 
+// Task 265: negative startIndex is rejected before it can compute a negative
+// array index (px[(startIndex+i)*4]) and read out of bounds before the start
+// of the internal cpuPixels_ buffer — mirrors the equivalent SetData guard.
+TEST(Texture2DTest, GetDataNegativeStartIndexThrowsOutOfRange)
+{
+    Texture2D tex;
+    Color buf[1] = { Color(0,0,0,0) };
+    EXPECT_THROW(tex.GetData(buf, -1, 1), std::out_of_range);
+}
+
 // 2-param overload delegates to 3-param; same guards apply
 TEST(Texture2DTest, GetData2ParamNullPtrThrowsInvalidArgument)
 {
@@ -221,6 +231,17 @@ TEST(Texture2DTest, GetDataNegativeLevelThrowsOutOfRange)
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     EXPECT_THROW(tex.GetData(-1, nullptr, buf, 0, 1), std::out_of_range);
+}
+
+// Task 265: negative startIndex is rejected before it can compute a negative
+// destination index (data[startIndex+row*w+col]) and write out of bounds
+// before the start of the caller-supplied data array — mirrors the equivalent
+// SetData(level,rect,...) guard (SetDataLevelNegativeStartIndexThrowsOutOfRange).
+TEST(Texture2DTest, GetDataLevelNegativeStartIndexThrowsOutOfRange)
+{
+    Texture2D tex;
+    Color buf[1] = { Color(0,0,0,0) };
+    EXPECT_THROW(tex.GetData(0, nullptr, buf, -1, 1), std::out_of_range);
 }
 
 TEST(Texture2DTest, GetDataLevelNoCpuPixelsThrowsRuntimeError)
@@ -384,6 +405,89 @@ TEST_F(SetDataSimpleGuardTest, ExactElementCountDoesNotThrow)
     Texture2D tex(gd, 2, 2);
     Color buf[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
     EXPECT_NO_THROW(tex.SetData(buf, 4));
+}
+
+// -----------------------------------------------------------------------
+// Context-recovery interaction with the CPU pixel shadow (Task 270)
+//
+// GraphicsDevice::SetContextRecoveryEnabled(false) is a NOXNA optimization:
+// Texture2D::MaybeFreeCpuPixels() frees the CPU-side pixel shadow
+// (cpuPixels_) after every full upload to save ~1x texture RAM. CNA has no
+// GPU pixel-readback path, so GetData() depends entirely on that shadow —
+// once freed, GetData() throws instead of falling back to a GPU read
+// (FNA's real GetData always reads back from the GPU). See AUDIT.md,
+// "Texture2D CPU shadow storage" for the full write-up.
+// -----------------------------------------------------------------------
+
+class ContextRecoveryTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+};
+
+TEST_F(ContextRecoveryTest, GetDataWorksAfterFullUploadWithRecoveryEnabledByDefault)
+{
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(1,2,3,4), Color(5,6,7,8), Color(9,10,11,12), Color(13,14,15,16) };
+    tex.SetData(in, 4);
+
+    Color out[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
+    EXPECT_NO_THROW(tex.GetData(out, 4));
+    EXPECT_EQ(out[0], in[0]);
+    EXPECT_EQ(out[3], in[3]);
+}
+
+TEST_F(ContextRecoveryTest, GetDataThrowsAfterFullUploadWithRecoveryDisabled)
+{
+    gd.SetContextRecoveryEnabled(false);
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(1,2,3,4), Color(5,6,7,8), Color(9,10,11,12), Color(13,14,15,16) };
+    tex.SetData(in, 4);
+
+    Color out[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
+    EXPECT_THROW(tex.GetData(out, 4), std::runtime_error);
+}
+
+TEST_F(ContextRecoveryTest, PartialUpdateAfterShadowFreedThrowsInsteadOfCorruptingTexture)
+{
+    // Regression test: before the Task 270 fix, this sequence silently zeroed
+    // out the 3 untouched pixels on the GPU, because getMipBuffer(0)
+    // resurrected a fresh zero-filled shadow and SetData re-uploaded the
+    // whole level over the real (5,5,5,5) GPU content. Now it fails loudly.
+    gd.SetContextRecoveryEnabled(false);
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5) };
+    tex.SetData(in, 4); // shadow freed again immediately after this upload
+
+    const Rectangle onePixel(0, 0, 1, 1);
+    Color patch(9, 9, 9, 9);
+    EXPECT_THROW(tex.SetData(0, &onePixel, &patch, 0, 1), std::runtime_error);
+}
+
+TEST_F(ContextRecoveryTest, PartialUpdateCoveringFullLevelDoesNotThrowEvenWithRecoveryDisabled)
+{
+    // A partial-update rect that happens to cover the whole level is safe:
+    // every pixel gets overwritten, so the resurrected zero-filled shadow
+    // never leaks stale content to the GPU.
+    gd.SetContextRecoveryEnabled(false);
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5) };
+    tex.SetData(in, 4);
+
+    const Rectangle fullLevel(0, 0, 2, 2);
+    Color patch[4] = { Color(9,9,9,9), Color(9,9,9,9), Color(9,9,9,9), Color(9,9,9,9) };
+    EXPECT_NO_THROW(tex.SetData(0, &fullLevel, patch, 0, 4));
+}
+
+TEST_F(ContextRecoveryTest, PartialUpdateNeverThrowsWithRecoveryEnabledByDefault)
+{
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5) };
+    tex.SetData(in, 4);
+
+    const Rectangle onePixel(0, 0, 1, 1);
+    Color patch(9, 9, 9, 9);
+    EXPECT_NO_THROW(tex.SetData(0, &onePixel, &patch, 0, 1));
 }
 
 // -----------------------------------------------------------------------
