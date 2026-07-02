@@ -1000,6 +1000,24 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 268: non-power-of-two (3x5) texture upload + GPU-sampled pixel-readback
+        cna_easygl_test(cna_test_easygl_npot_texture
+                        examples/easygl_npot_texture_test.cpp)
+        add_test(NAME EasyGL_NpotTexture
+                 COMMAND cna_test_easygl_npot_texture)
+        set_tests_properties(EasyGL_NpotTexture PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 269: SpriteBatch TextureAddressMode (Wrap vs Clamp) edge-sampling pixel-readback
+        cna_easygl_test(cna_test_easygl_texture_address_mode
+                        examples/easygl_texture_address_mode_test.cpp)
+        add_test(NAME EasyGL_TextureAddressMode
+                 COMMAND cna_test_easygl_texture_address_mode)
+        set_tests_properties(EasyGL_TextureAddressMode PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests

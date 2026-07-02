@@ -757,6 +757,17 @@ void main()
         }
     }
 
+    void EasyGLSpriteBatchBackend::SetSamplerFilter(int textureFilter)
+    {
+        pendingFilter_ = textureFilter;
+    }
+
+    void EasyGLSpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
+    {
+        pendingAddressU_ = addressU;
+        pendingAddressV_ = addressV;
+    }
+
     void EasyGLSpriteBatchBackend::End()
     {
         FlushBatch();
@@ -840,6 +851,8 @@ void main()
             prog->set_uniform_matrix4(projLoc, ortho);
 
         current_texture_->BindGL();
+        if (graphicsBackend_)
+            graphicsBackend_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
 
         vbo_.bind(::easygl::BufferTarget::Array);
         vbo_.set_data(::easygl::BufferTarget::Array,
@@ -902,15 +915,15 @@ void main()
         const float texW = static_cast<float>(texture.GetWidth());
         const float texH = static_cast<float>(texture.GetHeight());
 
+        // No [0,1] clamp here — matches FNA, which divides straight through with no clamping
+        // (SpriteBatch.cs, e.g. the Draw(..., Rectangle? sourceRectangle, ...) overloads).
+        // A sourceRectangle that extends past the texture bounds intentionally produces UVs
+        // outside [0,1], letting the bound SamplerState's TextureAddressMode (Wrap/Mirror/Clamp)
+        // govern edge sampling — the classic XNA scrolling/tiling-background technique.
         float u1 = (float)sourceRectangle.X / texW;
         float v1 = (float)sourceRectangle.Y / texH;
         float u2 = (float)(sourceRectangle.X + sourceRectangle.Width)  / texW;
         float v2 = (float)(sourceRectangle.Y + sourceRectangle.Height) / texH;
-
-        u1 = std::clamp(u1, 0.0f, 1.0f);
-        v1 = std::clamp(v1, 0.0f, 1.0f);
-        u2 = std::clamp(u2, 0.0f, 1.0f);
-        v2 = std::clamp(v2, 0.0f, 1.0f);
 
         if ((int)effects & (int)SpriteEffects::FlipHorizontally) std::swap(u1, u2);
         if ((int)effects & (int)SpriteEffects::FlipVertically) std::swap(v1, v2);

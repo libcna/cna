@@ -259,6 +259,16 @@ namespace CNA::Internal::Backends
         /// Sets the texture filter mode applied to each Draw call.
         /// Passes the raw TextureFilter int value; 0=Linear, 1=Point/Nearest, others map to nearest.
         virtual void SetSamplerFilter(int /*textureFilter*/) {}
+        /**
+         * @brief Sets the texture address (wrap/clamp/mirror) mode applied to each Draw call.
+         *
+         * Default: no-op (backend keeps whatever wrap mode the texture was created with, i.e.
+         * Clamp on EasyGL).
+         *
+         * @param addressU Raw TextureAddressMode int value for U (0=Wrap, 1=Clamp, 2=Mirror).
+         * @param addressV Raw TextureAddressMode int value for V (0=Wrap, 1=Clamp, 2=Mirror).
+         */
+        virtual void SetSamplerAddressMode(int /*addressU*/, int /*addressV*/) {}
         virtual void Draw(const ITextureBackend& texture, float x, float y) = 0;
         virtual void Draw(const ITextureBackend& texture,
                           const Rectangle& destinationRectangle,

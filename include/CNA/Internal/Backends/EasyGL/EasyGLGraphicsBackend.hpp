@@ -211,6 +211,14 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Program customProgram_;
         Effect* compiledFor_        = nullptr;
 
+        // Raw TextureFilter/TextureAddressMode values set via SetSamplerFilter/SetSamplerAddressMode
+        // (SpriteBatch::Begin), applied to texture unit 0 on the next FlushBatch(). Defaults match
+        // the GL texture-object defaults baked in at texture creation (Linear filter, Clamp address),
+        // so a SpriteBatch that never receives these calls behaves exactly as before this was added.
+        int pendingFilter_    = 0; // TextureFilter::Linear
+        int pendingAddressU_  = 1; // TextureAddressMode::Clamp
+        int pendingAddressV_  = 1; // TextureAddressMode::Clamp
+
     public:
         explicit EasyGLSpriteBatchBackend(::easygl::Device& device, ::easygl::ResourceRegistry* registry,
                                           EasyGLGraphicsBackend* backend = nullptr);
@@ -220,6 +228,8 @@ namespace CNA::Internal::Backends::EasyGL
         void End() override;
         void SetTransformMatrix(const Matrix& m) override;
         void SetCustomEffect(Effect* effect) override;
+        void SetSamplerFilter(int textureFilter) override;
+        void SetSamplerAddressMode(int addressU, int addressV) override;
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,
                   const Rectangle& destinationRectangle,
