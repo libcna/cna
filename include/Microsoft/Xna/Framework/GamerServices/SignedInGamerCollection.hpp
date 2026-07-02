@@ -16,6 +16,16 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
     public:
         /**
+         * @brief Brings GamerCollection<SignedInGamer>::operator[](int) into scope.
+         *
+         * NOXNA: without this, declaring the PlayerIndex overload below would hide the
+         * inherited int overload per C++ name-hiding rules (C# has no equivalent hiding for
+         * overloads with new parameter types) — FNA code such as
+         * `Gamer.SignedInGamers[i]` with an int index relies on that inherited overload.
+         */
+        NOXNA using GamerCollection<SignedInGamer>::operator[];
+
+        /**
          * @brief Gets the signed-in gamer for the specified player index.
          *
          * @param index The player index to look up.

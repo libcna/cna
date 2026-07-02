@@ -108,6 +108,21 @@ namespace Microsoft::Xna::Framework::GamerServices
             return GamerCollection<T>(std::move(items));
         }
 
+        /**
+         * @brief Appends an item to the collection.
+         *
+         * FNA's GamerCollection<T>.collection field is `internal` (same-assembly-mutable) —
+         * NetworkSession.AddLocalGamer mutates a sibling class's collection directly through
+         * it. The C++ port's collection_ is `protected` (subclass-only); this restores that
+         * same-library mutation access.
+         *
+         * @param item The element to append.
+         */
+        NOXNA void Add(T* item)
+        {
+            collection_.push_back(item);
+        }
+
     protected:
         explicit GamerCollection(std::vector<T*> items)
             : collection_(std::move(items))
