@@ -4,7 +4,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp"
 #include "System/AsyncCallback.hpp"
 #include "System/IAsyncResult.hpp"
-#include "System/Threading/ManualResetEvent.hpp"
+#include "System/Threading/EventWaitHandle.hpp"
 #include <any>
 #include <string>
 
@@ -209,7 +209,7 @@ namespace Microsoft::Xna::Framework::GamerServices
              *
              * @return The async state value.
              */
-            [[nodiscard]] std::any getAsyncStateProperty() const;
+            [[nodiscard]] const std::any& getAsyncStateProperty() const override;
 
             /** @brief Always false; this stub never completes synchronously. */
             [[nodiscard]] bool getCompletedSynchronouslyProperty() const override;
@@ -227,13 +227,9 @@ namespace Microsoft::Xna::Framework::GamerServices
             /**
              * @brief Gets the wait handle signalled when the operation completes.
              *
-             * Sharp-runtime's IAsyncResult does not (yet) declare AsyncWaitHandle, unlike
-             * real .NET, and its ManualResetEvent does not derive System::Threading::WaitHandle.
-             * Exposed directly as the concrete synchronization type FNA actually constructs.
-             *
              * @return Reference to the wait handle.
              */
-            [[nodiscard]] System::Threading::ManualResetEvent& getAsyncWaitHandleProperty();
+            [[nodiscard]] System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override;
 
             /** @brief The callback to invoke when the operation completes. */
             const System::AsyncCallback Callback;
@@ -241,7 +237,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         private:
             std::any asyncState_;
             bool isCompleted_{false};
-            System::Threading::ManualResetEvent asyncWaitHandle_;
+
+            // Mutable: IAsyncResult::getAsyncWaitHandleProperty() is const but returns a
+            // non-const WaitHandle&, so the handle exposed through it must be mutable.
+            mutable System::Threading::EventWaitHandle asyncWaitHandle_;
         };
 
         std::string displayName_;

@@ -107,16 +107,16 @@ namespace Microsoft::Xna::Framework::GamerServices
     Gamer::GamerAction::GamerAction(std::any state, System::AsyncCallback callback)
         : Callback(std::move(callback))
         , asyncState_(std::move(state))
-        , asyncWaitHandle_(true)
+        , asyncWaitHandle_(true, System::Threading::EventResetMode::ManualReset)
     {
     }
 
-    std::any Gamer::GamerAction::getAsyncStateProperty() const          { return asyncState_; }
+    const std::any& Gamer::GamerAction::getAsyncStateProperty() const  { return asyncState_; }
     bool Gamer::GamerAction::getCompletedSynchronouslyProperty() const  { return false; }
     bool Gamer::GamerAction::getIsCompletedProperty() const             { return isCompleted_; }
     void Gamer::GamerAction::setIsCompletedProperty(bool value)         { isCompleted_ = value; }
 
-    System::Threading::ManualResetEvent& Gamer::GamerAction::getAsyncWaitHandleProperty()
+    System::Threading::WaitHandle& Gamer::GamerAction::getAsyncWaitHandleProperty() const
     {
         return asyncWaitHandle_;
     }

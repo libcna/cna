@@ -2,7 +2,9 @@
 // Copyright (c) Robert Vokac and contributors
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
+#include "System/Threading/EventWaitHandle.hpp"
 
+#include <any>
 #include <filesystem>
 #include <stdexcept>
 
@@ -24,6 +26,22 @@ namespace Microsoft::Xna::Framework::Storage
 
         bool getIsCompletedProperty()           const override { return true; }
         bool getCompletedSynchronouslyProperty() const override { return true; }
+
+        [[nodiscard]] const std::any& getAsyncStateProperty() const override
+        {
+            asyncStateAny_ = asyncState;
+            return asyncStateAny_;
+        }
+
+        [[nodiscard]] System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override
+        {
+            return asyncWaitHandle_;
+        }
+
+    private:
+        mutable std::any asyncStateAny_;
+        // Already-signalled: BeginShowSelector always completes synchronously.
+        mutable System::Threading::EventWaitHandle asyncWaitHandle_{true, System::Threading::EventResetMode::ManualReset};
     };
 
     class ContainerResult final : public System::IAsyncResult
@@ -34,6 +52,22 @@ namespace Microsoft::Xna::Framework::Storage
 
         bool getIsCompletedProperty()           const override { return true; }
         bool getCompletedSynchronouslyProperty() const override { return true; }
+
+        [[nodiscard]] const std::any& getAsyncStateProperty() const override
+        {
+            asyncStateAny_ = asyncState;
+            return asyncStateAny_;
+        }
+
+        [[nodiscard]] System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override
+        {
+            return asyncWaitHandle_;
+        }
+
+    private:
+        mutable std::any asyncStateAny_;
+        // Already-signalled: BeginOpenContainer always completes synchronously.
+        mutable System::Threading::EventWaitHandle asyncWaitHandle_{true, System::Threading::EventResetMode::ManualReset};
     };
 
     // -------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "System/NotSupportedException.hpp"
-#include "System/Threading/ManualResetEvent.hpp"
+#include "System/Threading/EventWaitHandle.hpp"
 #include <SDL3/SDL.h>
 
 namespace Microsoft::Xna::Framework::GamerServices
@@ -18,17 +18,16 @@ namespace Microsoft::Xna::Framework::GamerServices
             GuideAction(std::any state, System::AsyncCallback callback)
                 : Callback(std::move(callback))
                 , asyncState_(std::move(state))
-                , asyncWaitHandle_(true)
+                , asyncWaitHandle_(true, System::Threading::EventResetMode::ManualReset)
             {
             }
 
-            [[nodiscard]] std::any getAsyncStateProperty() const { return asyncState_; }
+            [[nodiscard]] const std::any& getAsyncStateProperty() const override { return asyncState_; }
             [[nodiscard]] bool getCompletedSynchronouslyProperty() const override { return false; }
             [[nodiscard]] bool getIsCompletedProperty() const override { return isCompleted_; }
             void setIsCompletedProperty(bool value) { isCompleted_ = value; }
 
-            // Same sharp-runtime IAsyncResult/WaitHandle gap documented at Gamer::GamerAction.
-            [[nodiscard]] System::Threading::ManualResetEvent& getAsyncWaitHandleProperty()
+            [[nodiscard]] System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override
             {
                 return asyncWaitHandle_;
             }
@@ -38,7 +37,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         private:
             std::any asyncState_;
             bool isCompleted_{false};
-            System::Threading::ManualResetEvent asyncWaitHandle_;
+
+            // Mutable: IAsyncResult::getAsyncWaitHandleProperty() is const but returns a
+            // non-const WaitHandle&, so the handle exposed through it must be mutable.
+            mutable System::Threading::EventWaitHandle asyncWaitHandle_;
         };
     }
 
