@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -11,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Utf8Decode.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -370,9 +372,9 @@ namespace Microsoft::Xna::Framework::Graphics
         Vector2 curOffset(0.0f, 0.0f);
         bool firstInLine = true;
 
-        for (char raw : text)
+        for (std::size_t i = 0; i < text.size();)
         {
-            const auto c = static_cast<charcs>(static_cast<unsigned char>(raw));
+            const charcs c = CNA::Internal::DecodeUtf8CodePoint(text, i);
 
             if (c == u'\r') continue;
             if (c == u'\n')
