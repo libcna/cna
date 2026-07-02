@@ -6,6 +6,36 @@
 > **SDL_Renderer is intentionally 2D-only.** All 3D calls throw `std::runtime_error`.
 > This is correct XNA/FNA behavior — SDL_Renderer cannot do 3D.
 
+> **Task numbering:** 1–663 = original core plan (Phases 1–55, all non-WebGPU work).
+> 664+ = additions made after the original plan was written (session 2026-07-02 onward),
+> including the full Phase 70–73 backend-perfection wave below.
+> **10001+ = WebGPU** (Phases 56–69, renumbered 2026-07-02 from their original 501–661 to
+> free up the low range for further core-plan growth; WebGPU is deliberately deprioritized —
+> see "Execution order" below).
+
+## Execution order (priority, not document order)
+
+1. **Phases 1–55** (core, Tasks 1–663) — in progress, ~44% done as of 2026-07-02.
+2. **Phase 70 — SDL_Renderer** (Tasks 666–731) — the 2D-only backend must reach verified
+   perfection first: it's the smallest, simplest surface, and every other backend's SpriteBatch/
+   Texture2D work builds on the same XNA semantics SDL_Renderer has to get exactly right.
+3. **Phase 71 — EasyGL final gap closure** (Tasks 732–739) — EasyGL is already the de facto
+   target of most unlabeled tasks in Phases 34–55, so this phase is deliberately small: it only
+   covers what genuinely isn't tracked elsewhere yet (real `SurfaceFormat` GPU forwarding,
+   `FillMode::WireFrame` emulation, mip-chain generation for `Texture3D`/`TextureCube`).
+4. **Phase 72 — Bgfx parity** (Tasks 740–824) — full pixel-verified breadth, replicated from
+   Phases 35–50's EasyGL-default testing matrix, starting from wiring up the pixel-readback path
+   (`GetBackBufferData` exists per Task 117 but no current Bgfx test calls it).
+5. **Phase 73 — Vulkan parity** (Tasks 664–665, 825–861) — Vulkan already has more infrastructure
+   done than Bgfx (per-slot samplers, instancing, wireframe, MSAA, RenderTargetCube, stock-effect
+   SPIR-V shaders), so this phase is gap-closure sized, not a full replication — plus the two
+   SpriteBatch bugs found 2026-07-02 (multi-batch, dropped `SamplerState`).
+6. **Phases 56–69 (WebGPU, Tasks 10001+)** — parked. Revisit only after 1–5 above are done.
+
+> Phases 70–73 physically appear after Phase 69 in this document (append-only, to avoid
+> renumbering existing WebGPU content) but run **before** it — see the priority order above,
+> not the phase numbers, for actual execution sequence.
+
 ---
 
 ## Legend
@@ -689,6 +719,8 @@ All 100 original tasks addressed.
 | 418 | Pixel test: scalar and Vector2 scale overloads produce expected size     | ⬜      | EasyGL                |
 | 419 | Pixel test: source rectangle cropping                                    | ⬜      | EasyGL                |
 | 420 | Pixel test: layer depth affects order when sort mode uses it             | ⬜      | EasyGL                |
+| 664 | Fix Vulkan: multiple `SpriteBatch::Begin()`/`End()` calls per frame — only the last batch renders | ⬜ | Confirmed bug (session 2026-07-02, see `NEXT.md` §5). Root cause not yet isolated — likely `VulkanSpriteBatchBackend` reuses/overwrites a single per-frame vertex/index staging buffer or descriptor set across `Begin`/`End` cycles instead of flushing or double-buffering per batch. Repro: 2+ `Begin()`/`Draw()`/`End()` cycles in one `Draw(GameTime)`, each drawing a distinct-colour quad to a distinct screen region; expect both regions correct, currently only the last one renders. Do not guess-fix; instrument/trace the Vulkan command recording first. |
+| 665 | Fix Vulkan: `SpriteBatch::Begin()`'s `SamplerState` (Filter/AddressU/AddressV) has no effect | ⬜ | `VulkanSpriteBatchBackend` doesn't override `SetSamplerFilter`/`SetSamplerAddressMode` (mirrors the pre-Task-269 EasyGL bug, same root cause, different backend). Fix shape: mirror Task 269's EasyGL fix — store pending filter/address values set via `SetSamplerFilter`/`SetSamplerAddressMode`, apply via the existing per-slot `VkSampler` cache (Task 118, `GetOrCreateTexSamplerDescSet`) at flush time, slot 0. Verify UV is not separately clamped anywhere in the Vulkan sprite draw path (mirrors the second EasyGL bug Task 269 found — check before assuming only the sampler wiring is missing). Add a `Vulkan_TextureAddressMode` pixel-readback test analogous to `EasyGL_TextureAddressMode`. |
 
 ---
 
@@ -830,6 +862,11 @@ All 100 original tasks addressed.
 
 ## Phase 56 — WebGPU backend: infrastructure and CMake setup
 
+> **⛔ Deprioritized as of 2026-07-02.** Tasks in this phase and Phases 57–69 are on hold until
+> Phases 1–55 and the Phase 70–73 backend-perfection wave (SDL_Renderer → EasyGL → Bgfx → Vulkan)
+> are complete — see "Execution order" near the top of this document. Task numbers were moved to
+> 10001+ (from 501–661) to free up numbering space for that wave; no other content changed.
+>
 > WebGPU backend uses **wgpu-native v29** (C API header `webgpu.h` + `wgpu.h`).
 > Installed at `vendor/wgpu-native/`. Shaders are written in **WGSL** (not SPIR-V).
 > Push constants do not exist in WebGPU — replaced by uniform buffers (bind group 0, binding 0).
@@ -840,16 +877,16 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 501 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; find `vendor/wgpu-native` headers + libs; define `CNA_BACKEND_WEBGPU` | ⬜ | Mirror VULKAN block in CMakeLists.txt |
-| 502 | Create `include/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | ⬜ | ~12 nested backend classes |
-| 503 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — stub all methods (throw not-implemented) | ⬜ | Compiles clean, no functionality yet |
-| 504 | SDL3 surface creation: obtain `WGPUSurface` via `SDL_GetProperty(SDL_PROP_WINDOW_WGPU_SURFACE_POINTER)` or `wgpuInstanceCreateSurface` | ⬜ | Prerequisite for all rendering |
-| 505 | `WGPUInstance` + `WGPUAdapter` + `WGPUDevice` + `WGPUQueue` initialization via `wgpuCreateInstance` / `wgpuInstanceRequestAdapter` / `wgpuAdapterRequestDevice` | ⬜ | All synchronous in wgpu-native |
-| 506 | Swap chain: `WGPUSurface` configure + `wgpuSurfaceGetCurrentTexture` + `wgpuTextureCreateView` for backbuffer | ⬜ | Replaces `vkAcquireNextImageKHR` |
-| 507 | Command encoder: `wgpuDeviceCreateCommandEncoder` + `wgpuCommandEncoderFinish` + `wgpuQueueSubmit` per frame | ⬜ | Replaces Vulkan command buffer recording |
-| 508 | Render pass: `wgpuCommandEncoderBeginRenderPass` with color attachment (backbuffer view) + depth attachment | ⬜ | Equivalent to `vkCmdBeginRenderPass` |
-| 509 | `Clear()`: set clear color in `WGPURenderPassColorAttachment.clearValue`; implement depth clear in pass descriptor | ⬜ | |
-| 510 | `Present()`: `wgpuSurfacePresent()` after queue submit | ⬜ | |
+| 10001 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; find `vendor/wgpu-native` headers + libs; define `CNA_BACKEND_WEBGPU` | ⬜ | Mirror VULKAN block in CMakeLists.txt |
+| 10002 | Create `include/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | ⬜ | ~12 nested backend classes |
+| 10003 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — stub all methods (throw not-implemented) | ⬜ | Compiles clean, no functionality yet |
+| 10004 | SDL3 surface creation: obtain `WGPUSurface` via `SDL_GetProperty(SDL_PROP_WINDOW_WGPU_SURFACE_POINTER)` or `wgpuInstanceCreateSurface` | ⬜ | Prerequisite for all rendering |
+| 10005 | `WGPUInstance` + `WGPUAdapter` + `WGPUDevice` + `WGPUQueue` initialization via `wgpuCreateInstance` / `wgpuInstanceRequestAdapter` / `wgpuAdapterRequestDevice` | ⬜ | All synchronous in wgpu-native |
+| 10006 | Swap chain: `WGPUSurface` configure + `wgpuSurfaceGetCurrentTexture` + `wgpuTextureCreateView` for backbuffer | ⬜ | Replaces `vkAcquireNextImageKHR` |
+| 10007 | Command encoder: `wgpuDeviceCreateCommandEncoder` + `wgpuCommandEncoderFinish` + `wgpuQueueSubmit` per frame | ⬜ | Replaces Vulkan command buffer recording |
+| 10008 | Render pass: `wgpuCommandEncoderBeginRenderPass` with color attachment (backbuffer view) + depth attachment | ⬜ | Equivalent to `vkCmdBeginRenderPass` |
+| 10009 | `Clear()`: set clear color in `WGPURenderPassColorAttachment.clearValue`; implement depth clear in pass descriptor | ⬜ | |
+| 10010 | `Present()`: `wgpuSurfacePresent()` after queue submit | ⬜ | |
 
 ---
 
@@ -857,13 +894,13 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 511 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ⬜ | Central UBO for MVP + effect params |
-| 512 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | ⬜ | |
-| 513 | `WGPUBindGroupLayout` for slot 0 binding 0 (uniform buffer) — shared across all 3D pipelines | ⬜ | |
-| 514 | `WGPUBindGroup` creation and per-draw update for MVP matrix | ⬜ | |
-| 515 | `WGPUBindGroupLayout` for slot 1 binding 0 (texture sampler) — for textured pipelines | ⬜ | |
-| 516 | `WGPUSampler` creation mapping `SamplerState` (filter, address mode) → WGPU descriptor | ⬜ | |
-| 517 | `WGPUPipelineLayout` combining UBO bind group layout + texture bind group layout | ⬜ | |
+| 10011 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ⬜ | Central UBO for MVP + effect params |
+| 10012 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | ⬜ | |
+| 10013 | `WGPUBindGroupLayout` for slot 0 binding 0 (uniform buffer) — shared across all 3D pipelines | ⬜ | |
+| 10014 | `WGPUBindGroup` creation and per-draw update for MVP matrix | ⬜ | |
+| 10015 | `WGPUBindGroupLayout` for slot 1 binding 0 (texture sampler) — for textured pipelines | ⬜ | |
+| 10016 | `WGPUSampler` creation mapping `SamplerState` (filter, address mode) → WGPU descriptor | ⬜ | |
+| 10017 | `WGPUPipelineLayout` combining UBO bind group layout + texture bind group layout | ⬜ | |
 
 ---
 
@@ -871,17 +908,17 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 520 | Write `sprite2d.wgsl` — 2D sprite vertex + fragment shader (pos + UV + RGBA tint); embed as C++ string literal | ⬜ | Equivalent to `sprite2d.vert/frag.glsl` |
-| 521 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ⬜ | stride=16 |
-| 522 | Write `textured3d.wgsl` — 3D vertex (float3 pos + float2 UV); texture2D sampler in fragment | ⬜ | stride=20 |
-| 523 | Write `colored_textured3d.wgsl` — float3 + ubyte4 color + float2 UV; multiply tex×color in fragment | ⬜ | stride=24 |
-| 524 | Write `lit_textured3d.wgsl` — float3 pos + float3 normal + float2 UV; Blinn-Phong lighting in fragment | ⬜ | stride=32 |
-| 525 | Write `alpha_test3d.wgsl` — per-pixel alpha discard matching XNA AlphaTestEffect semantics | ⬜ | |
-| 526 | Write `dual_texture3d.wgsl` — two texture samplers, multiply/blend in fragment | ⬜ | |
-| 527 | Write `env_map3d.wgsl` — cube map sampler + reflection vector from normal | ⬜ | |
-| 528 | Write `skinned3d.wgsl` — bone palette as uniform array (max 72 mat4); blend 4 weights+indices | ⬜ | |
-| 529 | Write `instanced3d.wgsl` — per-instance mat4 world transform in second vertex buffer binding | ⬜ | |
-| 530 | Compile-time validation: embed all WGSL as `constexpr const char*` in `webgpu_shaders.hpp`; validate via `wgpuDeviceCreateShaderModule` at startup | ⬜ | Catch WGSL errors early |
+| 10020 | Write `sprite2d.wgsl` — 2D sprite vertex + fragment shader (pos + UV + RGBA tint); embed as C++ string literal | ⬜ | Equivalent to `sprite2d.vert/frag.glsl` |
+| 10021 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ⬜ | stride=16 |
+| 10022 | Write `textured3d.wgsl` — 3D vertex (float3 pos + float2 UV); texture2D sampler in fragment | ⬜ | stride=20 |
+| 10023 | Write `colored_textured3d.wgsl` — float3 + ubyte4 color + float2 UV; multiply tex×color in fragment | ⬜ | stride=24 |
+| 10024 | Write `lit_textured3d.wgsl` — float3 pos + float3 normal + float2 UV; Blinn-Phong lighting in fragment | ⬜ | stride=32 |
+| 10025 | Write `alpha_test3d.wgsl` — per-pixel alpha discard matching XNA AlphaTestEffect semantics | ⬜ | |
+| 10026 | Write `dual_texture3d.wgsl` — two texture samplers, multiply/blend in fragment | ⬜ | |
+| 10027 | Write `env_map3d.wgsl` — cube map sampler + reflection vector from normal | ⬜ | |
+| 10028 | Write `skinned3d.wgsl` — bone palette as uniform array (max 72 mat4); blend 4 weights+indices | ⬜ | |
+| 10029 | Write `instanced3d.wgsl` — per-instance mat4 world transform in second vertex buffer binding | ⬜ | |
+| 10030 | Compile-time validation: embed all WGSL as `constexpr const char*` in `webgpu_shaders.hpp`; validate via `wgpuDeviceCreateShaderModule` at startup | ⬜ | Catch WGSL errors early |
 
 ---
 
@@ -889,19 +926,19 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 535 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | ⬜ | Reusable for all pipelines |
-| 536 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
-| 537 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ⬜ | |
-| 538 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ⬜ | |
-| 539 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | ⬜ | |
-| 540 | `GetOrCreatePipelineAlphaTest3D()` — alpha discard variant | ⬜ | |
-| 541 | `GetOrCreatePipelineDualTex3D()` — two-texture variant | ⬜ | |
-| 542 | `GetOrCreatePipelineEnvMap3D()` — cube map variant | ⬜ | |
-| 543 | `GetOrCreatePipelineSkinned3D()` — bone palette variant | ⬜ | |
-| 544 | `GetOrCreatePipelineInstanced3D()` — per-instance binding variant | ⬜ | |
-| 545 | Depth-stencil: `WGPUDepthStencilState` mapping `DepthFormat` + `CompareFunction` + `StencilOperation` | ⬜ | |
-| 546 | Blend state: `WGPUBlendState` mapping `BlendFunction` + `BlendFactor` (Opaque, AlphaBlend, Additive, NonPremultiplied) | ⬜ | |
-| 547 | Rasterizer: `WGPUPrimitiveState` mapping `CullMode`, `FillMode` (WireFrame via `topology=LineStrip` fallback or unsupported) | ⬜ | |
+| 10035 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | ⬜ | Reusable for all pipelines |
+| 10036 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
+| 10037 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ⬜ | |
+| 10038 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ⬜ | |
+| 10039 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | ⬜ | |
+| 10040 | `GetOrCreatePipelineAlphaTest3D()` — alpha discard variant | ⬜ | |
+| 10041 | `GetOrCreatePipelineDualTex3D()` — two-texture variant | ⬜ | |
+| 10042 | `GetOrCreatePipelineEnvMap3D()` — cube map variant | ⬜ | |
+| 10043 | `GetOrCreatePipelineSkinned3D()` — bone palette variant | ⬜ | |
+| 10044 | `GetOrCreatePipelineInstanced3D()` — per-instance binding variant | ⬜ | |
+| 10045 | Depth-stencil: `WGPUDepthStencilState` mapping `DepthFormat` + `CompareFunction` + `StencilOperation` | ⬜ | |
+| 10046 | Blend state: `WGPUBlendState` mapping `BlendFunction` + `BlendFactor` (Opaque, AlphaBlend, Additive, NonPremultiplied) | ⬜ | |
+| 10047 | Rasterizer: `WGPUPrimitiveState` mapping `CullMode`, `FillMode` (WireFrame via `topology=LineStrip` fallback or unsupported) | ⬜ | |
 
 ---
 
@@ -909,13 +946,13 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 550 | `WebGPUVertexBufferBackend`: create `WGPUBuffer` (vertex, size=capacity×stride) with `COPY_DST` usage | ⬜ | |
-| 551 | `SetData()`: upload via `wgpuQueueWriteBuffer(queue, buffer, 0, data, byteSize)` | ⬜ | Simpler than Vulkan staging |
-| 552 | `SetDataWithOptions()`: `Discard` = reallocate buffer; `NoOverwrite` = `wgpuQueueWriteBuffer` at offset | ⬜ | |
-| 553 | `WebGPUIndexBufferBackend`: 16-bit and 32-bit index buffers via `WGPUIndexFormat` | ⬜ | |
-| 554 | `SetData16()` / `SetData32()`: `wgpuQueueWriteBuffer` | ⬜ | |
-| 555 | Disposed guard in all SetData methods (throw `ObjectDisposedException`) | ⬜ | Match Task 240 pattern |
-| 556 | `SetVertexBuffer(wgpuRenderPassSetVertexBuffer)` + `SetIndexBuffer(wgpuRenderPassSetIndexBuffer)` in draw dispatch | ⬜ | |
+| 10050 | `WebGPUVertexBufferBackend`: create `WGPUBuffer` (vertex, size=capacity×stride) with `COPY_DST` usage | ⬜ | |
+| 10051 | `SetData()`: upload via `wgpuQueueWriteBuffer(queue, buffer, 0, data, byteSize)` | ⬜ | Simpler than Vulkan staging |
+| 10052 | `SetDataWithOptions()`: `Discard` = reallocate buffer; `NoOverwrite` = `wgpuQueueWriteBuffer` at offset | ⬜ | |
+| 10053 | `WebGPUIndexBufferBackend`: 16-bit and 32-bit index buffers via `WGPUIndexFormat` | ⬜ | |
+| 10054 | `SetData16()` / `SetData32()`: `wgpuQueueWriteBuffer` | ⬜ | |
+| 10055 | Disposed guard in all SetData methods (throw `ObjectDisposedException`) | ⬜ | Match Task 240 pattern |
+| 10056 | `SetVertexBuffer(wgpuRenderPassSetVertexBuffer)` + `SetIndexBuffer(wgpuRenderPassSetIndexBuffer)` in draw dispatch | ⬜ | |
 
 ---
 
@@ -923,16 +960,16 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 560 | `WebGPUTextureBackend`: `WGPUTexture` (2D, RGBA8Unorm, COPY_DST + TEXTURE_BINDING) + `WGPUTextureView` | ⬜ | |
-| 561 | `SetData()`: `wgpuQueueWriteTexture()` with `WGPUImageCopyTexture` + `WGPUTextureDataLayout` | ⬜ | |
-| 562 | `GetData()`: `WGPUBuffer` (MAP_READ) + `wgpuCommandEncoderCopyTextureToBuffer` + `wgpuBufferMapAsync` + poll | ⬜ | Async → synchronous via polling |
-| 563 | Mip levels: generate via `wgpuCommandEncoderCopyTextureToTexture` per level or leave as mip=1 (document) | ⬜ | |
-| 564 | `WebGPURenderTargetBackend`: `WGPUTexture` (RENDER_ATTACHMENT + TEXTURE_BINDING) + depth texture | ⬜ | |
-| 565 | `SetRenderTarget(rt)` / `SetRenderTarget(nullptr)`: switch render pass target between RT and swapchain view | ⬜ | |
-| 566 | `GetBackBufferData()`: readback via MAP_READ buffer + `wgpuCommandEncoderCopyTextureToBuffer` | ⬜ | |
-| 567 | `WebGPUTextureCubeBackend`: `WGPUTexture` (dimension=2D, arrayLayerCount=6, CUBE_COMPATIBLE) | ⬜ | |
-| 568 | `WebGPUTexture3DBackend`: `WGPUTexture` (dimension=3D) | ⬜ | |
-| 569 | MSAA: `WGPUTexture` with `sampleCount=4`; resolve in render pass via `resolveTarget` | ⬜ | |
+| 10060 | `WebGPUTextureBackend`: `WGPUTexture` (2D, RGBA8Unorm, COPY_DST + TEXTURE_BINDING) + `WGPUTextureView` | ⬜ | |
+| 10061 | `SetData()`: `wgpuQueueWriteTexture()` with `WGPUImageCopyTexture` + `WGPUTextureDataLayout` | ⬜ | |
+| 10062 | `GetData()`: `WGPUBuffer` (MAP_READ) + `wgpuCommandEncoderCopyTextureToBuffer` + `wgpuBufferMapAsync` + poll | ⬜ | Async → synchronous via polling |
+| 10063 | Mip levels: generate via `wgpuCommandEncoderCopyTextureToTexture` per level or leave as mip=1 (document) | ⬜ | |
+| 10064 | `WebGPURenderTargetBackend`: `WGPUTexture` (RENDER_ATTACHMENT + TEXTURE_BINDING) + depth texture | ⬜ | |
+| 10065 | `SetRenderTarget(rt)` / `SetRenderTarget(nullptr)`: switch render pass target between RT and swapchain view | ⬜ | |
+| 10066 | `GetBackBufferData()`: readback via MAP_READ buffer + `wgpuCommandEncoderCopyTextureToBuffer` | ⬜ | |
+| 10067 | `WebGPUTextureCubeBackend`: `WGPUTexture` (dimension=2D, arrayLayerCount=6, CUBE_COMPATIBLE) | ⬜ | |
+| 10068 | `WebGPUTexture3DBackend`: `WGPUTexture` (dimension=3D) | ⬜ | |
+| 10069 | MSAA: `WGPUTexture` with `sampleCount=4`; resolve in render pass via `resolveTarget` | ⬜ | |
 
 ---
 
@@ -940,11 +977,11 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 575 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | ⬜ | |
-| 576 | Upload sprite quads via `wgpuQueueWriteBuffer` per batch | ⬜ | |
-| 577 | Per-batch draw: set pipeline, bind groups (UBO + texture), vertex buffer, draw | ⬜ | |
-| 578 | Viewport UBO (2 floats: width, height) in sprite UBO slot | ⬜ | Replaces Vulkan sprite push constants |
-| 579 | Sprite sort modes: Immediate, Deferred, Texture, FrontToBack, BackToFront — mirror Vulkan implementation | ⬜ | |
+| 10075 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | ⬜ | |
+| 10076 | Upload sprite quads via `wgpuQueueWriteBuffer` per batch | ⬜ | |
+| 10077 | Per-batch draw: set pipeline, bind groups (UBO + texture), vertex buffer, draw | ⬜ | |
+| 10078 | Viewport UBO (2 floats: width, height) in sprite UBO slot | ⬜ | Replaces Vulkan sprite push constants |
+| 10079 | Sprite sort modes: Immediate, Deferred, Texture, FrontToBack, BackToFront — mirror Vulkan implementation | ⬜ | |
 
 ---
 
@@ -952,13 +989,13 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 585 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ⬜ | |
-| 586 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ⬜ | |
-| 587 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | ⬜ | Mirror Vulkan dispatch logic |
-| 588 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ⬜ | |
-| 589 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ⬜ | |
-| 590 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ⬜ | |
-| 591 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ⬜ | Match Task 110 |
+| 10085 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ⬜ | |
+| 10086 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ⬜ | |
+| 10087 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | ⬜ | Mirror Vulkan dispatch logic |
+| 10088 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ⬜ | |
+| 10089 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ⬜ | |
+| 10090 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ⬜ | |
+| 10091 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ⬜ | Match Task 110 |
 
 ---
 
@@ -966,12 +1003,12 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 595 | `WebGPUEffectBackend`: `BasicEffect` wires to `FillGpuDrawParams` → UBO upload | ⬜ | |
-| 596 | `AlphaTestEffect`: UBO alpha test params (function, reference) | ⬜ | |
-| 597 | `DualTextureEffect`: second texture bind group | ⬜ | |
-| 598 | `EnvironmentMapEffect`: cube map bind group + reflection UBO params | ⬜ | |
-| 599 | `SkinnedEffect`: bone palette as large UBO (72 × mat4 = 4608 bytes) in separate bind group | ⬜ | WebGPU min UBO size: 65536 bytes — fits |
-| 600 | `ShaderEffect` (custom WGSL): `wgpuDeviceCreateShaderModule` from user-provided WGSL source string | ⬜ | NOXNA extension |
+| 10095 | `WebGPUEffectBackend`: `BasicEffect` wires to `FillGpuDrawParams` → UBO upload | ⬜ | |
+| 10096 | `AlphaTestEffect`: UBO alpha test params (function, reference) | ⬜ | |
+| 10097 | `DualTextureEffect`: second texture bind group | ⬜ | |
+| 10098 | `EnvironmentMapEffect`: cube map bind group + reflection UBO params | ⬜ | |
+| 10099 | `SkinnedEffect`: bone palette as large UBO (72 × mat4 = 4608 bytes) in separate bind group | ⬜ | WebGPU min UBO size: 65536 bytes — fits |
+| 10100 | `ShaderEffect` (custom WGSL): `wgpuDeviceCreateShaderModule` from user-provided WGSL source string | ⬜ | NOXNA extension |
 
 ---
 
@@ -979,14 +1016,14 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 605 | `SetDepthTestEnabled()` / `SetDepthWriteEnabled()`: bake into pipeline key | ⬜ | WebGPU requires pipeline rebuild on change |
-| 606 | `SetBlendState()`: map `BlendState` preset → `WGPUBlendState` | ⬜ | |
-| 607 | `SetRasterizerState()`: `CullMode` → `WGPUCullMode`; `FillMode::WireFrame` unsupported (log warning) | ⬜ | WebGPU has no polygon mode |
-| 608 | `SetScissorRectangle()`: `wgpuRenderPassEncoderSetScissorRect` | ⬜ | |
-| 609 | `SetViewport()`: `wgpuRenderPassEncoderSetViewport` | ⬜ | |
-| 610 | `SetSamplerState()`: per-slot `WGPUSampler` cache (filter + address mode key) | ⬜ | |
-| 611 | `SetDepthStencilState()`: stencil ops → `WGPUStencilFaceState` | ⬜ | |
-| 612 | `OcclusionQuery`: `WGPUQuerySet` (type=Occlusion) + `wgpuRenderPassEncoderBeginOcclusionQuery` | ⬜ | |
+| 10105 | `SetDepthTestEnabled()` / `SetDepthWriteEnabled()`: bake into pipeline key | ⬜ | WebGPU requires pipeline rebuild on change |
+| 10106 | `SetBlendState()`: map `BlendState` preset → `WGPUBlendState` | ⬜ | |
+| 10107 | `SetRasterizerState()`: `CullMode` → `WGPUCullMode`; `FillMode::WireFrame` unsupported (log warning) | ⬜ | WebGPU has no polygon mode |
+| 10108 | `SetScissorRectangle()`: `wgpuRenderPassEncoderSetScissorRect` | ⬜ | |
+| 10109 | `SetViewport()`: `wgpuRenderPassEncoderSetViewport` | ⬜ | |
+| 10110 | `SetSamplerState()`: per-slot `WGPUSampler` cache (filter + address mode key) | ⬜ | |
+| 10111 | `SetDepthStencilState()`: stencil ops → `WGPUStencilFaceState` | ⬜ | |
+| 10112 | `OcclusionQuery`: `WGPUQuerySet` (type=Occlusion) + `wgpuRenderPassEncoderBeginOcclusionQuery` | ⬜ | |
 
 ---
 
@@ -994,9 +1031,9 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 615 | MRT render pass: `WGPURenderPassDescriptor` with array of `WGPURenderPassColorAttachment` (up to 4) | ⬜ | |
-| 616 | `GetOrCreateMRTRenderPipeline(colorAttachmentCount)`: pipeline with matching `targetCount` in fragment state | ⬜ | |
-| 617 | `SetRenderTargets(vector<RenderTarget2D*>)`: configure MRT pass descriptor | ⬜ | |
+| 10115 | MRT render pass: `WGPURenderPassDescriptor` with array of `WGPURenderPassColorAttachment` (up to 4) | ⬜ | |
+| 10116 | `GetOrCreateMRTRenderPipeline(colorAttachmentCount)`: pipeline with matching `targetCount` in fragment state | ⬜ | |
+| 10117 | `SetRenderTargets(vector<RenderTarget2D*>)`: configure MRT pass descriptor | ⬜ | |
 
 ---
 
@@ -1004,24 +1041,24 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 620 | `cmake-build-webgpu` directory; `cna_webgpu_test` macro in CMakeLists.txt | ⬜ | Mirror `cna_vulkan_test` |
-| 621 | Smoke test: init device, clear to blue, `GetBackBufferData`, assert pixel | ⬜ | `webgpu_smoke_test.cpp` |
-| 622 | 2D sprite test: `SpriteBatch` draw white 1×1 texture → assert pixel | ⬜ | |
-| 623 | 3D colored quad: stride=16 VPC, red quad, assert center pixel | ⬜ | `webgpu_vertex_format_test.cpp` |
-| 624 | 3D textured quad: stride=20 VPT, green texture, assert center pixel | ⬜ | |
-| 625 | 3D colored+textured: stride=24 VPCT, blue vertex + white tex | ⬜ | |
-| 626 | 3D lit textured: stride=32 VPNT, magenta tex, no lighting | ⬜ | |
-| 627 | `AlphaTestEffect`: draw with alpha < threshold → pixel transparent | ⬜ | |
-| 628 | `DualTextureEffect`: two textures → multiply blend | ⬜ | |
-| 629 | `EnvironmentMapEffect`: emissive color only (envAmount=0) → red pixel | ⬜ | |
-| 630 | `SkinnedEffect`: identity bone palette → same as lit textured | ⬜ | |
-| 631 | Instanced draw: 3 instances at different positions, assert 3 pixels | ⬜ | |
-| 632 | RenderTarget2D: draw red into RT, blit to backbuffer → assert red | ⬜ | |
-| 633 | MSAA 4x: draw red quad with MSAA, resolve, assert pixel | ⬜ | |
-| 634 | OcclusionQuery: draw occluded geometry, assert query result = 0 | ⬜ | |
-| 635 | VertexBuffer dispose guard: assert `ObjectDisposedException` after `Dispose()` | ⬜ | |
-| 636 | Dynamic buffer stress: 12 frames × None/Discard/NoOverwrite | ⬜ | |
-| 637 | WebGPU vertex format mapping table test (mirror Task 248 for WebGPU) | ⬜ | `WGPUVertexFormat` enum |
+| 10120 | `cmake-build-webgpu` directory; `cna_webgpu_test` macro in CMakeLists.txt | ⬜ | Mirror `cna_vulkan_test` |
+| 10121 | Smoke test: init device, clear to blue, `GetBackBufferData`, assert pixel | ⬜ | `webgpu_smoke_test.cpp` |
+| 10122 | 2D sprite test: `SpriteBatch` draw white 1×1 texture → assert pixel | ⬜ | |
+| 10123 | 3D colored quad: stride=16 VPC, red quad, assert center pixel | ⬜ | `webgpu_vertex_format_test.cpp` |
+| 10124 | 3D textured quad: stride=20 VPT, green texture, assert center pixel | ⬜ | |
+| 10125 | 3D colored+textured: stride=24 VPCT, blue vertex + white tex | ⬜ | |
+| 10126 | 3D lit textured: stride=32 VPNT, magenta tex, no lighting | ⬜ | |
+| 10127 | `AlphaTestEffect`: draw with alpha < threshold → pixel transparent | ⬜ | |
+| 10128 | `DualTextureEffect`: two textures → multiply blend | ⬜ | |
+| 10129 | `EnvironmentMapEffect`: emissive color only (envAmount=0) → red pixel | ⬜ | |
+| 10130 | `SkinnedEffect`: identity bone palette → same as lit textured | ⬜ | |
+| 10131 | Instanced draw: 3 instances at different positions, assert 3 pixels | ⬜ | |
+| 10132 | RenderTarget2D: draw red into RT, blit to backbuffer → assert red | ⬜ | |
+| 10133 | MSAA 4x: draw red quad with MSAA, resolve, assert pixel | ⬜ | |
+| 10134 | OcclusionQuery: draw occluded geometry, assert query result = 0 | ⬜ | |
+| 10135 | VertexBuffer dispose guard: assert `ObjectDisposedException` after `Dispose()` | ⬜ | |
+| 10136 | Dynamic buffer stress: 12 frames × None/Discard/NoOverwrite | ⬜ | |
+| 10137 | WebGPU vertex format mapping table test (mirror Task 248 for WebGPU) | ⬜ | `WGPUVertexFormat` enum |
 
 ---
 
@@ -1029,17 +1066,17 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 640 | `SetStringMarkerEXT()`: no-op (WebGPU has no debug labels in wgpu-native C API yet) | ⬜ | Document deviation |
-| 641 | `DebugSimulateContextLoss()`: destroy and recreate device (wgpu-native supports `wgpuDeviceDestroy`) | ⬜ | |
-| 642 | `PresentationInterval` → vsync: `wgpuSurfaceConfigure.presentMode` (Fifo=VSync, Immediate=no VSync, Mailbox=adaptive) | ⬜ | |
-| 643 | `IsFullScreen` via `SDL_SetWindowFullscreen` — same as other backends | ⬜ | |
-| 644 | `BackBufferWidth/Height` changes: reconfigure swap chain via `wgpuSurfaceConfigure` | ⬜ | |
-| 645 | DXT1/DXT3/DXT5 compressed texture upload: `WGPUTextureFormat_BC1RGBAUnorm` etc. | ⬜ | Requires `wgpuAdapterHasFeature(BC_texture_compression)` |
-| 646 | Texture3D: `WGPUTextureDimension_3D` + layered upload | ⬜ | |
-| 647 | TextureCube: `WGPUTexture` arrayLayerCount=6 + `WGPUTextureViewDimension_Cube` | ⬜ | |
-| 648 | RenderTargetCube: `WGPUTexture` cube + per-face `WGPUTextureView` as render attachment | ⬜ | |
-| 649 | `FillMode::WireFrame`: document as unsupported in WebGPU (no polygon mode); add to deviations doc | ⬜ | |
-| 650 | WebGPU vertex format helper: `WGPUVertexFormat WebGPUVertexFormatFromVEF(VertexElementFormat)` (mirror Task 248) | ⬜ | |
+| 10140 | `SetStringMarkerEXT()`: no-op (WebGPU has no debug labels in wgpu-native C API yet) | ⬜ | Document deviation |
+| 10141 | `DebugSimulateContextLoss()`: destroy and recreate device (wgpu-native supports `wgpuDeviceDestroy`) | ⬜ | |
+| 10142 | `PresentationInterval` → vsync: `wgpuSurfaceConfigure.presentMode` (Fifo=VSync, Immediate=no VSync, Mailbox=adaptive) | ⬜ | |
+| 10143 | `IsFullScreen` via `SDL_SetWindowFullscreen` — same as other backends | ⬜ | |
+| 10144 | `BackBufferWidth/Height` changes: reconfigure swap chain via `wgpuSurfaceConfigure` | ⬜ | |
+| 10145 | DXT1/DXT3/DXT5 compressed texture upload: `WGPUTextureFormat_BC1RGBAUnorm` etc. | ⬜ | Requires `wgpuAdapterHasFeature(BC_texture_compression)` |
+| 10146 | Texture3D: `WGPUTextureDimension_3D` + layered upload | ⬜ | |
+| 10147 | TextureCube: `WGPUTexture` arrayLayerCount=6 + `WGPUTextureViewDimension_Cube` | ⬜ | |
+| 10148 | RenderTargetCube: `WGPUTexture` cube + per-face `WGPUTextureView` as render attachment | ⬜ | |
+| 10149 | `FillMode::WireFrame`: document as unsupported in WebGPU (no polygon mode); add to deviations doc | ⬜ | |
+| 10150 | WebGPU vertex format helper: `WGPUVertexFormat WebGPUVertexFormatFromVEF(VertexElementFormat)` (mirror Task 248) | ⬜ | |
 
 ---
 
@@ -1047,10 +1084,394 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 655 | `docs/webgpu-backend.md`: architecture, deviations from Vulkan, WGSL shader map, UBO layout | ⬜ | |
-| 656 | `docs/webgpu-vs-vulkan-deviations.md`: push constants → UBO, no wireframe, async→sync strategy | ⬜ | |
-| 657 | Emscripten target: configure CNA for `emcc` build with `-sUSE_WEBGPU=1`; WebGPU backend routes to browser `navigator.gpu` | ⬜ | True browser WASM target |
-| 658 | Emscripten: SDL3 Emscripten port + WebGPU surface via `emscripten_webgpu_get_device()` | ⬜ | |
-| 659 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | ⬜ | |
-| 660 | Emscripten: run 2D smoke test in headless Chrome via `--headless=new --enable-features=WebGPU` | ⬜ | CI-friendly |
-| 661 | Cross-backend pixel comparison: same scene rendered on EasyGL/Vulkan/Bgfx/WebGPU — assert pixel-level parity | ⬜ | |
+| 10155 | `docs/webgpu-backend.md`: architecture, deviations from Vulkan, WGSL shader map, UBO layout | ⬜ | |
+| 10156 | `docs/webgpu-vs-vulkan-deviations.md`: push constants → UBO, no wireframe, async→sync strategy | ⬜ | |
+| 10157 | Emscripten target: configure CNA for `emcc` build with `-sUSE_WEBGPU=1`; WebGPU backend routes to browser `navigator.gpu` | ⬜ | True browser WASM target |
+| 10158 | Emscripten: SDL3 Emscripten port + WebGPU surface via `emscripten_webgpu_get_device()` | ⬜ | |
+| 10159 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | ⬜ | |
+| 10160 | Emscripten: run 2D smoke test in headless Chrome via `--headless=new --enable-features=WebGPU` | ⬜ | CI-friendly |
+| 10161 | Cross-backend pixel comparison: same scene rendered on EasyGL/Vulkan/Bgfx/WebGPU — assert pixel-level parity | ⬜ | |
+
+---
+
+## Phase 70 — SDL_Renderer: 2D backend verified perfection
+
+> Runs first, per "Execution order" above. SDL_Renderer is 2D-only by design (see file header),
+> so this phase is deliberately smaller than Phases 72–73 — there's no 3D pipeline, blend/depth/
+> raster state matrix, or stock-effect shader breadth to cover. "Perfect" here means: every 2D
+> XNA feature SDL_Renderer is supposed to support is pixel-verified specifically *through*
+> SDL_Renderer (not assumed from EasyGL parity), and every unsupported 3D path throws the
+> correct, specific exception rather than a generic one.
+
+### SpriteBatch on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 666 | Audit all `SpriteBatch::Draw`/`DrawString` overloads specifically through SDL_Renderer (not inherited from EasyGL test assumptions) | ⬜ | Confirm every overload produces correct `SDL_RenderTexture`/`SDL_RenderTextureRotated` calls |
+| 667 | Pixel test: `SpriteSortMode::Deferred` submission order on SDL_Renderer | ⬜ | Mirrors Task 162 for this backend |
+| 668 | Pixel test: `SpriteSortMode::Texture` grouping on SDL_Renderer | ⬜ | Mirrors Task 163 |
+| 669 | Pixel test: `SpriteSortMode::FrontToBack` / `BackToFront` ordering on SDL_Renderer | ⬜ | Mirrors Tasks 164–165 |
+| 670 | Pixel test: `SpriteSortMode::Immediate` per-draw flush on SDL_Renderer | ⬜ | Mirrors Task 161 |
+| 671 | Pixel test: rotation around origin on SDL_Renderer | ⬜ | `SDL_RenderTextureRotated` |
+| 672 | Pixel test: scalar and `Vector2` scale overloads on SDL_Renderer | ⬜ | |
+| 673 | Pixel test: source rectangle cropping on SDL_Renderer | ⬜ | |
+| 674 | Pixel test: `SpriteEffects::FlipHorizontally`/`FlipVertically` on SDL_Renderer | ⬜ | Mirrors Task 167 |
+| 675 | Pixel test: `transformMatrix` in `SpriteBatch::Begin` on SDL_Renderer | ⬜ | Mirrors Task 168 |
+| 676 | Decide and document `SpriteBatch::Begin(effect)` custom-`Effect` behavior on SDL_Renderer | ⬜ | No programmable shader stage exists on SDL_Renderer — either throw `NotSupportedException` or document silent-ignore; must not silently misrender |
+| 677 | Guard tests: `Begin`/`End` sequencing errors throw correctly on SDL_Renderer | ⬜ | Mirrors Task 166 |
+
+### Texture2D on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 678 | Audit `Texture2D::SetData`/`GetData` full-array round-trip on SDL_Renderer | ⬜ | `SDL_UpdateTexture`/`SDL_LockTexture` path |
+| 679 | Pixel test: `SetData` partial-rectangle region on SDL_Renderer | ⬜ | Mirrors Task 169 |
+| 680 | Pixel test: `SetData` `startIndex`/`elementCount` slice on SDL_Renderer | ⬜ | Mirrors Task 170 |
+| 681 | Decide and document `Texture2D` mip-level `SetData`/`GetData` on SDL_Renderer | ⬜ | SDL textures have no native mip chain — single-level-only fallback, or throw for `level>0`; must not silently no-op |
+| 682 | Verify `Texture2D::FromStream` (PNG/JPG/BMP/DDS) round-trip renders correctly when drawn via SDL_Renderer | ⬜ | |
+| 683 | Verify `SaveAsPng`/`SaveAsJpeg` round-trip when the source texture was created/updated through SDL_Renderer | ⬜ | |
+| 684 | Verify NPOT texture upload+sample correctness on SDL_Renderer | ⬜ | 3×5, 7×11 — mirrors Task 268 |
+| 685 | Pixel test: `TextureAddressMode::Clamp` via `SpriteBatch` on SDL_Renderer | ⬜ | |
+| 686 | Decide and document `TextureAddressMode::Wrap` via `SpriteBatch` on SDL_Renderer | ⬜ | SDL's texture sampling has no native wrap mode — emulate via tiled draw calls, or throw `NotSupportedException`; must not silently clamp when Wrap was requested |
+| 687 | Decide and document `TextureAddressMode::Mirror` via `SpriteBatch` on SDL_Renderer | ⬜ | Same decision shape as Task 686 |
+| 688 | Pixel test: `TextureFilter::Point` vs `Linear` via `SDL_ScaleMode` on SDL_Renderer | ⬜ | |
+| 689 | Verify `Texture2D::Dispose` releases the underlying `SDL_Texture` exactly once | ⬜ | No double-free |
+
+### SpriteFont on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 690 | Pixel test: single glyph at known position on SDL_Renderer | ⬜ | Mirrors Task 424 |
+| 691 | Pixel test: multiple glyphs with spacing on SDL_Renderer | ⬜ | Mirrors Task 425 |
+| 692 | Pixel test: newline advances by line spacing on SDL_Renderer | ⬜ | Mirrors Task 426 |
+| 693 | Pixel test: default character fallback on SDL_Renderer | ⬜ | Mirrors Task 427 |
+| 694 | Verify `SpriteEffects` flip + rotation/origin/scale with `DrawString` on SDL_Renderer | ⬜ | Mirrors Tasks 428–429 |
+
+### BlendState on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 695 | Audit `BlendState` → `SDL_BlendMode` mapping for all 4 presets | ⬜ | Opaque/AlphaBlend/Additive/NonPremultiplied |
+| 696 | Pixel test: `BlendState::Opaque` on SDL_Renderer | ⬜ | |
+| 697 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha on SDL_Renderer | ⬜ | |
+| 698 | Pixel test: `BlendState::NonPremultiplied` on SDL_Renderer | ⬜ | |
+| 699 | Pixel test: `BlendState::Additive` saturation behavior on SDL_Renderer | ⬜ | |
+| 700 | Decide and document custom (non-preset) `BlendState` combinations on SDL_Renderer | ⬜ | `SDL_ComposeCustomBlendMode` has a narrower factor set than XNA — document fallback/throw per unsupported combination |
+
+### SamplerState on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 701 | Audit `SamplerState` → `SDL_ScaleMode` + address-mode mapping | ⬜ | |
+| 702 | Verify default sampler state matches FNA's `LinearClamp` on SDL_Renderer | ⬜ | |
+| 703 | Verify per-draw sampler state changes take effect on the next `SpriteBatch::Begin` on SDL_Renderer | ⬜ | |
+
+### RenderTarget2D on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 704 | Audit `RenderTarget2D` construction on SDL_Renderer | ⬜ | `SDL_TEXTUREACCESS_TARGET` |
+| 705 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on SDL_Renderer | ⬜ | |
+| 706 | Verify `RenderTargetUsage::DiscardContents` vs `PreserveContents` on SDL_Renderer | ⬜ | |
+| 707 | Verify `GetBackBufferData` reads correct pixels after `SetRenderTarget(nullptr)` restores the backbuffer on SDL_Renderer | ⬜ | |
+| 708 | Decide and document render-target depth-buffer behavior on SDL_Renderer | ⬜ | SDL_Renderer has no depth-buffer concept — throw, or silently ignore `DepthFormat`, matching the 2D-only design intent |
+| 709 | Verify MRT (`SetRenderTargets` with 2+ bindings) throws clearly on SDL_Renderer | ⬜ | SDL_Renderer supports one active render target at a time — must not silently render to only the first |
+
+### Viewport / PresentationParameters / GraphicsDeviceManager on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 710 | Verify `Viewport` get/set round-trip and `Project`/`Unproject` math on SDL_Renderer | ⬜ | 2D orthographic case |
+| 711 | Verify backbuffer resize through `PresentationParameters` on SDL_Renderer | ⬜ | |
+| 712 | Verify fullscreen toggle on SDL_Renderer | ⬜ | |
+| 713 | Verify `PresentInterval` (vsync) mapping to `SDL_SetRenderVSync` on SDL_Renderer | ⬜ | |
+| 714 | Decide and document `MultiSampleCount` behavior on SDL_Renderer | ⬜ | SDL_Renderer has no MSAA control — accept-and-ignore-with-log, or throw |
+| 715 | Verify `DeviceResetting`/`DeviceReset` events fire correctly on SDL_Renderer backbuffer resize | ⬜ | |
+
+### GraphicsDevice / resource lifecycle on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 716 | Verify `GraphicsDevice::Clear` (all `ClearOptions` combinations) on SDL_Renderer | ⬜ | |
+| 717 | Verify disposed-resource guards throw `ObjectDisposedException` consistently on SDL_Renderer | ⬜ | Texture2D, RenderTarget2D, BlendState, SamplerState, SpriteBatch |
+| 718 | Verify double-`Dispose` is safe for every SDL_Renderer-backed resource type | ⬜ | |
+| 719 | Add leak-check test: create/dispose 80 SDL_Renderer textures/render-targets, verify `GetTrackedResourceCount` returns to baseline | ⬜ | Mirrors Task 219 |
+
+### Systematic "3D throws correctly" sweep on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 720 | Verify `DrawPrimitives`/`DrawIndexedPrimitives`/`DrawInstancedPrimitives` throw the correct exception type+message on SDL_Renderer | ⬜ | Not just "throws something" |
+| 721 | Verify all 5 `DrawUserPrimitives` typed + `VertexDeclaration` overloads throw correctly on SDL_Renderer | ⬜ | |
+| 722 | Verify all 10 `DrawUserIndexedPrimitives` typed + `VertexDeclaration` overloads throw correctly on SDL_Renderer | ⬜ | |
+| 723 | Re-verify `CreateVertexBuffer`/`CreateIndexBuffer`/Dynamic variants throw correctly on SDL_Renderer with Task-261-style rigor | ⬜ | Phase 3 covered this at a lighter pass |
+| 724 | Verify `VertexDeclaration` construction does **not** throw on SDL_Renderer | ⬜ | Pure data description — only the draw call should throw, not declaration/construction |
+| 725 | Decide and document `Texture3D`/`TextureCube` construction on SDL_Renderer | ⬜ | Throw at construction, or allow construction but throw on Draw/sampling — match FNA's behavior model as closely as a 2D-only backend can |
+| 726 | Verify all 5 stock 3D effects' `Apply()`+property setters do **not** throw on SDL_Renderer, but drawing with them does | ⬜ | Matches FNA: effects are backend-agnostic data objects until actually used to draw |
+| 727 | Verify `OcclusionQuery::Begin`/`End` throw correctly on SDL_Renderer | ⬜ | |
+| 728 | Verify `Model::Draw` throws correctly on SDL_Renderer | ⬜ | Requires 3D primitives |
+| 729 | Verify `RasterizerState`/`DepthStencilState` can be constructed and assigned without throwing on SDL_Renderer | ⬜ | Pure data, mirrors Task 724's pattern |
+
+### Compatibility proof
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 730 | Port and run 5 minimal 2D-only FNA/XNA samples specifically targeting SDL_Renderer | ⬜ | Real compatibility proof for the 2D-only backend, not EasyGL |
+| 731 | Document `docs/sdl-renderer-2d-completeness.md`: final per-feature support table + decisions made for Tasks 676/681/686–687/700/708–709/725, with rationale | ⬜ | ✅/⚠️-emulated/❌-throws-by-design per feature |
+
+---
+
+## Phase 71 — EasyGL: final gap closure and perfection gate
+
+> Runs second. Deliberately small: EasyGL is already the implicit default target of most
+> unlabeled tasks across Phases 34–55 (see the coverage-analysis artifact from this session —
+> among 235 pending core tasks, 189 name no backend and default to EasyGL by established
+> convention). This phase covers only what genuinely isn't tracked anywhere else yet.
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 732 | Implement real `SurfaceFormat` GPU forwarding on EasyGL | ⬜ | `CreateTexture`/`CreateTexture3D`/`CreateTextureCube` currently hardcode `GL_RGBA8` regardless of requested format; map Color/Bgr565/Bgra4444/Bgra5551/Rgba1010102/Rg32/Rgba64/Single/Vector2/Vector4/HalfSingle/HalfVector2/HalfVector4/HdrBlendable to real GLES 3.2 internal formats; throw clearly for genuinely unsupported ones |
+| 733 | Implement `FillMode::WireFrame` emulation on EasyGL via barycentric-coordinate geometry shader + `fwidth()` edge detection | ⬜ | GLES 3.2 has geometry shaders in core — no native `glPolygonMode`, but this is emulatable, not a hardware wall (corrects the earlier "N/A on GLES" framing) |
+| 734 | Add a non-geometry-shader barycentric fallback for GLES 3.2 drivers with unreliable geometry-shader support | ⬜ | Vertex-attribute barycentrics (requires unwelding shared vertices) as a documented fallback path; note in `docs/easygl_bugs.md` |
+| 735 | Implement `Texture3D` mip-chain generation on EasyGL | ⬜ | `EasyGLTexture3DBackend`'s `mipMap` constructor parameter is currently unused (`bool /*mipMap*/`) — single level always, even though `Texture3D::LevelCount` now correctly reports the requested count (Task 271) |
+| 736 | Verify/implement `TextureCube` mip-chain generation on EasyGL | ⬜ | Confirm whether `EasyGLTextureCubeBackend` has the same unused-`mipMap`-parameter pattern as Task 735 found for Texture3D; fix if so |
+| 737 | Add explicit `TextureAddressMode::Mirror` regression test for the Task 269 SpriteBatch SamplerState fix | ⬜ | Only Wrap vs. Clamp were independently pixel-tested; Mirror is fixed by the same code path but never verified on its own |
+| 738 | Close the remaining EasyGL-scoped ⬜ tasks in Phases 34–55 | ⬜ | Not new work — this is the actual bulk of "EasyGL perfection." See Phases 34, 35, 36, 37, 38 (partial), 39, 40, 41, 42, 43 (partial), 44, 45, 46, 47, 48, 49, 50, 51 (EasyGL row), 52, 53 (EasyGL-relevant rows), 54, 55 (Tasks 493–494 specifically) |
+| 739 | Final EasyGL perfection gate: re-run Tasks 493–494 (full unit + integration suite) after Tasks 732–738 land | ⬜ | Zero unexplained failures; update `docs/xna-4-api-coverage.md` overall EasyGL estimate |
+
+---
+
+## Phase 72 — Bgfx: full 2D+3D pixel-verified parity
+
+> Runs third. Unlike the EasyGL phase above, this one is genuinely large — Bgfx is not the
+> default target of any existing Phase 34–55 task, so the full breadth of pixel-verification
+> work needs an explicit, separate pass. Starts from wiring up the pixel-readback path itself,
+> since no current Bgfx test uses it at all.
+
+### Foundational: unlock pixel testing
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 740 | Wire `GraphicsDevice::GetBackBufferData` into a reusable Bgfx pixel-readback test helper | ⬜ | The async `bgfx::requestScreenShot`+`bgfx::frame()` path exists (Task 117, done) but zero current tests call it — this unblocks every pixel test below |
+| 741 | Add a Bgfx per-texture-level readback path for direct `Texture2D`/`3D`/`Cube` `GetData` verification | ⬜ | Avoids needing a full draw+backbuffer-read cycle just to check an upload round-tripped |
+| 742 | Verify Bgfx `GetBackBufferData` readback reliability under headless CI | ⬜ | The "up to 3 frames" wait in Task 117 may need tuning; add a timeout/retry regression test |
+
+### SamplerState / TextureAddressMode
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 743 | Audit `SamplerState` → `BGFX_SAMPLER_*` flag mapping completeness | ⬜ | |
+| 744 | Pixel test: `TextureAddressMode::Clamp` on Bgfx | ⬜ | Mirrors Task 294 |
+| 745 | Pixel test: `TextureAddressMode::Wrap` on Bgfx | ⬜ | Mirrors Task 295 |
+| 746 | Pixel test: `TextureAddressMode::Mirror` on Bgfx | ⬜ | Mirrors Task 296 |
+| 747 | Pixel test: `TextureFilter::Point` vs `Linear` on Bgfx | ⬜ | Mirrors Task 297 |
+| 748 | Verify mipmap filter modes (`MipPoint`/`MipLinear`/etc.) on Bgfx | ⬜ | Mirrors Task 298 |
+| 749 | Verify anisotropic filtering cap query + fallback on Bgfx | ⬜ | Mirrors Task 299 |
+| 750 | Wire a Task-269-equivalent `SpriteBatch` `SamplerState` fix into Bgfx's `ISpriteBatchBackend` | ⬜ | Currently a no-op, same root cause as the EasyGL bug fixed this session and the Vulkan bug tracked as Task 665 |
+
+### BlendState
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 751 | Audit `BlendState` preset mapping to `BGFX_STATE_BLEND_*` | ⬜ | |
+| 752 | Pixel test: `BlendState::Opaque` on Bgfx | ⬜ | |
+| 753 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha on Bgfx | ⬜ | |
+| 754 | Pixel test: `BlendState::NonPremultiplied` on Bgfx | ⬜ | |
+| 755 | Pixel test: `BlendState::Additive` saturation on Bgfx | ⬜ | |
+| 756 | Verify separate color/alpha blend function + factor combinations on Bgfx | ⬜ | |
+| 757 | Verify `BlendFactor` constant-color blending on Bgfx | ⬜ | |
+
+### DepthStencilState
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 758 | Audit `DepthStencilState` preset mapping to Bgfx depth/stencil flags | ⬜ | |
+| 759 | Pixel test: depth write enabled vs disabled on Bgfx | ⬜ | |
+| 760 | Pixel test: all 8 depth `CompareFunction` values on Bgfx | ⬜ | |
+| 761 | Verify stencil enable/disable + read/write masks on Bgfx | ⬜ | |
+| 762 | Verify front-face stencil ops (Keep/Replace/Increment/Decrement) on Bgfx | ⬜ | |
+| 763 | Verify two-sided stencil ops on Bgfx if exposed | ⬜ | |
+| 764 | Verify `ReferenceStencil` device state reaches Bgfx draw calls | ⬜ | |
+
+### RasterizerState
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 765 | Pixel test: culling disabled / `CullClockwise` / `CullCounterClockwise` on Bgfx | ⬜ | |
+| 766 | Verify `FillMode::WireFrame` on Bgfx | ⬜ | Confirm real polygon wireframe vs. line-primitive substitution |
+| 767 | Verify depth bias and slope-scale depth bias on Bgfx | ⬜ | |
+| 768 | Verify scissor test enable/disable interaction with `ScissorRectangle` on Bgfx | ⬜ | |
+
+### RenderTarget2D / RenderTargetCube
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 769 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on Bgfx | ⬜ | |
+| 770 | Verify `RenderTargetCube` can be sampled as `TextureCube` after unbinding on Bgfx | ⬜ | `EnvironmentMapEffect` path |
+| 771 | Verify `RenderTargetUsage::DiscardContents` vs `PreserveContents` on Bgfx | ⬜ | |
+| 772 | Verify MSAA render target creation + resolve on Bgfx | ⬜ | |
+| 773 | Verify `SetRenderTarget(nullptr)` restores the backbuffer on Bgfx | ⬜ | |
+| 774 | Verify MRT with mixed formats is rejected or handled per XNA constraints on Bgfx | ⬜ | |
+| 775 | Document Bgfx MRT attachment limits | ⬜ | |
+
+### Viewport
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 776 | Verify `Viewport::Project`/`Unproject` math on Bgfx | ⬜ | Confirm no Bgfx-specific NDC/texture-origin convention bug |
+| 777 | Verify viewport reset after backbuffer resize on Bgfx | ⬜ | |
+
+### Effect base + BasicEffect
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 778 | Verify `EffectPass::Apply`/`EffectTechnique` selection reach the Bgfx draw-state setup correctly | ⬜ | |
+| 779 | Pixel test: `BasicEffect` vertex-color-only on Bgfx | ⬜ | |
+| 780 | Pixel test: `BasicEffect` texture-only on Bgfx | ⬜ | |
+| 781 | Pixel test: `BasicEffect` texture × vertex color on Bgfx | ⬜ | |
+| 782 | Pixel test: `BasicEffect` one directional light on Bgfx | ⬜ | |
+| 783 | Pixel test: `BasicEffect` ambient+emissive+specular combination on Bgfx | ⬜ | |
+| 784 | Pixel test: `BasicEffect` fog on Bgfx | ⬜ | |
+
+### AlphaTestEffect (Task 375 already covers the CompareFunction sweep)
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 785 | Verify alpha reference value 0–255 vs 0–1 scaling on Bgfx | ⬜ | |
+| 786 | Verify `AlphaTestEffect` + vertex/diffuse color interaction on Bgfx | ⬜ | |
+| 787 | Verify `AlphaTestEffect` fog behavior on Bgfx | ⬜ | |
+| 788 | Verify `AlphaTestEffect` null-texture behavior on Bgfx | ⬜ | |
+
+### DualTextureEffect
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 789 | Pixel test: two white textures + diffuse color on Bgfx | ⬜ | |
+| 790 | Pixel test: magenta × yellow = red on Bgfx | ⬜ | Mirrors Tasks 133/135 |
+| 791 | Verify first/second texture null behavior on Bgfx | ⬜ | |
+| 792 | Verify `DualTextureEffect` fog behavior on Bgfx | ⬜ | |
+
+### EnvironmentMapEffect
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 793 | Pixel test: `EnvironmentMapAmount=0` (ignores cubemap) on Bgfx | ⬜ | |
+| 794 | Pixel test: `EnvironmentMapAmount=1` with white cubemap on Bgfx | ⬜ | |
+| 795 | Pixel test: `EnvironmentMapSpecular` contribution on Bgfx | ⬜ | |
+| 796 | Verify `FresnelFactor` on Bgfx if implemented | ⬜ | |
+| 797 | Verify eye position affects reflection vector on Bgfx | ⬜ | |
+| 798 | Verify non-identity world/normal-matrix correctness on Bgfx | ⬜ | |
+
+### SkinnedEffect
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 799 | Verify `SetBoneTransforms` accepts the supported bone count + throws for excess on Bgfx | ⬜ | |
+| 800 | Pixel test: identity bone palette (no deformation) on Bgfx | ⬜ | |
+| 801 | Pixel test: single translation bone on Bgfx | ⬜ | |
+| 802 | Pixel test: two-bone 50/50 blend on Bgfx | ⬜ | |
+
+### SpriteBatch (needs Task 740's readback wiring first)
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 803 | Pixel test: `SpriteSortMode` ordering (Deferred/Texture/FrontToBack/BackToFront) on Bgfx | ⬜ | |
+| 804 | Pixel test: rotation around origin on Bgfx | ⬜ | |
+| 805 | Pixel test: scale overloads on Bgfx | ⬜ | |
+| 806 | Pixel test: source rectangle cropping on Bgfx | ⬜ | |
+| 807 | Pixel test: `SpriteEffects` flip on Bgfx | ⬜ | Mirrors Task 167 |
+| 808 | Pixel test: `transformMatrix` in `SpriteBatch::Begin` on Bgfx | ⬜ | Mirrors Task 168 |
+
+### SpriteFont
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 809 | Pixel test: single glyph at known position on Bgfx | ⬜ | |
+| 810 | Pixel test: multiple glyphs with spacing + newline on Bgfx | ⬜ | |
+| 811 | Pixel test: default character fallback on Bgfx | ⬜ | |
+
+### Model
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 812 | Pixel test: model with two meshes and different effects on Bgfx | ⬜ | |
+| 813 | Pixel test: model hierarchy transform propagation on Bgfx | ⬜ | |
+
+### OcclusionQuery (Task 448 already covers sync)
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 814 | Pixel/query test: fully visible quad returns positive pixel count on Bgfx | ⬜ | |
+| 815 | Pixel/query test: fully occluded quad returns zero/lower count on Bgfx | ⬜ | |
+| 816 | Verify disposing an active `OcclusionQuery` is safe or throws correctly on Bgfx | ⬜ | |
+
+### Texture2D / Texture3D / TextureCube depth
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 817 | Verify `Texture2D` `SetData`/`GetData` partial-rectangle + `startIndex`/`elementCount` on Bgfx | ⬜ | Mirrors Tasks 169–170; currently only EasyGL has this depth |
+| 818 | Verify `Texture2D` mip-level `SetData`/`GetData` on Bgfx | ⬜ | Mirrors Task 171 |
+| 819 | Verify `Texture3D` box/`GetData` bounds guards reach correct pixels on Bgfx | ⬜ | Task 271 fixed the C++ guards backend-agnostically; no Bgfx pixel test confirms the GPU side |
+| 820 | Verify `TextureCube` per-face/per-mip `SetData`/`GetData` on Bgfx | ⬜ | Mirrors Task 172 |
+| 821 | Verify NPOT texture upload+sample on Bgfx | ⬜ | Mirrors Task 268; currently code-inspected only for this backend |
+
+### Final Bgfx perfection gate
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 822 | Run the full Bgfx integration suite (Tasks 740–821) end to end; zero unexplained failures or documented, justified skips | ⬜ | |
+| 823 | Update `docs/xna-4-api-coverage.md` §7 stock-effect backend-parity table: move Bgfx from "compiles only" to "pixel-verified" only where proven by Tasks 740–822 | ⬜ | |
+| 824 | Document remaining genuine Bgfx architectural limitations (if any survive) in `docs/graphics-backend-feature-matrix.md` | ⬜ | |
+
+---
+
+## Phase 73 — Vulkan: full 2D+3D pixel-verified parity (gap closure)
+
+> Runs fourth (last of the four backend-focused phases; WebGPU remains parked after this).
+> Vulkan already has substantially more infrastructure than Bgfx — per-slot samplers (Task 118),
+> custom Effect/SPIR-V (119), instancing (111), wireframe (112), MSAA (147), RenderTargetCube
+> (142), Texture3D/Cube backends (143), scissor (329), depth bias (328), and stock-effect SPIR-V
+> shaders for all 5 effects (102–109) — so this phase is sized as gap-closure, not full
+> replication, plus the two SpriteBatch bugs found this session.
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 664 | *(see Phase 47 above)* Fix Vulkan `SpriteBatch` multi-`Begin`/`End` bug | ⬜ | Cross-referenced here; lives in Phase 47's table |
+| 665 | *(see Phase 47 above)* Fix Vulkan `SpriteBatch` `SamplerState` no-op | ⬜ | Cross-referenced here; lives in Phase 47's table |
+| 825 | Pixel test: `TextureAddressMode::Clamp` on Vulkan | ⬜ | |
+| 826 | Pixel test: `TextureAddressMode::Wrap` on Vulkan | ⬜ | Verifies Task 665's fix once landed |
+| 827 | Pixel test: `TextureAddressMode::Mirror` on Vulkan | ⬜ | |
+| 828 | Pixel test: `TextureFilter::Point` vs `Linear` on Vulkan | ⬜ | |
+| 829 | Verify mipmap filter modes on Vulkan | ⬜ | |
+| 830 | Verify anisotropic filtering cap + fallback on Vulkan | ⬜ | `VkPhysicalDeviceFeatures.samplerAnisotropy` |
+| 831 | Pixel test: `BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` on Vulkan | ⬜ | Consolidated, 4 sub-cases — mirrors Task 189's pattern |
+| 832 | Verify separate color/alpha blend function + factor combinations on Vulkan | ⬜ | |
+| 833 | Verify `BlendFactor` constant-color blending on Vulkan | ⬜ | |
+| 834 | Pixel test: depth write enabled vs disabled on Vulkan | ⬜ | |
+| 835 | Pixel test: all 8 depth `CompareFunction` values on Vulkan | ⬜ | |
+| 836 | Verify stencil enable/disable + read/write masks + front-face ops on Vulkan | ⬜ | |
+| 837 | Verify two-sided stencil ops on Vulkan | ⬜ | `VkStencilOpState` front/back |
+| 838 | Verify `ReferenceStencil` device state reaches Vulkan draw calls | ⬜ | |
+| 839 | Pixel test: culling disabled / `CullClockwise` / `CullCounterClockwise` on Vulkan | ⬜ | |
+| 840 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on Vulkan | ⬜ | Extends Task 148's full-cycle test with an explicit sampling-after-unbind assertion |
+| 841 | Add the pixel-readback confirmation for `RenderTargetUsage::DiscardContents` vs `PreserveContents` on Vulkan | ⬜ | Task 178 implemented the render-pass load-op mapping; no pixel test confirms it yet |
+| 842 | Verify MRT with mixed formats is rejected or handled per XNA constraints on Vulkan | ⬜ | |
+| 843 | Verify `Viewport::Project`/`Unproject` math on Vulkan | ⬜ | Confirm no Vulkan Y-flip/NDC convention bug |
+| 844 | Pixel test: `BasicEffect` vertex-color-only / texture-only / texture×vertex-color / one-light / ambient+emissive+specular on Vulkan | ⬜ | Consolidated, mirrors Task 189; Vulkan currently only has Phase 9–14's combined smoke coverage |
+| 845 | Pixel test: `BasicEffect` fog on Vulkan | ⬜ | EasyGL got this in Task 195; audit Vulkan `GpuDrawParams`/SPIR-V shaders for a fog uniform, add if missing |
+| 846 | Verify alpha reference scaling + vertex/diffuse color interaction + fog + null-texture behavior in `AlphaTestEffect` on Vulkan | ⬜ | |
+| 847 | Verify `DualTextureEffect` null-texture behavior + fog on Vulkan | ⬜ | Blend correctness already covered by Task 135 |
+| 848 | Verify `EnvironmentMapEffect` `FresnelFactor` + eye-position + non-identity world-matrix correctness on Vulkan | ⬜ | Amount/specular already covered by Task 136 |
+| 849 | Verify `SkinnedEffect` bone-count boundary + two-bone-blend pixel correctness on Vulkan | ⬜ | Add explicit pixel assertions beyond the existing shader smoke test |
+| 850 | Pixel test: `SpriteSortMode` ordering (Deferred/Texture/FrontToBack/BackToFront) on Vulkan | ⬜ | |
+| 851 | Pixel test: rotation/scale/source-rectangle-cropping/`SpriteEffects` flip on Vulkan | ⬜ | Consolidated |
+| 852 | Pixel test: single glyph + multi-glyph spacing + newline + default-character-fallback on Vulkan | ⬜ | `SpriteFont` has no dedicated Vulkan pixel test yet |
+| 853 | Pixel test: model with two meshes and hierarchy transform propagation on Vulkan | ⬜ | |
+| 854 | Pixel/query test: visible vs occluded quad pixel counts on Vulkan | ⬜ | Task 447 covers sync correctness; add the actual pixel/query-count assertions |
+| 855 | Verify `Texture2D` `SetData`/`GetData` partial-rectangle + `startIndex`/`elementCount` + mip-level on Vulkan | ⬜ | Currently only EasyGL has this depth (Tasks 169–171) |
+| 856 | Verify `TextureCube` per-face/per-mip `SetData`/`GetData` pixel correctness on Vulkan | ⬜ | Mirrors Task 172 |
+| 857 | Verify NPOT texture upload+sample on Vulkan | ⬜ | Mirrors Task 268; currently code-inspected only |
+| 858 | Verify `Texture3D` box-region `SetData`/`GetData` pixel correctness on Vulkan | ⬜ | Task 271's guards are backend-agnostic C++; no Vulkan pixel test confirms the GPU side |
+| 859 | Run the full Vulkan integration suite (Tasks 664–665, 825–858) end to end; zero unexplained failures or documented, justified skips | ⬜ | |
+| 860 | Update `docs/xna-4-api-coverage.md` §7 stock-effect backend-parity table: move Vulkan rows from "partial" to "pixel-verified" only where proven by Tasks 825–859 | ⬜ | |
+| 861 | Document remaining genuine Vulkan limitations (if any survive) in `docs/graphics-backend-feature-matrix.md` | ⬜ | |
