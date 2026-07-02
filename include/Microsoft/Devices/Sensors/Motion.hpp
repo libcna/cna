@@ -42,9 +42,15 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Gets the current state of the motion sensor.
          *
+         * CNA extension beyond the documented WP7 API: the real
+         * Microsoft.Devices.Sensors.Motion class has no State property
+         * (confirmed against its authoritative member list). Exposed here
+         * for symmetry with Accelerometer, the one sensor class that does
+         * have a real State property.
+         *
          * @return Current sensor state.
          */
-        [[nodiscard]] SensorState getStateProperty() const;
+        NOXNA [[nodiscard]] SensorState getStateProperty() const;
 
     public:
         /**

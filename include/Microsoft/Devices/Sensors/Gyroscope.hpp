@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Devices/Sensors/GyroscopeReading.hpp"
 #include "Microsoft/Devices/Sensors/SensorBase.hpp"
@@ -56,9 +57,15 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Gets the current state of the gyroscope.
          *
+         * CNA extension beyond the documented WP7 API: the real
+         * Microsoft.Devices.Sensors.Gyroscope class has no State property
+         * (confirmed against its authoritative member list). Exposed here
+         * for symmetry with Accelerometer, the one sensor class that does
+         * have a real State property.
+         *
          * @return Current sensor state.
          */
-        [[nodiscard]] SensorState getStateProperty() const;
+        NOXNA [[nodiscard]] SensorState getStateProperty() const;
 
     public:
         /**

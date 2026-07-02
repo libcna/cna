@@ -24,8 +24,11 @@ API spec. Branch: `feature/devices`.
 - `Microsoft::Devices::Sensors::SensorBase<T>` (header-only template) is the
   shared base for all sensor classes (`CurrentValue`, `IsDataValid`,
   `TimeBetweenUpdates`, `CurrentValueChanged`, `Dispose()`).
-- `VibrateController` is a static-only utility class (no instances, no
-  `SensorBase<T>`/`IDisposable`) — it does not follow the sensor pattern.
+- `VibrateController` is a singleton reached via `getDefaultProperty()`
+  (matches the real WP7 `VibrateController.Default` instance API, fixed
+  2026-07-02 in Task P2-14 — it used to be static-only, which was wrong).
+  It does not derive `SensorBase<T>`/`IDisposable` — it does not follow the
+  sensor pattern.
 - FNA (the usual local reference tree for XNA behavior) implements **no**
   equivalent of `Microsoft::Devices` at all (it's WP7-only) — this namespace
   has no local reference tree to diff against; API completeness is judged
@@ -38,9 +41,15 @@ API spec. Branch: `feature/devices`.
 ## 2. Current status
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
-(`cmake-build-debug`) as of the last verified build (during Task P2-8 work).
+(`cmake-build-debug`) as of the last verified build (during Task P2-5 work).
+Note: between Task P2-14 and P2-15, `sharp-runtime`
+(sibling repo, under concurrent work elsewhere) grew `System::IAsyncResult`
+to 4 pure-virtual members and broke
+`src/Microsoft/Xna/Framework/Storage/StorageDevice.cpp` (unrelated to
+`Microsoft::Devices`); fixed incidentally during P2-15 to unblock the build
+— see Section 3.
 
-**Tests:** last full `ctest` run: **1935 tests total, 97% passing.** The only
+**Tests:** last full `ctest` run: **1964 tests total, 97% passing.** The only
 failures are a fixed set of **64 pre-existing `EasyGL_*` graphics tests**
 that cannot run headless (no display/GPU in this dev environment) — present
 before this phase began and unrelated to `Microsoft::Devices` work. No
@@ -56,26 +65,21 @@ regressions have been introduced across the whole phase.
   `GyroscopeReading`/`Gyroscope` (real, SDL3-backed — `SDL_SENSOR_GYRO`),
   `AttitudeReading`, `MotionReading`, `Motion` (stub, see below). All have
   passing test suites.
-- `Microsoft::Devices::VibrateController` — static-only, SDL3 haptic-backed
-  (`SDL_GetHaptics`/`SDL_OpenHaptic`/`SDL_InitHapticRumble`/
+- `Microsoft::Devices::VibrateController` — singleton (`getDefaultProperty()`),
+  SDL3 haptic-backed (`SDL_GetHaptics`/`SDL_OpenHaptic`/`SDL_InitHapticRumble`/
   `SDL_PlayHapticRumble`/`SDL_StopHapticEffects`). Now filters out haptic
   devices that are also connected gamepads, so it can't compete with
   `GamePad::SetVibration` (different SDL3 API path). Full tests.
 
 **Does not work / not done yet:**
-- `Accelerometer` has **no test file** (`AccelerometerTests.cpp` doesn't
-  exist) — the only sensor class in this phase without one.
-- `Accelerometer.hpp` has an unfixed `Dispose()` C++ name-hiding bug (see
-  Section 4).
 - `Compass` and `Motion` are permanent stubs — SDL3 exposes no magnetometer
   API on any platform, so both are always `SensorState::NotSupported` and
   `Start()` always throws. This is by design, not a gap, until SDL3 gains
   magnetometer support.
-- Cross-platform builds (Vulkan/BGFX desktop backends, Android, iOS) have
-  **not** been verified this phase — only the Linux desktop `EASYGL` build
-  has been built and tested. No `cmake-build-vulkan`/`cmake-build-bgfx`
-  directory currently exists in this checkout, and no Android NDK / iOS
-  toolchain is available in this dev container.
+- Android/iOS cross-compilation has **not** been verified — no Android NDK
+  / iOS toolchain is available in this dev container (Task P2-7, blocked).
+  Vulkan/BGFX desktop backends **were** verified 2026-07-02 (Task P2-6): all
+  139 Devices/Sensors/VibrateController tests pass under both.
 
 ---
 
@@ -110,6 +114,189 @@ regressions have been introduced across the whole phase.
   `Dispose(bool) override` hides the inherited public no-arg `Dispose()`
   (C++ name-hiding). The identical bug exists in `Accelerometer.hpp` and is
   still unfixed (see Section 4/5).
+- **Task P2-2 (done, 2026-07-02):** independent verification of
+  `Microsoft::Devices::Sensors`/`VibrateController` API completeness against
+  archived Microsoft Learn "previous-versions" MSDN pages (high confidence)
+  plus one MonoGame cross-check for `SensorState`'s enum values (medium
+  confidence). Confirmed the vast majority of the existing implementation
+  matches the real WP7 Mango SDK exactly (full per-class verdicts in
+  `AUDIT.md`). Found four real gaps, each promoted to a new task in
+  `plan_devices_phase2.md` Phase 7: `VibrateController`'s static-only shape
+  should be an instance API via a `Default` singleton (P2-14);
+  `Accelerometer.ReadingChanged` (legacy WP7 7.0 event) was never wired up
+  (P2-15); `SensorFailedException` is missing `ErrorId` (P2-16); and
+  `getStateProperty()` on `Compass`/`Gyroscope`/`Motion` isn't in the
+  documented API for those three classes and likely needs a `NOXNA` tag
+  (P2-17). Research-only task — no source files changed, only
+  `plan_devices_phase2.md`, `AUDIT.md`, and this file.
+- **Task P2-3 (done, 2026-07-02):** fixed `Accelerometer.hpp`'s `Dispose()`
+  C++ name-hiding bug (added `using SensorBase<AccelerometerReading>::Dispose;`,
+  copying the pattern already used in `Compass`/`Gyroscope`/`Motion`) and
+  wrote `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (7 tests,
+  modeled on `GyroscopeTests.cpp`) — `Accelerometer` was the last sensor
+  class with zero test coverage. Files changed:
+  `include/Microsoft/Devices/Sensors/Accelerometer.hpp`,
+  `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (new). Build +
+  full `ctest` verified: 1942 tests total, same 64 pre-existing headless
+  `EasyGL_*` failures, no regressions.
+- **Task P2-4 (done, 2026-07-02):** fixed `Accelerometer.cpp`'s
+  `GetTypeNameCPP` to use the dot-separated .NET name convention
+  (`"Microsoft.Devices.Sensors.Accelerometer"`, was `::`-separated);
+  added a `GetTypeName` test case to `AccelerometerTests.cpp`. Files changed:
+  `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
+  `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`. Build + full
+  `ctest` verified: 1943 tests total, same 64 pre-existing headless
+  `EasyGL_*` failures, no regressions.
+- **Task P2-14 (done, 2026-07-02):** fixed `VibrateController`'s API shape
+  from fully static to the real WP7 instance-via-singleton pattern.
+  `getDefaultProperty()` (new, mirrors
+  `Microsoft::Xna::Framework::Audio::Microphone::getDefaultProperty()`'s
+  existing pattern in this codebase) returns a never-null singleton pointer;
+  `Start(const System::TimeSpan&)`/`Stop()` are now instance methods
+  (`VibrateController::getDefaultProperty()->Start(...)`); the default
+  constructor is private (`= default`, was `= delete`d). `Start()` now
+  throws `System::ArgumentOutOfRangeException` for `duration` outside the
+  closed interval `[TimeSpan::Zero, TimeSpan::FromSeconds(5)]`, instead of
+  silently clamping. Files changed:
+  `include/Microsoft/Devices/VibrateController.hpp`,
+  `src/Microsoft/Devices/VibrateController.cpp`,
+  `tests/Microsoft/Devices/VibrateControllerTests.cpp` (rewritten for the
+  new shape, 10 tests, up from 6). Build + full `ctest` verified: 1947 tests
+  total, same 64 pre-existing headless `EasyGL_*` failures, no regressions.
+- **Task P2-15 (done, 2026-07-02):** wired up `Accelerometer.ReadingChanged`,
+  the real (if `[Obsolete]`-tagged) WP7 7.0 legacy event using the
+  already-built `AccelerometerReadingEventArgs`. Added
+  `System::EventHandler<AccelerometerReadingEventArgs> ReadingChanged;` to
+  `Accelerometer.hpp`; raised it from the end of `ProcessSensorUpdateEvent()`
+  right after the existing `CurrentValueChanged`-raising call, same
+  X/Y/Z/Timestamp data, same `getIsDataValidProperty()`/`.Empty()` guard
+  pattern. Added `AccelerometerTests.cpp::ReadingChangedSubscriptionDoesNotThrow`
+  (can only confirm no-crash + `Start()`/`Stop()` behavior with a subscriber
+  attached — actually observing the event fire needs real hardware, same
+  limitation as `VibrateControllerTests`' gamepad-conflict scenario). Files
+  changed: `include/Microsoft/Devices/Sensors/Accelerometer.hpp`,
+  `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
+  `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`.
+  **Also fixed incidentally (unrelated to `Microsoft::Devices`):**
+  `sharp-runtime` grew `System::IAsyncResult` to 4 pure-virtual members
+  since the P2-14 session, breaking
+  `src/Microsoft/Xna/Framework/Storage/StorageDevice.cpp`'s internal
+  `SelectorResult`/`ContainerResult` helpers (`CNA` is one static-library
+  target, so this blocked verifying P2-15 at all). Fixed minimally: both
+  classes' `void* asyncState` became `std::any asyncState`, plus a new
+  pre-signaled `System::Threading::EventWaitHandle` member and the two new
+  `IAsyncResult` overrides — no behavior change, these results were already
+  always synchronously completed. No `Storage` tests exist to regression-check
+  against this specific fix. Build + full `ctest` verified: 1948 tests total,
+  same 64 pre-existing headless `EasyGL_*` failures, no regressions.
+- **Task P2-16 (done, 2026-07-02):** added `ErrorId` to `SensorFailedException`,
+  matching the real API (MSDN `hh239104`). Added `SharpRuntime::intcs errorId_`
+  + `getErrorIdProperty()` + a new `(const char* str, SharpRuntime::intcs
+  errorId)` constructor overload; existing message-only constructor kept
+  unchanged (defaults `ErrorId` to `0`) for source compat. Confirmed
+  `AccelerometerFailedException` does inherit `SensorFailedException`
+  (visible directly in its `.hpp` — the earlier "unverified" note from
+  Task P2-2 was overly cautious) and added the matching overload there too.
+  Existing throw sites across the sensor classes intentionally left
+  unchanged (still message-only, so `ErrorId` reads `0`) — no real WP7
+  error-code values are documented anywhere; inventing numbers would be
+  guesswork. Files changed:
+  `include/Microsoft/Devices/Sensors/SensorFailedException.hpp`,
+  `src/Microsoft/Devices/Sensors/SensorFailedException.cpp`,
+  `include/Microsoft/Devices/Sensors/AccelerometerFailedException.hpp`,
+  `src/Microsoft/Devices/Sensors/AccelerometerFailedException.cpp`,
+  `tests/Microsoft/Devices/Sensors/SensorFailedExceptionTests.cpp`,
+  `tests/Microsoft/Devices/Sensors/AccelerometerFailedExceptionTests.cpp`
+  (3 new tests each). Build + full `ctest` verified: 1954 tests total, same
+  64 pre-existing headless `EasyGL_*` failures, no regressions.
+- **Task P2-17 (done, 2026-07-02):** resolved `getStateProperty()` on
+  `Compass`/`Gyroscope`/`Motion`. Per the task's own step 1 ("spend a little
+  more effort"), fetched each class's exact authoritative "type exposes the
+  following members" page directly (`Compass` `hh220912`, `Gyroscope`
+  `hh239201`, `Motion` `hh239189`) instead of relying on the earlier
+  absence-based inference — all three list exactly the same 4 properties
+  (`CurrentValue`/`IsDataValid`/`IsSupported`/`TimeBetweenUpdates`), no
+  `State`, definitively confirming the gap (upgraded from "medium-high
+  confidence" to confirmed). Tagged `getStateProperty()` `NOXNA` on all
+  three headers with a Doxygen note (CNA symmetry extension mirroring
+  `Accelerometer`'s real `State`) — kept, not removed, since existing
+  code/tests depend on it. `Gyroscope.hpp` needed a new
+  `#include "CNA/CNAHelper.hpp"` for the `NOXNA` macro (`Compass.hpp`/
+  `Motion.hpp` already had it). No behavior change, no new tests needed.
+  Files changed: `include/Microsoft/Devices/Sensors/Compass.hpp`,
+  `include/Microsoft/Devices/Sensors/Gyroscope.hpp`,
+  `include/Microsoft/Devices/Sensors/Motion.hpp`. Build + full `ctest`
+  verified: 1954 tests total (unchanged), same 64 pre-existing headless
+  `EasyGL_*` failures, no regressions. **This closes out all four gaps
+  found by Task P2-2's audit** — P2-14/P2-15/P2-16/P2-17 are all done.
+- **Tasks P2-10 through P2-13 (done, 2026-07-02):** implemented all of Phase
+  6's `VibrateController` NOXNA extensions, as instance methods on the
+  `getDefaultProperty()` singleton (per the Phase 7 ordering note — not
+  free-standing statics). `Start(const System::TimeSpan&, float intensity)`
+  (P2-10): existing `Start(TimeSpan)` now delegates to it with `1.0f`, zero
+  behavior change; `intensity` clamped via `std::clamp`.
+  `getIsSupportedProperty()`/`getDeviceNameProperty()` (P2-11): share a new
+  private `AcquireHapticDeviceForProbe()` helper that reuses `g_haptic` if
+  already open, otherwise opens+closes a temporary device — never holds one
+  open as a side effect of probing; empirically confirmed (via a standalone
+  throwaway probe program, not committed) that both report
+  "unsupported"/`""` in this dev container, i.e. genuinely no haptic
+  hardware here. `StartLeftRight(float largeMotor, float smallMotor, const
+  System::TimeSpan&)` (P2-12): new file-static `g_leftRightEffectId`
+  (SDL's own `-1` "no effect" sentinel) tracks the uploaded
+  `SDL_HAPTIC_LEFTRIGHT` effect; gated on `SDL_GetHapticFeatures()` support
+  (silent no-op otherwise); `Stop()` now also calls
+  `SDL_DestroyHapticEffect()` on it (`SDL_StopHapticEffects()` alone stops
+  playback but doesn't free the uploaded effect slot). Added 10 new tests
+  (P2-13) — one deliberate deviation from the plan's exact text: rather than
+  hardcoding `EXPECT_FALSE(getIsSupportedProperty())`, the test only asserts
+  no-crash (mirrors `Accelerometer`/`Gyroscope`'s branch-on-live-result
+  convention, since haptic availability is a genuine hardware question like
+  theirs, not a permanent stub-by-design like `Compass`/`Motion`'s missing
+  magnetometer API — hardcoding `false` would be a latent flake on any
+  environment that does have haptic hardware). Files changed:
+  `include/Microsoft/Devices/VibrateController.hpp`,
+  `src/Microsoft/Devices/VibrateController.cpp`,
+  `tests/Microsoft/Devices/VibrateControllerTests.cpp`. Build + full `ctest`
+  verified: 1964 tests total (up from 1954), same 64 pre-existing headless
+  `EasyGL_*` failures, no regressions. Task P2-9 also closed as a natural
+  byproduct — the reasoning it asked to confirm is now stated directly in
+  P2-10's Doxygen comment, no separate code change needed. **This closes
+  out all of Phase 6.**
+- **Task P2-5 (done, 2026-07-02):** `CHECKLIST.md` compliance spot-check
+  across all 32 files in `Microsoft::Devices` (17 headers + 15 `.cpp`).
+  SPDX headers, `CNAHelper.hpp` presence, no-bare-`///`, Doxygen
+  completeness, and `GetTypeName()` dot-convention were all verified
+  compliant — no functional bugs found, matching this task's own prediction
+  ("expect it to mostly confirm compliance"). Two minor, pre-existing style
+  issues fixed: `ISensorReading.hpp`/`SensorState.hpp` had a stale
+  `@note Status: Partial.` doc-comment line (removed — both were already
+  confirmed ✅ complete by Task P2-2); `AccelerometerFailedException.hpp`
+  used a bare relative include and a stray `};` instead of
+  `} // namespace ...` (normalized to match every sibling file). Files
+  changed: `include/Microsoft/Devices/Sensors/ISensorReading.hpp`,
+  `include/Microsoft/Devices/Sensors/SensorState.hpp`,
+  `include/Microsoft/Devices/Sensors/AccelerometerFailedException.hpp`.
+  Build + full `ctest` verified: 1964 tests total (unchanged), same 64
+  pre-existing headless `EasyGL_*` failures, no regressions.
+- **Task P2-6 (done, 2026-07-02):** verified Vulkan/BGFX desktop builds pick
+  up `Microsoft::Devices` correctly. Configured `cmake-build-vulkan`
+  (`find_package(Vulkan)` found the system SDK, 1.4.309) and
+  `cmake-build-bgfx` (`FetchContent`-pulled `bgfx.cmake` from GitHub — a
+  genuinely slow ~6-minute configure + long build, since bgfx is a large
+  codebase; both ran in the background). `CNA` + `CnaTests` build clean
+  under both. Targeted `ctest -R
+  "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController"`:
+  **139/139 pass under both backends** — identical to the `EASYGL` baseline,
+  zero regressions. Full-suite counts differ from `EASYGL` as
+  expected/unrelated (Vulkan 1899/1912, BGFX 1903/1906 — every failure in
+  both is a missing graphics demo/smoke-test executable not built by the
+  `CNA`/`CnaTests` targets, e.g. `cna_demo_2d`, `cna_test_vulkan_instanced`,
+  `cna_test_bgfx_render_target_usage` — none `Microsoft::Devices`-related).
+  `cmake-build-vulkan`/`cmake-build-bgfx` left on disk (gitignored, like
+  `cmake-build-debug`). **This closes out Task P2-6** — only Task P2-7
+  (Android/iOS, blocked — no toolchain in this environment) remains in
+  Phase 5.
 
 Full per-class implementation history (constructors, tests added, etc.) for
 all 31 `plan_devices.md` tasks is in `git log` and the plan files themselves
@@ -119,80 +306,155 @@ all 31 `plan_devices.md` tasks is in `git log` and the plan files themselves
 
 ## 4. Current blocker / main problem
 
-No blocker prevents work from continuing. The most important known problem:
+No blocker prevents work from continuing.
 
-**Symptom:** `include/Microsoft/Devices/Sensors/Accelerometer.hpp` declares
-`void Dispose(bool disposing) override;` without a `using
-SensorBase<AccelerometerReading>::Dispose;` declaration. This C++ name-hiding
-means the inherited public no-arg `Dispose()` (the actual
-`System::IDisposable` contract method, defined in `SensorBase<T>`) is hidden
-for any `Accelerometer` instance — calling `accel.Dispose()` fails to
-compile for any external caller.
+**Resolved (2026-07-02, Task P2-3):** `Accelerometer.hpp`'s `Dispose()`
+name-hiding bug (declaring `Dispose(bool) override` without `using
+SensorBase<AccelerometerReading>::Dispose;`, which hid the inherited public
+no-arg `Dispose()`) is fixed — the one-line `using` declaration was added,
+copying the exact pattern already used in `Compass.hpp`/`Gyroscope.hpp`/
+`Motion.hpp`. `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` was
+also written (7 tests, modeled on `GyroscopeTests.cpp`): `getIsSupportedProperty()`
+doesn't crash, constructor succeeds, `getStateProperty()` reflects support
+status, `Start()` throws `AccelerometerFailedException` when unsupported,
+`Stop()` doesn't crash, `Dispose()`/second-`Dispose()`-throws, and the 11th
+simultaneous instance throws `SensorFailedException`. All 7 pass; the
+`DisposeSucceedsAndSecondDisposeThrows` test specifically exercises the
+no-arg `Dispose()` call that would not have compiled before this fix. Full
+`ctest` confirms no regressions: 1942 tests total (up from 1935), same 64
+pre-existing headless `EasyGL_*` failures.
 
-**Failing scenario (not yet reduced to a committed failing test):** any code
-that does `Accelerometer a; a.Dispose();` fails to compile with an
-"ambiguous"/"no matching function" style error, because only the
-`Dispose(bool)` overload is visible through the derived class.
+**Resolved (2026-07-02, Task P2-14):** `VibrateController`'s API shape —
+static-only, wrong — is now a singleton reached via `getDefaultProperty()`,
+with `Start`/`Stop` as instance methods, matching the real WP7
+`VibrateController.Default.Start(...)` pattern. Out-of-range `Start()`
+duration now throws `System::ArgumentOutOfRangeException` instead of
+silently clamping. See Section 5.
 
-**Affected files:** `include/Microsoft/Devices/Sensors/Accelerometer.hpp`.
+**Resolved (2026-07-02, Task P2-15):** `Accelerometer.ReadingChanged` (the
+real, `[Obsolete]`-tagged WP7 7.0 legacy event) is now wired up, raised
+alongside `CurrentValueChanged`.
 
-**Suspected cause:** this bug predates the current phase and was simply
-never triggered, because `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
-does not exist — no code anywhere calls `Accelerometer::Dispose()` the
-no-arg way. The same bug was independently found (and fixed) in `Compass`,
-`Gyroscope`, and `Motion` while writing their test files, which is what
-surfaced it for `Accelerometer` too.
+**Resolved (2026-07-02, Task P2-16):** `SensorFailedException` (and
+`AccelerometerFailedException`) now has `getErrorIdProperty()`, matching
+the real API.
 
-**What has been tried:** nothing yet for `Accelerometer` specifically — the
-fix is well-understood and already applied three times elsewhere in this
-codebase (see `include/Microsoft/Devices/Sensors/Compass.hpp` for the exact
-one-line pattern to copy). This is Task P2-3 in `plan_devices_phase2.md`.
+**Resolved (2026-07-02, Task P2-17):** `getStateProperty()` on
+`Compass`/`Gyroscope`/`Motion` is now tagged `NOXNA` — definitively
+confirmed (each class's exact authoritative member-list page fetched
+directly) that the real API has no `State` on those three. This closes out
+all four gaps found by Task P2-2's audit.
+
+**Resolved (2026-07-02, Tasks P2-10–P2-13, P2-9):** Phase 6's
+`VibrateController` NOXNA extensions are all implemented —
+variable-intensity `Start()` overload, `getIsSupportedProperty()`/
+`getDeviceNameProperty()` capability introspection, and `StartLeftRight()`
+dual-motor rumble, all as instance methods on the singleton.
+
+**Resolved (2026-07-02, Task P2-5):** `CHECKLIST.md` compliance spot-check
+across all 32 `Microsoft::Devices` files found no functional bugs — only two
+minor pre-existing style issues, both fixed (see Section 3).
+
+**Resolved (2026-07-02, Task P2-6):** Vulkan/BGFX desktop builds verified —
+`Microsoft::Devices` compiles identically and all 139
+Devices/Sensors/VibrateController tests pass under both, matching the
+`EASYGL` baseline exactly.
+
+The only remaining `Microsoft::Devices` work is Task P2-7 (Android/iOS
+cross-compilation) — blocked in this environment, no NDK/iOS toolchain
+available; flag for a different environment/CI. Every other task in
+`plan_devices.md` and `plan_devices_phase2.md` is done.
 
 ---
 
 ## 5. Known bugs and limitations
 
-- **Confirmed bug, not yet fixed:** `Accelerometer.hpp` `Dispose()`
-  name-hiding (see Section 4). Fix: `plan_devices_phase2.md` Task P2-3.
-- **Incomplete:** `AccelerometerTests.cpp` does not exist — `Accelerometer`
-  is the only sensor class with zero test coverage. Same task (P2-3).
-- **Confirmed inconsistency, not fixed:** `GetTypeNameCPP(...)` NAME-string
-  convention is inconsistent across the codebase — some files use
-  dot-separated .NET-style names (the documented invariant, see Section 6),
-  others use `::` (`Accelerometer.cpp`, `Cue.cpp`, `AudioEngine.cpp`,
+- **Fixed (2026-07-02, Task P2-3):** `Accelerometer.hpp` `Dispose()`
+  name-hiding (see Section 4) and the missing `AccelerometerTests.cpp` are
+  both resolved.
+- **Partially fixed:** `GetTypeNameCPP(...)` NAME-string convention was
+  inconsistent across the codebase — some files use dot-separated .NET-style
+  names (the documented invariant, see Section 6), others use `::`. **Fixed
+  in `Microsoft::Devices` scope (2026-07-02, Task P2-4):** `Accelerometer.cpp`
+  now uses `"Microsoft.Devices.Sensors.Accelerometer"`; every class in this
+  namespace now uses the dot convention correctly. **Still inconsistent
+  outside `Microsoft::Devices`** (`Cue.cpp`, `AudioEngine.cpp`,
   `SoundBank.cpp`, `WaveBank.cpp`, `DateTime.cpp`, `DateTimeOffset.cpp` —
-  grep `GetTypeNameCPP` to find all). All classes added during this phase
-  use the dot convention correctly. Fixing `Accelerometer.cpp` specifically
-  is Task P2-4; the rest is a separate, larger, cross-cutting cleanup
-  outside this phase's scope.
+  grep `GetTypeNameCPP` to find all) — a separate, larger, cross-cutting
+  cleanup outside this phase's scope, not started.
 - **By design, not a bug:** `Compass` and `Motion` are permanent
   `SensorState::NotSupported` stubs — SDL3 has no magnetometer API on any
   platform.
-- **By design, not a bug:** `VibrateController::Start()` always rumbles at
-  full strength (`1.0f`) — matches the real WP7 API, which has no intensity
-  concept (WP7-era vibration motors were single-intensity on/off). A `NOXNA`
-  variable-intensity overload is proposed but not implemented
-  (`plan_devices_phase2.md` Task P2-10).
+- **By design, not a bug:** `VibrateController::Start(const System::TimeSpan&)`
+  (the XNA-compliant overload) always rumbles at full strength (`1.0f`) —
+  matches the real WP7 API, which has no intensity concept (WP7-era
+  vibration motors were single-intensity on/off). **Fixed/extended
+  (2026-07-02, Task P2-10):** a `NOXNA Start(const System::TimeSpan&, float
+  intensity)` overload now exists for variable intensity; the XNA-compliant
+  overload delegates to it with `1.0f`, so its own behavior is unchanged.
 - **Accepted limitation:** `VibrateController`'s gamepad-exclusion filter
   (Task P2-8, Section 3) matches by device name; two physically distinct
   controllers reporting an identical product name would both be
   excluded/included together. Judged too rare to justify a more invasive
   fix (would require opening every connected joystick just to probe it).
-- **Needs verification:** cross-platform builds — Vulkan/BGFX desktop
-  backends, Android, iOS — have not been exercised this phase (only Linux
-  `EASYGL` desktop). Android/iOS specifically are blocked in this dev
-  container (no NDK/toolchain present). See `plan_devices_phase2.md` Tasks
-  P2-6/P2-7.
-- **Needs verification:** `cmake-build-vulkan`/`cmake-build-bgfx` build
-  directories may have the same stale-`CMakeCache.txt` issue that
-  `cmake-build-debug` once had (fixed by deleting the cache and
-  reconfiguring) — not yet re-checked since neither directory currently
-  exists in this checkout.
-- **Unknown:** whether `Microsoft::Devices::Sensors`'s public API surface,
-  as implemented, is 100% complete against the real WP7 Mango SDK — it was
-  filled in from general reference knowledge, not diffed against a local
-  source tree (none exists). Independent verification is proposed as
-  `plan_devices_phase2.md` Task P2-2.
+- **Verified (2026-07-02, Task P2-6):** Vulkan/BGFX desktop backends —
+  `cmake-build-vulkan` and `cmake-build-bgfx` configured fresh (neither
+  existed before, so no stale-cache issue to worry about), `CNA` +
+  `CnaTests` build clean under both, all 139
+  Devices/Sensors/VibrateController tests pass under both (identical count
+  to the `EASYGL` baseline). Full-suite failure counts differ from `EASYGL`
+  as expected (Vulkan: 13 failures, BGFX: 3 — both entirely
+  missing-executable failures for graphics demo/smoke-test binaries not
+  built by the `CNA`/`CnaTests` targets, unrelated to `Microsoft::Devices`).
+- **Still blocked:** Android/iOS cross-compilation (Task P2-7) — no NDK/iOS
+  toolchain available in this dev container; flag for a different
+  environment/CI. `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__`
+  branches remain unverified by any compiler.
+- **Fixed (2026-07-02, Task P2-14):** `VibrateController` was implemented
+  fully static; the real WP7 API is an instance API — static `Default`
+  singleton property + instance `Start`/`Stop`
+  (`VibrateController.Default.Start(...)`). Now fixed: `getDefaultProperty()`
+  returns a never-null singleton pointer, `Start`/`Stop` are instance
+  methods. Also fixed: `Start(TimeSpan)` now throws
+  `System::ArgumentOutOfRangeException` for `duration` outside the closed
+  interval `[TimeSpan::Zero, TimeSpan::FromSeconds(5)]`, instead of silently
+  clamping. Phase 6 (P2-10–P2-13, not yet implemented) should add its NOXNA
+  extensions as instance methods on this corrected singleton.
+- **Fixed (2026-07-02, Task P2-15):** `Accelerometer.ReadingChanged` (the
+  real, `[Obsolete]`-tagged WP7 7.0 legacy event using the already-built
+  `AccelerometerReadingEventArgs`) was never wired onto `Accelerometer`. Now
+  raised alongside `CurrentValueChanged` from `ProcessSensorUpdateEvent()`.
+- **Incidental, unrelated (2026-07-02, found/fixed during Task P2-15):**
+  `sharp-runtime` grew `System::IAsyncResult` to 4 pure-virtual members,
+  breaking `src/Microsoft/Xna/Framework/Storage/StorageDevice.cpp`'s
+  internal `SelectorResult`/`ContainerResult` helpers. Fixed minimally
+  (`std::any asyncState` + a pre-signaled `EventWaitHandle` member) just to
+  unblock the `CNA` build — see Section 3. `StorageDevice.cpp` is the only
+  `IAsyncResult` implementer in this codebase (confirmed via grep), so this
+  was the only site affected; no `Storage` tests exist, so nothing would
+  have otherwise caught this.
+- **Fixed (2026-07-02, Task P2-16):** `SensorFailedException` (and by
+  extension `AccelerometerFailedException`) was missing the real API's
+  `ErrorId` property. Now has `getErrorIdProperty()` and a
+  `(const char*, SharpRuntime::intcs)` constructor overload; existing throw
+  sites still use the message-only constructor (`ErrorId` reads `0` there),
+  since no real WP7 error-code values are documented.
+- **Fixed (2026-07-02, Task P2-17):** `getStateProperty()` on
+  `Compass`/`Gyroscope`/`Motion` isn't real WP7 API — definitively confirmed
+  via each class's exact authoritative member-list page (upgraded from
+  Task P2-2's "medium-high confidence" absence-based inference). Now tagged
+  `NOXNA` on all three (kept, not removed — existing code/tests depend on
+  it; it's a harmless symmetry extension mirroring `Accelerometer`'s real
+  `State`).
+- **Resolved (2026-07-02):** independent verification of
+  `Microsoft::Devices::Sensors`'s API completeness against archived WP7
+  Mango SDK docs (Task P2-2) is done — see `AUDIT.md` for full per-class
+  verdicts and the four gaps above. A few details remain unverified (no
+  authoritative source found) but are not treated as bugs: `ISensorReading.
+  Timestamp`/`SensorReadingEventArgs<T>.SensorReading` exact naming,
+  `AccelerometerFailedException : SensorFailedException` inheritance, and
+  CNA's own `MaxSensorCount = 10` cap (not documented either way in the
+  real API).
 
 ---
 
@@ -232,13 +494,24 @@ see each `.cpp`'s `ConvertAndroid*ToXnaLandscape()`).
 `Start()` always throws `SensorFailedException`; still expose the
 `Calibrate` event for API completeness even though it's never raised.
 
-**`VibrateController`:** static-only (`= delete`d default constructor, no
-`SensorBase<T>`, no `IDisposable`), lives directly in `Microsoft::Devices`
-(not `::Sensors`). Drives SDL3's haptic API directly rather than the sensor
-pattern. As of Task P2-8, deliberately excludes haptic devices that are also
+**`VibrateController`:** singleton (private default constructor, reached via
+`getDefaultProperty()`, fixed 2026-07-02 in Task P2-14 — used to be
+static-only with a `= delete`d constructor, which didn't match the real WP7
+API shape), no `SensorBase<T>`, no `IDisposable`, lives directly in
+`Microsoft::Devices` (not `::Sensors`). Drives SDL3's haptic API directly
+rather than the sensor pattern; underlying state (`g_haptic`) stays a
+file-static implementation detail regardless of the public instance shape.
+As of Task P2-8, deliberately excludes haptic devices that are also
 connected joysticks/gamepads from device selection, to avoid competing with
 `GamePad::SetVibration` (a separate SDL3 subsystem — `SDL_RumbleGamepad` on
-an `SDL_Gamepad*`, unrelated to the generic `SDL_Haptic*` API).
+an `SDL_Gamepad*`, unrelated to the generic `SDL_Haptic*` API). As of Tasks
+P2-10–P2-13, also has `NOXNA` extensions — variable-intensity `Start()`,
+`getIsSupportedProperty()`/`getDeviceNameProperty()` (share a private
+`AcquireHapticDeviceForProbe()` helper), and `StartLeftRight()` dual-motor
+rumble (tracks its uploaded `SDL_HAPTIC_LEFTRIGHT` effect via a new
+file-static `g_leftRightEffectId`, destroyed in `Stop()`) — all instance
+methods on the singleton, all following the same silent-no-op philosophy as
+the XNA-compliant `Start`/`Stop`.
 
 **`GetTypeName()` invariant:** must return `.`-separated fully-qualified
 .NET names (e.g. `"Microsoft.Devices.Sensors.Compass"`), tagged `NOXNA`.
@@ -286,57 +559,60 @@ cd cmake-build-debug && ctest --output-on-failure -R "Accelerometer|SensorFailed
 
 # Run one suite directly:
 ./cmake-build-debug/CnaTests --gtest_filter="GyroscopeTests*"
-
-# Reproduce the Section 4 blocker (expected to fail to compile):
-# Add `Accelerometer a; a.Dispose();` to any .cpp under tests/ and build —
-# it will not compile until the `using SensorBase<AccelerometerReading>::Dispose;`
-# fix (Task P2-3) is applied.
 ```
 
 ---
 
 ## 8. Next smallest tasks
 
-Numbered per `plan_devices_phase2.md`.
+**Every locally-executable task in `plan_devices.md` and
+`plan_devices_phase2.md` is done as of 2026-07-02.** The only open item in
+either plan is `Task P2-7` (Android/iOS cross-compilation), which is
+blocked in this environment — no Android NDK or iOS toolchain is available
+here. There is nothing left to pick up locally from those two plans; P2-7
+needs a different environment or CI that has the toolchains.
 
-1. **Task P2-3 — Fix `Accelerometer.hpp` Dispose() name-hiding + write `AccelerometerTests.cpp`**
-   - Goal: add `using SensorBase<AccelerometerReading>::Dispose;` (copy the
-     exact pattern from `include/Microsoft/Devices/Sensors/Compass.hpp`);
-     write a new test file modeled on
-     `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (branches on the
-     live `getIsSupportedProperty()` result so it passes both headless and
-     on real hardware).
-   - Files: `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (edit),
-     `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (new).
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests*"`,
-     then full `ctest --output-on-failure`.
+**`plan_devices_phase3.md` (new, 2026-07-02) has fresh open work.** A third,
+deeper research pass (three parallel angles: API-completeness re-audit,
+line-by-line implementation review cross-checked against vendored SDL3
+source, and test-coverage gap analysis) found real issues the earlier
+passes didn't catch:
+- **P3-1**: `SensorBase<T>::CurrentValue` never throws when the sensor is
+  unsupported — real API throws `InvalidOperationException`.
+- **P3-2**: the 5 reading types' setters are public where the real API has
+  `internal set` — a judgment-call task (fixing it properly breaks existing
+  property-pair tests; recommended resolution is documenting it as an
+  accepted C++ deviation, not a code change).
+- **P3-4**: `Accelerometer`/`Gyroscope`'s shared sensor state
+  (`startedInstances_` etc.) is read/written from the SDL event-watch
+  callback with zero synchronization — SDL's own docs warn that callback
+  may run on a different thread. Real race risk, especially on Android.
+- **P3-5**: `VibrateController::Start()`/`StartLeftRight()` don't cancel
+  each other's SDL effects — both can physically vibrate at once.
+- **P3-6 through P3-11**: a cluster of test-coverage gaps (zero
+  `CurrentValueChanged` coverage anywhere, missing `GetTypeName()` tests on
+  3 of 4 sensor classes, untested `Calibrate` event, dispose-then-11th
+  never verified, `GetHashCode()` never testing the different-hash case,
+  plus smaller boundary gaps).
+- **P3-3, P3-12**: documentation-only follow-ups / low-priority research.
 
-2. **Task P2-4 — Fix `Accelerometer.cpp`'s `GetTypeNameCPP` to the
-   dot-separated convention**
-   - Goal: change `GetTypeNameCPP(Accelerometer, "Microsoft::Devices::Sensors::Accelerometer")`
-     to use `.` separators, matching every other class from this phase.
-     Small; do right after P2-3 since both touch the same file.
-   - Files: `src/Microsoft/Devices/Sensors/Accelerometer.cpp`.
-   - Verify: build `CNA` + `CnaTests`, run `AccelerometerTests*` (add a
-     `GetTypeName()` assertion if the test doesn't already have one).
+See `plan_devices_phase3.md` for full task detail. Recommended starting
+point: **P3-1** (clearest real bug, low risk) or **P3-4** (highest
+severity, but no new tests possible — concurrency bugs can't be unit-tested
+headless).
 
-3. **Task P2-10 — NOXNA: `VibrateController::Start(duration, intensity)` overload**
-   - Goal: expose SDL3's already-available rumble-strength parameter (see
-     Section 5's "by design" note) as a `NOXNA` overload, clamped to
-     `[0.0f, 1.0f]`; the existing XNA-compliant `Start(TimeSpan)` should
-     delegate to it with `intensity = 1.0f`.
-   - Files: `include/Microsoft/Devices/VibrateController.hpp`,
-     `src/Microsoft/Devices/VibrateController.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="VibrateControllerTests*"`.
-
-4. **Task P2-11 — NOXNA: `VibrateController::getIsSupportedProperty()`**
-   - Goal: let calling code check haptic availability ahead of time (every
-     `Sensors` class already has this; `VibrateController` doesn't).
-   - Files: same as above.
-   - Verify: same as above.
-
-Full remaining list (P2-2, P2-5 through P2-9 [P2-8 done], P2-12/13,
-Phase 5 cross-platform verification) is in `plan_devices_phase2.md`.
+1. **Task P2-7 — Android/iOS cross-compilation**
+   - Goal: `Accelerometer.cpp`/`Gyroscope.cpp` both have `#ifdef __ANDROID__`
+     landscape axis-remap branches that have never been compiled — only the
+     non-Android branch has been build-verified (across `EASYGL`, `VULKAN`,
+     and `BGFX`, all Linux desktop). Confirm they compile cleanly under the
+     Android NDK toolchain, and manually verify on a physical device or
+     emulator with real accelerometer/gyroscope hardware that
+     `ProcessSensorUpdateEvent()`'s orientation remap produces sensible
+     values in both `sensorLandscape` rotations (`ROTATION_90` and
+     `ROTATION_270`) — this can't be verified by unit tests alone since it
+     depends on live sensor + display-orientation state.
+   - Not actionable here; needs an environment/CI with the NDK/iOS toolchain.
 
 ---
 
@@ -344,9 +620,10 @@ Phase 5 cross-platform verification) is in `plan_devices_phase2.md`.
 
 - Do not refactor or restructure `SensorBase<T>` or `ISensorReading` —
   stable, used by production code.
-- Do not perform the cross-cutting `GetTypeNameCPP` dot/colon cleanup beyond
-  `Accelerometer.cpp` (Task P2-4) — the rest touches unrelated files
-  (`Cue.cpp`, `AudioEngine.cpp`, etc.) and needs its own scoped plan.
+- Do not perform the cross-cutting `GetTypeNameCPP` dot/colon cleanup outside
+  `Microsoft::Devices` (`Accelerometer.cpp` was already fixed, Task P2-4,
+  done) — the rest touches unrelated files (`Cue.cpp`, `AudioEngine.cpp`,
+  etc.) and needs its own scoped plan.
 - Do not expand `Microsoft::Devices` to camera, radio, or phone-hardware
   APIs (`PhotoCamera`, `CameraButtons`, `PhotoChooserTask`, etc.) — not
   sensor/vibration functionality, explicitly out of scope.

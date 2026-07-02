@@ -10,10 +10,12 @@
 
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
+#include "Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorBase.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "System/EventHandler.hpp"
 
 namespace Microsoft::Devices::Sensors
 {
@@ -99,6 +101,24 @@ namespace Microsoft::Devices::Sensors
          */
         void Dispose(bool disposing) override;
 
+        /**
+         * @brief Brings the base class's no-argument Dispose() into scope.
+         *
+         * Without this, declaring Dispose(bool) here would hide the
+         * inherited public Dispose() override of System::IDisposable.
+         */
+        using SensorBase<AccelerometerReading>::Dispose;
+
         GetTypeNameHPP()
+
+        /**
+         * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.
+         *
+         * Deprecated in favor of CurrentValueChanged, which is the WP7 7.1
+         * SensorBase pattern used by every other sensor in this namespace.
+         * Kept and raised here only for API completeness with the real WP7
+         * Accelerometer, which still exposes both.
+         */
+        System::EventHandler<AccelerometerReadingEventArgs> ReadingChanged;
     };
 } // namespace Microsoft::Devices::Sensors

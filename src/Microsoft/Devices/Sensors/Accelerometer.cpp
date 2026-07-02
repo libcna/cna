@@ -460,7 +460,19 @@ namespace Microsoft::Devices::Sensors
         }
 
         setCurrentValueProperty(accelerometerReading);
+
+        if (getIsDataValidProperty() && !ReadingChanged.Empty())
+        {
+            const Microsoft::Xna::Framework::Vector3& acceleration = accelerometerReading.getAccelerationProperty();
+            const AccelerometerReadingEventArgs eventArgs(
+                acceleration.X,
+                acceleration.Y,
+                acceleration.Z,
+                accelerometerReading.getTimestampProperty());
+
+            ReadingChanged.Raise(static_cast<System::Object*>(this), eventArgs);
+        }
     }
 
-    GetTypeNameCPP(Accelerometer, "Microsoft::Devices::Sensors::Accelerometer")
+    GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")
 } // namespace Microsoft::Devices::Sensors

@@ -14,4 +14,14 @@ namespace Microsoft::Devices::Sensors
     SensorFailedException::SensorFailedException(const char* str) : System::Exception(str)
     {
     }
+
+    SensorFailedException::SensorFailedException(const char* str, SharpRuntime::intcs errorId)
+        : System::Exception(str), errorId_(errorId)
+    {
+    }
+
+    SharpRuntime::intcs SensorFailedException::getErrorIdProperty() const noexcept
+    {
+        return errorId_;
+    }
 }

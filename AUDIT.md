@@ -330,39 +330,57 @@ All 19 types audited. Missing Vector-form constructors added.
 **Note on methodology:** unlike every other section in this file, this namespace
 has **no FNA equivalent** — FNA does not implement `Microsoft.Devices` at all
 (it's a Windows Phone 7 API, not part of core XNA/FNA). This section was
-therefore audited against the documented WP7 Mango (OS 7.1) SDK API surface
-from general reference knowledge, not by diffing against a local FNA source
-tree. Tracked in `plan_devices.md` (31/31 tasks complete) and
-`plan_devices_phase2.md` (follow-up: independent verification of this list
-against authoritative WP7 SDK docs, since no local reference tree exists to
-check the "✅ complete" claims below against).
+originally audited against the documented WP7 Mango (OS 7.1) SDK API surface
+from general reference knowledge only. **Independently re-verified 2026-07-02**
+(`plan_devices_phase2.md` Task P2-2) against archived Microsoft Learn
+"previous-versions" MSDN pages (the `microsoft.devices.sensors.*`/
+`microsoft.devices.vibratecontroller` doc family — high confidence) plus one
+MonoGame cross-check for `SensorState`'s enum values (medium confidence, no
+direct MSDN enum page found). Four real gaps were found this pass —
+`plan_devices_phase2.md` Phase 7 (Tasks P2-14–P2-17, all now done as of
+2026-07-02) has the individual fix history for each; the per-class notes
+below still record what each gap was and how it was resolved. Everything
+else in the table was confirmed to match the documented API exactly.
 
 | Class / Enum | Status | Notes |
 |---|---|---|
-| Accelerometer | ✅ | Real SDL3-backed (`SDL_SENSOR_ACCEL`); Android landscape axis remap. No tests yet (`AccelerometerTests.cpp` missing) — see `plan_devices_phase2.md`. |
-| AccelerometerFailedException | ✅ | Full tests |
+| Accelerometer | ✅ | Real SDL3-backed (`SDL_SENSOR_ACCEL`); Android landscape axis remap. Class shape (`IsSupported`, `State`) confirmed 2026-07-02 against MSDN `ff707930`. `Dispose()` name-hiding bug fixed and full `AccelerometerTests.cpp` (9 tests) added 2026-07-02 (Task P2-3); `GetTypeNameCPP` corrected to the dot-separated convention 2026-07-02 (Task P2-4); legacy `ReadingChanged` event wired up 2026-07-02 (Task P2-15). |
+| AccelerometerFailedException | ✅ | Full tests (7). **Fixed (2026-07-02, Task P2-16):** gained `ErrorId` via the same `(const char*, SharpRuntime::intcs)` constructor overload added to `SensorFailedException`. Confirmed it does inherit `SensorFailedException` (visible directly in its own `.hpp`; the earlier "unverified" note was overly cautious). |
 | AccelerometerReading | ✅ | Full tests |
-| AccelerometerReadingEventArgs | ✅ | WP7 7.0 legacy; not wired to current `Accelerometer` (7.1 `SensorBase` pattern used instead). Full tests |
-| AttitudeReading | ✅ | Full tests |
+| AccelerometerReadingEventArgs | ✅ | WP7 7.0 legacy; class itself is correct and fully tested. **Fixed (2026-07-02, Task P2-15):** `Accelerometer.ReadingChanged` (the real, `[Obsolete]`-tagged event using this type) is now wired up, raised alongside `CurrentValueChanged` from `ProcessSensorUpdateEvent()`. |
+| AttitudeReading | ✅ | Full tests; member names (`Pitch`/`Roll`/`Yaw`/`Quaternion`/`RotationMatrix`) confirmed 2026-07-02. |
 | CalibrationEventArgs | ✅ | Full tests |
-| Compass | ✅ | Stub — SDL3 exposes no magnetometer API on any platform; always `NotSupported`. Full tests |
-| CompassReading | ✅ | Full tests |
-| Gyroscope | ✅ | Real SDL3-backed (`SDL_SENSOR_GYRO`), mirrors `Accelerometer`. Full tests |
+| Compass | ✅ | Stub — SDL3 exposes no magnetometer API on any platform; always `NotSupported`. Full tests. Class shape (`IsSupported`, `Calibrate`, no legacy event) confirmed 2026-07-02. **`getStateProperty()` tagged `NOXNA` 2026-07-02 (Task P2-17):** confirmed via the class's exact authoritative member-list page (`hh220912`) that real `Compass` has no `State` property — this is a CNA symmetry extension. |
+| CompassReading | ✅ | Full tests; member names (`HeadingAccuracy`/`MagneticHeading`/`MagnetometerReading`/`TrueHeading`) confirmed 2026-07-02. |
+| Gyroscope | ✅ | Real SDL3-backed (`SDL_SENSOR_GYRO`), mirrors `Accelerometer`. Full tests. Class shape confirmed 2026-07-02 (no `Calibrate` event, correctly omitted). **`getStateProperty()` tagged `NOXNA` 2026-07-02 (Task P2-17):** confirmed via the class's exact authoritative member-list page (`hh239201`) that real `Gyroscope` has no `State` property — this is a CNA symmetry extension. |
 | GyroscopeReading | ✅ | Full tests |
-| ISensorReading | ✅ | Complete |
-| Motion | ✅ | Stub — requires Compass (unsupported); always `NotSupported`. `// TODO` marks where sensor fusion should be wired once compass support exists. Full tests |
-| MotionReading | ✅ | Full tests |
-| SensorBase\<T\> | ✅ | Complete |
-| SensorFailedException | ✅ | Full tests |
+| ISensorReading | ✅ | Complete. `Timestamp` member unverified against a direct doc page (inferred from cross-class consistency + tutorial usage, medium confidence) — not treated as a gap. |
+| Motion | ✅ | Stub — requires Compass (unsupported); always `NotSupported`. `// TODO` marks where sensor fusion should be wired once compass support exists. Full tests. Class shape (`IsSupported`, `Calibrate` shared with `Compass`) confirmed 2026-07-02. **`getStateProperty()` tagged `NOXNA` 2026-07-02 (Task P2-17):** confirmed via the class's exact authoritative member-list page (`hh239189`) that real `Motion` has no `State` property — this is a CNA symmetry extension. |
+| MotionReading | ✅ | Full tests; confirmed 2026-07-02 that real member names are `DeviceAcceleration`/`DeviceRotationRate` (not plain `Acceleration`/`RotationRate` as originally guessed) — CNA's existing naming already matches. |
+| SensorBase\<T\> | ✅ | Complete. Confirmed 2026-07-02: base has only `CurrentValue`/`IsDataValid`/`TimeBetweenUpdates`/`Dispose`/`Start`/`Stop`/`CurrentValueChanged` — no `IsSupported`/`State` on the base (those are per-subclass statics), matching CNA. |
+| SensorFailedException | ✅ | Full tests (6). **Fixed (2026-07-02, Task P2-16):** added `getErrorIdProperty()` + a `(const char*, SharpRuntime::intcs errorId)` constructor overload, matching the real API's `ErrorId` property (MSDN `hh239104`). Existing throw sites across the sensor classes still use the message-only constructor (so `ErrorId` reads `0` there) — no real WP7 error-code values are documented anywhere; `0`/unspecified is left as the honest default rather than inventing numbers. |
 | SensorReadingEventArgs\<T\> | ✅ | Complete |
-| SensorState (enum) | ✅ | Complete |
-| VibrateController | ✅ | Static-only, SDL3 haptic-backed (`Microsoft::Devices` namespace, not `Sensors`). Full tests for the XNA-compliant surface. **Fixed (`plan_devices_phase2.md` Task P2-8):** confirmed via the vendored SDL3 Linux haptic backend that a rumble-capable gamepad is enumerated by `SDL_GetHaptics()` independently of `GamePad::SetVibration`'s `SDL_RumbleGamepad` path; `VibrateController.cpp` now skips haptic devices whose name matches a connected joystick, so it never competes with `GamePad` for the same physical motor. Remaining Phase 6 items (P2-9 through P2-13): proposed `NOXNA` extensions — variable intensity, `getIsSupportedProperty()`, dual-motor left/right rumble — not yet implemented. |
+| SensorState (enum) | ✅ | Complete — 6 values (`NotSupported`/`Ready`/`Initializing`/`NoData`/`NoPermissions`/`Disabled`) confirmed 2026-07-02 via MonoGame cross-check (medium confidence). |
+| VibrateController | ✅ | SDL3 haptic-backed (`Microsoft::Devices` namespace, not `Sensors`). **Fixed (2026-07-02, Task P2-14):** API shape corrected to match the real WP7 instance API — `getDefaultProperty()` returns a never-null singleton pointer (mirrors `Microsoft::Xna::Framework::Audio::Microphone::getDefaultProperty()`'s existing pattern in this codebase); `Start(const System::TimeSpan&)`/`Stop()` are now instance methods (`VibrateController::getDefaultProperty()->Start(...)`), previously fully static. `Start()` now throws `System::ArgumentOutOfRangeException` for `duration` outside the closed interval `[TimeSpan::Zero, TimeSpan::FromSeconds(5)]` (boundary values do not throw), replacing the previous silent clamp. **Fixed (`plan_devices_phase2.md` Task P2-8):** confirmed via the vendored SDL3 Linux haptic backend that a rumble-capable gamepad is enumerated by `SDL_GetHaptics()` independently of `GamePad::SetVibration`'s `SDL_RumbleGamepad` path; `VibrateController.cpp` now skips haptic devices whose name matches a connected joystick, so it never competes with `GamePad` for the same physical motor. **Phase 6 NOXNA extensions added (2026-07-02, Tasks P2-10–P2-13, all instance methods on the singleton per the Phase 7 ordering note):** `Start(const System::TimeSpan&, float intensity)` (clamped `[0,1]`, existing `Start(TimeSpan)` delegates to it with `1.0f`); `getIsSupportedProperty()`/`getDeviceNameProperty()` (probe-only, don't hold a device open as a side effect — share a private `AcquireHapticDeviceForProbe()` helper; empirically confirmed both report "unsupported"/`""` in this dev container, genuinely no haptic hardware); `StartLeftRight(float largeMotor, float smallMotor, const System::TimeSpan&)` via `SDL_HAPTIC_LEFTRIGHT`, gated on `SDL_GetHapticFeatures()` support, with `Stop()` now also destroying the tracked effect ID. Full tests (20, up from 10) cover the new shape, both `Start(TimeSpan)` throw boundaries, and all four Phase 6 additions. Only Task P2-9 (confirm-only, no code change) remains open in Phase 6. |
 
-**Known bug (not yet fixed):** `Accelerometer.hpp` declares `Dispose(bool) override`
-without `using SensorBase<AccelerometerReading>::Dispose;`, hiding the inherited
-public no-arg `Dispose()` (C++ name-hiding) — `accel.Dispose()` fails to compile
+**Fixed (2026-07-02, `plan_devices_phase2.md` Task P2-3):** `Accelerometer.hpp`
+declared `Dispose(bool) override` without `using
+SensorBase<AccelerometerReading>::Dispose;`, hiding the inherited public
+no-arg `Dispose()` (C++ name-hiding) — `accel.Dispose()` failed to compile
 for any caller. The identical bug was found and fixed in `Compass`/`Gyroscope`/
-`Motion` during this audit. See `plan_devices_phase2.md` Task P2-3.
+`Motion` earlier in `plan_devices.md`; the same one-line fix was applied here.
+
+**`getStateProperty()` on `Compass`/`Gyroscope`/`Motion` (resolved
+2026-07-02, Task P2-17):** each class's exact authoritative "type exposes
+the following members" page (`Compass` `hh220912`, `Gyroscope` `hh239201`,
+`Motion` `hh239189`) was fetched directly and definitively confirms none of
+the three has a `State` property — only `Accelerometer`'s page documents
+one, as an `Accelerometer`-specific member (not inherited from
+`SensorBase<T>`, which is confirmed to have none). `getStateProperty()` on
+all three is now tagged `NOXNA` in their headers (not removed — existing
+code/tests depend on it, and it's a harmless symmetry extension mirroring
+`Accelerometer`'s real `State`), with a Doxygen note explaining the
+deviation.
 
 **Explicitly out of scope** (per project decision, not omissions): camera
 (`PhotoCamera`, `CameraButtons`, `CameraCaptureTask`), media/photo pickers

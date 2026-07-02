@@ -2,10 +2,14 @@
 
 #include "Microsoft/Devices/VibrateController.hpp"
 
+#include <algorithm>
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_haptic.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_joystick.h>
+
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Devices
 {
@@ -17,21 +21,24 @@ namespace Microsoft::Devices
         // forget static VibrateController design (no Dispose concept exists).
         SDL_Haptic* g_haptic = nullptr;
 
-        System::TimeSpan ClampVibrationDuration(const System::TimeSpan& duration)
+        // File-local state: the currently-uploaded SDL_HAPTIC_LEFTRIGHT effect
+        // started by StartLeftRight(), if any. SDL_StopHapticEffects(g_haptic)
+        // (used by Stop()) already stops its playback, but doesn't free the
+        // uploaded effect slot — Stop() also calls SDL_DestroyHapticEffect()
+        // on this ID for that. -1 means "none uploaded".
+        SDL_HapticEffectID g_leftRightEffectId = -1;
+
+        void ValidateVibrationDuration(const System::TimeSpan& duration)
         {
             static const System::TimeSpan MaxVibrationDuration = System::TimeSpan::FromSeconds(5);
 
-            if (duration < System::TimeSpan::Zero)
+            if (duration < System::TimeSpan::Zero || duration > MaxVibrationDuration)
             {
-                return System::TimeSpan::Zero;
+                throw System::ArgumentOutOfRangeException(
+                    "duration",
+                    duration.ToString(),
+                    "'duration' must be between TimeSpan.Zero and TimeSpan.FromSeconds(5).");
             }
-
-            if (duration > MaxVibrationDuration)
-            {
-                return MaxVibrationDuration;
-            }
-
-            return duration;
         }
 
         bool EnsureHapticSubsystemInitialized()
@@ -130,12 +137,47 @@ namespace Microsoft::Devices
             SDL_free(haptics);
             return opened;
         }
+
+        // Returns a haptic device usable for a capability/name probe:
+        // g_haptic if a device is already open, otherwise a temporarily
+        // opened one. Sets openedTemporary so the caller knows whether it
+        // must close the returned device again — probing must not hold a
+        // device open as a side effect (that's what Start() is for).
+        SDL_Haptic* AcquireHapticDeviceForProbe(bool& openedTemporary)
+        {
+            if (g_haptic != nullptr)
+            {
+                openedTemporary = false;
+                return g_haptic;
+            }
+
+            openedTemporary = true;
+
+            if (!EnsureHapticSubsystemInitialized())
+            {
+                return nullptr;
+            }
+
+            return OpenFirstHapticDevice();
+        }
     } // namespace
+
+    VibrateController* VibrateController::getDefaultProperty()
+    {
+        static VibrateController instance;
+        return &instance;
+    }
 
     void VibrateController::Start(const System::TimeSpan& duration)
     {
-        const System::TimeSpan clampedDuration = ClampVibrationDuration(duration);
-        const Uint32 durationMs = static_cast<Uint32>(clampedDuration.getTotalMillisecondsProperty());
+        Start(duration, 1.0f);
+    }
+
+    void VibrateController::Start(const System::TimeSpan& duration, float intensity)
+    {
+        ValidateVibrationDuration(duration);
+        const float clampedIntensity = std::clamp(intensity, 0.0f, 1.0f);
+        const Uint32 durationMs = static_cast<Uint32>(duration.getTotalMillisecondsProperty());
 
         if (!EnsureHapticSubsystemInitialized())
         {
@@ -157,7 +199,7 @@ namespace Microsoft::Devices
             return; // Silent no-op: device doesn't support simple rumble.
         }
 
-        SDL_PlayHapticRumble(g_haptic, 1.0f, durationMs);
+        SDL_PlayHapticRumble(g_haptic, clampedIntensity, durationMs);
     }
 
     void VibrateController::Stop()
@@ -165,6 +207,98 @@ namespace Microsoft::Devices
         if (g_haptic != nullptr)
         {
             SDL_StopHapticEffects(g_haptic);
+
+            if (g_leftRightEffectId >= 0)
+            {
+                SDL_DestroyHapticEffect(g_haptic, g_leftRightEffectId);
+                g_leftRightEffectId = -1;
+            }
         }
+    }
+
+    bool VibrateController::getIsSupportedProperty()
+    {
+        bool openedTemporary = false;
+        SDL_Haptic* device = AcquireHapticDeviceForProbe(openedTemporary);
+
+        const bool supported = device != nullptr;
+
+        if (openedTemporary && device != nullptr)
+        {
+            SDL_CloseHaptic(device);
+        }
+
+        return supported;
+    }
+
+    std::string VibrateController::getDeviceNameProperty()
+    {
+        bool openedTemporary = false;
+        SDL_Haptic* device = AcquireHapticDeviceForProbe(openedTemporary);
+
+        std::string name;
+        if (device != nullptr)
+        {
+            const char* deviceName = SDL_GetHapticName(device);
+            if (deviceName != nullptr)
+            {
+                name = deviceName;
+            }
+        }
+
+        if (openedTemporary && device != nullptr)
+        {
+            SDL_CloseHaptic(device);
+        }
+
+        return name;
+    }
+
+    void VibrateController::StartLeftRight(float largeMotor, float smallMotor, const System::TimeSpan& duration)
+    {
+        ValidateVibrationDuration(duration);
+        const float clampedLarge = std::clamp(largeMotor, 0.0f, 1.0f);
+        const float clampedSmall = std::clamp(smallMotor, 0.0f, 1.0f);
+        const Uint32 durationMs = static_cast<Uint32>(duration.getTotalMillisecondsProperty());
+
+        if (!EnsureHapticSubsystemInitialized())
+        {
+            return; // Silent no-op: haptic subsystem unavailable on this platform.
+        }
+
+        if (g_haptic == nullptr)
+        {
+            g_haptic = OpenFirstHapticDevice();
+        }
+
+        if (g_haptic == nullptr)
+        {
+            return; // Silent no-op: no haptic device found.
+        }
+
+        if ((SDL_GetHapticFeatures(g_haptic) & SDL_HAPTIC_LEFTRIGHT) == 0)
+        {
+            return; // Silent no-op: device doesn't support dual-motor rumble.
+        }
+
+        if (g_leftRightEffectId >= 0)
+        {
+            SDL_DestroyHapticEffect(g_haptic, g_leftRightEffectId);
+            g_leftRightEffectId = -1;
+        }
+
+        SDL_HapticEffect effect{};
+        effect.leftright.type = SDL_HAPTIC_LEFTRIGHT;
+        effect.leftright.length = durationMs;
+        effect.leftright.large_magnitude = static_cast<Uint16>(clampedLarge * 65535.0f);
+        effect.leftright.small_magnitude = static_cast<Uint16>(clampedSmall * 65535.0f);
+
+        g_leftRightEffectId = SDL_CreateHapticEffect(g_haptic, &effect);
+        if (g_leftRightEffectId < 0)
+        {
+            return; // Silent no-op: effect could not be uploaded.
+        }
+
+        SDL_RunHapticEffect(g_haptic, g_leftRightEffectId, 1);
     }
 } // namespace Microsoft::Devices

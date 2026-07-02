@@ -45,3 +45,22 @@ TEST(AccelerometerFailedExceptionTests, CanBeCaughtAsSystemException)
     }
     FAIL() << "Expected AccelerometerFailedException to be caught as System::Exception";
 }
+
+TEST(AccelerometerFailedExceptionTests, DefaultConstructorErrorIdIsZero)
+{
+    const AccelerometerFailedException ex;
+    EXPECT_EQ(ex.getErrorIdProperty(), 0);
+}
+
+TEST(AccelerometerFailedExceptionTests, CStringConstructorErrorIdIsZero)
+{
+    const AccelerometerFailedException ex("Accelerometer sensor is unavailable.");
+    EXPECT_EQ(ex.getErrorIdProperty(), 0);
+}
+
+TEST(AccelerometerFailedExceptionTests, ErrorIdConstructorRoundTripsErrorIdAndMessage)
+{
+    const AccelerometerFailedException ex("Accelerometer failed.", 7);
+    EXPECT_EQ(ex.getErrorIdProperty(), 7);
+    EXPECT_STREQ(ex.what(), "Accelerometer failed.");
+}

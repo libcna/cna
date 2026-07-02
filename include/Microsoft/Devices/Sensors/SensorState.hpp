@@ -12,8 +12,6 @@ namespace Microsoft::Devices::Sensors
      *
      * This is a C++ counterpart of the .NET
      * Microsoft.Devices.Sensors.SensorState enumeration.
-     *
-     * @note Status: Partial.
      */
     enum class SensorState
     {
