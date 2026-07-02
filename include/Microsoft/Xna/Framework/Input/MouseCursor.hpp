@@ -3,6 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/IDisposable.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -16,7 +17,7 @@ namespace Microsoft::Xna::Framework::Input
      * @note NOXNA — this is a MonoGame-derived CNA extension. No MouseCursor type exists
      * in XNA 4.0 or FNA.
      */
-    NOXNA class MouseCursor
+    NOXNA class MouseCursor : public System::IDisposable
     {
     public:
         /** @brief Creates a default Arrow cursor. */
@@ -40,11 +41,18 @@ namespace Microsoft::Xna::Framework::Input
 
         MouseCursor(const MouseCursor&)            = delete;
         MouseCursor& operator=(const MouseCursor&) = delete;
-        MouseCursor(MouseCursor&&)                 = default;
-        MouseCursor& operator=(MouseCursor&&)      = default;
+        /** @brief Move-constructs a MouseCursor, transferring SDL cursor ownership. */
+        MouseCursor(MouseCursor&& other) noexcept;
+        /** @brief Move-assigns a MouseCursor, transferring SDL cursor ownership. */
+        MouseCursor& operator=(MouseCursor&& other) noexcept;
 
-        /** @brief Destructor; releases the SDL cursor if owned. */
-        ~MouseCursor();
+        /** @brief Destructor; disposes the cursor if owned. */
+        ~MouseCursor() override;
+
+        /**
+         * @brief Releases the SDL cursor if owned. Safe to call more than once.
+         */
+        NOXNA void Dispose() override;
 
         /**
          * @brief Returns the underlying SDL_Cursor pointer (not owned by the caller).
@@ -78,8 +86,9 @@ namespace Microsoft::Xna::Framework::Input
         NOXNA static MouseCursor WaitCursor;
 
     private:
-        SDL_Cursor* sdlCursor_ = nullptr;
-        bool        owning_    = false;
+        SDL_Cursor* sdlCursor_  = nullptr;
+        bool        owning_     = false;
+        bool        isDisposed_ = false;
 
         NOXNA static MouseCursor MakeSystem(SDL_SystemCursor id);
     };

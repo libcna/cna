@@ -86,12 +86,47 @@ namespace Microsoft::Xna::Framework::Input
     {
     }
 
+    MouseCursor::MouseCursor(MouseCursor&& other) noexcept
+        : sdlCursor_(other.sdlCursor_)
+        , owning_(other.owning_)
+        , isDisposed_(other.isDisposed_)
+    {
+        other.sdlCursor_  = nullptr;
+        other.owning_     = false;
+        other.isDisposed_ = true;
+    }
+
+    MouseCursor& MouseCursor::operator=(MouseCursor&& other) noexcept
+    {
+        if (this != &other)
+        {
+            Dispose();
+            sdlCursor_  = other.sdlCursor_;
+            owning_     = other.owning_;
+            isDisposed_ = other.isDisposed_;
+            other.sdlCursor_  = nullptr;
+            other.owning_     = false;
+            other.isDisposed_ = true;
+        }
+        return *this;
+    }
+
     MouseCursor::~MouseCursor()
     {
+        Dispose();
+    }
+
+    void MouseCursor::Dispose()
+    {
+        if (isDisposed_)
+        {
+            return;
+        }
         if (owning_ && sdlCursor_ != nullptr)
         {
             SDL_DestroyCursor(sdlCursor_);
-            sdlCursor_ = nullptr;
         }
+        sdlCursor_  = nullptr;
+        isDisposed_ = true;
     }
 }
