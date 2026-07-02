@@ -647,12 +647,17 @@ namespace CNA::Internal::Audio
                         sc.skip(rpcDataLength - 2);
                 }
 
-                // Skip DSP data
+                // Skip DSP data. The leading 2-byte field is NOT a self-inclusive length to
+                // skip by (unlike the RPC block above) -- FAudio reads and discards it, then
+                // reads a 1-byte code count followed by that many 4-byte codes (FACT_internal.c,
+                // FACTSoundBank_Prepare's SOUND_FLAG_HAS_DSP branch). DSP presets aren't applied
+                // here (SDL_mixer has no equivalent), but the codes must still be consumed
+                // correctly to keep the cursor in sync with the rest of the sound entries.
                 if (flags & SOUND_FLAG_HAS_DSP)
                 {
-                    uint16_t dspLen = sc.u16();
-                    if (dspLen >= 2)
-                        sc.skip(dspLen - 2);
+                    sc.u16(); // DSP presets length -- unused
+                    const uint8_t dspCodeCount = sc.u8();
+                    sc.skip(static_cast<std::size_t>(dspCodeCount) * 4);
                 }
             }
         }

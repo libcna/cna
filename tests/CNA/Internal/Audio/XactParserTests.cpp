@@ -291,6 +291,80 @@ namespace
 
         return data;
     }
+
+    // Minimal .xsb with two simple (non-complex) sounds: sound 0 has SOUND_FLAG_HAS_DSP set with
+    // a leading 2-byte field FAudio marks unused (FACT_internal.c) but this parser used to
+    // (incorrectly) treat as a self-inclusive skip length. Sound 1 has a distinctive wave
+    // reference; if sound 0's DSP block is mis-skipped, the cursor desyncs and sound 1's fields
+    // come out wrong. Regression fixture for IN-1 (plan_audio.md Fáze 7).
+    std::vector<uint8_t> BuildXsbWithDspThenSecondSound()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t soundOffset  = headerSize + bankNameSize; // 138
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 0);  // wavebankCount
+        AppendU16(data, 2); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset
+        AppendS32(data, -1); // cueNameIndexOffset
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "TestSoundBank", bankNameSize);
+
+        // Sound 0: simple (non-complex), SOUND_FLAG_HAS_DSP (0x10) set.
+        AppendU8(data, 0x10);  // flags
+        AppendU16(data, 0);    // categoryIndex
+        AppendU8(data, 0xFF);  // volume byte
+        AppendS16(data, 0);    // pitchCents
+        AppendU8(data, 0);     // priority
+        AppendU16(data, 0);    // soundLength (skipped)
+        AppendU16(data, 0);    // simple wave: waveIdx (unused by this test)
+        AppendU8(data, 0);     // simple wave: wbIdx (unused by this test)
+
+        // DSP block. Correct total size = 2 (unused length) + 1 (count) + count*4 (codes) = 11 B.
+        // The leading field's value (5) would make the OLD buggy `skip(dspLen - 2)` logic consume
+        // only 5 bytes total here -- 6 bytes short of sound 1's true start.
+        AppendU16(data, 5);       // DSP presets length -- unused per FAudio
+        AppendU8(data, 2);        // dspCodeCount
+        AppendU32(data, 0xDEADBEEFu);
+        AppendU32(data, 0xCAFEBABEu);
+
+        // Sound 1: simple (non-complex), no flags, distinctive wave reference.
+        AppendU8(data, 0x00);   // flags
+        AppendU16(data, 0);     // categoryIndex
+        AppendU8(data, 0xFF);   // volume byte
+        AppendS16(data, 0);     // pitchCents
+        AppendU8(data, 0);      // priority
+        AppendU16(data, 0);     // soundLength (skipped)
+        AppendU16(data, 99);    // waveIdx
+        AppendU8(data, 5);      // wbIdx
+
+        return data;
+    }
 }
 
 TEST(XactParserTest, CompactWaveBankComputesLengthsFromConsecutiveOffsets)
@@ -343,6 +417,16 @@ TEST(XactParserTest, ComplexTrackWithOnlyPlayWaveEventStillResolves)
     EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 2);
     EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 99u);
     EXPECT_EQ(xsb.sounds[0].waves[0].loopCount, 1);
+}
+
+TEST(XactParserTest, DspBlockIsSkippedByCodeCountNotByLengthField)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithDspThenSecondSound());
+
+    ASSERT_EQ(xsb.sounds.size(), 2u);
+    ASSERT_EQ(xsb.sounds[1].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[1].waves[0].wavebankIndex, 5);
+    EXPECT_EQ(xsb.sounds[1].waves[0].waveIndex, 99u);
 }
 
 TEST(XactParserTest, XgsParsesCategoryAndVariable)

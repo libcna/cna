@@ -564,7 +564,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 > prověřen a **není to bug** — `MIX_LoadRawAudio`/`MIX_LoadAudio_IO` nastavují per-audio
 > `SDL_AudioSpec.freq` na skutečný `entry.sampleRate` a SDL3_mixer převzorkovává za chodu.
 
-- [ ] **IN-1 — Chybné přeskakování DSP bloku ve `ParseXsb`.** Parser čte 2bajtové pole a přeskakuje
+- [x] **IN-1 — Chybné přeskakování DSP bloku ve `ParseXsb`.** *(hotovo 2026-07-02.)* Parser čte 2bajtové pole a přeskakuje
   `dspLen - 2` bajtů, jako by šlo o self-inclusive délku (stejný vzor jako u RPC bloku o pár řádků
   výš, kde to je správně). Ale podle FAudia (`FACT_internal.c:2650-2661`) DSP blok **nikdy**
   nepoužívá počáteční pole jako délku ke skoku — je explicitně označené "unused"; místo toho se čte
@@ -576,6 +576,9 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* přepsat na `count = sc.u8(); for(count) sc.u32();` (zahodit prvních 2 B jako unused);
   regresní test s `SOUND_FLAG_HAS_DSP` nastaveným ověřující, že další zvuk v souboru se naparsuje
   správně.
+  *Pozn.:* nový `XactParserTest.DspBlockIsSkippedByCodeCountNotByLengthField` ověřen na PŮVODNÍM
+  (pre-fix) kódu přes `git stash` — bez opravy test selže (dokonce hodí "read past end", ne jen
+  špatná data), s opravou projde. `dspCodeCount`-based skip nahradil starý délkově-založený skip.
 
 - [ ] **IN-2 — Over-read u non-compact XWB entry s `entryMetaDataSize < 24`.** Kód vždy provede
   všech 6 `u32()` čtení (24 B) *před* kontrolou `entryMetaDataSize < 24`, teprve pak kurzor přesune
