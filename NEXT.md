@@ -183,19 +183,34 @@ inside `SHARP_RUNTIME/CMakeFiles/...` rather than `CNA`/`CnaTests`, check `git s
 
 ## 5. Known bugs and limitations
 
+**A fresh 4-way parallel line-by-line audit against FNA ran 2026-07-02, after T-4A landed.** It
+found **30 new concrete bugs/gaps** (prefixes `CP`/`XA`/`IN`/`MC`) beyond everything already
+tracked in earlier phases — including real playback bugs (`SoundEffectInstance::Play()` isn't
+idempotent; `Apply3D` silently overwrites the public `Volume`/`Pan` properties), a memory leak
+(`WaveBank::GetSoundEffect` for 8-bit PCM/ADPCM), a dangling-pointer risk (`SoundEffectInstance`
+holds a raw `const SoundEffect*`), and a parser bug that can silently desync every sound after one
+malformed `.xsb` DSP block. **Full list with FNA line references and accept criteria: `plan_audio.md`
+§4 Fáze 7.** Do not re-derive this list from scratch in a future session — it's already there.
+
+It also confirmed T-4A didn't fully meet its own original accept criteria: `Microphone::GetSampleDuration`/
+`GetSampleSizeInBytes` never got wired up to delegate to `SoundEffect` as `plan_audio.md`'s T-4A
+task text required — tracked as `plan_audio.md` MC-1, not re-opening T-4A itself (see `plan_audio.md`'s
+T-4A entry for the exact wording of what's still missing).
+
 | Status | Issue | Ref |
 |--------|-------|-----|
-| **Incomplete** | `Microphone` capture is a stub — no real SDL recording; `All`/`GetData` never produce real devices/bytes | T-4A |
-| **Real gap (untasked)** | `AudioCategory::SetVolume` doesn't retroactively re-apply to already-playing cues | — |
+| **Real gap (untasked)** | `AudioCategory::SetVolume` doesn't retroactively re-apply to already-playing cues | plan_audio.md T-4D |
 | **Accepted deviation** | `SoundBank::IsInUse` reflects only fire-and-forget cues it owns (from `PlayCue`); cues obtained via `GetCue` are caller-owned and not tracked, unlike FNA's FACT-engine-level tracking | T-3B |
 | **Accepted deviation** | `Cue::GetVariable`/`SetVariable` validate against `AudioEngine`'s global variable set + a built-in 3D-variable set, not a true per-cue-instance-overridable catalog (the `ACCESSIBILITY_CUE` bit isn't tracked) | T-3A |
-| **Accepted limitation** | SDL_mixer: 3D HRTF + Doppler stored, never applied; streaming wavebanks always loaded fully into memory | plan §2 |
+| **Accepted limitation** | SDL_mixer: 3D HRTF + Doppler stored, never applied; streaming wavebanks always loaded fully into memory | `CHECKLIST.md` deviation table |
 | **FNA-faithful dead code** | `Microphone::setBufferDurationProperty`'s `milliseconds > 1000` branch is unreachable (`TimeSpan::getMillisecondsProperty()` is bounded to `[-999,999]`); kept as-is to match FNA, not "fixed" | — |
-| **Minor / intentional** | `SoundEffect::GetSampleDuration` truncates to whole ms (FNA); `DynamicSoundEffectInstance::GetSampleDuration` keeps float precision | — |
+| **Minor / intentional** | `SoundEffect::GetSampleDuration` truncates to whole ms (FNA); `DynamicSoundEffectInstance::GetSampleDuration` diverges from FNA by using real bytes-per-sample instead of hardcoded 16-bit | plan_audio.md CP-6 |
 | **Needs verification** | Device-dependent audio tests rely on the SDL `dummy` driver; skip when no device is available — never verified against a *real* device in CI | — |
+| **See plan_audio.md Fáze 7** | 30 new findings from the 2026-07-02 audit (real bugs, compliance gaps, test-coverage gaps) — not summarized here, this table would just go stale again | CP-1..14, XA-1..5, IN-1..6, MC-1..5 |
 
-All previously-tracked bugs (T-1A–T-1H, T-2A–T-2G, T-3A–T-3E, T-5A–T-5O except T-5M) are fixed;
-see `plan_audio.md` for the full checked-off list.
+All previously-tracked bugs (T-1A–T-1H, T-2A–T-2G, T-3A–T-3E, T-5A–T-5O except T-5M, T-4A) are
+fixed; see `plan_audio.md` for the full checked-off list. T-6A/T-6B (CHECKLIST.md/AUDIT.md
+staleness) were also fixed as part of the 2026-07-02 audit pass.
 
 ---
 
@@ -268,25 +283,25 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**T-4A (real microphone capture) is fully done — all 4 steps committed.** `plan_audio.md`'s
-compliance/bugfix plan was already done before T-4A started. The audio task list, as originally
-scoped, has **no open items**. There is no single obvious "next smallest task" anymore; picking
-one is a scoping decision for whoever resumes, not something to infer from this file alone.
+**T-4A (real microphone capture) is fully done — all 4 steps committed** (`d63946d` → `75bbf4a` →
+`afcf63c` → `435ff76`, plus an unrelated `fix(storage)` blocker `927d647`). `plan_audio.md`'s
+original Fáze 0–6 compliance/bugfix plan is done. **But the task list is NOT empty** — a fresh
+2026-07-02 audit (see §5) found 30 new concrete bugs/gaps, filed as `plan_audio.md` §4 **Fáze 7**
+(`CP-1..14`, `XA-1..5`, `IN-1..6`, `MC-1..5`).
 
-T-4A step history, for reference: enumeration (`d63946d`) → `Start`/`Stop` stream lifecycle
-(`75bbf4a`) → `GetData`/`GetQueuedBytes` (`afcf63c`) → capture-dependent tests + an unrelated
-`fix(storage)` blocker (`927d647`, this session, uncommitted at time of writing — see §3).
+**Next smallest task = pick ONE item from `plan_audio.md` Fáze 7**, ordered roughly by severity
+within each cluster (real bugs first, then compliance, then test gaps). The Fáze 7 intro block
+lists the 8 most severe findings across all 4 clusters if you want a starting point instead of
+reading the whole section — `IN-1` (silent XACT parse corruption) and `CP-1`
+(`SoundEffectInstance::Play()` not idempotent) are good first candidates: real, narrowly-scoped
+bugs with a clear FNA reference and accept criteria already written.
 
-Untasked candidates if this branch continues (none are blocking; pick based on what's actually
-needed next, e.g. merge readiness vs. more polish):
-- **`AudioCategory::SetVolume` retroactive re-apply** (§5 "Real gap (untasked)") — currently only
-  affects a category's *future* `Play()` calls; there's a dead re-apply loop already sitting in
-  `AudioEngine::SetCategoryVolumeInternal` that never got finished.
-- **Real-device CI verification** (§5 "Needs verification") — device-dependent tests (including
-  the new `MicrophoneCaptureTest`) have only ever run against the SDL `dummy` driver in this
-  environment; never verified in a CI job against genuine hardware.
-- Merge/PR readiness review of the whole branch (`git log 85938b8..HEAD` for everything done this
-  session plus earlier) if the intent is to land `feature/audio` into `develop`/`master`.
+Do NOT re-run another full audit before working through some of Fáze 7 first — that would just
+duplicate what's already found. Untasked candidates that are NOT bugs, for later:
+- Merge/PR readiness review of the whole branch (`git log 85938b8..HEAD`) once Fáze 7 is worked
+  down, if the intent is to land `feature/audio` into `develop`/`master`.
+- Real-device CI verification (§5) — device-dependent tests still only ever run against the SDL
+  `dummy` driver in this environment.
 
 ---
 
@@ -297,9 +312,10 @@ needed next, e.g. merge readiness vs. more polish):
 - **No instance-tracking / Dispose-cascade redesign** of `CreateInstance` — value semantics is a
   documented deviation (plan D1); changing it is a deliberate decision, not a drive-by fix.
 - **No real 3D HRTF or Doppler** — SDL_mixer cannot do it; keep as documented stored-not-applied.
-- **No broad `XactParser` rewrite** — the three known data bugs are fixed; don't use T-4A or
-  anything else as an excuse to restructure it further. It's load-bearing and coverage is thin
-  (4 tests).
+- **No broad `XactParser` rewrite** — targeted fixes for the specific bugs `plan_audio.md`
+  Fáze 7 found (`IN-1`..`IN-4`) and expanding its test coverage (`IN-6`) are sanctioned and
+  expected; don't use that as an excuse to restructure the parser wholesale beyond what each
+  task's accept criteria asks for.
 - **No touching the sibling `../cna` or `../sharp-runtime` checkouts** — separate repos/clones;
   if a build breaks there, wait or ask, don't "fix" it from this branch.
 - **No API renames / namespace moves** — XNA names are frozen.
@@ -310,18 +326,20 @@ needed next, e.g. merge readiness vs. more polish):
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, then plan_audio.md for background if needed.
-
-T-4A (real microphone capture) is fully done -- this branch's audio task list has no open items
-as originally scoped. Do NOT invent a new task on your own. Instead:
+Read NEXT.md first, then plan_audio.md §4 Fáze 7 for the current task list (30 items, prefixes
+CP/XA/IN/MC). T-4A (real microphone capture) is fully done. plan_audio.md's original Fáze 0-6 is
+done. Fáze 7 is NOT done -- that's where the real next work is.
 
 1. Confirm the current build/test state matches NEXT.md §2 (build clean, all tests pass) --
    rebuild and rerun ./cmake-build-debug/CnaTests to check for drift since this was last updated.
-2. Ask the user what they want next: pick one of the untasked candidates in NEXT.md §8, do a
-   merge/PR-readiness pass on the whole feature/audio branch, or something else entirely.
-3. Only then scope and execute a task, following this file's usual conventions (Do not touch the
-   Media namespace or the sibling ../cna / ../sharp-runtime checkouts; keep audio exceptions as
-   System:: types, GetTypeName dotted and public, SPDX + Doxygen present).
+2. Pick exactly ONE task from plan_audio.md Fáze 7 (start with the top-priority list at the start
+   of that section if unsure -- IN-1 and CP-1 are good, narrowly-scoped first picks). Do not pick
+   more than one, and do not re-run a fresh audit -- Fáze 7 already has 30 items queued.
+3. Inspect only the files that task names. Do not refactor unrelated code. Do not touch the Media
+   namespace or the sibling ../cna / ../sharp-runtime checkouts. Keep audio exceptions as System::
+   types, GetTypeName dotted and public, SPDX + Doxygen present.
+4. Follow that task's own *Accept* criteria, including its test requirement.
 
-After finishing whatever is decided, update NEXT.md (status, recent changes, next task) and commit.
+After finishing, check the task's checkbox in plan_audio.md, update NEXT.md (status, recent
+changes, next task) and commit.
 ```

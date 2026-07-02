@@ -72,22 +72,22 @@ and corrected or confirmed as expected C++ adaptations.
 | AudioCategory | ✅ | API complete |
 | AudioChannels (enum) | ✅ | Complete |
 | AudioEmitter | ✅ | API complete |
-| AudioEngine | ✅ | API complete (stub behavior) |
+| AudioEngine | ✅ | API complete; real System:: exceptions, validated GetCategory/SetGlobalVariable; category-volume live re-apply to already-playing cues and 3D pan/attenuation still stubbed (plan_audio.md T-4D/T-4B) |
 | AudioListener | ✅ | API complete |
 | AudioStopOptions (enum) | ✅ | Complete |
-| Cue | ✅ | API complete (stub behavior) |
+| Cue | ✅ | API complete; real state machine + GetVariable/SetVariable validation; Apply3D is a no-op (plan_audio.md T-4B) |
 | DynamicSoundEffectInstance | ✅ | API complete |
 | InstancePlayLimitException | ✅ | Complete |
-| Microphone | ✅ | API complete (stub behavior) |
+| Microphone | ✅ | API complete — real SDL3 capture (enumeration, Start/Stop, GetData/GetQueuedBytes); GetSampleDuration/GetSampleSizeInBytes doesn't delegate to SoundEffect yet (plan_audio.md MC-1) |
 | MicrophoneState (enum) | ✅ | Complete |
 | NoAudioHardwareException | ✅ | Complete |
 | NoMicrophoneConnectedException | ✅ | Complete |
 | RendererDetail | ✅ | API complete |
-| SoundBank | ✅ | API complete (stub behavior) |
+| SoundBank | ✅ | API complete; real IsInUse (fire-and-forget cues) and GetCue (throws on invalid name); 3D PlayCue ignores listener/emitter (plan_audio.md T-4B) |
 | SoundEffect | ✅ | Implemented (SDL_mixer) |
 | SoundEffectInstance | ✅ | Implemented (SDL_mixer) |
 | SoundState (enum) | ✅ | Complete |
-| WaveBank | ✅ | API complete (stub behavior) |
+| WaveBank | ✅ | API complete; real IsInUse; streaming ctor still delegates to full in-memory load (accepted deviation, plan_audio.md T-3F open) |
 
 ---
 
