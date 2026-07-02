@@ -3877,6 +3877,14 @@ namespace CNA::Internal::Backends::Vulkan
             barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        } else if (from == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                   to   == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            // Needed by VulkanTextureBackend::UpdatePixels to re-upload a texture that has
+            // already been sampled at least once (i.e. every SetData call after the first).
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         } else {
             throw std::runtime_error("Vulkan: unsupported image layout transition");
         }
