@@ -43,19 +43,19 @@ namespace Microsoft::Xna::Framework::Input
         /** @brief FNA extension: fires when a mouse button is clicked. */
         NOXNA static std::function<void(int)> ClickedEXT;
 
-        /** @brief When true, mouse motion is reported as relative delta rather than absolute position. */
-        NOXNA static bool IsRelativeMouseModeEXT;
+        /**
+         * @brief FNA extension: gets whether mouse motion is reported as relative delta
+         * rather than absolute position.
+         * @return True if relative mouse mode is enabled for the current window.
+         */
+        NOXNA static bool getIsRelativeMouseModeEXTProperty();
 
-        /** @brief Internal: game window width used for coordinate scaling. */
-        NOXNA static int INTERNAL_WindowWidth;
-        /** @brief Internal: game window height used for coordinate scaling. */
-        NOXNA static int INTERNAL_WindowHeight;
-        /** @brief Internal: back buffer width used for coordinate scaling. */
-        NOXNA static int INTERNAL_BackBufferWidth;
-        /** @brief Internal: back buffer height used for coordinate scaling. */
-        NOXNA static int INTERNAL_BackBufferHeight;
-        /** @brief Internal: accumulated scroll wheel value. */
-        NOXNA static int INTERNAL_MouseWheel;
+        /**
+         * @brief FNA extension: sets whether mouse motion is reported as relative delta
+         * rather than absolute position.
+         * @param value True to enable relative mouse mode; false to disable it.
+         */
+        NOXNA static void setIsRelativeMouseModeEXTProperty(bool value);
 
         /**
          * @brief Internal: dispatches the ClickedEXT event for the given button index.

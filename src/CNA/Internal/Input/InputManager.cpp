@@ -32,6 +32,14 @@ namespace CNA::Internal::Input
             ButtonState MiddleButton = ButtonState::Released;
             ButtonState XButton1 = ButtonState::Released;
             ButtonState XButton2 = ButtonState::Released;
+
+            // FNA extension: while true, GetMouseState() reports X/Y as the
+            // accumulated pointer delta since the last GetMouseState() call (drained
+            // to 0 on read) instead of the absolute cursor position, matching FNA's
+            // SDL_GetRelativeMouseState-backed GetMouseState() in relative mode.
+            bool RelativeMode = false;
+            float RelativeDeltaX = 0.0f;
+            float RelativeDeltaY = 0.0f;
         };
 
         using Microsoft::Xna::Framework::Input::Buttons;
@@ -135,6 +143,27 @@ namespace CNA::Internal::Input
     {
         auto& mouseState = getInternalInputState().Mouse;
         mouseState.ScrollWheelValue += delta;
+    }
+
+    void InputManager::SetMouseRelativeMode(const bool enabled)
+    {
+        auto& mouseState = getInternalInputState().Mouse;
+        mouseState.RelativeMode = enabled;
+        // Flush stale accumulated motion on toggle, matching SDL3_FNAPlatform's
+        // throwaway SDL_GetRelativeMouseState() call on enable.
+        mouseState.RelativeDeltaX = 0.0f;
+        mouseState.RelativeDeltaY = 0.0f;
+    }
+
+    void InputManager::AddMouseRelativeDelta(const float dx, const float dy)
+    {
+        auto& mouseState = getInternalInputState().Mouse;
+        if (!mouseState.RelativeMode)
+        {
+            return;
+        }
+        mouseState.RelativeDeltaX += dx;
+        mouseState.RelativeDeltaY += dy;
     }
 
     void InputManager::SetKeyState(
@@ -284,10 +313,21 @@ namespace CNA::Internal::Input
     Microsoft::Xna::Framework::Input::MouseState InputManager::GetMouseState()
     {
         using Microsoft::Xna::Framework::Input::ButtonState;
-        const auto& mouseState = getInternalInputState().Mouse;
+        auto& mouseState = getInternalInputState().Mouse;
+
+        int x = mouseState.X;
+        int y = mouseState.Y;
+        if (mouseState.RelativeMode)
+        {
+            x = static_cast<int>(mouseState.RelativeDeltaX);
+            y = static_cast<int>(mouseState.RelativeDeltaY);
+            mouseState.RelativeDeltaX = 0.0f;
+            mouseState.RelativeDeltaY = 0.0f;
+        }
+
         return Microsoft::Xna::Framework::Input::MouseState(
-            mouseState.X,
-            mouseState.Y,
+            x,
+            y,
             mouseState.ScrollWheelValue,
             mouseState.LeftButton,
             mouseState.MiddleButton,

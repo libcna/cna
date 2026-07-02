@@ -4,6 +4,7 @@
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
+#include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
@@ -690,6 +691,7 @@ namespace CNA::Internal::Input
                                       : SDL_GetMouseFocus();
                 const auto pos = to_logical_position(win, event.motion.x, event.motion.y);
                 InputManager::SetMousePosition(static_cast<int>(pos.X), static_cast<int>(pos.Y));
+                InputManager::AddMouseRelativeDelta(event.motion.xrel, event.motion.yrel);
                 break;
             }
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -727,6 +729,11 @@ namespace CNA::Internal::Input
                                           : SDL_GetMouseFocus();
                     const auto pos = to_logical_position(win, event.button.x, event.button.y);
                     InputManager::SetMousePosition(static_cast<int>(pos.X), static_cast<int>(pos.Y));
+                }
+
+                if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+                {
+                    Microsoft::Xna::Framework::Input::Mouse::INTERNAL_onClicked(event.button.button - 1);
                 }
                 break;
             }

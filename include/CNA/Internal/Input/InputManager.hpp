@@ -125,6 +125,19 @@ namespace CNA::Internal::Input
         static void AddScrollWheelDelta(int delta);
 
         /**
+         * @brief Toggles FNA extension relative-mouse-mode accumulation and flushes
+         * any pending relative delta (matches SDL3_FNAPlatform's flush-on-enable).
+         */
+        static void SetMouseRelativeMode(bool enabled);
+
+        /**
+         * @brief Accumulates a relative mouse motion delta. Only has an effect while
+         * relative mode is enabled (see SetMouseRelativeMode); fed from every mouse
+         * motion event regardless of mode, matching the SDL event stream.
+         */
+        static void AddMouseRelativeDelta(float dx, float dy);
+
+        /**
          * @brief Sets pressed/released state for one keyboard key.
          */
         static void SetKeyState(Microsoft::Xna::Framework::Input::Keys key, bool pressed);
