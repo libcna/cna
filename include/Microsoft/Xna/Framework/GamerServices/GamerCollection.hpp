@@ -91,6 +91,23 @@ namespace Microsoft::Xna::Framework::GamerServices
         /** @brief Returns a C++ iterator past the end (for range-for). */
         NOXNA [[nodiscard]] auto end()   const { return collection_.end(); }
 
+        /**
+         * @brief Creates a plain GamerCollection<T> for CNA internal use.
+         *
+         * FNA's GamerCollection<T> constructor is `internal` (same-assembly), so callers
+         * outside the GamerServices/Net namespaces that aren't a named subclass (e.g.
+         * NetworkMachine.Gamers, typed as a bare GamerCollection<NetworkGamer>) can still
+         * construct one directly in FNA. The C++ port's constructor is `protected` instead,
+         * so this factory restores that same-library-wide construction ability.
+         *
+         * @param items The elements to store.
+         * @return A new GamerCollection<T> wrapping items.
+         */
+        NOXNA static GamerCollection<T> CreateInternal(std::vector<T*> items)
+        {
+            return GamerCollection<T>(std::move(items));
+        }
+
     protected:
         explicit GamerCollection(std::vector<T*> items)
             : collection_(std::move(items))

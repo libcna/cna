@@ -31,14 +31,15 @@ ported to C++ with minimal API-surface changes.
 ### Build
 - `cmake-build-debug` (EasyGL): **clean build**, all targets including `CNA_GamerServices`,
   `CNA_Net`, and `CnaTests`.
-- **1972 / 1972 unit tests pass**.
+- **1979 / 1979 unit tests pass**.
 - **`GamerServices` namespace is now complete** — every class in the dependency chain
   (enums → exceptions → data structs → event args → Gamer/collections → SignedInGamer →
   GamerServicesDispatcher/GamerServicesComponent/Guide) is fully ported.
-- **`Net` namespace: enums done** (5) **+ 14 non-enum classes done** (`NetworkSessionProperties`,
+- **`Net` namespace: enums done** (5) **+ 16 non-enum classes done** (`NetworkSessionProperties`,
   `QualityOfService`, `AvailableNetworkSession`, `AvailableNetworkSessionCollection`, the 7
-  event-arg classes, `NetworkSessionJoinException`, `PacketReader`, `PacketWriter`); 4 non-enum
-  classes plus the ENet backend/platform/integration-test phases remain.
+  event-arg classes, `NetworkSessionJoinException`, `PacketReader`, `PacketWriter`,
+  `NetworkGamer`, `NetworkMachine`); 2 non-enum classes (`NetworkSession`, `LocalNetworkGamer`)
+  plus the ENet backend/platform/integration-test phases remain.
 - **sharp-runtime fix (unplanned, required to unblock any build in this repo):** sharp-runtime's
   `System::IAsyncResult` gained two pure-virtual members (`getAsyncStateProperty()`,
   `getAsyncWaitHandleProperty()`) since this repo's last successful build, which broke *every*
@@ -75,10 +76,13 @@ ported to C++ with minimal API-surface changes.
 | Task 4.3 | All 7 `Net` event-arg classes ported: `GameEndedEventArgs`/`GameStartedEventArgs` (empty), `GamerJoinedEventArgs`/`GamerLeftEventArgs` (`NetworkGamer*`), `HostChangedEventArgs` (`NetworkGamer*` OldHost/NewHost), `NetworkSessionEndedEventArgs` (`NetworkSessionEndReason`), `WriteLeaderboardsEventArgs` (`NetworkGamer*` + bool, internal ctor → private + `CreateInternal()`). All `NetworkGamer*` fields are forward-declared pointers, matching the `SignedInGamer*` precedent used before that type existed. |
 | Task 4.4 | `NetworkSessionJoinException` ported (`: GamerServices::NetworkException`), mirroring its base class's exact 4-ctor + protected serialization-ctor pattern (no surprises — the base was already ported in Task 2.11–2.16). |
 | Task 4.5 | `PacketReader`/`PacketWriter` ported (`: System::IO::BinaryReader`/`BinaryWriter`). Required adding `Stream::getPositionProperty()`/`setPositionProperty()` to sharp-runtime (additive-only; see section 2). Ownership of the backing `MemoryStream` solved with a private "base-from-member" helper (`PacketReaderStream`/`PacketWriterStream`) listed before the `BinaryReader`/`BinaryWriter` base so the buffer exists before the base constructor needs a pointer to it — `int capacity` ctors accept but discard the capacity hint (`MemoryStream` has no preallocating constructor; capacity is a pure preallocation hint in .NET with no observable effect). `PacketWriter` required `using System::IO::BinaryWriter::Write;` to un-hide the base's other `Write(...)` overloads (C++ name-hiding has no C# equivalent). Confirmed and preserved a genuine FNA-native asymmetry: `PacketWriter::Write(Color)` writes 4 bytes but `PacketReader::ReadColor()` reads 4 floats (16 bytes) — not round-trippable through these two methods alone, matching upstream exactly (see its own `ReadSingle`/`ReadDouble` FIXME). 20 new tests. Also fixed the pre-existing, unrelated sharp-runtime `IAsyncResult` build break described in section 2. |
+| Task 4.6 | `NetworkGamer` (`: GamerServices::Gamer`) and `NetworkMachine` ported. Corrected this file's own suggested order: `LocalNetworkGamer` was listed right after `NetworkGamer`, but its `ReceiveData`/`SendData` methods need `NetworkSession`'s nested `NetworkEvent` struct and `NetworkEventType` enum, so it's deferred until `NetworkSession` is ported (now next, see section 8). `GamerCollection<T>` gained a public `NOXNA static CreateInternal(std::vector<T*>)` factory — FNA's own `GamerCollection<T>` constructor is `internal` (same-assembly), so `NetworkMachine.Gamers` constructs a bare `GamerCollection<NetworkGamer>` directly in FNA; the C++ port's constructor was `protected` (subclass-only), which blocked that until this factory was added. `NetworkGamer::IsLocal` (`this is LocalNetworkGamer` in FNA) is ported as a virtual method (`getIsLocalProperty()`, overridden by `LocalNetworkGamer` once it exists) rather than `dynamic_cast`, since a base class header can't `dynamic_cast` to a derived type it can't yet include; behavior is identical either way. 7 new tests. |
 
 ### What is NOT done yet in the Net phase
 
-- **Phase 4: Net core classes** — 4 of 18 non-enum classes remain: `NetworkSession`, `NetworkGamer`, `LocalNetworkGamer`, `NetworkMachine`, and the nested `NetworkEventType` enum (tied to `NetworkSession`).
+- **Phase 4: Net core classes** — 2 of 18 non-enum classes remain: `NetworkSession` (including the
+  nested `NetworkEventType` enum and internal `NetworkEvent` struct) and `LocalNetworkGamer`
+  (blocked on `NetworkSession`'s nested types — see Task 4.6 above).
 - **Phase 5: ENet backend** — not started.
 - **Phase 6: Platform support** — not started.
 - **Phase 7: Integration tests** — not started.
@@ -90,6 +94,7 @@ ported to C++ with minimal API-surface changes.
 
 | Commit | Files | Change |
 |---|---|---|
+| Task 4.6 | `NetworkGamer.hpp/.cpp`, `NetworkMachine.hpp/.cpp` (new), `NetworkGamerMachineTests.cpp` (new); `GamerServices/GamerCollection.hpp` (added `CreateInternal` factory) | `NetworkGamer`/`NetworkMachine` ported; `LocalNetworkGamer` deferred until `NetworkSession` exists (dependency-order correction, see section 2). 7 new tests |
 | Task 4.5 | `PacketReader.hpp/.cpp`, `PacketWriter.hpp/.cpp` (new), `PacketReaderWriterTests.cpp` (new); sharp-runtime `Stream.hpp/.cpp`, `MemoryStream.hpp/.cpp`, `StreamTests.cpp` (additive `Position` support); `Storage/StorageDevice.cpp`, `GamerServices/Gamer.hpp/.cpp`, `GamerServices/Guide.cpp` (unplanned `IAsyncResult` fix) | `PacketReader`/`PacketWriter` ported; 20 new tests. Also fixed a pre-existing, unrelated build break (see section 2/4) affecting every target in the repo — not scoped to the Net phase, but nothing could be verified without it |
 | Task 4.4 | `NetworkSessionJoinException.hpp/.cpp` (new), `NetworkSessionJoinExceptionTests.cpp` (new) | First `Net` exception; `: GamerServices::NetworkException`, no deviations; 7 new tests |
 | Task 4.3 | `GameEndedEventArgs`, `GameStartedEventArgs`, `GamerJoinedEventArgs`, `GamerLeftEventArgs`, `HostChangedEventArgs`, `NetworkSessionEndedEventArgs`, `WriteLeaderboardsEventArgs` (.hpp/.cpp, new), `NetEventArgsTests.cpp` (new) | All 7 `Net` event-arg classes; `NetworkGamer` isn't ported yet, so its pointer fields use `nullptr` stand-ins in tests, matching the earlier `SignedInGamer*` precedent; 13 new tests |
@@ -136,11 +141,12 @@ the `protected` fields, since no code yet needs to mutate them from outside the 
 `WaitHandle`), not `ManualResetEvent` — see section 5, the previous deviation entry for this is
 now resolved.
 
-`Net`'s 5 enums are ported, plus 14 of its 18 non-enum classes: `NetworkSessionProperties`,
+`Net`'s 5 enums are ported, plus 16 of its 18 non-enum classes: `NetworkSessionProperties`,
 `QualityOfService`, `AvailableNetworkSession`, `AvailableNetworkSessionCollection`, the 7
-event-arg classes, `NetworkSessionJoinException`, `PacketReader`, `PacketWriter`. What's left is
-the other 4 non-enum `.cs` files (core session/gamer classes, the nested `NetworkEventType`
-enum) — then the ENet backend, then Avatar (deferred, low priority).
+event-arg classes, `NetworkSessionJoinException`, `PacketReader`, `PacketWriter`, `NetworkGamer`,
+`NetworkMachine`. What's left is `NetworkSession` (the nested `NetworkEventType` enum and
+internal `NetworkEvent` struct live inside it) and `LocalNetworkGamer` (blocked on
+`NetworkSession`'s nested types) — then the ENet backend, then Avatar (deferred, low priority).
 
 ---
 
@@ -151,13 +157,14 @@ enum) — then the ENet backend, then Avatar (deferred, low priority).
 | **Resolved** | ~~`Gamer::GamerAction::getAsyncWaitHandleProperty()` returns `ManualResetEvent&`, not `WaitHandle&`~~ — sharp-runtime's `IAsyncResult` now declares `getAsyncStateProperty()`/`getAsyncWaitHandleProperty()` as real members (it did not when this deviation was first written). `GamerAction`/`GuideAction` now use `System::Threading::EventWaitHandle` (which does derive `WaitHandle`) and properly `override` both methods. `Storage::SelectorResult`/`ContainerResult` needed the same fix (see section 2/4) since they implement the same interface. |
 | **Deviation (documented)** | `PacketWriter::Write(Color)` writes 4 bytes (R/G/B/A) but `PacketReader::ReadColor()` reads 4 floats (16 bytes) — genuinely asymmetric upstream, not something introduced here; preserved as-is rather than symmetrized. Not round-trippable through these two methods alone. |
 | **Deviation (documented)** | `PacketReader(int capacity)`/`PacketWriter(int capacity)` discard the `capacity` argument — sharp-runtime's `MemoryStream` has no preallocating constructor, and capacity is a pure preallocation hint in .NET with no effect on observable behavior, so nothing is lost. |
+| **Deviation (documented)** | `NetworkGamer::getIsLocalProperty()` is a virtual method overridden by `LocalNetworkGamer`, not a `dynamic_cast<LocalNetworkGamer*>(this) != nullptr` runtime check like FNA's `this is LocalNetworkGamer` — `NetworkGamer.hpp` can't `dynamic_cast` to a derived type it can't include (real header cycle). Externally observable behavior is identical. `LocalNetworkGamer` (not yet ported) must override `getIsLocalProperty()` to return `true` when it's added. |
 | **Deviation (documented)** | `LeaderboardEntry::operator==`/`operator!=` (NOXNA) added purely to satisfy `ReadOnlyCollection<T>`'s virtual `IndexOf`/`Contains` (they're instantiated regardless of use since they override virtuals). FNA's `LeaderboardEntry` has no custom equality (reference identity); this is structural comparison of gamer/rating/ranking, the closest achievable equivalent given value-type storage. Same reasoning applies to `AvailableNetworkSession::operator==`/`operator!=`. |
 | **Deviation (documented)** | `AvailableNetworkSessionCollection::Dispose()` only flips `IsDisposed`. FNA's version clears the underlying shared `List<T>` that its `ReadOnlyCollection<T>` wraps *by reference*, so the collection also empties visibly; sharp-runtime's `ReadOnlyCollection<T>` copies its source into private storage with no mutator exposed to a derived class, so there's no way to replicate the emptying without fighting the base class's encapsulation. Matches the precedent of not asserting count-after-dispose in `AchievementCollectionTest`/`FriendCollectionTest` either. |
 | **Note (not a bug)** | `SignedInGamer::IsHeadset()` has no unit test — it requires a real `Microsoft::Xna::Framework::Audio::Microphone`, only constructible via `MicrophoneFactory` against a real SDL audio device. Documented per CHECKLIST.md's "classes that cannot be unit-tested" provision. |
 | **Note (not a bug)** | `GamerServicesComponent` has no unit tests — it requires a live `Game&` (SDL/graphics backend) to construct, same limitation already documented for `GameComponent` (see `GameComponentTests.cpp`). |
 | **Note (not a bug)** | `GamerServicesDispatcher::Initialize()` is never called from the automated test suite. It sets `IsInitialized = true` as process-lifetime static state with no reset hook (matches FNA, which resets it via an `AppDomain.ProcessExit` handler — no C++ equivalent, intentionally omitted); calling it from a test would silently change `UpdateAsync()`'s behavior for every other test in the same binary. |
-| **Incomplete** | Phase 4 (Net core classes) is 14/18 done; Phases 5–7 (ENet backend, platform, integration tests) not started. |
-| **Incomplete** | `NetworkGamer` doesn't exist yet — `GamerJoinedEventArgs`/`GamerLeftEventArgs`/`HostChangedEventArgs`/`WriteLeaderboardsEventArgs` all forward-declare it and use `nullptr`/pointer stand-ins in tests, same pattern `SignedInGamer*` went through before it existed. |
+| **Incomplete** | Phase 4 (Net core classes) is 16/18 done; Phases 5–7 (ENet backend, platform, integration tests) not started. |
+| **Incomplete** | `NetworkGamer` now exists — `GamerJoinedEventArgs`/`GamerLeftEventArgs`/`HostChangedEventArgs`/`WriteLeaderboardsEventArgs` still forward-declare it and use `nullptr`/pointer stand-ins in tests (not yet revisited); swap for real `NetworkGamer` instances, same as was done for `SignedInGamer`, once convenient (their own `.cs` files don't require `NetworkSession` to exist, only `NetworkGamer`, which is done now). |
 | **Incomplete** | `FriendCollection` and `SignedInGamerCollection` store raw pointers — ownership model not yet defined. |
 | **Incomplete** | `PropertyDictionary` uses `std::any` internally; `GetValueStream` returns a raw `Stream*` — lifetime management unspecified. |
 | **Incomplete** | `GamerCollection<T>` template has no range-based-for adapter returning raw `T&` — returns `T*` from `begin()`/`end()`. |
@@ -243,18 +250,25 @@ ls /rv/data/development/github.com/openeggbert/sharp-runtime/include/System/
 
 In priority order:
 
-1. **Task 4.6+ — Continue Net core classes**
+1. **Task 4.7 — `NetworkSession`, then `LocalNetworkGamer`**
    - Goal: `NetworkSessionProperties`, `QualityOfService`, `AvailableNetworkSession`,
      `AvailableNetworkSessionCollection`, all 7 event-arg classes, `NetworkSessionJoinException`,
-     `PacketReader`, `PacketWriter` (Tasks 4.1–4.5) are done. Continue with the remaining 4
-     non-enum `.cs` files in `Net`. Suggested order (least- to most-dependent): `NetworkGamer`
-     (: `Gamer`) / `LocalNetworkGamer` (: `NetworkGamer`) / `NetworkMachine` → finally
-     `NetworkSession` itself (the big one — `IDisposable`, owns the nested `NetworkEventType`
-     enum and internal `NetworkEvent` struct). Once `NetworkGamer` exists, revisit
+     `PacketReader`, `PacketWriter`, `NetworkGamer`, `NetworkMachine` (Tasks 4.1–4.6) are done.
+     Port `NetworkSession` next — it's the big one (1071 lines in FNA): `IDisposable`, owns the
+     nested `NetworkEventType` enum and internal `NetworkEvent` struct, `AllGamers`/`LocalGamers`/
+     `RemoteGamers` collections, session lifecycle (`Update`, `EndGame`/`StartGame`), and the
+     `Create`/`Find`/`Join` static factory family. Consider splitting it into sub-tasks (e.g.
+     properties+lifecycle first, then the Create/Find/Join statics) rather than one pass, given
+     its size. Once `NetworkSession::NetworkEvent`/`NetworkEventType` exist, port
+     `LocalNetworkGamer` (: `NetworkGamer`) — it was deferred from Task 4.6 specifically because
+     its `ReceiveData`/`SendData` methods need those nested types. Then revisit
      `GamerJoinedEventArgs`/`GamerLeftEventArgs`/`HostChangedEventArgs`/`WriteLeaderboardsEventArgs`
-     tests to swap `nullptr` stand-ins for real instances (same as was done for `SignedInGamer`).
+     tests to swap `nullptr` stand-ins for real `NetworkGamer` instances (same as was done for
+     `SignedInGamer`), and have `LocalNetworkGamer` override `NetworkGamer::getIsLocalProperty()`
+     to return `true` (see section 5).
    - Files: new headers + cpp under `include/`+`src/Microsoft/Xna/Framework/Net/`.
-   - Reference: `/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/Net/`.
+   - Reference: `/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/Net/NetworkSession.cs`,
+     `LocalNetworkGamer.cs`.
    - Verification: build + tests pass per class, following the same per-file checklist in CHECKLIST.md
      used throughout GamerServices. For any class stored as an element type of a
      `System::Collections::ObjectModel::ReadOnlyCollection<T>` (like `AvailableNetworkSession` was),
@@ -263,7 +277,8 @@ In priority order:
      can occasionally time out on this shared machine if another session is compiling concurrently
      (observed load average >100 on a 16-core box) — retry with reduced `-j` and a longer timeout
      rather than assuming a real compile error; check `pgrep -fl cc1plus` before concluding a build
-     is stuck.
+     is stuck. And: re-verify with a real build before trusting this file's test-count claims — see
+     section 4 on the cross-repo sharp-runtime breakage risk.
 
 ---
 
@@ -300,16 +315,17 @@ Read NEXT.md first. Open only the files needed for the first task listed in sect
 Do not refactor unrelated code. Do not expand scope beyond the task.
 
 Current status: GamerServices namespace fully ported (Tasks 2.1-2.40); Net namespace's 5 enums
-ported (Task 3.1-3.15); 14 of 18 Net non-enum classes ported (Tasks 4.1-4.5: NetworkSessionProperties,
+ported (Task 3.1-3.15); 16 of 18 Net non-enum classes ported (Tasks 4.1-4.6: NetworkSessionProperties,
 QualityOfService, AvailableNetworkSession, AvailableNetworkSessionCollection, all 7 event-arg
-classes, NetworkSessionJoinException, PacketReader, PacketWriter).
-1972/1972 unit tests pass; CNA_GamerServices and CNA_Net targets build.
+classes, NetworkSessionJoinException, PacketReader, PacketWriter, NetworkGamer, NetworkMachine).
+1979/1979 unit tests pass; CNA_GamerServices and CNA_Net targets build.
 
 Before trusting that: do a real `cmake --build cmake-build-debug --target CnaTests` yourself first.
 sharp-runtime is a sibling repo edited by a separate session with no version pin from here — see
 section 4, an interface change there silently broke every build target once already this project.
 
-Next: Task 4.6+ — continue porting Net's remaining 4 non-enum classes. See section 8 for suggested order.
+Next: Task 4.7 — NetworkSession (the big one, ~1071 lines in FNA), then LocalNetworkGamer
+(deferred from 4.6 since it needs NetworkSession's nested types). See section 8 for details.
 Reference: /rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/Net/
 Build: cmake --build cmake-build-debug --target CnaTests
 Run:   cmake-build-debug/CnaTests
