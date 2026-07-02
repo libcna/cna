@@ -93,8 +93,14 @@ with minimal API-surface changes.
   practically useful direction, reducing/disabling gamepad tracking, works).
 
 ### What does NOT work yet
-- **Mouse:** `SetPosition` does not warp the cursor; relative-mouse-mode is a dead flag; `ClickedEXT`
-  never fires (Phase I4 — next focus).
+- **Mouse:** all four Phase I4 behavior tasks (745/746/747/748) are done, `MouseCursor`'s CHECKLIST
+  header/NOXNA-tagging pass (750) is done, and `MouseCursor::FromTexture2D` (751) now builds custom
+  cursors from a `Texture2D` via `SDL_CreateColorCursor`. Remaining known limitation (task 747's
+  resolution): `SetPosition` has no inverse (logical→window) coordinate transform, so on a
+  letterboxed/scaled window (render resolution ≠ window size) the OS cursor warp target will be off
+  by the scale factor — documented in-source (`Mouse.cpp`); fixing it for real requires a
+  graphics-layer change (`IGraphicsBackend` inverse transform), out of scope here. Next up is
+  `MouseCursor::Dispose`/stock-cursor fixes (tasks 752–754).
 - **Keyboard:** `GetPressedKeys()` order is non-deterministic; SDL keycode→Keys map is incomplete;
   `GetKeyFromScancodeEXT` is an identity stub (Phase I5).
 - **demo_input text panel is not visually verified** (see Section 5; carried over from Phase I1,
@@ -157,14 +163,13 @@ One practical issue carries over, and Phase I4 is the next real gap:
      `rm -rf cmake-build-<x> && cmake -S … -B … -G Ninja -DCNA_GRAPHICS_BACKEND=<X> …`.
      The Vulkan/Bgfx dirs have **not** been reconfigured.
 
-2. **Next functional focus: Mouse dead behavior paths (Phase I4).** `MouseState` itself is faithful
-   and populated from SDL3, but `Mouse::SetPosition` doesn't warp the OS cursor (state gets
-   overwritten by the next motion event anyway), `IsRelativeMouseModeEXT` is a dead flag not backed
-   by `SDL_SetWindowRelativeMouseMode`, and `ClickedEXT` never fires because `SdlInputBridge` never
-   calls `Mouse::INTERNAL_onClicked`. `MouseCursor` also has CHECKLIST issues (wrong SPDX, missing
-   `NOXNA` tags, no `FromTexture2D`/`Dispose`). See `plan_input.md` Phase I4 (tasks 745–755).
-   Affected: `src/Microsoft/Xna/Framework/Input/Mouse.cpp`, `MouseCursor.{hpp,cpp}`,
-   `src/CNA/Internal/Input/SdlInputBridge.cpp`.
+2. **Next functional focus: `MouseCursor` completeness (Phase I4, tasks 751–755).** Mouse behavior
+   (745–748) and `MouseCursor`'s CHECKLIST header/NOXNA pass (750) are done. What's left:
+   `MouseCursor` has no `FromTexture2D`/`Dispose`, `WaitCursor` should be renamed `WaitArrow`
+   (MonoGame name) with its static-init-before-`SDL_Init` fragility fixed, and a `Handle`
+   property/AUDIT.md status decision is still open. See `plan_input.md` Phase I4.
+   Affected: `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`,
+   `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`.
 
 ---
 
@@ -173,7 +178,7 @@ One practical issue carries over, and Phase I4 is the next real gap:
 | Status | Item |
 |--------|------|
 | **Confirmed** | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
-| **Incomplete** | Mouse: `SetPosition` no warp; `IsRelativeMouseModeEXT` dead; `ClickedEXT` never fires; dead `INTERNAL_*` fields (Phase I4 — next focus). |
+| **Incomplete** | Mouse: all Phase I4 behavior tasks (745/746/747/748) are done, `MouseCursor`'s SPDX/NOXNA CHECKLIST pass (750) is done, and `MouseCursor::FromTexture2D` (751) is done. Next is `Dispose`/stock-cursor fixes (tasks 752–754), then the batched `Mouse`/`MouseCursor` test task 755. |
 | **Incomplete** | Keyboard: `GetPressedKeys()` unordered; SDL keycode→Keys map missing F13–F24/Apps/Volume/locale fallbacks; `GetKeyFromScancodeEXT` is identity stub; no scancode mode (Phase I5). |
 | **Needs verification** | `demo_input` text panel not visually confirmed: it builds and runs crash-free ~4s under the native backend, but no Wayland screenshot tool is available here and forcing the X11 driver makes SDL exit. A human at a display should run it and type. |
 | **Intentional deviation** | `GamePadState.PacketNumber` is tracked at the raw `InputManager` layer (bumped on real connection/button/axis changes) rather than by comparing freshly-built `GamePadState`s like FNA's poll loop; documented in-source (`InputManager.cpp`). |
@@ -182,7 +187,10 @@ One practical issue carries over, and Phase I4 is the next real gap:
 | **Intentional deviation** | `FNA_GAMEPAD_NUM_GAMEPADS` env override is clamped to 4 (CNA's `PlayerIndex` enum is frozen XNA API with exactly 4 values); FNA nominally allows values above 4 but its own comment says doing so also requires adding `PlayerIndex` names, which CLAUDE.md forbids. |
 | **Minor, not yet fixed** | `TouchPanel::GetCapabilities()` passes `MAX_TOUCHES` unconditionally in both branches (connected and fallback); FNA returns `0` for `MaximumTouchCount` when disconnected. Noted during Phase I2, not yet scheduled as its own task. |
 | **Intentional deviation** | `TextInputEXT::TextInput` is `char`-based, so `SDL_EVENT_TEXT_INPUT` is forwarded **per UTF-8 byte** (appending rebuilds the UTF-8 string). FNA decodes to UTF-16 because C# strings are UTF-16. |
+| **Intentional deviation** | `Mouse::SetPosition`/`GetState` do not replicate FNA's `INTERNAL_WindowWidth/Height ÷ INTERNAL_BackBufferWidth/Height` faux-backbuffer scale (`Mouse.cs:107-116`) — those fields were removed (task 747). CNA already solves window↔logical coordinates more generally via `SdlInputBridge::to_logical_position`/`IGraphicsBackend::TransformWindowToLogical`, which `GetState()` benefits from for free; but there is no inverse (logical→window) transform yet, so `SetPosition`'s `SDL_WarpMouseInWindow` target will be off by the scale factor on a letterboxed/scaled window. Documented in-source (`Mouse.cpp`). Fixing it needs a graphics-layer `IGraphicsBackend` addition, out of scope for this branch. |
+| **Intentional deviation** | `InputManager::GetMouseState()` reports relative-mode `X`/`Y` from a float delta accumulator fed by every `SDL_EVENT_MOUSE_MOTION`'s `xrel`/`yrel` (drained to `0` on each read), rather than FNA's `SDL_GetRelativeMouseState` poll — the equivalent for CNA's event-driven model (see the `InputManager` class doc, task 735). Documented in-source (`InputManager.cpp`). |
 | **Pre-existing (not from input work)** | Working tree shows `D .claude/settings.json` (deleted) and untracked `vendor/wgpu-native/`. These predate this branch's input work and were **not** committed. |
+| **Fixed (unrelated to Mouse work, but blocked all builds)** | The sibling `sharp-runtime` checkout committed (`d61ffb8`) a `System::IAsyncResult` interface addition (`AsyncState`/`AsyncWaitHandle`, full 4-member .NET interface) mid-session, which broke this repo's `StorageDevice.cpp` (`ContainerResult`/`SelectorResult` didn't implement the two new pure-virtual overrides — `CNA` target wouldn't link). Fixed alongside task 750: `void* asyncState` → `std::any asyncState` (same values, no `Begin*` signature change) and a `mutable System::Threading::EventWaitHandle waitHandle{true, ManualReset}` (both classes always report `getIsCompletedProperty() == true`), matching the pattern `sharp-runtime`'s own commit used in its test implementers. If a future `sharp-runtime` interface change breaks this repo's build again the same way, this is the pattern to follow: implement the missing overrides in the CNA-side consumer, don't touch `sharp-runtime`. |
 
 ---
 
@@ -280,37 +288,56 @@ grep CMAKE_HOME_DIRECTORY cmake-build-debug/CMakeCache.txt
 
 ## 8. Next smallest tasks
 
-In priority order — the start of Phase I4 (Mouse). Each is one focused session.
+In priority order. Tasks 745–748 (Mouse behavior) are all **done** — Phase I4's remaining work is
+`MouseCursor` CHECKLIST compliance. Each is one focused session.
 
-1. **Task 745 — Wire `Mouse::SetPosition` to actually warp the OS cursor.**
-   - Goal: call `SDL_WarpMouseInWindow` with the FNA relative-mode early-return guard and
-     window/back-buffer coordinate scaling (`Mouse.cs:107–116`); stop relying solely on
-     `InputManager` state mutation, which the next motion event just overwrites.
-   - Files: `src/Microsoft/Xna/Framework/Input/Mouse.cpp`, `SdlInputBridge.{hpp,cpp}`.
-   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Mouse*'`
+- **Task 745 — DONE.** `Mouse::SetPosition` calls real `SDL_WarpMouseInWindow`, with the FNA
+  relative-mode early-return guard.
+- **Task 746 — DONE.** `Mouse::IsRelativeMouseModeEXT` is a real `getIsRelativeMouseModeEXTProperty()`/
+  `NOXNA setIsRelativeMouseModeEXTProperty(bool)` pair backed by `SDL_Get/SetWindowRelativeMouseMode`,
+  with relative motion deltas (`event.motion.xrel/yrel`) feeding `GetMouseState()`'s `X`/`Y` while
+  active (drained on read), mirroring FNA's `SDL_GetRelativeMouseState`-backed poll.
+- **Task 747 — DONE.** Removed FNA's dead `INTERNAL_WindowWidth/Height`/`INTERNAL_BackBufferWidth/
+  Height`/`INTERNAL_MouseWheel` fields rather than wiring them for real — CNA already solves
+  window↔logical coordinates more generally via `SdlInputBridge::to_logical_position`/
+  `IGraphicsBackend::TransformWindowToLogical`. **Known limitation, documented in-source
+  (`Mouse.cpp`):** `SetPosition` has no inverse (logical→window) transform, so its warp target is
+  off by the scale factor on a letterboxed/scaled window; fixing that for real is a graphics-layer
+  change, out of scope here.
+- **Task 748 — DONE.** `SdlInputBridge` now calls `Mouse::INTERNAL_onClicked(event.button.button - 1)`
+  on `SDL_EVENT_MOUSE_BUTTON_DOWN`, firing `ClickedEXT`, matching FNA exactly
+  (`SDL3_FNAPlatform.cs:958-960`).
+- **Task 750 — DONE.** `MouseCursor.hpp`/`.cpp` SPDX header fixed `MIT`→`MS-PL`, added
+  `#include "CNA/CNAHelper.hpp"`, class and every constructor/method/static-constant tagged `NOXNA`
+  (no `MouseCursor` exists in XNA 4 or FNA — MonoGame-derived CNA extension), matching the
+  `ShaderEffect` "wholly-non-XNA class" precedent. Also fixed an **unrelated build blocker**
+  encountered along the way: the sibling `sharp-runtime` checkout committed a `System::IAsyncResult`
+  interface addition mid-session that broke this repo's `StorageDevice.cpp` (see Section 5's "Fixed"
+  row) — the whole `CNA` target wouldn't link until that was patched.
 
-2. **Task 746 — Implement `Mouse::IsRelativeMouseModeEXT` as a real property.**
-   - Goal: back it with `SDL_SetWindowRelativeMouseMode`/`SDL_GetWindowRelativeMouseMode`; feed
-     relative deltas into `GetMouseState`. Currently a dead `bool` with no SDL wiring.
-   - Files: `src/Microsoft/Xna/Framework/Input/Mouse.cpp`, `SdlInputBridge.{hpp,cpp}`.
-   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Mouse*'`
+- **Task 751 — DONE.** `MouseCursor::FromTexture2D(const Graphics::Texture2D&, int originX, int originY)`
+  ported from MonoGame's SDL backend (`MouseCursor.SDL.cs::PlatformFromTexture2D` — no FNA equivalent;
+  MonoGame is the reference since `MouseCursor` is itself MonoGame-derived). Validates
+  `SurfaceFormat::Color`/`ColorSrgb` (else `std::invalid_argument`), reads pixels via
+  `Texture2D::GetData(Color*, int)`, then extracts each pixel's `getPackedValueProperty()` into a raw
+  `std::vector<uint32_t>` — **`Color` is not a tightly-packed RGBA8 buffer**, it carries a vtable
+  pointer (`IPackedVectorT`), so `sizeof(Color) != 4`. `PackedValue`'s R,G,B,A byte layout matches
+  `SDL_PIXELFORMAT_RGBA32` exactly, so no channel reordering needed. Builds an `SDL_Surface` via
+  `SDL_CreateSurfaceFrom` (SDL3's replacement for MonoGame's SDL2 `SDL_CreateRGBSurfaceFrom`), then
+  `SDL_CreateColorCursor`, throwing `std::runtime_error`+`SDL_GetError()` on failure. Added
+  `#include ".../Texture2D.hpp"` to `MouseCursor.hpp`.
 
-3. **Task 747 — Resolve the back-buffer scaling fields in `Mouse::GetState`.**
-   - Goal: either implement FNA-style scaling using `INTERNAL_BackBufferWidth/Height/WindowWidth/
-     Height/MouseWheel`, or remove those dead fields and document the existing
-     `TransformWindowToLogical` deviation (`SdlInputBridge.cpp:226`) instead.
-   - Files: `src/Microsoft/Xna/Framework/Input/Mouse.{hpp,cpp}`.
-   - Verify: `cmake --build cmake-build-debug --target CNA -j"$(nproc)"` (behavior decision + doc/code
-     change; add a regression test if scaling is implemented rather than removed).
+1866/1866 tests pass after each (no dedicated `Mouse`/`MouseCursor` tests yet — batched into task 755).
 
-4. **Task 748 — Wire `ClickedEXT`.**
-   - Goal: have `SdlInputBridge` call `Mouse::INTERNAL_onClicked(button)` on mouse-button-down;
-     currently never invoked.
-   - Files: `src/CNA/Internal/Input/SdlInputBridge.cpp`, `Mouse.{hpp,cpp}`.
-   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Mouse*'`
+**Next task to pick up — Task 752:** `MouseCursor::Dispose()` / `System::IDisposable` with an
+`isDisposed_` guard (MonoGame's `MouseCursor : IDisposable`); currently only has a destructor.
+- Files: `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`,
+  `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`.
+- Verify: `cmake --build cmake-build-debug --target CNA -j"$(nproc)"`.
 
-Full Phase I4 task list (745–755, including `MouseCursor` CHECKLIST fixes, `FromTexture2D`,
-`Dispose`, and the dedicated `MouseInputTests.cpp` test task 755) is in `plan_input.md`.
+Full Phase I4 task list (745–755, including stock-cursor rename/lazy-init fixes (753), `Handle`
+property / AUDIT.md status decision (754), and the dedicated `MouseInputTests.cpp` test task 755) is
+in `plan_input.md`.
 
 ---
 
@@ -343,14 +370,40 @@ Do not refactor unrelated code. Do not expand scope beyond the task.
 
 Context: on branch feature/input. Phase I1 (TextInputEXT), Phase I2 (Touch & gesture pipeline), and
 Phase I3 (GamePad behavior/FNA fidelity, tasks 725-740) are all complete; 1866/1866 unit tests pass
-on the EasyGL build (cmake-build-debug, correctly wired to cna_input). Mouse (Phase I4) is the next
-focus: SetPosition doesn't warp the cursor, IsRelativeMouseModeEXT is a dead flag, ClickedEXT never
-fires, and MouseCursor has CHECKLIST issues (wrong SPDX, missing NOXNA tags, no FromTexture2D/Dispose).
+on the EasyGL build (cmake-build-debug, correctly wired to cna_input). Mouse behavior (Phase I4 tasks
+745-748) is now fully done: SetPosition warps the real OS cursor via SDL_WarpMouseInWindow with FNA's
+relative-mode guard (745); IsRelativeMouseModeEXT is a real getIsRelativeMouseModeEXTProperty()/
+setIsRelativeMouseModeEXTProperty(bool) pair backed by SDL_Get/SetWindowRelativeMouseMode, with
+relative motion deltas from SDL_EVENT_MOUSE_MOTION's xrel/yrel feeding InputManager and drained into
+GetMouseState()'s X/Y while active (746); the dead INTERNAL_WindowWidth/Height/
+INTERNAL_BackBufferWidth/Height/INTERNAL_MouseWheel fields were removed rather than wired up, since
+CNA already solves window<->logical coordinates more generally via SdlInputBridge's
+to_logical_position()/IGraphicsBackend::TransformWindowToLogical — documented in-source as a known
+limitation that SetPosition's warp target has no inverse transform yet, so it's off by the scale
+factor on a letterboxed/scaled window (747); and SdlInputBridge now calls
+Mouse::INTERNAL_onClicked(event.button.button - 1) on SDL_EVENT_MOUSE_BUTTON_DOWN, firing ClickedEXT
+(748). MouseCursor's CHECKLIST header/NOXNA-tagging pass is also done (750): SPDX MIT->MS-PL,
+#include "CNA/CNAHelper.hpp" added, class and every constructor/method/static-constant NOXNA-tagged.
+Along the way, an unrelated build blocker was fixed: the sibling sharp-runtime checkout committed a
+System::IAsyncResult interface addition (AsyncState/AsyncWaitHandle) that broke this repo's
+StorageDevice.cpp (ContainerResult/SelectorResult didn't implement the two new pure-virtual
+overrides) — fixed by converting their void* asyncState field to std::any and adding a
+mutable System::Threading::EventWaitHandle (see Section 5's "Fixed" row for the pattern, in case a
+future sharp-runtime change breaks this repo's build the same way again). MouseCursor::FromTexture2D
+is also done now (751): ported from MonoGame's SDL backend (no FNA equivalent), validates
+SurfaceFormat::Color/ColorSrgb, reads pixels via Texture2D::GetData(Color*, int), extracts each
+pixel's PackedValue into a raw uint32_t buffer (Color itself is NOT a tightly-packed RGBA8 array —
+it carries a vtable pointer from IPackedVectorT), and builds the cursor via
+SDL_CreateSurfaceFrom + SDL_CreateColorCursor. Remaining gap: MouseCursor still has no Dispose, and
+the stock-cursor/Handle CHECKLIST items.
 
-Next: Task 745 — wire Mouse::SetPosition to SDL_WarpMouseInWindow with FNA's relative-mode guard and
-coordinate scaling (Mouse.cs:107-116). Then Task 746 (IsRelativeMouseModeEXT via
-SDL_Set/GetWindowRelativeMouseMode) and Task 748 (wire ClickedEXT via Mouse::INTERNAL_onClicked)
-follow the same bridge-then-XNA-API pattern used throughout Phase I3.
+Next: Task 752 — MouseCursor::Dispose() / System::IDisposable with an isDisposed_ guard (MonoGame's
+MouseCursor : IDisposable); currently only has a destructor. Then 753 (rename WaitCursor->WaitArrow,
+fix static-init ordering — SDL_CreateSystemCursor runs at static init before SDL_Init, likely
+null/fragile; construct lazily), 754 (Handle property / NOXNA-tag GetSDLCursor, AUDIT.md status
+decision), and the batched test task 755 (MouseInputTests.cpp covering MouseState, Mouse, and
+MouseCursor — including tasks 745/746/748/750/751's untested
+SetPosition/IsRelativeMouseModeEXT/ClickedEXT/MouseCursor/FromTexture2D) follow.
 
 Build/test: cmake --build cmake-build-debug --target CnaTests -j$(nproc)
             ./cmake-build-debug/CnaTests --gtest_filter='*Mouse*'
