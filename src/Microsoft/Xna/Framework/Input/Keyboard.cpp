@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SdlInputBridge.hpp"
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -21,6 +22,6 @@ namespace Microsoft::Xna::Framework::Input
 
     Keys Keyboard::GetKeyFromScancodeEXT(Keys scancode)
     {
-        return scancode;
+        return CNA::Internal::Input::SdlInputBridge::GetKeyFromScancode(scancode);
     }
 }

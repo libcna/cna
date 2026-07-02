@@ -512,6 +512,139 @@ namespace
         default: return std::nullopt;
         }
     }
+
+    /// Maps a US-layout XNA Keys value to the SDL_Scancode of the physical key that produces
+    /// it, mirroring FNA's INTERNAL_xnaMap (SDL3_FNAPlatform.cs:2619-2742). Used by
+    /// GetKeyFromScancode to find the physical key position for a given Keys value before
+    /// asking SDL what character the *current* keyboard layout produces there.
+    std::optional<SDL_Scancode> try_convert_keys_to_sdl_scancode(const Microsoft::Xna::Framework::Input::Keys key)
+    {
+        using Microsoft::Xna::Framework::Input::Keys;
+        switch (key)
+        {
+        case Keys::A: return SDL_SCANCODE_A;
+        case Keys::B: return SDL_SCANCODE_B;
+        case Keys::C: return SDL_SCANCODE_C;
+        case Keys::D: return SDL_SCANCODE_D;
+        case Keys::E: return SDL_SCANCODE_E;
+        case Keys::F: return SDL_SCANCODE_F;
+        case Keys::G: return SDL_SCANCODE_G;
+        case Keys::H: return SDL_SCANCODE_H;
+        case Keys::I: return SDL_SCANCODE_I;
+        case Keys::J: return SDL_SCANCODE_J;
+        case Keys::K: return SDL_SCANCODE_K;
+        case Keys::L: return SDL_SCANCODE_L;
+        case Keys::M: return SDL_SCANCODE_M;
+        case Keys::N: return SDL_SCANCODE_N;
+        case Keys::O: return SDL_SCANCODE_O;
+        case Keys::P: return SDL_SCANCODE_P;
+        case Keys::Q: return SDL_SCANCODE_Q;
+        case Keys::R: return SDL_SCANCODE_R;
+        case Keys::S: return SDL_SCANCODE_S;
+        case Keys::T: return SDL_SCANCODE_T;
+        case Keys::U: return SDL_SCANCODE_U;
+        case Keys::V: return SDL_SCANCODE_V;
+        case Keys::W: return SDL_SCANCODE_W;
+        case Keys::X: return SDL_SCANCODE_X;
+        case Keys::Y: return SDL_SCANCODE_Y;
+        case Keys::Z: return SDL_SCANCODE_Z;
+        case Keys::D0: return SDL_SCANCODE_0;
+        case Keys::D1: return SDL_SCANCODE_1;
+        case Keys::D2: return SDL_SCANCODE_2;
+        case Keys::D3: return SDL_SCANCODE_3;
+        case Keys::D4: return SDL_SCANCODE_4;
+        case Keys::D5: return SDL_SCANCODE_5;
+        case Keys::D6: return SDL_SCANCODE_6;
+        case Keys::D7: return SDL_SCANCODE_7;
+        case Keys::D8: return SDL_SCANCODE_8;
+        case Keys::D9: return SDL_SCANCODE_9;
+        case Keys::NumPad0: return SDL_SCANCODE_KP_0;
+        case Keys::NumPad1: return SDL_SCANCODE_KP_1;
+        case Keys::NumPad2: return SDL_SCANCODE_KP_2;
+        case Keys::NumPad3: return SDL_SCANCODE_KP_3;
+        case Keys::NumPad4: return SDL_SCANCODE_KP_4;
+        case Keys::NumPad5: return SDL_SCANCODE_KP_5;
+        case Keys::NumPad6: return SDL_SCANCODE_KP_6;
+        case Keys::NumPad7: return SDL_SCANCODE_KP_7;
+        case Keys::NumPad8: return SDL_SCANCODE_KP_8;
+        case Keys::NumPad9: return SDL_SCANCODE_KP_9;
+        case Keys::OemClear: return SDL_SCANCODE_KP_CLEAR;
+        case Keys::Decimal: return SDL_SCANCODE_KP_DECIMAL;
+        case Keys::Divide: return SDL_SCANCODE_KP_DIVIDE;
+        case Keys::Multiply: return SDL_SCANCODE_KP_MULTIPLY;
+        case Keys::Subtract: return SDL_SCANCODE_KP_MINUS;
+        case Keys::Add: return SDL_SCANCODE_KP_PLUS;
+        case Keys::F1: return SDL_SCANCODE_F1;
+        case Keys::F2: return SDL_SCANCODE_F2;
+        case Keys::F3: return SDL_SCANCODE_F3;
+        case Keys::F4: return SDL_SCANCODE_F4;
+        case Keys::F5: return SDL_SCANCODE_F5;
+        case Keys::F6: return SDL_SCANCODE_F6;
+        case Keys::F7: return SDL_SCANCODE_F7;
+        case Keys::F8: return SDL_SCANCODE_F8;
+        case Keys::F9: return SDL_SCANCODE_F9;
+        case Keys::F10: return SDL_SCANCODE_F10;
+        case Keys::F11: return SDL_SCANCODE_F11;
+        case Keys::F12: return SDL_SCANCODE_F12;
+        case Keys::F13: return SDL_SCANCODE_F13;
+        case Keys::F14: return SDL_SCANCODE_F14;
+        case Keys::F15: return SDL_SCANCODE_F15;
+        case Keys::F16: return SDL_SCANCODE_F16;
+        case Keys::F17: return SDL_SCANCODE_F17;
+        case Keys::F18: return SDL_SCANCODE_F18;
+        case Keys::F19: return SDL_SCANCODE_F19;
+        case Keys::F20: return SDL_SCANCODE_F20;
+        case Keys::F21: return SDL_SCANCODE_F21;
+        case Keys::F22: return SDL_SCANCODE_F22;
+        case Keys::F23: return SDL_SCANCODE_F23;
+        case Keys::F24: return SDL_SCANCODE_F24;
+        case Keys::Space: return SDL_SCANCODE_SPACE;
+        case Keys::Up: return SDL_SCANCODE_UP;
+        case Keys::Down: return SDL_SCANCODE_DOWN;
+        case Keys::Left: return SDL_SCANCODE_LEFT;
+        case Keys::Right: return SDL_SCANCODE_RIGHT;
+        case Keys::LeftAlt: return SDL_SCANCODE_LALT;
+        case Keys::RightAlt: return SDL_SCANCODE_RALT;
+        case Keys::LeftControl: return SDL_SCANCODE_LCTRL;
+        case Keys::RightControl: return SDL_SCANCODE_RCTRL;
+        case Keys::LeftWindows: return SDL_SCANCODE_LGUI;
+        case Keys::RightWindows: return SDL_SCANCODE_RGUI;
+        case Keys::LeftShift: return SDL_SCANCODE_LSHIFT;
+        case Keys::RightShift: return SDL_SCANCODE_RSHIFT;
+        case Keys::Apps: return SDL_SCANCODE_APPLICATION;
+        case Keys::OemQuestion: return SDL_SCANCODE_SLASH;
+        case Keys::OemPipe: return SDL_SCANCODE_BACKSLASH;
+        case Keys::OemOpenBrackets: return SDL_SCANCODE_LEFTBRACKET;
+        case Keys::OemCloseBrackets: return SDL_SCANCODE_RIGHTBRACKET;
+        case Keys::CapsLock: return SDL_SCANCODE_CAPSLOCK;
+        case Keys::OemComma: return SDL_SCANCODE_COMMA;
+        case Keys::Delete: return SDL_SCANCODE_DELETE;
+        case Keys::End: return SDL_SCANCODE_END;
+        case Keys::Back: return SDL_SCANCODE_BACKSPACE;
+        case Keys::Enter: return SDL_SCANCODE_RETURN;
+        case Keys::Escape: return SDL_SCANCODE_ESCAPE;
+        case Keys::Home: return SDL_SCANCODE_HOME;
+        case Keys::Insert: return SDL_SCANCODE_INSERT;
+        case Keys::OemMinus: return SDL_SCANCODE_MINUS;
+        case Keys::NumLock: return SDL_SCANCODE_NUMLOCKCLEAR;
+        case Keys::PageUp: return SDL_SCANCODE_PAGEUP;
+        case Keys::PageDown: return SDL_SCANCODE_PAGEDOWN;
+        case Keys::Pause: return SDL_SCANCODE_PAUSE;
+        case Keys::OemPeriod: return SDL_SCANCODE_PERIOD;
+        case Keys::OemPlus: return SDL_SCANCODE_EQUALS;
+        case Keys::PrintScreen: return SDL_SCANCODE_PRINTSCREEN;
+        case Keys::OemQuotes: return SDL_SCANCODE_APOSTROPHE;
+        case Keys::Scroll: return SDL_SCANCODE_SCROLLLOCK;
+        case Keys::OemSemicolon: return SDL_SCANCODE_SEMICOLON;
+        case Keys::Sleep: return SDL_SCANCODE_SLEEP;
+        case Keys::Tab: return SDL_SCANCODE_TAB;
+        case Keys::OemTilde: return SDL_SCANCODE_GRAVE;
+        case Keys::VolumeUp: return SDL_SCANCODE_VOLUMEUP;
+        case Keys::VolumeDown: return SDL_SCANCODE_VOLUMEDOWN;
+        case Keys::None: return SDL_SCANCODE_UNKNOWN;
+        default: return std::nullopt;
+        }
+    }
 }
 
 namespace CNA::Internal::Input
@@ -706,6 +839,22 @@ namespace CNA::Internal::Input
         caps.setHasAccelerometerEXTProperty(SDL_GamepadHasSensor(gamepad, SDL_SENSOR_ACCEL));
 
         return caps;
+    }
+
+    Microsoft::Xna::Framework::Input::Keys SdlInputBridge::GetKeyFromScancode(
+        const Microsoft::Xna::Framework::Input::Keys scancode
+    )
+    {
+        using Microsoft::Xna::Framework::Input::Keys;
+
+        const auto sdlScancode = try_convert_keys_to_sdl_scancode(scancode);
+        if (!sdlScancode.has_value())
+        {
+            return Keys::None;
+        }
+
+        const SDL_Keycode sym = SDL_GetKeyFromScancode(*sdlScancode, SDL_KMOD_NONE, true);
+        return try_convert_sdl_key(sym).value_or(Keys::None);
     }
 
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)

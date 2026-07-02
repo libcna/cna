@@ -5,6 +5,7 @@
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
+#include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
@@ -84,6 +85,15 @@ namespace CNA::Internal::Input
          */
         static Microsoft::Xna::Framework::Input::GamePadCapabilities GetCapabilities(
             Microsoft::Xna::Framework::PlayerIndex playerIndex
+        );
+
+        /**
+         * @brief Translates a US-layout Keys value to the Keys value the current keyboard
+         * layout produces at that same physical key position. Returns Keys::None if no
+         * mapping exists in either direction.
+         */
+        static Microsoft::Xna::Framework::Input::Keys GetKeyFromScancode(
+            Microsoft::Xna::Framework::Input::Keys scancode
         );
     };
 }
