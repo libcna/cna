@@ -501,16 +501,30 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   1s stereo @ 44100Hz pořád dát 176400 B, ne 352800 B) ověřen přes `git stash` — bez opravy
   selže přesně na `352800 != 176400`, s opravou projde. Celá sada 2003/2003 testů zelená.
 
-- [ ] **CP-7 — `SoundEffectInstance` drží syrový `const SoundEffect*` na rodiče bez správy
-  životnosti — dangling pointer u běžného řetězení.** `SoundEffect(path).CreateInstance()` (nebo
-  `SoundEffect::FromStream(s)->CreateInstance()` na dereferencovaném dočasném objektu) vytvoří
-  instanci ukazující na již zaniklý `SoundEffect`; následné `Play()` čte
-  `soundEffect_->getNativeAudioHandle()` na uvolněné paměti. Souvisí s T-3G (hodnotová sémantika),
-  ale je to konkrétní bezpečnostní riziko nad rámec obecného textu T-3G.
+- [x] **CP-7 — `SoundEffectInstance` drží syrový `const SoundEffect*` na rodiče bez správy
+  životnosti — dangling pointer u běžného řetězení.** *(hotovo 2026-07-03.)*
+  `SoundEffect(path).CreateInstance()` (nebo `SoundEffect::FromStream(s)->CreateInstance()` na
+  dereferencovaném dočasném objektu) vytvořilo instanci ukazující na již zaniklý `SoundEffect`;
+  následné `Play()` četlo `soundEffect_->getNativeAudioHandle()` na uvolněné paměti. Souvisí
+  s T-3G (hodnotová sémantika), ale je to konkrétní bezpečnostní riziko nad rámec obecného textu
+  T-3G.
   *FNA:* SoundEffect.cs:126,354 (reference semantics, GC drží objekt naživu).
   *CNA:* SoundEffectInstance.hpp:32; SoundEffectInstance.cpp:69-72.
   *Accept:* buď dokumentovaná kontraktová podmínka (owner musí přežít instanci) v Doxygenu
   `CreateInstance()`/ctoru, nebo oprava na sdílené vlastnictví; ASAN test na dangling scénář.
+  *Pozn.:* zvolena oprava na sdílené vlastnictví (ne jen dokumentace). Syrový `const SoundEffect*
+  soundEffect_` nahrazen dvěma členy: `std::shared_ptr<void> soundEffectKeepAlive_` (type-erased
+  kopie `SoundEffect::impl_`, protože `SoundEffect::Impl` je private a definovaná jen v
+  SoundEffect.cpp — ale konverze `shared_ptr<Impl> → shared_ptr<void>` funguje i s neúplným
+  typem) a `void* nativeAudioHandle_` (MIX_Audio*, zachycený v konstruktoru dokud byl
+  `soundEffect` ještě živý). `Play()` už nikdy nedereferencuje `SoundEffect*` — jen čte
+  `nativeAudioHandle_`. Nový test `PlaySucceedsAfterOriginatingSoundEffectTemporaryIsDestroyed`
+  (`SoundEffect(pcm,...).CreateInstance()` — dočasný `SoundEffect` je zničen před `Play()`)
+  ověřen pod skutečným ASan buildem (`cmake-build-asan`, dle NEXT.md receptu, smazán po ověření):
+  **před opravou** ASan nahlásí přesný `stack-use-after-scope` v
+  `SoundEffectInstance::Play()` → `SoundEffect::getNativeAudioHandle()`; **po opravě** celá
+  audio test suite (168 testů) prochází pod ASan+LeakSanitizer beze stop. Celá sada
+  2005/2005 testů zelená (normální build).
 
 - [x] **CP-8 — `SoundEffect` nededí `System::Object` a nemá `GetTypeName()`, na rozdíl od
   sourozeneckých tříd.** *(hotovo 2026-07-03.)* `SoundEffectInstance`, `DynamicSoundEffectInstance`,

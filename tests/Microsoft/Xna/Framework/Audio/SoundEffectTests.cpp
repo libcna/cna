@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/TimeSpan.hpp"
@@ -16,6 +17,7 @@
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
+using Microsoft::Xna::Framework::Audio::SoundState;
 
 namespace
 {
@@ -316,4 +318,26 @@ TEST(SoundEffectTest, GetTypeNameIsDottedXnaName)
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
     EXPECT_EQ(fx->GetTypeName(), "Microsoft.Xna.Framework.Audio.SoundEffect");
+}
+
+// CP-7: a common chaining pattern is SoundEffect(...).CreateInstance() -- the SoundEffect
+// temporary is destroyed at the end of the full expression, before the returned
+// SoundEffectInstance is ever Play()ed. Before the CP-7 fix, Play() dereferenced a raw
+// `const SoundEffect*` pointing at that already-destroyed temporary (heap-use-after-free).
+TEST(SoundEffectTest, PlaySucceedsAfterOriginatingSoundEffectTemporaryIsDestroyed)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    std::vector<unsigned char> pcm(4 * 1024, 0);
+
+    try
+    {
+        SoundEffectInstance inst = SoundEffect(pcm, 44100, AudioChannels::Stereo).CreateInstance();
+        // The temporary SoundEffect above has already been destroyed by this point.
+        inst.Play();
+        EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device";
+    }
 }

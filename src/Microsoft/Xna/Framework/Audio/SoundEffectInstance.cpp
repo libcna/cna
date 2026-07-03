@@ -62,12 +62,16 @@ namespace Microsoft::Xna::Framework::Audio
 #endif
 
     SoundEffectInstance::SoundEffectInstance()
-        : soundEffect_(nullptr)
     {
     }
 
     SoundEffectInstance::SoundEffectInstance(const SoundEffect& soundEffect)
-        : soundEffect_(&soundEffect)
+        // Capture the underlying audio resource (via SoundEffect's private impl_) and the
+        // native handle now, while soundEffect is definitely alive -- Play() must never
+        // dereference the SoundEffect itself, since a common chaining pattern like
+        // SoundEffect(path).CreateInstance() destroys it immediately (CP-7).
+        : soundEffectKeepAlive_(soundEffect.impl_)
+        , nativeAudioHandle_(soundEffect.getNativeAudioHandle())
     {
     }
 
@@ -80,7 +84,8 @@ namespace Microsoft::Xna::Framework::Audio
     }
 
     SoundEffectInstance::SoundEffectInstance(SoundEffectInstance&& other) noexcept
-        : soundEffect_(other.soundEffect_)
+        : soundEffectKeepAlive_(std::move(other.soundEffectKeepAlive_))
+        , nativeAudioHandle_(other.nativeAudioHandle_)
         , track_(other.track_)
         , playing_(other.playing_)
         , hasStarted_(other.hasStarted_)
@@ -91,7 +96,7 @@ namespace Microsoft::Xna::Framework::Audio
         , Pan_(other.Pan_)
         , Pitch_(other.Pitch_)
     {
-        other.soundEffect_ = nullptr;
+        other.nativeAudioHandle_ = nullptr;
         other.track_       = nullptr;
         other.playing_     = false;
         other.hasStarted_  = false;
@@ -106,7 +111,8 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
             DestroyTrackSafe(track_);
 #endif
-            soundEffect_ = other.soundEffect_;
+            soundEffectKeepAlive_ = std::move(other.soundEffectKeepAlive_);
+            nativeAudioHandle_ = other.nativeAudioHandle_;
             track_       = other.track_;
             playing_     = other.playing_;
             hasStarted_  = other.hasStarted_;
@@ -117,7 +123,7 @@ namespace Microsoft::Xna::Framework::Audio
             Pan_         = other.Pan_;
             Pitch_       = other.Pitch_;
 
-            other.soundEffect_ = nullptr;
+            other.nativeAudioHandle_ = nullptr;
             other.track_       = nullptr;
             other.playing_     = false;
             other.hasStarted_  = false;
@@ -171,14 +177,7 @@ namespace Microsoft::Xna::Framework::Audio
             }
         }
 
-        if (!soundEffect_)
-        {
-            State_   = SoundState::Stopped;
-            playing_ = false;
-            return;
-        }
-
-        auto* audio = static_cast<MIX_Audio*>(soundEffect_->getNativeAudioHandle());
+        auto* audio = static_cast<MIX_Audio*>(nativeAudioHandle_);
         if (!audio)
         {
             State_   = SoundState::Stopped;

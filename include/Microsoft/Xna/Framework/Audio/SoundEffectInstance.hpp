@@ -7,6 +7,8 @@
 #include "System/Object.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
+#include <memory>
+
 namespace Microsoft::Xna::Framework::Audio
 {
     class AudioEmitter;
@@ -32,7 +34,12 @@ namespace Microsoft::Xna::Framework::Audio
         SoundState State_   = SoundState::Stopped;
 
     private:
-        const SoundEffect* soundEffect_ = nullptr;
+        // Keeps the sound effect's underlying audio resource alive for the lifetime of this
+        // instance, independent of whether the originating SoundEffect object itself still
+        // exists (e.g. after `SoundEffect(path).CreateInstance()` on a temporary) -- CP-7.
+        // Type-erased because SoundEffect::Impl is private and defined only in SoundEffect.cpp.
+        std::shared_ptr<void> soundEffectKeepAlive_;
+        void* nativeAudioHandle_ = nullptr; // MIX_Audio*, cached while soundEffect was alive
         bool  IsLooped_     = false;
         bool  isDisposed_   = false;
         float Volume_       = 1.0f;
