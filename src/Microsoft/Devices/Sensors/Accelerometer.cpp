@@ -25,6 +25,7 @@ namespace Microsoft::Devices::Sensors
     int Accelerometer::instanceCount_ = 0;
     bool Accelerometer::eventWatchRegistered_ = false;
     std::vector<Accelerometer*> Accelerometer::startedInstances_;
+    std::mutex Accelerometer::mutex_;
 
     bool Accelerometer::EnsureSensorSubsystemInitialized()
     {
@@ -124,7 +125,13 @@ namespace Microsoft::Devices::Sensors
         const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
         const std::uint64_t timestampNs = static_cast<std::uint64_t>(SDL_GetTicksNS());
 
-        for (Accelerometer* accelerometer : startedInstances_)
+        std::vector<Accelerometer*> instancesSnapshot;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            instancesSnapshot = startedInstances_;
+        }
+
+        for (Accelerometer* accelerometer : instancesSnapshot)
         {
             if (accelerometer != nullptr)
             {
@@ -240,46 +247,54 @@ namespace Microsoft::Devices::Sensors
                 "Failed to start accelerometer data acquisition. SDL sensor subsystem initialization failed.");
         }
 
-        if (g_sensor_ == nullptr)
         {
-            g_sensor_ = OpenDefaultAccelerometer();
+            std::lock_guard<std::mutex> lock(mutex_);
+
+            if (g_sensor_ == nullptr)
+            {
+                g_sensor_ = OpenDefaultAccelerometer();
+            }
+
+            if (g_sensor_ == nullptr)
+            {
+                state_ = SensorState::NotSupported;
+                throw AccelerometerFailedException(
+                    "Failed to start accelerometer data acquisition. No default sensor found.");
+            }
+
+            started_ = true;
+            state_ = SensorState::Ready;
+
+            if (std::find(startedInstances_.begin(), startedInstances_.end(), this) == startedInstances_.end())
+            {
+                startedInstances_.push_back(this);
+            }
+
+            RegisterEventWatchIfNeeded();
         }
-
-        if (g_sensor_ == nullptr)
-        {
-            state_ = SensorState::NotSupported;
-            throw AccelerometerFailedException(
-                "Failed to start accelerometer data acquisition. No default sensor found.");
-        }
-
-        started_ = true;
-        state_ = SensorState::Ready;
-
-        if (std::find(startedInstances_.begin(), startedInstances_.end(), this) == startedInstances_.end())
-        {
-            startedInstances_.push_back(this);
-        }
-
-        RegisterEventWatchIfNeeded();
     }
 
     void Accelerometer::Stop()
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Accelerometer");
 
-        if (started_)
         {
-            auto it = std::find(startedInstances_.begin(), startedInstances_.end(), this);
-            if (it != startedInstances_.end())
+            std::lock_guard<std::mutex> lock(mutex_);
+
+            if (started_)
             {
-                startedInstances_.erase(it);
+                auto it = std::find(startedInstances_.begin(), startedInstances_.end(), this);
+                if (it != startedInstances_.end())
+                {
+                    startedInstances_.erase(it);
+                }
             }
+
+            started_ = false;
+            state_ = SensorState::Disabled;
+
+            UnregisterEventWatchIfNeeded();
         }
-
-        started_ = false;
-        state_ = SensorState::Disabled;
-
-        UnregisterEventWatchIfNeeded();
     }
 
     void Accelerometer::Dispose(bool disposing)
@@ -290,6 +305,8 @@ namespace Microsoft::Devices::Sensors
             {
                 Stop();
             }
+
+            std::lock_guard<std::mutex> lock(mutex_);
 
             --instanceCount_;
             if (instanceCount_ < 0)
@@ -418,12 +435,17 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        if (g_sensor_ == nullptr)
+        std::int64_t currentSensorId;
         {
-            return;
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (g_sensor_ == nullptr)
+            {
+                return;
+            }
+            currentSensorId = g_sensorId_;
         }
 
-        if (sensorId != g_sensorId_)
+        if (sensorId != currentSensorId)
         {
             return;
         }

@@ -154,7 +154,7 @@ this is now a documentation-only touch-up, not a code change. (Numbered here so 
 
 ## Phase 2: Thread safety
 
-### Task P3-4 — Guard `Accelerometer`/`Gyroscope`'s shared sensor state against the SDL event-watch callback running off-thread
+### Task P3-4 — Guard `Accelerometer`/`Gyroscope`'s shared sensor state against the SDL event-watch callback running off-thread — ✅ Done (2026-07-03)
 
 **Bug (confirmed, high severity):** `Accelerometer.cpp` and `Gyroscope.cpp` (identical
 duplicated pattern in both) register a `SensorEventWatch` static callback via
@@ -201,6 +201,38 @@ warning, surprising game code that assumes XNA-style single-threaded event deliv
    suites still pass, since correctness here can't be meaningfully unit-tested without
    real concurrent hardware events. Note that explicitly in the resolution instead of
    inventing a synthetic concurrency test that wouldn't actually exercise the real race.
+
+**Resolution (2026-07-03):** Went with the mutex (step 2's fix), not the "document and
+accept" alternative (step 3) — cheap to add, and this is exactly the kind of latent bug
+that's expensive to debug later. Added a `static std::mutex mutex_` class-static member to
+both `Accelerometer`/`Gyroscope` (declared in the `.hpp`, defined in the `.cpp`, matching
+the existing static-member style rather than an anonymous-namespace file-static). Locked
+around: `Start()`'s entire `g_sensor_`/`startedInstances_`/`RegisterEventWatchIfNeeded()`
+block; `Stop()`'s entire `startedInstances_`/`UnregisterEventWatchIfNeeded()` block;
+`Dispose(bool)`'s `instanceCount_`/`startedInstances_`/`g_sensor_`/`g_sensorId_` block
+(acquired **after** calling `Stop()`, not around it — `Stop()` takes its own lock
+internally, and `std::mutex` isn't recursive, so nesting would deadlock);
+`SensorEventWatch()`'s iteration (copies `startedInstances_` into a local
+`std::vector` snapshot under the lock, then iterates and calls
+`ProcessSensorUpdateEvent()` on each **unlocked**, exactly as step 2 specifies, so a
+`CurrentValueChanged`/`ReadingChanged` handler that re-enters `Start()`/`Stop()` can't
+deadlock); and `ProcessSensorUpdateEvent()`'s reads of `g_sensor_`/`g_sensorId_` (snapshot
+into locals under a short-lived lock, then use the locals — this wasn't explicitly named
+in step 2's bullet list but is one of the two variables step 1 says the mutex must guard).
+
+**Known residual gap, judged out of scope for this task:** the per-instance `started_`
+member (not one of the four statics the task named) is still read by
+`ProcessSensorUpdateEvent()` without synchronization, and in the (still narrow) window
+where the event thread has already copied a pointer out of `startedInstances_` but the
+object is concurrently destroyed by `Dispose()` on the app thread, that copied pointer can
+dangle — the mutex closes the *iterator-invalidation*/*shared-static-corruption* class of
+bug this task targeted, not a full ownership-safety guarantee (that would need
+`shared_ptr`/`weak_ptr`-based lifetime tracking, a materially bigger change than this task
+scoped). Not fixed here; flag if it ever becomes a priority.
+
+Verified: `CNA` + `CnaTests` build clean, no new warnings. Full `ctest` — 1970 tests
+(unchanged from Task P3-1, no new tests added per step 4's guidance), 97% passing, same 64
+pre-existing headless `EasyGL_*` failures, zero regressions.
 
 ---
 

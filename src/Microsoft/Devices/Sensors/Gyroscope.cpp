@@ -22,6 +22,7 @@ namespace Microsoft::Devices::Sensors
     int Gyroscope::instanceCount_ = 0;
     bool Gyroscope::eventWatchRegistered_ = false;
     std::vector<Gyroscope*> Gyroscope::startedInstances_;
+    std::mutex Gyroscope::mutex_;
 
     bool Gyroscope::EnsureSensorSubsystemInitialized()
     {
@@ -121,7 +122,13 @@ namespace Microsoft::Devices::Sensors
         const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
         const std::uint64_t timestampNs = static_cast<std::uint64_t>(SDL_GetTicksNS());
 
-        for (Gyroscope* gyroscope : startedInstances_)
+        std::vector<Gyroscope*> instancesSnapshot;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            instancesSnapshot = startedInstances_;
+        }
+
+        for (Gyroscope* gyroscope : instancesSnapshot)
         {
             if (gyroscope != nullptr)
             {
@@ -237,46 +244,54 @@ namespace Microsoft::Devices::Sensors
                 "Failed to start gyroscope data acquisition. SDL sensor subsystem initialization failed.");
         }
 
-        if (g_sensor_ == nullptr)
         {
-            g_sensor_ = OpenDefaultGyroscope();
+            std::lock_guard<std::mutex> lock(mutex_);
+
+            if (g_sensor_ == nullptr)
+            {
+                g_sensor_ = OpenDefaultGyroscope();
+            }
+
+            if (g_sensor_ == nullptr)
+            {
+                state_ = SensorState::NotSupported;
+                throw SensorFailedException(
+                    "Failed to start gyroscope data acquisition. No default sensor found.");
+            }
+
+            started_ = true;
+            state_ = SensorState::Ready;
+
+            if (std::find(startedInstances_.begin(), startedInstances_.end(), this) == startedInstances_.end())
+            {
+                startedInstances_.push_back(this);
+            }
+
+            RegisterEventWatchIfNeeded();
         }
-
-        if (g_sensor_ == nullptr)
-        {
-            state_ = SensorState::NotSupported;
-            throw SensorFailedException(
-                "Failed to start gyroscope data acquisition. No default sensor found.");
-        }
-
-        started_ = true;
-        state_ = SensorState::Ready;
-
-        if (std::find(startedInstances_.begin(), startedInstances_.end(), this) == startedInstances_.end())
-        {
-            startedInstances_.push_back(this);
-        }
-
-        RegisterEventWatchIfNeeded();
     }
 
     void Gyroscope::Stop()
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Gyroscope");
 
-        if (started_)
         {
-            auto it = std::find(startedInstances_.begin(), startedInstances_.end(), this);
-            if (it != startedInstances_.end())
+            std::lock_guard<std::mutex> lock(mutex_);
+
+            if (started_)
             {
-                startedInstances_.erase(it);
+                auto it = std::find(startedInstances_.begin(), startedInstances_.end(), this);
+                if (it != startedInstances_.end())
+                {
+                    startedInstances_.erase(it);
+                }
             }
+
+            started_ = false;
+            state_ = SensorState::Disabled;
+
+            UnregisterEventWatchIfNeeded();
         }
-
-        started_ = false;
-        state_ = SensorState::Disabled;
-
-        UnregisterEventWatchIfNeeded();
     }
 
     void Gyroscope::Dispose(bool disposing)
@@ -287,6 +302,8 @@ namespace Microsoft::Devices::Sensors
             {
                 Stop();
             }
+
+            std::lock_guard<std::mutex> lock(mutex_);
 
             --instanceCount_;
             if (instanceCount_ < 0)
@@ -371,12 +388,17 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        if (g_sensor_ == nullptr)
+        std::int64_t currentSensorId;
         {
-            return;
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (g_sensor_ == nullptr)
+            {
+                return;
+            }
+            currentSensorId = g_sensorId_;
         }
 
-        if (sensorId != g_sensorId_)
+        if (sensorId != currentSensorId)
         {
             return;
         }

@@ -134,32 +134,42 @@ executables weren't built (not a regression).
   1970 tests total now (up from 1964), same 64 pre-existing headless
   failures, no regressions. Full writeup:
   `plan_devices_phase3.md` Task P3-1's "Resolution" section.
+- **Task P3-4 done (2026-07-03):** `Accelerometer`/`Gyroscope`'s shared
+  static sensor state (`g_sensor_`/`g_sensorId_`/`eventWatchRegistered_`/
+  `startedInstances_`) is now guarded by a `static std::mutex`, closing the
+  thread-safety race against the SDL event-watch callback (SDL's own
+  `SDL_AddEventWatch()` doc warns it may run off-thread). `SensorEventWatch()`
+  copies `startedInstances_` under the lock, then iterates/calls
+  `ProcessSensorUpdateEvent()` unlocked (avoids deadlock if a
+  `CurrentValueChanged` handler re-enters `Start()`/`Stop()`). No new tests
+  possible (can't be exercised headless without real concurrent hardware
+  events, per the task's own guidance) — verified via full `ctest`, same
+  1970 tests, no regressions. Known residual gap (judged out of scope):
+  per-instance `started_` still isn't synchronized, so a narrow
+  dangling-pointer window remains if `Dispose()` runs concurrently with an
+  in-flight event callback; full writeup in `plan_devices_phase3.md` Task
+  P3-4's "Resolution" section.
 - Last pushed commit: `44ad496` on `feature/devices`. Task P3-1's changes
-  (`SensorBase.hpp`, the 4 sensor `.cpp` constructors, 4 test files,
-  `AUDIT.md`, `plan_devices_phase3.md`, this file) are **not yet committed**
-  as of this writing.
+  were committed locally as `9b8281f` (not yet pushed). Task P3-4's changes
+  (`Accelerometer.hpp`/`.cpp`, `Gyroscope.hpp`/`.cpp`, `AUDIT.md`,
+  `plan_devices_phase3.md`, this file) are **not yet committed** as of this
+  writing.
 
 ---
 
 ## 4. Current blocker / main problem
 
 No blocker prevents work from continuing — build and tests are green. The
-most important known problems, found by `plan_devices_phase3.md`'s research
-pass:
+last open problem found by `plan_devices_phase3.md`'s research pass:
 
-**Problem 1 (highest severity, not yet fixed):** `Accelerometer`/
-`Gyroscope`'s shared static sensor state (`startedInstances_`, `g_sensor_`,
-`g_sensorId_`, `eventWatchRegistered_` in both `.cpp` files) is read/written
-from `Start()`/`Stop()`/`Dispose()` (application thread) AND from the
-`SensorEventWatch` SDL event-filter callback, with **zero
-synchronization**. SDL's own header doc for `SDL_AddEventWatch()`
-(`third_party/SDL/include/SDL3/SDL_events.h`) explicitly warns the callback
-"may run in a different thread." No failing test exists for this (can't be
-unit-tested headless without real concurrent hardware events) — this is a
-latent bug, not a currently-observed crash. Affected files:
-`src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
-`src/Microsoft/Devices/Sensors/Gyroscope.cpp`. See `plan_devices_phase3.md`
-Task P3-4 for the full writeup and suggested fix (mutex guard).
+**Problem 1 — fixed 2026-07-03 (Task P3-4):** `Accelerometer`/`Gyroscope`'s
+shared static sensor state (`startedInstances_`, `g_sensor_`, `g_sensorId_`,
+`eventWatchRegistered_`) is now guarded by a `static std::mutex` against the
+SDL event-watch callback (SDL's own `SDL_AddEventWatch()` doc warns it "may
+run in a different thread"). See Section 3 for the fix summary and
+`plan_devices_phase3.md` Task P3-4 for the full resolution writeup,
+including a known narrow residual gap (per-instance `started_` still
+unsynchronized) that was judged out of scope for this task.
 
 **Problem 2 — fixed 2026-07-03 (Task P3-1):** `SensorBase<T>::getCurrentValueProperty()`
 now throws `System::InvalidOperationException` when the sensor isn't
@@ -176,17 +186,19 @@ its own `haptic->rumble_id`, separate from this codebase's
 physically vibrate both effects at once. See `plan_devices_phase3.md` Task
 P3-5.
 
-**What has been tried:** Problem 2 is fixed (Task P3-1, 2026-07-03).
-Problems 1 and 3 haven't been attempted yet — they were found by
-research/code review this session, not previously attempted fixes.
+**What has been tried:** Problems 1 and 2 are fixed (Tasks P3-4 and P3-1,
+both 2026-07-03). Problem 3 hasn't been attempted yet — found by
+research/code review this session, not a previously attempted fix.
 
 ---
 
 ## 5. Known bugs and limitations
 
-- **Confirmed bug, not yet fixed:** thread-safety race in
-  `Accelerometer`/`Gyroscope`'s shared sensor state vs. the SDL event-watch
-  callback. See Section 4, Problem 1 / `plan_devices_phase3.md` Task P3-4.
+- **Fixed 2026-07-03:** thread-safety race in `Accelerometer`/`Gyroscope`'s
+  shared sensor state vs. the SDL event-watch callback, via a
+  `static std::mutex`. See Section 4, Problem 1 / Task P3-4 (done). A
+  narrow residual gap (per-instance `started_` still unsynchronized) was
+  judged out of scope — see the task's "Resolution" section for detail.
 - **Fixed 2026-07-03:** `SensorBase<T>.CurrentValue` now throws
   `InvalidOperationException` when unsupported. See Section 4, Problem 2 /
   Task P3-1 (done).
@@ -263,13 +275,18 @@ reintroduce it in any new sensor class.
 `instanceCount_` enforces a ≤10 simultaneous-instance limit; static
 `eventWatchRegistered_` guards the SDL event filter lifecycle; static
 `startedInstances_` is the list the event-watch callback iterates. **This
-static state has a known, unfixed thread-safety gap — see Section 4,
-Problem 1.** `Start()` opens the sensor and registers the SDL event watch;
-`Stop()` unregisters; `Dispose(bool)` stops, decrements the counter, and
-closes the sensor handle when the last instance is disposed.
-`ProcessSensorUpdateEvent()` runs from the SDL event filter on every
-`SDL_EVENT_SENSOR_UPDATE`, with an Android-specific landscape axis remap
-(duplicated per-class, not shared, never build-verified).
+static state is now guarded by a `static std::mutex mutex_`** (fixed
+2026-07-03, Task P3-4 — see Section 4, Problem 1) against the SDL
+event-watch callback potentially running off-thread; a narrow residual gap
+(per-instance `started_` still unsynchronized) remains, documented in the
+task's resolution rather than fixed, since closing it fully needs
+ownership-safety (`shared_ptr`/`weak_ptr`) beyond this task's scope.
+`Start()` opens the sensor and registers the SDL event watch; `Stop()`
+unregisters; `Dispose(bool)` stops, decrements the counter, and closes the
+sensor handle when the last instance is disposed. `ProcessSensorUpdateEvent()`
+runs from the SDL event filter on every `SDL_EVENT_SENSOR_UPDATE`, with an
+Android-specific landscape axis remap (duplicated per-class, not shared,
+never build-verified).
 
 **Stub pattern (`Compass`/`Motion`):** always `SensorState::NotSupported`;
 `Start()` always throws `SensorFailedException`; still expose the
@@ -347,29 +364,16 @@ writing.
 ## 8. Next smallest tasks
 
 Full detail for all of these is in `plan_devices_phase3.md`; this is the
-recommended order. (Task P3-1 was completed 2026-07-03 — see Section 3.)
+recommended order. (Tasks P3-1 and P3-4 were completed 2026-07-03 — see
+Section 3.)
 
-1. **Task P3-4 — Guard `Accelerometer`/`Gyroscope`'s shared sensor state**
-   - Goal: add a `std::mutex` around `startedInstances_`/`g_sensor_`/
-     `g_sensorId_`/`eventWatchRegistered_` in both classes; lock around
-     `Start()`/`Stop()`/`Dispose(bool)` and the `SensorEventWatch`
-     callback's iteration (copy out the instance pointer(s) while locked,
-     call `ProcessSensorUpdateEvent()` unlocked to avoid holding the lock
-     across a callout).
-   - Files: `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
-     `src/Microsoft/Devices/Sensors/Gyroscope.cpp`.
-   - Verify: full `ctest --output-on-failure` (no new test possible — this
-     can't be exercised headless without real concurrent hardware events;
-     confirm existing suites still pass, don't invent a synthetic
-     concurrency test that wouldn't exercise the real race).
-
-2. **Task P3-5 — Make `VibrateController::Start()`/`StartLeftRight()` mutually exclusive**
+1. **Task P3-5 — Make `VibrateController::Start()`/`StartLeftRight()` mutually exclusive**
    - Goal: each `Start*` variant should stop the other's active SDL effect
      before starting its own.
    - Files: `src/Microsoft/Devices/VibrateController.cpp`.
    - Verify: `./cmake-build-debug/CnaTests --gtest_filter="VibrateControllerTests*"`.
 
-3. **Task P3-2 — Decide on the reading-type public-setter visibility gap**
+2. **Task P3-2 — Decide on the reading-type public-setter visibility gap**
    - Goal: this is a decision, not a mechanical fix — read
      `plan_devices_phase3.md` Task P3-2 in full and either (a) document the
      public-setter-vs-`internal set` mismatch as an accepted C++ deviation
@@ -380,7 +384,7 @@ recommended order. (Task P3-1 was completed 2026-07-03 — see Section 3.)
    - Verify: full `ctest --output-on-failure` if option B; no build/test
      needed if option A.
 
-4. **Task P3-6/P3-7/P3-9 — Fill the highest-value test-coverage gaps**
+3. **Task P3-6/P3-7/P3-9 — Fill the highest-value test-coverage gaps**
    - Goal: add `CurrentValueChanged` subscription tests (all 4 sensor
      classes), `GetTypeName()` tests (`Compass`/`Gyroscope`/`Motion` —
      `Accelerometer` already has one), and dispose-then-11th-succeeds tests
@@ -399,9 +403,11 @@ priority — see `plan_devices_phase3.md` directly when ready for those.
 - Do not fix Task P3-2 (reading-type setter visibility) by silently making
   setters private — it will break existing tests; it needs the explicit
   decision described in Task P3-2 above first.
-- Do not invent a synthetic concurrency/thread test for Task P3-4 — it
-  can't meaningfully exercise the real race without actual concurrent
-  hardware events; confirm existing suites still pass instead.
+- Task P3-4 is done (2026-07-03, mutex-based fix). Do not attempt to add a
+  synthetic concurrency/thread test for it retroactively — it can't
+  meaningfully exercise the real race without actual concurrent hardware
+  events; the existing full-suite pass is the only verification this
+  environment can give.
 - Do not refactor or restructure `SensorBase<T>` or `ISensorReading` further
   — stable, used by production code (Task P3-1's `isSupported_` addition is
   already done, 2026-07-03).

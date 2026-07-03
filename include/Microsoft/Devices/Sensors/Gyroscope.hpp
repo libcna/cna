@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
@@ -23,6 +24,17 @@ namespace Microsoft::Devices::Sensors
         static int instanceCount_;
         static bool eventWatchRegistered_;
         static std::vector<Gyroscope*> startedInstances_;
+
+        /**
+         * Guards g_sensor_, g_sensorId_, eventWatchRegistered_, and
+         * startedInstances_ against the SDL event-watch callback
+         * (SensorEventWatch) potentially running on a different thread than
+         * Start()/Stop()/Dispose(). See SDL_AddEventWatch()'s own doc
+         * comment. Not held across ProcessSensorUpdateEvent() itself, to
+         * avoid holding a lock across an event-handler callout that might
+         * re-enter Start()/Stop().
+         */
+        static std::mutex mutex_;
 
         static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
 
