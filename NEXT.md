@@ -11,11 +11,9 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   from the FNA reference to CNA — not just API surface, but FNA-faithful runtime behavior wired
   to SDL3, CHECKLIST-compliant, and covered by tests. The original plan was `plan_input.md`
   (Phases I1–I7, tasks 700–783); all of it is now complete.
-- **Current development phase:** Phases I1–I7 (700–783) are all done. The user was asked what to
-  do next and chose to define new follow-up tasks rather than merge or stop — **Phase I8
-  (post-completion follow-up, tasks 790–791)**: task 790 is done, task 791 remains. This phase is
-  deliberately small: it only covers gaps that were already identified and explicitly deferred
-  during Phases I1–I7 (not newly-discovered problems).
+- **Current development phase: everything currently planned is done again.** Phases I1–I7
+  (700–783) and Phase I8 (790–791, added after the user chose "define new follow-up tasks" over
+  merging/stopping) are all complete. There is no next numbered task — see Section 8.
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -39,14 +37,20 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 - EasyGL build (`cmake-build-debug`): clean, as of the last build in this session, including
   `cna_demo_input` (task 781), `CnaTests` (tasks 782, 790). Task 783 was a manual/integration
   check with no source change — no rebuild needed for it.
-- Vulkan (`cmake-build-vulkan`) / Bgfx (`cmake-build-bgfx`) build dirs are misconfigured — their
-  CMake caches point at the sibling `…/openeggbert/cna` repo, not this checkout (see Section 5).
-  They have not been used or fixed for input work.
+- **Vulkan (`cmake-build-vulkan`) and Bgfx (`cmake-build-bgfx`) now exist and build clean too**
+  (task 791). Correction to earlier notes in this file: these dirs did not previously exist at
+  all in this `cna_input` checkout — the "misconfigured, points at the sibling `cna` repo" build
+  dirs referred to earlier actually live in the sibling repo itself, not here. Both were freshly
+  configured (`-DCNA_GRAPHICS_BACKEND=VULKAN` / `=BGFX`) and confirmed to have the correct
+  `CMAKE_HOME_DIRECTORY` (this checkout).
 
 ### Tests
-- 1912 / 1912 unit tests passing (EasyGL build, `cmake-build-debug/CnaTests`), as of the last run
-  in this session, verified stable under `--gtest_filter='*Gesture*:*Touch*' --gtest_shuffle
-  --gtest_repeat=10` and a full-suite `--gtest_shuffle` pass.
+- **All three configured backends pass**, as of task 791 (this session): EasyGL 1912/1912,
+  Vulkan 1912/1912, Bgfx 1916/1916 (4 extra pre-existing Bgfx-specific tests, confirmed unrelated
+  to input via a `--gtest_list_tests` diff). The same 165 Keyboard/Mouse/GamePad/Touch/Gesture/
+  TextInput tests pass identically on all three. EasyGL's suite verified stable under
+  `--gtest_filter='*Gesture*:*Touch*' --gtest_shuffle --gtest_repeat=10` and a full-suite
+  `--gtest_shuffle` pass.
 
 ### Apps / libraries available
 - `CNA` static library (XNA 4.0 API surface).
@@ -98,21 +102,21 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   and relative-mouse-mode's no-op guard are pixel-exact and round-trip cleanly with no stuck
   state — see Section 5 for the one environment-specific finding (Wayland's global-mouse-query
   restriction) this check turned up.
-- Phase I8 (tasks 790–791) was added to `plan_input.md` after the user chose "define new
-  follow-up tasks" over merging or stopping. Task 790, now done: `TouchPanel::GetCapabilities()`
-  returns `MaximumTouchCount = 0` when disconnected via the `InputManager`-fallback branch,
-  matching FNA's `touchDeviceExists ? 4 : 0` formula — only that one branch needed the fix (the
+- Phase I8, now complete (tasks 790–791), added to `plan_input.md` after the user chose "define
+  new follow-up tasks" over merging or stopping. Task 790: `TouchPanel::GetCapabilities()` returns
+  `MaximumTouchCount = 0` when disconnected via the `InputManager`-fallback branch, matching FNA's
+  `touchDeviceExists ? 4 : 0` formula — only that one branch needed the fix (the
   `touchDeviceExists_` branch was already always connected there). Extended the existing
   `GetCapabilitiesFallsBackToInputManagerTouchStateWhenFlagIsUnset` test rather than adding a new
-  one.
+  one. Task 791: freshly configured `cmake-build-vulkan`/`cmake-build-bgfx` for this checkout
+  (they hadn't existed here before) and confirmed all input work passes on both backends — see
+  Section 2.
 - One unrelated build blocker was hit and fixed: the sibling `sharp-runtime` checkout committed a
   `System::IAsyncResult` interface change that broke this repo's `StorageDevice.cpp`.
 
 ### What does NOT work yet
-Phases I1–I7 (700–783) are all done; Phase I8's task 790 is done too. What remains is task 791
-plus one item deliberately left out of `plan_input.md` entirely (see Section 5 for full status):
-- `cmake-build-vulkan`/`cmake-build-bgfx` still point at the sibling `cna` repo; Vulkan/Bgfx have
-  never been verified against this branch's input work — **task 791**.
+Everything currently planned (Phases I1–I8, tasks 700–791) is done. One item was deliberately
+left out of `plan_input.md` entirely rather than marked incomplete (see Section 5 for status):
 - `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its OS-cursor
   warp target is off by the scale factor on a letterboxed/scaled window (documented in-source in
   `Mouse.cpp`) — a graphics-layer fix, intentionally **not** a `plan_input.md` task; see
@@ -128,6 +132,7 @@ All on `feature/input`, most recent first (`git log`):
 
 | Commit | Change |
 |--------|--------|
+| `79a9064` | docs(Task 791): verify input work on Vulkan and Bgfx backends; closes Phase I8 |
 | `a7f4b9e` | fix(Task 790): `TouchPanel::GetCapabilities()` reports 0 `MaximumTouchCount` when disconnected |
 | `1732de1` (docs) | update `NEXT.md` for newly-added Phase I8 (tasks 790–791) |
 | `8f4a97e` | docs: add Phase I8 follow-up tasks (790–791) to `plan_input.md` |
@@ -177,6 +182,8 @@ All on `feature/input`, most recent first (`git log`):
   logic changed), `AUDIT.md`, `docs/xna-4-api-coverage.md` (task 777 — docs only),
   `examples/demo_input/src/InputDemo.{hpp,cpp}` (task 781),
   `src/.../Input/Touch/TouchPanel.cpp` + `tests/.../Input/TouchInputTests.cpp` (task 790).
+  Task 791 touched no tracked source files — it created `cmake-build-vulkan`/`cmake-build-bgfx`
+  (both gitignored, confirmed via `git status`) and updated `plan_input.md`/`NEXT.md`.
 - **Behavior changed:** `KeyboardState::GetPressedKeys()`/`GetHashCode()` now FNA-faithful;
   `Keyboard::GetKeyFromScancodeEXT` is a real layout-aware translation instead of an identity
   stub, and now respects scancode mode; SDL keycode coverage is materially more complete;
@@ -203,30 +210,21 @@ All on `feature/input`, most recent first (`git log`):
   explicitly not committed, matching its "integration/manual check" framing) and no source
   change — 1912/1912 unaffected. Task 790 added no new test case — extended the existing
   `GetCapabilitiesFallsBackToInputManagerTouchStateWhenFlagIsUnset` test instead, since it
-  already exercised both branches; 1912/1912 still passing.
+  already exercised both branches; 1912/1912 still passing. Task 791 added no new tests either —
+  it's build-directory/backend verification; the same 1912 EasyGL/Vulkan tests and 1916 Bgfx
+  tests (4 pre-existing, input-unrelated) all pass.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**There is no blocker.** The last known state: EasyGL build clean, 1912/1912 tests passing, no
-failing command or failing test identified. Phases I1–I7 (700–783) are done, task 790 is done;
-work can resume directly at task 791 — the last task currently planned.
+**There is no blocker, and there is no next numbered task.** The last known state: all three
+configured backends (EasyGL, Vulkan, Bgfx) build clean; 1912/1912 (EasyGL, Vulkan) and 1916/1916
+(Bgfx) tests pass. Every task in `plan_input.md` (700–791, Phases I1–I8) is done. See Section 8
+for what to actually do next — same three-way decision as before Phase I8 was added.
 
-The one open practical issue is unrelated to correctness — it's also literally task 791 now:
-
-- **Symptom:** `cmake-build-vulkan/CMakeCache.txt` and `cmake-build-bgfx/CMakeCache.txt` have
-  `CMAKE_HOME_DIRECTORY=/rv/data/development/github.com/openeggbert/cna` (the sibling repo), not
-  this `cna_input` checkout.
-- **Failing command:** none directly — building in those dirs would silently compile the wrong
-  source tree rather than fail outright.
-- **Affected:** any Vulkan/Bgfx verification of input work (EasyGL is the only backend verified
-  so far).
-- **Suspected cause:** those build dirs were originally configured against the sibling `cna`
-  repo and never reconfigured for `cna_input`.
-- **What has already been tried:** `cmake-build-debug` (EasyGL) was reconfigured correctly with
-  `rm -rf cmake-build-debug && cmake -S … -B … -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL …`; the
-  same fix has **not** been applied to the Vulkan/Bgfx dirs.
+The Vulkan/Bgfx build-dir issue previously tracked here (task 791) is resolved: both build dirs
+now exist in this checkout with the correct `CMAKE_HOME_DIRECTORY`, and both pass all tests.
 
 ---
 
@@ -234,7 +232,6 @@ The one open practical issue is unrelated to correctness — it's also literally
 
 | Status | Item |
 |--------|------|
-| Confirmed, now task 791 | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
 | Needs verification | `demo_input`'s layout (text panel, and the task-781 multi-pad section) is not visually confirmed in this environment. It does run crash-free against this environment's real X11 display (`DISPLAY=:0`, confirmed this session via a timed run with no error/crash trace, contradicting an earlier note that forcing X11 made SDL exit — re-verified false this session, see the task-783 row below); the remaining gap is purely that no screenshot tool works here (`import -window root` fails silently). |
 | Environment finding, not a CNA bug | `SDL_GetGlobalMouseState` silently returns `(0, 0)` under this environment's ambient Wayland session (`XDG_SESSION_TYPE=wayland`) regardless of real cursor movement — Wayland's compositor security model restricts querying global cursor position outside your own window. Forcing `SDL_VIDEODRIVER=x11` (XWayland) makes it work correctly. Same root cause as the screenshot-tool gap above. Discovered during task 783; not a defect in CNA's `Mouse` implementation. |
 | Intentional deviation | `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its `SDL_WarpMouseInWindow` target is off by the scale factor on a letterboxed/scaled window. Documented in-source in `Mouse.cpp`. Fixing it for real needs a graphics-layer `IGraphicsBackend` addition, out of scope for this branch. |
@@ -255,8 +252,8 @@ The one open practical issue is unrelated to correctness — it's also literally
 | Fixed | `demo_input` only rendered `PlayerIndex::One` and never called `GamePad::SetVibration`. Task 781 added rumble (driven by each connected pad's own trigger values) and a compact multi-pad panel for `PlayerIndex::Two/Three/Four`. |
 | Fixed | The Phase I2 gesture pipeline had no test proving it end-to-end from the real SDL entry point (`GestureDetectorTests.cpp` only drives `GestureDetector`'s direct API). Task 782 added `SdlInputBridgeTouchGestureTests.cpp`. |
 | Verified, no bug found | Task 783: with a real SDL window under `SDL_VIDEODRIVER=x11`, `Mouse::SetPosition`'s OS-level warp is pixel-exact, relative mode genuinely no-ops it at the OS level, and disabling relative mode restores warping immediately with no stuck state. Also confirmed via source reading that `InputManager::GetMouseState()` doesn't go stale across the round-trip. No code change was needed. |
-| Not started | Phase I8 task 791 (Vulkan/Bgfx build-dir reconfiguration + verification), added after all of Phases I1–I7 were confirmed complete and the user chose to define new follow-up tasks. See Section 8. |
 | Fixed | `TouchPanel::GetCapabilities()` passed `MAX_TOUCHES` unconditionally in both branches; FNA returns `0` when disconnected. Fixed in task 790 (only the `InputManager`-fallback branch needed it). |
+| Fixed (was actually just missing, not misconfigured) | `cmake-build-vulkan`/`cmake-build-bgfx` didn't exist in this `cna_input` checkout at all — the "points at the sibling `cna` repo" build dirs earlier notes referred to actually live in that sibling repo, not here. Task 791 configured both fresh; both build clean and pass all tests (Vulkan 1912/1912, Bgfx 1916/1916 — 4 pre-existing Bgfx-specific tests unrelated to input). |
 | Fixed (unrelated to input work, but blocked all builds) | The sibling `sharp-runtime` checkout committed a `System::IAsyncResult` interface addition that broke this repo's `StorageDevice.cpp`. Fixed by implementing the two missing overrides in `ContainerResult`/`SelectorResult`. If a future `sharp-runtime` change breaks the build the same way, check `cd ../sharp-runtime && git status --short && git log -1` before assuming it's a transient concurrent-edit race — if the change is already committed, it needs the same kind of fix here, not a wait-and-retry. |
 
 ---
@@ -336,6 +333,15 @@ cmake --build cmake-build-debug --target cna_demo_input -j"$(nproc)"
 
 # Verify a build dir's source wiring (should print …/cna_input)
 grep CMAKE_HOME_DIRECTORY cmake-build-debug/CMakeCache.txt
+
+# Vulkan and Bgfx builds (configured task 791; already exist, but shown for reconfiguring)
+cmake -S . -B cmake-build-vulkan -G Ninja -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-vulkan --target CnaTests -j"$(nproc)" && ./cmake-build-vulkan/CnaTests
+
+cmake -S . -B cmake-build-bgfx -G Ninja -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-bgfx --target CnaTests -j"$(nproc)" && ./cmake-build-bgfx/CnaTests
+# Bgfx's configure step fetches bgfx.cmake via git (FetchContent) — took ~6.5 min in this
+# environment on first configure; needs network access to github.com.
 ```
 
 There is no known bug to reproduce right now (Section 4). No project-wide lint/format target was
@@ -350,21 +356,21 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ## 8. Next smallest tasks
 
-Phases I1–I7 (700–783) are all done. The user was explicitly asked what to do next (merge, define
-new tasks, or stop) and chose to **define new follow-up tasks** — that's Phase I8 (tasks 790–791).
-Task 790 is done; task 791 is the only remaining task currently planned anywhere.
+**There is no next task anywhere in `plan_input.md`.** Phases I1–I8 (700–791) are all done —
+Phase I8 was the follow-up phase the user asked for after Phases I1–I7 first completed, and it's
+now done too. This is the same decision point as before Phase I8 existed, and it's the user's
+call, not a default to pick for them:
 
-1. **Task 791 — Reconfigure and verify Vulkan/Bgfx build dirs.**
-   - Goal: fix `cmake-build-vulkan`/`cmake-build-bgfx`'s `CMAKE_HOME_DIRECTORY` (currently the
-     sibling `cna` repo, not this checkout — see Section 4), then build `CnaTests` on each backend
-     and confirm the Phase I1–I7 input work compiles and passes there too.
-   - Files: none (build-directory reconfiguration, not source changes) — unless building surfaces
-     real Vulkan/Bgfx-specific input-code issues, which would need their own follow-up.
-   - Verify: `rm -rf cmake-build-vulkan && cmake -S . -B cmake-build-vulkan -G Ninja -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON && cmake --build cmake-build-vulkan --target CnaTests -j"$(nproc)" && ./cmake-build-vulkan/CnaTests` (repeat for `BGFX`/`cmake-build-bgfx`).
-
-After this, Phase I8 (and everything currently planned) is complete again — return to the
-Section 8 decision point from before (merge/PR, define more new tasks, or stop) rather than
-inventing further work unprompted.
+1. **Merge/PR `feature/input` into `master`.** The branch's designated scope is complete, tested
+   on all three configured backends (EasyGL/Vulkan/Bgfx), and documented (`plan_input.md`,
+   `AUDIT.md`, `docs/input-backend.md`, `docs/xna-4-api-coverage.md`). Confirm with the user before
+   merging or pushing to `master` — this is a repo-affecting action.
+2. **Define more new follow-up tasks**, if there's further work wanted. The only known candidate
+   left is graphics-layer, not input-layer, scope (see below) — anything else would be a fresh
+   discovery, not a known deferred gap, so treat it accordingly (verify it's real before adding a
+   task for it).
+3. **Do nothing further and report the branch as complete** if neither of the above applies right
+   now — a valid, honest answer.
 
 **Intentionally not a task here:** `Mouse::SetPosition`'s scale-factor deviation (needs an
 `IGraphicsBackend` inverse-transform addition) was routed to `plan_input.md`'s "Known
@@ -387,14 +393,14 @@ become a task there, not here.
   graphics-layer scope, intentionally routed to `GRAPHICS_TASKS.md`'s track instead (Section 8).
   Don't edit `GRAPHICS_TASKS.md` either unless specifically asked — it's a separate, large,
   actively-maintained plan not owned by this branch's work.
-- Do not invent further new tasks beyond 790–791 unprompted — Phase I8 was scoped deliberately
-  narrow (only already-identified, already-deferred gaps). If more work is wanted, that's a new
-  decision for the user to make, same as the one that produced 790–791.
+- Do not invent new tasks unprompted now that Phases I1–I8 (700–791) are all done — ask the user
+  which of Section 8's options applies, same as when Phase I8 itself was created.
 - Do not merge or push `feature/input` to `master` without confirming with the user first — the
   branch being "done" per `plan_input.md` is not the same as authorization to merge.
 - Do not commit the pre-existing working-tree changes (`D .claude/settings.json`, untracked
   `vendor/wgpu-native/`) — unrelated to input work.
-- Do not reconfigure or commit `cmake-build-*` directories — they are gitignored.
+- Do not commit `cmake-build-*` directories (including the new `cmake-build-vulkan`/
+  `cmake-build-bgfx`) — they are gitignored. Reconfiguring/rebuilding them is fine when asked.
 - Do not attempt to unit-test `GraphicsDevice`-dependent construction in `CnaTests` (Section 6) —
   use a separate integration test executable instead.
 - Do not change the `TextInputEXT` char-based callback signature — a deliberate, documented
@@ -405,13 +411,14 @@ become a task there, not here.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Phases I1-I7 (700-783) are complete, and Phase I8's task 790 is done too —
-pick up task 791 next (Section 8), the only task currently planned anywhere.
+Read NEXT.md first. Phases I1-I8 (700-791) are all complete as of this writing — there is no
+next numbered task to pick up.
 
-Inspect only the files it needs, make one small, verified improvement, run the relevant
-build/test command (see Section 8's "Verify" line), confirm it passes, and update NEXT.md
-(Sections 2, 3, 5, 8, and this resume prompt) before finishing.
+Do not invent new work unprompted. Ask the user (or check for explicit new instructions) which
+of Section 8's options applies: (1) merge/PR feature/input into master, (2) define specific new
+follow-up tasks first, or (3) do nothing further right now.
 
-After 791 is done, do not invent further new tasks unprompted — return to asking the user what's
-next (merge/PR, more new tasks, or stop), same as before Phase I8 was added.
+If the user gives a new task, treat it like any other: inspect only the files it needs, make one
+small, verified improvement, run the relevant build/test command, and update NEXT.md (Sections 2,
+3, 5, 8, and this resume prompt) to reflect the new state before finishing.
 ```
