@@ -616,15 +616,24 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   (pre-fix) kódu přes `git stash` — bez opravy test selže (dokonce hodí "read past end", ne jen
   špatná data), s opravou projde. `dspCodeCount`-based skip nahradil starý délkově-založený skip.
 
-- [ ] **IN-2 — Over-read u non-compact XWB entry s `entryMetaDataSize < 24`.** Kód vždy provede
-  všech 6 `u32()` čtení (24 B) *před* kontrolou `entryMetaDataSize < 24`, teprve pak kurzor přesune
-  zpět. Pro starší (užší) formáty tak `loopStart`/`loopTotal` obsahují bajty z cizí paměti (dat
-  další entry, nebo mimo segment u posledního záznamu — riziko výjimky "read past end" u konce
-  bufferu). FAudio čte přesně `dwEntryMetaDataElementSize` bajtů a zbytek nechává vynulovaný.
+- [x] **IN-2 — Over-read u non-compact XWB entry s `entryMetaDataSize < 24`.** *(hotovo 2026-07-03.)*
+  Kód vždy provede všech 6 `u32()` čtení (24 B) *před* kontrolou `entryMetaDataSize < 24`, teprve
+  pak kurzor přesune zpět. Pro starší (užší) formáty tak `loopStart`/`loopTotal` obsahují bajty
+  z cizí paměti (dat další entry, nebo mimo segment u posledního záznamu — riziko výjimky
+  "read past end" u konce bufferu). FAudio čte přesně `dwEntryMetaDataElementSize` bajtů a zbytek
+  nechává vynulovaný.
   *Soubor:* src/CNA/Internal/Audio/XactParser.cpp:458-476.
   *Accept:* číst pole podmíněně/omezeně na `entryMetaDataSize`, ne natvrdo všech 24 B; test s
   non-compact `.xwb` fixture kde `entryMetaDataSize < 24` (dnešní testy pokrývají jen compact
   formát).
+  *Pozn.:* každé pole (`flagsAndDuration`/`fmt`/`playOffset`/`playLength`/`loopStart`/`loopTotal`)
+  se teď čte podmíněně podle prahu (`>=4`, `>=8`, ... `>=24`), chybějící pole zůstávají 0 (shoda
+  s FAudio zero-init + partial read). Kurzor se posouvá přesně o `entryMetaDataSize` (`ctx.skip`),
+  ne pevně o 24 B — pokryje i teoretický `entryMetaDataSize > 24` případ. Nový test
+  `XactParserTest.NonCompactWaveBankWithNarrowEntryMetaDataDoesNotReadForeignBytes` (fixture s
+  `entryMetaDataSize=12`, poslední entry končí přesně na konci souboru) ověřen na PŮVODNÍM
+  (pre-fix) kódu přes `git stash` — bez opravy test selže přesně s "read past end", s opravou
+  projde. Celá sada 1982/1982 testů zelená.
 
 - [ ] **IN-3 — Integer underflow v compact-XWB `dataLength` může obejít bounds-check ve
   `WaveBank.cpp`.** Výpočet `rawOffsetUnits[i+1]*alignment - offset - deviations[i]` je `uint32_t`

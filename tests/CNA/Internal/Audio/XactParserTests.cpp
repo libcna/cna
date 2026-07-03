@@ -192,6 +192,63 @@ namespace
         return data;
     }
 
+    // Minimal non-compact .xwb with entryMetaDataSize == 12 (only dwFlagsAndDuration/Format/
+    // PlayRegion.dwOffset present; dwLength/LoopRegion absent). The entry metadata segment ends
+    // exactly at the file's end, so a parser that unconditionally reads all 24 bytes of
+    // FACTWaveBankEntry before checking entryMetaDataSize would either read the following
+    // entry's bytes as its own loop fields, or overrun the buffer entirely for the last entry
+    // (regression fixture for IN-2).
+    std::vector<uint8_t> BuildNonCompactXwbWithNarrowEntryMetaData()
+    {
+        constexpr uint32_t headerSize        = 48;  // magic + version + 5 * {offset,length}
+        constexpr uint32_t bankDataSize      = 96;  // flags+count+name[64]+metaSize+nameSize+align+fmt+buildTime
+        constexpr uint32_t entryCount        = 2;
+        constexpr uint32_t entryMetaDataSize = 12;  // flagsAndDuration(4) + fmt(4) + playOffset(4)
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, 0 };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0u); // wbFlags: not compact, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "IN-2", 64); // bank name
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, 4); // alignment (unused, non-compact)
+        AppendU32(data, 0); // compactFormat (unused, non-compact)
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        // Entry 0: flagsAndDuration=0x11111111, fmt=0 (PCM/mono/0Hz/8-bit), playOffset=100
+        AppendU32(data, 0x11111111u);
+        AppendU32(data, 0u);
+        AppendU32(data, 100u);
+
+        // Entry 1 (last, ends exactly at file end): flagsAndDuration=0x22222222, fmt=0, playOffset=200
+        AppendU32(data, 0x22222222u);
+        AppendU32(data, 0u);
+        AppendU32(data, 200u);
+
+        return data;
+    }
+
     // Builds one PITCH-family track event using the "equation" (non-ramp) form — a stand-in
     // for any non-PlayWave event (PITCH/VOLUME/MARKER) the track-event walker must skip over.
     std::vector<uint8_t> BuildPitchEventBytes()
@@ -394,6 +451,23 @@ TEST(XactParserTest, CompactWaveBankComputesLengthsFromConsecutiveOffsets)
     const auto& first = wb.entries[0];
     const uint32_t bytesPerSample = static_cast<uint32_t>(first.bitsPerSample / 8) * first.channels;
     EXPECT_EQ(first.dataLength / bytesPerSample, 5u);
+}
+
+TEST(XactParserTest, NonCompactWaveBankWithNarrowEntryMetaDataDoesNotReadForeignBytes)
+{
+    const XwbData wb = ParseXwb(BuildNonCompactXwbWithNarrowEntryMetaData());
+
+    ASSERT_EQ(wb.entries.size(), 2u);
+
+    // dataLength must come from the "use entire wave data" fallback (entryMetaDataSize < 24),
+    // not from bytes belonging to the following entry.
+    EXPECT_EQ(wb.entries[0].dataLength, 0u);
+    EXPECT_EQ(wb.entries[0].loopStartSample, 0u);
+    EXPECT_EQ(wb.entries[0].loopTotalSamples, 0u);
+
+    EXPECT_EQ(wb.entries[1].dataLength, 0u);
+    EXPECT_EQ(wb.entries[1].loopStartSample, 0u);
+    EXPECT_EQ(wb.entries[1].loopTotalSamples, 0u);
 }
 
 TEST(XactParserTest, ComplexTrackSkipsNonPlayEventToFindPlayWave)

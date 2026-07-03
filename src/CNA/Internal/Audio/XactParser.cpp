@@ -454,23 +454,36 @@ namespace CNA::Internal::Audio
         }
         else
         {
-            // Normal format: FACTWaveBankEntry (up to 24 bytes)
+            // Normal format: FACTWaveBankEntry (up to 24 bytes: dwFlagsAndDuration,
+            // Format, PlayRegion{dwOffset,dwLength}, LoopRegion{dwStartSample,dwTotalSamples}).
+            // Older XWB versions may use a narrower entryMetaDataSize; fields at or beyond
+            // that boundary belong to the next entry (or lie outside the segment for the
+            // last entry) and must be treated as absent (zero), matching FAudio's
+            // zero-init-then-partial-read of FACTWaveBankEntry.
             for (uint32_t i = 0; i < entryCount; ++i)
             {
                 const uint8_t* entryPtr = ctx.cur;
 
-                uint32_t flagsAndDuration = ctx.u32();
-                uint32_t fmt              = ctx.u32();
-                uint32_t playOffset       = ctx.u32();
-                uint32_t playLength       = ctx.u32();
-                uint32_t loopStart        = ctx.u32();
-                uint32_t loopTotal        = ctx.u32();
+                uint32_t flagsAndDuration = 0;
+                uint32_t fmt              = 0;
+                uint32_t playOffset       = 0;
+                uint32_t playLength       = 0;
+                uint32_t loopStart        = 0;
+                uint32_t loopTotal        = 0;
 
-                // entryMetaDataSize may be < 24 in old XWB versions
+                if (entryMetaDataSize >= 4)  flagsAndDuration = ctx.u32();
+                if (entryMetaDataSize >= 8)  fmt              = ctx.u32();
+                if (entryMetaDataSize >= 12) playOffset       = ctx.u32();
+                if (entryMetaDataSize >= 16) playLength       = ctx.u32();
+                if (entryMetaDataSize >= 20) loopStart        = ctx.u32();
+                if (entryMetaDataSize >= 24) loopTotal        = ctx.u32();
+
+                // Advance to the next entry's true start -- covers both narrower
+                // (<24) and wider (>24, vendor-extended) element sizes.
+                ctx.skip(entryMetaDataSize - static_cast<uint32_t>(ctx.cur - entryPtr));
+
                 if (entryMetaDataSize < 24)
                 {
-                    // Rewind to entry start + entryMetaDataSize
-                    ctx.cur = entryPtr + entryMetaDataSize;
                     playLength = segLength[4]; // use entire wave data
                 }
 
