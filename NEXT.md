@@ -14,7 +14,7 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 - **Current development phase:** Phases I1–I5 are complete (TextInputEXT; Touch & gesture
   pipeline; GamePad behavior/FNA fidelity; Mouse behavior and MouseCursor; Keyboard fidelity and
   SDL key mapping). **Phase I6 (CHECKLIST / SPDX / NOXNA compliance and docs) is in progress** —
-  tasks 775–776 of 775–778 are done.
+  tasks 775–777 of 775–778 are done; only task 778 (new `docs/input-backend.md`) remains.
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -35,8 +35,8 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 ## 2. Current status
 
 ### Build
-- EasyGL build (`cmake-build-debug`): clean, as of the last build in this session (includes
-  Task 776).
+- EasyGL build (`cmake-build-debug`): clean, as of the last build in this session (task 777 was
+  docs-only, no rebuild needed; last actual rebuild was for task 776).
 - Vulkan (`cmake-build-vulkan`) / Bgfx (`cmake-build-bgfx`) build dirs are misconfigured — their
   CMake caches point at the sibling `…/openeggbert/cna` repo, not this checkout (see Section 5).
   They have not been used or fixed for input work.
@@ -67,14 +67,18 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   (`enum class Keys : int`), matching FNA's declaration intent with no behavior change;
   `KeyboardInputTests.cpp` expanded from 3 to 21 tests (18 new), covering everything the phase
   touched.
-- Phase I6 so far (tasks 775–776): added the missing `// SPDX-License-Identifier: MS-PL` header
+- Phase I6 so far (tasks 775–777): added the missing `// SPDX-License-Identifier: MS-PL` header
   to `SdlInputBridge.{hpp,cpp}` and `InputManager.{hpp,cpp}`, the only four files under
   `CNA/Internal/Input/` that lacked it; swept all Input headers and tagged 7 more non-XNA
   members with `NOXNA` (`TouchLocation()`/`TouchCollection()` default ctors,
   `TouchPanelCapabilities`'s two ctors, and `TouchPanel`'s
   `EnqueueGesture`/`INTERNAL_onTouchEvent`/`SetFinger`/`Update`) — all confirmed against FNA
   source; also confirmed no other `ToString`/`Equals`/`GetHashCode`/equality-operator override
-  is incorrectly `NOXNA`-tagged (the mistake task 766 found and fixed on `KeyboardState`).
+  is incorrectly `NOXNA`-tagged (the mistake task 766 found and fixed on `KeyboardState`);
+  updated `AUDIT.md`'s `Input`/`Input::Touch` tables with a `Runtime` column distinguishing
+  API-surface completeness from actual FNA-faithful behavior, and updated the Input/Touch
+  portions of `docs/xna-4-api-coverage.md` (Touch was still described as an unwired 0%-functional
+  stub there — corrected to reflect Phase I2's real gesture pipeline).
 - One unrelated build blocker was hit and fixed: the sibling `sharp-runtime` checkout committed a
   `System::IAsyncResult` interface change that broke this repo's `StorageDevice.cpp`.
 
@@ -87,9 +91,8 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   environment (no Wayland screenshot tool available here).
 - `TouchPanel::GetCapabilities()` passes `MAX_TOUCHES` unconditionally even when disconnected
   (FNA returns `0` when disconnected) — minor, not yet scheduled as its own task.
-- Phase I6 tasks 777–778 (`AUDIT.md` update, new `docs/input-backend.md`) and Phase I7
-  (demo/integration coverage) have not started — see `plan_input.md` for the full task lists
-  (777–778, 780–783).
+- Phase I6 task 778 (new `docs/input-backend.md`) and Phase I7 (demo/integration coverage) have
+  not started — see `plan_input.md` for the full task lists (778, 780–783).
 
 ---
 
@@ -99,6 +102,8 @@ All on `feature/input`, most recent first (`git log`):
 
 | Commit | Change |
 |--------|--------|
+| `20e0d6e` | docs(Task 777): update AUDIT.md and xna-4-api-coverage.md for Input/Touch |
+| `edefc1a` (docs) | mark Task 776 complete in `plan_input.md`; update `NEXT.md` for Task 777 |
 | `9c0deb3` | docs(Task 776): tag remaining non-XNA Touch members with NOXNA |
 | `d4afc62` (docs) | mark Task 775 complete in `plan_input.md`; update `NEXT.md` for Task 776 |
 | `09ff0ba` | docs(Task 775): add SPDX-License-Identifier to internal input backend files |
@@ -131,7 +136,7 @@ All on `feature/input`, most recent first (`git log`):
   (`SdlInputBridge.{hpp,cpp}`/`InputManager.{hpp,cpp}` this round only gained an SPDX header
   line — no logic changed.) Also `TouchLocation.hpp`, `TouchCollection.hpp`,
   `TouchPanelCapabilities.hpp`, `TouchPanel.hpp` (task 776 — Doxygen/`NOXNA` markers only, no
-  logic changed).
+  logic changed), `AUDIT.md`, `docs/xna-4-api-coverage.md` (task 777 — docs only).
 - **Behavior changed:** `KeyboardState::GetPressedKeys()`/`GetHashCode()` now FNA-faithful;
   `Keyboard::GetKeyFromScancodeEXT` is a real layout-aware translation instead of an identity
   stub, and now respects scancode mode; SDL keycode coverage is materially more complete;
@@ -145,8 +150,9 @@ All on `feature/input`, most recent first (`git log`):
   task 768 — expanded from 3 to 21). Phase I5's earlier tasks (760–767) were verified during
   development with ad-hoc standalone harnesses/manual checks that were **not committed**; task
   768 is where that coverage became real, committed tests, matching the batching pattern used
-  for tasks 740 and 755. Tasks 775–776 (Phase I6) added no tests — both are
-  comment/marker-only fixes with no behavior change (1910/1910 still passing confirms this).
+  for tasks 740 and 755. Tasks 775–777 (Phase I6) added no tests — 775/776 are
+  comment/marker-only fixes with no behavior change (1910/1910 still passing confirms this), and
+  777 is a pure documentation update with no source change at all.
 
 ---
 
@@ -154,7 +160,7 @@ All on `feature/input`, most recent first (`git log`):
 
 **There is no blocker.** The last known state: EasyGL build clean, 1910/1910 tests passing, no
 failing command or failing test identified. Phase I5 is complete; work can resume directly at
-Phase I6 task 777.
+Phase I6 task 778 — the last remaining task in Phase I6.
 
 The one open practical issue is unrelated to correctness and does not block Phase I6 work:
 
@@ -178,7 +184,7 @@ The one open practical issue is unrelated to correctness and does not block Phas
 | Status | Item |
 |--------|------|
 | Confirmed | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
-| Not started | Phase I6 tasks 777–778 (`AUDIT.md` update, new `docs/input-backend.md`) and Phase I7 (demo/integration coverage; tasks 780–783, some already done — see `plan_input.md`) haven't been picked up yet. |
+| Not started | Phase I6 task 778 (new `docs/input-backend.md`) and Phase I7 (demo/integration coverage; tasks 780–783, some already done — see `plan_input.md`) haven't been picked up yet. |
 | Needs verification | `demo_input` text panel not visually confirmed on a real display in this environment (builds and runs crash-free, but no Wayland screenshot tool available here and forcing X11 makes SDL exit). |
 | Intentional deviation | `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its `SDL_WarpMouseInWindow` target is off by the scale factor on a letterboxed/scaled window. Documented in-source in `Mouse.cpp`. Fixing it for real needs a graphics-layer `IGraphicsBackend` addition, out of scope for this branch. |
 | Intentional deviation | `InputManager::GetMouseState()` reports relative-mode `X`/`Y` from a float delta accumulator fed by `SDL_EVENT_MOUSE_MOTION`'s `xrel`/`yrel` (drained to `0` on each read), rather than FNA's `SDL_GetRelativeMouseState` poll — the event-driven equivalent. Documented in-source in `InputManager.cpp`. |
@@ -194,6 +200,7 @@ The one open practical issue is unrelated to correctness and does not block Phas
 | Fixed | `KeyboardInputTests.cpp` had only 3 tests, none covering tasks 761–767's changes. Task 768 expanded it to 21 (18 new), closing out Phase I5's test-coverage debt. |
 | Fixed | `SdlInputBridge.{hpp,cpp}`/`InputManager.{hpp,cpp}` were missing the `// SPDX-License-Identifier: MS-PL` header used everywhere else in the codebase. Fixed in task 775. |
 | Fixed | 7 non-XNA members across `TouchLocation`/`TouchCollection`/`TouchPanelCapabilities`/`TouchPanel` were missing the `NOXNA` marker (default ctors with no FNA counterpart, and `TouchPanel` methods that are `internal` in FNA but public in CNA). Fixed in task 776. |
+| Fixed (docs) | `AUDIT.md`'s Input/Touch tables didn't distinguish API-surface completeness from runtime behavior; `docs/xna-4-api-coverage.md` still described `Input::Touch` as an unwired, 0%-functional stub even though Phase I2 made it real. Fixed in task 777. |
 | Fixed (unrelated to input work, but blocked all builds) | The sibling `sharp-runtime` checkout committed a `System::IAsyncResult` interface addition that broke this repo's `StorageDevice.cpp`. Fixed by implementing the two missing overrides in `ContainerResult`/`SelectorResult`. If a future `sharp-runtime` change breaks the build the same way, check `cd ../sharp-runtime && git status --short && git log -1` before assuming it's a transient concurrent-edit race — if the change is already committed, it needs the same kind of fix here, not a wait-and-retry. |
 
 ---
@@ -283,17 +290,10 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ## 8. Next smallest tasks
 
-Phase I6 (CHECKLIST / SPDX / NOXNA compliance and docs) is in progress — tasks 777–778 remain.
-Full detail for completed tasks 775–776 is in `plan_input.md`.
+Phase I6 (CHECKLIST / SPDX / NOXNA compliance and docs) — task 778 is the last remaining task in
+the phase. Full detail for completed tasks 775–777 is in `plan_input.md`.
 
-1. **Task 777 — Update `AUDIT.md` Input/Touch sections.**
-   - Goal: distinguish **API surface** (complete) from **runtime behavior** (partial/complete
-     after this plan's phases), and reflect the gaps closed by Phases I1–I5. Update
-     `docs/xna-4-api-coverage.md` if present.
-   - Files: `AUDIT.md`, `docs/xna-4-api-coverage.md` (if it exists — check first).
-   - Verify: no build step; review for accuracy against the current `plan_input.md` state.
-
-2. **Task 778 — New `docs/input-backend.md`.**
+1. **Task 778 — New `docs/input-backend.md`.**
    - Goal: document `SdlInputBridge`/`InputManager` architecture, an SDL3-event→XNA-state mapping
      table, the event-driven-vs-FNA-polling deviation (Section 6 of this file has a summary to
      draw from), and per-device fidelity notes (the "Intentional deviation" rows in Section 5).
@@ -329,7 +329,7 @@ integration coverage — tasks 780–783; task 780 is already done).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task (Section 8, Task 777).
+Read NEXT.md first. Inspect only the files needed for the first task (Section 8, Task 778).
 Do not refactor unrelated code. Make one small, verified improvement.
 
 Then run the relevant build/test command for that task (see Section 8's "Verify" line, and/or
