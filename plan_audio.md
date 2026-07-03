@@ -544,10 +544,16 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* test na statické instanci (`Stop(false)` nechá doznít smyčku) a na dynamické
   (`Stop(false)` hází po opravě CP-5).
 
-- [ ] **CP-14 — Chybí regresní test na opakované `Play()` během `State==Playing`.** Přímo by
-  odhalil CP-1; dnešní test volá `Play()` jen jednou.
+- [x] **CP-14 — Chybí regresní test na opakované `Play()` během `State==Playing`.** *(hotovo
+  2026-07-03 — vyřešeno jako vedlejší efekt CP-1.)* Přímo by odhalil CP-1; dnešní test volal
+  `Play()` jen jednou.
   *CNA:* tests/…/SoundEffectInstanceTests.cpp:122-130.
   *Accept:* test zavolá `Play()` dvakrát za sebou a ověří, že stav zůstává `Playing` bez restartu.
+  *Pozn.:* CP-1's fix (2026-07-02) už přidal přesně tento test —
+  `SoundEffectInstanceTest.RepeatedPlayWhileAlreadyPlayingDoesNotRestartTrack` volá `Play()`
+  dvakrát, ověřuje `State==Playing` a navíc (silněji než accept vyžaduje) přes
+  `MIX_GetTrackPlaybackPosition`, že se přehrávání nerestartovalo od začátku. Žádná nová práce
+  nebyla potřeba, jen dodatečné zaškrtnutí položky v backlogu.
 
 #### 7.2 XACT (AudioEngine, SoundBank, WaveBank, Cue, AudioCategory, RendererDetail)
 
