@@ -807,14 +807,26 @@ namespace CNA::Internal::Audio
                                 auto sit = soundCodeMap.find(code);
                                 entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : 0;
                             }
-                            else // INTERACTIVE (type==2): skip
+                            else if (var.type == 3) // INTERACTIVE
                             {
                                 entry.isSoundEntry  = true;
                                 uint32_t code       = vc.u32();
+                                // var_min/var_max not yet retained in XsbVariEntry -- Cue::Play
+                                // falls back to a uniform pick for this type (plan_audio.md XA-3).
                                 vc.f32(); vc.f32(); // var_min, var_max
                                 vc.u32(); // linger
                                 auto sit = soundCodeMap.find(code);
                                 entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : 0;
+                            }
+                            else
+                            {
+                                // type 2 (CLIP) and any other reserved value: FAudio itself has
+                                // no known byte layout for these (FACT_internal.c's variation-
+                                // table switch only handles 0/1/3/4 and asserts on default).
+                                // Guessing a layout here would silently misalign the cursor for
+                                // every subsequent variation table/cue in the file.
+                                throw std::runtime_error(
+                                    "XSB: unsupported variation table type " + std::to_string(var.type));
                             }
                             var.entries.push_back(entry);
                         }

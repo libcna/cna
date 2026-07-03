@@ -537,6 +537,102 @@ namespace
 
         return data;
     }
+
+    // Minimal .xsb with one simple sound and one complex cue referencing a variation table of
+    // the given `type`. For type==3 (INTERACTIVE) the table gets one valid 16-byte entry
+    // (soundCode + var_min + var_max + linger); every other type (e.g. 2 == CLIP) gets an
+    // entryCount of 1 with no entry bytes at all, since the parser must reject an unknown type
+    // before attempting to read any type-specific fields. Regression fixture for IN-4.
+    std::vector<uint8_t> BuildXsbWithVariationOfType(uint8_t type)
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize; // 138
+        constexpr uint32_t soundSize    = 12; // simple sound: flags+cat+vol+pitch+prio+len+waveIdx+wbIdx
+
+        const uint32_t soundOffset        = baseOffset;             // 138
+        const uint32_t sound0Code         = soundOffset;             // 138
+        const uint32_t variationOffset    = soundOffset + soundSize; // 150
+        const uint32_t entrySize          = (type == 3) ? 16u : 0u;  // only type 3 needs valid bytes here
+        const uint32_t tableSize          = 4 + 2 + 2 + entrySize;
+        const uint32_t cueComplexOffset   = variationOffset + tableSize;
+        const uint32_t cueNameIndexOffset = cueComplexOffset + 15;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName         = "VariType";
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 1); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 0);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, static_cast<int32_t>(cueComplexOffset));
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, static_cast<int32_t>(variationOffset));
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "VariTypeTestBank", bankNameSize);
+
+        // Sound 0: simple, categoryIndex=0.
+        AppendU8(data, 0);   // flags
+        AppendU16(data, 0);  // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte (unused by this test)
+        AppendU16(data, 0);  // pitchCents
+        AppendU8(data, 0);   // priority
+        AppendU16(data, 0);  // soundLength (skipped)
+        AppendU16(data, 0);  // waveIdx
+        AppendU8(data, 0);   // wbIdx
+
+        // Variation table.
+        const uint32_t entryCountAndFlags = 1u | (static_cast<uint32_t>(type) << 19); // entryCount=1
+        AppendU32(data, entryCountAndFlags);
+        AppendU16(data, 0);   // unknown
+        AppendU16(data, static_cast<uint16_t>(-1)); // variable
+
+        if (type == 3) // INTERACTIVE: soundCode + var_min + var_max + linger
+        {
+            AppendU32(data, sound0Code);
+            AppendF32(data, 0.0f);
+            AppendF32(data, 1.0f);
+            AppendU32(data, 0);
+        }
+        // else: no entry bytes -- the parser must throw before reading any type-specific fields.
+
+        // Complex cue: not single-sound, sbCode points at the variation table.
+        AppendU8(data, 0);   // flags (CUE_FLAG_SINGLE_SOUND clear)
+        AppendU32(data, variationOffset); // sbCode
+        AppendU32(data, 0); // transitionOffset
+        AppendU8(data, 0xFF); // instanceLimit
+        AppendU16(data, 0); // fadeInMS
+        AppendU16(data, 0); // fadeOutMS
+        AppendU8(data, 0);  // maxInstanceBehavior
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0); // unknown
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
 }
 
 TEST(XactParserTest, CompactWaveBankComputesLengthsFromConsecutiveOffsets)
@@ -626,6 +722,22 @@ TEST(XactParserTest, DspBlockIsSkippedByCodeCountNotByLengthField)
     ASSERT_EQ(xsb.sounds[1].waves.size(), 1u);
     EXPECT_EQ(xsb.sounds[1].waves[0].wavebankIndex, 5);
     EXPECT_EQ(xsb.sounds[1].waves[0].waveIndex, 99u);
+}
+
+TEST(XactParserTest, VariationTypeInteractiveParsesSixteenByteEntry)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithVariationOfType(3));
+
+    ASSERT_EQ(xsb.variations.size(), 1u);
+    EXPECT_EQ(xsb.variations[0].type, 3);
+    ASSERT_EQ(xsb.variations[0].entries.size(), 1u);
+    EXPECT_TRUE(xsb.variations[0].entries[0].isSoundEntry);
+    EXPECT_EQ(xsb.variations[0].entries[0].soundIndex, 0u);
+}
+
+TEST(XactParserTest, VariationTypeClipThrows)
+{
+    EXPECT_THROW(ParseXsb(BuildXsbWithVariationOfType(2)), std::runtime_error);
 }
 
 TEST(XactParserTest, XgsParsesCategoryAndVariable)

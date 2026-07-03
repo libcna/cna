@@ -677,13 +677,23 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `git stash` — bez opravy obě selžou (`throws nothing` — dřívější kód tiše podtekl místo
   vyhození výjimky), s opravou projdou. Celá sada 1984/1984 testů zelená.
 
-- [ ] **IN-4 — Nesprávný komentář a chybějící case pro variation-table typ 2.** Komentář
-  `// INTERACTIVE (type==2)` je zavádějící: podle FAudia je `INTERACTIVE` typ **3**, typ **2** je
-  `CLIP` (FAudio ho sám nepodporuje). Catch-all `else` větev v CNA tak potichu naparsuje i typ
-  2/5/6/7 stejným 16bajtovým layoutem jako typ 3.
+- [x] **IN-4 — Nesprávný komentář a chybějící case pro variation-table typ 2.** *(hotovo
+  2026-07-03.)* Komentář `// INTERACTIVE (type==2)` byl zavádějící: podle FAudia je `INTERACTIVE`
+  typ **3**, typ **2** je `CLIP` (FAudio ho sám nepodporuje). Catch-all `else` větev v CNA tak
+  potichu naparsovala i typ 2/5/6/7 stejným 16bajtovým layoutem jako typ 3.
   *Soubor:* include/CNA/Internal/Audio/XactTypes.hpp:101, src/CNA/Internal/Audio/XactParser.cpp:746,775-783.
   *Accept:* opravit komentář (INTERACTIVE=3, CLIP=2 nepodporováno), přidat explicitní kontrolu na
   type 0/1/3/4 a u neznámého typu throw/log místo tichého domýšlení layoutu.
+  *Pozn.:* `XactTypes.hpp:101` komentář opraven (0=wave, 1=sound, 2=clip nepodporováno, 3=
+  interactive, 4=compact_wave). `XactParser.cpp` má teď explicitní `else if (var.type == 3)`
+  větev pro INTERACTIVE (16 B: code+var_min+var_max+linger) a samostatnou `else` větev pro
+  cokoliv jiného (2/5/6/7), která vyhodí `std::runtime_error` — shoda s FAudiem, jehož vlastní
+  switch (`FACT_internal.c:2798-2845`) taky pokrývá jen 0/1/3/4 a na `default` asertuje. Nové
+  testy `XactParserTest.VariationTypeInteractiveParsesSixteenByteEntry` (pozitivní, typ 3) a
+  `...VariationTypeClipThrows` (typ 2) ověřeny na PŮVODNÍM (pre-fix) kódu přes `git stash` —
+  `ClipThrows` bez opravy selže (`throws nothing` — starý catch-all typ 2 tiše přijal), s opravou
+  projde; `Interactive...` prochází v obou verzích (byte layout pro typ 3 byl už dřív správný,
+  jen špatně pojmenovaný/dosažený). Celá sada 1990/1990 testů zelená.
 
 - [ ] **IN-5 — `XactTypes.hpp` stále používá holé `///` komentáře místo Doxygen bloků.** V rozporu
   s `CLAUDE.md` („Never use bare `///` comments on public API members") — SPDX bylo doplněno

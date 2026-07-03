@@ -98,7 +98,7 @@ namespace CNA::Internal::Audio
     struct XsbVariation
     {
         uint32_t code;    ///< Absolute byte offset in XSB file (used as key)
-        uint8_t  type;    ///< 0=wave, 1=sound, 2=interactive, 4=compact_wave
+        uint8_t  type;    ///< 0=wave, 1=sound, 2=clip (unsupported by FAudio), 3=interactive, 4=compact_wave
         int16_t  variable;
         std::vector<XsbVariEntry> entries;
         mutable uint16_t lastSelected = 0xFFFF;
