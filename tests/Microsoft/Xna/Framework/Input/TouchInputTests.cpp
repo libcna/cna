@@ -147,10 +147,12 @@ TEST(TouchInputTest, GetCapabilitiesFallsBackToInputManagerTouchStateWhenFlagIsU
 
     const auto disconnected = TouchPanel::GetCapabilities();
     EXPECT_FALSE(disconnected.getIsConnectedProperty());
+    EXPECT_EQ(disconnected.getMaximumTouchCountProperty(), 0); // matches FNA: 0 when disconnected
 
     CNA::Internal::Input::InputManager::SetTouchState(99, TouchLocationState::Pressed, Vector2(1.0f, 1.0f));
     const auto connected = TouchPanel::GetCapabilities();
     EXPECT_TRUE(connected.getIsConnectedProperty());
+    EXPECT_EQ(connected.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
 
     ResetTouchState();
 }

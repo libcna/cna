@@ -99,7 +99,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
         }
 
         const TouchCollection state = CNA::Internal::Input::InputManager::GetTouchState();
-        return TouchPanelCapabilities(!state.empty(), MAX_TOUCHES);
+        const bool isConnected = !state.empty();
+        return TouchPanelCapabilities(isConnected, isConnected ? MAX_TOUCHES : 0);
     }
 
     TouchCollection TouchPanel::GetState()
