@@ -12,26 +12,33 @@ designed so that XNA/FNA game code can be ported to C++ with minimal API-surface
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate/behavior-accurate fidelity to the
   FNA reference implementation, backed by unit and (for graphics) pixel-readback integration
   tests.
-- **Current development phase:** **Phase 5 (the ENet networking backend) is now COMPLETE.**
+- **Current development phase:** **Phase 5 (the ENet networking backend) is COMPLETE.** Now in
+  **Phase 6 (Platform-Specific Work)**: Task 6.1 (Linux two-process real ENet test) is **done**;
+  Task 6.2 (Windows cross-build + Wine verification) is **in progress, paused mid-flight** — see
+  section 4 for exactly where and why. A fresh, approved plan for Phase 6 (scoped to Tasks 6.1/6.2
+  only — 6.3/6.4 need SDKs this sandbox doesn't have) lives at the same plan file path as Phase 5's
+  (see below), which was overwritten for Phase 6 since it's a different task.
   Graphics phases (1–31) are complete. `GamerServices` (all classes) and `Net` (5 enums + all 18
   non-enum classes: the full public API surface) are complete and unit-tested — see
   `plan_net.md`/Task history below. Phase 5 made that already-ported `Net` API actually do real
   networking, since FNA's own `Net` source (`FNA.NetStub`) never had a working implementation to
   port from — it was a non-functional stub (every gamer named "Stub Gamer", `Find()` always empty,
   etc.) before this phase. **Phase 5 was therefore original design work, not line-by-line
-  FNA-fidelity porting.** The detailed, approved design plan for all of Phase 5 lives at
-  `/home/robertvokac/.claude/plans/scalable-swimming-feigenbaum.md` — it's the source of truth for
-  the wire protocol, architecture decisions, and the 9-sub-task breakdown (5.1–5.9, all now done)
-  referenced throughout this file. **Note on `plan_net.md`:** that file's own, separately-numbered
-  "Phase 5" checklist (a sketch written before this effort started) describes a different, more
-  elaborate design — an abstract `INetworkBackend` interface, host migration, a `PlayerMatch` relay
-  server via a `CNA_NET_RELAY_HOST` env var, latency/QoS simulation — that was **deliberately not
-  followed**; see section 1's "Important architectural decisions" and section 9 for why (no
-  abstract interface: ENet is the only implementation). `plan_net.md`'s checkboxes were never kept
-  up to date as a live tracker across this whole multi-session effort (every phase's boxes are
-  still unchecked, including graphics phases 1–31 and GamerServices/Net, which are provably done)
-  — `NEXT.md` is the actively maintained status document; don't infer progress from `plan_net.md`'s
-  checkboxes.
+  FNA-fidelity porting.** The approved design plan for all of Phase 5's 9 sub-tasks (5.1–5.9, all
+  done) lived at `/home/robertvokac/.claude/plans/scalable-swimming-feigenbaum.md` — that same file
+  now holds the **Phase 6** plan instead (plan files get overwritten per task per this project's
+  workflow; if you need Phase 5's original plan content for historical reference, it's preserved in
+  this session's conversation history, not in a standalone file). **Note on `plan_net.md`:** that
+  file's own, separately-numbered "Phase 5" checklist (a sketch written before this effort started)
+  describes a different, more elaborate design — an abstract `INetworkBackend` interface, host
+  migration, a `PlayerMatch` relay server via a `CNA_NET_RELAY_HOST` env var, latency/QoS
+  simulation — that was **deliberately not followed**; see section 1's "Important architectural
+  decisions" and section 9 for why (no abstract interface: ENet is the only implementation).
+  `plan_net.md`'s checkboxes were never kept up to date as a live tracker across this whole
+  multi-session effort (every phase's boxes are still unchecked, including graphics phases 1–31
+  and GamerServices/Net, which are provably done) — `NEXT.md` is the actively maintained status
+  document; don't infer progress from `plan_net.md`'s checkboxes. Its Task 6.1–6.5 sketch is what
+  the current Phase 6 plan is based on (scoped down to what's actually achievable here).
 - **Important architectural decisions:**
   - Graphics backend selection is compile-time via `CNA_GRAPHICS_BACKEND`.
   - `CNA_GamerServices` and `CNA_Net` are separate CMake static libraries; excluded from the main
@@ -94,6 +101,12 @@ designed so that XNA/FNA game code can be ported to C++ with minimal API-surface
   **Phase 5 (the ENet networking backend) is complete.** `Microsoft::Xna::Framework::Net`'s
   entire public API surface now does real LAN networking for `SystemLink` sessions, while every
   other `NetworkSessionType` remains exactly the pre-Phase-5 synthetic stub, byte-for-byte.
+- Phase 6 (Platform-Specific Work): **Task 6.1 complete** — a genuine two-OS-process ENet loopback
+  test (`tools/net/net_two_process_harness.cpp` spawned twice by
+  `tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp`), proving Phase 5's real transport works
+  across independent address spaces, not just the one-process-two-roles trick every other Phase 5
+  test uses. **Task 6.2 (Windows cross-build + Wine) is in progress, paused mid-flight** — see
+  section 4 for the exact stopping point and what's needed to resume it.
 
 ### What works
 - The entire graphics stack (Phases 1–31).
@@ -175,6 +188,15 @@ designed so that XNA/FNA game code can be ported to C++ with minimal API-surface
   `Find()` returns empty in well under 50ms (proving the fast synthetic path is taken, not that it
   just found nothing after paying `SystemLink`'s real 150ms search cost). All 7 new tests passed
   on the first run with zero production code changes.
+- Two-process real ENet loopback (Task 6.1): `cna_net_two_process_harness` (new CMake executable,
+  `tools/net/net_two_process_harness.cpp`) plays `--role=host` or `--role=client`; the new
+  `TwoProcessLoopbackTest.cpp` orchestrator spawns both via `posix_spawn` (host's real bound port
+  handed to the client through a pipe on the host's stdout, not via `ENetDiscoveryService` — see
+  that file's own comments for why sharing the discovery port across two independent processes was
+  deliberately avoided), waits on both with a SIGKILL watchdog, and asserts both exit 0 after a
+  real join + one `AppData` round trip. Passed on the first run and stable across 10 repeats —
+  genuinely proves Phase 5's ENet transport works across independent OS processes, not just within
+  one process's shared static state.
 
 ### What does not work yet
 - A local gamer added at runtime via `AddLocalGamer()` **after** a session already started
@@ -186,6 +208,8 @@ designed so that XNA/FNA game code can be ported to C++ with minimal API-surface
 - `NetworkSession::Find()`'s full public API path (as opposed to `ENetDiscoveryService::
   FindSessions()` directly) cannot be end-to-end tested with a real hosted session alive in this
   same process — see section 4/5's new entry on this.
+- **Windows cross-build (Task 6.2) is unverified as of this writing** — see section 4 for the
+  exact stopping point. The Linux-native build and the new two-process test are unaffected.
 
 ---
 
@@ -196,7 +220,8 @@ This session's commits, newest first (all on branch `feature/net`, pushed to
 
 | Commit | Files | Change |
 |---|---|---|
-| (uncommitted at time of writing) | `NetworkSessionTypePolicyTests.cpp` (new) | Task 5.9 complete — **Phase 5 done.** Final `NetworkSessionType` policy regression pass: a systematic sweep (one set of assertions per non-`SystemLink` type, not spot checks) proving `Local`/`LocalWithLeaderboards`/`PlayerMatch`/`Ranked` are all provably unaffected by every real-networking mechanism Tasks 5.1–5.8 built (`RealNetworkingEnabled` false, no port ever bound, `ConnectToHost`/`SendData` stay no-ops, `StartGame`/`EndGame` still work locally without broadcasting, `Find()` returns empty in <50ms rather than paying `SystemLink`'s real 150ms search window). Zero production code changes — every test passed on the first run, confirming the `RealNetworkingEnabled` gating already added throughout 5.1–5.8 was correctly applied everywhere. 7 new tests, 2076/2076 total passing, stable under `--gtest_shuffle --gtest_repeat=8` and `--gtest_repeat=15`. |
+| (uncommitted at time of writing) | `CMakeLists.txt` (extended); `tools/net/net_two_process_harness.cpp` (new); `tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp` (new) | **Phase 6, Task 6.1 complete**: a genuine two-OS-process ENet loopback test. New `cna_net_two_process_harness` executable plays `--role=host`/`--role=client`; the orchestrator test spawns both via `posix_spawn`, hands the host's real bound port to the client through a pipe (deliberately not through `ENetDiscoveryService`'s shared port — see the file's own comments on why cross-process discovery-port sharing is fragile here), watches both with a `waitpid`+`SIGKILL` timeout, and asserts a real join + `AppData` round trip succeeds. Passed first try, stable across 10 repeats. Does not touch sharp-runtime. See section 4 for Task 6.2's (Windows) in-progress, paused status, including 4 real Windows-specific bugs found and fixed in sharp-runtime along the way (uncommitted there, pending explicit user go-ahead to commit in that sibling repo). 1 new test, 2077/2077 total passing on native Linux. |
+| `6f1f11e` | `NetworkSessionTypePolicyTests.cpp` (new) | Task 5.9 complete — **Phase 5 done.** Final `NetworkSessionType` policy regression pass: a systematic sweep (one set of assertions per non-`SystemLink` type, not spot checks) proving `Local`/`LocalWithLeaderboards`/`PlayerMatch`/`Ranked` are all provably unaffected by every real-networking mechanism Tasks 5.1–5.8 built (`RealNetworkingEnabled` false, no port ever bound, `ConnectToHost`/`SendData` stay no-ops, `StartGame`/`EndGame` still work locally without broadcasting, `Find()` returns empty in <50ms rather than paying `SystemLink`'s real 150ms search window). Zero production code changes — every test passed on the first run, confirming the `RealNetworkingEnabled` gating already added throughout 5.1–5.8 was correctly applied everywhere. 7 new tests, 2076/2076 total passing, stable under `--gtest_shuffle --gtest_repeat=8` and `--gtest_repeat=15`. |
 | `f1f5587` | `NetDiscoveryProtocol.hpp/.cpp` (extended); `ENetDiscoveryService.hpp/.cpp` (new); `AvailableNetworkSession.hpp/.cpp` (extended); `ENetBackend.cpp`, `NetworkSession.cpp` (extended); `NetDiscoveryProtocolTests.cpp`, `AvailableNetworkSessionTests.cpp` (extended), `ENetDiscoveryServiceTests.cpp` (new) | Task 5.8 complete: real LAN discovery. Found and fixed a real gap in Task 5.2's design first — `DiscoveryQueryMessage`/`DiscoveryAnnounceMessage` shared no leading tag byte, but both now travel over the same raw UDP socket, so added `DiscoveryMessageTag`/`PeekTag` (mirrors `NetPacketCodec`'s existing pattern) before either could be decoded on receipt. New `ENetDiscoveryService`: one process-wide raw UDP socket (well-known port 61190, `SOCKOPT_BROADCAST`+`REUSEADDR`+`NONBLOCK`), `RegisterHost`/`UnregisterHost` (wired into `ENetBackend::StartHosting`/`TeardownSession`), `Poll()` (wired into `NetworkSession::Update()`, non-blocking, answers incoming queries), `FindSessions(type)` (wired into `NetworkSession::EndFind`, blocks a real fixed 150ms window). Found and fixed a real duplicate-result bug during testing: broadcasting a query AND explicitly unicasting a loopback copy means the same host's reply can arrive twice on one machine (via different observed source addresses) — fixed by deduping collected results by connect port, exactly the correlation key the plan's own design anticipated needing. 8 new tests, 2069/2069 total passing, stable under `--gtest_shuffle --gtest_repeat=5` and `--gtest_repeat=15` on the discovery-specific tests. |
 | `2809c2b` | `ENetBackend.hpp/.cpp` (extended); `NetworkSession.cpp` (`StartGame`/`EndGame`); `ENetBackendTests.cpp` (extended) | Task 5.7 complete: new `ENetBackend::BroadcastStateChange(session, newState)` — called from `NetworkSession::StartGame()`/`EndGame()` after their existing local `StateChange` enqueue, gated behind `RealNetworkingEnabled(sessionType_)` and (inside `BroadcastStateChange` itself) `SessionState::HostPeer == nullptr` (only the actual ENet-transport host broadcasts; a session that's a transport client — reachable only via the pre-existing, unconditional-`true` `getIsHostProperty()` FNA-preserved stub quirk — transitions its own state locally but doesn't broadcast). New `HandleStateChangeBroadcast` (`ENetBackend.cpp`, the last remaining `default:` case in `HandleReceive`'s `switch`) queues a local `StateChange` event on the receiving side so `GameStarted`/`GameEnded`/`SessionState` stay consistent everywhere. 2 new loopback tests. 2060/2060 total passing, stable under `--gtest_shuffle --gtest_repeat=8` and `--gtest_repeat=20` on the ENet-specific tests. |
 | `ea2e040` | `ENetBackend.cpp` (extended); `ENetBackendTests.cpp` (extended) | Task 5.6 complete: real ENet `ENET_EVENT_TYPE_DISCONNECT` handling in `PumpSession`'s event loop (`HandleDisconnect`). Host role: removes every gamer the departed peer owned via `NetworkSession::RemoveGamer` (already existed, Task 5.3), broadcasts a `GamerLeaveBroadcastMessage` to the remaining peers, cleans up `SessionState`'s `PeerWireIds`/`WireIdToPeer`/`WireIdToGamer`/`GamerToWireId` entries for that peer. Client role: losing `HostPeer` calls `RemoveGamer` on one local gamer with `NetworkSessionEndReason::HostEndedSession`, raising `SessionEnded`. New `HandleGamerLeaveBroadcast` (mirrors `HandleGamerJoinBroadcast`'s shape) lets clients process the broadcast and remove their own proxy of the departed gamer. 3 new loopback tests. 2058/2058 total passing, stable under `--gtest_shuffle --gtest_repeat=8` and `--gtest_repeat=20` on the ENet-specific tests. |
@@ -218,11 +243,107 @@ on `feature/net` for the full sequence.
 
 ## 4. Current blocker / main problem
 
-**No blocker, and no open Phase 5 work.** Build is clean and all 2076 tests pass. Task 5.9 (final
-`NetworkSessionType` policy regression pass) is complete, closing out Phase 5 entirely — see
-section 1/2 for the full summary and section 8 for what a genuinely new unit of work looks like
-next (there's no single obvious "next task" the way there was throughout Phase 5; this needs a
-decision from whoever resumes / the user, informed by `plan_net.md`'s Phase 6/7/8 sketches).
+**Phase 5: no blocker, fully done.** Build is clean and all 2076 tests pass (2077 including the
+new Task 6.1 test — see below). Task 5.9 (final `NetworkSessionType` policy regression pass) is
+complete, closing out Phase 5 entirely.
+
+**Phase 6 status — read this before touching Task 6.2 again:**
+
+- **Task 6.1 (Linux two-process test): done, committed-ready, no issues.** See "What works" in
+  section 2 and `tools/net/net_two_process_harness.cpp` /
+  `tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp`. This work does **not** touch sharp-runtime
+  at all — safe to commit/push independent of the Task 6.2 situation below.
+
+- **Task 6.2 (Windows cross-build + Wine): in progress, paused mid-build.** What happened, in
+  order:
+  1. Configured `cmake -B cmake-build-windows -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake
+     -DCNA_GRAPHICS_BACKEND=SDL_RENDERER -DCNA_ENABLE_NET=ON` (matches the toolchain file's own
+     documented usage — **not** `EASYGL`, which is Linux/Emscripten-only; an earlier plan draft
+     wrongly suggested `EASYGL` for Windows, corrected here).
+  2. Hit a stale `.sdl-prebuilt/` cache (a gitignored, persistent-across-builds SDL3 install root —
+     see `cmake/ThirdPartySDL.cmake`'s own doc comment) left over from when this repo apparently
+     lived at a different path (`.../openeggbert/cna/` instead of `.../cna_net/`). Fixed per that
+     file's own documented recovery step: `rm -rf .sdl-prebuilt` (gitignored build cache, safe to
+     delete) and reconfigured — SDL3/SDL3_mixer built from vendored source for mingw successfully.
+  3. Configure then failed on `find_package(ZLIB REQUIRED)` inside **sharp-runtime's**
+     `CMakeLists.txt` — no mingw zlib dev package was installed. **The user installed
+     `libz-mingw-w64-dev` via apt themselves**; configure succeeded after that.
+  4. Build then hit a **real, genuine build break in `sharp-runtime`** (not in any `cna_net`/Net
+     code) — four Windows/mingw-specific bugs, all pre-existing (not introduced by this session,
+     just never exercised under a real Windows/GCC target before):
+     - `src/System/Environment.cpp`: `SetEnvironmentVariable`/`SetCurrentDirectory` collide with
+       `<windows.h>` A/W-suffix macros (the file already `#undef`s `GetCurrentDirectory` for the
+       identical reason, just missed these two) — definitions in the `.cpp` were silently renamed
+       to `...A` by the preprocessor, mismatching the header's declarations.
+     - Same file: `SHGetFolderPathA`/`SHGFP_TYPE_CURRENT` used without `#include <shlobj.h>`.
+     - Same file: `#pragma warning(suppress: 4996)` is MSVC-only syntax; GCC/mingw's
+       `-Werror=unknown-pragmas` turns the resulting "unknown pragma" warning into a hard error.
+     - `src/System/Net/Sockets/{NetworkStream,TcpClient,UdpClient}.cpp`: same MSVC-only-pragma
+       issue, this time `#pragma comment(lib, "ws2_32.lib")` (harmless under `-Wno-error`, fatal
+       under this project's `-Werror`). `ws2_32` is already correctly linked for `WIN32` at the
+       CMake level (`sharp-runtime/CMakeLists.txt:48-49`), so the pragma was always redundant
+       under GCC, not load-bearing.
+     **Fixed all four narrowly** — every change is inside `#if defined(_WIN32)` and/or
+     `#if defined(_MSC_VER)` guards, so the Linux/native code paths are provably untouched: verified
+     by rebuilding sharp-runtime's own test suite on Linux **twice** (once after each round of
+     fixes) — **8467/8467 passing both times**. **The user explicitly approved this fix-and-verify
+     approach both times it came up.**
+  5. **The Windows build was never actually re-attempted after these fixes landed.** Two
+     subsequent `AskUserQuestion` prompts asking to proceed with the next round of
+     sharp-runtime-touching/Windows-build work each went unanswered for 60 seconds (timed out, not
+     declined) — per this project's "don't keep retrying a blocked action" instruction, that line
+     of work was paused rather than resumed unilaterally. **The Windows cross-build's last known
+     state is exactly where step 4 left it**: sharp-runtime's mingw build fixed and reverified on
+     Linux (8467/8467, twice), but the actual `cmake --build cmake-build-windows --target CnaTests
+     --target cna_net_two_process_harness` invocation with those fixes in the tree has not been
+     run. Whether it links cleanly, and whether `CnaTests.exe`/`cna_net_two_process_harness.exe`
+     pass under Wine, is entirely unverified.
+  6. Separately, while this Windows-build line of work sat paused, a routine and fully-permitted
+     **native Linux verification build** (`cmake --build cmake-build-debug --target CnaTests`) done
+     for Task 6.1's own sake failed with bizarre `multiple definition of ...` linker errors
+     mentioning **Windows `.dll` files**. Root cause: `.sdl-prebuilt/` (see step 2) is keyed **only
+     by source path** (`CMAKE_CURRENT_SOURCE_DIR`), not by target platform/architecture — the
+     *original* Windows SDL3 configure back in step 2 (before the sharp-runtime saga even started)
+     had regenerated that directory with Windows binaries, silently overwriting the *same*
+     directory the *native* `cmake-build-debug` build's cached `SDL3::SDL3` imported target still
+     pointed at, so the native build started linking Windows DLLs into Linux executables. **Fixed
+     by `rm -rf .sdl-prebuilt` again and rebuilding natively** (regenerates Linux `.so` files);
+     native build confirmed fully healthy again afterward (2077/2077, stable across 5 shuffled
+     repeats). **This is a real, reusable gotcha for this repo, not just an artifact of this
+     session — see the dedicated "Known bugs and limitations" entry.** Note this discovery is
+     unrelated to, and did not require, the blocked Windows-build retry in step 5 — it surfaced
+     purely from verifying Task 6.1's own native build health.
+
+  **The 4 sharp-runtime fixes are uncommitted, local-only changes in that sibling repo's working
+  tree** (`git status` there shows exactly `src/System/Environment.cpp`,
+  `src/System/Net/Sockets/{NetworkStream,TcpClient,UdpClient}.cpp` modified, nothing else) — they
+  have **not** been committed or pushed anywhere. Since sharp-runtime is maintained by a separate
+  parallel session with no version pin from this repo, **do not commit/push them without asking
+  the user explicitly first**, even though the fix-and-verify steps themselves were approved.
+
+  **To resume Task 6.2:** confirm with the user first (same reason as before — the sharp-runtime
+  working tree still has uncommitted changes), then **before rebuilding for Windows, be aware
+  you're about to blow away the native build's SDL3 again** (see the gotcha above) — either accept
+  that and plan to `rm -rf .sdl-prebuilt` + rebuild `cmake-build-debug` natively afterward (as this
+  session did), or fix the underlying `CNA_SDL_PREBUILT_ROOT` path-collision in
+  `cmake/ThirdPartySDL.cmake` first (make it platform-specific, e.g. append
+  `${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}` the same way `.sdl-prebuilt-emscripten` already
+  gets its own distinct root) so native and cross builds stop fighting over one cache — this is
+  arguably the *correct* permanent fix and worth doing before more Task 6.2 iteration, not just a
+  one-off workaround. Then:
+  ```bash
+  cd /rv/data/development/github.com/openeggbert/cna_net
+  cmake --build cmake-build-windows --target CnaTests --target cna_net_two_process_harness -j"$(nproc)"
+  ```
+  If it succeeds, run `wine cmake-build-windows/CnaTests.exe --gtest_filter="*Network*:*Gamer*:*ENet*:*Packet*"`
+  per the approved plan's Task 6.2 verification step, and document the outcome here. If it
+  surfaces *more* sharp-runtime build breaks of the same class (MSVC-only pragmas, WinAPI macro
+  collisions), the same narrow fix-and-verify pattern applies — but confirm with the user before
+  each round of edits to that repo, matching what happened this time.
+
+For what a genuinely new unit of work looks like after Task 6.2 (there's no single obvious "next
+task" the way there was throughout Phase 5), see section 8 — informed by `plan_net.md`'s Phase
+6/7/8 sketches, needs a decision from whoever resumes / the user.
 
 **New constraint discovered during Task 5.8, same family as the Task 5.4 one below:** you cannot
 end-to-end test `NetworkSession::Find()`'s full public path (`BeginFind`→`EndFind`) with a real
@@ -292,6 +413,7 @@ connection through the safe explicit-local-gamers `Create()` overload and callin
 | **Incomplete** | `GamerJoinedEventArgs`/`GamerLeftEventArgs`/`HostChangedEventArgs`/`WriteLeaderboardsEventArgs` tests still use `nullptr` stand-ins for `NetworkGamer*` instead of real instances (both types now exist; just not yet revisited). |
 | **Confirmed bug (graphics)** | `SpriteBatch` multiple `Begin()/End()` per frame on Vulkan: only the last batch renders. |
 | **Suspected bug (graphics)** | `DrawUserIndexedPrimitives` typed overloads likely have the silent-return-on-missing-effect bug (not yet audited — Task 252). |
+| **Real infra bug found (Task 6.2), not yet fixed** | `.sdl-prebuilt/` (see `cmake/ThirdPartySDL.cmake`, `CNA_SDL_PREBUILT_ROOT`) is keyed **only** by `CMAKE_CURRENT_SOURCE_DIR` (source checkout path), not by target platform/architecture — only Emscripten gets its own distinct `.sdl-prebuilt-emscripten`. Configuring a Windows mingw cross-build regenerates the *same* directory a native Linux build's cached `SDL3::SDL3` imported target still points at, so the native build silently starts linking Windows `.dll`s into Linux executables (`multiple definition of ...` at link time). Recovery is `rm -rf .sdl-prebuilt` + rebuild natively (as done during Task 6.2's native-build check this session — confirmed 2077/2077 restored). The durable fix is to make `CNA_SDL_PREBUILT_ROOT` platform-specific (append `${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}`), not yet done. |
 
 ---
 
@@ -488,42 +610,59 @@ naturally takes priority over any of the above — none of these three are block
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Phase 5 (the ENet networking backend, Tasks 5.1-5.9) is COMPLETE — do not
-re-open it. Do not start Phase 6/7/8 (or anything else) without confirming with the user first;
-see section 8 for the options and why none of them has an approved plan yet.
+Read NEXT.md first, section 4 in full before doing anything else. Phase 5 (the ENet networking
+backend, Tasks 5.1-5.9) is COMPLETE — do not re-open it. Phase 6 is IN PROGRESS: Task 6.1 (Linux
+two-process test) is done; Task 6.2 (Windows cross-build + Wine) is PAUSED MID-BUILD with real,
+uncommitted changes sitting in the sharp-runtime sibling repo's working tree.
 
-Current status: GamerServices + Net API surface fully ported and tested. Phase 5 (ENet backend) is
-fully complete: ENetLibrary/ENetHostHandle (5.1), NetPacketCodec/NetDiscoveryProtocol (5.2),
-ENetBackend registry + NetworkSession wiring (5.3), real ConnectToHost + ClientHello/ServerWelcome/
-GamerJoinBroadcast handshake over loopback UDP (5.4), AppData relay: real SendData/ReceiveData with
-host relay (5.5), real ENet disconnect handling (5.6), StartGame/EndGame state broadcast (5.7),
-real LAN discovery via ENetDiscoveryService (5.8), and a final NetworkSessionType policy regression
-pass that found zero regressions (5.9). Microsoft::Xna::Framework::Net's entire public API surface
-now does real LAN networking for SystemLink sessions; every other NetworkSessionType remains
-exactly the pre-Phase-5 synthetic stub. 2076/2076 tests passing, stable under --gtest_shuffle
---gtest_repeat=8 (full suite) and --gtest_repeat=15 (discovery/policy tests).
+Current status: Phase 5 fully complete (2076/2076 tests). Phase 6 Task 6.1 also complete (+1 test,
+2077/2077 on native Linux) — a genuine two-OS-process ENet loopback test
+(tools/net/net_two_process_harness.cpp + tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp).
 
-IMPORTANT constraints to know before touching this code again (both are real, permanent properties
-of the shipped design, not bugs to fix):
+IMPORTANT — Task 6.2 (Windows) is mid-flight, read section 4 for the full blow-by-blow before
+touching it:
+- The Windows cross-build (cmake-build-windows/, mingw-w64 toolchain) hit a REAL, pre-existing
+  build break in sharp-runtime (not in any cna_net/Net code) — 4 Windows/mingw-specific bugs in
+  System/Environment.cpp and System/Net/Sockets/{NetworkStream,TcpClient,UdpClient}.cpp (WinAPI
+  macro collisions, a missing include, MSVC-only pragmas GCC's -Werror rejects).
+- Those 4 fixes have ALREADY BEEN MADE and verified (sharp-runtime's own Linux test suite:
+  8467/8467, twice) — but they are UNCOMMITTED in the sharp-runtime working tree. Check
+  `cd ../sharp-runtime && git status` before doing anything else; if those 4 files are still
+  modified there, that's this exact pending state, not something to redo.
+- The actual `cna_net` Windows build (CnaTests + cna_net_two_process_harness) has NOT been
+  re-attempted since those fixes landed — the permission system requires fresh explicit user
+  confirmation before further action on the sharp-runtime working tree, and two consecutive
+  requests timed out (user away from keyboard, not declining). Ask the user to confirm, then run
+  the commands in section 4's "To resume Task 6.2" block.
+- Do NOT commit/push the sharp-runtime changes without asking the user explicitly first, even
+  though the fix-and-verify steps themselves were already approved.
+
+IMPORTANT constraints to know before touching Phase 5/6 test code again (both are real, permanent
+properties of the shipped design, not bugs to fix):
 1. Only one real NetworkSession can exist per process (activeSession_ static gate in BeginCreate/
    BeginFind) — never construct two real NetworkSession instances in a test, and never call the
    public NetworkSession::Find()/BeginFind() while a real hosted session is alive in the same
    process (it would throw immediately). See ENetBackendTests.cpp's SystemLinkSessionFixture and
    ENetDiscoveryServiceTests.cpp for the one-real-session-plus-raw-transport-stand-in pattern.
+   (Task 6.1's two-process test sidesteps this differently: two real *processes*, each with its
+   own real NetworkSession — that's fine, since activeSession_ is process-wide, not global.)
 2. NetworkGamer::getIsHostProperty() is an unconditional-true FNA-preserved stub quirk — it does
    NOT distinguish "real ENet host" from "real ENet client." Anything gating on "am I the real
    host" (like state-change broadcast) checks ENetBackend/SessionState internals instead.
-See section 4/5 for the full story on both, plus a note on why plan_net.md's own Phase 5 checklist
-looks entirely unchecked (it's a stale sketch, not the design that was actually built — NEXT.md is
-the maintained source of truth).
+3. NetworkSession::EndJoin (and EndJoinInvited) hardcode the resulting session's type to
+   NetworkSessionType::PlayerMatch regardless of what was actually joined (upstream FNA "FIXME") —
+   so a session built via the public Join() never does real networking. Task 6.1's harness uses
+   Create()+ConnectToHost() on both sides instead, exactly like every Phase 5 test.
+See section 4/5 for the full story on all three, plus a note on why plan_net.md's own Phase 5
+checklist looks entirely unchecked (it's a stale sketch, not the design that was actually built —
+NEXT.md is the maintained source of truth).
 
 Before trusting any of this: do a real `cmake --build cmake-build-debug --target CnaTests` yourself
-first. sharp-runtime is a sibling repo edited by a separate session with no version pin from here
-— an interface change there silently broke every build target once already this project (see
-section 4's history / git log for the Task 4.5 IAsyncResult incident).
+first (native Linux — this does NOT depend on the paused Windows work at all).
 
-Next: ask the user what to work on. Do not assume Phase 6/7/8 or Avatar — see section 8 for the
-unstarted options and why none is an obvious default.
+Next: resolve Task 6.2 per section 4's exact resume steps (confirm with the user first, given the
+sharp-runtime state), or ask the user what to work on if they'd rather set Task 6.2 aside. Do not
+assume Phase 7/8 or Avatar — see section 8.
 Build: cmake --build cmake-build-debug --target CnaTests
 Run:   cmake-build-debug/CnaTests
 ```

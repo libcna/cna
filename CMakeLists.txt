@@ -1188,6 +1188,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
 endif()
 
+# --- Task 6.1: real two-process ENet loopback test harness ---
+# A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
+# independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /
+# the approved Phase 6 plan for why this exists separately from every Phase 5 single-process test.
+if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
+    add_executable(cna_net_two_process_harness
+        tools/net/net_two_process_harness.cpp
+    )
+    target_link_libraries(cna_net_two_process_harness
+        PRIVATE
+        CNA_GamerServices
+        CNA_Net
+        SHARP_RUNTIME
+    )
+endif()
+
 if(CNA_BUILD_TESTS)
     add_subdirectory(vendor/googletest)
 
@@ -1211,6 +1227,16 @@ if(CNA_BUILD_TESTS)
 
     if(CNA_ENABLE_NET)
         target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
+    endif()
+
+    if(TARGET cna_net_two_process_harness)
+        # Building CnaTests must also build the harness it spawns at test time (they're separate
+        # executables, so CMake won't infer this dependency on its own), and the orchestrator test
+        # needs the harness's real built path baked in at compile time.
+        add_dependencies(CnaTests cna_net_two_process_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_NET_HARNESS_PATH="$<TARGET_FILE:cna_net_two_process_harness>"
+        )
     endif()
 
     if(TARGET easy-gl)
