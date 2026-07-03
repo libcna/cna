@@ -80,10 +80,10 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] int GetHashCode() const;
 
         /**
-         * @brief Returns a string representation of this KeyboardState.
+         * @brief Retrieves a string representation of this object.
          * @return The string representation.
          */
-        NOXNA [[nodiscard]] std::string ToString() const;
+        [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Compares two KeyboardState instances for equality.

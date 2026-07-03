@@ -78,7 +78,10 @@ namespace Microsoft::Xna::Framework::Input
 
     std::string KeyboardState::ToString() const
     {
-        return "[KeyboardState]";
+        // FNA's KeyboardState never overrides ToString(), so ValueType's default applies —
+        // the fully-qualified type name, regardless of field values (same situation as
+        // GamePadState::ToString()).
+        return "Microsoft.Xna.Framework.Input.KeyboardState";
     }
 
     bool operator==(const KeyboardState& a, const KeyboardState& b)
