@@ -78,7 +78,7 @@ and corrected or confirmed as expected C++ adaptations.
 | Cue | ✅ | API complete; real state machine + GetVariable/SetVariable validation; Apply3D is a no-op (plan_audio.md T-4B) |
 | DynamicSoundEffectInstance | ✅ | API complete |
 | InstancePlayLimitException | ✅ | Complete |
-| Microphone | ✅ | API complete — real SDL3 capture (enumeration, Start/Stop, GetData/GetQueuedBytes); GetSampleDuration/GetSampleSizeInBytes doesn't delegate to SoundEffect yet (plan_audio.md MC-1) |
+| Microphone | ✅ | API complete — real SDL3 capture (enumeration, Start/Stop, GetData/GetQueuedBytes); GetSampleDuration/GetSampleSizeInBytes delegates to SoundEffect (plan_audio.md MC-1, done) |
 | MicrophoneState (enum) | ✅ | Complete |
 | NoAudioHardwareException | ✅ | Complete |
 | NoMicrophoneConnectedException | ✅ | Complete |

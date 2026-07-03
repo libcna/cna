@@ -10,13 +10,14 @@
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "System/IDisposable.hpp"
+#include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Represents a loaded sound effect asset. */
-    class SoundEffect final : public System::IDisposable
+    class SoundEffect final : public System::Object, public System::IDisposable
     {
         friend class SoundEffectInstance;
 
@@ -251,5 +252,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @return Pointer to the newly created SoundEffect.
          */
         [[nodiscard]] static SoundEffect* FromStream(std::istream& stream);
+
+        GetTypeNameHPP()
     };
 }

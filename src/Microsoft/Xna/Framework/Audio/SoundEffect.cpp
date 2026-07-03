@@ -409,4 +409,6 @@ namespace Microsoft::Xna::Framework::Audio
         return new SoundEffect(std::make_shared<Impl>());
 #endif
     }
+
+    GetTypeNameCPP(SoundEffect, "Microsoft.Xna.Framework.Audio.SoundEffect")
 }

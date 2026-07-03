@@ -471,14 +471,19 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* buď dokumentovaná kontraktová podmínka (owner musí přežít instanci) v Doxygenu
   `CreateInstance()`/ctoru, nebo oprava na sdílené vlastnictví; ASAN test na dangling scénář.
 
-- [ ] **CP-8 — `SoundEffect` nededí `System::Object` a nemá `GetTypeName()`, na rozdíl od
-  sourozeneckých tříd.** `SoundEffectInstance`, `DynamicSoundEffectInstance`, `AudioEngine`,
-  `SoundBank`, `WaveBank`, `Cue` všechny dědí `System::Object` a mají `GetTypeNameHPP()`/
-  `GetTypeNameCPP()`. `SoundEffect` dědí jen `System::IDisposable`.
+- [x] **CP-8 — `SoundEffect` nededí `System::Object` a nemá `GetTypeName()`, na rozdíl od
+  sourozeneckých tříd.** *(hotovo 2026-07-03.)* `SoundEffectInstance`, `DynamicSoundEffectInstance`,
+  `AudioEngine`, `SoundBank`, `WaveBank`, `Cue` všechny dědí `System::Object` a mají
+  `GetTypeNameHPP()`/`GetTypeNameCPP()`. `SoundEffect` dědila jen `System::IDisposable`.
   *FNA:* SoundEffect.cs:20 (implicitní `object`).
   *CNA:* SoundEffect.hpp:19.
   *Accept:* `SoundEffect : public System::Object, public System::IDisposable`;
   `GetTypeName()=="Microsoft.Xna.Framework.Audio.SoundEffect"`; test.
+  *Pozn.:* `SoundEffect` teď dědí `public System::Object, public System::IDisposable` (stejné
+  pořadí jako sourozenecké třídy), přidán `GetTypeNameHPP()`/`GetTypeNameCPP(SoundEffect, …)`.
+  Nový test `SoundEffectTest.GetTypeNameIsDottedXnaName` ověřen na PŮVODNÍM (pre-fix) kódu přes
+  `git stash` — bez opravy nejde ani zkompilovat (`has no member named 'GetTypeName'`), s opravou
+  projde. Celá sada 1987/1987 testů zelená.
 
 - [ ] **CP-9 — Konstruktor `SoundEffectInstance(const SoundEffect&)` je veřejný, FNA má ekvivalentní
   ctor `internal`.** Podle `CLAUDE.md` (Visibility Mapping) má `internal` mapovat na

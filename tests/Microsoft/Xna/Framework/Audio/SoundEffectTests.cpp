@@ -193,3 +193,10 @@ TEST(SoundEffectTest, DisposeIsIdempotentAndPlayReturnsFalse)
     EXPECT_NO_THROW(fx->Dispose());
     EXPECT_FALSE(fx->Play());
 }
+
+TEST(SoundEffectTest, GetTypeNameIsDottedXnaName)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    EXPECT_EQ(fx->GetTypeName(), "Microsoft.Xna.Framework.Audio.SoundEffect");
+}
