@@ -233,6 +233,15 @@ TEST(MicrophoneTest, GetDataZeroOrNegativeCountThrows)
     EXPECT_THROW(mic.GetData(buffer, 0, 0), System::ArgumentException);
 }
 
+TEST(MicrophoneTest, GetDataNegativeCountThrows)
+{
+    // GetDataZeroOrNegativeCountThrows (above) only exercises count == 0 despite its name;
+    // the validation is `count <= 0`, so a genuinely negative count needs its own test (MC-5).
+    Microphone mic = MakeMic();
+    std::vector<SharpRuntime::bytecs> buffer(10);
+    EXPECT_THROW(mic.GetData(buffer, 0, -5), System::ArgumentException);
+}
+
 TEST(MicrophoneTest, GetDataCountBeyondBufferThrows)
 {
     Microphone mic = MakeMic();

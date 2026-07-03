@@ -811,11 +811,13 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   zaregistrovat `BufferReady` handler, `Start()`, opakovaně volat `CheckBuffer()` v smyčce s
   timeoutem, ověřit, že handler byl zavolán alespoň jednou.
 
-- [ ] **MC-5 — `GetData` nemá samostatný test pro záporný `count`, jen pro `count == 0`.** Validace
-  je `count <= 0`, ale existující test `GetDataZeroOrNegativeCountThrows` (navzdory názvu) testuje
-  jen `count == 0`.
+- [x] **MC-5 — `GetData` nemá samostatný test pro záporný `count`, jen pro `count == 0`.** *(hotovo
+  2026-07-03.)* Validace je `count <= 0`, ale existující test `GetDataZeroOrNegativeCountThrows`
+  (navzdory názvu) testoval jen `count == 0`.
   *CNA:* Microphone.cpp:139-142; tests/.../MicrophoneTests.cpp:204-209.
   *Accept:* přidat `GetDataNegativeCountThrows` test s `count < 0`, ověřující `System::ArgumentException`.
+  *Pozn.:* žádná změna produkčního kódu. Přidán `MicrophoneTest.GetDataNegativeCountThrows`
+  (`count=-5`) hned za existující test. Celá sada 1997/1997 testů zelená.
 
 ---
 
