@@ -469,14 +469,21 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   třída nedeklaruje vlastní `Stop(bool)`) — silnější důkaz bugu než běžné "throws nothing". S
   opravou vše projde. Celá sada 1999/1999 testů zelená.
 
-- [ ] **CP-6 — `DynamicSoundEffectInstance::GetSampleDuration`/`GetSampleSizeInBytes` počítají
-  skutečné bajty/vzorek (`isFloat_ ? 4 : 2`) místo FNA napevno předpokládaných 16 bitů.** FNA obě
-  metody vždy deleguje na `SoundEffect.GetSampleDuration/GetSampleSizeInBytes`, které natvrdo
-  dělí/násobí 2 bez ohledu na float-mód. CNA po `SubmitFloatBufferEXT` vrací jiný výsledek než FNA.
+- [x] **CP-6 — `DynamicSoundEffectInstance::GetSampleDuration`/`GetSampleSizeInBytes` počítají
+  skutečné bajty/vzorek (`isFloat_ ? 4 : 2`) místo FNA napevno předpokládaných 16 bitů.** *(hotovo
+  2026-07-03.)* FNA obě metody vždy deleguje na `SoundEffect.GetSampleDuration/GetSampleSizeInBytes`,
+  které natvrdo dělí/násobí 2 bez ohledu na float-mód. CNA po `SubmitFloatBufferEXT` vracela jiný
+  výsledek než FNA.
   *FNA:* DynamicSoundEffectInstance.cs:114-130; SoundEffect.cs:363-374.
   *CNA:* DynamicSoundEffectInstance.cpp:79-96,335-339.
   *Accept:* po `SubmitFloatBufferEXT` dá `GetSampleDuration`/`GetSampleSizeInBytes` číselně stejný
   výsledek jako FNA (stále děleno/násobeno 2, ne 4); regresní test na float instanci.
+  *Pozn.:* obě metody teď jednořádkově delegují na `SoundEffect::GetSampleDuration`/
+  `GetSampleSizeInBytes(…, sampleRate_, channels_)` — přesně jako FNA. Nyní mrtvý privátní
+  helper `getBytesPerSampleFrame()` (jediný jeho volající kód) smazán (deklarace i definice).
+  Nový test `GetSampleDurationIgnoresFloatFormatMatchingFNA` (po `SubmitFloatBufferEXT` musí
+  1s stereo @ 44100Hz pořád dát 176400 B, ne 352800 B) ověřen přes `git stash` — bez opravy
+  selže přesně na `352800 != 176400`, s opravou projde. Celá sada 2003/2003 testů zelená.
 
 - [ ] **CP-7 — `SoundEffectInstance` drží syrový `const SoundEffect*` na rodiče bez správy
   životnosti — dangling pointer u běžného řetězení.** `SoundEffect(path).CreateInstance()` (nebo

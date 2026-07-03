@@ -81,6 +81,21 @@ TEST(DynamicSoundEffectInstanceTest, SampleDurationRoundTrip)
     EXPECT_NEAR(d.GetSampleDuration(176400).getTotalSecondsProperty(), 1.0, 1e-9);
 }
 
+TEST(DynamicSoundEffectInstanceTest, GetSampleDurationIgnoresFloatFormatMatchingFNA)
+{
+    // FNA's GetSampleSizeInBytes/GetSampleDuration always delegate to SoundEffect's versions,
+    // which hardcode 16-bit PCM regardless of the instance's actual sample format -- after
+    // SubmitFloatBufferEXT puts this instance in float (32-bit) mode, 1 second of stereo @
+    // 44100 Hz must still be 176400 bytes, not double that (CP-6).
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<float> floatBuf(32, 0.0f);
+    d.SubmitFloatBufferEXT(floatBuf);
+
+    const int bytes = d.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0));
+    EXPECT_EQ(bytes, 176400);
+    EXPECT_NEAR(d.GetSampleDuration(176400).getTotalSecondsProperty(), 1.0, 1e-9);
+}
+
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferQueuesWhileStopped)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);

@@ -79,20 +79,16 @@ namespace Microsoft::Xna::Framework::Audio
     System::TimeSpan DynamicSoundEffectInstance::GetSampleDuration(
         SharpRuntime::intcs sizeInBytes) const
     {
-        const int bpf = getBytesPerSampleFrame();
-        if (bpf <= 0 || sampleRate_ <= 0) return System::TimeSpan::Zero;
-        return System::TimeSpan::FromSeconds(
-            static_cast<double>(sizeInBytes) /
-            static_cast<double>(sampleRate_ * bpf)
-        );
+        // FNA delegates straight to SoundEffect.GetSampleDuration, which always assumes 16-bit
+        // PCM regardless of whether SubmitFloatBufferEXT put this instance in float (32-bit)
+        // mode -- match that exactly rather than computing from the real bytes-per-sample.
+        return SoundEffect::GetSampleDuration(sizeInBytes, sampleRate_, channels_);
     }
 
     SharpRuntime::intcs DynamicSoundEffectInstance::GetSampleSizeInBytes(
         System::TimeSpan duration) const
     {
-        return static_cast<SharpRuntime::intcs>(
-            duration.getTotalSecondsProperty() * sampleRate_ * getBytesPerSampleFrame()
-        );
+        return SoundEffect::GetSampleSizeInBytes(duration, sampleRate_, channels_);
     }
 
     // --- playback control ---
@@ -351,12 +347,6 @@ namespace Microsoft::Xna::Framework::Audio
     }
 
     // --- private helpers ---
-
-    SharpRuntime::intcs DynamicSoundEffectInstance::getBytesPerSampleFrame() const
-    {
-        const int bytesPerSample = isFloat_ ? 4 : 2;
-        return static_cast<SharpRuntime::intcs>(channels_) * bytesPerSample;
-    }
 
     void DynamicSoundEffectInstance::EnsureStream()
     {

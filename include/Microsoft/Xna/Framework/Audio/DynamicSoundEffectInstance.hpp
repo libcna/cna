@@ -165,7 +165,6 @@ namespace Microsoft::Xna::Framework::Audio
 
         static constexpr SharpRuntime::intcs MINIMUM_BUFFER_CHECK = 3;
 
-        [[nodiscard]] SharpRuntime::intcs getBytesPerSampleFrame() const;
         void EnsureStream();
         void DestroyStream();
         void SubmitQueuedToStream();
