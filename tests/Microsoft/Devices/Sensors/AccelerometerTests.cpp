@@ -10,6 +10,7 @@
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -20,6 +21,7 @@ using Microsoft::Devices::Sensors::AccelerometerReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
+using Microsoft::Xna::Framework::Vector3;
 
 // NOTE: Unlike Compass/Motion, the Accelerometer sensor can genuinely be
 // supported on platforms/devices that expose SDL_SENSOR_ACCEL. These tests
@@ -197,6 +199,105 @@ TEST(AccelerometerTests, ReadingChangedSubscriptionDoesNotThrow)
     {
         EXPECT_THROW(a.Start(), AccelerometerFailedException);
     }
+}
+
+// Task P4-3: exercises the real CurrentValueChanged dispatch path via the
+// Task P4-2 synthetic-injection hooks (this environment has no real
+// hardware to deliver a genuine SDL_EVENT_SENSOR_UPDATE, so every
+// preceding "subscription" test in this file only proved subscribing
+// doesn't crash, never that the event actually carries correct data).
+// SetStartedForTesting(true) bypasses the real Start()'s hardware
+// requirement; getCurrentValueProperty() is deliberately not asserted
+// here since it independently throws when the platform is genuinely
+// unsupported (Task P3-1), orthogonal to what this test verifies.
+TEST(AccelerometerTests, CurrentValueChangedReceivesExpectedReading)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    bool invoked = false;
+    AccelerometerReading receivedReading;
+    a.CurrentValueChanged += [&invoked, &receivedReading](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>& args)
+    {
+        invoked = true;
+        receivedReading = args.getSensorReadingProperty();
+    };
+
+    constexpr float StandardGravity = 9.80665f;
+    const float rawX = StandardGravity;
+    const float rawY = 0.0f;
+    const float rawZ = StandardGravity * 0.5f;
+    const std::uint64_t timestampNs = 123456789ULL;
+
+    a.InjectSyntheticSensorUpdate(rawX, rawY, rawZ, timestampNs);
+
+    ASSERT_TRUE(invoked);
+    const Vector3 expectedAcceleration(rawX / StandardGravity, rawY / StandardGravity, rawZ / StandardGravity);
+    EXPECT_EQ(receivedReading.getAccelerationProperty(), expectedAcceleration);
+}
+
+// Task P4-4: legacy ReadingChanged must receive the same converted
+// X/Y/Z as CurrentValueChanged's AccelerometerReading.Acceleration, since
+// both are raised from the same DispatchSensorReading() call site (see
+// Accelerometer.cpp) — this finally verifies that with real data instead
+// of only confirming subscription doesn't crash.
+TEST(AccelerometerTests, ReadingChangedReceivesMatchingXYZ)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    bool invoked = false;
+    AccelerometerReadingEventArgs receivedArgs;
+    a.ReadingChanged += [&invoked, &receivedArgs](System::Object*, const AccelerometerReadingEventArgs& args)
+    {
+        invoked = true;
+        receivedArgs = args;
+    };
+
+    constexpr float StandardGravity = 9.80665f;
+    const float rawX = StandardGravity;
+    const float rawY = -StandardGravity * 0.25f;
+    const float rawZ = StandardGravity * 0.75f;
+    const std::uint64_t timestampNs = 987654321ULL;
+
+    a.InjectSyntheticSensorUpdate(rawX, rawY, rawZ, timestampNs);
+
+    ASSERT_TRUE(invoked);
+    EXPECT_DOUBLE_EQ(receivedArgs.getXProperty(), static_cast<double>(rawX / StandardGravity));
+    EXPECT_DOUBLE_EQ(receivedArgs.getYProperty(), static_cast<double>(rawY / StandardGravity));
+    EXPECT_DOUBLE_EQ(receivedArgs.getZProperty(), static_cast<double>(rawZ / StandardGravity));
+}
+
+// Task P4-6: confirms Stop() actually disables further synthetic-event
+// dispatch (not just that Start() throws headless — StopDoesNotCrash
+// above already covers that). started_ is cleared by the real Stop()
+// regardless of how it was set, so this also exercises Stop()'s effect on
+// a SetStartedForTesting()-simulated instance.
+TEST(AccelerometerTests, StopPreventsSubsequentSyntheticEventFromDispatching)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    int invokedCount = 0;
+    Vector3 lastAcceleration;
+    a.CurrentValueChanged += [&invokedCount, &lastAcceleration](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>& args)
+    {
+        ++invokedCount;
+        lastAcceleration = args.getSensorReadingProperty().getAccelerationProperty();
+    };
+
+    constexpr float StandardGravity = 9.80665f;
+    a.InjectSyntheticSensorUpdate(StandardGravity, 0.0f, 0.0f, 111ULL);
+    ASSERT_EQ(invokedCount, 1);
+    const Vector3 accelerationBeforeStop = lastAcceleration;
+
+    a.Stop();
+
+    a.InjectSyntheticSensorUpdate(0.0f, StandardGravity, 0.0f, 222ULL);
+    EXPECT_EQ(invokedCount, 1);
+    EXPECT_EQ(lastAcceleration, accelerationBeforeStop);
 }
 
 // Task P3-6: CurrentValueChanged is the primary, non-deprecated event

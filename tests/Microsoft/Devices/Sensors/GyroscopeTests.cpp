@@ -8,6 +8,7 @@
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -16,6 +17,7 @@ using Microsoft::Devices::Sensors::GyroscopeReading;
 using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
+using Microsoft::Xna::Framework::Vector3;
 
 // NOTE: Unlike Compass, the Gyroscope sensor can genuinely be supported on
 // platforms/devices that expose SDL_SENSOR_GYRO. These tests branch on the
@@ -171,4 +173,63 @@ TEST(GyroscopeTests, CurrentValueChangedSubscriptionDoesNotThrow)
     {
         EXPECT_THROW(g.Start(), SensorFailedException);
     }
+}
+
+// Task P4-5: mirrors AccelerometerTests.CurrentValueChangedReceivesExpectedReading
+// — exercises the real CurrentValueChanged dispatch path via the Task P4-2
+// synthetic-injection hooks. No unit conversion for Gyroscope (unlike
+// Accelerometer's g-normalization): RotationRate is the raw SDL value,
+// in radians/second.
+TEST(GyroscopeTests, CurrentValueChangedReceivesExpectedReading)
+{
+    Gyroscope g;
+    g.SetStartedForTesting(true);
+
+    bool invoked = false;
+    GyroscopeReading receivedReading;
+    g.CurrentValueChanged += [&invoked, &receivedReading](
+        System::Object*, const SensorReadingEventArgs<GyroscopeReading>& args)
+    {
+        invoked = true;
+        receivedReading = args.getSensorReadingProperty();
+    };
+
+    const float rawX = 0.5f;
+    const float rawY = -1.25f;
+    const float rawZ = 2.0f;
+    const std::uint64_t timestampNs = 555555555ULL;
+
+    g.InjectSyntheticSensorUpdate(rawX, rawY, rawZ, timestampNs);
+
+    ASSERT_TRUE(invoked);
+    const Vector3 expectedRotationRate(rawX, rawY, rawZ);
+    EXPECT_EQ(receivedReading.getRotationRateProperty(), expectedRotationRate);
+}
+
+// Task P4-6: confirms Stop() actually disables further synthetic-event
+// dispatch (not just that Start() throws headless — StopDoesNotCrash
+// above already covers that).
+TEST(GyroscopeTests, StopPreventsSubsequentSyntheticEventFromDispatching)
+{
+    Gyroscope g;
+    g.SetStartedForTesting(true);
+
+    int invokedCount = 0;
+    Vector3 lastRotationRate;
+    g.CurrentValueChanged += [&invokedCount, &lastRotationRate](
+        System::Object*, const SensorReadingEventArgs<GyroscopeReading>& args)
+    {
+        ++invokedCount;
+        lastRotationRate = args.getSensorReadingProperty().getRotationRateProperty();
+    };
+
+    g.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f, 111ULL);
+    ASSERT_EQ(invokedCount, 1);
+    const Vector3 rotationRateBeforeStop = lastRotationRate;
+
+    g.Stop();
+
+    g.InjectSyntheticSensorUpdate(0.0f, 1.0f, 0.0f, 222ULL);
+    EXPECT_EQ(invokedCount, 1);
+    EXPECT_EQ(lastRotationRate, rotationRateBeforeStop);
 }

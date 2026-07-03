@@ -33,9 +33,11 @@ guess after a genuine research effort, judged not worth pursuing further).
 hardening plan: event-callback lifetime safety, real event-path testing,
 a real timestamp bug, SDL sensor-subsystem ownership, `VibrateController`
 hardening, cross-platform build, a demo screen — 14 tasks across 8 phases).
-Tasks P4-1 (doc cleanup) and P4-2 (`Accelerometer`/`Gyroscope` callback
-lifetime-safety fix + synthetic-event test hook) are done as of
-2026-07-03. Tasks P4-3 through P4-14 have not started yet.
+Tasks P4-1 through P4-6 are done as of 2026-07-03 (doc cleanup; callback
+lifetime-safety fix + synthetic-event test hook; real event-path tests for
+`CurrentValueChanged`/`ReadingChanged` on both `Accelerometer` and
+`Gyroscope`, including `Stop()`'s effect). Tasks P4-7 through P4-14 have
+not started yet.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -309,10 +311,27 @@ executables weren't built (not a regression).
   `CnaTests` build clean, no behavior change to any existing public API.
   Full `ctest` — 1985 tests, same 64 pre-existing headless failures, zero
   regressions (no new tests from this task itself).
+- **Tasks P4-3 through P4-6 done (2026-07-03):** real event-path tests
+  using P4-2's synthetic hooks — `Accelerometer`/`Gyroscope`'s
+  `CurrentValueChangedReceivesExpectedReading` (P4-3/P4-5), `Accelerometer`'s
+  `ReadingChangedReceivesMatchingXYZ` (P4-4), and
+  `StopPreventsSubsequentSyntheticEventFromDispatching` on both classes
+  (P4-6). These are the first tests in this codebase to ever observe
+  `CurrentValueChanged`/`ReadingChanged` actually *fire* with real data —
+  every prior subscription test only confirmed subscribing doesn't crash.
+  2 deliberate scope trims, both documented in
+  `plan_devices_phase4.md`'s per-task Resolution: `getCurrentValueProperty()`
+  is not asserted in any of these (it independently throws on this
+  genuinely-unsupported machine per Task P3-1, orthogonal to what these
+  tests verify), and P4-4 doesn't assert `Timestamp` (built from
+  `SDL_GetTicksNS()`, which Task P4-7 — next — is about to replace; locking
+  a test to the soon-to-change mechanism would need immediate rewriting).
+  5 new tests (1990 total, up from 1985). Full writeup:
+  `plan_devices_phase4.md` Tasks P4-3–P4-6's Resolution sections.
 - Last pushed commit: `60f476b` on `feature/devices` (the
-  `plan_devices_phase4.md` creation commit). Task P4-1 (`f291187`) is
-  committed locally but **not yet pushed**. Task P4-2's changes
-  (`Accelerometer.hpp`/`.cpp`, `Gyroscope.hpp`/`.cpp`,
+  `plan_devices_phase4.md` creation commit). Tasks P4-1 (`f291187`) and
+  P4-2 (`3965e57`) are committed locally but **not yet pushed**. Tasks
+  P4-3–P4-6's changes (`AccelerometerTests.cpp`, `GyroscopeTests.cpp`,
   `plan_devices_phase4.md`, this file) are **not yet committed** as of this
   writing.
 
@@ -368,12 +387,10 @@ P3-5, all 2026-07-03).
   `plan_devices_phase4.md` Task P4-2 (done) — including one documented,
   accepted residual limitation (a handler reentrantly disposing its own
   sender would deadlock).
-- **Real event-path test coverage.** No test in this codebase has ever
-  observed `CurrentValueChanged`/`ReadingChanged` actually *fire* with real
-  data — every existing subscription test only confirms subscribing doesn't
-  crash, because there's no synthetic-event injection mechanism yet (Task
-  P4-2 builds one) and no real sensor hardware in this environment. See
-  `plan_devices_phase4.md` Tasks P4-3 through P4-6.
+- **Fixed 2026-07-03:** real event-path test coverage.
+  `CurrentValueChanged`/`ReadingChanged` are now observed actually *firing*
+  with real data, via Task P4-2's synthetic-injection hooks — see
+  `plan_devices_phase4.md` Tasks P4-3 through P4-6 (all done).
 - **Timestamp correctness (confirmed real bug, not carried over from
   phase3 — newly found 2026-07-03).** `Accelerometer`/`Gyroscope` readings'
   `Timestamp` is built from `SDL_GetTicksNS()` (monotonic nanoseconds since
@@ -561,39 +578,28 @@ writing.
 `plan_devices_phase3.md` has no further actionable work (see Section 3 —
 Task P3-12 is as resolved as it can get without a source that doesn't
 appear to exist in any archive). `plan_devices_phase4.md` is now open
-(user-authored hardening plan, 14 tasks across 8 phases). Tasks P4-1 (doc
-cleanup) and P4-2 (callback lifetime-safety fix + synthetic-event hook)
-are done as of this edit. Recommended order for the rest:
+(user-authored hardening plan, 14 tasks across 8 phases). Tasks P4-1
+through P4-6 are done as of this edit. Recommended order for the rest:
 
-1. **Tasks P4-3 through P4-6 — real event-path tests** using P4-2's new
-   `InjectSyntheticSensorUpdate()`/`SetStartedForTesting()` hooks:
-   `Accelerometer.CurrentValueChanged` receives the expected reading,
-   legacy `Accelerometer.ReadingChanged` receives matching X/Y/Z/Timestamp,
-   `Gyroscope.CurrentValueChanged` receives the expected reading, and
-   `Stop()` prevents a subsequent synthetic event from doing anything (use
-   `SetStartedForTesting(true)` to simulate a started instance, inject,
-   assert the event fired; call the real `Stop()`, which clears `started_`
-   regardless of how it was set; inject again, assert nothing fires).
-   - Files: `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`,
-     `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests*:GyroscopeTests*"`,
-     then full `ctest --output-on-failure`.
-
-2. **Task P4-7 — timestamp audit.** Confirmed real bug (not carried over
+1. **Task P4-7 — timestamp audit.** Confirmed real bug (not carried over
    from phase3): `Timestamp` is built from `SDL_GetTicksNS()` fed into a
    `DateTime(ticks)` constructor that expects .NET-epoch ticks. Recommended
    fix: swap to `System::DateTimeOffset::getUtcNowProperty()` (confirmed to
-   already exist in `sharp-runtime`).
+   already exist in `sharp-runtime`). Note: Task P4-4's
+   `ReadingChangedReceivesMatchingXYZ` test deliberately avoided asserting
+   `Timestamp` in anticipation of this task — once P4-7 lands, consider
+   whether to extend that test (and P4-3/P4-5's) to also assert `Timestamp`
+   is close to "now".
 
-3. **Task P4-8 — SDL sensor subsystem ownership.** Real, root-caused bug:
+2. **Task P4-8 — SDL sensor subsystem ownership.** Real, root-caused bug:
    `EnsureSensorSubsystemInitialized()` bypasses SDL3's own built-in
    subsystem ref-counting via an `SDL_WasInit()` guard.
 
-4. **Tasks P4-9/P4-10 — `VibrateController` hardening** (mutex around
+3. **Tasks P4-9/P4-10 — `VibrateController` hardening** (mutex around
    `g_haptic`/`g_leftRightEffectId`; replace name-matching gamepad
    exclusion with `SDL_OpenHapticFromJoystick()`).
 
-5. **Tasks P4-11–P4-14 — cross-platform build and demo screen**, likely
+4. **Tasks P4-11–P4-14 — cross-platform build and demo screen**, likely
    still blocked for Android/iOS in this environment (re-check first); the
    demo screen (P4-14) has no environment blocker and can be done any time.
 

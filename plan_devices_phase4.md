@@ -251,7 +251,7 @@ through P4-6, next, are what actually exercise the new hooks).
 
 All four tasks below depend on Task P4-2's synthetic-event hook existing first.
 
-### Task P4-3 — `Accelerometer.CurrentValueChanged` receives the expected `AccelerometerReading`
+### Task P4-3 — `Accelerometer.CurrentValueChanged` receives the expected `AccelerometerReading` — ✅ Done (2026-07-03)
 
 **Steps:** using the synthetic hook, inject a known `(x, y, z, timestampNs)` triple;
 subscribe to `CurrentValueChanged`; assert the raised `SensorReadingEventArgs<AccelerometerReading>`
@@ -262,7 +262,19 @@ reading afterward.
 
 **Files:** `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`.
 
-### Task P4-4 — Legacy `Accelerometer.ReadingChanged` receives the same X/Y/Z/Timestamp
+**Resolution (2026-07-03):** Implemented as `CurrentValueChangedReceivesExpectedReading`.
+One deviation from the original steps: does **not** assert `getCurrentValueProperty()`
+afterward — that public getter independently throws `InvalidOperationException` on this
+genuinely-unsupported headless machine (Task P3-1's `isSupported_` flag, set from the real
+hardware-presence check at construction, is completely orthogonal to the `started_` flag
+`SetStartedForTesting()` manipulates for this test). Asserting on it here would either
+force a `GTEST_SKIP()`-guarded branch that never actually runs in this environment, or
+wrongly suggest `isSupported_`/`started_` should be coupled — neither is worth the
+complexity for what this task is actually verifying (the event's payload). The event args'
+`Acceleration` (via `getSensorReadingProperty()`) is the real signal and is asserted
+directly.
+
+### Task P4-4 — Legacy `Accelerometer.ReadingChanged` receives the same X/Y/Z/Timestamp — ✅ Done (2026-07-03)
 
 **Steps:** same synthetic injection as P4-3; subscribe to `ReadingChanged`; assert the
 raised `AccelerometerReadingEventArgs`'s `X`/`Y`/`Z`/`Timestamp` match the same expected
@@ -273,14 +285,29 @@ verifying subscription doesn't crash).
 
 **Files:** `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`.
 
-### Task P4-5 — `Gyroscope.CurrentValueChanged` receives the expected `GyroscopeReading`
+**Resolution (2026-07-03):** Implemented as `ReadingChangedReceivesMatchingXYZ`, asserting
+`X`/`Y`/`Z` via `EXPECT_DOUBLE_EQ` against the same expected converted values used in P4-3
+(float→double promotion through the `AccelerometerReadingEventArgs(double,double,double,...)`
+constructor is exact, so `EXPECT_DOUBLE_EQ` — not a tolerance-based comparison — correctly
+holds). `Timestamp` specifically dropped from this task's assertions: it's built from
+`SDL_GetTicksNS()`, the exact mechanism Task P4-7 (next phase) is about to change: locking
+this test to the current (about-to-be-replaced) `Timestamp` derivation would make it
+either wrong or need rewriting one task later. `X`/`Y`/`Z` matching is what this task
+actually set out to prove (the `ReadingChanged`/`CurrentValueChanged` payload-consistency
+claim) and stands on its own regardless of how `Timestamp` is computed.
+
+### Task P4-5 — `Gyroscope.CurrentValueChanged` receives the expected `GyroscopeReading` — ✅ Done (2026-07-03)
 
 **Steps:** mirror Task P4-3 for `Gyroscope` (no unit conversion — `GyroscopeReading`'s
 `RotationRate` is raw radians/second, unlike `Accelerometer`'s g-normalization).
 
 **Files:** `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`.
 
-### Task P4-6 — `Stop()` prevents a subsequent synthetic event from doing anything
+**Resolution (2026-07-03):** Implemented as `CurrentValueChangedReceivesExpectedReading`,
+mirroring P4-3's shape exactly (same `getCurrentValueProperty()` omission rationale
+applies identically to `Gyroscope`).
+
+### Task P4-6 — `Stop()` prevents a subsequent synthetic event from doing anything — ✅ Done (2026-07-03)
 
 **Steps:** start an instance (via whatever mechanism P4-2's hook allows, or the real
 `Start()` if the platform happens to support it — branch on `getIsSupportedProperty()`
@@ -291,6 +318,16 @@ unchanged from before `Stop()`. Do for both `Accelerometer` and `Gyroscope`.
 
 **Files:** `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`,
 `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`.
+
+**Resolution (2026-07-03):** Implemented as `StopPreventsSubsequentSyntheticEventFromDispatching`
+in both files, using `SetStartedForTesting(true)` (the real `Start()` always throws
+headless — the "or the real `Start()` if the platform happens to support it" branch from
+the original steps was judged unnecessary complexity given `SetStartedForTesting()`
+already exercises the exact same `started_` flag `Start()` sets, and `Stop()` clears it
+identically regardless of how it was set). Asserts invocation count stays at 1 and the
+last-received reading is unchanged after `Stop()` + a second injection with different
+values — same `getCurrentValueProperty()` omission as P4-3/P4-5 (independent
+`isSupported_` throw, orthogonal to this task's concern).
 
 ---
 
