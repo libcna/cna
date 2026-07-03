@@ -12,19 +12,22 @@ ported to C++ with minimal API-surface changes.
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
   pixel-readback integration tests.
 - **Current development phase:** Phase 32 (Texture2D completeness, Tasks 261–270) is **fully
-  complete**. Phase 33 (Texture3D/TextureCube completeness, Tasks 271–280) is in progress — Tasks
-  271 (`Texture3D` audit), 272 (`TextureCube` audit), 273 (`Texture3D` partial box x/y/z upload
-  tests), 274 (`Texture3D` partial box x/y/z readback tests), 275 (`TextureCube` partial rect +
-  startIndex tests, all six faces), 276 (`TextureCube` mip-level tests, all six faces — found and
-  fixed a real GPU-storage allocation bug), 277 (verified `Texture3D` sampling is not wired into
-  any shader — audit-only, no code change), 278 (verified `TextureCube` sampling in
-  `EnvironmentMapEffect` — EasyGL/Vulkan already fully wired; found and fixed a real gap in Bgfx,
-  which had zero code path for `envMapping` at all), and 279 (added `CubeMapFace` range
-  validation to `TextureCube::SetData`/`GetData`; a CNA safety extra, FNA itself never validates
-  this — see §3) done. Phases 30 and 31 were already complete. New Tasks 663, 862, and 863 were
-  added (unnumbered-sequence, matching existing precedent) for severe findings from Tasks 272,
-  276, and 277 — see §3. Next up: Task 280 (document `Texture3D`/`TextureCube` backend support
-  matrix — the last task in Phase 33).
+  complete**. **Phase 33 (Texture3D/TextureCube completeness, Tasks 271–280) is now fully
+  complete.** Summary: 271/272 audited `Texture3D`/`TextureCube` against FNA and fixed the same 3
+  bug classes in both (hardcoded `LevelCount`, missing `SetData`/`GetData` guards, missing
+  `Dispose(bool)`); 273–275 added genuine x/y/z(/rect) sub-region + `startIndex` pixel-verified
+  tests beyond what existed; 276 found and fixed a real GPU-storage mip-allocation bug in
+  `EasyGLTextureCubeBackend`; 277 confirmed `Texture3D` shader sampling is architecturally
+  unreachable (no code change); 278 confirmed `TextureCube` sampling in `EnvironmentMapEffect`
+  works on EasyGL/Vulkan and fixed a real missing code path on Bgfx; 279 added `CubeMapFace` range
+  validation (a CNA safety extra); 280 documented the full backend support matrix
+  (`docs/texture3d-texturecube-support.md`) and, in doing so, found that **`Texture3D`/
+  `TextureCube::GetData` is a total silent no-op on both Vulkan and Bgfx** (neither overrides the
+  empty base-class default) — a significant finding that had gone unnoticed because existing tests
+  never assert on `GetData`'s returned values. Phases 30 and 31 were already complete. New Tasks
+  663, 862, 863, 864, and 865 were added (unnumbered-sequence, matching existing precedent) for
+  severe findings from Tasks 272, 276, 277, and 280 — see §3. **Next up: Phase 34 — SurfaceFormat
+  implementation matrix (Tasks 281–290).**
 - **Key architectural decisions:**
   - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).
@@ -170,6 +173,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 280 | `docs/texture3d-texturecube-support.md` (new), `AUDIT.md`, `GRAPHICS_TASKS.md` | Documented the full `Texture3D`/`TextureCube` backend support matrix — the last task in Phase 33, which is now fully complete. Found (via direct Vulkan/Bgfx backend source inspection, prompted by writing the doc) that `GetData` is a total silent no-op on both Vulkan and Bgfx for both texture types — neither overrides the empty base-class default, so the caller's buffer is left untouched with no error. Existing tests never caught this since `GetData` coverage is argument-guard-only. Also flagged (not confirmed) that Vulkan/Bgfx likely have the same mip-level-allocation bug Task 276 fixed for EasyGL's `TextureCube`. Tracked as new Tasks 864 (Vulkan/Bgfx mip-level allocation) and 865 (Vulkan `GetData` readback implementation). No code changes — audit/documentation only. |
 | 279 | `TextureCube.cpp`, `TextureCubeTests.cpp` (extended), `AUDIT.md`, `GRAPHICS_TASKS.md` | Confirmed via FNA source that `cubeMapFace` is never validated in real XNA/FNA either — this is a CNA safety extra, not a parity gap. All 3 backends already guarded against out-of-range face (silent no-op); added a proper `IsValidCubeMapFace()` check (`std::out_of_range`) at the public API layer instead. 7 new unit tests. While verifying across backends, found (via `git stash` bisection) that `Vulkan_FillMode_WireFrame` fails when run as part of the full ctest suite but passes in isolation — confirmed pre-existing/unrelated (reproduces identically without this task's change); newly documented in §5. |
 | 278 | `BgfxGraphicsBackend.hpp/.cpp`, `shaders/vs_env_map3d.sc`/`fs_env_map3d.sc` (new), `shaders/varying.def.sc`, `shaders/compile_shaders.py`, `shaders/bgfx_shaders.hpp` (regenerated), `examples/bgfx_env_map_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | EasyGL/Vulkan `EnvironmentMapEffect` already fully wired (verified via existing pixel-readback tests, both still pass). **Found and fixed a real Bgfx gap**: `DrawPrimitivesEx` had zero code path for `params.envMapping` — it silently fell through to the plain lit-textured branch, rendering with no reflection and no error. Added a full Bgfx shader pair mirroring the EasyGL/Vulkan reflection formula, a new `envMap3DProgram_` + 6 uniforms, and wired the `envMapping` branch into `DrawPrimitivesEx`. Had to build bgfx's `shaderc` tool from source (`-DCNA_BGFX_BUILD_SHADERC=ON -DBGFX_BUILD_TOOLS=ON`) to regenerate `bgfx_shaders.hpp`. Bgfx has no GPU readback API, so added a smoke test (`Bgfx_EnvironmentMapEffect_Smoke`) instead of a pixel-verified one. 1908/1908 Bgfx ctest pass (100%, no regressions). |
 | 277 | `AUDIT.md`, `GRAPHICS_TASKS.md` (no source changes — audit-only) | Verified `Texture3D` sampling is not exposed to any effect, stock or custom. No stock FNA effect samples `Texture3D` (true in real XNA too). Custom `ShaderEffect`/`IEffectBackend` have no texture-binding API at all (scalar/vector/matrix uniforms only). Root architectural cause: FNA's `Texture3D : Texture` lets any texture ride `GraphicsDevice.Textures[slot]`; CNA's `Texture3D : GraphicsResource` (not `Texture`) can't be assigned into `TextureCollection` at all. `EffectParameter::SetValue(Texture3D*)` has zero consumers in any backend — a write-only dead end. Tracked as new Task 863 (real fix = architecture change, out of verify-only scope). |
@@ -250,6 +254,8 @@ failing command or failing test is associated with either.
 | **Confirmed bug, severe, silent failure** | `TextureCube::DDSFromStreamEXT` is a non-functional stub — it ignores its `stream` parameter entirely and always returns a blank 1×1 `Color` texture, regardless of what DDS cube-map data (if any) is passed. It compiles, runs without throwing, and returns a plausible-looking `TextureCube`, so callers get silently wrong data instead of a loud failure. Task 272 finding; tracked as new `GRAPHICS_TASKS.md` Task 663 (needs DDS header parsing + per-face/per-level DXT decode + 6×levelCount `SetData` calls — a real feature, not a guard fix). |
 | **Incomplete** | EasyGL's `Texture3D` backend ignores `mipMap` (no per-level GPU storage allocation, so `SetData(level>0,...)` almost certainly silently fails — Task 276 found and fixed the identical bug for `TextureCube`, tracked as new Task 862 for `Texture3D`) and always ignores `SurfaceFormat` (always `Rgba8`, for both `Texture3D` and `TextureCube` — Task 271/272 findings, not yet tracked as its own task). |
 | **Confirmed, architectural** | `Texture3D`/`TextureCube` sampling is not wired into any shader (stock or custom) — `Texture3D`/`TextureCube` don't inherit `Texture` (unlike FNA), so they can't go into `GraphicsDevice.Textures[slot]`, and custom `ShaderEffect` has no texture-binding API of any kind. `EffectParameter::SetValue(Texture3D*)` has zero consumers in any backend. Stock effects that *do* need a cube texture (`EnvironmentMapEffect`) bypass this entirely via a dedicated `GpuDrawParams::envMap` path instead (confirmed working on EasyGL/Vulkan, fixed on Bgfx — Task 278) — but no stock effect uses `Texture3D`, and no custom-effect workaround exists. Task 277 finding; tracked as new Task 863 (real fix = architecture change: `Texture3D`/`TextureCube` inheriting `Texture`, or a parallel binding path). |
+| **Confirmed bug, severe, silent failure, newly found** | `Texture3D`/`TextureCube::GetData` is a total no-op on both Vulkan and Bgfx — neither `VulkanTexture3DBackend`, `VulkanTextureCubeBackend`, `BgfxTexture3DBackend`, nor `BgfxTextureCubeBackend` overrides `GetData`, so all four silently fall through to the empty base-class default. The caller's output buffer is left completely untouched, with no exception or error. Went unnoticed through Tasks 271–279 because `GetData` unit test coverage is argument-guard-only (no value assertions); only EasyGL has pixel-readback integration tests. Task 280 finding; tracked as new Task 865 (Vulkan fix: real `vkCmdCopyImageToBuffer` readback; Bgfx's lack of any readback API is an accepted, pre-existing, project-wide limitation, not a new bug). |
+| **Likely bug, not yet confirmed** | Vulkan and Bgfx probably have the same "mip level >0 GPU storage never allocated" bug that Task 276 found and fixed for `EasyGLTextureCubeBackend`, for both `Texture3D` and `TextureCube` — `VkImageCreateInfo::mipLevels` is hardcoded to `1` in Vulkan (both types); Bgfx hardcodes `hasMips=false`/no-mips in both `BgfxTexture3DBackend` and `BgfxTextureCubeBackend`'s constructors, with the `mipMap` parameter received but unused in all 4 constructor sites. Not reproduced with a test (flagged 🔍 in `docs/texture3d-texturecube-support.md`, Task 280 finding). Tracked as new Task 864. |
 | **By design (documented Task 270)** | `Texture2D::GetData` (level 0) permanently throws `std::runtime_error` after the first full upload once `SetContextRecoveryEnabled(false)` has been called — CNA has no GPU pixel-readback path, unlike FNA's real `GetData<T>`, which always reads back from the GPU. |
 | **Risky assumption** | The new user-primitive scratch buffers (Task 260) never shrink — memory stays at the high-water mark for the life of the `GraphicsDevice`. Acceptable for typical usage, but worth knowing if a game does one enormous user-primitive draw and never again. |
 

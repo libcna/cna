@@ -1079,6 +1079,47 @@ both reproduce identically **without** this task's change, so they are pre-exist
 (the first hadn't been previously documented; the second was already known —
 `DepthBias=-1e6`). Neither investigated further here; see `NEXT.md` §5.
 
+### Texture3D/TextureCube backend support matrix — GetData is a silent no-op on Vulkan/Bgfx (Task 280, Phase 33 — closes the phase)
+
+Added `docs/texture3d-texturecube-support.md`, covering construction, `SetData`/`GetData`,
+mip levels, `CubeMapFace` validation, shader sampling, and `DDSFromStreamEXT`, across EasyGL,
+Vulkan, and Bgfx. Compiling it required reading parts of the Vulkan and Bgfx `Texture3D`/
+`TextureCube` backend implementations that no prior task in this phase had inspected directly
+(Tasks 271–279 all worked against EasyGL specifically), and that turned up a significant gap:
+
+**`Texture3D`/`TextureCube::GetData` is a total silent no-op on both Vulkan and Bgfx.** Neither
+`VulkanTexture3DBackend`, `VulkanTextureCubeBackend`, `BgfxTexture3DBackend`, nor
+`BgfxTextureCubeBackend` overrides `GetData` — all four fall through to
+`ITexture3DBackend`/`ITextureCubeBackend`'s empty base-class default
+(`virtual void GetData(...) const {}`). Calling `Texture3D::GetData`/`TextureCube::GetData` on
+either backend leaves the caller's output buffer completely untouched — not zeroed, just whatever
+was already there — with no exception, no error, no log message. This is a "fails silently, not
+loudly" gap in the same severity class as Task 663's `DDSFromStreamEXT` stub.
+
+This had gone unnoticed through Tasks 271–279 because `Texture3DTests.cpp`/`TextureCubeTests.cpp`'s
+`GetData*` unit tests are argument-guard-only — they check that invalid arguments throw and valid
+ones don't, but never assert on the *value* `GetData` returns. Task 279's "Vulkan `TextureCubeTest`
+34/34 pass" is entirely consistent with this bug, since none of those 34 tests read back and check
+pixel data. Only EasyGL has dedicated pixel-readback integration tests
+(`examples/easygl_texturecube_faces_test.cpp` etc.), which is why this was never exposed until this
+task cross-referenced the Vulkan/Bgfx backend source directly against the doc's own claims.
+
+Also flagged (not confirmed with a test — marked 🔍 in the doc): Vulkan and Bgfx very likely have
+the same "mip level >0 never allocated" bug that Task 276 found and fixed for
+`EasyGLTextureCubeBackend`, for **both** `Texture3D` and `TextureCube`. The code shape is identical:
+`VulkanGraphicsBackend::CreateTexture3D`/`CreateTextureCube` both take `bool /*mipMap*/` and drop it;
+`VkImageCreateInfo::mipLevels` is hardcoded to `1` in both `VulkanTexture3DBackend` and
+`VulkanTextureCubeBackend`'s constructors. `BgfxTexture3DBackend`'s constructor takes
+`bool /*mipMap*/` and calls `bgfx::createTexture3D(..., /*hasMips=*/false, ...)`;
+`BgfxTextureCubeBackend` similarly hardcodes `bgfx::createTextureCube(size, false, 1, ...)`
+regardless of its (unused) `mipMap` parameter.
+
+Neither finding was fixed here — both are real feature gaps, not guard fixes, and squarely outside
+a documentation task's scope. Tracked as new `GRAPHICS_TASKS.md` Task 864 (Vulkan/Bgfx mip-level
+allocation, both texture types) and Task 865 (Vulkan `GetData` readback implementation; Bgfx's lack
+of any readback API is treated as an accepted, already-documented, project-wide limitation, not a
+bug). **This closes Phase 33 (Tasks 271–280) — all ten tasks are now done.**
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`
