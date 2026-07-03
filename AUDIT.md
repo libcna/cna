@@ -937,6 +937,51 @@ specifically reproduce a level>0 `SetData` failure with a test — this session'
 documented limitation a concrete, fixable root cause and a matching fix shape (mirror this task's
 constructor change), left for a follow-up task since it's outside Task 276's `TextureCube` scope.
 
+### Texture3D sampling in shaders is not implemented (Task 277, Phase 33)
+
+Audit-only finding — no code change. The task asks whether `Texture3D` sampling is exposed to any
+effect (stock or custom); the answer is no, for structural reasons that go deeper than a single
+missing wire-up.
+
+**No stock XNA effect ever samples a `Texture3D`.** None of FNA's `BasicEffect`, `AlphaTestEffect`,
+`DualTextureEffect`, `EnvironmentMapEffect`, or `SkinnedEffect` declare a `Texture3D` parameter — this
+is true in real XNA/FNA too, not a CNA gap. So the only realistic path for `Texture3D` sampling is a
+custom effect.
+
+**Custom `ShaderEffect` has no texture-binding API at all.** Read `ShaderEffect.hpp` and
+`IEffectBackend` (`IGraphicsBackend.hpp`) in full: both expose only scalar/vector/matrix uniform
+setters (`SetUniformFloat/Int/Vec2/Vec3/Vec4/Mat4`). There is no `SetTexture`/`SetTexture2D`/
+`SetTexture3D`/`BindSampler` method anywhere in either type, for *any* texture type — not just
+`Texture3D`. A custom shader's `sampler2D`/`sampler3D` uniforms can only ever be fed by whatever the
+backend implicitly binds from `GraphicsDevice.Textures[slot]` during the draw call.
+
+**`Texture3D` cannot be placed into `GraphicsDevice.Textures[slot]` at all — a class-hierarchy
+mismatch from FNA.** Confirmed in FNA source: `Texture3D : Texture` and `TextureCube : Texture`
+(`Texture3D.cs`/`TextureCube.cs`), so in real XNA/FNA, `GraphicsDevice.Textures[0] = my3DTexture;`
+compiles and works, because `TextureCollection` holds `Texture` references and any texture subtype
+fits. In CNA, `Texture2D : public Texture` matches FNA, but **`Texture3D : public GraphicsResource`
+and `TextureCube : public GraphicsResource`** (`Texture3D.hpp`/`TextureCube.hpp`) — neither inherits
+`Texture`, so neither can be assigned into `TextureCollection` (`operator()(int, Texture*)`) at all.
+This is why `EffectParameter` needed dedicated `texture3DData_`/`textureCubeData_` storage slots
+instead of reusing the generic `textureData_` slot (see the comment in `EffectParameter.hpp`) — the
+type system itself blocks the FNA-equivalent unification.
+
+**`EffectParameter::SetValue(Texture3D*)`/`GetValueTexture3D()` are a write-only dead end.** Grepped
+every backend (`EasyGL`, `Vulkan`, `Bgfx`) for `texture3DData_`/`GetValueTexture3D`/`sampler3D` —
+zero matches outside `EffectParameter.hpp`/`.cpp` themselves. The API lets a game call
+`effect->Parameters["MyVolume"]->SetValue(myTexture3D)`, and the pointer is stored and can be read
+back, but nothing anywhere ever picks it up to bind the texture to the GPU or a shader uniform.
+`EffectParameterTests.cpp` already fully covers this one working piece (pointer round-trip storage,
+null and non-null); no further test was added here since there is no positive GPU-sampling behavior
+to lock in — a pixel-readback test would only prove the negative already established by code
+inspection.
+
+**Not fixed here — tracked as new Task 863.** Closing this gap for real means either (a) making
+`Texture3D`/`TextureCube` inherit `Texture` to match FNA and unify `TextureCollection` handling — a
+non-trivial refactor touching `EffectParameter`, `TextureCollection`, and every backend's
+texture-bind code — or (b) adding an entirely separate `Texture3D`-specific GPU-binding path outside
+`TextureCollection`. Both are well outside a verify-only audit's scope.
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`

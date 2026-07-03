@@ -15,11 +15,15 @@ ported to C++ with minimal API-surface changes.
   complete**. Phase 33 (Texture3D/TextureCube completeness, Tasks 271–280) is in progress — Tasks
   271 (`Texture3D` audit), 272 (`TextureCube` audit), 273 (`Texture3D` partial box x/y/z upload
   tests), 274 (`Texture3D` partial box x/y/z readback tests), 275 (`TextureCube` partial rect +
-  startIndex tests, all six faces), and 276 (`TextureCube` mip-level tests, all six faces — found
-  and fixed a real GPU-storage allocation bug, see §3) done. Phases 30 and 31 were already complete.
-  New Tasks 663 and 862 were added (unnumbered-sequence, matching existing precedent) for severe
-  findings from Tasks 272 and 276 — see §3. Next up: Task 277 (verify `Texture3D` sampling in
-  EasyGL stock/custom effect).
+  startIndex tests, all six faces), 276 (`TextureCube` mip-level tests, all six faces — found and
+  fixed a real GPU-storage allocation bug), and 277 (verified `Texture3D` sampling is not wired
+  into any shader — audit-only, no code change, see §3) done. Phases 30 and 31 were already
+  complete. New Tasks 663, 862, and 863 were added (unnumbered-sequence, matching existing
+  precedent) for severe findings from Tasks 272, 276, and 277 — see §3. Next up: Task 278 (verify
+  `TextureCube` sampling in EasyGL/Vulkan/Bgfx `EnvironmentMapEffect` — will likely hit the same
+  class-hierarchy wall Task 277 found, since `TextureCube` also doesn't inherit `Texture`, but
+  `EnvironmentMapEffect` is a stock effect that may have its own hardcoded cube-texture binding
+  path bypassing `GraphicsDevice.Textures` entirely — needs checking, not assumed).
 - **Key architectural decisions:**
   - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).
@@ -165,6 +169,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 277 | `AUDIT.md`, `GRAPHICS_TASKS.md` (no source changes — audit-only) | Verified `Texture3D` sampling is not exposed to any effect, stock or custom. No stock FNA effect samples `Texture3D` (true in real XNA too). Custom `ShaderEffect`/`IEffectBackend` have no texture-binding API at all (scalar/vector/matrix uniforms only). Root architectural cause: FNA's `Texture3D : Texture` lets any texture ride `GraphicsDevice.Textures[slot]`; CNA's `Texture3D : GraphicsResource` (not `Texture`) can't be assigned into `TextureCollection` at all. `EffectParameter::SetValue(Texture3D*)` has zero consumers in any backend — a write-only dead end. Tracked as new Task 863 (real fix = architecture change, out of verify-only scope). |
 | 276 | `EasyGLGraphicsBackend.cpp`, `examples/easygl_texturecube_mip_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | **Found and fixed a real bug.** New mip round-trip test (all 6 faces × 3 levels) initially failed: `EasyGLTextureCubeBackend`'s constructor only allocated GPU storage for level 0 (`set_image_2d`, no level loop), so `SetData`'s `set_sub_image_2d` (`glTexSubImage2D`) writes to level 1+ silently went nowhere (that call requires the level to already be defined). Fixed by pre-allocating every mip level for every face in the constructor. All 126 checks now pass. Same bug shape flagged (not fixed here) for `Texture3D`'s identical single-level-only pattern — tracked as new Task 862. 1973/1975 EasyGL ctest (same 2 pre-existing failures). |
 | 275 | `examples/easygl_texturecube_partial_rect_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Task 172 already covered whole-face round-trip for all 6 faces (simple 2-arg overload); `TextureCubeTests.cpp`'s rect-based/startIndex overload coverage was argument-guards only. New test closes that gap with real pixel verification: off-centre 2×2 rect per face (no cross-face bleed), `SetData`/`GetData` `startIndex` with real data. All pass, no bug found. |
 | 274 | `examples/easygl_texture3d_partial_box_readback_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | `GetData` box readback with a per-voxel-unique colour (so axis swaps are detectable, unlike Task 273's binary split): asymmetric off-origin box, `startIndex`, far-corner box. All pass, no bug found. Also confirmed FNA itself never validates `elementCount` against box volume — CNA's matching lack of that check is faithful behavior, not a gap. |
@@ -203,7 +208,11 @@ DDSFromStreamEXT` is a confirmed non-functional silent stub (Task 272 finding, t
 663) — not a build/test blocker, but worth flagging prominently since it fails silently. Also,
 `Texture3D`'s mip levels >0 are suspected broken via the same silent-failure GPU-storage-allocation
 bug that Task 276 found and fixed for `TextureCube` (tracked as new Task 862, not yet reproduced
-with a test) — likely-but-unconfirmed, not a build/test blocker either.
+with a test) — likely-but-unconfirmed, not a build/test blocker either. Separately, `Texture3D`
+sampling in shaders is confirmed **not implemented at all** (Task 277 finding, tracked as new Task
+863) — no stock effect needs it and no game code currently depends on it, so it's not a regression,
+but any future game code that expects `GraphicsDevice.Textures[i] = my3DTexture` to work (as it does
+in real XNA/FNA) will find it doesn't even compile in CNA today.
 
 The closest thing to an open problem beyond that is that the Task 261 `Texture2D` audit still has
 two unresolved (non-urgent) findings, documented in `AUDIT.md` under "Texture2D detailed audit":
