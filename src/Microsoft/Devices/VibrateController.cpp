@@ -160,6 +160,21 @@ namespace Microsoft::Devices
 
             return OpenFirstHapticDevice();
         }
+
+        // Destroys the currently-uploaded StartLeftRight() effect, if any.
+        // Shared by Stop(), Start()/Start(duration,intensity) (so the plain
+        // rumble path never runs layered on top of a still-active
+        // StartLeftRight() effect), and StartLeftRight()'s own re-entry path
+        // (replacing a previous dual-motor effect with a new one).
+        void DestroyLeftRightEffectIfAny()
+        {
+            if (g_haptic != nullptr && g_leftRightEffectId >= 0)
+            {
+                SDL_DestroyHapticEffect(g_haptic, g_leftRightEffectId);
+            }
+
+            g_leftRightEffectId = -1;
+        }
     } // namespace
 
     VibrateController* VibrateController::getDefaultProperty()
@@ -199,6 +214,11 @@ namespace Microsoft::Devices
             return; // Silent no-op: device doesn't support simple rumble.
         }
 
+        // Mutually exclusive with StartLeftRight(): the two use independent
+        // SDL haptic effect slots, so a still-active dual-motor effect must
+        // be stopped explicitly or both would vibrate simultaneously.
+        DestroyLeftRightEffectIfAny();
+
         SDL_PlayHapticRumble(g_haptic, clampedIntensity, durationMs);
     }
 
@@ -207,12 +227,7 @@ namespace Microsoft::Devices
         if (g_haptic != nullptr)
         {
             SDL_StopHapticEffects(g_haptic);
-
-            if (g_leftRightEffectId >= 0)
-            {
-                SDL_DestroyHapticEffect(g_haptic, g_leftRightEffectId);
-                g_leftRightEffectId = -1;
-            }
+            DestroyLeftRightEffectIfAny();
         }
     }
 
@@ -281,11 +296,16 @@ namespace Microsoft::Devices
             return; // Silent no-op: device doesn't support dual-motor rumble.
         }
 
-        if (g_leftRightEffectId >= 0)
-        {
-            SDL_DestroyHapticEffect(g_haptic, g_leftRightEffectId);
-            g_leftRightEffectId = -1;
-        }
+        // Mutually exclusive with Start()/Start(duration,intensity): stop
+        // any still-active simple rumble before uploading the dual-motor
+        // effect, so both never run on the same motor(s) at once.
+        // SDL_StopHapticRumble() is the only way to stop specifically the
+        // rumble path — its effect slot (haptic->rumble_id) is private to
+        // SDL, so a general SDL_StopHapticEffect(id) isn't reachable here.
+        SDL_StopHapticRumble(g_haptic);
+
+        // Replaces any previous StartLeftRight() effect (re-entry case).
+        DestroyLeftRightEffectIfAny();
 
         SDL_HapticEffect effect{};
         effect.leftright.type = SDL_HAPTIC_LEFTRIGHT;

@@ -150,3 +150,44 @@ TEST(VibrateControllerTests, StartLeftRightWithOutOfRangeDurationThrows)
         VibrateController::getDefaultProperty()->StartLeftRight(1.0f, 1.0f, TimeSpan::FromSeconds(5.001)),
         System::ArgumentOutOfRangeException);
 }
+
+// Task P3-5: Start()/Start(duration,intensity) and StartLeftRight() use
+// independent SDL haptic effect slots and must stop each other's effect
+// before starting their own, so they never run layered on the same
+// motor(s). This environment can't assert on actual simultaneous-motor
+// state headless (no real haptic hardware guaranteed), but it can assert
+// the call sequence itself is safe end-to-end: switching between the two
+// paths repeatedly, in both directions, must never throw or leak/double-
+// free the StartLeftRight() effect slot, and Stop() must still clean up
+// correctly afterward.
+
+TEST(VibrateControllerTests, StartThenStartLeftRightThenStopDoesNotThrow)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(50)));
+    EXPECT_NO_THROW(controller->StartLeftRight(1.0f, 1.0f, TimeSpan::FromMilliseconds(50)));
+    EXPECT_NO_THROW(controller->Stop());
+}
+
+TEST(VibrateControllerTests, StartLeftRightThenStartThenStopDoesNotThrow)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    EXPECT_NO_THROW(controller->StartLeftRight(1.0f, 1.0f, TimeSpan::FromMilliseconds(50)));
+    EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(50)));
+    EXPECT_NO_THROW(controller->Stop());
+}
+
+TEST(VibrateControllerTests, AlternatingStartAndStartLeftRightRepeatedlyDoesNotThrow)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    for (int i = 0; i < 3; ++i)
+    {
+        EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(10), 0.5f));
+        EXPECT_NO_THROW(controller->StartLeftRight(0.5f, 0.5f, TimeSpan::FromMilliseconds(10)));
+    }
+
+    EXPECT_NO_THROW(controller->Stop());
+}

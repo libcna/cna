@@ -46,21 +46,21 @@ deeper research pass) and **nothing in it has been started yet**.
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
 (`cmake-build-debug`) as of the last verified build (2026-07-03, HEAD
-`44ad496` + uncommitted Task P3-1 work). Also verified clean under `VULKAN`
+`50c091e` + uncommitted Task P3-5 work). Also verified clean under `VULKAN`
 (`cmake-build-vulkan`) and `BGFX` (`cmake-build-bgfx`) as of 2026-07-02 —
 the graphics backend choice has zero effect on `Microsoft::Devices::*`
 compilation, confirmed empirically. (Vulkan/BGFX not re-verified after
-Task P3-1 since it only touches `Microsoft::Devices::Sensors` headers/cpp,
+Tasks P3-1/P3-4/P3-5 since they only touch `Microsoft::Devices` headers/cpp,
 same reasoning as before.)
 
-**Tests:** last full `ctest` run (`EASYGL`): **1970 tests total, 97%
+**Tests:** last full `ctest` run (`EASYGL`): **1973 tests total, 97%
 passing.** The only failures are a fixed set of **64 pre-existing
 `EasyGL_*` graphics tests** that cannot run headless (no display/GPU in
 this dev environment) — present before this phase began, unrelated to
 `Microsoft::Devices`. No regressions have been introduced. Under `VULKAN`/
 `BGFX`, the targeted Devices/Sensors/VibrateController suite was **139/139**
-passing on both as of 2026-07-02 (not re-run after Task P3-1); full-suite
-counts differ from `EASYGL` only because backend-specific demo/smoke-test
+passing on both as of 2026-07-02 (not re-run since); full-suite counts
+differ from `EASYGL` only because backend-specific demo/smoke-test
 executables weren't built (not a regression).
 
 **Working:**
@@ -92,9 +92,10 @@ executables weren't built (not a regression).
   NDK / iOS toolchain is available in this dev container.
   `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__` branches have
   never been compiled by any compiler.
-- Two confirmed real bugs from the newest research pass are **not yet
-  fixed** (tracked in `plan_devices_phase3.md`; a third, Task P3-1, was
-  fixed 2026-07-03): see Section 4.
+- All three confirmed real bugs from the newest research pass are now
+  **fixed** (Tasks P3-1, P3-4, P3-5, all 2026-07-03): see Section 4. Test-
+  coverage gaps (Tasks P3-6 through P3-11) and one decision task (P3-2)
+  remain open in `plan_devices_phase3.md`.
 
 ---
 
@@ -149,9 +150,27 @@ executables weren't built (not a regression).
   dangling-pointer window remains if `Dispose()` runs concurrently with an
   in-flight event callback; full writeup in `plan_devices_phase3.md` Task
   P3-4's "Resolution" section.
-- Last pushed commit: `44ad496` on `feature/devices`. Task P3-1's changes
-  were committed locally as `9b8281f` (not yet pushed). Task P3-4's changes
-  (`Accelerometer.hpp`/`.cpp`, `Gyroscope.hpp`/`.cpp`, `AUDIT.md`,
+- **Task P3-5 done (2026-07-03):** `VibrateController::Start()`/
+  `Start(duration, intensity)` and `StartLeftRight()` now stop each other's
+  SDL haptic effect before starting their own, instead of running on
+  independent effect slots that could vibrate simultaneously. Added a
+  shared private `DestroyLeftRightEffectIfAny()` helper (used by `Stop()`,
+  `Start*`, and `StartLeftRight()`'s re-entry path); `StartLeftRight()`
+  additionally calls `SDL_StopHapticRumble(g_haptic)` before uploading its
+  effect (confirmed to exist in the vendored SDL3 by reading, not editing,
+  `third_party/SDL/include/SDL3/SDL_haptic.h`, per that directory's own
+  `CLAUDE.md`). 3 new sequence-safety tests (both call orders plus a
+  repeated-alternation stress case) — 23 `VibrateControllerTests` total, up
+  from 20. Full writeup: `plan_devices_phase3.md` Task P3-5's "Resolution"
+  section.
+- **Also added, 2026-07-03 (process change, not a code fix):** `CLAUDE.md`
+  now has a "Git Commits" section codifying that a commit should follow
+  immediately after each finished task rather than waiting for an explicit
+  request, staging only that task's files by name.
+- Last pushed commit: `44ad496` on `feature/devices`. Tasks P3-1 (`9b8281f`),
+  P3-4 (`ab106b5`), and the `CLAUDE.md` process-change commit (`50c091e`)
+  are committed locally but **not yet pushed**. Task P3-5's changes
+  (`VibrateController.cpp`, `VibrateControllerTests.cpp`, `AUDIT.md`,
   `plan_devices_phase3.md`, this file) are **not yet committed** as of this
   writing.
 
@@ -159,8 +178,9 @@ executables weren't built (not a regression).
 
 ## 4. Current blocker / main problem
 
-No blocker prevents work from continuing — build and tests are green. The
-last open problem found by `plan_devices_phase3.md`'s research pass:
+No blocker prevents work from continuing — build and tests are green. All
+three real bugs `plan_devices_phase3.md`'s research pass found are now
+fixed:
 
 **Problem 1 — fixed 2026-07-03 (Task P3-4):** `Accelerometer`/`Gyroscope`'s
 shared static sensor state (`startedInstances_`, `g_sensor_`, `g_sensorId_`,
@@ -177,18 +197,16 @@ supported, matching the documented WP7 behavior (MSDN `hh239261`). See
 Section 3 for the fix summary and `plan_devices_phase3.md` Task P3-1 for
 the full resolution writeup.
 
-**Problem 3 (not yet fixed):** `VibrateController::Start()`/
-`Start(duration, intensity)` and `StartLeftRight()` use independent SDL
-haptic effect slots and don't stop each other — confirmed by reading
-`third_party/SDL/src/haptic/SDL_haptic.c` (`SDL_InitHapticRumble` allocates
-its own `haptic->rumble_id`, separate from this codebase's
-`g_leftRightEffectId`). Calling both without an intervening `Stop()` can
-physically vibrate both effects at once. See `plan_devices_phase3.md` Task
-P3-5.
+**Problem 3 — fixed 2026-07-03 (Task P3-5):** `VibrateController::Start()`/
+`Start(duration, intensity)` and `StartLeftRight()` now stop each other's
+SDL haptic effect before starting their own — previously independent effect
+slots (`SDL_InitHapticRumble`'s internal `haptic->rumble_id` vs. this
+codebase's own `g_leftRightEffectId`) that could run simultaneously. See
+Section 3 for the fix summary and `plan_devices_phase3.md` Task P3-5 for
+the full resolution writeup.
 
-**What has been tried:** Problems 1 and 2 are fixed (Tasks P3-4 and P3-1,
-both 2026-07-03). Problem 3 hasn't been attempted yet — found by
-research/code review this session, not a previously attempted fix.
+**What has been tried:** all three problems are fixed (Tasks P3-4, P3-1,
+P3-5, all 2026-07-03).
 
 ---
 
@@ -202,9 +220,9 @@ research/code review this session, not a previously attempted fix.
 - **Fixed 2026-07-03:** `SensorBase<T>.CurrentValue` now throws
   `InvalidOperationException` when unsupported. See Section 4, Problem 2 /
   Task P3-1 (done).
-- **Confirmed design gap, not yet fixed:** `VibrateController`'s
-  `Start()`/`StartLeftRight()` don't cancel each other's SDL effects. See
-  Section 4, Problem 3 / Task P3-5.
+- **Fixed 2026-07-03:** `VibrateController`'s `Start()`/`StartLeftRight()`
+  now cancel each other's SDL effects before starting. See Section 4,
+  Problem 3 / Task P3-5 (done).
 - **Needs a decision, not a forced fix:** the 5 reading types
   (`AccelerometerReading`, `CompassReading`, `GyroscopeReading`,
   `AttitudeReading`, `MotionReading`) have fully public `setXProperty()`
@@ -296,10 +314,11 @@ never build-verified).
 via `getDefaultProperty()`), no `SensorBase<T>`, no `IDisposable`, lives
 directly in `Microsoft::Devices` (not `::Sensors`). Drives SDL3's haptic
 API directly. Excludes haptic devices that are also connected
-joysticks/gamepads from device selection. **Known unfixed gap:** its plain
-`Start()` rumble effect and its `StartLeftRight()` dual-motor effect are
-independent SDL effect slots that don't cancel each other — see Section 4,
-Problem 3.
+joysticks/gamepads from device selection. Its plain `Start()` rumble effect
+and its `StartLeftRight()` dual-motor effect are independent SDL effect
+slots; **fixed 2026-07-03 (Task P3-5)** so each now stops the other's
+effect before starting its own, via a shared `DestroyLeftRightEffectIfAny()`
+helper and `SDL_StopHapticRumble()` — see Section 4, Problem 3.
 
 **`GetTypeName()` invariant:** must return `.`-separated fully-qualified
 .NET names (e.g. `"Microsoft.Devices.Sensors.Compass"`), tagged `NOXNA`.
@@ -364,16 +383,11 @@ writing.
 ## 8. Next smallest tasks
 
 Full detail for all of these is in `plan_devices_phase3.md`; this is the
-recommended order. (Tasks P3-1 and P3-4 were completed 2026-07-03 — see
-Section 3.)
+recommended order. (Tasks P3-1, P3-4, and P3-5 were completed 2026-07-03 —
+see Section 3. All three confirmed real bugs from this plan are now fixed;
+what's left is one decision task and test-coverage gaps.)
 
-1. **Task P3-5 — Make `VibrateController::Start()`/`StartLeftRight()` mutually exclusive**
-   - Goal: each `Start*` variant should stop the other's active SDL effect
-     before starting its own.
-   - Files: `src/Microsoft/Devices/VibrateController.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="VibrateControllerTests*"`.
-
-2. **Task P3-2 — Decide on the reading-type public-setter visibility gap**
+1. **Task P3-2 — Decide on the reading-type public-setter visibility gap**
    - Goal: this is a decision, not a mechanical fix — read
      `plan_devices_phase3.md` Task P3-2 in full and either (a) document the
      public-setter-vs-`internal set` mismatch as an accepted C++ deviation
@@ -384,7 +398,7 @@ Section 3.)
    - Verify: full `ctest --output-on-failure` if option B; no build/test
      needed if option A.
 
-3. **Task P3-6/P3-7/P3-9 — Fill the highest-value test-coverage gaps**
+2. **Task P3-6/P3-7/P3-9 — Fill the highest-value test-coverage gaps**
    - Goal: add `CurrentValueChanged` subscription tests (all 4 sensor
      classes), `GetTypeName()` tests (`Compass`/`Gyroscope`/`Motion` —
      `Accelerometer` already has one), and dispose-then-11th-succeeds tests

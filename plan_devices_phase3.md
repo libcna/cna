@@ -238,7 +238,7 @@ pre-existing headless `EasyGL_*` failures, zero regressions.
 
 ## Phase 3: `VibrateController` effect conflict
 
-### Task P3-5 — Make `Start()`/`Start(duration,intensity)`/`StartLeftRight()` mutually exclusive
+### Task P3-5 — Make `Start()`/`Start(duration,intensity)`/`StartLeftRight()` mutually exclusive — ✅ Done (2026-07-03)
 
 **Gap (confirmed via reading `third_party/SDL/src/haptic/SDL_haptic.c`):**
 `SDL_InitHapticRumble()` (used by `Start()`/`Start(duration,intensity)`) allocates its
@@ -269,6 +269,22 @@ layering concept) never allows.
    headless, but can assert the call sequence itself is safe and no resource leaks/double
    frees occur — run under a leak-checking build if one is easily available, otherwise
    just confirm no crash/throw across the sequence).
+
+**Resolution (2026-07-03):** `SDL_StopHapticRumble(SDL_Haptic*)` does exist in the vendored
+SDL3 (`third_party/SDL/include/SDL3/SDL_haptic.h`, confirmed by reading — not editing, per
+that directory's own `CLAUDE.md`), so step 2's fallback speculation wasn't needed. Added a
+shared private helper `DestroyLeftRightEffectIfAny()` (anonymous-namespace function,
+matching the file's existing style) used by `Stop()`, `Start(duration, intensity)`, and
+`StartLeftRight()`'s own re-entry path — avoiding the tripled 3-line duplicate step 1
+flagged. `Start(duration, intensity)` now calls `DestroyLeftRightEffectIfAny()` right
+before `SDL_PlayHapticRumble()`; `StartLeftRight()` now calls `SDL_StopHapticRumble(g_haptic)`
+right before uploading its effect. Both directions covered. 3 new tests added
+(`StartThenStartLeftRightThenStopDoesNotThrow`, `StartLeftRightThenStartThenStopDoesNotThrow`,
+`AlternatingStartAndStartLeftRightRepeatedlyDoesNotThrow`), matching step 3's guidance —
+sequence-safety only, no simultaneous-motor-state assertion (not observable headless).
+Verified: `CNA` + `CnaTests` build clean. `VibrateControllerTests*` — 23/23 passing. Full
+`ctest` — 1973 tests (up from 1970), 97% passing, same 64 pre-existing headless `EasyGL_*`
+failures, zero regressions.
 
 ---
 
