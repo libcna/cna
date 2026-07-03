@@ -80,6 +80,15 @@ TEST(GyroscopeTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(g.Dispose(), System::ObjectDisposedException);
 }
 
+// Task P3-11: Stop()-after-Dispose() is a distinct, separately guarded code
+// path (ObjectDisposedException::ThrowIf at the top of Stop()).
+TEST(GyroscopeTests, StopAfterDisposeThrows)
+{
+    Gyroscope g;
+    g.Dispose();
+    EXPECT_THROW(g.Stop(), System::ObjectDisposedException);
+}
+
 TEST(GyroscopeTests, EleventhSimultaneousInstanceThrows)
 {
     std::vector<std::unique_ptr<Gyroscope>> instances;

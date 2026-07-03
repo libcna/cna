@@ -129,6 +129,23 @@ TEST(VibrateControllerTests, GetDeviceNamePropertyDoesNotCrash)
     (void)name;
 }
 
+// Task P3-11: getIsSupportedProperty() and getDeviceNameProperty() were
+// previously only tested independently ("doesn't crash"), treating them as
+// unrelated facts. Both re-probe via the same AcquireHapticDeviceForProbe()
+// helper, so the relationship is a real invariant, not a coincidence: no
+// device found (unsupported) implies an empty device name.
+TEST(VibrateControllerTests, UnsupportedImpliesEmptyDeviceName)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+    const bool supported = controller->getIsSupportedProperty();
+    const std::string name = controller->getDeviceNameProperty();
+
+    if (!supported)
+    {
+        EXPECT_TRUE(name.empty());
+    }
+}
+
 TEST(VibrateControllerTests, StartLeftRightDoesNotThrow)
 {
     EXPECT_NO_THROW(
@@ -149,6 +166,23 @@ TEST(VibrateControllerTests, StartLeftRightWithOutOfRangeDurationThrows)
     EXPECT_THROW(
         VibrateController::getDefaultProperty()->StartLeftRight(1.0f, 1.0f, TimeSpan::FromSeconds(5.001)),
         System::ArgumentOutOfRangeException);
+}
+
+// Task P3-11: StartLeftRightDoesNotThrow above incidentally covers the
+// upper magnitude boundary (1.0f/1.0f), but 0.0f for either motor was
+// never tested, nor was TimeSpan::Zero duration specifically for
+// StartLeftRight (only ~50ms and the 5.001s throw case).
+
+TEST(VibrateControllerTests, StartLeftRightWithZeroMagnitudesDoesNotThrow)
+{
+    EXPECT_NO_THROW(
+        VibrateController::getDefaultProperty()->StartLeftRight(0.0f, 0.0f, TimeSpan::FromMilliseconds(50)));
+}
+
+TEST(VibrateControllerTests, StartLeftRightWithZeroDurationDoesNotThrow)
+{
+    EXPECT_NO_THROW(
+        VibrateController::getDefaultProperty()->StartLeftRight(1.0f, 1.0f, TimeSpan::Zero));
 }
 
 // Task P3-5: Start()/Start(duration,intensity) and StartLeftRight() use

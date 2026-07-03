@@ -17,8 +17,11 @@ their reading/event-args/exception types) plus
 the documented Windows Phone 7 XNA API spec. Branch: `feature/devices`.
 Two plans are fully closed (`plan_devices.md`, `plan_devices_phase2.md`,
 except one environment-blocked task); a third, `plan_devices_phase3.md`, is
-open with concrete follow-up work (real bugs + test-coverage gaps found by a
-deeper research pass) and **nothing in it has been started yet**.
+**effectively done** as of 2026-07-03 — 11 of its 12 tasks are complete
+(all 3 confirmed real bugs fixed, the 1 decision task resolved, all 6
+test-coverage-gap tasks filled). Only **Task P3-12** remains, explicitly
+low-priority (unverified-but-not-known-broken research follow-up). No new
+task has been picked for after `plan_devices_phase3.md` yet.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -46,23 +49,23 @@ deeper research pass) and **nothing in it has been started yet**.
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
 (`cmake-build-debug`) as of the last verified build (2026-07-03, HEAD
-`b6e245d` + uncommitted Task P3-10 work). Also verified clean under
+`0c5bc25` + uncommitted Task P3-11 work). Also verified clean under
 `VULKAN` (`cmake-build-vulkan`) and `BGFX` (`cmake-build-bgfx`) as of
 2026-07-02 — the graphics backend choice has zero effect on
 `Microsoft::Devices::*` compilation, confirmed empirically. (Vulkan/BGFX
-not re-verified after Tasks P3-1/P3-4/P3-5/P3-2/P3-6/P3-7/P3-8/P3-9/P3-10
-since they only touch `Microsoft::Devices` headers/cpp/tests, same
-reasoning as before.)
+not re-verified after any of the Task P3-* work this session, since it all
+only touches `Microsoft::Devices` headers/cpp/tests, same reasoning as
+before — worth a real re-verification pass before considering this phase
+fully closed out, see Section 8.)
 
-**Tests:** last full `ctest` run (`EASYGL`): **1972 tests total, 97%
+**Tests:** last full `ctest` run (`EASYGL`): **1985 tests total, 97%
 passing.** The only failures are a fixed set of **64 pre-existing
 `EasyGL_*` graphics tests** that cannot run headless (no display/GPU in
 this dev environment) — present before this phase began, unrelated to
-`Microsoft::Devices`. No regressions have been introduced (the count went
-down from 1973 to 1953 as part of Task P3-2 — 20 `SetXxx` tests were
-removed because the methods they tested became private, not a coverage
-loss — then back up through 1966 (Tasks P3-6/P3-7/P3-8/P3-9) to 1972
-(Task P3-10); see Section 3). Under `VULKAN`/`BGFX`, the targeted
+`Microsoft::Devices`. No regressions have been introduced across the whole
+`plan_devices_phase3.md` pass (1964 → 1970 → 1953 (Task P3-2 removed 20
+setter tests, a churn not a loss) → 1966 → 1972 → 1985; see Section 3 for
+the per-task breakdown). Under `VULKAN`/`BGFX`, the targeted
 Devices/Sensors/VibrateController suite was **139/139** passing on both as
 of 2026-07-02 (not re-run since); full-suite counts differ from `EASYGL`
 only because backend-specific demo/smoke-test
@@ -98,10 +101,10 @@ executables weren't built (not a regression).
   `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__` branches have
   never been compiled by any compiler.
 - All three confirmed real bugs are fixed (Tasks P3-1, P3-4, P3-5), the one
-  decision task is resolved (P3-2), and the highest-value test-coverage
-  gaps are filled (Tasks P3-6, P3-7, P3-8, P3-9) — all 2026-07-03: see
-  Section 4. Only smaller test-coverage gaps (Tasks P3-10, P3-11) and
-  low-priority follow-ups (P3-3, P3-12) remain open in
+  decision task is resolved (P3-2), and every test-coverage-gap task is
+  filled (Tasks P3-6 through P3-11) — all 2026-07-03: see Section 4. Task
+  P3-3 was confirmed already-satisfied (no change needed). Only **Task
+  P3-12** (low-priority research follow-up, no known bug) remains open in
   `plan_devices_phase3.md`.
 
 ---
@@ -216,11 +219,29 @@ executables weren't built (not a regression).
   vanishingly unlikely. 6 new tests, no collisions hit. 1972 tests total,
   up from 1966. Full writeup: `plan_devices_phase3.md` Task P3-10's
   "Resolution" section.
+- **Task P3-11 done, Task P3-3 confirmed already-satisfied (2026-07-03):**
+  P3-11's bundle — `StopAfterDisposeThrows` (all 4 sensor classes),
+  `StartThenDisposeDoesNotCrash` (`Accelerometer`), a 2nd independently-varied
+  inequality case each for `AttitudeReading`/`MotionReading`/`CompassReading`,
+  negative-`ErrorId` round-trips for both exception test files,
+  `VibrateController`'s `UnsupportedImpliesEmptyDeviceName` consistency
+  test, and `StartLeftRight()` zero-magnitude/zero-duration boundary tests.
+  **One correction to the plan's own premise:** the "extend `ToString()` to
+  cover every field" sub-item turned out not to apply — reading the actual
+  `AttitudeReading`/`MotionReading` `.cpp` files showed their `ToString()`
+  format strings only ever included a subset of fields in the first place
+  (`Pitch`/`Roll`/`Yaw`; `DeviceAcceleration`/`Gravity`), so the existing
+  tests already covered everything actually in the output; no change made.
+  13 new tests (1985 total, up from 1972). Task P3-3 needed no change either
+  — `AUDIT.md`'s `AccelerometerFailedException` row already had the
+  "unverified" caveat dropped from an earlier task. **With this,
+  `plan_devices_phase3.md` is done except Task P3-12** (low priority). Full
+  writeup: `plan_devices_phase3.md` Tasks P3-11/P3-3's "Resolution" sections.
 - Last pushed commit: `44ad496` on `feature/devices`. Tasks P3-1 (`9b8281f`),
   P3-4 (`ab106b5`), the `CLAUDE.md` process-change commit (`50c091e`), P3-5
-  (`89d1e53`), P3-2 (`17e7dfa`), and P3-6/P3-7/P3-8/P3-9 (`b6e245d`) are
-  committed locally but **not yet pushed**. Task P3-10's changes (6 reading/
-  event-args test files, `plan_devices_phase3.md`, this file) are **not yet
+  (`89d1e53`), P3-2 (`17e7dfa`), P3-6/P3-7/P3-8/P3-9 (`b6e245d`), and P3-10
+  (`0c5bc25`) are committed locally but **not yet pushed**. Task P3-11's
+  changes (9 test files, `plan_devices_phase3.md`, this file) are **not yet
   committed** as of this writing.
 
 ---
@@ -229,7 +250,8 @@ executables weren't built (not a regression).
 
 No blocker prevents work from continuing — build and tests are green. All
 three real bugs `plan_devices_phase3.md`'s research pass found are now
-fixed:
+fixed, and the plan itself is done except one low-priority research
+follow-up (Task P3-12, see Section 5):
 
 **Problem 1 — fixed 2026-07-03 (Task P3-4):** `Accelerometer`/`Gyroscope`'s
 shared static sensor state (`startedInstances_`, `g_sensor_`, `g_sensorId_`,
@@ -281,16 +303,12 @@ P3-5, all 2026-07-03).
   Task P3-2 (done) for the full writeup, including the 20 removed direct
   `SetXxx` tests (replaced by existing constructor-based coverage) and the
   new `CHECKLIST.md` deviations-table row on `friend` vs. `internal` scope.
-- **Incomplete (test coverage):** zero test coverage of
-  `CurrentValueChanged` (the primary, non-deprecated event) on all 4 sensor
-  classes; `Compass`/`Gyroscope`/`Motion` are missing `GetTypeName()`
-  tests entirely; `Calibrate` event untested on `Compass`/`Motion`;
-  "dispose one of 10, an 11th now succeeds" never verified on any of the 4
-  sensor classes; `GetHashCode()` never tests the different-hash case
-  anywhere in the namespace; several smaller boundary gaps (negative
-  `ErrorId`, `StartLeftRight` zero-duration/zero-magnitude boundaries,
-  multi-field inequality/`ToString` coverage on `AttitudeReading`/
-  `MotionReading`). Full list: `plan_devices_phase3.md` Tasks P3-6–P3-11.
+- **Fixed 2026-07-03:** all test-coverage gaps identified by
+  `plan_devices_phase3.md`'s research pass are filled (Tasks P3-6 through
+  P3-11 — `CurrentValueChanged`/`Calibrate` subscription tests,
+  `GetTypeName()` on `Compass`/`Gyroscope`/`Motion`, dispose-decrement
+  verification, `GetHashCode()` different-hash cases, and the smaller
+  bundle in P3-11). See Section 3 for details.
 - **By design, not a bug:** `Compass` and `Motion` are permanent
   `SensorState::NotSupported` stubs — SDL3 has no magnetometer API on any
   platform.
@@ -430,33 +448,43 @@ writing.
 
 ## 8. Next smallest tasks
 
-Full detail for all of these is in `plan_devices_phase3.md`; this is the
-recommended order. (Tasks P3-1, P3-2, P3-4, P3-5, P3-6, P3-7, P3-8, P3-9,
-and P3-10 were completed 2026-07-03 — see Section 3. All confirmed real
-bugs, the one decision task, and all but the smallest test-coverage gaps
-from this plan are now resolved.)
+`plan_devices_phase3.md` is effectively done (11/12 tasks; see Section 3).
+What's left, in recommended order:
 
-1. **Task P3-11 — Remaining smaller coverage gaps (bundle)**
-   - Stop()-after-Dispose() on all 4 sensor classes; Start()-then-Dispose()
-     on `Accelerometer`; multi-field inequality variation on
-     `AttitudeReading`/`MotionReading`/`CompassReading`; full-field
-     `ToString()` coverage on `AttitudeReadingTests`/`MotionReadingTests`;
-     negative `ErrorId` round-trip on `SensorFailedExceptionTests`/
-     `AccelerometerFailedExceptionTests`; `VibrateController`
-     `getDeviceNameProperty()`/`getIsSupportedProperty()` consistency;
-     `StartLeftRight()` 0.0f-magnitude/zero-duration boundaries. See
-     `plan_devices_phase3.md` Task P3-11 for the full itemized list.
-   - Files: spread across `tests/Microsoft/Devices/Sensors/*.cpp` and
-     `tests/Microsoft/Devices/VibrateControllerTests.cpp`.
-   - Verify: full `ctest --output-on-failure`.
+1. **Re-verify `VULKAN`/`BGFX` builds** — not done since 2026-07-02
+   (commit `8092f6e`), and 8 commits of `Microsoft::Devices` changes have
+   landed since (Tasks P3-1 through P3-11). Low risk (the graphics backend
+   choice has never affected `Microsoft::Devices::*` compilation before),
+   but it's been asserted, not re-confirmed, across this whole session's
+   work — worth actually running before treating the phase as closed.
+   - Command: see Section 7's "Cross-platform build verification" block.
+   - Verify: both backends' `CNA`+`CnaTests` build clean; spot-run the
+     targeted Devices/Sensors/VibrateController suite on each.
 
-Remaining smaller items (P3-3, P3-12) are lower priority — see
-`plan_devices_phase3.md` directly when ready for those.
+2. **Task P3-12 (optional, low priority)** — re-attempt confirming
+   `SensorFailedException`'s real constructor overloads and
+   `CalibrationEventArgs`'s exact members via the `.NET Framework`
+   reference source instead of archived MSDN pages. No known bug either
+   way; only pick this up if going for full completeness. See
+   `plan_devices_phase3.md` Task P3-12 for the suggested research angle.
+
+3. **Decide what comes after `plan_devices_phase3.md`** — this is a
+   decision for you, not something to infer: is `Microsoft::Devices` done
+   for now (only Task P2-7's Android/iOS verification remains, blocked by
+   missing toolchain in this environment), or is there a `plan_devices_phase4.md`
+   worth opening for further hardening/expansion? Nothing in the current
+   plans mandates a phase 4.
 
 ---
 
 ## 9. Do not do yet
 
+- Tasks P3-6 through P3-11 are all done (2026-07-03). Do not re-add a
+  `ToString()` field-coverage test for `AttitudeReading`/`MotionReading`
+  expecting `Quaternion`/`RotationMatrix`/`Attitude`/`DeviceRotationRate`
+  substrings — those fields are genuinely not part of either class's
+  `ToString()` format string (verified by reading the `.cpp`, not assumed);
+  such a test would just fail.
 - Task P3-2 is done (2026-07-03, private + friend fix, option B). Do not
   re-open this or add back the removed direct `SetXxx` tests — they were
   intentionally removed because the methods they tested are no longer

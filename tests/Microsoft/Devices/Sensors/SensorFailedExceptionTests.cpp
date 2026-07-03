@@ -49,3 +49,13 @@ TEST(SensorFailedExceptionTests, ErrorIdConstructorRoundTripsErrorIdAndMessage)
     EXPECT_EQ(ex.getErrorIdProperty(), 42);
     EXPECT_STREQ(ex.what(), "Sensor failed.");
 }
+
+// Task P3-11: nothing in the implementation clamps/validates errorId, so a
+// negative value is a real untested code path, not just a missing
+// assertion.
+TEST(SensorFailedExceptionTests, ErrorIdConstructorRoundTripsNegativeErrorId)
+{
+    const SensorFailedException ex("Sensor failed.", -13);
+    EXPECT_EQ(ex.getErrorIdProperty(), -13);
+    EXPECT_STREQ(ex.what(), "Sensor failed.");
+}

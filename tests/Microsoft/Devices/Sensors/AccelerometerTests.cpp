@@ -85,6 +85,35 @@ TEST(AccelerometerTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(a.Dispose(), System::ObjectDisposedException);
 }
 
+// Task P3-11: only Start()-after-Dispose() and Dispose()-after-Dispose()
+// were tested before; Stop()-after-Dispose() is a distinct, separately
+// guarded code path (ObjectDisposedException::ThrowIf at the top of Stop()).
+TEST(AccelerometerTests, StopAfterDisposeThrows)
+{
+    Accelerometer a;
+    a.Dispose();
+    EXPECT_THROW(a.Stop(), System::ObjectDisposedException);
+}
+
+// Task P3-11: DisposeSucceedsAndSecondDisposeThrows above disposes a
+// never-started instance. This covers the separate started-then-disposed
+// cleanup path (Dispose(bool) calls Stop() internally when started_).
+TEST(AccelerometerTests, StartThenDisposeDoesNotCrash)
+{
+    Accelerometer a;
+
+    if (Accelerometer::getIsSupportedProperty())
+    {
+        a.Start();
+    }
+    else
+    {
+        EXPECT_THROW(a.Start(), AccelerometerFailedException);
+    }
+
+    EXPECT_NO_THROW(a.Dispose());
+}
+
 TEST(AccelerometerTests, EleventhSimultaneousInstanceThrows)
 {
     std::vector<std::unique_ptr<Accelerometer>> instances;

@@ -64,3 +64,13 @@ TEST(AccelerometerFailedExceptionTests, ErrorIdConstructorRoundTripsErrorIdAndMe
     EXPECT_EQ(ex.getErrorIdProperty(), 7);
     EXPECT_STREQ(ex.what(), "Accelerometer failed.");
 }
+
+// Task P3-11: nothing in the implementation clamps/validates errorId, so a
+// negative value is a real untested code path, not just a missing
+// assertion.
+TEST(AccelerometerFailedExceptionTests, ErrorIdConstructorRoundTripsNegativeErrorId)
+{
+    const AccelerometerFailedException ex("Accelerometer failed.", -7);
+    EXPECT_EQ(ex.getErrorIdProperty(), -7);
+    EXPECT_STREQ(ex.what(), "Accelerometer failed.");
+}

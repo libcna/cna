@@ -56,6 +56,15 @@ TEST(CompassTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(c.Dispose(), System::ObjectDisposedException);
 }
 
+// Task P3-11: Stop()-after-Dispose() is a distinct, separately guarded code
+// path (ObjectDisposedException::ThrowIf at the top of Stop()).
+TEST(CompassTests, StopAfterDisposeThrows)
+{
+    Compass c;
+    c.Dispose();
+    EXPECT_THROW(c.Stop(), System::ObjectDisposedException);
+}
+
 TEST(CompassTests, EleventhSimultaneousInstanceThrows)
 {
     std::vector<std::unique_ptr<Compass>> instances;

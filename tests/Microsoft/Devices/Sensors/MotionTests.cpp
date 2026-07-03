@@ -56,6 +56,15 @@ TEST(MotionTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(m.Dispose(), System::ObjectDisposedException);
 }
 
+// Task P3-11: Stop()-after-Dispose() is a distinct, separately guarded code
+// path (ObjectDisposedException::ThrowIf at the top of Stop()).
+TEST(MotionTests, StopAfterDisposeThrows)
+{
+    Motion m;
+    m.Dispose();
+    EXPECT_THROW(m.Stop(), System::ObjectDisposedException);
+}
+
 TEST(MotionTests, EleventhSimultaneousInstanceThrows)
 {
     std::vector<std::unique_ptr<Motion>> instances;

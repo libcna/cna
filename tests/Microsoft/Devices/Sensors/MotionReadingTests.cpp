@@ -60,6 +60,18 @@ TEST(MotionReadingTests, EqualityOperatorUnequalDeviceAcceleration)
     EXPECT_FALSE(a == b);
 }
 
+// Task P3-11: EqualityOperatorUnequalDeviceAcceleration above only varies
+// DeviceAcceleration, one of MotionReading's 5 fields. Vary Gravity too,
+// independently.
+TEST(MotionReadingTests, EqualityOperatorUnequalGravity)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const Vector3 v(1.0f, 0.0f, 0.0f);
+    const MotionReading a(AttitudeReading(), v, v, v, ts);
+    const MotionReading b(AttitudeReading(), v, v, Vector3(0.0f, 9.0f, 0.0f), ts);
+    EXPECT_FALSE(a == b);
+}
+
 TEST(MotionReadingTests, InequalityOperatorComplementary)
 {
     const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);

@@ -179,7 +179,7 @@ compiled with no changes needed, confirming the friend grants were correctly sco
 Full `ctest` — 1953 tests, 97% passing, same 64 pre-existing headless `EasyGL_*` failures,
 zero regressions.
 
-### Task P3-3 — `AccelerometerFailedException : SensorFailedException` inheritance — now fully confirmed, no action needed
+### Task P3-3 — `AccelerometerFailedException : SensorFailedException` inheritance — now fully confirmed, no action needed — ✅ Done (verified already satisfied, 2026-07-03)
 
 Already correctly implemented; this task just closes the loop on `plan_devices_phase2.md`
 Task P2-16's "unverified inheritance assumption" note. Confirmed directly via
@@ -187,6 +187,11 @@ Task P2-16's "unverified inheritance assumption" note. Confirmed directly via
 Update `AUDIT.md`'s `AccelerometerFailedException` row to drop the "unverified" caveat —
 this is now a documentation-only touch-up, not a code change. (Numbered here so the
 `AUDIT.md` update doesn't get lost, not because it needs its own build/test cycle.)
+
+**Resolution (2026-07-03):** Checked `AUDIT.md`'s current `AccelerometerFailedException`
+row — the "unverified" caveat was already dropped as part of Task P2-16's own resolution
+(the row already reads "Confirmed it does inherit `SensorFailedException`..."). No change
+needed; this task was already effectively satisfied before being picked up.
 
 ---
 
@@ -435,7 +440,7 @@ Full `ctest` — 1972 tests (up from 1966), 97% passing, same 64 pre-existing he
 
 ## Phase 5: Test coverage — smaller gaps (bundle into one pass per class)
 
-### Task P3-11 — Remaining smaller coverage gaps
+### Task P3-11 — Remaining smaller coverage gaps — ✅ Done (2026-07-03)
 
 Bundle these into whichever class's test file they touch — no need for one task per gap:
 
@@ -468,6 +473,42 @@ Bundle these into whichever class's test file they touch — no need for one tas
   `StartLeftRightDoesNotThrow`, but `0.0f` for either motor is never tested, and
   `TimeSpan::Zero` duration is never tested for `StartLeftRight` specifically (only
   ~50ms and the `5.001s` throw case). Add both.
+
+**Resolution (2026-07-03):** All 7 bullets addressed, with one correction to the plan's
+own assumption:
+
+- `Stop()`-after-`Dispose()`: added `StopAfterDisposeThrows` to all 4 sensor test files
+  (`Accelerometer`, `Gyroscope`, `Compass`, `Motion`).
+- `Start()`-then-`Dispose()`: added `StartThenDisposeDoesNotCrash` to `AccelerometerTests.cpp`.
+- Multi-field inequality: added `EqualityOperatorUnequalTimestamp` (`AttitudeReading`,
+  varying a 2nd of 6 fields), `EqualityOperatorUnequalGravity` (`MotionReading`, 2nd of 5),
+  `EqualityOperatorUnequalTrueHeading` (`CompassReading`, 2nd of 5) — each independently
+  confirmed against the real `operator==` implementation (grepped `src/.../*.cpp` first)
+  to make sure the varied field is actually part of the equality check.
+- **`ToString()` full-field spot-checks — corrected, not applicable:** reading the actual
+  `ToString()` implementations (`AttitudeReading.cpp`, `MotionReading.cpp`) shows the
+  format strings only ever include `Pitch`/`Roll`/`Yaw` and `DeviceAcceleration`/`Gravity`
+  respectively — `Quaternion`/`RotationMatrix`/`Timestamp` and `Attitude`/
+  `DeviceRotationRate`/`Timestamp` were never part of either format string in the first
+  place. The plan's premise here (based on the earlier research pass, not a direct read of
+  these two `.cpp` files) was incorrect. The existing tests already cover every field that
+  actually appears in each format string — no test change needed, and no test was added
+  asserting a substring that would never be present.
+- `ErrorId` negative-value test: added `ErrorIdConstructorRoundTripsNegativeErrorId` to
+  both `SensorFailedExceptionTests.cpp` and `AccelerometerFailedExceptionTests.cpp`.
+- `VibrateController` consistency: added `UnsupportedImpliesEmptyDeviceName`, asserting
+  `!getIsSupportedProperty() ⇒ getDeviceNameProperty().empty()` (the only direction the
+  implementation actually guarantees — both re-probe via the same
+  `AcquireHapticDeviceForProbe()` helper).
+- `StartLeftRight()` boundaries: added `StartLeftRightWithZeroMagnitudesDoesNotThrow` and
+  `StartLeftRightWithZeroDurationDoesNotThrow`.
+
+13 new tests total. Verified: `CNA` + `CnaTests` build clean. Targeted suites — 125/125
+passing (2 skipped, `Accelerometer`/`Gyroscope`'s supported-path variants). Full `ctest` —
+1985 tests (up from 1972), 97% passing, same 64 pre-existing headless `EasyGL_*` failures,
+zero regressions. **With Task P3-3 also confirmed already-satisfied in this same pass,
+every task in `plan_devices_phase3.md` is now done except the one explicitly low-priority
+Phase 6 item, Task P3-12.**
 
 ---
 

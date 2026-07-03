@@ -54,6 +54,18 @@ TEST(CompassReadingTests, EqualityOperatorUnequalHeadingAccuracy)
     EXPECT_FALSE(a == b);
 }
 
+// Task P3-11: EqualityOperatorUnequalHeadingAccuracy above only varies
+// HeadingAccuracy, one of CompassReading's 5 fields. Vary TrueHeading too,
+// independently.
+TEST(CompassReadingTests, EqualityOperatorUnequalTrueHeading)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const Vector3 mag(1.0f, 0.0f, 0.0f);
+    const CompassReading a(1.0, 2.0, mag, ts, 3.0);
+    const CompassReading b(1.0, 2.0, mag, ts, 9.0);
+    EXPECT_FALSE(a == b);
+}
+
 TEST(CompassReadingTests, InequalityOperatorComplementary)
 {
     const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);

@@ -57,6 +57,18 @@ TEST(AttitudeReadingTests, EqualityOperatorUnequalPitch)
     EXPECT_FALSE(a == b);
 }
 
+// Task P3-11: EqualityOperatorUnequalPitch above only varies Pitch, one of
+// AttitudeReading's 6 fields. Vary a second, independent field so a
+// hypothetical operator== bug that ignores Timestamp wouldn't slip through.
+TEST(AttitudeReadingTests, EqualityOperatorUnequalTimestamp)
+{
+    const AttitudeReading a(1.0f, 2.0f, 3.0f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        DateTimeOffset(System::DateTime(100LL), System::TimeSpan::Zero));
+    const AttitudeReading b(1.0f, 2.0f, 3.0f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        DateTimeOffset(System::DateTime(200LL), System::TimeSpan::Zero));
+    EXPECT_FALSE(a == b);
+}
+
 TEST(AttitudeReadingTests, InequalityOperatorComplementary)
 {
     const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
