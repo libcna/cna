@@ -372,6 +372,23 @@ Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vu
 
 ---
 
+## Git Commits — Always Commit After Finishing a Task
+
+**Always create a commit as soon as a task is finished** (build verified, tests passing,
+plan/`AUDIT.md`/`NEXT.md` updated) — do not wait for an explicit "commit" request for each
+individual task. Do not push unless the user explicitly asks to push.
+
+- Stage only the files that belong to the completed task, by explicit name
+  (`git add <file> <file> ...`). Never use `git add -A`/`git add .` — this repo routinely has
+  unrelated pre-existing local changes (e.g. an untracked vendor directory, an unrelated
+  deleted config file) that must not be swept into an unrelated commit.
+- Write the commit message referencing the task ID from the relevant plan file (e.g.
+  `fix(Task P3-4): ...`), summarizing what changed and why, matching the detail level of
+  this project's existing commit history (`git log --oneline`).
+- One task = one commit. Do not bundle multiple unrelated tasks into a single commit.
+
+---
+
 ## Internal (CNA) vs XNA Layer
 
 | Layer                     | Location                                      | Purpose                        |
