@@ -167,6 +167,51 @@ TEST_F(SoundEffectInstanceTest, RepeatedPlayWhileAlreadyPlayingDoesNotRestartTra
     EXPECT_GE(MIX_GetTrackPlaybackPosition(track), 500);
 }
 
+TEST_F(SoundEffectInstanceTest, MoveConstructorTransfersTrackAndProperties)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance src = instance();
+    src.setVolumeProperty(0.5f);
+    src.Play();
+    ASSERT_EQ(src.getStateProperty(), SoundState::Playing);
+    MIX_Track* originalTrack = SoundEffectInstanceTestAccess::GetTrack(src);
+    ASSERT_NE(originalTrack, nullptr);
+
+    SoundEffectInstance dst(std::move(src));
+
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(dst), originalTrack);
+    EXPECT_FLOAT_EQ(dst.getVolumeProperty(), 0.5f);
+    EXPECT_EQ(dst.getStateProperty(), SoundState::Playing);
+
+    // The moved-from instance must look disposed so its destructor (which no-ops when
+    // isDisposed_ is already true) doesn't try to destroy the track dst now owns.
+    EXPECT_TRUE(src.getIsDisposedProperty());
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(src), nullptr);
+}
+
+TEST_F(SoundEffectInstanceTest, MoveAssignmentTransfersTrackAndDestroysPreviousOne)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance src = instance();
+    src.setPanProperty(0.25f);
+    src.Play();
+    MIX_Track* originalTrack = SoundEffectInstanceTestAccess::GetTrack(src);
+    ASSERT_NE(originalTrack, nullptr);
+
+    SoundEffectInstance dst = instance();
+    dst.Play();
+    ASSERT_NE(SoundEffectInstanceTestAccess::GetTrack(dst), nullptr);
+
+    dst = std::move(src);
+
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(dst), originalTrack);
+    EXPECT_FLOAT_EQ(dst.getPanProperty(), 0.25f);
+    EXPECT_EQ(dst.getStateProperty(), SoundState::Playing);
+
+    EXPECT_TRUE(src.getIsDisposedProperty());
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(src), nullptr);
+}
+
 TEST_F(SoundEffectInstanceTest, PauseResume)
 {
     REQUIRE_DEVICE();

@@ -525,11 +525,18 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   (dummy audio zařízení funguje), `FromStream` úspěšně vrátil non-null `SoundEffect` a
   `getDurationProperty() > 0`. Celá sada 1993/1993 testů zelená.
 
-- [ ] **CP-12 — Chybí testy pro move-konstruktor a move-assignment `SoundEffectInstance` (NOXNA
-  veřejné členy).** `CLAUDE.md` požaduje test pro každou veřejnou metodu/operátor.
+- [x] **CP-12 — Chybí testy pro move-konstruktor a move-assignment `SoundEffectInstance` (NOXNA
+  veřejné členy).** *(hotovo 2026-07-03.)* `CLAUDE.md` požaduje test pro každou veřejnou
+  metodu/operátor.
   *CNA:* SoundEffectInstance.cpp:82-128; tests/…/SoundEffectInstanceTests.cpp.
   *Accept:* test ověří přenos `track_`/`State_`/vlastností a že zdrojový objekt po move je bezpečně
   disposed-like (žádný double-free při destrukci).
+  *Pozn.:* žádná změna produkčního kódu. Přidány `MoveConstructorTransfersTrackAndProperties`
+  (přehrávající instanci přesune, ověří stejný `MIX_Track*`, `Volume`, `State==Playing`, a že
+  zdrojová instance po move má `IsDisposed==true` a `track_==nullptr`) a
+  `MoveAssignmentTransfersTrackAndDestroysPreviousOne` (cílová instance už vlastní vlastní track,
+  který se má zahodit před převzetím zdrojova). Celá sada 1995/1995 testů zelená, bez pádu (což
+  by double-free typicky projevilo).
 
 - [ ] **CP-13 — Chybí testy pro `Stop(false)` (non-immediate) na `SoundEffectInstance` i
   `DynamicSoundEffectInstance`.** Testováno je jen `Stop()`/`Stop(true)`.
