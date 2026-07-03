@@ -443,13 +443,23 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   streamu, ne lokální seznam); `BufferNeeded` se nespouští při dostatku dat ve streamu (test na
   frekvenci volání).
 
-- [ ] **CP-5 — `Stop(bool immediate=false)` na `DynamicSoundEffectInstance` tiše no-opuje místo
-  hození `InvalidOperationException`.** FNA v `Stop(bool)` explicitně hází, pokud
-  `isDynamic && !immediate`. CNA `Stop(bool)` není virtuální a pracuje jen s bázovým `track_`, který
-  dynamické instance nikdy nepoužívají.
+- [x] **CP-5 — `Stop(bool immediate=false)` na `DynamicSoundEffectInstance` tiše no-opuje místo
+  hození `InvalidOperationException`.** *(hotovo 2026-07-03.)* FNA v `Stop(bool)` explicitně hází,
+  pokud `isDynamic && !immediate`. CNA `Stop(bool)` nebylo virtuální a pracovalo jen s bázovým
+  `track_`, který dynamické instance nikdy nepoužívají.
   *FNA:* SoundEffectInstance.cs:404-439 (throw ř. ~435).
   *CNA:* SoundEffectInstance.cpp:239-261 (chybí `isDynamic`/virtual dispatch).
   *Accept:* `dynamicInstance.Stop(false)` hází `System::InvalidOperationException`; test.
+  *Pozn.:* `SoundEffectInstance::Stop(bool)` je teď `virtual`; `DynamicSoundEffectInstance`
+  přidává override, který napřed replikuje FNA's `handle==0` early-return gate (žádný aktivní
+  track → tichý no-op, i pro `immediate=false` — matchuje FNA přesně: `Stop(false)` před prvním
+  `Play()` nehází), a teprve pokud track existuje a `!immediate`, hází
+  `System::InvalidOperationException`. Nové testy `StopFalseWhileNeverPlayedIsSafeNoOp` (no-op
+  case) a `StopFalseAfterPlayingThrowsInvalidOperation` (throw case, po `tryStartHeadless`).
+  Ověřeno přes `git stash`: PŮVODNÍ kód se s testy vůbec nezkompiluje (`d.Stop(false)` — C++
+  name-hiding: derived `Stop()` bez parametru skrývá base `Stop(bool)` overload, dokud derived
+  třída nedeklaruje vlastní `Stop(bool)`) — silnější důkaz bugu než běžné "throws nothing". S
+  opravou vše projde. Celá sada 1999/1999 testů zelená.
 
 - [ ] **CP-6 — `DynamicSoundEffectInstance::GetSampleDuration`/`GetSampleSizeInBytes` počítají
   skutečné bajty/vzorek (`isFloat_ ? 4 : 2`) místo FNA napevno předpokládaných 16 bitů.** FNA obě

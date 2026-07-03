@@ -73,8 +73,10 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Stops playback of this instance.
          *
          * @param immediate If true, cuts off immediately; if false, allows release tails.
+         * @throws System::InvalidOperationException if called on a DynamicSoundEffectInstance
+         *         with @p immediate false (there is no authored loop to release into).
          */
-        void Stop(bool immediate);
+        virtual void Stop(bool immediate);
 
         /** @brief Pauses playback of this instance. */
         void Pause();

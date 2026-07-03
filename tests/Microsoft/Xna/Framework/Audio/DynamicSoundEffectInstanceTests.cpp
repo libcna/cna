@@ -136,6 +136,15 @@ TEST(DynamicSoundEffectInstanceTest, StopWhileStoppedIsSafe)
     EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
 }
 
+TEST(DynamicSoundEffectInstanceTest, StopFalseWhileNeverPlayedIsSafeNoOp)
+{
+    // Matches FNA's handle==0 early return in Stop(bool): a non-immediate Stop before any
+    // Play() has no active voice/track to be invalid about (CP-5).
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    EXPECT_NO_THROW(d.Stop(false));
+    EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
+}
+
 TEST(DynamicSoundEffectInstanceTest, GetTypeNameIsFullyQualified)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -156,6 +165,18 @@ TEST(DynamicSoundEffectInstanceTest, SubmitFloatAfterPlayingThrowsInvalidOperati
     }
     std::vector<float> buf(32, 0.0f);
     EXPECT_THROW(d.SubmitFloatBufferEXT(buf), System::InvalidOperationException);
+}
+
+// CP-5: dynamic instances have no authored loop to release into, so a non-immediate Stop is
+// invalid once playback has actually started (FNA: SoundEffectInstance.cs Stop(bool)).
+TEST(DynamicSoundEffectInstanceTest, StopFalseAfterPlayingThrowsInvalidOperation)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    EXPECT_THROW(d.Stop(false), System::InvalidOperationException);
 }
 
 // T-2A: setting IsLooped through a base reference on a playing dynamic instance must

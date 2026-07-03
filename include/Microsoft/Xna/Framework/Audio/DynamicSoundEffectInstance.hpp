@@ -89,6 +89,15 @@ namespace Microsoft::Xna::Framework::Audio
         void Stop() override;
 
         /**
+         * @brief Stops playback and clears all queued buffers.
+         *
+         * @param immediate Must be true; dynamic instances have no authored loop to release
+         *        into, so a non-immediate stop is not a valid operation.
+         * @throws System::InvalidOperationException if @p immediate is false.
+         */
+        void Stop(bool immediate) override;
+
+        /**
          * @brief Submits a complete 16-bit PCM byte buffer for playback.
          *
          * @param buffer PCM audio data.

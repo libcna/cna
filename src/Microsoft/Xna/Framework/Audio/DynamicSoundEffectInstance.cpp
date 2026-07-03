@@ -178,6 +178,26 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
+    void DynamicSoundEffectInstance::Stop(bool immediate)
+    {
+        // Matches FNA's early return when there is no active voice/track yet (e.g. Stop() called
+        // before any Play()) -- only once playback has actually started does a non-immediate
+        // Stop become a meaningful (and, for dynamic instances, invalid) request.
+#ifdef SOUND_ENABLED
+        if (!AsTrackD(dynamicTrack_))
+        {
+            return;
+        }
+#endif
+        // FNA throws for a non-immediate Stop on a dynamic instance: there is no authored loop
+        // for FAudioSourceVoice_ExitLoop to release into, unlike a static SoundEffectInstance.
+        if (!immediate)
+        {
+            throw System::InvalidOperationException();
+        }
+        Stop();
+    }
+
     void DynamicSoundEffectInstance::Stop()
     {
 #ifdef SOUND_ENABLED
