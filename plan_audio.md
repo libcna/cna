@@ -618,14 +618,23 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   opravy konzistentně kolem 45-55 % (uniform), s opravou konzistentně >90 %. Celá sada
   1988/1988 testů zelená.
 
-- [ ] **XA-4 — `AudioEngine` dvouparametrový konstruktor tiše zahazuje `lookAheadTime` i
-  `rendererId` bez zdokumentované odchylky.** Oba parametry jsou zakomentované a nikam se
-  nepoužijí, ale doxygen je popisuje, jako by měly efekt.
+- [x] **XA-4 — `AudioEngine` dvouparametrový konstruktor tiše zahazuje `lookAheadTime` i
+  `rendererId` bez zdokumentované odchylky.** *(hotovo 2026-07-03.)* Oba parametry byly
+  zakomentované a nikam se nepoužívaly, ale doxygen je popisoval, jako by měly efekt.
   *FNA:* AudioEngine.cs:112-225.
   *CNA:* AudioEngine.cpp:46-54; AudioEngine.hpp:43-52.
   *Accept:* buď `rendererId` použít k výběru mezi budoucími backend-rendery, nebo minimálně doplnit
   `//` komentář v `.cpp` a upravit doxygen v `.hpp`; test ověřující, že konstruktor s libovolným
   `rendererId`/`lookAheadTime` nehází a chová se stejně jako jednoparametrový ctor.
+  *Pozn.:* zvolena zdokumentovaná odchylka (ne implementace výběru rendereru) — CNA má jediný
+  backend (SDL3_mixer), takže není mezi čím vybírat. Doxygen v `.hpp` teď explicitně říká, že oba
+  parametry jsou přijímány jen kvůli API kompatibilitě a nemají efekt (libovolná hodnota, včetně
+  neznámého `rendererId`, se chová stejně jako jednoparametrový ctor); `.cpp` má `//` komentář se
+  stejným vysvětlením. Existující test `TwoArgConstructorLoadsFixtureWithRendererAndLookAhead`
+  testoval jen "rozumné" hodnoty (`TimeSpan::Zero`, `"SDL3_mixer"`) — přidán nový
+  `ThreeArgConstructorWithArbitraryRendererAndLookAheadBehavesLikeSingleArg` s nesmyslným
+  `rendererId` a nenulovým `lookAheadTime`, ověřující `!IsDisposed`, neprázdné
+  `RendererDetails` a funkční `GetCategory("Default")`. Celá sada 1996/1996 testů zelená.
 
 - [ ] **XA-5 — Testy `AudioCategory`/`Cue` neověřují reálný efekt `Pause`/`Resume`/`Stop`/
   `SetVolume` na běžící cue.** Testováno je jen `EXPECT_NO_THROW` bez jakéhokoli aktivního `Cue` v

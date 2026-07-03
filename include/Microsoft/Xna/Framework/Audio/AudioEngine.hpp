@@ -43,9 +43,14 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Constructs an AudioEngine with explicit look-ahead time and renderer selection.
          *
+         * CNA has a single backend (SDL3_mixer), so @p lookAheadTime and @p rendererId are
+         * accepted for API compatibility but currently have no effect — any value (including
+         * an unrecognized renderer ID) behaves identically to the single-argument constructor.
+         *
          * @param settingsFile    Path to the .XGS XACT global settings file.
-         * @param lookAheadTime   Scheduling look-ahead duration.
+         * @param lookAheadTime   Scheduling look-ahead duration. Currently unused.
          * @param rendererId      Renderer identifier string, or empty for the default renderer.
+         *                        Currently unused; any value is accepted.
          */
         AudioEngine(const std::string& settingsFile,
                     System::TimeSpan lookAheadTime,

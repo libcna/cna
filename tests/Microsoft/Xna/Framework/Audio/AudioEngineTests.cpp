@@ -160,6 +160,20 @@ TEST(AudioEngineTest, TwoArgConstructorLoadsFixtureWithRendererAndLookAhead)
     EXPECT_FALSE(engine.getIsDisposedProperty());
 }
 
+TEST(AudioEngineTest, ThreeArgConstructorWithArbitraryRendererAndLookAheadBehavesLikeSingleArg)
+{
+    // lookAheadTime/rendererId have no effect (plan_audio.md XA-4): even a nonzero look-ahead
+    // and a renderer ID that doesn't name any real backend must not throw, and the resulting
+    // engine must behave identically to the single-argument constructor.
+    AudioEngine engine(XgsFixturePath(),
+                       System::TimeSpan::FromMilliseconds(500),
+                       "TotallyBogusRendererThatDoesNotExist");
+
+    EXPECT_FALSE(engine.getIsDisposedProperty());
+    EXPECT_FALSE(engine.getRendererDetailsProperty().empty());
+    EXPECT_NO_THROW((void)engine.GetCategory("Default"));
+}
+
 // ===================== IsDisposed / Dispose =====================
 
 TEST(AudioEngineTest, IsDisposedFalseInitiallyAndTrueAfterDispose)
