@@ -635,15 +635,24 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   (pre-fix) kódu přes `git stash` — bez opravy test selže přesně s "read past end", s opravou
   projde. Celá sada 1982/1982 testů zelená.
 
-- [ ] **IN-3 — Integer underflow v compact-XWB `dataLength` může obejít bounds-check ve
-  `WaveBank.cpp`.** Výpočet `rawOffsetUnits[i+1]*alignment - offset - deviations[i]` je `uint32_t`
-  aritmetika bez guardu — u poškozeného/adverzního souboru může podteče na hodnotu blízkou
-  `UINT32_MAX`. Navazující bounds-check ve `WaveBank.cpp` je taky `uint32_t` součet, který může sám
-  přetéct → heap over-read/pád při stavbě výsledného `std::vector`.
+- [x] **IN-3 — Integer underflow v compact-XWB `dataLength` může obejít bounds-check ve
+  `WaveBank.cpp`.** *(hotovo 2026-07-03.)* Výpočet `rawOffsetUnits[i+1]*alignment - offset -
+  deviations[i]` je `uint32_t` aritmetika bez guardu — u poškozeného/adverzního souboru může
+  podteče na hodnotu blízkou `UINT32_MAX`. Navazující bounds-check ve `WaveBank.cpp` je taky
+  `uint32_t` součet, který může sám přetéct → heap over-read/pád při stavbě výsledného
+  `std::vector`.
   *Soubor:* src/CNA/Internal/Audio/XactParser.cpp:449-452, downstream
   src/Microsoft/Xna/Framework/Audio/WaveBank.cpp:221-228.
   *Accept:* saturující/checked odečet (clamp na 0 nebo throw) při výpočtu `dataLength`; test s
   uměle vytvořenou deviací větší než mezera k dalšímu offsetu.
+  *Pozn.:* podle D7 (throw, ne tiché clampování) — oba underflow případy (mezera k další entry
+  minus deviace; poslední entry přesahující wave-data segment) teď počítají v `uint64_t` a
+  vyhodí `std::runtime_error`, pokud by odečet podtekl. Downstream bounds-check ve
+  `WaveBank.cpp:222` taky přepsán na `uint64_t` součet, aby nemohl sám přetéct. Nové testy
+  `XactParserTest.CompactWaveBankThrowsWhenDeviationExceedsGapToNextEntry` a
+  `...ThrowsWhenLastEntryOffsetExceedsWaveDataSegment` ověřeny na PŮVODNÍM (pre-fix) kódu přes
+  `git stash` — bez opravy obě selžou (`throws nothing` — dřívější kód tiše podtekl místo
+  vyhození výjimky), s opravou projdou. Celá sada 1984/1984 testů zelená.
 
 - [ ] **IN-4 — Nesprávný komentář a chybějící case pro variation-table typ 2.** Komentář
   `// INTERACTIVE (type==2)` je zavádějící: podle FAudia je `INTERACTIVE` typ **3**, typ **2** je

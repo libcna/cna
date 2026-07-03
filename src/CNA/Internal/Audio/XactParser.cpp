@@ -447,9 +447,26 @@ namespace CNA::Internal::Audio
                 result.entries[i].blockAlign    = wba;
 
                 result.entries[i].dataOffset    = segOffset[4] + offset;
-                result.entries[i].dataLength    = (i + 1 < entryCount)
-                    ? (rawOffsetUnits[i + 1] * alignment - offset - deviations[i])
-                    : (segLength[4] - offset);
+
+                // dwLengthDeviation is the aligned span's slack in bytes, not the length
+                // itself, so the real length must not exceed the gap to the next entry's
+                // offset (or to the end of the wave-data segment for the last entry). Check
+                // in 64-bit before narrowing so a corrupt/adversarial file can't underflow
+                // this into a huge uint32_t value (D7: throw rather than silently clamp).
+                if (i + 1 < entryCount)
+                {
+                    const uint64_t nextOffset = static_cast<uint64_t>(rawOffsetUnits[i + 1]) * alignment;
+                    const uint64_t consumed   = static_cast<uint64_t>(offset) + deviations[i];
+                    if (nextOffset < consumed)
+                        throw std::runtime_error("XWB: corrupt compact entry (deviation exceeds gap to next entry)");
+                    result.entries[i].dataLength = static_cast<uint32_t>(nextOffset - consumed);
+                }
+                else
+                {
+                    if (offset > segLength[4])
+                        throw std::runtime_error("XWB: corrupt compact entry (offset exceeds wave-data segment)");
+                    result.entries[i].dataLength = segLength[4] - offset;
+                }
             }
         }
         else

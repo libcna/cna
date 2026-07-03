@@ -3,6 +3,7 @@
 #include "CNA/Internal/Audio/XactTypes.hpp"
 
 #include <cstring>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -185,6 +186,120 @@ namespace
         AppendU32(data, (0u) | (2u << 21)); // entry 0: offset=0*4=0,  aligned span=12, deviation=2 -> length 10
         AppendU32(data, (3u) | (2u << 21)); // entry 1: offset=3*4=12, aligned span=8,  deviation=2 -> length 6
         AppendU32(data, (5u));              // entry 2 (last): offset=5*4=20, length = remaining segment (9)
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
+    // Compact .xwb with an adversarial deviation field larger than the gap to the next entry's
+    // offset -- the dataLength computation must throw rather than silently underflow to a huge
+    // uint32_t value that could later bypass WaveBank's bounds check (regression fixture for IN-3).
+    std::vector<uint8_t> BuildCompactXwbFixtureWithOversizedDeviation()
+    {
+        constexpr uint32_t alignment         = 4;
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 2;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 16;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "IN-3", 64); // bank name
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u)          // format tag: PCM
+            | (0u << 2)     // channels - 1 = 0 -> mono
+            | (44100u << 5) // sample rate
+            | (2u << 23)    // wBlockAlign
+            | (1u << 31);   // bits-per-sample flag -> 16-bit
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        // entry 0: offset=0*4=0, deviation=15 -- exceeds entry 1's offset (3*4=12): underflow.
+        AppendU32(data, (0u) | (15u << 21));
+        // entry 1 (last): offset=3*4=12
+        AppendU32(data, (3u));
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
+    // Compact .xwb whose single (and therefore last) entry's offset lies past the end of the
+    // wave-data segment -- the "remainder of segment" length computation must throw rather than
+    // underflow (regression fixture for IN-3's second underflow site).
+    std::vector<uint8_t> BuildCompactXwbFixtureWithOffsetPastSegment()
+    {
+        constexpr uint32_t alignment         = 4;
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 8;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "IN-3b", 64); // bank name
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u) | (0u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        // entry 0 (only/last): offset=10*4=40, past the 8-byte wave-data segment: underflow.
+        AppendU32(data, (10u));
 
         for (uint32_t i = 0; i < waveDataLength; ++i)
             data.push_back(static_cast<uint8_t>(i));
@@ -451,6 +566,16 @@ TEST(XactParserTest, CompactWaveBankComputesLengthsFromConsecutiveOffsets)
     const auto& first = wb.entries[0];
     const uint32_t bytesPerSample = static_cast<uint32_t>(first.bitsPerSample / 8) * first.channels;
     EXPECT_EQ(first.dataLength / bytesPerSample, 5u);
+}
+
+TEST(XactParserTest, CompactWaveBankThrowsWhenDeviationExceedsGapToNextEntry)
+{
+    EXPECT_THROW(ParseXwb(BuildCompactXwbFixtureWithOversizedDeviation()), std::runtime_error);
+}
+
+TEST(XactParserTest, CompactWaveBankThrowsWhenLastEntryOffsetExceedsWaveDataSegment)
+{
+    EXPECT_THROW(ParseXwb(BuildCompactXwbFixtureWithOffsetPastSegment()), std::runtime_error);
 }
 
 TEST(XactParserTest, NonCompactWaveBankWithNarrowEntryMetaDataDoesNotReadForeignBytes)

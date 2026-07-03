@@ -217,9 +217,10 @@ namespace Microsoft::Xna::Framework::Audio
 
         const auto& entry = xactImpl_->data.entries[waveIndex];
 
-        // Check that data range is valid
+        // Check that data range is valid. Widen to 64-bit before summing so a corrupt/adversarial
+        // entry can't wrap this check via uint32_t overflow and pass with an out-of-range offset.
         const auto& fd = xactImpl_->data.fileData;
-        if (entry.dataOffset + entry.dataLength > fd.size())
+        if (static_cast<uint64_t>(entry.dataOffset) + entry.dataLength > fd.size())
         {
             std::cerr << "[WaveBank] Wave " << waveIndex << " data out of range\n";
             return nullptr;
