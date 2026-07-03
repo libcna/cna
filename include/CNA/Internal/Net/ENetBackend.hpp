@@ -4,6 +4,7 @@
 
 #include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
 #include <cstdint>
+#include <string>
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -74,5 +75,20 @@ namespace CNA::Internal::Net
          * @return The bound port, or 0 if session isn't currently hosting real networking.
          */
         static uint16_t GetBoundPort(NetworkSession* session);
+
+        /**
+         * @brief Connects session to a remote host and begins the ClientHello/ServerWelcome
+         * handshake, exercising the same transport session's own EndJoin() would eventually use
+         * (bypassing EndJoin's pre-existing activeAction-stranding bug — see NEXT.md).
+         *
+         * No-op if RealNetworkingEnabled(session's type) is false. session must already have (or
+         * be able to start) its own registered ENet host, since even a "client" role peer owns
+         * an ENetHost in this design (see ENetHostHandle's own doc comment).
+         *
+         * @param session The (already-constructed, local) session initiating the connection.
+         * @param address Dotted IPv4 address or resolvable hostname of the host to connect to.
+         * @param port The host's bound UDP port (see GetBoundPort()).
+         */
+        static void ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port);
     };
 }
