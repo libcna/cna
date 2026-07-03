@@ -380,6 +380,22 @@ namespace
         return e;
     }
 
+    // Builds one PITCH-family track event using the "ramp" form (settings' RAMP bit set) --
+    // the counterpart to BuildPitchEventBytes's "equation" form (IN-6).
+    std::vector<uint8_t> BuildPitchRampEventBytes()
+    {
+        std::vector<uint8_t> e;
+        AppendU32(e, 7u);       // evtInfo: type=FACTEVENT_PITCH (7), timestamp=0
+        AppendU16(e, 0);        // randomOffset
+        AppendU8(e, 0xFF);      // separator
+        AppendU8(e, 0x01);      // settings: RAMP bit set
+        AppendF32(e, 0.0f);     // initialValue
+        AppendF32(e, 0.0f);     // initialSlope
+        AppendF32(e, 0.0f);     // slopeDelta
+        AppendU16(e, 0);        // duration
+        return e;
+    }
+
     // Builds one basic (non-variation) PlayWave track event.
     std::vector<uint8_t> BuildPlayWaveEventBytes(uint16_t waveIdx, uint8_t wbIdx, uint8_t loopCnt)
     {
@@ -538,6 +554,141 @@ namespace
         return data;
     }
 
+    // Minimal .xsb with two simple (non-complex) sounds: sound 0 has SOUND_FLAG_HAS_RPC set with
+    // a self-inclusive 2-byte rpcDataLength field (unlike the DSP block's leading field, this one
+    // genuinely IS a self-inclusive skip length per the parser). Sound 1 has a distinctive wave
+    // reference; if sound 0's RPC block is mis-skipped, the cursor desyncs and sound 1's fields
+    // come out wrong. Coverage fixture for IN-6.
+    std::vector<uint8_t> BuildXsbWithRpcThenSecondSound()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t soundOffset  = headerSize + bankNameSize; // 138
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 0);  // wavebankCount
+        AppendU16(data, 2); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset
+        AppendS32(data, -1); // cueNameIndexOffset
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "TestSoundBank", bankNameSize);
+
+        // Sound 0: simple (non-complex), SOUND_FLAG_HAS_RPC (0x02) set.
+        AppendU8(data, 0x02);  // flags
+        AppendU16(data, 0);    // categoryIndex
+        AppendU8(data, 0xFF);  // volume byte
+        AppendS16(data, 0);    // pitchCents
+        AppendU8(data, 0);     // priority
+        AppendU16(data, 0);    // soundLength (skipped)
+        AppendU16(data, 0);    // simple wave: waveIdx (unused by this test)
+        AppendU8(data, 0);     // simple wave: wbIdx (unused by this test)
+
+        // RPC block: rpcDataLength is self-inclusive (includes its own 2 bytes) -> 6 means
+        // 4 bytes of RPC codes follow.
+        AppendU16(data, 6);
+        AppendU32(data, 0xAAAAAAAAu);
+
+        // Sound 1: simple (non-complex), no flags, distinctive wave reference.
+        AppendU8(data, 0x00);   // flags
+        AppendU16(data, 0);     // categoryIndex
+        AppendU8(data, 0xFF);   // volume byte
+        AppendS16(data, 0);     // pitchCents
+        AppendU8(data, 0);      // priority
+        AppendU16(data, 0);     // soundLength (skipped)
+        AppendU16(data, 77);    // waveIdx
+        AppendU8(data, 4);      // wbIdx
+
+        return data;
+    }
+
+    // Minimal non-compact .xwb with a single, full-size (entryMetaDataSize==24) ADPCM entry --
+    // covers both the "standard" (non-narrow) non-compact entry layout and ADPCM's
+    // samplesPerBlock/blockAlign derivation from wBlockAlign (IN-6).
+    std::vector<uint8_t> BuildNonCompactAdpcmXwbFixture()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 24;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 16;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0u); // wbFlags: not compact, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "IN-6-ADPCM", 64); // bank name
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, 4); // alignment (unused, non-compact)
+        AppendU32(data, 0); // compactFormat (unused, non-compact)
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        // Entry 0: ADPCM, mono, 22050Hz, wBlockAlign=8 -> blockAlign=(8+22)*1=30,
+        // samplesPerBlock=(8+16)*2=48.
+        constexpr uint32_t wBlockAlign = 8u;
+        const uint32_t fmt =
+              (2u)                    // fmtTag: ADPCM
+            | (0u << 2)               // channels-1 = 0 -> mono
+            | (22050u << 5)           // sample rate
+            | (wBlockAlign << 23)
+            | (0u << 31);             // bps flag (unused for ADPCM)
+        AppendU32(data, 0x12345678u); // flagsAndDuration (unused by CNA)
+        AppendU32(data, fmt);
+        AppendU32(data, 0u);             // playOffset (relative to wave-data segment)
+        AppendU32(data, waveDataLength); // playLength
+        AppendU32(data, 100u);           // loopStart
+        AppendU32(data, 200u);           // loopTotal
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
     // Minimal .xsb with one simple sound and one complex cue referencing a variation table of
     // the given `type`. For type==3 (INTERACTIVE) the table gets one valid 16-byte entry
     // (soundCode + var_min + var_max + linger); every other type (e.g. 2 == CLIP) gets an
@@ -553,7 +704,12 @@ namespace
         const uint32_t soundOffset        = baseOffset;             // 138
         const uint32_t sound0Code         = soundOffset;             // 138
         const uint32_t variationOffset    = soundOffset + soundSize; // 150
-        const uint32_t entrySize          = (type == 3) ? 16u : 0u;  // only type 3 needs valid bytes here
+        const uint32_t entrySize =
+              (type == 0) ? 5u   // WAVE: waveIndex(2)+wavebankIndex(1)+weightMin(1)+weightMax(1)
+            : (type == 1) ? 6u   // SOUND: soundCode(4)+weightMin(1)+weightMax(1)
+            : (type == 3) ? 16u  // INTERACTIVE: soundCode(4)+var_min(4)+var_max(4)+linger(4)
+            : (type == 4) ? 3u   // COMPACT_WAVE: waveIndex(2)+wavebankIndex(1)
+            : 0u;                // anything else -- the parser must throw before reading fields
         const uint32_t tableSize          = 4 + 2 + 2 + entrySize;
         const uint32_t cueComplexOffset   = variationOffset + tableSize;
         const uint32_t cueNameIndexOffset = cueComplexOffset + 15;
@@ -608,12 +764,30 @@ namespace
         AppendU16(data, 0);   // unknown
         AppendU16(data, static_cast<uint16_t>(-1)); // variable
 
-        if (type == 3) // INTERACTIVE: soundCode + var_min + var_max + linger
+        if (type == 0) // WAVE: waveIndex + wavebankIndex + weightMin + weightMax
+        {
+            AppendU16(data, 7u);   // waveIndex
+            AppendU8(data, 2u);    // wavebankIndex
+            AppendU8(data, 0u);    // weightMin
+            AppendU8(data, 100u);  // weightMax
+        }
+        else if (type == 1) // SOUND: soundCode + weightMin + weightMax
+        {
+            AppendU32(data, sound0Code);
+            AppendU8(data, 0u);   // weightMin
+            AppendU8(data, 50u);  // weightMax
+        }
+        else if (type == 3) // INTERACTIVE: soundCode + var_min + var_max + linger
         {
             AppendU32(data, sound0Code);
             AppendF32(data, 0.0f);
             AppendF32(data, 1.0f);
             AppendU32(data, 0);
+        }
+        else if (type == 4) // COMPACT_WAVE: waveIndex + wavebankIndex (weight hardcoded 0..255)
+        {
+            AppendU16(data, 9u);  // waveIndex
+            AppendU8(data, 3u);   // wavebankIndex
         }
         // else: no entry bytes -- the parser must throw before reading any type-specific fields.
 
@@ -738,6 +912,126 @@ TEST(XactParserTest, VariationTypeInteractiveParsesSixteenByteEntry)
 TEST(XactParserTest, VariationTypeClipThrows)
 {
     EXPECT_THROW(ParseXsb(BuildXsbWithVariationOfType(2)), std::runtime_error);
+}
+
+TEST(XactParserTest, VariationTypeWaveParsesFiveByteEntry)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithVariationOfType(0));
+
+    ASSERT_EQ(xsb.variations.size(), 1u);
+    EXPECT_EQ(xsb.variations[0].type, 0);
+    ASSERT_EQ(xsb.variations[0].entries.size(), 1u);
+    const auto& e = xsb.variations[0].entries[0];
+    EXPECT_FALSE(e.isSoundEntry);
+    EXPECT_EQ(e.waveIndex, 7u);
+    EXPECT_EQ(e.wavebankIndex, 2u);
+    EXPECT_EQ(e.weightMin, 0u);
+    EXPECT_EQ(e.weightMax, 100u);
+}
+
+TEST(XactParserTest, VariationTypeSoundParsesSixByteEntry)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithVariationOfType(1));
+
+    ASSERT_EQ(xsb.variations.size(), 1u);
+    EXPECT_EQ(xsb.variations[0].type, 1);
+    ASSERT_EQ(xsb.variations[0].entries.size(), 1u);
+    const auto& e = xsb.variations[0].entries[0];
+    EXPECT_TRUE(e.isSoundEntry);
+    EXPECT_EQ(e.soundIndex, 0u);
+    EXPECT_EQ(e.weightMin, 0u);
+    EXPECT_EQ(e.weightMax, 50u);
+}
+
+TEST(XactParserTest, VariationTypeCompactWaveParsesThreeByteEntryWithHardcodedWeight)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithVariationOfType(4));
+
+    ASSERT_EQ(xsb.variations.size(), 1u);
+    EXPECT_EQ(xsb.variations[0].type, 4);
+    ASSERT_EQ(xsb.variations[0].entries.size(), 1u);
+    const auto& e = xsb.variations[0].entries[0];
+    EXPECT_FALSE(e.isSoundEntry);
+    EXPECT_EQ(e.waveIndex, 9u);
+    EXPECT_EQ(e.wavebankIndex, 3u);
+    EXPECT_EQ(e.weightMin, 0u);
+    EXPECT_EQ(e.weightMax, 255u);
+}
+
+TEST(XactParserTest, RpcBlockIsSkippedCorrectly)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithRpcThenSecondSound());
+
+    ASSERT_EQ(xsb.sounds.size(), 2u);
+    ASSERT_EQ(xsb.sounds[1].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[1].waves[0].wavebankIndex, 4);
+    EXPECT_EQ(xsb.sounds[1].waves[0].waveIndex, 77u);
+}
+
+TEST(XactParserTest, ComplexTrackSkipsRampPitchEventToFindPlayWave)
+{
+    const XsbData xsb = ParseXsb(
+        BuildXsbWithComplexTrack({ BuildPitchRampEventBytes(), BuildPlayWaveEventBytes(55, 6, 2) }));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 6);
+    EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 55u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].loopCount, 2);
+}
+
+TEST(XactParserTest, NonCompactAdpcmEntryComputesBlockAlignAndSamplesPerBlock)
+{
+    const XwbData wb = ParseXwb(BuildNonCompactAdpcmXwbFixture());
+
+    ASSERT_EQ(wb.entries.size(), 1u);
+    const auto& e = wb.entries[0];
+    EXPECT_EQ(e.format, XwbFormat::ADPCM);
+    EXPECT_EQ(e.channels, 1);
+    EXPECT_EQ(e.sampleRate, 22050u);
+    EXPECT_EQ(e.blockAlign, 30);
+    EXPECT_EQ(e.samplesPerBlock, 48);
+    EXPECT_EQ(e.dataLength, 16u);
+    EXPECT_EQ(e.loopStartSample, 100u);
+    EXPECT_EQ(e.loopTotalSamples, 200u);
+}
+
+// ===================== Truncated files / bad magic (IN-6) =====================
+
+TEST(XactParserTest, ParseXgsTruncatedFileThrows)
+{
+    std::vector<uint8_t> tiny(10, 0);
+    EXPECT_THROW(ParseXgs(tiny), std::runtime_error);
+}
+
+TEST(XactParserTest, ParseXwbTruncatedFileThrows)
+{
+    std::vector<uint8_t> tiny(10, 0);
+    EXPECT_THROW(ParseXwb(tiny), std::runtime_error);
+}
+
+TEST(XactParserTest, ParseXsbTruncatedFileThrows)
+{
+    std::vector<uint8_t> tiny(10, 0);
+    EXPECT_THROW(ParseXsb(tiny), std::runtime_error);
+}
+
+TEST(XactParserTest, ParseXgsBadMagicThrows)
+{
+    std::vector<uint8_t> data(0x50, 0); // large enough to pass the size check; magic is all-zero
+    EXPECT_THROW(ParseXgs(data), std::runtime_error);
+}
+
+TEST(XactParserTest, ParseXwbBadMagicThrows)
+{
+    std::vector<uint8_t> data(52, 0);
+    EXPECT_THROW(ParseXwb(data), std::runtime_error);
+}
+
+TEST(XactParserTest, ParseXsbBadMagicThrows)
+{
+    std::vector<uint8_t> data(0x50, 0);
+    EXPECT_THROW(ParseXsb(data), std::runtime_error);
 }
 
 TEST(XactParserTest, XgsParsesCategoryAndVariable)

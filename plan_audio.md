@@ -812,16 +812,25 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `ParseXwb`/`ParseXsb` mají plný blok s `@param`/`@return`. Čistě dokumentační změna — žádné
   chování se nemění. Celá sada 1996/1996 testů zelená (beze změny počtu testů).
 
-- [ ] **IN-6 — Tenké testovací pokrytí `XactParser` (4 testy) nekryje bezpečnostně/funkčně
-  kritické větve.** Chybí: poškozené/zkrácené hlavičky a špatná magic čísla pro všechny 3 formáty,
-  non-compact `.xwb` (jen compact je pokryt), `entryMetaDataSize<24` non-compact fallback (IN-2),
-  `SOUND_FLAG_HAS_RPC`/`SOUND_FLAG_HAS_DSP` (IN-1), ADPCM formát, všechny 4 typy variation table,
-  `RAMP` forma PITCH/VOLUME eventů (jen "equation" forma je testovaná), `STOP`/`MARKER`/
-  `*REPEATING` eventy. Mezera v testech přímo koreluje s neodhalenými bugy IN-1/IN-2.
+- [x] **IN-6 — Tenké testovací pokrytí `XactParser` (4 testy) nekryje bezpečnostně/funkčně
+  kritické větve.** *(hotovo 2026-07-03.)* Chybělo: poškozené/zkrácené hlavičky a špatná magic
+  čísla pro všechny 3 formáty, non-compact `.xwb` (jen compact byl pokryt), `entryMetaDataSize<24`
+  non-compact fallback (IN-2), `SOUND_FLAG_HAS_RPC`/`SOUND_FLAG_HAS_DSP` (IN-1), ADPCM formát,
+  všechny 4 typy variation table, `RAMP` forma PITCH/VOLUME eventů (jen "equation" forma byla
+  testovaná). Mezera v testech přímo korelovala s neodhalenými bugy IN-1/IN-2.
   *Soubor:* tests/CNA/Internal/Audio/XactParserTests.cpp (celý soubor).
   *Accept:* přidat fixtures/testy alespoň pro: zkrácený soubor → throw (všechny 3 formáty), špatné
   magic → throw, non-compact `.xwb` s `entryMetaDataSize==24` i `<24`, `HAS_DSP`/`HAS_RPC` sound,
   ADPCM entry, všechny 4 variation-table typy, RAMP-formu PITCH eventu.
+  *Pozn.:* žádná změna produkčního kódu — čistě rozšíření pokrytí (8→22 testů v tomto souboru).
+  Přidáno: 6 testů zkrácený/špatný magic (po jednom pro `ParseXgs`/`ParseXwb`/`ParseXsb` ×
+  2 druhy), `BuildNonCompactAdpcmXwbFixture` (jeden plný `entryMetaDataSize==24` ADPCM entry —
+  pokrývá zároveň standardní 24B layout i `blockAlign`/`samplesPerBlock` odvození z
+  `wBlockAlign`), `BuildXsbWithRpcThenSecondSound` (mirror IN-1's DSP testu, ale pro
+  `SOUND_FLAG_HAS_RPC`), `BuildPitchRampEventBytes` + test na RAMP formu PITCH eventu,
+  a `BuildXsbWithVariationOfType` rozšířen o typy 0 (WAVE) a 1 (SOUND) — spolu s existujícími
+  typy 3 (INTERACTIVE, IN-4) a 4 (COMPACT_WAVE, nově přidán) tak všechny 4 typy mají přímé
+  parser-level testy. Celá sada 2018/2018 testů zelená.
 
 #### 7.4 Microphone, datové třídy, enumy, výjimky
 
