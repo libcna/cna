@@ -105,19 +105,37 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::TextureTarget::TextureCubeMapNegativeZ,
     };
 
-    EasyGLTextureCubeBackend::EasyGLTextureCubeBackend(int size, bool /*mipMap*/, int /*surfaceFormat*/)
+    // Mirrors TextureCube.cpp's CalculateMipLevels(size,size) — cube faces are square.
+    static int CalculateCubeMipLevels(int size)
+    {
+        int levels = 1;
+        int s = size;
+        while (s > 1) { s = std::max(1, s / 2); ++levels; }
+        return levels;
+    }
+
+    EasyGLTextureCubeBackend::EasyGLTextureCubeBackend(int size, bool mipMap, int /*surfaceFormat*/)
         : size_(size)
     {
         tex_.create();
         tex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        // Pre-allocate GPU storage for every mip level (not just level 0): SetData's box writes
+        // use glTexSubImage2D, which requires the target level to already have a defined image —
+        // without this loop, SetData(level>0,...) would silently fail (Task 276 finding).
+        const int levelCount = mipMap ? CalculateCubeMipLevels(size) : 1;
         for (auto faceTarget : kCubeFaceTargets)
         {
-            tex_.set_image_2d(faceTarget, 0,
-                              ::metagl::InternalFormat::Rgba8,
-                              size, size,
-                              ::metagl::PixelFormat::Rgba,
-                              ::metagl::PixelType::UnsignedByte,
-                              nullptr);
+            int levelSize = size;
+            for (int level = 0; level < levelCount; ++level)
+            {
+                tex_.set_image_2d(faceTarget, level,
+                                  ::metagl::InternalFormat::Rgba8,
+                                  levelSize, levelSize,
+                                  ::metagl::PixelFormat::Rgba,
+                                  ::metagl::PixelType::UnsignedByte,
+                                  nullptr);
+                levelSize = std::max(1, levelSize / 2);
+            }
         }
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MinFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MagFilter, kTexLinear);

@@ -638,6 +638,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 276: TextureCube mip-level SetData/GetData round-trip, all six faces
+        cna_easygl_test(cna_test_easygl_texturecube_mip
+                        examples/easygl_texturecube_mip_test.cpp)
+        add_test(NAME EasyGL_TextureCube_Mip_RoundTrip
+                 COMMAND cna_test_easygl_texturecube_mip)
+        set_tests_properties(EasyGL_TextureCube_Mip_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 275: TextureCube partial rect + startIndex, all six faces
         cna_easygl_test(cna_test_easygl_texturecube_partial_rect
                         examples/easygl_texturecube_partial_rect_test.cpp)

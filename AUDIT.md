@@ -905,6 +905,38 @@ All three sub-tests pass — no bug found. Confirms `EasyGLTextureCubeBackend::S
 arbitrary x/y sub-rects independently per face. 1972/1974 EasyGL ctest pass (2 pre-existing,
 unrelated failures unchanged).
 
+### TextureCube mip-level allocation bug, all six faces (Task 276, Phase 33)
+
+Added `examples/easygl_texturecube_mip_test.cpp` (`EasyGL_TextureCube_Mip_RoundTrip` ctest),
+mirroring Task 171's `Texture2D` mip round-trip test but across all six faces: a 4×4
+`mipMap=true` cube (levels 4×4, 2×2, 1×1) gets a distinct colour written to every level of every
+face, then every level of every face is read back and verified.
+
+**This test initially failed.** Mip levels 1 and 2 always read back `(0,0,0)` regardless of what
+was written, on every face — level 0 was the only level that worked. Root cause:
+`EasyGLTextureCubeBackend`'s constructor only ever allocated GPU storage for level 0 (one
+`set_image_2d` call per face, no loop over levels), while `SetData`'s box writes go through
+`set_sub_image_2d` (`glTexSubImage2D`). `glTexSubImage2D` requires the target level to already have
+a defined image (from a prior `glTexImage2D`/`set_image_2d` call) — level 0 had one, levels 1+ never
+did, so those writes silently went nowhere (no GL error surfaced through the wrapper).
+
+Fixed in `EasyGLGraphicsBackend.cpp`: the constructor now computes the mip level count
+(`CalculateCubeMipLevels`, mirroring `TextureCube.cpp`'s own `CalculateMipLevels`/`mipDim` logic,
+duplicated locally since the backend doesn't share that translation unit) and pre-allocates every
+level of every face via `set_image_2d(level, ..., nullptr)` before returning. Subsequent
+`set_sub_image_2d` writes at any level now succeed because the level's storage already exists. All
+126 checks (6 faces × 21 pixels across 3 levels) now pass. 1973/1975 EasyGL ctest pass (2
+pre-existing, unrelated failures unchanged).
+
+**Not fixed in this task, flagged as a follow-up (`GRAPHICS_TASKS.md` Task 862):**
+`EasyGLTexture3DBackend`'s constructor has the identical single-level-only pattern (only level 0
+allocated via `set_image_3d`, `SetData` writes via `set_sub_image_3d`), so `Texture3D::SetData` at
+`level>0` on a mipmapped volume almost certainly has the same silent-failure bug. Task 271's audit
+already documented that EasyGL ignores `Texture3D`'s `mipMap` parameter in general, but did not
+specifically reproduce a level>0 `SetData` failure with a test — this session's finding gives that
+documented limitation a concrete, fixable root cause and a matching fix shape (mirror this task's
+constructor change), left for a follow-up task since it's outside Task 276's `TextureCube` scope.
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`
