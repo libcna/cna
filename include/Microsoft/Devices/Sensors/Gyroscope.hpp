@@ -92,8 +92,7 @@ namespace Microsoft::Devices::Sensors
             std::int64_t sensorId,
             float x,
             float y,
-            float z,
-            std::uint64_t timestampNs
+            float z
         );
 
         /**
@@ -101,9 +100,10 @@ namespace Microsoft::Devices::Sensors
          * CurrentValueChanged. No hardware-presence guard — callers
          * (ProcessSensorUpdateEvent() and the NOXNA synthetic-injection
          * hook below) are responsible for deciding whether this call is
-         * legitimate.
+         * legitimate. Timestamp is always the real wall-clock time of the
+         * call (Task P4-7), not derived from any caller-supplied value.
          */
-        void DispatchSensorReading(float x, float y, float z, std::uint64_t timestampNs);
+        void DispatchSensorReading(float x, float y, float z);
 
     public:
         /**
@@ -180,14 +180,15 @@ namespace Microsoft::Devices::Sensors
          *
          * Still respects the started/disposed state exactly as the real
          * event path does: a no-op if the instance isn't "started" (see
-         * SetStartedForTesting()) or has already been disposed.
+         * SetStartedForTesting()) or has already been disposed. The
+         * resulting reading's Timestamp is always the real wall-clock time
+         * of the call (Task P4-7), not a synthetic value.
          *
          * @param x Raw X-axis rotation rate, in radians/second.
          * @param y Raw Y-axis rotation rate, in radians/second.
          * @param z Raw Z-axis rotation rate, in radians/second.
-         * @param timestampNs Synthetic event timestamp in nanoseconds.
          */
-        NOXNA void InjectSyntheticSensorUpdate(float x, float y, float z, std::uint64_t timestampNs);
+        NOXNA void InjectSyntheticSensorUpdate(float x, float y, float z);
 
         /**
          * @brief Test-only hook (Task P4-2): directly sets the internal

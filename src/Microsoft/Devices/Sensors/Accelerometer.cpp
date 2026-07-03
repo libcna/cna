@@ -13,10 +13,8 @@
 
 #include "CNA/Platform.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
-#include "System/DateTime.hpp"
 #include "System/DateTimeOffset.hpp"
 #include "System/ObjectDisposedException.hpp"
-#include "System/TimeSpan.hpp"
 
 namespace Microsoft::Devices::Sensors
 {
@@ -124,7 +122,6 @@ namespace Microsoft::Devices::Sensors
         }
 
         const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
-        const std::uint64_t timestampNs = static_cast<std::uint64_t>(SDL_GetTicksNS());
 
         std::vector<Accelerometer*> instancesSnapshot;
         {
@@ -145,8 +142,7 @@ namespace Microsoft::Devices::Sensors
                 sensorId,
                 event->sensor.data[0],
                 event->sensor.data[1],
-                event->sensor.data[2],
-                timestampNs
+                event->sensor.data[2]
             );
 
             {
@@ -441,8 +437,7 @@ namespace Microsoft::Devices::Sensors
         std::int64_t sensorId,
         float x,
         float y,
-        float z,
-        std::uint64_t timestampNs)
+        float z)
     {
         if (!started_)
         {
@@ -469,10 +464,10 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        DispatchSensorReading(x, y, z, timestampNs);
+        DispatchSensorReading(x, y, z);
     }
 
-    void Accelerometer::DispatchSensorReading(float x, float y, float z, std::uint64_t timestampNs)
+    void Accelerometer::DispatchSensorReading(float x, float y, float z)
     {
         AccelerometerReading accelerometerReading;
 
@@ -500,11 +495,12 @@ namespace Microsoft::Devices::Sensors
 
             accelerometerReading.setAccelerationProperty(acceleration);
 
-            const SharpRuntime::longcs ticks = static_cast<SharpRuntime::longcs>(timestampNs / 100);
-
-            System::DateTime dateTime(ticks);
-            System::DateTimeOffset timestamp(dateTime, System::TimeSpan::Zero);
-            accelerometerReading.setTimestampProperty(timestamp);
+            // Wall-clock time of this reading (Task P4-7). Previously derived
+            // from SDL_GetTicksNS() (monotonic ns since SDL init) fed into a
+            // DateTime(ticks) constructor that expects ticks since the .NET
+            // epoch (0001-01-01) — always produced a bogus near-year-1 value,
+            // never the actual reading time.
+            accelerometerReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
 
         setCurrentValueProperty(accelerometerReading);
@@ -522,7 +518,7 @@ namespace Microsoft::Devices::Sensors
         }
     }
 
-    void Accelerometer::InjectSyntheticSensorUpdate(float x, float y, float z, std::uint64_t timestampNs)
+    void Accelerometer::InjectSyntheticSensorUpdate(float x, float y, float z)
     {
         if (!started_)
         {
@@ -534,7 +530,7 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        DispatchSensorReading(x, y, z, timestampNs);
+        DispatchSensorReading(x, y, z);
     }
 
     void Accelerometer::SetStartedForTesting(bool started)

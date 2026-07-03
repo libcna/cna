@@ -11,6 +11,7 @@
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -228,13 +229,37 @@ TEST(AccelerometerTests, CurrentValueChangedReceivesExpectedReading)
     const float rawX = StandardGravity;
     const float rawY = 0.0f;
     const float rawZ = StandardGravity * 0.5f;
-    const std::uint64_t timestampNs = 123456789ULL;
 
-    a.InjectSyntheticSensorUpdate(rawX, rawY, rawZ, timestampNs);
+    a.InjectSyntheticSensorUpdate(rawX, rawY, rawZ);
 
     ASSERT_TRUE(invoked);
     const Vector3 expectedAcceleration(rawX / StandardGravity, rawY / StandardGravity, rawZ / StandardGravity);
     EXPECT_EQ(receivedReading.getAccelerationProperty(), expectedAcceleration);
+}
+
+// Task P4-7: Timestamp is now the real wall-clock time of the call
+// (System::DateTimeOffset::getUtcNowProperty()), not a bogus near-year-1
+// value derived from SDL_GetTicksNS(). Asserts "close to now" with a
+// generous tolerance rather than an exact value, since wall-clock time is
+// inherently non-deterministic between the call and the assertion.
+TEST(AccelerometerTests, CurrentValueChangedReceivesWallClockTimestamp)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    System::DateTimeOffset receivedTimestamp;
+    a.CurrentValueChanged += [&receivedTimestamp](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>& args)
+    {
+        receivedTimestamp = args.getSensorReadingProperty().getTimestampProperty();
+    };
+
+    const System::DateTimeOffset beforeInjection = System::DateTimeOffset::getUtcNowProperty();
+    a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+    const System::DateTimeOffset afterInjection = System::DateTimeOffset::getUtcNowProperty();
+
+    EXPECT_GE(receivedTimestamp, beforeInjection);
+    EXPECT_LE(receivedTimestamp, afterInjection);
 }
 
 // Task P4-4: legacy ReadingChanged must receive the same converted
@@ -259,9 +284,8 @@ TEST(AccelerometerTests, ReadingChangedReceivesMatchingXYZ)
     const float rawX = StandardGravity;
     const float rawY = -StandardGravity * 0.25f;
     const float rawZ = StandardGravity * 0.75f;
-    const std::uint64_t timestampNs = 987654321ULL;
 
-    a.InjectSyntheticSensorUpdate(rawX, rawY, rawZ, timestampNs);
+    a.InjectSyntheticSensorUpdate(rawX, rawY, rawZ);
 
     ASSERT_TRUE(invoked);
     EXPECT_DOUBLE_EQ(receivedArgs.getXProperty(), static_cast<double>(rawX / StandardGravity));
@@ -289,13 +313,13 @@ TEST(AccelerometerTests, StopPreventsSubsequentSyntheticEventFromDispatching)
     };
 
     constexpr float StandardGravity = 9.80665f;
-    a.InjectSyntheticSensorUpdate(StandardGravity, 0.0f, 0.0f, 111ULL);
+    a.InjectSyntheticSensorUpdate(StandardGravity, 0.0f, 0.0f);
     ASSERT_EQ(invokedCount, 1);
     const Vector3 accelerationBeforeStop = lastAcceleration;
 
     a.Stop();
 
-    a.InjectSyntheticSensorUpdate(0.0f, StandardGravity, 0.0f, 222ULL);
+    a.InjectSyntheticSensorUpdate(0.0f, StandardGravity, 0.0f);
     EXPECT_EQ(invokedCount, 1);
     EXPECT_EQ(lastAcceleration, accelerationBeforeStop);
 }

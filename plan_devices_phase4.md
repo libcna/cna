@@ -333,7 +333,7 @@ values — same `getCurrentValueProperty()` omission as P4-3/P4-5 (independent
 
 ## Phase 4: Timestamp audit
 
-### Task P4-7 — Decide and fix: `Timestamp` should be wall-clock, not monotonic ticks
+### Task P4-7 — Decide and fix: `Timestamp` should be wall-clock, not monotonic ticks — ✅ Done (2026-07-03)
 
 **Gap (verified, high confidence — a real bug, not a style question):**
 `Accelerometer::ProcessSensorUpdateEvent()` (and `Gyroscope`'s twin) builds the reading's
@@ -401,6 +401,28 @@ a mechanical fix" framing):**
 `src/Microsoft/Devices/Sensors/Gyroscope.cpp`,
 `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`,
 `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`, `AUDIT.md`.
+
+**Resolution (2026-07-03):** Went with option (A), the recommendation, without being asked
+to choose otherwise. Replaced the `timestampNs`-derived `DateTime`/`DateTimeOffset`
+construction in both `DispatchSensorReading()`s (the split introduced by Task P4-2) with
+a direct `System::DateTimeOffset::getUtcNowProperty()` call. Per step 2, went further than
+just swapping the conversion: `timestampNs` turned out to be used for *nothing else*
+anywhere in either class once the old conversion was removed, so it was deleted entirely
+from the whole call chain — `SensorEventWatch()` no longer computes it via
+`SDL_GetTicksNS()`, and `ProcessSensorUpdateEvent()`/`DispatchSensorReading()`/
+`InjectSyntheticSensorUpdate()` (the Task P4-2 test hook) all dropped the parameter rather
+than carry a dead one. This meant updating the 5 already-written Task P4-3–P4-6 test call
+sites (`AccelerometerTests.cpp`/`GyroscopeTests.cpp`) to drop the now-removed argument.
+`#include "System/DateTime.hpp"` and `#include "System/TimeSpan.hpp"` also dropped from
+both `.cpp` files (no longer used). Added 2 new tests,
+`CurrentValueChangedReceivesWallClockTimestamp` (one per class), asserting the received
+`Timestamp` falls between two `DateTimeOffset::getUtcNowProperty()` samples taken
+immediately before/after the injection call — a tolerance-free but still
+non-flaky bound (`>=`/`<=`, not equality), rather than an arbitrary fixed tolerance window.
+Verified: `CNA` + `CnaTests` build clean. Targeted suite — 35/35 passing (2 skipped, the
+pre-existing supported-path variants). Full `ctest` — 1992 tests (up from 1990), 97%
+passing, same 64 pre-existing headless `EasyGL_*` failures, zero regressions. `AUDIT.md`'s
+`AccelerometerReading`/`GyroscopeReading` rows updated.
 
 ---
 

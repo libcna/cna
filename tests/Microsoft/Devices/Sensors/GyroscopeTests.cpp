@@ -9,6 +9,7 @@
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -197,13 +198,37 @@ TEST(GyroscopeTests, CurrentValueChangedReceivesExpectedReading)
     const float rawX = 0.5f;
     const float rawY = -1.25f;
     const float rawZ = 2.0f;
-    const std::uint64_t timestampNs = 555555555ULL;
 
-    g.InjectSyntheticSensorUpdate(rawX, rawY, rawZ, timestampNs);
+    g.InjectSyntheticSensorUpdate(rawX, rawY, rawZ);
 
     ASSERT_TRUE(invoked);
     const Vector3 expectedRotationRate(rawX, rawY, rawZ);
     EXPECT_EQ(receivedReading.getRotationRateProperty(), expectedRotationRate);
+}
+
+// Task P4-7: Timestamp is now the real wall-clock time of the call
+// (System::DateTimeOffset::getUtcNowProperty()), not a bogus near-year-1
+// value derived from SDL_GetTicksNS(). Asserts "close to now" with a
+// generous tolerance rather than an exact value, since wall-clock time is
+// inherently non-deterministic between the call and the assertion.
+TEST(GyroscopeTests, CurrentValueChangedReceivesWallClockTimestamp)
+{
+    Gyroscope g;
+    g.SetStartedForTesting(true);
+
+    System::DateTimeOffset receivedTimestamp;
+    g.CurrentValueChanged += [&receivedTimestamp](
+        System::Object*, const SensorReadingEventArgs<GyroscopeReading>& args)
+    {
+        receivedTimestamp = args.getSensorReadingProperty().getTimestampProperty();
+    };
+
+    const System::DateTimeOffset beforeInjection = System::DateTimeOffset::getUtcNowProperty();
+    g.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+    const System::DateTimeOffset afterInjection = System::DateTimeOffset::getUtcNowProperty();
+
+    EXPECT_GE(receivedTimestamp, beforeInjection);
+    EXPECT_LE(receivedTimestamp, afterInjection);
 }
 
 // Task P4-6: confirms Stop() actually disables further synthetic-event
@@ -223,13 +248,13 @@ TEST(GyroscopeTests, StopPreventsSubsequentSyntheticEventFromDispatching)
         lastRotationRate = args.getSensorReadingProperty().getRotationRateProperty();
     };
 
-    g.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f, 111ULL);
+    g.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
     ASSERT_EQ(invokedCount, 1);
     const Vector3 rotationRateBeforeStop = lastRotationRate;
 
     g.Stop();
 
-    g.InjectSyntheticSensorUpdate(0.0f, 1.0f, 0.0f, 222ULL);
+    g.InjectSyntheticSensorUpdate(0.0f, 1.0f, 0.0f);
     EXPECT_EQ(invokedCount, 1);
     EXPECT_EQ(lastRotationRate, rotationRateBeforeStop);
 }

@@ -33,11 +33,11 @@ guess after a genuine research effort, judged not worth pursuing further).
 hardening plan: event-callback lifetime safety, real event-path testing,
 a real timestamp bug, SDL sensor-subsystem ownership, `VibrateController`
 hardening, cross-platform build, a demo screen — 14 tasks across 8 phases).
-Tasks P4-1 through P4-6 are done as of 2026-07-03 (doc cleanup; callback
+Tasks P4-1 through P4-7 are done as of 2026-07-03 (doc cleanup; callback
 lifetime-safety fix + synthetic-event test hook; real event-path tests for
 `CurrentValueChanged`/`ReadingChanged` on both `Accelerometer` and
-`Gyroscope`, including `Stop()`'s effect). Tasks P4-7 through P4-14 have
-not started yet.
+`Gyroscope`, including `Stop()`'s effect; the confirmed `Timestamp` bug is
+fixed). Tasks P4-8 through P4-14 have not started yet.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -328,12 +328,29 @@ executables weren't built (not a regression).
   a test to the soon-to-change mechanism would need immediate rewriting).
   5 new tests (1990 total, up from 1985). Full writeup:
   `plan_devices_phase4.md` Tasks P4-3–P4-6's Resolution sections.
+- **Task P4-7 done (2026-07-03):** fixed the confirmed `Timestamp` bug —
+  `Accelerometer`/`Gyroscope` readings now get `Timestamp` from
+  `System::DateTimeOffset::getUtcNowProperty()` (real wall-clock time)
+  instead of the previous `SDL_GetTicksNS()`-derived value that always
+  landed near `0001-01-01`. Went further than the minimal fix: since
+  `timestampNs` had no other use once the old conversion was gone, it was
+  removed entirely from the whole call chain
+  (`SensorEventWatch()`/`ProcessSensorUpdateEvent()`/`DispatchSensorReading()`/
+  `InjectSyntheticSensorUpdate()`) rather than left as a dead parameter —
+  this required updating the 5 Task P4-3–P4-6 test call sites to drop the
+  now-removed argument. Added 2 new tests (one per class),
+  `CurrentValueChangedReceivesWallClockTimestamp`, asserting the received
+  `Timestamp` falls between two `getUtcNowProperty()` samples taken
+  immediately around the injection call. 1992 tests total, up from 1990.
+  `AUDIT.md`'s `AccelerometerReading`/`GyroscopeReading` rows updated. Full
+  writeup: `plan_devices_phase4.md` Task P4-7's Resolution section.
 - Last pushed commit: `60f476b` on `feature/devices` (the
-  `plan_devices_phase4.md` creation commit). Tasks P4-1 (`f291187`) and
-  P4-2 (`3965e57`) are committed locally but **not yet pushed**. Tasks
-  P4-3–P4-6's changes (`AccelerometerTests.cpp`, `GyroscopeTests.cpp`,
-  `plan_devices_phase4.md`, this file) are **not yet committed** as of this
-  writing.
+  `plan_devices_phase4.md` creation commit). Tasks P4-1 (`f291187`), P4-2
+  (`3965e57`), and P4-3–P4-6 (`43eec74`) are committed locally but **not
+  yet pushed**. Task P4-7's changes (`Accelerometer.hpp`/`.cpp`,
+  `Gyroscope.hpp`/`.cpp`, `AccelerometerTests.cpp`, `GyroscopeTests.cpp`,
+  `AUDIT.md`, `plan_devices_phase4.md`, this file) are **not yet
+  committed** as of this writing.
 
 ---
 
@@ -391,13 +408,13 @@ P3-5, all 2026-07-03).
   `CurrentValueChanged`/`ReadingChanged` are now observed actually *firing*
   with real data, via Task P4-2's synthetic-injection hooks — see
   `plan_devices_phase4.md` Tasks P4-3 through P4-6 (all done).
-- **Timestamp correctness (confirmed real bug, not carried over from
-  phase3 — newly found 2026-07-03).** `Accelerometer`/`Gyroscope` readings'
-  `Timestamp` is built from `SDL_GetTicksNS()` (monotonic nanoseconds since
-  SDL init) fed into a `DateTime(ticks)` constructor that expects ticks
-  since the .NET epoch (`0001-01-01`) — the resulting value is nowhere near
-  the actual wall-clock time the reading occurred. See
-  `plan_devices_phase4.md` Task P4-7.
+- **Fixed 2026-07-03:** timestamp correctness. `Accelerometer`/`Gyroscope`
+  readings' `Timestamp` now comes from `System::DateTimeOffset::getUtcNowProperty()`
+  (real wall-clock time); previously built from `SDL_GetTicksNS()`
+  (monotonic nanoseconds since SDL init) fed into a `DateTime(ticks)`
+  constructor that expects ticks since the .NET epoch — the resulting
+  value used to be nowhere near the actual wall-clock time the reading
+  occurred. See `plan_devices_phase4.md` Task P4-7 (done).
 - **Hardware-in-the-loop verification.** Nothing in this codebase — sensor
   axis conventions, actual vibration motor behavior, the gamepad-exclusion
   filter — has ever run against real accelerometer/gyroscope/haptic
@@ -579,27 +596,17 @@ writing.
 Task P3-12 is as resolved as it can get without a source that doesn't
 appear to exist in any archive). `plan_devices_phase4.md` is now open
 (user-authored hardening plan, 14 tasks across 8 phases). Tasks P4-1
-through P4-6 are done as of this edit. Recommended order for the rest:
+through P4-7 are done as of this edit. Recommended order for the rest:
 
-1. **Task P4-7 — timestamp audit.** Confirmed real bug (not carried over
-   from phase3): `Timestamp` is built from `SDL_GetTicksNS()` fed into a
-   `DateTime(ticks)` constructor that expects .NET-epoch ticks. Recommended
-   fix: swap to `System::DateTimeOffset::getUtcNowProperty()` (confirmed to
-   already exist in `sharp-runtime`). Note: Task P4-4's
-   `ReadingChangedReceivesMatchingXYZ` test deliberately avoided asserting
-   `Timestamp` in anticipation of this task — once P4-7 lands, consider
-   whether to extend that test (and P4-3/P4-5's) to also assert `Timestamp`
-   is close to "now".
-
-2. **Task P4-8 — SDL sensor subsystem ownership.** Real, root-caused bug:
+1. **Task P4-8 — SDL sensor subsystem ownership.** Real, root-caused bug:
    `EnsureSensorSubsystemInitialized()` bypasses SDL3's own built-in
    subsystem ref-counting via an `SDL_WasInit()` guard.
 
-3. **Tasks P4-9/P4-10 — `VibrateController` hardening** (mutex around
+2. **Tasks P4-9/P4-10 — `VibrateController` hardening** (mutex around
    `g_haptic`/`g_leftRightEffectId`; replace name-matching gamepad
    exclusion with `SDL_OpenHapticFromJoystick()`).
 
-4. **Tasks P4-11–P4-14 — cross-platform build and demo screen**, likely
+3. **Tasks P4-11–P4-14 — cross-platform build and demo screen**, likely
    still blocked for Android/iOS in this environment (re-check first); the
    demo screen (P4-14) has no environment blocker and can be done any time.
 
