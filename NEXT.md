@@ -4,280 +4,167 @@
 
 ## 1. Project summary
 
-**CNA** is a C++23 reimplementation of the XNA 4.0 programming model (`Microsoft::Xna::Framework`),
-built on SDL3 with a pluggable 3D graphics backend layer (EasyGL/OpenGL ES 3.2, Vulkan, Bgfx,
-SDL_Renderer). It is a framework/runtime — not a game — designed so that XNA/FNA game code can be
-ported to C++ with minimal API-surface changes.
+**CNA** is a C++23 reimplementation of the XNA 4.0 programming model
+(`Microsoft::Xna::Framework`), built on SDL3 with a pluggable 3D graphics backend layer. It is a
+framework/runtime — not a game — designed so that XNA/FNA game code can be ported to C++ with
+minimal API-surface changes.
 
-- **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit and
-  pixel-readback integration tests.
-- **Current development phase:** Phase 32 (Texture2D completeness, Tasks 261–270) is **fully
-  complete**. **Phase 33 (Texture3D/TextureCube completeness, Tasks 271–280) is now fully
-  complete.** Summary: 271/272 audited `Texture3D`/`TextureCube` against FNA and fixed the same 3
-  bug classes in both (hardcoded `LevelCount`, missing `SetData`/`GetData` guards, missing
-  `Dispose(bool)`); 273–275 added genuine x/y/z(/rect) sub-region + `startIndex` pixel-verified
-  tests beyond what existed; 276 found and fixed a real GPU-storage mip-allocation bug in
-  `EasyGLTextureCubeBackend`; 277 confirmed `Texture3D` shader sampling is architecturally
-  unreachable (no code change); 278 confirmed `TextureCube` sampling in `EnvironmentMapEffect`
-  works on EasyGL/Vulkan and fixed a real missing code path on Bgfx; 279 added `CubeMapFace` range
-  validation (a CNA safety extra); 280 documented the full backend support matrix
-  (`docs/texture3d-texturecube-support.md`) and, in doing so, found that **`Texture3D`/
-  `TextureCube::GetData` is a total silent no-op on both Vulkan and Bgfx** (neither overrides the
-  empty base-class default) — a significant finding that had gone unnoticed because existing tests
-  never assert on `GetData`'s returned values. Phases 30 and 31 were already complete. New Tasks
-  663, 862, 863, 864, and 865 were added (unnumbered-sequence, matching existing precedent) for
-  severe findings from Tasks 272, 276, 277, and 280 — see §3. **Phase 34 (SurfaceFormat
-  implementation matrix, Tasks 281–290) is now in progress** — Task 281 done: built the canonical
-  27-value `SurfaceFormat` table directly against FNA source and found/fixed a real enum-
-  conformance bug (CNA's enum diverged from FNA at ordinal 20+, see §3). Task 282 done: ported
-  FNA's real `Texture.GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` static methods (not a
-  CNA-invented `SurfaceFormatHelper`) with exhaustive per-format tests; also fixed a missing
-  `NOXNA` tag on `Texture::ValidateFormat` found along the way. Task 283 done: ported FNA's
-  remaining `GetPixelStoreAlignment`/`ValidateGetDataFormat` and wired the latter into all 4 real
-  `GetData` call sites (`Texture2D`, `Texture3D`, `TextureCube`, `GraphicsDevice::
-  GetBackBufferData`) — currently a no-op everywhere since only `Color` is supported, but correct
-  FNA-conformant infrastructure for future format support; made both `public` on `Texture`
-  (documented visibility deviation from FNA's `internal`, since 3 of 4 call sites aren't
-  `Texture` subclasses in CNA). **Task 284 done: found and fixed a real Vulkan gamma bug** —
-  `Texture2D` was created with `VK_FORMAT_R8G8B8A8_SRGB` and the swapchain preferred an SRGB
-  surface format too, applying unwanted gamma transforms to non-textured rendering (a nominal
-  128 read back as 188); both fixed to `UNORM`, verified with a new mid-grey comparison test
-  (existing tests all use saturated 0/255 values, which can't reveal a linear-vs-sRGB bug) — see
-  §3. Next up: Task 285 (implement/verify `Bgr565`/`Bgra5551`/`Bgra4444` packing/unpacking).
+- **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit tests and
+  pixel-readback integration tests, verified against the authoritative FNA reference source
+  (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
+- **Current development phase:** Phases 1–33 are complete. **Phase 34 (SurfaceFormat
+  implementation matrix, `GRAPHICS_TASKS.md` Tasks 281–290) is in progress** — Tasks 281–284 done,
+  Task 285 is next (see §8).
 - **Key architectural decisions:**
-  - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
-    (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).
-  - The `sharp-runtime` library (sibling repo at `../sharp-runtime/`) provides all `System.*` types
-    and primitive aliases (`bytecs`, `String`, etc.) used on the XNA API surface.
-  - Stride-keyed vertex layout: backends currently build VAO/pipeline/layout from a map keyed
-    by vertex stride. Only strides 16/20/24/32/52 work for 3D — arbitrary layouts are future work.
+  - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
+    (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
+    SDL_Renderer is 2D-only by design (no 3D pipeline at all).
+  - The `sharp-runtime` sibling repo (`../sharp-runtime/`) provides all `System.*` types and
+    primitive type aliases (`bytecs`, `Single`, `String`, …) used on the XNA API surface.
+  - Vertex layout dispatch is **stride-keyed**: EasyGL/Vulkan/Bgfx select their GPU vertex
+    layout from the raw byte stride of the bound buffer, not from `VertexDeclaration` contents.
+    Only strides 16/20/24/32/52 are handled correctly.
+  - `Texture3D` and `TextureCube` inherit `GraphicsResource` directly, **not** `Texture` — unlike
+    FNA, where both inherit `Texture`. This is a known, documented architectural gap (see §5,
+    §6) with real downstream consequences (texture-in-shader sampling, `EffectParameter` storage).
 
 ---
 
 ## 2. Current status
 
 ### Build status
-- **All three `cmake-build-*` dirs were re-created this session.** They had been pointing at the
-  sibling `../cna` repo's source tree (`CMAKE_HOME_DIRECTORY` mismatch — likely leftover from a
-  copy/split of the `cna` repo into `cna_graphics`), so every build in them was actually building
-  `../cna`, not this repo. Deleted and reconfigured all three (`cmake -B ... -DCNA_GRAPHICS_BACKEND=...`)
-  against `cna_graphics`. If a build dir ever needs recreating again, always configure it from
-  *this* repo's root, not `../cna`.
-- **EasyGL (`cmake-build-debug`)** — primary, most tested: reconfigured, fully rebuilt, all EasyGL
-  ctest targets pass except 2 pre-existing/unrelated (see Test status below).
-- **Vulkan (`cmake-build-vulkan`)** — reconfigured against `cna_graphics`, fully rebuilt this
-  session (`-j1`, required for link stability). Rebuilding surfaced and led to fixing a real
-  pre-existing Vulkan bug — see §3 and `AUDIT.md` "Vulkan `TransitionImageLayout` missing a
-  re-upload transition".
-- **Bgfx (`cmake-build-bgfx`)** — reconfigured against `cna_graphics` (the `bgfx.cmake`
-  `FetchContent` re-clone took ~32 minutes since the old `_deps` cache was deleted with the rest of
-  the dir) and fully rebuilt this session. **100% ctest pass** — see Test status below.
+All three backend build directories exist and were last rebuilt/verified in this session:
+`cmake-build-debug` (EasyGL), `cmake-build-vulkan` (Vulkan), `cmake-build-bgfx` (Bgfx). All three
+build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
-### Test status
-- **Unit tests (`CnaTests`):** EasyGL 1900/1900, Vulkan 1900/1900, Bgfx 1904/1904
-  (backend-conditional test count differs slightly per build, as expected — the delta is constant
-  across sessions, not a regression). All three backends verified this session.
-- **EasyGL integration tests (ctest, `cmake-build-debug`):** 1971 total ctest cases registered (unit
-  tests + integration tests + the `easy-gl` sibling library's own smoke tests, all share one `ctest`
-  run). **1969/1971 pass.** Two failures, both pre-existing/unrelated to this session (see §5):
-  `EasyGL_MRT_TwoAttachments` and `easy-gl-resource-smoke-tests`. The previously-documented
-  `easygl_device_dispose_order_test` failure is **no longer reproducing** (passed cleanly); entry in
-  §5 downgraded to "needs re-verification" rather than deleted, in case it's flaky.
-- **Vulkan integration tests (ctest, `cmake-build-vulkan`):** 1853 total ctest cases. **1852/1853
-  pass** — improved from the previously-documented "11/13" baseline for the 13 Vulkan-specific
-  integration tests (now 12/13; only `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails, a
-  pre-existing depth-bias-precision issue, not investigated further — see §5).
-- **Bgfx (ctest, `cmake-build-bgfx`):** 1847 total ctest cases. **1847/1847 pass (100%)**, including
-  `Bgfx_Demo2D_SmokeTest`, `Bgfx_RenderTargetUsage`, and `Bgfx_VertexFormatMapping` (47/47 mapping
-  checks). No pixel-readback for Bgfx (backend has no readback API), so Bgfx coverage is smoke-only,
-  but everything that exists passes cleanly.
+### Test status (last runs performed this session)
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2004/2006 pass. 2 pre-existing, unrelated
+  failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. One additional
+  test (`EasyGL_SkinnedBones`) was observed failing once under parallel `-j` execution but passed
+  cleanly both in isolation and on a repeat full run — treated as parallel-execution flakiness, not
+  a regression (not confirmed as a stable failure).
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1944/1945 (serial `-j1`) / 1943/1945 (parallel
+  `-j`). Only `Vulkan_DepthBias` (pre-existing, its `DepthBias=-1e6` sub-case) fails consistently.
+  `Vulkan_FillMode_WireFrame` and `Vulkan_RenderTargetUsage` have been observed to fail under
+  parallel execution / specific run ordering but pass in isolation — confirmed via `git stash`
+  bisection (Task 279) to be pre-existing and unrelated to any change made this session.
+- **Bgfx (`cmake-build-bgfx`), full `ctest`:** 1939/1939 (100%) as of Task 283. **Not rebuilt/retested
+  after Task 284** (a Vulkan-only change) or the trailing `SpriteBatch` `NOXNA`-tag fix (header-only
+  macro addition, no behavioral change) — low risk, but not empirically reverified since those two
+  commits. Bgfx has no GPU pixel-readback API in this project, so its integration coverage is
+  smoke-test-only by design.
 
 ### What currently works
-- Full unit-test coverage for `DrawUserPrimitives` / `DrawUserIndexedPrimitives` (all typed +
-  `VertexDeclaration` overloads), including argument-guard and pixel-readback verification.
-- `Texture2D`: constructors, `SetData`/`GetData` (with bounds checking on both), `FromStream`
-  (PNG/JPEG/BMP/DDS-DXT1/3/5, plus a resize/crop overload), `SaveAsPng`/`SaveAsJpeg` (both
-  round-trip verified), `LevelCount` (verified against FNA's mip-level formula), CPU shadow-storage
-  lifetime under `SetContextRecoveryEnabled` (audited and pinned by tests, Task 270).
-- Recently implemented (this session, chronological):
-  - Pixel-readback tests for `DrawUserIndexedPrimitives` with 16-bit and 32-bit indices.
-  - Argument-guard tests for `DrawUserPrimitives` (`primitiveCount <= 0` throws).
-  - A full FNA-conformance audit of `Texture2D` (see `AUDIT.md`), which found and led to fixing:
-    two heap-buffer-overflow bugs in `SetData`, two missing `NOXNA` tags, a missing `FromStream`
-    overload, and a hardcoded JPEG quality value.
-  - Round-trip verification of `Texture2D::FromStream`/`SaveAsPng`/`SaveAsJpeg` and `LevelCount`.
-  - A performance fix replacing 22 per-draw-call heap allocations in
-    `DrawUserPrimitives`/`DrawUserIndexedPrimitives` with two reusable scratch buffers.
-  - Task 270: audited `cpuPixels_`/`extraMipLevels_` shadow-buffer lifetime; confirmed `GetData`
-    permanently throws after the level-0 shadow is freed (no GPU readback fallback exists); found
-    and fixed a real bug where a partial `SetData(level,rect,...)` after the shadow was freed could
-    silently zero out the rest of the GPU texture — now throws instead. See `AUDIT.md`,
-    "Texture2D CPU shadow storage".
-  - `DrawUserIndexedPrimitives` argument-guard tests: `primitiveCount<=0` throws
-    `ArgumentOutOfRangeException` for all 8 typed + 2 `VertexDeclaration` overloads (Task 252 had
-    added the guard code but never the tests). Also found and fixed the untyped raw-`void*`
-    overload, which had no guard at all until now.
-  - Tasks 268/269: verified NPOT textures work end-to-end on EasyGL (new pixel-readback test);
-    found and fixed 2 real `SpriteBatch` bugs on EasyGL — `SamplerState` (`Filter`/`AddressU`/
-    `AddressV`) was never applied to sprite rendering at all (only SDL_Renderer's `Filter` worked),
-    and UVs were hard-clamped to `[0,1]`, making `TextureAddressMode::Wrap`/`Mirror` structurally
-    unreachable. Both fixed; see `AUDIT.md` "NPOT textures and SpriteBatch edge sampling".
-  - Unrelated build-blocking fix: `StorageDevice.cpp`'s `SelectorResult`/`ContainerResult` didn't
-    implement 2 new pure-virtual members that a concurrent `sharp-runtime` commit added to
-    `System::IAsyncResult` (`getAsyncStateProperty`/`getAsyncWaitHandleProperty`) — fixed to match.
-  - Rebuilt/verified Vulkan and Bgfx (only reconfigured earlier this session). Found and fixed a
-    real pre-existing Vulkan bug: `TransitionImageLayout` was missing the
-    `SHADER_READ_ONLY_OPTIMAL → TRANSFER_DST_OPTIMAL` barrier `UpdatePixels` needs to re-upload a
-    texture after its first `SetData` — every second-or-later `SetData` call threw on Vulkan. Fixed.
-  - Task 265 (closes Phase 32): FNA's real `GetData<T>` doesn't bounds-check `rect` at the managed
-    level at all (CNA's existing check is a deliberate safety extra, not a literal-parity gap).
-    Found and fixed a real, symmetric bug instead: neither `GetData` overload validated
-    `startIndex < 0` (the equivalent `SetData` overloads already did) — an OOB read from
-    `cpuPixels_` (3-arg) or an OOB write into the caller's array (5-arg). Fixed both.
-  - Task 271 (starts Phase 33): audited `Texture3D` against FNA and found/fixed 3 real bugs —
-    `LevelCount` hardcoded to 1 regardless of `mipMap`; `SetData`/`GetData` had almost no input
-    validation at all (null-data crash, negative-`elementCount` huge-allocation crash, negative-
-    `startIndex` OOB read/write, no box-bounds check); `Dispose(bool)` was never overridden, so the
-    GPU resource was never released on explicit `Dispose()`. Added `Texture3DTests.cpp` (31 new
-    tests) — previously `Texture3D` had zero dedicated unit tests. See `AUDIT.md` "Texture3D
-    detailed audit".
-  - Task 272: audited `TextureCube` against FNA and found the *exact same 3 bug classes* as Task
-    271 (confirming a systemic pattern, not one-off mistakes) plus 2 `TextureCube`-specific bugs —
-    a missing `SetData`/`GetData(face,data,startIndex,elementCount)` overload, and a `rect==nullptr`
-    -at-`level>0` bug that ignored `level` entirely (always used the full face `Size` instead of
-    `Size>>level`, unlike `Texture2D`/`Texture3D`'s `mipDim()` pattern). All 5 fixed. Also found
-    `DDSFromStreamEXT` is a **non-functional stub** — it ignores its `stream` argument and silently
-    returns a blank 1×1 texture; documented as a severe finding (new Task 663), not fixed (a real
-    DDS-cube-parser implementation is a substantial feature, out of this audit's guard-fixing
-    scope). Added `TextureCubeTests.cpp` (27 new tests). See `AUDIT.md` "TextureCube detailed audit".
-- Known working examples: `examples/dxt1_texture_test.cpp` (DDS/DXT1 decode via `FromStream`),
-  `examples/easygl_texture2d_partial_rect_test.cpp` and `easygl_texture2d_mip_test.cpp`
-  (`SetData`/`GetData` round trips), the DrawUserPrimitives/DrawUserIndexedPrimitives pixel-readback
-  tests (Tasks 255–258), `vulkan_scissor_test` (Task 329),
-  `easygl_npot_texture_test.cpp` / `easygl_texture_address_mode_test.cpp` (Tasks 268/269),
-  `easygl_texture3d_slices_test.cpp` (Task 173, per-slice SetData/GetData round trip), and
-  `easygl_texturecube_faces_test.cpp` (Task 172, per-face SetData/GetData round trip).
+- Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (including
+  arbitrary x/y/z or x/y/rect sub-regions, `startIndex`, and mip levels — mip levels only
+  confirmed fixed on EasyGL `TextureCube`, see §5), argument-guard validation, and `Dispose`.
+- `CubeMapFace` range validation (throws for an out-of-range enum value — a CNA safety extra;
+  confirmed FNA itself never validates this).
+- `SurfaceFormat` enum now has all 27 values matching FNA exactly, including ordinals — a real
+  conformance bug (7 wrong/invented values at ordinals 20–26) was found and fixed this session.
+- `Texture.GetBlockSizeSquaredEXT`, `GetFormatSizeEXT`, `GetPixelStoreAlignment`,
+  `ValidateGetDataFormat` — all four ported from FNA's `Texture.cs`, wired into all real
+  `GetData` call sites. Currently a no-op in practice (only `SurfaceFormat::Color` is supported
+  anywhere), but this is deliberate, correct, forward-looking infrastructure.
+- `EnvironmentMapEffect` (`TextureCube` reflection mapping) now works correctly on **all three**
+  backends — EasyGL and Vulkan were already correct; Bgfx had zero code path for it until this
+  session (Task 278).
+- Vulkan rendering is now colorspace-correct: `Texture2D` and the swapchain were both incorrectly
+  using sRGB GPU formats, silently gamma-distorting all non-textured rendering (fixed Task 284).
+- `SpriteBatch`: all 20 of FNA's real public methods (1 constructor, 5 `Begin` overloads, `End`,
+  7 `Draw` overloads, 6 `DrawString` overloads) are implemented with matching signatures. 4
+  CNA-only convenience additions exist alongside them, now correctly `NOXNA`-tagged.
 
 ### What does NOT work yet
-- `Texture2D` is still missing `SetDataPointerEXT`, `GetDataPointerEXT`, `TextureDataFromStreamEXT`,
-  and `DDSFromStreamEXT`; `SurfaceFormat` support is effectively Color-only (`ValidateFormat`
-  throws for every other format) — both found in the Task 261 audit, neither yet addressed.
-- Multiple `SpriteBatch::Begin()`/`End()` calls per frame on Vulkan only renders the last batch.
-- `SpriteBatch`'s `SamplerState` (`Filter`/`AddressU`/`AddressV`) is still a no-op on **Vulkan and
-  Bgfx** — only EasyGL was fixed this session (Task 269); those two backends' `ISpriteBatchBackend`
-  implementations don't override `SetSamplerFilter`/`SetSamplerAddressMode` at all.
-- EasyGL and Bgfx stride-keyed vertex layout only supports strides 16/20/24/32/52.
-- `Texture2D::extraMipLevels_` (mip levels >0 CPU shadow) is never freed regardless of
-  `SetContextRecoveryEnabled` — only the level-0 shadow (`cpuPixels_`) participates in the
-  RAM-saving optimization (Task 270 audit finding; documented, not fixed — see `AUDIT.md`).
-- EasyGL's `Texture3D` backend ignores `mipMap` and `SurfaceFormat` entirely — always creates a
-  single-level `Rgba8` 3D texture regardless of what the caller requested (Task 271 audit finding;
-  the `LevelCount` *property* is now correct, but the GPU texture itself still has no real mip
-  chain). Feeds a later Phase 33 task, not fixed now. `TextureCube`'s EasyGL backend likely has the
-  same limitation (not separately re-verified — Task 272 audit note).
-- **`TextureCube::DDSFromStreamEXT` does not work at all** — it's a silent stub that ignores the
-  input stream and always returns a blank 1×1 texture (Task 272 finding; new Task 663 tracks a
-  real implementation). This is more severe than the other "missing API surface" items above,
-  since it fails silently rather than loudly (compiles, runs, returns a plausible-looking object).
-- 358 tasks are still unchecked (⬜) out of 537 total in `GRAPHICS_TASKS.md` (Task 272 completed,
-  and a new Task 663 was added ⬜ this session for the `DDSFromStreamEXT` finding — net unchanged
-  from before Task 272, since one task closed and one was added).
+- `Texture3D`/`TextureCube::GetData` is a **total silent no-op on both Vulkan and Bgfx** — neither
+  backend overrides the base class's empty default implementation. Calling it leaves the output
+  buffer completely untouched, with no error (Task 280 finding, tracked as Task 865).
+- `Texture3D` sampling is not wired into any shader on any backend, and cannot be, without an
+  architecture change (`Texture3D`/`TextureCube` would need to inherit `Texture` to fit into
+  `GraphicsDevice.Textures[slot]`, or a parallel binding path would need to be added) — Task 277
+  finding, tracked as Task 863.
+- `TextureCube::DDSFromStreamEXT` is a non-functional stub: it ignores its `stream` argument and
+  always returns a blank 1×1 texture. Fails silently, not loudly. Tracked as Task 663.
+- Vulkan and Bgfx very likely have the same "mip level >0 GPU storage never allocated" bug that
+  was found and fixed for EasyGL's `TextureCube` (Task 276) — for **both** `Texture3D` and
+  `TextureCube`, on **both** backends. Flagged but not reproduced with a test. Tracked as Task 864.
+- `SpriteBatch`'s `SamplerState` (from `Begin()`) is a no-op on Vulkan and Bgfx — only EasyGL
+  applies it.
+- Multiple `SpriteBatch::Begin()`/`End()` calls per frame on Vulkan: only the last batch renders.
+- `SurfaceFormat` support is effectively Color-only everywhere — `Texture::ValidateFormat` throws
+  for every other value. `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT`/`ValidateGetDataFormat` exist
+  and are correct, but nothing in any backend actually maps a non-`Color` format to a real GPU
+  format yet (this is exactly Phase 34's remaining scope, Tasks 285–290).
 
 ---
 
 ## 3. Recent changes
 
-| Task | Files | Change |
-|------|-------|--------|
-| 284 | `VulkanGraphicsBackend.cpp`, `examples/vulkan_texture_srgb_test.cpp` (new), `CMakeLists.txt`, `docs/surface-format-support.md`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Found and fixed 2 compounding Vulkan bugs: `VulkanTextureBackend` (`Texture2D`) used `VK_FORMAT_R8G8B8A8_SRGB` (should be `_UNORM`, matching `Texture3D`/`TextureCube`/render targets and FNA's linear `SurfaceFormat.Color`), and `CreateSwapchain()` explicitly preferred an SRGB surface format, gamma-encoding every presented pixel. The two partially canceled for textured content but left all non-textured rendering (vertex colors, lighting, blends) wrong - a nominal 128 read back as 188. Existing tests never caught this since they all use saturated 0/255 values (sRGB-curve fixed points). Fixed both to UNORM; new test proves it (diff 60 before, 0 after). EasyGL/Bgfx confirmed to have no equivalent bug. Full Vulkan ctest suite: only the pre-existing `Vulkan_DepthBias` failure remains. |
-| 283 | `Texture.hpp/.cpp`, `Texture2D.cpp`, `Texture3D.cpp`, `TextureCube.cpp`, `GraphicsDevice.cpp`, `TextureTests.cpp` (extended), `docs/surface-format-support.md`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Ported FNA's remaining `Texture.GetPixelStoreAlignment`/`ValidateGetDataFormat` (both `internal` in FNA; made `public` on CNA's `Texture` since 3 of 4 real call sites - `Texture3D`, `TextureCube`, `GraphicsDevice` - aren't `Texture` subclasses in CNA, a documented deviation). Wired `ValidateGetDataFormat` into all 4 of FNA's real call sites matching FNA source exactly. Currently a no-op everywhere (only `Color` is supported today), but correct forward-looking infrastructure. 6 new unit tests. Verified across all 3 backends, no regressions from wiring into 4 existing `GetData` paths. |
-| 282 | `Texture.hpp/.cpp`, `TextureTests.cpp` (new), `docs/surface-format-support.md`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Ported FNA's real `Texture.GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` static methods (found in FNA's `Texture.cs`, not a `SurfaceFormatHelper` class as the plan guessed) - both throw `std::out_of_range` for an unrecognized enum value, matching Task 279's precedent. Exhaustive per-format tests (22 new, `TextureTests.cpp`) against all 27 `SurfaceFormat` values. Drive-by fix: `Texture::ValidateFormat` (CNA-only, not in FNA) was missing its `NOXNA` tag - added it. Verified across all 3 backends, no regressions. Lays groundwork for Task 283 (`ValidateGetDataFormat`/`GetPixelStoreAlignment`, not yet ported). |
-| 281 | `SurfaceFormat.hpp`, `SurfaceFormatTests.cpp` (extended), `examples/easygl_surface_format_throws_test.cpp`, `docs/surface-format-support.md`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Opens Phase 34. Building the canonical 27-value `SurfaceFormat` table directly against FNA's `SurfaceFormat.cs` found that CNA's enum diverged from FNA at ordinal 20+: CNA had 7 invented "Srgb" variants with no FNA equivalent, while omitting FNA's real `ColorBgraEXT`/`ColorSrgbEXT`/`Dxt5SrgbEXT`/`Bc7EXT`/`Bc7SrgbEXT`/`ByteEXT`/`UShortEXT` entirely - a direct violation of the "enum names must match XNA/FNA exactly" rule, and load-bearing since every backend casts the enum to `int`. Fixed the enum to match FNA exactly; blast radius was 1 test file (grepped first to confirm). 7 new ordinal-pinning unit tests. Verified across all 3 backends, no regressions. |
-| 280 | `docs/texture3d-texturecube-support.md` (new), `AUDIT.md`, `GRAPHICS_TASKS.md` | Documented the full `Texture3D`/`TextureCube` backend support matrix — the last task in Phase 33, which is now fully complete. Found (via direct Vulkan/Bgfx backend source inspection, prompted by writing the doc) that `GetData` is a total silent no-op on both Vulkan and Bgfx for both texture types — neither overrides the empty base-class default, so the caller's buffer is left untouched with no error. Existing tests never caught this since `GetData` coverage is argument-guard-only. Also flagged (not confirmed) that Vulkan/Bgfx likely have the same mip-level-allocation bug Task 276 fixed for EasyGL's `TextureCube`. Tracked as new Tasks 864 (Vulkan/Bgfx mip-level allocation) and 865 (Vulkan `GetData` readback implementation). No code changes — audit/documentation only. |
-| 279 | `TextureCube.cpp`, `TextureCubeTests.cpp` (extended), `AUDIT.md`, `GRAPHICS_TASKS.md` | Confirmed via FNA source that `cubeMapFace` is never validated in real XNA/FNA either — this is a CNA safety extra, not a parity gap. All 3 backends already guarded against out-of-range face (silent no-op); added a proper `IsValidCubeMapFace()` check (`std::out_of_range`) at the public API layer instead. 7 new unit tests. While verifying across backends, found (via `git stash` bisection) that `Vulkan_FillMode_WireFrame` fails when run as part of the full ctest suite but passes in isolation — confirmed pre-existing/unrelated (reproduces identically without this task's change); newly documented in §5. |
-| 278 | `BgfxGraphicsBackend.hpp/.cpp`, `shaders/vs_env_map3d.sc`/`fs_env_map3d.sc` (new), `shaders/varying.def.sc`, `shaders/compile_shaders.py`, `shaders/bgfx_shaders.hpp` (regenerated), `examples/bgfx_env_map_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | EasyGL/Vulkan `EnvironmentMapEffect` already fully wired (verified via existing pixel-readback tests, both still pass). **Found and fixed a real Bgfx gap**: `DrawPrimitivesEx` had zero code path for `params.envMapping` — it silently fell through to the plain lit-textured branch, rendering with no reflection and no error. Added a full Bgfx shader pair mirroring the EasyGL/Vulkan reflection formula, a new `envMap3DProgram_` + 6 uniforms, and wired the `envMapping` branch into `DrawPrimitivesEx`. Had to build bgfx's `shaderc` tool from source (`-DCNA_BGFX_BUILD_SHADERC=ON -DBGFX_BUILD_TOOLS=ON`) to regenerate `bgfx_shaders.hpp`. Bgfx has no GPU readback API, so added a smoke test (`Bgfx_EnvironmentMapEffect_Smoke`) instead of a pixel-verified one. 1908/1908 Bgfx ctest pass (100%, no regressions). |
-| 277 | `AUDIT.md`, `GRAPHICS_TASKS.md` (no source changes — audit-only) | Verified `Texture3D` sampling is not exposed to any effect, stock or custom. No stock FNA effect samples `Texture3D` (true in real XNA too). Custom `ShaderEffect`/`IEffectBackend` have no texture-binding API at all (scalar/vector/matrix uniforms only). Root architectural cause: FNA's `Texture3D : Texture` lets any texture ride `GraphicsDevice.Textures[slot]`; CNA's `Texture3D : GraphicsResource` (not `Texture`) can't be assigned into `TextureCollection` at all. `EffectParameter::SetValue(Texture3D*)` has zero consumers in any backend — a write-only dead end. Tracked as new Task 863 (real fix = architecture change, out of verify-only scope). |
-| 276 | `EasyGLGraphicsBackend.cpp`, `examples/easygl_texturecube_mip_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | **Found and fixed a real bug.** New mip round-trip test (all 6 faces × 3 levels) initially failed: `EasyGLTextureCubeBackend`'s constructor only allocated GPU storage for level 0 (`set_image_2d`, no level loop), so `SetData`'s `set_sub_image_2d` (`glTexSubImage2D`) writes to level 1+ silently went nowhere (that call requires the level to already be defined). Fixed by pre-allocating every mip level for every face in the constructor. All 126 checks now pass. Same bug shape flagged (not fixed here) for `Texture3D`'s identical single-level-only pattern — tracked as new Task 862. 1973/1975 EasyGL ctest (same 2 pre-existing failures). |
-| 275 | `examples/easygl_texturecube_partial_rect_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Task 172 already covered whole-face round-trip for all 6 faces (simple 2-arg overload); `TextureCubeTests.cpp`'s rect-based/startIndex overload coverage was argument-guards only. New test closes that gap with real pixel verification: off-centre 2×2 rect per face (no cross-face bleed), `SetData`/`GetData` `startIndex` with real data. All pass, no bug found. |
-| 274 | `examples/easygl_texture3d_partial_box_readback_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | `GetData` box readback with a per-voxel-unique colour (so axis swaps are detectable, unlike Task 273's binary split): asymmetric off-origin box, `startIndex`, far-corner box. All pass, no bug found. Also confirmed FNA itself never validates `elementCount` against box volume — CNA's matching lack of that check is faithful behavior, not a gap. |
-| 273 | `examples/easygl_texture3d_partial_box_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | `SetData` box upload with genuine x/y/z sub-regions (Task 173's existing test only varied z across full width/height): asymmetric off-origin box, single-voxel box, far-corner box. All pass, no bug found — confirms arbitrary 3D sub-region upload already worked correctly. |
-| 272 | `TextureCube.hpp/.cpp`, `TextureCubeTests.cpp` (new), `AUDIT.md`, `GRAPHICS_TASKS.md` | Audited `TextureCube` against FNA (`TextureCube.cs`) and found the *same 3 bug classes* as Task 271's `Texture3D` audit (hardcoded `LevelCount`, missing `SetData`/`GetData` guards, missing `Dispose(bool)`), confirming a systemic pattern — all fixed identically. Plus 2 `TextureCube`-specific bugs: (4) the `SetData`/`GetData(face,data,startIndex,elementCount)` overload was missing from the API entirely (FNA has 3 arities, CNA had 2) — added, delegating to the 6-arg overload like FNA's own overloads do; (5) `rect==nullptr` at `level>0` ignored `level` completely, always using the full face `Size` instead of `Size>>level` (unlike `Texture2D`/`Texture3D`'s `mipDim()` pattern) — fixed with the same `mipDim()` helper, pinned by 2 regression tests proving a level-1-sized call now succeeds and a level-0-sized one at level 1 is now correctly rejected. Also added a rect-bounds check to both `SetData`/`GetData` (FNA has neither for `TextureCube`, unlike `Texture3D`'s `GetData`-only check — extends C++ safety consistently). **Also found: `DDSFromStreamEXT` is a non-functional stub** — `return TextureCube(device, 1, false, SurfaceFormat::Color);`, ignoring `stream` entirely, always silently returning a blank 1×1 texture. Documented as a severe finding (fails silently, not loudly) and tracked as new Task 663 — not fixed here (a real DDS-cube-parser is a substantial feature, out of this audit's guard-fixing scope). 27 new unit tests (`TextureCubeTests.cpp` — previously zero dedicated TextureCube unit tests existed). 1900/1900 (EasyGL/Vulkan) / 1904/1904 (Bgfx) unit tests; 1969/1971 EasyGL ctest (same 2 pre-existing failures); existing `easygl_texturecube_faces_test.cpp` (Task 172) still 24/24 pixel checks pass. See `AUDIT.md` "TextureCube detailed audit". |
-| 271 | `Texture3D.hpp/.cpp`, `Texture3DTests.cpp` (new), `AUDIT.md`, `GRAPHICS_TASKS.md` | Starts Phase 33. Audited `Texture3D` against FNA (`Texture3D.cs`) and found/fixed 3 real bugs, mirroring the Texture2D Tasks 261/265/266 pattern: (1) `LevelCount` was hardcoded to 1, ignoring `mipMap` — now computes `CalculateMipLevels(width,height)`, matching FNA; (2) `SetData`/`GetData` had almost no input validation at all — null `data` caused a segfault, negative `elementCount` risked a huge-allocation crash (unsigned cast), negative `startIndex` caused an OOB read (`SetData`) or write (`GetData`), and the 10-arg box overloads had no bounds check at all (FNA's own `GetData` has one, `SetData` doesn't — added it to both, extending C++ safety beyond literal FNA parity, matching Texture2D's established precedent); (3) `Dispose(bool)` was never overridden, so `backend_` (and the GPU texture) was never released on explicit `Dispose()` — fixed, mirroring `Texture2D`'s pattern exactly (`using GraphicsResource::Dispose;` + override). Also refactored the 2-arg/3-arg `SetData`/`GetData` to delegate to the 10-arg overload instead of duplicating logic, matching how FNA's own overloads delegate. 31 new unit tests (`Texture3DTests.cpp` — previously zero dedicated Texture3D unit tests existed). 1873/1873 (EasyGL/Vulkan) / 1877/1877 (Bgfx) unit tests; 1942/1944 EasyGL ctest (same 2 pre-existing failures). Documented, not fixed: EasyGL's `Texture3D` backend ignores `mipMap`/`SurfaceFormat` entirely. See `AUDIT.md` "Texture3D detailed audit". |
-| 265 | `Texture2D.hpp/.cpp`, `Texture2DTests.cpp`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Closes Phase 32. FNA's real `GetData<T>` doesn't bounds-check `rect` at the managed level (delegates to native `FNA3D_GetTextureData2D`) — CNA's existing rect-bounds check is a deliberate safety extra, not a literal-parity gap. Found and fixed a real, symmetric bug instead: neither `GetData` overload validated `startIndex < 0` (the equivalent `SetData` overloads already do) — negative `startIndex` caused an OOB read from `cpuPixels_` (3-arg overload) or an OOB write into the caller's array (5-arg overload). Fixed both, mirroring `SetData`'s guard exactly. 2 new unit tests; 1842/1842 pass on EasyGL/Vulkan/Bgfx; 1911/1913 EasyGL ctest (same 2 pre-existing failures). |
-| — | `VulkanGraphicsBackend.cpp`, `AUDIT.md` | Rebuilt + fully verified `cmake-build-vulkan` and `cmake-build-bgfx` (both had only been reconfigured, not rebuilt, earlier this session). Found and fixed a real pre-existing Vulkan bug while doing so: `TransitionImageLayout` was missing the `SHADER_READ_ONLY_OPTIMAL → TRANSFER_DST_OPTIMAL` barrier case that `VulkanTextureBackend::UpdatePixels` needs to re-upload a texture after its first upload — every `SetData` call after the first threw `"Vulkan: unsupported image layout transition"` on any Vulkan-backed texture. Added the missing case (symmetric with the existing reverse-direction case). Vulkan: `CnaTests` 1840/1840 (was 1838/1840), ctest 1852/1853 (only `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails, pre-existing/unrelated — up from the documented "11/13" baseline). Bgfx: `CnaTests` 1844/1844, ctest 1847/1847 (100%). See `AUDIT.md` "Vulkan `TransitionImageLayout` missing a re-upload transition". |
-| 268/269 | `IGraphicsBackend.hpp`, `SpriteBatch.cpp`, `EasyGLGraphicsBackend.hpp/.cpp`, `CMakeLists.txt`, `examples/easygl_npot_texture_test.cpp` (new), `examples/easygl_texture_address_mode_test.cpp` (new), `AUDIT.md`, `GRAPHICS_TASKS.md` | Task 268: verified NPOT textures (3×5) upload and GPU-sample correctly end-to-end on EasyGL (new pixel-readback test, 5/5 rows correct); no POT/NPOT branching exists in any backend. Task 269: found and fixed 2 real bugs — (1) `SpriteBatch::Begin()`'s `SamplerState` had zero effect on EasyGL/Vulkan/Bgfx (`AddressU`/`AddressV` never read at all; `Filter` only worked on SDL_Renderer) — added `ISpriteBatchBackend::SetSamplerAddressMode`, `Begin()` now always resolves+applies `SamplerState` (default `LinearClamp`, matching FNA) via EasyGL's existing `ApplySamplerState`; (2) EasyGL's SpriteBatch UV math hard-clamped to `[0,1]`, making `Wrap`/`Mirror` unreachable — removed (FNA never clamps). New `EasyGL_TextureAddressMode` test proves `PointWrap` vs `PointClamp` now sample distinctly. EasyGL only — Vulkan/Bgfx SpriteBatch SamplerState remains a no-op (documented gap). Also fixed an unrelated build break in `StorageDevice.cpp` (`sharp-runtime`'s `IAsyncResult` gained 2 new pure-virtual members in a concurrent commit). 1840/1840 unit tests still pass; 1909/1911 ctest (2 pre-existing, unrelated failures — see §5). |
-| — | `GraphicsDevice.cpp`, `DrawUserIndexedPrimitivesTests.cpp`, `GRAPHICS_TASKS.md` | Added the `primitiveCount<=0` argument-guard unit tests for `DrawUserIndexedPrimitives` that Task 252 claimed but never landed (mirrors Task 259). All 8 typed + 2 `VertexDeclaration` overloads, zero and negative counts. Found and fixed a real gap: the untyped raw-`void*` overload had no guard at all — added `ArgumentOutOfRangeException::ThrowIfNegativeOrZero`, matching the other 10 overloads. 22 new unit tests; 1840/1840 total pass. |
-| 270 | `Texture2D.hpp/.cpp`, `Texture2DTests.cpp`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Audited `cpuPixels_`/`extraMipLevels_` shadow-buffer retention vs. `SetContextRecoveryEnabled`. Confirmed `GetData` throws permanently once the level-0 shadow is freed (no GPU readback fallback in `ITextureBackend`). Found and fixed a real bug: partial `SetData(level,rect,...)` after the shadow was freed resurrected a zero-filled buffer and re-uploaded it whole, silently zeroing already-uploaded GPU pixels outside the rect — now throws `std::runtime_error` instead; the level-0 branch also now calls `MaybeFreeCpuPixels()` so partial updates no longer defeat the RAM-saving feature. `extraMipLevels_` is never freed — documented as an open gap, not fixed. 5 new unit tests; 1818/1818 total pass. |
-| 260 | `GraphicsDevice.hpp/.cpp`, `GRAPHICS_TASKS.md` | Added 2 per-device scratch buffers (`userVertexScratch_`, `userIndexScratch_`), replacing 22 per-call `std::vector` heap allocations across all `DrawUserPrimitives`/`DrawUserIndexedPrimitives` typed + `VertexDeclaration` overloads. 1813/1813 unit tests + 8/8 pixel-readback checks (Tasks 255–258) still pass. Closes Phase 31. |
-| 267 | `Texture2DTests.cpp` (extended), `GRAPHICS_TASKS.md` | `LevelCount` verification: 2-arg ctor / `mipMap=false` always 1; `mipMap=true` matches FNA's `CalculateMipLevels` for square/non-square/non-power-of-two sizes. 5 new unit tests. |
-| — | `Texture2D.hpp`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Tagged the 2 `assetName` constructors `NOXNA` (Task 261 audit finding: neither is part of the FNA/XNA API). No behavior change. |
-| 264 | `Texture2D.cpp`, `Texture2DTests.cpp`, `AUDIT.md`, `GRAPHICS_TASKS.md` | `SaveAsJpeg` round-trip verification (tolerance-based; confirmed alpha is dropped, since JPEG has no alpha channel). Fixed hardcoded JPEG quality=100 by adding `FNA_GRAPHICS_JPEG_SAVE_QUALITY` env-var support. 8 new unit tests. |
-| 263 | `Texture2DTests.cpp` (extended), `GRAPHICS_TASKS.md` | `SaveAsPng` round-trip verification: error guards, multi-pixel + alpha exact match, non-square size, save-time resize, filename overload via temp file. 6 new unit tests. |
-| 262 | `Texture2D.hpp/.cpp`, `Texture2DTests.cpp`, `docs/texture-stream-formats.md` (new), `AUDIT.md`, `GRAPHICS_TASKS.md` | Verified PNG/JPEG/BMP `FromStream` decoding via round-trip tests. Added the missing `FromStream(device, stream, width, height, zoom)` overload, matching FNA3D's resize/crop semantics. 5 new unit tests. |
-| 266 | `Texture2D.cpp`, `Texture2DTests.cpp`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Fixed both Task 261 heap-buffer-overflow bugs: `SetData(level, rect, ...)` now bounds-checks `rect` against the mip level (mirrors `GetData`); `SetData(Color*, elementCount)` now validates the buffer size before building the `ImageData`. 7 new unit tests. |
-| 261 | `AUDIT.md` (extended), `GRAPHICS_TASKS.md` | Detailed `Texture2D` vs. FNA audit (no code changes) — found the 2 OOB bugs above, 2 missing `NOXNA` tags, 4 missing EXT methods, and Color-only format support. |
-| 259 | `DrawUserPrimitivesTests.cpp` (extended), `GRAPHICS_TASKS.md` | Argument-guard tests: `primitiveCount<=0` throws `ArgumentOutOfRangeException` for all 5 `DrawUserPrimitives` overloads. 10 new unit tests. |
-| 258 | `examples/easygl_draw_user_indexed_primitives_32_test.cpp` (new), `CMakeLists.txt` | `DrawUserIndexedPrimitives` pixel-readback with 32-bit indices; 2/2 PASS. |
-| 257 | `examples/easygl_draw_user_indexed_primitives_vpc_test.cpp` (new), `CMakeLists.txt` | `DrawUserIndexedPrimitives` pixel-readback with 16-bit indices; 2/2 PASS. |
+Most recent first. Earlier history (everything before Task 271) is in `GRAPHICS_TASKS.md`, not
+repeated here.
 
-Earlier history (Tasks 241–256, 329, and Phase 30) is in `GRAPHICS_TASKS.md`; not repeated here to
-keep this section current and scannable.
+| Commit / Task | Files | Change |
+|---|---|---|
+| `3750522` (no task #) | `SpriteBatch.hpp` | Added missing `NOXNA` tags to 4 CNA-only `SpriteBatch` members found during an API-coverage analysis against FNA (parameterless constructor, `Draw(texture,float,float)`, 2 non-optional-`Rectangle&` `Draw` overloads). Documentation/marker-only, no behavior change. |
+| `1c50a30` Task 284 | `VulkanGraphicsBackend.cpp`, `examples/vulkan_texture_srgb_test.cpp` (new), `CMakeLists.txt`, `docs/surface-format-support.md` | Found and fixed 2 compounding Vulkan bugs: `Texture2D`'s Vulkan image used `VK_FORMAT_R8G8B8A8_SRGB` (should be `_UNORM`), and the swapchain format selection explicitly preferred an SRGB surface format — both apply an unwanted gamma transform. The two partly canceled for textured content but left all non-textured rendering wrong (a nominal 128 read back as 188). Fixed both to `UNORM`. New test proves it (diff 60 → 0). EasyGL/Bgfx confirmed to have no equivalent issue. |
+| `4533778` Task 283 | `Texture.hpp/.cpp`, `Texture2D/3D/Cube.cpp`, `GraphicsDevice.cpp`, `TextureTests.cpp` | Ported FNA's `Texture.GetPixelStoreAlignment`/`ValidateGetDataFormat` (both `internal` in FNA; made `public` on CNA's `Texture`, a documented deviation, since 3 of 4 real call sites aren't `Texture` subclasses in CNA). Wired the validation into all 4 real `GetData` call sites. Currently a no-op everywhere (only `Color` supported). |
+| `80d3805` Task 282 | `Texture.hpp/.cpp`, `TextureTests.cpp` (new) | Ported FNA's real `Texture.GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` (not a `SurfaceFormatHelper` class as the plan guessed). 22 new exhaustive per-format tests. Fixed a missing `NOXNA` tag on `Texture::ValidateFormat` found along the way. |
+| `706b591` Task 281 | `SurfaceFormat.hpp`, `SurfaceFormatTests.cpp` | Opens Phase 34. Building a canonical enum table directly against FNA found CNA's `SurfaceFormat` diverged from FNA at ordinal 20+ (7 invented values with no FNA equivalent, 7 real FNA values missing entirely). Fixed to match FNA exactly. |
+| `89a0b82` Task 280 | `docs/texture3d-texturecube-support.md` (new) | Closes Phase 33. Documentation-only task that found `Texture3D`/`TextureCube::GetData` is a silent no-op on Vulkan/Bgfx (tracked as Task 865) and flagged a likely (unconfirmed) mip-allocation bug on both backends (Task 864). |
+| `20e4d03` Task 279 | `TextureCube.cpp`, `TextureCubeTests.cpp` | Added `CubeMapFace` range validation (confirmed via FNA source this is a CNA safety extra, not a parity fix). Found `Vulkan_FillMode_WireFrame`'s order-dependent flakiness is pre-existing (via `git stash` bisection). |
+| `41f8fc8` Task 278 | `BgfxGraphicsBackend.hpp/.cpp`, new Bgfx shader pair, `bgfx_shaders.hpp` (regenerated) | Found and fixed Bgfx's missing `EnvironmentMapEffect` code path (silently fell back to plain lit-textured rendering). Required building bgfx's `shaderc` tool from source. |
+| `3d09cf3` Task 277 | `AUDIT.md` only (audit, no code) | Confirmed `Texture3D` shader sampling is architecturally unreachable in CNA today. Tracked as Task 863. |
+| `9a2d884` Task 276 | `EasyGLGraphicsBackend.cpp`, new mip test | Found and fixed a real bug: `EasyGLTextureCubeBackend` only allocated GPU storage for mip level 0, so writes to level >0 silently went nowhere. |
+| `a003534`/`032e835`/`79095e6` Tasks 275/274/273 | new tests | Added genuine x/y/z(/rect) sub-region + `startIndex` pixel-verified `SetData`/`GetData` tests for `Texture3D`/`TextureCube` beyond what existed. No bugs found in these three. |
+| `d66af1c`/`2400d2b` Tasks 272/271 | `TextureCube.hpp/.cpp`, `Texture3D.hpp/.cpp`, new test files | Audited both against FNA; found/fixed the same 3 bug classes in each (hardcoded `LevelCount`, missing `SetData`/`GetData` guards, missing `Dispose(bool)`), plus 2 `TextureCube`-specific bugs. Found `DDSFromStreamEXT` is a non-functional stub (Task 663). |
 
 ---
 
 ## 4. Current blocker / main problem
 
-**There is no hard blocker.** The build is clean and all 1900 (EasyGL/Vulkan) / 1904 (Bgfx) unit
-tests pass on all three backends. Three pre-existing, unrelated ctest failures are documented in §5
-(`EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `Vulkan_DepthBias`'s `-1e6` sub-case).
-None block normal development; each needs its own dedicated investigation. Separately, `TextureCube::
-DDSFromStreamEXT` is a confirmed non-functional silent stub (Task 272 finding, tracked as new Task
-663) — not a build/test blocker, but worth flagging prominently since it fails silently. Also,
-`Texture3D`'s mip levels >0 are suspected broken via the same silent-failure GPU-storage-allocation
-bug that Task 276 found and fixed for `TextureCube` (tracked as new Task 862, not yet reproduced
-with a test) — likely-but-unconfirmed, not a build/test blocker either. Separately, `Texture3D`
-sampling in shaders is confirmed **not implemented at all** (Task 277 finding, tracked as new Task
-863) — no stock effect needs it and no game code currently depends on it, so it's not a regression,
-but any future game code that expects `GraphicsDevice.Textures[i] = my3DTexture` to work (as it does
-in real XNA/FNA) will find it doesn't even compile in CNA today.
+**There is no build-breaking or test-breaking blocker.** The repository builds and the test
+suites pass at the rates given in §2 on all three backends.
 
-The closest thing to an open problem beyond that is that the Task 261 `Texture2D` audit still has
-two unresolved (non-urgent) findings, documented in `AUDIT.md` under "Texture2D detailed audit":
-- Missing `SetDataPointerEXT` / `GetDataPointerEXT` / `TextureDataFromStreamEXT` /
-  `DDSFromStreamEXT` methods.
-- `SurfaceFormat` support is effectively Color-only (`Texture::ValidateFormat` throws for any
-  other format), so `Texture2D` cannot represent compressed or packed pixel formats natively.
+The most significant *correctness* gap currently open is architectural, not a build/test failure:
+`Texture3D`/`TextureCube` do not inherit `Texture` in CNA (they inherit `GraphicsResource`
+directly), which structurally prevents `Texture3D` from ever being sampled in a shader via the
+normal `GraphicsDevice.Textures[slot]` path, and is the root cause behind `EffectParameter`
+needing separate storage slots per texture type. There is no failing command or failing test
+tied to this — it manifests as a compile-time impossibility if game code tries
+`GraphicsDevice.Textures[i] = my3DTexture` in the way real XNA/FNA code would. See `AUDIT.md`'s
+Task 277 entry and `GRAPHICS_TASKS.md` Task 863 for the full analysis and fix options (both require
+a real architecture decision, not a small patch).
 
-Neither is a crash or correctness bug — both are missing API surface, not memory-unsafe. No
-failing command or failing test is associated with either.
+The most significant *silent-failure* gaps (compile and run without error, but produce wrong or
+no data) are: `TextureCube::DDSFromStreamEXT` (Task 663) and `Texture3D`/`TextureCube::GetData` on
+Vulkan/Bgfx (Task 865). Neither has a reliably reproducing failing *test* today because no test
+currently exercises the exact code path that would reveal them beyond what's already documented
+(DDS stub: no test loads a real DDS cube file; Vulkan/Bgfx `GetData`: existing tests never assert
+on returned pixel values).
 
 ---
 
 ## 5. Known bugs and limitations
 
 | Status | Issue |
-|--------|-------|
-| **Confirmed bug** | `SpriteBatch` with multiple `Begin()`/`End()` calls per frame on Vulkan: only the last batch renders. Workaround: merge all sprite draws into one Begin/End. |
-| **Confirmed bug, newly found** | `EasyGL_MRT_TwoAttachments` ctest (Task 145, `examples/easygl_mrt_test.cpp`) fails deterministically (4/4 runs): `SetRenderTargets` with 2 attachments renders the correct colour to attachment 0 but attachment 1 stays black instead of the expected colour. Not caused by this session (no file touched here relates to FBO/render-target code) — surfaced only because this was the first full `ctest` run in a while. Needs dedicated investigation; do not fix opportunistically. |
-| **Confirmed bug, newly found, out-of-repo** | `easy-gl-resource-smoke-tests` (sibling `easy-gl` repo) aborts deterministically (3/3 runs) on an `assert(g_state.last_active_texture == 0x84C0)` failure in `test_texture_upload_sets_unpack_alignment_wrap_and_unit0_binding` (`easy-gl/tests/smoke/SmokeResourceTests.cpp:336`). `easy-gl`'s `src/Texture.cpp` hasn't changed since 2026-06-27 and has no uncommitted changes — unrelated to this session. Out of scope: would need investigation in the sibling repo. |
-| **Needs re-verification** | `easygl_device_dispose_order_test` — previously documented as failing with an unknown root cause; **passed cleanly** in this session's full `ctest` run (`EasyGL_DeviceDisposeOrder ... Passed`). Possibly flaky, possibly already fixed incidentally. Downgraded from "confirmed failing" until re-checked a few more times. |
-| **Confirmed bug, pre-existing** | `Vulkan_DepthBias` ctest: the `DepthBias=-1e6` sub-case fails (`got=(255,0,0) expected GREEN`); the other 3/4 sub-cases (DepthBias=0, SlopeScale=0, SlopeScale=-2000) pass. Surfaced by fully rebuilding/retesting Vulkan this session (previously only "11/13 historically pass" was documented, without naming which 2). Likely a depth-bias scale/precision mismatch for very large bias values — not investigated further; out of scope for Tasks 268/269/270. |
-| **Confirmed bug, pre-existing, newly found** | `Vulkan_FillMode_WireFrame` ctest fails when run as part of the full `cmake-build-vulkan` ctest suite (both parallel and serial `-j1`), but passes when run in isolation (`ctest -R`) — an order-dependent state-leakage issue, not a crash. Confirmed via `git stash`/rebuild/retest during Task 279 that this reproduces identically **without** Task 279's change, so it predates this session and is unrelated to `TextureCube`. Also observed `Vulkan_RenderTargetUsage` failing once under `-j` (parallel GPU-context contention) but passing on every other run — likely parallel-execution flakiness, separate from the `WireFrame` issue. Neither investigated further; needs dedicated root-causing (test-order dependency in Vulkan's fill-mode/pipeline-cache state is the leading suspect). |
-| **Incomplete** | `SpriteBatch`'s `SamplerState` (`Filter`/`AddressU`/`AddressV`) is a no-op on Vulkan and Bgfx — only EasyGL was fixed (Task 269); their `ISpriteBatchBackend` implementations don't override `SetSamplerFilter`/`SetSamplerAddressMode` at all. |
-| **Incomplete** | EasyGL and Bgfx stride-keyed vertex layout supports only strides 16/20/24/32/52; other `VertexDeclaration` layouts silently select the wrong VAO/pipeline. |
-| **Incomplete** | Vulkan backend: `Tangent` and `Binormal` `VertexElementUsage` values are not mapped (no Vulkan semantic equivalent). |
-| **Incomplete** | `VertexElementUsage` Depth/Fog/PointSize/Sample/TessellateFactor are unsupported in all 3D backends (no-op, or return `bgfx::Attrib::Count`). |
-| **Incomplete** | SDL_Renderer backend: `CreateVertexBuffer` always throws `ThrowNo3D`; no 3D support at all. |
-| **Incomplete** | Bgfx backend has no pixel-readback API, so its integration tests are smoke-only. |
-| **Incomplete** | `Texture2D` missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`, and Color-only `SurfaceFormat` support (Task 261 audit; see `AUDIT.md`). |
-| **Incomplete** | `Texture2D::extraMipLevels_` (mip levels >0 CPU shadow) is never freed regardless of `SetContextRecoveryEnabled(false)` — only the level-0 shadow participates in the RAM-saving optimization (Task 270 audit finding). |
-| **Confirmed bug, severe, silent failure** | `TextureCube::DDSFromStreamEXT` is a non-functional stub — it ignores its `stream` parameter entirely and always returns a blank 1×1 `Color` texture, regardless of what DDS cube-map data (if any) is passed. It compiles, runs without throwing, and returns a plausible-looking `TextureCube`, so callers get silently wrong data instead of a loud failure. Task 272 finding; tracked as new `GRAPHICS_TASKS.md` Task 663 (needs DDS header parsing + per-face/per-level DXT decode + 6×levelCount `SetData` calls — a real feature, not a guard fix). |
-| **Incomplete** | EasyGL's `Texture3D` backend ignores `mipMap` (no per-level GPU storage allocation, so `SetData(level>0,...)` almost certainly silently fails — Task 276 found and fixed the identical bug for `TextureCube`, tracked as new Task 862 for `Texture3D`) and always ignores `SurfaceFormat` (always `Rgba8`, for both `Texture3D` and `TextureCube` — Task 271/272 findings, not yet tracked as its own task). |
-| **Confirmed, architectural** | `Texture3D`/`TextureCube` sampling is not wired into any shader (stock or custom) — `Texture3D`/`TextureCube` don't inherit `Texture` (unlike FNA), so they can't go into `GraphicsDevice.Textures[slot]`, and custom `ShaderEffect` has no texture-binding API of any kind. `EffectParameter::SetValue(Texture3D*)` has zero consumers in any backend. Stock effects that *do* need a cube texture (`EnvironmentMapEffect`) bypass this entirely via a dedicated `GpuDrawParams::envMap` path instead (confirmed working on EasyGL/Vulkan, fixed on Bgfx — Task 278) — but no stock effect uses `Texture3D`, and no custom-effect workaround exists. Task 277 finding; tracked as new Task 863 (real fix = architecture change: `Texture3D`/`TextureCube` inheriting `Texture`, or a parallel binding path). |
-| **Confirmed bug, severe, silent failure, newly found** | `Texture3D`/`TextureCube::GetData` is a total no-op on both Vulkan and Bgfx — neither `VulkanTexture3DBackend`, `VulkanTextureCubeBackend`, `BgfxTexture3DBackend`, nor `BgfxTextureCubeBackend` overrides `GetData`, so all four silently fall through to the empty base-class default. The caller's output buffer is left completely untouched, with no exception or error. Went unnoticed through Tasks 271–279 because `GetData` unit test coverage is argument-guard-only (no value assertions); only EasyGL has pixel-readback integration tests. Task 280 finding; tracked as new Task 865 (Vulkan fix: real `vkCmdCopyImageToBuffer` readback; Bgfx's lack of any readback API is an accepted, pre-existing, project-wide limitation, not a new bug). |
-| **Likely bug, not yet confirmed** | Vulkan and Bgfx probably have the same "mip level >0 GPU storage never allocated" bug that Task 276 found and fixed for `EasyGLTextureCubeBackend`, for both `Texture3D` and `TextureCube` — `VkImageCreateInfo::mipLevels` is hardcoded to `1` in Vulkan (both types); Bgfx hardcodes `hasMips=false`/no-mips in both `BgfxTexture3DBackend` and `BgfxTextureCubeBackend`'s constructors, with the `mipMap` parameter received but unused in all 4 constructor sites. Not reproduced with a test (flagged 🔍 in `docs/texture3d-texturecube-support.md`, Task 280 finding). Tracked as new Task 864. |
-| **By design (documented Task 270)** | `Texture2D::GetData` (level 0) permanently throws `std::runtime_error` after the first full upload once `SetContextRecoveryEnabled(false)` has been called — CNA has no GPU pixel-readback path, unlike FNA's real `GetData<T>`, which always reads back from the GPU. |
-| **Risky assumption** | The new user-primitive scratch buffers (Task 260) never shrink — memory stays at the high-water mark for the life of the `GraphicsDevice`. Acceptable for typical usage, but worth knowing if a game does one enormous user-primitive draw and never again. |
+|---|---|
+| Confirmed bug | `SpriteBatch` with multiple `Begin()`/`End()` calls per frame on Vulkan: only the last batch renders. |
+| Confirmed bug, severe, silent failure | `TextureCube::DDSFromStreamEXT` ignores its `stream` argument and always returns a blank 1×1 texture. Tracked as Task 663. |
+| Confirmed bug, severe, silent failure | `Texture3D`/`TextureCube::GetData` is a total no-op on Vulkan and Bgfx (neither overrides the empty base-class default). Tracked as Task 865. |
+| Confirmed, architectural | `Texture3D`/`TextureCube` sampling cannot be wired into any shader today — they don't inherit `Texture`, so can't enter `GraphicsDevice.Textures[slot]`; custom `ShaderEffect` has no texture-binding API at all. Tracked as Task 863. |
+| Confirmed bug, pre-existing | `EasyGL_MRT_TwoAttachments`: `SetRenderTargets` with 2 attachments renders correctly to attachment 0 but attachment 1 stays black. Not caused by recent work; needs dedicated investigation. |
+| Confirmed bug, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` (sibling `easy-gl` repo) aborts on an internal assert; unrelated to any file in this repo. |
+| Confirmed bug, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. Not investigated further. |
+| Confirmed bug, pre-existing, order-dependent | `Vulkan_FillMode_WireFrame` fails only when run as part of the full suite (parallel or serial), passes in isolation. Confirmed via `git stash` bisection to predate recent sessions. `Vulkan_RenderTargetUsage` shows similar parallel-only flakiness. |
+| Likely bug, not yet confirmed | Vulkan and Bgfx probably have the same mip-level-allocation bug fixed for EasyGL's `TextureCube` (Task 276), for both `Texture3D` and `TextureCube`, on both backends. Tracked as Task 864, not reproduced with a test. |
+| Incomplete | `SpriteBatch`'s `SamplerState` is a no-op on Vulkan and Bgfx (EasyGL only). |
+| Incomplete | EasyGL/Bgfx stride-keyed vertex layout only supports strides 16/20/24/32/52. |
+| Incomplete | Vulkan: `Tangent`/`Binormal` `VertexElementUsage` values have no mapping. |
+| Incomplete | `SurfaceFormat` support is Color-only everywhere; this is Phase 34's remaining scope (Tasks 285–290). |
+| Incomplete | SDL_Renderer: no 3D support at all (`CreateVertexBuffer` always throws), by design. |
+| Incomplete | Bgfx: no GPU pixel-readback API, so its tests are smoke-only, by design. |
+| By design | `Texture2D::GetData` (level 0) permanently throws after `SetContextRecoveryEnabled(false)` once the CPU shadow buffer is freed — no GPU readback fallback exists. |
+| Risky assumption | `GraphicsDevice`'s user-primitive scratch buffers (Task 260) never shrink — acceptable for typical use, but memory stays at the high-water mark for the device's lifetime. |
 
 ---
 
@@ -286,55 +173,45 @@ failing command or failing test is associated with either.
 ### Main modules
 
 | Layer | Location | Notes |
-|-------|----------|-------|
+|---|---|---|
 | XNA public API | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
 | Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, `IVertexBuffer`, etc. |
 | EasyGL backend | `src/CNA/Internal/Backends/EasyGL/` | Primary; OpenGL ES 3.2 via EasyGL wrapper |
-| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | Uses `VulkanVertexFormatHelper.hpp` for per-format mapping |
-| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | Uses `BgfxVertexFormatHelper.hpp`; no readback |
-| CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging, math |
+| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | `VulkanVertexFormatHelper.hpp` for per-format mapping |
+| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | `BgfxVertexFormatHelper.hpp`; no readback API |
+| CNA utilities | `include/CNA/`, `src/CNA/` | `NOXNA` helpers, logging, math |
 | sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types, primitive aliases |
 
 ### Critical invariants (do not break these)
 
-- **`NOXNA` macro** tags every non-XNA extension in public headers — required for any new
-  CNA-only public method/constructor.
-- **C# properties** → `getXProperty()` / `setXProperty()` convention (never public fields on the
-  XNA API surface).
+- **`NOXNA` macro** tags every non-XNA extension in public headers — required for any new CNA-only
+  public method/constructor/type. Requires `#include "CNA/CNAHelper.hpp"`.
+- **C# properties** → `getXProperty()` / `setXProperty()` — never public fields on the XNA surface.
 - **`static readonly`** (C#) → `static const` member in `.hpp` + definition in `.cpp`.
 - **Type aliases** from `SharpRuntime/SharpRuntimeHelper.hpp` (`bytecs`, `Single`, `String`, …) must
-  be used on XNA API surfaces — never raw `uint8_t`, `float`, `std::string` directly.
+  be used on XNA API surfaces — never raw `uint8_t`/`float`/`std::string` directly.
 - **Backend selection is compile-time** — no runtime branch between backends in the same binary.
-- **Stride-keyed vertex layout:** EasyGL, Vulkan, and Bgfx build VAO/pipeline/layout from a map
-  keyed by vertex stride; only strides 16/20/24/32/52 work correctly for 3D. Do not assume
-  arbitrary strides work.
+- **Stride-keyed vertex layout** — only strides 16/20/24/32/52 work correctly for 3D.
 - **Doxygen required** on every public `.hpp` member: full `/** @brief … @param … @return */`.
-- **SPDX header** `// SPDX-License-Identifier: MS-PL` required at the top of every `.hpp`/`.cpp`.
-- **Effect must be applied before any draw call** — all `DrawUser*` overloads throw
-  `std::runtime_error` when `currentEffect_` is null.
-- **`GraphicsDevice::userVertexScratch_` / `userIndexScratch_`** are shared, growable,
-  non-shrinking scratch buffers used by all `DrawUserPrimitives`/`DrawUserIndexedPrimitives`
-  overloads (Task 260). They must never be resized *down*, and must not be reentered
-  (no nested/concurrent draw calls reusing them mid-write).
-
-### Data flow (indexed user primitives draw call)
-
-```
-Game calls GraphicsDevice::DrawUserIndexedPrimitives(type, vertices, vOffset, numVerts, indices, iOffset, primCount)
-  → validates backend_ non-null (silent return if null)
-  → validates currentEffect_ non-null (throws if null)
-  → validates primCount > 0 (throws ArgumentOutOfRangeException)
-  → computes index count via IndexCountForPrimitives(type, primCount)
-  → packs vertex data into a typed GpuV* struct, backed by the reusable userVertexScratch_ buffer
-  → creates transient IVertexBuffer + IIndexBuffer via backend_->CreateVertexBuffer/CreateIndexBuffer16/32
-  → calls backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, gpuParams)
-  → backend maps vertex stride → VAO/pipeline/layout → GPU draw
-```
+- **SPDX header** `// SPDX-License-Identifier: MS-PL` at the top of every `.hpp`/`.cpp`.
+- **`Texture3D`/`TextureCube` inherit `GraphicsResource`, not `Texture`** — a known deviation from
+  FNA (see §5). Do not assume code that works for `Texture2D` "just works" for these two.
+- **`SurfaceFormat` ordinal values are load-bearing** — every backend does
+  `static_cast<int>(format)`. Any enum edit must preserve FNA's exact ordinals (verified 0–26).
+- **`Texture::ValidateFormat` blocks every format except `Color`** at `Texture2D`/`Texture3D`/
+  `TextureCube` construction time — this is why `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT`/
+  `ValidateGetDataFormat` are currently no-ops in practice everywhere they're wired in.
+- **`GraphicsDevice::userVertexScratch_`/`userIndexScratch_`** are shared, growable, non-shrinking
+  scratch buffers used by all `DrawUserPrimitives`/`DrawUserIndexedPrimitives` overloads. Never
+  resize down; never reenter mid-write.
 
 ### FNA reference
 
-Authoritative behavioral reference: `/rv/data/library/github.com/FNA-XNA/FNA/src`.
-When CNA diverges from FNA intentionally, document it with an inline `//` comment in the `.cpp`.
+Authoritative behavioral reference: `/rv/data/library/github.com/FNA-XNA/FNA/src`. When CNA
+intentionally diverges from FNA, document it in the commit/PR description and in `AUDIT.md` —
+not as a source comment explaining the deviation's rationale (a `//` comment explaining a genuine
+non-obvious behavioral constraint is fine; a comment whose only purpose is "this differs from FNA
+because X" belongs in the audit trail instead).
 
 ---
 
@@ -350,29 +227,29 @@ cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
 # Configure (Bgfx)
 cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
 
-# Build CNA library (EasyGL)
+# Build CNA library
 cmake --build cmake-build-debug --target CNA -j$(nproc)
 
-# Build all unit tests (EasyGL)
+# Build and run all unit tests (EasyGL)
 cmake --build cmake-build-debug --target CnaTests -j$(nproc)
+./cmake-build-debug/CnaTests
 
-# Run unit tests
-/rv/data/development/github.com/openeggbert/cna_graphics/cmake-build-debug/CnaTests
+# Run a specific unit test suite
+./cmake-build-debug/CnaTests --gtest_filter="Texture2DTest.*"
 
-# Run a specific test suite
-/rv/data/development/github.com/openeggbert/cna_graphics/cmake-build-debug/CnaTests --gtest_filter="Texture2DTest.*"
-
-# Build Vulkan (single-threaded to avoid linker races)
+# Build Vulkan (single-threaded is more reliable for link stability)
 cmake --build cmake-build-vulkan --target CNA -j1
 
-# Run a specific EasyGL integration test (headless, needs an X server on :0)
-DISPLAY=:0 /rv/data/development/github.com/openeggbert/cna_graphics/cmake-build-debug/cna_test_easygl_draw_user_primitives_vpc
+# Full ctest run (unit + integration), any backend build dir
+cd cmake-build-debug && ctest -j$(nproc)
+cd cmake-build-debug && ctest --output-on-failure   # for a failure's full output
+cd cmake-build-debug && ctest -R <TestName>          # run one test in isolation (useful for flaky tests)
 
-# CTest (all registered tests, EasyGL build)
-cd cmake-build-debug && ctest --output-on-failure
+# Run a specific EasyGL integration/example test directly (needs an X server on :0)
+DISPLAY=:0 ./cmake-build-debug/cna_test_easygl_surface_format_throws
 ```
 
-There is no known reproducible failing command right now (see §4).
+There is no known reproducible failing build command right now (see §4).
 
 ---
 
@@ -380,119 +257,87 @@ There is no known reproducible failing command right now (see §4).
 
 In priority order:
 
-1. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (highest priority: silent
-   failure, not just missing coverage)
-   - Goal: replace the current stub (`return TextureCube(device, 1, false, SurfaceFormat::Color);`,
-     which ignores `stream` entirely) with a real DDS cube-map parser: header parsing (magic,
-     size, mip levels, `isCube` flag — throw if the DDS isn't actually a cube map, matching FNA's
-     `FormatException`), reusing `Texture2D.cpp`'s private `TryDecodeDds`/`DxtUtil::
-     DecompressDxt1/3/5` decode helpers, then 6 faces × `levelCount` `SetData` calls reading
-     sequential per-face-per-level blocks from the stream (mirrors `TextureCube.cs:314-405`).
-   - Files: `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp`,
-     `tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp`, possibly a small refactor to
-     expose `Texture2D.cpp`'s DDS-decode helper for reuse (or a duplicate — check size/complexity
-     before deciding, matching this project's "small duplication over premature shared utility"
-     convention already used for `CalculateMipLevels`/`mipDim`).
-   - Verification: new unit test(s) round-tripping a hand-built or real DDS cube-map file; confirm
-     `isCube=false` DDS input throws instead of silently succeeding.
+1. **`GRAPHICS_TASKS.md` Task 285 — implement/verify `Bgr565`/`Bgra5551`/`Bgra4444` packing/unpacking**
+   - Goal: continue Phase 34's SurfaceFormat matrix. Check FNA's actual packing math for these 3
+     16-bit formats (`Bgr565`/`Bgra5551`/`Bgra4444`) against any CNA equivalent (likely in the
+     `PackedVector` types, if they exist for these formats, or none yet).
+   - Files: likely `include/Microsoft/Xna/Framework/Graphics/PackedVector/` and/or per-backend
+     texture upload code; check first whether anything already exists before assuming greenfield.
+   - Verification: new unit tests round-tripping known bit patterns against FNA's documented layout.
 
-2. **Extend the Task 269 `SpriteBatch` `SamplerState` fix to Vulkan and Bgfx** (optional follow-up)
-   - Goal: `VulkanSpriteBatchBackend`/the Bgfx equivalent still don't override
-     `SetSamplerFilter`/`SetSamplerAddressMode` — `SamplerState` passed to `SpriteBatch::Begin()`
-     is silently ignored on those two backends (EasyGL was fixed this session). Same fix shape:
-     store pending filter/address values, apply via each backend's existing sampler mechanism
-     (`VkSampler` cache for Vulkan, `BGFX_SAMPLER_*` flags for Bgfx) at draw/flush time.
-   - Files: `include/CNA/Internal/Backends/Vulkan/…`, `src/CNA/Internal/Backends/Vulkan/…` and/or
-     the Bgfx equivalents.
-   - Verification: a Vulkan/Bgfx pixel-readback test analogous to `EasyGL_TextureAddressMode`, if
-     readback infrastructure exists for that backend (Bgfx has none — smoke-test only there).
+2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
+   - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
+     flag, reuse `Texture2D.cpp`'s DXT decode helpers, 6×`levelCount` `SetData` calls).
+   - Files: `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp`, `TextureCubeTests.cpp`.
+   - Verification: build a real/hand-built DDS cube-map test fixture **first**, then implement
+     against it — do not mark done on "compiles and doesn't throw" alone (see §9).
 
-3. **Task 273/274 — `Texture3D` partial box upload/readback tests** (continues Phase 33)
-   - Goal: dedicated x/y/z sub-region `SetData`/`GetData` tests beyond the existing full-slice
-     round trip (`easygl_texture3d_slices_test.cpp`) — partial boxes within a single slice, boxes
-     spanning multiple slices, and boxes at non-zero mip levels (Task 271 added the guards but not
-     this positive-path coverage).
-   - Files: `tests/Microsoft/Xna/Framework/Graphics/Texture3DTests.cpp` and/or a new EasyGL
-     integration test.
-   - Verification: new tests pass on all 3 backends.
+3. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+   - Goal: `vkCmdCopyImageToBuffer` + host-visible staging buffer, mirroring the existing upload
+     path's staging-buffer pattern in reverse.
+   - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
+     (`VulkanTexture3DBackend`/`VulkanTextureCubeBackend::GetData`).
+   - Verification: new Vulkan pixel-readback test analogous to the EasyGL ones in
+     `easygl_texture3d_partial_box_readback_test.cpp`.
+
+4. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
+   - Goal: confirm (via a failing test first, matching the Task 276 methodology) that `Texture3D`/
+     `TextureCube` mip levels >0 silently fail on Vulkan and Bgfx, then fix by pre-allocating every
+     mip level at image/texture creation time.
+   - Files: `VulkanGraphicsBackend.cpp` (`VkImageCreateInfo::mipLevels`),
+     `BgfxGraphicsBackend.cpp` (`hasMips` parameter to `bgfx::createTexture3D`/`createTextureCube`).
+   - Verification: new mip round-trip test per backend, mirroring
+     `examples/easygl_texturecube_mip_test.cpp`.
 
 ---
 
 ## 9. Do not do yet
 
-- **No broad `Texture2D` rewrite** — Phase 32 (Tasks 261–270) is fully complete (see `AUDIT.md`).
-  Two lower-priority findings from the Task 261 audit remain open (missing EXT statics, Color-only
-  format support) but have no owning phase/task anymore — treat any future work on them as its own
-  small, scoped task, not a bundled rewrite.
-- **No further changes to the user-primitive scratch buffers (Task 260)** without re-running the
-  Tasks 255–258 pixel-readback tests — they are shared, growable, non-shrinking state on
-  `GraphicsDevice`; any change to their lifetime or sizing logic needs the same regression pass.
-- **No refactor of the stride-keyed vertex layout system** — it is load-bearing for all 3D tests;
-  changes need their own dedicated phase with full regression testing.
-- **No changes to the Bgfx backend draw path** — pixel readback is unavailable there, so
-  correctness cannot be verified.
+- **No architecture change to make `Texture3D`/`TextureCube` inherit `Texture`** (Task 863) without
+  a deliberate, scoped design pass — it touches `EffectParameter`, `TextureCollection`, and every
+  backend's texture-bind code. Not a small patch.
+- **No rushed `TextureCube::DDSFromStreamEXT` implementation** without a real DDS cube-map test
+  fixture built first — a "looks plausible" parser that isn't verified against real data just
+  trades one silent-failure stub for a differently-silent one.
 - **No SpriteBatch Vulkan multi-batch fix** until the root cause is isolated — a wrong fix could
-  break single-batch rendering silently.
-- **No API renames or namespace moves** — XNA API names are frozen by spec.
-- **No mass Doxygen cleanup passes** — add Doxygen only when touching a file for another reason.
-- **No new sharp-runtime types** unless a concrete CNA task requires them.
-- **No broad `GetData`/`SetData` rewrite** — the scope for further changes should come from a
-  dedicated audit, not ad-hoc cleanup.
-- **No opportunistic fix of `EasyGL_MRT_TwoAttachments`** (newly found this session) — it needs its
-  own root-cause investigation (FBO/render-target attachment code), not a guess bundled into an
-  unrelated task.
-- **No investigation of the `easy-gl-resource-smoke-tests` failure** as part of a CNA task — it's in
-  the sibling `easy-gl` repo; if it needs fixing, that's a separate `easy-gl` session's work.
-- **No further UV-clamp-style changes to `EasyGLSpriteBatchBackend::Draw()`** without re-running the
-  full sprite pixel-readback suite (`EasyGL_TexturedQuad`, `EasyGL_SpriteEffects_Flip`,
-  `EasyGL_TransformMatrix_Translation`, `EasyGL_NpotTexture`, `EasyGL_TextureAddressMode`) — this is
-  the single most heavily-used 2D rendering path in the engine.
-- **No opportunistic fix of `Vulkan_DepthBias`'s `DepthBias=-1e6` failure** (newly found this
-  session) — needs its own root-cause investigation (depth-bias scale/precision), not a guess
-  bundled into an unrelated task.
-- **No rushed `TextureCube::DDSFromStreamEXT` implementation (Task 663) without real test fixtures**
-  — a "looks plausible" DDS-cube parser that isn't actually verified against a real or carefully
-  hand-built DDS cube-map file would just trade one silent-failure stub for a differently-silent
-  bug. Build the test fixture(s) first, then the implementation, then verify against them —
-  don't mark Task 663 done on the strength of "it compiles and doesn't throw."
+  silently break single-batch rendering.
+- **No opportunistic fixes** for `EasyGL_MRT_TwoAttachments`, `Vulkan_DepthBias`, or
+  `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` flakiness — each needs its own dedicated
+  root-cause investigation, not a guess bundled into an unrelated task.
+- **No investigation of `easy-gl-resource-smoke-tests`** as part of a CNA task — it lives in the
+  sibling `easy-gl` repo.
+- **No refactor of the stride-keyed vertex layout system** — load-bearing for all 3D tests across
+  all backends; needs its own dedicated phase with full regression testing.
+- **No further changes to the `GraphicsDevice` user-primitive scratch buffers** without re-running
+  the full `DrawUserPrimitives`/`DrawUserIndexedPrimitives` pixel-readback suite.
+- **No API renames or namespace moves** — XNA API names and shapes are frozen by the FNA reference.
+- **No mass Doxygen or NOXNA cleanup passes** — fix tags only on files you're already touching for
+  a real reason.
+- **No broad `SurfaceFormat`/`GetData`/`SetData` rewrite** — Phase 34's scope is one task at a time
+  (Tasks 285–290); do not bundle multiple format implementations into one change.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task.
+Read NEXT.md first. Inspect only the files needed for the first task in §8.
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
-Current status: Phase 30, Phase 31, and Phase 32 (Tasks 261-270) are all fully complete. Phase 33
-(Texture3D/TextureCube completeness, Tasks 271-280) is in progress: Tasks 271 (Texture3D audit) and
-272 (TextureCube audit) are done. All three cmake-build-* dirs (EasyGL, Vulkan, Bgfx) are
-reconfigured against cna_graphics AND fully rebuilt/retested this session: EasyGL 1969/1971 ctest,
-Vulkan 1852/1853 ctest, Bgfx 1847/1847 (100%) — remaining failures are pre-existing/unrelated, see
-NEXT.md §5. Also fixed several real pre-existing bugs found along the way: a Vulkan
-TransitionImageLayout gap; a Texture2D::GetData startIndex<0 guard gap; in Texture3D (Task 271), a
-hardcoded LevelCount, missing SetData/GetData input validation, and a missing Dispose(bool)
-override; and in TextureCube (Task 272), the identical 3 bug classes as Texture3D (confirming a
-systemic pattern) plus 2 TextureCube-specific bugs: a missing SetData/GetData(face,data,startIndex,
-elementCount) overload, and a rect==nullptr-at-level>0 bug that ignored the mip level entirely.
-Task 272 also found TextureCube::DDSFromStreamEXT is a non-functional silent stub — documented as
-a severe finding, tracked as new Task 663, deliberately NOT fixed in the audit pass (it's a
-substantial feature, not a guard fix).
+Current status: Phases 1-33 complete. Phase 34 (SurfaceFormat implementation matrix,
+GRAPHICS_TASKS.md Tasks 281-290) is in progress: Tasks 281-284 done. All three backend builds
+(EasyGL/Vulkan/Bgfx) pass at the rates in NEXT.md §2; remaining failures are pre-existing and
+unrelated (see NEXT.md §5). Two significant bugs were found and fixed in the last few sessions:
+a real SurfaceFormat enum-ordinal conformance bug (Task 281) and a Vulkan sRGB/gamma bug affecting
+all non-textured rendering (Task 284). Two silent-failure gaps remain open and tracked but not
+yet fixed: TextureCube::DDSFromStreamEXT (Task 663) and Texture3D/TextureCube::GetData being a
+total no-op on Vulkan/Bgfx (Task 865).
 
-Next task: Task 663 — implement TextureCube::DDSFromStreamEXT for real (highest priority: this is a
-silent-failure bug, more urgent than ordinary missing coverage). The current implementation ignores
-its `stream` argument entirely and always returns a blank 1x1 texture. Needs: DDS header parsing
-(magic, size, mip levels, isCube flag - throw if not actually a cube map, matching FNA's
-FormatException), reusing Texture2D.cpp's private TryDecodeDds/DxtUtil::DecompressDxt1/3/5 decode
-helpers, then 6 faces x levelCount SetData calls reading sequential per-face-per-level blocks from
-the stream (mirrors TextureCube.cs:314-405). Build real DDS-cube-map test fixture(s) BEFORE writing
-the implementation — do not mark this done on "compiles and doesn't throw" alone, since that's
-exactly how the current stub looks superficially fine.
-Files: src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp,
-tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
-Verification: new unit test(s) round-tripping a real/hand-built DDS cube-map file; confirm
-isCube=false DDS input throws instead of silently succeeding.
+Next task: GRAPHICS_TASKS.md Task 285 - implement/verify Bgr565/Bgra5551/Bgra4444 packing and
+unpacking. Check FNA's actual bit-packing for these three 16-bit formats first, and check whether
+any CNA PackedVector type already covers them before assuming greenfield work. Add unit tests that
+round-trip known bit patterns against FNA's documented layout.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
