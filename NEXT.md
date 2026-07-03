@@ -29,8 +29,12 @@ ported to C++ with minimal API-surface changes.
   severe findings from Tasks 272, 276, 277, and 280 — see §3. **Phase 34 (SurfaceFormat
   implementation matrix, Tasks 281–290) is now in progress** — Task 281 done: built the canonical
   27-value `SurfaceFormat` table directly against FNA source and found/fixed a real enum-
-  conformance bug (CNA's enum diverged from FNA at ordinal 20+, see §3). Next up: Task 282 (define
-  CPU bytes-per-pixel/block size for each format).
+  conformance bug (CNA's enum diverged from FNA at ordinal 20+, see §3). Task 282 done: ported
+  FNA's real `Texture.GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` static methods (not a
+  CNA-invented `SurfaceFormatHelper`) with exhaustive per-format tests; also fixed a missing
+  `NOXNA` tag on `Texture::ValidateFormat` found along the way. Next up: Task 283 (implement
+  `ValidateGetDataFormat`/`GetPixelStoreAlignment`, the actual SetData/GetData-facing consumers
+  of Task 282's new size methods).
 - **Key architectural decisions:**
   - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).
@@ -176,6 +180,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 282 | `Texture.hpp/.cpp`, `TextureTests.cpp` (new), `docs/surface-format-support.md`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Ported FNA's real `Texture.GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` static methods (found in FNA's `Texture.cs`, not a `SurfaceFormatHelper` class as the plan guessed) - both throw `std::out_of_range` for an unrecognized enum value, matching Task 279's precedent. Exhaustive per-format tests (22 new, `TextureTests.cpp`) against all 27 `SurfaceFormat` values. Drive-by fix: `Texture::ValidateFormat` (CNA-only, not in FNA) was missing its `NOXNA` tag - added it. Verified across all 3 backends, no regressions. Lays groundwork for Task 283 (`ValidateGetDataFormat`/`GetPixelStoreAlignment`, not yet ported). |
 | 281 | `SurfaceFormat.hpp`, `SurfaceFormatTests.cpp` (extended), `examples/easygl_surface_format_throws_test.cpp`, `docs/surface-format-support.md`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Opens Phase 34. Building the canonical 27-value `SurfaceFormat` table directly against FNA's `SurfaceFormat.cs` found that CNA's enum diverged from FNA at ordinal 20+: CNA had 7 invented "Srgb" variants with no FNA equivalent, while omitting FNA's real `ColorBgraEXT`/`ColorSrgbEXT`/`Dxt5SrgbEXT`/`Bc7EXT`/`Bc7SrgbEXT`/`ByteEXT`/`UShortEXT` entirely - a direct violation of the "enum names must match XNA/FNA exactly" rule, and load-bearing since every backend casts the enum to `int`. Fixed the enum to match FNA exactly; blast radius was 1 test file (grepped first to confirm). 7 new ordinal-pinning unit tests. Verified across all 3 backends, no regressions. |
 | 280 | `docs/texture3d-texturecube-support.md` (new), `AUDIT.md`, `GRAPHICS_TASKS.md` | Documented the full `Texture3D`/`TextureCube` backend support matrix — the last task in Phase 33, which is now fully complete. Found (via direct Vulkan/Bgfx backend source inspection, prompted by writing the doc) that `GetData` is a total silent no-op on both Vulkan and Bgfx for both texture types — neither overrides the empty base-class default, so the caller's buffer is left untouched with no error. Existing tests never caught this since `GetData` coverage is argument-guard-only. Also flagged (not confirmed) that Vulkan/Bgfx likely have the same mip-level-allocation bug Task 276 fixed for EasyGL's `TextureCube`. Tracked as new Tasks 864 (Vulkan/Bgfx mip-level allocation) and 865 (Vulkan `GetData` readback implementation). No code changes — audit/documentation only. |
 | 279 | `TextureCube.cpp`, `TextureCubeTests.cpp` (extended), `AUDIT.md`, `GRAPHICS_TASKS.md` | Confirmed via FNA source that `cubeMapFace` is never validated in real XNA/FNA either — this is a CNA safety extra, not a parity gap. All 3 backends already guarded against out-of-range face (silent no-op); added a proper `IsValidCubeMapFace()` check (`std::out_of_range`) at the public API layer instead. 7 new unit tests. While verifying across backends, found (via `git stash` bisection) that `Vulkan_FillMode_WireFrame` fails when run as part of the full ctest suite but passes in isolation — confirmed pre-existing/unrelated (reproduces identically without this task's change); newly documented in §5. |

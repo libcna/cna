@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
@@ -18,6 +19,23 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the number of mipmap levels in this texture. */
         [[nodiscard]] int getLevelCountProperty() const;
 
+        /**
+         * @brief Gets the width/height (in texels) of one square compression block for the given format.
+         *
+         * @param format The surface format to query.
+         * @return 16 for block-compressed formats (Dxt1/Dxt3/Dxt5/Dxt5SrgbEXT/Bc7EXT/Bc7SrgbEXT,
+         *         each using 4x4 texel blocks); 1 for every uncompressed format.
+         */
+        static int GetBlockSizeSquaredEXT(SurfaceFormat format);
+
+        /**
+         * @brief Gets the size in bytes of one compression block (compressed formats) or one texel (uncompressed formats).
+         *
+         * @param format The surface format to query.
+         * @return The size in bytes: e.g. 8 for Dxt1, 16 for Dxt3/Dxt5/Bc7EXT, 4 for Color, 16 for Vector4.
+         */
+        static int GetFormatSizeEXT(SurfaceFormat format);
+
     public:
         /**
          * @brief Throws std::runtime_error if @p fmt is not yet implemented.
@@ -28,7 +46,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param fmt The SurfaceFormat to validate.
          */
-        static void ValidateFormat(SurfaceFormat fmt);
+        NOXNA static void ValidateFormat(SurfaceFormat fmt);
 
     protected:
         explicit Texture(GraphicsDevice* device = nullptr);

@@ -1167,6 +1167,52 @@ Verified across all three backends: EasyGL 1987/1989 ctest pass, Bgfx 1922/1922 
 `Vulkan_FillMode_WireFrame` order-dependency, and `Vulkan_DepthBias`'s `-1e6` sub-case — no new
 failures from this change).
 
+### Texture::GetBlockSizeSquaredEXT / GetFormatSizeEXT (Task 282, Phase 34)
+
+Task 282 asks for a shared helper that gives the CPU bytes-per-pixel or compressed-block size for
+each `SurfaceFormat`. Checked FNA's `Texture.cs` first (region "Static SurfaceFormat Size Methods")
+rather than inventing a `SurfaceFormatHelper` class per the plan's guessed name in
+`GRAPHICS_TASKS.md` — FNA already has exactly this, as two public static methods directly on
+`Texture`: `GetBlockSizeSquaredEXT(SurfaceFormat)` and `GetFormatSizeEXT(SurfaceFormat)`. Both are
+real FNA API (not CNA inventions), so ported them onto CNA's `Texture` class with the same names,
+matching the project rule to follow FNA's actual API shape over a plan's placeholder wording.
+
+Ported both switch statements line-by-line against FNA source, covering all 27 `SurfaceFormat`
+values (the full 0–26 range Task 281 just fixed):
+
+- `GetBlockSizeSquaredEXT` — returns `16` for the 6 block-compressed formats (`Dxt1`, `Dxt3`,
+  `Dxt5`, `Dxt5SrgbEXT`, `Bc7EXT`, `Bc7SrgbEXT`, all using 4×4 texel blocks) and `1` for every
+  uncompressed format (a "1×1 block").
+- `GetFormatSizeEXT` — returns the exact byte size of one block/texel per format: `8` (`Dxt1`),
+  `16` (`Dxt3`/`Dxt5`/`Dxt5SrgbEXT`/`Bc7EXT`/`Bc7SrgbEXT`/`Vector4`), `1` (`Alpha8`/`ByteEXT`), `2`
+  (`Bgr565`/`Bgra4444`/`Bgra5551`/`HalfSingle`/`NormalizedByte2`/`UShortEXT`), `4`
+  (`Color`/`Single`/`Rg32`/`HalfVector2`/`NormalizedByte4`/`Rgba1010102`/`ColorBgraEXT`/
+  `ColorSrgbEXT`), `8` (`HalfVector4`/`Rgba64`/`Vector2`/`HdrBlendable`).
+
+Both throw for an unrecognized enum value — FNA's own `default:` case throws `ArgumentException`;
+mapped to `std::out_of_range` here, matching the precedent set by Task 279's `CubeMapFace`
+validation (an out-of-range enum value is "out of range," not "a bad argument shape").
+
+**Drive-by fix, found while touching this file:** `Texture::ValidateFormat` (a CNA-only extension,
+not present in FNA at all) was missing its `NOXNA` tag — a straightforward, zero-behavior-change
+conformance fix per the project's explicit "every non-XNA method must be marked NOXNA" rule. Added
+the tag and the `CNA/CNAHelper.hpp` include it requires.
+
+Added `tests/Microsoft/Xna/Framework/Graphics/TextureTests.cpp` (new — `Texture` is abstract, but
+both new methods are static, so they're exercised directly with no subclass needed): 22 tests,
+exhaustive per-format coverage for both methods (grouped by expected return value, matching FNA's
+own switch-case grouping) plus an invalid-enum-value test for each. Verified across all three
+backends: EasyGL 1998/2000 ctest pass, Vulkan `TextureTest.*` clean, Bgfx 1933/1933 (100%) — no
+regressions anywhere.
+
+**Not yet ported — Task 283's scope:** FNA's same region also has `ValidateGetDataFormat` (throws
+if `GetFormatSizeEXT(format) % elementSizeInBytes != 0`) and the internal `GetPixelStoreAlignment`
+(`Math.Min(8, GetFormatSizeEXT(format))`) — both build on `GetFormatSizeEXT` and are the actual
+consumers "required for SetData/GetData" that Task 283's note refers to. Not currently called by
+any CNA `SetData`/`GetData` path, since `Texture::ValidateFormat` still blocks every non-`Color`
+format before that logic would ever run — but they'll become load-bearing once later Phase 34
+tasks add real support for more formats.
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`

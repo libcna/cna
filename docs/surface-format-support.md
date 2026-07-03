@@ -60,6 +60,29 @@ not CNA inventions.
 
 ---
 
+## Per-format CPU size (Task 282)
+
+Ported directly from FNA's `Texture.cs` ("Static SurfaceFormat Size Methods" region) as two public
+static methods on CNA's `Texture` class — real FNA API, so no `SurfaceFormatHelper` class was
+invented; both throw `std::out_of_range` for an unrecognized enum value.
+
+| Format | `GetBlockSizeSquaredEXT` | `GetFormatSizeEXT` (bytes) |
+|---|:---:|:---:|
+| Dxt1 | 16 | 8 |
+| Dxt3, Dxt5, Dxt5SrgbEXT, Bc7EXT, Bc7SrgbEXT | 16 | 16 |
+| Alpha8, ByteEXT | 1 | 1 |
+| Bgr565, Bgra4444, Bgra5551, HalfSingle, NormalizedByte2, UShortEXT | 1 | 2 |
+| Color, Single, Rg32, HalfVector2, NormalizedByte4, Rgba1010102, ColorBgraEXT, ColorSrgbEXT | 1 | 4 |
+| HalfVector4, Rgba64, Vector2, HdrBlendable | 1 | 8 |
+| Vector4 | 1 | 16 |
+
+Not yet ported: FNA's `ValidateGetDataFormat`/`GetPixelStoreAlignment`, which consume
+`GetFormatSizeEXT` and are the actual "required for `SetData`/`GetData`" helpers — tracked as
+Task 283. Not yet load-bearing in CNA since `Texture::ValidateFormat` still blocks every non-`Color`
+format before any of this logic would run.
+
+---
+
 ## How format selection works (current state)
 
 `Texture2D` stores the requested `SurfaceFormat` in `format_` but does **not** forward it
