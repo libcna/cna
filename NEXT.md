@@ -13,7 +13,7 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   tasks 700–783).
 - **Current development phase:** Phases I1–I4 are complete (TextInputEXT; Touch & gesture
   pipeline; GamePad behavior/FNA fidelity; Mouse behavior and MouseCursor). **Phase I5 (Keyboard
-  fidelity and SDL key mapping) is in progress** — tasks 760–765 of 760–768 are done.
+  fidelity and SDL key mapping) is in progress** — tasks 760–766 of 760–768 are done.
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -35,7 +35,7 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 
 ### Build
 - EasyGL build (`cmake-build-debug`): clean, as of the last build in this session (includes
-  Task 765).
+  Task 766).
 - Vulkan (`cmake-build-vulkan`) / Bgfx (`cmake-build-bgfx`) build dirs are misconfigured — their
   CMake caches point at the sibling `…/openeggbert/cna` repo, not this checkout (see Section 5).
   They have not been used or fixed for input work.
@@ -54,17 +54,20 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 - Phase I4 (Mouse + MouseCursor, tasks 745–755): real `SetPosition`/`IsRelativeMouseModeEXT`/
   `ClickedEXT` behavior; `MouseCursor` CHECKLIST compliance, `FromTexture2D`, `IDisposable`,
   lazy stock-cursor construction; 26 new tests in `MouseInputTests.cpp`.
-- Phase I5 so far (Keyboard, tasks 760–765): `GetPressedKeys()` ordering fix;
+- Phase I5 so far (Keyboard, tasks 760–766): `GetPressedKeys()` ordering fix;
   FNA-faithful `GetHashCode()`; `operator[](Keys)` indexer; completed SDL keycode→`Keys` map
   (F13–F24, Apps, Sleep, Volume keys, `KP_CLEAR`/`KP_PERIOD`, AZERTY/Norwegian/BEPO locale
   fallbacks); real `GetKeyFromScancodeEXT` implementation; scancode mode
   (`FNA_KEYBOARD_USE_SCANCODES` + `INTERNAL_scanMap`) wired into both the live key-event handler
-  and `GetKeyFromScancodeEXT`.
+  and `GetKeyFromScancodeEXT`; `KeyboardState::ToString()` now matches FNA's `ValueType` default
+  (fully-qualified type name) instead of a CNA-invented placeholder, and its `NOXNA` tag was
+  removed as a pre-existing mistake.
 - One unrelated build blocker was hit and fixed: the sibling `sharp-runtime` checkout committed a
   `System::IAsyncResult` interface change that broke this repo's `StorageDevice.cpp`.
 
 ### What does NOT work yet
-- Keyboard: `KeyboardState::ToString()` is still the placeholder `"[KeyboardState]"` — task 766.
+- Keyboard: nothing outstanding is known to be broken. Remaining Phase I5 tasks (767, 768) are
+  cosmetic/test-coverage, not behavior fixes (see Section 8).
 - `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its OS-cursor
   warp target is off by the scale factor on a letterboxed/scaled window (documented in-source in
   `Mouse.cpp`; fixing it for real is a graphics-layer change, out of scope for this branch).
@@ -81,6 +84,8 @@ All on `feature/input`, most recent first (`git log`):
 
 | Commit | Change |
 |--------|--------|
+| `d7156a3` | fix(Task 766): `KeyboardState::ToString()` matches FNA's `ValueType` default |
+| `112edd4` (docs) | mark Task 765 complete in `plan_input.md`; update `NEXT.md` |
 | `7dd4bf3` | feat(Task 765): add keyboard scancode mode (`INTERNAL_scanMap` + `FNA_KEYBOARD_USE_SCANCODES`) |
 | `028ba32` (docs) | rewrite `NEXT.md` as a concise handoff document |
 | `b63c56a` (docs) | mark Task 764 complete in `plan_input.md`; update `NEXT.md` |
@@ -104,19 +109,21 @@ All on `feature/input`, most recent first (`git log`):
   `Keyboard::GetKeyFromScancodeEXT` is a real layout-aware translation instead of an identity
   stub, and now respects scancode mode; SDL keycode coverage is materially more complete;
   `FNA_KEYBOARD_USE_SCANCODES=1` now switches the live key-event handler to physical-key-position
-  (`INTERNAL_scanMap`-equivalent) lookups instead of layout-dependent keycodes; Mouse/MouseCursor
-  behavior described above under "Recently implemented".
-- **Tests added:** 26 (`MouseInputTests.cpp`, Phase I4). Tasks 760–765 (Phase I5, this session)
-  were verified with ad-hoc standalone harnesses that were **not committed**; dedicated
-  `KeyboardInputTests.cpp` coverage for all of Phase I5 is deferred to task 768 (an explicit,
-  already-planned task), matching the batching pattern used for tasks 740 and 755.
+  (`INTERNAL_scanMap`-equivalent) lookups instead of layout-dependent keycodes;
+  `KeyboardState::ToString()` now returns `"Microsoft.Xna.Framework.Input.KeyboardState"`
+  (FNA's `ValueType` default) instead of the old `"[KeyboardState]"` placeholder, and is no
+  longer `NOXNA`-tagged; Mouse/MouseCursor behavior described above under "Recently implemented".
+- **Tests added:** 26 (`MouseInputTests.cpp`, Phase I4). Tasks 760–766 (Phase I5, this session)
+  were verified with ad-hoc standalone harnesses/manual checks that were **not committed**;
+  dedicated `KeyboardInputTests.cpp` coverage for all of Phase I5 is deferred to task 768 (an
+  explicit, already-planned task), matching the batching pattern used for tasks 740 and 755.
 
 ---
 
 ## 4. Current blocker / main problem
 
 **There is no blocker.** The last known state: EasyGL build clean, 1892/1892 tests passing, no
-failing command or failing test identified. Work can resume directly at Phase I5 task 766.
+failing command or failing test identified. Work can resume directly at Phase I5 task 767.
 
 The one open practical issue is unrelated to correctness and does not block Phase I5 work:
 
@@ -140,7 +147,7 @@ The one open practical issue is unrelated to correctness and does not block Phas
 | Status | Item |
 |--------|------|
 | Confirmed | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
-| Incomplete | `KeyboardState::ToString()` is a placeholder (task 766); dedicated `KeyboardInputTests.cpp` coverage for tasks 760–765 deferred to task 768. |
+| Incomplete | Dedicated `KeyboardInputTests.cpp` coverage for tasks 760–766 deferred to task 768; `Keys` underlying type not yet made explicit (task 767, cosmetic). |
 | Needs verification | `demo_input` text panel not visually confirmed on a real display in this environment (builds and runs crash-free, but no Wayland screenshot tool available here and forcing X11 makes SDL exit). |
 | Intentional deviation | `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its `SDL_WarpMouseInWindow` target is off by the scale factor on a letterboxed/scaled window. Documented in-source in `Mouse.cpp`. Fixing it for real needs a graphics-layer `IGraphicsBackend` addition, out of scope for this branch. |
 | Intentional deviation | `InputManager::GetMouseState()` reports relative-mode `X`/`Y` from a float delta accumulator fed by `SDL_EVENT_MOUSE_MOTION`'s `xrel`/`yrel` (drained to `0` on each read), rather than FNA's `SDL_GetRelativeMouseState` poll — the event-driven equivalent. Documented in-source in `InputManager.cpp`. |
@@ -151,6 +158,7 @@ The one open practical issue is unrelated to correctness and does not block Phas
 | Pre-existing, unrelated to input work | Working tree shows `D .claude/settings.json` (deleted) and untracked `vendor/wgpu-native/`. Do not commit either. |
 | Fixed | `MouseCursor`'s move constructor/assignment used to bitwise-copy the raw `SDL_Cursor*` without nulling the moved-from source (latent double-free risk, not reachable by any current call site). Fixed in task 752; regression-tested in `MouseInputTests.cpp`. |
 | Fixed | Keyboard scancode mode (`FNA_KEYBOARD_USE_SCANCODES`/`INTERNAL_scanMap`) was entirely absent — the live key-event handler always used layout-dependent keycodes, and `GetKeyFromScancodeEXT` never took the scancode-mode passthrough branch. Fixed in task 765. |
+| Fixed | `KeyboardState::ToString()` returned a CNA-invented `"[KeyboardState]"` placeholder, incorrectly tagged `NOXNA`, instead of matching FNA's `ValueType` default (fully-qualified type name) like `GamePadState::ToString()` does. Fixed in task 766. |
 | Fixed (unrelated to input work, but blocked all builds) | The sibling `sharp-runtime` checkout committed a `System::IAsyncResult` interface addition that broke this repo's `StorageDevice.cpp`. Fixed by implementing the two missing overrides in `ContainerResult`/`SelectorResult`. If a future `sharp-runtime` change breaks the build the same way, check `cd ../sharp-runtime && git status --short && git log -1` before assuming it's a transient concurrent-edit race — if the change is already committed, it needs the same kind of fix here, not a wait-and-retry. |
 
 ---
@@ -240,30 +248,22 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ## 8. Next smallest tasks
 
-Phase I5 (Keyboard fidelity and SDL key mapping), tasks 766–768, in order. Full detail for
-completed tasks 760–765 is in `plan_input.md`.
+Phase I5 (Keyboard fidelity and SDL key mapping), tasks 767–768, in order. Full detail for
+completed tasks 760–766 is in `plan_input.md`.
 
-1. **Task 766 — `KeyboardState::ToString()`.**
-   - Goal: replace the placeholder `"[KeyboardState]"` with a meaningful representation, or make
-     an explicit decision to drop it (it's a `NOXNA` extension, not present in FNA) and document
-     that choice.
-   - Files: `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`,
-     `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`.
-   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"`
-
-2. **Task 767 — Consider `enum class Keys : int`.**
+1. **Task 767 — Consider `enum class Keys : int`.**
    - Goal: cosmetic — make the underlying type explicit to match FNA's `int`-backed `Keys` enum.
      Confirm it changes nothing observable before committing to it.
    - Files: `include/Microsoft/Xna/Framework/Input/Keys.hpp`.
    - Verify: `cmake --build cmake-build-debug --target CNA -j"$(nproc)"`
 
-3. **Task 768 — Expand `KeyboardInputTests.cpp`.**
+2. **Task 768 — Expand `KeyboardInputTests.cpp`.**
    - Goal: dedicated coverage for everything Phase I5 touched: all three `KeyboardState`
      constructors, `operator[]`/`getItem`, `==`/`!=`/`Equals` (equal + unequal), `GetHashCode`
      consistency, `ToString`, multi-key `GetPressedKeys` ordering, empty `GetPressedKeys`,
      `GetState(PlayerIndex)`, `GetKeyFromScancodeEXT` (both default and scancode mode), and
      `Keys`/`KeyState` value spot-checks. This is where the ad-hoc verifications done for
-     tasks 760–765 should become real, committed tests.
+     tasks 760–766 should become real, committed tests.
    - Files: `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`.
    - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Keyboard*'`
 
@@ -293,7 +293,7 @@ completed tasks 760–765 is in `plan_input.md`.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task (Section 8, Task 766).
+Read NEXT.md first. Inspect only the files needed for the first task (Section 8, Task 767).
 Do not refactor unrelated code. Make one small, verified improvement.
 
 Then run the relevant build/test command for that task (see Section 8's "Verify" line, and/or
