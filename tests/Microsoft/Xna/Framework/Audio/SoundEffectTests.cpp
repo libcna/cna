@@ -148,6 +148,35 @@ TEST(SoundEffectTest, FromStreamGarbageThrowsNotSupported)
     }
 }
 
+// ===================== path constructor (NOXNA) =====================
+
+TEST(SoundEffectTest, ConstructFromEmptyPathIsNoOp)
+{
+    // Empty path is a documented no-op (Impl stays default-constructed, never touches the
+    // mixer), so this is safe to run without any audio device.
+    SoundEffect fx("");
+    EXPECT_FALSE(fx.getIsDisposedProperty());
+    EXPECT_EQ(fx.getDurationProperty().getTotalSecondsProperty(), 0.0);
+}
+
+TEST(SoundEffectTest, ConstructFromNonexistentPathThrowsNotSupported)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1); // a non-empty path reaches the mixer
+    try
+    {
+        SoundEffect fx("/nonexistent/cna_test_path/does_not_exist_12345.wav");
+        FAIL() << "expected an exception";
+    }
+    catch (const System::NotSupportedException&)
+    {
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the load path";
+    }
+}
+
 // ===================== instance methods (need audio device) =====================
 
 TEST(SoundEffectTest, ConstructFromBufferAndProperties)

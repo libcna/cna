@@ -500,11 +500,18 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   this context` — přesně dle accept-kritéria. Celá sada 1988/1988 testů zelená (beze změny počtu,
   jde čistě o viditelnost).
 
-- [ ] **CP-10 — Chybí test pro NOXNA ctor `SoundEffect(const std::string& assetName)` (načtení ze
-  souboru).** Pokrytý je jen buffer-ctor a `FromStream`; ctor z cesty k souboru nemá žádný test.
+- [x] **CP-10 — Chybí test pro NOXNA ctor `SoundEffect(const std::string& assetName)` (načtení ze
+  souboru).** *(hotovo 2026-07-03.)* Pokrytý byl jen buffer-ctor a `FromStream`; ctor z cesty k
+  souboru neměl žádný test.
   *CNA:* SoundEffect.hpp:48; tests/…/SoundEffectTests.cpp.
   *Accept:* test na prázdný string (no-op), neexistující soubor (throw, headless-safe pod
   `GTEST_SKIP` při chybějícím zařízení).
+  *Pozn.:* žádná změna produkčního kódu — ctor už se choval správně, jen chyběly testy. Přidány
+  `SoundEffectTest.ConstructFromEmptyPathIsNoOp` (prázdný string → žádný throw, `IsDisposed==
+  false`, `Duration==0`) a `...ConstructFromNonexistentPathThrowsNotSupported` (neexistující
+  cesta → `System::NotSupportedException`, se stejným try/catch/`GTEST_SKIP` idiomem jako
+  `FromStreamGarbageThrowsNotSupported`). Oba testy proběhly bez skipnutí (dummy audio zařízení
+  v tomto prostředí funguje) a reálně prošly load-path větví. Celá sada 1992/1992 testů zelená.
 
 - [ ] **CP-11 — T-5A tvrdí pokrytí „validní wave" pro `FromStream`, ale test na úspěšné načtení
   chybí.** `SoundEffectTests.cpp` má jen testy na prázdný/garbage vstup (throw) — žádný test
