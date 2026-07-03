@@ -723,11 +723,15 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   projde; `Interactive...` prochází v obou verzích (byte layout pro typ 3 byl už dřív správný,
   jen špatně pojmenovaný/dosažený). Celá sada 1990/1990 testů zelená.
 
-- [ ] **IN-5 — `XactTypes.hpp` stále používá holé `///` komentáře místo Doxygen bloků.** V rozporu
-  s `CLAUDE.md` („Never use bare `///` comments on public API members") — SPDX bylo doplněno
-  (T-1A), ale `///`→`/** @brief */` konverze nikdy nebyla samostatným úkolem.
+- [x] **IN-5 — `XactTypes.hpp` stále používá holé `///` komentáře místo Doxygen bloků.** *(hotovo
+  2026-07-03.)* V rozporu s `CLAUDE.md` („Never use bare `///` comments on public API members")
+  — SPDX bylo doplněno (T-1A), ale `///`→`/** @brief */` konverze nikdy nebyla samostatným úkolem.
   *Soubor:* include/CNA/Internal/Audio/XactTypes.hpp (celý soubor).
   *Accept:* převést všechny `///`/`//` popisky členů struktur na `/** @brief … */` bloky.
+  *Pozn.:* celý soubor přepsán — každá struktura/enum i každý člen má teď `/** @brief … */` blok
+  (i dříve zcela nekomentované členy, kvůli konzistenci s pravidlem „every .hpp file"); `ParseXgs`/
+  `ParseXwb`/`ParseXsb` mají plný blok s `@param`/`@return`. Čistě dokumentační změna — žádné
+  chování se nemění. Celá sada 1996/1996 testů zelená (beze změny počtu testů).
 
 - [ ] **IN-6 — Tenké testovací pokrytí `XactParser` (4 testy) nekryje bezpečnostně/funkčně
   kritické větve.** Chybí: poškozené/zkrácené hlavičky a špatná magic čísla pro všechny 3 formáty,
