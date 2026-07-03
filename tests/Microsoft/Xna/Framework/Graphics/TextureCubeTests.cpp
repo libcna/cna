@@ -256,6 +256,79 @@ TEST_F(TextureCubeTest, GetDataRectWithinBoundsDoesNotThrow)
 }
 
 // -----------------------------------------------------------------------
+// Invalid CubeMapFace values (Task 279)
+//
+// FNA itself never validates cubeMapFace — it's passed straight through to
+// FNA3D_SetTextureDataCube/FNA3D_GetTextureDataCube with no range check (confirmed in
+// TextureCube.cs). All 3 CNA backends (EasyGL/Vulkan/Bgfx) already guard against an
+// out-of-range face value at the backend layer (`if (face < 0 || face >= 6) return;`), so an
+// invalid face was already memory-safe — it just silently did nothing instead of surfacing a
+// clear, catchable error. This is a deliberate CNA safety extra beyond FNA, matching the
+// established pattern of Tasks 265/271/272's added guards.
+// -----------------------------------------------------------------------
+
+TEST_F(TextureCubeTest, SetDataInvalidFaceBelowRangeThrowsOutOfRange)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    Color buf[4] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
+    const auto invalidFace = static_cast<CubeMapFace>(-1);
+    EXPECT_THROW(tex.SetData(invalidFace, buf, 4), std::out_of_range);
+}
+
+TEST_F(TextureCubeTest, SetDataInvalidFaceAboveRangeThrowsOutOfRange)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    Color buf[4] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
+    const auto invalidFace = static_cast<CubeMapFace>(6);
+    EXPECT_THROW(tex.SetData(invalidFace, buf, 4), std::out_of_range);
+}
+
+TEST_F(TextureCubeTest, SetDataRectInvalidFaceThrowsOutOfRange)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    Color buf[1] = { Color(0, 0, 0, 0) };
+    const auto invalidFace = static_cast<CubeMapFace>(6);
+    EXPECT_THROW(tex.SetData(invalidFace, 0, nullptr, buf, 0, 4), std::out_of_range);
+}
+
+TEST_F(TextureCubeTest, GetDataInvalidFaceBelowRangeThrowsOutOfRange)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    Color buf[4] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
+    const auto invalidFace = static_cast<CubeMapFace>(-1);
+    EXPECT_THROW(tex.GetData(invalidFace, buf, 4), std::out_of_range);
+}
+
+TEST_F(TextureCubeTest, GetDataInvalidFaceAboveRangeThrowsOutOfRange)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    Color buf[4] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
+    const auto invalidFace = static_cast<CubeMapFace>(6);
+    EXPECT_THROW(tex.GetData(invalidFace, buf, 4), std::out_of_range);
+}
+
+TEST_F(TextureCubeTest, GetDataRectInvalidFaceThrowsOutOfRange)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    Color buf[1] = { Color(0, 0, 0, 0) };
+    const auto invalidFace = static_cast<CubeMapFace>(6);
+    EXPECT_THROW(tex.GetData(invalidFace, 0, nullptr, buf, 0, 4), std::out_of_range);
+}
+
+TEST_F(TextureCubeTest, SetDataAllSixValidFacesDoNotThrow)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    Color buf[4] = { Color(1, 2, 3, 4), Color(1, 2, 3, 4), Color(1, 2, 3, 4), Color(1, 2, 3, 4) };
+    const CubeMapFace faces[6] = {
+        CubeMapFace::PositiveX, CubeMapFace::NegativeX,
+        CubeMapFace::PositiveY, CubeMapFace::NegativeY,
+        CubeMapFace::PositiveZ, CubeMapFace::NegativeZ,
+    };
+    for (CubeMapFace face : faces)
+        EXPECT_NO_THROW(tex.SetData(face, buf, 4));
+}
+
+// -----------------------------------------------------------------------
 // Dispose
 // -----------------------------------------------------------------------
 

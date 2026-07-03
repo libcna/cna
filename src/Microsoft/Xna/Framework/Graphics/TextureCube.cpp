@@ -99,9 +99,18 @@ namespace Microsoft::Xna::Framework::Graphics
         SetData(face, 0, nullptr, data, startIndex, elementCount);
     }
 
+    static bool IsValidCubeMapFace(CubeMapFace face)
+    {
+        const int f = static_cast<int>(face);
+        return f >= static_cast<int>(CubeMapFace::PositiveX)
+            && f <= static_cast<int>(CubeMapFace::NegativeZ);
+    }
+
     void TextureCube::SetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                               const Color* data, int startIndex, int elementCount)
     {
+        if (!IsValidCubeMapFace(face))
+            throw std::out_of_range("TextureCube::SetData: face is not a valid CubeMapFace value");
         if (!data)
             throw std::invalid_argument("TextureCube::SetData: data must not be null");
         if (elementCount <= 0)
@@ -138,6 +147,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void TextureCube::GetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                               Color* data, int startIndex, int elementCount) const
     {
+        if (!IsValidCubeMapFace(face))
+            throw std::out_of_range("TextureCube::GetData: face is not a valid CubeMapFace value");
         if (!data)
             throw std::invalid_argument("TextureCube::GetData: data must not be null");
         if (elementCount <= 0)

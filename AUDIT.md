@@ -1049,6 +1049,36 @@ backend, not assumed either way.
   error on the `OpenGL` bgfx renderer. 1908/1908 Bgfx ctest pass (100%, no regressions from either
   the shader regeneration or the new draw-dispatch branch).
 
+### CubeMapFace validation (Task 279, Phase 33)
+
+Task 272's audit already flagged this as a known gap: `static_cast<int>(face)` was passed straight
+to the backend with no range check, for every `TextureCube::SetData`/`GetData` overload.
+
+Checked FNA's `TextureCube.cs` first: FNA itself **never validates `cubeMapFace`** — it goes
+straight through to `FNA3D_SetTextureDataCube`/`FNA3D_GetTextureDataCube` with no range check
+anywhere in the managed layer. So this is not a literal-parity gap; it's a deliberate CNA safety
+extra, matching the established pattern from Tasks 265/271/272.
+
+Checked all 3 backends first, to see whether an invalid face was actually unsafe: `EasyGLTextureCubeBackend`,
+`VulkanTextureCubeBackend`, and `BgfxTextureCubeBackend`'s `SetData`/`GetData` all already have
+`if (face < 0 || face >= 6) return;` at the top — an out-of-range face was already memory-safe on
+every backend, just a silent no-op instead of a clear, catchable error.
+
+Added `IsValidCubeMapFace()` (a local static helper) to `TextureCube.cpp`, called at the top of the
+6-arg `SetData`/`GetData` overload (the 2-arg/3-arg overloads both delegate to it, so the guard
+covers every arity). Throws `std::out_of_range`, matching the exception type already used for this
+function's other range checks (`level < 0`, rect bounds). 7 new unit tests in `TextureCubeTests.cpp`:
+below-range and above-range for both `SetData`/`GetData`, covering both the simple and rect-based
+overloads, plus a regression test confirming all 6 valid `CubeMapFace` values still work
+(`SetDataAllSixValidFacesDoNotThrow`).
+
+Verified across all three backends: EasyGL 1980/1982 ctest pass, Bgfx 1915/1915 (100%), Vulkan
+`TextureCubeTest` 34/34 pass. A full-suite Vulkan ctest run separately showed 2 failures
+(`Vulkan_FillMode_WireFrame`, `Vulkan_DepthBias`) — confirmed via `git stash`/rebuild/retest that
+both reproduce identically **without** this task's change, so they are pre-existing and unrelated
+(the first hadn't been previously documented; the second was already known —
+`DepthBias=-1e6`). Neither investigated further here; see `NEXT.md` §5.
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`
