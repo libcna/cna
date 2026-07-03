@@ -818,6 +818,31 @@ resume-prompt note), `TextureCube` had the *exact same 3 bug classes* Task 271 f
   audit) — the *shape* is right, matching FNA's API surface; only the *implementation* is a stub
   (finding #6).
 
+### Texture3D partial box upload verification (Task 273, Phase 33)
+
+Task 173 (an earlier session) added `examples/easygl_texture3d_slices_test.cpp`, but every box it
+uses spans the full width/height and only varies `front`/`back` — an x- or y-axis bug in either
+`Texture3D::SetData`'s box math or `EasyGLTexture3DBackend::SetData`/`GetData` would not have been
+caught.
+
+Added `examples/easygl_texture3d_partial_box_test.cpp` (`EasyGL_Texture3D_PartialBox_RoundTrip`
+ctest) with three sub-tests using boxes with distinct width/height/depth, offset on every axis:
+
+1. **Asymmetric off-origin box** — a 4×5×3 volume (deliberately distinct dimensions per axis) filled
+   Red, with a 2×3×2 Blue box written at `left=1,top=2,front=1`. Full-volume read-back checks all 60
+   voxels individually.
+2. **Single-voxel box** — a 3×3×3 volume, single voxel written at `(2,1,0)`; verifies exactly one of
+   27 voxels changed.
+3. **Far-corner box** — a 4×4×4 volume, box from `(2,2,2)` to `(4,4,4)` (i.e. `right==width`,
+   `bottom==height`, `back==depth`), verifying the exclusive upper-bound semantics hold at the far
+   edge.
+
+All three sub-tests pass against the existing implementation — no bug found. This confirms
+`EasyGLTexture3DBackend`'s use of `glTexSubImage3D` (upload) and a per-slice `glReadPixels` via a
+temporary FBO (readback) already handle arbitrary x/y/z sub-regions correctly; the earlier
+z-slice-only test just hadn't exercised that path. 1972/1972 EasyGL ctest pass (the 2 pre-existing,
+unrelated failures — `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests` — are unchanged).
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`
