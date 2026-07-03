@@ -7,6 +7,7 @@
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/GamerJoinedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include <string>
@@ -15,6 +16,7 @@
 using namespace CNA::Internal::Net;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 using Microsoft::Xna::Framework::Net::GamerJoinedEventArgs;
+using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
 using Microsoft::Xna::Framework::Net::NetworkGamer;
 using Microsoft::Xna::Framework::Net::NetworkSession;
 using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
@@ -224,4 +226,145 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
         if (g->getGamertagProperty() == "HostPlayer") foundHostPlayer = true;
     }
     EXPECT_TRUE(foundHostPlayer);
+}
+
+// --- Task 5.5: AppData relay (real SendData/ReceiveData) ---
+
+TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+
+    ServerWelcomeMessage welcome;
+    bool gotWelcome = false;
+    for (int i = 0; i < 200 && !gotWelcome; ++i) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::ServerWelcome) {
+                welcome = NetPacketCodec::DecodeServerWelcome(data);
+                gotWelcome = true;
+            }
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_TRUE(gotWelcome);
+    ASSERT_EQ(welcome.AssignedWireIds.size(), 1u);
+    uint8_t remoteWireId = welcome.AssignedWireIds[0];
+    uint8_t hostLocalWireId = 0; // the host's own local gamer is always assigned wire-id 0 first
+
+    AppDataMessage appData;
+    appData.SenderWireId = remoteWireId;
+    appData.TargetWireId = hostLocalWireId;
+    appData.Options = SendDataOptions::Reliable;
+    appData.Payload = {10, 20, 30};
+    auto appDataBytes = NetPacketCodec::Encode(appData);
+    fakeClient.Send(peerFromClientSide, 0, appDataBytes.data(), appDataBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+
+    LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
+    for (int i = 0; i < 200 && !hostLocalGamer->getIsDataAvailableProperty(); ++i) {
+        host.session->Update();
+    }
+    ASSERT_TRUE(hostLocalGamer->getIsDataAvailableProperty());
+
+    std::vector<SharpRuntime::bytecs> received(3);
+    NetworkGamer* sender = nullptr;
+    int len = hostLocalGamer->ReceiveData(received, sender);
+    EXPECT_EQ(len, 3);
+    EXPECT_EQ(received, (std::vector<SharpRuntime::bytecs>{10, 20, 30}));
+    ASSERT_NE(sender, nullptr);
+    EXPECT_EQ(sender->getGamertagProperty(), "RemotePlayer");
+}
+
+TEST(ENetBackendTest, ClientSendDataTransmitsAppDataToHost) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(0, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    bool gotHello = false;
+    for (int i = 0; i < 200 && !gotHello; ++i) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0) {
+            if (evt.type == ENET_EVENT_TYPE_CONNECT) {
+                clientPeerFromHostSide = evt.peer;
+            } else if (evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                if (NetPacketCodec::PeekTag(data) == MessageTag::ClientHello) {
+                    gotHello = true;
+                }
+                enet_packet_destroy(evt.packet);
+            }
+        }
+    }
+    ASSERT_TRUE(gotHello);
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer"}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i) {
+        client.session->Update();
+    }
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
+
+    NetworkGamer* hostPlayerProxy = nullptr;
+    for (NetworkGamer* g : client.session->getAllGamersProperty()) {
+        if (g->getGamertagProperty() == "HostPlayer") hostPlayerProxy = g;
+    }
+    ASSERT_NE(hostPlayerProxy, nullptr);
+
+    LocalNetworkGamer* clientLocalGamer = client.session->getLocalGamersProperty()[0];
+    std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4};
+    clientLocalGamer->SendData(payload, SendDataOptions::Reliable, hostPlayerProxy);
+    client.session->Update(); // dequeues the PacketSend event and transmits it via ENet
+
+    ENetPacket* received = nullptr;
+    for (int i = 0; i < 200 && !received; ++i) {
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            received = evt.packet;
+        }
+    }
+    ASSERT_NE(received, nullptr);
+
+    std::vector<SharpRuntime::bytecs> data(received->data, received->data + received->dataLength);
+    EXPECT_EQ(NetPacketCodec::PeekTag(data), MessageTag::AppData);
+    AppDataMessage decoded = NetPacketCodec::DecodeAppData(data);
+    enet_packet_destroy(received);
+
+    EXPECT_EQ(decoded.SenderWireId, 5);
+    EXPECT_EQ(decoded.TargetWireId, 0);
+    EXPECT_EQ(decoded.Options, SendDataOptions::Reliable);
+    EXPECT_EQ(decoded.Payload, (std::vector<SharpRuntime::bytecs>{1, 2, 3, 4}));
 }

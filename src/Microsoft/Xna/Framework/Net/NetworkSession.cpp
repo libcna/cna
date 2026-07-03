@@ -219,6 +219,31 @@ namespace Microsoft::Xna::Framework::Net
 
             if (evt.Type == NetworkEventType::PacketSend)
             {
+                // Gated behind RealNetworkingEnabled so non-SystemLink session types keep their
+                // pre-Phase-5 behavior byte-for-byte: PacketSend stays a complete no-op for them
+                // (see Task 5.9's planned regression pass), matching that no remote gamer can
+                // exist on a non-SystemLink session anyway (AddRemoteGamer is only ever called
+                // from ENetBackend's own RealNetworkingEnabled-gated handshake code).
+                if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
+                {
+                    if (auto* localTarget = dynamic_cast<LocalNetworkGamer*>(evt.Gamer))
+                    {
+                        // Target is local to this machine (whether the packet originated here
+                        // too, or arrived via the real ENet transport for one of our own
+                        // gamers) — deliver directly into its own packetQueue_. ReceiveData
+                        // matches its result's Gamer field against the SENDER, not the target
+                        // (see NetworkEvent::Sender's doc comment), so remap here.
+                        NetworkEvent delivered = evt;
+                        delivered.Gamer = evt.Sender;
+                        localTarget->EnqueuePacket(std::move(delivered));
+                    }
+                    else if (evt.Gamer != nullptr)
+                    {
+                        // Target is remote: transmit over ENet (the host relays if it isn't
+                        // itself the owner of the target gamer's connection).
+                        CNA::Internal::Net::ENetBackend::SendAppData(this, evt.Sender, evt.Gamer, evt.Packet, evt.Reliable);
+                    }
+                }
             }
             else if (evt.Type == NetworkEventType::GamerJoin)
             {

@@ -158,6 +158,19 @@ namespace Microsoft::Xna::Framework::Net
          */
         NOXNA void ClearPacketQueue();
 
+        /**
+         * @brief Queues an incoming packet for later retrieval via ReceiveData.
+         *
+         * Not part of FNA's original design (see NetworkSession.cpp's Update(), which never had
+         * anywhere to route a PacketSend event to before Phase 5): used by NetworkSession::
+         * Update() to deliver a PacketSend event addressed to this gamer, whether the packet
+         * originated locally (same-machine SendData) or arrived over the real ENet transport.
+         *
+         * @param evt The event to queue; its Gamer field should already be set to the sender
+         *            (see NetworkEvent::Sender's doc comment for why the two differ).
+         */
+        NOXNA void EnqueuePacket(NetworkSession::NetworkEvent evt);
+
         /** @brief Creates a LocalNetworkGamer for CNA internal use. */
         NOXNA static LocalNetworkGamer CreateInternal(GamerServices::SignedInGamer* gamer, NetworkSession* session);
 

@@ -460,11 +460,11 @@ TEST(LocalNetworkGamerTest, SendDataThenReceiveDataRoundtrip) {
     std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4};
     fixture.gamer->SendData(payload, SendDataOptions::Reliable);
 
-    // SendData enqueues a NetworkEvent on the session, not directly on packetQueue_ — Update()
-    // doesn't move PacketSend events into any gamer's packetQueue_ either (FNA's Update() has
-    // an empty PacketSend branch), so IsDataAvailable legitimately stays false. This exercises
-    // SendData's public API surface; the packetQueue_ delivery path is CNA-internal to
-    // NetworkSession's own event pipeline and isn't wired up by FNA itself.
+    // SendData enqueues a NetworkEvent on the session, not directly on packetQueue_. Update()'s
+    // PacketSend handling (Task 5.5) is gated behind ENetBackend::RealNetworkingEnabled(), which
+    // is false for this fixture's NetworkSessionType::Local — so it stays a no-op here (matching
+    // FNA's own always-empty PacketSend branch) and IsDataAvailable legitimately stays false. See
+    // CNA::Internal::Net::ENetBackendTest's AppData relay tests for the real (SystemLink) path.
     fixture.session->Update();
     EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
 }

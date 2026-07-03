@@ -41,6 +41,9 @@ namespace CNA::Internal::Net
             std::unordered_map<NetworkGamer*, uint8_t> GamerToWireId;
             std::unordered_map<uint8_t, NetworkGamer*> WireIdToGamer;
             std::unordered_map<ENetPeer*, std::vector<uint8_t>> PeerWireIds;
+            // Host-only: which peer owns a given remote wire-id, for AppData relay (Task 5.5).
+            // Never populated for the host's own local gamers (they need no peer to reach).
+            std::unordered_map<uint8_t, ENetPeer*> WireIdToPeer;
         };
 
         std::unordered_map<NetworkSession*, std::unique_ptr<SessionState>>& Sessions()
@@ -129,6 +132,7 @@ namespace CNA::Internal::Net
                 newWireIds.push_back(id);
                 newGamers.push_back(gamer);
                 broadcastMsg.NewGamers.push_back(RosterEntry{id, gamertag});
+                state.WireIdToPeer[id] = peer;
             }
             state.PeerWireIds[peer] = std::move(newWireIds);
 
@@ -192,6 +196,42 @@ namespace CNA::Internal::Net
             }
         }
 
+        void HandleAppData(NetworkSession* session, SessionState& state, ENetPeer* fromPeer, const AppDataMessage& msg)
+        {
+            auto targetIt = state.WireIdToGamer.find(msg.TargetWireId);
+            if (targetIt == state.WireIdToGamer.end())
+            {
+                return; // unknown target; drop
+            }
+            NetworkGamer* target = targetIt->second;
+
+            if (target->getIsLocalProperty())
+            {
+                auto senderIt = state.WireIdToGamer.find(msg.SenderWireId);
+                NetworkSession::NetworkEvent evt;
+                evt.Type = NetworkSession::NetworkEventType::PacketSend;
+                evt.Gamer = target;
+                evt.Sender = (senderIt != state.WireIdToGamer.end()) ? senderIt->second : nullptr;
+                evt.Packet = msg.Payload;
+                evt.Reliable = msg.Options;
+                session->SendNetworkEvent(std::move(evt));
+                return;
+            }
+
+            if (state.HostPeer == nullptr)
+            {
+                // We're the host and target belongs to someone else: relay it on, unless the
+                // sender already owns it (that would just echo the packet back to its origin).
+                auto peerIt = state.WireIdToPeer.find(msg.TargetWireId);
+                if (peerIt != state.WireIdToPeer.end() && peerIt->second != fromPeer)
+                {
+                    SendTo(state, peerIt->second, NetPacketCodec::Encode(msg), msg.Options);
+                }
+            }
+            // Else: we're a client that received an AppData for a gamer we don't own and aren't
+            // hosting for — shouldn't happen in this star topology; drop defensively.
+        }
+
         void HandleConnect(NetworkSession* session, SessionState& state, ENetPeer* peer)
         {
             if (peer != state.HostPeer)
@@ -227,8 +267,11 @@ namespace CNA::Internal::Net
                 case MessageTag::GamerJoinBroadcast:
                     HandleGamerJoinBroadcast(session, state, NetPacketCodec::DecodeGamerJoinBroadcast(data));
                     break;
+                case MessageTag::AppData:
+                    HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
+                    break;
                 default:
-                    // GamerLeaveBroadcast/StateChangeBroadcast/AppData: Tasks 5.5-5.7.
+                    // GamerLeaveBroadcast/StateChangeBroadcast: Tasks 5.6-5.7.
                     break;
             }
         }
@@ -308,5 +351,54 @@ namespace CNA::Internal::Net
 
         SessionState& state = *Sessions().at(session);
         state.HostPeer = state.Host.Connect(address, port, kChannelLimit);
+    }
+
+    void ENetBackend::SendAppData(
+        NetworkSession* session,
+        NetworkGamer* sender,
+        NetworkGamer* target,
+        const std::vector<SharpRuntime::bytecs>& payload,
+        SendDataOptions options
+    )
+    {
+        if (!RealNetworkingEnabled(session->getSessionTypeProperty()))
+        {
+            return;
+        }
+
+        auto it = Sessions().find(session);
+        if (it == Sessions().end())
+        {
+            return;
+        }
+        SessionState& state = *it->second;
+
+        auto senderIt = state.GamerToWireId.find(sender);
+        auto targetIt = state.GamerToWireId.find(target);
+        if (senderIt == state.GamerToWireId.end() || targetIt == state.GamerToWireId.end())
+        {
+            return;
+        }
+
+        AppDataMessage msg;
+        msg.SenderWireId = senderIt->second;
+        msg.TargetWireId = targetIt->second;
+        msg.Options = options;
+        msg.Payload = payload;
+        auto bytes = NetPacketCodec::Encode(msg);
+
+        if (state.HostPeer != nullptr)
+        {
+            // We're a client: everything goes to the host, which relays as needed.
+            SendTo(state, state.HostPeer, bytes, options);
+            return;
+        }
+
+        // We're the host: relay directly to the peer that owns the target wire-id.
+        auto peerIt = state.WireIdToPeer.find(msg.TargetWireId);
+        if (peerIt != state.WireIdToPeer.end())
+        {
+            SendTo(state, peerIt->second, bytes, options);
+        }
     }
 }

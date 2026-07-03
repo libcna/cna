@@ -101,6 +101,7 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSession::NetworkEvent evt;
             evt.Type = NetworkSession::NetworkEventType::PacketSend;
             evt.Gamer = gamer;
+            evt.Sender = this;
             evt.Packet = mem;
             evt.Reliable = options;
             getSessionProperty()->SendNetworkEvent(std::move(evt));
@@ -118,6 +119,7 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSession::NetworkEvent evt;
         evt.Type = NetworkSession::NetworkEventType::PacketSend;
         evt.Gamer = recipient;
+        evt.Sender = this;
         evt.Packet = std::move(mem);
         evt.Reliable = options;
         getSessionProperty()->SendNetworkEvent(std::move(evt));
@@ -134,6 +136,7 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSession::NetworkEvent evt;
             evt.Type = NetworkSession::NetworkEventType::PacketSend;
             evt.Gamer = gamer;
+            evt.Sender = this;
             evt.Packet = packet;
             evt.Reliable = options;
             getSessionProperty()->SendNetworkEvent(std::move(evt));
@@ -149,6 +152,7 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSession::NetworkEvent evt;
         evt.Type = NetworkSession::NetworkEventType::PacketSend;
         evt.Gamer = recipient;
+        evt.Sender = this;
         evt.Packet = std::move(packet);
         evt.Reliable = options;
         getSessionProperty()->SendNetworkEvent(std::move(evt));
@@ -157,5 +161,10 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::ClearPacketQueue()
     {
         packetQueue_ = {};
+    }
+
+    void LocalNetworkGamer::EnqueuePacket(NetworkSession::NetworkEvent evt)
+    {
+        packetQueue_.push(std::move(evt));
     }
 }
