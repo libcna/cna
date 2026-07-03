@@ -4,7 +4,7 @@
 namespace Microsoft::Xna::Framework::Input
 {
     /** @brief Defines the keys on a keyboard. */
-    enum class Keys
+    enum class Keys : int
     {
         /** @brief Reserved. */
         None = 0,
