@@ -100,7 +100,7 @@ not stale, per the Finding above). No build/test run — documentation only, as 
 
 ## Phase 2: Event callback lifetime safety
 
-### Task P4-2 — Close the `Accelerometer`/`Gyroscope` callback lifetime gap left open by Task P3-4
+### Task P4-2 — Close the `Accelerometer`/`Gyroscope` callback lifetime gap left open by Task P3-4 — ✅ Done (2026-07-03)
 
 **Verified gap (re-derived from current source, not assumed):**
 `Accelerometer::SensorEventWatch()` (and `Gyroscope`'s identical twin) — the SDL
@@ -216,6 +216,34 @@ event-path integration) is sufficient coverage for it, without needing the riski
 `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
 `include/Microsoft/Devices/Sensors/Gyroscope.hpp`,
 `src/Microsoft/Devices/Sensors/Gyroscope.cpp`.
+
+**Resolution (2026-07-03):** Implemented option (C) (per-instance quiescence flag) and
+option (i) (split validation from conversion+dispatch) exactly as recommended, in both
+`Accelerometer` and `Gyroscope`. Added `bool inFlightCallback_` (per-instance, guarded by
+the existing `mutex_`) and a shared `static std::condition_variable callbackFinished_`.
+`SensorEventWatch()` now sets `inFlightCallback_ = true` for each instance while still
+holding `mutex_` (right when building the dispatch snapshot), releases the lock, calls
+`ProcessSensorUpdateEvent()` unlocked (unchanged from Task P3-4), then re-acquires
+`mutex_` to clear the flag and notify. `Dispose(bool)` — after `Stop()` has already
+removed the instance from `startedInstances_`, preventing any *new* dispatch — waits on
+`callbackFinished_` for `inFlightCallback_` to clear before proceeding to decrement
+`instanceCount_`/touch `g_sensor_`, closing the exact use-after-free window Task P3-4 left
+open. `ProcessSensorUpdateEvent()` was split into itself (guards: `started_`,
+`getIsDisposedProperty()`, `g_sensor_`/`sensorId` hardware match) plus a new private
+`DispatchSensorReading(x, y, z, timestampNs)` doing the actual conversion+dispatch —
+both classes now share this shape. Added the 2 planned `NOXNA` test-only hooks to both
+classes: `InjectSyntheticSensorUpdate(x, y, z, timestampNs)` (calls
+`DispatchSensorReading()` directly, skipping only the hardware-presence checks — still
+respects `started_`/disposed state) and `SetStartedForTesting(bool)` (sets `started_`
+directly, since the real `Start()` always throws in this headless environment and there
+would otherwise be no way to test `InjectSyntheticSensorUpdate()`'s `started_` gating, or
+confirm the real `Stop()` correctly disables it). The known accepted limitation (a handler
+that reentrantly calls `Dispose()` on its own sender from within its own callback would
+deadlock) is documented in both headers' `inFlightCallback_` doc comment, not solved,
+matching the plan's own scoping. Verified: `CNA` + `CnaTests` build clean, no behavior
+change to any existing public API. Full `ctest` — 1985 tests, same 64 pre-existing
+headless failures, zero regressions (no new tests added by this task itself — Tasks P4-3
+through P4-6, next, are what actually exercise the new hooks).
 
 ---
 

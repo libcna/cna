@@ -23,6 +23,7 @@ namespace Microsoft::Devices::Sensors
     bool Gyroscope::eventWatchRegistered_ = false;
     std::vector<Gyroscope*> Gyroscope::startedInstances_;
     std::mutex Gyroscope::mutex_;
+    std::condition_variable Gyroscope::callbackFinished_;
 
     bool Gyroscope::EnsureSensorSubsystemInitialized()
     {
@@ -125,21 +126,31 @@ namespace Microsoft::Devices::Sensors
         std::vector<Gyroscope*> instancesSnapshot;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            instancesSnapshot = startedInstances_;
+            for (Gyroscope* gyroscope : startedInstances_)
+            {
+                if (gyroscope != nullptr)
+                {
+                    gyroscope->inFlightCallback_ = true;
+                    instancesSnapshot.push_back(gyroscope);
+                }
+            }
         }
 
         for (Gyroscope* gyroscope : instancesSnapshot)
         {
-            if (gyroscope != nullptr)
+            gyroscope->ProcessSensorUpdateEvent(
+                sensorId,
+                event->sensor.data[0],
+                event->sensor.data[1],
+                event->sensor.data[2],
+                timestampNs
+            );
+
             {
-                gyroscope->ProcessSensorUpdateEvent(
-                    sensorId,
-                    event->sensor.data[0],
-                    event->sensor.data[1],
-                    event->sensor.data[2],
-                    timestampNs
-                );
+                std::lock_guard<std::mutex> lock(mutex_);
+                gyroscope->inFlightCallback_ = false;
             }
+            callbackFinished_.notify_all();
         }
 
         return true;
@@ -303,7 +314,15 @@ namespace Microsoft::Devices::Sensors
                 Stop();
             }
 
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::unique_lock<std::mutex> lock(mutex_);
+
+            // Stop() (above) already removed this instance from
+            // startedInstances_, so no *new* callback can start targeting
+            // it — but SensorEventWatch() may already be mid-call into this
+            // instance's ProcessSensorUpdateEvent() on another thread. Wait
+            // for that to finish before letting this object's lifetime end,
+            // closing the use-after-free window left open by Task P3-4.
+            callbackFinished_.wait(lock, [this] { return !inFlightCallback_; });
 
             --instanceCount_;
             if (instanceCount_ < 0)
@@ -403,6 +422,11 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
+        DispatchSensorReading(x, y, z, timestampNs);
+    }
+
+    void Gyroscope::DispatchSensorReading(float x, float y, float z, std::uint64_t timestampNs)
+    {
         GyroscopeReading gyroscopeReading;
 
         const bool valid = true;
@@ -429,6 +453,26 @@ namespace Microsoft::Devices::Sensors
         }
 
         setCurrentValueProperty(gyroscopeReading);
+    }
+
+    void Gyroscope::InjectSyntheticSensorUpdate(float x, float y, float z, std::uint64_t timestampNs)
+    {
+        if (!started_)
+        {
+            return;
+        }
+
+        if (getIsDisposedProperty())
+        {
+            return;
+        }
+
+        DispatchSensorReading(x, y, z, timestampNs);
+    }
+
+    void Gyroscope::SetStartedForTesting(bool started)
+    {
+        started_ = started;
     }
 
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")

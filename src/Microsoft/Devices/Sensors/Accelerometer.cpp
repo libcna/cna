@@ -26,6 +26,7 @@ namespace Microsoft::Devices::Sensors
     bool Accelerometer::eventWatchRegistered_ = false;
     std::vector<Accelerometer*> Accelerometer::startedInstances_;
     std::mutex Accelerometer::mutex_;
+    std::condition_variable Accelerometer::callbackFinished_;
 
     bool Accelerometer::EnsureSensorSubsystemInitialized()
     {
@@ -128,21 +129,31 @@ namespace Microsoft::Devices::Sensors
         std::vector<Accelerometer*> instancesSnapshot;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            instancesSnapshot = startedInstances_;
+            for (Accelerometer* accelerometer : startedInstances_)
+            {
+                if (accelerometer != nullptr)
+                {
+                    accelerometer->inFlightCallback_ = true;
+                    instancesSnapshot.push_back(accelerometer);
+                }
+            }
         }
 
         for (Accelerometer* accelerometer : instancesSnapshot)
         {
-            if (accelerometer != nullptr)
+            accelerometer->ProcessSensorUpdateEvent(
+                sensorId,
+                event->sensor.data[0],
+                event->sensor.data[1],
+                event->sensor.data[2],
+                timestampNs
+            );
+
             {
-                accelerometer->ProcessSensorUpdateEvent(
-                    sensorId,
-                    event->sensor.data[0],
-                    event->sensor.data[1],
-                    event->sensor.data[2],
-                    timestampNs
-                );
+                std::lock_guard<std::mutex> lock(mutex_);
+                accelerometer->inFlightCallback_ = false;
             }
+            callbackFinished_.notify_all();
         }
 
         return true;
@@ -306,7 +317,15 @@ namespace Microsoft::Devices::Sensors
                 Stop();
             }
 
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::unique_lock<std::mutex> lock(mutex_);
+
+            // Stop() (above) already removed this instance from
+            // startedInstances_, so no *new* callback can start targeting
+            // it — but SensorEventWatch() may already be mid-call into this
+            // instance's ProcessSensorUpdateEvent() on another thread. Wait
+            // for that to finish before letting this object's lifetime end,
+            // closing the use-after-free window left open by Task P3-4.
+            callbackFinished_.wait(lock, [this] { return !inFlightCallback_; });
 
             --instanceCount_;
             if (instanceCount_ < 0)
@@ -450,6 +469,11 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
+        DispatchSensorReading(x, y, z, timestampNs);
+    }
+
+    void Accelerometer::DispatchSensorReading(float x, float y, float z, std::uint64_t timestampNs)
+    {
         AccelerometerReading accelerometerReading;
 
         constexpr float StandardGravity = 9.80665f;
@@ -496,6 +520,26 @@ namespace Microsoft::Devices::Sensors
 
             ReadingChanged.Raise(static_cast<System::Object*>(this), eventArgs);
         }
+    }
+
+    void Accelerometer::InjectSyntheticSensorUpdate(float x, float y, float z, std::uint64_t timestampNs)
+    {
+        if (!started_)
+        {
+            return;
+        }
+
+        if (getIsDisposedProperty())
+        {
+            return;
+        }
+
+        DispatchSensorReading(x, y, z, timestampNs);
+    }
+
+    void Accelerometer::SetStartedForTesting(bool started)
+    {
+        started_ = started;
     }
 
     GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")
