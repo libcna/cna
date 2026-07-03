@@ -404,14 +404,22 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   test selže (pozice se resetuje na 0), s opravou projde. `DynamicSoundEffectInstance::Play()`
   má vlastní override s guardem už hotovým — CP-1 se ho netýkal.
 
-- [ ] **CP-2 — `SoundEffect::Play(volume, pitch, pan)` nevaliduje/neklampuje pan a pitch.**
-  FNA interně dělá `instance.Pitch = pitch;` (klamp na [-1,1]) a `instance.Pan = pan;` (hází
-  `ArgumentOutOfRangeException` při `|pan|>1`) ještě před `instance.Play()`. CNA počítá stereo
-  gains a frequency ratio přímo ze syrových vstupů bez klampu/validace.
+- [x] **CP-2 — `SoundEffect::Play(volume, pitch, pan)` nevaliduje/neklampuje pan a pitch.** *(hotovo
+  2026-07-03.)* FNA interně dělá `instance.Pitch = pitch;` (klamp na [-1,1]) a
+  `instance.Pan = pan;` (hází `ArgumentOutOfRangeException` při `|pan|>1`) ještě před
+  `instance.Play()`. CNA počítala stereo gains a frequency ratio přímo ze syrových vstupů bez
+  klampu/validace.
   *FNA:* SoundEffect.cs:338-352, SoundEffectInstance.cs:46-65,87-101.
   *CNA:* SoundEffect.cpp:254-310.
   *Accept:* `Play(v, pitch>1, pan>1)` hází `ArgumentOutOfRangeException` (pan) resp. klampuje pitch
   na [-1,1] stejně jako property setter; test na obě větve.
+  *Pozn.:* `Play(volume,pitch,pan)` teď na začátku (před jakoukoliv práci s mixerem) validuje/
+  klampuje přesně jako `SoundEffectInstance::setPanProperty`/`setPitchProperty` — `pan` mimo
+  [-1,1] hází `System::ArgumentOutOfRangeException`, `pitch` se klampuje na [-1,1]. Nové testy
+  `PlayThrowsOnPanOutOfRange` (ověřen přes `git stash` — bez opravy selže, `throws nothing`, s
+  opravou projde) a `PlayClampsPitchInsteadOfThrowing` (prochází v obou verzích — extrémní pitch
+  nepadal ani předtím, jen se neklampoval; test pinuje klamp do budoucna). Celá sada
+  2002/2002 testů zelená.
 
 - [x] **CP-3 — `Apply3D(listener, emitter)` přepisuje veřejné `Volume`/`Pan`, místo aby počítal jen
   samostatnou výstupní matici jako FNA.** *(hotovo 2026-07-02.)* FNA aktualizuje pouze interní

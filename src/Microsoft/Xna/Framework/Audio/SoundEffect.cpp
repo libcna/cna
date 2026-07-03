@@ -258,6 +258,15 @@ namespace Microsoft::Xna::Framework::Audio
             return false;
         }
 
+        // FNA constructs a real SoundEffectInstance and assigns Volume/Pitch/Pan through its
+        // property setters before Play(); mirror their validation here: Pan is range-checked
+        // (throws), Pitch is clamped rather than validated.
+        if (pan > 1.0f || pan < -1.0f)
+        {
+            throw System::ArgumentOutOfRangeException("pan");
+        }
+        pitch = (pitch < -1.0f) ? -1.0f : ((pitch > 1.0f) ? 1.0f : pitch);
+
 #ifdef SOUND_ENABLED
         auto* audio = static_cast<MIX_Audio*>(getNativeAudioHandle());
         if (!audio)

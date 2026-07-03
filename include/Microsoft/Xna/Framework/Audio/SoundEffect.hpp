@@ -208,9 +208,10 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Plays the sound effect once with explicit volume, pitch, and pan.
          *
          * @param volume Volume in the range [0, 1].
-         * @param pitch  Pitch adjustment in the range [-1, 1].
+         * @param pitch  Pitch adjustment; clamped to [-1, 1].
          * @param pan    Pan in the range [-1 (left), 1 (right)].
          * @return true if the sound started playing; false if the instance limit was reached.
+         * @throws System::ArgumentOutOfRangeException if @p pan is outside [-1, 1].
          */
         bool Play(float volume, float pitch, float pan);
 

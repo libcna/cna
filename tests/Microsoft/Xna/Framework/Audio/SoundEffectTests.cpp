@@ -281,6 +281,26 @@ TEST(SoundEffectTest, PlayReturnsTrue)
     EXPECT_TRUE(fx->Play(0.5f, 0.0f, 0.25f));
 }
 
+TEST(SoundEffectTest, PlayThrowsOnPanOutOfRange)
+{
+    // Matches SoundEffectInstance::setPanProperty's validation (CP-2): Pan is range-checked,
+    // not clamped.
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    EXPECT_THROW(fx->Play(1.0f, 0.0f, 1.5f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx->Play(1.0f, 0.0f, -1.5f), System::ArgumentOutOfRangeException);
+}
+
+TEST(SoundEffectTest, PlayClampsPitchInsteadOfThrowing)
+{
+    // Matches SoundEffectInstance::setPitchProperty (CP-2): Pitch is clamped to [-1, 1], never
+    // rejected, so an out-of-range value still plays successfully.
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    EXPECT_TRUE(fx->Play(1.0f, 5.0f, 0.0f));
+    EXPECT_TRUE(fx->Play(1.0f, -5.0f, 0.0f));
+}
+
 TEST(SoundEffectTest, DisposeIsIdempotentAndPlayReturnsFalse)
 {
     auto fx = makeEffect();
