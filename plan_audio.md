@@ -40,7 +40,7 @@
 | 12 | AudioListener | 118 | Úplný (datová třída) | bez chování — bez chyb |
 | 13 | AudioChannels.hpp | enum | Úplný | OK |
 | 14 | AudioStopOptions.hpp | enum | Úplný | OK |
-| 15 | Microphone | 217 | Funkční, T-4A hotové s výhradou | reálný SDL3 capture (enumerace/Start/Stop/GetData) hotový; `GetSampleDuration`/`GetSampleSizeInBytes` **nedeleguje** na `SoundEffect` jak T-4A požadovalo (MC-1); zastaralý `friend class MicrophoneFactory` komentář (MC-2) |
+| 15 | Microphone | 217 | Funkční, T-4A hotové | reálný SDL3 capture (enumerace/Start/Stop/GetData) hotový; `GetSampleDuration`/`GetSampleSizeInBytes` teď deleguje na `SoundEffect` (MC-1, hotovo 2026-07-03); zastaralý `friend class MicrophoneFactory` komentář zbývá (MC-2) |
 | 16 | MicrophoneState.hpp | enum | Úplný | OK |
 | 17 | RendererDetail | 79 | Částečný | chybí `Equals`; neúplný doxygen |
 | 18 | InstancePlayLimitException | 35 | Částečný | dědí `std::runtime_error`, má být `ExternalException` |
@@ -686,13 +686,14 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 > `NoMicrophoneConnectedException`) zkontrolovány řádek po řádku — plně kompatibilní, žádné nové
 > úkoly.
 
-- [ ] **MC-1 — `Microphone::GetSampleDuration`/`GetSampleSizeInBytes` nedeleguje na `SoundEffect`,
-  vlastní vzorec má jinou přesnost než FNA.** FNA volá `SoundEffect.GetSampleDuration`/
-  `GetSampleSizeInBytes(sizeInBytes, SampleRate, AudioChannels.Mono)`, které zaokrouhlují na celé
-  milisekundy. CNA `Microphone::GetSampleDuration` místo toho počítá vlastní
-  `seconds = sizeInBytes/(SAMPLERATE*channels*2)` bez zaokrouhlení — pro nedělitelné hodnoty (např.
-  100 B @ 44100 Hz mono) vrátí jinou hodnotu než FNA. Toto je přesně nesplněné accept-kritérium
-  T-4A (viz poznámka u T-4A výše) — `GetSampleSizeInBytes` je numericky ekvivalentní, ale duplicitní.
+- [x] **MC-1 — `Microphone::GetSampleDuration`/`GetSampleSizeInBytes` nedeleguje na `SoundEffect`,
+  vlastní vzorec má jinou přesnost než FNA.** *(hotovo 2026-07-03.)* FNA volá
+  `SoundEffect.GetSampleDuration`/`GetSampleSizeInBytes(sizeInBytes, SampleRate,
+  AudioChannels.Mono)`, které zaokrouhlují na celé milisekundy. CNA `Microphone::GetSampleDuration`
+  místo toho počítala vlastní `seconds = sizeInBytes/(SAMPLERATE*channels*2)` bez zaokrouhlení —
+  pro nedělitelné hodnoty (např. 100 B @ 44100 Hz mono) vracela jinou hodnotu než FNA. Toto bylo
+  přesně nesplněné accept-kritérium T-4A (viz poznámka u T-4A výše) — `GetSampleSizeInBytes` byla
+  numericky ekvivalentní, ale duplicitní.
   *FNA:* Microphone.cs:172-188; SoundEffect.cs:363-387.
   *CNA:* Microphone.cpp:161-176 (vlastní vzorec); SoundEffect.cpp:334-363 (správná implementace,
   na kterou by se mělo delegovat).
@@ -700,6 +701,14 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `SoundEffect::GetSampleDuration(sizeInBytes, SAMPLERATE, AudioChannels::Mono)`/
   `GetSampleSizeInBytes(...)` (žádná duplicitní matematika). Test na neceločíselnou hranici (100 B)
   ověřující useknutí na celé ms shodné s FNA.
+  *Pozn.:* obě metody teď jednořádkově volají `SoundEffect::GetSampleDuration`/
+  `GetSampleSizeInBytes(…, getSampleRateProperty(), AudioChannels::Mono)` — žádná duplicitní
+  matematika, přesně jako FNA (Microphone.cs:172-188). Nový test
+  `GetSampleDurationDelegatesToSoundEffectWithMonoAndSampleRate` (100 B → 1,133 ms useknuto na
+  1 ms) ověřen na PŮVODNÍM (pre-fix) kódu přes `git stash` — bez opravy selže (staré vlastní
+  vzorec vrátí neuseknutou hodnotu), s opravou projde. Doprovodný test pro
+  `GetSampleSizeInBytes` numericky nerozlišuje staré/nové chování (obě jsou ekvivalentní), ale
+  pinuje delegaci do budoucna. Celá sada 1986/1986 testů zelená.
 
 - [ ] **MC-2 — Zastaralý komentář a mrtvá deklarace `friend class MicrophoneFactory` v
   `Microphone.hpp`.** `MicrophoneFactory` nikde v repozitáři neexistuje a od T-4A reálný SDL3

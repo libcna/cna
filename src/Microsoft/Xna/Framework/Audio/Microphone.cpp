@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
@@ -160,19 +161,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     System::TimeSpan Microphone::GetSampleDuration(SharpRuntime::intcs sizeInBytes) const
     {
-        const double seconds =
-            static_cast<double>(sizeInBytes) /
-            static_cast<double>(SAMPLERATE * static_cast<SharpRuntime::intcs>(AudioChannels::Mono) * 2);
-
-        return System::TimeSpan::FromSeconds(seconds);
+        return SoundEffect::GetSampleDuration(sizeInBytes, getSampleRateProperty(), AudioChannels::Mono);
     }
 
     SharpRuntime::intcs Microphone::GetSampleSizeInBytes(System::TimeSpan duration) const
     {
-        const double seconds = duration.getTotalSecondsProperty();
-        return static_cast<SharpRuntime::intcs>(
-            seconds * SAMPLERATE * static_cast<SharpRuntime::intcs>(AudioChannels::Mono) * 2
-        );
+        return SoundEffect::GetSampleSizeInBytes(duration, getSampleRateProperty(), AudioChannels::Mono);
     }
 
     void Microphone::Start()

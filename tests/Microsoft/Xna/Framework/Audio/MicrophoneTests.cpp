@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
 #include "Microsoft/Xna/Framework/Audio/MicrophoneState.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/TimeSpan.hpp"
@@ -13,8 +14,10 @@
 #include <utility>
 #include <vector>
 
+using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::Microphone;
 using Microsoft::Xna::Framework::Audio::MicrophoneState;
+using Microsoft::Xna::Framework::Audio::SoundEffect;
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -168,6 +171,28 @@ TEST(MicrophoneTest, GetSampleDurationOfZeroBytesIsZero)
 {
     Microphone mic = MakeMic();
     EXPECT_DOUBLE_EQ(mic.GetSampleDuration(0).getTotalSecondsProperty(), 0.0);
+}
+
+TEST(MicrophoneTest, GetSampleDurationDelegatesToSoundEffectWithMonoAndSampleRate)
+{
+    Microphone mic = MakeMic();
+    // 100 bytes / (mono * 2 bytes/sample) = 50 samples; 50 / (44100/1000.0) = 1.133...ms,
+    // which SoundEffect::GetSampleDuration truncates to a whole millisecond (1ms). The old
+    // formula computed fractional seconds directly and would not match this truncation --
+    // this pins the delegation FNA's Microphone.GetSampleDuration performs (MC-1).
+    const auto expected = SoundEffect::GetSampleDuration(
+        100, mic.getSampleRateProperty(), AudioChannels::Mono);
+    EXPECT_TRUE(mic.GetSampleDuration(100) == expected);
+    EXPECT_EQ(mic.GetSampleDuration(100).getMillisecondsProperty(), 1);
+}
+
+TEST(MicrophoneTest, GetSampleSizeInBytesDelegatesToSoundEffectWithMonoAndSampleRate)
+{
+    Microphone mic = MakeMic();
+    const auto duration = System::TimeSpan::FromMilliseconds(250);
+    const auto expected = SoundEffect::GetSampleSizeInBytes(
+        duration, mic.getSampleRateProperty(), AudioChannels::Mono);
+    EXPECT_EQ(mic.GetSampleSizeInBytes(duration), expected);
 }
 
 // ===================== GetData =====================
