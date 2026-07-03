@@ -36,6 +36,23 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         static int GetFormatSizeEXT(SurfaceFormat format);
 
+        /**
+         * @brief Gets the OpenGL pixel-store alignment to use for the given format.
+         *
+         * @param format The surface format to query.
+         * @return `min(8, GetFormatSizeEXT(format))`, matching the OpenGL 2.1 requirement that
+         *         `GL_PACK_ALIGNMENT`/`GL_UNPACK_ALIGNMENT` never exceed 8.
+         */
+        static int GetPixelStoreAlignment(SurfaceFormat format);
+
+        /**
+         * @brief Throws if @p elementSizeInBytes does not evenly divide the byte size of @p format.
+         *
+         * @param format The surface format being read.
+         * @param elementSizeInBytes The size, in bytes, of the destination element type.
+         */
+        static void ValidateGetDataFormat(SurfaceFormat format, int elementSizeInBytes);
+
     public:
         /**
          * @brief Throws std::runtime_error if @p fmt is not yet implemented.

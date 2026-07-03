@@ -1213,6 +1213,49 @@ any CNA `SetData`/`GetData` path, since `Texture::ValidateFormat` still blocks e
 format before that logic would ever run — but they'll become load-bearing once later Phase 34
 tasks add real support for more formats.
 
+### Texture::GetPixelStoreAlignment / ValidateGetDataFormat (Task 283, Phase 34)
+
+Ported the remaining two methods from FNA's "Static SurfaceFormat Size Methods" region
+(`Texture.cs`) that Task 282 left for this task: `GetPixelStoreAlignment(SurfaceFormat)` and
+`ValidateGetDataFormat(SurfaceFormat, int elementSizeInBytes)`. Both build on Task 282's
+`GetFormatSizeEXT`.
+
+- `GetPixelStoreAlignment` returns `min(8, GetFormatSizeEXT(format))` — the OpenGL 2.1 spec caps
+  `GL_PACK_ALIGNMENT`/`GL_UNPACK_ALIGNMENT` at 8, so no format's natural byte size can be used
+  directly above that.
+- `ValidateGetDataFormat` throws unless `elementSizeInBytes` evenly divides
+  `GetFormatSizeEXT(format)` — e.g. reading a `Color` (4 bytes/texel) resource into a 3-byte
+  element type is invalid; a 4-byte or 2-byte or 1-byte element all divide evenly.
+
+**Intentional visibility deviation, documented here per project convention (not in source
+comments):** FNA declares both methods `internal` (assembly-wide visibility in C#). CNA has no
+direct equivalent reachable from all 4 real call sites — `Texture3D::GetData`, `TextureCube::
+GetData`, and `GraphicsDevice::GetBackBufferData` are not subclasses of `Texture` in CNA (the same
+class-hierarchy gap Task 277/863 already documents: `Texture3D`/`TextureCube` inherit
+`GraphicsResource` directly, not `Texture`), so a `protected` member would be unreachable from
+three of the four places that need it. Made both `public static` on `Texture` instead — the
+simplest option that actually works, and low-risk since neither method touches any instance state
+(both are pure functions of their parameters).
+
+Wired `ValidateGetDataFormat` into all 4 of FNA's real call sites, matching `Texture2D.cs`
+(`GetData`, both the 3-arg and 5-arg overloads), `Texture3D.cs` (`GetData`'s 10-arg overload),
+`TextureCube.cs` (`GetData`'s 6-arg overload), and `GraphicsDevice.cs`
+(`GetBackBufferData`'s 4-arg rect overload) exactly, using `elementSizeInBytes = 4` at every site
+(this project's fixed `Color`/RGBA-raw-bytes convention — CNA has no generic-typed `GetData<T>`
+yet, unlike FNA). Since every current caller uses `Color` (always divides evenly by 4), this check
+is a no-op in practice everywhere it's wired in today, matching `GetFormatSizeEXT`/
+`GetPixelStoreAlignment`'s own status — but it is the exact, correct FNA-conformant
+infrastructure for whenever future Phase 34 tasks add real non-`Color` format support or
+generic-typed accessors.
+
+Added 6 new unit tests to `TextureTests.cpp`: `GetPixelStoreAlignment` for small formats (own
+size), large formats (clamped to 8), and an invalid-format throw; `ValidateGetDataFormat` for
+even-division (no throw), uneven-division (`std::invalid_argument`), and invalid-format
+(`std::out_of_range`, consistent with `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT`'s precedent from
+Task 282). Verified across all three backends after wiring the new check into the 4 existing
+`GetData` call sites: EasyGL 2004/2006 ctest pass, Vulkan 1942/1944 (2 pre-existing, unrelated
+failures), Bgfx 1939/1939 (100%) — no regressions.
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`

@@ -163,6 +163,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
             throw std::out_of_range("TextureCube::GetData: rectangle out of texture bounds");
+        Texture::ValidateGetDataFormat(format_, 4);
 
         if (!backend_) return;
         std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);

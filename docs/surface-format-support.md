@@ -76,10 +76,22 @@ invented; both throw `std::out_of_range` for an unrecognized enum value.
 | HalfVector4, Rgba64, Vector2, HdrBlendable | 1 | 8 |
 | Vector4 | 1 | 16 |
 
-Not yet ported: FNA's `ValidateGetDataFormat`/`GetPixelStoreAlignment`, which consume
-`GetFormatSizeEXT` and are the actual "required for `SetData`/`GetData`" helpers — tracked as
-Task 283. Not yet load-bearing in CNA since `Texture::ValidateFormat` still blocks every non-`Color`
-format before any of this logic would run.
+**Task 283** ported the remaining two methods from the same FNA region:
+
+- `Texture::GetPixelStoreAlignment(format)` — `min(8, GetFormatSizeEXT(format))`, the OpenGL 2.1
+  `GL_PACK_ALIGNMENT`/`GL_UNPACK_ALIGNMENT` cap.
+- `Texture::ValidateGetDataFormat(format, elementSizeInBytes)` — throws `std::invalid_argument`
+  unless `elementSizeInBytes` evenly divides `GetFormatSizeEXT(format)`; throws `std::out_of_range`
+  for an unrecognized format, same as `GetFormatSizeEXT` itself.
+
+Both are `internal` in FNA; made `public static` on CNA's `Texture` instead (documented, intentional
+deviation — see `AUDIT.md`), since 3 of the 4 real call sites aren't subclasses of `Texture` in CNA.
+Wired `ValidateGetDataFormat` into all 4 of FNA's real call sites: `Texture2D::GetData`,
+`Texture3D::GetData`, `TextureCube::GetData`, `GraphicsDevice::GetBackBufferData` — all using
+`elementSizeInBytes = 4` (this project's `Color`/RGBA-raw-bytes convention). Currently a no-op in
+practice everywhere, since `Texture::ValidateFormat` still blocks every non-`Color` format before
+any of this logic would run — but it's the correct, forward-looking infrastructure for future
+Phase 34 format support.
 
 ---
 

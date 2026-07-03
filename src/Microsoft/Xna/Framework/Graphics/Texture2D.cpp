@@ -288,6 +288,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::invalid_argument("data must not be null and elementCount must be > 0");
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
+        Texture::ValidateGetDataFormat(format_, 4);
         if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
 
@@ -317,6 +318,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
         if (level < 0)
             throw std::out_of_range("Texture2D::GetData: level must be >= 0");
+        Texture::ValidateGetDataFormat(format_, 4);
 
         const std::vector<uint8_t>* buf = getMipBufferConst(level);
         if (!buf)

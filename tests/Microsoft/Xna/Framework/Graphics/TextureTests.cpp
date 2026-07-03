@@ -125,3 +125,55 @@ TEST(TextureTest, GetFormatSizeEXT_InvalidValueThrowsOutOfRange)
     EXPECT_THROW(Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(27)), std::out_of_range);
     EXPECT_THROW(Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(-1)), std::out_of_range);
 }
+
+// -----------------------------------------------------------------------
+// GetPixelStoreAlignment — min(8, GetFormatSizeEXT(format)) (Task 283)
+// -----------------------------------------------------------------------
+
+TEST(TextureTest, GetPixelStoreAlignment_SmallFormatsReturnOwnSize)
+{
+    EXPECT_EQ(Texture::GetPixelStoreAlignment(SurfaceFormat::Alpha8), 1);
+    EXPECT_EQ(Texture::GetPixelStoreAlignment(SurfaceFormat::Bgr565), 2);
+    EXPECT_EQ(Texture::GetPixelStoreAlignment(SurfaceFormat::Color), 4);
+    EXPECT_EQ(Texture::GetPixelStoreAlignment(SurfaceFormat::HalfVector4), 8);
+}
+
+TEST(TextureTest, GetPixelStoreAlignment_LargeFormatsClampToEight)
+{
+    // Vector4 is 16 bytes/texel; GL_PACK/UNPACK_ALIGNMENT cannot exceed 8 (OpenGL 2.1 spec).
+    EXPECT_EQ(Texture::GetPixelStoreAlignment(SurfaceFormat::Vector4), 8);
+    EXPECT_EQ(Texture::GetPixelStoreAlignment(SurfaceFormat::Dxt3), 8);
+    EXPECT_EQ(Texture::GetPixelStoreAlignment(SurfaceFormat::Bc7EXT), 8);
+}
+
+TEST(TextureTest, GetPixelStoreAlignment_InvalidValueThrowsOutOfRange)
+{
+    EXPECT_THROW(Texture::GetPixelStoreAlignment(static_cast<SurfaceFormat>(27)), std::out_of_range);
+}
+
+// -----------------------------------------------------------------------
+// ValidateGetDataFormat — throws unless elementSizeInBytes evenly divides the format size (Task 283)
+// -----------------------------------------------------------------------
+
+TEST(TextureTest, ValidateGetDataFormat_EvenDivisionDoesNotThrow)
+{
+    // Color is 4 bytes/texel: a 4-byte element (matches this project's Color/RGBA convention).
+    EXPECT_NO_THROW(Texture::ValidateGetDataFormat(SurfaceFormat::Color, 4));
+    // Vector4 is 16 bytes/texel: a 4-byte float element divides evenly (4 floats per texel).
+    EXPECT_NO_THROW(Texture::ValidateGetDataFormat(SurfaceFormat::Vector4, 4));
+    // Dxt1 is 8 bytes/block: a 1-byte element divides evenly.
+    EXPECT_NO_THROW(Texture::ValidateGetDataFormat(SurfaceFormat::Dxt1, 1));
+}
+
+TEST(TextureTest, ValidateGetDataFormat_UnevenDivisionThrowsInvalidArgument)
+{
+    // Alpha8 is 1 byte/texel: a 4-byte element cannot divide it evenly.
+    EXPECT_THROW(Texture::ValidateGetDataFormat(SurfaceFormat::Alpha8, 4), std::invalid_argument);
+    // Color is 4 bytes/texel: a 3-byte element cannot divide it evenly.
+    EXPECT_THROW(Texture::ValidateGetDataFormat(SurfaceFormat::Color, 3), std::invalid_argument);
+}
+
+TEST(TextureTest, ValidateGetDataFormat_InvalidFormatThrowsOutOfRange)
+{
+    EXPECT_THROW(Texture::ValidateGetDataFormat(static_cast<SurfaceFormat>(27), 4), std::out_of_range);
+}

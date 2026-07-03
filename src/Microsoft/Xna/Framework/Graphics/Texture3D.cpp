@@ -143,6 +143,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture3D::GetData: level must be >= 0");
         if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
             throw std::out_of_range("Texture3D::GetData: box position/size is invalid");
+        Texture::ValidateGetDataFormat(format_, 4);
 
         if (!backend_) return;
         std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);

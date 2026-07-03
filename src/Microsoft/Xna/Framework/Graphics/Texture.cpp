@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 
@@ -90,6 +91,19 @@ namespace Microsoft::Xna::Framework::Graphics
             default:
                 throw std::out_of_range("Texture::GetFormatSizeEXT: format is not a valid SurfaceFormat value");
         }
+    }
+
+    int Texture::GetPixelStoreAlignment(SurfaceFormat format)
+    {
+        return std::min(8, GetFormatSizeEXT(format));
+    }
+
+    void Texture::ValidateGetDataFormat(SurfaceFormat format, int elementSizeInBytes)
+    {
+        if (GetFormatSizeEXT(format) % elementSizeInBytes != 0)
+            throw std::invalid_argument(
+                "Texture::ValidateGetDataFormat: the type used for the destination element is an "
+                "invalid size for this resource");
     }
 
     void Texture::ValidateFormat(SurfaceFormat fmt)

@@ -1522,6 +1522,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (elementCount < w * h)
             throw std::runtime_error("GetBackBufferData: data array too small for requested region");
+        Texture::ValidateGetDataFormat(presentationParameters_.getBackBufferFormatProperty(), 4);
 
         // Color inherits a vtable pointer, so its first byte is NOT the R component.
         // Use a plain byte buffer for ReadBackbuffer, then unpack each RGBA group
