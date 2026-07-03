@@ -27,8 +27,20 @@ using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
 using Microsoft::Xna::Framework::Audio::SoundBank;
 
+namespace Microsoft::Xna::Framework::Audio
+{
+    // Test-only accessor exposing which sound a variation table selected (via its category
+    // index) without needing a real WaveBank/audio device to observe playback (see Cue.hpp).
+    struct CueTestAccess
+    {
+        static uint16_t CategoryIndex(const Cue& cue) { return cue.categoryIdx_; }
+    };
+}
+
 namespace
 {
+    using Microsoft::Xna::Framework::Audio::CueTestAccess;
+
     void AppendU8(std::vector<uint8_t>& buf, uint8_t v) { buf.push_back(v); }
 
     void AppendU16(std::vector<uint8_t>& buf, uint16_t v)
@@ -193,6 +205,112 @@ namespace
         return data;
     }
 
+    // .xsb with 2 simple sounds (distinguished only by categoryIndex: 0 and 1) and one
+    // complex cue ("Weighted") referencing a SOUND-type variation table with 2 entries whose
+    // weight ranges are lopsided (weight 1 vs weight 99 out of a total of 100) -- regression
+    // fixture for XA-3. Neither sound references a real wavebank, so Cue::Play() cannot spawn
+    // a SoundEffectInstance, but it still resolves and stores the picked sound's category
+    // index (categoryIdx_) before attempting to, which is enough to observe the pick without
+    // a working audio device.
+    std::vector<uint8_t> BuildXsbFixtureBytesWithWeightedVariation()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize; // 138
+        constexpr uint32_t soundSize    = 12; // simple sound: flags+cat+vol+pitch+prio+len+waveIdx+wbIdx
+
+        const uint32_t soundOffset        = baseOffset;                 // 138
+        const uint32_t sound0Code         = soundOffset;                 // 138
+        const uint32_t sound1Code         = soundOffset + soundSize;     // 150
+        const uint32_t variationOffset    = soundOffset + 2 * soundSize; // 162
+        const uint32_t cueComplexOffset   = variationOffset + 20;        // 182 (table is 20 bytes)
+        const uint32_t cueNameIndexOffset = cueComplexOffset + 15;       // 197 (entry is 15 bytes)
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;      // 203
+        const std::string cueName         = "Weighted";
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 1); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 0);  // wavebankCount
+        AppendU16(data, 2); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, static_cast<int32_t>(cueComplexOffset));
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, static_cast<int32_t>(variationOffset));
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "WeightedTestBank", bankNameSize);
+
+        // Sound 0: categoryIndex=0 ("low weight" pick)
+        AppendU8(data, 0);   // flags: simple, no RPC/DSP
+        AppendU16(data, 0);  // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte (unused by this test)
+        AppendU16(data, 0);  // pitchCents
+        AppendU8(data, 0);   // priority
+        AppendU16(data, 0);  // soundLength (skipped)
+        AppendU16(data, 0);  // waveIdx
+        AppendU8(data, 0);   // wbIdx
+
+        // Sound 1: categoryIndex=1 ("high weight" pick)
+        AppendU8(data, 0);
+        AppendU16(data, 1);
+        AppendU8(data, 0xFF);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+        AppendU16(data, 0);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+
+        // Variation table: type=SOUND(1), 2 entries.
+        const uint32_t entryCountAndFlags = 2u | (1u << 19); // entryCount=2, type=1 (SOUND)
+        AppendU32(data, entryCountAndFlags);
+        AppendU16(data, 0);   // unknown
+        AppendU16(data, static_cast<uint16_t>(-1)); // variable (unused, not interactive)
+
+        AppendU32(data, sound0Code); // entry 0: weight = 1-0 = 1
+        AppendU8(data, 0);           // weightMin
+        AppendU8(data, 1);           // weightMax
+
+        AppendU32(data, sound1Code); // entry 1: weight = 100-1 = 99
+        AppendU8(data, 1);           // weightMin
+        AppendU8(data, 100);         // weightMax
+
+        // Complex cue "Weighted": not single-sound, sbCode points at the variation table.
+        AppendU8(data, 0);   // flags (CUE_FLAG_SINGLE_SOUND clear)
+        AppendU32(data, variationOffset); // sbCode
+        AppendU32(data, 0); // transitionOffset
+        AppendU8(data, 0xFF); // instanceLimit
+        AppendU16(data, 0); // fadeInMS
+        AppendU16(data, 0); // fadeOutMS
+        AppendU8(data, 0);  // maxInstanceBehavior
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0); // unknown
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
     std::string WriteFixture(const std::string& dirName, const std::string& fileName,
                               const std::vector<uint8_t>& bytes)
     {
@@ -218,6 +336,13 @@ namespace
         return path;
     }
 
+    const std::string& XsbWeightedVariationFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_cue_test", "fixture_weighted.xsb", BuildXsbFixtureBytesWithWeightedVariation());
+        return path;
+    }
+
     // Both fixtures are parseable, unlike the "stub" AudioEngine used by
     // SoundBankTests.cpp/WaveBankTests.cpp, so "Volume" is a real, engine-known
     // global variable Cue::GetVariable/SetVariable can validate against.
@@ -230,6 +355,12 @@ namespace
     SoundBank& SharedBank()
     {
         static SoundBank bank(&SharedEngine(), XsbFixturePath());
+        return bank;
+    }
+
+    SoundBank& SharedWeightedVariationBank()
+    {
+        static SoundBank bank(&SharedEngine(), XsbWeightedVariationFixturePath());
         return bank;
     }
 
@@ -463,4 +594,25 @@ TEST(CueTest, GetTypeNameIsDottedXnaName)
 {
     auto cue = MakeCue();
     EXPECT_EQ(cue->GetTypeName(), "Microsoft.Xna.Framework.Audio.Cue");
+}
+
+// ===================== Variation selection (XA-3) =====================
+
+TEST(CueTest, PlayWeightedVariationFavorsHigherWeightEntryStatistically)
+{
+    auto cue = std::unique_ptr<Cue>(SharedWeightedVariationBank().GetCue("Weighted"));
+
+    constexpr int kIterations = 200;
+    int highWeightPicks = 0;
+    for (int i = 0; i < kIterations; ++i)
+    {
+        cue->Play();
+        if (CueTestAccess::CategoryIndex(*cue) == 1)
+            ++highWeightPicks;
+    }
+
+    // Entry 1 carries weight 99 of a total 100 -- it should be picked ~99% of the time.
+    // Uniform (unweighted) selection between the two entries would land close to 50%, so an
+    // 80% threshold cleanly distinguishes weighted selection from the old uniform pick.
+    EXPECT_GT(highWeightPicks, kIterations * 0.8);
 }

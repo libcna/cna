@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -147,5 +148,9 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<WaveBank*> waveBanksUsed_;
 
         void StopInternal(bool immediate);
+
+        // Tests need to observe which sound a variation table selected (via the category
+        // index it carries) without a real WaveBank/audio device backing playback.
+        NOXNA friend struct CueTestAccess;
     };
 }

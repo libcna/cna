@@ -570,16 +570,28 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   ADPCM (ř. 263) používá identický fix, ale nemá vlastní fixture (ADPCM parsing nemá žádné testy
   vůbec — sledováno pod IN-6, ne znovu zde).
 
-- [ ] **XA-3 — `Cue::Play` ignoruje autorské `weightMin`/`weightMax` a typ výběru variace, vždy
-  vybírá uniformně náhodně.** `XsbVariEntry::weightMin/weightMax` jsou parserem načtené, ale
-  `Cue::Play` je nikde nepoužívá — vždy použije `std::uniform_int_distribution` přes všechny
-  entries místo vážené pravděpodobnosti. Chybí i rozlišení ostatních XACT variation types
-  (Ordered/OrderedFromRandom/RandomNoImmediateRepeats/Shuffle) — `var.lastSelected` je deklarováno,
-  ale nikde se nečte ani nezapisuje.
+- [x] **XA-3 — `Cue::Play` ignoruje autorské `weightMin`/`weightMax` a typ výběru variace, vždy
+  vybírá uniformně náhodně.** *(hotovo 2026-07-03.)* `XsbVariEntry::weightMin/weightMax` jsou
+  parserem načtené, ale `Cue::Play` je nikde nepoužívala — vždy použila
+  `std::uniform_int_distribution` přes všechny entries místo vážené pravděpodobnosti. Chybělo i
+  rozlišení ostatních XACT variation types (Ordered/OrderedFromRandom/RandomNoImmediateRepeats/
+  Shuffle) — `var.lastSelected` je deklarováno, ale nikde se nečte ani nezapisuje.
   *CNA:* Cue.cpp:139-197, XactTypes.hpp:88-105.
   *Accept:* výběr respektuje `weightMin`/`weightMax` (vážený náhodný výběr) alespoň pro náhodné
   typy; pro ne-náhodné typy implementace nebo zdokumentovaná odchylka; test ověřující, že entry s
   vahou blížící se 100 je vybírána statisticky výrazně častěji.
+  *Pozn.:* FAudio (`get_active_variation_index`, FACT_internal.c:467-525) používá **stejný**
+  vážený algoritmus pro VŠECHNY non-interaktivní typy (wave/sound/compact_wave) — žádné
+  Ordered/Shuffle/RandomNoImmediateRepeats FAudio samo neimplementuje, takže to není součástí
+  reálného FNA chování k dohnání. `Cue::Play` teď počítá `totalWeight = Σ(weightMax-weightMin)`
+  a vybírá entry váženou loterií 1:1 podle FAudio algoritmu (sken od posledního entry, `value >
+  (remaining - weight)`); degenerovaný případ (`totalWeight==0` — dnes jen interaktivní typ 3,
+  kde se `var_min`/`var_max` zatím neparsují do `XsbVariEntry`) padá zpět na uniformní výběr,
+  zdokumentováno v CHECKLIST.md. Nový test
+  `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically` (2 sound entries, váhy 1 a
+  99 ze 100, 200x `Play()`, práh 80 %) ověřen na PŮVODNÍM (pre-fix) kódu přes `git stash` — bez
+  opravy konzistentně kolem 45-55 % (uniform), s opravou konzistentně >90 %. Celá sada
+  1988/1988 testů zelená.
 
 - [ ] **XA-4 — `AudioEngine` dvouparametrový konstruktor tiše zahazuje `lookAheadTime` i
   `rendererId` bez zdokumentované odchylky.** Oba parametry jsou zakomentované a nikam se

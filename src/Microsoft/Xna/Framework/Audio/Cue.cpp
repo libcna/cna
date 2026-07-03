@@ -152,19 +152,43 @@ namespace Microsoft::Xna::Framework::Audio
 
             if (!var.entries.empty())
             {
-                uint16_t pick = 0;
+                // FACT selects a variation entry via a weighted lottery over each entry's
+                // [weightMin, weightMax) range (FAudio's get_active_variation_index): entries
+                // authored with a wider weight range are proportionally more likely to be
+                // picked, not merely one-of-N uniformly. This applies to every non-interactive
+                // table type (wave/sound/compact_wave) -- FAudio itself uses the identical
+                // algorithm for all of them. Interactive tables (type==3) instead select by a
+                // per-cue/global variable's value range, but the parser does not yet retain
+                // that range in XsbVariEntry, so those (and any other degenerate all-zero-
+                // weight table) fall back to a uniform pick (documented deviation, see
+                // CHECKLIST.md).
+                uint32_t totalWeight = 0;
+                for (const auto& e : var.entries)
+                    totalWeight += static_cast<uint32_t>(e.weightMax) - e.weightMin;
 
-                if (var.type == 0 || var.type == 4) // wave variation — pick randomly
+                uint16_t pick = 0;
+                if (totalWeight == 0)
                 {
                     std::uniform_int_distribution<uint16_t> dist(
                         0, static_cast<uint16_t>(var.entries.size() - 1));
                     pick = dist(Rng());
                 }
-                else if (var.type == 1) // sound variation
+                else
                 {
-                    std::uniform_int_distribution<uint16_t> dist(
-                        0, static_cast<uint16_t>(var.entries.size() - 1));
-                    pick = dist(Rng());
+                    std::uniform_int_distribution<uint32_t> valueDist(0, totalWeight - 1);
+                    const uint32_t value = valueDist(Rng());
+                    uint32_t remaining = totalWeight;
+                    for (int32_t i = static_cast<int32_t>(var.entries.size()) - 1; i > 0; --i)
+                    {
+                        const uint32_t weight =
+                            static_cast<uint32_t>(var.entries[i].weightMax) - var.entries[i].weightMin;
+                        if (value > (remaining - weight))
+                        {
+                            pick = static_cast<uint16_t>(i);
+                            break;
+                        }
+                        remaining -= weight;
+                    }
                 }
 
                 const XsbVariEntry& ve = var.entries[pick];
