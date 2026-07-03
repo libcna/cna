@@ -83,28 +83,28 @@ protected:
             TextureCube t(dev, 2, false, SurfaceFormat::Color);
         });
 
-        // ── sRGB formats must throw (Task 176 focus) ─────────────────────────
+        // ── sRGB / EXT formats must throw (Task 176 focus) ───────────────────
 
-        expectThrows("Texture2D ColorSrgb", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorSrgb);
+        expectThrows("Texture2D ColorSrgbEXT", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
-        expectThrows("Texture2D Dxt1Srgb", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1Srgb);
+        expectThrows("Texture2D Bc7EXT", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7EXT);
         });
-        expectThrows("Texture2D Dxt3Srgb", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt3Srgb);
+        expectThrows("Texture2D Bc7SrgbEXT", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7SrgbEXT);
         });
-        expectThrows("Texture2D Dxt5Srgb", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5Srgb);
+        expectThrows("Texture2D Dxt5SrgbEXT", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5SrgbEXT);
         });
-        expectThrows("Texture2D Bgr565Srgb", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565Srgb);
+        expectThrows("Texture2D ColorBgraEXT", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorBgraEXT);
         });
-        expectThrows("TextureCube ColorSrgb", [&]{
-            TextureCube t(dev, 2, false, SurfaceFormat::ColorSrgb);
+        expectThrows("TextureCube ColorSrgbEXT", [&]{
+            TextureCube t(dev, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
-        expectThrows("Texture3D ColorSrgb", [&]{
-            Texture3D t(dev, 2, 2, 2, false, SurfaceFormat::ColorSrgb);
+        expectThrows("Texture3D ColorSrgbEXT", [&]{
+            Texture3D t(dev, 2, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
 
         // ── Other unsupported formats must throw ─────────────────────────────

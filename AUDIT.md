@@ -1120,6 +1120,53 @@ allocation, both texture types) and Task 865 (Vulkan `GetData` readback implemen
 of any readback API is treated as an accepted, already-documented, project-wide limitation, not a
 bug). **This closes Phase 33 (Tasks 271–280) — all ten tasks are now done.**
 
+### SurfaceFormat canonical enum table — found and fixed a real enum-conformance bug (Task 281, Phase 34, opens the phase)
+
+Phase 34's first task asks for a canonical reference table of all 27 XNA/FNA `SurfaceFormat`
+values with their numeric ordinals — a documentation deliverable. Building it directly against
+FNA's `SurfaceFormat.cs` (rather than against CNA's existing enum) is what caught this.
+
+**Finding:** CNA's `SurfaceFormat` enum matched FNA exactly for ordinals 0–19, but diverged
+completely from ordinal 20 onward. FNA's real values at 20–26 are `ColorBgraEXT`, `ColorSrgbEXT`,
+`Dxt5SrgbEXT`, `Bc7EXT`, `Bc7SrgbEXT`, `ByteEXT`, `UShortEXT` — FNA extensions beyond the original
+XNA4 enum, but still part of FNA's real, current API surface (per project convention, FNA is the
+authoritative reference, not just "original Microsoft XNA4"). CNA instead had 7 invented "Srgb"
+variants at those same ordinals (`ColorSrgb`, `Bgr565Srgb`, `Bgra5551Srgb`, `Bgra4444Srgb`,
+`Dxt1Srgb`, `Dxt3Srgb`, `Dxt5Srgb`) that don't exist in FNA at all — no sRGB variant of
+`Bgr565`/`Bgra5551`/`Bgra4444`/`Dxt1`/`Dxt3` exists in real XNA/FNA; only `ColorSrgbEXT` and
+`Dxt5SrgbEXT` do. This is a direct violation of the project's explicit rule that enum names must
+match XNA/FNA exactly — not a stylistic quibble, since every backend does
+`static_cast<int>(format)` at some point, making the ordinal values load-bearing.
+
+Notably, `SurfaceFormatTests.cpp` already existed with a comment reading "XNA 4.0 ordinal values
+(0–19) match FNA source" — pinning exactly the correct range and implicitly flagging (without
+saying so directly) that 20+ was unverified. This was a useful, if silent, breadcrumb from
+whichever earlier task added that file.
+
+**Fixed** `SurfaceFormat.hpp`: replaced the 7 invented values with FNA's real 7, same order/ordinals,
+with Doxygen comments translated from FNA's XML doc comments (matching this project's established
+comment-translation convention). Checked blast radius first via grep before touching anything: only
+one file outside `SurfaceFormat.hpp`/`SurfaceFormatTests.cpp` referenced the old invented names —
+`examples/easygl_surface_format_throws_test.cpp` (Task 176's "unsupported formats throw" test).
+That test works regardless of which specific non-`Color` value is used, since
+`Texture::ValidateFormat` only special-cases `SurfaceFormat::Color` and throws for literally
+everything else — updated the test's 5 references to use real FNA EXT names instead of the
+removed ones. No other source file, anywhere in the repo, referenced any of the 7 removed names
+(confirmed via `grep -rn` before and after the fix). No `SurfaceFormatHelper` or any other
+`switch`-over-`SurfaceFormat` exists yet in the codebase (confirmed via search) — Task 283 will be
+the first to add one, against the now-correct enum.
+
+Added 7 new ordinal-pinning unit tests to `SurfaceFormatTests.cpp` (`ColorBgraEXTIs20` through
+`UShortEXTIs26`), extending the existing 0–19 tests. Added a new "Canonical `SurfaceFormat` enum
+values" section to the top of `docs/surface-format-support.md` (Task 174's pre-existing doc) with
+the full 27-row table, and fixed every stale reference to the old invented names throughout the
+rest of that doc's format table and priority-work sections.
+
+Verified across all three backends: EasyGL 1987/1989 ctest pass, Bgfx 1922/1922 (100%), Vulkan
+1924/1927 (the 3 failures are the already-documented `Vulkan_RenderTargetUsage` flake,
+`Vulkan_FillMode_WireFrame` order-dependency, and `Vulkan_DepthBias`'s `-1e6` sub-case — no new
+failures from this change).
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`
