@@ -982,6 +982,73 @@ non-trivial refactor touching `EffectParameter`, `TextureCollection`, and every 
 texture-bind code — or (b) adding an entirely separate `Texture3D`-specific GPU-binding path outside
 `TextureCollection`. Both are well outside a verify-only audit's scope.
 
+### TextureCube sampling in EnvironmentMapEffect, cross-backend (Task 278, Phase 33)
+
+Unlike Task 277's custom-effect finding, stock effects don't go through `EffectParameter`/
+`TextureCollection` for their textures at all — `EnvironmentMapEffect` stores `TextureCube*`
+directly and forwards it via `FillGpuDrawParams` into `GpuDrawParams::envMap` (a raw
+`const ITextureCubeBackend*`), which every backend's draw dispatch consumes directly. This
+completely bypasses the class-hierarchy problem from Task 277. So this had to be checked per
+backend, not assumed either way.
+
+- **EasyGL** — already fully wired. `EasyGLGraphicsBackend::SelectProgram` dispatches to
+  `EnsureEnvMapped3DProgram()` when `params.envMapping`, which compiles a real reflection shader
+  (`samplerCube uEnvMap`, `envColor = texture(uEnvMap, reflect(-E,N))`). `BindDrawParams` binds
+  `params.envMap->BindGL()` to texture unit 1. The existing `EasyGL_EnvironmentMapEffect_Readback`
+  pixel-readback test (`examples/easygl_env_map_test.cpp`, 4 sub-tests) still passes.
+- **Vulkan** — already fully wired. A dedicated descriptor set layout (binding 0 `sampler2D`,
+  binding 1 `samplerCube`, binding 2 UBO), pipeline, and push-constant path exist specifically for
+  `params.envMapping` (`EnsureEnvMapResources`, `GetOrCreatePipelineEnvMap3D`,
+  `env_map3d.frag.glsl`'s `samplerCube uEnvMap` + `reflect(-E,N)`, matching EasyGL's formula). The
+  existing `Vulkan_EnvironmentMapEffect_Readback` pixel-readback test still passes.
+- **Bgfx — found and fixed a real gap.** `BgfxGraphicsBackend::DrawPrimitivesEx` checked
+  `params.dualTexture` and `params.skinned` but had **no branch at all** for `params.envMapping`.
+  Since `EnvironmentMapEffect::FillGpuDrawParams` also sets `lightingEnabled=true` and
+  `textureEnabled=true`, an `EnvironmentMapEffect` draw would silently fall into the
+  `params.lightingEnabled` branch (`litTextured3DProgram_`) — rendering as plain lit-textured
+  geometry with **no reflection, no cube-map sampling, no specular tint, no error of any kind**.
+  This is a silent behavioral gap, not a crash — confirmed by reading the full `if`/`else if` chain
+  in `DrawPrimitivesEx` before writing any code.
+
+  Fixed by adding full Bgfx support, mirroring the EasyGL/Vulkan reflection formula (no alpha-test
+  branch, matching Vulkan's simpler shader rather than EasyGL's — the two references had already
+  diverged on that point before this task; picking one is a reasonable, documented scope choice):
+  - `vs_env_map3d.sc`/`fs_env_map3d.sc` — new shader pair; `fs_env_map3d.sc` samples
+    `SAMPLERCUBE(s_envMap, 1)` via `reflect(-E,N)`.
+  - `varying.def.sc` — added `v_eyeDir : TEXCOORD1`, needed by the new vertex shader (world-space
+    eye direction) and not covered by any existing varying.
+  - `envMap3DProgram_` + 6 new uniforms (`u_world`, `u_eyePos`, `u_emissiveColor`,
+    `u_envMapAmount`, `u_envMapSpecular`, `s_envMap`) added to `BgfxGraphicsBackend`, created in the
+    constructor and destroyed in the destructor, mirroring the existing `dualTexture3DProgram_`
+    pattern exactly.
+  - A new `params.envMapping` branch in `DrawPrimitivesEx`, inserted between the existing
+    `skinned` and `alphaTestActive` branches, binding `params.texture0` to slot 0 and
+    `params.envMap` (cast to `BgfxTextureCubeBackend`, using its public `handle` member) to slot 1.
+
+  **Regenerating `bgfx_shaders.hpp` required building bgfx's `shaderc` tool from source** — not
+  built by default in this project's `bgfx.cmake` integration (`BGFX_BUILD_TOOLS` is forced `OFF`
+  unless the `CNA_BGFX_BUILD_SHADERC` option is set, and setting only that option didn't
+  self-propagate into forcing `BGFX_BUILD_TOOLS` on a reconfigure — had to pass
+  `-DBGFX_BUILD_TOOLS=ON` directly). Built `shaderc` (~2 minutes, links against the already-built
+  `tint`/`bx`/`bimg` libraries in the existing `cmake-build-bgfx` tree), then ran
+  `compile_shaders.py` against it — all 8 target variants (GLSL/ESSL/SPIR-V/WGSL × vertex/fragment)
+  compiled cleanly for the new shader pair, alongside the 7 pre-existing pairs. Diffed the
+  regenerated `bgfx_shaders.hpp` against the pre-existing one: every GLSL/ESSL/SPIR-V variant and
+  every fragment shader is byte-for-byte identical; only the 7 pre-existing vertex shaders' `_wgsl`
+  (WebGPU) byte arrays changed, apparently from non-deterministic internal symbol numbering in
+  bgfx's `tint`-based WGSL backend across separate invocations. WebGPU isn't wired into any runtime
+  path this project actually exercises today (Linux/OpenGL here; WebGPU is Phase 56–69, parked), so
+  this is inert — flagged here only for diff-review transparency, not a functional concern.
+
+  Bgfx has no GPU readback API in this project (documented pre-existing limitation — see
+  `bgfx_render_target_usage_test.cpp`), so a pixel-verified test analogous to EasyGL/Vulkan's isn't
+  possible. Added `Bgfx_EnvironmentMapEffect_Smoke` (new `examples/bgfx_env_map_test.cpp`) instead:
+  exercises all 4 of the EasyGL/Vulkan test's configurations (varying `EmissiveColor`,
+  `EnvironmentMapAmount`, `EnvironmentMapSpecular`, and the cube map itself) across 3 frames,
+  verifying no crash/exception — confirmed the new program compiles, links, and draws without
+  error on the `OpenGL` bgfx renderer. 1908/1908 Bgfx ctest pass (100%, no regressions from either
+  the shader regeneration or the new draw-dispatch branch).
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`

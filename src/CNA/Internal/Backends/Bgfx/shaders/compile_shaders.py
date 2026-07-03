@@ -55,6 +55,10 @@ SHADER_PAIRS = [
         ("vs_skinned3d",          "vertex",   "vs_skinned3d.sc"),
         ("fs_skinned3d",          "fragment", "fs_skinned3d.sc"),
     ]),
+    ("kEnvMap3dShaders", [
+        ("vs_env_map3d",          "vertex",   "vs_env_map3d.sc"),
+        ("fs_env_map3d",          "fragment", "fs_env_map3d.sc"),
+    ]),
     ("kInstanced3dShaders", [
         ("vs_instanced3d",        "vertex",   "vs_instanced3d.sc"),
         ("fs_instanced3d",        "fragment", "fs_instanced3d.sc"),

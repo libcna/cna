@@ -16,14 +16,13 @@ ported to C++ with minimal API-surface changes.
   271 (`Texture3D` audit), 272 (`TextureCube` audit), 273 (`Texture3D` partial box x/y/z upload
   tests), 274 (`Texture3D` partial box x/y/z readback tests), 275 (`TextureCube` partial rect +
   startIndex tests, all six faces), 276 (`TextureCube` mip-level tests, all six faces — found and
-  fixed a real GPU-storage allocation bug), and 277 (verified `Texture3D` sampling is not wired
-  into any shader — audit-only, no code change, see §3) done. Phases 30 and 31 were already
+  fixed a real GPU-storage allocation bug), 277 (verified `Texture3D` sampling is not wired into
+  any shader — audit-only, no code change), and 278 (verified `TextureCube` sampling in
+  `EnvironmentMapEffect` — EasyGL/Vulkan already fully wired; found and fixed a real gap in Bgfx,
+  which had zero code path for `envMapping` at all, see §3) done. Phases 30 and 31 were already
   complete. New Tasks 663, 862, and 863 were added (unnumbered-sequence, matching existing
-  precedent) for severe findings from Tasks 272, 276, and 277 — see §3. Next up: Task 278 (verify
-  `TextureCube` sampling in EasyGL/Vulkan/Bgfx `EnvironmentMapEffect` — will likely hit the same
-  class-hierarchy wall Task 277 found, since `TextureCube` also doesn't inherit `Texture`, but
-  `EnvironmentMapEffect` is a stock effect that may have its own hardcoded cube-texture binding
-  path bypassing `GraphicsDevice.Textures` entirely — needs checking, not assumed).
+  precedent) for severe findings from Tasks 272, 276, and 277 — see §3. Next up: Task 279 (add
+  validation for invalid `CubeMapFace` values).
 - **Key architectural decisions:**
   - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).
@@ -169,6 +168,7 @@ ported to C++ with minimal API-surface changes.
 
 | Task | Files | Change |
 |------|-------|--------|
+| 278 | `BgfxGraphicsBackend.hpp/.cpp`, `shaders/vs_env_map3d.sc`/`fs_env_map3d.sc` (new), `shaders/varying.def.sc`, `shaders/compile_shaders.py`, `shaders/bgfx_shaders.hpp` (regenerated), `examples/bgfx_env_map_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | EasyGL/Vulkan `EnvironmentMapEffect` already fully wired (verified via existing pixel-readback tests, both still pass). **Found and fixed a real Bgfx gap**: `DrawPrimitivesEx` had zero code path for `params.envMapping` — it silently fell through to the plain lit-textured branch, rendering with no reflection and no error. Added a full Bgfx shader pair mirroring the EasyGL/Vulkan reflection formula, a new `envMap3DProgram_` + 6 uniforms, and wired the `envMapping` branch into `DrawPrimitivesEx`. Had to build bgfx's `shaderc` tool from source (`-DCNA_BGFX_BUILD_SHADERC=ON -DBGFX_BUILD_TOOLS=ON`) to regenerate `bgfx_shaders.hpp`. Bgfx has no GPU readback API, so added a smoke test (`Bgfx_EnvironmentMapEffect_Smoke`) instead of a pixel-verified one. 1908/1908 Bgfx ctest pass (100%, no regressions). |
 | 277 | `AUDIT.md`, `GRAPHICS_TASKS.md` (no source changes — audit-only) | Verified `Texture3D` sampling is not exposed to any effect, stock or custom. No stock FNA effect samples `Texture3D` (true in real XNA too). Custom `ShaderEffect`/`IEffectBackend` have no texture-binding API at all (scalar/vector/matrix uniforms only). Root architectural cause: FNA's `Texture3D : Texture` lets any texture ride `GraphicsDevice.Textures[slot]`; CNA's `Texture3D : GraphicsResource` (not `Texture`) can't be assigned into `TextureCollection` at all. `EffectParameter::SetValue(Texture3D*)` has zero consumers in any backend — a write-only dead end. Tracked as new Task 863 (real fix = architecture change, out of verify-only scope). |
 | 276 | `EasyGLGraphicsBackend.cpp`, `examples/easygl_texturecube_mip_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | **Found and fixed a real bug.** New mip round-trip test (all 6 faces × 3 levels) initially failed: `EasyGLTextureCubeBackend`'s constructor only allocated GPU storage for level 0 (`set_image_2d`, no level loop), so `SetData`'s `set_sub_image_2d` (`glTexSubImage2D`) writes to level 1+ silently went nowhere (that call requires the level to already be defined). Fixed by pre-allocating every mip level for every face in the constructor. All 126 checks now pass. Same bug shape flagged (not fixed here) for `Texture3D`'s identical single-level-only pattern — tracked as new Task 862. 1973/1975 EasyGL ctest (same 2 pre-existing failures). |
 | 275 | `examples/easygl_texturecube_partial_rect_test.cpp` (new), `CMakeLists.txt`, `AUDIT.md`, `GRAPHICS_TASKS.md` | Task 172 already covered whole-face round-trip for all 6 faces (simple 2-arg overload); `TextureCubeTests.cpp`'s rect-based/startIndex overload coverage was argument-guards only. New test closes that gap with real pixel verification: off-centre 2×2 rect per face (no cross-face bleed), `SetData`/`GetData` `startIndex` with real data. All pass, no bug found. |

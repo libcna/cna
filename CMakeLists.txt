@@ -1237,6 +1237,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+    # Task 278: EnvironmentMapEffect smoke test (no GPU readback available on Bgfx)
+    cna_bgfx_test(cna_test_bgfx_env_map
+                  examples/bgfx_env_map_test.cpp)
+    add_test(NAME Bgfx_EnvironmentMapEffect_Smoke
+             COMMAND cna_test_bgfx_env_map)
+    set_tests_properties(Bgfx_EnvironmentMapEffect_Smoke PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
 endif()
 
 if(CNA_BUILD_TESTS)
