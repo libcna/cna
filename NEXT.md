@@ -45,7 +45,7 @@ designed so that XNA/FNA game code can be ported to C++ with minimal API-surface
 ## 2. Current status
 
 ### Build
-- Last verified clean build + full test run: **2055 / 2055 unit tests passing** (Task 5.5
+- Last verified clean build + full test run: **2058 / 2058 unit tests passing** (Task 5.6
   complete), verified stable under `--gtest_shuffle --gtest_repeat=8` (full suite) and
   `--gtest_repeat=20` (ENet/loopback tests specifically, given their real-socket timing).
 - `GamerServices` namespace: **complete**, all classes ported and tested.
@@ -65,7 +65,9 @@ designed so that XNA/FNA game code can be ported to C++ with minimal API-surface
   `ConnectToHost` + `ClientHello`/`ServerWelcome`/`GamerJoinBroadcast` handshake; rosters converge
   over a real loopback UDP connection). **Task 5.5 complete** (`AppData` relay: real
   `SendData`/`ReceiveData` over the ENet transport, with host relay for gamers it doesn't own).
-  **Task 5.6 (disconnect/leave handling) not started.**
+  **Task 5.6 complete** (real ENet disconnect handling: host removes/broadcasts departed clients,
+  clients raise `SessionEnded` on losing their host). **Task 5.7 (StartGame/EndGame state
+  broadcast) not started.**
 
 ### What works
 - The entire graphics stack (Phases 1–31).
@@ -103,10 +105,19 @@ designed so that XNA/FNA game code can be ported to C++ with minimal API-surface
   (`HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue`/`ClientSendDataTransmitsAppDataToHost`).
   Gated behind `RealNetworkingEnabled(sessionType_)`, so non-`SystemLink` sessions keep `PacketSend`
   as a complete no-op, byte-for-byte matching pre-Phase-5 behavior.
+- Disconnect/leave (Task 5.6): a real ENet `DISCONNECT` event is now handled on both roles. Host
+  side: removes every gamer the departed peer owned via the already-shipped
+  `NetworkSession::RemoveGamer` (raises `GamerLeft`, migrates to `PreviousGamers`), then broadcasts
+  a `GamerLeaveBroadcastMessage` to the other connected peers so their rosters converge too, and
+  cleans up `SessionState`'s per-peer bookkeeping. Client side: losing its `HostPeer` connection
+  calls `RemoveGamer` on one of its own local gamers with `NetworkSessionEndReason::HostEndedSession`
+  (raises `SessionEnded`, transitions `SessionState` to `Ended`) — per `RemoveGamer`'s Task-5.3
+  design, this is a session-wide signal regardless of which local gamer is passed. Proven by 3 more
+  real-socket loopback tests in `ENetBackendTests.cpp`.
 
 ### What does not work yet
-- Disconnect/leave (Task 5.6), `StartGame`/`EndGame` state broadcast (Task 5.7), and LAN discovery
-  `Find`/`BeginFind`/`EndFind` (Task 5.8) are all still exactly the pre-Phase-5 synthetic behavior.
+- `StartGame`/`EndGame` state broadcast (Task 5.7) and LAN discovery `Find`/`BeginFind`/`EndFind`
+  (Task 5.8) are still exactly the pre-Phase-5 synthetic behavior.
 - A local gamer added at runtime via `AddLocalGamer()` **after** a session already started
   hosting/connecting does not get a wire-id assigned or announced to already-connected peers —
   only gamers present at `Create()` time are covered. Not yet needed by any task's stated scope;
@@ -123,7 +134,8 @@ This session's commits, newest first (all on branch `feature/net`, pushed to
 
 | Commit | Files | Change |
 |---|---|---|
-| (uncommitted at time of writing) | `LocalNetworkGamer.hpp/.cpp` (extended); `ENetBackend.hpp/.cpp` (extended); `NetworkSession.cpp` (`Update()`'s `PacketSend` branch); `ENetBackendTests.cpp`, `NetworkSessionTests.cpp` (extended) | Task 5.5 complete: `LocalNetworkGamer::EnqueuePacket` + every `SendData` overload now sets `NetworkEvent::Sender = this`. `NetworkSession::Update()`'s previously-empty `PacketSend` branch (gated behind `RealNetworkingEnabled(sessionType_)`, so non-`SystemLink` types stay byte-for-byte unchanged) now delivers local-target packets directly into the target's `packetQueue_` (remapping `.Gamer` to the sender, per the Task 5.3-documented field-collision fix) or transmits remote-target packets via new `ENetBackend::SendAppData`. `ENetBackend`'s `SessionState` gained `WireIdToPeer` (host-only) for relay routing; `HandleReceive` gained a `MessageTag::AppData` case (`HandleAppData`) that delivers to a local target or relays to the owning peer. 2 new loopback tests reusing the Task 5.4 one-real-session-plus-raw-`ENetHostHandle` pattern. 2055/2055 total passing, stable under `--gtest_shuffle --gtest_repeat=8`. |
+| (uncommitted at time of writing) | `ENetBackend.cpp` (extended); `ENetBackendTests.cpp` (extended) | Task 5.6 complete: real ENet `ENET_EVENT_TYPE_DISCONNECT` handling in `PumpSession`'s event loop (`HandleDisconnect`). Host role: removes every gamer the departed peer owned via `NetworkSession::RemoveGamer` (already existed, Task 5.3), broadcasts a `GamerLeaveBroadcastMessage` to the remaining peers, cleans up `SessionState`'s `PeerWireIds`/`WireIdToPeer`/`WireIdToGamer`/`GamerToWireId` entries for that peer. Client role: losing `HostPeer` calls `RemoveGamer` on one local gamer with `NetworkSessionEndReason::HostEndedSession`, raising `SessionEnded`. New `HandleGamerLeaveBroadcast` (mirrors `HandleGamerJoinBroadcast`'s shape) lets clients process the broadcast and remove their own proxy of the departed gamer. 3 new loopback tests. 2058/2058 total passing, stable under `--gtest_shuffle --gtest_repeat=8` and `--gtest_repeat=20` on the ENet-specific tests. |
+| `89dfbc0` | `LocalNetworkGamer.hpp/.cpp` (extended); `ENetBackend.hpp/.cpp` (extended); `NetworkSession.cpp` (`Update()`'s `PacketSend` branch); `ENetBackendTests.cpp`, `NetworkSessionTests.cpp` (extended) | Task 5.5 complete: `LocalNetworkGamer::EnqueuePacket` + every `SendData` overload now sets `NetworkEvent::Sender = this`. `NetworkSession::Update()`'s previously-empty `PacketSend` branch (gated behind `RealNetworkingEnabled(sessionType_)`, so non-`SystemLink` types stay byte-for-byte unchanged) now delivers local-target packets directly into the target's `packetQueue_` (remapping `.Gamer` to the sender, per the Task 5.3-documented field-collision fix) or transmits remote-target packets via new `ENetBackend::SendAppData`. `ENetBackend`'s `SessionState` gained `WireIdToPeer` (host-only) for relay routing; `HandleReceive` gained a `MessageTag::AppData` case (`HandleAppData`) that delivers to a local target or relays to the owning peer. 2 new loopback tests reusing the Task 5.4 one-real-session-plus-raw-`ENetHostHandle` pattern. 2055/2055 total passing, stable under `--gtest_shuffle --gtest_repeat=8`. |
 | `b0fb10d` | `ENetBackend.hpp/.cpp` (extended); `ENetBackendTests.cpp` (extended); plan file corrected | Task 5.4 complete: `ENetBackend::ConnectToHost` + full `ClientHello`/`ServerWelcome`/`GamerJoinBroadcast` handshake over real loopback UDP. `SessionState` gained `NextWireId`/`HostPeer`/`GamerToWireId`/`WireIdToGamer`/`PeerWireIds`. **Found and fixed a real testing-strategy error in the approved plan**: `NetworkSession::BeginCreate` gates on a single process-wide `activeSession_`, so two real `NetworkSession`s can never coexist in one test process (ephemeral ports don't change this, contrary to the plan's original assumption) — an early test draft proved this by throwing and stranding `activeSession_` for the rest of the suite (42 tests failed) until fixed. Corrected testing pattern (one real `NetworkSession` + a raw `ENetHostHandle` standing in for "the other machine", RAII-`Dispose()`-guarded fixture) is now documented in the plan file and used for 2 new loopback handshake tests, reusable for Tasks 5.5–5.8. 3 new tests. 2053/2053 total passing, stable under `--gtest_shuffle --gtest_repeat=8` and `--gtest_repeat=20` on the ENet-specific tests. |
 | `8fcd5e1` | `ENetBackend.hpp` (new)/`.cpp` (implemented); `NetworkSession.hpp/.cpp`, `NetworkGamer.hpp/.cpp`, `GamerCollection.hpp` (extended); `NetworkSessionTests.cpp`, `NetworkGamerMachineTests.cpp` (extended), `ENetBackendTests.cpp` (new) | Task 5.3 complete: `ENetBackend` static facade (`RealNetworkingEnabled`/`StartHosting`/`TeardownSession`/`PumpSession`/`GetBoundPort`) wired into `NetworkSession`'s constructor tail/`Dispose`/`Update` — `SystemLink` sessions now bind a real ephemeral-port ENet host; every other type is unaffected (verified via regression tests). Added `NetworkSession::AddRemoteGamer`/`RemoveGamer`, `NetworkEvent::Sender`, `GamerCollection<T>::Remove`, `NetworkGamer::SetHasLeftSession`, and a gamertag ctor param on `NetworkGamer::CreateInternal` (defaulted to "Stub Gamer", so local gamers are unaffected — real gamertags are for remote gamers ENetBackend constructs in Task 5.4). 12 new tests. 2050/2050 total passing, stable under `--gtest_shuffle --gtest_repeat=5`. |
 | `34f289b` | `NetPacketCodec.cpp`, `NetDiscoveryProtocol.hpp/.cpp` (new), `NetPacketCodecTests.cpp`, `NetDiscoveryProtocolTests.cpp` (new) | Task 5.2 complete: implemented all 6 `NetPacketCodec` message encode/decode functions (`ClientHello`/`ServerWelcome`/`GamerJoinBroadcast`/`GamerLeaveBroadcast`/`StateChangeBroadcast`/`AppData`) plus `SendDataOptionsToEnetFlags`, and `NetDiscoveryProtocol`'s query/announce codec including sparse `NetworkSessionProperties` encoding (only non-null entries written, as index+value pairs). Both built on `PacketWriter`/`PacketReader` per the header committed earlier. 13 new tests, all round-trip. 2038/2038 total passing. |
@@ -141,9 +153,9 @@ on `feature/net` for the full sequence.
 
 ## 4. Current blocker / main problem
 
-**No hard blocker.** Build is clean and all 2055 tests pass. Task 5.5 (`AppData` relay: real
-`SendData`/`ReceiveData`) is now fully complete. The next unit of work is Task 5.6 (disconnect/
-leave handling) — see section 8 for the exact scope, and the approved plan at
+**No hard blocker.** Build is clean and all 2058 tests pass. Task 5.6 (disconnect/leave handling)
+is now fully complete. The next unit of work is Task 5.7 (`StartGame`/`EndGame` state broadcast) —
+see section 8 for the exact scope, and the approved plan at
 `/home/robertvokac/.claude/plans/scalable-swimming-feigenbaum.md` (corrected during Task 5.4 — see
 below) for full design detail.
 
@@ -184,7 +196,7 @@ connection through the safe explicit-local-gamers `Create()` overload and callin
 | **Resolved** | ~~`NetPacketCodec` (Task 5.2) — header only, no `.cpp`~~ — Task 5.2 is now fully implemented and tested (13 tests, `NetPacketCodecTests.cpp`/`NetDiscoveryProtocolTests.cpp`). |
 | **Confirmed bug (upstream FNA, preserved)** | `NetworkSession::EndCreate`/`EndJoin`/`EndJoinInvited` set the static `activeAction` back to `null` **after** constructing the `NetworkSession`, so a constructor throw (e.g. empty `LocalGamers`) strands `activeAction` non-null for the rest of the process — every later `NetworkSession::Begin*` call then throws a spurious `InvalidOperationException`. FNA has the identical ordering; not introduced here. This is why `Create(sessionType, maxLocalGamers, maxGamers)`, `Join(AvailableNetworkSession*)`, and `JoinInvited(int)` aren't exercised past argument validation in `NetworkSessionTests.cpp`. |
 | **Design constraint found (Task 5.4), not a bug** | `NetworkSession::BeginCreate` (all overloads) gates on a single **process-wide** `activeSession_` static — only one real `NetworkSession` can be alive in this test binary at a time; a second `Create()` while one is still alive throws `InvalidOperationException`, same static-state-stranding risk as the `activeAction` bug above if the exception isn't caught before the first session's `Dispose()`. Not a bug (real single-active-session XNA/FNA semantics); just means loopback tests need exactly one real `NetworkSession` + a raw `ENetHostHandle` peer stand-in, never two real sessions. See section 4 and `ENetBackendTests.cpp`. |
-| **Resolved (Task 5.3)** | ~~`NetworkSession::Update()`'s `GamerJoin`/`GamerLeave` branches never mutate `AllGamers`/`RemoteGamers`~~ — `AddRemoteGamer(NetworkGamer*)`/`RemoveGamer(NetworkGamer*, NetworkSessionEndReason)` now exist and correctly mutate `AllGamers`/`RemoteGamers`/`PreviousGamers` (with FIFO eviction past `MaxPreviousGamers`) and raise `GamerJoined`/`GamerLeft`, or — when the removed gamer is local — a `StateChange`-to-`Ended` event carrying the given reason (raises `SessionEnded`). Now called for real from `ENetBackend`'s handshake (Task 5.4, join side); disconnect/leave wiring is Task 5.6. |
+| **Resolved (Task 5.3, wired for real in 5.4/5.6)** | ~~`NetworkSession::Update()`'s `GamerJoin`/`GamerLeave` branches never mutate `AllGamers`/`RemoteGamers`~~ — `AddRemoteGamer(NetworkGamer*)`/`RemoveGamer(NetworkGamer*, NetworkSessionEndReason)` now exist and correctly mutate `AllGamers`/`RemoteGamers`/`PreviousGamers` (with FIFO eviction past `MaxPreviousGamers`) and raise `GamerJoined`/`GamerLeft`, or — when the removed gamer is local — a `StateChange`-to-`Ended` event carrying the given reason (raises `SessionEnded`). `AddRemoteGamer` is called from the join handshake (Task 5.4); `RemoveGamer` is now called for real from ENet `DISCONNECT` handling and incoming `GamerLeaveBroadcast` messages (Task 5.6). |
 | **Resolved (Task 5.3, used for real in 5.4)** | ~~`NetworkGamer::CreateInternal`'s single-arg constructor hardcodes `Gamer("Stub Gamer", "Stub Gamer")`~~ — `CreateInternal`/the protected constructor now take a `const std::string& gamertag = "Stub Gamer"` param. `LocalNetworkGamer` still passes nothing (stays "Stub Gamer", matching FNA's stub identically for local gamers — verified explicitly by Task 5.4's loopback tests); `ENetBackend` now passes real gamertags (received via `ClientHello`/`ServerWelcome`/`GamerJoinBroadcast`, or read from `LocalNetworkGamer::getSignedInGamerProperty()->getGamertagProperty()` when sending) when constructing **remote** `NetworkGamer` instances. |
 | **Resolved (Task 5.5)** | ~~`LocalNetworkGamer::SendData`/`ReceiveData` field-meaning collision~~ — every `SendData` overload now sets `NetworkEvent::Sender = this`; `NetworkSession::Update()`'s `PacketSend` handling remaps `.Gamer = evt.Sender` when delivering into a target's `packetQueue_`, so `ReceiveData`'s already-shipped `.Gamer == packet.Gamer` sender-matching logic resolves correctly with zero changes to `ReceiveData` itself. |
 | **Deviation (documented)** | `PacketWriter::Write(Color)` writes 4 bytes but `PacketReader::ReadColor()` reads 4 floats (16 bytes) — genuinely asymmetric upstream, preserved as-is. Not round-trippable through these two methods alone. |
@@ -208,7 +220,7 @@ connection through the safe explicit-local-gamers `Create()` overload and callin
 | XNA public API (graphics) | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
 | XNA public API (GamerServices) | `include/Microsoft/Xna/Framework/GamerServices/` | Complete. Internal ctors → `private` + `CreateInternal()` factory |
 | XNA public API (Net) | `include/Microsoft/Xna/Framework/Net/` | Complete API surface (5 enums + 18 classes). Internals being wired to real networking in Phase 5 — **public shapes here are a fixed point, must not change** |
-| ENet backend (Phase 5, in progress) | `include/CNA/Internal/Net/`, `src/CNA/Internal/Net/` | `ENetLibrary`/`ENetHostHandle` (5.1), `NetPacketCodec`/`NetDiscoveryProtocol` (5.2), `ENetBackend` registry/wiring (5.3), connect+handshake (5.4), and `AppData` relay (5.5) done and tested; disconnect/state-broadcast/discovery still to come (Tasks 5.6–5.9) |
+| ENet backend (Phase 5, in progress) | `include/CNA/Internal/Net/`, `src/CNA/Internal/Net/` | `ENetLibrary`/`ENetHostHandle` (5.1), `NetPacketCodec`/`NetDiscoveryProtocol` (5.2), `ENetBackend` registry/wiring (5.3), connect+handshake (5.4), `AppData` relay (5.5), and disconnect/leave handling (5.6) done and tested; state-broadcast/discovery still to come (Tasks 5.7–5.9) |
 | Backend contracts (graphics only) | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, etc. — **not** the pattern used for networking (see section 1) |
 | CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging |
 | sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types; only add new files; no version pin from this repo (see section 1) |
@@ -268,7 +280,7 @@ Enums (done) → Exceptions (done) → Data structs (done) → EventArgs (done)
 → [Phase 5, in progress] ENetLibrary/ENetHostHandle (done, 5.1) → NetPacketCodec/
   NetDiscoveryProtocol (done, 5.2) → ENetBackend + NetworkSession wiring (done, 5.3) →
   handshake/roster sync (done, 5.4) → AppData relay (done, 5.5) → disconnect handling
-  (5.6, next) → state broadcast (5.7) → discovery (5.8) → regression pass (5.9)
+  (done, 5.6) → state broadcast (5.7, next) → discovery (5.8) → regression pass (5.9)
 ```
 
 ---
@@ -320,30 +332,27 @@ In priority order (all from the approved plan at
 starting, **including the Task 5.4 correction notes added to the Testing strategy section**; this
 section is a summary, not a replacement):
 
-1. **Task 5.6 — Disconnect/leave handling.** ENet's `ENET_EVENT_TYPE_DISCONNECT` is currently a
-   no-op comment in `ENetBackend::PumpSession`'s event loop (`ENetBackend.cpp`). Needs: when the
-   **host** observes a client peer disconnect, call `NetworkSession::RemoveGamer(gamer,
-   NetworkSessionEndReason::Disconnected)` (already exists, Task 5.3) for every gamer that peer's
-   `SessionState::PeerWireIds` entry owned, then encode/broadcast a `GamerLeaveBroadcastMessage`
-   (already declared, Task 5.2) to the other connected peers so their rosters converge too, and
-   clean up that peer's entries from `PeerWireIds`/`WireIdToPeer`/`WireIdToGamer`/`GamerToWireId`.
-   When a **client** observes its `HostPeer` disconnect, call `RemoveGamer` on each of its own
-   local gamers with `NetworkSessionEndReason::HostEndedSession` (this raises `SessionEnded` per
-   the Task 5.3 design — see the "if isLocal" branch in `NetworkSession::RemoveGamer`). Add a new
-   `HandleGamerLeaveBroadcast` case to `HandleReceive`'s `switch` (`ENetBackend.cpp`) for clients
-   receiving the broadcast, mirroring `HandleGamerJoinBroadcast`'s shape but calling `RemoveGamer`
-   instead of `AddRemoteGamer`.
-   - Verify with a loopback test (same one-real-`NetworkSession`-plus-raw-`ENetHostHandle` pattern
-     as Tasks 5.4/5.5, see section 4/5): connect, complete the handshake, disconnect the raw peer,
-     poll `Update()` until `GamerLeft`/`SessionEnded` fires as appropriate, and assert
-     `PreviousGamers` picks up the departed gamer.
-   - Files: `ENetBackend.hpp/.cpp` (extend `PumpSession`'s `DISCONNECT` case + `HandleReceive`).
-     `NetworkSession.cpp`/`RemoveGamer` likely needs no further changes (5.3 already built it for
-     this).
+1. **Task 5.7 — `StartGame`/`EndGame` state broadcast.** Per the plan: "small, mostly free given
+   5.3–5.6." `NetworkSession::StartGame()`/`EndGame()` already queue a local `StateChange` event
+   (`NetworkSession.cpp`) that flips `sessionState_` and raises `GameStarted`/`GameEnded` — but
+   only on the machine that called them. Needs: when the **host** calls `StartGame`/`EndGame`,
+   also encode/broadcast a `StateChangeBroadcastMessage` (already declared, Task 5.2) to every
+   connected peer, so their sessions transition too. Add a `HandleStateChangeBroadcast` case to
+   `HandleReceive`'s `switch` (`ENetBackend.cpp`, currently the only remaining `default:` case)
+   that queues a local `StateChange` `NetworkEvent` with the received `NewState` via
+   `session->SendNetworkEvent(...)` (`SendNetworkEvent` is already `NOXNA`-public, Task 4.7) so the
+   receiving side's own `Update()` raises `GameStarted`/`GameEnded` identically to the host. Likely
+   the smallest task since 5.1 — no new `SessionState` fields expected.
+   - Verify with a loopback test (same pattern as Tasks 5.4–5.6): host calls `StartGame()`,
+     `Update()` on both sides, assert `GameStarted` fires and `SessionState` becomes `Playing` on
+     the connected peer too; same for `EndGame()`/`Lobby`.
+   - Files: `NetworkSession.cpp` (`StartGame`/`EndGame`, to also call an `ENetBackend` broadcast
+     helper — may need a small new `ENetBackend::BroadcastStateChange(session, newState)` method),
+     `ENetBackend.hpp/.cpp` (new method + `HandleReceive` case).
    - Verification: `cmake --build cmake-build-debug --target CnaTests`, then
-     `cmake-build-debug/CnaTests` full run (2055+ expected).
-2. Tasks 5.7–5.9 as detailed in the plan (state broadcast → LAN discovery → final
-   `NetworkSessionType` policy regression pass).
+     `cmake-build-debug/CnaTests` full run (2058+ expected).
+2. Tasks 5.8–5.9 as detailed in the plan (LAN discovery → final `NetworkSessionType` policy
+   regression pass).
 
 ---
 
@@ -387,9 +396,11 @@ code. Do not expand scope beyond the task.
 Current status: GamerServices + Net API surface fully ported and tested. Phase 5 (ENet backend)
 Tasks 5.1 (ENetLibrary/ENetHostHandle), 5.2 (NetPacketCodec/NetDiscoveryProtocol), 5.3 (ENetBackend
 registry + NetworkSession wiring), 5.4 (real ConnectToHost + ClientHello/ServerWelcome/
-GamerJoinBroadcast handshake over loopback UDP), and 5.5 (AppData relay: real SendData/ReceiveData,
-with host relay for gamers it doesn't own) are all done and tested. 2055/2055 tests passing,
-stable under --gtest_shuffle --gtest_repeat=8 (full suite) and --gtest_repeat=20 (ENet tests).
+GamerJoinBroadcast handshake over loopback UDP), 5.5 (AppData relay: real SendData/ReceiveData,
+with host relay for gamers it doesn't own), and 5.6 (real ENet disconnect handling: host
+removes/broadcasts departed clients, clients raise SessionEnded on losing their host) are all done
+and tested. 2058/2058 tests passing, stable under --gtest_shuffle --gtest_repeat=8 (full suite)
+and --gtest_repeat=20 (ENet tests).
 
 IMPORTANT correction from Task 5.4, read before writing more loopback tests: only one real
 NetworkSession can exist per process (activeSession_ static gate in BeginCreate) — never construct
@@ -403,7 +414,7 @@ first. sharp-runtime is a sibling repo edited by a separate session with no vers
 — an interface change there silently broke every build target once already this project (see
 section 4's history / git log for the Task 4.5 IAsyncResult incident).
 
-Next: Task 5.6 — disconnect/leave handling (see section 8, item 1).
+Next: Task 5.7 — StartGame/EndGame state broadcast (see section 8, item 1).
 Read the full approved plan first: /home/robertvokac/.claude/plans/scalable-swimming-feigenbaum.md
 Build: cmake --build cmake-build-debug --target CnaTests
 Run:   cmake-build-debug/CnaTests

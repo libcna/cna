@@ -7,19 +7,25 @@
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/GamerJoinedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Net/GamerLeftEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp"
 #include <string>
 #include <vector>
 
 using namespace CNA::Internal::Net;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 using Microsoft::Xna::Framework::Net::GamerJoinedEventArgs;
+using Microsoft::Xna::Framework::Net::GamerLeftEventArgs;
 using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
 using Microsoft::Xna::Framework::Net::NetworkGamer;
 using Microsoft::Xna::Framework::Net::NetworkSession;
+using Microsoft::Xna::Framework::Net::NetworkSessionEndedEventArgs;
+using Microsoft::Xna::Framework::Net::NetworkSessionEndReason;
 using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
+using Microsoft::Xna::Framework::Net::NetworkSessionState;
 using Microsoft::Xna::Framework::Net::NetworkSessionType;
 
 namespace {
@@ -367,4 +373,143 @@ TEST(ENetBackendTest, ClientSendDataTransmitsAppDataToHost) {
     EXPECT_EQ(decoded.TargetWireId, 0);
     EXPECT_EQ(decoded.Options, SendDataOptions::Reliable);
     EXPECT_EQ(decoded.Payload, (std::vector<SharpRuntime::bytecs>{1, 2, 3, 4}));
+}
+
+// --- Task 5.6: Disconnect/leave handling ---
+
+TEST(ENetBackendTest, HostRemovesGamerAndFiresGamerLeftOnClientDisconnect) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
+
+    int leftCount = 0;
+    host.session->GamerLeft += [&leftCount](System::Object*, const GamerLeftEventArgs&) { ++leftCount; };
+
+    fakeClient.Disconnect(peerFromClientSide, 0);
+    fakeClient.Flush();
+
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() > 1; ++i) {
+        host.session->Update();
+    }
+
+    EXPECT_EQ(host.session->getAllGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(host.session->getRemoteGamersProperty().getCountProperty(), 0);
+    ASSERT_EQ(host.session->getPreviousGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(host.session->getPreviousGamersProperty()[0]->getGamertagProperty(), "RemotePlayer");
+    EXPECT_EQ(leftCount, 1);
+}
+
+TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(0, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    int endedCount = 0;
+    NetworkSessionEndReason observedReason = NetworkSessionEndReason::ClientSignedOut;
+    client.session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs& e) {
+        ++endedCount;
+        observedReason = e.getEndReasonProperty();
+    };
+
+    fakeHost.Disconnect(clientPeerFromHostSide, 0);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && endedCount == 0; ++i) {
+        client.session->Update();
+    }
+
+    EXPECT_EQ(endedCount, 1);
+    EXPECT_EQ(observedReason, NetworkSessionEndReason::HostEndedSession);
+    EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Ended);
+}
+
+TEST(ENetBackendTest, ClientProcessesGamerLeaveBroadcast) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(0, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {RosterEntry{0, "OtherPlayer"}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i) {
+        client.session->Update();
+    }
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
+
+    int leftCount = 0;
+    client.session->GamerLeft += [&leftCount](System::Object*, const GamerLeftEventArgs&) { ++leftCount; };
+
+    GamerLeaveBroadcastMessage leave;
+    leave.WireIds = {0};
+    auto leaveBytes = NetPacketCodec::Encode(leave);
+    fakeHost.Send(clientPeerFromHostSide, 0, leaveBytes.data(), leaveBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() > 1; ++i) {
+        client.session->Update();
+    }
+
+    EXPECT_EQ(client.session->getAllGamersProperty().getCountProperty(), 1);
+    ASSERT_EQ(client.session->getPreviousGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(client.session->getPreviousGamersProperty()[0]->getGamertagProperty(), "OtherPlayer");
+    EXPECT_EQ(leftCount, 1);
 }

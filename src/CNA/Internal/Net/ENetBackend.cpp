@@ -19,6 +19,7 @@ namespace CNA::Internal::Net
     using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkSession;
+    using Microsoft::Xna::Framework::Net::NetworkSessionEndReason;
 
     namespace
     {
@@ -232,6 +233,74 @@ namespace CNA::Internal::Net
             // hosting for — shouldn't happen in this star topology; drop defensively.
         }
 
+        void HandleGamerLeaveBroadcast(NetworkSession* session, SessionState& state, const GamerLeaveBroadcastMessage& msg)
+        {
+            for (uint8_t wireId : msg.WireIds)
+            {
+                auto gamerIt = state.WireIdToGamer.find(wireId);
+                if (gamerIt == state.WireIdToGamer.end())
+                {
+                    continue; // unknown; already removed or never known
+                }
+                NetworkGamer* gamer = gamerIt->second;
+                session->RemoveGamer(gamer, NetworkSessionEndReason::Disconnected);
+                state.GamerToWireId.erase(gamer);
+                state.WireIdToGamer.erase(gamerIt);
+            }
+        }
+
+        void HandleDisconnect(NetworkSession* session, SessionState& state, ENetPeer* peer)
+        {
+            if (peer == state.HostPeer)
+            {
+                // We're a client and just lost our connection to the host: our own view of this
+                // session is over. RemoveGamer's isLocal branch raises a single session-wide
+                // SessionEnded event no matter which local gamer is passed (see its own doc
+                // comment), so any one of them is a valid trigger.
+                const auto& locals = session->getLocalGamersProperty();
+                if (locals.getCountProperty() > 0)
+                {
+                    session->RemoveGamer(locals[0], NetworkSessionEndReason::HostEndedSession);
+                }
+                state.HostPeer = nullptr;
+                return;
+            }
+
+            // We're the host (or at least not this peer's upstream) and one of our clients
+            // disconnected: remove every gamer it owned and tell the remaining peers.
+            auto peerWireIdsIt = state.PeerWireIds.find(peer);
+            if (peerWireIdsIt == state.PeerWireIds.end())
+            {
+                return; // a peer we never completed a handshake with; nothing to clean up
+            }
+
+            GamerLeaveBroadcastMessage broadcastMsg;
+            for (uint8_t wireId : peerWireIdsIt->second)
+            {
+                auto gamerIt = state.WireIdToGamer.find(wireId);
+                if (gamerIt == state.WireIdToGamer.end())
+                {
+                    continue;
+                }
+                NetworkGamer* gamer = gamerIt->second;
+                session->RemoveGamer(gamer, NetworkSessionEndReason::Disconnected);
+                broadcastMsg.WireIds.push_back(wireId);
+                state.GamerToWireId.erase(gamer);
+                state.WireIdToGamer.erase(gamerIt);
+                state.WireIdToPeer.erase(wireId);
+            }
+            state.PeerWireIds.erase(peerWireIdsIt);
+
+            if (!broadcastMsg.WireIds.empty())
+            {
+                auto bytes = NetPacketCodec::Encode(broadcastMsg);
+                for (auto& [otherPeer, wireIds] : state.PeerWireIds)
+                {
+                    SendTo(state, otherPeer, bytes, SendDataOptions::Reliable);
+                }
+            }
+        }
+
         void HandleConnect(NetworkSession* session, SessionState& state, ENetPeer* peer)
         {
             if (peer != state.HostPeer)
@@ -267,11 +336,14 @@ namespace CNA::Internal::Net
                 case MessageTag::GamerJoinBroadcast:
                     HandleGamerJoinBroadcast(session, state, NetPacketCodec::DecodeGamerJoinBroadcast(data));
                     break;
+                case MessageTag::GamerLeaveBroadcast:
+                    HandleGamerLeaveBroadcast(session, state, NetPacketCodec::DecodeGamerLeaveBroadcast(data));
+                    break;
                 case MessageTag::AppData:
                     HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
                     break;
                 default:
-                    // GamerLeaveBroadcast/StateChangeBroadcast: Tasks 5.6-5.7.
+                    // StateChangeBroadcast: Task 5.7.
                     break;
             }
         }
@@ -327,7 +399,10 @@ namespace CNA::Internal::Net
                 HandleReceive(session, state, evt.peer, evt.packet);
                 enet_packet_destroy(evt.packet);
             }
-            // ENET_EVENT_TYPE_DISCONNECT: Task 5.6.
+            else if (evt.type == ENET_EVENT_TYPE_DISCONNECT)
+            {
+                HandleDisconnect(session, state, evt.peer);
+            }
         }
     }
 
