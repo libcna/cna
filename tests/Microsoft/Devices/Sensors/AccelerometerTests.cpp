@@ -8,6 +8,7 @@
 #include "Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Devices::Sensors::Accelerometer;
@@ -95,6 +96,28 @@ TEST(AccelerometerTests, GetTypeName)
 {
     const Accelerometer a;
     EXPECT_EQ(a.GetTypeName(), "Microsoft.Devices.Sensors.Accelerometer");
+}
+
+TEST(AccelerometerTests, GetCurrentValuePropertyThrowsWhenUnsupported)
+{
+    if (Accelerometer::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Accelerometer is supported on this platform; unsupported-path test not applicable.";
+    }
+
+    const Accelerometer a;
+    EXPECT_THROW((void)a.getCurrentValueProperty(), System::InvalidOperationException);
+}
+
+TEST(AccelerometerTests, GetCurrentValuePropertyDoesNotThrowWhenSupported)
+{
+    if (!Accelerometer::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Accelerometer is not supported on this platform; supported-path test not applicable.";
+    }
+
+    const Accelerometer a;
+    EXPECT_NO_THROW((void)a.getCurrentValueProperty());
 }
 
 // NOTE: Actually observing ReadingChanged/CurrentValueChanged fire together

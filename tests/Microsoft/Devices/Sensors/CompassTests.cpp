@@ -6,6 +6,7 @@
 #include "Microsoft/Devices/Sensors/Compass.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Devices::Sensors::Compass;
@@ -58,4 +59,10 @@ TEST(CompassTests, EleventhSimultaneousInstanceThrows)
     }
 
     EXPECT_THROW({ const Compass overflow; (void)overflow; }, SensorFailedException);
+}
+
+TEST(CompassTests, GetCurrentValuePropertyThrowsInvalidOperationException)
+{
+    const Compass c;
+    EXPECT_THROW((void)c.getCurrentValueProperty(), System::InvalidOperationException);
 }

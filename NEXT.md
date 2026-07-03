@@ -45,20 +45,23 @@ deeper research pass) and **nothing in it has been started yet**.
 ## 2. Current status
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
-(`cmake-build-debug`) as of the last verified build (2026-07-02, HEAD
-`8092f6e`). Also verified clean under `VULKAN` (`cmake-build-vulkan`) and
-`BGFX` (`cmake-build-bgfx`) — the graphics backend choice has zero effect on
-`Microsoft::Devices::*` compilation, confirmed empirically.
+(`cmake-build-debug`) as of the last verified build (2026-07-03, HEAD
+`44ad496` + uncommitted Task P3-1 work). Also verified clean under `VULKAN`
+(`cmake-build-vulkan`) and `BGFX` (`cmake-build-bgfx`) as of 2026-07-02 —
+the graphics backend choice has zero effect on `Microsoft::Devices::*`
+compilation, confirmed empirically. (Vulkan/BGFX not re-verified after
+Task P3-1 since it only touches `Microsoft::Devices::Sensors` headers/cpp,
+same reasoning as before.)
 
-**Tests:** last full `ctest` run (`EASYGL`): **1964 tests total, 97%
+**Tests:** last full `ctest` run (`EASYGL`): **1970 tests total, 97%
 passing.** The only failures are a fixed set of **64 pre-existing
 `EasyGL_*` graphics tests** that cannot run headless (no display/GPU in
 this dev environment) — present before this phase began, unrelated to
 `Microsoft::Devices`. No regressions have been introduced. Under `VULKAN`/
-`BGFX`, the targeted Devices/Sensors/VibrateController suite is **139/139**
-passing on both; full-suite counts differ from `EASYGL` only because
-backend-specific demo/smoke-test executables weren't built (not a
-regression).
+`BGFX`, the targeted Devices/Sensors/VibrateController suite was **139/139**
+passing on both as of 2026-07-02 (not re-run after Task P3-1); full-suite
+counts differ from `EASYGL` only because backend-specific demo/smoke-test
+executables weren't built (not a regression).
 
 **Working:**
 - Full `Microsoft::Devices::Sensors` namespace: `Accelerometer` (real,
@@ -89,9 +92,9 @@ regression).
   NDK / iOS toolchain is available in this dev container.
   `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__` branches have
   never been compiled by any compiler.
-- Three confirmed real bugs from the newest research pass are **not yet
-  fixed** (all tracked in `plan_devices_phase3.md`, not started): see
-  Section 4.
+- Two confirmed real bugs from the newest research pass are **not yet
+  fixed** (tracked in `plan_devices_phase3.md`; a third, Task P3-1, was
+  fixed 2026-07-03): see Section 4.
 
 ---
 
@@ -120,21 +123,34 @@ regression).
   (API-completeness re-audit against archived WP7 docs, line-by-line
   implementation review cross-checked against vendored SDL3 source, and a
   test-coverage gap analysis against `CHECKLIST.md`) found real issues the
-  earlier passes didn't catch. **None of its 12 tasks have been started.**
-- All changes committed and pushed: `8092f6e` on `feature/devices`.
+  earlier passes didn't catch.
+- **Task P3-1 done (2026-07-03):** `SensorBase<T>::getCurrentValueProperty()`
+  now throws `System::InvalidOperationException` when the owning sensor is
+  unsupported, matching the documented WP7 behavior. Added `isSupported_` +
+  `setIsSupportedProperty()` to `SensorBase.hpp`; all 4 derived constructors
+  set it from their own `getIsSupportedProperty()` result. 6 new tests
+  across `Accelerometer`/`Compass`/`Gyroscope`/`Motion`. No existing test
+  touched `getCurrentValueProperty()` before this, so zero test churn.
+  1970 tests total now (up from 1964), same 64 pre-existing headless
+  failures, no regressions. Full writeup:
+  `plan_devices_phase3.md` Task P3-1's "Resolution" section.
+- Last pushed commit: `44ad496` on `feature/devices`. Task P3-1's changes
+  (`SensorBase.hpp`, the 4 sensor `.cpp` constructors, 4 test files,
+  `AUDIT.md`, `plan_devices_phase3.md`, this file) are **not yet committed**
+  as of this writing.
 
 ---
 
 ## 4. Current blocker / main problem
 
 No blocker prevents work from continuing — build and tests are green. The
-most important known problems, all newly found by `plan_devices_phase3.md`'s
-research pass and **not yet fixed**:
+most important known problems, found by `plan_devices_phase3.md`'s research
+pass:
 
-**Problem 1 (highest severity):** `Accelerometer`/`Gyroscope`'s shared
-static sensor state (`startedInstances_`, `g_sensor_`, `g_sensorId_`,
-`eventWatchRegistered_` in both `.cpp` files) is read/written from
-`Start()`/`Stop()`/`Dispose()` (application thread) AND from the
+**Problem 1 (highest severity, not yet fixed):** `Accelerometer`/
+`Gyroscope`'s shared static sensor state (`startedInstances_`, `g_sensor_`,
+`g_sensorId_`, `eventWatchRegistered_` in both `.cpp` files) is read/written
+from `Start()`/`Stop()`/`Dispose()` (application thread) AND from the
 `SensorEventWatch` SDL event-filter callback, with **zero
 synchronization**. SDL's own header doc for `SDL_AddEventWatch()`
 (`third_party/SDL/include/SDL3/SDL_events.h`) explicitly warns the callback
@@ -145,26 +161,24 @@ latent bug, not a currently-observed crash. Affected files:
 `src/Microsoft/Devices/Sensors/Gyroscope.cpp`. See `plan_devices_phase3.md`
 Task P3-4 for the full writeup and suggested fix (mutex guard).
 
-**Problem 2:** `SensorBase<T>::getCurrentValueProperty()`
-(`include/Microsoft/Devices/Sensors/SensorBase.hpp`) never throws — the
-real WP7 API throws `System::InvalidOperationException` when the sensor
-isn't supported (confirmed via archived MSDN `hh239261`, direct primary
-source). Reproduce: call `getCurrentValueProperty()` on any unsupported
-`Compass`/`Motion` instance (or an `Accelerometer`/`Gyroscope` on a
-headless machine) — it silently returns a default-constructed reading
-instead of throwing. See `plan_devices_phase3.md` Task P3-1.
+**Problem 2 — fixed 2026-07-03 (Task P3-1):** `SensorBase<T>::getCurrentValueProperty()`
+now throws `System::InvalidOperationException` when the sensor isn't
+supported, matching the documented WP7 behavior (MSDN `hh239261`). See
+Section 3 for the fix summary and `plan_devices_phase3.md` Task P3-1 for
+the full resolution writeup.
 
-**Problem 3:** `VibrateController::Start()`/`Start(duration, intensity)`
-and `StartLeftRight()` use independent SDL haptic effect slots and don't
-stop each other — confirmed by reading
+**Problem 3 (not yet fixed):** `VibrateController::Start()`/
+`Start(duration, intensity)` and `StartLeftRight()` use independent SDL
+haptic effect slots and don't stop each other — confirmed by reading
 `third_party/SDL/src/haptic/SDL_haptic.c` (`SDL_InitHapticRumble` allocates
 its own `haptic->rumble_id`, separate from this codebase's
 `g_leftRightEffectId`). Calling both without an intervening `Stop()` can
 physically vibrate both effects at once. See `plan_devices_phase3.md` Task
 P3-5.
 
-**What has been tried:** nothing yet for any of the three — they were found
-by research/code review this session, not previously attempted fixes.
+**What has been tried:** Problem 2 is fixed (Task P3-1, 2026-07-03).
+Problems 1 and 3 haven't been attempted yet — they were found by
+research/code review this session, not previously attempted fixes.
 
 ---
 
@@ -173,9 +187,9 @@ by research/code review this session, not previously attempted fixes.
 - **Confirmed bug, not yet fixed:** thread-safety race in
   `Accelerometer`/`Gyroscope`'s shared sensor state vs. the SDL event-watch
   callback. See Section 4, Problem 1 / `plan_devices_phase3.md` Task P3-4.
-- **Confirmed bug, not yet fixed:** `SensorBase<T>.CurrentValue` doesn't
-  throw `InvalidOperationException` when unsupported. See Section 4,
-  Problem 2 / Task P3-1.
+- **Fixed 2026-07-03:** `SensorBase<T>.CurrentValue` now throws
+  `InvalidOperationException` when unsupported. See Section 4, Problem 2 /
+  Task P3-1 (done).
 - **Confirmed design gap, not yet fixed:** `VibrateController`'s
   `Start()`/`StartLeftRight()` don't cancel each other's SDL effects. See
   Section 4, Problem 3 / Task P3-5.
@@ -231,11 +245,12 @@ tests/Microsoft/Devices/             ← VibrateControllerTests.cpp
 ```
 
 **`SensorBase<T>`** (header-only template) owns `CurrentValue`,
-`IsDataValid`, `TimeBetweenUpdates`, `CurrentValueChanged`, and `Dispose()`.
-Concrete sensors override `Start()`, `Stop()`, and `Dispose(bool)`. **Do
-not restructure this class** — stable, used by production code, and any
-change here (e.g. Task P3-1's planned `isSupported_` flag addition) must
-preserve the existing public contract for all 4 derived classes.
+`IsDataValid`, `TimeBetweenUpdates`, `CurrentValueChanged`, `Dispose()`, and
+(since Task P3-1, 2026-07-03) an internal `isSupported_` flag that gates
+`getCurrentValueProperty()`'s `InvalidOperationException`. Concrete sensors
+override `Start()`, `Stop()`, and `Dispose(bool)`, and must call
+`setIsSupportedProperty()` once from their constructor. **Do not restructure
+this class further** — stable, used by production code.
 
 **Invariant:** any class overriding `Dispose(bool)` **must** add `using
 SensorBase<T>::Dispose;`, or C++ name-hiding silently breaks the inherited
@@ -332,22 +347,9 @@ writing.
 ## 8. Next smallest tasks
 
 Full detail for all of these is in `plan_devices_phase3.md`; this is the
-recommended order.
+recommended order. (Task P3-1 was completed 2026-07-03 — see Section 3.)
 
-1. **Task P3-1 — `SensorBase<T>::CurrentValue` throws when unsupported**
-   - Goal: add a `protected bool isSupported_` flag (+ setter) to
-     `SensorBase<T>`, set once from each derived constructor's own
-     `getIsSupportedProperty()` result; `getCurrentValueProperty()` throws
-     `System::InvalidOperationException` when `!isSupported_`.
-   - Files: `include/Microsoft/Devices/Sensors/SensorBase.hpp`,
-     `src/Microsoft/Devices/Sensors/{Accelerometer,Compass,Gyroscope,Motion}.cpp`
-     (constructors). Check whether any existing test currently calls
-     `getCurrentValueProperty()` on an unsupported stub expecting a benign
-     value — those will need updating to expect the throw instead.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="*Tests.GetCurrentValue*"`
-     (new tests), then full `ctest --output-on-failure`.
-
-2. **Task P3-4 — Guard `Accelerometer`/`Gyroscope`'s shared sensor state**
+1. **Task P3-4 — Guard `Accelerometer`/`Gyroscope`'s shared sensor state**
    - Goal: add a `std::mutex` around `startedInstances_`/`g_sensor_`/
      `g_sensorId_`/`eventWatchRegistered_` in both classes; lock around
      `Start()`/`Stop()`/`Dispose(bool)` and the `SensorEventWatch`
@@ -361,13 +363,13 @@ recommended order.
      confirm existing suites still pass, don't invent a synthetic
      concurrency test that wouldn't exercise the real race).
 
-3. **Task P3-5 — Make `VibrateController::Start()`/`StartLeftRight()` mutually exclusive**
+2. **Task P3-5 — Make `VibrateController::Start()`/`StartLeftRight()` mutually exclusive**
    - Goal: each `Start*` variant should stop the other's active SDL effect
      before starting its own.
    - Files: `src/Microsoft/Devices/VibrateController.cpp`.
    - Verify: `./cmake-build-debug/CnaTests --gtest_filter="VibrateControllerTests*"`.
 
-4. **Task P3-2 — Decide on the reading-type public-setter visibility gap**
+3. **Task P3-2 — Decide on the reading-type public-setter visibility gap**
    - Goal: this is a decision, not a mechanical fix — read
      `plan_devices_phase3.md` Task P3-2 in full and either (a) document the
      public-setter-vs-`internal set` mismatch as an accepted C++ deviation
@@ -378,7 +380,7 @@ recommended order.
    - Verify: full `ctest --output-on-failure` if option B; no build/test
      needed if option A.
 
-5. **Task P3-6/P3-7/P3-9 — Fill the highest-value test-coverage gaps**
+4. **Task P3-6/P3-7/P3-9 — Fill the highest-value test-coverage gaps**
    - Goal: add `CurrentValueChanged` subscription tests (all 4 sensor
      classes), `GetTypeName()` tests (`Compass`/`Gyroscope`/`Motion` —
      `Accelerometer` already has one), and dispose-then-11th-succeeds tests
@@ -400,8 +402,9 @@ priority — see `plan_devices_phase3.md` directly when ready for those.
 - Do not invent a synthetic concurrency/thread test for Task P3-4 — it
   can't meaningfully exercise the real race without actual concurrent
   hardware events; confirm existing suites still pass instead.
-- Do not refactor or restructure `SensorBase<T>` or `ISensorReading` beyond
-  what Task P3-1 specifically requires — stable, used by production code.
+- Do not refactor or restructure `SensorBase<T>` or `ISensorReading` further
+  — stable, used by production code (Task P3-1's `isSupported_` addition is
+  already done, 2026-07-03).
 - Do not expand `Microsoft::Devices` to camera, radio, or phone-hardware
   APIs (`PhotoCamera`, `CameraButtons`, `PhotoChooserTask`, etc.) — not
   sensor/vibration functionality, explicitly out of scope.

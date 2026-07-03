@@ -38,7 +38,7 @@ as of this writing — re-check the current count, since it may drift), and an u
 
 ## Phase 1: Confirmed behavioral gaps vs. the real WP7 API
 
-### Task P3-1 — `SensorBase<T>::CurrentValue` should throw when the sensor isn't supported
+### Task P3-1 — `SensorBase<T>::CurrentValue` should throw when the sensor isn't supported — ✅ Done (2026-07-03)
 
 **Gap (confirmed via archived MSDN `hh239261`, high confidence — direct primary
 source):** the real `SensorBase<T>.CurrentValue` property doc states explicitly: *"If
@@ -77,6 +77,25 @@ constructor already does `state_ = getIsSupportedProperty() ? SensorState::Initi
 6. Double-check this doesn't break any existing test that currently calls
    `getCurrentValueProperty()` on an unsupported stub (`Compass`/`Motion` tests) expecting
    a benign default value — those tests will need updating to expect the throw instead.
+
+**Resolution (2026-07-03):** Implemented exactly as designed above. Added
+`bool isSupported_` (default `false`) + `protected void setIsSupportedProperty(bool)` to
+`SensorBase<T>` (`include/Microsoft/Devices/Sensors/SensorBase.hpp`); added
+`#include "System/InvalidOperationException.hpp"`; `getCurrentValueProperty()` now throws
+`System::InvalidOperationException` when `!isSupported_`. All 4 derived constructors
+(`Accelerometer`, `Compass`, `Gyroscope`, `Motion`) now capture their own
+`getIsSupportedProperty()` result once and call `setIsSupportedProperty(supported)` right
+after computing `state_`. Step 6 turned out to be moot: grepped the whole `tests/`
+tree first — no existing test called `getCurrentValueProperty()` at all, so there was
+zero test churn from the new throw. Added 6 new tests: `Accelerometer`/`Gyroscope` each
+got a throws-when-unsupported + does-not-throw-when-supported pair (branching on the live
+`getIsSupportedProperty()` result, same pattern as their other hardware-conditional
+tests — the does-not-throw case is `GTEST_SKIP()`ped in this headless environment);
+`Compass`/`Motion` (permanent `NotSupported` stubs) each got a single
+unconditional-throw test. Verified: `CNA` + `CnaTests` build clean (no warnings after
+void-casting the `[[nodiscard]]` return inside `EXPECT_THROW`/`EXPECT_NO_THROW`); full
+`ctest` — 1970 tests total (up from 1964), 97% passing, same 64 pre-existing headless
+`EasyGL_*` failures, zero regressions.
 
 ### Task P3-2 — Decide: should the five reading types' setters be `internal`-equivalent?
 

@@ -31,7 +31,9 @@ namespace Microsoft::Devices::Sensors
         }
 
         ++instanceCount_;
-        state_ = getIsSupportedProperty() ? SensorState::Initializing : SensorState::NotSupported;
+        const bool supported = getIsSupportedProperty();
+        state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
+        setIsSupportedProperty(supported);
     }
 
     Compass::~Compass()

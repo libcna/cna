@@ -6,6 +6,7 @@
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Devices::Sensors::Gyroscope;
@@ -84,4 +85,26 @@ TEST(GyroscopeTests, EleventhSimultaneousInstanceThrows)
     }
 
     EXPECT_THROW({ const Gyroscope overflow; (void)overflow; }, SensorFailedException);
+}
+
+TEST(GyroscopeTests, GetCurrentValuePropertyThrowsWhenUnsupported)
+{
+    if (Gyroscope::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Gyroscope is supported on this platform; unsupported-path test not applicable.";
+    }
+
+    const Gyroscope g;
+    EXPECT_THROW((void)g.getCurrentValueProperty(), System::InvalidOperationException);
+}
+
+TEST(GyroscopeTests, GetCurrentValuePropertyDoesNotThrowWhenSupported)
+{
+    if (!Gyroscope::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Gyroscope is not supported on this platform; supported-path test not applicable.";
+    }
+
+    const Gyroscope g;
+    EXPECT_NO_THROW((void)g.getCurrentValueProperty());
 }

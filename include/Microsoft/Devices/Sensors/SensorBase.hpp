@@ -14,6 +14,7 @@
 #include "System/IDisposable.hpp"
 #include "System/EventHandler.hpp"
 #include "System/EventArgs.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
 
@@ -29,6 +30,7 @@ namespace Microsoft::Devices::Sensors
     private:
         bool disposed_;
         bool isDataValid_;
+        bool isSupported_;
         System::TimeSpan timeBetweenUpdates_;
         TSensorReading currentValue_;
         SensorReadingEventArgs<TSensorReading> eventArgs_;
@@ -97,6 +99,19 @@ namespace Microsoft::Devices::Sensors
         }
 
         /**
+         * @brief Sets whether the underlying sensor hardware is supported on this device.
+         *
+         * Derived classes must call this once from their constructor with the result of
+         * their own static IsSupported check, since SensorBase has no access to it.
+         *
+         * @param value New support flag.
+         */
+        void setIsSupportedProperty(bool value)
+        {
+            isSupported_ = value;
+        }
+
+        /**
          * @brief Derived classes override this method to dispose managed-like
          * and unmanaged/native resources.
          *
@@ -129,6 +144,7 @@ namespace Microsoft::Devices::Sensors
         SensorBase()
             : disposed_(false),
               isDataValid_(false),
+              isSupported_(false),
               timeBetweenUpdates_(System::TimeSpan::Zero),
               currentValue_(),
               eventArgs_(TSensorReading())
@@ -157,9 +173,18 @@ namespace Microsoft::Devices::Sensors
          * @brief Gets the current sensor reading.
          *
          * @return Current sensor reading.
+         *
+         * @throws System::InvalidOperationException if the sensor is not supported on
+         * this device. Use IsSupported to check before accessing this property.
          */
         [[nodiscard]] const TSensorReading& getCurrentValueProperty() const
         {
+            if (!isSupported_)
+            {
+                throw System::InvalidOperationException(
+                    "The sensor is not supported on this device. Check IsSupported before accessing CurrentValue.");
+            }
+
             return currentValue_;
         }
 

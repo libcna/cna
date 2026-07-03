@@ -6,6 +6,7 @@
 #include "Microsoft/Devices/Sensors/Motion.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Devices::Sensors::Motion;
@@ -58,4 +59,10 @@ TEST(MotionTests, EleventhSimultaneousInstanceThrows)
     }
 
     EXPECT_THROW({ const Motion overflow; (void)overflow; }, SensorFailedException);
+}
+
+TEST(MotionTests, GetCurrentValuePropertyThrowsInvalidOperationException)
+{
+    const Motion m;
+    EXPECT_THROW((void)m.getCurrentValueProperty(), System::InvalidOperationException);
 }
