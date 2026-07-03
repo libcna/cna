@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <mutex>
 #include <vector>
 
@@ -162,6 +163,14 @@ namespace Microsoft::Xna::Framework::Audio
 
         mutable std::mutex queueMutex_;
         std::vector<std::vector<SharpRuntime::bytecs>> queuedBuffers_;
+
+        // Byte size of each chunk handed to audioStream_ via SubmitQueuedToStream(), oldest
+        // first. A chunk is only popped once Update() observes (via SDL_GetAudioStreamQueued)
+        // that the stream no longer holds that many bytes queued as input -- i.e. once it has
+        // actually been consumed by playback, not merely submitted. Counted alongside
+        // queuedBuffers_ by getPendingBufferCountProperty() (matches FNA's PendingBufferCount,
+        // which only shrinks once the native voice reports a buffer as consumed).
+        std::deque<std::size_t> submittedChunkSizes_;
 
         static constexpr SharpRuntime::intcs MINIMUM_BUFFER_CHECK = 3;
 

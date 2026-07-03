@@ -221,3 +221,25 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresWhenStarved)
     d.Update();
     EXPECT_GT(fired, 0);
 }
+
+// CP-4: a buffer must remain "pending" until the stream reports it was actually consumed, not
+// the instant it's handed off to SDL. Pre-load 3 buffers (MINIMUM_BUFFER_CHECK,
+// DynamicSoundEffectInstance.cpp) before playing, then Update() immediately -- nothing has had
+// time to actually be consumed by playback yet, so BufferNeeded must not fire at all.
+TEST(DynamicSoundEffectInstanceTest, BufferNeededDoesNotFireWhenStreamHasEnoughData)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<unsigned char> pcm(4 * 256, 0); // 256 stereo S16 frames of silence
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    if (!tryStartHeadless(d)) // submits a 3rd buffer, then Play()s
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    int fired = 0;
+    d.BufferNeeded += [&fired](System::Object*, const System::EventArgs&) { ++fired; };
+    d.Update();
+
+    EXPECT_EQ(fired, 0);
+}

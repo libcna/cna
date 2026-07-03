@@ -440,16 +440,32 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `Apply3DDoesNotModifyVolumeOrPanProperties` bez opravy selže (Volume/Pan se přepíšou), s opravou
   projde.
 
-- [ ] **CP-4 — `DynamicSoundEffectInstance::PendingBufferCount`/`Update()` mění sémantiku oproti FNA
+- [x] **CP-4 — `DynamicSoundEffectInstance::PendingBufferCount`/`Update()` mění sémantiku oproti FNA
   — počet se nuluje ihned po předání dat do SDL streamu, ne až po skutečném přehrání hardwarem.**
-  `SubmitQueuedToStream()` vyprázdní `queuedBuffers_` při každém volání (i uvnitř `Update()`), takže
-  `getPendingBufferCountProperty()` je těsně po submitu prakticky vždy 0 → `Update()` pak spouští
-  `BufferNeeded` prakticky při každém tiku bez ohledu na skutečný stav bufferu.
+  *(hotovo 2026-07-03.)* `SubmitQueuedToStream()` vyprázdnilo `queuedBuffers_` při každém volání
+  (i uvnitř `Update()`), takže `getPendingBufferCountProperty()` bylo těsně po submitu prakticky
+  vždy 0 → `Update()` pak spouštělo `BufferNeeded` prakticky při každém tiku bez ohledu na
+  skutečný stav bufferu.
   *FNA:* DynamicSoundEffectInstance.cs:23-29,290-322.
   *CNA:* DynamicSoundEffectInstance.cpp:47-51,312-331,374-395.
   *Accept:* `PendingBufferCount` odráží data ještě nespotřebovaná (dotaz na skutečnou frontu SDL
   streamu, ne lokální seznam); `BufferNeeded` se nespouští při dostatku dat ve streamu (test na
   frekvenci volání).
+  *Pozn.:* přidán nový privátní člen `std::deque<std::size_t> submittedChunkSizes_` — velikost
+  (v bajtech) každého chunku předaného do `audioStream_`, od nejstaršího. `SubmitQueuedToStream()`
+  teď při předání dat do streamu zároveň zaznamená velikost chunku do `submittedChunkSizes_`
+  (místo pouhého vyprázdnění `queuedBuffers_`). `getPendingBufferCountProperty()` vrací
+  `queuedBuffers_.size() + submittedChunkSizes_.size()`. `Update()` po `SubmitQueuedToStream()`
+  zavolá `SDL_GetAudioStreamQueued(stream)` (skutečný počet bajtů, které stream stále drží jako
+  nespotřebovaný vstup — SDL3 analog FNA's `FAudioSourceVoice_GetState().BuffersQueued`) a
+  odstraňuje nejstarší chunky z `submittedChunkSizes_`, dokud součet zbylých přesahuje tuto
+  hodnotu — přesně stejný algoritmus jako FNA's `while (PendingBufferCount > state.BuffersQueued)
+  RemoveAt(0)`, jen v bajtové granularitě místo diskrétních bufferů. `ClearBuffers()` teď maže i
+  `submittedChunkSizes_`. Nový test `BufferNeededDoesNotFireWhenStreamHasEnoughData` (3 buffery
+  před/při `Play()`, `Update()` hned poté — nic nemohlo být reálně spotřebováno, `BufferNeeded`
+  nesmí vystřelit ani jednou) ověřen přes `git stash` — bez opravy konzistentně selže (fired>0
+  i s plným bufferem), s opravou konzistentně `fired==0` (5x opakováno). Celá sada
+  2004/2004 testů zelená (3x opakovaně, bez flakiness).
 
 - [x] **CP-5 — `Stop(bool immediate=false)` na `DynamicSoundEffectInstance` tiše no-opuje místo
   hození `InvalidOperationException`.** *(hotovo 2026-07-03.)* FNA v `Stop(bool)` explicitně hází,

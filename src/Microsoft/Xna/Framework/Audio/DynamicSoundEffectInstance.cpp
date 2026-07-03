@@ -47,7 +47,7 @@ namespace Microsoft::Xna::Framework::Audio
     SharpRuntime::intcs DynamicSoundEffectInstance::getPendingBufferCountProperty() const
     {
         std::lock_guard<std::mutex> lock(queueMutex_);
-        return static_cast<SharpRuntime::intcs>(queuedBuffers_.size());
+        return static_cast<SharpRuntime::intcs>(queuedBuffers_.size() + submittedChunkSizes_.size());
     }
 
     bool DynamicSoundEffectInstance::getIsLoopedProperty() const
@@ -314,6 +314,7 @@ namespace Microsoft::Xna::Framework::Audio
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
             queuedBuffers_.clear();
+            submittedChunkSizes_.clear();
         }
 
 #ifdef SOUND_ENABLED
@@ -334,6 +335,29 @@ namespace Microsoft::Xna::Framework::Audio
 
         // Submit any freshly queued buffers.
         SubmitQueuedToStream();
+
+#ifdef SOUND_ENABLED
+        // A submitted chunk only counts as consumed once the stream reports it no longer holds
+        // that many bytes queued as input (matches FNA polling the native voice's real
+        // BuffersQueued state) -- not the instant it was handed to SDL.
+        SDL_AudioStream* stream = AsStream(audioStream_);
+        if (stream)
+        {
+            const int queuedBytes = SDL_GetAudioStreamQueued(stream);
+            if (queuedBytes >= 0)
+            {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                std::size_t total = 0;
+                for (std::size_t size : submittedChunkSizes_) total += size;
+                while (!submittedChunkSizes_.empty() &&
+                       total > static_cast<std::size_t>(queuedBytes))
+                {
+                    total -= submittedChunkSizes_.front();
+                    submittedChunkSizes_.pop_front();
+                }
+            }
+        }
+#endif
 
         // Raise BufferNeeded while we are short of MINIMUM_BUFFER_CHECK worth of data.
         for (
@@ -400,6 +424,9 @@ namespace Microsoft::Xna::Framework::Audio
                 chunk.data(),
                 static_cast<int>(chunk.size())
             );
+
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            submittedChunkSizes_.push_back(chunk.size());
         }
 #endif
     }
