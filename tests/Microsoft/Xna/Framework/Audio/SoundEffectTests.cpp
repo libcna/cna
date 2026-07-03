@@ -34,6 +34,52 @@ namespace
             return nullptr;
         }
     }
+
+    void w16(std::vector<uint8_t>& v, uint16_t x)
+    {
+        v.push_back(static_cast<uint8_t>(x));
+        v.push_back(static_cast<uint8_t>(x >> 8));
+    }
+
+    void w32(std::vector<uint8_t>& v, uint32_t x)
+    {
+        v.push_back(static_cast<uint8_t>(x));
+        v.push_back(static_cast<uint8_t>(x >> 8));
+        v.push_back(static_cast<uint8_t>(x >> 16));
+        v.push_back(static_cast<uint8_t>(x >> 24));
+    }
+
+    void tag(std::vector<uint8_t>& v, const char* t)
+    {
+        v.insert(v.end(), t, t + 4);
+    }
+
+    // Minimal valid 16-bit mono PCM WAV: 0.1s of silence @ 44100Hz -- enough for FromStream to
+    // successfully decode and report a nonzero Duration (regression fixture for CP-11).
+    std::vector<uint8_t> BuildMinimalWavBytes()
+    {
+        constexpr uint16_t channels      = 1;
+        constexpr uint32_t sampleRate    = 44100;
+        constexpr uint8_t  bitsPerSample = 16;
+        constexpr uint32_t frameCount    = 4410; // 0.1s
+        const uint32_t audioLen = frameCount * channels * (bitsPerSample / 8);
+
+        const uint16_t blockAlign     = static_cast<uint16_t>(channels * (bitsPerSample / 8));
+        const uint32_t avgBytesPerSec = sampleRate * blockAlign;
+        const uint32_t riffPayload    = 4 + (8 + 16) + (8 + audioLen);
+
+        std::vector<uint8_t> wav;
+        tag(wav, "RIFF"); w32(wav, riffPayload);
+        tag(wav, "WAVE");
+        tag(wav, "fmt "); w32(wav, 16);
+        w16(wav, 1); w16(wav, channels);
+        w32(wav, sampleRate); w32(wav, avgBytesPerSec);
+        w16(wav, blockAlign); w16(wav, bitsPerSample);
+        tag(wav, "data"); w32(wav, audioLen);
+        wav.resize(wav.size() + audioLen, 0); // silence
+
+        return wav;
+    }
 }
 
 // ===================== static sample math (headless) =====================
@@ -146,6 +192,28 @@ TEST(SoundEffectTest, FromStreamGarbageThrowsNotSupported)
     {
         GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
     }
+}
+
+TEST(SoundEffectTest, FromStreamValidWavSucceedsAndReportsNonzeroDuration)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildMinimalWavBytes();
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream valid(s);
+
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx.reset(SoundEffect::FromStream(valid));
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+
+    ASSERT_TRUE(fx != nullptr);
+    EXPECT_FALSE(fx->getIsDisposedProperty());
+    EXPECT_GT(fx->getDurationProperty().getTotalSecondsProperty(), 0.0);
 }
 
 // ===================== path constructor (NOXNA) =====================

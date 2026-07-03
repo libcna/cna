@@ -513,12 +513,17 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `FromStreamGarbageThrowsNotSupported`). Oba testy proběhly bez skipnutí (dummy audio zařízení
   v tomto prostředí funguje) a reálně prošly load-path větví. Celá sada 1992/1992 testů zelená.
 
-- [ ] **CP-11 — T-5A tvrdí pokrytí „validní wave" pro `FromStream`, ale test na úspěšné načtení
-  chybí.** `SoundEffectTests.cpp` má jen testy na prázdný/garbage vstup (throw) — žádný test
-  nenačítá skutečná platná WAV data a neověřuje úspěšný návrat/`Duration`.
+- [x] **CP-11 — T-5A tvrdí pokrytí „validní wave" pro `FromStream`, ale test na úspěšné načtení
+  chybí.** *(hotovo 2026-07-03.)* `SoundEffectTests.cpp` měl jen testy na prázdný/garbage vstup
+  (throw) — žádný test nenačítal skutečná platná WAV data a neověřoval úspěšný návrat/`Duration`.
   *CNA:* tests/…/SoundEffectTests.cpp:125-149.
   *Accept:* test s minimální validní WAV fixturou (in-memory PCM header) ověří úspěšné `FromStream`
   + `getDurationProperty() > 0`.
+  *Pozn.:* žádná změna produkčního kódu. Přidán `BuildMinimalWavBytes()` (16-bit mono PCM, 0.1 s
+  ticha, ručně sestavený RIFF/WAVE/fmt/data header) a
+  `SoundEffectTest.FromStreamValidWavSucceedsAndReportsNonzeroDuration` — proběhl bez skipnutí
+  (dummy audio zařízení funguje), `FromStream` úspěšně vrátil non-null `SoundEffect` a
+  `getDurationProperty() > 0`. Celá sada 1993/1993 testů zelená.
 
 - [ ] **CP-12 — Chybí testy pro move-konstruktor a move-assignment `SoundEffectInstance` (NOXNA
   veřejné členy).** `CLAUDE.md` požaduje test pro každou veřejnou metodu/operátor.
