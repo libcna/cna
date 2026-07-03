@@ -197,6 +197,14 @@ namespace CNA::Internal::Net
             }
         }
 
+        void HandleStateChangeBroadcast(NetworkSession* session, SessionState& /*state*/, const StateChangeBroadcastMessage& msg)
+        {
+            NetworkSession::NetworkEvent evt;
+            evt.Type = NetworkSession::NetworkEventType::StateChange;
+            evt.State = msg.NewState;
+            session->SendNetworkEvent(std::move(evt));
+        }
+
         void HandleAppData(NetworkSession* session, SessionState& state, ENetPeer* fromPeer, const AppDataMessage& msg)
         {
             auto targetIt = state.WireIdToGamer.find(msg.TargetWireId);
@@ -339,11 +347,13 @@ namespace CNA::Internal::Net
                 case MessageTag::GamerLeaveBroadcast:
                     HandleGamerLeaveBroadcast(session, state, NetPacketCodec::DecodeGamerLeaveBroadcast(data));
                     break;
+                case MessageTag::StateChangeBroadcast:
+                    HandleStateChangeBroadcast(session, state, NetPacketCodec::DecodeStateChangeBroadcast(data));
+                    break;
                 case MessageTag::AppData:
                     HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
                     break;
                 default:
-                    // StateChangeBroadcast: Task 5.7.
                     break;
             }
         }
@@ -474,6 +484,34 @@ namespace CNA::Internal::Net
         if (peerIt != state.WireIdToPeer.end())
         {
             SendTo(state, peerIt->second, bytes, options);
+        }
+    }
+
+    void ENetBackend::BroadcastStateChange(NetworkSession* session, NetworkSessionState newState)
+    {
+        if (!RealNetworkingEnabled(session->getSessionTypeProperty()))
+        {
+            return;
+        }
+
+        auto it = Sessions().find(session);
+        if (it == Sessions().end())
+        {
+            return;
+        }
+        SessionState& state = *it->second;
+
+        if (state.HostPeer != nullptr)
+        {
+            return; // only the ENet-transport host broadcasts state changes
+        }
+
+        StateChangeBroadcastMessage msg;
+        msg.NewState = newState;
+        auto bytes = NetPacketCodec::Encode(msg);
+        for (auto& [peer, wireIds] : state.PeerWireIds)
+        {
+            SendTo(state, peer, bytes, SendDataOptions::Reliable);
         }
     }
 }

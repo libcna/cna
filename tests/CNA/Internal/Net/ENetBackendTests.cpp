@@ -6,6 +6,7 @@
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/Net/GameStartedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/GamerJoinedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/GamerLeftEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
@@ -17,6 +18,7 @@
 
 using namespace CNA::Internal::Net;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
+using Microsoft::Xna::Framework::Net::GameStartedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerJoinedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerLeftEventArgs;
 using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
@@ -512,4 +514,112 @@ TEST(ENetBackendTest, ClientProcessesGamerLeaveBroadcast) {
     ASSERT_EQ(client.session->getPreviousGamersProperty().getCountProperty(), 1);
     EXPECT_EQ(client.session->getPreviousGamersProperty()[0]->getGamertagProperty(), "OtherPlayer");
     EXPECT_EQ(leftCount, 1);
+}
+
+// --- Task 5.7: StartGame/EndGame state broadcast ---
+
+TEST(ENetBackendTest, HostBroadcastsStateChangeOnStartAndEndGame) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
+
+    host.session->StartGame();
+
+    ENetPacket* received = nullptr;
+    for (int i = 0; i < 200 && !received; ++i) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            received = evt.packet;
+        }
+    }
+    ASSERT_NE(received, nullptr);
+    {
+        std::vector<SharpRuntime::bytecs> data(received->data, received->data + received->dataLength);
+        EXPECT_EQ(NetPacketCodec::PeekTag(data), MessageTag::StateChangeBroadcast);
+        EXPECT_EQ(NetPacketCodec::DecodeStateChangeBroadcast(data).NewState, NetworkSessionState::Playing);
+        enet_packet_destroy(received);
+    }
+    EXPECT_EQ(host.session->getSessionStateProperty(), NetworkSessionState::Playing);
+
+    host.session->EndGame();
+
+    received = nullptr;
+    for (int i = 0; i < 200 && !received; ++i) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            received = evt.packet;
+        }
+    }
+    ASSERT_NE(received, nullptr);
+    std::vector<SharpRuntime::bytecs> data(received->data, received->data + received->dataLength);
+    EXPECT_EQ(NetPacketCodec::PeekTag(data), MessageTag::StateChangeBroadcast);
+    EXPECT_EQ(NetPacketCodec::DecodeStateChangeBroadcast(data).NewState, NetworkSessionState::Lobby);
+    enet_packet_destroy(received);
+    EXPECT_EQ(host.session->getSessionStateProperty(), NetworkSessionState::Lobby);
+}
+
+TEST(ENetBackendTest, ClientProcessesStateChangeBroadcast) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(0, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    int startedCount = 0;
+    client.session->GameStarted += [&startedCount](System::Object*, const GameStartedEventArgs&) { ++startedCount; };
+
+    StateChangeBroadcastMessage msg;
+    msg.NewState = NetworkSessionState::Playing;
+    auto bytes = NetPacketCodec::Encode(msg);
+    fakeHost.Send(clientPeerFromHostSide, 0, bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && client.session->getSessionStateProperty() != NetworkSessionState::Playing; ++i) {
+        client.session->Update();
+    }
+
+    EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Playing);
+    EXPECT_EQ(startedCount, 1);
 }

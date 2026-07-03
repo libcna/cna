@@ -2,6 +2,7 @@
 // Copyright (c) Robert Vokac and contributors
 #pragma once
 
+#include "Microsoft/Xna/Framework/Net/NetworkSessionState.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
 #include "Microsoft/Xna/Framework/Net/SendDataOptions.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -19,6 +20,7 @@ namespace CNA::Internal::Net
 {
     using Microsoft::Xna::Framework::Net::NetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkSession;
+    using Microsoft::Xna::Framework::Net::NetworkSessionState;
     using Microsoft::Xna::Framework::Net::NetworkSessionType;
     using Microsoft::Xna::Framework::Net::SendDataOptions;
 
@@ -120,5 +122,18 @@ namespace CNA::Internal::Net
             const std::vector<SharpRuntime::bytecs>& payload,
             SendDataOptions options
         );
+
+        /**
+         * @brief Broadcasts a session state change (StartGame/EndGame) to every connected peer.
+         *
+         * No-op if RealNetworkingEnabled(session's type) is false, session has no registered
+         * transport, or session isn't itself the ENet-transport host — a session that connected
+         * out via ConnectToHost never broadcasts state changes; only the actual host's own
+         * StartGame/EndGame call should propagate to everyone else.
+         *
+         * @param session The hosting session whose state changed.
+         * @param newState The new session state.
+         */
+        static void BroadcastStateChange(NetworkSession* session, NetworkSessionState newState);
     };
 }

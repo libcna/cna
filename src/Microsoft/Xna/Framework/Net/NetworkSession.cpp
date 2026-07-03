@@ -318,6 +318,11 @@ namespace Microsoft::Xna::Framework::Net
         evt.Type = NetworkEventType::StateChange;
         evt.State = NetworkSessionState::Playing;
         SendNetworkEvent(std::move(evt));
+
+        if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
+        {
+            CNA::Internal::Net::ENetBackend::BroadcastStateChange(this, NetworkSessionState::Playing);
+        }
     }
 
     void NetworkSession::EndGame()
@@ -330,6 +335,11 @@ namespace Microsoft::Xna::Framework::Net
         evt.Type = NetworkEventType::StateChange;
         evt.State = NetworkSessionState::Lobby;
         SendNetworkEvent(std::move(evt));
+
+        if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
+        {
+            CNA::Internal::Net::ENetBackend::BroadcastStateChange(this, NetworkSessionState::Lobby);
+        }
     }
 
     void NetworkSession::SendNetworkEvent(NetworkEvent evt)
