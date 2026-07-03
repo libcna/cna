@@ -293,12 +293,15 @@ protected:
 
     // Always stop, even on assertion failure mid-test, so the next test starts from a clean
     // (Stopped, no open stream) state -- getDefaultProperty() returns the same cached singleton
-    // to every test in this binary.
+    // to every test in this binary. BufferReady is also cleared so a test-local lambda (which
+    // captures locals that go out of scope at the end of that test) can never be invoked again
+    // by a later test sharing the same singleton.
     void TearDown() override
     {
         if (mic_ != nullptr)
         {
             mic_->Stop();
+            mic_->BufferReady.Clear();
         }
     }
 
@@ -345,6 +348,29 @@ TEST_F(MicrophoneCaptureTest, GetDataReturnsNonZeroBytesAfterCapture)
     }
 
     EXPECT_GT(read, 0);
+}
+
+// MC-4: GetQueuedBytes/CheckBuffer were only just wired up to real SDL data (T-4A); before
+// that, GetQueuedBytes always returned 0, so BufferReady could never fire and no test could
+// have caught it. Use the smallest allowed BufferDuration (100ms) and poll CheckBuffer() while
+// the real capture device accumulates data, verifying the handler actually fires.
+TEST_F(MicrophoneCaptureTest, BufferReadyFiresWhenQueuedDataExceedsBufferDuration)
+{
+    REQUIRE_MIC();
+    mic_->setBufferDurationProperty(System::TimeSpan::FromMilliseconds(100));
+
+    int fired = 0;
+    mic_->BufferReady += [&fired](System::Object*, const System::EventArgs&) { ++fired; };
+
+    mic_->Start();
+
+    for (int attempt = 0; attempt < 40 && fired == 0; ++attempt)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        mic_->CheckBuffer();
+    }
+
+    EXPECT_GT(fired, 0);
 }
 
 // ===================== GetTypeName =====================

@@ -895,17 +895,25 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   musí zůstat `0xAB`) ověřen přes `git stash` — bez opravy selže (`0x00 != 0xAB`, staré chování
   buffer vynulovalo), s opravou projde. Celá sada 2019/2019 testů zelená.
 
-- [ ] **MC-4 — Chybí test, že `BufferReady` skutečně vystřelí při reálném zachytávání dat
-  přesahujících `BufferDuration`.** Existující testy ověřují jen, že volání nespadne. Vzhledem k
-  tomu, že `GetQueuedBytes`/`CheckBuffer` byly právě přepojeny na reálná SDL data (dříve vždy
-  vracely 0, tedy `BufferReady` nikdy nemohlo vystřelit), je tohle nejrizikovější a nejméně
-  prověřené chování — přímo souvisí s MC-1 (špatná `GetSampleDuration` mohla threshold posunout,
-  aniž by to jakýkoli test odhalil).
+- [x] **MC-4 — Chybí test, že `BufferReady` skutečně vystřelí při reálném zachytávání dat
+  přesahujících `BufferDuration`.** *(hotovo 2026-07-03.)* Existující testy ověřovaly jen, že
+  volání nespadne. Vzhledem k tomu, že `GetQueuedBytes`/`CheckBuffer` byly právě přepojeny na
+  reálná SDL data (dříve vždy vracely 0, tedy `BufferReady` nikdy nemohlo vystřelit), bylo tohle
+  nejrizikovější a nejméně prověřené chování — přímo souvisí s MC-1 (špatná `GetSampleDuration`
+  mohla threshold posunout, aniž by to jakýkoli test odhalil).
   *FNA:* Microphone.cs:206-213.
   *CNA:* Microphone.cpp:218-224; tests/.../MicrophoneTests.cpp:220-229.
   *Accept:* nový test (analogicky k `MicrophoneCaptureTest`) — nastavit malé `BufferDuration`,
   zaregistrovat `BufferReady` handler, `Start()`, opakovaně volat `CheckBuffer()` v smyčce s
   timeoutem, ověřit, že handler byl zavolán alespoň jednou.
+  *Pozn.:* žádná změna produkčního kódu. Nový `MicrophoneCaptureTest.
+  BufferReadyFiresWhenQueuedDataExceedsBufferDuration` nastaví `BufferDuration=100ms` (minimum
+  povolené), zaregistruje handler, `Start()`, a v cyklu (max 40× po 50ms) volá `CheckBuffer()`,
+  dokud handler nevystřelí — ověřeno stabilně 3× po sobě bez flakiness. Zároveň opraven latentní
+  test-infra problém: `MicrophoneCaptureTest::TearDown()` teď navíc volá `BufferReady.Clear()` —
+  bez toho by testem lokálně zachycená lambda (odkazující na lokální proměnnou mimo scope)
+  zůstala navěky připojená ke sdílenému `getDefaultProperty()` singletonu a mohla by být volána
+  (use-after-scope) i pozdějšími testy ve stejném binárce. Celá sada 2020/2020 testů zelená.
 
 - [x] **MC-5 — `GetData` nemá samostatný test pro záporný `count`, jen pro `count == 0`.** *(hotovo
   2026-07-03.)* Validace je `count <= 0`, ale existující test `GetDataZeroOrNegativeCountThrows`
