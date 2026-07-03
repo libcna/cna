@@ -9,7 +9,9 @@ namespace Microsoft::Xna::Framework::Net
         int privateSlots,
         int publicSlots,
         NetworkSessionProperties properties,
-        QualityOfService qos
+        QualityOfService qos,
+        const std::string& hostAddress,
+        uint16_t hostPort
     )
         : currentGamerCount_(numGamers)
         , hostGamertag_(host)
@@ -17,6 +19,8 @@ namespace Microsoft::Xna::Framework::Net
         , openPublicGamerSlots_(publicSlots)
         , sessionProperties_(std::move(properties))
         , qualityOfService_(std::move(qos))
+        , hostAddress_(hostAddress)
+        , hostPort_(hostPort)
     {
     }
 
@@ -26,9 +30,13 @@ namespace Microsoft::Xna::Framework::Net
         int privateSlots,
         int publicSlots,
         NetworkSessionProperties properties,
-        QualityOfService qos
+        QualityOfService qos,
+        const std::string& hostAddress,
+        uint16_t hostPort
     ) {
-        return AvailableNetworkSession(numGamers, host, privateSlots, publicSlots, std::move(properties), std::move(qos));
+        return AvailableNetworkSession(
+            numGamers, host, privateSlots, publicSlots, std::move(properties), std::move(qos), hostAddress, hostPort
+        );
     }
 
     int AvailableNetworkSession::getCurrentGamerCountProperty() const     { return currentGamerCount_; }
@@ -46,12 +54,17 @@ namespace Microsoft::Xna::Framework::Net
         return sessionProperties_;
     }
 
+    const std::string& AvailableNetworkSession::GetConnectAddress() const { return hostAddress_; }
+    uint16_t AvailableNetworkSession::GetConnectPort() const { return hostPort_; }
+
     bool AvailableNetworkSession::operator==(const AvailableNetworkSession& other) const
     {
         return currentGamerCount_ == other.currentGamerCount_
             && hostGamertag_ == other.hostGamertag_
             && openPrivateGamerSlots_ == other.openPrivateGamerSlots_
-            && openPublicGamerSlots_ == other.openPublicGamerSlots_;
+            && openPublicGamerSlots_ == other.openPublicGamerSlots_
+            && hostAddress_ == other.hostAddress_
+            && hostPort_ == other.hostPort_;
     }
 
     bool AvailableNetworkSession::operator!=(const AvailableNetworkSession& other) const

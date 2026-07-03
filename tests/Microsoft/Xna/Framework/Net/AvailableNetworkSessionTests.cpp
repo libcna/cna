@@ -47,6 +47,34 @@ TEST(AvailableNetworkSessionTest, EqualityAndInequality) {
     EXPECT_NE(a, c);
 }
 
+TEST(AvailableNetworkSessionTest, DefaultConnectAddressAndPortAreEmpty) {
+    auto session = MakeSession();
+    EXPECT_EQ(session.GetConnectAddress(), "");
+    EXPECT_EQ(session.GetConnectPort(), 0);
+}
+
+TEST(AvailableNetworkSessionTest, ConnectAddressAndPortFromCreateInternal) {
+    auto session = AvailableNetworkSession::CreateInternal(
+        2, "host1", 1, 3, NetworkSessionProperties{}, QualityOfService::CreateInternal(), "192.168.1.5", 12345
+    );
+    EXPECT_EQ(session.GetConnectAddress(), "192.168.1.5");
+    EXPECT_EQ(session.GetConnectPort(), 12345);
+}
+
+TEST(AvailableNetworkSessionTest, EqualityConsidersConnectAddressAndPort) {
+    auto a = AvailableNetworkSession::CreateInternal(
+        2, "host1", 1, 3, NetworkSessionProperties{}, QualityOfService::CreateInternal(), "10.0.0.1", 1000
+    );
+    auto b = AvailableNetworkSession::CreateInternal(
+        2, "host1", 1, 3, NetworkSessionProperties{}, QualityOfService::CreateInternal(), "10.0.0.1", 1000
+    );
+    auto c = AvailableNetworkSession::CreateInternal(
+        2, "host1", 1, 3, NetworkSessionProperties{}, QualityOfService::CreateInternal(), "10.0.0.2", 1000
+    );
+    EXPECT_EQ(a, b);
+    EXPECT_NE(a, c);
+}
+
 // --- AvailableNetworkSessionCollection ---
 
 TEST(AvailableNetworkSessionCollectionTest, EmptyCollection) {

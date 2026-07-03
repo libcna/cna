@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) Robert Vokac and contributors
 #include "CNA/Internal/Net/ENetBackend.hpp"
+#include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -380,12 +381,16 @@ namespace CNA::Internal::Net
         auto state = std::make_unique<SessionState>(
             SessionState{ENetHostHandle::CreateHost(0, kMaxPeers, kChannelLimit)}
         );
+        uint16_t boundPort = state->Host.getBoundPortProperty();
         sessions.emplace(session, std::move(state));
+
+        ENetDiscoveryService::RegisterHost(session, boundPort);
     }
 
     void ENetBackend::TeardownSession(NetworkSession* session)
     {
         Sessions().erase(session);
+        ENetDiscoveryService::UnregisterHost(session);
     }
 
     void ENetBackend::PumpSession(NetworkSession* session)

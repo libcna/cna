@@ -18,6 +18,19 @@ namespace CNA::Internal::Net
     /** @brief Wire format version for the discovery protocol; bump on incompatible changes. */
     constexpr uint8_t kDiscoveryProtocolVersion = 1;
 
+    /**
+     * @brief Identifies which discovery message follows.
+     *
+     * Unlike NetPacketCodec's connected-channel messages (each delivered on its own ENet
+     * connection), both discovery message types share one raw UDP socket/port (see
+     * ENetDiscoveryService), so an explicit tag is required to tell them apart on receipt.
+     */
+    enum class DiscoveryMessageTag : uint8_t
+    {
+        Query = 0x01,
+        Announce = 0x02,
+    };
+
     /** @brief Broadcast (and sent to localhost as a fallback) by a client searching for LAN sessions. */
     struct DiscoveryQueryMessage
     {
@@ -50,6 +63,9 @@ namespace CNA::Internal::Net
     public:
         static std::vector<SharpRuntime::bytecs> Encode(const DiscoveryQueryMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const DiscoveryAnnounceMessage& message);
+
+        /** @brief Reads the leading DiscoveryMessageTag byte without needing a full decode. */
+        static DiscoveryMessageTag PeekTag(const std::vector<SharpRuntime::bytecs>& data);
 
         static DiscoveryQueryMessage DecodeQuery(const std::vector<SharpRuntime::bytecs>& data);
         static DiscoveryAnnounceMessage DecodeAnnounce(const std::vector<SharpRuntime::bytecs>& data);

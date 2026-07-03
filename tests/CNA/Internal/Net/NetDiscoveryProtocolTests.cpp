@@ -7,12 +7,19 @@
 using namespace CNA::Internal::Net;
 using Microsoft::Xna::Framework::Net::NetworkSessionType;
 
+TEST(NetDiscoveryProtocolTest, PeekTagOnEmptyBufferThrows) {
+    std::vector<uint8_t> empty;
+    EXPECT_THROW(NetDiscoveryProtocol::PeekTag(empty), std::out_of_range);
+}
+
 TEST(NetDiscoveryProtocolTest, QueryRoundtrip) {
     DiscoveryQueryMessage message;
     message.ProtocolVersion = kDiscoveryProtocolVersion;
     message.SessionTypeFilter = NetworkSessionType::SystemLink;
 
     auto bytes = NetDiscoveryProtocol::Encode(message);
+    EXPECT_EQ(NetDiscoveryProtocol::PeekTag(bytes), DiscoveryMessageTag::Query);
+
     auto decoded = NetDiscoveryProtocol::DecodeQuery(bytes);
 
     EXPECT_EQ(decoded.ProtocolVersion, kDiscoveryProtocolVersion);
@@ -29,6 +36,8 @@ TEST(NetDiscoveryProtocolTest, AnnounceRoundtripWithNoProperties) {
     message.HostGamertag = "hostplayer";
 
     auto bytes = NetDiscoveryProtocol::Encode(message);
+    EXPECT_EQ(NetDiscoveryProtocol::PeekTag(bytes), DiscoveryMessageTag::Announce);
+
     auto decoded = NetDiscoveryProtocol::DecodeAnnounce(bytes);
 
     EXPECT_EQ(decoded.ProtocolVersion, kDiscoveryProtocolVersion);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "CNA/Internal/Net/ENetBackend.hpp"
+#include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -210,6 +211,7 @@ namespace Microsoft::Xna::Framework::Net
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
         {
             CNA::Internal::Net::ENetBackend::PumpSession(this);
+            CNA::Internal::Net::ENetDiscoveryService::Poll();
         }
 
         while (!networkEvents_.empty())
@@ -661,8 +663,18 @@ namespace Microsoft::Xna::Framework::Net
             throw System::ArgumentException("result");
         }
 
-        // Always empty: FNA never actually populates a discovered-sessions list in this stub.
+        NetworkSessionType type = activeAction_->SessionType;
         activeAction_ = nullptr;
+
+        if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(type))
+        {
+            return AvailableNetworkSessionCollection::CreateInternal(
+                CNA::Internal::Net::ENetDiscoveryService::FindSessions(type)
+            );
+        }
+
+        // Non-SystemLink types stay fully synthetic: FNA never actually populates a
+        // discovered-sessions list in this stub.
         return AvailableNetworkSessionCollection::CreateInternal({});
     }
 

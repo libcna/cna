@@ -3,6 +3,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
 #include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
+#include <cstdint>
 #include <string>
 
 namespace Microsoft::Xna::Framework::Net
@@ -76,6 +77,25 @@ namespace Microsoft::Xna::Framework::Net
          */
         NOXNA [[nodiscard]] bool operator!=(const AvailableNetworkSession& other) const;
 
+        /**
+         * @brief Gets the network address to connect to in order to join this session.
+         *
+         * Not part of FNA's original design (FNA's Find() never actually discovers anything to
+         * connect to); populated by ENetDiscoveryService from the real LAN discovery reply.
+         *
+         * @return The host's address, or empty if this instance wasn't built from a real
+         *         discovery reply.
+         */
+        NOXNA [[nodiscard]] const std::string& GetConnectAddress() const;
+
+        /**
+         * @brief Gets the network port to connect to in order to join this session.
+         *
+         * @return The host's real ENet connect port, or 0 if this instance wasn't built from a
+         *         real discovery reply.
+         */
+        NOXNA [[nodiscard]] uint16_t GetConnectPort() const;
+
         /** @brief Creates an AvailableNetworkSession for CNA internal use. */
         NOXNA static AvailableNetworkSession CreateInternal(
             int numGamers,
@@ -83,7 +103,9 @@ namespace Microsoft::Xna::Framework::Net
             int privateSlots,
             int publicSlots,
             NetworkSessionProperties properties,
-            QualityOfService qos
+            QualityOfService qos,
+            const std::string& hostAddress = "",
+            uint16_t hostPort = 0
         );
 
     private:
@@ -93,7 +115,9 @@ namespace Microsoft::Xna::Framework::Net
             int privateSlots,
             int publicSlots,
             NetworkSessionProperties properties,
-            QualityOfService qos
+            QualityOfService qos,
+            const std::string& hostAddress = "",
+            uint16_t hostPort = 0
         );
 
         int currentGamerCount_;
@@ -102,5 +126,7 @@ namespace Microsoft::Xna::Framework::Net
         int openPublicGamerSlots_;
         NetworkSessionProperties sessionProperties_;
         QualityOfService qualityOfService_;
+        std::string hostAddress_;
+        uint16_t hostPort_{0};
     };
 }

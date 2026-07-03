@@ -60,15 +60,22 @@ namespace CNA::Internal::Net
     std::vector<bytecs> NetDiscoveryProtocol::Encode(const DiscoveryQueryMessage& message)
     {
         Microsoft::Xna::Framework::Net::PacketWriter writer;
+        writer.Write(static_cast<bytecs>(DiscoveryMessageTag::Query));
         writer.Write(message.ProtocolVersion);
         writer.Write(static_cast<bytecs>(message.SessionTypeFilter));
         return NetPacketCodec::ExtractBytes(writer);
+    }
+
+    DiscoveryMessageTag NetDiscoveryProtocol::PeekTag(const std::vector<bytecs>& data)
+    {
+        return static_cast<DiscoveryMessageTag>(data.at(0));
     }
 
     DiscoveryQueryMessage NetDiscoveryProtocol::DecodeQuery(const std::vector<bytecs>& data)
     {
         Microsoft::Xna::Framework::Net::PacketReader reader;
         NetPacketCodec::FillReader(reader, data);
+        (void) reader.ReadByte(); // skip the tag byte (already inspected by the caller via PeekTag)
 
         DiscoveryQueryMessage message;
         message.ProtocolVersion = reader.ReadByte();
@@ -79,6 +86,7 @@ namespace CNA::Internal::Net
     std::vector<bytecs> NetDiscoveryProtocol::Encode(const DiscoveryAnnounceMessage& message)
     {
         Microsoft::Xna::Framework::Net::PacketWriter writer;
+        writer.Write(static_cast<bytecs>(DiscoveryMessageTag::Announce));
         writer.Write(message.ProtocolVersion);
         writer.Write(message.ConnectPort);
         writer.Write(message.CurrentGamerCount);
@@ -94,6 +102,7 @@ namespace CNA::Internal::Net
     {
         Microsoft::Xna::Framework::Net::PacketReader reader;
         NetPacketCodec::FillReader(reader, data);
+        (void) reader.ReadByte(); // skip the tag byte
 
         DiscoveryAnnounceMessage message;
         message.ProtocolVersion = reader.ReadByte();
