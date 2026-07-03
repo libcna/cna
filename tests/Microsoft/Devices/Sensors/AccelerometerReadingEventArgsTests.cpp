@@ -107,6 +107,14 @@ TEST(AccelerometerReadingEventArgsTests, GetHashCodeConsistency)
     EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
 }
 
+TEST(AccelerometerReadingEventArgsTests, GetHashCodeDifferentForUnequalInstances)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const AccelerometerReadingEventArgs a(1.0, 2.0, 3.0, ts);
+    const AccelerometerReadingEventArgs b(4.0, 5.0, 6.0, ts);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
 TEST(AccelerometerReadingEventArgsTests, GetTypeName)
 {
     const AccelerometerReadingEventArgs e;

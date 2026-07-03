@@ -84,6 +84,14 @@ TEST(AttitudeReadingTests, GetHashCodeConsistency)
     EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
 }
 
+TEST(AttitudeReadingTests, GetHashCodeDifferentForUnequalInstances)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const AttitudeReading a(1.0f, 2.0f, 3.0f, Quaternion::Identity, Matrix::getIdentityProperty(), ts);
+    const AttitudeReading b(7.0f, 8.0f, 9.0f, Quaternion::Identity, Matrix::getIdentityProperty(), ts);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
 TEST(AttitudeReadingTests, GetTypeName)
 {
     const AttitudeReading r;

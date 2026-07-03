@@ -404,7 +404,7 @@ Verified: `CNA` + `CnaTests` build clean. Targeted suite — 48/48 passing (2 sk
 Full `ctest` — 1965 tests (up from 1953), 97% passing, same 64 pre-existing headless
 `EasyGL_*` failures, zero regressions.
 
-### Task P3-10 — Add "different objects → different hash" coverage for `GetHashCode()` across all reading/event-args types
+### Task P3-10 — Add "different objects → different hash" coverage for `GetHashCode()` across all reading/event-args types — ✅ Done (2026-07-03)
 
 **Gap:** `CHECKLIST.md` explicitly requires both "equal objects → equal hash" AND
 "different objects → (typically) different hash." Every `GetHashCode()` test in this
@@ -418,6 +418,18 @@ missing everywhere, a systemic omission across all 6+ files, not an isolated gap
 different hashes (accept, per `CHECKLIST.md`'s own "(typically)" hedge, that a genuine
 collision is possible in principle — if one is hit by chance during implementation, pick
 different field values rather than treating it as a bug).
+
+**Resolution (2026-07-03):** `CalibrationEventArgs` turned out to have no `GetHashCode()`
+method at all (confirmed by reading its header — it's an empty marker class with no
+fields, so there's nothing to hash), so the actual scope was the 6 files the "6+" hedge
+anticipated, not 7. Added a `GetHashCodeDifferentForUnequalInstances` test to each of
+`AccelerometerReadingTests`, `CompassReadingTests`, `GyroscopeReadingTests`,
+`AttitudeReadingTests`, `MotionReadingTests`, `AccelerometerReadingEventArgsTests`,
+constructing two instances differing in every field (not just one), all reusing the exact
+same timestamp to isolate the value-field contribution to the hash. No collisions hit
+during implementation. Verified: `CNA` + `CnaTests` build clean, all 6 new tests pass.
+Full `ctest` — 1972 tests (up from 1966), 97% passing, same 64 pre-existing headless
+`EasyGL_*` failures, zero regressions.
 
 ---
 

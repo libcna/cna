@@ -85,6 +85,14 @@ TEST(CompassReadingTests, GetHashCodeConsistency)
     EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
 }
 
+TEST(CompassReadingTests, GetHashCodeDifferentForUnequalInstances)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const CompassReading a(1.0, 2.0, Vector3(1.0f, 2.0f, 3.0f), ts, 3.0);
+    const CompassReading b(7.0, 8.0, Vector3(4.0f, 5.0f, 6.0f), ts, 9.0);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
 TEST(CompassReadingTests, GetTypeName)
 {
     const CompassReading r;

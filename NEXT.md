@@ -46,23 +46,23 @@ deeper research pass) and **nothing in it has been started yet**.
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
 (`cmake-build-debug`) as of the last verified build (2026-07-03, HEAD
-`17e7dfa` + uncommitted Tasks P3-6/P3-7/P3-8/P3-9 work). Also verified
-clean under `VULKAN` (`cmake-build-vulkan`) and `BGFX` (`cmake-build-bgfx`)
-as of 2026-07-02 — the graphics backend choice has zero effect on
+`b6e245d` + uncommitted Task P3-10 work). Also verified clean under
+`VULKAN` (`cmake-build-vulkan`) and `BGFX` (`cmake-build-bgfx`) as of
+2026-07-02 — the graphics backend choice has zero effect on
 `Microsoft::Devices::*` compilation, confirmed empirically. (Vulkan/BGFX
-not re-verified after Tasks P3-1/P3-4/P3-5/P3-2/P3-6/P3-7/P3-8/P3-9 since
-they only touch `Microsoft::Devices` headers/cpp/tests, same reasoning as
-before.)
+not re-verified after Tasks P3-1/P3-4/P3-5/P3-2/P3-6/P3-7/P3-8/P3-9/P3-10
+since they only touch `Microsoft::Devices` headers/cpp/tests, same
+reasoning as before.)
 
-**Tests:** last full `ctest` run (`EASYGL`): **1966 tests total, 97%
+**Tests:** last full `ctest` run (`EASYGL`): **1972 tests total, 97%
 passing.** The only failures are a fixed set of **64 pre-existing
 `EasyGL_*` graphics tests** that cannot run headless (no display/GPU in
 this dev environment) — present before this phase began, unrelated to
 `Microsoft::Devices`. No regressions have been introduced (the count went
 down from 1973 to 1953 as part of Task P3-2 — 20 `SetXxx` tests were
 removed because the methods they tested became private, not a coverage
-loss — then back up to 1966 with Tasks P3-6/P3-7/P3-8/P3-9's 13 new tests;
-see Section 3). Under `VULKAN`/`BGFX`, the targeted
+loss — then back up through 1966 (Tasks P3-6/P3-7/P3-8/P3-9) to 1972
+(Task P3-10); see Section 3). Under `VULKAN`/`BGFX`, the targeted
 Devices/Sensors/VibrateController suite was **139/139** passing on both as
 of 2026-07-02 (not re-run since); full-suite counts differ from `EASYGL`
 only because backend-specific demo/smoke-test
@@ -206,12 +206,22 @@ executables weren't built (not a regression).
   that the 10-cap triggers). 13 new tests (1966 total, up from 1953). Full
   writeup: `plan_devices_phase3.md` Tasks P3-6/P3-7/P3-8/P3-9's shared
   "Resolution" section (under Task P3-9).
+- **Task P3-10 done (2026-07-03):** added `GetHashCodeDifferentForUnequalInstances`
+  to the 6 reading/event-args test files that have a `GetHashCode()` method
+  (`AccelerometerReadingTests`, `CompassReadingTests`, `GyroscopeReadingTests`,
+  `AttitudeReadingTests`, `MotionReadingTests`,
+  `AccelerometerReadingEventArgsTests` — `CalibrationEventArgsTests` was
+  found to have no `GetHashCode()` to test at all, an empty marker class).
+  Each test varies every field, not just one, to make a hash collision
+  vanishingly unlikely. 6 new tests, no collisions hit. 1972 tests total,
+  up from 1966. Full writeup: `plan_devices_phase3.md` Task P3-10's
+  "Resolution" section.
 - Last pushed commit: `44ad496` on `feature/devices`. Tasks P3-1 (`9b8281f`),
   P3-4 (`ab106b5`), the `CLAUDE.md` process-change commit (`50c091e`), P3-5
-  (`89d1e53`), and P3-2 (`17e7dfa`) are committed locally but **not yet
-  pushed**. Tasks P3-6/P3-7/P3-8/P3-9's changes (4 sensor test files,
-  `plan_devices_phase3.md`, this file) are **not yet committed** as of this
-  writing.
+  (`89d1e53`), P3-2 (`17e7dfa`), and P3-6/P3-7/P3-8/P3-9 (`b6e245d`) are
+  committed locally but **not yet pushed**. Task P3-10's changes (6 reading/
+  event-args test files, `plan_devices_phase3.md`, this file) are **not yet
+  committed** as of this writing.
 
 ---
 
@@ -421,22 +431,12 @@ writing.
 ## 8. Next smallest tasks
 
 Full detail for all of these is in `plan_devices_phase3.md`; this is the
-recommended order. (Tasks P3-1, P3-2, P3-4, P3-5, P3-6, P3-7, P3-8, and
-P3-9 were completed 2026-07-03 — see Section 3. All confirmed real bugs,
-the one decision task, and the highest-value test-coverage gaps from this
-plan are now resolved; what's left is smaller test-coverage gaps and
-low-priority follow-ups.)
+recommended order. (Tasks P3-1, P3-2, P3-4, P3-5, P3-6, P3-7, P3-8, P3-9,
+and P3-10 were completed 2026-07-03 — see Section 3. All confirmed real
+bugs, the one decision task, and all but the smallest test-coverage gaps
+from this plan are now resolved.)
 
-1. **Task P3-10 — `GetHashCode()` different-hash coverage across 6 reading/event-args types**
-   - Goal: add a test asserting two *unequal* instances produce different
-     hashes, for `AccelerometerReadingTests`, `CompassReadingTests`,
-     `GyroscopeReadingTests`, `AttitudeReadingTests`, `MotionReadingTests`,
-     `AccelerometerReadingEventArgsTests`, `CalibrationEventArgsTests` (if
-     it has meaningful fields to vary).
-   - Files: `tests/Microsoft/Devices/Sensors/*Reading*Tests.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="*ReadingTests*:*ReadingEventArgsTests*"`.
-
-2. **Task P3-11 — Remaining smaller coverage gaps (bundle)**
+1. **Task P3-11 — Remaining smaller coverage gaps (bundle)**
    - Stop()-after-Dispose() on all 4 sensor classes; Start()-then-Dispose()
      on `Accelerometer`; multi-field inequality variation on
      `AttitudeReading`/`MotionReading`/`CompassReading`; full-field
