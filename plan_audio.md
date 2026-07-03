@@ -877,15 +877,23 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `MicrophoneTestAccess` obchází enumeraci pro izolované testy). Čistě úklidová změna, celá sada
   1996/1996 testů zelená.
 
-- [ ] **MC-3 — `GetData()` při nedostupnosti dat přepíše celý požadovaný rozsah bufferu nulami,
-  FNA buffer vůbec nemění.** FNA vrací jen počet skutečně přečtených bajtů a zbylou část bufferu
-  nechává beze změny. CNA při `read <= 0` (žádný stream, nic k přečtení, i chyba SDL vracející
-  záporné číslo) vždy vyplní celý požadovaný rozsah nulami — chybový stav je tak potichu maskován
-  jako "0 bajtů, buffer vynulován", a zároveň to přepíše případná stará platná data volajícího.
+- [x] **MC-3 — `GetData()` při nedostupnosti dat přepíše celý požadovaný rozsah bufferu nulami,
+  FNA buffer vůbec nemění.** *(hotovo 2026-07-03.)* FNA vrací jen počet skutečně přečtených
+  bajtů a zbylou část bufferu nechává beze změny. CNA při `read <= 0` (žádný stream, nic
+  k přečtení, i chyba SDL vracející záporné číslo) vždy vyplnila celý požadovaný rozsah nulami —
+  chybový stav byl tak potichu maskován jako "0 bajtů, buffer vynulován", a zároveň to přepsalo
+  případná stará platná data volajícího.
   *FNA:* Microphone.cs:149-170.
   *CNA:* Microphone.cpp:128-159 (zejména 144-158).
   *Accept:* buď formálně zdokumentovat jako schválenou odchylku v `CHECKLIST.md`, nebo zúžit
   nulování jen na "žádný otevřený stream" případ a při chybě SDL nechat buffer nedotčený; test.
+  *Pozn.:* zvolena D8 preferovaná varianta — sladit s FNA (žádné nulování vůbec, ne jen zúžení).
+  `GetData` teď při `read <= 0` (žádný stream, nic k přečtení, i chyba SDL) jen vrátí 0 a buffer
+  nechá zcela nedotčený, přesně jako FNA (`Microphone.GetData` deleguje přímo na platformu bez
+  jakéhokoliv fallback nulování). Odstraněn i teď nepoužívaný `#include <algorithm>`. Nový test
+  `GetDataLeavesBufferUntouchedWhenNoDataAvailable` (buffer předvyplněný `0xAB`, po `GetData`
+  musí zůstat `0xAB`) ověřen přes `git stash` — bez opravy selže (`0x00 != 0xAB`, staré chování
+  buffer vynulovalo), s opravou projde. Celá sada 2019/2019 testů zelená.
 
 - [ ] **MC-4 — Chybí test, že `BufferReady` skutečně vystřelí při reálném zachytávání dat
   přesahujících `BufferDuration`.** Existující testy ověřují jen, že volání nespadne. Vzhledem k
@@ -941,10 +949,10 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 | D2 | Pan/Volume klamp vs. throw/pass-through (T-3C) | Sladit s FNA (throw na range, pass-through volume); klamp jen vědomě + do CHECKLIST |
 | D3 | Streaming WaveBank (T-3F) | Zatím doložená odchylka (vše do paměti); skutečný streaming jako pozdější úkol |
 | D4 | Rozsah `AudioEngine::Update` / FACT DoWork (T-4D) | Minimálně per-cue volume re-apply; zbytek dokumentovaně no-op |
-| D5 | Vlastnictví `SoundEffect` vs. `SoundEffectInstance` — dangling-safe kontrakt vs. sdílené vlastnictví (CP-7) | Provázáno s D1/T-3G; pokud D1 zůstane „hodnota bez trackingu", alespoň zdokumentovat kontrakt v Doxygenu; sdílené vlastnictví (`shared_ptr`) jen pokud D1 padne na tracking |
+| D5 | ~~Vlastnictví `SoundEffect` vs. `SoundEffectInstance` — dangling-safe kontrakt vs. sdílené vlastnictví (CP-7)~~ | **Rozhodnuto a implementováno 2026-07-03** — sdílené vlastnictví: `SoundEffectInstance` drží type-erased `shared_ptr<void>` na `SoundEffect::impl_` plus cache'ovaný native handle, žádná dereference syrového `SoundEffect*` za konstrukcí. Ověřeno reálným ASan buildem. |
 | D6 | ~~Fire-and-forget cue cleanup: čas vs. stav přehrávání (XA-1)~~ | **Rozhodnuto a implementováno 2026-07-02** — mazat podle `!IsPlaying`, časový safety-net (5 min) jen jako krajní pojistka. |
-| D7 | Chování parseru na poškozená/adverzní XACT data — throw vs. saturující clamp (IN-2, IN-3) | Throw (`InvalidOperationException`/`ArgumentException`) je bezpečnější než tiché clampování na 0 — sladí se s projektovým pravidlem „no silent data corruption"; zdokumentovat v CHECKLIST, pokud se zvolí clamp |
-| D8 | `Microphone::GetData` chování bufferu při chybě/no-op — nulovat vs. nechat nedotčené (MC-3) | Sladit s FNA (nechat nedotčené) kvůli předvídatelnosti API; pokud zůstane nulování, zapsat do CHECKLIST jako vědomou odchylku |
+| D7 | ~~Chování parseru na poškozená/adverzní XACT data — throw vs. saturující clamp (IN-2, IN-3)~~ | **Rozhodnuto a implementováno 2026-07-03** — throw (`std::runtime_error`) na podteklé/poškozené hodnoty místo tichého clampování; sladí se s projektovým pravidlem „no silent data corruption". |
+| D8 | ~~`Microphone::GetData` chování bufferu při chybě/no-op — nulovat vs. nechat nedotčené (MC-3)~~ | **Rozhodnuto a implementováno 2026-07-03** — sladěno s FNA: `GetData` vrací 0 a buffer nechává zcela nedotčený, žádné nulování. |
 
 ---
 

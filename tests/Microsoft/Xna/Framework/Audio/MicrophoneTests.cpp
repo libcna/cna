@@ -199,7 +199,7 @@ TEST(MicrophoneTest, GetSampleSizeInBytesDelegatesToSoundEffectWithMonoAndSample
 
 TEST(MicrophoneTest, GetDataSingleArgOverloadDelegatesAndReturnsZero)
 {
-    // Never Start()-ed, so no capture stream is open: falls through to the zero-fill stub.
+    // Never Start()-ed, so no capture stream is open: nothing to read, returns 0.
     Microphone mic = MakeMic();
     std::vector<SharpRuntime::bytecs> buffer(10);
     EXPECT_EQ(mic.GetData(buffer), 0);
@@ -210,6 +210,19 @@ TEST(MicrophoneTest, GetDataValidRangeReturnsZero)
     Microphone mic = MakeMic();
     std::vector<SharpRuntime::bytecs> buffer(100);
     EXPECT_EQ(mic.GetData(buffer, 10, 50), 0);
+}
+
+TEST(MicrophoneTest, GetDataLeavesBufferUntouchedWhenNoDataAvailable)
+{
+    // Matches FNA (MC-3): GetData never zero-fills the requested range on a no-op read -- the
+    // caller's existing buffer contents must survive untouched.
+    Microphone mic = MakeMic();
+    std::vector<SharpRuntime::bytecs> buffer(10, static_cast<SharpRuntime::bytecs>(0xAB));
+    EXPECT_EQ(mic.GetData(buffer, 0, 10), 0);
+    for (auto b : buffer)
+    {
+        EXPECT_EQ(b, static_cast<SharpRuntime::bytecs>(0xAB));
+    }
 }
 
 TEST(MicrophoneTest, GetDataNegativeOffsetThrows)

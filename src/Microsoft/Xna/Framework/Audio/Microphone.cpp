@@ -4,8 +4,6 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#include <algorithm>
-
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
 #endif
@@ -153,9 +151,9 @@ namespace Microsoft::Xna::Framework::Audio
         }
 #endif
 
-        // No capture stream is open, or nothing was available to read: leave the caller with a
-        // predictable (silent) buffer rather than stale/uninitialized bytes.
-        std::fill(buffer.begin() + offset, buffer.begin() + offset + count, SharpRuntime::bytecs{0});
+        // No capture stream open, nothing available yet, or an SDL error: report 0 bytes read
+        // and leave the buffer untouched, matching FNA (Microphone.GetData delegates straight to
+        // the platform read with no fallback zeroing of unread bytes).
         return 0;
     }
 
