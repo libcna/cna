@@ -14,8 +14,7 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 - **Current development phase:** Phases I1–I6 are complete (TextInputEXT; Touch & gesture
   pipeline; GamePad behavior/FNA fidelity; Mouse behavior and MouseCursor; Keyboard fidelity and
   SDL key mapping; CHECKLIST/SPDX/NOXNA compliance and docs). **Phase I7 (demo and integration
-  coverage) is in progress** — task 780 of 780–783 is done (from an earlier session; not part of
-  this session's work).
+  coverage) is in progress** — tasks 780–781 of 780–783 are done (780 from an earlier session).
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -36,8 +35,8 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 ## 2. Current status
 
 ### Build
-- EasyGL build (`cmake-build-debug`): clean, as of the last build in this session (tasks 777/778
-  were docs-only, no rebuild needed; last actual rebuild was for task 776).
+- EasyGL build (`cmake-build-debug`): clean, as of the last build in this session, including
+  `cna_demo_input` (task 781).
 - Vulkan (`cmake-build-vulkan`) / Bgfx (`cmake-build-bgfx`) build dirs are misconfigured — their
   CMake caches point at the sibling `…/openeggbert/cna` repo, not this checkout (see Section 5).
   They have not been used or fixed for input work.
@@ -50,8 +49,10 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 ### Apps / libraries available
 - `CNA` static library (XNA 4.0 API surface).
 - `CnaTests` (Google Test unit suite).
-- `cna_demo_input` — interactive input demo (keyboard, mouse, gamepad, touch, text input panel).
-  Builds; last known to run crash-free.
+- `cna_demo_input` — interactive input demo (keyboard, mouse, gamepad ×4 players with rumble,
+  touch, text input panel). Builds; last known to run crash-free (confirmed via a timed run
+  against the real X11 display in this environment; no screenshot tool available here to
+  visually confirm layout — see Section 5).
 
 ### Recently implemented
 - Phase I4 (Mouse + MouseCursor, tasks 745–755): real `SetPosition`/`IsRelativeMouseModeEXT`/
@@ -82,6 +83,11 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   0%-functional stub there — corrected to reflect Phase I2's real gesture pipeline); added new
   `docs/input-backend.md` (architecture overview, complete SDL3-event→XNA-state mapping table,
   event-driven-vs-FNA-polling deviation, per-device fidelity notes).
+- Phase I7 so far (task 781, `examples/demo_input`): `Update()` now calls
+  `GamePad::SetVibration` every frame for all 4 `PlayerIndex` slots, driven by each slot's own
+  trigger values; `Draw()` renders `PlayerIndex::Two/Three/Four` via a new compact
+  `DrawGamePadMini` panel (connection/DPad/ABXY/shoulders/triggers/rumble-bar/sticks) alongside
+  the existing full-detail Player One panel.
 - One unrelated build blocker was hit and fixed: the sibling `sharp-runtime` checkout committed a
   `System::IAsyncResult` interface change that broke this repo's `StorageDevice.cpp`.
 
@@ -90,11 +96,11 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 - `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its OS-cursor
   warp target is off by the scale factor on a letterboxed/scaled window (documented in-source in
   `Mouse.cpp`; fixing it for real is a graphics-layer change, out of scope for this branch).
-- `demo_input`'s text input panel has not been visually verified on a real display in this
-  environment (no Wayland screenshot tool available here).
+- `demo_input`'s layout (text panel, multi-pad section) has not been visually verified in this
+  environment — it runs crash-free, but no screenshot tool works here (see Section 5).
 - `TouchPanel::GetCapabilities()` passes `MAX_TOUCHES` unconditionally even when disconnected
   (FNA returns `0` when disconnected) — minor, not yet scheduled as its own task.
-- Phase I7 tasks 781–783 (demo/integration coverage) have not started — see `plan_input.md`.
+- Phase I7 tasks 782–783 (gesture integration test; relative-mouse-mode check) have not started.
 
 ---
 
@@ -104,6 +110,8 @@ All on `feature/input`, most recent first (`git log`):
 
 | Commit | Change |
 |--------|--------|
+| `91a4b09` | feat(Task 781): add rumble feedback and multi-pad rendering to `demo_input` |
+| `77ea4c2` (docs) | mark Task 778 complete in `plan_input.md`; `NEXT.md` now points at Phase I7 |
 | `121773b` | docs(Task 778): add `docs/input-backend.md`; closes Phase I6 |
 | `9e85dcf` (docs) | mark Task 777 complete in `plan_input.md`; update `NEXT.md` for Task 778 |
 | `20e0d6e` | docs(Task 777): update AUDIT.md and xna-4-api-coverage.md for Input/Touch |
@@ -141,7 +149,8 @@ All on `feature/input`, most recent first (`git log`):
   (`SdlInputBridge.{hpp,cpp}`/`InputManager.{hpp,cpp}` this round only gained an SPDX header
   line — no logic changed.) Also `TouchLocation.hpp`, `TouchCollection.hpp`,
   `TouchPanelCapabilities.hpp`, `TouchPanel.hpp` (task 776 — Doxygen/`NOXNA` markers only, no
-  logic changed), `AUDIT.md`, `docs/xna-4-api-coverage.md` (task 777 — docs only).
+  logic changed), `AUDIT.md`, `docs/xna-4-api-coverage.md` (task 777 — docs only),
+  `examples/demo_input/src/InputDemo.{hpp,cpp}` (task 781).
 - **Behavior changed:** `KeyboardState::GetPressedKeys()`/`GetHashCode()` now FNA-faithful;
   `Keyboard::GetKeyFromScancodeEXT` is a real layout-aware translation instead of an identity
   stub, and now respects scancode mode; SDL keycode coverage is materially more complete;
@@ -150,22 +159,25 @@ All on `feature/input`, most recent first (`git log`):
   `KeyboardState::ToString()` now returns `"Microsoft.Xna.Framework.Input.KeyboardState"`
   (FNA's `ValueType` default) instead of the old `"[KeyboardState]"` placeholder, and is no
   longer `NOXNA`-tagged; `Keys`'s underlying type is now explicitly `int` (no observable change);
-  Mouse/MouseCursor behavior described above under "Recently implemented".
+  Mouse/MouseCursor behavior described above under "Recently implemented"; `demo_input` now
+  drives real rumble on all 4 gamepad slots and renders all 4 players (task 781).
 - **Tests added:** 26 (`MouseInputTests.cpp`, Phase I4) + 18 (`KeyboardInputTests.cpp`, Phase I5,
   task 768 — expanded from 3 to 21). Phase I5's earlier tasks (760–767) were verified during
   development with ad-hoc standalone harnesses/manual checks that were **not committed**; task
   768 is where that coverage became real, committed tests, matching the batching pattern used
   for tasks 740 and 755. Phase I6 (tasks 775–778) added no tests — 775/776 are
   comment/marker-only fixes with no behavior change (1910/1910 still passing confirms this), and
-  777/778 are pure documentation updates with no source change at all.
+  777/778 are pure documentation updates with no source change at all. Task 781 (demo-only,
+  `examples/`) added no `CnaTests` coverage either — confirmed 1910/1910 still passing (this
+  task can't touch library test count since it only changes example code), and confirmed the
+  demo itself builds and runs crash-free for 4s against a real display.
 
 ---
 
 ## 4. Current blocker / main problem
 
 **There is no blocker.** The last known state: EasyGL build clean, 1910/1910 tests passing, no
-failing command or failing test identified. Phase I6 is complete; work can resume directly at
-Phase I7 task 781 (task 780 was already done in an earlier session).
+failing command or failing test identified. Work can resume directly at Phase I7 task 782.
 
 The one open practical issue is unrelated to correctness and does not block Phase I7 work:
 
@@ -189,8 +201,8 @@ The one open practical issue is unrelated to correctness and does not block Phas
 | Status | Item |
 |--------|------|
 | Confirmed | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
-| Not started | Phase I7 tasks 781–783 (multi-pad demo rendering + rumble; gesture integration test; relative-mouse-mode integration check) haven't been picked up yet — see `plan_input.md`. |
-| Needs verification | `demo_input` text panel not visually confirmed on a real display in this environment (builds and runs crash-free, but no Wayland screenshot tool available here and forcing X11 makes SDL exit). |
+| Not started | Phase I7 tasks 782–783 (gesture integration test; relative-mouse-mode integration check) haven't been picked up yet — see `plan_input.md`. |
+| Needs verification | `demo_input`'s layout (text panel, and now the task-781 multi-pad section) is not visually confirmed in this environment. It does run crash-free against this environment's real X11 display (`DISPLAY=:0`, confirmed this session via a timed run with no error/crash trace, contradicting an earlier note that forcing X11 made SDL exit — that may have been environment-specific or since resolved); the remaining gap is purely that no screenshot tool works here (`import -window root` fails silently). |
 | Intentional deviation | `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its `SDL_WarpMouseInWindow` target is off by the scale factor on a letterboxed/scaled window. Documented in-source in `Mouse.cpp`. Fixing it for real needs a graphics-layer `IGraphicsBackend` addition, out of scope for this branch. |
 | Intentional deviation | `InputManager::GetMouseState()` reports relative-mode `X`/`Y` from a float delta accumulator fed by `SDL_EVENT_MOUSE_MOTION`'s `xrel`/`yrel` (drained to `0` on each read), rather than FNA's `SDL_GetRelativeMouseState` poll — the event-driven equivalent. Documented in-source in `InputManager.cpp`. |
 | Intentional deviation | `GamePadState.PacketNumber` is tracked at the raw `InputManager` layer (bumped on real connection/button/axis changes) rather than by comparing freshly-built `GamePadState`s like FNA's poll loop. Documented in-source in `InputManager.cpp`. |
@@ -207,6 +219,7 @@ The one open practical issue is unrelated to correctness and does not block Phas
 | Fixed | 7 non-XNA members across `TouchLocation`/`TouchCollection`/`TouchPanelCapabilities`/`TouchPanel` were missing the `NOXNA` marker (default ctors with no FNA counterpart, and `TouchPanel` methods that are `internal` in FNA but public in CNA). Fixed in task 776. |
 | Fixed (docs) | `AUDIT.md`'s Input/Touch tables didn't distinguish API-surface completeness from runtime behavior; `docs/xna-4-api-coverage.md` still described `Input::Touch` as an unwired, 0%-functional stub even though Phase I2 made it real. Fixed in task 777. |
 | Fixed (docs) | No architecture doc existed for the input backend (`SdlInputBridge`/`InputManager`/`GestureDetector`, the SDL3-event mapping, or the event-driven-vs-polling deviation). Added `docs/input-backend.md` in task 778. |
+| Fixed | `demo_input` only rendered `PlayerIndex::One` and never called `GamePad::SetVibration`. Task 781 added rumble (driven by each connected pad's own trigger values) and a compact multi-pad panel for `PlayerIndex::Two/Three/Four`. |
 | Fixed (unrelated to input work, but blocked all builds) | The sibling `sharp-runtime` checkout committed a `System::IAsyncResult` interface addition that broke this repo's `StorageDevice.cpp`. Fixed by implementing the two missing overrides in `ContainerResult`/`SelectorResult`. If a future `sharp-runtime` change breaks the build the same way, check `cd ../sharp-runtime && git status --short && git log -1` before assuming it's a transient concurrent-edit race — if the change is already committed, it needs the same kind of fix here, not a wait-and-retry. |
 
 ---
@@ -300,19 +313,10 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ## 8. Next smallest tasks
 
-Phases I1–I6 are all complete. Phase I7 (demo and integration coverage), tasks 781–783 remain
-(task 780 was already done in an earlier session). Full detail for everything completed so far
-is in `plan_input.md`.
+Phases I1–I6 are all complete. Phase I7 (demo and integration coverage), tasks 782–783 remain
+(tasks 780–781 are done). Full detail for everything completed so far is in `plan_input.md`.
 
-1. **Task 781 — `examples/demo_input`: multi-pad rendering + rumble.**
-   - Goal: add vibration/rumble feedback and render `PlayerIndex::Two/Three/Four` alongside the
-     existing `PlayerIndex::One`-only view.
-   - Files: `examples/demo_input/*` (check current structure first — not touched this session).
-   - Verify: `cmake --build cmake-build-debug --target cna_demo_input -j"$(nproc)"`, then run and
-     visually confirm (needs a display; see Section 5's "Needs verification" row for the
-     no-Wayland-screenshot-tool caveat already hit for task 780).
-
-2. **Task 782 — Integration test: gesture pipeline end-to-end.**
+1. **Task 782 — Integration test: gesture pipeline end-to-end.**
    - Goal: drive synthetic `SDL_EVENT_FINGER_*` through `SdlInputBridge::ProcessEvent` and assert
      a `GestureSample` (Tap, Flick) is dequeued via `TouchPanel::ReadGesture` — proves the Phase
      I2 wiring works from the real SDL event entry point, not just via `GestureDetector`'s direct
@@ -321,7 +325,7 @@ is in `plan_input.md`.
      existing one — check `GestureDetectorTests.cpp`/`TouchInputTests.cpp` first for the best fit.
    - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Gesture*:*Touch*'`
 
-3. **Task 783 — Integration/manual check: relative mouse mode + `SetPosition` warp.**
+2. **Task 783 — Integration/manual check: relative mouse mode + `SetPosition` warp.**
    - Goal: confirm relative mouse mode and `SetPosition`'s cursor warp behave correctly together
      in practice (Phase I4). This is explicitly integration/manual, not necessarily a new unit
      test — decide based on what's practical to verify headlessly vs. what needs a real window.
@@ -354,7 +358,7 @@ is in `plan_input.md`.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task (Section 8, Task 781).
+Read NEXT.md first. Inspect only the files needed for the first task (Section 8, Task 782).
 Do not refactor unrelated code. Make one small, verified improvement.
 
 Then run the relevant build/test command for that task (see Section 8's "Verify" line, and/or
