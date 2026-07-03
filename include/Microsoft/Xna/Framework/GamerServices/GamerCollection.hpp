@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 #include "CNA/CNAHelper.hpp"
+#include <algorithm>
 #include <vector>
 #include <stdexcept>
 
@@ -121,6 +122,19 @@ namespace Microsoft::Xna::Framework::GamerServices
         NOXNA void Add(T* item)
         {
             collection_.push_back(item);
+        }
+
+        /**
+         * @brief Removes the first occurrence of item from the collection.
+         *
+         * Restores the same same-library mutation access as Add(), for the same reason
+         * (NetworkSession removing a gamer from a sibling class's collection).
+         *
+         * @param item The element to remove.
+         */
+        NOXNA void Remove(T* item)
+        {
+            collection_.erase(std::remove(collection_.begin(), collection_.end(), item), collection_.end());
         }
 
     protected:

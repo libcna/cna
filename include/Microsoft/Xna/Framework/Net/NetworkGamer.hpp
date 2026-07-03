@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkMachine.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/TimeSpan.hpp"
+#include <string>
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -22,6 +23,16 @@ namespace Microsoft::Xna::Framework::Net
          * @return true if the gamer has left the session.
          */
         [[nodiscard]] bool getHasLeftSessionProperty() const;
+
+        /**
+         * @brief Marks whether this gamer has left the session.
+         *
+         * FNA's setter for this is `internal`; restored here for NetworkSession's
+         * RemoveGamer() (a sibling class, not a subclass) to update it.
+         *
+         * @param value The new value.
+         */
+        NOXNA void SetHasLeftSession(bool value);
 
         /**
          * @brief Gets whether this gamer has a voice/headset available.
@@ -130,16 +141,24 @@ namespace Microsoft::Xna::Framework::Net
          */
         [[nodiscard]] NetworkSession* getSessionProperty() const;
 
-        /** @brief Creates a NetworkGamer for CNA internal use. */
-        NOXNA static NetworkGamer CreateInternal(NetworkSession* session);
+        /**
+         * @brief Creates a NetworkGamer for CNA internal use.
+         *
+         * @param session The owning NetworkSession.
+         * @param gamertag The gamer's gamertag. Defaults to "Stub Gamer", matching FNA's stub
+         *                 behavior for gamers with no known real identity; ENetBackend passes a
+         *                 real gamertag received over the wire when constructing remote gamers.
+         */
+        NOXNA static NetworkGamer CreateInternal(NetworkSession* session, const std::string& gamertag = "Stub Gamer");
 
     protected:
         /**
          * @brief Constructs a NetworkGamer bound to the given session.
          *
          * @param session The owning NetworkSession.
+         * @param gamertag The gamer's gamertag. Defaults to "Stub Gamer", matching FNA's stub.
          */
-        explicit NetworkGamer(NetworkSession* session);
+        explicit NetworkGamer(NetworkSession* session, const std::string& gamertag = "Stub Gamer");
 
     private:
         bool hasLeftSession_{false};

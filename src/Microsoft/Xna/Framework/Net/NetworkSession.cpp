@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
+#include "CNA/Internal/Net/ENetBackend.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -122,6 +123,11 @@ namespace Microsoft::Xna::Framework::Net
 
         bytesPerSecondReceived_ = 0;
         bytesPerSecondSent_ = 0;
+
+        if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
+        {
+            CNA::Internal::Net::ENetBackend::StartHosting(this);
+        }
     }
 
     // --- Properties ---
@@ -186,6 +192,10 @@ namespace Microsoft::Xna::Framework::Net
         {
             gamer->ClearPacketQueue();
         }
+        if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
+        {
+            CNA::Internal::Net::ENetBackend::TeardownSession(this);
+        }
         activeSession_ = nullptr;
         isDisposed_ = true;
     }
@@ -195,6 +205,11 @@ namespace Microsoft::Xna::Framework::Net
         if (isDisposed_)
         {
             throw System::ObjectDisposedException("this");
+        }
+
+        if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
+        {
+            CNA::Internal::Net::ENetBackend::PumpSession(this);
         }
 
         while (!networkEvents_.empty())
@@ -295,6 +310,58 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::SendNetworkEvent(NetworkEvent evt)
     {
         networkEvents_.push(std::move(evt));
+    }
+
+    void NetworkSession::AddRemoteGamer(NetworkGamer* gamer)
+    {
+        remoteGamers_.Add(gamer);
+        allGamers_.Add(gamer);
+
+        NetworkEvent evt;
+        evt.Type = NetworkEventType::GamerJoin;
+        evt.Gamer = gamer;
+        SendNetworkEvent(std::move(evt));
+    }
+
+    void NetworkSession::RemoveGamer(NetworkGamer* gamer, NetworkSessionEndReason reason)
+    {
+        bool isLocal = false;
+        for (LocalNetworkGamer* local : localGamers_)
+        {
+            if (local == gamer)
+            {
+                isLocal = true;
+                break;
+            }
+        }
+
+        gamer->SetHasLeftSession(true);
+        remoteGamers_.Remove(gamer);
+        allGamers_.Remove(gamer);
+
+        // Not part of FNA's original design (no prior real implementation exists to match):
+        // evict oldest-first once the tracked history exceeds MaxPreviousGamers.
+        previousGamers_.Add(gamer);
+        while (previousGamers_.getCountProperty() > MaxPreviousGamers)
+        {
+            previousGamers_.Remove(previousGamers_[0]);
+        }
+
+        if (isLocal)
+        {
+            NetworkEvent evt;
+            evt.Type = NetworkEventType::StateChange;
+            evt.State = NetworkSessionState::Ended;
+            evt.Reason = reason;
+            SendNetworkEvent(std::move(evt));
+        }
+        else
+        {
+            NetworkEvent evt;
+            evt.Type = NetworkEventType::GamerLeave;
+            evt.Gamer = gamer;
+            SendNetworkEvent(std::move(evt));
+        }
     }
 
     // --- Static Create methods ---

@@ -4,19 +4,20 @@
 
 namespace Microsoft::Xna::Framework::Net
 {
-    NetworkGamer::NetworkGamer(NetworkSession* session)
-        : Gamer("Stub Gamer", "Stub Gamer")
+    NetworkGamer::NetworkGamer(NetworkSession* session, const std::string& gamertag)
+        : Gamer(gamertag, gamertag)
         , machine_(NetworkMachine::CreateInternal())
         , session_(session)
     {
     }
 
-    NetworkGamer NetworkGamer::CreateInternal(NetworkSession* session)
+    NetworkGamer NetworkGamer::CreateInternal(NetworkSession* session, const std::string& gamertag)
     {
-        return NetworkGamer(session);
+        return NetworkGamer(session, gamertag);
     }
 
     bool NetworkGamer::getHasLeftSessionProperty() const     { return hasLeftSession_; }
+    void NetworkGamer::SetHasLeftSession(bool value)         { hasLeftSession_ = value; }
     bool NetworkGamer::getHasVoiceProperty() const            { return hasVoice_; }
     SharpRuntime::bytecs NetworkGamer::getIdProperty() const  { return 0; }
     bool NetworkGamer::getIsGuestProperty() const             { return isGuest_; }

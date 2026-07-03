@@ -62,3 +62,16 @@ TEST(NetworkGamerTest, SessionPointerStored) {
     NetworkGamer g = NetworkGamer::CreateInternal(fakeSession);
     EXPECT_EQ(g.getSessionProperty(), fakeSession);
 }
+
+TEST(NetworkGamerTest, CreateInternalWithCustomGamertag) {
+    NetworkGamer g = NetworkGamer::CreateInternal(nullptr, "RemotePlayer");
+    EXPECT_EQ(g.getGamertagProperty(), "RemotePlayer");
+    EXPECT_EQ(g.getDisplayNameProperty(), "RemotePlayer");
+}
+
+TEST(NetworkGamerTest, SetHasLeftSessionUpdatesProperty) {
+    NetworkGamer g = NetworkGamer::CreateInternal(nullptr);
+    EXPECT_FALSE(g.getHasLeftSessionProperty());
+    g.SetHasLeftSession(true);
+    EXPECT_TRUE(g.getHasLeftSessionProperty());
+}

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/Net/ENetBackend.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
@@ -518,4 +519,124 @@ TEST(LocalNetworkGamerTest, ClearPacketQueueLeavesNoDataAvailable) {
     LocalGamerFixture fixture;
     fixture.gamer->ClearPacketQueue();
     EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
+}
+
+// --- Phase 5: real ENet-backed networking (SystemLink only) ---
+//
+// SystemLink is the only NetworkSessionType that starts a real ENet host (see
+// CNA::Internal::Net::ENetBackend::RealNetworkingEnabled). No existing test above constructs a
+// SystemLink session — only Find/BeginFind/EndFind use that type, and those never construct a
+// NetworkSession — so this is the first real-hosting exercise in the suite.
+
+TEST(NetworkSessionTest, SystemLinkSessionHostsRealNetworkingAndUpdatesCleanly) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    // Update() drains the real ENet transport (no peers connected yet) as well as the local
+    // event queue; neither should throw.
+    EXPECT_NO_THROW(session->Update());
+    EXPECT_NO_THROW(session->Update());
+
+    session->Dispose();
+}
+
+TEST(NetworkSessionTest, LocalSessionTypeDoesNotStartRealNetworking) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    EXPECT_EQ(CNA::Internal::Net::ENetBackend::GetBoundPort(session), 0);
+
+    session->Dispose();
+}
+
+TEST(NetworkSessionTest, SystemLinkSessionGetsARealBoundPort) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    EXPECT_GT(CNA::Internal::Net::ENetBackend::GetBoundPort(session), 0);
+
+    session->Dispose();
+    // TeardownSession() unregisters the transport, so the port is no longer reported afterward.
+    EXPECT_EQ(CNA::Internal::Net::ENetBackend::GetBoundPort(session), 0);
+}
+
+TEST(NetworkSessionTest, AddRemoteGamerJoinsRostersAndRaisesGamerJoined) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    session->Update(); // drain the local gamer's own GamerJoin event first
+
+    NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemotePlayer");
+    int joinCount = 0;
+    session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs& e) {
+        ++joinCount;
+        EXPECT_EQ(e.getGamerProperty()->getGamertagProperty(), "RemotePlayer");
+    };
+
+    session->AddRemoteGamer(&remote);
+    EXPECT_EQ(session->getRemoteGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 2);
+
+    session->Update();
+    EXPECT_EQ(joinCount, 1);
+
+    session->Dispose();
+}
+
+TEST(NetworkSessionTest, RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPrevious) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    session->Update();
+
+    NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemotePlayer");
+    session->AddRemoteGamer(&remote);
+    session->Update();
+
+    int leftCount = 0;
+    session->GamerLeft += [&leftCount](System::Object*, const GamerLeftEventArgs&) { ++leftCount; };
+
+    session->RemoveGamer(&remote, NetworkSessionEndReason::Disconnected);
+    EXPECT_TRUE(remote.getHasLeftSessionProperty());
+    EXPECT_EQ(session->getRemoteGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getPreviousGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getPreviousGamersProperty()[0], &remote);
+
+    session->Update();
+    EXPECT_EQ(leftCount, 1);
+
+    session->Dispose();
+}
+
+TEST(NetworkSessionTest, RemoveGamerOnLocalGamerRaisesSessionEndedWithReason) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    session->Update();
+
+    int endedCount = 0;
+    NetworkSessionEndReason observedReason = NetworkSessionEndReason::ClientSignedOut;
+    session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs& e) {
+        ++endedCount;
+        observedReason = e.getEndReasonProperty();
+    };
+
+    session->RemoveGamer(session->getLocalGamersProperty()[0], NetworkSessionEndReason::HostEndedSession);
+    session->Update();
+
+    EXPECT_EQ(endedCount, 1);
+    EXPECT_EQ(observedReason, NetworkSessionEndReason::HostEndedSession);
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Ended);
+
+    session->Dispose();
 }

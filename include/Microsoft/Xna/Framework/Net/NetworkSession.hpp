@@ -81,6 +81,15 @@ namespace Microsoft::Xna::Framework::Net
             NetworkEventType Type{NetworkEventType::PacketSend};
             /** @brief The gamer associated with the event, if any. */
             NetworkGamer* Gamer{nullptr};
+            /**
+             * @brief The gamer that sent a PacketSend event's payload, if any.
+             *
+             * Not part of FNA's original design: carries the sender through the session-level
+             * event queue, since Gamer's meaning differs between the session-level queue (where
+             * it names the recipient) and each gamer's own packetQueue_ (where it names the
+             * sender) — see NetworkSession.cpp's Update() for how the two are reconciled.
+             */
+            NOXNA NetworkGamer* Sender{nullptr};
             /** @brief The packet payload, for PacketSend events. */
             std::vector<SharpRuntime::bytecs> Packet;
             /** @brief The delivery option the packet was sent with. */
@@ -337,6 +346,29 @@ namespace Microsoft::Xna::Framework::Net
          * @param evt The event to queue.
          */
         NOXNA void SendNetworkEvent(NetworkEvent evt);
+
+        /**
+         * @brief Adds a remote gamer to the session and queues its GamerJoin event.
+         *
+         * Not part of FNA's original design (FNA's Update() never populates AllGamers/
+         * RemoteGamers for anyone but local gamers); used by ENetBackend when a peer's identity
+         * is learned via the connected-channel handshake or a GamerJoinBroadcast.
+         *
+         * @param gamer The remote gamer to add. Ownership stays with the caller.
+         */
+        NOXNA void AddRemoteGamer(NetworkGamer* gamer);
+
+        /**
+         * @brief Removes a gamer from the session, migrating it to PreviousGamers.
+         *
+         * If gamer is one of this machine's own local gamers, queues a StateChange-to-Ended
+         * event instead (this machine's own view of the session is over); otherwise queues a
+         * GamerLeave event for the remaining gamers.
+         *
+         * @param gamer The gamer to remove. Ownership stays with the caller.
+         * @param reason Why the gamer is leaving; only observed when gamer is local (see above).
+         */
+        NOXNA void RemoveGamer(NetworkGamer* gamer, NetworkSessionEndReason reason);
 
         /**
          * @brief Synchronously creates a new local network session.
