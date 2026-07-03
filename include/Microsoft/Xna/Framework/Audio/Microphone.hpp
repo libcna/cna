@@ -139,9 +139,9 @@ namespace Microsoft::Xna::Framework::Audio
         GetTypeNameHPP()
 
     private:
-        friend class MicrophoneFactory;
-        // Production Microphone instances only come from a real capture backend, which does not
-        // exist yet; tests need a way to construct an isolated instance directly.
+        // Production Microphone instances are constructed directly by getAllProperty() from
+        // the enumerated SDL3 capture devices; tests need a way to construct an isolated
+        // instance directly, independent of whatever the current machine/driver enumerates.
         NOXNA friend struct MicrophoneTestAccess;
 
         Microphone(SharpRuntime::uintcs id, std::string name);

@@ -775,14 +775,19 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `GetSampleSizeInBytes` numericky nerozlišuje staré/nové chování (obě jsou ekvivalentní), ale
   pinuje delegaci do budoucna. Celá sada 1986/1986 testů zelená.
 
-- [ ] **MC-2 — Zastaralý komentář a mrtvá deklarace `friend class MicrophoneFactory` v
-  `Microphone.hpp`.** `MicrophoneFactory` nikde v repozitáři neexistuje a od T-4A reálný SDL3
-  capture backend existuje — instance se vytvářejí přímo v `Microphone::getAllProperty()`
-  (`new Microphone(...)`), ne přes žádnou factory. Komentář „Production Microphone instances only
-  come from a real capture backend, which does not exist yet" je teď nepravdivý.
+- [x] **MC-2 — Zastaralý komentář a mrtvá deklarace `friend class MicrophoneFactory` v
+  `Microphone.hpp`.** *(hotovo 2026-07-03.)* `MicrophoneFactory` nikde v repozitáři neexistovala
+  a od T-4A reálný SDL3 capture backend existuje — instance se vytvářejí přímo v
+  `Microphone::getAllProperty()` (`new Microphone(...)`), ne přes žádnou factory. Komentář
+  „Production Microphone instances only come from a real capture backend, which does not exist
+  yet" byl teď nepravdivý.
   *CNA:* Microphone.hpp:141-145.
   *Accept:* odstranit nepoužívanou `friend class MicrophoneFactory;` a přepsat komentář tak, aby
   odpovídal aktuálnímu stavu.
+  *Pozn.:* `friend class MicrophoneFactory;` odstraněn (nikde jinde v repu se nepoužíval),
+  komentář přepsán na popis skutečného stavu (instance vytváří `getAllProperty()` přímo;
+  `MicrophoneTestAccess` obchází enumeraci pro izolované testy). Čistě úklidová změna, celá sada
+  1996/1996 testů zelená.
 
 - [ ] **MC-3 — `GetData()` při nedostupnosti dat přepíše celý požadovaný rozsah bufferu nulami,
   FNA buffer vůbec nemění.** FNA vrací jen počet skutečně přečtených bajtů a zbylou část bufferu
