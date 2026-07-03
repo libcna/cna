@@ -14,6 +14,9 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 - **Current development phase: everything currently planned is done again.** Phases I1–I7
   (700–783) and Phase I8 (790–791, added after the user chose "define new follow-up tasks" over
   merging/stopping) are all complete. There is no next numbered task — see Section 8.
+- **Pending:** the user plans to have **ChatGPT Plus review this `cna_input` work** next and
+  decide new follow-up tasks from that review, then relay the feedback here. See Section 8 for
+  what to do about this when resuming.
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -356,6 +359,12 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ## 8. Next smallest tasks
 
+**Pending: external review.** The user said they will next have **ChatGPT Plus review this
+`cna_input` work** and decide what new tasks should be done, then send that feedback back here.
+**If the user returns without mentioning this review, ask whether it happened and whether there's
+feedback/new tasks from it before defaulting to the three options below** — don't just re-ask the
+same open-ended "what next" question as if this plan didn't exist.
+
 **There is no next task anywhere in `plan_input.md`.** Phases I1–I8 (700–791) are all done —
 Phase I8 was the follow-up phase the user asked for after Phases I1–I7 first completed, and it's
 now done too. This is the same decision point as before Phase I8 existed, and it's the user's
@@ -414,11 +423,12 @@ become a task there, not here.
 Read NEXT.md first. Phases I1-I8 (700-791) are all complete as of this writing — there is no
 next numbered task to pick up.
 
-Do not invent new work unprompted. Ask the user (or check for explicit new instructions) which
-of Section 8's options applies: (1) merge/PR feature/input into master, (2) define specific new
-follow-up tasks first, or (3) do nothing further right now.
+The user said they plan to have ChatGPT Plus review this cna_input work and decide new follow-up
+tasks from it. If the user hasn't mentioned that review yet, ask whether it happened and whether
+there's feedback/new tasks from it, before falling back to Section 8's generic three options
+(merge/PR, define new tasks, or do nothing further).
 
-If the user gives a new task, treat it like any other: inspect only the files it needs, make one
-small, verified improvement, run the relevant build/test command, and update NEXT.md (Sections 2,
-3, 5, 8, and this resume prompt) to reflect the new state before finishing.
+If the user gives a new task (from the review or otherwise), treat it like any other: inspect
+only the files it needs, make one small, verified improvement, run the relevant build/test
+command, and update NEXT.md (Sections 2, 3, 5, 8, and this resume prompt) before finishing.
 ```
