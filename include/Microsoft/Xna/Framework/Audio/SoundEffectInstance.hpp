@@ -39,14 +39,18 @@ namespace Microsoft::Xna::Framework::Audio
         float Pan_          = 0.0f;
         float Pitch_        = 0.0f;
 
-    public:
         /**
          * @brief Constructs a SoundEffectInstance bound to the given sound effect.
+         *
+         * FNA's equivalent constructor is `internal`; only SoundEffect::CreateInstance() (a
+         * friend) is meant to call this. Direct external construction is not part of the
+         * public API and must not compile.
          *
          * @param soundEffect The sound effect to bind this instance to.
          */
         explicit SoundEffectInstance(const SoundEffect& soundEffect);
 
+    public:
         /** @brief Destroys the instance and releases its audio track. */
         ~SoundEffectInstance() override;
 

@@ -485,14 +485,20 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `git stash` — bez opravy nejde ani zkompilovat (`has no member named 'GetTypeName'`), s opravou
   projde. Celá sada 1987/1987 testů zelená.
 
-- [ ] **CP-9 — Konstruktor `SoundEffectInstance(const SoundEffect&)` je veřejný, FNA má ekvivalentní
-  ctor `internal`.** Podle `CLAUDE.md` (Visibility Mapping) má `internal` mapovat na
-  `private`/`protected`/friend-scoped, ne na `public`. Třída už deklaruje `friend class SoundEffect;`,
-  takže zprivátnění je bezbolestné.
+- [x] **CP-9 — Konstruktor `SoundEffectInstance(const SoundEffect&)` je veřejný, FNA má ekvivalentní
+  ctor `internal`.** *(hotovo 2026-07-03.)* Podle `CLAUDE.md` (Visibility Mapping) má `internal`
+  mapovat na `private`/`protected`/friend-scoped, ne na `public`. Třída už deklarovala
+  `friend class SoundEffect;`, takže zprivátnění bylo bezbolestné.
   *FNA:* SoundEffectInstance.cs:174 (`internal SoundEffectInstance(...)`).
   *CNA:* SoundEffectInstance.hpp:45.
   *Accept:* ctor `private`/`protected`; `SoundEffect::CreateInstance()` (friend) se dál překládá;
   přímá konstrukce zvenčí se nepřekládá (kompilační negativní test/komentář).
+  *Pozn.:* ctor přesunut do `private:` sekce s doxygen poznámkou, že jde o `internal`-ekvivalent
+  volaný jen z `SoundEffect::CreateInstance()`. Ověřeno oběma směry: `cmake --build` prochází
+  beze změny (CreateInstance() se dál překládá), a scratch soubor s přímou konstrukcí zvenčí
+  (`SoundEffectInstance inst(fx);`) selže s `'...SoundEffectInstance(...)' is private within
+  this context` — přesně dle accept-kritéria. Celá sada 1988/1988 testů zelená (beze změny počtu,
+  jde čistě o viditelnost).
 
 - [ ] **CP-10 — Chybí test pro NOXNA ctor `SoundEffect(const std::string& assetName)` (načtení ze
   souboru).** Pokrytý je jen buffer-ctor a `FromStream`; ctor z cesty k souboru nemá žádný test.
