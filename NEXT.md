@@ -10,6 +10,12 @@ preserves XNA-style public APIs (`Microsoft::Xna::Framework`,
 `Microsoft::Devices`) while using modern C++ internally. It targets desktop
 Linux/Windows/macOS, Android, and iOS.
 
+**Baseline `Microsoft::Devices` API surface is complete and tested against
+the documented WP7 spec.** Remaining work (see `plan_devices_phase4.md`) is
+hardening, deeper testing, and cross-platform verification — not API
+completeness. Don't re-litigate API-shape questions already closed by
+`plan_devices.md`/`plan_devices_phase2.md`/`plan_devices_phase3.md`.
+
 **Main goal (current phase):** the `Microsoft::Devices` namespace —
 `Microsoft::Devices::Sensors` (Accelerometer, Compass, Gyroscope, Motion, and
 their reading/event-args/exception types) plus
@@ -23,7 +29,12 @@ tasks filled), and the 12th (Task P3-12, low-priority research) is
 partially resolved (`CalibrationEventArgs` confirmed correct;
 `SensorFailedException`'s exact constructor signature remains an educated
 guess after a genuine research effort, judged not worth pursuing further).
-No new task has been picked for after `plan_devices_phase3.md` yet.
+**A fourth plan, `plan_devices_phase4.md`, is open** (user-authored
+hardening plan: event-callback lifetime safety, real event-path testing,
+a real timestamp bug, SDL sensor-subsystem ownership, `VibrateController`
+hardening, cross-platform build, a demo screen — 14 tasks across 8 phases).
+Task P4-1 (this doc-cleanup pass) is in progress; nothing else in
+`plan_devices_phase4.md` has started yet.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -307,6 +318,38 @@ P3-5, all 2026-07-03).
 
 ## 5. Known bugs and limitations
 
+**Genuinely open work, grouped (all tracked in `plan_devices_phase4.md`):**
+
+- **Event-callback lifetime safety.** `Accelerometer`/`Gyroscope`'s SDL
+  event-watch callback can (in principle, on platforms where SDL delivers
+  sensor events off-thread) call `ProcessSensorUpdateEvent()` on an instance
+  that the main thread is concurrently disposing — a narrow use-after-free
+  window, documented and deliberately left open by `plan_devices_phase3.md`
+  Task P3-4 (which fixed the surrounding shared-static-state race but not
+  this specific residual gap). See `plan_devices_phase4.md` Task P4-2.
+- **Real event-path test coverage.** No test in this codebase has ever
+  observed `CurrentValueChanged`/`ReadingChanged` actually *fire* with real
+  data — every existing subscription test only confirms subscribing doesn't
+  crash, because there's no synthetic-event injection mechanism yet (Task
+  P4-2 builds one) and no real sensor hardware in this environment. See
+  `plan_devices_phase4.md` Tasks P4-3 through P4-6.
+- **Timestamp correctness (confirmed real bug, not carried over from
+  phase3 — newly found 2026-07-03).** `Accelerometer`/`Gyroscope` readings'
+  `Timestamp` is built from `SDL_GetTicksNS()` (monotonic nanoseconds since
+  SDL init) fed into a `DateTime(ticks)` constructor that expects ticks
+  since the .NET epoch (`0001-01-01`) — the resulting value is nowhere near
+  the actual wall-clock time the reading occurred. See
+  `plan_devices_phase4.md` Task P4-7.
+- **Hardware-in-the-loop verification.** Nothing in this codebase — sensor
+  axis conventions, actual vibration motor behavior, the gamepad-exclusion
+  filter — has ever run against real accelerometer/gyroscope/haptic
+  hardware. See `plan_devices_phase4.md` Tasks P4-13/P4-14.
+- **Android/iOS cross-compilation.** No NDK/toolchain available in this dev
+  container (`plan_devices_phase2.md` Task P2-7, blocked). See
+  `plan_devices_phase4.md` Tasks P4-11/P4-12.
+
+**Resolved (historical record, `plan_devices_phase3.md`, all 2026-07-03):**
+
 - **Fixed 2026-07-03:** thread-safety race in `Accelerometer`/`Gyroscope`'s
   shared sensor state vs. the SDL event-watch callback, via a
   `static std::mutex`. See Section 4, Problem 1 / Task P3-4 (done). A
@@ -336,13 +379,12 @@ P3-5, all 2026-07-03).
 - **By design, not a bug:** `Compass` and `Motion` are permanent
   `SensorState::NotSupported` stubs — SDL3 has no magnetometer API on any
   platform.
-- **Accepted limitation:** `VibrateController`'s gamepad-exclusion filter
-  matches by device name; two physically distinct controllers reporting an
-  identical product name would both be excluded/included together.
-- **Needs verification:** Android/iOS cross-compilation — no NDK/toolchain
-  available in this dev container (`plan_devices_phase2.md` Task P2-7,
-  blocked). `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__`
-  branches have never been compiled by any compiler.
+- **Superseded by `plan_devices_phase4.md` Task P4-10 (not yet fixed):**
+  `VibrateController`'s gamepad-exclusion filter matches by device name;
+  two physically distinct controllers reporting an identical product name
+  would both be excluded/included together. SDL3's
+  `SDL_OpenHapticFromJoystick()` gives a real ID-based correlation instead
+  of name-matching — confirmed to exist, not yet implemented.
 - **Confirmed 2026-07-03:** `CalibrationEventArgs`'s empty-marker-class
   implementation matches the real class exactly (MSDN `hh220788`).
 - **Unverified (low priority, no evidence of an actual bug, genuinely
@@ -477,24 +519,46 @@ writing.
 
 `plan_devices_phase3.md` has no further actionable work (see Section 3 —
 Task P3-12 is as resolved as it can get without a source that doesn't
-appear to exist in any archive). What's left, in recommended order:
+appear to exist in any archive). `plan_devices_phase4.md` is now open
+(user-authored hardening plan, 14 tasks across 8 phases). Task P4-1 (this
+doc-cleanup pass) is done as of this edit. Recommended order for the rest:
 
-1. **Re-verify `VULKAN`/`BGFX` builds** — not done since 2026-07-02
-   (commit `8092f6e`), and 9 commits of `Microsoft::Devices` changes have
-   landed since (Tasks P3-1 through P3-12). Low risk (the graphics backend
-   choice has never affected `Microsoft::Devices::*` compilation before),
-   but it's been asserted, not re-confirmed, across this whole session's
-   work — worth actually running before treating the phase as closed.
-   - Command: see Section 7's "Cross-platform build verification" block.
-   - Verify: both backends' `CNA`+`CnaTests` build clean; spot-run the
-     targeted Devices/Sensors/VibrateController suite on each.
+1. **Task P4-2 — Close the `Accelerometer`/`Gyroscope` callback lifetime
+   gap, plus the synthetic-event test hook.** The most architecturally
+   significant task in phase4, and a dependency for Tasks P4-3–P4-6. Read
+   `plan_devices_phase4.md` Task P4-2 in full before starting — it lays out
+   3 concrete design options (pending-event queue, weak_ptr registry,
+   per-instance quiescence flag) and recommends the quiescence flag as the
+   smallest diff; that recommendation still needs to be confirmed (or
+   overridden) before implementing.
+   - Files: `Accelerometer.hpp`/`.cpp`, `Gyroscope.hpp`/`.cpp`.
+   - Verify: full `ctest --output-on-failure`, no new tests expected from
+     this task alone (P4-3–P4-6 consume the new hook afterward).
 
-2. **Decide what comes after `plan_devices_phase3.md`** — this is a
-   decision for you, not something to infer: is `Microsoft::Devices` done
-   for now (only Task P2-7's Android/iOS verification remains, blocked by
-   missing toolchain in this environment), or is there a `plan_devices_phase4.md`
-   worth opening for further hardening/expansion? Nothing in the current
-   plans mandates a phase 4.
+2. **Tasks P4-3 through P4-6 — real event-path tests** using P4-2's new
+   synthetic hook: `Accelerometer.CurrentValueChanged` receives the
+   expected reading, legacy `Accelerometer.ReadingChanged` receives
+   matching X/Y/Z/Timestamp, `Gyroscope.CurrentValueChanged` receives the
+   expected reading, and `Stop()` prevents a subsequent synthetic event
+   from doing anything.
+
+3. **Task P4-7 — timestamp audit.** Confirmed real bug (not carried over
+   from phase3): `Timestamp` is built from `SDL_GetTicksNS()` fed into a
+   `DateTime(ticks)` constructor that expects .NET-epoch ticks. Recommended
+   fix: swap to `System::DateTimeOffset::getUtcNowProperty()` (confirmed to
+   already exist in `sharp-runtime`).
+
+4. **Task P4-8 — SDL sensor subsystem ownership.** Real, root-caused bug:
+   `EnsureSensorSubsystemInitialized()` bypasses SDL3's own built-in
+   subsystem ref-counting via an `SDL_WasInit()` guard.
+
+5. **Tasks P4-9/P4-10 — `VibrateController` hardening** (mutex around
+   `g_haptic`/`g_leftRightEffectId`; replace name-matching gamepad
+   exclusion with `SDL_OpenHapticFromJoystick()`).
+
+6. **Tasks P4-11–P4-14 — cross-platform build and demo screen**, likely
+   still blocked for Android/iOS in this environment (re-check first); the
+   demo screen (P4-14) has no environment blocker and can be done any time.
 
 ---
 

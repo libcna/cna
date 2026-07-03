@@ -38,7 +38,7 @@ the "always commit after finishing a task" rule in `CLAUDE.md`.
 
 ## Phase 1: Documentation cleanup
 
-### Task P4-1 — Reconcile plan/status docs, state the baseline clearly, separate genuinely open items
+### Task P4-1 — Reconcile plan/status docs, state the baseline clearly, separate genuinely open items — ✅ Done (2026-07-03)
 
 **Finding (checked before writing this task, not assumed):** `plan_devices_phase2.md` and
 `plan_devices_phase3.md` are **not actually stale** in the way "stale notes" usually
@@ -73,6 +73,28 @@ session (both were part of each task's own build+test+commit cycle, not a separa
 **Steps:** edit `NEXT.md` Section 1 and Section 5 as above; add the one-line pointer to
 `plan_devices_phase3.md`. No `plan_devices_phase2.md` change needed (checked, not stale).
 No build/test needed — documentation only.
+
+**Resolution (2026-07-03):** Implemented exactly as scoped. `NEXT.md` Section 1 now opens
+with a one-line "baseline complete" statement before the existing detailed paragraph, and
+names `plan_devices_phase4.md` explicitly. Section 5 was restructured with a new
+"Genuinely open work, grouped" block at the top (the 4 named categories: event-callback
+lifetime safety, real event-path test coverage, timestamp correctness, hardware-in-the-loop
+verification, plus Android/iOS cross-compilation — 5 categories, not 4, once
+Android/iOS was pulled out as its own bullet for parity with how it was already called
+out by name elsewhere in the doc), each pointing at its `plan_devices_phase4.md` task
+number; the pre-existing fixed/resolved bullets were kept below under a
+"Resolved (historical record)" heading rather than deleted (this project's convention is
+to preserve history, not erase it — same reasoning as why `plan_devices_phase2.md`/
+`plan_devices_phase3.md` keep original task text after a Resolution is appended). Also
+updated 2 bullets that had gone stale in the process: the `VibrateController`
+gamepad-exclusion-filter bullet now points at Task P4-10 instead of calling it an
+"accepted limitation" (it isn't anymore — a concrete fix exists), and a
+now-fully-redundant duplicate Android/iOS bullet further down the section was removed.
+`NEXT.md` Section 8 (Next smallest tasks) was also updated — it still described "decide
+whether to open phase4" as a next step, which was moot the moment this plan file was
+created; replaced with the actual phase4 task order. `plan_devices_phase3.md` got a
+one-line closing pointer to this file. No `plan_devices_phase2.md` change made (confirmed
+not stale, per the Finding above). No build/test run — documentation only, as scoped.
 
 ---
 

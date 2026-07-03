@@ -590,3 +590,11 @@ get-only property.
   count first — it was 64 as of `plan_devices_phase2.md`'s completion, 2026-07-02).
 - Update `NEXT.md` (status, recent changes, known bugs sections) after each task, same
   as throughout `plan_devices.md`/`plan_devices_phase2.md`.
+
+---
+
+**This plan has no further actionable work** (see Task P3-12's resolution above). A
+follow-up hardening plan, `plan_devices_phase4.md`, is open — see that file for
+`Microsoft::Devices`'s next steps (event-callback lifetime safety, real event-path
+testing, a confirmed timestamp bug, SDL sensor-subsystem ownership, `VibrateController`
+hardening, cross-platform build, a demo screen).
