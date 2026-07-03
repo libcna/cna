@@ -11,11 +11,11 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   from the FNA reference to CNA — not just API surface, but FNA-faithful runtime behavior wired
   to SDL3, CHECKLIST-compliant, and covered by tests. The plan is `plan_input.md` (Phases I1–I7,
   tasks 700–783).
-- **Current development phase:** Phases I1–I6 are complete (TextInputEXT; Touch & gesture
-  pipeline; GamePad behavior/FNA fidelity; Mouse behavior and MouseCursor; Keyboard fidelity and
-  SDL key mapping; CHECKLIST/SPDX/NOXNA compliance and docs). **Phase I7 (demo and integration
-  coverage) is in progress** — tasks 780–782 of 780–783 are done (780 from an earlier session);
-  only task 783 remains.
+- **Current development phase: all of it is done.** Every task in `plan_input.md` (700–783,
+  Phases I1–I7) is now marked ✅. TextInputEXT; Touch & gesture pipeline; GamePad behavior/FNA
+  fidelity; Mouse behavior and MouseCursor; Keyboard fidelity and SDL key mapping;
+  CHECKLIST/SPDX/NOXNA compliance and docs; demo and integration coverage are all complete.
+  **There is no next numbered task on this branch** — see Section 8 for what "next" means now.
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -37,7 +37,8 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 
 ### Build
 - EasyGL build (`cmake-build-debug`): clean, as of the last build in this session, including
-  `cna_demo_input` (task 781) and `CnaTests` (task 782).
+  `cna_demo_input` (task 781) and `CnaTests` (task 782). Task 783 was a manual/integration check
+  with no source change — no rebuild needed for it.
 - Vulkan (`cmake-build-vulkan`) / Bgfx (`cmake-build-bgfx`) build dirs are misconfigured — their
   CMake caches point at the sibling `…/openeggbert/cna` repo, not this checkout (see Section 5).
   They have not been used or fixed for input work.
@@ -84,19 +85,26 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   0%-functional stub there — corrected to reflect Phase I2's real gesture pipeline); added new
   `docs/input-backend.md` (architecture overview, complete SDL3-event→XNA-state mapping table,
   event-driven-vs-FNA-polling deviation, per-device fidelity notes).
-- Phase I7 so far (tasks 781–782): `demo_input`'s `Update()` now calls `GamePad::SetVibration`
-  every frame for all 4 `PlayerIndex` slots, driven by each slot's own trigger values; `Draw()`
-  renders `PlayerIndex::Two/Three/Four` via a new compact `DrawGamePadMini` panel
-  (connection/DPad/ABXY/shoulders/triggers/rumble-bar/sticks) alongside the existing full-detail
-  Player One panel (task 781). New `SdlInputBridgeTouchGestureTests.cpp` (2 tests) drives
-  synthetic `SDL_EVENT_FINGER_DOWN/MOTION/UP` through `SdlInputBridge::ProcessEvent` and asserts
-  a Tap and a Flick `GestureSample` come out of `TouchPanel::ReadGesture()` — an end-to-end proof
-  of the Phase I2 wiring from the real SDL entry point (task 782).
+- Phase I7, now complete (tasks 780–783): `demo_input`'s `Update()` now calls
+  `GamePad::SetVibration` every frame for all 4 `PlayerIndex` slots, driven by each slot's own
+  trigger values; `Draw()` renders `PlayerIndex::Two/Three/Four` via a new compact
+  `DrawGamePadMini` panel (connection/DPad/ABXY/shoulders/triggers/rumble-bar/sticks) alongside
+  the existing full-detail Player One panel (task 781). New `SdlInputBridgeTouchGestureTests.cpp`
+  (2 tests) drives synthetic `SDL_EVENT_FINGER_DOWN/MOTION/UP` through
+  `SdlInputBridge::ProcessEvent` and asserts a Tap and a Flick `GestureSample` come out of
+  `TouchPanel::ReadGesture()` — an end-to-end proof of the Phase I2 wiring from the real SDL
+  entry point (task 782). Task 783 (manual/integration check, no source change): confirmed with
+  a real SDL window under `SDL_VIDEODRIVER=x11` that `Mouse::SetPosition`'s OS-level cursor warp
+  and relative-mouse-mode's no-op guard are pixel-exact and round-trip cleanly with no stuck
+  state — see Section 5 for the one environment-specific finding (Wayland's global-mouse-query
+  restriction) this check turned up.
 - One unrelated build blocker was hit and fixed: the sibling `sharp-runtime` checkout committed a
   `System::IAsyncResult` interface change that broke this repo's `StorageDevice.cpp`.
 
 ### What does NOT work yet
-- Keyboard: nothing outstanding is known to be broken; Phase I5 is complete.
+Nothing on the `plan_input.md` task list is outstanding — all 700–783 are done. What remains is a
+short list of small, already-known, already-documented gaps (none blocking, none scheduled as
+numbered tasks — see Section 5 for the full list with status):
 - `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its OS-cursor
   warp target is off by the scale factor on a letterboxed/scaled window (documented in-source in
   `Mouse.cpp`; fixing it for real is a graphics-layer change, out of scope for this branch).
@@ -104,8 +112,6 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   environment — it runs crash-free, but no screenshot tool works here (see Section 5).
 - `TouchPanel::GetCapabilities()` passes `MAX_TOUCHES` unconditionally even when disconnected
   (FNA returns `0` when disconnected) — minor, not yet scheduled as its own task.
-- Phase I7 task 783 (relative-mouse-mode + `SetPosition` warp integration check) has not
-  started — the last remaining task in `plan_input.md`.
 
 ---
 
@@ -115,6 +121,7 @@ All on `feature/input`, most recent first (`git log`):
 
 | Commit | Change |
 |--------|--------|
+| `fc56845` | docs(Task 783): verify relative mouse mode + `SetPosition` warp integration; closes `plan_input.md` |
 | `1cc6a8b` | test(Task 782): integration test for the touch/gesture pipeline via `ProcessEvent` |
 | `f78e155` (docs) | mark Task 781 complete in `plan_input.md`; update `NEXT.md` for Task 782 |
 | `91a4b09` | feat(Task 781): add rumble feedback and multi-pad rendering to `demo_input` |
@@ -178,17 +185,20 @@ All on `feature/input`, most recent first (`git log`):
   source change at all. Task 781 (demo-only, `examples/`) added no `CnaTests` coverage either —
   confirmed 1910/1910 still passing (this task can't touch library test count since it only
   changes example code), and confirmed the demo itself builds and runs crash-free for 4s against
-  a real display.
+  a real display. Task 783 added no tests either (its own ad-hoc verification harness was
+  explicitly not committed, matching its "integration/manual check" framing) and no source
+  change — 1912/1912 unaffected.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**There is no blocker.** The last known state: EasyGL build clean, 1912/1912 tests passing, no
-failing command or failing test identified. Work can resume directly at Phase I7 task 783 — the
-last remaining task in the phase (and in `plan_input.md` overall).
+**There is no blocker, and there is no next numbered task.** The last known state: EasyGL build
+clean, 1912/1912 tests passing, no failing command or failing test identified. Every task in
+`plan_input.md` (700–783) is done. See Section 8 for what to actually do next — it isn't "pick
+the next task," since there isn't one.
 
-The one open practical issue is unrelated to correctness and does not block Phase I7 work:
+The one open practical issue is unrelated to correctness and doesn't block anything above:
 
 - **Symptom:** `cmake-build-vulkan/CMakeCache.txt` and `cmake-build-bgfx/CMakeCache.txt` have
   `CMAKE_HOME_DIRECTORY=/rv/data/development/github.com/openeggbert/cna` (the sibling repo), not
@@ -210,8 +220,8 @@ The one open practical issue is unrelated to correctness and does not block Phas
 | Status | Item |
 |--------|------|
 | Confirmed | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
-| Not started | Phase I7 task 783 (relative-mouse-mode + `SetPosition` warp integration check) — the last remaining task overall in `plan_input.md`. |
-| Needs verification | `demo_input`'s layout (text panel, and now the task-781 multi-pad section) is not visually confirmed in this environment. It does run crash-free against this environment's real X11 display (`DISPLAY=:0`, confirmed this session via a timed run with no error/crash trace, contradicting an earlier note that forcing X11 made SDL exit — that may have been environment-specific or since resolved); the remaining gap is purely that no screenshot tool works here (`import -window root` fails silently). |
+| Needs verification | `demo_input`'s layout (text panel, and the task-781 multi-pad section) is not visually confirmed in this environment. It does run crash-free against this environment's real X11 display (`DISPLAY=:0`, confirmed this session via a timed run with no error/crash trace, contradicting an earlier note that forcing X11 made SDL exit — re-verified false this session, see the task-783 row below); the remaining gap is purely that no screenshot tool works here (`import -window root` fails silently). |
+| Environment finding, not a CNA bug | `SDL_GetGlobalMouseState` silently returns `(0, 0)` under this environment's ambient Wayland session (`XDG_SESSION_TYPE=wayland`) regardless of real cursor movement — Wayland's compositor security model restricts querying global cursor position outside your own window. Forcing `SDL_VIDEODRIVER=x11` (XWayland) makes it work correctly. Same root cause as the screenshot-tool gap above. Discovered during task 783; not a defect in CNA's `Mouse` implementation. |
 | Intentional deviation | `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its `SDL_WarpMouseInWindow` target is off by the scale factor on a letterboxed/scaled window. Documented in-source in `Mouse.cpp`. Fixing it for real needs a graphics-layer `IGraphicsBackend` addition, out of scope for this branch. |
 | Intentional deviation | `InputManager::GetMouseState()` reports relative-mode `X`/`Y` from a float delta accumulator fed by `SDL_EVENT_MOUSE_MOTION`'s `xrel`/`yrel` (drained to `0` on each read), rather than FNA's `SDL_GetRelativeMouseState` poll — the event-driven equivalent. Documented in-source in `InputManager.cpp`. |
 | Intentional deviation | `GamePadState.PacketNumber` is tracked at the raw `InputManager` layer (bumped on real connection/button/axis changes) rather than by comparing freshly-built `GamePadState`s like FNA's poll loop. Documented in-source in `InputManager.cpp`. |
@@ -230,6 +240,7 @@ The one open practical issue is unrelated to correctness and does not block Phas
 | Fixed (docs) | No architecture doc existed for the input backend (`SdlInputBridge`/`InputManager`/`GestureDetector`, the SDL3-event mapping, or the event-driven-vs-polling deviation). Added `docs/input-backend.md` in task 778. |
 | Fixed | `demo_input` only rendered `PlayerIndex::One` and never called `GamePad::SetVibration`. Task 781 added rumble (driven by each connected pad's own trigger values) and a compact multi-pad panel for `PlayerIndex::Two/Three/Four`. |
 | Fixed | The Phase I2 gesture pipeline had no test proving it end-to-end from the real SDL entry point (`GestureDetectorTests.cpp` only drives `GestureDetector`'s direct API). Task 782 added `SdlInputBridgeTouchGestureTests.cpp`. |
+| Verified, no bug found | Task 783: with a real SDL window under `SDL_VIDEODRIVER=x11`, `Mouse::SetPosition`'s OS-level warp is pixel-exact, relative mode genuinely no-ops it at the OS level, and disabling relative mode restores warping immediately with no stuck state. Also confirmed via source reading that `InputManager::GetMouseState()` doesn't go stale across the round-trip. No code change was needed. |
 | Fixed (unrelated to input work, but blocked all builds) | The sibling `sharp-runtime` checkout committed a `System::IAsyncResult` interface addition that broke this repo's `StorageDevice.cpp`. Fixed by implementing the two missing overrides in `ContainerResult`/`SelectorResult`. If a future `sharp-runtime` change breaks the build the same way, check `cd ../sharp-runtime && git status --short && git log -1` before assuming it's a transient concurrent-edit race — if the change is already committed, it needs the same kind of fix here, not a wait-and-retry. |
 
 ---
@@ -323,20 +334,37 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ## 8. Next smallest tasks
 
-Phases I1–I6 are all complete. Phase I7 (demo and integration coverage) has one task left:
-task 783 — the last remaining task in `plan_input.md` overall.
+**There is no next task in `plan_input.md`.** All 66 tasks in the 700–783 range (Phases I1–I7;
+numbering isn't contiguous) are done. This section used to hand off "pick up task N" — that no
+longer applies. What's actually next is one of these, and it's a decision for whoever picks this
+up (human or Claude), not something to just default into:
 
-1. **Task 783 — Integration/manual check: relative mouse mode + `SetPosition` warp.**
-   - Goal: confirm relative mouse mode and `SetPosition`'s cursor warp behave correctly together
-     in practice (Phase I4). This is explicitly integration/manual, not necessarily a new unit
-     test — decide based on what's practical to verify headlessly vs. what needs a real window.
-   - Files: none predetermined — investigate first.
-   - Verify: TBD based on the approach chosen.
+1. **Merge/PR `feature/input` into `master`.** The branch's entire designated scope
+   (`Microsoft::Xna::Framework::Input`/`Input::Touch` FNA-faithful behavior + CHECKLIST
+   compliance + tests + docs) is complete, tested (1912/1912 passing), and documented
+   (`plan_input.md`, `AUDIT.md`, `docs/input-backend.md`, `docs/xna-4-api-coverage.md`). If this
+   is the intended stopping point, review the diff against `master` and decide on a merge
+   strategy (this is a repo-affecting action — confirm with the user before merging or pushing to
+   `master`).
+2. **Define new follow-up tasks**, if there's more wanted here, before doing any more
+   implementation work. Candidates already identified but explicitly out of scope for the
+   `plan_input.md` tasks that exist today (see Section 5 for full detail on each):
+   - Fix `TouchPanel::GetCapabilities()`'s `MAX_TOUCHES`-when-disconnected bug (small, isolated).
+   - Add the graphics-layer inverse (logical→window) coordinate transform so
+     `Mouse::SetPosition`'s warp is correct on a letterboxed/scaled window — this is explicitly a
+     graphics-layer (`IGraphicsBackend`) change, likely belongs in `GRAPHICS_TASKS.md`'s track,
+     not this input-focused plan.
+   - Reconfigure `cmake-build-vulkan`/`cmake-build-bgfx` (currently pointing at the sibling `cna`
+     repo) so Vulkan/Bgfx backends can be verified against this session's input work — EasyGL is
+     the only backend verified so far.
+   - Get a working screenshot/visual-verification path for `demo_input` in this environment (or
+     accept that visual confirmation needs to happen elsewhere).
+3. **Do nothing further and report the branch as complete** if merging isn't the user's call to
+   make right now and no new scope has been requested — this is a valid, honest answer; don't
+   invent new tasks unprompted.
 
-After task 783, every task currently listed in `plan_input.md` (700–783) is complete. At that
-point, check whether the branch should be merged/PR'd, or whether new follow-up tasks should be
-added to `plan_input.md` first (e.g. the known minor bugs in Section 5 that were explicitly
-deferred rather than fixed).
+Whichever direction is chosen, update this section (and the resume prompt in Section 10) to
+reflect the actual next step once one is picked.
 
 ---
 
@@ -348,9 +376,11 @@ deferred rather than fixed).
   Section 6).
 - No graphics changes on this branch — graphics is tracked in `GRAPHICS_TASKS.md` on its own
   track.
-- No unrelated cleanup while Phase I7 is in progress — e.g. do not touch the `TouchPanel`
-  `MAX_TOUCHES` deviation or the Vulkan/Bgfx build-dir wiring as a side effect of a demo/test
-  task; each needs its own small task/PR.
+- Do not start fixing the Section 5/8 known-gaps list (`MAX_TOUCHES` bug, Vulkan/Bgfx build-dir
+  wiring, `Mouse::SetPosition` scale factor) as unprompted "cleanup" now that the plan is done —
+  each needs its own small task/PR and an explicit decision to take it on (Section 8).
+- Do not merge or push `feature/input` to `master` without confirming with the user first — the
+  branch being "done" per `plan_input.md` is not the same as authorization to merge.
 - Do not commit the pre-existing working-tree changes (`D .claude/settings.json`, untracked
   `vendor/wgpu-native/`) — unrelated to input work.
 - Do not reconfigure or commit `cmake-build-*` directories — they are gitignored.
@@ -364,10 +394,14 @@ deferred rather than fixed).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task (Section 8, Task 783).
-Do not refactor unrelated code. Make one small, verified improvement.
+Read NEXT.md first. All 66 tasks in the plan_input.md 700-783 range (Phases I1-I7) are already
+complete as of this writing — there is no next numbered task to pick up.
 
-Then run the relevant build/test command for that task (see Section 8's "Verify" line, and/or
-Section 7), confirm it passes, and update NEXT.md (Sections 2, 3, 8, and this resume prompt)
-before finishing.
+Do not invent new work unprompted. Ask the user (or check for explicit new instructions) which
+of Section 8's options applies: (1) merge/PR feature/input into master, (2) define specific new
+follow-up tasks first (candidates listed in Section 8), or (3) do nothing further right now.
+
+If the user gives a new task, treat it like any other: inspect only the files it needs, make one
+small, verified improvement, run the relevant build/test command, and update NEXT.md (Sections 2,
+3, 5, 8, and this resume prompt) to reflect the new state before finishing.
 ```
