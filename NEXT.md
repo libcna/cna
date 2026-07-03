@@ -151,7 +151,9 @@ findings, fixed in an earlier session).
 
 ## 4. Current blocker / main problem
 
-**No build- or test-breaking blocker.** The build is clean and all 2020 tests pass as of `678258e`.
+**No build- or test-breaking blocker.** No failing command, no failing test. The build is clean
+and all 2020 tests pass as of `678258e` (last commit with an actual code/test change; the NEXT.md
+rewrite itself doesn't touch build state).
 
 **Fáze 7 is now fully closed (30/30).** There is no discrete backlog left from that audit. The
 remaining open work is the older, smaller set of pre-Fáze-7 items in §5 (`T-3F`, `T-3G`, `T-4B`,
