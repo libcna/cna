@@ -9,13 +9,13 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 
 - **Main goal (this branch):** port `Microsoft::Xna::Framework::Input` and `…::Input::Touch`
   from the FNA reference to CNA — not just API surface, but FNA-faithful runtime behavior wired
-  to SDL3, CHECKLIST-compliant, and covered by tests. The plan is `plan_input.md` (Phases I1–I7,
-  tasks 700–783).
-- **Current development phase: all of it is done.** Every task in `plan_input.md` (700–783,
-  Phases I1–I7) is now marked ✅. TextInputEXT; Touch & gesture pipeline; GamePad behavior/FNA
-  fidelity; Mouse behavior and MouseCursor; Keyboard fidelity and SDL key mapping;
-  CHECKLIST/SPDX/NOXNA compliance and docs; demo and integration coverage are all complete.
-  **There is no next numbered task on this branch** — see Section 8 for what "next" means now.
+  to SDL3, CHECKLIST-compliant, and covered by tests. The original plan was `plan_input.md`
+  (Phases I1–I7, tasks 700–783); all of it is now complete.
+- **Current development phase:** Phases I1–I7 (700–783) are all done. The user was asked what to
+  do next and chose to define new follow-up tasks rather than merge or stop — **Phase I8
+  (post-completion follow-up, tasks 790–791) was just added** and is not started yet. This is
+  deliberately small: it only covers gaps that were already identified and explicitly deferred
+  during Phases I1–I7 (not newly-discovered problems).
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -98,20 +98,24 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   and relative-mouse-mode's no-op guard are pixel-exact and round-trip cleanly with no stuck
   state — see Section 5 for the one environment-specific finding (Wayland's global-mouse-query
   restriction) this check turned up.
+- Phase I8 (tasks 790–791) was just added to `plan_input.md` after the user chose "define new
+  follow-up tasks" over merging or stopping — docs-only, nothing implemented yet.
 - One unrelated build blocker was hit and fixed: the sibling `sharp-runtime` checkout committed a
   `System::IAsyncResult` interface change that broke this repo's `StorageDevice.cpp`.
 
 ### What does NOT work yet
-Nothing on the `plan_input.md` task list is outstanding — all 700–783 are done. What remains is a
-short list of small, already-known, already-documented gaps (none blocking, none scheduled as
-numbered tasks — see Section 5 for the full list with status):
+Phases I1–I7 (700–783) are all done. What remains is Phase I8 (tasks 790–791, not started) plus
+one item deliberately left out of `plan_input.md` entirely (see Section 5 for full status):
+- `TouchPanel::GetCapabilities()` passes `MAX_TOUCHES` unconditionally even when disconnected
+  (FNA returns `0` when disconnected) — **task 790**.
+- `cmake-build-vulkan`/`cmake-build-bgfx` still point at the sibling `cna` repo; Vulkan/Bgfx have
+  never been verified against this branch's input work — **task 791**.
 - `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its OS-cursor
   warp target is off by the scale factor on a letterboxed/scaled window (documented in-source in
-  `Mouse.cpp`; fixing it for real is a graphics-layer change, out of scope for this branch).
+  `Mouse.cpp`) — a graphics-layer fix, intentionally **not** a `plan_input.md` task; see
+  `plan_input.md`'s "Known limitations / deferred" table, which points at `GRAPHICS_TASKS.md`.
 - `demo_input`'s layout (text panel, multi-pad section) has not been visually verified in this
   environment — it runs crash-free, but no screenshot tool works here (see Section 5).
-- `TouchPanel::GetCapabilities()` passes `MAX_TOUCHES` unconditionally even when disconnected
-  (FNA returns `0` when disconnected) — minor, not yet scheduled as its own task.
 
 ---
 
@@ -121,6 +125,8 @@ All on `feature/input`, most recent first (`git log`):
 
 | Commit | Change |
 |--------|--------|
+| `8f4a97e` | docs: add Phase I8 follow-up tasks (790–791) to `plan_input.md` |
+| `33e2ba7` (docs) | rewrite `NEXT.md` to reflect `plan_input.md` is fully complete (700–783) |
 | `fc56845` | docs(Task 783): verify relative mouse mode + `SetPosition` warp integration; closes `plan_input.md` |
 | `1cc6a8b` | test(Task 782): integration test for the touch/gesture pipeline via `ProcessEvent` |
 | `f78e155` (docs) | mark Task 781 complete in `plan_input.md`; update `NEXT.md` for Task 782 |
@@ -193,12 +199,11 @@ All on `feature/input`, most recent first (`git log`):
 
 ## 4. Current blocker / main problem
 
-**There is no blocker, and there is no next numbered task.** The last known state: EasyGL build
-clean, 1912/1912 tests passing, no failing command or failing test identified. Every task in
-`plan_input.md` (700–783) is done. See Section 8 for what to actually do next — it isn't "pick
-the next task," since there isn't one.
+**There is no blocker.** The last known state: EasyGL build clean, 1912/1912 tests passing, no
+failing command or failing test identified. Phases I1–I7 (700–783) are done; Phase I8 (tasks
+790–791) was just added and work can resume directly at task 790.
 
-The one open practical issue is unrelated to correctness and doesn't block anything above:
+The one open practical issue is unrelated to correctness — it's also literally task 791 now:
 
 - **Symptom:** `cmake-build-vulkan/CMakeCache.txt` and `cmake-build-bgfx/CMakeCache.txt` have
   `CMAKE_HOME_DIRECTORY=/rv/data/development/github.com/openeggbert/cna` (the sibling repo), not
@@ -219,7 +224,7 @@ The one open practical issue is unrelated to correctness and doesn't block anyth
 
 | Status | Item |
 |--------|------|
-| Confirmed | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
+| Confirmed, now task 791 | `cmake-build-vulkan` / `cmake-build-bgfx` caches point at the sibling `…/cna` repo (Section 4). |
 | Needs verification | `demo_input`'s layout (text panel, and the task-781 multi-pad section) is not visually confirmed in this environment. It does run crash-free against this environment's real X11 display (`DISPLAY=:0`, confirmed this session via a timed run with no error/crash trace, contradicting an earlier note that forcing X11 made SDL exit — re-verified false this session, see the task-783 row below); the remaining gap is purely that no screenshot tool works here (`import -window root` fails silently). |
 | Environment finding, not a CNA bug | `SDL_GetGlobalMouseState` silently returns `(0, 0)` under this environment's ambient Wayland session (`XDG_SESSION_TYPE=wayland`) regardless of real cursor movement — Wayland's compositor security model restricts querying global cursor position outside your own window. Forcing `SDL_VIDEODRIVER=x11` (XWayland) makes it work correctly. Same root cause as the screenshot-tool gap above. Discovered during task 783; not a defect in CNA's `Mouse` implementation. |
 | Intentional deviation | `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its `SDL_WarpMouseInWindow` target is off by the scale factor on a letterboxed/scaled window. Documented in-source in `Mouse.cpp`. Fixing it for real needs a graphics-layer `IGraphicsBackend` addition, out of scope for this branch. |
@@ -227,7 +232,7 @@ The one open practical issue is unrelated to correctness and doesn't block anyth
 | Intentional deviation | `GamePadState.PacketNumber` is tracked at the raw `InputManager` layer (bumped on real connection/button/axis changes) rather than by comparing freshly-built `GamePadState`s like FNA's poll loop. Documented in-source in `InputManager.cpp`. |
 | Intentional deviation | `TouchPanel::GetState()` falls back to `InputManager::GetTouchState()` because CNA's bridge is event-driven, not poll-driven like FNA. Documented in-source in `TouchPanel.cpp`. |
 | Intentional deviation | `TextInputEXT::TextInput` is `char`-based, so `SDL_EVENT_TEXT_INPUT` is forwarded per UTF-8 byte, not per UTF-16 code unit like FNA. |
-| Minor, not yet fixed | `TouchPanel::GetCapabilities()` passes `MAX_TOUCHES` unconditionally in both branches; FNA returns `0` when disconnected. |
+| Minor, now task 790 | `TouchPanel::GetCapabilities()` passes `MAX_TOUCHES` unconditionally in both branches; FNA returns `0` when disconnected. |
 | Pre-existing, unrelated to input work | Working tree shows `D .claude/settings.json` (deleted) and untracked `vendor/wgpu-native/`. Do not commit either. |
 | Fixed | `MouseCursor`'s move constructor/assignment used to bitwise-copy the raw `SDL_Cursor*` without nulling the moved-from source (latent double-free risk, not reachable by any current call site). Fixed in task 752; regression-tested in `MouseInputTests.cpp`. |
 | Fixed | Keyboard scancode mode (`FNA_KEYBOARD_USE_SCANCODES`/`INTERNAL_scanMap`) was entirely absent — the live key-event handler always used layout-dependent keycodes, and `GetKeyFromScancodeEXT` never took the scancode-mode passthrough branch. Fixed in task 765. |
@@ -241,6 +246,7 @@ The one open practical issue is unrelated to correctness and doesn't block anyth
 | Fixed | `demo_input` only rendered `PlayerIndex::One` and never called `GamePad::SetVibration`. Task 781 added rumble (driven by each connected pad's own trigger values) and a compact multi-pad panel for `PlayerIndex::Two/Three/Four`. |
 | Fixed | The Phase I2 gesture pipeline had no test proving it end-to-end from the real SDL entry point (`GestureDetectorTests.cpp` only drives `GestureDetector`'s direct API). Task 782 added `SdlInputBridgeTouchGestureTests.cpp`. |
 | Verified, no bug found | Task 783: with a real SDL window under `SDL_VIDEODRIVER=x11`, `Mouse::SetPosition`'s OS-level warp is pixel-exact, relative mode genuinely no-ops it at the OS level, and disabling relative mode restores warping immediately with no stuck state. Also confirmed via source reading that `InputManager::GetMouseState()` doesn't go stale across the round-trip. No code change was needed. |
+| Not started | Phase I8, tasks 790–791, added after all of Phases I1–I7 were confirmed complete and the user chose to define new follow-up tasks. See Section 8. |
 | Fixed (unrelated to input work, but blocked all builds) | The sibling `sharp-runtime` checkout committed a `System::IAsyncResult` interface addition that broke this repo's `StorageDevice.cpp`. Fixed by implementing the two missing overrides in `ContainerResult`/`SelectorResult`. If a future `sharp-runtime` change breaks the build the same way, check `cd ../sharp-runtime && git status --short && git log -1` before assuming it's a transient concurrent-edit race — if the change is already committed, it needs the same kind of fix here, not a wait-and-retry. |
 
 ---
@@ -334,37 +340,45 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ## 8. Next smallest tasks
 
-**There is no next task in `plan_input.md`.** All 66 tasks in the 700–783 range (Phases I1–I7;
-numbering isn't contiguous) are done. This section used to hand off "pick up task N" — that no
-longer applies. What's actually next is one of these, and it's a decision for whoever picks this
-up (human or Claude), not something to just default into:
+Phases I1–I7 (700–783) are all done. The user was explicitly asked what to do next (merge, define
+new tasks, or stop) and chose to **define new follow-up tasks** — that's Phase I8, tasks 790–791,
+just added to `plan_input.md`. Note this phase was scoped deliberately narrow: only the two gaps
+that were already identified and explicitly deferred during Phases I1–I7 (not new discoveries),
+plus a graphics-layer item that was intentionally routed to `GRAPHICS_TASKS.md`'s track instead
+of added here (see below).
 
-1. **Merge/PR `feature/input` into `master`.** The branch's entire designated scope
-   (`Microsoft::Xna::Framework::Input`/`Input::Touch` FNA-faithful behavior + CHECKLIST
-   compliance + tests + docs) is complete, tested (1912/1912 passing), and documented
-   (`plan_input.md`, `AUDIT.md`, `docs/input-backend.md`, `docs/xna-4-api-coverage.md`). If this
-   is the intended stopping point, review the diff against `master` and decide on a merge
-   strategy (this is a repo-affecting action — confirm with the user before merging or pushing to
-   `master`).
-2. **Define new follow-up tasks**, if there's more wanted here, before doing any more
-   implementation work. Candidates already identified but explicitly out of scope for the
-   `plan_input.md` tasks that exist today (see Section 5 for full detail on each):
-   - Fix `TouchPanel::GetCapabilities()`'s `MAX_TOUCHES`-when-disconnected bug (small, isolated).
-   - Add the graphics-layer inverse (logical→window) coordinate transform so
-     `Mouse::SetPosition`'s warp is correct on a letterboxed/scaled window — this is explicitly a
-     graphics-layer (`IGraphicsBackend`) change, likely belongs in `GRAPHICS_TASKS.md`'s track,
-     not this input-focused plan.
-   - Reconfigure `cmake-build-vulkan`/`cmake-build-bgfx` (currently pointing at the sibling `cna`
-     repo) so Vulkan/Bgfx backends can be verified against this session's input work — EasyGL is
-     the only backend verified so far.
-   - Get a working screenshot/visual-verification path for `demo_input` in this environment (or
-     accept that visual confirmation needs to happen elsewhere).
-3. **Do nothing further and report the branch as complete** if merging isn't the user's call to
-   make right now and no new scope has been requested — this is a valid, honest answer; don't
-   invent new tasks unprompted.
+1. **Task 790 — Fix `TouchPanel::GetCapabilities()`'s `MAX_TOUCHES` bug.**
+   - Goal: return `0` for `MaximumTouchCount` when `TouchDeviceExists` is false, matching FNA
+     (currently returns `MAX_TOUCHES` unconditionally in both branches).
+   - Files: `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`, `GetCapabilities()`
+     (lines 94–103). Confirmed against FNA's `GetTouchCapabilities()`
+     (`SDL3_FNAPlatform.cs:2265–2281`): `return new TouchPanelCapabilities(touchDeviceExists,
+     touchDeviceExists ? 4 : 0)` — only the fallback branch's return (line 102,
+     `TouchPanelCapabilities(!state.empty(), MAX_TOUCHES)`) needs the fix, to
+     `TouchPanelCapabilities(!state.empty(), !state.empty() ? MAX_TOUCHES : 0)`; the first branch
+     (line 98) is already always connected=true there, matching FNA. Likely also needs a new test
+     case in `TouchInputTests.cpp` (`TouchPanelCapabilitiesTest` — task 721 already covers the
+     connected branch; this needs the disconnected-branch case).
+   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && ./cmake-build-debug/CnaTests --gtest_filter='*Touch*'`
 
-Whichever direction is chosen, update this section (and the resume prompt in Section 10) to
-reflect the actual next step once one is picked.
+2. **Task 791 — Reconfigure and verify Vulkan/Bgfx build dirs.**
+   - Goal: fix `cmake-build-vulkan`/`cmake-build-bgfx`'s `CMAKE_HOME_DIRECTORY` (currently the
+     sibling `cna` repo, not this checkout — see Section 4), then build `CnaTests` on each backend
+     and confirm the Phase I1–I7 input work compiles and passes there too.
+   - Files: none (build-directory reconfiguration, not source changes) — unless building surfaces
+     real Vulkan/Bgfx-specific input-code issues, which would need their own follow-up.
+   - Verify: `rm -rf cmake-build-vulkan && cmake -S . -B cmake-build-vulkan -G Ninja -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON && cmake --build cmake-build-vulkan --target CnaTests -j"$(nproc)" && ./cmake-build-vulkan/CnaTests` (repeat for `BGFX`/`cmake-build-bgfx`).
+
+After both, Phase I8 (and everything currently planned) is complete again — return to the
+Section 8 decision point from before (merge/PR, define more new tasks, or stop) rather than
+inventing further work unprompted.
+
+**Intentionally not a task here:** `Mouse::SetPosition`'s scale-factor deviation (needs an
+`IGraphicsBackend` inverse-transform addition) was routed to `plan_input.md`'s "Known
+limitations / deferred" table with a pointer to `GRAPHICS_TASKS.md`, not added as a numbered task
+in this file — it's graphics-layer scope, and `GRAPHICS_TASKS.md` is a separate, actively
+maintained plan with its own numbering (currently up to Phase 69). If this is wanted, it should
+become a task there, not here.
 
 ---
 
@@ -376,9 +390,13 @@ reflect the actual next step once one is picked.
   Section 6).
 - No graphics changes on this branch — graphics is tracked in `GRAPHICS_TASKS.md` on its own
   track.
-- Do not start fixing the Section 5/8 known-gaps list (`MAX_TOUCHES` bug, Vulkan/Bgfx build-dir
-  wiring, `Mouse::SetPosition` scale factor) as unprompted "cleanup" now that the plan is done —
-  each needs its own small task/PR and an explicit decision to take it on (Section 8).
+- Do not add the `Mouse::SetPosition` scale-factor fix as a `plan_input.md` task — it's
+  graphics-layer scope, intentionally routed to `GRAPHICS_TASKS.md`'s track instead (Section 8).
+  Don't edit `GRAPHICS_TASKS.md` either unless specifically asked — it's a separate, large,
+  actively-maintained plan not owned by this branch's work.
+- Do not invent further new tasks beyond 790–791 unprompted — Phase I8 was scoped deliberately
+  narrow (only already-identified, already-deferred gaps). If more work is wanted, that's a new
+  decision for the user to make, same as the one that produced 790–791.
 - Do not merge or push `feature/input` to `master` without confirming with the user first — the
   branch being "done" per `plan_input.md` is not the same as authorization to merge.
 - Do not commit the pre-existing working-tree changes (`D .claude/settings.json`, untracked
@@ -394,14 +412,13 @@ reflect the actual next step once one is picked.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. All 66 tasks in the plan_input.md 700-783 range (Phases I1-I7) are already
-complete as of this writing — there is no next numbered task to pick up.
+Read NEXT.md first. Phases I1-I7 (700-783) are complete. Phase I8 (tasks 790-791) was just added
+per the user's explicit choice to define new follow-up tasks — pick up task 790 next (Section 8).
 
-Do not invent new work unprompted. Ask the user (or check for explicit new instructions) which
-of Section 8's options applies: (1) merge/PR feature/input into master, (2) define specific new
-follow-up tasks first (candidates listed in Section 8), or (3) do nothing further right now.
+Inspect only the files it needs, make one small, verified improvement, run the relevant
+build/test command (see Section 8's "Verify" line), confirm it passes, and update NEXT.md
+(Sections 2, 3, 5, 8, and this resume prompt) before finishing.
 
-If the user gives a new task, treat it like any other: inspect only the files it needs, make one
-small, verified improvement, run the relevant build/test command, and update NEXT.md (Sections 2,
-3, 5, 8, and this resume prompt) to reflect the new state before finishing.
+After both 790 and 791 are done, do not invent further new tasks unprompted — return to asking
+the user what's next (merge/PR, more new tasks, or stop), same as before Phase I8 was added.
 ```
