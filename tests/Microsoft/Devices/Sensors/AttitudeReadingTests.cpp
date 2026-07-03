@@ -35,54 +35,11 @@ TEST(AttitudeReadingTests, ParameterizedConstructorStoresValues)
     EXPECT_EQ(r.getTimestampProperty(), ts);
 }
 
-TEST(AttitudeReadingTests, SetPitch)
-{
-    AttitudeReading r;
-    r.setPitchProperty(0.5f);
-    EXPECT_EQ(r.getPitchProperty(), 0.5f);
-}
-
-TEST(AttitudeReadingTests, SetRoll)
-{
-    AttitudeReading r;
-    r.setRollProperty(-0.5f);
-    EXPECT_EQ(r.getRollProperty(), -0.5f);
-}
-
-TEST(AttitudeReadingTests, SetYaw)
-{
-    AttitudeReading r;
-    r.setYawProperty(1.5f);
-    EXPECT_EQ(r.getYawProperty(), 1.5f);
-}
-
-TEST(AttitudeReadingTests, SetQuaternion)
-{
-    AttitudeReading r;
-    const Quaternion q(1.0f, 0.0f, 0.0f, 0.0f);
-    r.setQuaternionProperty(q);
-    EXPECT_TRUE(r.getQuaternionProperty() == q);
-}
-
-TEST(AttitudeReadingTests, SetRotationMatrix)
-{
-    AttitudeReading r;
-    const Matrix m(
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        1.0f, 2.0f, 3.0f, 1.0f);
-    r.setRotationMatrixProperty(m);
-    EXPECT_TRUE(r.getRotationMatrixProperty() == m);
-}
-
-TEST(AttitudeReadingTests, SetTimestamp)
-{
-    AttitudeReading r;
-    const DateTimeOffset ts(System::DateTime(9999LL), System::TimeSpan::Zero);
-    r.setTimestampProperty(ts);
-    EXPECT_EQ(r.getTimestampProperty(), ts);
-}
+// NOTE (Task P3-2): all setXProperty() methods on AttitudeReading are
+// private + friend Motion as of this task, matching the real WP7 API's
+// `internal set`, so they can no longer be exercised directly from this
+// test file. Field storage/round-trip is still fully covered via
+// ParameterizedConstructorStoresValues() above.
 
 TEST(AttitudeReadingTests, EqualityOperatorEqualInstances)
 {

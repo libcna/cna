@@ -24,21 +24,11 @@ TEST(GyroscopeReadingTests, ParameterizedConstructorStoresValues)
     EXPECT_EQ(r.getTimestampProperty(), ts);
 }
 
-TEST(GyroscopeReadingTests, SetRotationRate)
-{
-    GyroscopeReading r;
-    const Vector3 v(0.5f, -0.5f, 1.0f);
-    r.setRotationRateProperty(v);
-    EXPECT_EQ(r.getRotationRateProperty(), v);
-}
-
-TEST(GyroscopeReadingTests, SetTimestamp)
-{
-    GyroscopeReading r;
-    const DateTimeOffset ts(System::DateTime(9999LL), System::TimeSpan::Zero);
-    r.setTimestampProperty(ts);
-    EXPECT_EQ(r.getTimestampProperty(), ts);
-}
+// NOTE (Task P3-2): setRotationRateProperty()/setTimestampProperty() are
+// private + friend Gyroscope as of this task, matching the real WP7 API's
+// `internal set`, so they can no longer be exercised directly from this
+// test file. Field storage/round-trip is still fully covered via
+// ParameterizedConstructorStoresValues() above.
 
 TEST(GyroscopeReadingTests, EqualityOperatorEqualInstances)
 {

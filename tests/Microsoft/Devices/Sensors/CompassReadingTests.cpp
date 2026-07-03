@@ -30,42 +30,11 @@ TEST(CompassReadingTests, ParameterizedConstructorStoresValues)
     EXPECT_EQ(r.getTrueHeadingProperty(), 95.0);
 }
 
-TEST(CompassReadingTests, SetHeadingAccuracy)
-{
-    CompassReading r;
-    r.setHeadingAccuracyProperty(3.5);
-    EXPECT_EQ(r.getHeadingAccuracyProperty(), 3.5);
-}
-
-TEST(CompassReadingTests, SetMagneticHeading)
-{
-    CompassReading r;
-    r.setMagneticHeadingProperty(180.0);
-    EXPECT_EQ(r.getMagneticHeadingProperty(), 180.0);
-}
-
-TEST(CompassReadingTests, SetMagnetometerReading)
-{
-    CompassReading r;
-    const Vector3 v(0.5f, -0.5f, 1.0f);
-    r.setMagnetometerReadingProperty(v);
-    EXPECT_EQ(r.getMagnetometerReadingProperty(), v);
-}
-
-TEST(CompassReadingTests, SetTimestamp)
-{
-    CompassReading r;
-    const DateTimeOffset ts(System::DateTime(9999LL), System::TimeSpan::Zero);
-    r.setTimestampProperty(ts);
-    EXPECT_EQ(r.getTimestampProperty(), ts);
-}
-
-TEST(CompassReadingTests, SetTrueHeading)
-{
-    CompassReading r;
-    r.setTrueHeadingProperty(270.0);
-    EXPECT_EQ(r.getTrueHeadingProperty(), 270.0);
-}
+// NOTE (Task P3-2): all setXProperty() methods on CompassReading are
+// private + friend Compass as of this task, matching the real WP7 API's
+// `internal set`, so they can no longer be exercised directly from this
+// test file. Field storage/round-trip is still fully covered via
+// ParameterizedConstructorStoresValues() above.
 
 TEST(CompassReadingTests, EqualityOperatorEqualInstances)
 {

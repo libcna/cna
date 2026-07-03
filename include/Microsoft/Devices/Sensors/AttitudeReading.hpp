@@ -19,6 +19,8 @@ namespace Microsoft::Devices::Sensors
     /** @brief Represents one device attitude (orientation) sensor reading. */
     class AttitudeReading : public ISensorReading
     {
+        friend class Motion;
+
     private:
         DEF_MEMBER(float, Pitch)
         DEF_MEMBER(float, Roll)
@@ -60,25 +62,11 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] float getPitchProperty() const;
 
         /**
-         * @brief Sets the rotation around the X-axis, in radians.
-         *
-         * @param value New pitch, in radians.
-         */
-        void setPitchProperty(float value);
-
-        /**
          * @brief Gets the rotation around the Z-axis, in radians.
          *
          * @return Roll, in radians.
          */
         [[nodiscard]] float getRollProperty() const;
-
-        /**
-         * @brief Sets the rotation around the Z-axis, in radians.
-         *
-         * @param value New roll, in radians.
-         */
-        void setRollProperty(float value);
 
         /**
          * @brief Gets the rotation around the Y-axis, in radians.
@@ -88,25 +76,11 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] float getYawProperty() const;
 
         /**
-         * @brief Sets the rotation around the Y-axis, in radians.
-         *
-         * @param value New yaw, in radians.
-         */
-        void setYawProperty(float value);
-
-        /**
          * @brief Gets the device orientation expressed as a quaternion.
          *
          * @return Orientation quaternion.
          */
         [[nodiscard]] const Quaternion& getQuaternionProperty() const;
-
-        /**
-         * @brief Sets the device orientation expressed as a quaternion.
-         *
-         * @param value New orientation quaternion.
-         */
-        void setQuaternionProperty(const Quaternion& value);
 
         /**
          * @brief Gets the device orientation expressed as a rotation matrix.
@@ -116,25 +90,11 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] const Matrix& getRotationMatrixProperty() const;
 
         /**
-         * @brief Sets the device orientation expressed as a rotation matrix.
-         *
-         * @param value New orientation rotation matrix.
-         */
-        void setRotationMatrixProperty(const Matrix& value);
-
-        /**
          * @brief Gets the timestamp of the sensor reading.
          *
          * @return Timestamp of the reading.
          */
         [[nodiscard]] const System::DateTimeOffset& getTimestampProperty() const override;
-
-        /**
-         * @brief Sets the timestamp of the sensor reading.
-         *
-         * @param value New timestamp.
-         */
-        void setTimestampProperty(const System::DateTimeOffset& value);
 
         /**
          * @brief Returns true if both readings have equal attitude and timestamp values.
@@ -172,5 +132,63 @@ namespace Microsoft::Devices::Sensors
          * @return "Microsoft.Devices.Sensors.AttitudeReading"
          */
         NOXNA [[nodiscard]] std::string GetTypeName() const;
+
+    private:
+        /**
+         * @brief Sets the rotation around the X-axis, in radians.
+         *
+         * Restricted to Motion, the class that produces readings of this
+         * type (as MotionReading.Attitude), matching the real WP7 API's
+         * `internal set` (settable only from within
+         * Microsoft.Devices.Sensors.dll).
+         *
+         * @param value New pitch, in radians.
+         */
+        void setPitchProperty(float value);
+
+        /**
+         * @brief Sets the rotation around the Z-axis, in radians.
+         *
+         * Restricted to Motion; see setPitchProperty() for why.
+         *
+         * @param value New roll, in radians.
+         */
+        void setRollProperty(float value);
+
+        /**
+         * @brief Sets the rotation around the Y-axis, in radians.
+         *
+         * Restricted to Motion; see setPitchProperty() for why.
+         *
+         * @param value New yaw, in radians.
+         */
+        void setYawProperty(float value);
+
+        /**
+         * @brief Sets the device orientation expressed as a quaternion.
+         *
+         * Restricted to Motion; see setPitchProperty() for why.
+         *
+         * @param value New orientation quaternion.
+         */
+        void setQuaternionProperty(const Quaternion& value);
+
+        /**
+         * @brief Sets the device orientation expressed as a rotation matrix.
+         *
+         * Restricted to Motion; see setPitchProperty() for why.
+         *
+         * @param value New orientation rotation matrix.
+         */
+        void setRotationMatrixProperty(const Matrix& value);
+
+        /**
+         * @brief Sets the timestamp of the sensor reading.
+         *
+         * Restricted to Motion; see setPitchProperty() for why.
+         *
+         * @param value New timestamp.
+         */
+        void setTimestampProperty(const System::DateTimeOffset& value);
     };
 } // namespace Microsoft::Devices::Sensors

@@ -17,6 +17,8 @@ namespace Microsoft::Devices::Sensors
     /** @brief Represents one compass sensor reading with heading and magnetometer data. */
     class CompassReading : public ISensorReading
     {
+        friend class Compass;
+
     private:
         DEF_MEMBER(double, HeadingAccuracy)
         DEF_MEMBER(double, MagneticHeading)
@@ -54,25 +56,11 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] double getHeadingAccuracyProperty() const;
 
         /**
-         * @brief Sets the accuracy of the heading reading, in degrees.
-         *
-         * @param value New heading accuracy, in degrees.
-         */
-        void setHeadingAccuracyProperty(double value);
-
-        /**
          * @brief Gets the heading, in degrees, measured relative to magnetic north.
          *
          * @return Magnetic heading, in degrees.
          */
         [[nodiscard]] double getMagneticHeadingProperty() const;
-
-        /**
-         * @brief Sets the heading, in degrees, measured relative to magnetic north.
-         *
-         * @param value New magnetic heading, in degrees.
-         */
-        void setMagneticHeadingProperty(double value);
 
         /**
          * @brief Gets the raw magnetometer reading, in micro-teslas (uT), for each 3D axis.
@@ -82,13 +70,6 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] const Vector3& getMagnetometerReadingProperty() const;
 
         /**
-         * @brief Sets the raw magnetometer reading, in micro-teslas (uT), for each 3D axis.
-         *
-         * @param value New magnetometer reading vector.
-         */
-        void setMagnetometerReadingProperty(const Vector3& value);
-
-        /**
          * @brief Gets the timestamp of the sensor reading.
          *
          * @return Timestamp of the reading.
@@ -96,25 +77,11 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] const System::DateTimeOffset& getTimestampProperty() const override;
 
         /**
-         * @brief Sets the timestamp of the sensor reading.
-         *
-         * @param value New timestamp.
-         */
-        void setTimestampProperty(const System::DateTimeOffset& value);
-
-        /**
          * @brief Gets the heading, in degrees, measured relative to true north.
          *
          * @return True heading, in degrees.
          */
         [[nodiscard]] double getTrueHeadingProperty() const;
-
-        /**
-         * @brief Sets the heading, in degrees, measured relative to true north.
-         *
-         * @param value New true heading, in degrees.
-         */
-        void setTrueHeadingProperty(double value);
 
         /**
          * @brief Returns true if both readings have equal heading, magnetometer, and timestamp values.
@@ -152,5 +119,53 @@ namespace Microsoft::Devices::Sensors
          * @return "Microsoft.Devices.Sensors.CompassReading"
          */
         NOXNA [[nodiscard]] std::string GetTypeName() const;
+
+    private:
+        /**
+         * @brief Sets the accuracy of the heading reading, in degrees.
+         *
+         * Restricted to Compass, the class that produces readings of this
+         * type, matching the real WP7 API's `internal set` (settable only
+         * from within Microsoft.Devices.Sensors.dll).
+         *
+         * @param value New heading accuracy, in degrees.
+         */
+        void setHeadingAccuracyProperty(double value);
+
+        /**
+         * @brief Sets the heading, in degrees, measured relative to magnetic north.
+         *
+         * Restricted to Compass; see setHeadingAccuracyProperty() for why.
+         *
+         * @param value New magnetic heading, in degrees.
+         */
+        void setMagneticHeadingProperty(double value);
+
+        /**
+         * @brief Sets the raw magnetometer reading, in micro-teslas (uT), for each 3D axis.
+         *
+         * Restricted to Compass; see setHeadingAccuracyProperty() for why.
+         *
+         * @param value New magnetometer reading vector.
+         */
+        void setMagnetometerReadingProperty(const Vector3& value);
+
+        /**
+         * @brief Sets the timestamp of the sensor reading.
+         *
+         * Restricted to Compass; see setHeadingAccuracyProperty() for why.
+         *
+         * @param value New timestamp.
+         */
+        void setTimestampProperty(const System::DateTimeOffset& value);
+
+        /**
+         * @brief Sets the heading, in degrees, measured relative to true north.
+         *
+         * Restricted to Compass; see setHeadingAccuracyProperty() for why.
+         *
+         * @param value New true heading, in degrees.
+         */
+        void setTrueHeadingProperty(double value);
     };
 } // namespace Microsoft::Devices::Sensors

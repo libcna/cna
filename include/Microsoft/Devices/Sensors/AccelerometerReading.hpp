@@ -20,6 +20,8 @@ namespace Microsoft::Devices::Sensors
     /** @brief Represents one accelerometer sensor reading with a timestamp and acceleration vector. */
     class AccelerometerReading : public ISensorReading
     {
+        friend class Accelerometer;
+
     private:
         DEF_MEMBER(System::DateTimeOffset, Timestamp)
         DEF_MEMBER(Vector3, Acceleration)
@@ -46,25 +48,11 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] const System::DateTimeOffset& getTimestampProperty() const override;
 
         /**
-         * @brief Sets the timestamp of the sensor reading.
-         *
-         * @param value New timestamp.
-         */
-        void setTimestampProperty(const System::DateTimeOffset& value);
-
-        /**
          * @brief Gets the acceleration vector.
          *
          * @return Acceleration vector.
          */
         [[nodiscard]] const Vector3& getAccelerationProperty() const;
-
-        /**
-         * @brief Sets the acceleration vector.
-         *
-         * @param value New acceleration vector.
-         */
-        void setAccelerationProperty(const Vector3& value);
 
         /**
          * @brief Returns true if both readings have equal Acceleration and Timestamp.
@@ -102,5 +90,26 @@ namespace Microsoft::Devices::Sensors
          * @return "Microsoft.Devices.Sensors.AccelerometerReading"
          */
         NOXNA [[nodiscard]] std::string GetTypeName() const;
+
+    private:
+        /**
+         * @brief Sets the timestamp of the sensor reading.
+         *
+         * Restricted to Accelerometer, the class that produces readings of
+         * this type, matching the real WP7 API's `internal set` (settable
+         * only from within Microsoft.Devices.Sensors.dll).
+         *
+         * @param value New timestamp.
+         */
+        void setTimestampProperty(const System::DateTimeOffset& value);
+
+        /**
+         * @brief Sets the acceleration vector.
+         *
+         * Restricted to Accelerometer; see setTimestampProperty() for why.
+         *
+         * @param value New acceleration vector.
+         */
+        void setAccelerationProperty(const Vector3& value);
     };
 } // namespace Microsoft::Devices::Sensors

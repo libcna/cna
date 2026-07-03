@@ -18,6 +18,8 @@ namespace Microsoft::Devices::Sensors
     /** @brief Represents one fused device-motion sensor reading. */
     class MotionReading : public ISensorReading
     {
+        friend class Motion;
+
     private:
         DEF_MEMBER(AttitudeReading, Attitude)
         DEF_MEMBER(Vector3, DeviceAcceleration)
@@ -55,25 +57,11 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] const AttitudeReading& getAttitudeProperty() const;
 
         /**
-         * @brief Sets the fused device orientation.
-         *
-         * @param value New attitude reading.
-         */
-        void setAttitudeProperty(const AttitudeReading& value);
-
-        /**
          * @brief Gets the linear acceleration excluding gravity, in g, for each axis.
          *
          * @return Device acceleration vector.
          */
         [[nodiscard]] const Vector3& getDeviceAccelerationProperty() const;
-
-        /**
-         * @brief Sets the linear acceleration excluding gravity, in g, for each axis.
-         *
-         * @param value New device acceleration vector.
-         */
-        void setDeviceAccelerationProperty(const Vector3& value);
 
         /**
          * @brief Gets the angular velocity, in radians per second, for each axis.
@@ -83,13 +71,6 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] const Vector3& getDeviceRotationRateProperty() const;
 
         /**
-         * @brief Sets the angular velocity, in radians per second, for each axis.
-         *
-         * @param value New device rotation rate vector.
-         */
-        void setDeviceRotationRateProperty(const Vector3& value);
-
-        /**
          * @brief Gets the gravity vector, in g, for each axis.
          *
          * @return Gravity vector.
@@ -97,25 +78,11 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] const Vector3& getGravityProperty() const;
 
         /**
-         * @brief Sets the gravity vector, in g, for each axis.
-         *
-         * @param value New gravity vector.
-         */
-        void setGravityProperty(const Vector3& value);
-
-        /**
          * @brief Gets the timestamp of the sensor reading.
          *
          * @return Timestamp of the reading.
          */
         [[nodiscard]] const System::DateTimeOffset& getTimestampProperty() const override;
-
-        /**
-         * @brief Sets the timestamp of the sensor reading.
-         *
-         * @param value New timestamp.
-         */
-        void setTimestampProperty(const System::DateTimeOffset& value);
 
         /**
          * @brief Returns true if both readings have equal attitude, motion vectors, and timestamp.
@@ -153,5 +120,53 @@ namespace Microsoft::Devices::Sensors
          * @return "Microsoft.Devices.Sensors.MotionReading"
          */
         NOXNA [[nodiscard]] std::string GetTypeName() const;
+
+    private:
+        /**
+         * @brief Sets the fused device orientation.
+         *
+         * Restricted to Motion, the class that produces readings of this
+         * type, matching the real WP7 API's `internal set` (settable only
+         * from within Microsoft.Devices.Sensors.dll).
+         *
+         * @param value New attitude reading.
+         */
+        void setAttitudeProperty(const AttitudeReading& value);
+
+        /**
+         * @brief Sets the linear acceleration excluding gravity, in g, for each axis.
+         *
+         * Restricted to Motion; see setAttitudeProperty() for why.
+         *
+         * @param value New device acceleration vector.
+         */
+        void setDeviceAccelerationProperty(const Vector3& value);
+
+        /**
+         * @brief Sets the angular velocity, in radians per second, for each axis.
+         *
+         * Restricted to Motion; see setAttitudeProperty() for why.
+         *
+         * @param value New device rotation rate vector.
+         */
+        void setDeviceRotationRateProperty(const Vector3& value);
+
+        /**
+         * @brief Sets the gravity vector, in g, for each axis.
+         *
+         * Restricted to Motion; see setAttitudeProperty() for why.
+         *
+         * @param value New gravity vector.
+         */
+        void setGravityProperty(const Vector3& value);
+
+        /**
+         * @brief Sets the timestamp of the sensor reading.
+         *
+         * Restricted to Motion; see setAttitudeProperty() for why.
+         *
+         * @param value New timestamp.
+         */
+        void setTimestampProperty(const System::DateTimeOffset& value);
     };
 } // namespace Microsoft::Devices::Sensors

@@ -24,21 +24,13 @@ TEST(AccelerometerReadingTests, ParameterizedConstructorStoresValues)
     EXPECT_EQ(r.getTimestampProperty(), ts);
 }
 
-TEST(AccelerometerReadingTests, SetAcceleration)
-{
-    AccelerometerReading r;
-    const Vector3 v(0.5f, -0.5f, 1.0f);
-    r.setAccelerationProperty(v);
-    EXPECT_EQ(r.getAccelerationProperty(), v);
-}
-
-TEST(AccelerometerReadingTests, SetTimestamp)
-{
-    AccelerometerReading r;
-    const DateTimeOffset ts(System::DateTime(9999LL), System::TimeSpan::Zero);
-    r.setTimestampProperty(ts);
-    EXPECT_EQ(r.getTimestampProperty(), ts);
-}
+// NOTE (Task P3-2): setAccelerationProperty()/setTimestampProperty() are
+// private + friend Accelerometer as of this task, matching the real WP7
+// API's `internal set`, so they can no longer be exercised directly from
+// this test file. Field storage/round-trip is still fully covered via
+// ParameterizedConstructorStoresValues() above (same underlying storage,
+// just set through the constructor's initializer list instead of the
+// now-private setters).
 
 TEST(AccelerometerReadingTests, EqualityOperatorEqualInstances)
 {

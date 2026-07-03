@@ -97,7 +97,7 @@ void-casting the `[[nodiscard]]` return inside `EXPECT_THROW`/`EXPECT_NO_THROW`)
 `ctest` — 1970 tests total (up from 1964), 97% passing, same 64 pre-existing headless
 `EasyGL_*` failures, zero regressions.
 
-### Task P3-2 — Decide: should the five reading types' setters be `internal`-equivalent?
+### Task P3-2 — Decide: should the five reading types' setters be `internal`-equivalent? — ✅ Done (2026-07-03)
 
 **Finding (confirmed via archived MSDN `ff239107` for `AccelerometerReading.Acceleration`
 and `hh239090` for `GyroscopeReading.RotationRate`, high confidence — same pattern
@@ -140,6 +140,44 @@ awkward testing style.
   then rewrite every test that currently calls `setXProperty()` directly — likely via a
   test-only factory function in the owning sensor class, or by constructing the reading
   through the sensor's real update path where feasible.
+
+**Resolution (2026-07-03):** User explicitly chose option (B) over the recommended (A)
+when asked. Implemented exactly as designed: each of the 5 reading types' `setXProperty()`
+methods moved to a `private:` block at the end of the class (kept together as one block
+rather than interleaved with their public getters, to avoid many access-specifier
+switches — CLAUDE.md's "keep member order close to C# source order" is a "where
+practical" guideline, and grouping was judged more practical/readable here), with a
+`friend class <OwningSensorClass>;` declaration added near the top of each class body:
+`AccelerometerReading` → `friend class Accelerometer`, `GyroscopeReading` → `friend class
+Gyroscope`, `CompassReading` → `friend class Compass`, `AttitudeReading` → `friend class
+Motion` (Motion is the class that produces `AttitudeReading` values, as
+`MotionReading.Attitude` — there's no separate "AttitudeSensor" class in CNA), `MotionReading`
+→ `friend class Motion`. `ISensorReading::getTimestampProperty()` stays a public pure
+virtual (the real interface only ever declared a getter, never a setter, so this was
+already correct and untouched).
+
+The test-rewrite turned out simpler than step 2's fallback speculation suggested: since
+every one of the 5 reading types already had a parameterized constructor covering every
+field (pre-existing, not added for this task), and those constructors initialize fields
+directly via their initializer list rather than by calling the public setters, no
+test-only factory function or real-sensor-update-path plumbing was needed. Each
+`*ReadingTests.cpp` file simply had its direct `SetXxx` test cases (20 total across all 5
+files) removed, replaced by a one-line `NOTE` comment pointing at the pre-existing
+`ParameterizedConstructorStoresValues` test, which already exercises the identical field
+storage through the constructor instead. Net effect: 1953 tests (down from 1973 — the 20
+removed setter tests, with zero net loss of real coverage since the constructor path
+covers the same storage assignment).
+
+Also added a row to `CHECKLIST.md`'s "Known acceptable C++ deviations from FNA/XNA" table
+documenting that C++ `friend` (per-named-class) is narrower than C#'s `internal`
+(assembly-scoped) — accepted since each reading type here has exactly one producing
+sensor class, so the narrower semantics cost nothing in practice.
+
+Verified: `CNA` + `CnaTests` build clean (production code in `Accelerometer.cpp`/
+`Gyroscope.cpp` — the only 2 sensor classes that currently populate real reading values —
+compiled with no changes needed, confirming the friend grants were correctly scoped).
+Full `ctest` — 1953 tests, 97% passing, same 64 pre-existing headless `EasyGL_*` failures,
+zero regressions.
 
 ### Task P3-3 — `AccelerometerFailedException : SensorFailedException` inheritance — now fully confirmed, no action needed
 

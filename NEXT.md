@@ -46,21 +46,24 @@ deeper research pass) and **nothing in it has been started yet**.
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
 (`cmake-build-debug`) as of the last verified build (2026-07-03, HEAD
-`50c091e` + uncommitted Task P3-5 work). Also verified clean under `VULKAN`
+`89d1e53` + uncommitted Task P3-2 work). Also verified clean under `VULKAN`
 (`cmake-build-vulkan`) and `BGFX` (`cmake-build-bgfx`) as of 2026-07-02 —
 the graphics backend choice has zero effect on `Microsoft::Devices::*`
 compilation, confirmed empirically. (Vulkan/BGFX not re-verified after
-Tasks P3-1/P3-4/P3-5 since they only touch `Microsoft::Devices` headers/cpp,
-same reasoning as before.)
+Tasks P3-1/P3-4/P3-5/P3-2 since they only touch `Microsoft::Devices`
+headers/cpp, same reasoning as before.)
 
-**Tests:** last full `ctest` run (`EASYGL`): **1973 tests total, 97%
+**Tests:** last full `ctest` run (`EASYGL`): **1953 tests total, 97%
 passing.** The only failures are a fixed set of **64 pre-existing
 `EasyGL_*` graphics tests** that cannot run headless (no display/GPU in
 this dev environment) — present before this phase began, unrelated to
-`Microsoft::Devices`. No regressions have been introduced. Under `VULKAN`/
-`BGFX`, the targeted Devices/Sensors/VibrateController suite was **139/139**
-passing on both as of 2026-07-02 (not re-run since); full-suite counts
-differ from `EASYGL` only because backend-specific demo/smoke-test
+`Microsoft::Devices`. No regressions have been introduced (the count went
+down from 1973 to 1953 as part of Task P3-2 — 20 `SetXxx` tests were
+removed because the methods they tested became private, not a coverage
+loss; see Section 3). Under `VULKAN`/`BGFX`, the targeted
+Devices/Sensors/VibrateController suite was **139/139** passing on both as
+of 2026-07-02 (not re-run since); full-suite counts differ from `EASYGL`
+only because backend-specific demo/smoke-test
 executables weren't built (not a regression).
 
 **Working:**
@@ -167,12 +170,32 @@ executables weren't built (not a regression).
   now has a "Git Commits" section codifying that a commit should follow
   immediately after each finished task rather than waiting for an explicit
   request, staging only that task's files by name.
+- **Task P3-2 done (2026-07-03):** the user was explicitly asked to choose
+  between the plan's two options and picked **option B** (the non-default,
+  higher-cost one): the 5 reading types' `setXProperty()` methods
+  (`AccelerometerReading`, `CompassReading`, `GyroscopeReading`,
+  `AttitudeReading`, `MotionReading`) are now `private` + `friend class
+  <OwningSensorClass>` (`Accelerometer`/`Compass`/`Gyroscope`/`Motion`/
+  `Motion` respectively — `Motion` owns both `MotionReading` and
+  `AttitudeReading`, since `AttitudeReading` is `MotionReading.Attitude`
+  and there's no separate "AttitudeSensor" class), matching the real WP7
+  API's `internal set`. `ISensorReading::getTimestampProperty()` stayed a
+  public pure-virtual getter, untouched — the real interface never declared
+  a setter. Every affected `*ReadingTests.cpp`'s direct `SetXxx` test cases
+  (20 total) were removed and replaced with a one-line comment pointing at
+  the pre-existing `ParameterizedConstructorStoresValues` test, since every
+  reading type already had a full-field constructor that initializes fields
+  directly (not through the now-private setters) — no test-only factory
+  function was needed. Added a row to `CHECKLIST.md`'s deviations table
+  documenting that C++ `friend` is narrower than C#'s assembly-scoped
+  `internal`. Full writeup: `plan_devices_phase3.md` Task P3-2's
+  "Resolution" section.
 - Last pushed commit: `44ad496` on `feature/devices`. Tasks P3-1 (`9b8281f`),
-  P3-4 (`ab106b5`), and the `CLAUDE.md` process-change commit (`50c091e`)
-  are committed locally but **not yet pushed**. Task P3-5's changes
-  (`VibrateController.cpp`, `VibrateControllerTests.cpp`, `AUDIT.md`,
-  `plan_devices_phase3.md`, this file) are **not yet committed** as of this
-  writing.
+  P3-4 (`ab106b5`), the `CLAUDE.md` process-change commit (`50c091e`), and
+  P3-5 (`89d1e53`) are committed locally but **not yet pushed**. Task P3-2's
+  changes (5 `*Reading.hpp` files, 5 `*ReadingTests.cpp` files,
+  `CHECKLIST.md`, `AUDIT.md`, `plan_devices_phase3.md`, this file) are
+  **not yet committed** as of this writing.
 
 ---
 
@@ -223,16 +246,15 @@ P3-5, all 2026-07-03).
 - **Fixed 2026-07-03:** `VibrateController`'s `Start()`/`StartLeftRight()`
   now cancel each other's SDL effects before starting. See Section 4,
   Problem 3 / Task P3-5 (done).
-- **Needs a decision, not a forced fix:** the 5 reading types
-  (`AccelerometerReading`, `CompassReading`, `GyroscopeReading`,
-  `AttitudeReading`, `MotionReading`) have fully public `setXProperty()`
-  methods; the real WP7 API has `internal set` on these (confirmed for two
-  of the five via direct MSDN pages, high confidence the pattern holds for
-  all five). Fixing this properly (private + `friend`) would break every
-  existing test that calls `setXProperty()` directly — recommended
-  resolution is documenting it as an accepted C++ deviation (`CHECKLIST.md`
-  already has precedent for this class of C#-vs-C++ visibility gap), not a
-  code change. See `plan_devices_phase3.md` Task P3-2.
+- **Fixed 2026-07-03:** the 5 reading types (`AccelerometerReading`,
+  `CompassReading`, `GyroscopeReading`, `AttitudeReading`, `MotionReading`)
+  previously had fully public `setXProperty()` methods; the real WP7 API
+  has `internal set` on these. User picked the higher-cost fix (private +
+  `friend class <OwningSensorClass>`) over the zero-code-change
+  documentation default when asked. See Section 3 and `plan_devices_phase3.md`
+  Task P3-2 (done) for the full writeup, including the 20 removed direct
+  `SetXxx` tests (replaced by existing constructor-based coverage) and the
+  new `CHECKLIST.md` deviations-table row on `friend` vs. `internal` scope.
 - **Incomplete (test coverage):** zero test coverage of
   `CurrentValueChanged` (the primary, non-deprecated event) on all 4 sensor
   classes; `Compass`/`Gyroscope`/`Motion` are missing `GetTypeName()`
@@ -383,22 +405,12 @@ writing.
 ## 8. Next smallest tasks
 
 Full detail for all of these is in `plan_devices_phase3.md`; this is the
-recommended order. (Tasks P3-1, P3-4, and P3-5 were completed 2026-07-03 —
-see Section 3. All three confirmed real bugs from this plan are now fixed;
-what's left is one decision task and test-coverage gaps.)
+recommended order. (Tasks P3-1, P3-4, P3-5, and P3-2 were completed
+2026-07-03 — see Section 3. All three confirmed real bugs plus the one
+decision task from this plan are now fixed/resolved; what's left is
+test-coverage gaps and low-priority follow-ups.)
 
-1. **Task P3-2 — Decide on the reading-type public-setter visibility gap**
-   - Goal: this is a decision, not a mechanical fix — read
-     `plan_devices_phase3.md` Task P3-2 in full and either (a) document the
-     public-setter-vs-`internal set` mismatch as an accepted C++ deviation
-     in `CHECKLIST.md`'s deviations table (recommended, zero code change),
-     or (b) commit to the private+`friend`+test-rewrite path.
-   - Files: `CHECKLIST.md` (if option A) or all 5 reading types + their
-     test files (if option B).
-   - Verify: full `ctest --output-on-failure` if option B; no build/test
-     needed if option A.
-
-2. **Task P3-6/P3-7/P3-9 — Fill the highest-value test-coverage gaps**
+1. **Task P3-6/P3-7/P3-9 — Fill the highest-value test-coverage gaps**
    - Goal: add `CurrentValueChanged` subscription tests (all 4 sensor
      classes), `GetTypeName()` tests (`Compass`/`Gyroscope`/`Motion` —
      `Accelerometer` already has one), and dispose-then-11th-succeeds tests
@@ -414,9 +426,11 @@ priority — see `plan_devices_phase3.md` directly when ready for those.
 
 ## 9. Do not do yet
 
-- Do not fix Task P3-2 (reading-type setter visibility) by silently making
-  setters private — it will break existing tests; it needs the explicit
-  decision described in Task P3-2 above first.
+- Task P3-2 is done (2026-07-03, private + friend fix, option B). Do not
+  re-open this or add back the removed direct `SetXxx` tests — they were
+  intentionally removed because the methods they tested are no longer
+  public API; the existing `ParameterizedConstructorStoresValues` tests
+  cover the same field-storage behavior.
 - Task P3-4 is done (2026-07-03, mutex-based fix). Do not attempt to add a
   synthetic concurrency/thread test for it retroactively — it can't
   meaningfully exercise the real race without actual concurrent hardware

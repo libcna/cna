@@ -36,45 +36,11 @@ TEST(MotionReadingTests, ParameterizedConstructorStoresValues)
     EXPECT_EQ(r.getTimestampProperty(), ts);
 }
 
-TEST(MotionReadingTests, SetAttitude)
-{
-    MotionReading r;
-    const AttitudeReading attitude(1.0f, 0.0f, 0.0f, Quaternion::Identity, Matrix::getIdentityProperty(), DateTimeOffset());
-    r.setAttitudeProperty(attitude);
-    EXPECT_TRUE(r.getAttitudeProperty() == attitude);
-}
-
-TEST(MotionReadingTests, SetDeviceAcceleration)
-{
-    MotionReading r;
-    const Vector3 v(0.5f, -0.5f, 1.0f);
-    r.setDeviceAccelerationProperty(v);
-    EXPECT_EQ(r.getDeviceAccelerationProperty(), v);
-}
-
-TEST(MotionReadingTests, SetDeviceRotationRate)
-{
-    MotionReading r;
-    const Vector3 v(0.1f, 0.2f, 0.3f);
-    r.setDeviceRotationRateProperty(v);
-    EXPECT_EQ(r.getDeviceRotationRateProperty(), v);
-}
-
-TEST(MotionReadingTests, SetGravity)
-{
-    MotionReading r;
-    const Vector3 v(0.0f, -1.0f, 0.0f);
-    r.setGravityProperty(v);
-    EXPECT_EQ(r.getGravityProperty(), v);
-}
-
-TEST(MotionReadingTests, SetTimestamp)
-{
-    MotionReading r;
-    const DateTimeOffset ts(System::DateTime(9999LL), System::TimeSpan::Zero);
-    r.setTimestampProperty(ts);
-    EXPECT_EQ(r.getTimestampProperty(), ts);
-}
+// NOTE (Task P3-2): all setXProperty() methods on MotionReading are
+// private + friend Motion as of this task, matching the real WP7 API's
+// `internal set`, so they can no longer be exercised directly from this
+// test file. Field storage/round-trip is still fully covered via
+// ParameterizedConstructorStoresValues() above.
 
 TEST(MotionReadingTests, EqualityOperatorEqualInstances)
 {

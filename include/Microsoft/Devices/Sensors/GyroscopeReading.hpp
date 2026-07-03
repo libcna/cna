@@ -17,6 +17,8 @@ namespace Microsoft::Devices::Sensors
     /** @brief Represents one gyroscope sensor reading with a timestamp and angular velocity vector. */
     class GyroscopeReading : public ISensorReading
     {
+        friend class Gyroscope;
+
     private:
         DEF_MEMBER(Vector3, RotationRate)
         DEF_MEMBER(System::DateTimeOffset, Timestamp)
@@ -43,25 +45,11 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] const Vector3& getRotationRateProperty() const;
 
         /**
-         * @brief Sets the angular velocity, in radians per second, for each axis.
-         *
-         * @param value New rotation rate vector.
-         */
-        void setRotationRateProperty(const Vector3& value);
-
-        /**
          * @brief Gets the timestamp of the sensor reading.
          *
          * @return Timestamp of the reading.
          */
         [[nodiscard]] const System::DateTimeOffset& getTimestampProperty() const override;
-
-        /**
-         * @brief Sets the timestamp of the sensor reading.
-         *
-         * @param value New timestamp.
-         */
-        void setTimestampProperty(const System::DateTimeOffset& value);
 
         /**
          * @brief Returns true if both readings have equal RotationRate and Timestamp.
@@ -99,5 +87,26 @@ namespace Microsoft::Devices::Sensors
          * @return "Microsoft.Devices.Sensors.GyroscopeReading"
          */
         NOXNA [[nodiscard]] std::string GetTypeName() const;
+
+    private:
+        /**
+         * @brief Sets the angular velocity, in radians per second, for each axis.
+         *
+         * Restricted to Gyroscope, the class that produces readings of this
+         * type, matching the real WP7 API's `internal set` (settable only
+         * from within Microsoft.Devices.Sensors.dll).
+         *
+         * @param value New rotation rate vector.
+         */
+        void setRotationRateProperty(const Vector3& value);
+
+        /**
+         * @brief Sets the timestamp of the sensor reading.
+         *
+         * Restricted to Gyroscope; see setRotationRateProperty() for why.
+         *
+         * @param value New timestamp.
+         */
+        void setTimestampProperty(const System::DateTimeOffset& value);
     };
 } // namespace Microsoft::Devices::Sensors
