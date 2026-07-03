@@ -32,8 +32,12 @@ namespace Microsoft::Xna::Framework::Input::Touch
          */
         [[nodiscard]] bool getIsReadOnlyProperty() const;
 
-        /** @brief Constructs an empty touch collection. */
-        TouchCollection();
+        /**
+         * @brief Constructs an empty touch collection.
+         * @note NOXNA — FNA's `TouchCollection` has no explicit parameterless constructor
+         *       (only the one taking a touch array).
+         */
+        NOXNA TouchCollection();
 
         /**
          * @brief Constructs from a vector of touch locations.

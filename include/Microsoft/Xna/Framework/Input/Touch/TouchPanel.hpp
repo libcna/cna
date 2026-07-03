@@ -137,12 +137,16 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Queues a gesture sample for later retrieval via ReadGesture.
+         * @note NOXNA — FNA declares `EnqueueGesture` `internal`, not part of the public
+         *       XNA `TouchPanel` API. Exposed for `GestureDetector`.
          * @param gesture The gesture sample to enqueue.
          */
-        static void EnqueueGesture(const GestureSample& gesture);
+        NOXNA static void EnqueueGesture(const GestureSample& gesture);
 
         /**
          * @brief Handles a normalized platform touch event used by gesture processing.
+         * @note NOXNA — FNA declares `INTERNAL_onTouchEvent` `internal`, not part of the
+         *       public XNA `TouchPanel` API. Exposed for the platform input bridge.
          * @param fingerId The finger identifier.
          * @param state The touch location state of this event.
          * @param x The normalized x coordinate.
@@ -150,7 +154,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
          * @param dx The x delta since the last event.
          * @param dy The y delta since the last event.
          */
-        static void INTERNAL_onTouchEvent(
+        NOXNA static void INTERNAL_onTouchEvent(
             intcs fingerId,
             TouchLocationState state,
             float x,
@@ -161,16 +165,20 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Updates one touch slot with a finger id and pixel position.
+         * @note NOXNA — FNA declares `SetFinger` `internal`, not part of the public XNA
+         *       `TouchPanel` API.
          * @param index The slot index to update.
          * @param fingerId The finger identifier.
          * @param fingerPos The current finger position in pixels.
          */
-        static void SetFinger(intcs index, intcs fingerId, const Microsoft::Xna::Framework::Vector2& fingerPos);
+        NOXNA static void SetFinger(intcs index, intcs fingerId, const Microsoft::Xna::Framework::Vector2& fingerPos);
 
         /**
          * @brief Advances touch panel state by one frame.
+         * @note NOXNA — FNA declares `Update` `internal`, not part of the public XNA
+         *       `TouchPanel` API. Exposed for `FrameworkDispatcher::Update()`.
          */
-        static void Update();
+        NOXNA static void Update();
 
     private:
         static intcs displayWidth_;
