@@ -82,7 +82,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imgInfo.imageType     = VK_IMAGE_TYPE_2D;
-        imgInfo.format        = VK_FORMAT_R8G8B8A8_SRGB;
+        imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
         imgInfo.extent        = { static_cast<uint32_t>(data.width), static_cast<uint32_t>(data.height), 1 };
         imgInfo.mipLevels     = 1;
         imgInfo.arrayLayers   = 1;
@@ -122,7 +122,7 @@ namespace CNA::Internal::Backends::Vulkan
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image    = image_;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format   = VK_FORMAT_R8G8B8A8_SRGB;
+        viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
         viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel   = 0;
         viewInfo.subresourceRange.levelCount     = 1;
@@ -1051,9 +1051,13 @@ namespace CNA::Internal::Backends::Vulkan
         vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &fn, nullptr);
         std::vector<VkSurfaceFormatKHR> fmts(fn);
         vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &fn, fmts.data());
+        // FNA's SurfaceFormat.Color (the default backbuffer format) is linear, not sRGB — a
+        // separate SurfaceFormat.ColorSrgbEXT exists for the gamma-encoded variant. An SRGB
+        // swapchain format would apply an automatic linear-to-sRGB encode to every presented
+        // pixel regardless of content, which XNA/FNA does not do by default. Prefer UNORM.
         VkSurfaceFormatKHR fmt = fmts[0];
         for (auto& f : fmts)
-            if (f.format == VK_FORMAT_B8G8R8A8_SRGB && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             { fmt = f; break; }
 
         uint32_t mn = 0;

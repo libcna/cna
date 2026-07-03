@@ -1102,6 +1102,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 284: Texture2D Color format mapping — linear vs. sRGB decode on Vulkan
+        cna_vulkan_test(cna_test_vulkan_texture_srgb
+                        examples/vulkan_texture_srgb_test.cpp)
+        add_test(NAME Vulkan_Texture2D_ColorFormat_Linear
+                 COMMAND cna_test_vulkan_texture_srgb)
+        set_tests_properties(Vulkan_Texture2D_ColorFormat_Linear PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 135: DualTextureEffect — magenta×yellow→red pixel readback on Vulkan
         cna_vulkan_test(cna_test_vulkan_dual_texture
                         examples/vulkan_dual_texture_test.cpp)

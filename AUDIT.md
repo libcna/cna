@@ -1256,6 +1256,77 @@ Task 282). Verified across all three backends after wiring the new check into th
 `GetData` call sites: EasyGL 2004/2006 ctest pass, Vulkan 1942/1944 (2 pre-existing, unrelated
 failures), Bgfx 1939/1939 (100%) — no regressions.
 
+### Color format mapping — found and fixed a real Vulkan gamma bug (Task 284, Phase 34)
+
+Task 284 asks to verify RGBA/BGRA channel-order correctness for `SurfaceFormat::Color` across
+EasyGL, Vulkan, and Bgfx. Channel order was already confirmed correct everywhere — dozens of
+existing pixel-readback tests across EasyGL and Vulkan check exact colors (Red, Green, Blue,
+White, Black, Magenta, Yellow, Cyan) and all pass. But every one of those tests uses only
+saturated 0/255 component values. That's an important, easy-to-miss blind spot: 0 and 255 are
+both fixed points of the sRGB transfer curve (`srgb_decode(0)=0`, `srgb_decode(255)=255`), so a
+texture that's wrongly sample-decoded as sRGB when it should be sampled as linear still round-trips
+*exactly* correctly at the extremes — the bug is invisible unless a test uses a genuine mid-range
+value. Deliberately tested with 128 instead, which the sRGB curve maps to a very different value
+(≈188 when encoding 128/255 linear to sRGB) — large and unmistakable.
+
+**Found two compounding bugs on Vulkan, no equivalent on EasyGL or Bgfx:**
+
+1. `VulkanTextureBackend` (the backend behind `Texture2D`) created its `VkImage` and `VkImageView`
+   with `format = VK_FORMAT_R8G8B8A8_SRGB`. This is inconsistent with `VulkanTexture3DBackend`,
+   `VulkanTextureCubeBackend`, and the Vulkan render-target color attachment, all of which
+   correctly use `VK_FORMAT_R8G8B8A8_UNORM` — and it's wrong regardless of internal consistency:
+   confirmed via FNA's `SurfaceFormat.cs` (Task 281's audit) that plain `SurfaceFormat.Color` is
+   linear, not sRGB; FNA has a *separate* `SurfaceFormat.ColorSrgbEXT` value for the gamma-encoded
+   variant. An `_SRGB`-format Vulkan image applies an automatic sRGB→linear decode on every texture
+   sample, which is simply the wrong transform for plain `Color` data.
+2. `VulkanGraphicsBackend::CreateSwapchain()` explicitly searched the surface's supported formats
+   for `VK_FORMAT_B8G8R8A8_SRGB` and preferred it whenever available (falling back to `fmts[0]`
+   otherwise) — applying an automatic linear→sRGB gamma *encode* to every pixel written to the
+   swapchain at present time, regardless of what drew it. This looks like a carried-over default
+   from generic Vulkan tutorial boilerplate (many Vulkan getting-started guides recommend an sRGB
+   swapchain "for accurate color") that was never reconciled with XNA/FNA's actual no-gamma-by-
+   default `SurfaceFormat.Color` semantics — none of the fragment shaders anywhere in this codebase
+   do any gamma math, and no other color source (vertex colors, `DirectionalLight`, `BasicEffect`'s
+   diffuse/emissive/ambient colors) is ever gamma-decoded before use.
+
+**Why this went undetected until now:** the two bugs are approximate inverses of each other for
+*textured* content — sample-time sRGB decode, then present-time sRGB encode, is close to an
+identity transform (`encode(decode(x)) ≈ x`), so a textured quad's mid-grey byte value read back
+looking correct *by coincidence*. But any **non-textured** rendering — plain vertex colors, lit
+`BasicEffect`/`EnvironmentMapEffect` output, alpha-blended colors, anything that doesn't sample a
+`Texture2D` — only goes through the swapchain's uncompensated encode, with nothing to cancel it.
+Confirmed by direct test: a nominal `(128,128,128)` `VertexPositionColor` quad (no texture) read
+back as `(188,188,188)` — a 60-unit error, dramatic and unmistakable once the right test is run.
+
+**Fixed both root causes:**
+- `VulkanTextureBackend`'s image and view format: `VK_FORMAT_R8G8B8A8_SRGB` → `_UNORM`.
+- `CreateSwapchain()`'s format preference: `VK_FORMAT_B8G8R8A8_SRGB` → `_UNORM` (with a source
+  comment explaining why, since "avoid the commonly-recommended sRGB swapchain" is a genuinely
+  non-obvious constraint a future reader would otherwise question).
+
+Verified the existing BGRA-vs-RGBA channel-swap logic in the backbuffer readback path
+(`isBGRA = swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM || == VK_FORMAT_B8G8R8A8_SRGB`) already
+checks for *both* BGRA variants, so it needed no change and remains correct as a defensive fallback
+for devices where the UNORM+`VK_COLOR_SPACE_SRGB_NONLINEAR_KHR` combination isn't available.
+
+Added `examples/vulkan_texture_srgb_test.cpp` (`Vulkan_Texture2D_ColorFormat_Linear` ctest):
+renders a mid-grey (128,128,128) full-screen quad two independent ways in the same frame — (a)
+`BasicEffect` with `VertexColorEnabled=true`, no texture; (b) `BasicEffect` with a sampled
+`Texture2D` filled with the same value, `DiffuseColor=white` (no tint) — and diffs the two
+backbuffer center-pixel readbacks. This methodology sidesteps needing to reason about the
+swapchain's absolute gamma transform: whatever the swapchain does, it does to both scenes equally,
+so a divergence between them isolates exactly the texture-sampling-specific transform. Verified the
+test actually catches the bug before applying either fix (diff=60), then confirmed it passes after
+(diff=0).
+
+Verified across all three backends: **EasyGL and Bgfx have no equivalent bug** — grepped both
+backends' source for any `SRGB`/`Srgb` reference; neither has one anywhere. Full Vulkan ctest suite
+after the fix: 1944/1945 (serial) / 1943/1945 (parallel) — only the pre-existing, already-documented
+`Vulkan_DepthBias` failure remains consistently; `Vulkan_FillMode_WireFrame`'s already-documented
+order-dependent flakiness (found during Task 279) appeared in the parallel run only, unrelated to
+this change. No regressions from a fix with this much surface area (it touches the swapchain format
+used for literally every pixel Vulkan presents).
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`
