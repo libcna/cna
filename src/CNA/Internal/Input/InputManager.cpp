@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 

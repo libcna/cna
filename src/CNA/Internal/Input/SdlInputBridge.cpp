@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
