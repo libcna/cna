@@ -192,6 +192,19 @@ violations in the internal layer, and very thin test coverage.
 
 ---
 
+## Phase I8 — Post-completion follow-up
+
+> Added after Phases I1–I7 (tasks 700–783) were all completed and verified. These are small,
+> previously-identified gaps that were explicitly deferred rather than fixed at the time (see
+> each task's origin note below), not newly-discovered problems.
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 790 | Fix `TouchPanel::GetCapabilities()`: it passes `MAX_TOUCHES` unconditionally in both the connected and disconnected branches; FNA returns `0` for `MaximumTouchCount` when disconnected (`TouchPanel.cs`). Noted but not fixed in task 721 | ⬜ | |
+| 791 | Reconfigure `cmake-build-vulkan`/`cmake-build-bgfx`: both build dirs' `CMakeCache.txt` currently have `CMAKE_HOME_DIRECTORY` pointing at the sibling `…/openeggbert/cna` repo instead of this `cna_input` checkout (confirmed still true as of `NEXT.md`'s last check). Reconfigure both (`rm -rf` + fresh `cmake -S … -B … -G Ninja -DCNA_GRAPHICS_BACKEND={VULKAN,BGFX} …`, mirroring how `cmake-build-debug` was already fixed for EasyGL), then build and run `CnaTests` on each to confirm the Phase I1–I7 input work compiles and passes on those backends too — EasyGL is the only backend verified so far | ⬜ | |
+
+---
+
 ## XNA 4.0 Input API coverage
 
 | Area | API surface | Runtime behavior (now) | After this plan |
@@ -218,6 +231,7 @@ violations in the internal layer, and very thin test coverage.
 | Gamepad sensors/touchpad event stream | Capabilities advertise gyro/accel/touchpad; only on-demand reads planned (Tasks 726–727), not an event stream |
 | `FNA_GAMEPAD_NUM_GAMEPADS` env override | Backend hardcodes 4 slots; low priority (Task 734) |
 | Horizontal scroll wheel | This FNA `MouseState` has no horizontal-scroll member; gated on XNA-layer support (Task 749) |
+| `Mouse::SetPosition` warp scale-factor deviation | `SDL_WarpMouseInWindow`'s target has no inverse (logical→window) coordinate transform, so it's off by the scale factor on a letterboxed/scaled window (documented in-source in `Mouse.cpp`; verified correct when window size matches logical/render resolution — task 783). Fixing it needs an `IGraphicsBackend` addition, which is graphics-layer, not input-layer, scope — belongs in `GRAPHICS_TASKS.md`'s track (not added as a `plan_input.md` task; not yet added to `GRAPHICS_TASKS.md` either as of this note) |
 
 ---
 
