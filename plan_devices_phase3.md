@@ -514,7 +514,7 @@ Phase 6 item, Task P3-12.**
 
 ## Phase 6: Follow-up research (low priority, no urgency)
 
-### Task P3-12 — Re-attempt confirming `SensorFailedException`'s real constructor overloads and `CalibrationEventArgs`'s exact members
+### Task P3-12 — Re-attempt confirming `SensorFailedException`'s real constructor overloads and `CalibrationEventArgs`'s exact members — 🟡 Partially resolved (2026-07-03)
 
 Both remain genuinely unverified after two research passes now:
 - `SensorFailedException`'s class page found this pass (`hh239255`) is a different
@@ -538,6 +538,46 @@ lineage with a desktop `System.Device.*` equivalent; for `CalibrationEventArgs`,
 searching for its constructor signature specifically rather than its class member page
 (constructor pages sometimes exist independently of a found class page, as happened for
 `Accelerometer.ReadingChanged` in Task P2-15's research).
+
+**Resolution (2026-07-03) — `CalibrationEventArgs`: ✅ confirmed.** Found the
+`Microsoft.Devices.Sensors` namespace listing page
+([`ff403003(v=vs.110)`](https://learn.microsoft.com/en-us/previous-versions/ff403003(v=vs.110)))
+via web search, which links directly to `CalibrationEventArgs`'s own class page
+([`hh220788(v=vs.110)`](https://learn.microsoft.com/en-us/previous-versions/hh220788(v=vs.110))).
+That page's Constructors table lists exactly one constructor (the parameterless default),
+and its Methods table shows only members inherited from `System.Object` — no
+class-specific properties or methods at all. This directly confirms CNA's existing
+implementation (empty marker class, default constructor only, `GetTypeName()` only) is
+already correct — no code change needed. `AUDIT.md`'s `CalibrationEventArgs` row updated
+to note the confirmation.
+
+**Resolution (2026-07-03) — `SensorFailedException` constructors: still unverified, but
+with a stronger explanation why.** The same namespace listing confirmed
+`SensorFailedException`'s own class page really is
+[`hh239255(v=vs.110)`](https://learn.microsoft.com/en-us/previous-versions/hh239255(v=vs.110))
+— re-fetched directly (not just found via search this time) and it genuinely has no
+Constructors section, only Properties/Methods/Extension Methods. To rule out "this one
+page is just missing it," the same check was run against two related pages: (1) the
+`vs.105` WP7-specific generation of the identical class
+([`hh239255(v=vs.105)`](https://learn.microsoft.com/en-us/previous-versions/windows/apps/hh239255(v=vs.105)))
+— also no Constructors section; (2) `SensorFailedException`'s own subclass,
+`AccelerometerFailedException`
+([`ff628070(v=vs.110)`](https://learn.microsoft.com/en-us/previous-versions/ff628070(v=vs.110)))
+— also no Constructors section. The gap is consistent across both doc-family generations
+and both classes in the inheritance chain, which is strong evidence this is a systematic
+archival omission specific to exception-type Constructors tables in this documentation
+set, not evidence the constructors don't exist (an exception with zero public
+constructors couldn't be thrown at all, and WP7/8 tutorials do throw
+`SensorFailedException`/`AccelerometerFailedException`). Separately re-confirmed `ErrorId`
+is real and `{ get; }` (read-only, no public setter) via
+[`hh239104(v=vs.110)`](https://learn.microsoft.com/en-us/previous-versions/hh239104(v=vs.110))
+— consistent with (though not proof of) the `(message, errorId)` constructor CNA already
+has, since a get-only property can otherwise only be assigned via a constructor. The exact
+signature (parameter order, whether other overloads exist) remains an educated guess, not
+a confirmed match — genuinely unverifiable from any Microsoft Learn/MSDN archive found
+across two research passes now. Not picked up further; low priority, no evidence of an
+actual bug, and CNA's own guess is architecturally the only sensible shape given the
+get-only property.
 
 ---
 

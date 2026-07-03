@@ -17,11 +17,13 @@ their reading/event-args/exception types) plus
 the documented Windows Phone 7 XNA API spec. Branch: `feature/devices`.
 Two plans are fully closed (`plan_devices.md`, `plan_devices_phase2.md`,
 except one environment-blocked task); a third, `plan_devices_phase3.md`, is
-**effectively done** as of 2026-07-03 — 11 of its 12 tasks are complete
-(all 3 confirmed real bugs fixed, the 1 decision task resolved, all 6
-test-coverage-gap tasks filled). Only **Task P3-12** remains, explicitly
-low-priority (unverified-but-not-known-broken research follow-up). No new
-task has been picked for after `plan_devices_phase3.md` yet.
+**done** as of 2026-07-03 — 11 of 12 tasks fully complete (all 3 confirmed
+real bugs fixed, the 1 decision task resolved, all 6 test-coverage-gap
+tasks filled), and the 12th (Task P3-12, low-priority research) is
+partially resolved (`CalibrationEventArgs` confirmed correct;
+`SensorFailedException`'s exact constructor signature remains an educated
+guess after a genuine research effort, judged not worth pursuing further).
+No new task has been picked for after `plan_devices_phase3.md` yet.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -103,9 +105,10 @@ executables weren't built (not a regression).
 - All three confirmed real bugs are fixed (Tasks P3-1, P3-4, P3-5), the one
   decision task is resolved (P3-2), and every test-coverage-gap task is
   filled (Tasks P3-6 through P3-11) — all 2026-07-03: see Section 4. Task
-  P3-3 was confirmed already-satisfied (no change needed). Only **Task
-  P3-12** (low-priority research follow-up, no known bug) remains open in
-  `plan_devices_phase3.md`.
+  P3-3 was confirmed already-satisfied (no change needed). Task P3-12 is
+  partially resolved (`CalibrationEventArgs` confirmed correct;
+  `SensorFailedException`'s constructor signature stays an educated guess).
+  **`plan_devices_phase3.md` has no further actionable work.**
 
 ---
 
@@ -237,12 +240,32 @@ executables weren't built (not a regression).
   "unverified" caveat dropped from an earlier task. **With this,
   `plan_devices_phase3.md` is done except Task P3-12** (low priority). Full
   writeup: `plan_devices_phase3.md` Tasks P3-11/P3-3's "Resolution" sections.
+- **Task P3-12 partially resolved (2026-07-03, via a research-only fork
+  agent — no code touched):** `CalibrationEventArgs` **confirmed correct**
+  — its real class page (MSDN `hh220788`, vs.110, found via the
+  `Microsoft.Devices.Sensors` namespace listing page `ff403003`) shows
+  exactly one constructor (parameterless) and no class-specific members,
+  matching CNA's existing empty-marker-class implementation exactly.
+  `SensorFailedException`'s exact constructor signature **stays an
+  educated guess** — its class page (`hh239255`) has no Constructors
+  section in either the `vs.110` or `vs.105` doc-family generation, nor
+  does its subclass `AccelerometerFailedException`'s page (`ff628070`);
+  consistent absence across 2 generations and 2 classes in the inheritance
+  chain points to a systematic archival gap in this doc set's exception
+  Constructors tables, not evidence the constructors don't exist (an
+  exception with zero public constructors couldn't be thrown, and WP7
+  tutorials do throw it). Not pursued further — low priority, no evidence
+  of an actual bug, and CNA's `(message, errorId)` shape is the only
+  sensible one given the confirmed get-only `ErrorId` property (`hh239104`).
+  `AUDIT.md`'s `CalibrationEventArgs` row and `plan_devices_phase3.md` Task
+  P3-12 updated with full source links. **This was the last open item in
+  `plan_devices_phase3.md` — the plan has no further actionable work.**
 - Last pushed commit: `44ad496` on `feature/devices`. Tasks P3-1 (`9b8281f`),
   P3-4 (`ab106b5`), the `CLAUDE.md` process-change commit (`50c091e`), P3-5
-  (`89d1e53`), P3-2 (`17e7dfa`), P3-6/P3-7/P3-8/P3-9 (`b6e245d`), and P3-10
-  (`0c5bc25`) are committed locally but **not yet pushed**. Task P3-11's
-  changes (9 test files, `plan_devices_phase3.md`, this file) are **not yet
-  committed** as of this writing.
+  (`89d1e53`), P3-2 (`17e7dfa`), P3-6/P3-7/P3-8/P3-9 (`b6e245d`), P3-10
+  (`0c5bc25`), and P3-11 (`18ef398`) are committed locally but **not yet
+  pushed**. Task P3-12's changes (`AUDIT.md`, `plan_devices_phase3.md`,
+  this file) are **not yet committed** as of this writing.
 
 ---
 
@@ -250,8 +273,9 @@ executables weren't built (not a regression).
 
 No blocker prevents work from continuing — build and tests are green. All
 three real bugs `plan_devices_phase3.md`'s research pass found are now
-fixed, and the plan itself is done except one low-priority research
-follow-up (Task P3-12, see Section 5):
+fixed, and the plan itself has no further actionable work (Task P3-12's
+research is as complete as it can get without a source that doesn't exist
+in any archive found so far — see Section 3):
 
 **Problem 1 — fixed 2026-07-03 (Task P3-4):** `Accelerometer`/`Gyroscope`'s
 shared static sensor state (`startedInstances_`, `g_sensor_`, `g_sensorId_`,
@@ -319,13 +343,16 @@ P3-5, all 2026-07-03).
   available in this dev container (`plan_devices_phase2.md` Task P2-7,
   blocked). `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__`
   branches have never been compiled by any compiler.
-- **Unverified (low priority, no evidence of an actual bug):**
-  `SensorFailedException`'s real constructor overload list (the
-  `(message, errorId)` overload added in `plan_devices_phase2.md` Task
-  P2-16 is an educated guess, no direct doc page confirms it) and
-  `CalibrationEventArgs`'s exact member list (no direct class page found;
-  current empty-marker-class implementation is unconfirmed either way). See
-  `plan_devices_phase3.md` Task P3-12.
+- **Confirmed 2026-07-03:** `CalibrationEventArgs`'s empty-marker-class
+  implementation matches the real class exactly (MSDN `hh220788`).
+- **Unverified (low priority, no evidence of an actual bug, genuinely
+  researched twice and not resolvable further):** `SensorFailedException`'s
+  real constructor overload list — the `(message, errorId)` overload added
+  in `plan_devices_phase2.md` Task P2-16 remains an educated guess.
+  `SensorFailedException`'s and `AccelerometerFailedException`'s doc pages
+  both lack a Constructors table in every doc-family generation checked,
+  consistent with a systematic archival gap rather than the constructors
+  not existing. See `plan_devices_phase3.md` Task P3-12.
 
 ---
 
@@ -448,12 +475,13 @@ writing.
 
 ## 8. Next smallest tasks
 
-`plan_devices_phase3.md` is effectively done (11/12 tasks; see Section 3).
-What's left, in recommended order:
+`plan_devices_phase3.md` has no further actionable work (see Section 3 —
+Task P3-12 is as resolved as it can get without a source that doesn't
+appear to exist in any archive). What's left, in recommended order:
 
 1. **Re-verify `VULKAN`/`BGFX` builds** — not done since 2026-07-02
-   (commit `8092f6e`), and 8 commits of `Microsoft::Devices` changes have
-   landed since (Tasks P3-1 through P3-11). Low risk (the graphics backend
+   (commit `8092f6e`), and 9 commits of `Microsoft::Devices` changes have
+   landed since (Tasks P3-1 through P3-12). Low risk (the graphics backend
    choice has never affected `Microsoft::Devices::*` compilation before),
    but it's been asserted, not re-confirmed, across this whole session's
    work — worth actually running before treating the phase as closed.
@@ -461,14 +489,7 @@ What's left, in recommended order:
    - Verify: both backends' `CNA`+`CnaTests` build clean; spot-run the
      targeted Devices/Sensors/VibrateController suite on each.
 
-2. **Task P3-12 (optional, low priority)** — re-attempt confirming
-   `SensorFailedException`'s real constructor overloads and
-   `CalibrationEventArgs`'s exact members via the `.NET Framework`
-   reference source instead of archived MSDN pages. No known bug either
-   way; only pick this up if going for full completeness. See
-   `plan_devices_phase3.md` Task P3-12 for the suggested research angle.
-
-3. **Decide what comes after `plan_devices_phase3.md`** — this is a
+2. **Decide what comes after `plan_devices_phase3.md`** — this is a
    decision for you, not something to infer: is `Microsoft::Devices` done
    for now (only Task P2-7's Android/iOS verification remains, blocked by
    missing toolchain in this environment), or is there a `plan_devices_phase4.md`
