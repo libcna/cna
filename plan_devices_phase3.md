@@ -328,7 +328,7 @@ failures, zero regressions.
 
 ## Phase 4: Test coverage — systemic gaps (highest bug-catching value)
 
-### Task P3-6 — Add `CurrentValueChanged` subscription coverage to all 4 sensor classes
+### Task P3-6 — Add `CurrentValueChanged` subscription coverage to all 4 sensor classes — ✅ Done (2026-07-03)
 
 **Gap:** the primary, non-deprecated event in the entire namespace
 (`SensorBase<T>::CurrentValueChanged`) has **zero** test coverage on `Accelerometer`,
@@ -345,7 +345,7 @@ headless-safe pattern already used for `Accelerometer.ReadingChanged` and
 that actually observing the event *fire* needs real hardware this environment doesn't
 have.
 
-### Task P3-7 — Add `GetTypeName()` tests to `Compass`, `Gyroscope`, `Motion`
+### Task P3-7 — Add `GetTypeName()` tests to `Compass`, `Gyroscope`, `Motion` — ✅ Done (2026-07-03)
 
 **Gap:** `Accelerometer` got a `GetTypeName()` test in Task P2-4 (specifically to catch
 the `::`-vs-`.` convention bug found there). `Compass`, `Gyroscope`, and `Motion` all
@@ -358,7 +358,7 @@ nothing would catch here if it existed.
 `MotionTests.cpp`), asserting the expected `"Microsoft.Devices.Sensors.<ClassName>"`
 string, mirroring `AccelerometerTests.cpp::GetTypeName`.
 
-### Task P3-8 — Add `Calibrate` event subscription coverage to `Compass` and `Motion`
+### Task P3-8 — Add `Calibrate` event subscription coverage to `Compass` and `Motion` — ✅ Done (2026-07-03)
 
 **Gap:** `Compass.Calibrate`/`Motion.Calibrate` (shared `CalibrationEventArgs` type) are
 never subscribed to in either class's test file, not even a no-crash check.
@@ -369,7 +369,7 @@ Since both `Compass` and `Motion` are permanent `NotSupported` stubs, `Calibrate
 never actually fire in this environment regardless of hardware — document that plainly
 rather than pretending otherwise.
 
-### Task P3-9 — Verify the instance-count decrement, not just the instance-count cap, on all 4 sensor classes
+### Task P3-9 — Verify the instance-count decrement, not just the instance-count cap, on all 4 sensor classes — ✅ Done (2026-07-03)
 
 **Gap:** every sensor class's `EleventhSimultaneousInstanceThrows` test proves the
 10-instance cap triggers, but none of them prove `instanceCount_` actually decrements on
@@ -379,6 +379,30 @@ This is the one piece of the limit logic nothing currently verifies.
 **Steps:** for each of the 4 sensor classes, add a test: construct 10 instances, dispose
 one, construct one more (should succeed, not throw), matching the existing
 `EleventhSimultaneousInstanceThrows`'s construction-loop style.
+
+**Resolution (2026-07-03, Tasks P3-6/P3-7/P3-8/P3-9 combined):** all four tasks touch the
+same 4 sensor test files, so they were implemented and committed together (matching
+`NEXT.md`'s own pre-existing "Task P3-6/P3-7/P3-9" grouping, extended to include P3-8
+since it's the identical shape as P3-6, just for `Calibrate` instead of
+`CurrentValueChanged`). Added, per class:
+- `CurrentValueChangedSubscriptionDoesNotThrow` (P3-6) — all 4 classes; `Accelerometer`/
+  `Gyroscope` branch on live `getIsSupportedProperty()` and exercise `Start()`/`Stop()`
+  with a subscriber attached (mirroring the existing `ReadingChanged` test);
+  `Compass`/`Motion` only assert the subscription itself and `Start()`'s throw, since
+  they're permanent stubs.
+- `GetTypeName` (P3-7) — `Compass`, `Gyroscope`, `Motion` (initially missed adding it to
+  `Gyroscope` in the first pass; caught and fixed before this task was reported done).
+- `CalibrateSubscriptionDoesNotThrow` (P3-8) — `Compass`, `Motion` only (the only 2
+  classes with a `Calibrate` event).
+- `DisposingOneOfTenAllowsAnotherConstruction` (P3-9) — all 4 classes: build 10 instances,
+  `Dispose()` the first, confirm an 11th construction now succeeds.
+
+12 new tests total (3 per class × 4 classes: `CurrentValueChanged` + `DisposingOneOfTen`
+on all 4, plus `GetTypeName`/`Calibrate` split between the stub pair and the real pair).
+Verified: `CNA` + `CnaTests` build clean. Targeted suite — 48/48 passing (2 skipped,
+`Accelerometer`/`Gyroscope`'s supported-path variants, correctly inapplicable headless).
+Full `ctest` — 1965 tests (up from 1953), 97% passing, same 64 pre-existing headless
+`EasyGL_*` failures, zero regressions.
 
 ### Task P3-10 — Add "different objects → different hash" coverage for `GetHashCode()` across all reading/event-args types
 

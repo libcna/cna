@@ -5,16 +5,20 @@
 
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
+#include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
+#include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Devices::Sensors::Accelerometer;
 using Microsoft::Devices::Sensors::AccelerometerFailedException;
+using Microsoft::Devices::Sensors::AccelerometerReading;
 using Microsoft::Devices::Sensors::AccelerometerReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorFailedException;
+using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
 
 // NOTE: Unlike Compass/Motion, the Accelerometer sensor can genuinely be
@@ -92,6 +96,22 @@ TEST(AccelerometerTests, EleventhSimultaneousInstanceThrows)
     EXPECT_THROW({ const Accelerometer overflow; (void)overflow; }, SensorFailedException);
 }
 
+// Task P3-9: the eleventh-instance test above only proves the cap
+// triggers; this proves instanceCount_ actually decrements on Dispose().
+TEST(AccelerometerTests, DisposingOneOfTenAllowsAnotherConstruction)
+{
+    std::vector<std::unique_ptr<Accelerometer>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        instances.push_back(std::make_unique<Accelerometer>());
+    }
+
+    instances.front()->Dispose();
+    instances.erase(instances.begin());
+
+    EXPECT_NO_THROW({ const Accelerometer eleventh; (void)eleventh; });
+}
+
 TEST(AccelerometerTests, GetTypeName)
 {
     const Accelerometer a;
@@ -134,6 +154,33 @@ TEST(AccelerometerTests, ReadingChangedSubscriptionDoesNotThrow)
     Accelerometer a;
     bool invoked = false;
     a.ReadingChanged += [&invoked](System::Object*, const AccelerometerReadingEventArgs&)
+    {
+        invoked = true;
+    };
+    (void)invoked;
+
+    if (Accelerometer::getIsSupportedProperty())
+    {
+        EXPECT_NO_THROW(a.Start());
+        EXPECT_NO_THROW(a.Stop());
+    }
+    else
+    {
+        EXPECT_THROW(a.Start(), AccelerometerFailedException);
+    }
+}
+
+// Task P3-6: CurrentValueChanged is the primary, non-deprecated event
+// (unlike the legacy ReadingChanged above). Same headless limitation:
+// actually observing it fire needs a real accelerometer delivering an
+// SDL_EVENT_SENSOR_UPDATE, which this environment cannot produce. This
+// test confirms subscribing doesn't crash and Start()/Stop() still behave
+// correctly with a subscriber attached.
+TEST(AccelerometerTests, CurrentValueChangedSubscriptionDoesNotThrow)
+{
+    Accelerometer a;
+    bool invoked = false;
+    a.CurrentValueChanged += [&invoked](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
     {
         invoked = true;
     };

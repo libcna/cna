@@ -46,21 +46,23 @@ deeper research pass) and **nothing in it has been started yet**.
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
 (`cmake-build-debug`) as of the last verified build (2026-07-03, HEAD
-`89d1e53` + uncommitted Task P3-2 work). Also verified clean under `VULKAN`
-(`cmake-build-vulkan`) and `BGFX` (`cmake-build-bgfx`) as of 2026-07-02 —
-the graphics backend choice has zero effect on `Microsoft::Devices::*`
-compilation, confirmed empirically. (Vulkan/BGFX not re-verified after
-Tasks P3-1/P3-4/P3-5/P3-2 since they only touch `Microsoft::Devices`
-headers/cpp, same reasoning as before.)
+`17e7dfa` + uncommitted Tasks P3-6/P3-7/P3-8/P3-9 work). Also verified
+clean under `VULKAN` (`cmake-build-vulkan`) and `BGFX` (`cmake-build-bgfx`)
+as of 2026-07-02 — the graphics backend choice has zero effect on
+`Microsoft::Devices::*` compilation, confirmed empirically. (Vulkan/BGFX
+not re-verified after Tasks P3-1/P3-4/P3-5/P3-2/P3-6/P3-7/P3-8/P3-9 since
+they only touch `Microsoft::Devices` headers/cpp/tests, same reasoning as
+before.)
 
-**Tests:** last full `ctest` run (`EASYGL`): **1953 tests total, 97%
+**Tests:** last full `ctest` run (`EASYGL`): **1966 tests total, 97%
 passing.** The only failures are a fixed set of **64 pre-existing
 `EasyGL_*` graphics tests** that cannot run headless (no display/GPU in
 this dev environment) — present before this phase began, unrelated to
 `Microsoft::Devices`. No regressions have been introduced (the count went
 down from 1973 to 1953 as part of Task P3-2 — 20 `SetXxx` tests were
 removed because the methods they tested became private, not a coverage
-loss; see Section 3). Under `VULKAN`/`BGFX`, the targeted
+loss — then back up to 1966 with Tasks P3-6/P3-7/P3-8/P3-9's 13 new tests;
+see Section 3). Under `VULKAN`/`BGFX`, the targeted
 Devices/Sensors/VibrateController suite was **139/139** passing on both as
 of 2026-07-02 (not re-run since); full-suite counts differ from `EASYGL`
 only because backend-specific demo/smoke-test
@@ -95,10 +97,12 @@ executables weren't built (not a regression).
   NDK / iOS toolchain is available in this dev container.
   `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__` branches have
   never been compiled by any compiler.
-- All three confirmed real bugs from the newest research pass are now
-  **fixed** (Tasks P3-1, P3-4, P3-5, all 2026-07-03): see Section 4. Test-
-  coverage gaps (Tasks P3-6 through P3-11) and one decision task (P3-2)
-  remain open in `plan_devices_phase3.md`.
+- All three confirmed real bugs are fixed (Tasks P3-1, P3-4, P3-5), the one
+  decision task is resolved (P3-2), and the highest-value test-coverage
+  gaps are filled (Tasks P3-6, P3-7, P3-8, P3-9) — all 2026-07-03: see
+  Section 4. Only smaller test-coverage gaps (Tasks P3-10, P3-11) and
+  low-priority follow-ups (P3-3, P3-12) remain open in
+  `plan_devices_phase3.md`.
 
 ---
 
@@ -190,12 +194,24 @@ executables weren't built (not a regression).
   documenting that C++ `friend` is narrower than C#'s assembly-scoped
   `internal`. Full writeup: `plan_devices_phase3.md` Task P3-2's
   "Resolution" section.
+- **Tasks P3-6/P3-7/P3-8/P3-9 done (2026-07-03):** requested and implemented
+  together since they touch the same 4 sensor test files. Added, per class:
+  `CurrentValueChangedSubscriptionDoesNotThrow` (P3-6, all 4 —
+  `Accelerometer`/`Gyroscope` exercise `Start()`/`Stop()` with a subscriber
+  attached on the supported-hardware branch); `GetTypeName` (P3-7,
+  `Compass`/`Gyroscope`/`Motion` — `Accelerometer` already had one);
+  `CalibrateSubscriptionDoesNotThrow` (P3-8, `Compass`/`Motion` only, the
+  only 2 classes with a `Calibrate` event); `DisposingOneOfTenAllowsAnotherConstruction`
+  (P3-9, all 4 — proves `instanceCount_` decrements on `Dispose()`, not just
+  that the 10-cap triggers). 13 new tests (1966 total, up from 1953). Full
+  writeup: `plan_devices_phase3.md` Tasks P3-6/P3-7/P3-8/P3-9's shared
+  "Resolution" section (under Task P3-9).
 - Last pushed commit: `44ad496` on `feature/devices`. Tasks P3-1 (`9b8281f`),
-  P3-4 (`ab106b5`), the `CLAUDE.md` process-change commit (`50c091e`), and
-  P3-5 (`89d1e53`) are committed locally but **not yet pushed**. Task P3-2's
-  changes (5 `*Reading.hpp` files, 5 `*ReadingTests.cpp` files,
-  `CHECKLIST.md`, `AUDIT.md`, `plan_devices_phase3.md`, this file) are
-  **not yet committed** as of this writing.
+  P3-4 (`ab106b5`), the `CLAUDE.md` process-change commit (`50c091e`), P3-5
+  (`89d1e53`), and P3-2 (`17e7dfa`) are committed locally but **not yet
+  pushed**. Tasks P3-6/P3-7/P3-8/P3-9's changes (4 sensor test files,
+  `plan_devices_phase3.md`, this file) are **not yet committed** as of this
+  writing.
 
 ---
 
@@ -405,22 +421,37 @@ writing.
 ## 8. Next smallest tasks
 
 Full detail for all of these is in `plan_devices_phase3.md`; this is the
-recommended order. (Tasks P3-1, P3-4, P3-5, and P3-2 were completed
-2026-07-03 — see Section 3. All three confirmed real bugs plus the one
-decision task from this plan are now fixed/resolved; what's left is
-test-coverage gaps and low-priority follow-ups.)
+recommended order. (Tasks P3-1, P3-2, P3-4, P3-5, P3-6, P3-7, P3-8, and
+P3-9 were completed 2026-07-03 — see Section 3. All confirmed real bugs,
+the one decision task, and the highest-value test-coverage gaps from this
+plan are now resolved; what's left is smaller test-coverage gaps and
+low-priority follow-ups.)
 
-1. **Task P3-6/P3-7/P3-9 — Fill the highest-value test-coverage gaps**
-   - Goal: add `CurrentValueChanged` subscription tests (all 4 sensor
-     classes), `GetTypeName()` tests (`Compass`/`Gyroscope`/`Motion` —
-     `Accelerometer` already has one), and dispose-then-11th-succeeds tests
-     (all 4 sensor classes). See `plan_devices_phase3.md` for exact test
-     shapes to mirror.
-   - Files: `tests/Microsoft/Devices/Sensors/*.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests*:CompassTests*:GyroscopeTests*:MotionTests*"`.
+1. **Task P3-10 — `GetHashCode()` different-hash coverage across 6 reading/event-args types**
+   - Goal: add a test asserting two *unequal* instances produce different
+     hashes, for `AccelerometerReadingTests`, `CompassReadingTests`,
+     `GyroscopeReadingTests`, `AttitudeReadingTests`, `MotionReadingTests`,
+     `AccelerometerReadingEventArgsTests`, `CalibrationEventArgsTests` (if
+     it has meaningful fields to vary).
+   - Files: `tests/Microsoft/Devices/Sensors/*Reading*Tests.cpp`.
+   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="*ReadingTests*:*ReadingEventArgsTests*"`.
 
-Remaining smaller items (P3-3, P3-8, P3-10, P3-11, P3-12) are lower
-priority — see `plan_devices_phase3.md` directly when ready for those.
+2. **Task P3-11 — Remaining smaller coverage gaps (bundle)**
+   - Stop()-after-Dispose() on all 4 sensor classes; Start()-then-Dispose()
+     on `Accelerometer`; multi-field inequality variation on
+     `AttitudeReading`/`MotionReading`/`CompassReading`; full-field
+     `ToString()` coverage on `AttitudeReadingTests`/`MotionReadingTests`;
+     negative `ErrorId` round-trip on `SensorFailedExceptionTests`/
+     `AccelerometerFailedExceptionTests`; `VibrateController`
+     `getDeviceNameProperty()`/`getIsSupportedProperty()` consistency;
+     `StartLeftRight()` 0.0f-magnitude/zero-duration boundaries. See
+     `plan_devices_phase3.md` Task P3-11 for the full itemized list.
+   - Files: spread across `tests/Microsoft/Devices/Sensors/*.cpp` and
+     `tests/Microsoft/Devices/VibrateControllerTests.cpp`.
+   - Verify: full `ctest --output-on-failure`.
+
+Remaining smaller items (P3-3, P3-12) are lower priority — see
+`plan_devices_phase3.md` directly when ready for those.
 
 ---
 
