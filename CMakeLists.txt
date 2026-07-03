@@ -656,6 +656,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 274: Texture3D partial box (x/y/z region) GetData readback
+        cna_easygl_test(cna_test_easygl_texture3d_partial_box_readback
+                        examples/easygl_texture3d_partial_box_readback_test.cpp)
+        add_test(NAME EasyGL_Texture3D_PartialBox_Readback
+                 COMMAND cna_test_easygl_texture3d_partial_box_readback)
+        set_tests_properties(EasyGL_Texture3D_PartialBox_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 176: SurfaceFormat validation — unsupported formats throw
         cna_easygl_test(cna_test_easygl_surface_format_throws
                         examples/easygl_surface_format_throws_test.cpp)

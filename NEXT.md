@@ -13,10 +13,11 @@ ported to C++ with minimal API-surface changes.
   pixel-readback integration tests.
 - **Current development phase:** Phase 32 (Texture2D completeness, Tasks 261–270) is **fully
   complete**. Phase 33 (Texture3D/TextureCube completeness, Tasks 271–280) is in progress — Tasks
-  271 (`Texture3D` audit), 272 (`TextureCube` audit), and 273 (`Texture3D` partial box x/y/z upload
-  tests) done. Phases 30 and 31 were already complete. A new Task 663 was added (unnumbered-sequence,
-  matching existing precedent) for a severe finding from Task 272 — see §3. Next up: Task 274
-  (`Texture3D` partial box readback tests).
+  271 (`Texture3D` audit), 272 (`TextureCube` audit), 273 (`Texture3D` partial box x/y/z upload
+  tests), and 274 (`Texture3D` partial box x/y/z readback tests) done. Phases 30 and 31 were already
+  complete. A new Task 663 was added (unnumbered-sequence, matching existing precedent) for a
+  severe finding from Task 272 — see §3. Next up: Task 275 (`TextureCube` face upload/readback
+  tests for all six faces).
 - **Key architectural decisions:**
   - Backend selection is compile-time via `CNA_GRAPHICS_BACKEND`
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary (most tested).

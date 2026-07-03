@@ -843,6 +843,41 @@ temporary FBO (readback) already handle arbitrary x/y/z sub-regions correctly; t
 z-slice-only test just hadn't exercised that path. 1972/1972 EasyGL ctest pass (the 2 pre-existing,
 unrelated failures — `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests` — are unchanged).
 
+### Texture3D partial box readback verification (Task 274, Phase 33)
+
+Task 273's box-placement test uses a binary Red/Blue split, which would not catch a `GetData`-side
+bug that reads the right box shape from the wrong (x,y,z) offset if the mistake happened to
+preserve a symmetric colour boundary. This task instead fills a 4×3×5 volume with a colour unique
+to every voxel's coordinate (`R=20+x*40, G=20+y*60, B=20+z*40`, all three axes using different
+multipliers so a coordinate swap is also detectable), then reads sub-boxes back and compares every
+element against the exact source formula.
+
+Added `examples/easygl_texture3d_partial_box_readback_test.cpp`
+(`EasyGL_Texture3D_PartialBox_Readback` ctest), three sub-tests:
+
+1. **Asymmetric off-origin box read** — 2×2×3 box at `left=1,top=1,front=1`, `elementCount` exactly
+   matching the box volume.
+2. **`GetData` with non-zero `startIndex`** — a 2×1×2 box read into the middle of a
+   sentinel-padded 6-element output array (mirrors Task 170B's `Texture2D` `startIndex` pattern);
+   verifies the padding elements are left untouched.
+3. **Far-corner box read** — box from `(2,1,3)` to `(4,3,5)` (`right==width`, `bottom==height`,
+   `back==depth`), verifying the read path's exclusive upper bounds match the write path's (Task
+   273C).
+
+All three sub-tests pass — no bug found. Confirms `EasyGLTexture3DBackend::GetData`'s per-slice
+`glReadPixels` correctly honours arbitrary x/y/z box offsets on read, not just on write.
+
+While designing this test, cross-checked FNA's `Texture3D.cs`/`Texture2D.cs` `GetData<T>` against
+CNA's `Texture3D::GetData`: **FNA itself never validates that `elementCount` matches the box's pixel
+count** (`(right-left)*(bottom-top)*(back-front)`) — the only check is
+`data.Length >= startIndex + elementCount`, then `elementCount * elementSizeInBytes` is passed
+straight through to the native backend, which writes based on the box dimensions regardless of what
+`elementCount` claims. CNA's `Texture3D::GetData` has the identical characteristic (no box-volume-
+vs-`elementCount` cross-check). This is faithful-to-FNA behavior — matching an existing implicit
+contract, not a gap to close — so no fix was made; every test in this task supplies a correctly-
+sized `elementCount` for its box, as real XNA/FNA usage must. 1971/1973 EasyGL ctest pass (2
+pre-existing, unrelated failures unchanged).
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`
