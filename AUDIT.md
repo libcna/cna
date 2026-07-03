@@ -878,6 +878,33 @@ contract, not a gap to close — so no fix was made; every test in this task sup
 sized `elementCount` for its box, as real XNA/FNA usage must. 1971/1973 EasyGL ctest pass (2
 pre-existing, unrelated failures unchanged).
 
+### TextureCube partial rect and startIndex verification, all six faces (Task 275, Phase 33)
+
+Task 172 (an earlier session) already gives pixel-exact whole-face round-trip coverage for all six
+faces, but only through the simple 2-arg `SetData`/`GetData(face,data,elementCount)` overload.
+`TextureCubeTests.cpp`'s coverage of the rect-based 6-arg overload (added/fixed by Task 272) and the
+startIndex 4-arg overload is argument-guards only — e.g. `SetDataRectWithinBoundsDoesNotThrow` checks
+the call doesn't throw, not that it wrote the right pixels.
+
+Added `examples/easygl_texturecube_partial_rect_test.cpp`
+(`EasyGL_TextureCube_PartialRect_RoundTrip` ctest), three sub-tests:
+
+1. **Partial rect, all six faces** — a 4×4 `TextureCube`; every face gets its own background colour
+   (same 6-colour palette as Task 172), then an off-centre, asymmetric 2×2 White rect
+   (`Rectangle(1,0,2,2)`) is written into every face via the 6-arg rect overload. Verified only
+   *after* all six faces are written, so a cross-face bleed (writing face A's rect into face B) would
+   be caught, not just a same-face placement bug.
+2. **`SetData` with non-zero `startIndex`** (rect-based, `PositiveX`) — mirrors Task 170A's
+   `Texture2D` pattern: a 6-element source array with Green padding around a 2-element Blue payload,
+   verifying only the requested 2 elements are consumed.
+3. **`GetData` with non-zero `startIndex`** (rect-based, `PositiveX`) — mirrors Task 170B's pattern:
+   reads into the middle of a sentinel-padded array, verifying the padding stays untouched.
+
+All three sub-tests pass — no bug found. Confirms `EasyGLTextureCubeBackend::SetData`/`GetData`
+(`set_sub_image_2d` for upload; a per-face FBO + `glReadPixels` for readback) correctly honour
+arbitrary x/y sub-rects independently per face. 1972/1974 EasyGL ctest pass (2 pre-existing,
+unrelated failures unchanged).
+
 ---
 
 ## `Microsoft::Xna::Framework::Graphics::PackedVector`
