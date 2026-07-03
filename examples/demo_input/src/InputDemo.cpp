@@ -32,6 +32,7 @@ static const Color DPAD_OFF   {50,  50,  50,  255};
 static const Color DPAD_ON    {210, 210, 210, 255};
 static const Color TRIG_BG    {40,  40,  40,  255};
 static const Color TRIG_FILL  {200, 80,  0,   255};
+static const Color RUMBLE_FILL{255, 60,  180, 255};
 static const Color STICK_BG   {30,  30,  30,  255};
 static const Color STICK_DOT  {200, 200, 200, 255};
 static const Color CONN_YES   {0,   200, 80,  255};
@@ -131,6 +132,15 @@ void InputDemo::Update(GameTime& gameTime)
     prevToggleKey_ = toggle;
 
     TouchPanel::Update();
+
+    // Drive rumble motors from trigger pressure for every player slot (One..Four), exercising
+    // GamePad::SetVibration end-to-end. Harmless no-op (returns false) for disconnected slots.
+    for (int p = 0; p < 4; ++p)
+    {
+        const auto playerIndex = static_cast<PlayerIndex>(p);
+        const auto& trig = GamePad::GetState(playerIndex).getTriggersProperty();
+        GamePad::SetVibration(playerIndex, trig.getLeftProperty(), trig.getRightProperty());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -143,22 +153,29 @@ void InputDemo::Draw(const GameTime& gameTime)
 
     getGraphicsDeviceProperty().Clear(BG);
 
-    const KbState kb = Keyboard::GetState();
-    const MsState ms = Mouse::GetState();
-    const GpState gp = GamePad::GetState(PlayerIndex::One);
-    const TC      tc = TouchPanel::GetState();
+    const KbState kb      = Keyboard::GetState();
+    const MsState ms      = Mouse::GetState();
+    const GpState gpOne   = GamePad::GetState(PlayerIndex::One);
+    const GpState gpTwo   = GamePad::GetState(PlayerIndex::Two);
+    const GpState gpThree = GamePad::GetState(PlayerIndex::Three);
+    const GpState gpFour  = GamePad::GetState(PlayerIndex::Four);
+    const TC      tc      = TouchPanel::GetState();
 
     spriteBatch_->Begin();
 
     // Section backgrounds
     DrawRect(10,  10,  440, 380, SECT_BG);  // keyboard section
     DrawRect(10,  400, 440, 190, SECT_BG);  // mouse section
-    DrawRect(460, 10,  330, 580, SECT_BG);  // gamepad section
+    DrawRect(460, 10,  330, 580, SECT_BG);  // gamepad section (Player One, detailed)
+    DrawRect(800, 10,  204, 580, SECT_BG);  // gamepad section (Players Two-Four, compact)
     DrawRect(10,  600, 1004, 158, SECT_BG); // text input section
 
     DrawKeyboard(20, 20, kb);
     DrawMouse(20, 410, ms);
-    DrawGamePad(470, 20, gp);
+    DrawGamePad(470, 20, gpOne);
+    DrawGamePadMini(810, 20,  gpTwo);
+    DrawGamePadMini(810, 210, gpThree);
+    DrawGamePadMini(810, 400, gpFour);
     DrawTouchPoints(tc);
     DrawTextPanel(10, 600, 1004, 158);
 
@@ -356,6 +373,66 @@ void InputDemo::DrawGamePad(int ox, int oy, const GpState& gp)
     DrawStick(ox + 235, oy + 270, 55,
               stick.getRightProperty().X,
               stick.getRightProperty().Y);
+}
+
+// ---------------------------------------------------------------------------
+// GamePad section (compact — Players Two/Three/Four)
+// ---------------------------------------------------------------------------
+
+void InputDemo::DrawGamePadMini(int ox, int oy, const GpState& gp)
+{
+    const bool connected = gp.getIsConnectedProperty();
+    DrawRect(ox, oy, 184, 14, connected ? CONN_YES : CONN_NO);
+
+    if (!connected) return;
+
+    const auto& btns  = gp.getButtonsProperty();
+    const auto& dpad  = gp.getDPadProperty();
+    const auto& stick = gp.getThumbSticksProperty();
+    const auto& trig  = gp.getTriggersProperty();
+
+    auto btn = [&](int x, int y, bool pressed, Color c)
+    {
+        DrawRect(ox + x, oy + y, 14, 14, pressed ? c : GP_OFF);
+    };
+    auto dpadBtn = [&](int x, int y, bool pressed)
+    {
+        DrawRect(ox + x, oy + y, 12, 12, pressed ? DPAD_ON : DPAD_OFF);
+    };
+
+    // --- DPad (left)
+    const int dpx = 4, dpy = 20;
+    dpadBtn(dpx + 14, dpy,       dpad.getUpProperty()    == BS::Pressed);
+    dpadBtn(dpx,      dpy + 14,  dpad.getLeftProperty()  == BS::Pressed);
+    dpadBtn(dpx + 14, dpy + 14,  dpad.getDownProperty()  == BS::Pressed);
+    dpadBtn(dpx + 28, dpy + 14,  dpad.getRightProperty() == BS::Pressed);
+
+    // --- ABXY (diamond, right of DPad)
+    const int abx = 70, aby = 20;
+    btn(abx + 14, aby,      btns.getYProperty() == BS::Pressed, Color{220, 220, 0,   255});
+    btn(abx,      aby + 14, btns.getXProperty() == BS::Pressed, Color{80,  80,  220, 255});
+    btn(abx + 28, aby + 14, btns.getBProperty() == BS::Pressed, Color{220, 60,  60,  255});
+    btn(abx + 14, aby + 28, btns.getAProperty() == BS::Pressed, Color{60,  200, 60,  255});
+
+    // --- Shoulders
+    const bool lb = btns.getLeftShoulderProperty()  == BS::Pressed;
+    const bool rb = btns.getRightShoulderProperty() == BS::Pressed;
+    DrawRect(ox,      oy + 58, 88, 12, lb ? GP_ON : GP_OFF);
+    DrawRect(ox + 96, oy + 58, 88, 12, rb ? GP_ON : GP_OFF);
+
+    // --- Triggers as bars
+    DrawBar(ox,      oy + 74, 88, 10, trig.getLeftProperty(),  TRIG_BG, TRIG_FILL);
+    DrawBar(ox + 96, oy + 74, 88, 10, trig.getRightProperty(), TRIG_BG, TRIG_FILL);
+
+    // --- Rumble motor level currently sent to this pad (Update() mirrors it 1:1 from the
+    // trigger bars above via GamePad::SetVibration); shown separately so the feedback loop
+    // driving real hardware rumble is visible, not just the trigger input.
+    DrawBar(ox,      oy + 88, 88, 8, trig.getLeftProperty(),  TRIG_BG, RUMBLE_FILL);
+    DrawBar(ox + 96, oy + 88, 88, 8, trig.getRightProperty(), TRIG_BG, RUMBLE_FILL);
+
+    // --- Thumbstick visualizers
+    DrawStick(ox + 40,  oy + 132, 28, stick.getLeftProperty().X,  stick.getLeftProperty().Y);
+    DrawStick(ox + 144, oy + 132, 28, stick.getRightProperty().X, stick.getRightProperty().Y);
 }
 
 // ---------------------------------------------------------------------------

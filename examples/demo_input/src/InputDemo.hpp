@@ -55,6 +55,7 @@ private:
     void DrawKeyboard(int ox, int oy, const KbState& kb);
     void DrawMouse(int ox, int oy, const MsState& ms);
     void DrawGamePad(int ox, int oy, const GpState& gp);
+    void DrawGamePadMini(int ox, int oy, const GpState& gp);
     void DrawTouchPoints(const TC& touches);
     void DrawTextPanel(int ox, int oy, int w, int h);
 
