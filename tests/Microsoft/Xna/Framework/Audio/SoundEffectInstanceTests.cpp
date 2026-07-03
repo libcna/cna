@@ -146,6 +146,20 @@ TEST_F(SoundEffectInstanceTest, PlayStopTransitions)
     EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
 }
 
+TEST_F(SoundEffectInstanceTest, StopFalseDoesNotCutOffLoopedPlaybackImmediately)
+{
+    // Non-immediate Stop must not cut playback off right away -- it only removes the loop so
+    // the track finishes its current pass and stops naturally afterward (CP-13).
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+
+    inst.Stop(false);
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+}
+
 TEST_F(SoundEffectInstanceTest, RepeatedPlayWhileAlreadyPlayingDoesNotRestartTrack)
 {
     REQUIRE_DEVICE();

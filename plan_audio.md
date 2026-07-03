@@ -548,11 +548,17 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   který se má zahodit před převzetím zdrojova). Celá sada 1995/1995 testů zelená, bez pádu (což
   by double-free typicky projevilo).
 
-- [ ] **CP-13 — Chybí testy pro `Stop(false)` (non-immediate) na `SoundEffectInstance` i
-  `DynamicSoundEffectInstance`.** Testováno je jen `Stop()`/`Stop(true)`.
+- [x] **CP-13 — Chybí testy pro `Stop(false)` (non-immediate) na `SoundEffectInstance` i
+  `DynamicSoundEffectInstance`.** *(hotovo 2026-07-03.)* Testováno bylo jen `Stop()`/`Stop(true)`.
   *CNA:* tests/…/SoundEffectInstanceTests.cpp, tests/…/DynamicSoundEffectInstanceTests.cpp.
   *Accept:* test na statické instanci (`Stop(false)` nechá doznít smyčku) a na dynamické
   (`Stop(false)` hází po opravě CP-5).
+  *Pozn.:* dynamická část už byla pokrytá jako součást CP-5 opravy
+  (`StopFalseWhileNeverPlayedIsSafeNoOp`/`StopFalseAfterPlayingThrowsInvalidOperation`). Přidán
+  chybějící statický test `SoundEffectInstanceTest.StopFalseDoesNotCutOffLoopedPlaybackImmediately`
+  — nastaví `IsLooped=true`, `Play()`, pak `Stop(false)` a ověří, že `State` zůstává `Playing`
+  (smyčka se jen ukončí pro příští cyklus, přehrávání se okamžitě nezastaví). Celá sada
+  2000/2000 testů zelená.
 
 - [x] **CP-14 — Chybí regresní test na opakované `Play()` během `State==Playing`.** *(hotovo
   2026-07-03 — vyřešeno jako vedlejší efekt CP-1.)* Přímo by odhalil CP-1; dnešní test volal
