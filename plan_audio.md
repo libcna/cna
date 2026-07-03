@@ -703,14 +703,26 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `rendererId` a nenulovým `lookAheadTime`, ověřující `!IsDisposed`, neprázdné
   `RendererDetails` a funkční `GetCategory("Default")`. Celá sada 1996/1996 testů zelená.
 
-- [ ] **XA-5 — Testy `AudioCategory`/`Cue` neověřují reálný efekt `Pause`/`Resume`/`Stop`/
-  `SetVolume` na běžící cue.** Testováno je jen `EXPECT_NO_THROW` bez jakéhokoli aktivního `Cue` v
-  kategorii — přestože `AudioCategory.hpp` explicitně dokumentuje, že tyto metody „route to every
-  currently active Cue... and have a real, immediate effect on playback".
+- [x] **XA-5 — Testy `AudioCategory`/`Cue` neověřují reálný efekt `Pause`/`Resume`/`Stop`/
+  `SetVolume` na běžící cue.** *(hotovo 2026-07-03.)* Testováno bylo jen `EXPECT_NO_THROW` bez
+  jakéhokoli aktivního `Cue` v kategorii — přestože `AudioCategory.hpp` explicitně dokumentuje,
+  že tyto metody „route to every currently active Cue... and have a real, immediate effect on
+  playback".
   *CNA:* tests/.../AudioCategoryTests.cpp:130-160.
   *Accept:* nový test vytvoří `SoundBank`+`Cue` ve fixture s kategorií, zavolá `cue->Play()`, pak
   `category.Pause()`/`.Stop()`/`.SetVolume()` a ověří přes `getIsPausedProperty()`/
   `getIsStoppedProperty()`, že efekt skutečně nastal.
+  *Pozn.:* žádná změna produkčního kódu. Přidána minimální `.xsb` fixture (jeden simple cue,
+  sound s `categoryIndex=0` = "Default", žádná wavebanka potřeba — `Cue::Play()` nastaví
+  `categoryIdx_`/`state_` a zaregistruje se do `activeCues` bez ohledu na to, jestli se najde
+  reálná wavebanka) a `SharedBank()`. Nový test
+  `PauseResumeStopRouteToRealActiveCueInCategory` reálně ověřuje `Pause→IsPaused`,
+  `Resume→IsPlaying`, `Stop→IsStopped` na skutečném zaregistrovaném Cue. **Vedlejší nález** (mimo
+  rozsah XA-5, nezaznamenáno jako nová položka): `AudioEngine::SetCategoryVolumeInternal`
+  (AudioEngine.cpp:224-234) má komentář „Cue would need to re-apply volume — skipped for
+  simplicity" — `SetVolume()` tedy ve skutečnosti **nic nedělá** na aktivních cues, jen uloží
+  hodnotu do `categoryVolumes`; test proto `SetVolume` jen ověřuje `EXPECT_NO_THROW`, ne reálný
+  efekt (na rozdíl od Pause/Resume/Stop). Celá sada 2006/2006 testů zelená.
 
 #### 7.3 Interní backend (XactParser, XactTypes, AudioMixer)
 

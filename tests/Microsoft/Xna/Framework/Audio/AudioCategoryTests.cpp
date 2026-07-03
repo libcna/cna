@@ -3,17 +3,22 @@
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
+#include "Microsoft/Xna/Framework/Audio/Cue.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
 using Microsoft::Xna::Framework::Audio::AudioStopOptions;
+using Microsoft::Xna::Framework::Audio::Cue;
+using Microsoft::Xna::Framework::Audio::SoundBank;
 
 namespace
 {
@@ -37,6 +42,20 @@ namespace
     {
         buf.insert(buf.end(), s.begin(), s.end());
         buf.push_back(0);
+    }
+
+    void AppendS32(std::vector<uint8_t>& buf, int32_t v)
+    {
+        uint8_t bytes[4];
+        std::memcpy(bytes, &v, 4);
+        buf.insert(buf.end(), bytes, bytes + 4);
+    }
+
+    void AppendPadded(std::vector<uint8_t>& buf, const std::string& text, std::size_t totalSize)
+    {
+        const std::size_t start = buf.size();
+        buf.resize(start + totalSize, 0);
+        std::memcpy(buf.data() + start, text.data(), text.size());
     }
 
     void AppendCategory(std::vector<uint8_t>& buf)
@@ -117,6 +136,99 @@ namespace
         static AudioEngine engine(path);
         return engine;
     }
+
+    // Minimal .xsb with one simple cue ("TestCue") whose sound has categoryIndex=0 ("Default",
+    // the first category in BuildXgsFixtureBytes). No wavebank is needed: Cue::Play() sets
+    // categoryIdx_/state_ and registers with the engine's activeCues list regardless of whether
+    // any wave reference actually resolves to a real WaveBank -- enough to exercise
+    // AudioCategory's routing to a real, currently-playing Cue (XA-5).
+    std::vector<uint8_t> BuildXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize; // 138
+        constexpr uint32_t soundSize    = 12; // simple sound: flags+cat+vol+pitch+prio+len+waveIdx+wbIdx
+
+        const uint32_t soundOffset       = baseOffset;             // 138
+        const uint32_t cueSimpleOffset   = soundOffset + soundSize; // 150
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;    // 155
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6; // 161
+        const std::string cueName = "TestCue";
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 0);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "TestSoundBank", bankNameSize);
+
+        // Sound: simple, categoryIndex=0 ("Default").
+        AppendU8(data, 0);   // flags
+        AppendU16(data, 0);  // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte (unused by this test)
+        AppendU16(data, 0);  // pitchCents
+        AppendU8(data, 0);   // priority
+        AppendU16(data, 0);  // soundLength (skipped)
+        AppendU16(data, 0);  // waveIdx
+        AppendU8(data, 0);   // wbIdx
+
+        // Simple cue "TestCue", pointing at the sound above.
+        AppendU8(data, 0);   // flags
+        AppendU32(data, soundOffset); // sbCode
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0); // unknown
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    const std::string& XsbFixturePath()
+    {
+        static const std::string path = []() -> std::string
+        {
+            auto dir = std::filesystem::temp_directory_path() / "cna_audio_category_test";
+            std::filesystem::create_directories(dir);
+            auto file = dir / "fixture.xsb";
+            const auto bytes = BuildXsbFixtureBytes();
+            std::ofstream f(file, std::ios::binary);
+            f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            return file.string();
+        }();
+        return path;
+    }
+
+    SoundBank& SharedBank()
+    {
+        static SoundBank bank(&SharedEngine(), XsbFixturePath());
+        return bank;
+    }
 }
 
 // ===================== Name =====================
@@ -157,6 +269,32 @@ TEST(AudioCategoryTest, StopImmediateDoesNotThrow)
 {
     AudioCategory cat = SharedEngine().GetCategory("Default");
     EXPECT_NO_THROW(cat.Stop(AudioStopOptions::Immediate));
+}
+
+// XA-5: AudioCategory.hpp documents that Pause/Resume/Stop "route to every currently active
+// Cue... and have a real, immediate effect on playback" -- verify that against a real playing
+// Cue in the category, not just EXPECT_NO_THROW with no active cue at all.
+TEST(AudioCategoryTest, PauseResumeStopRouteToRealActiveCueInCategory)
+{
+    AudioCategory cat = SharedEngine().GetCategory("Default");
+    std::unique_ptr<Cue> cue(SharedBank().GetCue("TestCue"));
+
+    cue->Play();
+    ASSERT_TRUE(cue->getIsPlayingProperty());
+
+    cat.Pause();
+    EXPECT_TRUE(cue->getIsPausedProperty());
+    EXPECT_FALSE(cue->getIsPlayingProperty());
+
+    cat.Resume();
+    EXPECT_TRUE(cue->getIsPlayingProperty());
+    EXPECT_FALSE(cue->getIsPausedProperty());
+
+    EXPECT_NO_THROW(cat.SetVolume(0.5f));
+
+    cat.Stop(AudioStopOptions::Immediate);
+    EXPECT_TRUE(cue->getIsStoppedProperty());
+    EXPECT_FALSE(cue->getIsPlayingProperty());
 }
 
 // ===================== Equals / GetHashCode / operators =====================
