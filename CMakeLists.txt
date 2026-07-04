@@ -1171,6 +1171,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 313: DepthStencilState.DepthBufferWriteEnable actually gates depth-buffer writes
+        cna_easygl_test(cna_test_easygl_depthstencilstate_write_enable
+                        examples/easygl_depthstencilstate_write_enable_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_WriteEnable
+                 COMMAND cna_test_easygl_depthstencilstate_write_enable)
+        set_tests_properties(EasyGL_DepthStencilState_WriteEnable PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1363,6 +1372,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_BlendState_BlendFactor
                  COMMAND cna_test_vulkan_blendstate_blendfactor)
         set_tests_properties(Vulkan_BlendState_BlendFactor PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 313: DepthStencilState.DepthBufferWriteEnable on Vulkan (reuses the backend-agnostic
+        # EasyGL source).
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_write_enable
+                        examples/easygl_depthstencilstate_write_enable_test.cpp)
+        add_test(NAME Vulkan_DepthStencilState_WriteEnable
+                 COMMAND cna_test_vulkan_depthstencilstate_write_enable)
+        set_tests_properties(Vulkan_DepthStencilState_WriteEnable PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
