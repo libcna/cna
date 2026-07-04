@@ -13,8 +13,8 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–33 are complete. **Phase 34 (SurfaceFormat
-  implementation matrix, `GRAPHICS_TASKS.md` Tasks 281–290) is in progress** — Tasks 281–285 done,
-  Task 286 is next (see §8).
+  implementation matrix, `GRAPHICS_TASKS.md` Tasks 281–290) is in progress** — Tasks 281–286 done,
+  Task 287 is next (see §8).
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -38,11 +38,13 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2004/2006 pass. 2 pre-existing, unrelated
-  failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. One additional
-  test (`EasyGL_SkinnedBones`) was observed failing once under parallel `-j` execution but passed
-  cleanly both in isolation and on a repeat full run — treated as parallel-execution flakiness, not
-  a regression (not confirmed as a stable failure).
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2016/2018 (serial `-j1`) pass. 2 pre-existing,
+  unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. Two
+  additional tests have each been observed failing once under parallel `-j` execution but passed
+  cleanly both in isolation and on a repeat serial full run — treated as parallel-execution
+  flakiness, not a regression (neither confirmed as a stable failure): `EasyGL_SkinnedBones`
+  (observed in an earlier session) and `EasyGL_TransformMatrix_Translation` (observed in the
+  Task 286 session).
 - **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1944/1945 (serial `-j1`) / 1943/1945 (parallel
   `-j`). Only `Vulkan_DepthBias` (pre-existing, its `DepthBias=-1e6` sub-case) fails consistently.
   `Vulkan_FillMode_WireFrame` and `Vulkan_RenderTargetUsage` have been observed to fail under
@@ -106,7 +108,8 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 285 | `tests/Microsoft/Xna/Framework/Graphics/PackedVector/PackedVectorTests.cpp` | Continues Phase 34. Found `Bgr565`/`Bgra5551`/`Bgra4444` `PackedVector` types **already existed** with pack/unpack math already matching FNA's bit layouts exactly (verified line-by-line against FNA's `Bgr565.cs`/`Bgra5551.cs`/`Bgra4444.cs`), and `tests/PackedVectorGolden.md` already had a golden reference table for all three — but the golden values weren't actually pinned in tests (`Bgr565` only tested Red/Half; `Bgra4444`/`Bgra5551` had zero golden tests). Added 8 new golden-value tests closing that gap. No bug found — pure test-coverage task. 2012/2014 EasyGL ctest pass (2 pre-existing, unrelated failures unchanged). |
+| (uncommitted) Task 286 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | Continues Phase 34. **Found the task's own premise was half wrong:** `NormalizedShort2`/`NormalizedShort4` are not `SurfaceFormat` texture values in FNA at all (confirmed via FNA source) — they're `VertexElementFormat`-only, already correctly implemented (Vulkan/Bgfx real GPU mapping, matching ordinals, existing tests). `NormalizedByte2`/`NormalizedByte4` *are* real `SurfaceFormat` values; their CPU-side `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` were already correct and tested (Task 282). The one real gap: no test confirmed `Texture2D` construction actually throws for these two formats. Added 2 tests (`UnsupportedFormatConstructionTest.NormalizedByte2Throws`/`NormalizedByte4Throws`). No bug found — closed a narrow test-coverage gap, same shape as Task 285. |
+| `a1012de` Task 285 | `tests/Microsoft/Xna/Framework/Graphics/PackedVector/PackedVectorTests.cpp` | Continues Phase 34. Found `Bgr565`/`Bgra5551`/`Bgra4444` `PackedVector` types **already existed** with pack/unpack math already matching FNA's bit layouts exactly (verified line-by-line against FNA's `Bgr565.cs`/`Bgra5551.cs`/`Bgra4444.cs`), and `tests/PackedVectorGolden.md` already had a golden reference table for all three — but the golden values weren't actually pinned in tests (`Bgr565` only tested Red/Half; `Bgra4444`/`Bgra5551` had zero golden tests). Added 8 new golden-value tests closing that gap. No bug found — pure test-coverage task. 2012/2014 EasyGL ctest pass (2 pre-existing, unrelated failures unchanged). |
 | `3750522` (no task #) | `SpriteBatch.hpp` | Added missing `NOXNA` tags to 4 CNA-only `SpriteBatch` members found during an API-coverage analysis against FNA (parameterless constructor, `Draw(texture,float,float)`, 2 non-optional-`Rectangle&` `Draw` overloads). Documentation/marker-only, no behavior change. |
 | `1c50a30` Task 284 | `VulkanGraphicsBackend.cpp`, `examples/vulkan_texture_srgb_test.cpp` (new), `CMakeLists.txt`, `docs/surface-format-support.md` | Found and fixed 2 compounding Vulkan bugs: `Texture2D`'s Vulkan image used `VK_FORMAT_R8G8B8A8_SRGB` (should be `_UNORM`), and the swapchain format selection explicitly preferred an SRGB surface format — both apply an unwanted gamma transform. The two partly canceled for textured content but left all non-textured rendering wrong (a nominal 128 read back as 188). Fixed both to `UNORM`. New test proves it (diff 60 → 0). EasyGL/Bgfx confirmed to have no equivalent issue. |
 | `4533778` Task 283 | `Texture.hpp/.cpp`, `Texture2D/3D/Cube.cpp`, `GraphicsDevice.cpp`, `TextureTests.cpp` | Ported FNA's `Texture.GetPixelStoreAlignment`/`ValidateGetDataFormat` (both `internal` in FNA; made `public` on CNA's `Texture`, a documented deviation, since 3 of 4 real call sites aren't `Texture` subclasses in CNA). Wired the validation into all 4 real `GetData` call sites. Currently a no-op everywhere (only `Color` supported). |
@@ -259,20 +262,20 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 286 — implement/verify `NormalizedByte2/4`, `NormalizedShort2/4`
-   texture/storage behavior if supported (or throw clearly)**
-   - Goal: continue Phase 34's SurfaceFormat matrix. Note these `PackedVector` CPU types already
-     exist and already have golden tests (`tests/PackedVectorGolden.md` + `PackedVectorTests.cpp`
-     both cover all 4) — same situation Task 285 found for `Bgr565`/`Bgra5551`/`Bgra4444`. This
-     task's real scope is likely the "if supported" / "or throw clearly" part: confirm whether
-     `SurfaceFormat::NormalizedByte2/4`/`NormalizedShort2/4` (the *texture* formats, not the
-     `PackedVector` CPU types) are backed by any real GPU format in any backend, and if not, confirm
-     `Texture::ValidateFormat` throws clearly for them (it should already, being non-`Color`) —
-     check first before assuming there's implementation work at all.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/Texture.cpp` (`ValidateFormat`), per-backend texture
-     creation code if GPU mapping is actually in scope.
-   - Verification: a test confirming the current throw-or-work behavior is deliberate, not silent.
+1. **`GRAPHICS_TASKS.md` Task 287 — implement/verify float formats: `Single`, `Vector2`, `Vector4`**
+   - Goal: continue Phase 34's SurfaceFormat matrix (GL/Vulkan format mapping). As with Tasks 285/286,
+     check first whether this is "already correct, needs verification/tests" rather than greenfield:
+     `Texture::GetFormatSizeEXT` already handles `Single`(4)/`Vector2`(8)/`Vector4`(16) correctly
+     (Task 282), and `Texture::ValidateFormat` already throws for all three since only `Color` is
+     GPU-backed anywhere. Confirm no backend secretly half-supports one of these (check EasyGL/
+     Vulkan/Bgfx texture creation code for any `Single`/`Vector2`/`Vector4` special-casing), and add
+     a throws-clearly test per format if (as expected) none exists yet — mirroring Task 286's
+     `UnsupportedFormatConstructionTest` addition in `Texture2DTests.cpp`.
+   - Files: `src/Microsoft/Xna/Framework/Graphics/Texture.cpp`,
+     `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp`.
+   - Verification: unit tests confirming `Texture2D` construction throws `std::runtime_error` for
+     `SurfaceFormat::Single`/`Vector2`/`Vector4`, plus confirmation that `GetFormatSizeEXT` values
+     are already correct (they are, per Task 282).
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -336,23 +339,24 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-33 complete. Phase 34 (SurfaceFormat implementation matrix,
-GRAPHICS_TASKS.md Tasks 281-290) is in progress: Tasks 281-285 done. All three backend builds
+GRAPHICS_TASKS.md Tasks 281-290) is in progress: Tasks 281-286 done. All three backend builds
 (EasyGL/Vulkan/Bgfx) pass at the rates in NEXT.md §2; remaining failures are pre-existing and
 unrelated (see NEXT.md §5). Two significant bugs were found and fixed in earlier sessions:
 a real SurfaceFormat enum-ordinal conformance bug (Task 281) and a Vulkan sRGB/gamma bug affecting
-all non-textured rendering (Task 284). Task 285 found the Bgr565/Bgra5551/Bgra4444 PackedVector
-types and golden reference doc already existed and were already correct against FNA — it closed
-a test-coverage gap (golden values existed in docs but weren't pinned in actual tests), not a
-greenfield implementation. Two silent-failure gaps remain open and tracked but not yet fixed:
-TextureCube::DDSFromStreamEXT (Task 663) and Texture3D/TextureCube::GetData being a total no-op
-on Vulkan/Bgfx (Task 865).
+all non-textured rendering (Task 284). Tasks 285 and 286 both turned out to be verification/
+test-coverage tasks, not greenfield implementation: Task 285 found Bgr565/Bgra5551/Bgra4444 already
+correct, just missing pinned golden tests. Task 286 found its own premise half wrong -
+NormalizedShort2/4 are VertexElementFormat-only in FNA, not SurfaceFormat, and were already
+correctly implemented as vertex formats; NormalizedByte2/4 (the real SurfaceFormat values) were
+already correct too, just missing a throws-clearly test, which was added. Two silent-failure gaps
+remain open and tracked but not yet fixed: TextureCube::DDSFromStreamEXT (Task 663) and
+Texture3D/TextureCube::GetData being a total no-op on Vulkan/Bgfx (Task 865).
 
-Next task: GRAPHICS_TASKS.md Task 286 - implement/verify NormalizedByte2/4, NormalizedShort2/4
-texture/storage behavior if supported, or throw clearly. IMPORTANT: check first whether this is
-another "already done, just needs golden tests" situation like Task 285 turned out to be - the
-NormalizedByte2/4/NormalizedShort2/4 PackedVector CPU types already exist and already have golden
-tests in tests/PackedVectorGolden.md and PackedVectorTests.cpp. This task's real remaining scope
-is likely just the SurfaceFormat/Texture::ValidateFormat "if supported, or throw clearly" part -
-confirm that non-Color GPU texture formats still throw clearly and are not silently broken.
+Next task: GRAPHICS_TASKS.md Task 287 - implement/verify float formats Single/Vector2/Vector4
+(GL/Vulkan format mapping). Given the pattern from Tasks 285/286, check FIRST whether
+Texture::GetFormatSizeEXT already handles these correctly (it very likely does, from Task 282)
+and whether Texture::ValidateFormat already throws clearly for them before assuming any
+greenfield GPU-mapping work is needed. If it's another verify-only task, add throws-clearly
+unit tests mirroring Task 286's UnsupportedFormatConstructionTest additions in Texture2DTests.cpp.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```

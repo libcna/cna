@@ -101,6 +101,28 @@ TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 }
 
 // -----------------------------------------------------------------------
+// Unsupported SurfaceFormat construction — must throw clearly, never
+// silently fall back to RGBA8 (Task 176 established the pattern; Task 286
+// closes the gap for the two bump-map formats it left uncovered).
+// -----------------------------------------------------------------------
+
+class UnsupportedFormatConstructionTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+};
+
+TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), std::runtime_error);
+}
+
+// -----------------------------------------------------------------------
 // getBoundsProperty
 // -----------------------------------------------------------------------
 
