@@ -193,3 +193,46 @@ TEST(SamplerStateTest, SetMipMapLodBias)
     ss.setMipMapLevelOfDetailBiasProperty(-0.5f);
     EXPECT_FLOAT_EQ(ss.getMipMapLevelOfDetailBiasProperty(), -0.5f);
 }
+
+// --- Preset Name (Task 291: FNA sets Name on every preset; CNA previously did not) ---
+
+TEST(SamplerStateTest, AnisotropicClampName)
+{
+    EXPECT_EQ(SamplerState::AnisotropicClamp.getNameProperty(), "SamplerState.AnisotropicClamp");
+}
+
+TEST(SamplerStateTest, AnisotropicWrapName)
+{
+    EXPECT_EQ(SamplerState::AnisotropicWrap.getNameProperty(), "SamplerState.AnisotropicWrap");
+}
+
+TEST(SamplerStateTest, LinearClampName)
+{
+    EXPECT_EQ(SamplerState::LinearClamp.getNameProperty(), "SamplerState.LinearClamp");
+}
+
+TEST(SamplerStateTest, LinearWrapName)
+{
+    EXPECT_EQ(SamplerState::LinearWrap.getNameProperty(), "SamplerState.LinearWrap");
+}
+
+TEST(SamplerStateTest, PointClampName)
+{
+    EXPECT_EQ(SamplerState::PointClamp.getNameProperty(), "SamplerState.PointClamp");
+}
+
+TEST(SamplerStateTest, PointWrapName)
+{
+    EXPECT_EQ(SamplerState::PointWrap.getNameProperty(), "SamplerState.PointWrap");
+}
+
+TEST(SamplerStateTest, PresetToStringReturnsName)
+{
+    EXPECT_EQ(SamplerState::PointClamp.ToString(), "SamplerState.PointClamp");
+}
+
+TEST(SamplerStateTest, DefaultConstructedNameIsEmpty)
+{
+    SamplerState ss;
+    EXPECT_TRUE(ss.getNameProperty().empty());
+}

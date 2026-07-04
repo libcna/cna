@@ -109,7 +109,8 @@ namespace Microsoft::Xna::Framework::Graphics
         void setMipMapLevelOfDetailBiasProperty(float value);
 
     private:
-        SamplerState(TextureFilter filter,
+        SamplerState(const std::string& name,
+                     TextureFilter filter,
                      TextureAddressMode addressU,
                      TextureAddressMode addressV,
                      TextureAddressMode addressW);

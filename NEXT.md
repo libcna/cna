@@ -12,10 +12,9 @@ minimal API-surface changes.
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit tests and
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
-- **Current development phase:** Phases 1–33 are complete, and **Phase 34 (SurfaceFormat
-  implementation matrix, `GRAPHICS_TASKS.md` Tasks 281–290) is now complete.** **Phase 35
-  (SamplerState/texture sampling conformance, Tasks 291–300) is starting** — Task 291 is next
-  (see §8).
+- **Current development phase:** Phases 1–34 are complete. **Phase 35 (SamplerState/texture
+  sampling conformance, `GRAPHICS_TASKS.md` Tasks 291–300) is in progress** — Tasks 291–292 done,
+  Task 293 is next (see §8).
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -78,6 +77,14 @@ build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` conf
   7 `Draw` overloads, 6 `DrawString` overloads) are implemented with matching signatures. 4
   CNA-only convenience additions exist alongside them, now correctly `NOXNA`-tagged.
 
+### What currently works (continued)
+- `SamplerState`'s 6 static presets now correctly set `Name` (e.g. `"SamplerState.PointClamp"`)
+  matching FNA, fixed in Task 291 — previously silently empty on every preset.
+- `GraphicsDevice.SamplerStates`/`VertexSamplerStates` now correctly default every one of the 16
+  slots to `SamplerState.LinearWrap` (matching FNA byte-for-byte, including `Name`), fixed in
+  Task 292 — previously each slot was a default-constructed `SamplerState` (functionally identical
+  filter/address values, but empty `Name`, and completely untested before this task).
+
 ### What does NOT work yet
 - `Texture3D`/`TextureCube::GetData` is a **total silent no-op on both Vulkan and Bgfx** — neither
   backend overrides the base class's empty default implementation. Calling it leaves the output
@@ -109,7 +116,9 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 290 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | **Closes Phase 34.** Found 7 of 27 `SurfaceFormat` values still untested for throw-behavior (`Bgra5551`/`Bgra4444`/`Dxt3`/`Dxt5`/`Rg32`/`ByteEXT`/`UShortEXT`). Added one exhaustive `EverySurfaceFormatEitherWorksOrThrowsClearly` test iterating all 27 values instead of more one-off tests. Confirmed `Texture::ValidateFormat` is backend-agnostic (called from the shared `Texture2D`/`Texture3D`/`TextureCube` constructors), so this holds for Vulkan/Bgfx too. No bug found. |
+| (uncommitted) Task 292 | `SamplerStateCollection.cpp`, `SamplerStateCollectionTests.cpp` (new) | Found and fixed a real bug uncovered directly by Task 291: `SamplerStateCollection`'s constructor default-constructed each of 16 slots instead of copying `SamplerState::LinearWrap` (FNA's actual behavior). Values coincided (both Linear+Wrap×3) so this was invisible until `Name` existed to distinguish them. Zero prior test coverage for this class or `GraphicsDevice`'s sampler defaults existed. Fixed + added a full new test file. 2042/2044 EasyGL ctest pass serially. |
+| (uncommitted) Task 291 | `SamplerState.hpp/.cpp`, `SamplerStateTests.cpp` | **Opens Phase 35.** Audited `SamplerState` against FNA: property surface, all 6 presets, and default values already matched FNA exactly. Real finding: FNA sets `Name` on every preset (e.g. `"SamplerState.PointClamp"`); CNA's private preset constructor never did. Fixed by threading a `name` param through the constructor. Also found the same gap exists in `BlendState`/`DepthStencilState`/`RasterizerState` — tracked separately as Task 866, not fixed here (scope discipline). 8 new tests. 2032/2034 EasyGL ctest pass serially. |
+| `7c3e051` Task 290 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | **Closes Phase 34.** Found 7 of 27 `SurfaceFormat` values still untested for throw-behavior (`Bgra5551`/`Bgra4444`/`Dxt3`/`Dxt5`/`Rg32`/`ByteEXT`/`UShortEXT`). Added one exhaustive `EverySurfaceFormatEitherWorksOrThrowsClearly` test iterating all 27 values instead of more one-off tests. Confirmed `Texture::ValidateFormat` is backend-agnostic (called from the shared `Texture2D`/`Texture3D`/`TextureCube` constructors), so this holds for Vulkan/Bgfx too. No bug found. |
 | `5bf517f` Task 289 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | Continues Phase 34. Same verify-only shape as Tasks 285–288: `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` for `HdrBlendable`/`Rgba1010102`/`Rgba64` were already correct (Task 282); fallback status already documented (Task 281's `docs/surface-format-support.md`). Added the missing throws-clearly tests. No bug found. |
 | `1d8c859` Task 288 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | Continues Phase 34. Same verify-only shape as Tasks 285–287: `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` for `HalfSingle`/`HalfVector2`/`HalfVector4` were already correct (Task 282) and no backend special-cases them. Added the missing throws-clearly tests. No bug found. |
 | `ef25803` Task 287 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | Continues Phase 34. Same verify-only shape as Tasks 285/286: `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` for `Single`/`Vector2`/`Vector4` were already correct (Task 282) and no backend special-cases them. Added the missing throws-clearly tests (`SingleThrows`/`Vector2Throws`/`Vector4Throws`). No bug found. |
@@ -170,6 +179,7 @@ on returned pixel values).
 | Incomplete | `SpriteBatch`'s `SamplerState` is a no-op on Vulkan and Bgfx (EasyGL only). |
 | Incomplete | EasyGL/Bgfx stride-keyed vertex layout only supports strides 16/20/24/32/52. |
 | Incomplete | Vulkan: `Tangent`/`Binormal` `VertexElementUsage` values have no mapping. |
+| Incomplete, tracked | `BlendState`/`DepthStencilState`/`RasterizerState` static presets don't set `Name` (FNA does, e.g. `"BlendState.Additive"`) — same gap `SamplerState` had before Task 291 fixed it there. Tracked as Task 866, deliberately not fixed under Task 291 (out of its `SamplerState`-only scope). |
 | Incomplete | `SurfaceFormat` support is Color-only everywhere; this is Phase 34's remaining scope (Tasks 285–290). |
 | Incomplete | SDL_Renderer: no 3D support at all (`CreateVertexBuffer` always throws), by design. |
 | Incomplete | Bgfx: no GPU pixel-readback API, so its tests are smoke-only, by design. |
@@ -267,31 +277,21 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 291 — audit `SamplerState` API and static presets against FNA
-   (opens Phase 35)**
-   - Goal: audit CNA's `SamplerState` against FNA's `Graphics/States/SamplerState.cs`. Pre-checked
-     this session: the property surface (7 properties), the 6 static presets
-     (`AnisotropicClamp/Wrap`, `LinearClamp/Wrap`, `PointClamp/Wrap` — FNA has no 7th "Default"
-     preset, confirmed), default-constructor values, and preset filter/address values all already
-     match FNA exactly — no bug in the core state values. **One real, genuine finding**: FNA's
-     private preset constructor sets `Name` (e.g. `"SamplerState.AnisotropicClamp"`) on each
-     preset; CNA's private preset constructor (`SamplerState.cpp:24`) does not call
-     `setNameProperty` at all, so `SamplerState::PointClamp.getNameProperty()` returns empty /
-     `ToString()` falls back to the type name instead of `"SamplerState.PointClamp"` — a real,
-     user-visible deviation (confirmed no existing test in `SamplerStateTests.cpp` covers `Name`).
-     **This is a systemic gap, not SamplerState-specific**: grepped `BlendState`/`DepthStencilState`/
-     `RasterizerState` — FNA sets `Name` on all of their presets too (e.g. `"BlendState.Additive"`),
-     and CNA's presets don't set it for any of them either. Decide scope before fixing: either (a)
-     fix `SamplerState` only (this task's literal scope) and track the other 3 classes as a
-     follow-up, or (b) fix all 4 in one pass since it's the same one-line-per-preset change
-     repeated — lean toward (a) per the project's "don't bundle unrelated fixes" convention, and
-     open a new tracked task for the other 3.
-   - Files: `src/Microsoft/Xna/Framework/Graphics/SamplerState.cpp` (add `setNameProperty(name)` to
-     the private preset constructor, threading a `name` parameter through like FNA does),
-     `tests/Microsoft/Xna/Framework/Graphics/SamplerStateTests.cpp` (new `Name` tests per preset).
-   - Verification: unit tests asserting each preset's `getNameProperty()` matches FNA's exact string
-     (e.g. `"SamplerState.PointClamp"`), plus a `ToString()` test confirming it now returns the
-     preset name instead of the type name.
+1. **`GRAPHICS_TASKS.md` Task 293 — verify per-slot sampler binding with two textures using
+   different sampler states (DualTextureEffect test)**
+   - Goal: confirm that `GraphicsDevice.SamplerStates[0]`/`[1]` (or wherever `DualTextureEffect`
+     binds its two textures) can independently hold different `SamplerState`s and that both are
+     actually applied to their respective texture slot on the GPU, not just stored. Given the
+     pattern from Tasks 291/292 (both found small-but-real gaps in code nobody had exercised),
+     check EasyGL/Vulkan/Bgfx's per-slot sampler-apply code path first — NEXT.md §5 already flags
+     "`SpriteBatch`'s `SamplerState` is a no-op on Vulkan and Bgfx (EasyGL only)" as a known,
+     unrelated gap; confirm whether `DualTextureEffect`'s sampler binding has the same limitation
+     before writing a test that would just fail for an already-known reason.
+   - Files: likely `src/CNA/Internal/Backends/*/*.cpp` (sampler-apply code),
+     `tests/`/`examples/` (new pixel-readback test with 2 differently-sampled textures).
+   - Verification: a pixel-readback test rendering two textures through `DualTextureEffect` with
+     visibly different sampler states (e.g. one `PointClamp`, one `LinearWrap`) and confirming the
+     rendered result reflects both independently.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -354,30 +354,31 @@ Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
-Current status: Phases 1-34 are now fully complete. Phase 35 (SamplerState/texture sampling
-conformance, GRAPHICS_TASKS.md Tasks 291-300) is starting. All three backend builds
-(EasyGL/Vulkan/Bgfx) pass at the rates in NEXT.md §2; remaining failures are pre-existing and
-unrelated (see NEXT.md §5). Phase 34 (Tasks 281-290) found two significant bugs (a SurfaceFormat
-enum-ordinal conformance bug, Task 281; a Vulkan sRGB/gamma bug, Task 284) and otherwise turned out
-to be almost entirely verification/test-coverage work - every format's CPU-side size/packing math
-was already correct from Task 282's exhaustive port; the recurring gap was missing
-throws-clearly construction tests, closed incrementally (Tasks 286-289) then consolidated into one
-exhaustive all-27-formats test (Task 290). Two silent-failure gaps remain open and tracked but not
-yet fixed: TextureCube::DDSFromStreamEXT (Task 663) and Texture3D/TextureCube::GetData being a
-total no-op on Vulkan/Bgfx (Task 865).
+Current status: Phases 1-34 are fully complete. Phase 35 (SamplerState/texture sampling
+conformance, GRAPHICS_TASKS.md Tasks 291-300) is in progress: Tasks 291-292 done. All three
+backend builds (EasyGL/Vulkan/Bgfx) pass at the rates in NEXT.md §2; remaining failures are
+pre-existing and unrelated (see NEXT.md §5). Task 291 (opening Phase 35) audited SamplerState
+against FNA - the API surface and all 6 presets' values already matched, but found FNA sets Name
+on every preset (e.g. "SamplerState.PointClamp") while CNA never did; fixed, and found the
+identical gap in BlendState/DepthStencilState/RasterizerState (tracked separately as Task 866,
+not fixed - out of Task 291's SamplerState-only scope). Task 292 (verify default sampler states)
+found a real, previously-untested bug that Task 291's Name fix made newly detectable:
+SamplerStateCollection's constructor default-constructed each of 16 slots instead of copying
+SamplerState::LinearWrap (FNA's actual behavior) - the filter/address values coincidentally
+matched, which is why nothing caught it until Name existed to tell them apart. Fixed, plus a new
+SamplerStateCollectionTests.cpp (previously zero coverage existed for this class or for
+GraphicsDevice's sampler defaults). Two silent-failure gaps remain open and tracked from Phase 33:
+TextureCube::DDSFromStreamEXT (Task 663) and Texture3D/TextureCube::GetData being a total no-op
+on Vulkan/Bgfx (Task 865).
 
-Next task: GRAPHICS_TASKS.md Task 291 - audit SamplerState API and static presets against FNA
-(opens Phase 35). Already pre-checked this session: the property surface, the 6 static presets,
-default-constructor values, and preset filter/address values all already match FNA's
-Graphics/States/SamplerState.cs exactly - no bug in the core state values themselves. One real,
-scoped finding: FNA sets Name (e.g. "SamplerState.AnisotropicClamp") on each preset via its private
-constructor; CNA's equivalent private constructor (SamplerState.cpp:24) never calls
-setNameProperty, so preset Name/ToString() don't match FNA. This same gap exists in
-BlendState/DepthStencilState/RasterizerState too (checked this session) - decide whether Task 291
-should fix SamplerState only (its literal scope) and open a follow-up task for the other 3, or fix
-all 4 in one pass; leaning toward SamplerState-only per the project's no-bundling convention. Fix
-by threading a name parameter through SamplerState's private preset constructor and calling
-setNameProperty, matching FNA's exact preset name strings. Add Name/ToString() tests per preset in
-SamplerStateTests.cpp.
+Next task: GRAPHICS_TASKS.md Task 293 - verify per-slot sampler binding with two textures using
+different sampler states (DualTextureEffect test). Given the pattern from Tasks 291/292 (both
+found small-but-real gaps in code nobody had exercised), check EasyGL/Vulkan/Bgfx's per-slot
+sampler-apply code path first before writing a new test. NEXT.md §5 already flags "SpriteBatch's
+SamplerState is a no-op on Vulkan and Bgfx (EasyGL only)" as a known, separate gap - confirm
+whether DualTextureEffect's sampler binding has the same limitation before assuming a pixel test
+will pass on all backends. Build a pixel-readback test rendering two textures through
+DualTextureEffect with visibly different sampler states (e.g. one PointClamp, one LinearWrap) and
+confirm the rendered result reflects both independently.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
