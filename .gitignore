@@ -6,7 +6,7 @@ cmake-build-web/*
 cmake-build-vulkan/*
 cmake-build-easygl/*
 .sdl-prebuilt/
-.sdl-prebuilt-emscripten/
+.sdl-prebuilt-*/
 cmake-build-bgfx/*
 
 

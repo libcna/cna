@@ -11,7 +11,9 @@ option(CNA_USE_SYSTEM_SDL "Use system SDL packages instead of vendored submodule
 if(EMSCRIPTEN)
     set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten")
 else()
-    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt")
+    # Keyed by target platform/arch so a cross-build (e.g. Windows via mingw-w64) cannot
+    # silently overwrite the native build's cached SDL3 install, and vice versa.
+    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 endif()
 set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}"
     CACHE PATH "Persistent SDL3 install root (survives cmake --clean and build-tree deletion)")

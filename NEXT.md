@@ -16,9 +16,10 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`).
   - Phase 5 (real ENet networking backend for `Net`) is **complete**.
   - Task 6.1 (Linux two-process real ENet loopback test) is **complete, committed, pushed**
     (`9c7ce0b` on `feature/net`).
-  - Task 6.2 (Windows cross-build + Wine verification) is **in progress, blocked on user
-    confirmation** — see section 4.
-  - Graphics (Phases 1–31) and `GamerServices` are complete and stable; not touched this phase.
+  - Task 6.2 (Windows cross-build + Wine verification) is **complete, verified, not yet
+    committed** — see section 3/4.
+  - Graphics (Phases 1–31) and `GamerServices` are complete and stable; not touched this phase
+    beyond one real latent-bug fix surfaced by the Windows build (section 3).
 - **Important architectural decisions:**
   - Graphics backend selection is compile-time via `CNA_GRAPHICS_BACKEND`.
   - `CNA_GamerServices` and `CNA_Net` are separate CMake static libraries, excluded from the main
@@ -39,13 +40,11 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`).
 ## 2. Current status
 
 ### Build
-- **Native Linux** (`cmake-build-debug`, target `CnaTests`): clean, **2077/2077 tests passing**,
-  stable under `--gtest_shuffle --gtest_repeat=8`.
-- **Windows cross-build** (`cmake-build-windows/`, `cmake/toolchains/mingw-w64.cmake`): configured
-  and partially built. A real, pre-existing `sharp-runtime` mingw build break was found and fixed
-  (uncommitted there — see section 3/4), but the `cna_net` Windows build has **not been re-run**
-  since. Unverified whether `CnaTests.exe`/`cna_net_two_process_harness.exe` link and pass under
-  Wine.
+- **Native Linux** (`cmake-build-debug`, target `CnaTests`): clean, **2077/2077 tests passing**.
+- **Windows cross-build** (`cmake-build-windows/`, `cmake/toolchains/mingw-w64.cmake`): clean,
+  **both `CnaTests.exe` and `cna_net_two_process_harness.exe` build and pass under Wine**
+  (**2076/2076** — one fewer than native because `TwoProcessLoopbackTest.cpp` is POSIX-only and is
+  excluded from the Windows build; see section 3).
 - `GamerServices` namespace: complete, all classes ported and tested.
 - `Net` namespace: complete API surface (5 enums + 18 classes). `SystemLink` sessions do real ENet
   networking (Phase 5); every other `NetworkSessionType` remains a synthetic, non-networked stub.
@@ -54,7 +53,8 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`).
 - `CnaTests` — the main GoogleTest binary (all graphics + GamerServices + Net tests).
 - `cna_net_two_process_harness` — standalone executable (`tools/net/net_two_process_harness.cpp`),
   `--role=host`/`--role=client`, used only by `TwoProcessLoopbackTest.cpp` to spawn two independent
-  real processes for a genuine cross-process ENet loopback test.
+  real processes for a genuine cross-process ENet loopback test. Builds on Windows too, but the
+  orchestrator test that spawns it is POSIX-only (see section 3) so it isn't exercised there.
 
 ### Recently implemented / working
 - Real ENet-backed `SystemLink` networking end to end: hosting, connect/handshake
@@ -64,13 +64,15 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`).
 - Two-process real ENet loopback test (Task 6.1): proves the transport works across independent OS
   processes, not just one process playing both roles (every Phase 5 test's pattern, forced by
   `NetworkSession`'s process-wide `activeSession_` gate).
+- Windows cross-build (Task 6.2): fully green, native and cross builds now coexist without clobbering
+  each other's SDL3 cache (see section 3).
 
 ### What does not work / unverified yet
-- Windows cross-build's actual link + Wine test run (`CnaTests.exe`/
-  `cna_net_two_process_harness.exe`) — configured, not yet executed with the sharp-runtime fixes in
-  place.
 - Web (Emscripten) and Android (NDK) targets for `Net` — no SDK installed in this environment;
   not started, not attempted.
+- FFmpeg-backed video decoding (`VideoDecoder`/`VideoPlayer`/`Video`) is unavailable on the Windows
+  cross-build — no mingw-w64 FFmpeg dev packages in this environment (see section 3). Native Linux
+  and (previously) Emscripten/Android are unaffected; no test coverage depends on video on Windows.
 - Runtime-added local gamers (`AddLocalGamer()` called after `Create()`) don't get a wire-id
   assigned or announced to already-connected peers — not needed by any task's scope yet.
 - Host migration, `SimulatedLatency`/`SimulatedPacketLoss`, cross-machine `IsReady` sync: inert/
@@ -83,13 +85,62 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`).
 ## 3. Recent changes
 
 - **Committed & pushed** (`9c7ce0b`, `feature/net`): Task 6.1 — two-OS-process ENet loopback test.
-  `CMakeLists.txt` extended (new `cna_net_two_process_harness` target, guarded
-  `CNA_ENABLE_NET AND CNA_BUILD_TESTS`); `tools/net/net_two_process_harness.cpp` (new); new
-  `tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp`. Passed first try, stable across 10 repeats.
   Does not touch `sharp-runtime`.
-- **sharp-runtime (sibling repo, uncommitted, not pushed):** 4 Windows/mingw-only bug fixes
-  required to make the Windows cross-build compile — all pre-existing, never exercised under a
-  real Windows/GCC target before:
+- **Not yet committed (this session) — Task 6.2, Windows cross-build + Wine verification, now
+  fully green.** Six real, previously-latent issues were found and fixed along the way — this was
+  the first time this codebase was actually built and run on a non-Linux target, so none of these
+  had ever been exercised before:
+  1. **`CMakeLists.txt`** — `pkg_check_modules(... REQUIRED libavcodec ...)` ran unconditionally
+     for every non-Emscripten/Android build, including the mingw cross-build. With no mingw-w64
+     FFmpeg dev packages installed, pkg-config silently resolved to the **host's native** FFmpeg
+     `.pc` files and injected `-I/usr/include/x86_64-linux-gnu` into the cross-compile, which
+     collided with mingw's own headers (`fatal error: features.h: No such file or directory`).
+     Fixed by introducing `CNA_FFMPEG_AVAILABLE` (OFF when `MINGW`) and reusing the existing
+     Emscripten/Android exclusion pattern for `VideoDecoder.cpp`/`VideoPlayer.cpp`/`Video.cpp`. No
+     test depends on these on Windows.
+  2. **`CMakeLists.txt`** — `CNA_GamerServices` never declared a dependency on SDL3, even though
+     `Guide.cpp` includes `<SDL3/SDL.h>` directly. It only ever compiled on this machine because a
+     stray system-wide `/usr/local/include/SDL3` happens to be on the default include path. Fixed
+     by linking `SDL3::SDL3` `PRIVATE` to `CNA_GamerServices`.
+  3. **`src/CNA/Internal/Net/ENetDiscoveryService.cpp`** — two call sites built `ENetBuffer` via
+     positional aggregate init (`{data, size}`). ENet's `ENetBuffer` struct has **opposite member
+     order** on win32 (`dataLength` then `data`) vs. unix (`data` then `dataLength`)
+     (`third_party/enet/include/enet/{win32,unix}.h`), so the positional init silently swapped the
+     pointer and length fields under mingw. Fixed with field-by-field assignment (order-independent).
+  4. **`tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp`** — uses POSIX-only process APIs
+     (`posix_spawn`, `poll`, `sys/wait.h`) to orchestrate two real OS processes; not portable to
+     mingw. Excluded from the Windows `CnaTests` build via a `CMakeLists.txt` glob filter (`WIN32`).
+     Not a loss for Task 6.2's own verification scope — its suite name (`TwoProcessLoopbackTest`)
+     was never part of the `*Network*:*Gamer*:*ENet*:*Packet*` filter anyway.
+  5. **`CMakeLists.txt`** — mingw-w64's `<cmath>` only exposes `M_PI` when `_USE_MATH_DEFINES` is
+     defined (unlike glibc, which always defines it); three test files
+     (`MathHelperTests.cpp`/`QuaternionTests.cpp`/`MatrixTests.cpp`) use `M_PI` as a reference
+     value. Fixed with a `MINGW`-guarded `target_compile_definitions(CnaTests PRIVATE
+     _USE_MATH_DEFINES)`. No library/production code uses `M_PI`.
+  6. **`CMakeLists.txt`** — a known mingw-w64/GCC PE-COFF toolchain limitation: `CnaTests.exe`
+     failed to link with `multiple definition of 'std::type_info::operator=='` between
+     `libstdc++.a` and one of the test object files. Both definitions are byte-identical (the
+     linker just fails to fold the COMDAT on this target); worked around with a `MINGW`-guarded
+     `target_link_options(CnaTests PRIVATE -Wl,--allow-multiple-definition)`.
+  - **Also fixed (test-only, not a production bug):** 3 `TitleContainerTest` cases
+    (`OpenStreamRelativeNameReadsContent`/`OpenStreamAbsolutePathReadsContent`/
+    `OpenStreamNormalizesBackslashes`) kept the `unique_ptr<Stream>` returned by `OpenStream(...)`
+    open while calling `std::filesystem::remove_all()` on the temp directory. POSIX allows deleting
+    a file with an open handle; Windows doesn't (without `FILE_SHARE_DELETE`), so this only failed
+    under Wine. Fixed by resetting the stream before cleanup in all three tests.
+  - **Durable fix for the `.sdl-prebuilt` collision** (previously "discovered, not yet fixed"; see
+    section 5's old entry): `cmake/ThirdPartySDL.cmake`'s default `CNA_SDL_PREBUILT_ROOT` now
+    appends `${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}` to the cache root (except the
+    Emscripten branch, which already had its own suffix). `.gitignore` updated to
+    `.sdl-prebuilt-*/`. Verified: `cmake-build-debug` (pre-existing cache, still plain
+    `.sdl-prebuilt` since CMake cache variables don't pick up new defaults once already configured)
+    and a freshly-configured `cmake-build-windows` (`.sdl-prebuilt-Windows-x86_64`) now coexist —
+    both stayed green rebuilt back-to-back.
+  - None of the above touch `Microsoft::Xna::Framework::Net`'s public API shapes, and none touch
+    `sharp-runtime`.
+- **sharp-runtime (sibling repo, still uncommitted, not pushed — untouched this session):** 4
+  Windows/mingw-only bug fixes from the prior session, still needed to make the Windows cross-build
+  compile at all:
   - `src/System/Environment.cpp`: `SetEnvironmentVariable`/`SetCurrentDirectory` collide with
     `<windows.h>` A/W-suffix macros; missing `#include <shlobj.h>` for `SHGetFolderPathA`; an
     MSVC-only `#pragma warning(suppress: 4996)` that GCC's `-Werror=unknown-pragmas` rejects.
@@ -97,47 +148,21 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`).
     (`#pragma comment(lib, "ws2_32.lib")` — redundant under GCC, `ws2_32` is already linked at the
     CMake level).
   - All changes confined to `#if defined(_WIN32)`/`#if defined(_MSC_VER)` guards. Verified via
-    sharp-runtime's own Linux test suite twice: **8467/8467 passing both times**.
-  - **Not committed or pushed** — needs explicit user go-ahead in that repo before committing.
-- **Discovered, not yet fixed:** `.sdl-prebuilt/` (SDL3 build cache, see `cmake/ThirdPartySDL.cmake`)
-  is keyed only by source checkout path, not by target platform — configuring the Windows
-  cross-build silently overwrote the same directory the native Linux build's cached `SDL3::SDL3`
-  target pointed at, breaking the native build with `multiple definition of ...` linker errors
-  mentioning Windows `.dll` files. Recovered via `rm -rf .sdl-prebuilt` + native rebuild (confirmed
-  2077/2077 restored). See section 5 for the durable fix.
+    sharp-runtime's own Linux test suite twice: **8467/8467 passing both times** (prior session).
+  - **Still not committed or pushed** — needs explicit user go-ahead in that repo before committing
+    (see section 8).
 
 ---
 
 ## 4. Current blocker / main problem
 
-**Task 6.2 (Windows cross-build + Wine verification) is blocked pending user confirmation — not a
-technical dead end.**
+**None — Task 6.2 is complete and fully verified.** The only open decision points are:
 
-- **Symptom:** no command is currently failing. The last real attempt stopped after fixing
-  `sharp-runtime`'s mingw build break (section 3), before the `cna_net` Windows build was re-run
-  with those fixes in place.
-- **Last failing command** (believed fixed, not yet re-verified):
-  ```bash
-  cmake --build cmake-build-windows --target CnaTests --target cna_net_two_process_harness -j"$(nproc)"
-  ```
-  failed while compiling `sharp-runtime` object files (WinAPI macro collisions / MSVC-only pragmas
-  under this project's `-Werror`).
-- **Affected modules:** `sharp-runtime`'s `System::Environment` and `System::Net::Sockets` (Windows
-  code paths only) — **not** `cna_net`/`Net` code itself.
-- **Suspected cause:** those sharp-runtime files were written and previously only compiled under
-  MSVC; this was the first time they were built with mingw-w64 GCC.
-- **What's already been tried:** the 4 fixes described in section 3, verified safe on Linux
-  (sharp-runtime's own suite, 8467/8467, twice, user-approved both times). The actual re-run of the
-  Windows build with those fixes in the tree has **not** happened — two `AskUserQuestion` prompts
-  asking to proceed timed out unanswered (60s each, not declined). Per this project's convention,
-  that is "not yet decided," not "permanently blocked" — do not keep retrying without a fresh ask.
-- **To resume:**
-  1. Confirm with the user first — `sharp-runtime`'s working tree still has uncommitted changes.
-  2. Before rebuilding for Windows, expect the `.sdl-prebuilt` collision (section 5) to happen
-     again — either accept it and `rm -rf .sdl-prebuilt` + rebuild `cmake-build-debug` natively
-     afterward, or fix `CNA_SDL_PREBUILT_ROOT` to be platform-keyed first (see section 8, task 5).
-  3. `cd /rv/data/development/github.com/openeggbert/cna_net && cmake --build cmake-build-windows --target CnaTests --target cna_net_two_process_harness -j"$(nproc)"`.
-  4. If it succeeds: `wine cmake-build-windows/CnaTests.exe --gtest_filter="*Network*:*Gamer*:*ENet*:*Packet*"` and record the pass/fail count here.
+1. Whether to commit the 4 sharp-runtime Windows fixes in the sibling repo (still uncommitted,
+   still needs explicit user go-ahead — see section 8, task 1).
+2. Whether to commit/push this session's `cna_net` changes (section 3) to `feature/net`.
+3. What to work on next: Phase 6.3 (Web/Emscripten), 6.4 (Android/NDK), Phase 7 (integration
+   tests), or Phase 8 (Avatar) — none is an assumed default (see section 8, task 3, and section 9).
 
 ---
 
@@ -145,8 +170,7 @@ technical dead end.**
 
 | Status | Issue |
 |---|---|
-| **Blocked on user input** | Task 6.2 Windows build not yet re-attempted since sharp-runtime fixes landed — see section 4. |
-| **Real infra bug, not yet fixed** | `.sdl-prebuilt/` (`cmake/ThirdPartySDL.cmake`, `CNA_SDL_PREBUILT_ROOT`) is keyed only by `CMAKE_CURRENT_SOURCE_DIR`, not by target platform — a Windows cross-build silently overwrites the native Linux build's cached SDL3. Recovery: `rm -rf .sdl-prebuilt` + rebuild natively. Durable fix: append `${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}` to the cache root. |
+| **Fixed this session** | `.sdl-prebuilt/` platform-cache collision — see section 3 for the durable fix (`cmake/ThirdPartySDL.cmake`). |
 | **Design constraint (not a bug)** | `NetworkSession::BeginCreate`/`BeginFind` gate on a single **process-wide** `activeSession_` static — only one real `NetworkSession` can exist per OS process at a time. Loopback tests within one process must use one real `NetworkSession` + a raw `ENetHostHandle` peer stand-in (see `ENetBackendTests.cpp`'s `SystemLinkSessionFixture`); Task 6.1's two-process test sidesteps this by using two real *processes* instead. |
 | **Confirmed bug (upstream FNA, preserved)** | `NetworkSession::EndCreate`/`EndJoin`/`EndJoinInvited` null the static `activeAction` **after** constructing `NetworkSession`, so a constructor throw strands it non-null for the rest of the process (no public API to reset it). FNA has the identical ordering; not something to fix. |
 | **Confirmed bug (upstream FNA, preserved)** | `NetworkSession::EndJoin`/`EndJoinInvited` hardcode the resulting session's type to `NetworkSessionType::PlayerMatch` regardless of what was actually joined — so a session built via the public `Join()` never does real networking (`RealNetworkingEnabled(PlayerMatch)` is `false`). Tests/harnesses use `Create()` + `ENetBackend::ConnectToHost()` on both sides instead. |
@@ -160,6 +184,8 @@ technical dead end.**
 | **Incomplete** | `GamerJoinedEventArgs`/`GamerLeftEventArgs`/`HostChangedEventArgs`/`WriteLeaderboardsEventArgs` tests still use `nullptr` stand-ins for `NetworkGamer*` instead of real instances. |
 | **Confirmed bug (graphics)** | `SpriteBatch` multiple `Begin()`/`End()` per frame on Vulkan: only the last batch renders. |
 | **Suspected bug (graphics)** | `DrawUserIndexedPrimitives` typed overloads likely have the silent-return-on-missing-effect bug (not yet audited — Task 252). |
+| **Platform limitation (Windows cross-build only)** | FFmpeg-backed video decoding is unavailable on the mingw-w64 Windows cross-build — no mingw-w64 FFmpeg dev packages in this environment. `VideoDecoder.cpp`/`VideoPlayer.cpp`/`Video.cpp` are excluded from that build only (same pattern as Emscripten/Android). No test coverage depends on it. |
+| **Platform limitation (Windows cross-build only)** | `TwoProcessLoopbackTest.cpp` (Task 6.1) is excluded from the Windows `CnaTests` build — it uses POSIX-only process APIs (`posix_spawn`/`poll`/`sys/wait.h`) that don't exist under mingw. |
 | **Note (not a bug)** | `plan_net.md`'s own Phase 5 checklist describes a different, more elaborate design (abstract `INetworkBackend`, host migration, relay server, QoS simulation) that was deliberately not built. Its checkboxes were never kept live — don't infer project status from it; `NEXT.md` is the maintained source of truth. |
 
 ---
@@ -174,7 +200,7 @@ technical dead end.**
 | XNA public API (GamerServices) | `include/Microsoft/Xna/Framework/GamerServices/` | Complete. Internal ctors → `private` + `CreateInternal()` factory |
 | XNA public API (Net) | `include/Microsoft/Xna/Framework/Net/` | Complete API surface (5 enums + 18 classes); fully wired to real networking for `SystemLink` — **public shapes here are a fixed point, must not change** |
 | ENet backend (Phase 5, complete) | `include/CNA/Internal/Net/`, `src/CNA/Internal/Net/` | `ENetLibrary`/`ENetHostHandle`, `NetPacketCodec`/`NetDiscoveryProtocol`, `ENetBackend` registry/wiring, connect+handshake, `AppData` relay, disconnect/leave, state broadcast, `ENetDiscoveryService` |
-| Two-process test harness (Task 6.1) | `tools/net/net_two_process_harness.cpp`, `tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp` | Standalone executable + GTest orchestrator, outside `tests/`'s glob to avoid a second `main()` |
+| Two-process test harness (Task 6.1) | `tools/net/net_two_process_harness.cpp`, `tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp` | Standalone executable + GTest orchestrator, outside `tests/`'s glob to avoid a second `main()`; test file is POSIX-only, excluded on Windows (section 5) |
 | Backend contracts (graphics only) | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, etc. — not the pattern used for networking |
 | CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging |
 | sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types; only add new files; no version pin from this repo |
@@ -192,6 +218,8 @@ technical dead end.**
   `Microsoft::Xna::Framework::Net` — `enet/enet.h` must not leak into any public XNA-facing header.
   `ENetBackend`'s per-session state (`SessionState`) is a private `.cpp`-only struct keyed by
   `NetworkSession*` in a function-local static registry.
+- **`ENetBuffer`'s member order is platform-dependent** (win32.h: `dataLength` then `data`; unix.h:
+  `data` then `dataLength`) — always assign fields by name, never positional-initialize.
 - **Only one real `NetworkSession` can exist per OS process at a time** (`activeSession_` static
   gate). See section 5.
 - **`ENetDiscoveryService`'s discovery port is `61190`**, hardcoded; its raw UDP socket is
@@ -202,6 +230,10 @@ technical dead end.**
 - **Doxygen** `/** @brief … @param … @return */` required on every public member in every `.hpp`.
 - sharp-runtime: only add new files; modifying existing ones is a last resort requiring explicit
   user go-ahead each time, not a routine option.
+- **`CNA_SDL_PREBUILT_ROOT` is now platform-keyed** (`.sdl-prebuilt-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}`)
+  — native and cross builds no longer clobber each other's cached SDL3 install.
+- **FFmpeg is gated by `CNA_FFMPEG_AVAILABLE`** (OFF when `MINGW`) — don't assume video decoding
+  works on every non-Emscripten/Android target; check that variable, not just `EMSCRIPTEN`/`ANDROID`.
 
 ---
 
@@ -227,8 +259,10 @@ cmake -B cmake-build-windows \
       -DCNA_ENABLE_NET=ON
 cmake --build cmake-build-windows --target CnaTests --target cna_net_two_process_harness -j"$(nproc)"
 wine cmake-build-windows/CnaTests.exe --gtest_filter="*Network*:*Gamer*:*ENet*:*Packet*"
+# Full suite also passes: wine cmake-build-windows/CnaTests.exe  →  2076/2076
 
-# Recover native build if a Windows cross-build clobbered the SDL3 cache (see section 5)
+# Recover native build if a Windows cross-build ever clobbers the SDL3 cache again
+# (should no longer happen now that the cache root is platform-keyed — see section 3/6)
 rm -rf .sdl-prebuilt
 cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
 
@@ -248,35 +282,25 @@ with a reduced `-j` and a longer timeout rather than assuming a real compile err
 
 ## 8. Next smallest tasks
 
-1. **Get user go-ahead, then re-attempt the Windows build.**
-   Goal: verify `CnaTests`/`cna_net_two_process_harness` actually build and pass under Wine with
-   the sharp-runtime fixes in place. Files: none new — just re-run the build.
-   Verify: `cmake --build cmake-build-windows --target CnaTests --target cna_net_two_process_harness -j"$(nproc)"`
-   succeeds, then `wine cmake-build-windows/CnaTests.exe --gtest_filter="*Network*:*Gamer*:*ENet*:*Packet*"`
-   passes.
-
-2. **Restore native build health if step 1 clobbers `.sdl-prebuilt` again.**
-   Goal: keep `cmake-build-debug` green.
-   Files: none (cache directory only).
-   Verify: `rm -rf .sdl-prebuilt && cmake --build cmake-build-debug --target CnaTests` → 2077/2077.
-
-3. **Fix `.sdl-prebuilt` platform-cache collision permanently.**
-   Goal: make `CNA_SDL_PREBUILT_ROOT` platform-specific so native and cross builds stop
-   overwriting each other's SDL3.
-   Files: `cmake/ThirdPartySDL.cmake` (append `${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}` to
-   the cache root path).
-   Verify: build `cmake-build-debug` then `cmake-build-windows` back-to-back; both stay green.
-
-4. **Decide (with the user) whether to commit the 4 sharp-runtime Windows fixes.**
+1. **Decide (with the user) whether to commit the 4 sharp-runtime Windows fixes.**
    Goal: land `Environment.cpp`/`NetworkStream.cpp`/`TcpClient.cpp`/`UdpClient.cpp` fixes in the
    sibling repo, or leave them local if the parallel session maintaining it should own that.
    Files: `../sharp-runtime/src/System/Environment.cpp`,
    `../sharp-runtime/src/System/Net/Sockets/{NetworkStream,TcpClient,UdpClient}.cpp`.
-   Verify: sharp-runtime's own test suite still 8467/8467 on Linux before committing.
+   Verify: sharp-runtime's own test suite still 8467/8467 on Linux before committing (already
+   verified twice in a prior session; re-verify if more time has passed / more changes landed
+   there).
 
-5. **Once Task 6.2 is fully verified, update this file and decide on Phase 6.3/6.4/7/8.**
-   Goal: document the Windows verification outcome; ask the user whether to pursue Web/Android
-   (needs SDKs not present here), integration tests, or Avatar next — none is an assumed default.
+2. **Decide (with the user) whether to commit this session's `cna_net` changes to `feature/net`.**
+   Goal: land the Task 6.2 fixes (section 3) — `cmake/ThirdPartySDL.cmake`, `.gitignore`,
+   `CMakeLists.txt`, `src/CNA/Internal/Net/ENetDiscoveryService.cpp`,
+   `tests/Microsoft/Xna/Framework/TitleContainerTests.cpp`.
+   Verify: both `cmake-build-debug/CnaTests` (2077/2077) and
+   `wine cmake-build-windows/CnaTests.exe` (2076/2076) pass before committing.
+
+3. **Once section 8 tasks 1–2 are resolved, decide on Phase 6.3/6.4/7/8.**
+   Goal: ask the user whether to pursue Web/Android (needs SDKs not present here), integration
+   tests, or Avatar next — none is an assumed default.
    Files: `NEXT.md` only.
    Verify: N/A (documentation task).
 
@@ -302,6 +326,8 @@ with a reduced `-j` and a longer timeout rather than assuming a real compile err
   environment; would produce unverifiable code.
 - No unilaterally starting Phase 7 (integration tests) or Phase 8 (Avatar) — ask the user first,
   see section 8.
+- No attempting to install/build a mingw-w64 FFmpeg toolchain to restore Windows video decoding
+  unless the user asks for it — out of scope for Task 6.2, which was about `Net`/Wine verification.
 
 ---
 
@@ -309,22 +335,22 @@ with a reduced `-j` and a longer timeout rather than assuming a real compile err
 
 ```
 Read NEXT.md first, in full, before doing anything else. Phase 5 (ENet networking backend for
-Microsoft::Xna::Framework::Net) is COMPLETE — do not re-open it. Phase 6 Task 6.1 (Linux
-two-process real ENet loopback test) is COMPLETE, committed and pushed (9c7ce0b). Task 6.2
-(Windows cross-build + Wine verification) is BLOCKED ON USER CONFIRMATION, not a technical dead
-end — see section 4 for the exact state and section 8 for the ordered next steps.
+Microsoft::Xna::Framework::Net) is COMPLETE. Phase 6 Task 6.1 (Linux two-process real ENet
+loopback test) is COMPLETE, committed and pushed (9c7ce0b). Task 6.2 (Windows cross-build + Wine
+verification) is COMPLETE AND VERIFIED this session (2076/2076 under Wine, 2077/2077 native Linux)
+but NOT YET COMMITTED — see section 3 for the six real bugs found and fixed along the way, and
+section 8 for the ordered next steps (mainly: decide with the user whether to commit).
 
 Before doing anything else:
 1. Run `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"` then `cmake-build-debug/CnaTests`
-   to confirm the native Linux build is still healthy (expect 2077/2077). This does not depend on
-   the paused Windows work.
-2. Run `cd ../sharp-runtime && git status` — if Environment.cpp and
-   Net/Sockets/{NetworkStream,TcpClient,UdpClient}.cpp show modified, that is the known,
-   already-verified-safe, uncommitted state described in section 3 — do not redo that work, and do
-   not commit/push it without asking the user explicitly first.
+   to confirm the native Linux build is still healthy (expect 2077/2077).
+2. Run `git status` in this repo — expect the Task 6.2 fixes (section 3) still uncommitted on
+   `feature/net`. Run `cd ../sharp-runtime && git status` — expect the 4 Windows fixes still
+   uncommitted there too (from a prior session). Neither should be committed/pushed without asking
+   the user explicitly first.
 
-Then: ask the user whether to proceed with Task 6.2 (section 8, tasks 1–2) given sharp-runtime's
-uncommitted state. Do not assume Phase 6.3/6.4/7/8 — see section 9.
+Then: ask the user whether to commit (a) the sharp-runtime fixes, (b) this session's cna_net
+fixes, and what to work on next (section 8, task 3; section 9 lists what NOT to assume).
 
 Make one small, verified improvement at a time; do not refactor unrelated code. After finishing,
 update NEXT.md to reflect the new state.

@@ -39,6 +39,7 @@ TEST(TitleContainerTest, OpenStreamRelativeNameReadsContent)
 
     auto stream = TitleContainer::OpenStream("hello.txt");
     ASSERT_NE(stream, nullptr);
+    stream.reset();
 
     std::filesystem::remove_all(tmpDir);
 }
@@ -56,6 +57,7 @@ TEST(TitleContainerTest, OpenStreamAbsolutePathReadsContent)
     // Rooted path is used directly, regardless of TitleLocation.
     auto stream = TitleContainer::OpenStream(absPath);
     ASSERT_NE(stream, nullptr);
+    stream.reset();
 
     std::filesystem::remove_all(tmpDir);
 }
@@ -76,6 +78,7 @@ TEST(TitleContainerTest, OpenStreamNormalizesBackslashes)
     // On Linux the backslash is part of the path; NormalizeFilePathSeparators converts it.
     auto stream = TitleContainer::OpenStream("sub/file.txt");
     ASSERT_NE(stream, nullptr);
+    stream.reset();
 
     std::filesystem::remove_all(tmpDir);
 }

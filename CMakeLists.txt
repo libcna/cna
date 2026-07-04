@@ -125,8 +125,17 @@ else()
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
 endif()
 
-# --- FFmpeg (video decoding) — not available on Emscripten/Android ---
-if(NOT EMSCRIPTEN AND NOT ANDROID)
+# --- FFmpeg (video decoding) — not available on Emscripten/Android, nor on the
+# mingw-w64 Windows cross-build (no mingw-w64 FFmpeg dev packages in this toolchain;
+# pkg-config would otherwise silently resolve to the host's native FFmpeg and poison
+# the cross-compile's include path with native glibc headers). ---
+if(MINGW)
+    set(CNA_FFMPEG_AVAILABLE OFF)
+else()
+    set(CNA_FFMPEG_AVAILABLE ON)
+endif()
+
+if(NOT EMSCRIPTEN AND NOT ANDROID AND CNA_FFMPEG_AVAILABLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(LIBAVCODEC  REQUIRED libavcodec)
     pkg_check_modules(LIBAVFORMAT REQUIRED libavformat)
@@ -171,7 +180,7 @@ list(FILTER CNA_SOURCES EXCLUDE REGEX "src/Microsoft/Xna/Framework/Net/.*")
 list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/Net/.*")
 
 # Exclude FFmpeg-dependent sources on platforms where FFmpeg is unavailable
-if(EMSCRIPTEN OR ANDROID)
+if(NOT CNA_FFMPEG_AVAILABLE)
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Media/VideoDecoder\\.cpp$")
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/Media/Video/VideoPlayer\\.cpp$")
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/Media/Video/Video\\.cpp$")
@@ -206,7 +215,7 @@ target_link_libraries(CNA
 #        SDL3_ttf::SDL3_ttf
 )
 
-if(NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_FFMPEG_AVAILABLE)
     target_link_libraries(CNA PRIVATE
         ${LIBAVCODEC_LIBRARIES}
         ${LIBAVFORMAT_LIBRARIES}
@@ -231,7 +240,9 @@ if(CNA_ENABLE_NET)
         PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_link_libraries(CNA_GamerServices PUBLIC CNA)
+    # Guide.cpp calls SDL3 directly (message box); this was previously only compiling by
+    # accident on hosts with a stray system-wide SDL3 install on the default include path.
+    target_link_libraries(CNA_GamerServices PUBLIC CNA PRIVATE SDL3::SDL3)
 
     file(GLOB_RECURSE CNA_NET_SOURCES CONFIGURE_DEPENDS
         "src/Microsoft/Xna/Framework/Net/*.cpp"
@@ -1213,9 +1224,28 @@ if(CNA_BUILD_TESTS)
             "tests/*.cpp"
     )
 
+    # TwoProcessLoopbackTest.cpp (Task 6.1) uses POSIX-only process APIs (posix_spawn, poll,
+    # sys/wait.h) to orchestrate two independent OS processes — not available under mingw-w64.
+    # It isn't part of the Task 6.2 Windows verification filter (*Network*:*Gamer*:*ENet*:*Packet*)
+    # either, since its suite name is TwoProcessLoopbackTest.
+    if(WIN32)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
+    endif()
+
     add_executable(CnaTests
             ${CNA_TEST_SOURCES}
     )
+
+    # mingw-w64's <cmath> only exposes M_PI when _USE_MATH_DEFINES is set (unlike glibc, which
+    # defines it unconditionally) — a handful of test files use M_PI directly as a reference value.
+    if(MINGW)
+        target_compile_definitions(CnaTests PRIVATE _USE_MATH_DEFINES)
+        # Known mingw-w64/GCC PE-COFF toolchain limitation: std::type_info::operator== is emitted
+        # as vague linkage (COMDAT) in libstdc++.a, but a test binary this large (many RTTI-using
+        # TUs) trips a case where the linker fails to fold it against the identical libstdc++
+        # definition. Both copies are byte-identical, so allowing the duplicate is safe.
+        target_link_options(CnaTests PRIVATE -Wl,--allow-multiple-definition)
+    endif()
 
     target_link_libraries(CnaTests
             PRIVATE

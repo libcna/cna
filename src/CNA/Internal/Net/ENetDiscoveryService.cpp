@@ -81,7 +81,11 @@ namespace CNA::Internal::Net
 
         void SendTo(ENetSocket sock, const ENetAddress& address, const std::vector<SharpRuntime::bytecs>& bytes)
         {
-            ENetBuffer buffer{const_cast<SharpRuntime::bytecs*>(bytes.data()), bytes.size()};
+            // ENetBuffer's member order is platform-dependent (win32.h vs unix.h swap
+            // data/dataLength), so field-by-field assignment is used instead of positional init.
+            ENetBuffer buffer{};
+            buffer.data = const_cast<SharpRuntime::bytecs*>(bytes.data());
+            buffer.dataLength = bytes.size();
             enet_socket_send(sock, &address, &buffer, 1);
         }
 
@@ -173,7 +177,9 @@ namespace CNA::Internal::Net
 
             ENetAddress fromAddress{};
             std::array<SharpRuntime::bytecs, 1500> buffer{};
-            ENetBuffer enetBuffer{buffer.data(), buffer.size()};
+            ENetBuffer enetBuffer{};
+            enetBuffer.data = buffer.data();
+            enetBuffer.dataLength = buffer.size();
             int received = enet_socket_receive(sock, &fromAddress, &enetBuffer, 1);
             if (received <= 0)
             {
