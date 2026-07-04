@@ -367,6 +367,24 @@ if(CNA_BUILD_EXAMPLES)
     endif()
 endif()
 
+# ---- Combined input smoke sample: Keyboard+Mouse+GamePad+Touch+TextInput -----
+if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_input_smoke examples/input_smoke/InputSmoke.cpp)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+        target_link_libraries(cna_input_smoke PRIVATE
+            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group SHARP_RUNTIME)
+    else()
+        target_link_libraries(cna_input_smoke PRIVATE CNA SHARP_RUNTIME)
+    endif()
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_input_smoke PRIVATE SDL3::SDL3main)
+    endif()
+    if(WIN32)
+        set_target_properties(cna_input_smoke PROPERTIES WIN32_EXECUTABLE TRUE)
+        cna_copy_sdl_runtime(cna_input_smoke)
+    endif()
+endif()
+
 # ---- NOXNA settings example (no window needed — pure API test) ---------------
 if(CNA_BUILD_EXAMPLES AND CNA_NOXNA)
     add_executable(cna_example_noxna_settings examples/noxna_settings_example.cpp)

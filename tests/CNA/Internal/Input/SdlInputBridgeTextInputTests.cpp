@@ -212,6 +212,21 @@ TEST_F(SdlInputBridgeTextInputTest, TextInputEventDecodesCombiningCharactersAsSe
     EXPECT_EQ(captured[1], charcs{0x0301}); // combining acute accent
 }
 
+TEST_F(SdlInputBridgeTextInputTest, TextInputEventDecodesCzechDiacritics)
+{
+    // Task 852 (headless part): Czech diacritics are 2-byte UTF-8 (U+00xx / U+01xx) — the decode
+    // must yield one BMP code unit each. "žluťoučký": ž U+017E, ť U+0165, č U+010D, ý U+00FD.
+    // (Real IME/keyboard typing of these is a separate, human-gated check — see
+    // docs/input-manual-verification-results.md.)
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("\xC5\xBElu\xC5\xA5ou\xC4\x8Dk\xC3\xBD"));
+
+    const std::u16string expected = {0x017E, u'l', u'u', 0x0165, u'o', u'u', 0x010D, u'k', 0x00FD};
+    EXPECT_EQ(captured, expected);
+}
+
 TEST_F(SdlInputBridgeTextInputTest, TextInputEventDecodesMixedWidthStringInOrder)
 {
     std::u16string captured;

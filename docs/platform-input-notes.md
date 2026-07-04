@@ -67,10 +67,13 @@ See also [`docs/input-backend.md`](input-backend.md) (architecture) and
 
 ## Cross-cutting
 
-- **`SetPosition` letterbox scale factor** (all platforms): `SDL_WarpMouseInWindow` targets
-  window-space with no inverse logical→window transform, so on a letterboxed/scaled window the warp
-  target is off by the scale factor. Correct when window size == render resolution. Fix is
-  graphics-layer scope, deferred to [`plan.md`](../plan.md) task `a-0001`.
+- **`SetPosition` on a scaled/letterboxed window** (all platforms): `Mouse::SetPosition` converts
+  the caller's logical coordinates to window space (via `SDL_RenderCoordinatesToWindow` for the
+  SDL_Renderer backend, or `IGraphicsBackend::TransformLogicalToWindow` for EasyGL; pass-through for
+  Vulkan/bgfx, which don't do logical-presentation scaling) before `SDL_WarpMouseInWindow`, so the
+  OS cursor lands at the correct physical pixel (implemented in `plan.md` a-0001 / task 846). The
+  conversion is unit-tested; the OS-cursor *landing* pixel is verifiable only where global-mouse
+  readback works (X11, not Wayland — see the Wayland section).
 - **Keyboard layouts** (all platforms): `Keyboard::GetKeyFromScancodeEXT` translates a physical key
   position to the character the *current* layout produces. Set `FNA_KEYBOARD_USE_SCANCODES=1`
   (read once at startup) for layout-independent physical-position key bindings. 40 XNA `Keys`

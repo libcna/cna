@@ -123,12 +123,11 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   `System::IAsyncResult` interface change that broke this repo's `StorageDevice.cpp`.
 
 ### What does NOT work yet
-Everything currently planned (Phases I1–I8, tasks 700–791) is done. One item was deliberately
-left out of `plan_input.md` entirely rather than marked incomplete (see Section 5 for status):
-- `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its OS-cursor
-  warp target is off by the scale factor on a letterboxed/scaled window (documented in-source in
-  `Mouse.cpp`) — a graphics-layer fix, intentionally **not** a `plan_input.md` task; see
-  `plan_input.md`'s "Known limitations / deferred" table, which points at `GRAPHICS_TASKS.md`.
+Everything planned (Phases I1–I10, tasks 700–855) is done. The one previously-deferred item —
+`Mouse::SetPosition`'s scaled/letterboxed logical→window transform — was **implemented in Phase I10
+(a-0001 / task 846)**. Remaining unverifiable items are platform/hardware-gated only (real gamepad
+hardware, real IME, Wayland global-mouse), documented honestly in Section 5 and
+`docs/input-manual-verification-results.md`, not missing implementation.
 - `demo_input`'s layout (text panel, multi-pad section) has not been visually verified in this
   environment — it runs crash-free, but no screenshot tool works here (see Section 5).
 
@@ -242,7 +241,7 @@ now exist in this checkout with the correct `CMAKE_HOME_DIRECTORY`, and both pas
 |--------|------|
 | Needs verification | `demo_input`'s layout (text panel, and the task-781 multi-pad section) is not visually confirmed in this environment. It does run crash-free against this environment's real X11 display (`DISPLAY=:0`, confirmed this session via a timed run with no error/crash trace, contradicting an earlier note that forcing X11 made SDL exit — re-verified false this session, see the task-783 row below); the remaining gap is purely that no screenshot tool works here (`import -window root` fails silently). |
 | Environment finding, not a CNA bug | `SDL_GetGlobalMouseState` silently returns `(0, 0)` under this environment's ambient Wayland session (`XDG_SESSION_TYPE=wayland`) regardless of real cursor movement — Wayland's compositor security model restricts querying global cursor position outside your own window. Forcing `SDL_VIDEODRIVER=x11` (XWayland) makes it work correctly. Same root cause as the screenshot-tool gap above. Discovered during task 783; not a defect in CNA's `Mouse` implementation. |
-| Intentional deviation | `Mouse::SetPosition` has no inverse (logical→window) coordinate transform, so its `SDL_WarpMouseInWindow` target is off by the scale factor on a letterboxed/scaled window. Documented in-source in `Mouse.cpp`. Fixing it for real needs a graphics-layer `IGraphicsBackend` addition, out of scope for this branch. |
+| Resolved (Phase I10, a-0001 / task 846) | `Mouse::SetPosition` now converts logical→window (inverse `IGraphicsBackend::TransformLogicalToWindow` + `SDL_RenderCoordinatesToWindow`) before `SDL_WarpMouseInWindow`, so the OS cursor lands correctly on a scaled/letterboxed window. The graphics-layer change was authorized in Phase I10. |
 | Intentional deviation | `InputManager::GetMouseState()` reports relative-mode `X`/`Y` from a float delta accumulator fed by `SDL_EVENT_MOUSE_MOTION`'s `xrel`/`yrel` (drained to `0` on each read), rather than FNA's `SDL_GetRelativeMouseState` poll — the event-driven equivalent. Documented in-source in `InputManager.cpp`. |
 | Intentional deviation | `GamePadState.PacketNumber` is tracked at the raw `InputManager` layer (bumped on real connection/button/axis changes) rather than by comparing freshly-built `GamePadState`s like FNA's poll loop. Documented in-source in `InputManager.cpp`. |
 | Intentional deviation | `TouchPanel::GetState()` falls back to `InputManager::GetTouchState()` because CNA's bridge is event-driven, not poll-driven like FNA. Documented in-source in `TouchPanel.cpp`. |
