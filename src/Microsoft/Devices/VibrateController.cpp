@@ -257,11 +257,22 @@ namespace Microsoft::Devices
     {
         std::lock_guard<std::mutex> lock(g_mutex);
 
+        // Task P8-6: SDL_CloseHaptic() implicitly invalidates any effect
+        // still uploaded on this device (SDL3 does not require destroying
+        // uploaded effects before closing their owning device) — no
+        // separate SDL_DestroyHapticEffect() call is needed here. Still
+        // reset g_leftRightEffectId to -1 for consistency with g_haptic/
+        // g_subsystemHeld, both of which are fully reset by this
+        // destructor — not a fix for a reachable bug (this singleton's
+        // destructor runs once, at static destruction, and no legitimate
+        // code path calls into VibrateController afterward), just closing
+        // the one piece of state this destructor previously left stale.
         if (g_haptic != nullptr)
         {
             SDL_CloseHaptic(g_haptic);
             g_haptic = nullptr;
         }
+        g_leftRightEffectId = -1;
 
         if (g_subsystemHeld)
         {

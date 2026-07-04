@@ -545,3 +545,76 @@ cd .. && ctest --output-on-failure
 **Remaining risk:** negligible. The documented policy is now backed by a test that
 would fail (confirmed via a temporary revert) if the batch-continuation guarantee ever
 regressed.
+
+## P8-6: Final resource ownership audit
+
+### Resolution
+
+**Files changed:**
+- `src/Microsoft/Devices/VibrateController.cpp` — `~VibrateController()` now resets
+  `g_leftRightEffectId` to `-1` after closing `g_haptic`, matching the same
+  full-state-reset pattern the destructor already applies to `g_haptic`/`g_subsystemHeld`.
+  Not a fix for a reachable bug — `SDL_CloseHaptic()` already implicitly invalidates any
+  effect still uploaded on that device, and this singleton's destructor runs once, at
+  static destruction, with no legitimate code path calling into `VibrateController`
+  afterward — just closing the one piece of state this destructor previously left stale,
+  for consistency and defensive completeness.
+
+**Re-confirmed, no new gap found, for each item this task's brief asked to re-check:**
+- **Accelerometer/Gyroscope `SDL_INIT_SENSOR` holds** (`subsystemHeld_`): consistent with
+  Phase 6/7's fixes; covered by `ConcurrentConstructDestroyKeepsInstanceCountBalanced`,
+  `FailedStartReleasesSubsystemHoldItAcquired`, and the Start/Stop/Dispose concurrency
+  suite. No new gap.
+- **Probe-only `ProbeGuard` paths**: covered by
+  `RepeatedSupportProbingDoesNotChangeSubsequentBehavior` (Task P5-1) — can't assert on
+  SDL's internal ref-count directly (no public API exposes it), so this remains the
+  strongest test possible in this environment, same as Task P5-1's own original
+  reasoning. No new gap.
+- **`SDL_OpenSensor`/`SDL_CloseSensor` cached sensor handle**: covered by the Start/Stop/
+  Dispose test suite (the cached handle is closed exactly once, when `instanceCount_`
+  reaches zero, inside the now-`GetGlobalSdlSensorMutex()`-protected section — Task
+  P7-1). No new gap.
+- **Event watch add/remove**: covered by
+  `ConcurrentStartStopFromMultipleThreadsDoesNotCrash` and the rest of the Start/Stop/
+  Dispose suite. No new gap.
+- **`VibrateController` `SDL_INIT_HAPTIC`/`SDL_Haptic*`/`g_leftRightEffectId`**: the one
+  real (if unreachable-in-practice) inconsistency found and fixed above; everything else
+  already correct per Tasks P5-11/P6-6's own re-audits, re-confirmed by re-reading the
+  full file this task.
+
+**Why no new automated test for the `g_leftRightEffectId` reset specifically:**
+`~VibrateController()` only runs once, at normal process/static-destruction exit — a unit
+test cannot trigger this destructor and then inspect the now-destroyed singleton's
+internal state (a `.cpp`-file-local anonymous-namespace variable, not exposed by any
+public API) without invoking undefined behavior itself. This mirrors this project's
+existing, accepted reasoning for why `ProbeGuard`'s SDL ref-count balance also can't be
+asserted on directly. Re-ran the full `VibrateControllerTests` suite (29 tests) — under
+both the plain build and a throwaway ASan build, both clean — to confirm this change
+introduces no regression in every path that *is* testable.
+
+**Tests added:** none — see above for why the one behavior change here isn't
+independently testable; re-ran all existing resource-ownership-relevant tests to confirm
+no regression.
+
+**Commands run:**
+```bash
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean
+./cmake-build-debug/CnaTests --gtest_filter="VibrateControllerTests.*"
+# 29 tests, all passed
+
+./cmake-build-debug/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+# 226 tests, 224 passed, 2 skipped (expected)
+
+# Re-verified under the devices-asan preset build (throwaway, from Task P8-4):
+cmake --build /tmp/cmake-build-asan-check --target CnaTests -j"$(nproc)"
+/tmp/cmake-build-asan-check/CnaTests --gtest_filter="VibrateControllerTests.*"
+# 29 tests, all passed, zero ASan reports
+
+cd .. && ctest --output-on-failure
+# 2049/2051 passed; the standard 2 pre-existing EasyGL failures.
+```
+
+**Remaining risk:** negligible. This task's only code change is a defensive
+consistency fix for an already-non-reachable edge case; every genuinely reachable
+resource-ownership path was re-confirmed already correct, not newly fixed.
