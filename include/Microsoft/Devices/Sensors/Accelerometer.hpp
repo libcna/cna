@@ -289,6 +289,60 @@ namespace Microsoft::Devices::Sensors
         NOXNA void SetDisposalCleanupHookForTesting(std::function<void()> hook);
 
         /**
+         * @brief Test-only hook (Task P7-3): registers this instance into
+         * the shared subsystem's startedInstances_ list directly, without
+         * requiring a real SDL sensor to be opened (the real Start() always
+         * throws in a headless environment). Lets tests reproduce
+         * multi-instance dispatch-batch scenarios (see
+         * DispatchToInstancesForTesting()) that require an instance to be
+         * genuinely present in startedInstances_ — SetStartedForTesting()
+         * alone only sets this instance's own started_ flag, not the
+         * shared subsystem-level registry a real dispatch batch is drawn
+         * from.
+         *
+         * @param instance Instance to register.
+         */
+        NOXNA static void RegisterStartedInstanceForTesting(Accelerometer& instance);
+
+        /**
+         * @brief Test-only hook (Task P7-3): removes this instance from the
+         * shared subsystem's startedInstances_ list directly. See
+         * RegisterStartedInstanceForTesting()'s doc comment.
+         *
+         * @param instance Instance to unregister.
+         */
+        NOXNA static void UnregisterStartedInstanceForTesting(Accelerometer& instance);
+
+        /**
+         * @brief Test-only hook (Task P7-3): simulates the multi-instance
+         * portion of the real SDL event-watch dispatch path
+         * (Detail::SdlSensorSubsystem<TSensor>::SensorEventWatch()) for a
+         * caller-supplied list of instances, using the exact same
+         * bookkeeping method (DispatchToInstances()) the real path uses —
+         * so a test can reproduce a specific batch ordering/interleaving
+         * (e.g. one instance's callback disposing a different, not-yet-
+         * dispatched instance in the same simulated batch) that real SDL
+         * event timing cannot be controlled to reproduce deterministically
+         * in a headless test environment. Dispatches via
+         * DispatchSensorReading() directly (bypassing the real
+         * hardware-presence gate ProcessSensorUpdateEvent() enforces, the
+         * same way InjectSyntheticSensorUpdate() does), since no real SDL
+         * sensor is ever open in this environment.
+         *
+         * Each instance must already be registered via
+         * RegisterStartedInstanceForTesting() for this to dispatch to it —
+         * otherwise DispatchToInstances()'s own re-validation against the
+         * live startedInstances_ list will (correctly) skip it.
+         *
+         * @param instances Instances to dispatch to, in order.
+         * @param x Raw X-axis sensor value to pass to each instance's DispatchSensorReading().
+         * @param y Raw Y-axis sensor value.
+         * @param z Raw Z-axis sensor value.
+         */
+        NOXNA static void DispatchToInstancesForTesting(
+            const std::vector<Accelerometer*>& instances, float x, float y, float z);
+
+        /**
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.
          *
          * Deprecated in favor of CurrentValueChanged, which is the WP7 7.1

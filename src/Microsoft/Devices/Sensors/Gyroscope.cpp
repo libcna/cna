@@ -450,5 +450,28 @@ namespace Microsoft::Devices::Sensors
         disposalTestHook_ = std::move(hook);
     }
 
+    void Gyroscope::RegisterStartedInstanceForTesting(Gyroscope& instance)
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        subsystem.RegisterStartedInstanceLocked(&instance);
+    }
+
+    void Gyroscope::UnregisterStartedInstanceForTesting(Gyroscope& instance)
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        subsystem.UnregisterStartedInstanceLocked(&instance);
+    }
+
+    void Gyroscope::DispatchToInstancesForTesting(
+        const std::vector<Gyroscope*>& instances, float x, float y, float z)
+    {
+        GetSubsystem().DispatchToInstances(instances, [x, y, z](Gyroscope* instance)
+        {
+            instance->DispatchSensorReading(x, y, z);
+        });
+    }
+
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")
 } // namespace Microsoft::Devices::Sensors

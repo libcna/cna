@@ -306,3 +306,75 @@ implementation (see `plan_devices_phase5.md`'s native-backend plan). Assumes the
 cleanup path never throws once `ClaimDisposalOnce()` succeeds (documented in
 `WaitForDisposalToComplete()`'s doc comment) — matches this codebase's pre-existing
 assumption elsewhere (e.g. `callbackFinished_`'s own no-timeout wait), not a new risk.
+
+## P7-3: Fix same-thread cross-instance dispose during dispatch
+
+### Resolution
+
+**Files changed:**
+- `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp` — extracted the
+  dispatch loop's bookkeeping into a new public template method
+  `DispatchToInstances(instancesSnapshot, dispatchOne)`, shared by both the real
+  `SensorEventWatch()` path and the new NOXNA test hooks (so they can never diverge).
+  Per-instance, it now re-validates the pointer against the *live* `startedInstances_`
+  list (by pointer value only, never dereferencing until validated) and marks it as
+  actively dispatching (`dispatchingThreadIds_`) atomically, immediately before
+  dispatching to that specific instance — not in bulk, up front, for the whole snapshot,
+  as the old code did. `SensorEventWatch()` itself now just takes a plain pointer-value
+  snapshot under the lock and delegates to `DispatchToInstances()` with a lambda calling
+  the real (hardware-gated) `ProcessSensorUpdateEvent()`.
+- `include/Microsoft/Devices/Sensors/Accelerometer.hpp` / `Gyroscope.hpp` + matching
+  `.cpp` — added three NOXNA test-only hooks: `RegisterStartedInstanceForTesting()` /
+  `UnregisterStartedInstanceForTesting()` (register/unregister an instance into the
+  shared subsystem's `startedInstances_` directly, without a real SDL sensor) and
+  `DispatchToInstancesForTesting()` (forwards to the shared `DispatchToInstances()` with
+  a lambda calling the private `DispatchSensorReading()` directly — bypassing
+  `ProcessSensorUpdateEvent()`'s hardware-presence gate, the same way
+  `InjectSyntheticSensorUpdate()` already does, since no real SDL sensor is ever open in
+  this headless environment).
+- `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` / `GyroscopeTests.cpp` — added
+  `DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUseAfterFree`: registers two
+  started instances A and B into a simulated dispatch batch; A's `CurrentValueChanged`
+  handler disposes B by resetting B's owning `unique_ptr` (not merely calling `Dispose()`
+  — this actually frees B's memory, not just logically disposes it, so a regression
+  would touch genuinely freed memory, not just an already-disposed-but-still-allocated
+  object); confirms A's handler ran, B's handler never ran, and the whole batch dispatch
+  completes without crashing.
+
+**Regression-proof check (not part of the permanent test suite):** temporarily reverted
+`DispatchToInstances()` to the old pre-P7-3 "mark every snapshotted instance up front,
+no re-validation" bookkeeping and re-ran the new UAF test 5 times — it **segfaulted
+5/5 times** (real memory corruption, not just a failed assertion), confirming this is a
+genuine, reliably reproducible use-after-free, not a theoretical concern. Restored the
+real fix immediately after confirming this; all tests pass again with the fix in place.
+
+**Tests added:** `DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUseAfterFree`
+(Accelerometer, Gyroscope).
+
+**Commands run:**
+```bash
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean
+./cmake-build-debug/CnaTests --gtest_filter="Accelerometer*:Gyroscope*:Compass*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*"
+# 136 tests, 134 passed, 2 skipped (expected)
+
+cd cmake-build-debug
+for i in $(seq 1 40); do
+  ./CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*" || echo "run $i FAILED"
+done
+# 40/40 clean
+
+cd .. && ctest --output-on-failure
+# 2039/2041 passed; same 2 pre-existing EasyGL failures as every prior verification.
+```
+
+**Remaining risk:** low. This is the most serious bug found this phase (a genuinely
+reproducible use-after-free, not just a data race or a resource leak), and it now has a
+dedicated regression test verified to actually crash without the fix (5/5 segfaults) and
+pass reliably with it (40 stress-loop iterations, full suite). One acknowledged
+limitation, unchanged from before this task and out of scope for it: a handler that
+disposes its *own* sender reentrantly (same instance, not a different one) still uses
+the pre-existing Task P5-2/P5-3 self-dispose exemption — that mechanism is untouched by
+this fix and still relies on the object remaining valid (not literally freed) through the
+remainder of its own callback frame, a pre-existing, already-documented design tradeoff
+from Phase 5, not something this task's scope covers.

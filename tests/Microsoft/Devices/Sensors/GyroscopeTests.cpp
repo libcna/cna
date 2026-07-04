@@ -627,3 +627,43 @@ TEST(GyroscopeTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
     EXPECT_TRUE(handlerRan);
     EXPECT_THROW(gyroscope->Dispose(), System::ObjectDisposedException);
 }
+
+// Task P7-3: see AccelerometerTests's identical test for the full
+// rationale — reproduces the use-after-free the audit found in
+// SdlSensorSubsystem<TSensor>::SensorEventWatch()'s old bookkeeping, where
+// disposing (and freeing) a not-yet-dispatched instance from a different
+// instance's callback, within the same simulated dispatch batch, could
+// leave the dispatch loop holding a dangling pointer to it.
+TEST(GyroscopeTests, DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUseAfterFree)
+{
+    auto a = std::make_unique<Gyroscope>();
+    auto b = std::make_unique<Gyroscope>();
+
+    a->SetStartedForTesting(true);
+    b->SetStartedForTesting(true);
+    Gyroscope::RegisterStartedInstanceForTesting(*a);
+    Gyroscope::RegisterStartedInstanceForTesting(*b);
+
+    Gyroscope* bRawPtr = b.get();
+    bool bCallbackCalled = false;
+    bRawPtr->CurrentValueChanged += [&bCallbackCalled](
+        System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        bCallbackCalled = true;
+    };
+
+    bool aCallbackCalled = false;
+    a->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        aCallbackCalled = true;
+        b.reset();
+    };
+
+    const std::vector<Gyroscope*> batch{a.get(), bRawPtr};
+    EXPECT_NO_THROW(Gyroscope::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_FALSE(bCallbackCalled);
+
+    EXPECT_NO_THROW(a->Dispose());
+}

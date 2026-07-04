@@ -345,24 +345,108 @@ namespace Microsoft::Devices::Sensors::Detail
         std::mutex mutex_;
         std::condition_variable callbackFinished_;
 
+        /**
+         * @brief Dispatches to each instance in `instancesSnapshot`, in
+         * order, via `dispatchOne` (Task P7-3).
+         *
+         * Shared by the real SDL_EventFilter path (SensorEventWatch(),
+         * below) and the NOXNA test-only dispatch hooks that TSensor
+         * exposes — both funnel through this one method so the bookkeeping
+         * can never diverge between the real path and a test simulating it.
+         *
+         * For each snapshotted pointer, re-validates it against the *live*
+         * startedInstances_ list — by pointer value only, never
+         * dereferencing the pointer before this check passes — and only if
+         * still present, marks it as actively dispatching (pushes this
+         * thread's id into its dispatchingThreadIds_) and calls
+         * `dispatchOne(instance)`.
+         *
+         * This closes a real use-after-free (Task P7-3's audit finding C):
+         * previously, *every* snapshotted instance had this thread's id
+         * pushed into dispatchingThreadIds_ up front, before any of them
+         * were dispatched to. If one instance's callback (e.g. instance A's
+         * ProcessSensorUpdateEvent(), still mid-loop below) disposed a
+         * *different*, not-yet-reached instance B from the same snapshot,
+         * B's pre-pushed thread-id entry made its concurrent Dispose() call
+         * look like a same-thread self-dispose (exempt from waiting) even
+         * though nothing was actually executing inside B yet — B was fully
+         * disposed (and possibly destroyed) with no wait at all, and this
+         * loop would then blindly call `dispatchOne` on the now-dangling
+         * `B*` on its next iteration.
+         *
+         * The fix: mark (and validate) each instance immediately before
+         * dispatching to *that* instance, not in bulk up front. If a prior
+         * iteration's callback already disposed a later instance in this
+         * snapshot, that instance's own Dispose(bool)/Stop() has already
+         * removed it from startedInstances_ (necessarily before any wait
+         * that could let it be destroyed) — so the pointer-value-only
+         * re-check here safely detects that and skips it, never touching
+         * (dereferencing) the possibly-freed memory.
+         */
+        template <typename DispatchFn>
+        void DispatchToInstances(const std::vector<TSensor*>& instancesSnapshot, DispatchFn&& dispatchOne)
+        {
+            const std::thread::id thisThreadId = std::this_thread::get_id();
+
+            for (TSensor* instance : instancesSnapshot)
+            {
+                bool stillStarted = false;
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    if (std::find(startedInstances_.begin(), startedInstances_.end(), instance)
+                        != startedInstances_.end())
+                    {
+                        instance->dispatchingThreadIds_.push_back(thisThreadId);
+                        stillStarted = true;
+                    }
+                }
+
+                if (!stillStarted)
+                {
+                    continue;
+                }
+
+                auto cleanupGuard = MakeScopeExit([this, instance, thisThreadId]()
+                {
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        auto& ids = instance->dispatchingThreadIds_;
+                        const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
+                        if (it != ids.end())
+                        {
+                            ids.erase(it);
+                        }
+                    }
+                    callbackFinished_.notify_all();
+                });
+
+                try
+                {
+                    dispatchOne(instance);
+                }
+                catch (...)
+                {
+                    // Swallowed deliberately — see SensorEventWatch()'s doc
+                    // comment: the real path is an SDL_EventFilter callback
+                    // invoked directly by SDL_PushEvent(), a C API that does
+                    // not expect a C++ exception to unwind through its own
+                    // call frames, and swallowing it here also lets the
+                    // remaining snapshotted instances still get dispatched
+                    // to and cleaned up.
+                }
+            }
+        }
+
     private:
         /**
-         * SDL_EventFilter trampoline for TSensor's event watch. Snapshots
-         * startedInstances_ under mutex_ (recording each instance's
-         * dispatching thread id — Task P5-3), then calls each snapshotted
-         * instance's ProcessSensorUpdateEvent() outside the lock (so a
-         * handler re-entering Start()/Stop()/Dispose() doesn't self-deadlock
-         * on mutex_), clearing its dispatch entry and notifying
-         * callbackFinished_ after each one returns — via a ScopeExit guard
-         * (Task P6-4) so this cleanup still runs even if
-         * ProcessSensorUpdateEvent() throws. Any exception from
-         * ProcessSensorUpdateEvent() (or transitively a user's
-         * CurrentValueChanged/ReadingChanged handler) is caught and
-         * swallowed per-instance (Task P6-4): this is an SDL_EventFilter
-         * callback invoked directly by SDL_PushEvent(), a C API that does
-         * not expect a C++ exception to unwind through its own call
-         * frames, and swallowing it here also lets the remaining
-         * snapshotted instances still get dispatched to and cleaned up.
+         * SDL_EventFilter trampoline for TSensor's event watch. Takes a
+         * stable snapshot of startedInstances_ (pointer values only) under
+         * mutex_, then hands it to DispatchToInstances() above, which does
+         * the actual per-instance re-validation, marking, dispatch, and
+         * cleanup — see that method's doc comment for the full Task P7-3
+         * rationale. Dispatch itself always runs outside the lock (so a
+         * handler re-entering Start()/Stop()/Dispose() doesn't
+         * self-deadlock on mutex_).
          */
         static bool SensorEventWatch(void* userdata, void* eventData)
         {
@@ -382,51 +466,20 @@ namespace Microsoft::Devices::Sensors::Detail
 
             SdlSensorSubsystem& subsystem = TSensor::GetSubsystem();
             const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
-            const std::thread::id thisThreadId = std::this_thread::get_id();
+            const float x = event->sensor.data[0];
+            const float y = event->sensor.data[1];
+            const float z = event->sensor.data[2];
 
             std::vector<TSensor*> instancesSnapshot;
             {
                 std::lock_guard<std::mutex> lock(subsystem.mutex_);
-                for (TSensor* instance : subsystem.startedInstances_)
-                {
-                    if (instance != nullptr)
-                    {
-                        instance->dispatchingThreadIds_.push_back(thisThreadId);
-                        instancesSnapshot.push_back(instance);
-                    }
-                }
+                instancesSnapshot = subsystem.startedInstances_;
             }
 
-            for (TSensor* instance : instancesSnapshot)
+            subsystem.DispatchToInstances(instancesSnapshot, [sensorId, x, y, z](TSensor* instance)
             {
-                auto cleanupGuard = MakeScopeExit([&subsystem, instance, thisThreadId]()
-                {
-                    {
-                        std::lock_guard<std::mutex> lock(subsystem.mutex_);
-                        auto& ids = instance->dispatchingThreadIds_;
-                        const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
-                        if (it != ids.end())
-                        {
-                            ids.erase(it);
-                        }
-                    }
-                    subsystem.callbackFinished_.notify_all();
-                });
-
-                try
-                {
-                    instance->ProcessSensorUpdateEvent(
-                        sensorId,
-                        event->sensor.data[0],
-                        event->sensor.data[1],
-                        event->sensor.data[2]
-                    );
-                }
-                catch (...)
-                {
-                    // Swallowed deliberately — see this method's doc comment.
-                }
-            }
+                instance->ProcessSensorUpdateEvent(sensorId, x, y, z);
+            });
 
             return true;
         }

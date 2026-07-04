@@ -790,3 +790,61 @@ TEST(AccelerometerTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
     // already-disposed instance.
     EXPECT_THROW(accelerometer->Dispose(), System::ObjectDisposedException);
 }
+
+// Task P7-3: reproduces the use-after-free the audit found in
+// SdlSensorSubsystem<TSensor>::SensorEventWatch()'s old bookkeeping. Two
+// started instances A and B are dispatched in the same simulated batch
+// (A first). A's CurrentValueChanged handler disposes B *by resetting B's
+// owning unique_ptr* — not merely calling Dispose() — so B's underlying
+// memory is actually freed before the loop reaches its second (B's) turn,
+// giving a genuine dangling pointer rather than a merely-logically-disposed
+// object. If DispatchToInstances()'s per-instance re-validation against the
+// live startedInstances_ list ever regresses back to the old "mark
+// everything up front" bookkeeping, this test either crashes/corrupts the
+// heap (calling ProcessSensorUpdateEvent-equivalent code through
+// DispatchSensorReading on freed memory) or, at minimum, fails the
+// bCallbackCalled assertion below.
+TEST(AccelerometerTests, DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUseAfterFree)
+{
+    auto a = std::make_unique<Accelerometer>();
+    auto b = std::make_unique<Accelerometer>();
+
+    // started_ (not just subsystem-level registration) must be true so
+    // that b's own Dispose(bool) cleanup actually calls Stop() — which is
+    // what removes b from startedInstances_. Without this, b would remain
+    // in startedInstances_ after being freed below, and the fix's
+    // re-validation step would (correctly, given that stale state) still
+    // find it "present" and dispatch into freed memory — this test needs
+    // b's unregistration to actually happen for the fix to have anything
+    // to check.
+    a->SetStartedForTesting(true);
+    b->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*a);
+    Accelerometer::RegisterStartedInstanceForTesting(*b);
+
+    Accelerometer* bRawPtr = b.get();
+    bool bCallbackCalled = false;
+    bRawPtr->CurrentValueChanged += [&bCallbackCalled](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        bCallbackCalled = true;
+    };
+
+    bool aCallbackCalled = false;
+    a->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        aCallbackCalled = true;
+        // Disposes AND frees B's memory (unlike a bare Dispose() call,
+        // which would leave B's memory allocated but logically disposed —
+        // this makes bRawPtr a genuinely dangling pointer afterward).
+        b.reset();
+    };
+
+    const std::vector<Accelerometer*> batch{a.get(), bRawPtr};
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_FALSE(bCallbackCalled);
+
+    EXPECT_NO_THROW(a->Dispose());
+}

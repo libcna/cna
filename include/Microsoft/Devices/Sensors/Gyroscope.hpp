@@ -261,5 +261,33 @@ namespace Microsoft::Devices::Sensors
          * @param hook Callback to invoke; pass an empty std::function to clear it.
          */
         NOXNA void SetDisposalCleanupHookForTesting(std::function<void()> hook);
+
+        /**
+         * @brief Test-only hook (Task P7-3): see Accelerometer.hpp's
+         * identical hook for the full rationale.
+         *
+         * @param instance Instance to register.
+         */
+        NOXNA static void RegisterStartedInstanceForTesting(Gyroscope& instance);
+
+        /**
+         * @brief Test-only hook (Task P7-3): see Accelerometer.hpp's
+         * identical hook for the full rationale.
+         *
+         * @param instance Instance to unregister.
+         */
+        NOXNA static void UnregisterStartedInstanceForTesting(Gyroscope& instance);
+
+        /**
+         * @brief Test-only hook (Task P7-3): see Accelerometer.hpp's
+         * identical hook for the full rationale.
+         *
+         * @param instances Instances to dispatch to, in order.
+         * @param x Raw X-axis rotation rate to pass to each instance's DispatchSensorReading().
+         * @param y Raw Y-axis rotation rate.
+         * @param z Raw Z-axis rotation rate.
+         */
+        NOXNA static void DispatchToInstancesForTesting(
+            const std::vector<Gyroscope*>& instances, float x, float y, float z);
     };
 } // namespace Microsoft::Devices::Sensors

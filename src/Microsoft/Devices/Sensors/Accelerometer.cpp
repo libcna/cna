@@ -595,5 +595,28 @@ namespace Microsoft::Devices::Sensors
         disposalTestHook_ = std::move(hook);
     }
 
+    void Accelerometer::RegisterStartedInstanceForTesting(Accelerometer& instance)
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        subsystem.RegisterStartedInstanceLocked(&instance);
+    }
+
+    void Accelerometer::UnregisterStartedInstanceForTesting(Accelerometer& instance)
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        subsystem.UnregisterStartedInstanceLocked(&instance);
+    }
+
+    void Accelerometer::DispatchToInstancesForTesting(
+        const std::vector<Accelerometer*>& instances, float x, float y, float z)
+    {
+        GetSubsystem().DispatchToInstances(instances, [x, y, z](Accelerometer* instance)
+        {
+            instance->DispatchSensorReading(x, y, z);
+        });
+    }
+
     GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")
 } // namespace Microsoft::Devices::Sensors
