@@ -70,6 +70,21 @@ namespace Microsoft::Xna::Framework::Input
     // matching MonoGame's `static MouseCursor() { PlatformInitalize(); }` lazy static
     // constructor. Building them as plain static member initializers instead would run
     // SDL_CreateSystemCursor at static-init time, before SDL_Init() has necessarily run.
+    //
+    // Stock-cursor mapping audit (task 833). Each MonoGame MouseCursor maps to the closest SDL3
+    // system cursor. MonoGame targets SDL2's SDL_SYSTEM_CURSOR_* names; SDL3 renamed the enum, so
+    // CNA uses SDL3's equivalents:
+    //   Arrow     -> DEFAULT       (SDL2 ARROW)         IBeam  -> TEXT       (SDL2 IBEAM)
+    //   Wait      -> WAIT          (SDL2 WAIT)          Cross  -> CROSSHAIR  (SDL2 CROSSHAIR)
+    //   SizeNWSE  -> NWSE_RESIZE   (SDL2 SIZENWSE)      SizeNESW -> NESW_RESIZE (SDL2 SIZENESW)
+    //   SizeWE    -> EW_RESIZE     (SDL2 SIZEWE)        SizeNS -> NS_RESIZE  (SDL2 SIZENS)
+    //   SizeAll   -> MOVE          (SDL2 SIZEALL)       No     -> NOT_ALLOWED(SDL2 NO)
+    //   Hand      -> POINTER       (SDL2 HAND)
+    // Only one is not a pure rename: MonoGame's WaitArrow used SDL2's SDL_SYSTEM_CURSOR_WAITARROW,
+    // which SDL3 removed. WaitArrow maps to SDL3's SDL_SYSTEM_CURSOR_PROGRESS ("WAIT with an
+    // arrow") — the closest available match, and the exact meaning MonoGame's WaitArrow conveyed.
+    // The concrete glyph for every system cursor is chosen by the OS/desktop theme, so exact
+    // pixels differ per platform regardless of the enum used — an unavoidable SDL/OS difference.
     MouseCursor& MouseCursor::getArrowProperty()
     {
         static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_DEFAULT);
