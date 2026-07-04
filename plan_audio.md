@@ -1223,7 +1223,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 
 #### 8.2 XACT (AudioEngine, AudioCategory, Cue, SoundBank, WaveBank)
 
-- [ ] **XA-6 — `Cue::Stop(AudioStopOptions::AsAuthored)` se chová identicky jako `Stop(Immediate)`.**
+- [x] **XA-6 — `Cue::Stop(AudioStopOptions::AsAuthored)` se chová identicky jako `Stop(Immediate)`.**
   Ověřeno přímo ve zdroji: `StopInternal` nejdřív správně zavolá `pi.instance->Stop(immediate)`
   (pro `immediate=false` jen `MIX_SetTrackLoops(track,0)`, track zůstává hrát), ale HNED další
   řádek je bezpodmínečné `active_.clear()`, které zničí `unique_ptr<SoundEffectInstance>` →
@@ -1236,6 +1236,14 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   na loopované instanci nechá track hrát dál hned po volání (jen ukončí loop), zatímco
   `Stop(Immediate)` ho tvrdě zastaví okamžitě — test čte skutečný `MIX_Track*` přes
   `SoundEffectInstanceTestAccess`, ne jen `Cue`'s vlastní state.
+  *Pozn.:* `active_.clear()` teď volá jen pro `immediate==true`; pro `AsAuthored` `active_` zůstává
+  netknuté (instance se zničí až při `Cue::Dispose()`, matches FNA — nativní engine taky drží voice
+  naživu, dokud release skutečně nedoběhne). Test potřeboval delší (1s) fixturu — původní sdílené
+  fixtury (200 B ≈ 1ms) byly příliš krátké pro spolehlivou živou kontrolu `MIX_TrackPlaying`, nová
+  fixtura přidána jako `SharedLongBank`/`"LongCue"`. `git stash` potvrdil selhání proti staré
+  logice. Čisté pod ASan+LeakSanitizer. Vědomě neřešeno: `SoundBank`'s fire-and-forget sweep
+  (XA-1/XA-7) může takovou "releasing" (Stopped, ale ne Paused) cue smést dřív, než release
+  doopravdy doběhne — mimo rozsah tohoto nálezu, audit ho nezmínil.
 
 - [ ] **XA-7 — Fire-and-forget sweep v `SoundBank::PlayCueInternal` smaže i cue, který je jen PAUSED.**
   Ověřeno přímo ve zdroji: sweep predikát kontroluje jen `getIsPlayingProperty()` — pokud je cue

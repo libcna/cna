@@ -294,7 +294,20 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_) return;
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Stop(immediate);
-        active_.clear();
+
+        // XA-6: pi.instance->Stop(false) above already does the right thing (just exits the
+        // loop, leaving the track playing its release/tail) -- but destroying every instance
+        // right after (the old unconditional active_.clear()) immediately hard-stops them via
+        // ~SoundEffectInstance()'s Dispose() cascade regardless, making AsAuthored behave
+        // identically to Immediate. Only actually destroy them here for an immediate stop, where
+        // there is no tail to let ring out; a non-immediate stop leaves them owned by active_
+        // until this Cue is later disposed (matches FNA: the cue doesn't relinquish its native
+        // voice until the release genuinely finishes, not the instant Stop(AsAuthored) is called).
+        if (immediate)
+        {
+            active_.clear();
+        }
+
         state_ = State::Stopped;
 
         for (auto* wb : waveBanksUsed_)

@@ -496,6 +496,145 @@ namespace
         return wb;
     }
 
+    constexpr const char* kLongWaveBankName = "LongWaveBank";
+
+    // Same layout as BuildApply3DXwbFixtureBytes, but with a full second of audio instead of
+    // 200 bytes (~1ms) -- XA-6's "is the track still actually playing" check is a live, timing-
+    // sensitive MIX_TrackPlaying() query, and a ~1ms sound can easily have already finished
+    // playing by the time a test gets around to checking it.
+    std::vector<uint8_t> BuildLongXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 44100u * 2u; // 1 second, mono 16-bit @ 44100Hz
+        constexpr uint32_t alignment         = 4;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, kLongWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u)            // format tag: PCM
+            | (1u << 2)       // channels: mono
+            | (44100u << 5)   // sample rate
+            | (2u << 23)      // wBlockAlign: 2 bytes/sample
+            | (1u << 31);     // 16-bit
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        AppendU32(data, 0u); // entry 0: offset=0, deviation=0 (last/only entry)
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(0x00); // 16-bit silence
+
+        return data;
+    }
+
+    // Same layout as BuildApply3DXsbFixtureBytes, but referencing LongWaveBank and named "LongCue".
+    std::vector<uint8_t> BuildLongXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "LongCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "LongSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
+
+        AppendU8(data, 0);    // flags
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    WaveBank& SharedLongWaveBank()
+    {
+        static WaveBank wb(&SharedEngine(), WriteFixture(
+            "cna_cue_test", "long.xwb", BuildLongXwbFixtureBytes()));
+        return wb;
+    }
+
+    SoundBank& SharedLongBank()
+    {
+        (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&SharedEngine(), WriteFixture(
+            "cna_cue_test", "long.xsb", BuildLongXsbFixtureBytes()));
+        return bank;
+    }
+
     SoundBank& SharedApply3DBank()
     {
         (void)SharedApply3DWaveBank(); // must be registered with the engine before GetCue()/Play()
@@ -639,6 +778,56 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
         EXPECT_LT(farGain, nearGain);
 
         cue->Stop(AudioStopOptions::Immediate);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// XA-6: Stop(AsAuthored) must let the track keep playing (SoundEffectInstance::Stop(false) just
+// exits any loop) instead of hard-stopping it -- the old code called active_.clear() right after
+// pi.instance->Stop(immediate) unconditionally, destroying every instance (and thus hard-stopping
+// its track via ~SoundEffectInstance()'s Dispose() cascade) regardless of `immediate`. Contrasted
+// directly against Stop(Immediate), which must still hard-stop right away.
+TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> asAuthoredCue(SharedLongBank().GetCue("LongCue"));
+        asAuthoredCue->Play();
+
+        SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*asAuthoredCue, 0);
+        if (!inst)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(*inst);
+        ASSERT_NE(track, nullptr);
+
+        asAuthoredCue->Stop(AudioStopOptions::AsAuthored);
+
+        // The instance must still be tracked (not destroyed) and its track still playing --
+        // AsAuthored only exits the loop, it doesn't cut the sound off.
+        EXPECT_NE(CueTestAccess::ActiveInstance(*asAuthoredCue, 0), nullptr);
+        EXPECT_TRUE(MIX_TrackPlaying(track));
+
+        // Contrast: Stop(Immediate) on a fresh instance must hard-stop right away -- it destroys
+        // the instance (and with it the underlying track) immediately, so there is no track left
+        // to query afterward; the absence of an active instance is itself the observable effect.
+        std::unique_ptr<Cue> immediateCue(SharedApply3DBank().GetCue("Apply3DCue"));
+        immediateCue->Play();
+        SoundEffectInstance* inst2 = CueTestAccess::ActiveInstance(*immediateCue, 0);
+        ASSERT_NE(inst2, nullptr);
+        ASSERT_NE(SoundEffectInstanceTestAccess::GetTrack(*inst2), nullptr);
+
+        immediateCue->Stop(AudioStopOptions::Immediate);
+
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*immediateCue, 0), nullptr);
     }
     catch (...)
     {
