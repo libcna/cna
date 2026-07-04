@@ -11,19 +11,25 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   from the FNA reference to CNA — not just API surface, but FNA-faithful runtime behavior wired
   to SDL3, CHECKLIST-compliant, and covered by tests. The original plan was `plan_input.md`
   (Phases I1–I7, tasks 700–783); all of it is now complete.
-- **Current development phase: `feature/input` is FINALIZED and merge-verified — READY TO MERGE.**
-  Phases I1–I10 (tasks 700–855) complete and pre-merge-audited (Phase I11, tasks 856–864).
-  **Final merge verification (2026-07-04):** ran the full clean-build sequence (`git submodule
-  update --init --recursive`, then `rm -rf` + configure + build + run `CnaTests`) independently on
-  all three backends. Results:
-  - **EasyGL: 1964/1964** full · **217/217** input-filter
-  - **Vulkan: 1964/1964** full · **217/217** input-filter
-  - **bgfx: 1968/1968** full (+4 bgfx-specific, input-unrelated) · **217/217** input-filter
+- **Current development phase: `feature/input` is FINALIZED — READY TO MERGE.** Phases I1–I10
+  (tasks 700–855) complete, pre-merge-audited (Phase I11, 856–864), plus a final touch-fidelity +
+  doc hardening pass (Phase I12, 865–878).
+  **Latest clean 3-backend verification (2026-07-04, task 876):** `rm -rf` + configure + build +
+  run `CnaTests` on each backend from initialized submodules:
+  - **EasyGL: 1968/1968** full · **221/221** input-filter
+  - **Vulkan: 1968/1968** full · **221/221** input-filter
+  - **bgfx: 1972/1972** full (+4 bgfx-specific, input-unrelated) · **221/221** input-filter
   - Input filter: `--gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'`
 
-  All green, reproducing the Phase I11 counts. `feature/input` is **ready to merge**. There is no
-  next numbered task — see Section 8. (Hardware/human-gated checks — real gamepad/IME/mobile — stay
-  documented-as-unverified in `docs/input-manual-verification-results.md`, not faked.)
+  All green. `feature/input` is **ready to merge**. There is no next numbered task — see Section 8.
+  (Hardware/human-gated checks — real gamepad/IME/mobile — stay documented-as-unverified in
+  `docs/input-manual-verification-results.md`, not faked.)
+- **Phase I12 fixed one real fidelity gap:** the event-driven touch path (`InputManager`, which is
+  what real SDL input feeds) dropped `TouchLocation::TryGetPreviousLocation()` — it now preserves
+  the previous state/position for Moved/Released touches (tasks 868–872), matching FNA. The rest of
+  Phase I12 was doc reconciliation (stale `TextInput`-is-`char`-based claims → `charcs`/UTF-16;
+  test-count reconciliation; "complete keycode map" → "FNA-mappable subset") + test hardening
+  (`SdlInputBridge::ResetForTests`, Ctrl+V-suppression regression test). No new features.
 - **Two external-review passes drove the last two phases.** The first (2026-07-04) became **Phase
   I9 (792–840)**; the second became **Phase I10 (841–855)**, a stabilization pass. The one
   previously-deferred item — `Mouse::SetPosition`'s scaled/letterboxed logical→window transform
@@ -377,16 +383,19 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ## 8. Final handoff (tasks 855 + 864)
 
-**`feature/input` is finalized and pre-merge-audited — merge-ready.** Phases I1–I11 (tasks
-700–864) are all done and clean-built + tested on all three backends (task 862: EasyGL/Vulkan
-**1964**, bgfx **1968**; **217** input tests each). Both external-review passes (→ Phase I9, then
-Phase I10) plus the pre-merge audit (Phase I11) are complete; the audit found **no real bug** (task
-858 confirmed `SetPosition` handles letterbox offset, not just scale). The previously-deferred
-`plan.md` a-0001 is **implemented** (task 846). There is **no next numbered task**.
+**`feature/input` is finalized, pre-merge-audited, and touch-hardened — merge-ready.** Phases
+I1–I12 (tasks 700–878) are all done and clean-built + tested on all three backends (task 876:
+EasyGL/Vulkan **1968**, bgfx **1972**; **221** input tests each). Both external-review passes (→
+Phase I9, I10), the pre-merge audit (I11), and the final touch-fidelity/doc pass (I12) are
+complete. Bugs found & fixed: I11 confirmed `SetPosition` handles letterbox *offset* (858); **I12
+fixed the event-driven touch path dropping `TryGetPreviousLocation` (868–872)**. The
+previously-deferred `plan.md` a-0001 is **implemented** (task 846). There is **no next numbered
+task**.
 
 **What is done (on this branch):** the full XNA 4.0 `Input` + `Input::Touch` surface, FNA-faithful
 runtime behavior on SDL3, FNA `*EXT` extensions, the MonoGame-style `MouseCursor`, `TextInputEXT`
-(UTF-16), gesture recognition, and `Mouse::SetPosition` logical→window scaling. 217 input tests + a
+(UTF-16), gesture recognition, `Mouse::SetPosition` logical→window scaling, and event-driven touch
+previous-location. 221 input tests + a
 combined `cna_input_smoke` sample. Coverage is documented **by category** (never blended) in
 `plan_input.md`'s "final split" and `docs/xna-4-api-coverage.md`.
 
@@ -440,16 +449,16 @@ combined `cna_input_smoke` sample. Coverage is documented **by category** (never
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. feature/input is FINALIZED and pre-merge-audited: Phases I1-I11 (700-864)
-are all complete and clean-built + tested on EasyGL/Vulkan/bgfx (task 862: 1964/1964/1968, 217
-input tests each). There is no next numbered input task to pick up.
+Read NEXT.md first. feature/input is FINALIZED, pre-merge-audited, and touch-hardened: Phases
+I1-I12 (700-878) are all complete and clean-built + tested on EasyGL/Vulkan/bgfx (task 876:
+1968/1968/1972, 221 input tests each). There is no next numbered input task to pick up.
 
-Two external-review passes (Phase I9, I10) plus a pre-merge audit (Phase I11) are done; the audit
-found NO real bug (task 858 confirmed SetPosition handles letterbox offset, not just scale).
-plan.md a-0001 (Mouse::SetPosition logical->window transform) is IMPLEMENTED (task 846). Task 811
-stays partial and the manual/hardware checks in docs/input-manual-verification-results.md stay
-open ONLY because they need real hardware/IME/X11 - not missing code. Do NOT re-open these as
-input tasks.
+Two external-review passes (I9, I10), a pre-merge audit (I11), and a final touch-fidelity/doc pass
+(I12) are done. Real bugs found & fixed: 858 (SetPosition letterbox offset) and 868-872 (the
+event-driven touch path now preserves TryGetPreviousLocation for Moved/Released). plan.md a-0001
+(Mouse::SetPosition logical->window transform) is IMPLEMENTED (task 846). Task 811 stays partial
+and the manual/hardware checks in docs/input-manual-verification-results.md stay open ONLY because
+they need real hardware/IME/X11 - not missing code. Do NOT re-open these as input tasks.
 
 The decision now (Section 8) is the user's: merge/PR feature/input into master (confirm before
 pushing - do NOT merge/push to master without explicit confirmation), or report complete and
