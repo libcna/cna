@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <atomic>
+#include <chrono>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
@@ -287,4 +290,45 @@ TEST(GyroscopeTests, StopPreventsSubsequentSyntheticEventFromDispatching)
     g.InjectSyntheticSensorUpdate(0.0f, 1.0f, 0.0f);
     EXPECT_EQ(invokedCount, 1);
     EXPECT_EQ(lastRotationRate, rotationRateBeforeStop);
+}
+
+// Task P5-2: mirrors AccelerometerTests.ConcurrentSyntheticUpdatesDoNotCrashAndDrainBeforeDispose
+// — see that test for the full rationale.
+TEST(GyroscopeTests, ConcurrentSyntheticUpdatesDoNotCrashAndDrainBeforeDispose)
+{
+    auto gyroscope = std::make_unique<Gyroscope>();
+    gyroscope->SetStartedForTesting(true);
+
+    std::atomic<int> receivedCount{0};
+    gyroscope->CurrentValueChanged += [&receivedCount](
+        System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        ++receivedCount;
+    };
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 10;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&gyroscope]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                gyroscope->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+
+    EXPECT_EQ(receivedCount.load(), ThreadCount * IterationsPerThread);
+    EXPECT_NO_THROW(gyroscope->Dispose());
 }

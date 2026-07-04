@@ -72,25 +72,37 @@ namespace Microsoft::Devices::Sensors
         bool subsystemHeld_ = false;
 
         /**
-         * True while SensorEventWatch() is (possibly on another thread)
-         * mid-call into this instance's ProcessSensorUpdateEvent(). Guarded
-         * by mutex_. Dispose() waits for this to clear (after first
+         * Count of calls currently (possibly on another thread, possibly
+         * more than one concurrently) mid-call into this instance's
+         * ProcessSensorUpdateEvent()/InjectSyntheticSensorUpdate(). Guarded
+         * by mutex_. Dispose() waits for this to reach 0 (after first
          * removing the instance from startedInstances_, so no *new*
          * callback can start) before letting the object's lifetime end,
          * closing the use-after-free window left open by Task P3-4.
          *
-         * @note Known accepted limitation: if a CurrentValueChanged/
-         * ReadingChanged subscriber calls Dispose() on *this same instance*
-         * from within its own handler (i.e. reentrantly, on the same thread
-         * already executing ProcessSensorUpdateEvent() for this instance),
-         * Dispose() would deadlock waiting on a flag only that same,
-         * currently-blocked call could clear. Not solved here — judged an
-         * unusual enough pattern (a handler disposing the very sensor
-         * object mid-dispatch to it) to accept as a documented limitation
-         * rather than adding further complexity (e.g. detecting the
-         * disposing thread is the callback thread) for this task's scope.
+         * Task P5-2: was a single bool (inFlightCallback_) until this task.
+         * SDL's own SDL_AddEventWatch() documentation warns the callback
+         * "may run in a different thread", and SDL_PushEvent() (which
+         * synchronously invokes it) is documented safe to call from any
+         * thread — nothing rules out SensorEventWatch() being re-entered
+         * concurrently for this same instance from a second thread while
+         * the first invocation is still mid-dispatch. With a single bool,
+         * the first call to finish would clear it while the second was
+         * still in flight, letting a concurrently-waiting Dispose() wake up
+         * and free the object out from under the still-running second
+         * call. A count fixes this: every dispatch increments before
+         * running and decrements after, and Dispose() only proceeds once
+         * the count is genuinely back to 0.
+         *
+         * @note As of Task P5-2, a handler that calls Dispose() on *this
+         * same instance* from within its own callback (reentrantly, on the
+         * same thread already executing a dispatch for this instance)
+         * still deadlocks here, same as the old bool — Dispose() would
+         * wait on a count only that same, currently-blocked call could
+         * decrement. Fixed in Task P5-3, which tracks the dispatching
+         * thread id so Dispose() can recognize and skip waiting on itself.
          */
-        bool inFlightCallback_ = false;
+        int inFlightCallbackCount_ = 0;
 
     private:
         static bool EnsureSensorSubsystemInitialized();

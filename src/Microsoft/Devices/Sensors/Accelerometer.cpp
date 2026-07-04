@@ -178,7 +178,7 @@ namespace Microsoft::Devices::Sensors
             {
                 if (accelerometer != nullptr)
                 {
-                    accelerometer->inFlightCallback_ = true;
+                    ++accelerometer->inFlightCallbackCount_;
                     instancesSnapshot.push_back(accelerometer);
                 }
             }
@@ -195,7 +195,7 @@ namespace Microsoft::Devices::Sensors
 
             {
                 std::lock_guard<std::mutex> lock(mutex_);
-                accelerometer->inFlightCallback_ = false;
+                --accelerometer->inFlightCallbackCount_;
             }
             callbackFinished_.notify_all();
         }
@@ -375,7 +375,10 @@ namespace Microsoft::Devices::Sensors
             // instance's ProcessSensorUpdateEvent() on another thread. Wait
             // for that to finish before letting this object's lifetime end,
             // closing the use-after-free window left open by Task P3-4.
-            callbackFinished_.wait(lock, [this] { return !inFlightCallback_; });
+            // Task P5-2: waits for the count to reach 0, not for a single
+            // bool to clear — see inFlightCallbackCount_'s own comment for
+            // why a bool could under-count concurrent dispatches.
+            callbackFinished_.wait(lock, [this] { return inFlightCallbackCount_ == 0; });
 
             --instanceCount_;
             if (instanceCount_ < 0)
@@ -590,7 +593,23 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
+        // Task P5-2/P5-3: participates in the same inFlightCallbackCount_
+        // bookkeeping as the real SensorEventWatch() path, so a handler
+        // that calls Dispose() on this same instance from within a
+        // synthetic-update-triggered callback is recognized identically to
+        // the real event path (see Dispose(bool)'s self-dispose check).
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            ++inFlightCallbackCount_;
+        }
+
         DispatchSensorReading(x, y, z);
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            --inFlightCallbackCount_;
+        }
+        callbackFinished_.notify_all();
     }
 
     void Accelerometer::SetStartedForTesting(bool started)

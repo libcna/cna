@@ -66,22 +66,24 @@ namespace Microsoft::Devices::Sensors
         bool subsystemHeld_ = false;
 
         /**
-         * True while SensorEventWatch() is (possibly on another thread)
-         * mid-call into this instance's ProcessSensorUpdateEvent(). Guarded
-         * by mutex_. Dispose() waits for this to clear (after first
+         * Count of calls currently (possibly on another thread, possibly
+         * more than one concurrently) mid-call into this instance's
+         * ProcessSensorUpdateEvent()/InjectSyntheticSensorUpdate(). Guarded
+         * by mutex_. Dispose() waits for this to reach 0 (after first
          * removing the instance from startedInstances_, so no *new*
          * callback can start) before letting the object's lifetime end,
          * closing the use-after-free window left open by Task P3-4.
          *
-         * @note Known accepted limitation: if a CurrentValueChanged
-         * subscriber calls Dispose() on *this same instance* from within
-         * its own handler (i.e. reentrantly, on the same thread already
-         * executing ProcessSensorUpdateEvent() for this instance),
-         * Dispose() would deadlock waiting on a flag only that same,
-         * currently-blocked call could clear. Not solved here — see
-         * Accelerometer.hpp's identical note for the full rationale.
+         * Task P5-2: was a single bool (inFlightCallback_) until this task
+         * — see Accelerometer.hpp's identical member for the full
+         * rationale (SDL's own documented "may run in a different thread"
+         * event-watch warning).
+         *
+         * @note As of Task P5-2, a handler that calls Dispose() on *this
+         * same instance* from within its own callback still deadlocks
+         * here, same as the old bool. Fixed in Task P5-3.
          */
-        bool inFlightCallback_ = false;
+        int inFlightCallbackCount_ = 0;
 
     private:
         static bool EnsureSensorSubsystemInitialized();

@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <type_traits>
 #include <utility>
 
@@ -33,7 +34,20 @@ namespace Microsoft::Devices::Sensors
         bool isSupported_;
         System::TimeSpan timeBetweenUpdates_;
         TSensorReading currentValue_;
-        SensorReadingEventArgs<TSensorReading> eventArgs_;
+
+        /**
+         * Guards currentValue_/isDataValid_ (Task P5-2): for real,
+         * SDL3-backed sensors (Accelerometer/Gyroscope), setCurrentValueProperty()/
+         * setIsDataValidProperty() are called from DispatchSensorReading(),
+         * which may run on whatever thread SDL invokes the sensor
+         * event-watch callback on — not necessarily the game/user thread
+         * that calls getCurrentValueProperty()/getIsDataValidProperty().
+         * Never held while calling CurrentValueChanged.Raise() — a
+         * subscriber's handler can legitimately call back into this sensor
+         * (e.g. Dispose(), another getter), and raising under a lock risks
+         * deadlock.
+         */
+        mutable std::mutex mutex_;
 
     protected:
         /**
@@ -63,12 +77,19 @@ namespace Microsoft::Devices::Sensors
          */
         void setCurrentValueProperty(const TSensorReading& value)
         {
-            currentValue_ = value;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                currentValue_ = value;
+            }
 
             if (!CurrentValueChanged.Empty())
             {
-                eventArgs_.setSensorReadingProperty(value);
-                CurrentValueChanged.Raise(static_cast<System::Object*>(this), eventArgs_);
+                // A local, per-dispatch event-args instance (Task P5-2) —
+                // not a shared member — so a concurrent dispatch on another
+                // thread can never mutate the args this call is still
+                // raising with.
+                SensorReadingEventArgs<TSensorReading> args(value);
+                CurrentValueChanged.Raise(static_cast<System::Object*>(this), args);
             }
         }
 
@@ -79,12 +100,26 @@ namespace Microsoft::Devices::Sensors
          */
         void setCurrentValueProperty(TSensorReading&& value)
         {
-            currentValue_ = std::move(value);
+            TSensorReading valueForEvent{};
+            bool shouldRaise = false;
 
-            if (!CurrentValueChanged.Empty())
             {
-                eventArgs_.setSensorReadingProperty(currentValue_);
-                CurrentValueChanged.Raise(static_cast<System::Object*>(this), eventArgs_);
+                std::lock_guard<std::mutex> lock(mutex_);
+                currentValue_ = std::move(value);
+                shouldRaise = !CurrentValueChanged.Empty();
+                if (shouldRaise)
+                {
+                    // value is moved-from at this point; copy the
+                    // now-authoritative currentValue_ instead, still under
+                    // the lock, so the event gets the real new value.
+                    valueForEvent = currentValue_;
+                }
+            }
+
+            if (shouldRaise)
+            {
+                SensorReadingEventArgs<TSensorReading> args(std::move(valueForEvent));
+                CurrentValueChanged.Raise(static_cast<System::Object*>(this), args);
             }
         }
 
@@ -95,6 +130,7 @@ namespace Microsoft::Devices::Sensors
          */
         void setIsDataValidProperty(bool value)
         {
+            std::lock_guard<std::mutex> lock(mutex_);
             isDataValid_ = value;
         }
 
@@ -146,8 +182,7 @@ namespace Microsoft::Devices::Sensors
               isDataValid_(false),
               isSupported_(false),
               timeBetweenUpdates_(System::TimeSpan::Zero),
-              currentValue_(),
-              eventArgs_(TSensorReading())
+              currentValue_()
         {
             setTimeBetweenUpdatesProperty(System::TimeSpan::FromMilliseconds(2.0));
         }
@@ -172,13 +207,23 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Gets the current sensor reading.
          *
+         * Returns a copy (Task P5-2) rather than a reference to internal
+         * state, since that state can be concurrently overwritten from the
+         * SDL sensor event-watch callback thread for real, SDL3-backed
+         * sensors — a caller holding a reference into currentValue_ across
+         * such a write would see a torn/inconsistent value. This also
+         * matches the real WP7 API more closely: the C# CurrentValue
+         * property returns a value-type reading, not a reference.
+         *
          * @return Current sensor reading.
          *
          * @throws System::InvalidOperationException if the sensor is not supported on
          * this device. Use IsSupported to check before accessing this property.
          */
-        [[nodiscard]] const TSensorReading& getCurrentValueProperty() const
+        [[nodiscard]] TSensorReading getCurrentValueProperty() const
         {
+            std::lock_guard<std::mutex> lock(mutex_);
+
             if (!isSupported_)
             {
                 throw System::InvalidOperationException(
@@ -195,6 +240,7 @@ namespace Microsoft::Devices::Sensors
          */
         [[nodiscard]] bool getIsDataValidProperty() const
         {
+            std::lock_guard<std::mutex> lock(mutex_);
             return isDataValid_;
         }
 

@@ -272,6 +272,46 @@ no GPU to run them against." Out of scope for this Devices-focused plan per
 `include/Microsoft/Devices/Sensors/Gyroscope.hpp`,
 `src/Microsoft/Devices/Sensors/Gyroscope.cpp`, relevant test files.
 
+**Resolution (2026-07-04):** Implemented as scoped, with two simplifications found
+during implementation:
+- `SensorBase<T>::eventArgs_` (the shared, reused `SensorReadingEventArgs<T>` member)
+  was **removed entirely** rather than kept and locked — it was only ever touched from
+  inside `setCurrentValueProperty()`, so replacing it with a local, per-call
+  `SensorReadingEventArgs<T>` temporary removes the race on it completely (a concurrent
+  dispatch on another thread can never mutate event args this call is still raising
+  with, since each call now owns its own) without needing any additional locking
+  around it.
+- `getCurrentValueProperty()`'s return type changed from `const TSensorReading&` to
+  `TSensorReading` (by value) — returning a reference into a mutex-protected member
+  would let a caller hold a reference whose backing storage could be overwritten the
+  instant the lock releases (a torn/inconsistent read, not memory-unsafe but still
+  wrong). Confirmed zero existing call sites bind to a reference (`grep` across
+  `tests/`/`src/`/`examples/` — every call site is `(void)x.getCurrentValueProperty()`
+  or passes the temporary straight into a comparison), so this doesn't break anything,
+  and it's arguably more faithful to the real WP7 API — `AccelerometerReading`/etc. are
+  C# structs (value types), so the real `CurrentValue` getter already returns a copy,
+  not a reference, at the C# language level.
+- `inFlightCallback_` → `inFlightCallbackCount_`: implemented exactly as scoped in both
+  `Accelerometer`/`Gyroscope`. `InjectSyntheticSensorUpdate()` (the `NOXNA` test hook)
+  now also increments/decrements the same counter around its dispatch, so a handler
+  that calls `Dispose()` on the same instance from within a synthetic-update-triggered
+  callback is recognized identically to the real SDL event-watch path (needed for Task
+  P5-3, next).
+- Tests: rather than a synthetic test-only hook for "simulating" overlap, added
+  `ConcurrentSyntheticUpdatesDoNotCrashAndDrainBeforeDispose` to both
+  `AccelerometerTests.cpp`/`GyroscopeTests.cpp` — 8 real `std::thread`s each calling
+  `InjectSyntheticSensorUpdate()` 10 times concurrently on the same instance (each
+  handler invocation sleeps 1ms to widen the overlap window), confirming no crash, all
+  80 events received, and a subsequent `Dispose()` completes (doesn't hang) once every
+  thread finishes — exercising the real counter/lock/condition-variable machinery under
+  genuine concurrent contention rather than a synthetic simulation.
+
+Verified: `CNA`/`CnaTests` build clean; Devices-only filter 39/39 passing (2 expected
+skips); full `ctest` 1999 tests, same 2 pre-existing unrelated `EasyGL`/`easy-gl`
+failures as Task P5-1's new baseline — no regressions. The self-dispose deadlock
+(Audit finding accepted-limitation) is **not yet fixed** — confirmed still present at
+this commit (both header comments explicitly say so); Task P5-3 fixes it next.
+
 ---
 
 ## Task P5-3 — Remove the self-dispose deadlock accepted-limitation

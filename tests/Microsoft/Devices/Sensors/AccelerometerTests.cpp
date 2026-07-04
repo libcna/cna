@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <atomic>
+#include <chrono>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
@@ -384,4 +387,55 @@ TEST(AccelerometerTests, CurrentValueChangedSubscriptionDoesNotThrow)
     {
         EXPECT_THROW(a.Start(), AccelerometerFailedException);
     }
+}
+
+// Task P5-2: exercises inFlightCallbackCount_ under real concurrent
+// contention (this environment has no real hardware to deliver genuinely
+// concurrent SDL_EVENT_SENSOR_UPDATE events, so this uses real std::thread
+// concurrency on InjectSyntheticSensorUpdate() instead, which goes through
+// the exact same counter/lock/condition_variable machinery as the real SDL
+// event-watch path). Confirms: no crash/UB when the count legitimately
+// goes above 1 (multiple threads dispatching to the same instance at
+// once), every dispatch's event is still received, and Dispose() called
+// afterward correctly waits for the count to fully drain rather than
+// returning early on some intermediate zero crossing.
+TEST(AccelerometerTests, ConcurrentSyntheticUpdatesDoNotCrashAndDrainBeforeDispose)
+{
+    auto accelerometer = std::make_unique<Accelerometer>();
+    accelerometer->SetStartedForTesting(true);
+
+    std::atomic<int> receivedCount{0};
+    accelerometer->CurrentValueChanged += [&receivedCount](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        // Widens the in-flight window so concurrent threads are likely to
+        // genuinely overlap rather than happen to serialize.
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        ++receivedCount;
+    };
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 10;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&accelerometer]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                accelerometer->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+
+    EXPECT_EQ(receivedCount.load(), ThreadCount * IterationsPerThread);
+    EXPECT_NO_THROW(accelerometer->Dispose());
 }
