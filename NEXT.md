@@ -60,22 +60,48 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean (uncommitted changes on top of `2463eed`, `HEAD` at last commit). EasyGL
-  backend, `SOUND_ENABLED` on, SDL3_mixer linked. Verified immediately before writing this update;
-  also rebuilt `cna_demo_sound`/`cna_demo_2d` (the example targets, `CNA_BUILD_EXAMPLES=ON` by
-  default) — no failures.
-- **Tests:** `CnaTests` **2090 / 2090 pass** (2064 at the last handoff snapshot, +26 net new across
-  Fáze 9's `P9-LIFECYCLE-001..015`, `P9-CATEGORY-001..004`, and `P9-VALIDATION-001..015`; `P9-DOCS`
-  is docs-only, no test count change). No known regressions. Also verified clean under a full
+- **Build:** clean (uncommitted changes on top of `cdec800`, `HEAD` at last commit). EasyGL
+  backend, `SOUND_ENABLED` on, SDL3_mixer linked. Verified via BOTH the long-standing manual
+  `cmake-build-debug/` AND the new `tests` CMake preset (`cmake-build-tests/`, freshly deleted and
+  reconfigured from scratch); also rebuilt `cna_demo_sound`/`cna_demo_2d` — no failures.
+- **Tests:** `CnaTests` **2090 / 2090 pass, reliably** (2064 at the last handoff snapshot, +26 net
+  new across Fáze 9's `P9-LIFECYCLE-001..015`, `P9-CATEGORY-001..004`, and `P9-VALIDATION-001..015`;
+  `P9-DOCS` was docs-only). Stress-tested 5+ consecutive full-suite runs post-`P9-BUILD-007` fix
+  (see below) with zero failures, across both build directories. Also verified clean under a full
   ASan+UBSan build.
   Re-run to check for drift: `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
 - **CLI/tools/apps:** none in the framework itself. `cna_demo_sound`/`cna_demo_2d` aren't part of
   `CnaTests` and are easy to forget when just running `--target CnaTests` — see §7 for how to
   rebuild them; both still build clean as of this update.
 - **Fáze 9 (started 2026-07-04, user-directed "audio correctness hardening" pass): `P9-LIFECYCLE`,
-  `P9-CATEGORY`, `P9-VALIDATION`, and `P9-DOCS` are now fully closed, 6 of Fáze 9's 11 task groups
-  untouched.** This is the user's own scoped plan (not a repeat of the Fáze 7/8 "fresh full audit
-  against FNA" pattern) — see `plan_audio.md`'s new "Phase 9" section for the complete task list.
+  `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, and `P9-BUILD` are now fully closed, 5 of Fáze 9's 11
+  task groups untouched.** This is the user's own scoped plan (not a repeat of the Fáze 7/8 "fresh
+  full audit against FNA" pattern) — see `plan_audio.md`'s new "Phase 9" section for the complete
+  task list.
+  - **`P9-BUILD-001..007` (2026-07-04): found and fixed a real, reproducible data race while
+    verifying "all audio tests pass from a clean checkout."** Added `CMakePresets.json`'s first
+    native desktop preset (`tests` — EasyGL, Debug, tests+examples on; the only prior preset was
+    Emscripten-only). While verifying the full suite from a freshly-deleted build directory, 3 of
+    the `T-4C` DSP-filter tests (`SoundEffectInstanceTest`'s Low/HighPass convergence tests and the
+    move-survival test) turned out to be genuinely flaky (~15-25% failure rate over repeated
+    runs) — not a `ctest`-specific artifact, reproduced via direct repeated binary invocation too.
+    Root cause: these tests call `Play()` (required so the DSP filter has a live track to attach
+    its real SDL3_mixer "cooked" callback to) and then run up to 2000 manual, synchronous
+    `ProcessFilterSamplesForTest()` calls — but `Play()` also starts the real background mixing
+    thread (active even under the SDL dummy driver, which simulates real-time playback via its own
+    timer thread), which periodically invokes that SAME real callback concurrently with the test's
+    manual calls, racing unsynchronized on the shared `FilterState` (`yl`/`yb`). Confirmed the
+    filter math itself has no marginal-stability issue (an isolated single-threaded reproduction of
+    the exact recursion converges reliably by iteration ~40 of 2000). Fixed: all 6
+    `Apply*Filter`-using tests now call `inst.Stop(true)` immediately after applying the filter and
+    before the first manual sample-processing call — halts the real track (and with it the race)
+    without touching `filterState_` (only `Dispose()` does that). Stress-tested 40+ isolated runs
+    and 5+ full-suite runs post-fix, zero failures. Also found (via `ctest`'s one-process-per-test
+    model specifically, not the project's primary test-running method) a second, pre-existing,
+    unrelated issue — several tests share hardcoded `/tmp/cna_*_test/` fixture paths, safe for a
+    single-process full-suite run but not under `ctest`'s cross-process parallelism — documented as
+    a `ctest`-mode caveat in the new preset's own description, not fixed (would need per-process-
+    unique temp paths across dozens of fixture builders, out of scope for this task).
   - **`P9-DOCS-001..007` (2026-07-04):** synchronized `AUDIT.md`, `docs/xna-4-api-coverage.md`, and
     the audio-specific rows of `docs/coverage.md` against real current code — all three had stale
     "XACT unimplemented"/"Microphone stub-only"/"3D pan still stubbed" claims predating this
@@ -260,7 +286,19 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
-- *(uncommitted)* — **`P9-VALIDATION-001..015`**: found and fixed a real out-of-bounds memory
+- *(uncommitted)* — **`P9-BUILD-001..007`**: added `CMakePresets.json`'s first native desktop
+  preset (`tests`); found and fixed a real, reproducible data race in 3 `T-4C` DSP-filter tests
+  (real SDL3_mixer mixing thread racing the test's synchronous filter-processing calls on shared
+  `FilterState`), confirmed by ~15-25% failure rate over repeated runs and fixed by stopping the
+  track before the manual test loop. `P9-BUILD` group now fully closed (7/7). See §2/`plan_audio.md`'s
+  Phase 9 section for full detail.
+- `7bec360`/`cdec800` — **`P9-DOCS-001..007`**: synchronized `AUDIT.md`, `docs/xna-4-api-coverage.md`,
+  and the audio-specific rows of `docs/coverage.md` against real current code (several predated
+  this branch's work entirely); added a consolidated Audio compatibility table, an SDL3_mixer-vs-
+  FAudio/FACT backend-limitations writeup, and an "FNA-matching fix vs. permanent compromise"
+  distinction, all in `docs/xna-4-api-coverage.md`. `P9-DOCS` group now fully closed (7/7). Docs-only,
+  no test count change. See §2/`plan_audio.md`'s Phase 9 section.
+- `8f439dd`/`2463eed` — **`P9-VALIDATION-001..015`**: found and fixed a real out-of-bounds memory
   bug confirmed by a segfault (`offset+count` int32-overflow in `SoundEffect`'s buffer/range ctor
   and `DynamicSoundEffectInstance::SubmitBuffer`/`SubmitFloatBufferEXT`), plus a real `Resume()`
   behavior gap (didn't call `Play()` when never-started/disposed, unlike FNA) and a missing
@@ -495,16 +533,18 @@ findings, fixed in an earlier session).
 ## 4. Current blocker / main problem
 
 **No build- or test-breaking blocker.** No failing command, no failing test. The build is clean
-and all 2090 tests pass. `cna_demo_sound`/`cna_demo_2d` also rebuilt clean. Changes are
-**uncommitted** on top of `2463eed` (`HEAD`) — see §8 for the suggested commit boundary.
+and all 2090 tests pass reliably (stress-tested, see §2). `cna_demo_sound`/`cna_demo_2d` also
+rebuilt clean. Changes are **uncommitted** on top of `cdec800` (`HEAD`) — see §8 for the suggested
+commit boundary.
 
 **Fáze 7, the pre-existing older backlog, and Fáze 8 are fully closed. `P9-LIFECYCLE` (15/15),
-`P9-CATEGORY` (4/4), `P9-VALIDATION` (15/15), and `P9-DOCS` (7/7) are now also fully closed. Fáze 9
-as a whole (user-directed hardening pass, started 2026-07-04) is still NOT fully closed** — every
-other one of Fáze 9's 7 remaining task groups (`P9-STOP`/`P9-XACT`/`P9-3D`/`P9-HARDWARE`/
-`P9-DYNAMIC`/`P9-BUILD`, plus `P9-AUDIT` itself) are still open. This is real, tracked open work —
-not a "no known open item" state like the prior handoff. See `plan_audio.md`'s "Phase 9" section
-for the full unchecked list, and §8 below for the user-specified implementation order to continue in.
+`P9-CATEGORY` (4/4), `P9-VALIDATION` (15/15), `P9-DOCS` (7/7), and `P9-BUILD` (7/7) are now also
+fully closed. Fáze 9 as a whole (user-directed hardening pass, started 2026-07-04) is still NOT
+fully closed** — every other one of Fáze 9's 6 remaining task groups (`P9-STOP`/`P9-XACT`/`P9-3D`/
+`P9-HARDWARE`/`P9-DYNAMIC`, plus `P9-AUDIT` itself) are still open. This is real, tracked open
+work — not a "no known open item" state like the prior handoff. See `plan_audio.md`'s "Phase 9"
+section for the full unchecked list, and §8 below for the user-specified implementation order to
+continue in.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, which is under separate, active, concurrent development by another session.
@@ -780,6 +820,42 @@ Microphone (capture)
 
 ## 7. Useful commands
 
+### Dependencies (`P9-BUILD-004`)
+
+- **SDL3 / SDL3_image / SDL3_mixer**: git submodules under `third_party/` (`.gitmodules`). First
+  configure builds them from source into the persistent `.sdl-prebuilt/` install root (survives
+  build-directory deletion — only `rm -rf .sdl-prebuilt` forces a full rebuild); every later
+  configure/build reuses that cache. Pass `-DCNA_USE_SYSTEM_SDL=ON` to use system-installed SDL3
+  packages via `find_package` instead of the vendored submodules. A missing/uninitialized
+  submodule fails configure with a clear, actionable `FATAL_ERROR` message telling you to run
+  `git submodule update --init --recursive` (`cmake/ThirdPartySDL.cmake`, verified `P9-BUILD-003`).
+- **googletest**: a git submodule under `vendor/`, always built from source via
+  `add_subdirectory(vendor/googletest)` when `CNA_BUILD_TESTS=ON` — there is no system-package
+  option for it.
+- **FFmpeg** (`libavcodec`/`libavformat`/`libavutil`/`libswresample`): a real system package
+  dependency, not vendored — see `CLAUDE.md`'s "System Dependencies (Linux)" section for the
+  `apt-get install` line. Required for `VideoPlayer`, unrelated to the Audio namespace itself.
+- Run `git submodule update --init --recursive` once after cloning before configuring anything.
+
+### Native desktop test preset (`P9-BUILD-002`, added 2026-07-04)
+
+```bash
+# Configure + build + run, using the new "tests" preset (EasyGL, Debug, tests+examples on)
+cmake --preset tests
+cmake --build --preset tests --target CnaTests -j"$(nproc)"
+SDL_AUDIODRIVER=dummy ./cmake-build-tests/CnaTests
+```
+
+Running the `CnaTests` binary directly (as above) — not `ctest` — is the authoritative way to run
+the suite. `ctest` (via `gtest_discover_tests`) runs each test case as its own short-lived process,
+which (a) reports every unbuilt, display-dependent graphics smoke-test executable as failed unless
+you also build every target, and (b) can race on hardcoded `/tmp/cna_*_test/` fixture paths shared
+by several tests across independently-scheduled processes (safe for the single-process full-suite
+run this project has always used; not safe under `ctest`'s cross-process parallelism). Neither is a
+real bug in the tests themselves — see `plan_audio.md`'s `P9-BUILD-007` note.
+
+### Manual configure (equivalent, without presets)
+
 ```bash
 # Configure (EasyGL, audio enabled) — run from the cna_audio repo root
 cmake -B cmake-build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug \
@@ -833,28 +909,28 @@ grep -n "<symbol>" /rv/data/library/github.com/FNA-XNA/FAudio/src/FACT_internal.
 **Fáze 9 is a real, user-specified, still-open task list — continue it, don't invent a new one.**
 The user gave an explicit implementation order; pick up exactly where it left off:
 
-**`P9-LIFECYCLE` (15/15), `P9-CATEGORY` (4/4), `P9-VALIDATION` (15/15), and `P9-DOCS` (7/7) are now
-fully closed as of 2026-07-04.** The one thing left behind is a genuine open decision, not a task:
-the `IsPlaying`+`IsPaused` coexistence deviation (§5/§6, now also in `CHECKLIST.md`) — fixing it
-would touch `PauseCategoryInternal`/`ResumeCategoryInternal` and existing tests, similar in shape
-to the Fáze 8 `CP-19`/`CP-18`/`XA-9` "touches shared infrastructure" decisions, so ask the user
-before implementing rather than picking a side. It is NOT blocking anything else in Fáze 9.
+**`P9-LIFECYCLE` (15/15), `P9-CATEGORY` (4/4), `P9-VALIDATION` (15/15), `P9-DOCS` (7/7), and
+`P9-BUILD` (7/7) are now fully closed as of 2026-07-04.** The one thing left behind is a genuine
+open decision, not a task: the `IsPlaying`+`IsPaused` coexistence deviation (§5/§6, now also in
+`CHECKLIST.md`) — fixing it would touch `PauseCategoryInternal`/`ResumeCategoryInternal` and
+existing tests, similar in shape to the Fáze 8 `CP-19`/`CP-18`/`XA-9` "touches shared
+infrastructure" decisions, so ask the user before implementing rather than picking a side. It is
+NOT blocking anything else in Fáze 9.
 
-1. **`P9-BUILD-001..007`** next per the user's specified order (verify a clean checkout can
-   configure/build/test audio, document a native desktop CMake preset, document dependency
-   expectations, document the SDL dummy audio driver setup) — this is the last group before the
-   user's specified order moves to the lower-priority groups.
-2. **`P9-STOP`, `P9-XACT`, `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`** come last per the user's own
-   ordering — don't jump ahead to these before `P9-BUILD` is done.
-3. **`P9-AUDIT-001..005`** (the fresh-read audit tasks) were never in the user's explicit
+1. **`P9-STOP`, `P9-XACT`, `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`** are all that's left of Fáze 9's
+   explicit task groups — the user's order doesn't distinguish priority among these five, so any
+   reasonable starting point is fine; `P9-STOP` (stop semantics/authored-stop-tail correctness) is
+   the most natural next pick since it's the closest in spirit to the just-closed `P9-LIFECYCLE`/
+   `P9-CATEGORY` work.
+2. **`P9-AUDIT-001..005`** (the fresh-read audit tasks) were never in the user's explicit
    implementation order and remain unchecked; the per-file reading needed to fix
-   `P9-LIFECYCLE`/`P9-CATEGORY`/`P9-VALIDATION` happened ad hoc but the formal audit deliverable
-   (comparison write-up) was never produced — pick this up if asked, or fold it into whichever
-   group is being worked when a stale-doc inconsistency is found.
+   `P9-LIFECYCLE`/`P9-CATEGORY`/`P9-VALIDATION`/`P9-BUILD` happened ad hoc but the formal audit
+   deliverable (comparison write-up) was never produced — pick this up if asked, or fold it into
+   whichever group is being worked when a stale-doc inconsistency is found.
 
-**Commit boundary:** everything in this handoff (`P9-DOCS-001..007` fix + this `NEXT.md` update)
-is currently uncommitted on top of `2463eed` — commit before starting `P9-BUILD` so this fix isn't
-bundled with unrelated work.
+**Commit boundary:** everything in this handoff (`P9-BUILD-001..007` fix + this `NEXT.md` update)
+is currently uncommitted on top of `cdec800` — commit before starting the next group so this fix
+isn't bundled with unrelated work.
 
 ---
 
@@ -886,22 +962,24 @@ bundled with unrelated work.
 ```
 Read NEXT.md first, then plan_audio.md if you need file-by-file history. Fáze 7 (30 items),
 Fáze 8 (25 items), and now all 15 of P9-LIFECYCLE, all 4 of P9-CATEGORY, all 15 of
-P9-VALIDATION, and all 7 of P9-DOCS are fully done (2026-07-04). Fáze 9 as a whole is still IN
-PROGRESS: P9-STOP/P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC/P9-BUILD/P9-AUDIT are all still open -- see
-§4/§8. This is real open work, don't treat this branch as "nothing left to do."
+P9-VALIDATION, all 7 of P9-DOCS, and all 7 of P9-BUILD are fully done (2026-07-04). Fáze 9 as a
+whole is still IN PROGRESS: P9-STOP/P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC/P9-AUDIT are all still
+open -- see §4/§8. This is real open work, don't treat this branch as "nothing left to do."
 
-1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2090/2090 tests pass) --
-   rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests to check for drift since
-   this was last updated. Also rebuild cna_demo_sound/cna_demo_2d if you touch anything on the
-   Audio public API surface -- they're not part of CnaTests and easy to forget.
-2. Commit the uncommitted P9-DOCS-001..007 work first (see §8's "Commit boundary") if it isn't
+1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2090/2090 tests pass,
+   reliably -- stress-test with a few repeated runs if you're not sure, see §2's P9-BUILD-007
+   note) -- rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests (or the new
+   `tests` CMake preset, see §7) to check for drift since this was last updated. Also rebuild
+   cna_demo_sound/cna_demo_2d if you touch anything on the Audio public API surface -- they're not
+   part of CnaTests and easy to forget.
+2. Commit the uncommitted P9-BUILD-001..007 work first (see §8's "Commit boundary") if it isn't
    already committed, so the next group starts from a clean base.
 3. Continue Fáze 9 in the order specified in plan_audio.md's "Phase 9" section / this file's §8:
-   P9-BUILD-001..007 next, then
-   P9-STOP/P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC last. Don't invent a "Fáze 10" full re-audit on
-   your own initiative (see §9) -- Fáze 9's own task list is not exhausted yet. The one leftover
-   decision from P9-LIFECYCLE (IsPlaying+IsPaused coexistence, §5/§6, CHECKLIST.md) is NOT
-   blocking -- ask the user before implementing it, don't let it stall P9-BUILD.
+   P9-STOP/P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC are all that's left (no further ordering among
+   them from the user). Don't invent a "Fáze 10" full re-audit on your own initiative (see §9) --
+   Fáze 9's own task list is not exhausted yet. The one leftover decision from P9-LIFECYCLE
+   (IsPlaying+IsPaused coexistence, §5/§6, CHECKLIST.md) is NOT blocking -- ask the user before
+   implementing it, don't let it stall the next group.
 4. Follow the established git-stash regression-verification pattern (see NEXT.md §7) for any
    behavioral fix -- stash it, confirm the new test fails against the pre-fix code, restore,
    confirm green. Run ASan+LeakSanitizer too if the change touches memory lifetime, ownership, or
