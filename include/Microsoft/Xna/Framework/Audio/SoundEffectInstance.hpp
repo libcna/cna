@@ -123,10 +123,10 @@ namespace Microsoft::Xna::Framework::Audio
         virtual void Stop(bool immediate);
 
         /** @brief Pauses playback of this instance. */
-        void Pause();
+        virtual void Pause();
 
         /** @brief Resumes a paused instance. */
-        void Resume();
+        virtual void Resume();
 
         /** @brief Releases this sound effect instance. */
         void Dispose() override;

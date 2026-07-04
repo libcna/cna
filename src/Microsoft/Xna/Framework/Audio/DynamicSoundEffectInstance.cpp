@@ -143,7 +143,9 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        MIX_SetTrackGain(track, getVolumeProperty() * SoundEffect::getMasterVolumeProperty());
+        // CP-16: master volume is applied globally via MIX_SetMixerGain, not baked into each
+        // track's own gain (that would double-apply it -- see SoundEffect::setMasterVolumeProperty).
+        MIX_SetTrackGain(track, getVolumeProperty());
 
         SDL_PropertiesID props = SDL_CreateProperties();
         if (props != 0)
@@ -213,6 +215,36 @@ namespace Microsoft::Xna::Framework::Audio
         std::lock_guard<std::mutex> lock(Microsoft::Xna::Framework::FrameworkDispatcher::StreamsMutex);
         auto& streams = Microsoft::Xna::Framework::FrameworkDispatcher::Streams;
         streams.erase(std::remove(streams.begin(), streams.end(), this), streams.end());
+    }
+
+    void DynamicSoundEffectInstance::Pause()
+    {
+#ifdef SOUND_ENABLED
+        // CP-15: the base SoundEffectInstance::Pause() operates on the protected `track_`
+        // member, which a dynamic instance never populates (Play()/Stop() above manage their
+        // own `dynamicTrack_` instead) -- without this override, Pause()/Resume() were silent
+        // no-ops on every DynamicSoundEffectInstance.
+        MIX_Track* track = AsTrackD(dynamicTrack_);
+        if (track && getStateProperty() == SoundState::Playing)
+        {
+            MIX_PauseTrack(track);
+            State_   = SoundState::Paused;
+            playing_ = false;
+        }
+#endif
+    }
+
+    void DynamicSoundEffectInstance::Resume()
+    {
+#ifdef SOUND_ENABLED
+        MIX_Track* track = AsTrackD(dynamicTrack_);
+        if (track && getStateProperty() == SoundState::Paused)
+        {
+            MIX_ResumeTrack(track);
+            State_   = SoundState::Playing;
+            playing_ = true;
+        }
+#endif
     }
 
     void DynamicSoundEffectInstance::Dispose()

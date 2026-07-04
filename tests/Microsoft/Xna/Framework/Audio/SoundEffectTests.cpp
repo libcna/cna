@@ -16,10 +16,15 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
+#include "SoundEffectInstanceTestAccess.hpp"
+#include "CNA/Internal/Audio/AudioMixer.hpp"
+
+#include <SDL3_mixer/SDL_mixer.h>
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
+using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundState;
 
 // T-3G: SoundEffect must be move-only -- a single, unambiguous owner per underlying resource
@@ -129,7 +134,20 @@ TEST(SoundEffectTest, GetSampleDurationZeroForBadFormat)
 
 TEST(SoundEffectTest, MasterVolumePassesThroughUnclamped)
 {
-    const float saved = SoundEffect::getMasterVolumeProperty();
+    // CP-16: the getter/setter now round-trip through SDL3_mixer's real master gain
+    // (MIX_GetMixerGain/MIX_SetMixerGain), matching FNA's own live-query-the-device semantics
+    // (SoundEffect.cs's MasterVolume queries/sets the FAudio master voice directly, no local
+    // cache) -- so this now needs a (dummy) audio device, unlike before this fix.
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    float saved = 1.0f;
+    try
+    {
+        saved = SoundEffect::getMasterVolumeProperty();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
     SoundEffect::setMasterVolumeProperty(0.5f);
     EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 0.5f);
     SoundEffect::setMasterVolumeProperty(2.0f); // FNA does not clamp
@@ -137,6 +155,57 @@ TEST(SoundEffectTest, MasterVolumePassesThroughUnclamped)
     SoundEffect::setMasterVolumeProperty(1.25f); // move overload
     EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 1.25f);
     SoundEffect::setMasterVolumeProperty(saved);
+}
+
+// CP-16: MasterVolume must retroactively affect already-playing sounds, not just future Play()
+// calls -- SDL3_mixer's MIX_SetMixerGain is a real global stage applied at mix time, so a track's
+// own gain (Volume_ only) must stay constant while the mixer's gain is what actually changes.
+TEST(SoundEffectTest, MasterVolumeAffectsAlreadyPlayingInstanceViaMixerGainNotTrackGain)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto effect = makeEffect();
+    if (!effect)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    const float savedMaster = SoundEffect::getMasterVolumeProperty();
+    try
+    {
+        SoundEffect::setMasterVolumeProperty(1.0f);
+        SoundEffectInstance instance = effect->CreateInstance();
+        instance.setVolumeProperty(0.8f);
+        instance.Play();
+        if (instance.getStateProperty() != SoundState::Playing)
+        {
+            SoundEffect::setMasterVolumeProperty(savedMaster);
+            GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+        }
+
+        MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(instance);
+        ASSERT_NE(track, nullptr);
+        const float trackGainBefore = MIX_GetTrackGain(track);
+
+        SoundEffect::setMasterVolumeProperty(0.25f);
+
+        // The real discriminator: query SDL3_mixer's own mixer-level gain directly (not just
+        // SoundEffect::getMasterVolumeProperty(), which pre-fix round-tripped through a plain
+        // static field regardless of the mixer -- that alone wouldn't prove anything reached the
+        // mixer). This is the actual live mechanism that must reflect the new value while the
+        // instance keeps playing, with no per-instance re-application needed.
+        EXPECT_FLOAT_EQ(MIX_GetMixerGain(CNA::Internal::Audio::GetMixer()), 0.25f);
+        // The track's own gain must NOT have been touched by the MasterVolume change (it still
+        // reflects only Volume_) -- otherwise master volume would be double-applied once mixed
+        // with the mixer's own gain.
+        EXPECT_FLOAT_EQ(MIX_GetTrackGain(track), trackGainBefore);
+        EXPECT_FLOAT_EQ(MIX_GetTrackGain(track), 0.8f);
+    }
+    catch (...)
+    {
+        SoundEffect::setMasterVolumeProperty(savedMaster);
+        throw;
+    }
+    SoundEffect::setMasterVolumeProperty(savedMaster);
 }
 
 TEST(SoundEffectTest, DistanceScaleRejectsNonPositive)

@@ -98,6 +98,12 @@ namespace Microsoft::Xna::Framework::Audio
          */
         void Stop(bool immediate) override;
 
+        /** @brief Pauses playback of this instance. */
+        void Pause() override;
+
+        /** @brief Resumes a paused instance. */
+        void Resume() override;
+
         /**
          * @brief Submits a complete 16-bit PCM byte buffer for playback.
          *

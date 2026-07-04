@@ -243,3 +243,41 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededDoesNotFireWhenStreamHasEnoughD
 
     EXPECT_EQ(fired, 0);
 }
+
+// CP-15: Pause()/Resume() used to be silent no-ops on DynamicSoundEffectInstance -- the base
+// class's (non-virtual, pre-fix) implementation only ever touched the protected `track_` member,
+// which a dynamic instance never populates (Play()/Stop() manage their own `dynamicTrack_`).
+TEST(DynamicSoundEffectInstanceTest, PauseThenResumeActuallyPausesAndResumesDynamicTrack)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    ASSERT_EQ(d.getStateProperty(), SoundState::Playing);
+
+    d.Pause();
+    EXPECT_EQ(d.getStateProperty(), SoundState::Paused);
+
+    d.Resume();
+    EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
+}
+
+// Pausing via a SoundEffectInstance& base reference must resolve to the override (CP-15) --
+// confirms the fix relies on virtual dispatch, not on callers happening to use the derived type.
+TEST(DynamicSoundEffectInstanceTest, PauseViaBaseRefResolvesToOverride)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    SoundEffectInstance& base = d;
+    base.Pause();
+    EXPECT_EQ(d.getStateProperty(), SoundState::Paused);
+
+    base.Resume();
+    EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
+}

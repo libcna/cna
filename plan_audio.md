@@ -1083,7 +1083,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 
 #### 8.1 Core Playback (SoundEffect, SoundEffectInstance, DynamicSoundEffectInstance)
 
-- [ ] **CP-15 — `DynamicSoundEffectInstance::Pause()`/`Resume()` jsou mrtvý kód.**
+- [x] **CP-15 — `DynamicSoundEffectInstance::Pause()`/`Resume()` jsou mrtvý kód.**
   `Pause()`/`Resume()` (SoundEffectInstance.cpp:373-397) nejsou `virtual` a vždy pracují s
   chráněným `track_`. `DynamicSoundEffectInstance::Play()`/`Stop()` mají vlastní override, ale
   pracují výhradně s vlastním `dynamicTrack_` (`track_` u dynamic instance zůstává navždy
@@ -1094,8 +1094,13 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* `DynamicSoundEffectInstance::Pause()`/`Resume()` (přes `virtual` na base, nebo sdílenou
   abstrakcí handle) skutečně pozastaví/obnoví `dynamicTrack_`; test: `Play()`→`Pause()`→assert
   `State==Paused`→`Resume()`→assert `State==Playing`, pod dummy driverem.
+  *Pozn.:* `Pause()`/`Resume()` teď `virtual` na base; `DynamicSoundEffectInstance` má vlastní
+  override operující na `dynamicTrack_` (stejný vzorec jako existující `Play()`/`Stop()`
+  override). Přidány 2 testy (`Play→Pause→Resume` přímo i přes `SoundEffectInstance&` base
+  referenci, ověřující virtual dispatch). `git stash` potvrdil selhání obou proti staré
+  (nevirtuální) implementaci.
 
-- [ ] **CP-16 — `SoundEffect::MasterVolume` neovlivňuje už hrající zvuky.**
+- [x] **CP-16 — `SoundEffect::MasterVolume` neovlivňuje už hrající zvuky.**
   `MasterVolume_` je statický float násobený do gain jen v okamžiku `Play()`/`setVolumeProperty()`.
   Změna `MasterVolume` po spuštění zvuku nemá na již hrající instance (ani na fire-and-forget
   `SoundEffect::Play()` tracky) žádný vliv — SDL3_mixer přitom má reálný globální mixer gain
@@ -1104,6 +1109,18 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *CNA:* SoundEffect.cpp:210-223,298-311; SoundEffectInstance.cpp:314,541.
   *Accept:* `setMasterVolumeProperty` použije `MIX_SetMixerGain` (nebo re-aplikuje gain na všechny
   živé tracky); test ověří `MIX_GetTrackGain` po změně `MasterVolume` na již hrající instanci.
+  *Pozn.:* `getMasterVolumeProperty`/`setMasterVolumeProperty` teď čtou/píší přímo
+  `MIX_GetMixerGain`/`MIX_SetMixerGain` (živě, žádná lokální cache — stejně jako FNA vždy
+  dotazuje/nastavuje reálný FAudio master voice). Aby nedošlo ke dvojímu započtení, master volume
+  se přestalo násobit do gain jednotlivých tracků (`ApplyTrackProperties` ztratil parametr
+  `masterVolume`; `SoundEffect::Play()`'s fire-and-forget cesta a `SoundEffectInstance::
+  setVolumeProperty`/`DynamicSoundEffectInstance::Play()` už ho také nenásobí) — mixer gain je
+  teď jediný mechanismus a aplikuje se živě na všechny tracky včetně už hrajících, bez nutnosti
+  cokoliv ručně znovu-aplikovat. Přidán test ověřující `MIX_GetMixerGain` (ne `MIX_GetTrackGain`,
+  který zůstává záměrně konstantní) po změně `MasterVolume` na už hrající instanci — první verze
+  testu omylem kontrolovala jen `getMasterVolumeProperty()`, což by prošlo i proti staré
+  (nefunkční) implementaci, protože ta taky jen round-tripuje přes statické pole; opraveno na
+  přímé `MIX_GetMixerGain` volání, `git stash` pak potvrdil selhání proti staré implementaci.
 
 - [ ] **CP-17 — `SoundEffect`'s loop region (`loopStart`/`loopLength`) se zachytí, ale nikdy nepoužije.**
   Bufferová konstrukce s explicitním loop rozsahem uloží `loopStart_`/`loopLength_`, ale nic je

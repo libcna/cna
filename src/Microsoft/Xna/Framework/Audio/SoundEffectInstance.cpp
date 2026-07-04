@@ -48,12 +48,15 @@ namespace Microsoft::Xna::Framework::Audio
             return static_cast<MIX_Track*>(p);
         }
 
-        void ApplyTrackProperties(MIX_Track* track, float volume, float masterVolume,
-                                  float pan, float pitch)
+        // CP-16: master volume is applied once, globally, via MIX_SetMixerGain (SDL3_mixer's own
+        // master gain stage), not baked into each track's own gain here -- doing both would
+        // double-apply it, and only the mixer-level gain re-applies live to already-playing
+        // tracks without this function needing to be called again.
+        void ApplyTrackProperties(MIX_Track* track, float volume, float pan, float pitch)
         {
             if (!track) return;
 
-            MIX_SetTrackGain(track, volume * masterVolume);
+            MIX_SetTrackGain(track, volume);
 
             MIX_StereoGains stereo{};
             stereo.left  = (pan < 0.0f) ? 1.0f : (1.0f - pan);
@@ -311,7 +314,7 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        ApplyTrackProperties(track, Volume_, SoundEffect::getMasterVolumeProperty(), Pan_, Pitch_);
+        ApplyTrackProperties(track, Volume_, Pan_, Pitch_);
 
         SDL_PropertiesID props = SDL_CreateProperties();
         if (props == 0)
@@ -500,8 +503,7 @@ namespace Microsoft::Xna::Framework::Audio
         // multiplicatively with the voice's own Volume at the audio-engine level and never
         // touches INTERNAL_volume/INTERNAL_pan, so Volume/Pan continue to report exactly what the
         // caller last set via the setters, unaffected by 3D positioning.
-        ApplyTrackProperties(AsTrack(track_), atten * Volume_,
-                              SoundEffect::getMasterVolumeProperty(), pan, Pitch_);
+        ApplyTrackProperties(AsTrack(track_), atten * Volume_, pan, Pitch_);
 #endif
     }
 
@@ -538,7 +540,7 @@ namespace Microsoft::Xna::Framework::Audio
         MIX_Track* track = AsTrack(track_);
         if (track)
         {
-            MIX_SetTrackGain(track, Volume_ * SoundEffect::getMasterVolumeProperty());
+            MIX_SetTrackGain(track, Volume_);
         }
 #endif
     }

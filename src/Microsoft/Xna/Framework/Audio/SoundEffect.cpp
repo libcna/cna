@@ -209,12 +209,27 @@ namespace Microsoft::Xna::Framework::Audio
 
     float SoundEffect::getMasterVolumeProperty()
     {
+#ifdef SOUND_ENABLED
+        // CP-16: query the real SDL3_mixer master gain (matches FNA, which likewise always
+        // queries the live FAudio master voice rather than a cached value) so this reflects
+        // MIX_SetMixerGain's actual current value, not a value that could drift from it.
+        return MIX_GetMixerGain(CNA::Internal::Audio::GetMixer());
+#else
         return MasterVolume_;
+#endif
     }
 
     void SoundEffect::setMasterVolumeProperty(const float& v)
     {
-        MasterVolume_ = v; // FNA passes the value straight through, without clamping
+#ifdef SOUND_ENABLED
+        // CP-16: SDL3_mixer's mixer gain is a real global, applied to every track (including
+        // already-playing ones) at mix time -- unlike the old per-track-baked-in approach, this
+        // needs no per-instance re-application. FNA passes the value straight through, without
+        // clamping; MIX_SetMixerGain does the same (only rejects negative values as an error).
+        MIX_SetMixerGain(CNA::Internal::Audio::GetMixer(), v);
+#else
+        MasterVolume_ = v;
+#endif
     }
 
     void SoundEffect::setMasterVolumeProperty(float&& v)
@@ -308,7 +323,9 @@ namespace Microsoft::Xna::Framework::Audio
             return false;
         }
 
-        MIX_SetTrackGain(track, volume * MasterVolume_);
+        // CP-16: master volume is applied once, globally, via MIX_SetMixerGain (the mixer's own
+        // master gain stage) -- not baked into each track's own gain, which would double-apply it.
+        MIX_SetTrackGain(track, volume);
 
         MIX_StereoGains stereo{};
         stereo.left  = (pan < 0.0f) ? 1.0f : (1.0f - pan);
