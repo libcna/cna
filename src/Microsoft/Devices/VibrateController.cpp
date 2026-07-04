@@ -25,6 +25,19 @@ namespace Microsoft::Devices
         // stay valid until well after this runs. Previously left
         // permanently unclosed based on an unverified assumption (Task
         // P4-9) that SDL_Quit() might run first; that assumption was wrong.
+        //
+        // Task P6-6 re-examined this with a sharper question: could a HOST
+        // application (using CNA as a library) call the umbrella
+        // SDL_Quit() directly in its own code, independent of anything
+        // CNA does? Confirmed this destructor's pattern — a per-class
+        // SDL_InitSubSystem()/SDL_QuitSubSystem() pair, never the umbrella
+        // SDL_Init()/SDL_Quit() — is an established, project-wide
+        // convention: Microsoft::Xna::Framework::Graphics::GraphicsDevice
+        // does the identical thing for SDL_INIT_VIDEO (its own constructor/
+        // Dispose()). The residual risk of a host app calling SDL_Quit()
+        // directly is therefore a characteristic shared identically by
+        // GraphicsDevice, not something unique to or fixable by
+        // VibrateController alone within a Microsoft::Devices-only scope.
         SDL_Haptic* g_haptic = nullptr;
 
         // File-local state: the currently-uploaded SDL_HAPTIC_LEFTRIGHT effect

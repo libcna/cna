@@ -146,6 +146,16 @@ namespace Microsoft::Devices
          * has no Dispose/destructor concept at all — it's a fire-and-
          * forget static design), but not tagged since it's not a new
          * *public API surface* addition a game would ever call directly.
+         *
+         * @note Task P6-6: this per-class SDL_InitSubSystem()/
+         * SDL_QuitSubSystem() pairing (never the umbrella SDL_Init()/
+         * SDL_Quit()) is an established, project-wide convention —
+         * Microsoft::Xna::Framework::Graphics::GraphicsDevice does the
+         * identical thing for SDL_INIT_VIDEO. A host application calling
+         * the umbrella SDL_Quit() directly, in its own code, would affect
+         * GraphicsDevice identically and is a characteristic of this
+         * whole codebase's SDL usage model, not something unique to or
+         * fixable by VibrateController alone.
          */
         ~VibrateController();
 

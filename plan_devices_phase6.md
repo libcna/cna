@@ -530,3 +530,60 @@ Commands run:
 
 Remaining risk: none identified — this task added test coverage for
 already-correct, already-reviewed behavior; no production code changed.
+
+## P6-6: `VibrateController` subsystem/device lifetime cleanup
+
+### Resolution
+
+Per the audit's finding #6, the sharper question this phase raised
+(**can a host application using CNA as a library call the umbrella
+`SDL_Quit()` independently of CNA's own code, racing `~VibrateController()`
+against an already-torn-down SDL?**) was investigated and answered: this
+per-class `SDL_InitSubSystem()`/`SDL_QuitSubSystem()` pairing (never the
+umbrella `SDL_Init()`/`SDL_Quit()`) is an established, project-wide
+convention — `Microsoft::Xna::Framework::Graphics::GraphicsDevice` does the
+*identical* thing for `SDL_INIT_VIDEO` (`GraphicsDevice.cpp` lines 148 and
+330: `SDL_InitSubSystem`/`SDL_QuitSubSystem` in its own constructor/
+`Dispose()`). The residual risk of a host app calling `SDL_Quit()` directly
+is therefore shared identically by `GraphicsDevice` — a `Graphics` class
+this phase's scope rule forbids modifying — and is not a
+`VibrateController`-specific gap to fix unilaterally; doing so would make
+`VibrateController` *inconsistent* with the rest of the codebase for no
+proportionate benefit.
+
+Also re-confirmed (no code change needed, already correct from prior
+phases):
+- `getIsSupportedProperty()`/`getDeviceNameProperty()` correctly close any
+  temporarily-opened probe device — no leak.
+- `g_subsystemHeld` persists correctly regardless of whether it was set via
+  a probe or a real `Start()` — no leak, no incorrect early teardown.
+- Repeated-probe, repeated-Start/Stop, and `StartLeftRight()` test coverage
+  already exists and is thorough (`RepeatedProbeCallsStayConsistent`,
+  `RepeatedStartStopSequencesDoNotDegrade`,
+  `ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadlock`, plus the
+  `StartLeftRight`/`Start` interleaving tests) — added in Phases 4/5, no
+  gap found requiring new tests here.
+- `docs/devices-hardware-checklist.md` Section 3 already documents Android
+  vibration as unverified pending real hardware — re-read and confirmed
+  still accurate; no change needed.
+
+Files changed:
+- `include/Microsoft/Devices/VibrateController.hpp` — `~VibrateController()`'s
+  doc comment extended with the `GraphicsDevice` precedent and the explicit
+  residual-risk framing above.
+- `src/Microsoft/Devices/VibrateController.cpp` — `g_haptic`'s file-local
+  comment extended identically.
+
+Commands run:
+- `cmake --build cmake-build-debug --target CNA -j$(nproc)` — clean build.
+- `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` — clean build.
+- `ctest --output-on-failure -R "VibrateController"` — 29/29 passed
+  (unchanged from before — this task was documentation-only, no behavior
+  change).
+
+Remaining risk: a host application calling the umbrella `SDL_Quit()`
+directly remains a theoretical risk shared by `VibrateController` and
+`GraphicsDevice` alike — explicitly out of scope for a
+`Microsoft::Devices`-only pass per this phase's own scope rule. Worth
+flagging as a candidate for a future cross-cutting "SDL lifecycle
+ownership" pass spanning `Graphics` too, not a `Microsoft::Devices` task.
