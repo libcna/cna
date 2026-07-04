@@ -1432,6 +1432,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 (int)value.getAlphaDestinationBlendProperty(),
                 (int)value.getColorBlendFunctionProperty(),
                 (int)value.getAlphaBlendFunctionProperty());
+        // FNA applies BlendState.BlendFactor atomically as part of FNA3D_SetBlendState — the
+        // state's own baked-in blend factor becomes the device's current one, the same way
+        // GraphicsDevice.BlendFactor's own setter would.
+        setBlendFactorProperty(value.getBlendFactorProperty());
     }
 
     DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() { return depthStencilState_; }

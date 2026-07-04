@@ -1162,6 +1162,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 309: BlendState.BlendFactor propagates via GraphicsDevice.setBlendStateProperty alone
+        cna_easygl_test(cna_test_easygl_blendstate_blendfactor
+                        examples/easygl_blendstate_blendfactor_test.cpp)
+        add_test(NAME EasyGL_BlendState_BlendFactor
+                 COMMAND cna_test_easygl_blendstate_blendfactor)
+        set_tests_properties(EasyGL_BlendState_BlendFactor PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1341,6 +1350,19 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_BlendState_SeparateFactors
                  COMMAND cna_test_vulkan_blendstate_separate_factors)
         set_tests_properties(Vulkan_BlendState_SeparateFactors PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 309: BlendState.BlendFactor propagation (reuses the backend-agnostic EasyGL source).
+        # NOTE: expected to FAIL on Vulkan per Task 868 - ApplyBlendState hardcodes a single blend
+        # equation that never selects VK_BLEND_FACTOR_CONSTANT_COLOR, so Blend::BlendFactor is moot
+        # here regardless of the Task 309 propagation fix. Kept registered as a further documented
+        # confirmation of Task 868, not a new bug.
+        cna_vulkan_test(cna_test_vulkan_blendstate_blendfactor
+                        examples/easygl_blendstate_blendfactor_test.cpp)
+        add_test(NAME Vulkan_BlendState_BlendFactor
+                 COMMAND cna_test_vulkan_blendstate_blendfactor)
+        set_tests_properties(Vulkan_BlendState_BlendFactor PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

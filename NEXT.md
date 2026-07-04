@@ -13,10 +13,13 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–35 are now complete. **Phase 36 (BlendState
-  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) is in progress** — Tasks 301–305 done, Task 306
-  is next (see §8). **Task 304 found a MASSIVE bug: Vulkan's blend state support is almost
-  entirely fake (Task 868, not yet fixed)** — likely to resurface in most remaining Phase 36
-  Vulkan tests, see §3/§5. Phase 35 found and fixed a severe, project-wide bug (Task 293) and
+  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) is nearly done** — Tasks 301–309 done, only
+  Task 310 remains (see §8). **Task 304 found a MASSIVE bug: Vulkan's blend state support is
+  almost entirely fake (Task 868, not yet fixed)** — reconfirmed a fifth time by Task 309, see
+  §3/§5. Task 309 also found and fixed a real, universal `BlendFactor`-propagation bug
+  (`GraphicsDevice.setBlendStateProperty` never forwarded a `BlendState`'s own `BlendFactor`) plus
+  a Bgfx-specific gap where the computed blend-constant colour was never passed to
+  `bgfx::setState()`. Phase 35 found and fixed a severe, project-wide bug (Task 293) and
   found-but-tracked a second one (Task 867, not yet fixed) — see §3/§5, and the new
   `docs/sampler-state-support.md` for the full Phase 35 writeup.
 - **Key architectural decisions:**
@@ -42,19 +45,25 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2062/2064 (serial `-j1`) pass. 2 pre-existing,
-  unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. Some
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2063/2065 (serial `-j1`) pass. 2 pre-existing,
+  unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. New
+  `EasyGL_BlendState_BlendFactor` (Task 309) passes exactly as predicted. Some
   tests have each been observed failing once under parallel `-j` execution but passed cleanly both
   in isolation and on a repeat serial full run — treated as parallel-execution flakiness, not a
   regression (none confirmed as a stable failure): `EasyGL_SkinnedBones`,
   `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1997/2002 (serial `-j1`) pass. Only
-  `Vulkan_DepthBias` (pre-existing) and 4 confirmed-real, documented known failures —
-  `Vulkan_BlendState_AlphaBlend`/`Additive`/`SeparateFunctions`/`SeparateFactors` (all
-  Task 304/306/307/308/868 findings, kept registered rather than hidden) — failed this run.
-  `Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame`
-  (pre-existing order-dependent flakiness, confirmed via isolation reruns in earlier sessions) did
-  not recur this run. `../sharp-runtime`
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1996/2003 (serial `-j1`) pass. Only
+  `Vulkan_DepthBias` (pre-existing, usual single sub-case) and 5 confirmed-real, documented known
+  failures — `Vulkan_BlendState_AlphaBlend`/`Additive`/`SeparateFunctions`/`SeparateFactors`/
+  `BlendFactor` (all Task 304/306/307/308/309/868 findings, kept registered rather than hidden) —
+  plus `Vulkan_FillMode_WireFrame`'s pre-existing order-dependent flakiness (recurred this session,
+  confirmed via isolation reruns — see §5) failed this run. **Caution for future sessions:**
+  running the EasyGL and Vulkan full `ctest` suites concurrently in this session produced 2 extra
+  transient failures (`Vulkan_DepthBias` failing all 4 sub-cases instead of its usual 1;
+  `Vulkan_FillMode_WireFrame`'s "Solid" check) that did NOT reproduce when the Vulkan suite was
+  rerun alone immediately after — apparent GPU/driver contention from concurrent heavy GPU load,
+  not a real regression. Prefer running the two backends' full suites sequentially, not
+  concurrently, to avoid this false-failure noise. `../sharp-runtime`
   (sibling repo) had a pre-existing, uncommitted local fix for a real `BitConverter.hpp` ambiguity
   bug (`System::Single`, the static-utility class from `Half.hpp`, collided with `BitConverter`'s
   own `using SharpRuntime::Single` for the float alias — any TU including both failed to compile).
@@ -67,13 +76,11 @@ build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` conf
   descriptor-set caching, nothing in the fill-mode/rasterization pipeline). Treat as the same
   pre-existing, order/timing-sensitive issue tracked since Task 279, just flakier than previously
   characterized — worth a dedicated root-cause pass eventually, not a quick fix.
-- **Bgfx (`cmake-build-bgfx`), full `ctest`:** **1977/1977 (100%)**. Rebuilt and reverified this
-  session after Task 293's `GraphicsDevice.cpp` fix (backend-agnostic, applies here too) plus a
-  Bgfx-specific follow-up fix: `DrawPrimitivesEx`'s dual-texture branch bound `texture1` (slot 1)
-  using `samplerFlags_[0]` instead of `samplerFlags_[1]`, so the second texture always inherited
-  slot 0's sampler state. Fixed. No regressions. Bgfx has no GPU pixel-readback API in this project,
-  so its integration coverage remains smoke-test-only by design — the sampler-state fix itself
-  isn't pixel-verified on Bgfx, only confirmed not to crash/regress.
+- **Bgfx (`cmake-build-bgfx`), full `ctest`:** **1985/1985 (100%)**. Rebuilt and reverified this
+  session after Task 309's fix (`blendFactorPacked_` now passed to all 5 `bgfx::setState()` call
+  sites). No regressions. Bgfx has no GPU pixel-readback API in this project, so its integration
+  coverage remains smoke-test-only by design — the `BlendFactor` fix itself isn't pixel-verified on
+  Bgfx, only confirmed not to crash/regress.
 
 ### What currently works
 - Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (including
@@ -179,6 +186,7 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
+| (uncommitted) Task 309 | `GraphicsDevice.cpp`, `BgfxGraphicsBackend.cpp`, `examples/easygl_blendstate_blendfactor_test.cpp` (new), `CMakeLists.txt` | **Found and fixed a real, universal bug**: `GraphicsDevice::setBlendStateProperty` never propagated a `BlendState`'s own `BlendFactor` to the device (FNA applies it atomically as part of the whole native blend-state struct); fixed by calling `setBlendFactorProperty` from within `setBlendStateProperty`. New test proves it on EasyGL (`200,100,0` exactly as predicted). **Fails on Vulkan — a fifth confirmation of Task 868**, not a new bug (hardcoded equation never selects `VK_BLEND_FACTOR_CONSTANT_COLOR`). Also fixed a separate Bgfx-specific gap found while investigating: `blendFactorPacked_` was computed but never passed to any of Bgfx's 5 `bgfx::setState()` call sites — all 5 fixed (smoke-tested only, no Bgfx readback API). `MultiSampleMask` confirmed a complete, universal no-op across all 3 backends (documented, not fixed — no consumer, would need new backend-interface surface). |
 | (uncommitted) Task 308 | `examples/easygl_blendstate_separate_factors_test.cpp` (new), `CMakeLists.txt` | Mirrors Task 307 but for blend *factors* (`ColorSourceBlend`/`ColorDestinationBlend` vs `Alpha*Blend`) instead of functions. Two checks with alpha factors swapped, expecting opposite colour results (source-only vs destination-only). Both pass on EasyGL exactly as predicted. **On Vulkan, Check A coincidentally passes and Check B cleanly fails — a fourth confirmation of Task 868**, same asymmetric-pass pattern as Task 305. |
 | (uncommitted) Task 307 | `examples/easygl_blendstate_separate_functions_test.cpp` (new), `CMakeLists.txt` | New test building 2 custom `BlendState`s to verify `ColorBlendFunction`/`AlphaBlendFunction` are independent (none of the 4 presets vary `BlendFunction`). Both checks pass exactly as predicted on EasyGL. **Both fail on Vulkan — a third, clean confirmation of Task 868**: both readbacks show the unmodified source colour, since Task 868's hardcoded destination factor evaluates to exactly 0 at alpha=255, making the requested `BlendFunction` moot regardless of which one is set. |
 | (uncommitted) Task 306 | `examples/easygl_blendstate_additive_test.cpp` (new), `CMakeLists.txt` | New `Additive` pixel test checking both saturation (`255+200` clamps, no wraparound) and full-destination-add behaviour (`colorDst=One`, unlike `AlphaBlend`/`NonPremultiplied`'s `InverseSourceAlpha`). Passes on EasyGL exactly as predicted. **Fails on Vulkan, definitively re-confirming Task 868** — unlike Task 305's coincidental pass, this test's destination-factor mismatch is unambiguous (`G=100` instead of `150`, the destination-dropped signature). Kept registered as a second documented known failure. |
@@ -249,14 +257,16 @@ on returned pixel values).
 | Confirmed bug | `SpriteBatch` with multiple `Begin()`/`End()` calls per frame on Vulkan: only the last batch renders. |
 | Confirmed bug, severe, silent failure | `TextureCube::DDSFromStreamEXT` ignores its `stream` argument and always returns a blank 1×1 texture. Tracked as Task 663. |
 | Confirmed bug, severe, silent failure | `Texture3D`/`TextureCube::GetData` is a total no-op on Vulkan and Bgfx (neither overrides the empty base-class default). Tracked as Task 865. |
-| Confirmed bug, MASSIVE, silent failure | **Vulkan's blend state support is almost entirely fake.** `VulkanGraphicsBackend::ApplyBlendState` ignores every specific blend-factor/function parameter, only checking "is this exactly `BlendState.Opaque`?" — any other `BlendState` (`Additive`, `AlphaBlend`, any custom state) gets one hardcoded blend equation baked into every pipeline, regardless of what was actually requested. Confirmed on real hardware FOUR times: `Vulkan_BlendState_AlphaBlend` (Task 304), `Vulkan_BlendState_Additive` (Task 306), `Vulkan_BlendState_SeparateFunctions` (Task 307), `Vulkan_BlendState_SeparateFactors` (Task 308 — one of its two checks coincidentally passes, the same asymmetric pattern as Task 305, since the hardcoded equation collapses to "source only" at `alpha=255`, matching *one* possible expectation but not the other). Task 305's `NonPremultiplied` test is the only FULLY coincidental pass. All 4 real failures kept registered as documented known failures (like `Vulkan_DepthBias`) rather than hidden. Bgfx has a narrower, related gap (colour blend factors correctly mapped; alpha factors and blend functions ignored). EasyGL is fully, correctly implemented (confirmed by contrast, and by passing all of Tasks 304–308 exactly as predicted). Tracked as Task 868, not fixed — large, multi-pipeline-site change needing its own dedicated task. |
+| Confirmed bug, MASSIVE, silent failure | **Vulkan's blend state support is almost entirely fake.** `VulkanGraphicsBackend::ApplyBlendState` ignores every specific blend-factor/function parameter, only checking "is this exactly `BlendState.Opaque`?" — any other `BlendState` (`Additive`, `AlphaBlend`, any custom state) gets one hardcoded blend equation baked into every pipeline, regardless of what was actually requested. Confirmed on real hardware FIVE times: `Vulkan_BlendState_AlphaBlend` (Task 304), `Vulkan_BlendState_Additive` (Task 306), `Vulkan_BlendState_SeparateFunctions` (Task 307), `Vulkan_BlendState_SeparateFactors` (Task 308 — one of its two checks coincidentally passes, the same asymmetric pattern as Task 305, since the hardcoded equation collapses to "source only" at `alpha=255`, matching *one* possible expectation but not the other), and `Vulkan_BlendState_BlendFactor` (Task 309 — the hardcoded equation never selects `VK_BLEND_FACTOR_CONSTANT_COLOR`, so `Blend::BlendFactor` is moot regardless of Task 309's separate `BlendFactor`-propagation fix). Task 305's `NonPremultiplied` test is the only FULLY coincidental pass. All 5 real failures kept registered as documented known failures (like `Vulkan_DepthBias`) rather than hidden. Bgfx has a narrower, related gap (colour blend factors correctly mapped; alpha factors and blend functions ignored — the `BlendFactor`-propagation piece of this was fixed by Task 309). EasyGL is fully, correctly implemented (confirmed by contrast, and by passing all of Tasks 304–309 exactly as predicted). Tracked as Task 868, not fixed — large, multi-pipeline-site change needing its own dedicated task. |
 | Confirmed, architectural | `Texture3D`/`TextureCube` sampling cannot be wired into any shader today — they don't inherit `Texture`, so can't enter `GraphicsDevice.Textures[slot]`; custom `ShaderEffect` has no texture-binding API at all. Tracked as Task 863. |
 | Confirmed bug, pre-existing | `EasyGL_MRT_TwoAttachments`: `SetRenderTargets` with 2 attachments renders correctly to attachment 0 but attachment 1 stays black. Not caused by recent work; needs dedicated investigation. |
 | Confirmed bug, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` (sibling `easy-gl` repo) aborts on an internal assert; unrelated to any file in this repo. |
 | Confirmed bug, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. Not investigated further. |
-| Confirmed bug, pre-existing, order-dependent | `Vulkan_FillMode_WireFrame` fails only when run as part of the full suite (parallel or serial), passes in isolation. Confirmed via `git stash` bisection to predate recent sessions. `Vulkan_RenderTargetUsage` shows similar parallel-only flakiness. |
+| Confirmed bug, pre-existing, order-dependent | `Vulkan_FillMode_WireFrame` fails only when run as part of the full suite (parallel or serial), passes in isolation. Confirmed via `git stash` bisection to predate recent sessions. `Vulkan_RenderTargetUsage` shows similar parallel-only flakiness. Recurred again in Task 309's session, including transiently in isolation right after a period of concurrent EasyGL+Vulkan `ctest` load (see §2's caution note) — reconfirmed unrelated to Task 309's changes (its `GraphicsDevice.cpp`/`BgfxGraphicsBackend.cpp` edits don't touch fill-mode/rasterization state; `SetBlendFactor` is a trivial 4-float store with no GPU-side effect). |
 | Likely bug, not yet confirmed | Vulkan and Bgfx probably have the same mip-level-allocation bug fixed for EasyGL's `TextureCube` (Task 276), for both `Texture3D` and `TextureCube`, on both backends. Tracked as Task 864, not reproduced with a test. |
 | Fixed (Task 293), all 3 backends | `GraphicsDevice.SamplerStates`/`VertexSamplerStates` were silently ignored by 3D stock-effect draws on every backend, for 3 different backend-specific reasons (missing `applySamplerStatesToBackend()` on EasyGL/shared code; hardcoded `defaultSampler_` + view-only descriptor cache key on Vulkan; `samplerFlags_[0]` reused for texture slot 1 on Bgfx). All 3 fixed and reverified: EasyGL/Vulkan pixel-test-confirmed (`*_SamplerState_DualTextureEffect`), Bgfx confirmed via full-suite no-regression (no pixel-readback API). |
+| Fixed (Task 309) | `GraphicsDevice::setBlendStateProperty` never propagated a `BlendState`'s own `BlendFactor` to the device — fixed by calling `setBlendFactorProperty` internally. Also fixed a separate Bgfx-specific gap: `blendFactorPacked_` was computed but never passed to any of Bgfx's 5 `bgfx::setState()` call sites. Confirmed via `*_BlendState_BlendFactor` (EasyGL passes; Vulkan fails, but only as a further Task 868 confirmation, not a new bug). |
+| By design, documented (Task 309) | `GraphicsDevice.MultiSampleMask` is a complete no-op on all 3 backends — zero references to any sample-mask concept anywhere in backend code. Not fixed: no consumer exists yet, and supporting it would need new backend-interface surface on all 3 backends for a niche, rarely-used DX9-era feature. |
 | Incomplete | `SpriteBatch`'s `SamplerState` is a no-op on Vulkan and Bgfx (EasyGL only) — a separate code path from Task 293's fix; `SpriteBatch` doesn't go through `GraphicsDevice.DrawUserPrimitives`. |
 | Incomplete | EasyGL/Bgfx stride-keyed vertex layout only supports strides 16/20/24/32/52. |
 | Incomplete | Vulkan: `Tangent`/`Binormal` `VertexElementUsage` values have no mapping. |
@@ -358,29 +368,15 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 304 — pixel test: `BlendState::AlphaBlend` premultiplied alpha**
-1. **`GRAPHICS_TASKS.md` Task 309 — verify `BlendFactor` and `MultiSampleMask` behavior
-   ("Backends differ")**
-   - Goal: the task's own Notes column ("Backends differ") suggests this may be more of an
-     audit/documentation task than a strict pixel test, similar in spirit to Task 277/280's
-     verify-and-document approach for architecturally uneven ground. Two distinct things to check:
-     (a) `BlendState.BlendFactor` (the `Color` constant used when `Blend::BlendFactor`/
-     `InverseBlendFactor` is selected as a source/destination factor) — confirm whether any backend
-     actually wires this through to a real constant-colour blend factor
-     (`VK_BLEND_FACTOR_CONSTANT_COLOR`/`GL_CONSTANT_COLOR`/etc.); given Task 868, Vulkan's
-     hardcoded equation never uses `VK_BLEND_FACTOR_CONSTANT_COLOR` regardless of what's
-     requested, so this is very likely ANOTHER angle on the same root bug, not a fresh one — check
-     EasyGL specifically (it already correctly maps `Blend::BlendFactor`→`ConstantColor` per Task
-     304-308's confirmed-correct mapping table) to see if it's the one backend where this works.
-     (b) `GraphicsDevice.MultiSampleMask` — check whether any backend actually applies a sample
-     mask at all (`VkPipelineMultisampleStateCreateInfo::pSampleMask` for Vulkan, `glSampleMaski`
-     for GL) or if it's silently a no-op everywhere (plausible, given XNA's `MultiSampleMask` was
-     always a fairly obscure/rarely-used DX9-era feature) — if so, this is a "document the honest
-     limitation" finding, not a bug to fix.
-   - Files: likely `docs/` (a findings writeup) plus a scoped pixel test only if `BlendFactor` is
-     confirmed working on at least one backend; unlikely to need new production code.
-   - Verification: whatever's appropriate given the findings — don't force a pixel test if the
-     answer turns out to be "no backend implements this at all."
+1. **`GRAPHICS_TASKS.md` Task 310 — verify changing blend state after first use follows XNA
+   immutability rules if applicable (state object freeze semantics)**
+   - Goal: closes Phase 36. Check whether FNA's `BlendState`/`DepthStencilState`/`RasterizerState`
+     freeze themselves (throw if mutated) once bound to a `GraphicsDevice`, and whether CNA matches
+     that behavior (or its absence) — confirm against FNA's actual source rather than assuming.
+   - Files: likely `docs/` if this is a verify-only finding; `BlendState.cpp`/`GraphicsDevice.cpp`
+     only if a real freeze-check gap is found.
+   - Verification: a unit test (not necessarily pixel-readback) asserting the actual behavior
+     found, whichever way it goes.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -444,11 +440,15 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-35 are fully complete. Phase 36 (BlendState conformance,
-GRAPHICS_TASKS.md Tasks 301-310) is in progress: Tasks 301-308 done, only 309/310 remain. EasyGL
-is fully green: 2062/2064 (2 pre-existing failures). Vulkan: 1997/2002 - only Vulkan_DepthBias
-(pre-existing) and 4 confirmed-real, documented known failures (Vulkan_BlendState_AlphaBlend/
-Additive/SeparateFunctions/SeparateFactors - all Task 868, kept registered rather than hidden).
-Bgfx 1977/1977 (100%, not rebuilt this specific session).
+GRAPHICS_TASKS.md Tasks 301-310) is nearly done: Tasks 301-309 done, only Task 310 remains. EasyGL
+is fully green: 2063/2065 (2 pre-existing failures). Vulkan: 1996/2003 - only Vulkan_DepthBias
+(pre-existing, usual single sub-case), Vulkan_FillMode_WireFrame (pre-existing order-dependent
+flake), and 5 confirmed-real, documented known failures (Vulkan_BlendState_AlphaBlend/Additive/
+SeparateFunctions/SeparateFactors/BlendFactor - all Task 868, kept registered rather than hidden).
+Bgfx: 1985/1985 (100%), rebuilt and reverified this session (Task 309's BgfxGraphicsBackend.cpp
+fix; smoke-tested only, no readback API). Caution: don't run EasyGL's and Vulkan's full ctest
+suites concurrently - this session saw 2 transient false failures from GPU/driver contention that
+vanished on a sequential rerun (see NEXT.md §2).
 
 Phase 35's headline result (full writeup: docs/sampler-state-support.md): Task 293 found and fixed
 a severe, project-wide bug across all 3 backends - GraphicsDevice.SamplerStates was being silently

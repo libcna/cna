@@ -991,7 +991,7 @@ namespace CNA::Internal::Backends::Bgfx
         if (scissorW_ > 0 && scissorH_ > 0)
             bgfx::setScissor(scissorX_, scissorY_, scissorW_, scissorH_);
         bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_MSAA
-                       | blendFlags_ | depthFlags_ | cullFlags_);
+                       | blendFlags_ | depthFlags_ | cullFlags_, blendFactorPacked_);
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::submit(spriteViewId, spriteProgram);
     }
@@ -1374,7 +1374,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                        | blendFlags_ | depthFlags_ | cullFlags_)
-                       | ToTopologyFlag(primitive));
+                       | ToTopologyFlag(primitive), blendFactorPacked_);
         bgfx::submit(currentViewId_, colored3DProgram_);
     }
 
@@ -1399,7 +1399,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                        | blendFlags_ | depthFlags_ | cullFlags_)
-                       | ToTopologyFlag(primitive));
+                       | ToTopologyFlag(primitive), blendFactorPacked_);
         bgfx::submit(currentViewId_, colored3DProgram_);
     }
 
@@ -1422,7 +1422,7 @@ namespace CNA::Internal::Backends::Bgfx
         const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                                 | blendFlags_ | depthFlags_ | cullFlags_)
                                | ToTopologyFlag(primitive);
-        bgfx::setState(state);
+        bgfx::setState(state, blendFactorPacked_);
 
         const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
         if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
@@ -1595,7 +1595,7 @@ namespace CNA::Internal::Backends::Bgfx
         const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                                 | blendFlags_ | depthFlags_ | cullFlags_)
                                | ToTopologyFlag(primitive);
-        bgfx::setState(state);
+        bgfx::setState(state, blendFactorPacked_);
         bgfx::submit(currentViewId_, instanced3DProgram_);
         (void)primitiveCount;
     }
