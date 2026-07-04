@@ -137,6 +137,21 @@ TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
 }
 
+TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
+}
+
 // -----------------------------------------------------------------------
 // getBoundsProperty
 // -----------------------------------------------------------------------

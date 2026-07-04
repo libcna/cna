@@ -13,8 +13,8 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–33 are complete. **Phase 34 (SurfaceFormat
-  implementation matrix, `GRAPHICS_TASKS.md` Tasks 281–290) is in progress** — Tasks 281–287 done,
-  Task 288 is next (see §8).
+  implementation matrix, `GRAPHICS_TASKS.md` Tasks 281–290) is in progress** — Tasks 281–288 done,
+  Task 289 is next (see §8).
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -38,7 +38,7 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2017/2019 (serial `-j1`) pass. 2 pre-existing,
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2020/2022 (serial `-j1`) pass. 2 pre-existing,
   unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. Two
   additional tests have each been observed failing once under parallel `-j` execution but passed
   cleanly both in isolation and on a repeat serial full run — treated as parallel-execution
@@ -108,7 +108,8 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 287 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | Continues Phase 34. Same verify-only shape as Tasks 285/286: `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` for `Single`/`Vector2`/`Vector4` were already correct (Task 282) and no backend special-cases them. Added the missing throws-clearly tests (`SingleThrows`/`Vector2Throws`/`Vector4Throws`). No bug found. |
+| (uncommitted) Task 288 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | Continues Phase 34. Same verify-only shape as Tasks 285–287: `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` for `HalfSingle`/`HalfVector2`/`HalfVector4` were already correct (Task 282) and no backend special-cases them. Added the missing throws-clearly tests. No bug found. |
+| `ef25803` Task 287 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | Continues Phase 34. Same verify-only shape as Tasks 285/286: `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` for `Single`/`Vector2`/`Vector4` were already correct (Task 282) and no backend special-cases them. Added the missing throws-clearly tests (`SingleThrows`/`Vector2Throws`/`Vector4Throws`). No bug found. |
 | `23ea5d9` Task 286 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | Continues Phase 34. **Found the task's own premise was half wrong:** `NormalizedShort2`/`NormalizedShort4` are not `SurfaceFormat` texture values in FNA at all (confirmed via FNA source) — they're `VertexElementFormat`-only, already correctly implemented (Vulkan/Bgfx real GPU mapping, matching ordinals, existing tests). `NormalizedByte2`/`NormalizedByte4` *are* real `SurfaceFormat` values; their CPU-side `GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` were already correct and tested (Task 282). The one real gap: no test confirmed `Texture2D` construction actually throws for these two formats. Added 2 tests (`UnsupportedFormatConstructionTest.NormalizedByte2Throws`/`NormalizedByte4Throws`). No bug found — closed a narrow test-coverage gap, same shape as Task 285. |
 | `a1012de` Task 285 | `tests/Microsoft/Xna/Framework/Graphics/PackedVector/PackedVectorTests.cpp` | Continues Phase 34. Found `Bgr565`/`Bgra5551`/`Bgra4444` `PackedVector` types **already existed** with pack/unpack math already matching FNA's bit layouts exactly (verified line-by-line against FNA's `Bgr565.cs`/`Bgra5551.cs`/`Bgra4444.cs`), and `tests/PackedVectorGolden.md` already had a golden reference table for all three — but the golden values weren't actually pinned in tests (`Bgr565` only tested Red/Half; `Bgra4444`/`Bgra5551` had zero golden tests). Added 8 new golden-value tests closing that gap. No bug found — pure test-coverage task. 2012/2014 EasyGL ctest pass (2 pre-existing, unrelated failures unchanged). |
 | `3750522` (no task #) | `SpriteBatch.hpp` | Added missing `NOXNA` tags to 4 CNA-only `SpriteBatch` members found during an API-coverage analysis against FNA (parameterless constructor, `Draw(texture,float,float)`, 2 non-optional-`Rectangle&` `Draw` overloads). Documentation/marker-only, no behavior change. |
@@ -263,19 +264,20 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 288 — implement/verify half-float formats: `HalfSingle`,
-   `HalfVector2`, `HalfVector4`**
-   - Goal: continue Phase 34's SurfaceFormat matrix (GL/Vulkan format mapping). Pre-checked this
-     session: same shape as Tasks 285/286/287 — `Texture::GetBlockSizeSquaredEXT`(1)/
-     `GetFormatSizeEXT` (`HalfSingle`=2/`HalfVector2`=4/`HalfVector4`=8) are already correct
-     (Task 282) with existing tests, and no backend special-cases any of the 3 (confirmed via grep).
-     Very likely another "add the missing throws-clearly test" task, not greenfield — but actually
-     check, don't just assume from this note.
+1. **`GRAPHICS_TASKS.md` Task 289 — implement/verify HDR formats: `HdrBlendable`, `Rgba1010102`,
+   `Rgba64` (document fallback)**
+   - Goal: continue Phase 34's SurfaceFormat matrix. Pre-checked this session: same shape as Tasks
+     285–288 — `GetBlockSizeSquaredEXT`(1)/`GetFormatSizeEXT` (`Rgba1010102`=4/`Rgba64`=8/
+     `HdrBlendable`=8) already correct (Task 282) with existing tests; no backend special-cases any
+     of the 3; `docs/surface-format-support.md` (from Task 281) already documents the fallback
+     status/required GPU format for all 3 (`HdrBlendable` noted as "alias for RGBA16F in FNA, same
+     as HalfVector4"). No construction-throws test exists yet for these 3 specifically — likely
+     another "add the missing test" task, not greenfield — but verify, don't just assume.
    - Files: `src/Microsoft/Xna/Framework/Graphics/Texture.cpp`,
      `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp`.
    - Verification: unit tests confirming `Texture2D` construction throws `std::runtime_error` for
-     `SurfaceFormat::HalfSingle`/`HalfVector2`/`HalfVector4`, mirroring the
-     `UnsupportedFormatConstructionTest` pattern from Tasks 286/287.
+     `SurfaceFormat::HdrBlendable`/`Rgba1010102`/`Rgba64`, mirroring the
+     `UnsupportedFormatConstructionTest` pattern from Tasks 286–288.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -339,11 +341,11 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-33 complete. Phase 34 (SurfaceFormat implementation matrix,
-GRAPHICS_TASKS.md Tasks 281-290) is in progress: Tasks 281-287 done. All three backend builds
+GRAPHICS_TASKS.md Tasks 281-290) is in progress: Tasks 281-288 done. All three backend builds
 (EasyGL/Vulkan/Bgfx) pass at the rates in NEXT.md §2; remaining failures are pre-existing and
 unrelated (see NEXT.md §5). Two significant bugs were found and fixed in earlier sessions:
 a real SurfaceFormat enum-ordinal conformance bug (Task 281) and a Vulkan sRGB/gamma bug affecting
-all non-textured rendering (Task 284). Tasks 285-287 all turned out to be verification/
+all non-textured rendering (Task 284). Tasks 285-288 all turned out to be verification/
 test-coverage tasks, not greenfield implementation: CPU-side size/packing math was already correct
 (from Task 282's exhaustive port) for every format checked so far; the recurring real gap was
 missing throws-clearly construction tests, now added one `UnsupportedFormatConstructionTest` case
@@ -353,15 +355,15 @@ correctly implemented as vertex formats. Two silent-failure gaps remain open and
 yet fixed: TextureCube::DDSFromStreamEXT (Task 663) and Texture3D/TextureCube::GetData being a
 total no-op on Vulkan/Bgfx (Task 865).
 
-Next task: GRAPHICS_TASKS.md Task 288 - implement/verify half-float formats HalfSingle/
-HalfVector2/HalfVector4 (GL/Vulkan format mapping). Given the established pattern from Tasks
-285-287, check FIRST whether Texture::GetBlockSizeSquaredEXT/GetFormatSizeEXT already handle these
-correctly (very likely yes, from Task 282) and whether any backend special-cases them, before
-assuming greenfield GPU-mapping work is needed. If it's another verify-only task, add
-throws-clearly unit tests mirroring the UnsupportedFormatConstructionTest pattern from Tasks
-286/287 in Texture2DTests.cpp. After Task 288, Tasks 289 (HDR formats) and 290 (exhaustive
-every-format throw-or-work test) remain to close out Phase 34 - Task 290 in particular may finally
-subsume/formalize the per-format throw tests added incrementally in 286-289 into one exhaustive
-sweep, so check its actual wording before duplicating work again.
+Next task: GRAPHICS_TASKS.md Task 289 - implement/verify HDR formats HdrBlendable/Rgba1010102/
+Rgba64 (document fallback). Already pre-checked this session: GetBlockSizeSquaredEXT/
+GetFormatSizeEXT are already correct for all 3 (Task 282), no backend special-cases them, and
+docs/surface-format-support.md already documents their fallback status (from Task 281) - so this
+is very likely another "just add the missing throws-clearly test" task like 286-288, not
+greenfield or a new doc. Verify this assumption, then add throws-clearly unit tests mirroring the
+UnsupportedFormatConstructionTest pattern in Texture2DTests.cpp. After Task 289, only Task 290
+(exhaustive every-format throw-or-work test) remains to close out Phase 34 - it may subsume/
+formalize the per-format throw tests added incrementally in 286-289 into one exhaustive sweep over
+all 27 SurfaceFormat values, so check its actual wording before duplicating work again.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
