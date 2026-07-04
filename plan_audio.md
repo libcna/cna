@@ -1159,7 +1159,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   NoAudioHardwareException` místo `std::runtime_error`; test simulující selhání vytvoření mixeru
   ověří správný typ výjimky. (Provázáno s XA-9 — řešit spolu.)
 
-- [ ] **CP-19 — Pan u stereo zdroje ztlumí celý opačný kanál místo crossfeed blendu.**
+- [x] **CP-19 — Pan u stereo zdroje ztlumí celý opačný kanál místo crossfeed blendu.**
   `ApplyTrackProperties`'s pan vzorec (`left=(pan<0)?1:(1-pan)`) u `Pan=1.0` (tvrdě doprava) dá
   `left gain=0` — u stereo zdroje tak úplně zmizí levý kanál. FNA má explicitní komentář, že tvrdé
   panování NEMÁ eliminovat celý kanál, a používá plnou 4-koeficientovou matici pro stereo→stereo.
@@ -1169,6 +1169,13 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* buď doložit jako akceptovanou odchylku v CHECKLIST.md (SDL3_mixer's `MIX_StereoGains`
   nemá crossfeed API), nebo ručně mixovat stereo pan; test porovnávající CNA gains proti FNA matici
   pro stereo zdroj při několika pan hodnotách.
+  *Pozn.:* konzultováno s uživatelem — zvolena zdokumentovaná odchylka, ne implementace. Reálný
+  ruční mix by musel sdílet SDL3_mixer's JEDINÝ per-track "cooked callback" slot s T-4C's už
+  hotovým DSP filtrem (sloučení pan-crossfeed matematiky a filtru do jednoho callbacku +
+  registrace pro každou stereo instanci, ne jen filtrovanou) — reálné riziko regrese v už
+  odladěném a otestovaném filter kódu, na rozdíl od předchozích "implement" rozhodnutí této session
+  (T-3F/T-3G/T-4C), která nezasahovala do sdílené, už fungující infrastruktury. Zdokumentováno v
+  CHECKLIST.md.
 
 - [x] **CP-20 — `setPanProperty()` ignoruje aktivní `Apply3D` stav.**
   FNA má `is3D` latch — jakmile byl `Apply3D` alespoň jednou zavolán, `Pan` setter už jen aktualizuje
