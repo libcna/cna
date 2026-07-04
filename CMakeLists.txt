@@ -1126,6 +1126,33 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 305: BlendState::NonPremultiplied expects a raw (non-premultiplied) source colour
+        cna_easygl_test(cna_test_easygl_blendstate_nonpremultiplied
+                        examples/easygl_blendstate_nonpremultiplied_test.cpp)
+        add_test(NAME EasyGL_BlendState_NonPremultiplied
+                 COMMAND cna_test_easygl_blendstate_nonpremultiplied)
+        set_tests_properties(EasyGL_BlendState_NonPremultiplied PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 306: BlendState::Additive saturation + full-destination-add behaviour
+        cna_easygl_test(cna_test_easygl_blendstate_additive
+                        examples/easygl_blendstate_additive_test.cpp)
+        add_test(NAME EasyGL_BlendState_Additive
+                 COMMAND cna_test_easygl_blendstate_additive)
+        set_tests_properties(EasyGL_BlendState_Additive PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 307: ColorBlendFunction/AlphaBlendFunction operate independently
+        cna_easygl_test(cna_test_easygl_blendstate_separate_functions
+                        examples/easygl_blendstate_separate_functions_test.cpp)
+        add_test(NAME EasyGL_BlendState_SeparateFunctions
+                 COMMAND cna_test_easygl_blendstate_separate_functions)
+        set_tests_properties(EasyGL_BlendState_SeparateFunctions PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1262,6 +1289,38 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_BlendState_AlphaBlend
                  COMMAND cna_test_vulkan_blendstate_alphablend)
         set_tests_properties(Vulkan_BlendState_AlphaBlend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 305: BlendState::NonPremultiplied on Vulkan too (reuses the backend-agnostic
+        # EasyGL source). NOTE: a passing result here does NOT mean Task 868 is fixed — see the
+        # test source's file-header comment for why.
+        cna_vulkan_test(cna_test_vulkan_blendstate_nonpremultiplied
+                        examples/easygl_blendstate_nonpremultiplied_test.cpp)
+        add_test(NAME Vulkan_BlendState_NonPremultiplied
+                 COMMAND cna_test_vulkan_blendstate_nonpremultiplied)
+        set_tests_properties(Vulkan_BlendState_NonPremultiplied PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 306: BlendState::Additive on Vulkan too (reuses the backend-agnostic EasyGL source).
+        # NOTE: expected to genuinely re-expose Task 868 here, unlike Task 305's coincidental pass.
+        cna_vulkan_test(cna_test_vulkan_blendstate_additive
+                        examples/easygl_blendstate_additive_test.cpp)
+        add_test(NAME Vulkan_BlendState_Additive
+                 COMMAND cna_test_vulkan_blendstate_additive)
+        set_tests_properties(Vulkan_BlendState_Additive PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 307: ColorBlendFunction/AlphaBlendFunction independence on Vulkan too (reuses the
+        # backend-agnostic EasyGL source). NOTE: expect Check A (Subtract) to fail per Task 868 -
+        # Vulkan always hardcodes VK_BLEND_OP_ADD.
+        cna_vulkan_test(cna_test_vulkan_blendstate_separate_functions
+                        examples/easygl_blendstate_separate_functions_test.cpp)
+        add_test(NAME Vulkan_BlendState_SeparateFunctions
+                 COMMAND cna_test_vulkan_blendstate_separate_functions)
+        set_tests_properties(Vulkan_BlendState_SeparateFunctions PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
