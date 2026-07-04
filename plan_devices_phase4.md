@@ -701,6 +701,19 @@ genuinely unattemptable here, at minimum ensure `NEXT.md`/`AUDIT.md` say so expl
 rather than silently omitting iOS from the conversation (Android is already called out
 by name in existing docs; iOS should be too, symmetric treatment).
 
+**Resolution (2026-07-04):** Re-checked rather than assumed, per this task's own
+instruction and the precedent set by Task P4-11 (where the Android assumption turned out
+to be stale). Confirmed no Apple/iOS toolchain of any kind is present: no
+`xcodebuild`/`xcrun`, no `osxcross` or any `*ios*toolchain*` anywhere on the filesystem —
+this is a plain Linux container (`uname -a`: `Linux ... 6.12.90+deb13-amd64`). Unlike
+Android, where the missing piece was a single downloadable NDK package (now present),
+iOS cross-compilation fundamentally requires Apple's own toolchain, which needs
+macOS/Xcode to obtain and run — not something a Linux container can gain by installing a
+package, so this is very unlikely to become unblocked here in any future session either,
+unless the underlying dev environment itself changes (a macOS runner, or a CI pipeline
+with one). Documented explicitly in `NEXT.md` (Sections 2, 5, 8) rather than silently
+omitted — no code changes, this task is documentation-only.
+
 ### Task P4-13 — Manual hardware verification checklist
 
 Write a plain checklist (new file, e.g. `docs/devices-hardware-checklist.md`, or a

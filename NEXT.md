@@ -21,15 +21,15 @@ verification — not API completeness.
 **Plan history:**
 - `plan_devices.md` (31 tasks) — closed.
 - `plan_devices_phase2.md` (17 tasks) — closed except Task P2-7
-  (Android/iOS build verification) — Android half now superseded by
-  `plan_devices_phase4.md` Task P4-11 (done); iOS half still blocked (no
-  toolchain in this dev container).
+  (Android/iOS build verification) — superseded by `plan_devices_phase4.md`
+  Tasks P4-11 (Android, done) and P4-12 (iOS, confirmed still blocked — see
+  below).
 - `plan_devices_phase3.md` (12 tasks) — closed. All 3 confirmed real bugs
   fixed, 1 decision task resolved, all 6 test-coverage tasks filled, 1
   low-priority research task partially resolved (no known bug either way).
 - `plan_devices_phase4.md` (14 tasks, user-authored hardening plan) — **open**.
-  Tasks P4-1 through P4-11 done (P4-1–P4-7 on 2026-07-03, P4-8/P4-9/P4-10/P4-11
-  on 2026-07-04). Tasks P4-12 through P4-14 not started.
+  Tasks P4-1 through P4-12 done (P4-1–P4-7 on 2026-07-03,
+  P4-8/P4-9/P4-10/P4-11/P4-12 on 2026-07-04). Tasks P4-13/P4-14 not started.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -275,11 +275,26 @@ unrelated to it. No regressions across the whole session's work.
   compiled objects, not silently skipped. Static-lib compile check only —
   no APK packaging, no emulator/device run, `CnaTests` not
   cross-compiled (see Task P4-13 for the still-needed physical
-  verification).
-- All work committed. Last commit in `cna_devices`: (Task P4-11, this
-  commit) on `feature/devices`, not yet pushed. The 3 `sharp-runtime`
-  fixes above are committed separately in that sibling repo (not part of
-  `cna_devices`'s own git history).
+  verification). The 3 `sharp-runtime` fixes above are committed
+  separately in that sibling repo (commit `2c49474` on its `develop`
+  branch), not part of `cna_devices`'s own git history; verified there
+  too — clean build, all 8467 tests passing.
+- **Task P4-12 done (2026-07-04):** re-checked rather than assumed
+  iOS is still blocked, per this task's own instruction and the precedent
+  Task P4-11 just set (where the Android assumption *was* stale).
+  Confirmed no Apple/iOS toolchain exists in this environment at all — no
+  `xcodebuild`/`xcrun`, no `osxcross`, nothing matching `*ios*toolchain*`
+  anywhere on the filesystem; this is a plain Linux container. Unlike
+  Android (a missing NDK package, now installed), iOS fundamentally needs
+  macOS/Xcode to obtain and run its own toolchain — not fixable by
+  installing a package in a Linux container, so far less likely to
+  spontaneously unblock in a future session the way Android just did.
+  Documentation-only task: no code changes, this status is now explicit
+  in `NEXT.md` (this section, Sections 2/5/8) rather than silently
+  omitted.
+- All work committed. Last commit in `cna_devices`: `22cacb2` (Task
+  P4-11) on `feature/devices`, not yet pushed (Task P4-12's commit, this
+  one, follows it).
 
 ---
 
@@ -485,18 +500,7 @@ writing.
      7; spot-run the targeted Devices/Sensors/VibrateController suite on
      each backend afterward.
 
-2. **Task P4-12 — Compile the iOS branch, or explicitly mark it
-   unverified.** No toolchain available in this Linux dev container —
-   unlike Android (Task P4-11, done 2026-07-04, an NDK turned out to be
-   present), this is unlikely to become available in any Linux container
-   at all (Apple's own toolchain needs macOS/Xcode). If still genuinely
-   unattemptable, this task is really just confirming `NEXT.md` says so
-   explicitly (it now does, see Section 2/5) rather than further build
-   attempts.
-   - Files: none expected (build-only task, likely a documentation-only
-     resolution).
-
-3. **Task P4-13 — Manual hardware verification checklist.** A plain
+2. **Task P4-13 — Manual hardware verification checklist.** A plain
    checklist document (e.g. `docs/devices-hardware-checklist.md`) for
    whoever eventually runs this on real hardware: accelerometer/gyroscope
    axis sign/orientation in both landscape rotations (now compiles clean
@@ -509,7 +513,7 @@ writing.
    - Files: new checklist file (or a `NEXT.md` section, if a new file is
      judged unnecessary overhead).
 
-4. **Task P4-14 — `Microsoft::Devices` demo screen.** Mirror
+3. **Task P4-14 — `Microsoft::Devices` demo screen.** Mirror
    `examples/demo_input`'s `Game`-subclass pattern
    (`examples/demo_input/src/InputDemo.hpp`/`.cpp`): new
    `examples/demo_devices/src/DevicesDemo.hpp`/`.cpp`, displaying each
