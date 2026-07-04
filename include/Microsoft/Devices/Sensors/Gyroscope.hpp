@@ -235,5 +235,15 @@ namespace Microsoft::Devices::Sensors
          * @param supported New value for the base class's isSupported_ flag.
          */
         NOXNA void SetSupportedForTesting(bool supported);
+
+        /**
+         * @brief Test-only hook (Task P6-2): exposes whether this instance
+         * currently holds its own successful
+         * SDL_InitSubSystem(SDL_INIT_SENSOR) call — see
+         * Accelerometer.hpp's identical hook for the full rationale.
+         *
+         * @return True if this instance currently holds the subsystem open.
+         */
+        NOXNA [[nodiscard]] bool GetSubsystemHeldForTesting() const;
     };
 } // namespace Microsoft::Devices::Sensors

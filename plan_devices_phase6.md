@@ -266,3 +266,44 @@ Remaining risk: none identified for this specific fix. The `try`/`catch`
 rollback path is currently unreachable in practice (`getIsSupportedProperty()`
 does not throw today) but is cheap, correct, and guards against a future
 change that makes it throw.
+
+## P6-2: Fix `Start()` failure cleanup for SDL subsystem ownership
+
+### Resolution
+
+Files changed:
+- `src/Microsoft/Devices/Sensors/Accelerometer.cpp`/`Gyroscope.cpp` —
+  `Start()` now tracks `acquiredSubsystemThisCall` (true only when *this*
+  call transitioned `subsystemHeld_` false→true); if `OpenDefaultSensorLocked()`
+  then fails, the hold acquired by this call is released
+  (`SDL_QuitSubSystem(SDL_INIT_SENSOR)`, `subsystemHeld_ = false`) before
+  throwing, instead of leaking until this instance's eventual `Dispose()`.
+  An already-`true` `subsystemHeld_` from an earlier successful
+  Start()/Stop() cycle is left untouched — its release still correctly
+  belongs to `Dispose()`.
+- `include/Microsoft/Devices/Sensors/Accelerometer.hpp`/`Gyroscope.hpp` +
+  their `.cpp` — added a `NOXNA GetSubsystemHeldForTesting()` test-only
+  accessor (matching the existing `SetStartedForTesting()`/
+  `SetSupportedForTesting()` pattern) so tests can directly observe
+  `subsystemHeld_`, since no public SDL API exposes the subsystem's
+  internal ref-count for a direct assertion (same limitation documented in
+  `plan_devices_phase5.md` Task P5-1).
+
+Tests added: `FailedStartReleasesSubsystemHoldItAcquired` (both
+`AccelerometerTests.cpp`/`GyroscopeTests.cpp`, skipped when real hardware
+makes the platform actually supported) — constructs an instance, asserts
+`GetSubsystemHeldForTesting()` is initially false, calls `Start()` (which
+fails in this headless container — `SDL_INIT_SENSOR` initializes fine but
+no sensor device exists), and asserts `GetSubsystemHeldForTesting()` is
+false again immediately after the throw (would have stayed true before
+this fix).
+
+Commands run:
+- `cmake --build cmake-build-debug --target CNA -j$(nproc)` — clean build.
+- `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` — clean build.
+- `ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation"`
+  — 193/193 passed (191 previous + 2 new), 2 expected skips.
+
+Remaining risk: none identified. The fix only changes *when* the hold is
+released on a failure path that previously delayed it; the balanced
+init/quit pairing itself (Task P4-8) is unchanged.

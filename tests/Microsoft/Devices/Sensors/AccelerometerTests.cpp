@@ -103,6 +103,25 @@ TEST(AccelerometerTests, StartOnUnsupportedPlatformThrows)
     EXPECT_THROW(a.Start(), AccelerometerFailedException);
 }
 
+// Task P6-2: OpenDefaultSensorLocked() failing (no sensor hardware, but
+// SDL_INIT_SENSOR itself initializes fine) after subsystemHeld_ was just
+// set true previously left it true until this instance's eventual
+// Dispose() — a real subsystem-hold leak. GetSubsystemHeldForTesting()
+// (Task P6-2) lets this test directly confirm the hold is released
+// immediately on failure instead.
+TEST(AccelerometerTests, FailedStartReleasesSubsystemHoldItAcquired)
+{
+    if (Accelerometer::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Accelerometer is supported on this platform; Start()-failure path not exercised.";
+    }
+
+    Accelerometer a;
+    EXPECT_FALSE(a.GetSubsystemHeldForTesting());
+    EXPECT_THROW(a.Start(), AccelerometerFailedException);
+    EXPECT_FALSE(a.GetSubsystemHeldForTesting());
+}
+
 TEST(AccelerometerTests, StopDoesNotCrash)
 {
     Accelerometer a;

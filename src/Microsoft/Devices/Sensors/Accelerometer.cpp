@@ -114,6 +114,15 @@ namespace Microsoft::Devices::Sensors
                 "Failed to start accelerometer data acquisition. Data acquisition already started.");
         }
 
+        // Task P6-2: tracks whether *this* Start() call is the one that
+        // just transitioned subsystemHeld_ false -> true, as opposed to it
+        // already having been true from an earlier successful Start()
+        // (e.g. after a Stop()/Start() cycle). Only a hold newly acquired
+        // by this call should be released on failure below — an
+        // already-true subsystemHeld_ from before still owes its eventual
+        // release to Dispose(), same as always.
+        bool acquiredSubsystemThisCall = false;
+
         if (!subsystemHeld_)
         {
             if (!Detail::SdlSensorSubsystem<Accelerometer>::EnsureSubsystemInitialized())
@@ -124,6 +133,7 @@ namespace Microsoft::Devices::Sensors
             }
 
             subsystemHeld_ = true;
+            acquiredSubsystemThisCall = true;
         }
 
         auto& subsystem = GetSubsystem();
@@ -132,6 +142,19 @@ namespace Microsoft::Devices::Sensors
         if (subsystem.OpenDefaultSensorLocked() == nullptr)
         {
             state_ = SensorState::NotSupported;
+
+            // Task P6-2: previously left subsystemHeld_ true here forever
+            // (until this instance's eventual Dispose()) even though
+            // Start() itself failed — a real subsystem-hold leak for any
+            // caller that constructs, fails Start(), and never disposes
+            // promptly (e.g. a retry loop). Release only the hold this
+            // call itself just acquired.
+            if (acquiredSubsystemThisCall)
+            {
+                SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                subsystemHeld_ = false;
+            }
+
             throw AccelerometerFailedException(
                 "Failed to start accelerometer data acquisition. No default sensor found.");
         }
@@ -435,6 +458,11 @@ namespace Microsoft::Devices::Sensors
     void Accelerometer::SetSupportedForTesting(bool supported)
     {
         setIsSupportedProperty(supported);
+    }
+
+    bool Accelerometer::GetSubsystemHeldForTesting() const
+    {
+        return subsystemHeld_;
     }
 
     GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")

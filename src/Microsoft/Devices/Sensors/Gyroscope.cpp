@@ -108,6 +108,11 @@ namespace Microsoft::Devices::Sensors
                 "Failed to start gyroscope data acquisition. Data acquisition already started.");
         }
 
+        // Task P6-2: see Accelerometer::Start()'s identical fix for the
+        // full rationale — only a subsystem hold newly acquired by *this*
+        // call is released on failure below.
+        bool acquiredSubsystemThisCall = false;
+
         if (!subsystemHeld_)
         {
             if (!Detail::SdlSensorSubsystem<Gyroscope>::EnsureSubsystemInitialized())
@@ -118,6 +123,7 @@ namespace Microsoft::Devices::Sensors
             }
 
             subsystemHeld_ = true;
+            acquiredSubsystemThisCall = true;
         }
 
         auto& subsystem = GetSubsystem();
@@ -126,6 +132,16 @@ namespace Microsoft::Devices::Sensors
         if (subsystem.OpenDefaultSensorLocked() == nullptr)
         {
             state_ = SensorState::NotSupported;
+
+            // Task P6-2: previously left subsystemHeld_ true here forever
+            // (until this instance's eventual Dispose()) even though
+            // Start() itself failed — a real subsystem-hold leak.
+            if (acquiredSubsystemThisCall)
+            {
+                SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                subsystemHeld_ = false;
+            }
+
             throw SensorFailedException(
                 "Failed to start gyroscope data acquisition. No default sensor found.");
         }
@@ -363,6 +379,11 @@ namespace Microsoft::Devices::Sensors
     void Gyroscope::SetSupportedForTesting(bool supported)
     {
         setIsSupportedProperty(supported);
+    }
+
+    bool Gyroscope::GetSubsystemHeldForTesting() const
+    {
+        return subsystemHeld_;
     }
 
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")

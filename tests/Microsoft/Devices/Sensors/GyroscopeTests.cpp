@@ -93,6 +93,22 @@ TEST(GyroscopeTests, StartOnUnsupportedPlatformThrows)
     EXPECT_THROW(g.Start(), SensorFailedException);
 }
 
+// Task P6-2: see AccelerometerTests.cpp's identical test for the full
+// rationale — a failed Start() must release the subsystem hold it just
+// acquired instead of leaking it until Dispose().
+TEST(GyroscopeTests, FailedStartReleasesSubsystemHoldItAcquired)
+{
+    if (Gyroscope::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Gyroscope is supported on this platform; Start()-failure path not exercised.";
+    }
+
+    Gyroscope g;
+    EXPECT_FALSE(g.GetSubsystemHeldForTesting());
+    EXPECT_THROW(g.Start(), SensorFailedException);
+    EXPECT_FALSE(g.GetSubsystemHeldForTesting());
+}
+
 TEST(GyroscopeTests, StopDoesNotCrash)
 {
     Gyroscope g;

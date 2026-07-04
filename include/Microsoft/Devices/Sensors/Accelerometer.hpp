@@ -247,6 +247,19 @@ namespace Microsoft::Devices::Sensors
         NOXNA void SetSupportedForTesting(bool supported);
 
         /**
+         * @brief Test-only hook (Task P6-2): exposes whether this instance
+         * currently holds its own successful
+         * SDL_InitSubSystem(SDL_INIT_SENSOR) call, without any way to
+         * observe SDL's internal subsystem ref-count directly (no public
+         * SDL API exposes it). Lets tests directly confirm a failed
+         * Start() releases the hold it just acquired, rather than leaking
+         * it until Dispose().
+         *
+         * @return True if this instance currently holds the subsystem open.
+         */
+        NOXNA [[nodiscard]] bool GetSubsystemHeldForTesting() const;
+
+        /**
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.
          *
          * Deprecated in favor of CurrentValueChanged, which is the WP7 7.1
