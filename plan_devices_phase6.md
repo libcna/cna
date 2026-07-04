@@ -801,3 +801,77 @@ Compass/Motion test results in this same session.
 Remaining risk: none — no behavior changed. The sketch above is
 intentionally non-binding; an actual native-backend implementation task
 may reasonably diverge from it once real platform constraints are known.
+
+## P6-9: Documentation accuracy pass
+
+### Resolution
+
+Updated `NEXT.md`, `AUDIT.md`, `docs/devices-build.md`, and
+`docs/devices-hardware-checklist.md` to reflect everything found and fixed
+in this phase, including the addendum fix discovered during this very
+task's own verification pass (see below) — matching this phase's own
+"documentation must be more conservative than the code" standard, not
+overstating confidence anywhere.
+
+**A concrete demonstration of why this task's own verification mattered:**
+while gathering accurate current test counts for these doc updates, running
+the Devices-only `ctest` filter surfaced a real failure —
+`AccelerometerTests.ConcurrentConstructDestroyKeepsInstanceCountBalanced`
+(P6-1's own new test) aborted with glibc's `malloc(): unaligned tcache
+chunk detected`. Every *individual* verification run earlier in this phase
+happened to pass, so this had gone undetected for 5 prior commits. Looping
+the test 40 times reproduced it 5 times (~12%); investigating and fixing it
+is documented as an addendum to P6-1's own Resolution section above (the
+fix: lock `subsystem.mutex_` around `getIsSupportedProperty()`'s entire
+call, since SDL3's own `SDL_InitSubSystem()`/`SDL_QuitSubSystem()` docs
+state they are main-thread-only/not thread-safe, and this method previously
+called them with zero synchronization). This is fixed and verified (40/40,
+then a separate 60/60, stress runs; full `ctest`: 2034/2036, same 2
+pre-existing unrelated failures) before any of this task's doc updates were
+written, so the counts/claims below reflect the *fixed* state.
+
+Files changed:
+- `NEXT.md` — Sections 1-3 (phase history, layered status, recent changes)
+  extended with Phase 6's findings, including the heap-corruption
+  discovery and fix; Section 5 (known bugs) updated — new deliberate
+  double-dispose limitation documented, Phase 6 fixes moved to "resolved,"
+  `VULKAN`/`BGFX`/Android build re-verification explicitly marked
+  not-yet-done (Task P6-10); Section 6 (architecture notes) updated —
+  `SensorBase<T>`'s `ClaimDisposalOnce()`, `getIsSupportedProperty()`'s new
+  lock (with an explicit "do not remove" callout and the reasoning), the
+  `ScopeExit` guard, and the Android semantic-test caveat about the
+  forward/backward axis; Section 7 (commands) test counts updated; Section
+  8 (next tasks) reordered so finishing Task P6-10 is explicitly first;
+  Section 9 (do-not-do) extended with Phase 6-specific guardrails,
+  including "do not trust a single passing concurrency test run"; Section
+  10 (resume prompt) updated to match.
+- `AUDIT.md` — `Accelerometer`/`Gyroscope`/`Compass`/`Motion`/`SensorBase<T>`/
+  `VibrateController` rows extended with Phase 6's findings and fixes,
+  matching the existing per-phase annotation style already used for Phase
+  4/5's entries.
+- `docs/devices-build.md` — test counts updated (211 devices-only via
+  `ctest -R`, including the new `SensorBase` suite; 131/129 via the direct
+  `--gtest_filter` form; 2036/2 for the full suite); added a new note (and
+  loop-command example) explaining that concurrency tests in this suite
+  must be re-run repeatedly, not trusted from one pass — directly
+  motivated by this task's own discovery above.
+- `docs/devices-hardware-checklist.md` — Android orientation test count
+  updated (5 → 9, Task P6-7's semantic additions); added a note on why
+  Task P6-7 deliberately did not assert an absolute forward/backward sign.
+- `docs/location-future-plan.md` — re-read in full; confirmed no Phase 6
+  change affects it (no `Microsoft::Devices::Sensors` API surface or GPS/
+  location-adjacent code was touched this phase); left unmodified.
+
+Commands run (for the addendum fix, see P6-1's own Resolution; for this
+task specifically):
+- `ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase"`
+  — 211/211 passed, 2 expected skips (post-fix).
+- `./CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:VibrateControllerTests.*:SensorSubsystemOwnershipTests.*:AndroidSensorOrientationTests.*:SensorBaseTests.*"`
+  — 131 tests, 129 passed, 2 skipped (post-fix).
+- `ctest --output-on-failure` (full suite) — 2034/2036 passed, same 2
+  pre-existing unrelated `EasyGL`/`easy-gl` failures (post-fix).
+
+Remaining risk: none identified for the documentation itself. Task P6-10
+still needs to re-verify `VULKAN`/`BGFX`/Android against this phase's
+complete changeset — explicitly flagged as not-yet-done throughout the
+updated docs, not silently assumed clean.

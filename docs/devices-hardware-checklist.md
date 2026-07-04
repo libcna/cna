@@ -35,8 +35,9 @@ which since `plan_devices_phase5.md` Task P5-7 delegates its actual sign/axis ma
 function taking an explicit `AndroidSensorLandscapeOrientation` instead of querying SDL
 directly, so it's unit-testable on any platform.
 `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp` now covers both
-rotations for both sensor classes' representative magnitudes (5 tests, all passing in
-this headless container).
+rotations for both sensor classes' representative magnitudes, plus semantic tilt-right/
+tilt-left/face-up/face-down examples added in `plan_devices_phase6.md` Task P6-7 (9
+tests total, all passing in this headless container).
 
 **Why this still needs real hardware despite the new unit tests:** the unit tests only
 prove the code *implements the documented sign convention correctly* — they were derived
@@ -47,7 +48,13 @@ first time in this project's history, and Task P5-7 (2026-07-04) confirmed the
 documented convention is what the code actually does — but neither step can prove the
 convention itself is physically correct. A wrong assumption baked into both the
 implementation and its own tests would still pass every automated check here and only
-show up as the game tilting the wrong direction on a real device.
+show up as the game tilting the wrong direction on a real device. **Task P6-7
+(2026-07-04) deliberately did not add a test asserting an absolute sign for the
+forward/backward (X) axis** (step 3 below) after an attempt to independently re-derive
+one from rotation geometry alone produced a contradiction with the already-trusted Y-axis
+convention on the first pass — see that task's Resolution in `plan_devices_phase6.md` for
+the full account. This is exactly the kind of mistake this checklist exists to catch
+before it reaches a real device, not after.
 
 **Steps:**
 1. Run a game (or the Task P4-14 demo screen, once it exists) on a real Android device

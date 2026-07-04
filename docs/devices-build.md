@@ -1,9 +1,9 @@
 # Building and Testing `Microsoft::Devices` — Reproducible Commands
 
 Every command below was actually run in a session working on `Microsoft::Devices`
-(`plan_devices_phase4.md`/`plan_devices_phase5.md`), not copy-pasted from
-documentation without running it. Where a command's success is asserted, it was
-verified in this repository, on this branch, this session.
+(`plan_devices_phase4.md`/`plan_devices_phase5.md`/`plan_devices_phase6.md`), not
+copy-pasted from documentation without running it. Where a command's success is
+asserted, it was verified in this repository, on this branch, this session.
 
 ## 0. Fresh clone / submodule setup
 
@@ -33,7 +33,8 @@ cmake --build cmake-build-debug --target CNA -j"$(nproc)"
 cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
 ```
 
-Both targets build clean as of this writing (2026-07-04, `feature/devices`).
+Both targets build clean as of this writing (2026-07-04, `feature/devices`,
+`plan_devices_phase6.md`).
 
 ## 2. Devices-only test filter
 
@@ -41,15 +42,17 @@ Both targets build clean as of this writing (2026-07-04, `feature/devices`).
 # Via ctest, matching every Devices/Sensors/VibrateController test suite by name
 # (this also matches the Reading/EventArgs/FailedException-type test suites, e.g.
 # AccelerometerReadingTests, SensorFailedExceptionTests — anything with these
-# substrings in its suite name, which is more than just the 7 "main" suites below):
+# substrings in its suite name, which is more than just the 8 "main" suites below.
+# Does NOT match SensorBaseTests — add it explicitly to a gtest_filter, or use
+# ctest -R "SensorBase" separately, if you need that suite too):
 cd cmake-build-debug && ctest --output-on-failure \
-    -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation"
-# 187 tests, 100% passing, as of Task P5-11 (last verified this way).
+    -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase"
+# 211 tests, 100% passing, as of plan_devices_phase6.md Task P6-9 (last verified this way).
 
-# Or directly via the test binary's own gtest filter — narrower: only the 7
+# Or directly via the test binary's own gtest filter — narrower: only the 8
 # "main" per-class suites, not the Reading/EventArgs/FailedException ones:
-./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:VibrateControllerTests.*:SensorSubsystemOwnershipTests.*:AndroidSensorOrientationTests.*"
-# 107 tests, 105 passing, as of Task P5-11 (last verified this way).
+./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:VibrateControllerTests.*:SensorSubsystemOwnershipTests.*:AndroidSensorOrientationTests.*:SensorBaseTests.*"
+# 131 tests, 129 passing, as of plan_devices_phase6.md Task P6-9 (last verified this way).
 ```
 
 Both commands' 2 skips are the same pair: `AccelerometerTests`/`GyroscopeTests`'
@@ -57,13 +60,29 @@ Both commands' 2 skips are the same pair: `AccelerometerTests`/`GyroscopeTests`'
 *because* this dev container genuinely has no accelerometer/gyroscope hardware, which
 is itself the expected, correct result here, not a failure.
 
+**Concurrency tests in this suite are stress tests, not single-shot checks — a single
+green `ctest` run does not prove a concurrency fix is correct.** `plan_devices_phase6.md`
+Task P6-1's own addendum found a real, reproducible heap-corruption bug
+(`AccelerometerTests`/`GyroscopeTests`' concurrent-construction tests) that a single
+`ctest` run did not catch — it only surfaced after looping the same test binary
+invocation tens of times in a row. If you change anything touching
+`Detail::SdlSensorSubsystem<TSensor>`, `Accelerometer`, or `Gyroscope`, re-run the
+relevant `--gtest_filter` in a loop (20–60 iterations) before trusting a single pass:
+
+```bash
+cd cmake-build-debug
+for i in $(seq 1 40); do
+  ./CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*" > /tmp/run_$i.log 2>&1 || echo "run $i FAILED"
+done
+```
+
 ## 3. Full test suite
 
 ```bash
 cd cmake-build-debug && ctest --output-on-failure
 ```
 
-As of this writing: ~2012 tests, 2 failures — both pre-existing, unrelated `EasyGL`/
+As of this writing: 2036 tests, 2 failures — both pre-existing, unrelated `EasyGL`/
 `easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
 `easy-gl-resource-smoke-tests`) that this session's environment happens to have a real
 GPU/display to actually run for the first time (previously silently `Not Run`
