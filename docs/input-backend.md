@@ -166,10 +166,13 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
 - `Mouse::SetPosition`, `IsRelativeMouseModeEXT`, and `ClickedEXT` are all wired to real SDL3
   calls (`SDL_WarpMouseInWindow`, `SDL_Get/SetWindowRelativeMouseMode`) rather than stubs
   (Phase I4, tasks 745–749).
-- Known deviation: `SetPosition`'s warp target has no inverse logical→window coordinate
-  transform, so on a letterboxed/scaled window the OS cursor lands off by the scale factor.
-  Fixing it for real needs a graphics-layer (`IGraphicsBackend`) addition — out of scope for the
-  input branch, documented in-source in `Mouse.cpp`.
+- `SetPosition` converts the caller's logical coordinates to window space before the warp
+  (`plan.md` a-0001, task 846), so the OS cursor lands at the correct pixel on a scaled window: the
+  SDL_Renderer path uses `SDL_RenderCoordinatesToWindow` (**offset-aware**, so true-letterbox bars
+  map correctly — verified for a 200×100 window in task 858), and EasyGL uses its
+  `TransformLogicalToWindow` (a uniform height-scale with no offset, which is exact for EasyGL's
+  `FixedHeightDynamicWidth` model — the logical width tracks the window aspect, so there are no
+  bars to offset). Vulkan/bgfx pass through (no logical-presentation scaling).
 - `MouseCursor` (custom + 11 stock system cursors) is a MonoGame-derived `NOXNA` extension — FNA
   has no `MouseCursor` type at all. Kept as a deliberate, documented status decision (task 754),
   since `Mouse::SetCursor(MouseCursor&)` depends on it and it's the standard way

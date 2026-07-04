@@ -426,6 +426,54 @@ TEST(MouseTest, SetPositionConvertsLogicalToWindowForLetterboxedRenderer)
     ResetMouseState();
 }
 
+TEST(MouseTest, SetPositionHandlesLetterboxOffsetNotJustScale)
+{
+    // Task 858: prove OFFSET handling, not just uniform scale. A 100×100 logical presentation
+    // LETTERBOXed into a NON-square 200×100 window (aspect 2:1) fits the square content to the
+    // 100px height and centers it horizontally → 50px bars on each side. So logical center (50,50)
+    // maps to window (100,50) — NOT (50,50): the +50px horizontal offset must be applied.
+    // Mouse::SetPosition uses SDL_RenderCoordinatesToWindow, which is offset-aware.
+    ResetMouseState();
+
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Window* window = SDL_CreateWindow("MouseLetterboxTest", 200, 100, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (!renderer)
+    {
+        SDL_DestroyWindow(window);
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateRenderer failed: " << SDL_GetError();
+    }
+
+    SDL_SetRenderLogicalPresentation(renderer, 100, 100, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+
+    float wx = 0.0f, wy = 0.0f;
+    // Center: 50px left bar + 50px (scale 1.0) → x=100; no vertical bars → y=50.
+    ASSERT_TRUE(SDL_RenderCoordinatesToWindow(renderer, 50.0f, 50.0f, &wx, &wy));
+    EXPECT_NEAR(wx, 100.0f, 1.0f) << "horizontal letterbox offset not applied";
+    EXPECT_NEAR(wy, 50.0f, 1.0f);
+    EXPECT_GT(wx, 60.0f) << "if wx≈50 the offset was ignored (scale-only, wrong)";
+
+    // Top-left logical corner lands at the left bar edge, not the window origin.
+    ASSERT_TRUE(SDL_RenderCoordinatesToWindow(renderer, 0.0f, 0.0f, &wx, &wy));
+    EXPECT_NEAR(wx, 50.0f, 1.0f);
+    EXPECT_NEAR(wy, 0.0f, 1.0f);
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    ResetMouseState();
+}
+
 // ===========================================================================
 // MouseCursor
 // ===========================================================================

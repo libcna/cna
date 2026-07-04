@@ -18,10 +18,14 @@ namespace
 
     /// Converts a point from logical (game/render) coordinates to physical window coordinates —
     /// the inverse of SdlInputBridge::to_logical_position, so SetPosition warps the OS cursor to
-    /// the right pixel on a scaled/letterboxed window (plan.md a-0001). Mirrors the same two
-    /// backend paths: SDL_Renderer via SDL_RenderCoordinatesToWindow, other backends via
-    /// IGraphicsBackend::TransformLogicalToWindow. Falls back to pass-through (window == logical)
-    /// when no scaling transform is available — correct when window size == render resolution.
+    /// the right pixel on a scaled window (plan.md a-0001). Two backend paths:
+    ///   - SDL_Renderer: SDL_RenderCoordinatesToWindow — fully offset-aware, so true-letterbox
+    ///     modes (bars) map correctly, including the centering offset (verified, task 858).
+    ///   - Other backends: IGraphicsBackend::TransformLogicalToWindow — for EasyGL this is a
+    ///     uniform height-scale with no offset, which is exact for its FixedHeightDynamicWidth
+    ///     model (the logical viewport fills the window; no bars, so no offset).
+    /// Falls back to pass-through (window == logical) when no scaling transform is available —
+    /// correct when window size == render resolution.
     void logical_to_window(SDL_Window* window, float logX, float logY, float& outX, float& outY)
     {
         outX = logX;

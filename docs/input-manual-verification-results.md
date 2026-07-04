@@ -20,14 +20,16 @@ environment/session.
 | **Screenshot tool** | None working (`import -window root` fails under Wayland) |
 
 ### Automated (headless) baseline
-- `CnaTests` full suite: **1962/1962** (EasyGL, Vulkan); **1966/1966** (bgfx, +4 bgfx-specific).
-- Input filter: **215** tests, identical on all three backends.
+- `CnaTests` full suite (clean builds, task 862, incl. the task-858 offset test): **1964/1964**
+  (EasyGL, Vulkan); **1968/1968** (bgfx, +4 bgfx-specific).
+- Input filter: **217** tests, identical on all three backends.
 
 ### Verified in this environment
 
 | Check | Method | Result |
 |-------|--------|--------|
 | `Mouse::SetPosition` logical→window conversion (a-0001) | Unit test `SetPositionConvertsLogicalToWindowForLetterboxedRenderer` (real window + `SDL_Renderer`, 100×100 logical on 200×200 window) | **Pass** under ambient Wayland **and** `SDL_VIDEODRIVER=x11` |
+| `SetPosition` letterbox **offset** (not just scale) | Unit test `SetPositionHandlesLetterboxOffsetNotJustScale` (100×100 logical LETTERBOXed into a non-square 200×100 window → logical `(50,50)`→window `(100,50)`) | **Pass** (Wayland + X11); the +50px centering offset is applied (task 858) |
 | Basic `SetPosition` OS-cursor warp (window == render res) | Prior manual X11 harness (task 783): `SetPosition(50,60)` → global cursor at `windowPos+(50,60)` | **Pass** (pixel-exact, X11) |
 | `TextInputEXT` Start/Stop/`IsTextInputActive` | Real hidden-window round-trip test (task 809) | **Pass** |
 | `demo_input` builds + runs crash-free | `timeout 4 ./cna_demo_input` — window created, EasyGL/OpenGL ES 3.2 initialized, no crash | **Pass** (no crash; layout **not** visually verified — no screenshot tool) |

@@ -67,12 +67,20 @@ See also [`docs/input-backend.md`](input-backend.md) (architecture) and
 
 ## Cross-cutting
 
-- **`SetPosition` on a scaled/letterboxed window** (all platforms): `Mouse::SetPosition` converts
-  the caller's logical coordinates to window space (via `SDL_RenderCoordinatesToWindow` for the
-  SDL_Renderer backend, or `IGraphicsBackend::TransformLogicalToWindow` for EasyGL; pass-through for
-  Vulkan/bgfx, which don't do logical-presentation scaling) before `SDL_WarpMouseInWindow`, so the
-  OS cursor lands at the correct physical pixel (implemented in `plan.md` a-0001 / task 846). The
-  conversion is unit-tested; the OS-cursor *landing* pixel is verifiable only where global-mouse
+- **`SetPosition` on a scaled window** (all platforms): `Mouse::SetPosition` converts the caller's
+  logical coordinates to window space before `SDL_WarpMouseInWindow` (`plan.md` a-0001 / task 846).
+  Two paths, both correct for their scaling model:
+  - **SDL_Renderer** — `SDL_RenderCoordinatesToWindow`, which is **offset-aware**, so a true
+    letterbox (centering bars) maps correctly, not just scaled (verified with a non-square 200×100
+    window in task 858).
+  - **EasyGL** — `IGraphicsBackend::TransformLogicalToWindow`, a uniform height-scale with **no
+    offset**. That is exact for EasyGL's default `FixedHeightDynamicWidth` presentation, which fixes
+    the logical height and derives the logical *width* from the window aspect — so the viewport
+    fills the window and there are no bars to offset. EasyGL does **not** implement true
+    letterbox-with-bars for input; it doesn't need to for this model.
+  - **Vulkan / bgfx** — pass-through (no logical-presentation scaling).
+
+  The conversion is unit-tested; the OS-cursor *landing* pixel is verifiable only where global-mouse
   readback works (X11, not Wayland — see the Wayland section).
 - **Keyboard layouts** (all platforms): `Keyboard::GetKeyFromScancodeEXT` translates a physical key
   position to the character the *current* layout produces. Set `FNA_KEYBOARD_USE_SCANCODES=1`

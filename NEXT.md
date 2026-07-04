@@ -12,8 +12,9 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   to SDL3, CHECKLIST-compliant, and covered by tests. The original plan was `plan_input.md`
   (Phases I1–I7, tasks 700–783); all of it is now complete.
 - **Current development phase: `feature/input` is FINALIZED.** Phases I1–I10 (tasks 700–855) are
-  all complete and verified clean-built on **EasyGL/Vulkan/bgfx** (task 843: **1963/1963,
-  1963/1963, 1967/1967**; 215 input tests each). There is no next numbered task — see Section 8.
+  all complete and pre-merge-audited (Phase I11, tasks 856–864). Latest clean 3-backend build
+  (task 862): **EasyGL 1964/1964, Vulkan 1964/1964, bgfx 1968/1968**; **217 input tests** each.
+  There is no next numbered task — see Section 8.
 - **Two external-review passes drove the last two phases.** The first (2026-07-04) became **Phase
   I9 (792–840)**; the second became **Phase I10 (841–855)**, a stabilization pass. The one
   previously-deferred item — `Mouse::SetPosition`'s scaled/letterboxed logical→window transform
@@ -365,16 +366,18 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ---
 
-## 8. Final handoff (task 855)
+## 8. Final handoff (tasks 855 + 864)
 
-**`feature/input` is finalized.** Phases I1–I10 (tasks 700–855) are all done and clean-built +
-tested on all three backends (task 843: EasyGL/Vulkan 1963, bgfx 1967; 215 input tests each). Both
-external-review passes (→ Phase I9, then Phase I10) are complete. There is **no next numbered
-task**; the previously-deferred `plan.md` a-0001 is now **implemented** (task 846).
+**`feature/input` is finalized and pre-merge-audited — merge-ready.** Phases I1–I11 (tasks
+700–864) are all done and clean-built + tested on all three backends (task 862: EasyGL/Vulkan
+**1964**, bgfx **1968**; **217** input tests each). Both external-review passes (→ Phase I9, then
+Phase I10) plus the pre-merge audit (Phase I11) are complete; the audit found **no real bug** (task
+858 confirmed `SetPosition` handles letterbox offset, not just scale). The previously-deferred
+`plan.md` a-0001 is **implemented** (task 846). There is **no next numbered task**.
 
 **What is done (on this branch):** the full XNA 4.0 `Input` + `Input::Touch` surface, FNA-faithful
 runtime behavior on SDL3, FNA `*EXT` extensions, the MonoGame-style `MouseCursor`, `TextInputEXT`
-(UTF-16), gesture recognition, and `Mouse::SetPosition` logical→window scaling. 215 input tests + a
+(UTF-16), gesture recognition, and `Mouse::SetPosition` logical→window scaling. 217 input tests + a
 combined `cna_input_smoke` sample. Coverage is documented **by category** (never blended) in
 `plan_input.md`'s "final split" and `docs/xna-4-api-coverage.md`.
 
@@ -428,15 +431,16 @@ combined `cna_input_smoke` sample. Coverage is documented **by category** (never
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. feature/input is FINALIZED: Phases I1-I10 (700-855) are all complete and
-clean-built + tested on EasyGL/Vulkan/bgfx (task 843: 1963/1963/1967, 215 input tests each).
-There is no next numbered input task to pick up.
+Read NEXT.md first. feature/input is FINALIZED and pre-merge-audited: Phases I1-I11 (700-864)
+are all complete and clean-built + tested on EasyGL/Vulkan/bgfx (task 862: 1964/1964/1968, 217
+input tests each). There is no next numbered input task to pick up.
 
-Both external-review passes are done (Phase I9, then Phase I10). plan.md a-0001
-(Mouse::SetPosition logical->window transform) is now IMPLEMENTED (task 846). Task 811 stays
-partial and the manual/hardware checks in docs/input-manual-verification-results.md stay open
-ONLY because they need real hardware/IME/X11 - not missing code. Do NOT re-open these as input
-tasks.
+Two external-review passes (Phase I9, I10) plus a pre-merge audit (Phase I11) are done; the audit
+found NO real bug (task 858 confirmed SetPosition handles letterbox offset, not just scale).
+plan.md a-0001 (Mouse::SetPosition logical->window transform) is IMPLEMENTED (task 846). Task 811
+stays partial and the manual/hardware checks in docs/input-manual-verification-results.md stay
+open ONLY because they need real hardware/IME/X11 - not missing code. Do NOT re-open these as
+input tasks.
 
 The decision now (Section 8) is the user's: merge/PR feature/input into master (confirm before
 pushing - do NOT merge/push to master without explicit confirmation), or report complete and
