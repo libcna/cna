@@ -279,3 +279,71 @@ ASan detection of the reverted bug, and a clean ASan run of the fix). The docume
 unfixed Accelerometer boundary (destroy-during-`CurrentValueChanged`) is a known,
 explicit limitation, not a silent gap — matches this task's own framing ("if a full
 lifetime-token refactor is too large, document the boundary").
+
+## P8-2: Lock `SensorBase::TimeBetweenUpdates`
+
+### Resolution
+
+**Files changed:**
+- `include/Microsoft/Devices/Sensors/SensorBase.hpp` — `getTimeBetweenUpdatesProperty()`
+  now returns `System::TimeSpan` by value (was `const System::TimeSpan&`) and locks
+  `mutex_` around the read. `setTimeBetweenUpdatesProperty()` locks `mutex_` around the
+  compare-and-write, releasing it before `TimeBetweenUpdatesChanged.Raise()` — matching
+  every other event-raising setter on this class, none of which hold the lock while
+  raising.
+- `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` — added
+  `ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash`: 8 threads × 200 iterations
+  each calling both the getter and setter concurrently on one shared instance.
+
+**API compatibility:** confirmed via `grep` that every existing call site (all in
+`SensorBaseTests.cpp`) either compares the return value or copies it to a `const
+TimeSpan` local — both work identically with a value or reference return, so this is
+not a breaking change. Matches the exact precedent Task P5-2 already set for
+`getCurrentValueProperty()` for the same reason (the real WP7 `TimeSpan` property is a
+C# value type, so returning by value is the more faithful match, not a divergence).
+
+**Verification beyond a plain pass:** built a **second throwaway sanitizer
+configuration** — ThreadSanitizer (`-fsanitize=thread`, EASYGL backend,
+`/tmp/cmake-build-tsan-check`, not part of the repo) — specifically because TSan, not
+ASan, is the tool that actually detects data races (ASan only catches memory-safety
+bugs like the P8-1 use-after-free). Ran the *entire* Devices-only test suite
+(`SensorBase`/`Accelerometer`/`Gyroscope`/`Compass`/`Motion`/`SensorSubsystemOwnership`)
+under TSan: 28 warnings reported, but every single one is the *identical* pre-existing
+race — `System::TimeSpan::TimeSpan(const TimeSpan&)` incrementing an unsynchronized
+global `copy_count` debug/instrumentation counter at `sharp-runtime/src/System/TimeSpan.cpp:55`
+— confirmed by reading that file directly. This is a `sharp-runtime` bug (a separate
+repo with its own `CLAUDE.md`/git history, per this project's established
+boundary — see `NEXT.md`'s "do not fix bugs discovered in sharp-runtime..." rule), not
+a `Microsoft::Devices` bug, and not something this task's new locking introduced —
+`ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash` itself shows **zero** TSan
+reports anywhere near it. Not fixed here; documented as an out-of-scope, pre-existing
+finding (see Task P8-4/P8-7 for where this is written up for future sessions).
+
+**Tests added:** `SensorBaseTests.ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash`.
+
+**Commands run:**
+```bash
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean
+./cmake-build-debug/CnaTests --gtest_filter="SensorBaseTests.*"
+# 7 tests, all passed
+
+cd .. && ctest --output-on-failure
+# 2046/2049 passed; the same 2 pre-existing EasyGL failures, plus one additional
+# transient failure (EasyGL_SkinnedBones) confirmed via immediate re-run in isolation
+# to pass cleanly (100%) — an environmental flake under this session's concurrent
+# sanitizer-build load, not a regression from this task's changes.
+
+# Throwaway TSan verification build (not committed, not part of the repo):
+cmake -S . -B /tmp/cmake-build-tsan-check -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON \
+  -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -g -O1" \
+  -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+cmake --build /tmp/cmake-build-tsan-check --target CnaTests -j"$(nproc)"
+/tmp/cmake-build-tsan-check/CnaTests --gtest_filter="SensorBaseTests.*:AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:SensorSubsystemOwnershipTests.*"
+# 28 TSan warnings, ALL the identical pre-existing sharp-runtime TimeSpan::copy_count
+# race — zero warnings involving Microsoft::Devices's own locking.
+```
+
+**Remaining risk:** low. The fix itself is verified clean under TSan; the only
+sanitizer findings in this run point to a pre-existing, out-of-scope `sharp-runtime`
+issue, not this task's own change.

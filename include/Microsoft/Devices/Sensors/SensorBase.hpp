@@ -357,10 +357,23 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Gets the time interval between sensor updates.
          *
+         * Task P8-2: returns a copy, not `const TimeSpan&`, and is guarded
+         * by `mutex_` — previously read with no lock at all, the one
+         * remaining field on this class with that gap (`currentValue_`/
+         * `isDataValid_`/`isSupported_`/`disposed_` were all already fixed
+         * across Tasks P5-2/P6-3). Returning by value rather than by
+         * reference matches the precedent `getCurrentValueProperty()`
+         * already set in Task P5-2 for the same reason: a caller holding a
+         * reference into `timeBetweenUpdates_` across a concurrent write
+         * from another thread would see a torn/inconsistent value, and the
+         * real WP7 `TimeSpan` property is a value type in C# anyway, so
+         * this is a more faithful match, not a breaking API change.
+         *
          * @return Time between updates.
          */
-        [[nodiscard]] const System::TimeSpan& getTimeBetweenUpdatesProperty() const
+        [[nodiscard]] System::TimeSpan getTimeBetweenUpdatesProperty() const
         {
+            std::lock_guard<std::mutex> lock(mutex_);
             return timeBetweenUpdates_;
         }
 
@@ -369,18 +382,28 @@ namespace Microsoft::Devices::Sensors
          *
          * If the value changes, TimeBetweenUpdatesChanged is raised.
          *
+         * Task P8-2: the compare-and-write is now guarded by `mutex_`, but
+         * the lock is released before `TimeBetweenUpdatesChanged.Raise()` —
+         * never held while raising an event, same discipline every other
+         * event-raising setter on this class already follows, since a
+         * subscriber's handler can legitimately call back into this sensor
+         * and raising under a lock risks deadlock.
+         *
          * @param value New update interval.
          */
         void setTimeBetweenUpdatesProperty(const System::TimeSpan& value)
         {
-            if (!(timeBetweenUpdates_ != value))
+            bool changed = false;
             {
-                return;
+                std::lock_guard<std::mutex> lock(mutex_);
+                changed = timeBetweenUpdates_ != value;
+                if (changed)
+                {
+                    timeBetweenUpdates_ = value;
+                }
             }
 
-            timeBetweenUpdates_ = value;
-
-            if (!TimeBetweenUpdatesChanged.Empty())
+            if (changed && !TimeBetweenUpdatesChanged.Empty())
             {
                 System::EventArgs args;
                 TimeBetweenUpdatesChanged.Raise(static_cast<System::Object*>(this), args);

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "Microsoft/Devices/Sensors/SensorBase.hpp"
 #include "System/DateTimeOffset.hpp"
@@ -169,4 +171,41 @@ TEST(SensorBaseTests, CurrentValueChangedEventArgsCarryTheNewValue)
 
     ASSERT_TRUE(invoked);
     EXPECT_EQ(receivedValue, 7);
+}
+
+// Task P8-2: timeBetweenUpdates_ was the one remaining field on this class read
+// and written with no lock at all (currentValue_/isDataValid_/isSupported_/
+// disposed_ were all already fixed across Tasks P5-2/P6-3). Stresses concurrent
+// getTimeBetweenUpdatesProperty()/setTimeBetweenUpdatesProperty() calls from many
+// threads; a regression would most likely show up as a crash or a TSan-detectable
+// race, not a specific assertion failure — this test's value is in running clean
+// under real concurrent contention, same as this project's other Start()/Stop()/
+// Dispose() concurrency tests.
+TEST(SensorBaseTests, ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash)
+{
+    TestSensorBase sensor;
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 200;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&sensor, t]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(1.0 + (t % 4)));
+                const TimeSpan current = sensor.getTimeBetweenUpdatesProperty();
+                (void)current;
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
 }
