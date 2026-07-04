@@ -348,3 +348,28 @@ no dedicated demo tests exist or were added.
 publicly-tested library APIs, called through the same try/catch pattern the demo
 already used successfully — the risk surface is the demo's own new code, and it's a
 small, mechanical addition to an already-working file, verified to compile and run.
+
+## P9-7: Final API/status table
+
+### Resolution
+
+**Files changed:** `AUDIT.md` (new "Final precise status table" section, inserted
+before the existing per-class API-completeness table in the `Microsoft::Devices`
+section) and `NEXT.md` (new quick-reference table at the top of Section 2, kept in
+sync with `AUDIT.md`'s copy).
+
+**Design:** five independent columns per component — API surface, SDL/native runtime,
+sanitizer status, Android compile status, physical hardware status — deliberately kept
+separate rather than folded into a single verdict, per this task's own "avoid vague
+words like 'done' without qualifiers" instruction. Every cell reflects what was actually
+run this session or in a prior, cited phase — not an assumption. `System.Device.Location`
+is included explicitly as "not implemented, future plan only" so its absence reads as a
+documented decision, not an accidental omission.
+
+**Sanity check:** re-ran the Devices-only test filter after the doc-only change — 226
+tests, 224 passed, 2 expected skips, unaffected (as expected for a documentation-only
+change).
+
+**Tests added:** none — pure documentation.
+
+**Remaining risk:** none — documentation only, no code changed.

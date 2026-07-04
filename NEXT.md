@@ -146,6 +146,25 @@ verdict.
 
 ## 2. Current status — layered, not a single verdict
 
+**Quick-reference table (`plan_devices_phase9.md` Task P9-7, 2026-07-04)** — read the
+prose below for full detail and reasoning; this is a fast-scan summary, not a
+replacement for it. See `AUDIT.md`'s own copy of this table for the identical content
+kept in sync.
+
+| Component | API surface | SDL/native runtime | Sanitizers | Android compile | Physical hardware |
+|---|---|---|---|---|---|
+| `Accelerometer` | Complete | Real, SDL3-backed | Clean (ASan/TSan/UBSan) | Passes | **Not verified** |
+| `Gyroscope` | Complete | Real, SDL3-backed | Clean | Passes | **Not verified** |
+| `Compass` | Complete shell | Permanent `NotSupported` stub (no SDL magnetometer API) | Clean | Passes | N/A (stub) |
+| `Motion` | Complete shell | Permanent `NotSupported` stub (depends on `Compass`) | Clean | Passes | N/A (stub) |
+| `VibrateController` | Complete | Real, SDL3 haptic-backed | Clean | Passes | **Not verified** (motor/gamepad) |
+| `SensorBase<T>` | Complete | N/A (base class) | Clean, every field locked | N/A | N/A |
+| `System.Device.Location` | **Not implemented** | N/A | N/A | N/A | N/A — future plan only |
+
+**Native backend for `Compass`/`Motion`:** missing (design sketched only, see
+`docs/devices-native-backend-design.md`, Task P9-8) — not a temporary gap, a permanent
+one until a native (non-SDL) backend is separately scoped and implemented.
+
 **API surface (matches documented WP7 shape):** implemented and stable.
 `Accelerometer`, `Compass`, `Gyroscope`, `Motion`, `VibrateController`, and
 every reading/event-args/exception type match the archived WP7 SDK docs
