@@ -125,3 +125,61 @@ right outcome here, not a failure to investigate.
 skipped) — no drift, no regression, nothing to fix.
 
 **Remaining risk:** none — pure reproduction, no code touched.
+
+## P9-3: Re-run sanitizer gates
+
+### Resolution
+
+All three presets from `CMakePresets.json` (added Task P8-4) configured, built, and ran
+successfully against the exact Devices-only filter from the task brief.
+
+**ASan (`devices-asan`):**
+```bash
+cmake --preset devices-asan && cmake --build --preset devices-asan
+./cmake-build-devices-asan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+```
+Result: **226 tests, 224 passed, 2 expected skips, zero ASan reports.**
+
+**TSan (`devices-tsan`):**
+```bash
+cmake --preset devices-tsan && cmake --build --preset devices-tsan
+./cmake-build-devices-tsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+```
+Result: **226 tests, 224 passed, 2 expected skips; 41 TSan warnings, all reporting the
+identical single location:**
+```
+SUMMARY: ThreadSanitizer: data race /rv/.../sharp-runtime/src/System/TimeSpan.cpp:55 in System::TimeSpan::TimeSpan(System::TimeSpan const&)
+```
+Read the actual stack trace (not just the summary line) to confirm the classification
+rather than assuming it: both racing accesses are at frame `#0`,
+`System::TimeSpan::TimeSpan(const TimeSpan&)`, `sharp-runtime/src/System/TimeSpan.cpp:55`
+— this is `sharp-runtime`'s own `copy_count++` debug/instrumentation counter, a plain
+global incremented on every `TimeSpan` copy with no synchronization of its own. Frame
+`#1` in the sample trace is `SensorBase<AccelerometerReading>::SensorBase()` (calling
+`setTimeBetweenUpdatesProperty(TimeSpan::FromMilliseconds(2.0))`, which copy-constructs
+a `TimeSpan`) and frame `#2` is `Accelerometer::Accelerometer()` — but the *racing
+variable itself* is `sharp-runtime`'s own counter, not any `Microsoft::Devices` field or
+lock. **Classified as outside `Microsoft::Devices`, confirmed by the stack, not assumed
+from the file path alone** — a separate repo with its own `CLAUDE.md`/git history, per
+this project's established boundary (`NEXT.md`'s "do not fix bugs discovered in
+sharp-runtime..." rule). Identical finding, same count (41, vs. Phase 8's own 41 after
+its atomic-counter fix), same single location as Task P8-4's own final TSan run — no
+drift, no new race.
+
+**UBSan (`devices-ubsan`):**
+```bash
+cmake --preset devices-ubsan && cmake --build --preset devices-ubsan
+./cmake-build-devices-ubsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+```
+Result: **226 tests, 224 passed, 2 expected skips, zero UBSan reports.**
+
+All three preset-generated build directories were deleted after verification, matching
+Task P8-4's own established practice (they regenerate identically from the presets any
+time they're needed again).
+
+**Tests added:** none — pure re-verification.
+
+**Remaining risk:** none. All three sanitizers reproduce Phase 8's final clean state
+exactly; the one TSan finding is confirmed (via its actual stack, not assumed) to be the
+same pre-existing, out-of-scope `sharp-runtime` issue, unrelated to any
+`Microsoft::Devices` code.
