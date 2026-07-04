@@ -11,9 +11,12 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
@@ -23,6 +26,7 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -566,6 +570,205 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+        // ---------------------------------------------------------------------------
+        // .skinnedmodel.json descriptor reader
+        // NOXNA — loads a GPU-skinned mesh + skeleton + animation clips for the real-rendering
+        // Avatar extension (see AvatarRenderer::EnableRealRenderingEXT). Not part of the XNA
+        // 4.0 content pipeline.
+        // ---------------------------------------------------------------------------
+
+        struct BinReaderEXT
+        {
+            const std::vector<std::uint8_t>& Data;
+            std::size_t Pos = 0;
+
+            template <typename T>
+            T Read()
+            {
+                T value{};
+                std::memcpy(&value, Data.data() + Pos, sizeof(T));
+                Pos += sizeof(T);
+                return value;
+            }
+
+            Matrix ReadMatrix()
+            {
+                float m[16];
+                for (float& f : m) { f = Read<float>(); }
+                return Matrix(m[0],  m[1],  m[2],  m[3],
+                              m[4],  m[5],  m[6],  m[7],
+                              m[8],  m[9],  m[10], m[11],
+                              m[12], m[13], m[14], m[15]);
+            }
+        };
+
+        std::size_t FindMatchingBracketEXT(const std::string& j, std::size_t openPos,
+                                            char openCh, char closeCh)
+        {
+            int depth = 1;
+            std::size_t pos = openPos + 1;
+            while (pos < j.size() && depth > 0)
+            {
+                if (j[pos] == openCh) { ++depth; }
+                else if (j[pos] == closeCh) { --depth; }
+                ++pos;
+            }
+            return pos;
+        }
+
+        // Parses a flat JSON array of small objects bounded to the array's own closing
+        // bracket (unlike the "meshes"/"glyphs" loops above, this schema has more than one
+        // array key per file, so bounding matters — an unbounded scan would bleed into a
+        // later array's objects).
+        std::vector<std::string> ParseFlatObjectArrayEXT(const std::string& json, const std::string& key)
+        {
+            std::vector<std::string> result;
+            const std::size_t k = json.find("\"" + key + "\"");
+            if (k == std::string::npos) { return result; }
+            const std::size_t a = json.find('[', k);
+            if (a == std::string::npos) { return result; }
+            const std::size_t arrEnd = FindMatchingBracketEXT(json, a, '[', ']');
+
+            std::size_t pos = a + 1;
+            while (true)
+            {
+                const std::size_t os = json.find('{', pos);
+                if (os == std::string::npos || os >= arrEnd) { break; }
+                const std::size_t oe = FindMatchingBracketEXT(json, os, '{', '}');
+                result.push_back(json.substr(os, oe - os));
+                pos = oe;
+            }
+            return result;
+        }
+
+        class SkinnedModelTypeReader
+            : public ContentTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".skinnedmodel.json"};
+            }
+
+            std::shared_ptr<Graphics::SkinnedModelEXT> Read(const std::string& path,
+                                                             ContentManager& cm) override
+            {
+                namespace fs = std::filesystem;
+
+                const std::string json = ReadTextFile(path);
+                const std::string root = cm.getRootDirectoryProperty();
+                Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
+
+                auto model = std::make_shared<Graphics::SkinnedModelEXT>();
+
+                // --- Skeleton ---
+                const std::string skeletonRel = ExtractJsonStringField(json, "skeleton");
+                if (skeletonRel.empty())
+                {
+                    throw ContentLoadException(
+                        "SkinnedModel descriptor missing 'skeleton' field: " + path);
+                }
+
+                const auto skelBytes = ReadBinaryFile((fs::path(root) / skeletonRel).string());
+                BinReaderEXT skelReader{skelBytes};
+                const int boneCount = skelReader.Read<std::int32_t>();
+                model->BoneCount = boneCount;
+                model->ParentBoneIndices.resize(static_cast<std::size_t>(boneCount));
+                for (int i = 0; i < boneCount; ++i)
+                {
+                    model->ParentBoneIndices[static_cast<std::size_t>(i)] = skelReader.Read<std::int32_t>();
+                }
+                model->BindPoseLocal.resize(static_cast<std::size_t>(boneCount));
+                for (int i = 0; i < boneCount; ++i)
+                {
+                    model->BindPoseLocal[static_cast<std::size_t>(i)] = skelReader.ReadMatrix();
+                }
+                model->InverseBindPoseGlobal.resize(static_cast<std::size_t>(boneCount));
+                for (int i = 0; i < boneCount; ++i)
+                {
+                    model->InverseBindPoseGlobal[static_cast<std::size_t>(i)] = skelReader.ReadMatrix();
+                }
+
+                // --- Parts ---
+                for (const std::string& pg : ParseFlatObjectArrayEXT(json, "parts"))
+                {
+                    const std::string name     = ExtractJsonStringField(pg, "name");
+                    const std::string vertFile = ExtractJsonStringField(pg, "vertices");
+                    const std::string idxFile  = ExtractJsonStringField(pg, "indices");
+                    const int stride           = JsonInt(pg, "vertexStride", 52);
+                    const std::string texFile  = ExtractJsonStringField(pg, "texture");
+
+                    if (vertFile.empty() || idxFile.empty()) { continue; }
+                    if (stride <= 0) { continue; }
+
+                    const auto vertBytes = ReadBinaryFile((fs::path(root) / vertFile).string());
+                    const auto idxBytes  = ReadBinaryFile((fs::path(root) / idxFile).string());
+
+                    const int numVertices = static_cast<int>(vertBytes.size()) / stride;
+                    const int numIndices  = static_cast<int>(idxBytes.size())
+                                            / static_cast<int>(sizeof(std::uint16_t));
+                    const int primCount   = numIndices / 3;
+
+                    auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
+                    vb->SetDataRaw(vertBytes.data(), numVertices, stride);
+
+                    auto ib = std::make_unique<Graphics::IndexBuffer>(device, numIndices);
+                    ib->SetData(reinterpret_cast<const std::uint16_t*>(idxBytes.data()), numIndices);
+
+                    auto part = std::make_unique<Graphics::ModelMeshPart>(
+                        vb.get(), ib.get(), numVertices, primCount, 0, 0);
+
+                    Graphics::Texture2D texture;
+                    if (!texFile.empty())
+                    {
+                        texture = cm.Load<Graphics::Texture2D>(texFile);
+                    }
+
+                    model->AddPartEXT(name, std::move(vb), std::move(ib), std::move(part),
+                                       std::move(texture));
+                }
+
+                // --- Animations ---
+                for (const std::string& ag : ParseFlatObjectArrayEXT(json, "animations"))
+                {
+                    const std::string name     = ExtractJsonStringField(ag, "name");
+                    const std::string clipFile = ExtractJsonStringField(ag, "clip");
+                    if (name.empty() || clipFile.empty()) { continue; }
+
+                    const auto clipBytes = ReadBinaryFile((fs::path(root) / clipFile).string());
+                    BinReaderEXT clipReader{clipBytes};
+
+                    Graphics::AnimationClipEXT clip;
+                    clip.Duration = System::TimeSpan::FromSeconds(clipReader.Read<double>());
+                    const int trackCount = clipReader.Read<std::int32_t>();
+                    clip.Tracks.reserve(static_cast<std::size_t>(trackCount));
+                    for (int t = 0; t < trackCount; ++t)
+                    {
+                        Graphics::BoneTrackEXT track;
+                        track.BoneIndex = clipReader.Read<std::int32_t>();
+                        const int keyCount = clipReader.Read<std::int32_t>();
+                        track.Keys.reserve(static_cast<std::size_t>(keyCount));
+                        for (int k = 0; k < keyCount; ++k)
+                        {
+                            Graphics::KeyframeEXT key;
+                            key.Time = System::TimeSpan::FromSeconds(clipReader.Read<double>());
+                            key.Translation = Vector3(clipReader.Read<float>(), clipReader.Read<float>(),
+                                                       clipReader.Read<float>());
+                            key.Rotation = Quaternion(clipReader.Read<float>(), clipReader.Read<float>(),
+                                                       clipReader.Read<float>(), clipReader.Read<float>());
+                            key.Scale = Vector3(clipReader.Read<float>(), clipReader.Read<float>(),
+                                                clipReader.Read<float>());
+                            track.Keys.push_back(key);
+                        }
+                        clip.Tracks.push_back(std::move(track));
+                    }
+                    model->Clips[name] = std::move(clip);
+                }
+
+                return model;
+            }
+        };
+
         class SongTypeReader : public ContentTypeReader<Media::Song>
         {
         public:
@@ -609,6 +812,8 @@ namespace Microsoft::Xna::Framework::Content
         RegisterTypeReader<std::shared_ptr<Graphics::Effect>>(std::make_unique<EffectTypeReader>());
         RegisterTypeReader<Graphics::SpriteFont>(std::make_unique<SpriteFontTypeReader>());
         RegisterTypeReader<Graphics::Model>(std::make_unique<ModelTypeReader>());
+        RegisterTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>(
+            std::make_unique<SkinnedModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
         RegisterTypeReader<Media::Video>(std::make_unique<VideoTypeReader>());

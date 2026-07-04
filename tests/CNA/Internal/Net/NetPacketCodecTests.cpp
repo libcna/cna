@@ -1,0 +1,128 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) Robert Vokac and contributors
+#include <gtest/gtest.h>
+
+#include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include <enet/enet.h>
+
+using namespace CNA::Internal::Net;
+
+TEST(NetPacketCodecTest, PeekTagOnEmptyBufferThrows) {
+    std::vector<uint8_t> empty;
+    EXPECT_THROW(NetPacketCodec::PeekTag(empty), std::out_of_range);
+}
+
+TEST(NetPacketCodecTest, ClientHelloRoundtrip) {
+    ClientHelloMessage message;
+    message.LocalGamertags = {"alice", "bob"};
+
+    auto bytes = NetPacketCodec::Encode(message);
+    EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::ClientHello);
+
+    auto decoded = NetPacketCodec::DecodeClientHello(bytes);
+    ASSERT_EQ(decoded.LocalGamertags.size(), 2u);
+    EXPECT_EQ(decoded.LocalGamertags[0], "alice");
+    EXPECT_EQ(decoded.LocalGamertags[1], "bob");
+}
+
+TEST(NetPacketCodecTest, ClientHelloRoundtripEmpty) {
+    ClientHelloMessage message;
+    auto bytes = NetPacketCodec::Encode(message);
+    auto decoded = NetPacketCodec::DecodeClientHello(bytes);
+    EXPECT_TRUE(decoded.LocalGamertags.empty());
+}
+
+TEST(NetPacketCodecTest, ServerWelcomeRoundtrip) {
+    ServerWelcomeMessage message;
+    message.AssignedWireIds = {3, 4};
+    message.ExistingRoster = {{1, "host"}, {2, "guest"}};
+
+    auto bytes = NetPacketCodec::Encode(message);
+    EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::ServerWelcome);
+
+    auto decoded = NetPacketCodec::DecodeServerWelcome(bytes);
+    ASSERT_EQ(decoded.AssignedWireIds.size(), 2u);
+    EXPECT_EQ(decoded.AssignedWireIds[0], 3);
+    EXPECT_EQ(decoded.AssignedWireIds[1], 4);
+    ASSERT_EQ(decoded.ExistingRoster.size(), 2u);
+    EXPECT_EQ(decoded.ExistingRoster[0].WireId, 1);
+    EXPECT_EQ(decoded.ExistingRoster[0].Gamertag, "host");
+    EXPECT_EQ(decoded.ExistingRoster[1].WireId, 2);
+    EXPECT_EQ(decoded.ExistingRoster[1].Gamertag, "guest");
+}
+
+TEST(NetPacketCodecTest, GamerJoinBroadcastRoundtrip) {
+    GamerJoinBroadcastMessage message;
+    message.NewGamers = {{5, "newgamer"}};
+
+    auto bytes = NetPacketCodec::Encode(message);
+    EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::GamerJoinBroadcast);
+
+    auto decoded = NetPacketCodec::DecodeGamerJoinBroadcast(bytes);
+    ASSERT_EQ(decoded.NewGamers.size(), 1u);
+    EXPECT_EQ(decoded.NewGamers[0].WireId, 5);
+    EXPECT_EQ(decoded.NewGamers[0].Gamertag, "newgamer");
+}
+
+TEST(NetPacketCodecTest, GamerLeaveBroadcastRoundtrip) {
+    GamerLeaveBroadcastMessage message;
+    message.WireIds = {7, 8, 9};
+
+    auto bytes = NetPacketCodec::Encode(message);
+    EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::GamerLeaveBroadcast);
+
+    auto decoded = NetPacketCodec::DecodeGamerLeaveBroadcast(bytes);
+    ASSERT_EQ(decoded.WireIds.size(), 3u);
+    EXPECT_EQ(decoded.WireIds[0], 7);
+    EXPECT_EQ(decoded.WireIds[1], 8);
+    EXPECT_EQ(decoded.WireIds[2], 9);
+}
+
+TEST(NetPacketCodecTest, StateChangeBroadcastRoundtrip) {
+    StateChangeBroadcastMessage message;
+    message.NewState = Microsoft::Xna::Framework::Net::NetworkSessionState::Playing;
+
+    auto bytes = NetPacketCodec::Encode(message);
+    EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::StateChangeBroadcast);
+
+    auto decoded = NetPacketCodec::DecodeStateChangeBroadcast(bytes);
+    EXPECT_EQ(decoded.NewState, Microsoft::Xna::Framework::Net::NetworkSessionState::Playing);
+}
+
+TEST(NetPacketCodecTest, AppDataRoundtrip) {
+    AppDataMessage message;
+    message.SenderWireId = 1;
+    message.TargetWireId = 2;
+    message.Options = SendDataOptions::Reliable;
+    message.Payload = {10, 20, 30, 40, 50};
+
+    auto bytes = NetPacketCodec::Encode(message);
+    EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::AppData);
+
+    auto decoded = NetPacketCodec::DecodeAppData(bytes);
+    EXPECT_EQ(decoded.SenderWireId, 1);
+    EXPECT_EQ(decoded.TargetWireId, 2);
+    EXPECT_EQ(decoded.Options, SendDataOptions::Reliable);
+    ASSERT_EQ(decoded.Payload.size(), 5u);
+    EXPECT_EQ(decoded.Payload[0], 10);
+    EXPECT_EQ(decoded.Payload[4], 50);
+}
+
+TEST(NetPacketCodecTest, AppDataRoundtripEmptyPayload) {
+    AppDataMessage message;
+    message.SenderWireId = 0;
+    message.TargetWireId = 1;
+    message.Options = SendDataOptions::None;
+
+    auto bytes = NetPacketCodec::Encode(message);
+    auto decoded = NetPacketCodec::DecodeAppData(bytes);
+    EXPECT_TRUE(decoded.Payload.empty());
+}
+
+TEST(NetPacketCodecTest, SendDataOptionsToEnetFlagsMapping) {
+    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::None), static_cast<uint32_t>(ENET_PACKET_FLAG_UNSEQUENCED));
+    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::InOrder), 0u);
+    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::Reliable), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
+    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::ReliableInOrder), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
+    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::Chat), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
+}

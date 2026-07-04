@@ -174,6 +174,49 @@ namespace Microsoft::Xna::Framework::Graphics
         SetData(data + startIndex, elementCount);
     }
 
+    void VertexBuffer::SetData(const VertexPositionNormalTextureSkinned* data, int count)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        // VertexPositionNormalTextureSkinned has a virtual base (IVertexType). Pack into
+        // GPU layout: float3 position + float3 normal + float2 texcoord + float4 weights
+        // + byte4 indices = 52 bytes.
+        struct GpuVertex {
+            float x, y, z;
+            float nx, ny, nz;
+            float u, v;
+            float w0, w1, w2, w3;
+            std::uint8_t i0, i1, i2, i3;
+        };
+        static_assert(sizeof(GpuVertex) == 52, "GpuVertex (VPNTSkinned) must be 52 bytes");
+
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i) {
+            packed[i].x  = data[i].Position.X;
+            packed[i].y  = data[i].Position.Y;
+            packed[i].z  = data[i].Position.Z;
+            packed[i].nx = data[i].Normal.X;
+            packed[i].ny = data[i].Normal.Y;
+            packed[i].nz = data[i].Normal.Z;
+            packed[i].u  = data[i].TextureCoordinate.X;
+            packed[i].v  = data[i].TextureCoordinate.Y;
+            packed[i].w0 = data[i].BlendWeight.X;
+            packed[i].w1 = data[i].BlendWeight.Y;
+            packed[i].w2 = data[i].BlendWeight.Z;
+            packed[i].w3 = data[i].BlendWeight.W;
+            packed[i].i0 = data[i].BlendIndices[0];
+            packed[i].i1 = data[i].BlendIndices[1];
+            packed[i].i2 = data[i].BlendIndices[2];
+            packed[i].i3 = data[i].BlendIndices[3];
+        }
+        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
+    }
+
+    void VertexBuffer::SetData(const VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount)
+    {
+        SetData(data + startIndex, elementCount);
+    }
+
     void VertexBuffer::SetDataRaw(const void* data, int count, int stride)
     {
         if (getIsDisposedProperty())

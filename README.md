@@ -51,9 +51,12 @@ ctest --test-dir build --output-on-failure
 
 - SDL3-based platform foundation for windowing/input/audio integration.
 - Backend abstraction supports targeting multiple rendering paths from one API layer.
-- **Windows support** via the `SDL_RENDERER` backend (MSVC, clang-cl, or MinGW-w64).
+- **Windows support** via the `SDL_RENDERER` backend (MSVC, clang-cl, or MinGW-w64) — cross-compiled
+  with MinGW-w64 and verified running under Wine.
 - Linux support via `EASYGL` (OpenGL) or `SDL_RENDERER`.
-- Architecture is future-friendly for Android and Web (Emscripten) targets.
+- **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
+  architecturally planned — see section 7 (Networking, Services & Avatar) below for real
+  cross-platform `Net` verification on both.
 
 ### Performance / C++ Advantages
 
@@ -141,17 +144,59 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
     - Present as an architecture target/scaffold.
     - Current implementation is incomplete and contains TODO/stub areas.
 
-## 7. 🧰 Technology Stack
+## 7. 🌐 Networking, Services & Avatar
+
+Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and, within
+`GamerServices`, the Avatar subsystem), with real cross-platform networking behind them.
+
+### GamerServices
+
+- Complete XNA-shaped port of the Xbox LIVE-era gamer services API surface: `Gamer`,
+  `SignedInGamer`, `GamerProfile`, `FriendGamer`/`FriendCollection`, leaderboards
+  (`LeaderboardReader`/`LeaderboardWriter`/`LeaderboardEntry`), `Guide`, achievements, and more.
+- **Not** binary-compatible with real Xbox Live — reimplements the public API shape with
+  local/synthetic semantics, matching how FNA itself already handles this namespace.
+
+### Net (`Microsoft::Xna::Framework::Net`)
+
+- Complete `NetworkSession` API surface (5 enums + 18 classes).
+- **Real networking** for `NetworkSessionType::SystemLink`, backed by
+  [ENet](http://enet.bespin.org/) (reliable UDP, vendored directly under `third_party/enet`) —
+  hosting, joining, LAN discovery, `AppData` relay, disconnect handling, and `StartGame`/`EndGame`
+  state broadcast all run over a genuine transport, not a stub. Every other `NetworkSessionType`
+  remains a synthetic (non-networked) stub, matching upstream XNA/FNA behavior.
+- **Verified real networking across four platforms:**
+  - **Linux** — native ENet/UDP, including a genuine two-OS-process loopback test.
+  - **Windows** — native ENet/UDP via WinSock2; cross-compiled with MinGW-w64 and verified running
+    under Wine.
+  - **Web (Emscripten)** — real ENet traffic carried over actual WebSocket connections. A browser
+    tab can only ever be a network *client* (browsers cannot open listening sockets at all); real
+    hosting requires a Node.js-run process.
+  - **Android (NDK)** — native ENet/UDP via bionic libc's genuine POSIX sockets, verified on a real
+    x86_64 emulator — no platform-specific transport workarounds needed at all, unlike Web.
+
+### Avatar
+
+- `AvatarAnimation`, `AvatarDescription`, `AvatarRenderer`, and their supporting enums/types (all
+  within `Microsoft::Xna::Framework::GamerServices`) are ported from a decompiled real Microsoft
+  XNA 4.0 reference assembly — FNA itself never implemented Avatar, since real avatar rendering
+  required Xbox Live's cloud avatar-editor service. The API shape is complete, with the real
+  (occasionally surprising, always-inert) stubbed behavior of the original assembly preserved
+  faithfully rather than "improved."
+
+## 8. 🧰 Technology Stack
 
 - **Language:** C++23
 - **Core platform/runtime library:** SDL3 (vendored via Git submodule at `third_party/SDL`)
 - **Media integration:** `SDL3_image`, `SDL3_mixer` (vendored via Git submodules)
 - **Graphics dependency:** `easy-gl` (for `EASYGL` backend)
+- **Networking:** [ENet](http://enet.bespin.org/) (vendored directly at `third_party/enet`) —
+  reliable-UDP transport backing `Microsoft::Xna::Framework::Net`'s `SystemLink` sessions
 - **Utility/runtime layer:** `sharp-runtime`
 - **Build system:** CMake
 - **Tests:** GoogleTest (`CnaTests` target)
 
-## 8. ⚡ Getting Started
+## 9. ⚡ Getting Started
 
 ### Prerequisites (Linux)
 
@@ -269,11 +314,13 @@ cmake --build build --target hello-triangle-sdl
 |----------|----------|---------|--------|
 | Linux x86_64 | GCC 12+ | EASYGL, SDL_RENDERER | ✅ |
 | Linux x86_64 | Clang 15+ | EASYGL, SDL_RENDERER | ✅ |
-| Windows x86_64 | MSVC 2022 | SDL_RENDERER | ✅ planned |
-| Windows x86_64 | MinGW-w64 | SDL_RENDERER | ✅ planned |
-| Linux → Windows | MinGW-w64 (cross) | SDL_RENDERER | ✅ planned |
+| Windows x86_64 | MSVC 2022 | SDL_RENDERER | planned |
+| Windows x86_64 (native) | MinGW-w64 | SDL_RENDERER | planned |
+| Linux → Windows (cross) | MinGW-w64 | SDL_RENDERER | ✅ verified building + full test suite under Wine |
+| Web (Emscripten) | emcc/Clang (emsdk) | EASYGL | ✅ verified building + running under Node.js |
+| Android (NDK) | Clang (NDK 29/30) | EASYGL | ✅ verified building + running on a real x86_64 emulator |
 
-## 9. 📖 Usage Example
+## 10. 📖 Usage Example
 
 Minimal XNA-style game skeleton in CNA:
 
@@ -337,7 +384,7 @@ int main()
 }
 ```
 
-## 10. 🧠 Design & Engineering Highlights
+## 11. 🧠 Design & Engineering Highlights
 
 - **API mirroring strategy:** Public classes follow XNA naming and namespace conventions to reduce conceptual migration cost from XNA/MonoGame-style code.
 - **Abstraction design:** Gameplay-facing rendering APIs (`GraphicsDevice`, `SpriteBatch`, `Texture2D`) delegate to backend interfaces instead of exposing low-level renderer objects.
@@ -345,7 +392,7 @@ int main()
 - **Backend-oriented architecture:** Backend can be swapped at build-time with a single CMake option while keeping high-level game code stable.
 - **Performance-minded C++ implementation:** Native code path enables tighter control over memory, lifetime, and rendering behavior than managed runtime abstractions.
 
-## 11. 🛣 Roadmap
+## 12. 🛣 Roadmap
 
 - Continue expanding XNA API coverage and behavior parity (incremental, class-by-class).
 - Improve backend parity and complete missing/stubbed backend functionality.
@@ -353,7 +400,7 @@ int main()
 - Extend rendering capabilities beyond current 2D-focused workflows.
 - Strengthen cross-platform execution targets and validation coverage.
 
-## 12. 📜 License
+## 13. 📜 License
 
 CNA is licensed under the Microsoft Public License (Ms-PL). See the [LICENSE](LICENSE) file for details.
 

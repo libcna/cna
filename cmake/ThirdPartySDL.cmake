@@ -11,7 +11,9 @@ option(CNA_USE_SYSTEM_SDL "Use system SDL packages instead of vendored submodule
 if(EMSCRIPTEN)
     set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten")
 else()
-    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt")
+    # Keyed by target platform/arch so a cross-build (e.g. Windows via mingw-w64) cannot
+    # silently overwrite the native build's cached SDL3 install, and vice versa.
+    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 endif()
 set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}"
     CACHE PATH "Persistent SDL3 install root (survives cmake --clean and build-tree deletion)")
@@ -161,6 +163,20 @@ function(_cna_build_sdl_dep)
     )
     if(CMAKE_TOOLCHAIN_FILE)
         list(APPEND _base_args "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
+    endif()
+    if(ANDROID)
+        # The NDK's own toolchain file determines the target ABI/platform from these cache
+        # variables, not from CMAKE_TOOLCHAIN_FILE alone - each SDL sub-build is a fully separate
+        # cmake invocation (execute_process below), so it doesn't inherit the parent configure's
+        # cache automatically. Without this, every sub-build silently falls back to the NDK
+        # toolchain's own defaults (historically ARM32 / minimum supported platform).
+        list(APPEND _base_args "-DANDROID_ABI=${ANDROID_ABI}")
+        if(ANDROID_PLATFORM)
+            list(APPEND _base_args "-DANDROID_PLATFORM=${ANDROID_PLATFORM}")
+        endif()
+        if(ANDROID_STL)
+            list(APPEND _base_args "-DANDROID_STL=${ANDROID_STL}")
+        endif()
     endif()
 
     message(STATUS "CNA: Configuring ${_A_NAME} (one-time step)...")

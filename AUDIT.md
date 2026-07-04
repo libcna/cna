@@ -202,8 +202,10 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | VertexPositionColor | ✅ | API complete |
 | VertexPositionColorTexture | ✅ | API complete |
 | VertexPositionNormalTexture | ✅ | API complete |
+| VertexPositionNormalTextureSkinned | ✅ | NOXNA — not part of the XNA 4.0 API. GPU-skinned vertex (position/normal/texcoord/4 blend weights/4 blend indices, 52-byte logical layout) added for the Avatar real-rendering extension (see `docs/avatar-real-rendering-ext.md`); matching `VertexBuffer::SetData` overloads added |
 | VertexPositionTexture | ✅ | API complete |
 | Viewport | ✅ | API complete |
+| SkinnedModelEXT | ✅ | NOXNA — not part of the XNA 4.0 API. Real, GPU-skinnable mesh + skeleton + animation-clip container for the Avatar real-rendering extension. Deliberately not built on `Model`/`ModelBone`/`ModelMesh` (those encode rigid multi-part model animation, the wrong shape for per-vertex GPU skinning). Its bone hierarchy is entirely independent of the real Xbox Avatar 71-bone arrays. Loaded via a new `SkinnedModelTypeReader` (`.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`) registered in `ContentManager` |
 
 ---
 
@@ -1453,9 +1455,30 @@ never reached `GestureDetector`) to real and gesture-tested (`plan_input.md` Pha
 
 | Class | Status | Notes |
 |---|---|---|
-| Guide | ✅ | Stub |
-| GamerServicesComponent | ✅ | Stub added |
 | GamerServicesNotAvailableException | ✅ | Stub added |
+| Gamer | ✅ | Full port; abstract base, tests via FriendGamer subclass |
+| GamerProfile | ✅ | Full port; tests complete |
+| LeaderboardEntry | ✅ | Full port; tests complete; `operator==`/`operator!=` added (NOXNA — required by `ReadOnlyCollection<T>`, not present in FNA) |
+| LeaderboardWriter | ✅ | Full port; `GetLeaderboard` always throws (matches FNA stub) |
+| LeaderboardReader | ✅ | Full port; tests complete |
+| SignedInGamer | ✅ | Full port; tests complete |
+| GamerServicesDispatcher | ✅ | Full port: `IsInitialized`, `WindowHandle`, `InstallingTitleUpdate` event, `Initialize()` (creates 4 stub `SignedInGamer`s, fires `OnSignIn`), `Update()`, `UpdateAsync()`. `Initialize()` deliberately not exercised by the automated test suite (sets process-lifetime static state) |
+| GamerServicesComponent | ✅ | Full port — wires `Initialize()`/`Update()` to `GamerServicesDispatcher`; no tests (requires a live `Game`, same as `GameComponent`) |
+| Guide | ✅ | Full port — replaced the old `DEF_PROP`-based stub (which had an invented, non-FNA `Show(PlayerIndex)` method); tests complete except the always-empty `Show*` no-ops verified only for non-throw |
+| AvatarBodyType (enum) | ✅ | Complete |
+| AvatarRendererState (enum) | ✅ | Complete |
+| AvatarMouth (enum) | ✅ | Complete |
+| AvatarEye (enum) | ✅ | Complete |
+| AvatarEyebrow (enum) | ✅ | Complete |
+| AvatarAnimationPreset (enum) | ✅ | Complete |
+| AvatarBone (enum) | ✅ | Complete; explicit numeric values with gaps (0-70 range, 55 named values), verified byte-for-byte against the real reference assembly, not guessed |
+| AvatarExpression | ✅ | Full port; plain get/set struct |
+| IAvatarAnimation | ✅ | Full port; interface |
+| AvatarAnimation | ✅ | Full port. **Note: FNA has zero Avatar implementation** (Avatar required real Xbox Live cloud services FNA never built) — ported from the real, genuine Microsoft `Microsoft.Xna.Framework.Avatar.dll` reference assembly (v4.0.20823.0), decompiled via `monodis` for this port, since FNA's own tree has nothing to verify line-by-line against. Preserves real, verified quirks faithfully: the constructor never reads its `animationPreset` argument for any faithful field (every instance gets identical zero-valued bones and zero `Length`); `Update()` has real clamp logic, not a no-op, though `Length` being permanently zero makes every call collapse `CurrentPosition` back to zero regardless of the `loop` argument. **NOXNA extension added**: `SetRealClipNameEXT`/`GetRealClipNameEXT` (defaults to `AvatarAnimationPresetToClipNameEXT(preset)` — the one place `animationPreset` is now read, only for this new field) |
+| AvatarDescription | ✅ | Full port from the decompiled reference assembly (see AvatarAnimation's note — same FNA gap). Preserves a genuinely surprising, verified quirk: `CreateRandom()`/`CreateRandom(AvatarBodyType)`/`EndGetFromGamer()` never actually randomize or populate anything — all three always return an all-zero, invalid (1021-byte) description. `BeginGetFromGamer` invokes its callback synchronously before returning (a real behavior, not present as the actual "fake-async" pattern used elsewhere in this codebase's other Begin/End stubs). The disposed-`Gamer` branch of `BeginGetFromGamer` is not covered by a test — `Gamer` has no publicly/NOXNA-accessible way to become disposed anywhere in this codebase currently |
+| AvatarRenderer | ✅ | Full port from the decompiled reference assembly (see AvatarAnimation's note — same FNA gap). Preserves a genuinely surprising, verified quirk: `get_State()` unconditionally forces itself to `Unavailable` on *every single read* (not just an initial value) — nothing anywhere in the class ever sets it to `Ready` or `Loading`, so `BindPose`'s `state != Ready` guard always throws in practice. `ParentBones`' 71 real values decoded byte-for-byte from the assembly's static-array-init blob, not guessed. Both constructors ignore all of their arguments. **NOXNA extension added**: `EnableRealRenderingEXT`/`IsRealRenderingEnabledEXT`/`SetAppearanceEXT`/`DrawRealEXT` opt a game into real GPU-skinned rendering via a `Graphics::SkinnedModelEXT`, fully decoupled from the faithful 71-bone arrays above and from the always-no-op `Draw()` overloads (unaffected, still tested unchanged). See `docs/avatar-real-rendering-ext.md` |
+| AvatarAnimationPresetNamesEXT (free function) | ✅ | NOXNA — not part of the XNA 4.0 API. `AvatarAnimationPresetToClipNameEXT` maps each of the 31 `AvatarAnimationPreset` values to its enumerator name, used to look up `SkinnedModelEXT` clips |
+| AvatarAppearanceEXT | ✅ | NOXNA — not part of the XNA 4.0 API. CNA-invented skin/hair tint struct used only by the real-rendering extension; explicitly not a reconstruction of the real, undocumented, proprietary 1021-byte `AvatarDescription` format. No clothing customization in this phase |
 
 ---
 
@@ -1575,3 +1598,27 @@ convention. If a real game surfaces a concrete need for main-thread dispatch, it
 be scoped and implemented then, informed by that actual use case, not guessed at now.
 Documented instead (above), so the behavior is at least honestly known rather than
 silently assumed.
+
+---
+
+## `Microsoft::Xna::Framework::Net`
+
+| Class | Status | Notes |
+|---|---|---|
+| NetworkSessionType (enum) | ✅ | Complete |
+| NetworkSessionState (enum) | ✅ | Complete |
+| NetworkSessionEndReason (enum) | ✅ | Complete |
+| NetworkSessionJoinError (enum) | ✅ | Complete |
+| SendDataOptions (enum) | ✅ | Complete; FNA marks `[Flags]` but values are sequential (0-4), not real bit flags — ported plain, no bitwise operators added |
+| NetworkSessionProperties | ✅ | Full port; implements `System::Collections::Generic::IList<std::optional<int>>`. Preserves two FNA quirks faithfully: the indexer setter appends instead of extending when given an out-of-range index (FNA's own "TODO: Expand list to index size?"), and `IsReadOnly` always returns `true` despite `Add`/`Remove`/`Clear` being fully functional |
+| QualityOfService | ✅ | Full port; all-defaults data class |
+| AvailableNetworkSession | ✅ | Full port; `operator==`/`operator!=` added (NOXNA — required by `ReadOnlyCollection<T>`, not present in FNA; compares only scalar fields, excludes non-equatable `QualityOfService`/`NetworkSessionProperties` members) |
+| AvailableNetworkSessionCollection | ✅ | Full port; `Dispose()` only flips `IsDisposed` — sharp-runtime's `ReadOnlyCollection<T>` copies into private storage with no derived-class mutator, unlike FNA's reference-wrapping `ReadOnlyCollection<T>` whose `Dispose()` empties the underlying shared list too |
+| GameEndedEventArgs | ✅ | Full port |
+| GameStartedEventArgs | ✅ | Full port |
+| GamerJoinedEventArgs | ✅ | Full port; `NetworkGamer*` stored as forward-declared pointer (`NetworkGamer` not yet ported) |
+| GamerLeftEventArgs | ✅ | Full port; `NetworkGamer*` forward-declared |
+| HostChangedEventArgs | ✅ | Full port; `NetworkGamer*` forward-declared (OldHost/NewHost) |
+| NetworkSessionEndedEventArgs | ✅ | Full port |
+| WriteLeaderboardsEventArgs | ✅ | Full port; internal ctor → private + `CreateInternal()` factory |
+| NetworkSessionJoinException | ✅ | Full port; `: GamerServices::NetworkException`, mirrors its 4-ctor + protected serialization-ctor pattern exactly |

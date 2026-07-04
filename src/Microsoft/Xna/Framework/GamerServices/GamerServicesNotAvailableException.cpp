@@ -4,12 +4,25 @@
 namespace Microsoft::Xna::Framework::GamerServices
 {
     GamerServicesNotAvailableException::GamerServicesNotAvailableException()
-        : std::runtime_error("GamerServices are not available on this platform.")
+        : System::Exception()
     {
     }
 
     GamerServicesNotAvailableException::GamerServicesNotAvailableException(const std::string& message)
-        : std::runtime_error(message)
+        : System::Exception(message)
+    {
+    }
+
+    GamerServicesNotAvailableException::GamerServicesNotAvailableException(const std::string& message, std::exception_ptr innerException)
+        : System::Exception(message, innerException)
+    {
+    }
+
+    GamerServicesNotAvailableException::GamerServicesNotAvailableException(
+        System::Runtime::Serialization::SerializationInfo& /*info*/,
+        System::Runtime::Serialization::StreamingContext& /*context*/
+    )
+        : System::Exception()
     {
     }
 }

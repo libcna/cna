@@ -2,6 +2,7 @@
 // Copyright (c) Robert Vokac and contributors
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
+#include "System/Threading/EventWaitHandle.hpp"
 
 #include <any>
 #include <filesystem>
@@ -31,6 +32,7 @@ namespace Microsoft::Xna::Framework::Storage
         System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override { return waitHandle_; }
 
     private:
+        // Already-signalled: BeginShowSelector always completes synchronously.
         mutable System::Threading::EventWaitHandle waitHandle_{true, System::Threading::EventResetMode::ManualReset};
     };
 
@@ -46,6 +48,7 @@ namespace Microsoft::Xna::Framework::Storage
         System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override { return waitHandle_; }
 
     private:
+        // Already-signalled: BeginOpenContainer always completes synchronously.
         mutable System::Threading::EventWaitHandle waitHandle_{true, System::Threading::EventResetMode::ManualReset};
     };
 

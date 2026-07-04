@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GameWindow.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -10,13 +13,14 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void GamerServicesComponent::Initialize()
     {
-        // CNA_STUB: GamerServices not available — no-op.
-        GameComponent::Initialize();
+        // FNA's override does not call base.Initialize() — matched here intentionally.
+        GamerServicesDispatcher::setWindowHandleProperty(getGameProperty().getWindowProperty().getHandleProperty());
+        GamerServicesDispatcher::Initialize(getGameProperty().getServicesProperty());
     }
 
-    void GamerServicesComponent::Update(Microsoft::Xna::Framework::GameTime& gameTime)
+    void GamerServicesComponent::Update(Microsoft::Xna::Framework::GameTime& /*gameTime*/)
     {
-        // CNA_STUB: GamerServices not available — no-op.
-        GameComponent::Update(gameTime);
+        // FNA's override does not call base.Update() — matched here intentionally.
+        GamerServicesDispatcher::Update();
     }
 }

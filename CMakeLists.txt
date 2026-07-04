@@ -6,11 +6,27 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Emscripten disables C++ exception throw/catch support by default (an uncaught throw aborts
+# the whole runtime instead of unwinding) - this codebase relies on exceptions pervasively
+# (System::Exception hierarchy, EXPECT_THROW tests, etc.), so it must be enabled globally,
+# before sharp-runtime is added below, since unwinding requires every frame in the call chain
+# to be compiled with -fexceptions.
+if(EMSCRIPTEN)
+    add_compile_options(-fexceptions)
+    add_link_options(-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING=1)
+endif()
+
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
 option(CNA_NOXNA "Enable CNA NOXNA extended graphics layer (beyond XNA 4.0)" OFF)
+option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
 
 include(cmake/ThirdPartySDL.cmake)
 cna_configure_vendored_sdl()
+
+if(CNA_ENABLE_NET)
+    include(cmake/ThirdPartyENet.cmake)
+    cna_configure_vendored_enet()
+endif()
 
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
 add_subdirectory(../sharp-runtime SHARP_RUNTIME)
@@ -119,8 +135,17 @@ else()
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
 endif()
 
-# --- FFmpeg (video decoding) — not available on Emscripten/Android ---
-if(NOT EMSCRIPTEN AND NOT ANDROID)
+# --- FFmpeg (video decoding) — not available on Emscripten/Android, nor on the
+# mingw-w64 Windows cross-build (no mingw-w64 FFmpeg dev packages in this toolchain;
+# pkg-config would otherwise silently resolve to the host's native FFmpeg and poison
+# the cross-compile's include path with native glibc headers). ---
+if(MINGW OR EMSCRIPTEN OR ANDROID)
+    set(CNA_FFMPEG_AVAILABLE OFF)
+else()
+    set(CNA_FFMPEG_AVAILABLE ON)
+endif()
+
+if(CNA_FFMPEG_AVAILABLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(LIBAVCODEC  REQUIRED libavcodec)
     pkg_check_modules(LIBAVFORMAT REQUIRED libavformat)
@@ -159,8 +184,13 @@ file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
 # Exclude backend sources from main CNA library to avoid double compilation and conflicts
 list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/Backends/.*")
 
+# Exclude Net / GamerServices sources — they live in CNA_GamerServices and CNA_Net targets
+list(FILTER CNA_SOURCES EXCLUDE REGEX "src/Microsoft/Xna/Framework/GamerServices/.*")
+list(FILTER CNA_SOURCES EXCLUDE REGEX "src/Microsoft/Xna/Framework/Net/.*")
+list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/Net/.*")
+
 # Exclude FFmpeg-dependent sources on platforms where FFmpeg is unavailable
-if(EMSCRIPTEN OR ANDROID)
+if(NOT CNA_FFMPEG_AVAILABLE)
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Media/VideoDecoder\\.cpp$")
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/Media/Video/VideoPlayer\\.cpp$")
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/Media/Video/Video\\.cpp$")
@@ -195,7 +225,7 @@ target_link_libraries(CNA
 #        SDL3_ttf::SDL3_ttf
 )
 
-if(NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_FFMPEG_AVAILABLE)
     target_link_libraries(CNA PRIVATE
         ${LIBAVCODEC_LIBRARIES}
         ${LIBAVFORMAT_LIBRARIES}
@@ -207,6 +237,36 @@ if(NOT EMSCRIPTEN AND NOT ANDROID)
         ${LIBAVFORMAT_INCLUDE_DIRS}
         ${LIBAVUTIL_INCLUDE_DIRS}
         ${LIBSWRESAMPLE_INCLUDE_DIRS}
+    )
+endif()
+
+# --- GamerServices + Net ---
+if(CNA_ENABLE_NET)
+    file(GLOB_RECURSE CNA_GAMERSERVICES_SOURCES CONFIGURE_DEPENDS
+        "src/Microsoft/Xna/Framework/GamerServices/*.cpp"
+    )
+    add_library(CNA_GamerServices STATIC ${CNA_GAMERSERVICES_SOURCES})
+    target_include_directories(CNA_GamerServices
+        PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    # Guide.cpp calls SDL3 directly (message box); this was previously only compiling by
+    # accident on hosts with a stray system-wide SDL3 install on the default include path.
+    target_link_libraries(CNA_GamerServices PUBLIC CNA PRIVATE SDL3::SDL3)
+
+    file(GLOB_RECURSE CNA_NET_SOURCES CONFIGURE_DEPENDS
+        "src/Microsoft/Xna/Framework/Net/*.cpp"
+        "src/CNA/Internal/Net/*.cpp"
+    )
+    add_library(CNA_Net STATIC ${CNA_NET_SOURCES})
+    target_include_directories(CNA_Net
+        PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(CNA_Net
+        PUBLIC
+        CNA_GamerServices
+        enet
     )
 endif()
 
@@ -583,6 +643,21 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         set_tests_properties(EasyGL_SkinnedEffect_BoneDeformation PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 10.14: AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT real GPU-skinned
+        # rendering (Phase 10 — Avatar real-rendering NOXNA/EXT extension). Needs
+        # CNA_GamerServices (AvatarRenderer lives there), so it's only built when networking
+        # (and thus GamerServices) is enabled.
+        if(CNA_ENABLE_NET)
+            cna_easygl_test(cna_test_avatar_real_render
+                            examples/avatar_real_render_integration_test.cpp)
+            target_link_libraries(cna_test_avatar_real_render PRIVATE CNA_GamerServices)
+            add_test(NAME EasyGL_AvatarRenderer_RealRender
+                     COMMAND cna_test_avatar_real_render)
+            set_tests_properties(EasyGL_AvatarRenderer_RealRender PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        endif()
 
         # Task 125: DXT1 texture loaded via FromStream, rendered, pixel readback
         cna_easygl_test(cna_test_dxt1_texture
@@ -1745,6 +1820,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
 endif()
 
+# --- Task 6.1: real two-process ENet loopback test harness ---
+# A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
+# independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /
+# the approved Phase 6 plan for why this exists separately from every Phase 5 single-process test.
+if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
+    add_executable(cna_net_two_process_harness
+        tools/net/net_two_process_harness.cpp
+    )
+    target_link_libraries(cna_net_two_process_harness
+        PRIVATE
+        CNA_GamerServices
+        CNA_Net
+        SHARP_RUNTIME
+    )
+endif()
+
 if(CNA_BUILD_TESTS)
     add_subdirectory(vendor/googletest)
 
@@ -1754,9 +1845,48 @@ if(CNA_BUILD_TESTS)
             "tests/*.cpp"
     )
 
+    # TwoProcessLoopbackTest.cpp (Task 6.1) uses POSIX-only process APIs (posix_spawn, poll,
+    # sys/wait.h) to orchestrate two independent OS processes. Compiles under mingw-w64 and
+    # Emscripten (both provide POSIX-ish libc stubs) but can't actually work under either: no real
+    # multi-process spawning exists in a single Node.js/Wasm module. Also excluded on Android: the
+    # harness path baked in via CNA_NET_HARNESS_PATH is an absolute path on the build machine, not
+    # the on-device filesystem, and CnaTests is run as a bare pushed executable, not a packaged app
+    # with its own bundled assets. Not part of the Task 6.2/6.4 verification filters
+    # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
+    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
+    endif()
+
     add_executable(CnaTests
             ${CNA_TEST_SOURCES}
     )
+
+    # mingw-w64's <cmath> only exposes M_PI when _USE_MATH_DEFINES is set (unlike glibc, which
+    # defines it unconditionally) — a handful of test files use M_PI directly as a reference value.
+    if(MINGW)
+        target_compile_definitions(CnaTests PRIVATE _USE_MATH_DEFINES)
+        # Known mingw-w64/GCC PE-COFF toolchain limitation: std::type_info::operator== is emitted
+        # as vague linkage (COMDAT) in libstdc++.a, but a test binary this large (many RTTI-using
+        # TUs) trips a case where the linker fails to fold it against the identical libstdc++
+        # definition. Both copies are byte-identical, so allowing the duplicate is safe.
+        target_link_options(CnaTests PRIVATE -Wl,--allow-multiple-definition)
+    endif()
+
+    if(EMSCRIPTEN)
+        # Emscripten's EXIT_RUNTIME defaults to 0 (deliberately keeps the JS runtime alive after
+        # main() returns, so pending async JS/WebSocket handles can keep running) - without this,
+        # `node CnaTests.js` never exits after printing its results, even on success.
+        target_link_options(CnaTests PRIVATE -sEXIT_RUNTIME=1)
+
+        # Emscripten's default build is fully synchronous/single-threaded: a real WebSocket
+        # handshake structurally cannot complete while C++ code holds the call stack (confirmed
+        # empirically - even a real 1s sleep loop never lets it finish, since nothing returns
+        # control to Node's event loop). The SystemLink loopback tests need emscripten_sleep() to
+        # actually yield back to Node between polls, which requires Asyncify. Scoped to CnaTests
+        # only (a per-executable link-time transformation - does not affect native/Windows builds
+        # or any other Emscripten executable target such as the demos or the two-process harness).
+        target_link_options(CnaTests PRIVATE -sASYNCIFY=1)
+    endif()
 
     target_link_libraries(CnaTests
             PRIVATE
@@ -1765,6 +1895,20 @@ if(CNA_BUILD_TESTS)
             gtest_main
             SDL3::SDL3
     )
+
+    if(CNA_ENABLE_NET)
+        target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
+    endif()
+
+    if(TARGET cna_net_two_process_harness)
+        # Building CnaTests must also build the harness it spawns at test time (they're separate
+        # executables, so CMake won't infer this dependency on its own), and the orchestrator test
+        # needs the harness's real built path baked in at compile time.
+        add_dependencies(CnaTests cna_net_two_process_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_NET_HARNESS_PATH="$<TARGET_FILE:cna_net_two_process_harness>"
+        )
+    endif()
 
     if(TARGET easy-gl)
         target_link_libraries(CnaTests PRIVATE easy-gl)

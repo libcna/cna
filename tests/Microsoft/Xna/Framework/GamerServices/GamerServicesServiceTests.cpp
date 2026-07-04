@@ -1,0 +1,165 @@
+// SPDX-License-Identifier: MS-PL
+#include <gtest/gtest.h>
+#include <any>
+
+#include <SDL3/SDL.h>
+
+#include "System/NotSupportedException.hpp"
+
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+
+// No tests for GamerServicesComponent: like GameComponent (see GameComponentTests.cpp), it
+// requires a live Game reference (SDL/graphics backend) to construct.
+//
+// GamerServicesDispatcher::Initialize() is intentionally never called from this suite: it sets
+// a process-lifetime static (IsInitialized = true) with no way to reset it, which would change
+// the behavior of GamerServicesDispatcher::UpdateAsync() for every other test in this binary
+// (e.g. SignedInGamerTest.GetAchievementsReturnsEmptyCollection relies on UpdateAsync() being a
+// same-iteration false while uninitialized).
+
+using namespace Microsoft::Xna::Framework::GamerServices;
+using Microsoft::Xna::Framework::PlayerIndex;
+
+// --- GamerServicesDispatcher ---
+
+TEST(GamerServicesDispatcherTest, IsInitializedDefaultsFalse) {
+    EXPECT_FALSE(GamerServicesDispatcher::getIsInitializedProperty());
+}
+
+TEST(GamerServicesDispatcherTest, WindowHandleGetSet) {
+    GamerServicesDispatcher::setWindowHandleProperty(0);
+    EXPECT_EQ(0u, GamerServicesDispatcher::getWindowHandleProperty());
+    GamerServicesDispatcher::setWindowHandleProperty(0x1234);
+    EXPECT_EQ(0x1234u, GamerServicesDispatcher::getWindowHandleProperty());
+    GamerServicesDispatcher::setWindowHandleProperty(0);
+}
+
+TEST(GamerServicesDispatcherTest, InstallingTitleUpdateNeverFiresAutomatically) {
+    bool fired = false;
+    auto token = GamerServicesDispatcher::InstallingTitleUpdate.Add(
+        [&fired](System::Object* /*sender*/, const System::EventArgs& /*e*/) { fired = true; }
+    );
+    GamerServicesDispatcher::Update();
+    GamerServicesDispatcher::UpdateAsync();
+    EXPECT_FALSE(fired);
+    GamerServicesDispatcher::InstallingTitleUpdate.Remove(token);
+}
+
+TEST(GamerServicesDispatcherTest, UpdateDoesNotThrow) {
+    EXPECT_NO_THROW(GamerServicesDispatcher::Update());
+}
+
+TEST(GamerServicesDispatcherTest, UpdateAsyncReturnsIsInitialized) {
+    EXPECT_EQ(GamerServicesDispatcher::getIsInitializedProperty(), GamerServicesDispatcher::UpdateAsync());
+}
+
+// --- Guide ---
+
+TEST(GuideTest, IsTrialModeGetSet) {
+    Guide::setIsTrialModeProperty(true);
+    EXPECT_TRUE(Guide::getIsTrialModeProperty());
+    Guide::setIsTrialModeProperty(false);
+    EXPECT_FALSE(Guide::getIsTrialModeProperty());
+}
+
+TEST(GuideTest, SimulateTrialModeGetSet) {
+    Guide::setSimulateTrialModeProperty(true);
+    EXPECT_TRUE(Guide::getSimulateTrialModeProperty());
+    Guide::setSimulateTrialModeProperty(false);
+    EXPECT_FALSE(Guide::getSimulateTrialModeProperty());
+}
+
+TEST(GuideTest, IsVisibleAlwaysFalseAndSetterIsNoOp) {
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    Guide::setIsVisibleProperty(true);
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
+}
+
+TEST(GuideTest, NotificationPositionDefaultAndSet) {
+    EXPECT_EQ(NotificationPosition::BottomRight, Guide::getNotificationPositionProperty());
+    Guide::setNotificationPositionProperty(NotificationPosition::TopLeft);
+    EXPECT_EQ(NotificationPosition::TopLeft, Guide::getNotificationPositionProperty());
+    Guide::setNotificationPositionProperty(NotificationPosition::BottomRight);
+}
+
+TEST(GuideTest, IsScreenSaverEnabledGetSet) {
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    Guide::setIsScreenSaverEnabledProperty(true);
+    EXPECT_TRUE(Guide::getIsScreenSaverEnabledProperty());
+    Guide::setIsScreenSaverEnabledProperty(false);
+    EXPECT_FALSE(Guide::getIsScreenSaverEnabledProperty());
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(GuideTest, BeginEndShowKeyboardInput) {
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "default", System::AsyncCallback{}, std::any{}
+    );
+    ASSERT_NE(nullptr, result);
+    EXPECT_TRUE(result->getIsCompletedProperty());
+    EXPECT_FALSE(result->getCompletedSynchronouslyProperty());
+    EXPECT_EQ("", Guide::EndShowKeyboardInput(result));
+    delete result;
+}
+
+TEST(GuideTest, BeginEndShowKeyboardInputWithPasswordModeOverload) {
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::Two, "title", "description", "default", System::AsyncCallback{}, std::any{}, true
+    );
+    ASSERT_NE(nullptr, result);
+    EXPECT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ("", Guide::EndShowKeyboardInput(result));
+    delete result;
+}
+
+TEST(GuideTest, BeginShowMessageBoxThrows) {
+    EXPECT_THROW(
+        Guide::BeginShowMessageBox(
+            "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
+            System::AsyncCallback{}, std::any{}
+        ),
+        System::NotSupportedException
+    );
+}
+
+TEST(GuideTest, BeginShowMessageBoxPlayerOverloadThrows) {
+    EXPECT_THROW(
+        Guide::BeginShowMessageBox(
+            PlayerIndex::One, "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
+            System::AsyncCallback{}, std::any{}
+        ),
+        System::NotSupportedException
+    );
+}
+
+TEST(GuideTest, EndShowMessageBoxThrows) {
+    EXPECT_THROW(Guide::EndShowMessageBox(nullptr), System::NotSupportedException);
+}
+
+TEST(GuideTest, DelayNotificationsDoesNotThrow) {
+    EXPECT_NO_THROW(Guide::DelayNotifications(System::TimeSpan::FromSeconds(1)));
+}
+
+TEST(GuideTest, ShowMethodsDoNotThrow) {
+    EXPECT_NO_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}));
+    EXPECT_NO_THROW(Guide::ShowFriendRequest(PlayerIndex::One, nullptr));
+    EXPECT_NO_THROW(Guide::ShowFriends(PlayerIndex::One));
+    EXPECT_NO_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}));
+    EXPECT_NO_THROW(Guide::ShowGameInvite(std::string("session-id")));
+    EXPECT_NO_THROW(Guide::ShowGamerCard(PlayerIndex::One, nullptr));
+    EXPECT_NO_THROW(Guide::ShowMarketplace(PlayerIndex::One));
+    EXPECT_NO_THROW(Guide::ShowMessages(PlayerIndex::One));
+    EXPECT_NO_THROW(Guide::ShowParty(PlayerIndex::One));
+    EXPECT_NO_THROW(Guide::ShowPartySessions(PlayerIndex::One));
+    EXPECT_NO_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr));
+    EXPECT_NO_THROW(Guide::ShowPlayers(PlayerIndex::One));
+    EXPECT_NO_THROW(Guide::ShowSignIn(1, false));
+    EXPECT_NO_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One));
+}
