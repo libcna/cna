@@ -1274,6 +1274,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 331: RenderTarget2D constructor/property audit against FNA.
+        cna_easygl_test(cna_test_easygl_rendertarget2d_properties
+                        examples/easygl_rendertarget2d_properties_test.cpp)
+        add_test(NAME EasyGL_RenderTarget2D_Properties
+                 COMMAND cna_test_easygl_rendertarget2d_properties)
+        set_tests_properties(EasyGL_RenderTarget2D_Properties PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1629,6 +1638,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ScissorTest
                  COMMAND cna_test_vulkan_scissor)
         set_tests_properties(Vulkan_ScissorTest PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 331: RenderTarget2D constructor/property audit against FNA.
+        cna_vulkan_test(cna_test_vulkan_rendertarget2d_properties
+                        examples/easygl_rendertarget2d_properties_test.cpp)
+        add_test(NAME Vulkan_RenderTarget2D_Properties
+                 COMMAND cna_test_vulkan_rendertarget2d_properties)
+        set_tests_properties(Vulkan_RenderTarget2D_Properties PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

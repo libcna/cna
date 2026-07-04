@@ -5,6 +5,8 @@
 #include "Microsoft/Xna/Framework/Graphics/IRenderTarget.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/EventArgs.hpp"
+#include "System/EventHandler.hpp"
 #include "CNA/CNAHelper.hpp"
 
 namespace CNA::Internal::Backends { class IRenderTargetBackend; }
@@ -82,6 +84,12 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] DepthFormat getDepthStencilFormatProperty() const override;
         /** @brief Returns the number of multisample locations. */
         [[nodiscard]] int getMultiSampleCountProperty() const override;
+
+        /** @brief Returns false; content is never lost in CNA. */
+        [[nodiscard]] bool getIsContentLostProperty() const { return false; }
+
+        /** @brief Raised when the render target content is lost (never raised in CNA). */
+        System::EventHandler<System::EventArgs> ContentLost;
 
         /**
          * @brief Returns the backend render target handle.
