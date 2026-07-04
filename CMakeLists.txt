@@ -1254,6 +1254,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 323 (+ 324/325 coverage): RasterizerState.CullMode — None/CullClockwiseFace/
+        # CullCounterClockwiseFace, contrast-checked with front- and back-winding quads
+        cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode
+                        examples/easygl_rasterizerstate_cullmode_test.cpp)
+        add_test(NAME EasyGL_RasterizerState_CullMode
+                 COMMAND cna_test_easygl_rasterizerstate_cullmode)
+        set_tests_properties(EasyGL_RasterizerState_CullMode PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1521,6 +1531,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_GraphicsDevice_ReferenceStencil
                  COMMAND cna_test_vulkan_graphicsdevice_reference_stencil)
         set_tests_properties(Vulkan_GraphicsDevice_ReferenceStencil PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 323 (+ 324/325 coverage): RasterizerState.CullMode on Vulkan (reuses the
+        # backend-agnostic EasyGL source).
+        cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode
+                        examples/easygl_rasterizerstate_cullmode_test.cpp)
+        add_test(NAME Vulkan_RasterizerState_CullMode
+                 COMMAND cna_test_vulkan_rasterizerstate_cullmode)
+        set_tests_properties(Vulkan_RasterizerState_CullMode PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
