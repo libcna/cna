@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "CueTestAccess.hpp"
+#include "SoundBankTestAccess.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/EventArgs.hpp"
@@ -24,6 +25,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <SDL3_mixer/SDL_mixer.h>
@@ -37,36 +39,6 @@ using Microsoft::Xna::Framework::Audio::SoundBank;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
 using Microsoft::Xna::Framework::Audio::WaveBank;
-
-namespace Microsoft::Xna::Framework::Audio
-{
-    // Test-only accessor for SoundBank's private fire-and-forget cue list (see SoundBank.hpp),
-    // used to test PlayCue()'s sweep logic precisely without a real-time wait.
-    struct SoundBankTestAccess
-    {
-        static std::size_t FireAndForgetCount(const SoundBank& bank)
-        {
-            return bank.fireAndForget_.size();
-        }
-
-        // Backdates the most recently added fire-and-forget entry's creation time, so sweep
-        // behavior at a specific age can be tested deterministically.
-        static void BackdateLastFireAndForget(SoundBank& bank, std::chrono::steady_clock::duration age)
-        {
-            if (!bank.fireAndForget_.empty())
-            {
-                bank.fireAndForget_.back().created = std::chrono::steady_clock::now() - age;
-            }
-        }
-
-        // The most recently played fire-and-forget cue, so a test can verify PlayCue's 3D
-        // overload actually reached Cue::Apply3D (T-4B), not just that it didn't throw.
-        static Cue* LastFireAndForgetCue(const SoundBank& bank)
-        {
-            return bank.fireAndForget_.empty() ? nullptr : bank.fireAndForget_.back().cue.get();
-        }
-    };
-}
 
 using Microsoft::Xna::Framework::Audio::SoundBankTestAccess;
 using Microsoft::Xna::Framework::Audio::CueTestAccess;
@@ -539,9 +511,11 @@ TEST(SoundBankTest, IsInUseFalseWithNoFireAndForgetCues)
 
 TEST(SoundBankTest, IsInUseTrueAfterPlayCueThenFalseAfterDispose)
 {
-    // Cue never self-transitions out of Playing without an explicit Stop() (see Cue.cpp), so a
-    // fire-and-forget cue stays "in use" indefinitely here; Dispose (which clears the list
-    // immediately) is used as the deterministic "stop" trigger instead of a real-time wait.
+    // "Explosion" has no wavebank reference, so Cue::active_ stays empty and Cue::ReconcileState()
+    // never has anything to naturally finish (see P9-LIFECYCLE-001) -- this fire-and-forget cue
+    // stays "in use" indefinitely here; Dispose (which clears the list immediately) is used as the
+    // deterministic "stop" trigger instead of a real-time wait. See
+    // IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes below for the real-instance case.
     SoundBank bank(&SharedEngine(), XsbFixturePath());
     bank.PlayCue("Explosion");
     ASSERT_TRUE(bank.getIsInUseProperty());
@@ -567,6 +541,39 @@ TEST(SoundBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
     EXPECT_TRUE(bank.getIsInUseProperty());
 
     bank.Dispose();
+}
+
+// P9-LIFECYCLE-003/006: unlike "Explosion" above, "Apply3DCue" has a real (200-byte, ~1.13ms)
+// WaveBank-backed instance, so its fire-and-forget cue actually finishes naturally -- IsInUse must
+// become false soon afterward without any explicit Stop() or a second PlayCue() call to trigger
+// the sweep (SoundBank::getIsInUseProperty() queries each cue's live, reconciled IsPlaying/
+// IsPaused directly; it doesn't require the entry to have been swept from fireAndForget_ yet).
+TEST(SoundBankTest, IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        (void)SharedApply3DWaveBank();
+        SoundBank bank(&SharedEngine(), Apply3DXsbFixturePath());
+
+        bank.PlayCue("Apply3DCue");
+
+        if (!bank.getIsInUseProperty())
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not exercise real playback";
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        EXPECT_FALSE(bank.getIsInUseProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
 }
 
 // Regression coverage for XA-2's XA-1 sibling bug: PlayCue()'s sweep used to remove any

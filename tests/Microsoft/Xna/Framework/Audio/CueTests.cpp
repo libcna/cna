@@ -16,6 +16,7 @@
 #include "System/Object.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -23,6 +24,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <SDL3_mixer/SDL_mixer.h>
@@ -713,6 +715,121 @@ TEST(CueTest, IsStoppingIsAlwaysFalse)
     cue->Play();
     cue->Stop(AudioStopOptions::Immediate);
     EXPECT_FALSE(cue->getIsStoppingProperty());
+}
+
+// P9-LIFECYCLE-001/002/005: "Apply3DCue" has a real (200-byte, ~1.13ms) WaveBank-backed instance
+// (unlike MakeCue()'s wavebank-less "Explosion" fixture used by every test above), so it actually
+// finishes playing on its own -- IsPlaying/IsStopped must reconcile to reflect that without any
+// explicit Stop() call, and the finished instance must be dropped from Cue::active_.
+TEST(CueTest, PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
+        cue->Play();
+
+        if (!CueTestAccess::ActiveInstance(*cue, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_FALSE(cue->getIsPlayingProperty());
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// P9-LIFECYCLE-013: a naturally-finished cue must not be resurrected into Paused by a stray
+// Pause() call (mirrors FACTCue_Pause rejecting STOPPING/STOPPED cues in FACT.c).
+TEST(CueTest, PauseAfterNaturalCompletionIsANoOp)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
+        cue->Play();
+
+        if (!CueTestAccess::ActiveInstance(*cue, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        ASSERT_TRUE(cue->getIsStoppedProperty());
+
+        cue->Pause();
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_FALSE(cue->getIsPausedProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// P9-LIFECYCLE-010/011: FACTCue_Play (FACT.c) silently rejects a cue whose state already has
+// PLAYING/STOPPING/STOPPED set; FNA's Cue.Play() discards the return value, so this is a no-op
+// from the caller's perspective, not an exception -- and it must not spawn a second, overlapping
+// SoundEffectInstance for the same wave reference.
+TEST(CueTest, PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
+        cue->Play();
+
+        SoundEffectInstance* first = CueTestAccess::ActiveInstance(*cue, 0);
+        if (!first)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+
+        cue->Play();
+
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), first);
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 1), nullptr);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+TEST(CueTest, PlayWhilePausedIsANoOp)
+{
+    auto cue = MakeCue();
+    cue->Play();
+    cue->Pause();
+    cue->Play();
+    EXPECT_TRUE(cue->getIsPausedProperty());
+    EXPECT_FALSE(cue->getIsPlayingProperty());
+}
+
+TEST(CueTest, PlayAfterStopIsANoOp)
+{
+    auto cue = MakeCue();
+    cue->Play();
+    cue->Stop(AudioStopOptions::Immediate);
+    cue->Play();
+    EXPECT_TRUE(cue->getIsStoppedProperty());
+    EXPECT_FALSE(cue->getIsPlayingProperty());
 }
 
 TEST(CueTest, NameReturnsGivenName)

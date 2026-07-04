@@ -130,15 +130,8 @@ namespace Microsoft::Xna::Framework::Audio
         PlayCueInternal(name, &listener, &emitter);
     }
 
-    void SoundBank::PlayCueInternal(const std::string& name,
-                                     const AudioListener* listener,
-                                     const AudioEmitter* emitter)
+    void SoundBank::SweepFireAndForget()
     {
-        if (name.empty())
-            throw System::ArgumentNullException("name");
-        if (isDisposed_)
-            throw System::ObjectDisposedException("SoundBank");
-
         // Sweep fire-and-forget cues that have finished playing (destroying a Cue whose sound
         // has already stopped is effectively a no-op) plus any still-playing entry past the
         // safety-net timeout -- NOT simply "older than N seconds", which would cut off any
@@ -160,6 +153,18 @@ namespace Microsoft::Xna::Framework::Audio
                     return true;
                 }),
             fireAndForget_.end());
+    }
+
+    void SoundBank::PlayCueInternal(const std::string& name,
+                                     const AudioListener* listener,
+                                     const AudioEmitter* emitter)
+    {
+        if (name.empty())
+            throw System::ArgumentNullException("name");
+        if (isDisposed_)
+            throw System::ObjectDisposedException("SoundBank");
+
+        SweepFireAndForget();
 
         std::unique_ptr<Cue> cue(GetCue(name));
         cue->Play();
@@ -170,7 +175,7 @@ namespace Microsoft::Xna::Framework::Audio
             cue->Apply3D(*listener, *emitter);
         // Keep the Cue alive so its SoundEffectInstances (and their SDL3_mixer
         // tracks) are not destroyed before the sound has had a chance to play.
-        fireAndForget_.push_back({std::move(cue), now});
+        fireAndForget_.push_back({std::move(cue), std::chrono::steady_clock::now()});
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────

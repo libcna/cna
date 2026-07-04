@@ -150,6 +150,18 @@ namespace Microsoft::Xna::Framework::Audio
 
         void StopInternal(bool immediate);
 
+        // P9-LIFECYCLE-001/002: lazily reconciles state_ from Playing to Stopped once every
+        // instance in active_ has finished naturally (no explicit Stop() call) -- matches FNA,
+        // where FACTCue_GetState always reflects FAudio's live per-voice state (kept current by
+        // FAudio's own mixer thread), not a value that only updates on explicit calls. Called
+        // from every state getter that can observe Playing, so a natural finish is visible on
+        // the very next query instead of being stuck forever. Only mutates active_/state_ (never
+        // waveBanksUsed_/AudioEngine's registries), since this runs from const getters that may
+        // themselves be invoked while a caller is mid-iteration over those other registries
+        // (e.g. WaveBank::getIsInUseProperty()); the actual unregistration happens later, from
+        // StopInternal() (explicit Stop()/Dispose(), or SoundBank's fire-and-forget sweep).
+        void ReconcileState() const;
+
         // Re-applies a new category volume to all currently active instances, recombining it
         // with each instance's stored baseVolume (see AudioEngine::SetCategoryVolumeInternal).
         void ApplyCategoryVolume(float catVol);

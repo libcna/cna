@@ -152,5 +152,14 @@ namespace Microsoft::Xna::Framework::Audio
         // name against the engine's parsed global variable set (XACT per-cue variables
         // are the same named global variables, just individually overridable per cue).
         bool IsValidVariableName(const std::string& name) const;
+
+        // P9-LIFECYCLE-012: exposes the active-cue registry's size to AudioEngineTestAccess so a
+        // regression test can prove repeated category operations never duplicate an
+        // already-registered cue. XactEngineImpl (and therefore activeCues) is only defined in
+        // AudioEngine.cpp, so a test-only friend struct can't read it directly the way
+        // SoundBankTestAccess reads SoundBank::fireAndForget_.
+        NOXNA [[nodiscard]] std::size_t ActiveCueCountForTest() const;
+
+        NOXNA friend struct AudioEngineTestAccess;
     };
 }

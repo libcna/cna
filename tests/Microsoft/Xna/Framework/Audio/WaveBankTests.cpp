@@ -10,6 +10,7 @@
 #include "System/EventArgs.hpp"
 #include "System/Object.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -17,6 +18,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 using Microsoft::Xna::Framework::Audio::AudioEngine;
@@ -677,6 +679,43 @@ TEST(WaveBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
 
         cue->Stop(AudioStopOptions::Immediate);
         EXPECT_FALSE(wb.getIsInUseProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise WaveBank playback";
+    }
+}
+
+// P9-LIFECYCLE-004/007: unlike Stop(Immediate) above, this cue is never explicitly stopped --
+// WaveBank::IsInUse must still become false soon after the underlying 200-byte (~1.13ms) wave
+// naturally finishes playing, via Cue::ReconcileState() reconciling IsPlaying/IsPaused live on
+// every getIsInUseProperty() query (see WaveBank::getIsInUseProperty()).
+TEST(WaveBankTest, IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, XwbFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+        SoundBank sb(&engine, XsbFixturePath());
+
+        std::unique_ptr<Cue> cue(sb.GetCue("Boom"));
+        cue->Play();
+
+        if (!wb.getIsInUseProperty())
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not exercise WaveBank playback";
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        EXPECT_FALSE(wb.getIsInUseProperty());
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_FALSE(cue->getIsPlayingProperty());
     }
     catch (...)
     {

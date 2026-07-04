@@ -9,6 +9,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <fstream>
 #include <iostream>
@@ -175,7 +176,14 @@ namespace Microsoft::Xna::Framework::Audio
 
     void AudioEngine::Update()
     {
-        // No streaming or notification work needed for SDL3_mixer.
+        // P9-LIFECYCLE-008/009: mirrors FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork,
+        // which is what actually destroys managed/fire-and-forget cues once FACT_STATE_STOPPED
+        // (FACT_internal.c), instead of only sweeping lazily on a bank's next PlayCue() call.
+        // Cue-level Playing/Paused/Stopped reconciliation itself is live and per-call (see
+        // Cue::ReconcileState()), so it needs no help from Update() to stay accurate.
+        if (!xactImpl_) return;
+        for (auto* sb : xactImpl_->soundBanks)
+            if (sb) sb->SweepFireAndForget();
     }
 
     void AudioEngine::Dispose()
@@ -312,7 +320,14 @@ namespace Microsoft::Xna::Framework::Audio
     void AudioEngine::RegisterCue(Cue* cue)
     {
         if (!xactImpl_ || !cue) return;
-        xactImpl_->activeCues.push_back(cue);
+        // P9-LIFECYCLE-011: Cue::Play() already rejects being called twice on an already
+        // Playing/Paused/Stopping/Stopped cue (see Cue::Play()'s ReconcileState() + state guard),
+        // so this path shouldn't be reachable in practice; guarded anyway as defense-in-depth for
+        // the registry itself, since a duplicate entry here would make every category-wide
+        // operation (Pause/Resume/Stop/SetVolume) apply itself twice to the same cue.
+        auto& v = xactImpl_->activeCues;
+        if (std::find(v.begin(), v.end(), cue) != v.end()) return;
+        v.push_back(cue);
     }
 
     void AudioEngine::UnregisterCue(Cue* cue)
@@ -325,6 +340,11 @@ namespace Microsoft::Xna::Framework::Audio
     bool AudioEngine::IsValidVariableName(const std::string& name) const
     {
         return xactImpl_ && xactImpl_->globalVariables.find(name) != xactImpl_->globalVariables.end();
+    }
+
+    std::size_t AudioEngine::ActiveCueCountForTest() const
+    {
+        return xactImpl_ ? xactImpl_->activeCues.size() : 0;
     }
 
     GetTypeNameCPP(AudioEngine, "Microsoft.Xna.Framework.Audio.AudioEngine")

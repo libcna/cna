@@ -61,13 +61,27 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool Cue::getIsCreatedProperty()   const { return !isDisposed_ && state_ == State::Created;   }
     bool Cue::getIsDisposedProperty()  const { return isDisposed_; }
-    bool Cue::getIsPausedProperty()    const { return !isDisposed_ && state_ == State::Paused;    }
-    bool Cue::getIsPlayingProperty()   const { return !isDisposed_ && state_ == State::Playing;   }
+    bool Cue::getIsPausedProperty()    const { ReconcileState(); return !isDisposed_ && state_ == State::Paused;    }
+    bool Cue::getIsPlayingProperty()   const { ReconcileState(); return !isDisposed_ && state_ == State::Playing;   }
     bool Cue::getIsPreparedProperty()  const { return !isDisposed_ && state_ == State::Prepared;  }
     bool Cue::getIsPreparingProperty() const { return !isDisposed_ && state_ == State::Preparing; }
-    bool Cue::getIsStoppedProperty()   const { return isDisposed_  || state_ == State::Stopped;   }
-    bool Cue::getIsStoppingProperty()  const { return !isDisposed_ && state_ == State::Stopping;  }
+    bool Cue::getIsStoppedProperty()   const { ReconcileState(); return isDisposed_  || state_ == State::Stopped;   }
+    bool Cue::getIsStoppingProperty()  const { ReconcileState(); return !isDisposed_ && state_ == State::Stopping;  }
     const std::string& Cue::getNameProperty() const { return name_; }
+
+    void Cue::ReconcileState() const
+    {
+        if (isDisposed_ || state_ != State::Playing || active_.empty())
+            return;
+
+        for (const auto& pi : active_)
+            if (pi.instance && pi.instance->getStateProperty() != SoundState::Stopped)
+                return; // at least one wave reference is still playing (or looping)
+
+        auto* self = const_cast<Cue*>(this);
+        self->active_.clear();
+        self->state_ = State::Stopped;
+    }
 
     // ── Variables ─────────────────────────────────────────────────────────────
 
@@ -124,6 +138,19 @@ namespace Microsoft::Xna::Framework::Audio
     void Cue::Play()
     {
         if (isDisposed_) throw System::ObjectDisposedException("Cue");
+
+        // P9-LIFECYCLE-010/011: FACTCue_Play (FACT.c) silently rejects a cue whose state already
+        // has PLAYING, STOPPING, or STOPPED set -- FNA's Cue.Play() discards the return value, so
+        // from the C# caller's perspective this is just a no-op, not an exception. A Cue models
+        // exactly one playthrough, not a restartable voice. PAUSED is included here too: real
+        // FACT keeps the PLAYING bit set while paused (pausing never clears it), so a paused cue
+        // is rejected as well. Reconciling first ensures a cue that finished naturally (but whose
+        // state_ is still the stale Playing value from before the next query) is correctly
+        // treated as already-stopped rather than being resurrected by a stray Play() call.
+        ReconcileState();
+        if (state_ == State::Playing || state_ == State::Paused ||
+            state_ == State::Stopping || state_ == State::Stopped)
+            return;
 
         // Resolve waves to play
         using namespace CNA::Internal::Audio;
@@ -269,6 +296,7 @@ namespace Microsoft::Xna::Framework::Audio
     void Cue::Pause()
     {
         if (isDisposed_) return;
+        ReconcileState(); // a naturally-finished cue must not be resurrected into Paused
         if (state_ != State::Playing) return;
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Pause();

@@ -5,6 +5,8 @@
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
+#include "AudioEngineTestAccess.hpp"
+#include "SoundBankTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -12,18 +14,23 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
+using Microsoft::Xna::Framework::Audio::AudioEngineTestAccess;
 using Microsoft::Xna::Framework::Audio::Cue;
 using Microsoft::Xna::Framework::Audio::SoundBank;
+using Microsoft::Xna::Framework::Audio::SoundBankTestAccess;
 using Microsoft::Xna::Framework::Audio::WaveBank;
 
 namespace
@@ -493,6 +500,71 @@ TEST(AudioEngineTest, UpdateDoesNotThrow)
 {
     AudioEngine engine(XgsFixturePath());
     EXPECT_NO_THROW(engine.Update());
+}
+
+// P9-LIFECYCLE-008/009: mirrors FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork, which is
+// what actually destroys a managed/fire-and-forget cue once it reaches FACT_STATE_STOPPED
+// (FACT_internal.c). A single Update() call after natural completion must sweep it out of its
+// SoundBank's fire-and-forget list -- without needing a second PlayCue() call on that bank to
+// trigger the sweep (see SoundBank::PlayCueInternal's own, separate sweep-on-next-play path).
+TEST(AudioEngineTest, UpdateSweepsFinishedFireAndForgetCueWithoutNeedingAnotherPlayCue)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioEngine engine(XgsFixturePath());
+        WaveBank wb(&engine, WriteFixture("xa8_update.xwb", BuildXA8XwbFixtureBytes()));
+        SoundBank sb(&engine, WriteFixture("xa8_update.xsb", BuildXA8XsbFixtureBytes()));
+
+        sb.PlayCue("XA8Cue");
+
+        if (SoundBankTestAccess::FireAndForgetCount(sb) == 0 ||
+            !SoundBankTestAccess::LastFireAndForgetCue(sb) ||
+            !SoundBankTestAccess::LastFireAndForgetCue(sb)->getIsPlayingProperty())
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not exercise real playback";
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(sb), 1u); // not swept yet, no new PlayCue()
+
+        engine.Update();
+
+        EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(sb), 0u);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// P9-LIFECYCLE-012: repeated category-wide Pause/Resume/SetVolume calls must never duplicate a
+// cue's entry in AudioEngine's active-cue registry. RegisterCue() is the registry's only
+// inserter (called once from Cue::Play(), itself now guarded by P9-LIFECYCLE-010/011 against
+// being re-entered on an already Playing/Paused/Stopped cue) -- AudioCategory operations only
+// ever call methods on cues already in the registry, never RegisterCue() again.
+TEST(AudioEngineTest, RepeatedCategoryOperationsDoNotDuplicateActiveCueRegistryEntries)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wb(&engine, WriteFixture("xa_lifecycle012.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("xa_lifecycle012.xsb", BuildXA8XsbFixtureBytes()));
+
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+    cue->Play();
+    ASSERT_EQ(AudioEngineTestAccess::ActiveCueCount(engine), 1u);
+
+    AudioCategory category = engine.GetCategory("Default");
+    category.Pause();
+    category.Pause();
+    category.Resume();
+    category.Resume();
+    category.SetVolume(0.5f);
+    category.SetVolume(0.8f);
+
+    EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(engine), 1u);
 }
 
 // ===================== GetTypeName =====================

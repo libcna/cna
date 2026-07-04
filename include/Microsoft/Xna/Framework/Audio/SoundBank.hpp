@@ -103,6 +103,11 @@ namespace Microsoft::Xna::Framework::Audio
 
     private:
         friend class Cue;
+        // P9-LIFECYCLE-008/009: AudioEngine::Update() calls SweepFireAndForget() on every
+        // registered bank, mirroring FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork, which
+        // is what actually destroys managed/fire-and-forget cues once FACT_STATE_STOPPED
+        // (FACT_internal.c) instead of waiting for this bank's next PlayCue() call.
+        friend class AudioEngine;
 
         AudioEngine* engine_;
         bool isDisposed_ = false;
@@ -117,6 +122,11 @@ namespace Microsoft::Xna::Framework::Audio
         void PlayCueInternal(const std::string& name,
                               const AudioListener* listener,
                               const AudioEmitter* emitter);
+
+        // Removes finished fire-and-forget cues; factored out of PlayCueInternal so
+        // AudioEngine::Update() can also trigger it promptly (see the AudioEngine friend
+        // declaration above) instead of only sweeping on this bank's next PlayCue() call.
+        void SweepFireAndForget();
 
         // Fire-and-forget cues from PlayCue() — kept alive while playing (FNA has no C#-visible
         // handle for these; FACT tracks cue lifetime natively), swept once IsPlaying goes false
