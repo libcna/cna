@@ -645,6 +645,14 @@ namespace Microsoft::Xna::Framework
             graphicsDeviceManager_->CreateDevice();
         }
 
+        // Startup invariant: initialize the SDL gamepad subsystem here — DoInitialize() runs once,
+        // before the first event pump and before the first Update() (via both Run() and
+        // RunOneFrame()). This makes gamepads that were already connected before the first frame get
+        // enumerated by SDL (which queues SDL_EVENT_GAMEPAD_ADDED for each), so they are visible to
+        // GamePad::GetState from frame one. SdlInputBridge::ProcessEvent still calls this lazily as a
+        // defensive fallback for any host that pumps events without going through Game's loop.
+        CNA::Internal::Input::SdlInputBridge::EnsureGamepadSubsystemInitialized();
+
         Initialize();
 
         updateableComponents_.clear();

@@ -410,3 +410,18 @@ TEST_F(FakeGamepadTest, SensorReadFailsGracefullyWhenUnavailable)
     EXPECT_FALSE(SdlInputBridge::GetGyro(PlayerIndex::One, gyro));
     EXPECT_NEAR(gyro.X, 0.0f, 1e-5f) << "failed read must zero the out param";
 }
+
+// --- startup gamepad-subsystem init (the invariant Game::DoInitialize establishes) ---
+
+TEST(SdlGamepadSubsystemInit, EnsureIsIdempotentAndInitializesSubsystem)
+{
+    // Both the explicit startup call (Game::DoInitialize, before the first event pump/Update) and
+    // the defensive lazy fallback (SdlInputBridge::ProcessEvent) use this. After it runs, the SDL
+    // gamepad subsystem must be initialized (so SDL enumerates already-connected pads), and calling
+    // it again must be safe (idempotent — SDL ref-counts subsystem init).
+    SdlInputBridge::EnsureGamepadSubsystemInitialized();
+    EXPECT_TRUE((SDL_WasInit(SDL_INIT_GAMEPAD) & SDL_INIT_GAMEPAD) != 0u);
+
+    SdlInputBridge::EnsureGamepadSubsystemInitialized();
+    EXPECT_TRUE((SDL_WasInit(SDL_INIT_GAMEPAD) & SDL_INIT_GAMEPAD) != 0u);
+}

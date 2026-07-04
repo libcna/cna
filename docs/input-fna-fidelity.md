@@ -79,9 +79,15 @@ not exactly identical.
 | `ToString()` | Matches FNA (type name). |
 
 **Real bugs fixed in Phase I13/I14:**
-- **`SDL_INIT_GAMEPAD` was never initialized** → no gamepad events were ever delivered. Now the
-  bridge initializes the gamepad subsystem (idempotently, with background-events hint) on first use,
-  so hot-plugged **and** already-connected pads become visible (tasks 907/908).
+- **`SDL_INIT_GAMEPAD` was never initialized** → no gamepad events were ever delivered. The gamepad
+  subsystem is now initialized (idempotently, with the background-events hint) via
+  `SdlInputBridge::EnsureGamepadSubsystemInitialized()`, so hot-plugged **and** already-connected pads
+  become visible (tasks 907/908).
+  - **Startup invariant:** `Game::DoInitialize()` calls it explicitly **once**, right after the
+    graphics device is created and **before the first event pump and the first `Update()`** (both
+    `Game::Run()` and `Game::RunOneFrame()` funnel through `DoInitialize()`). So a pad connected
+    before frame one is enumerated by SDL from the start. `SdlInputBridge::ProcessEvent()` also calls
+    it lazily as a **defensive fallback** for any host that pumps SDL events without Game's loop.
 - **`GetCapabilities` cancelled active rumble**: it probed rumble support with
   `SDL_RumbleGamepad(0,0,0)` (which *stops* vibration). Now it reads non-mutating capability
   properties (`SDL_PROP_GAMEPAD_CAP_*`), so reading capabilities no longer cancels a game's

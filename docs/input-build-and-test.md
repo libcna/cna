@@ -87,6 +87,12 @@ of the translation logic only, and are otherwise manual/hardware-gated:
   (`ISdlGamepadBackend` / `FakeSdlGamepadBackend`, `*FakeGamepad*` tests). What the fake cannot prove
   is that the physical device *acts* — that stays manual/hardware-gated. See `plan_input.md`
   (Phase I15) and `docs/input-manual-verification-results.md`.
+  - **Startup invariant:** the SDL gamepad subsystem is initialized explicitly in
+    `Game::DoInitialize()` — once, before the first event pump and the first `Update()` — via
+    `SdlInputBridge::EnsureGamepadSubsystemInitialized()`, with a defensive lazy call still in
+    `SdlInputBridge::ProcessEvent()`. So gamepads connected before the first frame are enumerated
+    from startup (the fake test `SdlGamepadSubsystemInit.*` checks the idempotent init primitive;
+    the pre-connected-visibility path is covered by `FakeGamepadTest.PadConnectedBeforeFirstFrame*`).
 - **IME / composition** — real `TextEditing` composition, cursor, and selection over a physical IME.
 - **Wayland OS-cursor landing** — `SDL_GetGlobalMouseState` is compositor-restricted, so the absolute
   landing pixel of `Mouse::SetPosition` is only readable under X11.
