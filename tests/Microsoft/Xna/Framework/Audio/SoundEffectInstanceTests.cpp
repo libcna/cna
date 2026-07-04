@@ -376,12 +376,26 @@ TEST_F(SoundEffectInstanceTest, ApplyLowPassFilterBeforePlayIsNoOp)
 //   Yh(1) = x - Yl(1) - Q1*Yb(0) = x
 //   Yb(1) = F*Yh(1) + Yb(0) = F*x
 // -- so this pins down the actual math, not just "the value changed".
+// P9-BUILD-007: ApplyXFilter() requires a live track_ to attach the REAL SDL3_mixer cooked
+// callback to (INTERNAL_apply*Filter's own "no-op if the track hasn't been created yet" guard),
+// so Play() has to run first -- but that also starts the real background mixing thread, which
+// (even under the SDL dummy driver, which simulates real-time playback via its own timer thread)
+// will periodically invoke that SAME real callback concurrently with this test's synchronous
+// ProcessFilterSamplesForTest() calls, racing on the shared FilterState (yl/yb). This was a real,
+// confirmed-flaky bug (~15-25% failure rate on repeated runs, found while verifying P9-BUILD-007's
+// "all audio tests pass" claim) -- not a marginal-numerics issue in the filter math itself (a
+// standalone, single-threaded re-run of the exact same recursion converges reliably by iteration
+// ~40). Stop()ing the track immediately after applying the filter (but before touching pcm data)
+// halts the real mixing thread's involvement with this track without discarding filterState_
+// (Stop() never touches it, only Dispose() does), so every ProcessFilterSamplesForTest() call
+// after this point is safely single-threaded.
 TEST_F(SoundEffectInstanceTest, LowPassFilterFirstSampleMatchesStateVariableFilterMath)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
     inst.Play();
     SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, 0.5f);
+    inst.Stop(true);
 
     float pcm[2] = {2.0f, 2.0f};
     SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
@@ -395,6 +409,7 @@ TEST_F(SoundEffectInstanceTest, HighPassFilterFirstSampleMatchesStateVariableFil
     SoundEffectInstance inst = instance();
     inst.Play();
     SoundEffectInstanceTestAccess::ApplyHighPassFilter(inst, 0.5f);
+    inst.Stop(true);
 
     float pcm[2] = {2.0f, 2.0f};
     SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
@@ -408,6 +423,7 @@ TEST_F(SoundEffectInstanceTest, BandPassFilterFirstSampleMatchesStateVariableFil
     SoundEffectInstance inst = instance();
     inst.Play();
     SoundEffectInstanceTestAccess::ApplyBandPassFilter(inst, 0.5f);
+    inst.Stop(true);
 
     float pcm[2] = {2.0f, 2.0f};
     SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
@@ -424,6 +440,7 @@ TEST_F(SoundEffectInstanceTest, LowPassFilterConvergesToUnityGainForConstantSign
     SoundEffectInstance inst = instance();
     inst.Play();
     SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, 0.5f);
+    inst.Stop(true); // P9-BUILD-007: stop the real mixing thread's involvement, see the comment above
 
     float pcm[2];
     for (int i = 0; i < 2000; ++i)
@@ -443,6 +460,7 @@ TEST_F(SoundEffectInstanceTest, HighPassFilterConvergesToZeroForConstantSignal)
     SoundEffectInstance inst = instance();
     inst.Play();
     SoundEffectInstanceTestAccess::ApplyHighPassFilter(inst, 0.5f);
+    inst.Stop(true); // P9-BUILD-007: stop the real mixing thread's involvement, see the comment above
 
     float pcm[2];
     for (int i = 0; i < 2000; ++i)
@@ -466,6 +484,10 @@ TEST_F(SoundEffectInstanceTest, LowPassFilterSurvivesMoveConstruction)
     SoundEffectInstance src = instance();
     src.Play();
     SoundEffectInstanceTestAccess::ApplyLowPassFilter(src, 0.5f);
+    src.Stop(true); // P9-BUILD-007: stop the real mixing thread's involvement, see the comment above
+    // track_ itself (and its cooked-callback registration) survives Stop() -- only Dispose()
+    // destroys it -- so this still meaningfully exercises "the same real callback stays valid
+    // across the move", just without a live mixing thread racing the manual loop below.
 
     float pcm[2] = {2.0f, 2.0f};
     SoundEffectInstanceTestAccess::ProcessFilterSamples(src, pcm, 2, 2);
