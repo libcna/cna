@@ -198,8 +198,23 @@ namespace Microsoft::Devices::Sensors::Detail
          * for the per-instance pairing, or ProbeGuard for the probe-only
          * pairing) — see Task P4-8's original rationale for why this must
          * not bypass SDL's own ref-counting via SDL_WasInit().
+         *
+         * Task P8-3: takes a `const std::lock_guard<std::mutex>&` referencing
+         * `GetGlobalSdlSensorMutex()` as a required parameter — not used for
+         * anything except as a compile-time "you must already hold this
+         * lock" proof. A plain doc-comment precondition (what this method
+         * relied on before this task) is easy to miss when adding a new call
+         * site; a required parameter makes it structurally awkward to call
+         * this without a lock visibly in hand, closing off the exact class
+         * of mistake Task P6-1's addendum and Task P7-1 both found and
+         * fixed the hard way. This does not prove the passed lock_guard
+         * actually references `GetGlobalSdlSensorMutex()` specifically (C++
+         * has no such "prove this exact mutex" mechanism without a bespoke
+         * tag type, which would be more machinery than this internal-only
+         * class warrants) — see `GetGlobalSdlSensorMutex()`'s own doc
+         * comment for the lock-order rule this participates in.
          */
-        static bool EnsureSubsystemInitialized()
+        static bool EnsureSubsystemInitialized(const std::lock_guard<std::mutex>& /*globalSdlSensorMutexHeld*/)
         {
             return SDL_InitSubSystem(SDL_INIT_SENSOR);
         }
@@ -207,9 +222,14 @@ namespace Microsoft::Devices::Sensors::Detail
         /**
          * Opens (if not already open) the first SDL sensor matching
          * TSensor::GetSdlSensorType() and caches its id. Returns the
-         * shared handle. Caller must already hold mutex_.
+         * shared handle. Caller must already hold mutex_ (documented, not
+         * enforced — this method's own per-instance data, not a real SDL
+         * call misuse risk the way the global SDL sensor mutex is; see
+         * Task P8-3's rationale on EnsureSubsystemInitialized() above for
+         * why *that* lock specifically is enforced via a required
+         * parameter here too).
          */
-        SDL_Sensor* OpenDefaultSensorLocked()
+        SDL_Sensor* OpenDefaultSensorLocked(const std::lock_guard<std::mutex>& /*globalSdlSensorMutexHeld*/)
         {
             if (sensor_ != nullptr)
             {
@@ -267,8 +287,15 @@ namespace Microsoft::Devices::Sensors::Detail
          * exists, without holding the subsystem or any device open
          * afterward (ProbeGuard handles the subsystem side, Task P5-1;
          * this closes every device it opens to check).
+         *
+         * Task P8-3: requires proof the global SDL sensor mutex is held —
+         * see EnsureSubsystemInitialized()'s doc comment for the full
+         * rationale. Unlike that method, this one needs *only* the global
+         * lock (no per-class `mutex_` at all — this touches no per-class
+         * subsystem state), which is exactly why it was easy to forget in
+         * the first place (Task P6-1's addendum).
          */
-        static bool ProbeIsSupported()
+        static bool ProbeIsSupported(const std::lock_guard<std::mutex>& /*globalSdlSensorMutexHeld*/)
         {
             const ProbeGuard subsystemGuard;
             if (!subsystemGuard.IsInitialized())

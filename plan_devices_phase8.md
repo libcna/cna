@@ -347,3 +347,70 @@ cmake --build /tmp/cmake-build-tsan-check --target CnaTests -j"$(nproc)"
 **Remaining risk:** low. The fix itself is verified clean under TSan; the only
 sanitizer findings in this run point to a pre-existing, out-of-scope `sharp-runtime`
 issue, not this task's own change.
+
+## P8-3: Make SDL sensor helper locking impossible to misuse
+
+### Resolution
+
+**Files changed:**
+- `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp` —
+  `EnsureSubsystemInitialized()`, `OpenDefaultSensorLocked()`, and `ProbeIsSupported()`
+  now each take a required `const std::lock_guard<std::mutex>& /*globalSdlSensorMutexHeld*/`
+  parameter — not used for anything except as a compile-time "you must already hold
+  this lock" proof, chosen over renaming (the brief's other suggested option) because
+  it makes the precondition structurally enforced rather than only nominally clearer.
+- `src/Microsoft/Devices/Sensors/Accelerometer.cpp` / `Gyroscope.cpp` — every one of the
+  three call sites (`getIsSupportedProperty()`, and `Start()`'s two calls) already had
+  the correct `std::lock_guard<std::mutex>` on `Detail::GetGlobalSdlSensorMutex()` in
+  scope from Task P7-1 — this task only threads that existing local variable into the
+  call, adding zero new lock acquisitions and zero deadlock risk.
+
+**Why a lock-proof parameter over the brief's other two options:** a rename alone
+(`ProbeIsSupportedGlobalSdlLockHeld`) is still just a stronger-worded comment — nothing
+stops a future call site from calling it without the lock, it just makes the mistake
+slightly more embarrassing to make. Making the methods outright `private` doesn't fit
+either: they're already `Detail::`-internal, never exposed outside
+`Accelerometer.cpp`/`Gyroscope.cpp`'s own translation units, so the actual risk isn't
+external misuse, it's a *future edit within these same two files* forgetting the lock —
+exactly the mistake Task P6-1's addendum and Task P7-1 both found and fixed after the
+fact. A required lock-proof parameter is the only one of the three options that the
+*compiler* enforces, not just a human reviewer.
+
+**What this does not guarantee:** the parameter's type (`const std::lock_guard<std::mutex>&`)
+doesn't prove the passed lock references `GetGlobalSdlSensorMutex()` *specifically* — a
+caller could construct a decoy lock over some unrelated mutex and still compile. C++ has
+no built-in mechanism to prove "this lock guards this exact mutex" without a bespoke tag
+type wrapping the mutex, which would be more machinery than this internal-only class
+warrants for a mistake that would require a much more deliberate, visible action (writing
+a whole separate, pointless `std::lock_guard` construction) than the original one-line
+omission this fixes.
+
+**Verification that misuse now fails to compile (not just a documentation claim):**
+wrote a throwaway scratch file calling `SdlSensorSubsystem<Accelerometer>::ProbeIsSupported()`
+with no argument and compiled it directly against this header with the project's real
+include paths — confirmed a compile error (`no matching function for call to
+'ProbeIsSupported()' ... candidate expects 1 argument, 0 provided`). Deleted the scratch
+file immediately after confirming; not part of the permanent test suite (a
+compile-failure check isn't a runnable `gtest`, and this project has no separate
+compile-fail-test harness).
+
+**Tests added:** none — this is a pure signature-hardening change with no behavior
+change; every existing call site already held the required lock, so no test's
+observable behavior changes. Re-ran the existing Accelerometer/Gyroscope/
+SensorSubsystemOwnership suite to confirm.
+
+**Commands run:**
+```bash
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean
+./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:SensorSubsystemOwnershipTests.*"
+# 65 tests, 63 passed, 2 skipped (expected) — identical to before this task, as expected
+# for a pure signature change.
+
+cd .. && ctest --output-on-failure
+# 2047/2049 passed; back to the standard 2 pre-existing EasyGL failures (confirming
+# the 3rd failure noted in Task P8-2 was indeed transient, not a regression).
+```
+
+**Remaining risk:** negligible. No behavior change; the added parameter is a
+compile-time-only safety net verified to actually reject the exact misuse it targets.

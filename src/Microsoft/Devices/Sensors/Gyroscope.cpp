@@ -55,7 +55,7 @@ namespace Microsoft::Devices::Sensors
         // subsystem state, so this now locks only the shared global SDL
         // sensor mutex.
         std::lock_guard<std::mutex> lock(Detail::GetGlobalSdlSensorMutex());
-        return Detail::SdlSensorSubsystem<Gyroscope>::ProbeIsSupported();
+        return Detail::SdlSensorSubsystem<Gyroscope>::ProbeIsSupported(lock);
     }
 
     SensorState Gyroscope::getStateProperty() const
@@ -141,7 +141,7 @@ namespace Microsoft::Devices::Sensors
 
             if (!subsystemHeld_)
             {
-                if (!Detail::SdlSensorSubsystem<Gyroscope>::EnsureSubsystemInitialized())
+                if (!Detail::SdlSensorSubsystem<Gyroscope>::EnsureSubsystemInitialized(sdlLock))
                 {
                     state_ = SensorState::NotSupported;
                     throw SensorFailedException(
@@ -152,7 +152,7 @@ namespace Microsoft::Devices::Sensors
                 acquiredSubsystemThisCall = true;
             }
 
-            if (subsystem.OpenDefaultSensorLocked() == nullptr)
+            if (subsystem.OpenDefaultSensorLocked(sdlLock) == nullptr)
             {
                 state_ = SensorState::NotSupported;
 

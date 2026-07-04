@@ -79,7 +79,7 @@ namespace Microsoft::Devices::Sensors
         // GetGlobalSdlSensorMutex()'s doc comment for the full lock-order
         // rule this participates in).
         std::lock_guard<std::mutex> lock(Detail::GetGlobalSdlSensorMutex());
-        return Detail::SdlSensorSubsystem<Accelerometer>::ProbeIsSupported();
+        return Detail::SdlSensorSubsystem<Accelerometer>::ProbeIsSupported(lock);
     }
 
     SensorState Accelerometer::getStateProperty() const
@@ -186,7 +186,7 @@ namespace Microsoft::Devices::Sensors
 
             if (!subsystemHeld_)
             {
-                if (!Detail::SdlSensorSubsystem<Accelerometer>::EnsureSubsystemInitialized())
+                if (!Detail::SdlSensorSubsystem<Accelerometer>::EnsureSubsystemInitialized(sdlLock))
                 {
                     state_ = SensorState::NotSupported;
                     throw AccelerometerFailedException(
@@ -197,7 +197,7 @@ namespace Microsoft::Devices::Sensors
                 acquiredSubsystemThisCall = true;
             }
 
-            if (subsystem.OpenDefaultSensorLocked() == nullptr)
+            if (subsystem.OpenDefaultSensorLocked(sdlLock) == nullptr)
             {
                 state_ = SensorState::NotSupported;
 
