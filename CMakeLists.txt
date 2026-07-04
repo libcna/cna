@@ -1081,6 +1081,24 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 297: TextureFilter::Point vs Linear, magnification and minification
+        cna_easygl_test(cna_test_easygl_texture_filter_point_vs_linear
+                        examples/easygl_texture_filter_point_vs_linear_test.cpp)
+        add_test(NAME EasyGL_TextureFilter_PointVsLinear
+                 COMMAND cna_test_easygl_texture_filter_point_vs_linear)
+        set_tests_properties(EasyGL_TextureFilter_PointVsLinear PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 298: mipmap filter behavior (LinearMipPoint selects the correct mip; Point does not)
+        cna_easygl_test(cna_test_easygl_texture_mip_filter_effect
+                        examples/easygl_texture_mip_filter_effect_test.cpp)
+        add_test(NAME EasyGL_TextureMipFilter_DualTextureEffect
+                 COMMAND cna_test_easygl_texture_mip_filter_effect)
+        set_tests_properties(EasyGL_TextureMipFilter_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1176,6 +1194,20 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         set_tests_properties(Vulkan_TextureAddressMode_Mirror_DualTextureEffect PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 297: TextureFilter::Point vs Linear on Vulkan too (reuses the backend-agnostic
+        # EasyGL test source).
+        cna_vulkan_test(cna_test_vulkan_texture_filter_point_vs_linear
+                        examples/easygl_texture_filter_point_vs_linear_test.cpp)
+        add_test(NAME Vulkan_TextureFilter_PointVsLinear
+                 COMMAND cna_test_vulkan_texture_filter_point_vs_linear)
+        set_tests_properties(Vulkan_TextureFilter_PointVsLinear PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 298: NOT registered on Vulkan. Texture2D::SetData(level>0) is a silent no-op on
+        # Vulkan (UpdatePixelsLevel never overridden — Task 867 finding), which confounds this
+        # test's mip-filter-selection intent (it would fail for the wrong reason). See Task 867.
 
         # Task 136: EnvironmentMapEffect — emissive=(1,0,0), envAmount=0 → red pixel on Vulkan
         cna_vulkan_test(cna_test_vulkan_env_map

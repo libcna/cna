@@ -13,8 +13,9 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–34 are complete. **Phase 35 (SamplerState/texture
-  sampling conformance, `GRAPHICS_TASKS.md` Tasks 291–300) is in progress** — Tasks 291–296 done,
-  Task 297 is next (see §8). **Task 293 found and fixed a severe, project-wide bug** — see §3/§5.
+  sampling conformance, `GRAPHICS_TASKS.md` Tasks 291–300) is in progress** — Tasks 291–298 done,
+  Task 299 is next (see §8). **Task 293 found and fixed a severe, project-wide bug** — see §3/§5.
+  **Task 298 found a second severe, project-wide bug (Task 867, not yet fixed)** — see §3/§5.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -38,13 +39,15 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2045/2047 (serial `-j1`) pass. 2 pre-existing,
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2047/2049 (serial `-j1`) pass. 2 pre-existing,
   unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. Some
   tests have each been observed failing once under parallel `-j` execution but passed cleanly both
   in isolation and on a repeat serial full run — treated as parallel-execution flakiness, not a
   regression (none confirmed as a stable failure): `EasyGL_SkinnedBones`,
   `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1984/1986 (serial `-j1`) pass. `../sharp-runtime`
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1984/1987 (serial `-j1`) pass (`Vulkan_RenderTargetUsage`
+  also failed in one full run this session, confirmed passing in isolation — same pre-existing
+  order-dependent flakiness as `Vulkan_FillMode_WireFrame`, not a regression). `../sharp-runtime`
   (sibling repo) had a pre-existing, uncommitted local fix for a real `BitConverter.hpp` ambiguity
   bug (`System::Single`, the static-utility class from `Half.hpp`, collided with `BitConverter`'s
   own `using SharpRuntime::Single` for the float alias — any TU including both failed to compile).
@@ -116,6 +119,16 @@ build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` conf
   Bgfx has no pixel-readback API so its fix is confirmed only by full-suite no-regression (1977/1977).
 
 ### What does NOT work yet
+- **`Texture2D::SetData(level>0,...)` is a total silent no-op on both Vulkan and Bgfx** — same
+  bug shape and severity as the `Texture3D`/`TextureCube::GetData` finding below, but for the most
+  commonly used texture type. `ITextureBackend::UpdatePixelsLevel` has an empty default body;
+  neither backend overrides it. Found while building Task 298's mipmap-filter test — the uploaded
+  higher-mip-level colour never appeared on Vulkan, which traced back to this, not a filter/sampler
+  issue. Vulkan additionally hardcodes `VkImageCreateInfo::mipLevels=1`,
+  `VkImageViewCreateInfo::levelCount=1`, and never sets sampler `minLod`/`maxLod` (defaulting to 0,
+  clamping automatic LOD selection to level 0 regardless of filter) — three more fixes needed
+  together with `UpdatePixelsLevel` for Vulkan `Texture2D` mips to work at all. Tracked as Task 867,
+  not fixed this session (multi-part, backend-touching fix needing its own dedicated pass).
 - `Texture3D`/`TextureCube::GetData` is a **total silent no-op on both Vulkan and Bgfx** — neither
   backend overrides the base class's empty default implementation. Calling it leaves the output
   buffer completely untouched, with no error (Task 280 finding, tracked as Task 865).
@@ -146,7 +159,9 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 296 | `examples/easygl_texture_address_mode_mirror_effect_test.cpp` (new), `CMakeLists.txt` | New `Mirror` pixel test on `DualTextureEffect`, mirroring Tasks 293/294's pattern. FNA has no `PointMirror` preset, so this builds a custom `SamplerState`. Deliberately sampled at raw `u=1.6` (not `1.25`, where `Mirror` and `Clamp` coincidentally agree) so only a genuinely correct `Mirror` implementation passes. All 3 backends already correctly mapped `Mirror` to their GPU's mirrored-repeat mode — no bug found, pure coverage addition. Registered and passing on both EasyGL and Vulkan. |
+| (uncommitted) Task 298 | `examples/easygl_texture_mip_filter_effect_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (new Task 867) | EasyGL: verified real mip-level selection works for explicit `Mip*` filters (`LinearMipPoint` correctly samples a high mip level at 8x8px on a 128-texel texture); confirmed `Point`/`Linear` are deliberately non-mip-aware on EasyGL (documented tradeoff, avoids GL-incomplete textures). **Found a severe, separate bug while testing Vulkan**: `Texture2D::SetData(level>0)` is a total silent no-op on Vulkan/Bgfx (`UpdatePixelsLevel` never overridden) — same class as Task 865. Vulkan additionally hardcodes `mipLevels=1`/`levelCount=1`/never sets sampler `minLod`/`maxLod`. Un-registered the confounded Vulkan test rather than leave it misleadingly failing; tracked the full finding as new Task 867 (not fixed — multi-part, needs its own pass). |
+| (uncommitted) Task 297 | `examples/easygl_texture_filter_point_vs_linear_test.cpp` (new), `CMakeLists.txt` | First genuinely new-ground Phase 35 test — no prior test touched `TextureFilter`. New test draws 4 columns in one frame (magnification/minification × Point/Linear) on `DualTextureEffect`, sampling each at a texel boundary; `Point` reads pure, `Linear` reads a ~50/50 blend, in both scales. All 4 checks passed on both backends immediately — no bug found. Documented that magnification/minification share identical sampler math in CNA (flat `TextureFilter`→min+mag pair, no mipmaps), so this task's two scales confirm robustness at scale, not a distinct code path. |
+| `29c4b06` Task 296 | `examples/easygl_texture_address_mode_mirror_effect_test.cpp` (new), `CMakeLists.txt` | New `Mirror` pixel test on `DualTextureEffect`, mirroring Tasks 293/294's pattern. FNA has no `PointMirror` preset, so this builds a custom `SamplerState`. Deliberately sampled at raw `u=1.6` (not `1.25`, where `Mirror` and `Clamp` coincidentally agree) so only a genuinely correct `Mirror` implementation passes. All 3 backends already correctly mapped `Mirror` to their GPU's mirrored-repeat mode — no bug found, pure coverage addition. Registered and passing on both EasyGL and Vulkan. |
 | (uncommitted) Task 295 | `GRAPHICS_TASKS.md` only | **Already fully satisfied, no new code** — Task 293's own fix-proof test already is a `TextureAddressMode::Wrap` pixel test on a 3D stock effect. Documented the mapping so it isn't duplicated. |
 | `f70a169` Task 294 | `examples/easygl_texture_address_mode_clamp_effect_test.cpp` (new), `CMakeLists.txt` | Confirmed Task 269's existing address-mode test is `SpriteBatch`-only (a different code path from Task 293's fix), so a real 3D-stock-effect test was needed. New test mirrors Task 293's `DualTextureEffect` pattern with `SamplerState::PointClamp` (expects the opposite, edge-extend/`GREEN` result vs. `PointWrap`'s repeat/`RED`). Registered on both EasyGL and Vulkan — both pass, confirming Task 293's fix holds for `Clamp` too, not just `Wrap`. |
 | `8649227` Task 293 (+Vulkan/Bgfx follow-up) | `GraphicsDevice.cpp` (18 sites), `VulkanGraphicsBackend.cpp/.hpp`, `BgfxGraphicsBackend.cpp`, `examples/easygl_sampler_state_effect_test.cpp` (new), `CMakeLists.txt` | **Found and fixed a severe, project-wide bug across all 3 backends.** EasyGL: all 18 `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives` overloads skipped `applySamplerStatesToBackend()`; fixed. Vulkan: `GetOrCreateDualTexDescSet` hardcoded `defaultSampler_` and cached by view-only key, ignoring `slotSamplers_`; fixed by threading samplers through + widening the cache key. Bgfx: dual-texture draw used `samplerFlags_[0]` for both texture slots instead of `samplerFlags_[1]` for slot 1; fixed. New pixel test (`DualTextureEffect` + `SamplerStates[0]=PointWrap`, UV past 1.0) proves the fix on both EasyGL and Vulkan (reused test source, registered as both `EasyGL_SamplerState_DualTextureEffect` and `Vulkan_SamplerState_DualTextureEffect`); Bgfx confirmed via full-suite no-regression only (no pixel-readback API). Along the way, also verified and committed a pre-existing, unrelated uncommitted fix in the sibling `sharp-runtime` repo (`BitConverter.hpp` `System::Single` ambiguity) that had been silently blocking any Vulkan build. Directly unblocks Tasks 294–299. All three backends' full ctest suites reconfirmed with zero regressions: EasyGL 2043/2045, Vulkan 1983/1984, Bgfx 1977/1977 (100%). |
@@ -312,23 +327,23 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 297 — pixel test: `TextureFilter::Point` vs `Linear`
-   (magnification/minification)**
-   - Goal: continue Phase 35. Unlike Tasks 295 (already covered) and 296 (pure coverage gap, no
-     bug), this task is genuinely untested ground — no existing test exercises `TextureFilter`
-     itself (only `TextureAddressMode` has been covered so far in Phase 35). Needs two distinct
-     scenarios: **magnification** (draw a small texture large on screen — `Point` shows hard texel
-     edges, `Linear` blends across them) and **minification** (draw a texture smaller than its
-     source texels map to — `Point` picks one texel per pixel, `Linear` averages neighbors). A
-     2-texel red/green pattern (as used in Tasks 293–296) works for magnification (sample near a
-     texel boundary: `Point` gives a pure colour, `Linear` gives a blend); minification needs a
-     higher-frequency pattern (e.g. a checkerboard) to show a measurable difference, since a single
-     boundary averaged over a huge minified area washes out either way.
-   - Files: new `examples/easygl_texture_filter_point_vs_linear_test.cpp` (or two, if magnification
-     and minification don't fit one file cleanly); register on both EasyGL and Vulkan mirroring
-     Tasks 293–296.
-   - Verification: pixel-readback test(s) confirming `Point` gives a crisp/unblended sample and
-     `Linear` gives a measurably blended one, for both magnification and minification.
+1. **`GRAPHICS_TASKS.md` Task 299 — verify anisotropic filtering caps and fallback (closes
+   Phase 35's testing scope, only Task 300's doc pass remains after)**
+   - Goal: verify `TextureFilter::Anisotropic` + `SamplerState.MaxAnisotropy` actually affects
+     rendering, and that requesting an anisotropy level beyond the GPU's real cap degrades
+     gracefully (clamped, not a crash/validation error). Recall from this session:
+     `VulkanGraphicsBackend::ApplySamplerState`'s `case 2: // Anisotropic` sets
+     `ci.anisotropyEnable=VK_TRUE` only `if (enableAniso && anisotropySupported_)`, and clamps
+     `ci.maxAnisotropy` to `maxSamplerAnisotropy_` (the real device cap) — check this logic is
+     actually correct/exercised, and check EasyGL/Bgfx's equivalent handling too. A pixel test is
+     harder here than Tasks 293–298 (anisotropic filtering's visible effect is on *oblique-angle*
+     minification, not a simple axis-aligned UV/LOD case) — consider whether a simpler
+     property-level check (does `SamplerStates[0].MaxAnisotropy` reach the backend unmodified aside
+     from the device-cap clamp?) is a more honest, robust scope than attempting a full oblique-quad
+     pixel-difference test.
+   - Files: likely `tests/`/`examples/` (new), possibly touching backend anisotropy-cap query code
+     if a real gap is found (unlikely, given Vulkan's existing clamp logic looks correct on read).
+   - Verification: whatever test is written; run on all backends that claim anisotropic support.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -392,35 +407,45 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-34 are fully complete. Phase 35 (SamplerState/texture sampling
-conformance, GRAPHICS_TASKS.md Tasks 291-300) is in progress: Tasks 291-296 done. All three
-backends are green: EasyGL 2045/2047, Vulkan 1984/1986, Bgfx 1977/1977 (100%) - only pre-existing,
-documented failures remain anywhere (see NEXT.md §5; Vulkan_FillMode_WireFrame is confirmed flaky
-even in isolation, not a regression).
+conformance, GRAPHICS_TASKS.md Tasks 291-300) is in progress: Tasks 291-298 done, only 299/300
+remain. All three backends are green: EasyGL 2047/2049, Vulkan 1984/1987 (100% in isolation - one
+observed full-run failure, Vulkan_RenderTargetUsage, confirmed pre-existing order-dependent
+flakiness via isolation rerun, not a regression), Bgfx 1977/1977 (100%, not rebuilt this specific
+session but no Bgfx changes made) - only pre-existing, documented failures remain anywhere (see
+NEXT.md §5).
 
 Task 293 found and fixed something big, across all 3 backends: GraphicsDevice.SamplerStates was
-being silently ignored by essentially all 3D stock-effect texture draws
-(BasicEffect/DualTextureEffect/AlphaTestEffect/EnvironmentMapEffect/SkinnedEffect), for 3 different
-backend-specific reasons - EasyGL: all 18 DrawUserPrimitives/DrawUserIndexedPrimitives/
-DrawInstancedPrimitives overloads never called applySamplerStatesToBackend(); Vulkan:
-GetOrCreateDualTexDescSet hardcoded defaultSampler_ and cached by view-only key, ignoring
-slotSamplers_; Bgfx: dual-texture draw used samplerFlags_[0] for both texture slots instead of
-samplerFlags_[1] for slot 1. All 3 fixed and pixel/regression-verified. Also found and committed a
-pre-existing, unrelated uncommitted fix in the sibling sharp-runtime repo (BitConverter.hpp:
-System::Single ambiguity) that had been silently blocking any Vulkan build (sharp-runtime commit
-ec97562). Tasks 294/295/296 rounded out TextureAddressMode coverage (Clamp/Wrap/Mirror) on 3D
-stock effects, each registered on both EasyGL and Vulkan: Task 294 added a genuine new Clamp test
-(Task 269's existing test was SpriteBatch-only); Task 295 found Task 293's own fix-proof test
-already covers Wrap, so no new code was needed; Task 296 added a genuine new Mirror test (FNA has
-no PointMirror preset, so it builds a custom SamplerState) - picked sample point u=1.6 deliberately
-since u=1.25 would have let Mirror and Clamp coincidentally agree, hiding a fallback-to-Clamp bug.
+being silently ignored by essentially all 3D stock-effect texture draws, for 3 different
+backend-specific reasons (EasyGL: 18 missing applySamplerStatesToBackend() calls; Vulkan:
+GetOrCreateDualTexDescSet hardcoded defaultSampler_ + view-only cache key; Bgfx: samplerFlags_[0]
+reused for texture slot 1). All 3 fixed and verified. Also committed a pre-existing, unrelated
+uncommitted sharp-runtime fix (BitConverter.hpp System::Single ambiguity, commit ec97562) that had
+been blocking any Vulkan build. Tasks 294/295/296 rounded out TextureAddressMode coverage
+(Clamp/Wrap/Mirror); Task 297 covered TextureFilter::Point vs Linear (magnification+minification,
+no bug found, all 4 checks passed cleanly on both backends).
 
-Next task: GRAPHICS_TASKS.md Task 297 - pixel test: TextureFilter::Point vs Linear
-(magnification/minification). This is genuinely new ground - no test in Phase 35 so far has
-exercised TextureFilter itself (only TextureAddressMode). Needs two distinct scenarios:
-magnification (small texture drawn large - Point shows hard texel edges, Linear blends) and
-minification (texture drawn smaller than its texel density - Point picks one texel per pixel,
-Linear averages neighbors; needs a higher-frequency pattern like a checkerboard, since a single
-colour boundary washes out under heavy minification regardless of filter). Mirror Tasks 293-296's
-DualTextureEffect + custom-SamplerState pattern; register on both EasyGL and Vulkan.
+Task 298 (mipmap filter behavior) found a SECOND severe, project-wide bug, distinct from Task 293's:
+Texture2D::SetData(level>0,...) is a total silent no-op on Vulkan and Bgfx
+(ITextureBackend::UpdatePixelsLevel has an empty default body, neither backend overrides it) - same
+severity class as the already-tracked Task 865 (Texture3D/TextureCube::GetData no-op), but for the
+much more commonly used Texture2D, and previously undocumented. Vulkan additionally hardcodes
+VkImageCreateInfo::mipLevels=1, VkImageViewCreateInfo::levelCount=1, and never sets sampler
+minLod/maxLod (defaulting to 0, clamping automatic LOD selection to level 0 regardless of filter).
+NOT fixed this session (multi-part fix needing its own dedicated pass) - tracked as new Task 867.
+EasyGL itself was verified correct: real mip-level selection works for explicit Mip* filters
+(LinearMipPoint), while Point/Linear are deliberately non-mip-aware there (documented tradeoff to
+avoid GL-incomplete non-mipmapped textures). The Vulkan variant of Task 298's test was
+un-registered rather than left misleadingly failing for the wrong (data-upload, not filter) reason.
+
+Next task: GRAPHICS_TASKS.md Task 299 - verify anisotropic filtering caps and fallback. This is
+likely the last real testing task in Phase 35 (Task 300 is a documentation pass). Check
+VulkanGraphicsBackend::ApplySamplerState's existing anisotropy-enable/clamp logic
+(case 2: only enables anisotropy if anisotropySupported_, clamps maxAnisotropy to the real device
+cap maxSamplerAnisotropy_) and EasyGL/Bgfx's equivalents first - this looks likely correct already
+from a first read, but verify rather than assume, matching this session's pattern. A pixel test is
+harder here than Tasks 293-298 since anisotropic filtering's visible effect is on oblique-angle
+minification, not a simple axis-aligned UV/LOD case - consider whether a simpler property-level
+check (does SamplerStates[0].MaxAnisotropy reach the backend correctly, clamped only by the device
+cap) is a more honest scope than a full oblique-quad pixel-difference test.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
