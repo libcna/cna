@@ -650,3 +650,88 @@ Remaining risk: none of these tests (old or new) prove physical hardware
 correctness — only that the pure function implements its own documented,
 internally-consistent convention. Real-device verification remains
 required and is tracked in `docs/devices-hardware-checklist.md`.
+
+## P6-8: Compass/Motion honest stubs + backend interface sketch
+
+### Resolution
+
+Re-read `Compass.hpp`/`.cpp` and `Motion.hpp`/`.cpp` fully (audit finding
+#8): both remain honest, permanent `SensorState::NotSupported` stubs —
+`getIsSupportedProperty()` hardcoded `return false;` in both, `Start()`
+unconditionally throws `SensorFailedException` in both, no fake data
+synthesis from `Accelerometer`/`Gyroscope` anywhere. Confirmed still true;
+no code change made or needed here.
+
+Existing test coverage already satisfies "confirm tests that they still
+throw/not-supported": `CompassTests.GetIsSupportedPropertyDoesNotCrash`
+(`EXPECT_FALSE(...)`), `CompassTests.StartThrowsSensorFailedException`,
+`MotionTests.GetIsSupportedPropertyIsFalse`,
+`MotionTests.StartThrowsSensorFailedException` — all re-run and confirmed
+still passing (see P6-1's/P6-3's Resolutions above, which also exercised
+Compass/Motion's construct/destroy paths heavily under concurrency without
+ever observing a change in this behavior).
+
+**Interface sketch** (documentation only, per the brief's own "optionally
+sketch... only if they don't destabilize current code" — no `.hpp`/`.cpp`
+files added to the build; adding an unused compiled interface with zero
+callers would be exactly the kind of premature/half-finished abstraction
+this project's own conventions warn against). This translates
+`plan_devices_phase5.md`'s existing prose-level Android/iOS field mappings
+(Tasks P5-8/P5-9) into a concrete C++ shape a future native-backend task
+could implement against, without committing to it now:
+
+```cpp
+// Sketch only -- not compiled, not wired into Compass/Motion today.
+namespace Microsoft::Devices::Sensors::Detail
+{
+    // One instance per platform (Android JNI bridge / iOS CLLocationManager
+    // heading wrapper), constructed only once a real native backend is
+    // scoped and implemented. Until then, Compass has no backend_ member
+    // at all and getIsSupportedProperty() stays a hardcoded `return false;`.
+    class ICompassBackend
+    {
+    public:
+        virtual ~ICompassBackend() = default;
+        [[nodiscard]] virtual bool IsSupported() = 0;
+        virtual void Start() = 0;
+        virtual void Stop() = 0;
+        // Pull-model to match this project's existing SensorEventWatch()
+        // dispatch shape (Detail::SdlSensorSubsystem<TSensor>) rather than
+        // inventing a second, backend-specific push callback mechanism.
+        [[nodiscard]] virtual CompassReading GetLatestReading() = 0;
+    };
+
+    // Same shape, mirroring MotionReading's Attitude/Gravity/
+    // DeviceAcceleration/DeviceRotationRate fields (see
+    // plan_devices_phase5.md's Motion-Android/Motion-iOS sections for the
+    // field-for-field native source mapping).
+    class IMotionBackend
+    {
+    public:
+        virtual ~IMotionBackend() = default;
+        [[nodiscard]] virtual bool IsSupported() = 0;
+        virtual void Start() = 0;
+        virtual void Stop() = 0;
+        [[nodiscard]] virtual MotionReading GetLatestReading() = 0;
+    };
+}
+```
+
+Why this shape and not more: mirrors the existing
+`Detail::SdlSensorSubsystem<TSensor>` pull-model (a reading is fetched, not
+pushed via a second callback mechanism) so a future implementation could
+plausibly reuse `SensorBase<T>`'s existing `setCurrentValueProperty()`
+dispatch path from inside `Start()`'s own polling/callback glue, rather
+than inventing a parallel event system. Deliberately not sketching
+constructor/DI wiring, error handling, or thread-safety details — those
+depend on decisions (polling vs. push, which thread delivers updates) that
+belong to the actual implementation task, not this sketch.
+
+Files changed: none (documentation only, added to this plan file).
+
+Commands run: none (no code changed) — relied on P6-1's/P6-3's already-run
+Compass/Motion test results in this same session.
+
+Remaining risk: none — no behavior changed. The sketch above is
+intentionally non-binding; an actual native-backend implementation task
+may reasonably diverge from it once real platform constraints are known.
