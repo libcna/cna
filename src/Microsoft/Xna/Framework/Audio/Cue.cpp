@@ -245,7 +245,7 @@ namespace Microsoft::Xna::Framework::Audio
             inst->setIsLoopedProperty(waveRef.loopCount > 0);
             inst->Play();
 
-            active_.push_back({std::move(inst)});
+            active_.push_back({std::move(inst), waveRef.volume});
 
             if (std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())
             {
@@ -297,6 +297,12 @@ namespace Microsoft::Xna::Framework::Audio
 
         if (bank_ && bank_->engine_)
             bank_->engine_->UnregisterCue(this);
+    }
+
+    void Cue::ApplyCategoryVolume(float catVol)
+    {
+        for (auto& pi : active_)
+            if (pi.instance) pi.instance->setVolumeProperty(std::clamp(pi.baseVolume * catVol, 0.0f, 1.0f));
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────

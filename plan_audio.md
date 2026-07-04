@@ -283,12 +283,22 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *FNA:* SoundEffectInstance.cs:488,518,536,554.
   *Accept:* volající se překládají; chování (reálné/no-op) v tabulce odchylek. (A8)
 
-- [ ] **T-4D — AudioEngine `Update()` / per-cue přepočet kategorií.**
+- [x] **T-4D — AudioEngine `Update()` / per-cue přepočet kategorií.**
   Posoudit, co z FACT `DoWork` je potřeba (fade kategorií, instance-limity); minimálně dokončit
   re-apply smyčku hlasitosti kategorie (`AudioEngine.cpp:219-223` má prázdné tělo), aby změna hlasitosti
   ovlivnila i běžící cue, ne jen budoucí.
   *FNA:* AudioEngine.cs:337 (+ kategorie/fade).
   *Accept:* změna hlasitosti kategorie ovlivní právě hrající cue (test); dokumentováno, co zůstává no-op. (B z AudioEngine §1)
+  *Pozn.:* Hotovo -- `AudioEngine::SetCategoryVolumeInternal` teď volá nové `Cue::ApplyCategoryVolume`
+  pro každý aktivní cue v dané kategorii; `Cue::PlaybackInstance` si pamatuje `baseVolume`
+  (waveRef.volume, jak byl zkombinován s track/sound volume při parsování), takže re-apply
+  přepočítá `clamp(baseVolume * newCatVol, 0, 1)` stejným vzorcem jako `Play()`. Fade
+  kategorií a instance-limity (zbytek FACT `DoWork`) zůstávají mimo rozsah -- nebyly součástí
+  accept kritéria. Ověřeno regresním testem `AudioCategoryTest.SetVolumeReappliesToAlreadyPlayingCueInstance`
+  (nová fixtura s reálným WaveBank+SoundEffectInstance, na rozdíl od stávající
+  `PauseResumeStopRouteToRealActiveCueInCategory`, jejíž cue nemá žádný wavebank, takže
+  `active_` zůstává prázdné a nešlo by u ní hlasitost pozorovat); potvrzeno přes `git stash`
+  metodiku, že test bez opravy skutečně selže (1 == 1, žádná změna).
 
 ### Fáze 5 — Kompletní testovací sada (Google Test)
 
@@ -956,7 +966,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 | D1 | `CreateInstance`/`FromStream`: hodnota vs. heap-reference + instance-tracking (T-3G) | Ponechat hodnotu, **zdokumentovat** odchylku; tracking jen pokud demo/hra vyžaduje Dispose-kaskádu |
 | D2 | Pan/Volume klamp vs. throw/pass-through (T-3C) | Sladit s FNA (throw na range, pass-through volume); klamp jen vědomě + do CHECKLIST |
 | D3 | Streaming WaveBank (T-3F) | Zatím doložená odchylka (vše do paměti); skutečný streaming jako pozdější úkol |
-| D4 | Rozsah `AudioEngine::Update` / FACT DoWork (T-4D) | Minimálně per-cue volume re-apply; zbytek dokumentovaně no-op |
+| D4 | ~~Rozsah `AudioEngine::Update` / FACT DoWork (T-4D)~~ | **Rozhodnuto a implementováno 2026-07-04** — minimální rozsah: `SetCategoryVolumeInternal` teď volá `Cue::ApplyCategoryVolume` pro re-apply na aktivní instance; fade kategorií a instance-limity (zbytek FACT `DoWork`) zůstávají dokumentovaně mimo rozsah. |
 | D5 | ~~Vlastnictví `SoundEffect` vs. `SoundEffectInstance` — dangling-safe kontrakt vs. sdílené vlastnictví (CP-7)~~ | **Rozhodnuto a implementováno 2026-07-03** — sdílené vlastnictví: `SoundEffectInstance` drží type-erased `shared_ptr<void>` na `SoundEffect::impl_` plus cache'ovaný native handle, žádná dereference syrového `SoundEffect*` za konstrukcí. Ověřeno reálným ASan buildem. |
 | D6 | ~~Fire-and-forget cue cleanup: čas vs. stav přehrávání (XA-1)~~ | **Rozhodnuto a implementováno 2026-07-02** — mazat podle `!IsPlaying`, časový safety-net (5 min) jen jako krajní pojistka. |
 | D7 | ~~Chování parseru na poškozená/adverzní XACT data — throw vs. saturující clamp (IN-2, IN-3)~~ | **Rozhodnuto a implementováno 2026-07-03** — throw (`std::runtime_error`) na podteklé/poškozené hodnoty místo tichého clampování; sladí se s projektovým pravidlem „no silent data corruption". |

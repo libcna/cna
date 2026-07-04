@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
+#include "CueTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -26,16 +27,6 @@ using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
 using Microsoft::Xna::Framework::Audio::SoundBank;
-
-namespace Microsoft::Xna::Framework::Audio
-{
-    // Test-only accessor exposing which sound a variation table selected (via its category
-    // index) without needing a real WaveBank/audio device to observe playback (see Cue.hpp).
-    struct CueTestAccess
-    {
-        static uint16_t CategoryIndex(const Cue& cue) { return cue.categoryIdx_; }
-    };
-}
 
 namespace
 {

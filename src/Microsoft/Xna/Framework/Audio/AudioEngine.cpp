@@ -227,10 +227,8 @@ namespace Microsoft::Xna::Framework::Audio
         xactImpl_->categoryVolumes[idx] = vol;
         // Apply to all active cues in this category
         for (auto* cue : xactImpl_->activeCues)
-        {
             if (cue && cue->categoryIdx_ == idx)
-                ; // Cue would need to re-apply volume — skipped for simplicity
-        }
+                cue->ApplyCategoryVolume(vol);
     }
 
     void AudioEngine::PauseCategoryInternal(unsigned short idx)

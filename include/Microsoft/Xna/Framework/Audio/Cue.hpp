@@ -140,6 +140,7 @@ namespace Microsoft::Xna::Framework::Audio
         struct PlaybackInstance
         {
             std::unique_ptr<SoundEffectInstance> instance;
+            float baseVolume = 1.0f; // waveRef.volume, before category volume is combined in
         };
         std::vector<PlaybackInstance> active_;
 
@@ -148,6 +149,10 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<WaveBank*> waveBanksUsed_;
 
         void StopInternal(bool immediate);
+
+        // Re-applies a new category volume to all currently active instances, recombining it
+        // with each instance's stored baseVolume (see AudioEngine::SetCategoryVolumeInternal).
+        void ApplyCategoryVolume(float catVol);
 
         // Tests need to observe which sound a variation table selected (via the category
         // index it carries) without a real WaveBank/audio device backing playback.
