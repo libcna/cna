@@ -680,3 +680,109 @@ confirm the doc-only changes didn't accidentally touch anything (226 tests, 224 
 2 skipped — unchanged from Task P8-6).
 
 **Remaining risk:** none — documentation only, no code changed.
+
+## P8-8: Final verification report
+
+### Commands run and exact results
+
+**`EASYGL` (`cmake-build-debug`):**
+```bash
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean
+cd cmake-build-debug && ctest --output-on-failure \
+  -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase|ScopeExit"
+# 226/226 passed (plus the 2 expected GTEST_SKIP()s)
+cd .. && ctest --test-dir cmake-build-debug --output-on-failure
+# 2049/2051 passed — same 2 pre-existing EasyGL_MRT_TwoAttachments/easy-gl-resource-smoke-tests failures
+```
+(Already re-verified at the end of every P8-1 through P8-6 task individually, including
+under throwaway ASan/TSan/UBSan builds during Tasks P8-1/P8-2/P8-4/P8-6; this is the
+final confirmation on the plain `EASYGL` build, not a first check.)
+
+**`VULKAN` (`cmake-build-vulkan`):**
+```bash
+cmake --build cmake-build-vulkan --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-vulkan --target CnaTests -j"$(nproc)"   # clean
+cd cmake-build-vulkan && ctest --output-on-failure -R "...same filter as EASYGL..."
+# 226/226 passed — identical to EASYGL
+
+for i in $(seq 1 30); do
+  ./CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:SensorSubsystemOwnershipTests.*:SensorBaseTests.*" || echo "run $i FAILED"
+done
+# 30/30 clean
+
+cd .. && ctest --test-dir cmake-build-vulkan --output-on-failure
+# 1986/1999 passed (99%); 13 pre-existing Vulkan_* graphics-smoke tests "Not Run"
+# (need a real GPU/driver) — same baseline count as plan_devices_phase7.md Task P7-7;
+# no new failures, no regressions.
+```
+
+**`BGFX` (`cmake-build-bgfx`):**
+```bash
+cmake --build cmake-build-bgfx --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-bgfx --target CnaTests -j"$(nproc)"   # clean
+cd cmake-build-bgfx && ctest --output-on-failure -R "...same filter as EASYGL..."
+# 226/226 passed — identical to EASYGL
+
+for i in $(seq 1 30); do
+  ./CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:SensorSubsystemOwnershipTests.*:SensorBaseTests.*" || echo "run $i FAILED"
+done
+# 30/30 clean
+
+cd .. && ctest --test-dir cmake-build-bgfx --output-on-failure
+# 1990/1993 passed (99%); 3 pre-existing Bgfx_* tests "Not Run" (multi-config build-dir
+# executable lookup quirk unrelated to Microsoft::Devices) — same baseline count as
+# plan_devices_phase7.md Task P7-7; no new failures, no regressions.
+```
+
+**Android cross-compile (`cmake-build-android`, NDK 30.0.14904198, arm64-v8a, API 24):**
+```bash
+cmake --build cmake-build-android --target CNA -j"$(nproc)"
+# clean
+```
+Re-ran the NDK's own `llvm-nm` against `Accelerometer.cpp.o`/`VibrateController.cpp.o`
+to confirm Phase 8's actual new symbols compiled in, not just that *something* compiled:
+```bash
+NM="$HOME/Android/Sdk/ndk/30.0.14904198/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+"$NM" -C cmake-build-android/CMakeFiles/CNA.dir/src/Microsoft/Devices/Sensors/Accelerometer.cpp.o \
+  | grep -iE "ProbeIsSupported|EnsureSubsystemInitialized|OpenDefaultSensorLocked|make_shared.*thread"
+```
+Confirmed present: the lock-proof-parameter overloads of `ProbeIsSupported`/
+`OpenDefaultSensorLocked`/`EnsureSubsystemInitialized` (each showing
+`std::lock_guard<std::mutex> const&` in their demangled signature — Task P8-3), and the
+`std::make_shared<std::vector<std::thread::id>>()` instantiation backing `dispatchToken_`
+(Task P8-1). Also confirmed `~VibrateController()` still compiles (Task P8-6's change).
+Still **compile-only**: no APK packaging, no emulator/device run, `CnaTests` itself not
+cross-compiled (`googletest` not configured for the NDK toolchain in this session, same
+as every prior phase).
+
+**iOS — re-confirmed still blocked:**
+```bash
+which xcodebuild xcrun osxcross   # no output — none found
+find / -iname "*ios*toolchain*" 2>/dev/null   # no matches
+```
+No Apple/iOS toolchain of any kind in this Linux container, checked fresh this task
+(not assumed carried over from Phase 7).
+
+**Honest gaps this task does not and cannot close:**
+- No real accelerometer/gyroscope/haptic hardware, any Android/iOS device or emulator,
+  or rumble-capable gamepad exists in this container — see
+  `docs/devices-hardware-checklist.md`.
+- No APK packaging or on-device/emulator run for Android — library compile-only.
+- A raw ZIP export of this repository (without `git submodule update --init --recursive`)
+  is not buildable — every command above ran against a real git checkout with
+  submodules already initialized. See `docs/devices-build.md`'s and `NEXT.md`'s
+  ZIP-export caveats (Task P7-6, re-confirmed unchanged this phase).
+
+**Remaining risk:** none beyond what's already documented as an accepted, honest gap
+(physical hardware, iOS toolchain, ZIP-export self-containment, and the one deliberate
+Accelerometer `CurrentValueChanged` self-destroy boundary from Task P8-1) — every
+backend this container can actually build and test is clean, with no regressions
+anywhere, and the phase's one real bug (Task P8-1) and one real fixture race (Task P8-4)
+were each confirmed both broken-without-the-fix and clean-with-it via a sanitizer, not
+just a plain test pass.
+
+---
+
+`plan_devices_phase8.md` is now fully closed: all 8 tasks (P8-1 through P8-8) done,
+each with its own commit, verified individually and again together in this final pass.
