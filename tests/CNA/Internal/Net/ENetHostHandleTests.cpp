@@ -4,9 +4,30 @@
 
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 using CNA::Internal::Net::ENetHostHandle;
 
+namespace {
+#ifdef __EMSCRIPTEN__
+    // Emscripten's default build is fully synchronous/single-threaded: a real WebSocket handshake
+    // cannot complete while C++ code holds the call stack, since nothing ever returns control to
+    // Node's event loop. emscripten_sleep() genuinely yields back to Node and resumes later, but
+    // only works because CnaTests is linked with -sASYNCIFY=1 (see CMakeLists.txt).
+    void PollYield() { emscripten_sleep(10); }
+#else
+    void PollYield() { }
+#endif
+}
+
 TEST(ENetHostHandleTest, CreateHostBindsToEphemeralPort) {
+#ifdef __EMSCRIPTEN__
+    GTEST_SKIP() << "Emscripten's SOCKFS bind()/getsockname() shim never reports back a real "
+                    "OS-assigned ephemeral port (always echoes back the literal port requested, "
+                    "0 in this case) - a permanent platform limitation, not a CNA bug. See NEXT.md.";
+#endif
     ENetHostHandle server = ENetHostHandle::CreateHost(0, 4, 2);
     EXPECT_TRUE(server.IsValid());
     EXPECT_GT(server.getBoundPortProperty(), 0);
@@ -41,7 +62,15 @@ TEST(ENetHostHandleTest, MoveAssignmentTransfersOwnership) {
 // exchange a real packet end-to-end, before any wire protocol/relay logic is built on top of
 // that assumption.
 TEST(ENetHostHandleTest, LoopbackConnectAndExchangeOnePacket) {
+#ifdef __EMSCRIPTEN__
+    // Emscripten's SOCKFS bind()/getsockname() shim never reports back a real ephemeral port (see
+    // CreateHostBindsToEphemeralPort above), so this smoke test's actual point - a real bound host
+    // exchanging a real packet - uses a fixed port here instead of ENET_PORT_ANY (0).
+    constexpr uint16_t kLoopbackTestPort = 61193;
+    ENetHostHandle server = ENetHostHandle::CreateHost(kLoopbackTestPort, 1, 2);
+#else
     ENetHostHandle server = ENetHostHandle::CreateHost(0, 1, 2);
+#endif
     uint16_t serverPort = server.getBoundPortProperty();
     ASSERT_GT(serverPort, 0);
 
@@ -51,7 +80,7 @@ TEST(ENetHostHandleTest, LoopbackConnectAndExchangeOnePacket) {
 
     ENetPeer* serverSidePeer = nullptr;
     bool clientSideConnected = false;
-    for (int i = 0; i < 200 && (!serverSidePeer || !clientSideConnected); ++i) {
+    for (int i = 0; i < 200 && (!serverSidePeer || !clientSideConnected); ++i, PollYield()) {
         ENetEvent serverEvt{};
         if (server.Service(0, serverEvt) > 0 && serverEvt.type == ENET_EVENT_TYPE_CONNECT) {
             serverSidePeer = serverEvt.peer;
@@ -69,7 +98,7 @@ TEST(ENetHostHandleTest, LoopbackConnectAndExchangeOnePacket) {
     client.Flush();
 
     ENetPacket* received = nullptr;
-    for (int i = 0; i < 200 && !received; ++i) {
+    for (int i = 0; i < 200 && !received; ++i, PollYield()) {
         ENetEvent serverEvt{};
         if (server.Service(0, serverEvt) > 0 && serverEvt.type == ENET_EVENT_TYPE_RECEIVE) {
             received = serverEvt.packet;

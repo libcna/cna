@@ -6,6 +6,16 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Emscripten disables C++ exception throw/catch support by default (an uncaught throw aborts
+# the whole runtime instead of unwinding) - this codebase relies on exceptions pervasively
+# (System::Exception hierarchy, EXPECT_THROW tests, etc.), so it must be enabled globally,
+# before sharp-runtime is added below, since unwinding requires every frame in the call chain
+# to be compiled with -fexceptions.
+if(EMSCRIPTEN)
+    add_compile_options(-fexceptions)
+    add_link_options(-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING=1)
+endif()
+
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
 option(CNA_NOXNA "Enable CNA NOXNA extended graphics layer (beyond XNA 4.0)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
@@ -129,13 +139,13 @@ endif()
 # mingw-w64 Windows cross-build (no mingw-w64 FFmpeg dev packages in this toolchain;
 # pkg-config would otherwise silently resolve to the host's native FFmpeg and poison
 # the cross-compile's include path with native glibc headers). ---
-if(MINGW)
+if(MINGW OR EMSCRIPTEN OR ANDROID)
     set(CNA_FFMPEG_AVAILABLE OFF)
 else()
     set(CNA_FFMPEG_AVAILABLE ON)
 endif()
 
-if(NOT EMSCRIPTEN AND NOT ANDROID AND CNA_FFMPEG_AVAILABLE)
+if(CNA_FFMPEG_AVAILABLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(LIBAVCODEC  REQUIRED libavcodec)
     pkg_check_modules(LIBAVFORMAT REQUIRED libavformat)
@@ -1225,10 +1235,12 @@ if(CNA_BUILD_TESTS)
     )
 
     # TwoProcessLoopbackTest.cpp (Task 6.1) uses POSIX-only process APIs (posix_spawn, poll,
-    # sys/wait.h) to orchestrate two independent OS processes — not available under mingw-w64.
-    # It isn't part of the Task 6.2 Windows verification filter (*Network*:*Gamer*:*ENet*:*Packet*)
-    # either, since its suite name is TwoProcessLoopbackTest.
-    if(WIN32)
+    # sys/wait.h) to orchestrate two independent OS processes. Compiles under mingw-w64 and
+    # Emscripten (both provide POSIX-ish libc stubs) but can't actually work under either: no real
+    # multi-process spawning exists in a single Node.js/Wasm module, and it isn't part of the
+    # Task 6.2 Windows verification filter (*Network*:*Gamer*:*ENet*:*Packet*) either, since its
+    # suite name is TwoProcessLoopbackTest.
+    if(WIN32 OR EMSCRIPTEN)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
     endif()
 
@@ -1245,6 +1257,22 @@ if(CNA_BUILD_TESTS)
         # TUs) trips a case where the linker fails to fold it against the identical libstdc++
         # definition. Both copies are byte-identical, so allowing the duplicate is safe.
         target_link_options(CnaTests PRIVATE -Wl,--allow-multiple-definition)
+    endif()
+
+    if(EMSCRIPTEN)
+        # Emscripten's EXIT_RUNTIME defaults to 0 (deliberately keeps the JS runtime alive after
+        # main() returns, so pending async JS/WebSocket handles can keep running) - without this,
+        # `node CnaTests.js` never exits after printing its results, even on success.
+        target_link_options(CnaTests PRIVATE -sEXIT_RUNTIME=1)
+
+        # Emscripten's default build is fully synchronous/single-threaded: a real WebSocket
+        # handshake structurally cannot complete while C++ code holds the call stack (confirmed
+        # empirically - even a real 1s sleep loop never lets it finish, since nothing returns
+        # control to Node's event loop). The SystemLink loopback tests need emscripten_sleep() to
+        # actually yield back to Node between polls, which requires Asyncify. Scoped to CnaTests
+        # only (a per-executable link-time transformation - does not affect native/Windows builds
+        # or any other Emscripten executable target such as the demos or the two-process harness).
+        target_link_options(CnaTests PRIVATE -sASYNCIFY=1)
     endif()
 
     target_link_libraries(CnaTests

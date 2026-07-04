@@ -28,6 +28,15 @@ namespace CNA::Internal::Net
         constexpr size_t kChannelLimit = 2;
         constexpr uint8_t kControlChannel = 0;
 
+#ifdef __EMSCRIPTEN__
+        // Emscripten's SOCKFS bind()/getsockname() shim never reports back a real OS-assigned
+        // ephemeral port (see NEXT.md) - hosting on Web must request a fixed, known port instead
+        // of relying on ENET_PORT_ANY (0) + read-back. Only reachable in practice by a Node.js-run
+        // dedicated relay/server build: a real browser tab can never accept incoming connections
+        // at all (browsers cannot open listening sockets), so hosting is moot there regardless.
+        constexpr uint16_t kEmscriptenHostPort = 61191;
+#endif
+
         // Per-session ENet transport state. HostPeer is set only when this session itself
         // initiated an outbound ConnectToHost() — it identifies "the one peer we asked to
         // connect to", distinguishing "we are the client of this specific connection" (in
@@ -378,9 +387,15 @@ namespace CNA::Internal::Net
             return;
         }
 
+#ifdef __EMSCRIPTEN__
+        auto state = std::make_unique<SessionState>(
+            SessionState{ENetHostHandle::CreateHost(kEmscriptenHostPort, kMaxPeers, kChannelLimit)}
+        );
+#else
         auto state = std::make_unique<SessionState>(
             SessionState{ENetHostHandle::CreateHost(0, kMaxPeers, kChannelLimit)}
         );
+#endif
         uint16_t boundPort = state->Host.getBoundPortProperty();
         sessions.emplace(session, std::move(state));
 
@@ -437,7 +452,17 @@ namespace CNA::Internal::Net
         {
             return;
         }
+
+#ifdef __EMSCRIPTEN__
+        // A real browser tab can never bind/listen (see NEXT.md), so the "client" role here is
+        // rebuilt as a pure outbound-only host instead of reusing whatever StartHosting's
+        // constructor call already bound - matching what a real browser can actually do.
+        Sessions()[session] = std::make_unique<SessionState>(
+            SessionState{ENetHostHandle::CreateClient(kChannelLimit)}
+        );
+#else
         StartHosting(session);
+#endif
 
         SessionState& state = *Sessions().at(session);
         state.HostPeer = state.Host.Connect(address, port, kChannelLimit);

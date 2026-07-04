@@ -29,6 +29,11 @@ namespace CNA::Internal::Net
      * for the full design rationale (client-queries/host-replies, not periodic host-announce; a
      * unicast loopback copy of every query as a same-machine fallback, which is also what makes
      * this reliably testable in this sandboxed environment).
+     *
+     * Permanently disabled on Emscripten: raw UDP broadcast/unicast has no equivalent on the Web
+     * platform at all (no browser, and no Node.js `ws` package, can send a raw datagram), so every
+     * method below is a no-op there (RegisterHost/UnregisterHost/Poll do nothing; FindSessions
+     * always returns empty). This is a permanent platform constraint, not a TODO.
      */
     class ENetDiscoveryService
     {

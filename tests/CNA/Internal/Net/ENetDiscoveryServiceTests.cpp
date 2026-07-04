@@ -56,6 +56,11 @@ TEST(ENetDiscoveryServiceTest, FindSessionsDiscoversRegisteredHost) {
     uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
     ASSERT_GT(hostPort, 0);
 
+#ifdef __EMSCRIPTEN__
+    // ENetDiscoveryService is permanently disabled on Emscripten — raw UDP broadcast/unicast has
+    // no equivalent on the Web platform (see NEXT.md and the class's own header doc comment).
+    EXPECT_TRUE(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink).empty());
+#else
     // ENetBackend::StartHosting (called from the fixture's own NetworkSession constructor)
     // already registered host.session with ENetDiscoveryService. FindSessions is a standalone
     // static call with no activeSession_ involvement, so — unlike NetworkSession::Find() itself,
@@ -79,6 +84,7 @@ TEST(ENetDiscoveryServiceTest, FindSessionsDiscoversRegisteredHost) {
     // public slots is 69 - privateSlots(0) - currentGamerCount(1), not derived from the 8 passed
     // to Create() here.
     EXPECT_EQ(found[0].getOpenPublicGamerSlotsProperty(), 68);
+#endif
 }
 
 TEST(ENetDiscoveryServiceTest, UnregisterHostStopsAnsweringQueries) {
@@ -97,5 +103,10 @@ TEST(ENetDiscoveryServiceTest, UnregisterHostIsSafeForAnUnregisteredOrMismatched
     EXPECT_NO_THROW(ENetDiscoveryService::UnregisterHost(nullptr));
 
     std::vector<AvailableNetworkSession> found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
+#ifdef __EMSCRIPTEN__
+    // ENetDiscoveryService is permanently disabled on Emscripten (see NEXT.md) — always empty.
+    EXPECT_TRUE(found.empty());
+#else
     EXPECT_EQ(found.size(), 1u);
+#endif
 }

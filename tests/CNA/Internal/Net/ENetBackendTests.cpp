@@ -16,6 +16,10 @@
 #include <string>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 using namespace CNA::Internal::Net;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 using Microsoft::Xna::Framework::Net::GameStartedEventArgs;
@@ -54,6 +58,29 @@ namespace {
 
         ~SystemLinkSessionFixture() { session->Dispose(); }
     };
+
+#ifdef __EMSCRIPTEN__
+    // Emscripten's SOCKFS bind()/getsockname() shim never reports back a real OS-assigned
+    // ephemeral port (see NEXT.md), so the raw ENetHostHandle "fake host" stand-ins below (playing
+    // "the other machine" for Client* tests) need a fixed port too - distinct from ENetBackend's
+    // own kEmscriptenHostPort (61191), which the real NetworkSession under test binds to
+    // independently via its own constructor in these same tests.
+    constexpr uint16_t kFakeHostTestPort = 61192;
+#else
+    constexpr uint16_t kFakeHostTestPort = 0; // ENET_PORT_ANY - real ephemeral binding works here
+#endif
+
+#ifdef __EMSCRIPTEN__
+    // Emscripten's default build is fully synchronous/single-threaded: a real WebSocket handshake
+    // cannot complete while C++ code holds the call stack, since nothing ever returns control to
+    // Node's event loop (confirmed empirically - even a real-time sleep loop never lets it finish
+    // without this). emscripten_sleep() genuinely yields back to Node and resumes later, but only
+    // works because CnaTests is linked with -sASYNCIFY=1 (see CMakeLists.txt). Called once per
+    // polling-loop iteration below in place of native/Windows's instant, no-delay-needed spin.
+    void PollYield() { emscripten_sleep(10); }
+#else
+    void PollYield() { }
+#endif
 }
 
 TEST(ENetBackendTest, RealNetworkingEnabledOnlyForSystemLink) {
@@ -133,7 +160,7 @@ TEST(ENetBackendTest, HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGam
     ASSERT_NE(peerFromClientSide, nullptr);
 
     bool connected = false;
-    for (int i = 0; i < 200 && !connected; ++i) {
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
         host.session->Update(); // pumps the host's real ENet transport
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
@@ -152,7 +179,7 @@ TEST(ENetBackendTest, HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGam
     host.session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
 
     ENetPacket* received = nullptr;
-    for (int i = 0; i < 200 && !received; ++i) {
+    for (int i = 0; i < 200 && !received; ++i, PollYield()) {
         host.session->Update();
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
@@ -183,7 +210,7 @@ TEST(ENetBackendTest, HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGam
 
 TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
     // A raw ENet host standing in for "the real remote host machine".
-    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(0, 4, 2);
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
     uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
     ASSERT_GT(fakeHostPort, 0);
 
@@ -193,7 +220,7 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
     ENetPeer* clientPeerFromHostSide = nullptr;
     ClientHelloMessage receivedHello;
     bool gotHello = false;
-    for (int i = 0; i < 200 && !gotHello; ++i) {
+    for (int i = 0; i < 200 && !gotHello; ++i, PollYield()) {
         client.session->Update(); // pumps the client's transport; sends ClientHello on CONNECT
         ENetEvent evt{};
         if (fakeHost.Service(0, evt) > 0) {
@@ -223,7 +250,7 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
 
     int joinCount = 0;
     client.session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
-    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i) {
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
         client.session->Update();
     }
 
@@ -248,7 +275,7 @@ TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
     ASSERT_NE(peerFromClientSide, nullptr);
 
     bool connected = false;
-    for (int i = 0; i < 200 && !connected; ++i) {
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
         host.session->Update();
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
@@ -265,7 +292,7 @@ TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
 
     ServerWelcomeMessage welcome;
     bool gotWelcome = false;
-    for (int i = 0; i < 200 && !gotWelcome; ++i) {
+    for (int i = 0; i < 200 && !gotWelcome; ++i, PollYield()) {
         host.session->Update();
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
@@ -292,7 +319,7 @@ TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
     fakeClient.Flush();
 
     LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
-    for (int i = 0; i < 200 && !hostLocalGamer->getIsDataAvailableProperty(); ++i) {
+    for (int i = 0; i < 200 && !hostLocalGamer->getIsDataAvailableProperty(); ++i, PollYield()) {
         host.session->Update();
     }
     ASSERT_TRUE(hostLocalGamer->getIsDataAvailableProperty());
@@ -307,7 +334,7 @@ TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
 }
 
 TEST(ENetBackendTest, ClientSendDataTransmitsAppDataToHost) {
-    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(0, 4, 2);
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
     uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
     ASSERT_GT(fakeHostPort, 0);
 
@@ -316,7 +343,7 @@ TEST(ENetBackendTest, ClientSendDataTransmitsAppDataToHost) {
 
     ENetPeer* clientPeerFromHostSide = nullptr;
     bool gotHello = false;
-    for (int i = 0; i < 200 && !gotHello; ++i) {
+    for (int i = 0; i < 200 && !gotHello; ++i, PollYield()) {
         client.session->Update();
         ENetEvent evt{};
         if (fakeHost.Service(0, evt) > 0) {
@@ -341,7 +368,7 @@ TEST(ENetBackendTest, ClientSendDataTransmitsAppDataToHost) {
     fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeHost.Flush();
 
-    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i) {
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
         client.session->Update();
     }
     ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
@@ -358,7 +385,7 @@ TEST(ENetBackendTest, ClientSendDataTransmitsAppDataToHost) {
     client.session->Update(); // dequeues the PacketSend event and transmits it via ENet
 
     ENetPacket* received = nullptr;
-    for (int i = 0; i < 200 && !received; ++i) {
+    for (int i = 0; i < 200 && !received; ++i, PollYield()) {
         ENetEvent evt{};
         if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
             received = evt.packet;
@@ -389,7 +416,7 @@ TEST(ENetBackendTest, HostRemovesGamerAndFiresGamerLeftOnClientDisconnect) {
     ASSERT_NE(peerFromClientSide, nullptr);
 
     bool connected = false;
-    for (int i = 0; i < 200 && !connected; ++i) {
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
         host.session->Update();
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
@@ -404,7 +431,7 @@ TEST(ENetBackendTest, HostRemovesGamerAndFiresGamerLeftOnClientDisconnect) {
     fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeClient.Flush();
 
-    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i) {
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
         host.session->Update();
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
@@ -419,7 +446,7 @@ TEST(ENetBackendTest, HostRemovesGamerAndFiresGamerLeftOnClientDisconnect) {
     fakeClient.Disconnect(peerFromClientSide, 0);
     fakeClient.Flush();
 
-    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() > 1; ++i) {
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() > 1; ++i, PollYield()) {
         host.session->Update();
     }
 
@@ -431,7 +458,7 @@ TEST(ENetBackendTest, HostRemovesGamerAndFiresGamerLeftOnClientDisconnect) {
 }
 
 TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
-    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(0, 4, 2);
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
     uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
     ASSERT_GT(fakeHostPort, 0);
 
@@ -439,7 +466,7 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
 
     ENetPeer* clientPeerFromHostSide = nullptr;
-    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i) {
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
         client.session->Update();
         ENetEvent evt{};
         if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
@@ -458,7 +485,7 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     fakeHost.Disconnect(clientPeerFromHostSide, 0);
     fakeHost.Flush();
 
-    for (int i = 0; i < 200 && endedCount == 0; ++i) {
+    for (int i = 0; i < 200 && endedCount == 0; ++i, PollYield()) {
         client.session->Update();
     }
 
@@ -468,7 +495,7 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
 }
 
 TEST(ENetBackendTest, ClientProcessesGamerLeaveBroadcast) {
-    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(0, 4, 2);
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
     uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
     ASSERT_GT(fakeHostPort, 0);
 
@@ -476,7 +503,7 @@ TEST(ENetBackendTest, ClientProcessesGamerLeaveBroadcast) {
     ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
 
     ENetPeer* clientPeerFromHostSide = nullptr;
-    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i) {
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
         client.session->Update();
         ENetEvent evt{};
         if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
@@ -492,7 +519,7 @@ TEST(ENetBackendTest, ClientProcessesGamerLeaveBroadcast) {
     fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeHost.Flush();
 
-    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i) {
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
         client.session->Update();
     }
     ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
@@ -506,7 +533,7 @@ TEST(ENetBackendTest, ClientProcessesGamerLeaveBroadcast) {
     fakeHost.Send(clientPeerFromHostSide, 0, leaveBytes.data(), leaveBytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeHost.Flush();
 
-    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() > 1; ++i) {
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() > 1; ++i, PollYield()) {
         client.session->Update();
     }
 
@@ -528,7 +555,7 @@ TEST(ENetBackendTest, HostBroadcastsStateChangeOnStartAndEndGame) {
     ASSERT_NE(peerFromClientSide, nullptr);
 
     bool connected = false;
-    for (int i = 0; i < 200 && !connected; ++i) {
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
         host.session->Update();
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
@@ -543,7 +570,7 @@ TEST(ENetBackendTest, HostBroadcastsStateChangeOnStartAndEndGame) {
     fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeClient.Flush();
 
-    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i) {
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
         host.session->Update();
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
@@ -552,10 +579,24 @@ TEST(ENetBackendTest, HostBroadcastsStateChangeOnStartAndEndGame) {
     }
     ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
 
+    // The host's gamer count and the fake client's own view of the ServerWelcome reply are
+    // updated by two separate steps (host-side AddRemoteGamer vs. the reply actually arriving in
+    // the fake client's receive queue) that aren't perfectly synchronized under a genuinely-async
+    // transport (unlike the always-instant native ENet loopback) - so the loop above can exit
+    // right as gamer count hits 2 but before the ServerWelcome has actually arrived here. Drain
+    // any such straggler now so it isn't mistaken for the StateChangeBroadcast sent by
+    // StartGame() below.
+    for (int i = 0; i < 20; ++i, PollYield()) {
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            enet_packet_destroy(evt.packet);
+        }
+    }
+
     host.session->StartGame();
 
     ENetPacket* received = nullptr;
-    for (int i = 0; i < 200 && !received; ++i) {
+    for (int i = 0; i < 200 && !received; ++i, PollYield()) {
         host.session->Update();
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
@@ -574,7 +615,7 @@ TEST(ENetBackendTest, HostBroadcastsStateChangeOnStartAndEndGame) {
     host.session->EndGame();
 
     received = nullptr;
-    for (int i = 0; i < 200 && !received; ++i) {
+    for (int i = 0; i < 200 && !received; ++i, PollYield()) {
         host.session->Update();
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
@@ -590,7 +631,7 @@ TEST(ENetBackendTest, HostBroadcastsStateChangeOnStartAndEndGame) {
 }
 
 TEST(ENetBackendTest, ClientProcessesStateChangeBroadcast) {
-    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(0, 4, 2);
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
     uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
     ASSERT_GT(fakeHostPort, 0);
 
@@ -598,7 +639,7 @@ TEST(ENetBackendTest, ClientProcessesStateChangeBroadcast) {
     ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
 
     ENetPeer* clientPeerFromHostSide = nullptr;
-    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i) {
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
         client.session->Update();
         ENetEvent evt{};
         if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
@@ -616,7 +657,7 @@ TEST(ENetBackendTest, ClientProcessesStateChangeBroadcast) {
     fakeHost.Send(clientPeerFromHostSide, 0, bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeHost.Flush();
 
-    for (int i = 0; i < 200 && client.session->getSessionStateProperty() != NetworkSessionState::Playing; ++i) {
+    for (int i = 0; i < 200 && client.session->getSessionStateProperty() != NetworkSessionState::Playing; ++i, PollYield()) {
         client.session->Update();
     }
 

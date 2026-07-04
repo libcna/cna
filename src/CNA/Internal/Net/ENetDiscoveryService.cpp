@@ -21,6 +21,8 @@ namespace CNA::Internal::Net
     using Microsoft::Xna::Framework::Net::NetworkGamer;
     using Microsoft::Xna::Framework::Net::QualityOfService;
 
+#ifndef __EMSCRIPTEN__
+
     namespace
     {
         constexpr uint16_t kDiscoveryPort = 61190;
@@ -258,4 +260,21 @@ namespace CNA::Internal::Net
         currentResults_ = nullptr;
         return results;
     }
+
+#else // __EMSCRIPTEN__
+
+    // Raw UDP broadcast/unicast has no equivalent on the Web platform at all (no browser, and no
+    // Node.js `ws` package, can send a raw datagram) - this is a permanent platform constraint,
+    // not a TODO (see NEXT.md and this class's own header doc comment).
+
+    void ENetDiscoveryService::RegisterHost(NetworkSession*, uint16_t) { }
+    void ENetDiscoveryService::UnregisterHost(NetworkSession*) { }
+    void ENetDiscoveryService::Poll() { }
+
+    std::vector<AvailableNetworkSession> ENetDiscoveryService::FindSessions(NetworkSessionType)
+    {
+        return {};
+    }
+
+#endif // __EMSCRIPTEN__
 }
