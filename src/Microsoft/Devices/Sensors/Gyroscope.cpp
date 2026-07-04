@@ -45,6 +45,12 @@ namespace Microsoft::Devices::Sensors
             return false;
         }
 
+        // Task P6-9: see Accelerometer::getIsSupportedProperty()'s
+        // identical fix for the full rationale — serializes this class's
+        // own real SDL sensor-subsystem calls against every other SDL
+        // sensor call this class makes.
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
         return Detail::SdlSensorSubsystem<Gyroscope>::ProbeIsSupported();
     }
 

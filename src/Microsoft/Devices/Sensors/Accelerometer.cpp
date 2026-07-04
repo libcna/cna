@@ -48,6 +48,28 @@ namespace Microsoft::Devices::Sensors
             return false;
         }
 
+        // Task P6-9: ProbeIsSupported() calls real SDL sensor-subsystem
+        // functions (SDL_InitSubSystem/SDL_GetSensors/SDL_OpenSensor/
+        // SDL_CloseSensor/SDL_QuitSubSystem) with no synchronization of
+        // its own. SDL3's own documentation states SDL_InitSubSystem()
+        // "should only be called on the main thread" and
+        // SDL_QuitSubSystem() "is not thread safe" — calling this from
+        // multiple threads at once (e.g. concurrently constructing several
+        // Accelerometer instances, which each call this from their own
+        // constructor) reliably corrupted the heap under real stress
+        // testing (a P6-1 regression test constructing instances from 8
+        // threads at once reproduced glibc's "unaligned tcache chunk
+        // detected"/"malloc(): unaligned tcache chunk detected" abort in
+        // roughly 1 in 4 runs). Locking subsystem.mutex_ for the whole
+        // call serializes it against every other SDL sensor call this
+        // class makes (Start()'s EnsureSubsystemInitialized()/
+        // OpenDefaultSensorLocked() already run under this same lock), so
+        // no two SDL sensor-subsystem calls from this class ever run
+        // concurrently with each other. Does not risk deadlock: the
+        // constructor's own instanceCount_ lock is fully released before
+        // calling this method, and Start() never calls this method itself.
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
         return Detail::SdlSensorSubsystem<Accelerometer>::ProbeIsSupported();
     }
 

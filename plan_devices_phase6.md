@@ -267,6 +267,72 @@ rollback path is currently unreachable in practice (`getIsSupportedProperty()`
 does not throw today) but is cheap, correct, and guards against a future
 change that makes it throw.
 
+### Addendum (found during P6-9's verification pass): this task's own test exposed a real, separate SDL thread-safety bug
+
+The `ConcurrentConstructDestroyKeepsInstanceCountBalanced` test above is the
+**first thing in this codebase's history to construct multiple
+`Accelerometer`/`Gyroscope` instances concurrently from different
+threads.** Every constructor unconditionally calls
+`getIsSupportedProperty()` → `Detail::SdlSensorSubsystem<TSensor>::ProbeIsSupported()`,
+which makes real SDL calls (`SDL_InitSubSystem`, `SDL_GetSensors`,
+`SDL_OpenSensor`, `SDL_CloseSensor`, `SDL_QuitSubSystem`) with **no
+synchronization of its own** — by design, since P5-1's `ProbeGuard` was
+written assuming independent, not necessarily *concurrent*, probe calls.
+
+Re-running this exact test in a loop (not just once) surfaced a real,
+reproducible heap-corruption crash — glibc's `malloc(): unaligned tcache
+chunk detected` / `tcache_thread_shutdown(): unaligned tcache chunk
+detected` abort — in roughly 1 in 4 runs (`for i in $(seq 1 40); do
+./CnaTests --gtest_filter="AccelerometerTests.*"; done` reproduced it 5
+times out of 40). This was **not** flagged by any single test run earlier
+in this phase (every prior individual verification pass happened to pass),
+which is itself a reminder that a single green run does not prove a
+concurrency fix is correct — only repetition under real stress does.
+
+Root cause, confirmed by reading `third_party/SDL/include/SDL3/SDL_init.h`
+directly: `SDL_InitSubSystem()`'s own doc says **"This function should
+only be called on the main thread"**; `SDL_QuitSubSystem()`'s says **"This
+function is not thread safe."** `ProbeIsSupported()` (called via every
+constructor) violates this contract with zero mitigation once two threads
+call it at the same time.
+
+**Fix:** `getIsSupportedProperty()` (both `Accelerometer.cpp`/
+`Gyroscope.cpp`) now locks `subsystem.mutex_` for its entire call —
+the same lock `Start()`'s body already holds for its own SDL calls
+(`EnsureSubsystemInitialized()`/`OpenDefaultSensorLocked()`, per P6-3's
+restructure). This serializes every SDL sensor-subsystem call this class
+makes against every other one, closing the concurrent-access window
+entirely. No deadlock risk: the constructor's own `instanceCount_` lock
+scope is fully released before calling `getIsSupportedProperty()`, and
+`Start()` never calls `getIsSupportedProperty()` itself. Verified: 40/40
+and a separate 60/60 repeated stress runs of the previously-crashing
+suites, zero failures (previously ~25% failure rate); full `ctest`:
+2034/2036 passed (same 2 pre-existing, unrelated `EasyGL`/`easy-gl`
+failures).
+
+This refines this task's own scope: P6-1's brief said "don't hold the
+lock during slow/reentrant SDL probing," aimed at not entangling the fast
+`instanceCount_` check with a slow probe call. That guidance is still
+followed for `instanceCount_` itself; what changed is a *second*, distinct
+lock scope now wraps the probe call alone, for a reason the original brief
+could not have anticipated (SDL's own thread-safety contract, only
+discovered by actually stress-testing concurrent construction).
+
+Files changed (addendum): `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
+`src/Microsoft/Devices/Sensors/Gyroscope.cpp`.
+
+Remaining risk: `Compass`/`Motion`'s `getIsSupportedProperty()` is a
+hardcoded `return false;` with no SDL calls at all — confirmed not
+affected. `VibrateController`'s probe path
+(`AcquireHapticDeviceForProbe()`) already runs under `g_mutex` for its
+entire body (Task P4-9) — already safe, not affected by this finding.
+`GraphicsDevice`'s own `SDL_InitSubSystem(SDL_INIT_VIDEO)` call
+(constructor) is a single call per instance with no equivalent
+concurrent-construction pattern exercised anywhere in this codebase's
+tests — out of scope for this `Microsoft::Devices`-only pass, but worth
+flagging alongside P6-6's own residual-risk note as a candidate for a
+future cross-cutting SDL-usage audit.
+
 ## P6-2: Fix `Start()` failure cleanup for SDL subsystem ownership
 
 ### Resolution
