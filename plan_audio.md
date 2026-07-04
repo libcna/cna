@@ -1584,3 +1584,171 @@ T-6B (aktualizace `AUDIT.md`) je tímto splněno. T-6A (deviation table) je tím
 *Vygenerováno na základě tří paralelních line-by-line auditů proti FNA (clustery: core playback,
 XACT, 3D/mic/enumy/výjimky). Pokrývá pouze `Microsoft::Xna::Framework::Audio` + `CNA::Internal::Audio`.
 Fáze 7 (2026-07-02) přidala další 4 paralelní audity nad již opraveným kódem — viz dodatek výše.*
+
+---
+
+# Phase 9 — Audio correctness hardening and XNA/FNA fidelity
+
+Scope: audit and harden the existing audio implementation so it becomes closer to real XNA 4.0 /
+FNA behavior, without turning the module into a huge unrelated audio engine. Focused on the XNA 4.0
+Audio namespace and XACT-compatible behavior needed by XNA games. Do not trust the checkboxes below
+once checked without re-reading the actual code first (this exact phase exists because Fáze 7/8's
+"all checked" state still had real gaps).
+
+Implementation order: (1) P9-LIFECYCLE-001..012, (2) P9-CATEGORY-001..004, (3) P9-VALIDATION-001..013,
+(4) P9-DOCS-001..007, (5) P9-BUILD-001..007, then (6) P9-STOP, P9-XACT, P9-3D, P9-HARDWARE, P9-DYNAMIC,
+and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-started groups).
+
+## P9-AUDIT — Fresh implementation audit
+
+* [ ] P9-AUDIT-001 Re-read all public audio headers under `include/Microsoft/Xna/Framework/Audio` and compare the exposed API against XNA 4.0 / FNA Audio.
+* [ ] P9-AUDIT-002 Re-read all implementations under `src/Microsoft/Xna/Framework/Audio` and identify behavior that is stubbed, approximate, or inconsistent with XNA/FNA.
+* [ ] P9-AUDIT-003 Re-read internal audio backend files under `include/CNA/Internal/Audio` and `src/CNA/Internal/Audio` and document backend assumptions and limitations.
+* [ ] P9-AUDIT-004 Re-read all audio tests and identify which known deviations are locked in by tests.
+* [ ] P9-AUDIT-005 Update `plan_audio.md` with a concise "current known deviations" subsection based on actual code, not stale documentation.
+
+## P9-LIFECYCLE — Cue and playback lifecycle correctness
+
+* [x] P9-LIFECYCLE-001 Fix `Cue` state reconciliation so `Cue::IsPlaying`, `Cue::IsPaused`, and `Cue::IsStopped` reflect the real state of active `SoundEffectInstance` objects after natural playback completion.
+  *Pozn.:* Přidána `Cue::ReconcileState() const` (`Cue.cpp`) — voláno na začátku `getIsPlayingProperty`/`getIsPausedProperty`/`getIsStoppedProperty`/`getIsStoppingProperty`. Pokud `state_==Playing` a `active_` není prázdné, zkontroluje `pi.instance->getStateProperty()` (živý dotaz do SDL3_mixeru) pro každou instanci; jsou-li všechny `Stopped`, přepne `state_` na `Stopped`. Fixture s `active_` prázdným (bez wavebank reference, např. "Explosion") se nemění — zůstává navždy Playing, jak bylo zamýšleno pro tento degenerovaný testovací případ. `Pause()` teď taky volá `ReconcileState()` na začátku, aby přirozeně doběhlý cue nemohl být omylem "vzkříšen" do Paused (test `CueTests.cpp::PauseAfterNaturalCompletionIsANoOp`). Ověřeno `git stash` na `Cue.hpp/.cpp` + `SoundBank.hpp/.cpp` + `AudioEngine.cpp`: 8 nových testů selhalo proti starému kódu, viz P9-LIFECYCLE-005/010/011 níže.
+* [x] P9-LIFECYCLE-002 Add cleanup logic so completed cue instances are removed from `Cue::active_` without waiting for the fire-and-forget safety timeout.
+  *Pozn.:* Součástí `ReconcileState()` výše — `active_.clear()` proběhne okamžitě při zjištění, že všechny instance doběhly, bez čekání na 5minutový safety-net timer.
+* [x] P9-LIFECYCLE-003 Ensure `SoundBank::IsInUse` becomes false soon after all fire-and-forget and explicit cues naturally finish.
+  *Pozn.:* Vyplývá přímo z P9-LIFECYCLE-001 — `SoundBank::getIsInUseProperty()` už volá `faf.cue->getIsPlayingProperty()/getIsPausedProperty()`, teď živě rekonciliované. Žádná změna v `SoundBank::getIsInUseProperty()` samotné nebyla potřeba.
+* [x] P9-LIFECYCLE-004 Ensure `WaveBank::IsInUse` becomes false soon after all cues using that wave bank naturally finish.
+  *Pozn.:* Stejné jako výše — `WaveBank::getIsInUseProperty()` už volá `cue->getIsPlayingProperty()/getIsPausedProperty()`.
+* [x] P9-LIFECYCLE-005 Add tests for a short one-shot cue naturally transitioning from Playing to Stopped.
+  *Pozn.:* `CueTests.cpp::PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes` — reálná (200 B, ~1.13 ms) WaveBank instance přes `SharedApply3DBank()`, 50 ms sleep, ověří `IsStopped==true`, `IsPlaying==false`, `active_[0]==nullptr`. `git stash` potvrzeno selhání proti starému kódu.
+* [x] P9-LIFECYCLE-006 Add tests for `SoundBank::IsInUse` after natural cue completion.
+  *Pozn.:* `SoundBankTests.cpp::IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes`. `git stash` potvrzeno selhání proti starému kódu.
+* [x] P9-LIFECYCLE-007 Add tests for `WaveBank::IsInUse` after natural cue completion.
+  *Pozn.:* `WaveBankTests.cpp::IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop`. `git stash` potvrzeno selhání proti starému kódu.
+* [x] P9-LIFECYCLE-008 Ensure `AudioEngine::Update()` performs necessary lifecycle cleanup/reconciliation for active cues.
+  *Pozn.:* `AudioEngine::Update()` teď iteruje `xactImpl_->soundBanks` a volá `sb->SweepFireAndForget()` na každém — zrcadlí FNA `AudioEngine.Update()` → `FACTAudioEngine_DoWork`, který v `FACT_internal.c` řádek ~1732 skutečně ničí `managed` cue jakmile dosáhne `FACT_STATE_STOPPED`. `Cue`-level Playing/Paused/Stopped rekonciliace samotná je živá per-call (P9-LIFECYCLE-001), takže na `Update()` není závislá.
+* [x] P9-LIFECYCLE-009 Ensure fire-and-forget cues are swept promptly after completion and are not kept alive for minutes after playback ends.
+  *Pozn.:* `SoundBank::PlayCueInternal`'s sweep-lambda přesunut do nové `SoundBank::SweepFireAndForget()`, volané jak z `PlayCueInternal` (jako dřív), tak nově z `AudioEngine::Update()` (P9-LIFECYCLE-008). `AudioEngineTests.cpp::UpdateSweepsFinishedFireAndForgetCueWithoutNeedingAnotherPlayCue` ověřuje, že jediné volání `Update()` po přirozeném doběhnutí zvuku odstraní entry bez druhého `PlayCue()`. `git stash` potvrzeno selhání proti starému kódu.
+* [x] P9-LIFECYCLE-010 Audit whether `Cue::Play()` may be called repeatedly on the same cue while already Playing or Paused. Match FNA/XNA behavior and add tests.
+  *Pozn.:* Audit `FACT.c::FACTCue_Play` (řádek ~2327) potvrdil: FACT tiše odmítá (`FACTENGINE_E_INVALIDUSAGE`) cue, jehož stav už má `PLAYING`/`STOPPING`/`STOPPED` — FNA's `Cue.Play()` návratovou hodnotu zahazuje, tedy no-op z pohledu C# volajícího. `PAUSED` je zahrnuto taky, protože reálný FACT nechává `PLAYING` bit nastavený i během pauzy (`FACTCue_Pause`, řádek ~2622, `PLAYING` nikdy nemaže). `Cue::Play()` teď po `ReconcileState()` odmítá volání když `state_` je `Playing`/`Paused`/`Stopping`/`Stopped`. Testy: `CueTests.cpp::PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`, `PlayWhilePausedIsANoOp`, `PlayAfterStopIsANoOp`. `git stash` potvrzeno selhání (duplicitní instance) proti starému kódu.
+* [x] P9-LIFECYCLE-011 Prevent duplicate cue registration in `AudioEngine::RegisterCue`.
+  *Pozn.:* Vyřešeno primárně P9-LIFECYCLE-010 (Play() už nedovolí druhé `RegisterCue()` volání). `AudioEngine::RegisterCue` navíc má explicitní `std::find` guard jako defense-in-depth pro registry samotný.
+* [x] P9-LIFECYCLE-012 Add regression tests proving repeated category operations do not duplicate active cue entries.
+  *Pozn.:* Přidán `AudioEngine::ActiveCueCountForTest()` (NOXNA, test-only) + `AudioEngineTestAccess.hpp`, protože `XactEngineImpl` je definované jen v `AudioEngine.cpp` a nejde na něj napsat friend-test-struct jako na `SoundBank::fireAndForget_`. Test `AudioEngineTests.cpp::RepeatedCategoryOperationsDoNotDuplicateActiveCueRegistryEntries` volá `AudioCategory::Pause/Resume/SetVolume` opakovaně a ověří `ActiveCueCount==1`. Poznámka k poctivosti: `AudioCategory` operace nikdy nevolají `RegisterCue` (jen metody na už registrovaných cue), takže tento test by prošel i proti staršímu kódu — je to regresní pojistka do budoucna, ne reprodukce reálného bugu (na rozdíl od P9-LIFECYCLE-010/011, kde `git stash` skutečně ukázal selhání).
+* [ ] P9-LIFECYCLE-013 Audit `Cue::Pause()`, `Cue::Resume()`, and `Cue::Stop()` behavior when called in Stopped, Playing, Paused, and Disposed states.
+  *Pozn.:* Částečně prozkoumáno vedlejším produktem P9-LIFECYCLE-010: reálný FACT nechává `FACT_STATE_PLAYING` nastavený i během `PAUSED` (`IsPlaying` a `IsPaused` mohou být v XNA/FNA true současně!) — CNA má `State` jako vzájemně se vylučující enum, takže `IsPlaying`/`IsPaused` jsou zde vždy disjunktní. Toto je zdokumentovaná odchylka, ale její případná oprava by byla invazivní (mění sémantiku `PauseCategoryInternal`/`ResumeCategoryInternal` i řadu testů) — odloženo na plný audit této položky, neimplementováno v tomto průchodu.
+* [ ] P9-LIFECYCLE-014 Align disposed-state behavior for `Cue` methods with XNA/FNA and add tests.
+* [ ] P9-LIFECYCLE-015 Ensure `Cue::GetVariable()` and `Cue::SetVariable()` handle disposed cues consistently with XNA/FNA.
+
+## P9-STOP — Stop semantics and authored stop behavior
+
+* [ ] P9-STOP-001 Audit current `Cue::Stop(AudioStopOptions::Immediate)` behavior against XNA/FNA.
+* [ ] P9-STOP-002 Audit current `Cue::Stop(AudioStopOptions::AsAuthored)` behavior against XNA/FNA.
+* [ ] P9-STOP-003 Do not mark a cue as fully inactive while authored stop tails/fades are still active.
+* [ ] P9-STOP-004 Introduce explicit internal tracking for stopping/tail state if needed.
+* [ ] P9-STOP-005 Ensure wave bank and sound bank in-use tracking remains true while authored stop tails are still active.
+* [ ] P9-STOP-006 Add tests for `Stop(Immediate)` state transitions.
+* [ ] P9-STOP-007 Add tests for `Stop(AsAuthored)` state transitions.
+* [ ] P9-STOP-008 Add tests for category stop with authored stop behavior.
+* [ ] P9-STOP-009 Verify that stopping a cue unregisters from `AudioEngine` only when it is actually finished.
+* [ ] P9-STOP-010 Document any remaining deviation from exact XACT authored stop behavior.
+
+## P9-CATEGORY — AudioCategory correctness
+
+* [ ] P9-CATEGORY-001 Fix category operations so they iterate over a snapshot of active cues instead of mutating `activeCues` during iteration.
+* [ ] P9-CATEGORY-002 Add regression tests for stopping multiple active cues in the same category.
+* [ ] P9-CATEGORY-003 Add regression tests for pausing and resuming multiple active cues in the same category.
+* [ ] P9-CATEGORY-004 Add regression tests for changing category volume while cues are active.
+* [ ] P9-CATEGORY-005 Implement XACT category `instanceLimit` if enough parsed data is already available.
+* [ ] P9-CATEGORY-006 Add tests for category instance limits using synthetic/minimal XACT data or direct internal fixtures.
+* [ ] P9-CATEGORY-007 Implement category fade-in behavior where feasible.
+* [ ] P9-CATEGORY-008 Implement category fade-out behavior where feasible.
+* [ ] P9-CATEGORY-009 Add tests for category fade-in/fade-out behavior.
+* [ ] P9-CATEGORY-010 Clearly document any category behavior that remains approximate.
+
+## P9-VALIDATION — Constructor and argument validation
+
+* [ ] P9-VALIDATION-001 Audit all `SoundEffect` constructors against XNA/FNA argument validation.
+* [ ] P9-VALIDATION-002 Fix `SoundEffect` buffer/range constructor validation for negative loop start and loop length.
+* [ ] P9-VALIDATION-003 Fix `SoundEffect` buffer/range constructor validation for offset/count overflow.
+* [ ] P9-VALIDATION-004 Fix `SoundEffect` buffer/range constructor validation for invalid channel count.
+* [ ] P9-VALIDATION-005 Fix `SoundEffect` buffer/range constructor validation for invalid sample rate.
+* [ ] P9-VALIDATION-006 Add tests for invalid `SoundEffect` buffer constructor arguments.
+* [ ] P9-VALIDATION-007 Audit `DynamicSoundEffectInstance` constructor validation for sample rate and `AudioChannels`.
+* [ ] P9-VALIDATION-008 Fix `DynamicSoundEffectInstance` constructor validation to match XNA/FNA.
+* [ ] P9-VALIDATION-009 Add tests for invalid `DynamicSoundEffectInstance` constructor arguments.
+* [ ] P9-VALIDATION-010 Audit `SubmitBuffer`, `SubmitFloatBufferEXT`, `Play`, `Pause`, `Resume`, and `Stop` after `Dispose`.
+* [ ] P9-VALIDATION-011 Ensure `DynamicSoundEffectInstance::SubmitBuffer` cannot queue buffers after disposal.
+* [ ] P9-VALIDATION-012 Ensure `SoundEffect::CreateInstance()` handles disposed `SoundEffect` consistently with XNA/FNA.
+* [ ] P9-VALIDATION-013 Add tests for disposed `SoundEffect::CreateInstance()`.
+* [ ] P9-VALIDATION-014 Audit `SoundEffect::FromStream()` ownership and exception behavior.
+* [ ] P9-VALIDATION-015 Add tests for invalid and empty streams where feasible.
+
+## P9-XACT — XACT cue behavior fidelity
+
+* [ ] P9-XACT-001 Audit XSB cue variation parsing against FNA.
+* [ ] P9-XACT-002 Preserve parsed interactive variation variable ranges instead of falling back to uniform random selection.
+* [ ] P9-XACT-003 Implement interactive variation selection based on cue variables where feasible.
+* [ ] P9-XACT-004 Add tests for variable-driven interactive variation selection.
+* [ ] P9-XACT-005 Audit XACT RPC parsing and currently unused runtime data.
+* [ ] P9-XACT-006 Wire simple RPC volume changes into cue playback where feasible.
+* [ ] P9-XACT-007 Wire simple RPC pitch changes into cue playback where feasible.
+* [ ] P9-XACT-008 Add tests for XACT variable-to-volume RPC behavior.
+* [ ] P9-XACT-009 Add tests for XACT variable-to-pitch RPC behavior.
+* [ ] P9-XACT-010 Audit DSP/filter parsing and runtime application.
+* [ ] P9-XACT-011 Wire parsed low-pass/high-pass/band-pass filters to `SoundEffectInstance` where feasible.
+* [ ] P9-XACT-012 Keep reverb as documented no-op only if faithful implementation is not feasible with current backend.
+* [ ] P9-XACT-013 Document exact XACT DSP features supported and unsupported.
+* [ ] P9-XACT-014 Ensure missing wave, missing sound, and invalid cue index behavior matches XNA/FNA as closely as possible.
+* [ ] P9-XACT-015 Add tests for missing wave/cue behavior.
+
+## P9-3D — 3D audio fidelity
+
+* [ ] P9-3D-001 Audit `Apply3D` behavior against FNA for mono and stereo sources.
+* [ ] P9-3D-002 Fix or document stereo panning behavior. Avoid hard stereo pan if FNA uses crossfeed or another model.
+* [ ] P9-3D-003 Audit distance attenuation behavior against `SoundEffect.DistanceScale`.
+* [ ] P9-3D-004 Audit doppler behavior against `SoundEffect.DopplerScale` and `SoundEffect.SpeedOfSound`.
+* [ ] P9-3D-005 Implement doppler pitch adjustment if feasible.
+* [ ] P9-3D-006 Add tests for distance attenuation.
+* [ ] P9-3D-007 Add tests for panning left/right based on listener/emitter orientation.
+* [ ] P9-3D-008 Add tests for doppler behavior if implemented.
+* [ ] P9-3D-009 Document remaining limitations of CNA 3D audio compared to XNA/FNA.
+
+## P9-HARDWARE — Audio hardware and exception behavior
+
+* [ ] P9-HARDWARE-001 Audit `NoAudioHardwareException` usage across the audio backend.
+* [ ] P9-HARDWARE-002 Replace raw `std::runtime_error` backend initialization failures with XNA-compatible exception behavior where appropriate.
+* [ ] P9-HARDWARE-003 Decide whether missing/corrupt XGS/XSB/XWB constructors should remain soft stubs or throw XNA/FNA-compatible exceptions.
+* [ ] P9-HARDWARE-004 If constructor behavior changes, update tests that currently lock in silent stub behavior.
+* [ ] P9-HARDWARE-005 Add tests for no-audio-device behavior using SDL dummy/no-device configuration where feasible.
+* [ ] P9-HARDWARE-006 Document backend behavior when audio hardware is unavailable.
+
+## P9-DYNAMIC — DynamicSoundEffectInstance correctness
+
+* [ ] P9-DYNAMIC-001 Audit `PendingBufferCount` transitions across Play, Pause, Resume, Stop, and Dispose.
+* [ ] P9-DYNAMIC-002 Add tests for buffer completion while playing.
+* [ ] P9-DYNAMIC-003 Add tests for buffer completion while paused.
+* [ ] P9-DYNAMIC-004 Add tests for Stop clearing or preserving buffers according to XNA/FNA behavior.
+* [ ] P9-DYNAMIC-005 Add tests for `BufferNeeded` event ordering.
+* [ ] P9-DYNAMIC-006 Add tests for multiple subscribers to `BufferNeeded`.
+* [ ] P9-DYNAMIC-007 Add tests for subscriber removal during callback.
+* [ ] P9-DYNAMIC-008 Audit dynamic stream format conversion for mono/stereo and byte/float paths.
+* [ ] P9-DYNAMIC-009 Add tests for invalid buffer sizes and alignment.
+
+## P9-DOCS — Documentation synchronization
+
+* [ ] P9-DOCS-001 Update `AUDIT.md` audio rows so they no longer describe implemented features as stubs.
+* [ ] P9-DOCS-002 Update `docs/xna-4-api-coverage.md` for current Audio coverage.
+* [ ] P9-DOCS-003 Update `docs/coverage.md` for current Audio/XACT/Microphone status.
+* [ ] P9-DOCS-004 Update `NEXT.md` so it does not claim both "all audio tasks complete" and stale pending/uncommitted Phase 8 status.
+* [ ] P9-DOCS-005 Add a concise Audio compatibility table: implemented, approximate, intentionally unsupported, not yet implemented.
+* [ ] P9-DOCS-006 Document SDL3/SDL_mixer backend limitations versus FAudio/FACT.
+* [ ] P9-DOCS-007 Document which behavior is intended to match FNA and which behavior is a CNA-specific compatibility compromise.
+
+## P9-BUILD — Reproducible build and test workflow
+
+* [ ] P9-BUILD-001 Ensure a clean checkout can configure audio tests with documented dependencies.
+* [ ] P9-BUILD-002 Add or document a native desktop CMake preset for running tests outside the Emscripten/web preset.
+* [ ] P9-BUILD-003 Ensure missing vendored dependencies produce a clear error message.
+* [ ] P9-BUILD-004 Document whether SDL/SDL_mixer/googletest are expected as submodules, vendored source, or system packages.
+* [ ] P9-BUILD-005 Add a minimal command sequence to build and run audio tests locally.
+* [ ] P9-BUILD-006 Ensure CI or local test docs mention the SDL dummy audio driver setup.
+* [ ] P9-BUILD-007 Verify that all audio tests pass from a clean checkout.
