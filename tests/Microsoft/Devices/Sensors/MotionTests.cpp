@@ -131,6 +131,51 @@ TEST(MotionTests, ConcurrentConstructDestroyKeepsInstanceCountBalanced)
     EXPECT_THROW({ const Motion overflow; (void)overflow; }, SensorFailedException);
 }
 
+// Task P6-3: see CompassTests.cpp's identical test for the full rationale —
+// ClaimDisposalOnce() closes a race where two threads calling Dispose() on
+// the same instance concurrently could both decrement instanceCount_.
+TEST(MotionTests, ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount)
+{
+    constexpr int Rounds = 30;
+
+    for (int round = 0; round < Rounds; ++round)
+    {
+        auto instance = std::make_shared<Motion>();
+
+        std::thread t1([instance]()
+        {
+            try
+            {
+                instance->Dispose();
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+            }
+        });
+        std::thread t2([instance]()
+        {
+            try
+            {
+                instance->Dispose();
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+            }
+        });
+
+        t1.join();
+        t2.join();
+    }
+
+    std::vector<std::unique_ptr<Motion>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(instances.push_back(std::make_unique<Motion>()));
+    }
+
+    EXPECT_THROW({ const Motion overflow; (void)overflow; }, SensorFailedException);
+}
+
 TEST(MotionTests, GetCurrentValuePropertyThrowsInvalidOperationException)
 {
     const Motion m;

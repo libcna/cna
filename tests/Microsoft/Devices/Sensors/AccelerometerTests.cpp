@@ -241,6 +241,100 @@ TEST(AccelerometerTests, ConcurrentConstructDestroyKeepsInstanceCountBalanced)
     EXPECT_THROW({ const Accelerometer overflow; (void)overflow; }, SensorFailedException);
 }
 
+// Task P6-3: started_/state_/subsystemHeld_ previously had an inconsistent
+// locking discipline (some reads/writes under subsystem.mutex_, some not).
+// Stresses concurrent Start()/Stop()/getStateProperty() calls on one shared
+// instance from many threads; a regression would most likely show up as a
+// crash, TSan-detectable race, or hang, not a specific assertion failure —
+// this test's value is in running clean under real concurrent contention.
+TEST(AccelerometerTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
+{
+    Accelerometer a;
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 20;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&a]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                try
+                {
+                    a.Start();
+                }
+                catch (const AccelerometerFailedException&)
+                {
+                    // Expected: either unsupported hardware, or another
+                    // thread already started it first.
+                }
+
+                a.Stop();
+                (void)a.getStateProperty();
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+
+    EXPECT_NO_THROW(a.Dispose());
+}
+
+// Task P6-3: ClaimDisposalOnce() (SensorBase.hpp) closes a race where two
+// threads calling Dispose() on the *same* instance concurrently could both
+// pass the getIsDisposedProperty() check and both decrement
+// subsystem.instanceCount_ for what should be a single logical disposal. If
+// this regresses, repeated rounds of this would eventually corrupt
+// instanceCount_ enough to make the final 10-instance check below fail.
+TEST(AccelerometerTests, ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount)
+{
+    constexpr int Rounds = 30;
+
+    for (int round = 0; round < Rounds; ++round)
+    {
+        auto instance = std::make_shared<Accelerometer>();
+
+        std::thread t1([instance]()
+        {
+            try
+            {
+                instance->Dispose();
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+            }
+        });
+        std::thread t2([instance]()
+        {
+            try
+            {
+                instance->Dispose();
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+            }
+        });
+
+        t1.join();
+        t2.join();
+    }
+
+    std::vector<std::unique_ptr<Accelerometer>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(instances.push_back(std::make_unique<Accelerometer>()));
+    }
+
+    EXPECT_THROW({ const Accelerometer overflow; (void)overflow; }, SensorFailedException);
+}
+
 TEST(AccelerometerTests, GetTypeName)
 {
     const Accelerometer a;

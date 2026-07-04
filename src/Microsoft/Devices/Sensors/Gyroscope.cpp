@@ -51,6 +51,10 @@ namespace Microsoft::Devices::Sensors
     SensorState Gyroscope::getStateProperty() const
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Gyroscope");
+
+        // Task P6-3: see Accelerometer::getStateProperty()'s identical fix
+        // for the full rationale.
+        std::lock_guard<std::mutex> lock(GetSubsystem().mutex_);
         return state_;
     }
 
@@ -102,6 +106,12 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Gyroscope");
 
+        // Task P6-3: see Accelerometer::Start()'s identical fix for the
+        // full rationale — the whole body below is now guarded by a single
+        // subsystem.mutex_ acquisition.
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+
         if (started_)
         {
             throw SensorFailedException(
@@ -125,9 +135,6 @@ namespace Microsoft::Devices::Sensors
             subsystemHeld_ = true;
             acquiredSubsystemThisCall = true;
         }
-
-        auto& subsystem = GetSubsystem();
-        std::lock_guard<std::mutex> lock(subsystem.mutex_);
 
         if (subsystem.OpenDefaultSensorLocked() == nullptr)
         {
@@ -173,14 +180,23 @@ namespace Microsoft::Devices::Sensors
 
     void Gyroscope::Dispose(bool disposing)
     {
-        if (!getIsDisposedProperty() && disposing)
+        // Task P6-3: see Accelerometer::Dispose(bool)'s identical fix for
+        // the full rationale.
+        if (!getIsDisposedProperty() && disposing && ClaimDisposalOnce())
         {
-            if (started_)
+            auto& subsystem = GetSubsystem();
+
+            bool wasStarted;
+            {
+                std::lock_guard<std::mutex> lock(subsystem.mutex_);
+                wasStarted = started_;
+            }
+
+            if (wasStarted)
             {
                 Stop();
             }
 
-            auto& subsystem = GetSubsystem();
             std::unique_lock<std::mutex> lock(subsystem.mutex_);
 
             // Stop() (above) already removed this instance from
@@ -275,21 +291,18 @@ namespace Microsoft::Devices::Sensors
         float y,
         float z)
     {
-        if (!started_)
-        {
-            return;
-        }
-
         if (getIsDisposedProperty())
         {
             return;
         }
 
+        // Task P6-3: see Accelerometer::ProcessSensorUpdateEvent()'s
+        // identical fix for the full rationale.
         std::int64_t currentSensorId;
         {
             auto& subsystem = GetSubsystem();
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
-            if (subsystem.sensor_ == nullptr)
+            if (!started_ || subsystem.sensor_ == nullptr)
             {
                 return;
             }
@@ -337,11 +350,6 @@ namespace Microsoft::Devices::Sensors
 
     void Gyroscope::InjectSyntheticSensorUpdate(float x, float y, float z)
     {
-        if (!started_)
-        {
-            return;
-        }
-
         if (getIsDisposedProperty())
         {
             return;
@@ -353,8 +361,14 @@ namespace Microsoft::Devices::Sensors
         const std::thread::id thisThreadId = std::this_thread::get_id();
         auto& subsystem = GetSubsystem();
 
+        // Task P6-3: started_'s read folded into the same lock scope as
+        // the dispatchingThreadIds_ push.
         {
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            if (!started_)
+            {
+                return;
+            }
             dispatchingThreadIds_.push_back(thisThreadId);
         }
 
@@ -373,6 +387,7 @@ namespace Microsoft::Devices::Sensors
 
     void Gyroscope::SetStartedForTesting(bool started)
     {
+        std::lock_guard<std::mutex> lock(GetSubsystem().mutex_);
         started_ = started;
     }
 

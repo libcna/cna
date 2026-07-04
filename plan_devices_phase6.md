@@ -307,3 +307,95 @@ Commands run:
 Remaining risk: none identified. The fix only changes *when* the hold is
 released on a failure path that previously delayed it; the balanced
 init/quit pairing itself (Task P4-8) is unchanged.
+
+## P6-3: Tighten synchronization for `started_`/`state_`/`subsystemHeld_`/`disposed_`/`isSupported_`
+
+### Locking discipline (decided and documented here)
+
+- **Accelerometer/Gyroscope's `started_`, `state_`, `subsystemHeld_`**: every
+  read and write now happens under that class's own
+  `Detail::SdlSensorSubsystem<TSensor>::mutex_` — the same mutex already
+  used for `instanceCount_`/`sensor_`/`sensorId_`/`startedInstances_`. `Start()`
+  now takes this lock once for its entire body (previously taken only for
+  the back half). `Stop()` was already fully locked. `Dispose(bool)` reads
+  `started_` in a short locked scope, then calls `Stop()` (which re-locks
+  internally — the mutex is not recursive, so the read and the `Stop()`
+  call cannot share one lock scope). `getStateProperty()`,
+  `ProcessSensorUpdateEvent()`, `InjectSyntheticSensorUpdate()`, and the
+  `SetStartedForTesting()` test hook all now read/write `started_`/`state_`
+  under this same lock.
+- **`SensorBase::disposed_`/`isSupported_`**: guarded by the class's
+  existing `mutex_` (already used for `currentValue_`/`isDataValid_`, Task
+  P5-2) — `getIsDisposedProperty()`, `Dispose(bool)`, and
+  `setIsSupportedProperty()` all lock it now; `getCurrentValueProperty()`
+  already did.
+- **`timeBetweenUpdates_`**: deliberately left unguarded. Confirmed during
+  the audit that, unlike `currentValue_`/`isDataValid_`, it is never
+  written by the SDL sensor event-watch thread — only ever set once by the
+  constructor and thereafter by direct game/UI-thread calls to
+  `setTimeBetweenUpdatesProperty()`, matching real WP7 usage. Documented
+  here rather than silently left inconsistent.
+- **Never hold a lock while raising an event**: unchanged and reconfirmed —
+  `CurrentValueChanged`/`ReadingChanged`/`TimeBetweenUpdatesChanged` are all
+  still raised after their respective lock scopes end.
+- **Double-dispose race (new finding, beyond the brief's named fields)**:
+  auditing `disposed_`'s consistency surfaced that `Dispose(bool)`'s guard
+  (`if (!getIsDisposedProperty() && disposing)`) was a check-then-act, not
+  atomic — two threads calling `Dispose()` on the *same* instance
+  concurrently could both pass the check and both run cleanup once each
+  (e.g. both decrementing `instanceCount_` for one logical disposal).
+  Fixed with a new `SensorBase::ClaimDisposalOnce()` protected helper — a
+  separate `disposalClaimed_` flag (deliberately distinct from `disposed_`,
+  which must stay false until cleanup actually finishes, since cleanup
+  itself calls `Stop()`, which throws `ObjectDisposedException` if
+  `disposed_` is already true) that atomically claims disposal so only one
+  concurrent caller's cleanup body runs. Documented as a known, deliberate
+  limitation that the *second* concurrent caller may not get a clean
+  `ObjectDisposedException` in this specific race window (matching the
+  conventional .NET `IDisposable` contract, which does not generally
+  require `Dispose()` to be thread-safe against concurrent callers) —
+  what's guaranteed is that shared state is never corrupted.
+
+### Resolution
+
+Files changed:
+- `include/Microsoft/Devices/Sensors/SensorBase.hpp` — `getIsDisposedProperty()`,
+  `Dispose(bool)`, `setIsSupportedProperty()` now lock `mutex_`; added
+  `disposalClaimed_` + `ClaimDisposalOnce()`; `~SensorBase()`/`Dispose()`
+  updated to use the accessor instead of the raw field.
+- `src/Microsoft/Devices/Sensors/Accelerometer.cpp`/`Gyroscope.cpp` —
+  `Start()` restructured to hold `subsystem.mutex_` for its whole body;
+  `Dispose(bool)` uses `ClaimDisposalOnce()` and reads `started_` in a
+  short locked scope before calling `Stop()`; `getStateProperty()`,
+  `ProcessSensorUpdateEvent()`, `InjectSyntheticSensorUpdate()`,
+  `SetStartedForTesting()` all now read/write `started_`/`state_` under
+  `subsystem.mutex_`.
+- `src/Microsoft/Devices/Sensors/Compass.cpp`/`Motion.cpp` — `Dispose(bool)`
+  uses `ClaimDisposalOnce()` for the same reason.
+- Tests added: `ConcurrentStartStopFromMultipleThreadsDoesNotCrash`
+  (Accelerometer/Gyroscope — 8 threads × 20 iterations of
+  Start()/Stop()/getStateProperty() on one shared instance) and
+  `ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount` (all
+  four classes — 30 rounds of two threads calling `Dispose()` on one
+  shared instance, then asserting exactly 10 fresh instances can still be
+  constructed and an 11th still throws).
+
+Commands run:
+- `cmake --build cmake-build-debug --target CNA -j$(nproc)` — clean build.
+- `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` — clean build.
+- `ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation"`
+  — 199/199 passed (193 previous + 6 new), 2 expected skips.
+- `ctest --output-on-failure` (full suite) — 2022/2024 passed; the 2
+  failures (`EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`) are
+  the same pre-existing, unrelated `EasyGL`/`easy-gl` bugs documented in
+  `plan_devices_phase5.md` Task P5-1 — confirmed still unrelated to
+  `Microsoft::Devices` (different subsystem, no plausible causal link, and
+  this task touched no Graphics code).
+
+Remaining risk: concurrent `Dispose()` from two different threads on the
+same instance is not guaranteed to give the second caller a clean
+`ObjectDisposedException` (documented above and in `SensorBase::Dispose()`'s
+own doc comment) — this is a deliberate, proportionate scope decision, not
+an oversight. No TSan/ASan run was available in this environment to
+independently corroborate the absence of data races beyond code review and
+stress-test repetition; noted as a residual verification gap.

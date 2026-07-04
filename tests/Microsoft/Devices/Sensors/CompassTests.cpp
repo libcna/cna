@@ -131,6 +131,52 @@ TEST(CompassTests, ConcurrentConstructDestroyKeepsInstanceCountBalanced)
     EXPECT_THROW({ const Compass overflow; (void)overflow; }, SensorFailedException);
 }
 
+// Task P6-3: ClaimDisposalOnce() (SensorBase.hpp) closes a race where two
+// threads calling Dispose() on the same instance concurrently could both
+// decrement instanceCount_ for what should be a single logical disposal.
+// See AccelerometerTests.cpp's identical test for the full rationale.
+TEST(CompassTests, ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount)
+{
+    constexpr int Rounds = 30;
+
+    for (int round = 0; round < Rounds; ++round)
+    {
+        auto instance = std::make_shared<Compass>();
+
+        std::thread t1([instance]()
+        {
+            try
+            {
+                instance->Dispose();
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+            }
+        });
+        std::thread t2([instance]()
+        {
+            try
+            {
+                instance->Dispose();
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+            }
+        });
+
+        t1.join();
+        t2.join();
+    }
+
+    std::vector<std::unique_ptr<Compass>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(instances.push_back(std::make_unique<Compass>()));
+    }
+
+    EXPECT_THROW({ const Compass overflow; (void)overflow; }, SensorFailedException);
+}
+
 TEST(CompassTests, GetCurrentValuePropertyThrowsInvalidOperationException)
 {
     const Compass c;

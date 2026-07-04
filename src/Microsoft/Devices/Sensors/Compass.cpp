@@ -72,7 +72,12 @@ namespace Microsoft::Devices::Sensors
 
     void Compass::Dispose(bool disposing)
     {
-        if (!getIsDisposedProperty() && disposing)
+        // Task P6-3: ClaimDisposalOnce() closes a race where two threads
+        // calling Dispose() on the same instance concurrently could both
+        // pass the getIsDisposedProperty() check and both decrement
+        // instanceCount_ for what should be a single logical disposal —
+        // see SensorBase::Dispose()'s doc comment for the full rationale.
+        if (!getIsDisposedProperty() && disposing && ClaimDisposalOnce())
         {
             if (started_)
             {

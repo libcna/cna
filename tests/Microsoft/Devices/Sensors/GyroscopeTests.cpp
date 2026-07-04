@@ -190,6 +190,93 @@ TEST(GyroscopeTests, ConcurrentConstructDestroyKeepsInstanceCountBalanced)
     EXPECT_THROW({ const Gyroscope overflow; (void)overflow; }, SensorFailedException);
 }
 
+// Task P6-3: see AccelerometerTests.cpp's identical test for the full
+// rationale — started_/state_/subsystemHeld_ previously had an
+// inconsistent locking discipline.
+TEST(GyroscopeTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
+{
+    Gyroscope g;
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 20;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&g]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                try
+                {
+                    g.Start();
+                }
+                catch (const SensorFailedException&)
+                {
+                }
+
+                g.Stop();
+                (void)g.getStateProperty();
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+
+    EXPECT_NO_THROW(g.Dispose());
+}
+
+// Task P6-3: see AccelerometerTests.cpp's identical test for the full
+// rationale — ClaimDisposalOnce() closes a race where two threads calling
+// Dispose() on the same instance concurrently could both decrement
+// instanceCount_ for one logical disposal.
+TEST(GyroscopeTests, ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount)
+{
+    constexpr int Rounds = 30;
+
+    for (int round = 0; round < Rounds; ++round)
+    {
+        auto instance = std::make_shared<Gyroscope>();
+
+        std::thread t1([instance]()
+        {
+            try
+            {
+                instance->Dispose();
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+            }
+        });
+        std::thread t2([instance]()
+        {
+            try
+            {
+                instance->Dispose();
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+            }
+        });
+
+        t1.join();
+        t2.join();
+    }
+
+    std::vector<std::unique_ptr<Gyroscope>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(instances.push_back(std::make_unique<Gyroscope>()));
+    }
+
+    EXPECT_THROW({ const Gyroscope overflow; (void)overflow; }, SensorFailedException);
+}
+
 // Task P3-7: catches the dot-vs-colon GetTypeNameCPP naming-convention
 // mistake that Task P2-4 fixed for Accelerometer; nothing previously
 // verified this for Gyroscope.

@@ -30,6 +30,7 @@ namespace Microsoft::Devices::Sensors
 
     private:
         bool disposed_;
+        bool disposalClaimed_;
         bool isDataValid_;
         bool isSupported_;
         System::TimeSpan timeBetweenUpdates_;
@@ -60,11 +61,54 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Gets whether this instance has already been disposed.
          *
+         * Task P6-3: guarded by mutex_ (shared with currentValue_/
+         * isDataValid_/isSupported_) since this is read from both the
+         * game/user thread and, for real SDL3-backed sensors, the SDL
+         * sensor event-watch thread (Accelerometer/Gyroscope's
+         * ProcessSensorUpdateEvent()). Previously unguarded — a real data
+         * race under the C++ memory model.
+         *
          * @return true if disposed; otherwise false.
          */
         [[nodiscard]] bool getIsDisposedProperty() const
         {
+            std::lock_guard<std::mutex> lock(mutex_);
             return disposed_;
+        }
+
+        /**
+         * @brief Atomically claims this instance's one-time disposal cleanup (Task P6-3).
+         *
+         * Derived classes must call this instead of checking
+         * getIsDisposedProperty() directly to decide whether to run their
+         * own disposal cleanup (Stop(), releasing native resources,
+         * decrementing a shared instance counter, etc.) — a plain "if
+         * (!getIsDisposedProperty())" check-then-act is not atomic and lets
+         * two threads calling Dispose() on the same instance concurrently
+         * both pass the check and both run cleanup once each, e.g. both
+         * decrementing a shared instance counter for what should be a
+         * single logical disposal.
+         *
+         * Deliberately a separate flag from disposed_ (still set only by
+         * Dispose(bool) itself, at its normal point in each derived
+         * override): a derived Dispose(bool)'s own cleanup body may call
+         * other public methods (e.g. Stop()) that themselves guard on
+         * getIsDisposedProperty() being still false — claiming disposal
+         * must not make the object appear fully disposed before its own
+         * cleanup has actually run.
+         *
+         * @return True if this call is the first to claim disposal; false
+         * if another call already has (concurrently or previously).
+         */
+        bool ClaimDisposalOnce()
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (disposalClaimed_)
+            {
+                return false;
+            }
+            disposalClaimed_ = true;
+            return true;
         }
 
         /**
@@ -140,10 +184,15 @@ namespace Microsoft::Devices::Sensors
          * Derived classes must call this once from their constructor with the result of
          * their own static IsSupported check, since SensorBase has no access to it.
          *
+         * Task P6-3: guarded by mutex_ — previously written here without a
+         * lock but read under mutex_ inside getCurrentValueProperty(), an
+         * inconsistent locking discipline on the same field.
+         *
          * @param value New support flag.
          */
         void setIsSupportedProperty(bool value)
         {
+            std::lock_guard<std::mutex> lock(mutex_);
             isSupported_ = value;
         }
 
@@ -160,6 +209,7 @@ namespace Microsoft::Devices::Sensors
         virtual void Dispose(bool disposing)
         {
             (void)disposing;
+            std::lock_guard<std::mutex> lock(mutex_);
             disposed_ = true;
         }
 
@@ -179,6 +229,7 @@ namespace Microsoft::Devices::Sensors
          */
         SensorBase()
             : disposed_(false),
+              disposalClaimed_(false),
               isDataValid_(false),
               isSupported_(false),
               timeBetweenUpdates_(System::TimeSpan::Zero),
@@ -198,7 +249,7 @@ namespace Microsoft::Devices::Sensors
          */
         virtual ~SensorBase()
         {
-            if (!disposed_)
+            if (!getIsDisposedProperty())
             {
                 Dispose(false);
             }
@@ -282,10 +333,25 @@ namespace Microsoft::Devices::Sensors
          *
          * Mirrors the .NET Dispose() method. Calling Dispose() more than once
          * throws ObjectDisposedException, just like the decompiled source.
+         *
+         * @note Calling Dispose() concurrently from two different threads
+         * on the *same* instance is not a fully supported usage pattern
+         * (matching the conventional .NET IDisposable contract, which does
+         * not generally require Dispose() itself to be thread-safe against
+         * concurrent callers): the getIsDisposedProperty() check above and
+         * the call into Dispose(true) below are not a single atomic
+         * transaction, so both concurrent callers may reach Dispose(true)
+         * without either seeing ObjectDisposedException here. Derived
+         * classes' own cleanup is still safe in that race (Task P6-3):
+         * ClaimDisposalOnce() ensures only one of the two calls actually
+         * runs the derived cleanup body (e.g. decrementing a shared
+         * instance counter once, not twice) — the other simply becomes a
+         * no-op Dispose(true) call instead of a clean second-call
+         * exception.
          */
         void Dispose() override
         {
-            if (disposed_)
+            if (getIsDisposedProperty())
             {
                 throw System::ObjectDisposedException("SensorBase");
             }

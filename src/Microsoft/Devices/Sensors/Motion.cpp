@@ -73,7 +73,9 @@ namespace Microsoft::Devices::Sensors
 
     void Motion::Dispose(bool disposing)
     {
-        if (!getIsDisposedProperty() && disposing)
+        // Task P6-3: see Compass::Dispose(bool)'s identical fix for the
+        // full rationale.
+        if (!getIsDisposedProperty() && disposing && ClaimDisposalOnce())
         {
             if (started_)
             {

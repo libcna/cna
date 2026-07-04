@@ -54,6 +54,13 @@ namespace Microsoft::Devices::Sensors
     SensorState Accelerometer::getStateProperty() const
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Accelerometer");
+
+        // Task P6-3: state_ is only ever written under subsystem.mutex_
+        // (constructor aside, before the object is published to any other
+        // thread), but was previously read here without any lock — a real
+        // data race against Start()/Stop()/Dispose() running concurrently
+        // on another thread.
+        std::lock_guard<std::mutex> lock(GetSubsystem().mutex_);
         return state_;
     }
 
@@ -108,6 +115,17 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Accelerometer");
 
+        // Task P6-3: the whole body below is now guarded by a single
+        // subsystem.mutex_ acquisition — previously the started_ check and
+        // the initial subsystemHeld_ read/write ran before any lock was
+        // taken at all, racing against Stop()/Dispose()/
+        // ProcessSensorUpdateEvent() on another thread. EnsureSubsystemInitialized()
+        // (a plain SDL_InitSubSystem() call, not a device-enumerating probe)
+        // is safe to call while holding this lock — it doesn't call back
+        // into this class's own code.
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+
         if (started_)
         {
             throw AccelerometerFailedException(
@@ -135,9 +153,6 @@ namespace Microsoft::Devices::Sensors
             subsystemHeld_ = true;
             acquiredSubsystemThisCall = true;
         }
-
-        auto& subsystem = GetSubsystem();
-        std::lock_guard<std::mutex> lock(subsystem.mutex_);
 
         if (subsystem.OpenDefaultSensorLocked() == nullptr)
         {
@@ -186,14 +201,33 @@ namespace Microsoft::Devices::Sensors
 
     void Accelerometer::Dispose(bool disposing)
     {
-        if (!getIsDisposedProperty() && disposing)
+        // Task P6-3: ClaimDisposalOnce() closes a race where two threads
+        // calling Dispose() on the same instance concurrently could both
+        // pass the getIsDisposedProperty() check (disposed_ is only set
+        // true by SensorBase::Dispose() at the very end of this call) and
+        // both run the cleanup below — e.g. both decrementing
+        // instanceCount_ for what should be a single logical disposal.
+        // Only the call that wins ClaimDisposalOnce() proceeds.
+        if (!getIsDisposedProperty() && disposing && ClaimDisposalOnce())
         {
-            if (started_)
+            auto& subsystem = GetSubsystem();
+
+            // Task P6-3: started_ is only ever written under
+            // subsystem.mutex_, but was previously read here directly with
+            // no lock at all. Stop() re-locks subsystem.mutex_ internally
+            // (not a recursive mutex), so the read and the Stop() call
+            // itself cannot share one lock scope.
+            bool wasStarted;
+            {
+                std::lock_guard<std::mutex> lock(subsystem.mutex_);
+                wasStarted = started_;
+            }
+
+            if (wasStarted)
             {
                 Stop();
             }
 
-            auto& subsystem = GetSubsystem();
             std::unique_lock<std::mutex> lock(subsystem.mutex_);
 
             // Stop() (above) already removed this instance from
@@ -332,21 +366,20 @@ namespace Microsoft::Devices::Sensors
         float y,
         float z)
     {
-        if (!started_)
-        {
-            return;
-        }
-
         if (getIsDisposedProperty())
         {
             return;
         }
 
+        // Task P6-3: started_'s read folded into the same lock scope that
+        // already reads subsystem.sensor_/sensorId_ — previously read
+        // separately with no lock at all, racing against
+        // Start()/Stop()/Dispose() on another thread.
         std::int64_t currentSensorId;
         {
             auto& subsystem = GetSubsystem();
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
-            if (subsystem.sensor_ == nullptr)
+            if (!started_ || subsystem.sensor_ == nullptr)
             {
                 return;
             }
@@ -414,11 +447,6 @@ namespace Microsoft::Devices::Sensors
 
     void Accelerometer::InjectSyntheticSensorUpdate(float x, float y, float z)
     {
-        if (!started_)
-        {
-            return;
-        }
-
         if (getIsDisposedProperty())
         {
             return;
@@ -432,8 +460,15 @@ namespace Microsoft::Devices::Sensors
         const std::thread::id thisThreadId = std::this_thread::get_id();
         auto& subsystem = GetSubsystem();
 
+        // Task P6-3: started_'s read folded into the same lock scope as
+        // the dispatchingThreadIds_ push — previously read separately with
+        // no lock at all.
         {
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            if (!started_)
+            {
+                return;
+            }
             dispatchingThreadIds_.push_back(thisThreadId);
         }
 
@@ -452,6 +487,7 @@ namespace Microsoft::Devices::Sensors
 
     void Accelerometer::SetStartedForTesting(bool started)
     {
+        std::lock_guard<std::mutex> lock(GetSubsystem().mutex_);
         started_ = started;
     }
 
