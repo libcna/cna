@@ -488,3 +488,60 @@ the presets any time they're needed again.)
 fixed and re-verified. The pre-existing `sharp-runtime` TSan finding is explicitly
 documented so a future session doesn't need to re-discover it, and so a *genuinely new*
 finding isn't mistakenly waved away as "probably that same old thing."
+
+## P8-5: Test exception behavior policy
+
+### Resolution
+
+**Files changed:**
+- `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` / `GyroscopeTests.cpp` —
+  added `ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent`
+  to both: registers two started instances A and B in a simulated
+  `DispatchToInstancesForTesting()` batch; A's handler throws; confirms B's handler
+  still runs (the actual claim `DispatchToInstances()`'s own doc comment makes, per
+  Task P7-3's own comment: "swallowing it here also lets the remaining snapshotted
+  instances still get dispatched to and cleaned up") and that both instances' `Dispose()`
+  afterward is clean (no hang from corrupted dispatch-tracking state).
+
+**Gap this closes:** `ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose`
+(Task P6-4) only proves a *single* instance's own dispatch survives its own handler
+throwing — it says nothing about a *different*, later instance in the same batch. No
+existing test exercised the multi-instance batch-continuation claim before this task
+(confirmed via `grep`, matching the audit finding).
+
+**Documented policy** (per this task's own ask — the swallow-all-exceptions choice is a
+deliberate behavioral decision, not an oversight): already documented in
+`DispatchToInstances()`'s own doc comment (`SdlSensorSubsystem.hpp`, added across Tasks
+P6-4/P7-3) — the real path is an `SDL_EventFilter` callback invoked directly by
+`SDL_PushEvent()`, a C API that does not expect a C++ exception to unwind through its own
+call frames, and swallowing per-instance also lets the rest of the batch still get
+dispatched to. This task's tests are the first to actually *prove* the second half of
+that claim, not just state it.
+
+**Regression-proof check (not part of the permanent test suite):** temporarily replaced
+`DispatchToInstances()`'s `try { dispatchOne(instance); } catch (...) { ... }` with a
+bare, unguarded `dispatchOne(instance);` call (no swallowing at all) and re-ran the new
+tests — both failed exactly as predicted: the exception propagated out of
+`DispatchToInstancesForTesting()` itself (`EXPECT_NO_THROW` failure) and B's handler
+never ran (`bCallbackCalled` stayed `false`). Restored the real code immediately after
+confirming this; all tests pass again with the real swallow-and-continue behavior in
+place.
+
+**Tests added:**
+`ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent`
+(Accelerometer, Gyroscope).
+
+**Commands run:**
+```bash
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean
+./cmake-build-debug/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+# 226 tests, 224 passed, 2 skipped (expected)
+
+cd .. && ctest --output-on-failure
+# 2049/2051 passed; the standard 2 pre-existing EasyGL failures.
+```
+
+**Remaining risk:** negligible. The documented policy is now backed by a test that
+would fail (confirmed via a temporary revert) if the batch-continuation guarantee ever
+regressed.

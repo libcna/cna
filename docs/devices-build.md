@@ -95,6 +95,23 @@ for i in $(seq 1 40); do
 done
 ```
 
+**Exception-swallowing policy in sensor dispatch (Task P8-5):**
+`Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()` catches and swallows *any*
+exception a `CurrentValueChanged`/`ReadingChanged` handler throws, per-instance, and
+continues dispatching to the rest of the batch. This is a deliberate design choice, not
+an oversight: the real path (`SensorEventWatch()`) is an `SDL_EventFilter` callback
+invoked directly by `SDL_PushEvent()`, a C API that does not expect a C++ exception to
+unwind through its own call frames — and swallowing it there is also what lets a
+*different*, later instance in the same dispatch batch still receive its own event even
+if an earlier instance's handler misbehaves. `AccelerometerTests`/`GyroscopeTests`'
+`ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent` (Task
+P8-5) proves the batch-continuation half of this claim directly (Task P6-4's
+`ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose` only proves the
+single-instance half — that a throwing handler doesn't corrupt *that* instance's own
+dispatch-tracking state or hang a future `Dispose()`). A game's own
+`CurrentValueChanged`/`ReadingChanged` handler should not rely on an exception it throws
+propagating anywhere — it never will.
+
 ## 3. Full test suite
 
 ```bash

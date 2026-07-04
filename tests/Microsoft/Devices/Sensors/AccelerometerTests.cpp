@@ -876,3 +876,48 @@ TEST(AccelerometerTests, SelfDestroyingFromOwnReadingChangedCallbackDuringInject
     EXPECT_NO_THROW(rawPtr->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
     EXPECT_TRUE(handlerRan);
 }
+
+// Task P8-5: DispatchToInstances()'s own doc comment claims that if one instance's
+// callback throws, the exception is swallowed per-instance and the dispatch loop
+// still moves on to the next instance in the batch — but until this task, nothing
+// exercised that claim at the *batch* level. Task P6-4's
+// ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose only
+// proves a single instance's own dispatch survives its own handler throwing; it
+// says nothing about whether a *different*, later instance in the same batch still
+// gets dispatched to.
+TEST(AccelerometerTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent)
+{
+    auto a = std::make_unique<Accelerometer>();
+    auto b = std::make_unique<Accelerometer>();
+
+    a->SetStartedForTesting(true);
+    b->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*a);
+    Accelerometer::RegisterStartedInstanceForTesting(*b);
+
+    bool aCallbackCalled = false;
+    a->CurrentValueChanged += [&aCallbackCalled](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        aCallbackCalled = true;
+        throw std::runtime_error("a's handler deliberately fails");
+    };
+
+    bool bCallbackCalled = false;
+    b->CurrentValueChanged += [&bCallbackCalled](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        bCallbackCalled = true;
+    };
+
+    const std::vector<Accelerometer*> batch{a.get(), b.get()};
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_TRUE(bCallbackCalled);
+
+    // Also confirms A's own dispatch-tracking state was cleaned up despite the
+    // throw (no hang, matching Task P6-4's single-instance guarantee).
+    EXPECT_NO_THROW(a->Dispose());
+    EXPECT_NO_THROW(b->Dispose());
+}

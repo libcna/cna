@@ -717,3 +717,41 @@ TEST(GyroscopeTests, SelfDestroyingFromOwnCallbackDuringBatchDispatchDoesNotUseA
 
     EXPECT_TRUE(handlerRan);
 }
+
+// Task P8-5: see AccelerometerTests's identical test for the full rationale —
+// DispatchToInstances()'s own doc comment claims a throwing handler doesn't prevent
+// the next instance in the same batch from being dispatched to; this proves it.
+TEST(GyroscopeTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent)
+{
+    auto a = std::make_unique<Gyroscope>();
+    auto b = std::make_unique<Gyroscope>();
+
+    a->SetStartedForTesting(true);
+    b->SetStartedForTesting(true);
+    Gyroscope::RegisterStartedInstanceForTesting(*a);
+    Gyroscope::RegisterStartedInstanceForTesting(*b);
+
+    bool aCallbackCalled = false;
+    a->CurrentValueChanged += [&aCallbackCalled](
+        System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        aCallbackCalled = true;
+        throw std::runtime_error("a's handler deliberately fails");
+    };
+
+    bool bCallbackCalled = false;
+    b->CurrentValueChanged += [&bCallbackCalled](
+        System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        bCallbackCalled = true;
+    };
+
+    const std::vector<Gyroscope*> batch{a.get(), b.get()};
+    EXPECT_NO_THROW(Gyroscope::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_TRUE(bCallbackCalled);
+
+    EXPECT_NO_THROW(a->Dispose());
+    EXPECT_NO_THROW(b->Dispose());
+}
