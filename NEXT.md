@@ -11,10 +11,19 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   from the FNA reference to CNA — not just API surface, but FNA-faithful runtime behavior wired
   to SDL3, CHECKLIST-compliant, and covered by tests. The original plan was `plan_input.md`
   (Phases I1–I7, tasks 700–783); all of it is now complete.
-- **Current development phase: `feature/input` is FINALIZED.** Phases I1–I10 (tasks 700–855) are
-  all complete and pre-merge-audited (Phase I11, tasks 856–864). Latest clean 3-backend build
-  (task 862): **EasyGL 1964/1964, Vulkan 1964/1964, bgfx 1968/1968**; **217 input tests** each.
-  There is no next numbered task — see Section 8.
+- **Current development phase: `feature/input` is FINALIZED and merge-verified — READY TO MERGE.**
+  Phases I1–I10 (tasks 700–855) complete and pre-merge-audited (Phase I11, tasks 856–864).
+  **Final merge verification (2026-07-04):** ran the full clean-build sequence (`git submodule
+  update --init --recursive`, then `rm -rf` + configure + build + run `CnaTests`) independently on
+  all three backends. Results:
+  - **EasyGL: 1964/1964** full · **217/217** input-filter
+  - **Vulkan: 1964/1964** full · **217/217** input-filter
+  - **bgfx: 1968/1968** full (+4 bgfx-specific, input-unrelated) · **217/217** input-filter
+  - Input filter: `--gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'`
+
+  All green, reproducing the Phase I11 counts. `feature/input` is **ready to merge**. There is no
+  next numbered task — see Section 8. (Hardware/human-gated checks — real gamepad/IME/mobile — stay
+  documented-as-unverified in `docs/input-manual-verification-results.md`, not faked.)
 - **Two external-review passes drove the last two phases.** The first (2026-07-04) became **Phase
   I9 (792–840)**; the second became **Phase I10 (841–855)**, a stabilization pass. The one
   previously-deferred item — `Mouse::SetPosition`'s scaled/letterboxed logical→window transform
