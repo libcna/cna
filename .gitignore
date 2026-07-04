@@ -8,5 +8,7 @@ cmake-build-easygl/*
 .sdl-prebuilt/
 .sdl-prebuilt-*/
 cmake-build-bgfx/*
+cmake-build-windows/*
+cmake-build-android/*
 
 

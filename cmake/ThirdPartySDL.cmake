@@ -164,6 +164,20 @@ function(_cna_build_sdl_dep)
     if(CMAKE_TOOLCHAIN_FILE)
         list(APPEND _base_args "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
     endif()
+    if(ANDROID)
+        # The NDK's own toolchain file determines the target ABI/platform from these cache
+        # variables, not from CMAKE_TOOLCHAIN_FILE alone - each SDL sub-build is a fully separate
+        # cmake invocation (execute_process below), so it doesn't inherit the parent configure's
+        # cache automatically. Without this, every sub-build silently falls back to the NDK
+        # toolchain's own defaults (historically ARM32 / minimum supported platform).
+        list(APPEND _base_args "-DANDROID_ABI=${ANDROID_ABI}")
+        if(ANDROID_PLATFORM)
+            list(APPEND _base_args "-DANDROID_PLATFORM=${ANDROID_PLATFORM}")
+        endif()
+        if(ANDROID_STL)
+            list(APPEND _base_args "-DANDROID_STL=${ANDROID_STL}")
+        endif()
+    endif()
 
     message(STATUS "CNA: Configuring ${_A_NAME} (one-time step)...")
     execute_process(

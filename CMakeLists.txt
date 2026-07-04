@@ -1237,10 +1237,12 @@ if(CNA_BUILD_TESTS)
     # TwoProcessLoopbackTest.cpp (Task 6.1) uses POSIX-only process APIs (posix_spawn, poll,
     # sys/wait.h) to orchestrate two independent OS processes. Compiles under mingw-w64 and
     # Emscripten (both provide POSIX-ish libc stubs) but can't actually work under either: no real
-    # multi-process spawning exists in a single Node.js/Wasm module, and it isn't part of the
-    # Task 6.2 Windows verification filter (*Network*:*Gamer*:*ENet*:*Packet*) either, since its
-    # suite name is TwoProcessLoopbackTest.
-    if(WIN32 OR EMSCRIPTEN)
+    # multi-process spawning exists in a single Node.js/Wasm module. Also excluded on Android: the
+    # harness path baked in via CNA_NET_HARNESS_PATH is an absolute path on the build machine, not
+    # the on-device filesystem, and CnaTests is run as a bare pushed executable, not a packaged app
+    # with its own bundled assets. Not part of the Task 6.2/6.4 verification filters
+    # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
+    if(WIN32 OR EMSCRIPTEN OR ANDROID)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
     endif()
 
