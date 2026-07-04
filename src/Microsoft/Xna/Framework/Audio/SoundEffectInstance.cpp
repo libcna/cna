@@ -22,6 +22,24 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
+    // T-4C: DSP filter state (see SoundEffectInstance.hpp's filterState_ for the ownership/
+    // move-safety rationale). Kind/frequency/oneOverQ are written by INTERNAL_apply*Filter (main
+    // thread) and read by FilterMixCallback (SDL3_mixer's mixing thread) -- guarded by
+    // MIX_LockMixer/UnlockMixer in the writer, relying on SDL3_mixer's own documented guarantee
+    // that "the SDL audio device thread [holds this same lock] while actual mixing is in
+    // progress" (so the callback itself must NOT also lock -- it would be redundant at best).
+    // yl/yb are the filter's per-channel recursive state and are touched ONLY by the mixing
+    // thread inside the callback, never by the setters, so they need no synchronization at all.
+    struct FilterState
+    {
+        enum class Kind { None, LowPass, HighPass, BandPass };
+        Kind  kind        = Kind::None;
+        float frequency   = 0.0f;
+        float oneOverQ    = 1.0f;
+        float yl[2]       = {0.0f, 0.0f};
+        float yb[2]       = {0.0f, 0.0f};
+    };
+
 #ifdef SOUND_ENABLED
     namespace
     {
@@ -57,6 +75,53 @@ namespace Microsoft::Xna::Framework::Audio
                 MIX_DestroyTrack(track);
                 trackPtr = nullptr;
             }
+        }
+
+        // T-4C: FAudio's exact state-variable filter (Chamberlin SVF; see FAudio_internal.c's
+        // FAudio_INTERNAL_FilterVoice). Pure math, independent of SDL3_mixer, so it can also be
+        // driven directly and synchronously by SoundEffectInstanceTestAccess -- MIX_Track's real
+        // callback only fires asynchronously from the mixing thread, which would make a test
+        // either flaky or need a real-time wait.
+        void ProcessFilterState(FilterState& state, float* pcm, int channels, int samples)
+        {
+            if (state.kind == FilterState::Kind::None) return;
+            if (channels <= 0) return;
+            const float f  = state.frequency;
+            const float q1 = state.oneOverQ;
+
+            for (int i = 0; i + channels <= samples; i += channels)
+            {
+                for (int c = 0; c < channels && c < 2; ++c)
+                {
+                    float& yl = state.yl[c];
+                    float& yb = state.yb[c];
+                    const float x = pcm[i + c];
+
+                    yl = yl + f * yb;
+                    const float yh = x - yl - q1 * yb;
+                    yb = f * yh + yb;
+
+                    switch (state.kind)
+                    {
+                        case FilterState::Kind::LowPass:  pcm[i + c] = yl; break;
+                        case FilterState::Kind::HighPass: pcm[i + c] = yh; break;
+                        case FilterState::Kind::BandPass: pcm[i + c] = yb; break;
+                        default: break; // Kind::None already returned above
+                    }
+                }
+            }
+        }
+
+        // SDL3_mixer trampoline: fires as a per-track "cooked" callback (after gain/pan/3D are
+        // applied, right before this track's audio is mixed into the output -- the closest
+        // SDL3_mixer equivalent to FAudio's per-voice filter). `userdata` is the instance's
+        // FilterState*, kept alive by its own unique_ptr (see SoundEffectInstance.hpp)
+        // independent of the SoundEffectInstance's own address, so this stays valid even if the
+        // instance is later moved.
+        void SDLCALL FilterMixCallback(void* userdata, MIX_Track* /*track*/,
+                                        const SDL_AudioSpec* spec, float* pcm, int samples)
+        {
+            ProcessFilterState(*static_cast<FilterState*>(userdata), pcm, spec->channels, samples);
         }
     }
 #endif
@@ -98,6 +163,10 @@ namespace Microsoft::Xna::Framework::Audio
         , Volume_(other.Volume_)
         , Pan_(other.Pan_)
         , Pitch_(other.Pitch_)
+        // filterState_ is heap-owned; moving the unique_ptr transfers ownership without moving
+        // the FilterState object's address, so the callback registered on `track_` (also just
+        // transferred, unchanged) stays valid with no re-registration needed (T-4C).
+        , filterState_(std::move(other.filterState_))
     {
         // Re-point Dispose()-cascade tracking from &other to &this (T-3G) -- other's own address
         // must stop being cascade-targeted, since it no longer represents a live instance once
@@ -141,6 +210,9 @@ namespace Microsoft::Xna::Framework::Audio
             Volume_      = other.Volume_;
             Pan_         = other.Pan_;
             Pitch_       = other.Pitch_;
+            // See the move constructor's identical rationale for why no callback
+            // re-registration is needed here (T-4C).
+            filterState_ = std::move(other.filterState_);
 
             // Re-point tracking from &other to &this in the SoundEffect whose keepAlive we just
             // took over (see the move constructor's identical rationale).
@@ -321,6 +393,78 @@ namespace Microsoft::Xna::Framework::Audio
             State_   = SoundState::Playing;
             playing_ = true;
         }
+#endif
+    }
+
+    void SoundEffectInstance::INTERNAL_applyReverb(float /*rvGain*/)
+    {
+        // SDL3_mixer has no aux-send/return bus; documented no-op (T-4C, see the declaration's
+        // comment in SoundEffectInstance.hpp for why this matches FNA's own dead-code status).
+    }
+
+    void SoundEffectInstance::INTERNAL_applyLowPassFilter(float cutoff)
+    {
+#ifdef SOUND_ENABLED
+        if (!track_) return; // matches FNA's `handle == IntPtr.Zero` guard
+        if (!filterState_) filterState_ = std::make_unique<FilterState>();
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_LockMixer(mixer);
+        filterState_->kind      = FilterState::Kind::LowPass;
+        filterState_->frequency = cutoff;
+        filterState_->oneOverQ  = 1.0f; // matches FNA: hardcoded, not exposed as a parameter
+        MIX_UnlockMixer(mixer);
+
+        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+#else
+        (void)cutoff;
+#endif
+    }
+
+    void SoundEffectInstance::INTERNAL_applyHighPassFilter(float cutoff)
+    {
+#ifdef SOUND_ENABLED
+        if (!track_) return;
+        if (!filterState_) filterState_ = std::make_unique<FilterState>();
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_LockMixer(mixer);
+        filterState_->kind      = FilterState::Kind::HighPass;
+        filterState_->frequency = cutoff;
+        filterState_->oneOverQ  = 1.0f;
+        MIX_UnlockMixer(mixer);
+
+        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+#else
+        (void)cutoff;
+#endif
+    }
+
+    void SoundEffectInstance::INTERNAL_applyBandPassFilter(float center)
+    {
+#ifdef SOUND_ENABLED
+        if (!track_) return;
+        if (!filterState_) filterState_ = std::make_unique<FilterState>();
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_LockMixer(mixer);
+        filterState_->kind      = FilterState::Kind::BandPass;
+        filterState_->frequency = center;
+        filterState_->oneOverQ  = 1.0f;
+        MIX_UnlockMixer(mixer);
+
+        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+#else
+        (void)center;
+#endif
+    }
+
+    void SoundEffectInstance::ProcessFilterSamplesForTest(float* pcm, int channels, int samples)
+    {
+#ifdef SOUND_ENABLED
+        if (filterState_) ProcessFilterState(*filterState_, pcm, channels, samples);
+#else
+        (void)pcm; (void)channels; (void)samples;
 #endif
     }
 

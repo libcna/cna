@@ -296,3 +296,145 @@ TEST_F(SoundEffectInstanceTest, GetTypeName)
     SoundEffectInstance inst = instance();
     EXPECT_EQ(inst.GetTypeName(), "Microsoft.Xna.Framework.Audio.SoundEffectInstance");
 }
+
+// ===================== DSP filters/reverb (T-4C) =====================
+
+// SDL3_mixer has no aux-send/return bus; INTERNAL_applyReverb is a documented no-op (matching
+// FNA, which never calls it either -- FACT applies XACT reverb routing natively).
+TEST_F(SoundEffectInstanceTest, ApplyReverbDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    EXPECT_NO_THROW(SoundEffectInstanceTestAccess::ApplyReverb(inst, 0.5f));
+}
+
+// Matches FNA's `handle == IntPtr.Zero` guard: applying a filter before the track exists must
+// not create filter state that later processes samples.
+TEST_F(SoundEffectInstanceTest, ApplyLowPassFilterBeforePlayIsNoOp)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, 0.5f);
+
+    float pcm[2] = {2.0f, 2.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_FLOAT_EQ(pcm[0], 2.0f);
+    EXPECT_FLOAT_EQ(pcm[1], 2.0f);
+}
+
+// Regression coverage for the exact state-variable filter FAudio uses (FAudio_internal.c's
+// FAudio_INTERNAL_FilterVoice), not just "some" filter: from a fresh (zero) filter state, the
+// first sample's outputs are exactly predictable --
+//   Yl(1) = Yl(0) + F*Yb(0) = 0
+//   Yh(1) = x - Yl(1) - Q1*Yb(0) = x
+//   Yb(1) = F*Yh(1) + Yb(0) = F*x
+// -- so this pins down the actual math, not just "the value changed".
+TEST_F(SoundEffectInstanceTest, LowPassFilterFirstSampleMatchesStateVariableFilterMath)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, 0.5f);
+
+    float pcm[2] = {2.0f, 2.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_NEAR(pcm[0], 0.0f, 1e-6f);
+    EXPECT_NEAR(pcm[1], 0.0f, 1e-6f);
+}
+
+TEST_F(SoundEffectInstanceTest, HighPassFilterFirstSampleMatchesStateVariableFilterMath)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyHighPassFilter(inst, 0.5f);
+
+    float pcm[2] = {2.0f, 2.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_NEAR(pcm[0], 2.0f, 1e-6f);
+    EXPECT_NEAR(pcm[1], 2.0f, 1e-6f);
+}
+
+TEST_F(SoundEffectInstanceTest, BandPassFilterFirstSampleMatchesStateVariableFilterMath)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyBandPassFilter(inst, 0.5f);
+
+    float pcm[2] = {2.0f, 2.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_NEAR(pcm[0], 1.0f, 1e-6f); // F * x = 0.5 * 2.0
+    EXPECT_NEAR(pcm[1], 1.0f, 1e-6f);
+}
+
+// A constant (DC) signal repeatedly fed through the low-pass filter must converge to unity gain
+// -- verifies the recursive state (yl/yb) persists correctly across multiple calls, not just a
+// single-sample transient.
+TEST_F(SoundEffectInstanceTest, LowPassFilterConvergesToUnityGainForConstantSignal)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, 0.5f);
+
+    float pcm[2];
+    for (int i = 0; i < 2000; ++i)
+    {
+        pcm[0] = 3.0f;
+        pcm[1] = 3.0f;
+        SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    }
+    EXPECT_NEAR(pcm[0], 3.0f, 0.01f);
+    EXPECT_NEAR(pcm[1], 3.0f, 0.01f);
+}
+
+// A constant (DC) signal fed through the high-pass filter must converge to zero.
+TEST_F(SoundEffectInstanceTest, HighPassFilterConvergesToZeroForConstantSignal)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyHighPassFilter(inst, 0.5f);
+
+    float pcm[2];
+    for (int i = 0; i < 2000; ++i)
+    {
+        pcm[0] = 3.0f;
+        pcm[1] = 3.0f;
+        SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    }
+    EXPECT_NEAR(pcm[0], 0.0f, 0.01f);
+    EXPECT_NEAR(pcm[1], 0.0f, 0.01f);
+}
+
+// Regression coverage for filterState_'s move-safety design (T-4C): filterState_ is heap-owned
+// via unique_ptr specifically so a move transfers ownership without changing the FilterState
+// object's address, meaning the SDL3_mixer callback registered on the (also-transferred) track_
+// stays valid with no re-registration. Verify the filter keeps working correctly (not just
+// "doesn't crash") on the moved-to instance, including continuity of its recursive state.
+TEST_F(SoundEffectInstanceTest, LowPassFilterSurvivesMoveConstruction)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance src = instance();
+    src.Play();
+    SoundEffectInstanceTestAccess::ApplyLowPassFilter(src, 0.5f);
+
+    float pcm[2] = {2.0f, 2.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(src, pcm, 2, 2);
+    ASSERT_NEAR(pcm[0], 0.0f, 1e-6f); // first-sample transient from a fresh filter state
+
+    SoundEffectInstance dst(std::move(src));
+
+    // Continue feeding the same constant signal on the MOVED-TO instance; state must carry over
+    // (i.e. this is a continuation of the same recursion, not a freshly-reset filter).
+    for (int i = 0; i < 2000; ++i)
+    {
+        pcm[0] = 2.0f;
+        pcm[1] = 2.0f;
+        SoundEffectInstanceTestAccess::ProcessFilterSamples(dst, pcm, 2, 2);
+    }
+    EXPECT_NEAR(pcm[0], 2.0f, 0.01f);
+    EXPECT_NEAR(pcm[1], 2.0f, 0.01f);
+}

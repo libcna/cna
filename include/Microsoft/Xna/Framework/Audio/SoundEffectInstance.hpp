@@ -15,6 +15,13 @@ namespace Microsoft::Xna::Framework::Audio
     class AudioListener;
     class SoundEffect;
 
+    // T-4C: DSP filter state (kind/coefficients/recursive state), fully defined only in
+    // SoundEffectInstance.cpp where SDL3_mixer's callback-registration types are available.
+    // Namespace-scope (not a nested class of SoundEffectInstance) so the free-function
+    // SDL3_mixer callback that reads it doesn't need friend access -- it's still effectively
+    // private, since nothing outside SoundEffectInstance.cpp ever names it.
+    struct FilterState;
+
     /** @brief Controls playback of a sound effect instance, including volume, pitch, pan, and looping. */
     class SoundEffectInstance : public System::Object, public System::IDisposable
     {
@@ -45,6 +52,36 @@ namespace Microsoft::Xna::Framework::Audio
         float Volume_       = 1.0f;
         float Pan_          = 0.0f;
         float Pitch_        = 0.0f;
+
+        // Heap-allocated (not inline) so its address is stable across a move of *this* -- the
+        // SDL3_mixer callback holds a raw pointer to it as userdata, and a unique_ptr move
+        // transfers ownership without changing that address, so no callback re-registration is
+        // needed after moving a SoundEffectInstance with an active filter (T-4C).
+        std::unique_ptr<FilterState> filterState_;
+
+        // SDL3_mixer has no aux-send/return bus (no equivalent to FAudio's shared ReverbVoice),
+        // so this stays a documented no-op (T-4C). Matches FNA: SoundEffectInstance.cs never has
+        // any caller for this method either -- FACT applies XACT reverb routing natively,
+        // invisible to the C# layer -- so there is no observable behavior gap versus reference.
+        void INTERNAL_applyReverb(float rvGain);
+
+        // Real state-variable filter (T-4C), matching FAudio's own algorithm exactly (see
+        // FAudio_internal.c's FAudio_INTERNAL_FilterVoice) via an SDL3_mixer per-track "cooked"
+        // callback. `cutoff`/`center` are the pre-computed normalized frequency FAudio expects
+        // (2*sin(pi*cutoffHz/sampleRate), range [0,1]), not raw Hz -- matches
+        // FAudioFilterParameters::Frequency exactly, since these methods just forward it. No-op
+        // if the track hasn't been created yet (matches FNA's `handle == IntPtr.Zero` guard);
+        // not sticky across Stop(true)/replay, again matching FNA (the filter lives on the
+        // voice/track, not the instance).
+        void INTERNAL_applyLowPassFilter(float cutoff);
+        void INTERNAL_applyHighPassFilter(float cutoff);
+        void INTERNAL_applyBandPassFilter(float center);
+
+        // Test-only hook (SoundEffectInstanceTestAccess): runs this instance's filter state
+        // through the exact same math the real SDL3_mixer callback uses, but synchronously and
+        // directly -- the real callback only fires asynchronously from the mixing thread, which
+        // would make a test either flaky or need a real-time wait. No-op if no filter is active.
+        void ProcessFilterSamplesForTest(float* pcm, int channels, int samples);
 
         /**
          * @brief Constructs a SoundEffectInstance bound to the given sound effect.

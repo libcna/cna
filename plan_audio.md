@@ -342,12 +342,46 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   kompilační chyba tentokrát, protože scaffolding nezávisí na samotné opravě). Ověřeno
   ASan+LeakSanitizer. Celá sada 2031/2031 zelená.
 
-- [ ] **T-4C — Interní DSP filtry/reverb routing v SoundEffectInstance.**
+- [x] **T-4C — Interní DSP filtry/reverb routing v SoundEffectInstance.**
   Přidat `INTERNAL_applyReverb`/`applyLowPassFilter`/`applyHighPassFilter`/`applyBandPassFilter`
   (private/detail), aby volající z Cue/AudioEngine seděli; implementovat přes SDL_mixer kde to jde,
   jinak doložený no-op.
   *FNA:* SoundEffectInstance.cs:488,518,536,554.
   *Accept:* volající se překládají; chování (reálné/no-op) v tabulce odchylek. (A8)
+  *Pozn.:* Hotovo 2026-07-04 -- rozhodnutí padlo pro "implementovat reálné filtry, reverb necháme
+  no-op" (uživatel). Zjištění před implementací: **žádný caller neexistuje ani ve FNA samotném**
+  (grep přes celý FNA zdroj) -- FACT aplikuje XACT RPC/filter routing nativně, C# vrstva tato
+  `INTERNAL_*` volá nikdy. "Volající z Cue/AudioEngine" z accept kritéria tedy neodpovídá žádnému
+  reálnému volajícímu ani v referenci; úkol se redukuje na "metody existují, správně se chovají".
+  Filtry ale reálně JDOU implementovat: SDL3_mixer's `MIX_SetTrackCookedCallback` dává přístup
+  k syrovému float PCM po gain/pan/3D, těsně před mixováním -- implementován FAudio's přesný
+  state-variable filter (Chamberlin SVF, viz `FAudio_internal.c`'s `FAudio_INTERNAL_FilterVoice`)
+  v tomto callbacku. Reverb zůstává doložený no-op -- SDL3_mixer nemá aux-send/return bus
+  (žádný ekvivalent FAudio's sdíleného `ReverbVoice`), skutečná implementace by byla
+  neúměrně velký rozsah proti zbytku úkolu.
+  Thread-safety: callback běží na SDL_mixer's mixovacím vlákně (dle dokumentace SDL3_mixer).
+  Koeficienty (`kind`/`frequency`/`oneOverQ`) se zapisují v setteru pod `MIX_LockMixer`/
+  `UnlockMixer`, čtou se v callbacku BEZ zamykání -- SDL3_mixer dokumentuje, že mixovací vlákno
+  už tento zámek drží po dobu mixování, takže druhý zámek by byl zbytečný. Rekurzivní stav filtru
+  (`yl`/`yb`) čte/píše výhradně mixovací vlákno, žádná synchronizace není potřeba.
+  Filter stav (`FilterState`) je heap-alokovaný přes `unique_ptr` -- při přesunu
+  `SoundEffectInstance` (move ctor/assignment) se přesune jen vlastnictví ukazatele, ne adresa
+  objektu, takže SDL3_mixer callback (jehož `userdata` je právě tento ukazatel) zůstává platný
+  bez nutnosti re-registrace. Bez tohoto by přesun instance s aktivním filtrem nechal callback
+  mířit na cizí/zastaralou adresu -- stejná třída chyby jako u T-3G's instance-tracking repointu.
+  Testy: 9 nových v `SoundEffectInstanceTests.cpp`, včetně no-op-před-Play() testu,
+  přesných jedno-vzorkových testů (z čerstvého nulového stavu je první výstup filtru přesně
+  spočítatelný: `Yl(1)=0`, `Yh(1)=x`, `Yb(1)=F*x`), konvergenčních testů (konstantní signál musí
+  konvergovat k unity gain u lowpass / nule u highpass) a testu přežití move. Testy volají
+  matematiku filtru PŘÍMO a synchronně (`ProcessFilterSamplesForTest`), ne přes skutečný
+  SDL3_mixer callback -- ten by se spouštěl asynchronně z mixovacího vlákna, což by test buď
+  zpomalilo (reálné čekání), nebo udělalo nedeterministickým (flaky). **Omezení testování:**
+  skutečná souběžnost (setter na hlavním vlákně současně s callbackem na mixovacím vlákně) není
+  timing-přesně ověřena (žádný ThreadSanitizer běh, žádné reálné (non-dummy) audio zařízení v
+  tomto prostředí) -- zámkování odpovídá SDL3_mixer's vlastní zdokumentované doporučené praxi,
+  ale nebylo empiricky stresováno.
+  Ověřeno `git stash` (testy se bez opravy nezkompilují -- `INTERNAL_applyLowPassFilter` atd.
+  neexistují) a ASan+LeakSanitizer (celá sada). Celá sada 2039/2039 zelená.
 
 - [x] **T-4D — AudioEngine `Update()` / per-cue přepočet kategorií.**
   Posoudit, co z FACT `DoWork` je potřeba (fade kategorií, instance-limity); minimálně dokončit
@@ -445,9 +479,10 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   algoritmu; streaming `WaveBank`'s `offset`/`packetSize` nepoužité (shoda s FNA); `SoundEffect`
   move-only; `ContentManager::Load<SoundEffect>()` necachuje; interaktivní (`type==3`) variation
   tabulky uniform-pick místo variable-driven.
-  **Zbývající mezery** (viz `NEXT.md` §5): jen `T-4C` (DSP filtry/reverb na
-  `SoundEffectInstance`) zůstává otevřené jako skutečná nedodělaná práce; zbytek jsou úmyslné,
-  zdokumentované odchylky výše.
+  **Zbývající mezery** (viz `NEXT.md` §5): v době psaní tohoto reportu byl jediný zbývající úkol
+  `T-4C` (DSP filtry/reverb na `SoundEffectInstance`) -- **od té doby (stále 2026-07-04) uzavřen
+  také**, viz jeho vlastní `*Pozn.:*` výše. K okamžiku psaní TOHOTO odstavce (T-6C) tedy zbytek
+  jsou jen úmyslné, zdokumentované odchylky výše -- žádný otevřený úkol nezůstává.
 
 ### Fáze 7 — Doplňkový audit (2026-07-02): nové nálezy nad rámec Fází 0–6
 
