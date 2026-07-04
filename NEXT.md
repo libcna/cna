@@ -21,8 +21,8 @@ framework/runtime, not a game.
   re-audit against FNA (run 2026-07-02) that found 30 concrete bugs/gaps (prefixes
   `CP`/`XA`/`IN`/`MC`) — is **fully complete: 30 of 30 fixed/closed**. Of the handful of
   pre-existing older items from Fáze 3/4/6 that were never in scope for that audit (`T-3F`,
-  `T-3G`, `T-4B`, `T-4C`, `T-4D`, `T-6C`), **`T-4D`, `T-3F`, `T-3G`, and `T-4B` were closed this
-  session** (2026-07-04); see §3. `T-4C`, `T-6C` are still open — see §5.
+  `T-3G`, `T-4B`, `T-4C`, `T-4D`, `T-6C`), **`T-4D`, `T-3F`, `T-3G`, `T-4B`, and `T-6C` were closed
+  this session** (2026-07-04); see §3. Only `T-4C` is still open — see §5.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is
   parsed by a hand-written `XactParser` and mixed through SDL_mixer. Consequences: 3D HRTF and
@@ -43,17 +43,17 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean at `feb6eda` (`HEAD`). EasyGL backend, `SOUND_ENABLED` on, SDL3_mixer linked.
+- **Build:** clean at `1244430` (`HEAD`). EasyGL backend, `SOUND_ENABLED` on, SDL3_mixer linked.
   Verified immediately before writing this update; also rebuilt `cna_demo_sound`/`cna_demo_2d`
   (the example targets, `CNA_BUILD_EXAMPLES=ON` by default) since `T-3G` changed a public API
   shape (`SoundEffect` copyability) those depend on through `ContentManager::Load<SoundEffect>()`.
 - **Tests:** `CnaTests` **2031 / 2031 pass** (2020 at the last handoff snapshot; +1 for `T-4D`,
-  +3 for `T-3F`, +5 for `T-3G`, +2 for `T-4B`). No known regressions.
-  Re-run to check for drift: `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
+  +3 for `T-3F`, +5 for `T-3G`, +2 for `T-4B`, +0 for `T-6C` — docs/checkpoint only, no code).
+  No known regressions. Re-run to check for drift: `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
 - **CLI/tools/apps:** none in the framework itself, but this session's `T-3G` work touched the
   two example demos (`cna_demo_sound`, `cna_demo_2d`) as collateral — see §7 for how to rebuild
   them; they're not part of `CnaTests` and easy to forget when just running `--target CnaTests`.
-- **This session's work: closed `T-4D`, `T-3F`, `T-3G`, and `T-4B`** — see §3 for detail on all four.
+- **This session's work: closed `T-4D`, `T-3F`, `T-3G`, `T-4B`, and `T-6C`** — see §3 for detail.
   - `T-4D`: `AudioCategory::SetVolume` now re-applies to already-playing cues. This was the one
     task in the old §8 backlog that was a mechanical fix rather than an open design decision.
   - `T-3F`: asked the user how to close it (implement real streaming vs. document the deviation);
@@ -67,7 +67,9 @@ framework/runtime, not a game.
     an "implement vs. document" decision, so it was picked up directly without asking first —
     `Cue::Apply3D`/3D `PlayCue` now forward to `SoundEffectInstance::Apply3D` (already working
     since `CP-3`), instead of being no-ops.
-  - `T-4C`, `T-6C` remain open and still need a decision first (see §5/§8).
+  - `T-6C`: the formal build & report checkpoint itself — both targets were already green with
+    nothing to rebuild; recorded the short report in `plan_audio.md`.
+  - `T-4C` is the only item left open, and still needs a decision first (see §5/§8).
 - **Prior session's work (26 commits, all 30 Fáze 7 findings closed):**
   - **Bug fixes (13):** `IN-2`/`IN-3` (XWB parser over-read + integer-underflow bounds-check
     bypass), `MC-1` (Microphone sample-duration math), `CP-8`/`CP-9` (`SoundEffect` API
@@ -91,14 +93,17 @@ framework/runtime, not a game.
 - **Does NOT work yet / known incomplete (all pre-existing, outside Fáze 7's scope):**
   - `T-4C` — no DSP filter/reverb routing (`applyReverb`/`applyLowPassFilter`/etc.) on
     `SoundEffectInstance`.
-  - `T-6C` — the formal "build & report" checklist step was never explicitly checked off, though
-    its criteria (clean build, passing tests, changed-files report) were satisfied continuously
-    during the Fáze 7 session.
 
 ---
 
 ## 3. Recent changes (this branch, newest first)
 
+- `1244430` — **T-6C**: formal build & report checkpoint. `cmake --build --target CNA` and
+  `--target CnaTests` both green with nothing to rebuild (already current from the prior four
+  commits); `CnaTests` 2031/2031 under `SDL_AUDIODRIVER=dummy`. Recorded the short report
+  `CLAUDE.md` §Build and Report asks for directly in `plan_audio.md`'s T-6C entry: changed files
+  this session, no new stubs/missing dependencies, the accepted-deviations list (already in
+  `CHECKLIST.md`), and `T-4C` as the one remaining real gap. Pure docs/checkpoint — no code change.
 - `feb6eda` — **T-4B**: `Cue::Apply3D` was a pure no-op (only checked `isDisposed_`); it now
   iterates `Cue::active_` and calls `SoundEffectInstance::Apply3D` (already working since `CP-3`)
   on each live instance — no new pan/attenuation math, just wiring to the mechanism `CP-3` already
@@ -250,13 +255,14 @@ findings, fixed in an earlier session).
 ## 4. Current blocker / main problem
 
 **No build- or test-breaking blocker.** No failing command, no failing test. The build is clean
-and all 2031 tests pass as of `feb6eda` (last commit with an actual code/test change; the NEXT.md
-rewrite itself doesn't touch build state). `cna_demo_sound`/`cna_demo_2d` also rebuilt clean.
+and all 2031 tests pass as of `feb6eda` (last commit with an actual code/test change; `1244430`
+and the NEXT.md rewrite itself are docs-only and don't touch build state). `cna_demo_sound`/
+`cna_demo_2d` also rebuilt clean.
 
-**Fáze 7 is now fully closed (30/30), and `T-4D`/`T-3F`/`T-3G`/`T-4B` from the older backlog are
-also closed.** There is no discrete backlog left from Fáze 7. The remaining open work in §5
-(`T-4C`, `T-6C`) — none of these are bugs or regressions; they are either accepted deviations
-awaiting a product decision, or genuinely unimplemented (but documented-as-such) features.
+**Fáze 7 is now fully closed (30/30), and `T-4D`/`T-3F`/`T-3G`/`T-4B`/`T-6C` from the older
+backlog are also closed.** There is no discrete backlog left from Fáze 7. `T-4C` is the only item
+still open (see §5) — not a bug or regression, a genuinely unimplemented (but documented-as-such)
+feature.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, which is under separate, active, concurrent development by another session.
@@ -273,11 +279,11 @@ it may just need a retry once that unrelated work lands, or a small compliance p
 | Status | Issue | Ref |
 |---|---|---|
 | **Confirmed, open** | No DSP filter/reverb routing on `SoundEffectInstance` | `T-4C` |
-| **Housekeeping, open** | Formal "build & report" step never explicitly checked off, though satisfied continuously during the Fáze 7 session | `T-6C` |
 | **Fixed 2026-07-04** | `AudioCategory::SetVolume` now retroactively re-applies to already-playing cues via `Cue::ApplyCategoryVolume` | `T-4D` |
 | **Fixed 2026-07-04** | `WaveBank`'s streaming ctor now does real lazy per-entry disk reads instead of eagerly loading the whole file like the non-streaming ctor | `T-3F` |
 | **Fixed 2026-07-04** | `SoundEffect` now has real instance-tracking + Dispose cascade (matches FNA's `SoundEffect.Instances`); `SoundEffect` is move-only as a result | `T-3G` |
 | **Fixed 2026-07-04** | `Cue::Apply3D`/3D `PlayCue` now forward to `SoundEffectInstance::Apply3D` instead of being no-ops | `T-4B` |
+| **Fixed 2026-07-04** | Formal "build & report" checkpoint recorded in `plan_audio.md` | `T-6C` |
 | **Accepted deviation** | 3D positional audio is pan + distance-attenuation only, no elevation/Doppler | `CHECKLIST.md` |
 | **Accepted deviation** | Interactive-type (`type==3`) XACT variation tables fall back to a uniform pick instead of a variable-driven one (parser doesn't retain `var_min`/`var_max` per entry) | `CHECKLIST.md`, `XA-3` |
 | **Accepted deviation** | `SoundBank::IsInUse` only tracks fire-and-forget cues it owns; `GetCue`-obtained cues are caller-owned | `T-3B` |
@@ -449,18 +455,18 @@ grep -n "<symbol>" /rv/data/library/github.com/FNA-XNA/FAudio/src/FACT_internal.
 ## 8. Next smallest tasks
 
 Fáze 7 (`plan_audio.md` §4) is fully closed — there is no `CP-`/`XA-`/`IN-`/`MC-` backlog left.
-`T-4D`, `T-3F`, `T-3G`, and `T-4B` were closed 2026-07-04 — see §3. Two items remain:
+`T-4D`, `T-3F`, `T-3G`, `T-4B`, and `T-6C` were closed 2026-07-04 — see §3. Exactly **one** item
+remains:
 
-1. **`T-6C` — formal build & report checkpoint.** Genuinely small: run
-   `cmake --build cmake-build-debug --target CNA` and `--target CnaTests`, confirm both are
-   clean, write the short report `CLAUDE.md` §Build and Report asks for, check the box.
-
-2. **`T-4C` — DSP filter/reverb routing on `SoundEffectInstance`.** This one IS still framed as
-   a decision-ish task in `plan_audio.md` (add `INTERNAL_applyReverb`/`applyLowPassFilter`/etc.,
-   implemented via SDL_mixer where possible, documented no-op otherwise) — it's the
-   least-scoped of what's left. Read `SoundEffectInstance.cs:488,518,536,554` in the FNA source
-   first to size it before starting; ask/flag before picking the more invasive option if SDL_mixer
-   turns out to support real filtering (unclear without checking).
+1. **`T-4C` — DSP filter/reverb routing on `SoundEffectInstance`.** Add
+   `INTERNAL_applyReverb`/`applyLowPassFilter`/`applyHighPassFilter`/`applyBandPassFilter`
+   (private/detail) so callers from `Cue`/`AudioEngine` have something to call; implement via
+   SDL_mixer where possible, documented no-op otherwise. It's the least-scoped item left in
+   `plan_audio.md` — read `SoundEffectInstance.cs:488,518,536,554` in the FNA source first to
+   size it before starting; ask/flag before picking the more invasive option if SDL_mixer turns
+   out to support real filtering (unclear without checking).
+   *FNA:* `SoundEffectInstance.cs:488,518,536,554`.
+   *Accept:* callers compile; behavior (real/no-op) recorded in `CHECKLIST.md`'s deviation table.
 
 **If a future fixture needs a real playing `SoundEffectInstance`** (not just Cue state), the
 wavebank-less `SharedBank()`/`BuildXsbFixtureBytes` fixtures in `CueTests.cpp`/
@@ -503,14 +509,14 @@ has before assuming it needs a decision.)
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, then plan_audio.md for full task detail (Fáze 7, T-4D, T-3F, T-3G, and T-4B
-are done -- see §8 here for what's actually left: T-6C, T-4C).
+Read NEXT.md first, then plan_audio.md for full task detail (Fáze 7, T-4D, T-3F, T-3G, T-4B, and
+T-6C are all done -- see §8 here for what's actually left: just T-4C).
 
 1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2031/2031 tests pass) --
    rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests to check for drift since
    this was last updated. Also rebuild cna_demo_sound/cna_demo_2d if you touch anything on the
    Audio public API surface -- they're not part of CnaTests and easy to forget.
-2. Pick exactly ONE task from NEXT.md §8. T-6C is purely mechanical. T-4C has real accept
+2. Do NEXT.md §8's one remaining task, T-4C (DSP filter/reverb routing). It has real accept
    criteria in plan_audio.md but some ambiguity about SDL_mixer's real filtering capability --
    ask/flag before picking the more invasive option if that turns out to matter.
 3. Inspect only the files that task names. Do not refactor unrelated code.
