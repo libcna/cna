@@ -3,7 +3,9 @@
 
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <sstream>
+#include <type_traits>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -12,12 +14,20 @@
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundState;
+
+// T-3G: SoundEffect must be move-only -- a single, unambiguous owner per underlying resource
+// is what makes Dispose()'s instance-tracking cascade below unambiguous (see SoundEffect.hpp).
+static_assert(!std::is_copy_constructible_v<SoundEffect>, "SoundEffect must not be copy-constructible (T-3G)");
+static_assert(!std::is_copy_assignable_v<SoundEffect>, "SoundEffect must not be copy-assignable (T-3G)");
+static_assert(std::is_move_constructible_v<SoundEffect>, "SoundEffect must remain move-constructible");
+static_assert(std::is_move_assignable_v<SoundEffect>, "SoundEffect must remain move-assignable");
 
 namespace
 {
@@ -340,4 +350,101 @@ TEST(SoundEffectTest, PlaySucceedsAfterOriginatingSoundEffectTemporaryIsDestroye
     {
         GTEST_SKIP() << "no audio device";
     }
+}
+
+// ===================== Instance-tracking + Dispose cascade (T-3G) =====================
+
+TEST(SoundEffectTest, DisposeStopsAndDisposesLiveInstanceFromCreateInstance)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    SoundEffectInstance inst = fx->CreateInstance();
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+    ASSERT_FALSE(inst.getIsDisposedProperty());
+
+    fx->Dispose();
+
+    EXPECT_TRUE(inst.getIsDisposedProperty());
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    // The cascaded instance must be genuinely inert afterward, not just flagged.
+    EXPECT_THROW(inst.Play(), System::ObjectDisposedException);
+}
+
+TEST(SoundEffectTest, DisposeCascadesToEveryLiveInstance)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    SoundEffectInstance a = fx->CreateInstance();
+    SoundEffectInstance b = fx->CreateInstance();
+    a.Play();
+    b.Play();
+    ASSERT_FALSE(a.getIsDisposedProperty());
+    ASSERT_FALSE(b.getIsDisposedProperty());
+
+    fx->Dispose();
+
+    EXPECT_TRUE(a.getIsDisposedProperty());
+    EXPECT_TRUE(b.getIsDisposedProperty());
+}
+
+TEST(SoundEffectTest, DisposeSkipsAlreadyDisposedInstanceWithoutThrowing)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    SoundEffectInstance inst = fx->CreateInstance();
+    inst.Play();
+    inst.Dispose(); // unregisters itself before the SoundEffect ever gets to cascade to it
+
+    EXPECT_NO_THROW(fx->Dispose());
+    EXPECT_TRUE(inst.getIsDisposedProperty());
+}
+
+// Regression check for the CP-7-style dangling-pointer hazard this feature could reintroduce:
+// once `inst` has been moved-to (dst), the SoundEffect's cascade tracking must follow the move
+// and target &dst, not the (possibly since-reused) address of the original `src`.
+TEST(SoundEffectTest, DisposeAfterInstanceMovedOutOfScopeDisposesTheMovedToInstance)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    SoundEffectInstance dst = fx->CreateInstance();
+    {
+        SoundEffectInstance src = fx->CreateInstance();
+        src.Play();
+        dst = std::move(src);
+        // src goes out of scope here; its stack slot may be reused by later code.
+    }
+    ASSERT_FALSE(dst.getIsDisposedProperty());
+
+    fx->Dispose();
+
+    EXPECT_TRUE(dst.getIsDisposedProperty());
+    EXPECT_EQ(dst.getStateProperty(), SoundState::Stopped);
+}
+
+// Same regression as above, but for the move constructor specifically (operator= and the
+// converting constructor re-point tracking via separate code paths in SoundEffectInstance.cpp).
+TEST(SoundEffectTest, DisposeAfterInstanceMoveConstructedOutOfScopeDisposesTheMovedToInstance)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    std::optional<SoundEffectInstance> dst;
+    {
+        SoundEffectInstance src = fx->CreateInstance();
+        src.Play();
+        dst.emplace(std::move(src));
+        // src goes out of scope here; its stack slot may be reused by later code.
+    }
+    ASSERT_TRUE(dst.has_value());
+    ASSERT_FALSE(dst->getIsDisposedProperty());
+
+    fx->Dispose();
+
+    EXPECT_TRUE(dst->getIsDisposedProperty());
+    EXPECT_EQ(dst->getStateProperty(), SoundState::Stopped);
 }

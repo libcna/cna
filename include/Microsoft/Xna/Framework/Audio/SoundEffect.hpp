@@ -40,6 +40,15 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Internal constructor that wraps a preloaded Impl. */
         explicit SoundEffect(std::shared_ptr<Impl> impl, std::string name = {});
 
+        // Instance-tracking + Dispose cascade (T-3G, matches FNA's SoundEffect.Instances):
+        // SoundEffectInstance registers itself here on construction against the type-erased
+        // keep-alive it holds (see SoundEffectInstance::soundEffectKeepAlive_), unregisters on
+        // Dispose(), and re-points registration when moved (its own address changes). Static and
+        // keyed by the keep-alive pointer, not a SoundEffect&, because an instance must be able
+        // to unregister itself long after the original SoundEffect object is gone.
+        static void RegisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance);
+        static void UnregisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance);
+
     public:
         /**
          * @brief Constructs a SoundEffect by loading from a file path.
@@ -81,9 +90,22 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Destroys the sound effect and releases audio resources. */
         ~SoundEffect() override;
 
-        SoundEffect(const SoundEffect&) = default;
-        SoundEffect& operator=(const SoundEffect&) = default;
+        /**
+         * @brief SoundEffect is move-only (T-3G): matching FNA's single-object instance
+         * tracking (SoundEffect::Dispose() cascades to every live SoundEffectInstance created
+         * via CreateInstance()) requires a single, unambiguous owner per underlying resource --
+         * two independent copies could otherwise disagree about which one's Dispose() call
+         * is authoritative.
+         */
+        SoundEffect(const SoundEffect&) = delete;
+
+        /** @brief Deleted; see the copy constructor's rationale. */
+        SoundEffect& operator=(const SoundEffect&) = delete;
+
+        /** @brief Move-constructs a SoundEffect, transferring ownership of the underlying resource. */
         SoundEffect(SoundEffect&&) noexcept = default;
+
+        /** @brief Move-assigns a SoundEffect, transferring ownership of the underlying resource. */
         SoundEffect& operator=(SoundEffect&&) noexcept = default;
 
         // --- Properties ---

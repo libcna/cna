@@ -73,6 +73,9 @@ namespace Microsoft::Xna::Framework::Audio
         : soundEffectKeepAlive_(soundEffect.impl_)
         , nativeAudioHandle_(soundEffect.getNativeAudioHandle())
     {
+        // Register for SoundEffect::Dispose()'s cascade (T-3G, matches FNA's
+        // parentEffect.Instances.Add(selfReference) in SoundEffectInstance's ctor).
+        SoundEffect::RegisterInstance(soundEffectKeepAlive_, this);
     }
 
     SoundEffectInstance::~SoundEffectInstance()
@@ -96,6 +99,16 @@ namespace Microsoft::Xna::Framework::Audio
         , Pan_(other.Pan_)
         , Pitch_(other.Pitch_)
     {
+        // Re-point Dispose()-cascade tracking from &other to &this (T-3G) -- other's own address
+        // must stop being cascade-targeted, since it no longer represents a live instance once
+        // moved-from (only skip this for an already-disposed `other`, which was never tracked,
+        // or has already unregistered itself).
+        if (soundEffectKeepAlive_ && !isDisposed_)
+        {
+            SoundEffect::UnregisterInstance(soundEffectKeepAlive_, &other);
+            SoundEffect::RegisterInstance(soundEffectKeepAlive_, this);
+        }
+
         other.nativeAudioHandle_ = nullptr;
         other.track_       = nullptr;
         other.playing_     = false;
@@ -111,6 +124,12 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
             DestroyTrackSafe(track_);
 #endif
+            // Unregister *this* from whatever SoundEffect it was previously tracked by --
+            // once soundEffectKeepAlive_ is overwritten below, *this* address represents a
+            // different (or no) instance, and the old SoundEffect must not cascade to it (T-3G).
+            if (soundEffectKeepAlive_ && !isDisposed_)
+                SoundEffect::UnregisterInstance(soundEffectKeepAlive_, this);
+
             soundEffectKeepAlive_ = std::move(other.soundEffectKeepAlive_);
             nativeAudioHandle_ = other.nativeAudioHandle_;
             track_       = other.track_;
@@ -122,6 +141,14 @@ namespace Microsoft::Xna::Framework::Audio
             Volume_      = other.Volume_;
             Pan_         = other.Pan_;
             Pitch_       = other.Pitch_;
+
+            // Re-point tracking from &other to &this in the SoundEffect whose keepAlive we just
+            // took over (see the move constructor's identical rationale).
+            if (soundEffectKeepAlive_ && !isDisposed_)
+            {
+                SoundEffect::UnregisterInstance(soundEffectKeepAlive_, &other);
+                SoundEffect::RegisterInstance(soundEffectKeepAlive_, this);
+            }
 
             other.nativeAudioHandle_ = nullptr;
             other.track_       = nullptr;
@@ -140,6 +167,11 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
             DestroyTrackSafe(track_);
 #endif
+            if (soundEffectKeepAlive_)
+            {
+                SoundEffect::UnregisterInstance(soundEffectKeepAlive_, this);
+                soundEffectKeepAlive_.reset();
+            }
             playing_    = false;
             State_      = SoundState::Stopped;
             isDisposed_ = true;

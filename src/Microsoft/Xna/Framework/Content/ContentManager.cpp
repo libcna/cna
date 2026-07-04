@@ -689,4 +689,35 @@ namespace Microsoft::Xna::Framework::Content
 
         return result;
     }
+
+    // See the declaration in ContentManager.hpp for why this type is not cached: SoundEffect
+    // is move-only (T-3G), so there is no way to hand back "the same loaded instance" to a
+    // second caller anyway -- reader.Read() below already does a fresh decode per call, which
+    // is exactly what a cache MISS did before this specialisation existed.
+    template<>
+    Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& assetName)
+    {
+        if (disposed_)
+            throw std::runtime_error("ContentManager has been disposed.");
+
+        log::Debug(std::string("Loading asset: ") + assetName);
+
+        auto readerIt = typeReaders_.find(std::type_index(typeid(Audio::SoundEffect)));
+        if (readerIt == typeReaders_.end())
+            throw ContentLoadException(
+                std::string("ContentManager::Load<T>(): No reader registered for type, asset '")
+                + assetName + "'.");
+
+        auto* readerPtr = std::any_cast<
+            std::shared_ptr<ContentTypeReader<Audio::SoundEffect>>>(&readerIt->second);
+        if (!readerPtr || !*readerPtr)
+            throw ContentLoadException(
+                std::string("ContentManager::Load<T>(): Reader is null for asset '")
+                + assetName + "'.");
+
+        ContentTypeReader<Audio::SoundEffect>& reader = **readerPtr;
+        const std::string resolvedPath = ResolveAssetPath(assetName, reader);
+
+        return reader.Read(resolvedPath, *this);
+    }
 } // namespace Microsoft::Xna::Framework::Content

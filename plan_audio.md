@@ -67,8 +67,8 @@ ne odstranit (pokud se nerozhodne jinak v úkolu, který je explicitně zmiňuje
    (per-cue re-apply hlasitosti kategorie ale ano, viz T-4D). Streaming `WaveBank` byl doplněn
    (T-3F, 2026-07-04): streamující ctor čte hlavičku/metadata z disku a data položky líné, ne
    celý soubor eager.
-5. **`CreateInstance`/`FromStream` hodnotová vs. heap-reference sémantika** — řeší úkol T-3G
-   (buď instance-tracking, nebo doložená odchylka).
+5. **`CreateInstance`/`FromStream` zůstávají hodnotové** (žádná heap-reference sémantika), ale
+   `SoundEffect` teď má instance-tracking + Dispose-kaskádu a je move-only (T-3G, 2026-07-04).
 
 > Každá z těchto odchylek musí mít řádek v tabulce odchylek v `CHECKLIST.md` (úkol T-6A).
 
@@ -265,12 +265,38 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   metodikou (bez opravy `WaveBankTestAccess` ani nejde zkompilovat, protože `StreamingInternal`
   atd. neexistují -- genuine compile failure, ne jen selhávající assert).
 
-- [ ] **T-3G — SoundEffect: instance-tracking + Dispose-kaskáda (rozhodnutí).**
+- [x] **T-3G — SoundEffect: instance-tracking + Dispose-kaskáda (rozhodnutí).**
   Buď evidovat živé instance (weak refs) a `SoundEffect::Dispose()` je zastaví/disposne (FNA),
   nebo formálně zdokumentovat hodnotovou odchylku (bez kaskády) v CHECKLIST. Provázáno s rozhodnutím
   `CreateInstance` hodnotou vs. heap-ref a `FromStream` ownership.
   *FNA:* SoundEffect.cs:126,315-323,354,389.
   *Accept:* doložené rozhodnutí; pokud tracking, dispose SoundEffectu zastaví jeho instanci (test). (A7)
+  *Pozn.:* Hotovo 2026-07-04 -- rozhodnutí padlo pro "implementovat" (uživatel), ne pro doložení
+  odchylky. `SoundEffect::Impl` má nový `std::vector<SoundEffectInstance*> instances` (raw,
+  neowning); `SoundEffectInstance` se registruje ve svém ctoru (`SoundEffect::RegisterInstance`)
+  a odregistruje v `Dispose()` (`UnregisterInstance` + uvolní vlastní `soundEffectKeepAlive_`,
+  takže poslední instance + `SoundEffect` skutečně uvolní `MIX_Audio` deterministicky, blíž FNA
+  eager-release). `SoundEffect::Dispose()` iteruje snapshot `impl_->instances` a zavolá `Dispose()`
+  na každou živou instanci (FNA `Instances.ToArray()` + foreach), než `impl_.reset()`.
+  Vedlejší, ale nutná změna: **`SoundEffect` je teď move-only** (copy ctor/assignment `= delete`) --
+  bez jediného vlastníka na resource by dvě nezávislé kopie mohly nesouhlasit v tom, čí `Dispose()`
+  je autoritativní. Ověřeno přes Explore agenta, že žádné volající místo v `src/`/`tests/`/`examples/`
+  nespoléhá na kopírovatelnost `SoundEffect` -- **kromě** `ContentManager::Load<T>()`, jehož
+  generický `std::any`-cache vyžaduje `CopyConstructible`; opraveno novou explicitní specializací
+  `Load<Audio::SoundEffect>` (viz `ContentManager.hpp`/`.cpp`), která tento typ vůbec necachuje
+  (sdílení jedné instance mezi nesouvisejícími volajícími by teď bylo vyloženě špatně -- Dispose
+  jednoho volajícího by tiše zastavil přehrávání jiného). Move ctor/assignment
+  `SoundEffectInstance` teď navíc **re-pointují** cascade-tracking (odregistrují `&other`,
+  zaregistrují `this`) -- bez toho by `SoundEffect::Dispose()` po přesunuté instanci volal
+  `Dispose()` na starou (možná už mimo scope) adresu. Ověřeno reálným segfaultem: dočasné
+  vypnutí jen repoint-bloků (ne celé feature) a spuštění nového testu
+  `DisposeAfterInstanceMovedOutOfScopeDisposesTheMovedToInstance` skutečně spadlo (SIGSEGV), ne
+  jen selhal assert -- silnější důkaz než obvyklá `git stash` metodika. Testy: 5 nových v
+  `SoundEffectTests.cpp` (cascade na 1/N instancí, already-disposed instance přeskočena bez
+  throw, moved-to instance přes move ctor i move assignment) + 4 `static_assert` (move-only).
+  Ověřeno ASan+LeakSanitizer (celá sada, ne jen nové testy) a `git stash` (bez opravy testy
+  vůbec nejdou zkompilovat -- `RegisterInstance` atd. neexistují). Celá sada 2029/2029 zelená,
+  `cna_demo_sound`/`cna_demo_2d` (jediná volající místa `Load<SoundEffect>`) se překládají čistě.
 
 ### Fáze 4 — Dokončení funkcí (žádné stuby bez důvodu)
 
@@ -983,7 +1009,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 
 | ID | Otázka k rozhodnutí | Default doporučení |
 |----|---------------------|--------------------|
-| D1 | `CreateInstance`/`FromStream`: hodnota vs. heap-reference + instance-tracking (T-3G) | Ponechat hodnotu, **zdokumentovat** odchylku; tracking jen pokud demo/hra vyžaduje Dispose-kaskádu |
+| D1 | ~~`CreateInstance`/`FromStream`: hodnota vs. heap-reference + instance-tracking (T-3G)~~ | **Rozhodnuto a implementováno 2026-07-04** — instance-tracking + Dispose-kaskáda; `SoundEffect` je nově move-only (jediný vlastník resource), `SoundEffectInstance` se registruje/odregistruje/re-pointuje při přesunu. `CreateInstance`/`FromStream` zůstávají hodnotové (žádná heap-ref sémantika), ale `SoundEffect` už nelze kopírovat. |
 | D2 | Pan/Volume klamp vs. throw/pass-through (T-3C) | Sladit s FNA (throw na range, pass-through volume); klamp jen vědomě + do CHECKLIST |
 | D3 | ~~Streaming WaveBank (T-3F)~~ | **Rozhodnuto a implementováno 2026-07-04** — skutečný streaming: `ParseXwbStreamingHeader` čte jen hlavičku/metadata z disku, `WaveBank::GetSoundEffect` čte data položky líné přímo ze souboru. Non-streaming ctor beze změny (celý soubor eager, jako FNA). |
 | D4 | ~~Rozsah `AudioEngine::Update` / FACT DoWork (T-4D)~~ | **Rozhodnuto a implementováno 2026-07-04** — minimální rozsah: `SetCategoryVolumeInternal` teď volá `Cue::ApplyCategoryVolume` pro re-apply na aktivní instance; fade kategorií a instance-limity (zbytek FACT `DoWork`) zůstávají dokumentovaně mimo rozsah. |

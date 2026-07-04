@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
+#include <algorithm>
 #include <istream>
 #include <vector>
 
@@ -23,7 +25,26 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs sampleRate = 44100;
         SharpRuntime::uintcs channels  = 2;
 #endif
+        // Live SoundEffectInstance objects created via CreateInstance(), for Dispose()'s
+        // cascade (T-3G). Raw, non-owning pointers: the instances' lifetime belongs to their
+        // caller; SoundEffectInstance registers/unregisters itself (see SoundEffect::Register/
+        // UnregisterInstance). Not gated by SOUND_ENABLED -- this is pure object-lifecycle
+        // bookkeeping, independent of the audio backend.
+        std::vector<SoundEffectInstance*> instances;
     };
+
+    void SoundEffect::RegisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance)
+    {
+        if (!keepAlive || !instance) return;
+        static_cast<Impl*>(keepAlive.get())->instances.push_back(instance);
+    }
+
+    void SoundEffect::UnregisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance)
+    {
+        if (!keepAlive || !instance) return;
+        auto& v = static_cast<Impl*>(keepAlive.get())->instances;
+        v.erase(std::remove(v.begin(), v.end(), instance), v.end());
+    }
 
     // --- static members ---
 
@@ -322,6 +343,17 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!isDisposed_)
         {
+            if (impl_)
+            {
+                // instance->Dispose() unregisters itself from impl_->instances, mutating the
+                // live vector -- iterate a snapshot so that's safe (matches FNA's
+                // Instances.ToArray() before the foreach in SoundEffect.Dispose()).
+                auto instancesSnapshot = impl_->instances;
+                for (auto* instance : instancesSnapshot)
+                {
+                    if (instance) instance->Dispose();
+                }
+            }
             impl_.reset();
             isDisposed_ = true;
         }
