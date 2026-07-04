@@ -95,6 +95,24 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClo
     EXPECT_EQ(rs.getFillModeProperty(), RasterizerState::CullCounterClockwise.getFillModeProperty());
 }
 
+// Task 322: extends the values check above to RasterizerState's full 6-property surface (not
+// just CullMode/FillMode), matching the full-surface rigor DepthStencilState's Task 312 test
+// already applies. CullCounterClockwise only ever diverges from a plain default-constructed
+// RasterizerState in CullMode/Name (Task 321 confirmed this via FNA audit), so this is expected
+// to pass trivially - but pins the full surface against regression rather than leaving it assumed.
+TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClockwiseAllValues)
+{
+    GraphicsDevice gd;
+    const RasterizerState& rs = gd.getRasterizerStateProperty();
+    const RasterizerState& preset = RasterizerState::CullCounterClockwise;
+    EXPECT_EQ(rs.getCullModeProperty(), preset.getCullModeProperty());
+    EXPECT_EQ(rs.getDepthBiasProperty(), preset.getDepthBiasProperty());
+    EXPECT_EQ(rs.getFillModeProperty(), preset.getFillModeProperty());
+    EXPECT_EQ(rs.getMultiSampleAntiAliasProperty(), preset.getMultiSampleAntiAliasProperty());
+    EXPECT_EQ(rs.getScissorTestEnableProperty(), preset.getScissorTestEnableProperty());
+    EXPECT_EQ(rs.getSlopeScaleDepthBiasProperty(), preset.getSlopeScaleDepthBiasProperty());
+}
+
 // Task 321: now that RasterizerState::CullCounterClockwise has a Name (Task 321 fixed the last
 // remaining portion of Task 866), this closes the loose end left by Task 312 (which deliberately
 // skipped this check since the Name gap wasn't fixed yet).

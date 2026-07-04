@@ -13,12 +13,12 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–37 are now complete. **Phase 38 (RasterizerState
-  conformance, `GRAPHICS_TASKS.md` Tasks 321+) is in progress** — Task 321 done, Task 322 is next
-  (see §8). Task 321 audited `RasterizerState` against FNA (all correct; fixed the last remaining
-  portion of the known Task 866 preset-`Name` gap) — **this fully closes Task 866**: all 4 state
-  classes (`SamplerState`/`BlendState`/`DepthStencilState`/`RasterizerState`) now correctly set
-  `Name` on every preset. Also closed a loose end from Task 312 by adding a `GraphicsDevice`
-  default-`RasterizerState`-`Name` test. See §3/§5.
+  conformance, `GRAPHICS_TASKS.md` Tasks 321+) is in progress** — Tasks 321–322 done, Task 323 is
+  next (see §8). Task 321 audited `RasterizerState` against FNA (all correct; fixed the last
+  remaining portion of the known Task 866 preset-`Name` gap) — **this fully closes Task 866**: all
+  4 state classes (`SamplerState`/`BlendState`/`DepthStencilState`/`RasterizerState`) now correctly
+  set `Name` on every preset. Task 322 extended `GraphicsDevice`'s default-`RasterizerState`
+  verification to its full 6-property surface (no bug — trivially passed, as expected). See §3/§5.
   **Phase 37 (DepthStencilState conformance, Tasks 311–320) is fully closed** — all 10 tasks done,
   full writeup in `docs/depthstencilstate-support.md`. Headline result: Task 313 found a MASSIVE
   bug — Vulkan's `DepthStencilState` support is almost entirely fake (`DepthBufferFunction` ignored,
@@ -61,31 +61,34 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2296/2299 (serial `-j1`) pass. 3 pre-existing or
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2297/2300 (serial `-j1`) pass. 3 pre-existing or
   expected failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`
   (pre-existing, unrelated), and `EasyGL_GraphicsDevice_ReferenceStencil` (Task 319, expected —
   confirms Task 872, a universal gap present on EasyGL too). New `RasterizerStateTest.*Name*`
-  (Task 321) and `GraphicsDeviceDefaultStateTest.DefaultRasterizerStateMatchesCullCounterClockwiseName`
-  (Task 321, closing a loose end from Task 312) all pass. Some tests have each been observed
-  failing once under parallel `-j` execution but passed cleanly both in isolation and on a repeat
-  serial full run — treated as parallel-execution flakiness, not a regression (none confirmed as a
-  stable failure): `EasyGL_SkinnedBones`, `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 2225/2237 (serial `-j1`) pass. Only
-  `Vulkan_DepthBias` (pre-existing, usual single sub-case), 5 confirmed-real, documented known
-  failures — `Vulkan_BlendState_AlphaBlend`/`Additive`/`SeparateFunctions`/`SeparateFactors`/
-  `BlendFactor` (Task 868) — 5 more —
+  (Task 321), `GraphicsDeviceDefaultStateTest.DefaultRasterizerStateMatchesCullCounterClockwiseName`
+  (Task 321, closing a loose end from Task 312), and
+  `GraphicsDeviceDefaultStateTest.DefaultRasterizerStateMatchesCullCounterClockwiseAllValues`
+  (Task 322, full 6-property surface) all pass. Some tests have each been observed failing once
+  under parallel `-j` execution but passed cleanly both in isolation and on a repeat serial full
+  run — treated as parallel-execution flakiness, not a regression (none confirmed as a stable
+  failure): `EasyGL_SkinnedBones`, `EasyGL_TransformMatrix_Translation`.
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 2225/2238 (serial `-j1`) pass. `Vulkan_DepthBias`
+  (pre-existing, usual single sub-case), `Vulkan_FillMode_WireFrame` (pre-existing, order-dependent
+  flakiness — recurred this run), 5 confirmed-real, documented known failures —
+  `Vulkan_BlendState_AlphaBlend`/`Additive`/`SeparateFunctions`/`SeparateFactors`/`BlendFactor`
+  (Task 868) — 5 more —
   `Vulkan_DepthStencilState_CompareFunction`/`StencilEnable`/`StencilMask`/`StencilOps`/`StencilTwoSided`
-  (Task 870) — and `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872) failed this run.
-  `Vulkan_FillMode_WireFrame` did not recur this run. **Caution for future sessions:** running the
-  EasyGL and Vulkan full `ctest` suites concurrently produced transient false failures in an
-  earlier session (see the git history in §3) — prefer running the two backends' full suites
-  sequentially, not concurrently. `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails consistently
-  (pre-existing, documented). `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` remain the
-  same pre-existing, order/timing-sensitive issues tracked since Task 279 — flaky (not stable
-  failures), unrelated to any change made this session (Task 321 only touches `RasterizerState`/
+  (Task 870) — and `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872) failed this run (13 total,
+  all pre-existing/documented). **Caution for future sessions:** running the EasyGL and Vulkan full
+  `ctest` suites concurrently produced transient false failures in an earlier session (see the git
+  history in §3) — prefer running the two backends' full suites sequentially, not concurrently.
+  `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails consistently (pre-existing, documented).
+  `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` remain the same pre-existing,
+  order/timing-sensitive issues tracked since Task 279 — flaky (not stable failures), unrelated to
+  any change made this session (Tasks 321–322 only touch `RasterizerState`/
   `GraphicsDeviceDefaultStateTests.cpp`, nothing in the render-target or rasterization pipeline).
 - **Bgfx (`cmake-build-bgfx`), full `ctest`:** **1985/1985 (100%)** as of Task 309's fix. Not
-  rebuilt/rerun for Tasks 311–319 (all EasyGL/Vulkan-only changes — `DepthStencilState`'s value
+  rebuilt/rerun for Tasks 311–322 (all EasyGL/Vulkan-only changes — `DepthStencilState`'s value
   layout, `GraphicsDevice`'s constructor member-init list and `ReferenceStencil` propagation fix,
   seven new EasyGL/Vulkan-registered pixel tests, and the EasyGL-specific `SDL_GL_STENCIL_SIZE`
   fix — none touch Bgfx). Bgfx's own
@@ -200,7 +203,8 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| `(uncommitted)` Task 321 | `RasterizerState.hpp/.cpp`, `RasterizerStateTests.cpp`, `GraphicsDeviceDefaultStateTests.cpp`, `GRAPHICS_TASKS.md` (Task 866 closed) | **Opens Phase 38.** Audited `RasterizerState` against FNA's `RasterizerState.cs` line-by-line — full 6-property surface, all 3 presets, and default-constructor values all already matched FNA exactly. Fixed the known Task 866 gap (its last remaining portion): presets didn't set `Name` (e.g. `"RasterizerState.CullCounterClockwise"`). Fixed by threading a `name` param through the private preset constructor, mirroring Tasks 291/301/311 exactly. **This finally closes Task 866 entirely** — all 4 state classes (`SamplerState`/`BlendState`/`DepthStencilState`/`RasterizerState`) now correctly set `Name` on every preset. Also closed a loose end from Task 312 (which deliberately skipped this check since the gap wasn't fixed yet): new `GraphicsDeviceDefaultStateTest.DefaultRasterizerStateMatchesCullCounterClockwiseName` confirms `GraphicsDevice`'s default `RasterizerState` now matches `CullCounterClockwise`'s `Name` too, not just its values. 5 new `RasterizerStateTests.cpp` tests. EasyGL 2296/2299, Vulkan 2225/2237 — both only pre-existing/documented failures (Tasks 868/870/872, `Vulkan_DepthBias`'s usual sub-case), zero regressions. |
+| `(uncommitted)` Task 322 | `GraphicsDeviceDefaultStateTests.cpp` (extended) | Task 312 already added a values test (`CullMode`/`FillMode`) and Task 321 already added a `Name` test for `GraphicsDevice`'s default `RasterizerState` — rather than declare Task 322 pre-satisfied (the Task 295 precedent), extended coverage to the full 6-property surface: new `DefaultRasterizerStateMatchesCullCounterClockwiseAllValues` test checks all 6 `RasterizerState` properties against `CullCounterClockwise`, matching the full-surface rigor `DepthStencilState`'s Task 312 test already applies. No bug found — passed trivially, as expected. EasyGL 2297/2300, Vulkan 2225/2238, both only pre-existing/documented failures. |
+| `c18b0f3` Task 321 | `RasterizerState.hpp/.cpp`, `RasterizerStateTests.cpp`, `GraphicsDeviceDefaultStateTests.cpp`, `GRAPHICS_TASKS.md` (Task 866 closed) | **Opens Phase 38.** Audited `RasterizerState` against FNA's `RasterizerState.cs` line-by-line — full 6-property surface, all 3 presets, and default-constructor values all already matched FNA exactly. Fixed the known Task 866 gap (its last remaining portion): presets didn't set `Name` (e.g. `"RasterizerState.CullCounterClockwise"`). Fixed by threading a `name` param through the private preset constructor, mirroring Tasks 291/301/311 exactly. **This finally closes Task 866 entirely** — all 4 state classes (`SamplerState`/`BlendState`/`DepthStencilState`/`RasterizerState`) now correctly set `Name` on every preset. Also closed a loose end from Task 312 (which deliberately skipped this check since the gap wasn't fixed yet): new `GraphicsDeviceDefaultStateTest.DefaultRasterizerStateMatchesCullCounterClockwiseName` confirms `GraphicsDevice`'s default `RasterizerState` now matches `CullCounterClockwise`'s `Name` too, not just its values. 5 new `RasterizerStateTests.cpp` tests. EasyGL 2296/2299, Vulkan 2225/2237 — both only pre-existing/documented failures (Tasks 868/870/872, `Vulkan_DepthBias`'s usual sub-case), zero regressions. |
 | `ba6011e` Task 320 | `docs/depthstencilstate-support.md` (new) | **Closes Phase 37.** Synthesizes Tasks 311–319's findings into one reference doc, mirroring Task 300's `docs/sampler-state-support.md` precedent: API conformance, per-backend support matrix, the central Task 870 finding (confirmed 5 times), Task 315's EasyGL stencil-buffer fix, the test-design lesson learned mid-phase (contrast checks are essential when the underlying test itself might be bypassed), and links to Tasks 866/869/870/871/872. Doc-only, no new tests. |
 | `6652573` Tasks 318-319 | `examples/easygl_depthstencilstate_stencil_twosided_test.cpp` (new), `examples/easygl_graphicsdevice_reference_stencil_test.cpp` (new), `GraphicsDevice.cpp` (fix), `GraphicsDeviceDefaultStateTests.cpp` (extended), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (Task 870 updated, new Task 872) | Task 318: 2-column genuinely differential pixel test for `TwoSidedStencilMode`/back-face (CCW) stencil ops, built as a proper differential test from the start (applying Task 317's lesson immediately): both columns draw the SAME deliberately back-facing triangle (`CullMode=None` + reversed winding), differing only in `TwoSidedStencilMode`. **EasyGL: both pass exactly as predicted.** **Vulkan: the "should pass" column passes by coincidence, the contrast column fails — a fifth, clean reconfirmation of Task 870.** Task 319: found and fixed a small Task-309-shaped bug (`setDepthStencilStateProperty` never propagated an assigned state's own `ReferenceStencil` into `GraphicsDevice`'s own field) — fixed, new unit test confirms it. **Found a SECOND, universal, NOT-fixed bug while verifying independent-override behavior with a real pixel test**: `GraphicsDevice::setReferenceStencilProperty` has zero backend connection on all 3 backends (`IGraphicsBackend` has no `SetReferenceStencil` method at all) — confirmed failing identically on **both** EasyGL and Vulkan, unlike Task 870 which is Vulkan-specific. Tracked as new Task 872. |
 | `95abf99` Task 317 | `examples/easygl_depthstencilstate_stencil_ops_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (Task 870 updated) | 4-column pixel test: 3 isolate one front-face `StencilOperation` slot each (`StencilFail`/`StencilDepthBufferFail`/`StencilPass`), verified via stamp→operation→read-back; a 4th contrast column (deliberately-wrong read-back reference) is critical for validity — without it, all 3 op-slot checks expect the same PASS outcome a fully-bypassed stencil test would *also* produce (discovered mid-development when an earlier 3-column version coincidentally passed on Vulkan too). **EasyGL: all 4 pass exactly as predicted.** **Vulkan: 3 of 4 pass by coincidence, the contrast column correctly fails — a fourth, clean reconfirmation of Task 870.** Kept `Vulkan_DepthStencilState_StencilOps` registered as a documented known failure. |
@@ -401,21 +405,20 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 322 — verify default rasterizer state on `GraphicsDevice`**
-   - Goal: per `GRAPHICS_TASKS.md`'s Phase 38 list ("Unit test"). Task 312 already added
-     `DefaultRasterizerStateMatchesCullCounterClockwiseValues` (checks `CullMode`/`FillMode`) and
-     Task 321 already added `DefaultRasterizerStateMatchesCullCounterClockwiseName` — so the two
-     properties that actually distinguish `CullCounterClockwise` from a plain default-constructed
-     `RasterizerState` are already covered. Worth doing properly rather than declaring it
-     pre-satisfied (like Task 295 was): extend the existing values test (or add a new one) to check
-     all 6 `RasterizerState` properties (`CullMode`/`FillMode`/`DepthBias`/`MultiSampleAntiAlias`/
-     `ScissorTestEnable`/`SlopeScaleDepthBias`) against `RasterizerState::CullCounterClockwise`,
-     matching the full-surface rigor `DepthStencilState`'s Task 312 test already applies (3 of its
-     16 properties) — cheap, and closes any doubt.
-   - Files: `GraphicsDeviceDefaultStateTests.cpp`.
-   - Verification: build + run the extended/new test on EasyGL (Vulkan not required for a
-     value-only default-state check, but rerun the full suite on both before committing per this
-     session's standing discipline).
+1. **`GRAPHICS_TASKS.md` Task 323 — pixel test: culling disabled**
+   - Goal: per `GRAPHICS_TASKS.md`'s Phase 38 list ("Draw both winding orders"). Build a pixel
+     test using `RasterizerState.CullNone` that draws two triangles with opposite winding order
+     (one CW, one CCW) in the same frame and confirms both are rasterized (neither disappears),
+     unlike `CullClockwise`/`CullCounterClockwise` which would cull one of them. Mirrors the
+     structure of existing `RasterizerState` pixel tests (e.g. `vulkan_scissor_test.cpp`,
+     Task 329) and the `BasicEffect`+`VertexPositionColor`+`GetBackBufferData` pattern used
+     throughout Phases 35–37.
+   - Files: new `examples/easygl_rasterizerstate_cullnone_test.cpp` (or similar), `CMakeLists.txt`
+     (register EasyGL + Vulkan variants).
+   - Verification: run on both EasyGL and Vulkan; per this session's established methodology,
+     include a genuine contrast check (e.g. also test `CullClockwise`/`CullCounterClockwise` in the
+     same file to prove the harness itself can detect a culled triangle) rather than only checking
+     the "nothing culled" case, which a broken/bypassed cull implementation would also pass.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -489,16 +492,16 @@ Update NEXT.md after finishing.
 Current status: Phases 1-37 are fully complete. Phase 37 (DepthStencilState conformance,
 GRAPHICS_TASKS.md Tasks 311-320) is fully closed - full writeup in
 docs/depthstencilstate-support.md. Phase 38 (RasterizerState conformance, Tasks 321+) is in
-progress - Task 321 done, Task 322 is next. EasyGL: 2296/2299 (2 pre-existing failures + 1
+progress - Tasks 321-322 done, Task 323 is next. EasyGL: 2297/2300 (2 pre-existing failures + 1
 already-known EasyGL_GraphicsDevice_ReferenceStencil failure - confirms Task 872, a universal gap).
-Vulkan: 2225/2237 - only Vulkan_DepthBias (pre-existing, usual single sub-case) and 11
-confirmed-real, documented known failures (Vulkan_BlendState_AlphaBlend/Additive/SeparateFunctions/
-SeparateFactors/BlendFactor - Task 868 - plus Vulkan_DepthStencilState_CompareFunction/
-StencilEnable/StencilMask/StencilOps/StencilTwoSided - Task 870 - plus
-Vulkan_GraphicsDevice_ReferenceStencil - Task 872). Bgfx: 1985/1985 (100%) as of Task 309's fix,
-not rebuilt for Tasks 311-321 (none touch Bgfx). Caution: don't run EasyGL's and Vulkan's full
-ctest suites concurrently - an earlier session saw transient false failures from GPU/driver
-contention that vanished on a sequential rerun (see NEXT.md §2).
+Vulkan: 2225/2238 - Vulkan_DepthBias (pre-existing, usual single sub-case), Vulkan_FillMode_WireFrame
+(pre-existing, order-dependent flakiness) and 11 confirmed-real, documented known failures
+(Vulkan_BlendState_AlphaBlend/Additive/SeparateFunctions/SeparateFactors/BlendFactor - Task 868 -
+plus Vulkan_DepthStencilState_CompareFunction/StencilEnable/StencilMask/StencilOps/StencilTwoSided
+- Task 870 - plus Vulkan_GraphicsDevice_ReferenceStencil - Task 872). Bgfx: 1985/1985 (100%) as of
+Task 309's fix, not rebuilt for Tasks 311-322 (none touch Bgfx). Caution: don't run EasyGL's and
+Vulkan's full ctest suites concurrently - an earlier session saw transient false failures from
+GPU/driver contention that vanished on a sequential rerun (see NEXT.md §2).
 
 Phase 35's headline result (full writeup: docs/sampler-state-support.md): Task 293 found and fixed
 a severe, project-wide bug across all 3 backends - GraphicsDevice.SamplerStates was being silently
@@ -556,16 +559,22 @@ FINALLY CLOSES TASK 866 ENTIRELY - all 4 state classes (SamplerState/BlendState/
 RasterizerState) now correctly set Name on every preset. Also closed a loose end from Task 312 by
 adding a GraphicsDevice default-RasterizerState-Name test.
 
-Next task: GRAPHICS_TASKS.md Task 322 - verify default rasterizer state on GraphicsDevice (unit
-test). Task 312 already added a values test (CullMode/FillMode) and Task 321 already added a Name
-test - the two properties that actually distinguish CullCounterClockwise from a plain
-default-constructed RasterizerState are already covered. Do it properly rather than declaring it
-pre-satisfied: extend the existing test (or add a new one) to check all 6 RasterizerState
-properties against RasterizerState::CullCounterClockwise, matching the full-surface rigor
-DepthStencilState's Task 312 test already applies. Cheap, closes any doubt. Files:
-GraphicsDeviceDefaultStateTests.cpp. Then continue to Task 323 (pixel test: culling disabled) and
-onward through Phase 38's remaining tasks (324 cull clockwise, 325 cull counter-clockwise, 326
-FillMode::Solid - 327/328/329 already done per GRAPHICS_TASKS.md, 330 state immutability/freeze
-still open).
+Task 322 verified default rasterizer state on GraphicsDevice: Task 312 already added a values test
+(CullMode/FillMode) and Task 321 already added a Name test - the two properties that actually
+distinguish CullCounterClockwise from a plain default-constructed RasterizerState were already
+covered. Extended coverage to the full 6-property surface anyway (matching DepthStencilState's
+Task 312 test rigor) rather than declaring it pre-satisfied - passed trivially, no bug found.
+
+Next task: GRAPHICS_TASKS.md Task 323 - pixel test: culling disabled (per Phase 38's list, "Draw
+both winding orders"). Build a pixel test using RasterizerState.CullNone drawing two triangles
+with opposite winding order in the same frame, confirming both rasterize (neither culled), unlike
+CullClockwise/CullCounterClockwise which would cull one. Include a genuine contrast check (also
+exercise CullClockwise/CullCounterClockwise in the same test file) so the harness can actually
+detect a culled triangle - per this session's established methodology (Tasks 317/318's lesson: a
+test where every check expects the same outcome can't distinguish "it works" from "culling is
+bypassed entirely"). Files: new examples/easygl_rasterizerstate_cullnone_test.cpp (or similar),
+CMakeLists.txt. Then continue through Phase 38's remaining tasks (324 cull clockwise, 325 cull
+counter-clockwise, 326 FillMode::Solid - 327/328/329 already done per GRAPHICS_TASKS.md, 330 state
+immutability/freeze still open).
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
