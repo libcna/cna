@@ -9,5 +9,8 @@ cmake-build-easygl/*
 .sdl-prebuilt-emscripten/
 cmake-build-bgfx/*
 vendor/wgpu-native/
+cmake-build-input-easygl/*
+cmake-build-input-vulkan/*
+cmake-build-input-bgfx/*
 
 

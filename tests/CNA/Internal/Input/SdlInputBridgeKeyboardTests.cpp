@@ -1,0 +1,179 @@
+// SPDX-License-Identifier: MS-PL
+//
+// Tasks 820-821: table-driven tests for the SDL->XNA keyboard conversion.
+//
+// try_convert_sdl_key / try_convert_sdl_scancode are file-local to SdlInputBridge.cpp, so they are
+// exercised through synthetic SDL_EVENT_KEY_DOWN events driven into SdlInputBridge::ProcessEvent
+// (the real path), reading the result back via Keyboard::GetState(). Scancode mode is normally
+// gated by the process-cached FNA_KEYBOARD_USE_SCANCODES env var; SdlInputBridge exposes
+// SetScancodeModeForTests/ClearScancodeModeForTests so both modes can be exercised in one binary.
+
+#include <gtest/gtest.h>
+
+#include <SDL3/SDL.h>
+
+#include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
+#include "Microsoft/Xna/Framework/Input/Keys.hpp"
+
+using CNA::Internal::Input::InputManager;
+using CNA::Internal::Input::SdlInputBridge;
+using Microsoft::Xna::Framework::Input::Keyboard;
+using Microsoft::Xna::Framework::Input::Keys;
+
+namespace
+{
+    class SdlInputBridgeKeyboardTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override { Reset(); }
+        void TearDown() override { Reset(); }
+
+        static void Reset()
+        {
+            SdlInputBridge::ClearScancodeModeForTests();
+            InputManager::ResetForTests();
+        }
+    };
+
+    SDL_Event keyDownWithKeycode(const SDL_Keycode key)
+    {
+        SDL_Event e{};
+        e.type = SDL_EVENT_KEY_DOWN;
+        e.key.key = key;
+        e.key.scancode = SDL_SCANCODE_UNKNOWN;
+        e.key.repeat = false;
+        return e;
+    }
+
+    SDL_Event keyDownWithScancode(const SDL_Scancode scancode)
+    {
+        SDL_Event e{};
+        e.type = SDL_EVENT_KEY_DOWN;
+        e.key.scancode = scancode;
+        e.key.key = SDLK_UNKNOWN;
+        e.key.repeat = false;
+        return e;
+    }
+}
+
+// --- Task 820: keycode map (default mode) via synthetic KEY_DOWN events ---
+
+TEST_F(SdlInputBridgeKeyboardTest, KeycodeMapCoversLettersDigitsNumpadOemModifiersFunctionAndMediaKeys)
+{
+    struct Case { SDL_Keycode key; Keys expected; const char* name; };
+    const Case cases[] = {
+        // Letters
+        {SDLK_A, Keys::A, "A"},
+        {SDLK_D, Keys::D, "D"},
+        {SDLK_F, Keys::F, "F"},
+        // Digits
+        {SDLK_0, Keys::D0, "D0"},
+        {SDLK_1, Keys::D1, "D1"},
+        // Numpad
+        {SDLK_KP_1, Keys::NumPad1, "NumPad1"},
+        // OEM
+        {SDLK_SEMICOLON, Keys::OemSemicolon, "OemSemicolon"},
+        {SDLK_COMMA, Keys::OemComma, "OemComma"},
+        {SDLK_PERIOD, Keys::OemPeriod, "OemPeriod"},
+        // Modifiers
+        {SDLK_LCTRL, Keys::LeftControl, "LeftControl"},
+        {SDLK_LSHIFT, Keys::LeftShift, "LeftShift"},
+        {SDLK_LALT, Keys::LeftAlt, "LeftAlt"},
+        // Function keys (incl. the extended F13-F24 range from task 763)
+        {SDLK_F1, Keys::F1, "F1"},
+        {SDLK_F13, Keys::F13, "F13"},
+        {SDLK_F24, Keys::F24, "F24"},
+        // Navigation / whitespace
+        {SDLK_UP, Keys::Up, "Up"},
+        {SDLK_SPACE, Keys::Space, "Space"},
+        {SDLK_RETURN, Keys::Enter, "Enter"},
+        {SDLK_ESCAPE, Keys::Escape, "Escape"},
+        // Media / system keys
+        {SDLK_VOLUMEUP, Keys::VolumeUp, "VolumeUp"},
+        {SDLK_APPLICATION, Keys::Apps, "Apps"},
+        {SDLK_SLEEP, Keys::Sleep, "Sleep"},
+    };
+
+    for (const Case& c : cases)
+    {
+        InputManager::ResetForTests();
+        SdlInputBridge::ProcessEvent(keyDownWithKeycode(c.key));
+        EXPECT_TRUE(Keyboard::GetState().IsKeyDown(c.expected)) << c.name;
+    }
+}
+
+TEST_F(SdlInputBridgeKeyboardTest, UnmappedKeycodeIsDroppedNotMarkedNone)
+{
+    // '\xE9' (é) and SDLK_UNKNOWN have no XNA mapping; the bridge drops the event rather than
+    // marking Keys::None pressed (matching FNA's ToXNAKey miss-handling).
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_UNKNOWN));
+    EXPECT_FALSE(Keyboard::GetState().IsKeyDown(Keys::None));
+    EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 0u);
+}
+
+// --- Task 820: scancode map (scancode mode) via synthetic KEY_DOWN events ---
+
+TEST_F(SdlInputBridgeKeyboardTest, ScancodeMapUsedWhenScancodeModeForced)
+{
+    SdlInputBridge::SetScancodeModeForTests(true);
+
+    struct Case { SDL_Scancode scancode; Keys expected; const char* name; };
+    const Case cases[] = {
+        {SDL_SCANCODE_A, Keys::A, "A"},
+        {SDL_SCANCODE_1, Keys::D1, "D1"},
+        {SDL_SCANCODE_KP_1, Keys::NumPad1, "NumPad1"},
+        {SDL_SCANCODE_KP_PLUS, Keys::Add, "Add"},
+        {SDL_SCANCODE_LSHIFT, Keys::LeftShift, "LeftShift"},
+        {SDL_SCANCODE_F1, Keys::F1, "F1"},
+        {SDL_SCANCODE_F13, Keys::F13, "F13"},
+    };
+
+    for (const Case& c : cases)
+    {
+        InputManager::ResetForTests();
+        SdlInputBridge::ProcessEvent(keyDownWithScancode(c.scancode));
+        EXPECT_TRUE(Keyboard::GetState().IsKeyDown(c.expected)) << c.name;
+    }
+}
+
+TEST_F(SdlInputBridgeKeyboardTest, ScancodeModeIgnoresTheLayoutDependentKeycode)
+{
+    // In scancode mode the physical position (scancode) wins; a bogus/mismatched keycode on the
+    // same event must not influence the result.
+    SdlInputBridge::SetScancodeModeForTests(true);
+
+    SDL_Event e = keyDownWithScancode(SDL_SCANCODE_A);
+    e.key.key = SDLK_Z; // deliberately inconsistent — should be ignored in scancode mode
+    SdlInputBridge::ProcessEvent(e);
+
+    EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::A));
+    EXPECT_FALSE(Keyboard::GetState().IsKeyDown(Keys::Z));
+}
+
+// --- Task 821: Keyboard::GetKeyFromScancodeEXT in both modes ---
+
+TEST_F(SdlInputBridgeKeyboardTest, GetKeyFromScancodeEXTIsIdentityInScancodeMode)
+{
+    // FNA's GetKeyFromScancode short-circuits to the input in scancode mode (SDL3_FNAPlatform.cs:
+    // 2768-2773) — layout-independent, so this is robust everywhere.
+    SdlInputBridge::SetScancodeModeForTests(true);
+
+    EXPECT_EQ(Keyboard::GetKeyFromScancodeEXT(Keys::A), Keys::A);
+    EXPECT_EQ(Keyboard::GetKeyFromScancodeEXT(Keys::F13), Keys::F13);
+    EXPECT_EQ(Keyboard::GetKeyFromScancodeEXT(Keys::OemComma), Keys::OemComma);
+    EXPECT_EQ(Keyboard::GetKeyFromScancodeEXT(Keys::None), Keys::None);
+}
+
+TEST_F(SdlInputBridgeKeyboardTest, GetKeyFromScancodeEXTTranslatesInNormalMode)
+{
+    SdlInputBridge::SetScancodeModeForTests(false);
+
+    // F13 is layout-invariant (its scancode's keycode is the same on any layout), so its
+    // xnaMap -> SDL_GetKeyFromScancode -> keyMap round-trip is stable across CI environments.
+    EXPECT_EQ(Keyboard::GetKeyFromScancodeEXT(Keys::F13), Keys::F13);
+
+    // A Keys value with no SDL scancode (see task 819's unmappable list) resolves to None.
+    EXPECT_EQ(Keyboard::GetKeyFromScancodeEXT(Keys::Kana), Keys::None);
+}

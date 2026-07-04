@@ -1,6 +1,8 @@
 # XNA 4.0 API Coverage Audit
 
-**Date:** 2026-06-26 (updated 2026-06-26 — Tasks 197–199)  
+**Date:** 2026-06-26 (updated 2026-06-26 — Tasks 197–199; updated 2026-07-03 — Input/Touch
+sections, `feature/input` Phases I1–I6; updated 2026-07-04 — final Input status, `feature/input`
+Phase I9, `plan_input.md` tasks 700–840, coverage split by category)  
 **Reference:** FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src`  
 **CNA headers:** `include/Microsoft/Xna/Framework/`
 
@@ -42,7 +44,7 @@ This document compares the CNA public C++ API surface against:
 | `Microsoft::Xna::Framework::Graphics` | ✅ | ✅ | Implemented / Stub |
 | `Microsoft::Xna::Framework::Graphics::PackedVector` | ✅ | ✅ | Implemented |
 | `Microsoft::Xna::Framework::Input` | ✅ | ✅ | Implemented |
-| `Microsoft::Xna::Framework::Input::Touch` | ✅ | ✅ | Stub |
+| `Microsoft::Xna::Framework::Input::Touch` | ✅ | ✅ | Implemented (see §4) |
 | `Microsoft::Xna::Framework::Media` | ✅ | ✅ | Implemented / Stub |
 | `Microsoft::Xna::Framework::Media::Video` | ✅ | ✅ | Implemented |
 | `Microsoft::Xna::Framework::Storage` | ✅ | ✅ | Implemented |
@@ -142,9 +144,12 @@ All 17 XNA 4.0 PackedVector types are fully implemented:
 
 ### `Microsoft::Xna::Framework::Input::Touch`
 
-- `TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState`, `GestureSample`, `GestureType`: headers exist.
-- No SDL3 touch backend is wired up yet.
-- **Status:** Stub
+- `TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState`, `GestureSample`, `GestureType`: headers exist, full API surface.
+- SDL3 touch backend is wired up (`feature/input` branch, `plan_input.md` Phase I2, tasks 710–722): `SDL_EVENT_FINGER_*` feeds `TouchPanel::INTERNAL_onTouchEvent`, `TouchDeviceExists`, and `DisplayWidth`/`DisplayHeight` (from the real back-buffer size). Gestures (Tap, DoubleTap, Hold, Horizontal/Vertical/Free drag, Flick, Pinch, PinchComplete) are recognized end-to-end by `GestureDetector` and covered by a dedicated test suite (task 720).
+- Gesture recognition is a byte-faithful port of FNA's `GestureDetector.cs` (audited, task 829) with deterministic clock-injected tests (task 830); multi-touch edge cases + coordinate scaling covered (tasks 825–828).
+- Known deviation: `TouchPanel::GetState()` falls back to an event-driven `InputManager` snapshot rather than FNA's per-frame poll population of `touches_` (documented in-source, task 714) — CNA's input bridge is event-driven, not poll-driven, throughout. The event-driven `InputManager` touch map is also not capped at `MAX_TOUCHES` (8) the way FNA is (documented, task 826).
+- `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and `MAX_TOUCHES` when connected, matching FNA (fixed in task 790; the earlier unconditional-`MAX_TOUCHES` bug is resolved).
+- **Status:** Implemented
 
 ### `Microsoft::Xna::Framework::Media`
 
@@ -312,12 +317,14 @@ Coverage is estimated as the fraction of public XNA 4.0 API surface that is usab
 | `MediaPlayer / VideoPlayer` | ~85 % | FFmpeg video; SDL_mixer audio; Album/Artist/Genre stub |
 | `ContentManager` | ~65 % | File-extension readers; no XNB; no ServiceProvider property |
 | `StorageDevice / StorageContainer` | ~90 % | Native filesystem; full XNA API shape |
-| `GamePad / Keyboard / Mouse` | ~90 % | SDL3 backend; tested |
-| `Input::Touch` | ~10 % | API declared; no SDL3 touch backend wired |
+| `GamePad / Keyboard / Mouse` (XNA 4.0 core) | ~100 % behavior | SDL3 backend; FNA-faithful `GetHashCode`/`ToString`/ordering, keycode/scancode maps, dead-zone math, button/axis mapping — all wired and tested (`feature/input` Phases I3–I5, I9–I10). `Mouse::SetPosition` now converts logical→window for scaled/letterboxed windows (a-0001, task 846) — no remaining input-layer gap; residual items are platform/hardware-gated only. |
+| `TextInputEXT` / `Mouse`+`GamePad` EXT / `Keyboard` scancode EXT | ~95 % behavior | FNA extensions, all implemented and FNA-faithful (`feature/input` Phases I1, I3–I5, I9): `TextInputEXT` is `char16_t`/UTF-16 with Unicode/IME tests; relative mouse, `ClickedEXT`, rumble, `GetGUIDEXT` (format fixed, task 816), gyro/accel. Untested slice is hardware/IME-gated. |
+| `MouseCursor` (MonoGame-inspired, `NOXNA`) | ~100 % of exposed surface | 12 stock cursors, `FromTexture2D`, `IDisposable` singleton-safe dispose; no XNA/FNA equivalent. |
+| `Input::Touch` | ~98 % behavior | Gesture pipeline (Tap…PinchComplete) byte-faithful FNA port, wired end-to-end and tested with a deterministic clock (`feature/input` Phase I2, I9). Documented deviations only: event-driven vs. poll-based `GetState()`, and the uncapped-`>MAX_TOUCHES` map. `GetCapabilities()` disconnected-count bug is **fixed** (task 790). |
 | `GamerServices` | ~5 % | `Guide` stub only |
 | `Audio (XACT)` — AudioEngine/SoundBank | ~0 % | Headers exist; XACT not implemented |
 | `Framework.Net` (NetworkSession, etc.) | 0 % | Xbox Live exclusive; intentionally excluded |
-| **Overall (EasyGL backend, 2D+3D game)** | **~80 %** | Main gaps: Touch, GamerServices, XACT, XNB content pipeline |
+| **Overall (EasyGL backend, 2D+3D game)** | **~80 %** | Main gaps: GamerServices, XACT, XNB content pipeline. (Touch was a main gap as of this table's original estimate; closed by `feature/input` Phase I2 — see the `Input::Touch` row above.) |
 
 ---
 
@@ -325,7 +332,15 @@ Coverage is estimated as the fraction of public XNA 4.0 API surface that is usab
 
 1. **Math / common framework types** — ✅ Done: Color, Vector2/3/4, Matrix, Quaternion, BoundingBox/Sphere/Frustum, Ray, Plane, Curve, MathHelper, Point, Rectangle, GameTime.
 
-2. **Input** — ✅ Done: GamePad, Keyboard, Mouse, Touch (stubs).
+2. **Input** — ✅ Done: GamePad, Keyboard, Mouse, Touch, TextInputEXT, MouseCursor. All have real,
+   FNA-faithful runtime behavior wired to SDL3 (`feature/input` branch Phases I1–I9,
+   `plan_input.md` tasks 700–840), not stubs. Coverage is assessed **by category, not blended**
+   (per the input review): **XNA 4.0 core** ~99% behavior / ~99% tested (complete & faithful);
+   **FNA `*EXT`** ~95% (all implemented; untested slice hardware/IME-gated); **MonoGame
+   `MouseCursor`** (`NOXNA`) complete for the exposed surface; **platform-dependent** items
+   (Wayland global-mouse, live sensors/rumble, gamepad hotplug slot-assignment, `SetPosition`
+   letterbox) documented, not headless-verifiable. See `plan_input.md`'s "final split" table,
+   `AUDIT.md`, `docs/platform-input-notes.md`, and `docs/demo-input-checklist.md` for detail.
 
 3. **Audio** — ✅ Partial: SoundEffect/Instance done. XACT (AudioEngine/SoundBank/WaveBank/Cue) remains stub.
 
@@ -361,7 +376,6 @@ Coverage is estimated as the fraction of public XNA 4.0 API surface that is usab
 - `ContentReader` XNB-based class (deferred; CNA uses non-XNB approach)
 - `ContentSerializerAttribute` family (intentionally excluded)
 - XACT audio system (AudioEngine, SoundBank, WaveBank, Cue) — headers exist, behavior is stub
-- SDL3 touch backend for `TouchPanel`
 - Vulkan pixel tests for BasicEffect, AlphaTestEffect, SkinnedEffect
 - Bgfx 3D state (depth test / blend enable) blocks all Bgfx 3D pixel tests
 
@@ -379,9 +393,8 @@ See build run in task notes. Build must remain clean after each stub addition.
 
 ### Recommended next steps
 
-1. Wire up SDL3 touch backend for `TouchPanel` (currently 0 % functional).
-2. Implement XACT audio (AudioEngine, SoundBank, WaveBank) via SDL_mixer or OpenAL.
-3. Add Vulkan pixel tests for `BasicEffect`, `AlphaTestEffect`, `SkinnedEffect` (see §7 known gaps).
-4. Unblock Bgfx 3D state (`SetDepthTestEnabled`, `SetBlendEnabled`) to enable 3D pixel tests on Bgfx.
-5. Add compile-compatibility stubs for `Gamer` / `SignedInGamer` / `GamerCollection` if target games need them.
+1. Implement XACT audio (AudioEngine, SoundBank, WaveBank) via SDL_mixer or OpenAL.
+2. Add Vulkan pixel tests for `BasicEffect`, `AlphaTestEffect`, `SkinnedEffect` (see §7 known gaps).
+3. Unblock Bgfx 3D state (`SetDepthTestEnabled`, `SetBlendEnabled`) to enable 3D pixel tests on Bgfx.
+4. Add compile-compatibility stubs for `Gamer` / `SignedInGamer` / `GamerCollection` if target games need them.
 6. Audit `GraphicsDevice` public methods against FNA for any missing overloads or validation differences.

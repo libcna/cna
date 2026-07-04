@@ -1359,40 +1359,52 @@ All 19 types audited. Missing Vector-form constructors added.
 
 ## `Microsoft::Xna::Framework::Input`
 
-| Class / Enum | Status | Notes |
-|---|---|---|
-| Buttons (enum) | ✅ | Complete |
-| ButtonState (enum) | ✅ | Complete |
-| GamePad | ✅ | API complete |
-| GamePadButtons | ✅ | API complete |
-| GamePadCapabilities | ✅ | API complete |
-| GamePadDeadZone (enum) | ✅ | Complete |
-| GamePadDPad | ✅ | API complete |
-| GamePadState | ✅ | API complete |
-| GamePadThumbSticks | ✅ | API complete |
-| GamePadTriggers | ✅ | API complete |
-| GamePadType (enum) | ✅ | Complete |
-| Keyboard | ✅ | API complete |
-| KeyboardState | ✅ | API complete |
-| Keys (enum) | ✅ | Complete |
-| KeyState (enum) | ✅ | Complete |
-| Mouse | ✅ | API complete |
-| MouseState | ✅ | API complete |
-| TextInputEXT | ✅ | API complete |
+`Status` below is API-surface completeness (every method/property/constant declared and
+callable). `Runtime` is separate: whether calling those members produces real, FNA-faithful
+behavior wired to SDL3, versus a stub/no-op. Both were closed to "real" for nearly everything
+in this namespace by the `feature/input` branch (`plan_input.md`, Phases I1–I6, tasks 700–776);
+see that file for full per-task detail and any accepted deviations from FNA.
+
+| Class / Enum | Status | Runtime | Notes |
+|---|---|---|---|
+| Buttons (enum) | ✅ | N/A | Complete; pure value enum |
+| ButtonState (enum) | ✅ | N/A | Complete; pure value enum |
+| GamePad | ✅ | Real | `GetState`/`GetCapabilities`/`SetVibration` and all EXT methods (light bar, trigger vibration, gyro, accelerometer) wired to real SDL3 gamepad hardware (Phase I3, tasks 725–740). `PacketNumber` bumps on real connection/button/axis changes (task 729, tracked at the `InputManager` layer rather than by comparing built `GamePadState`s — see in-source note). |
+| GamePadButtons | ✅ | Real | Derived from real button state; `GetHashCode` and `FromButtonArray` (renamed from `FromButtons` in task 731) are both FNA-faithful. |
+| GamePadCapabilities | ✅ | Real | Populated from real SDL3 `SDL_Gamepad` capability queries (task 730 rework: properties + `NOXNA`-tagged internal setters). |
+| GamePadDeadZone (enum) | ✅ | N/A | Complete; pure value enum |
+| GamePadDPad | ✅ | Real | Derived from real button state; `GetHashCode` is FNA-faithful; `FromButtonArray` (renamed from `FromButtons`, and reconciled to FNA's `params Buttons[]` signature, task 731) is FNA-faithful. |
+| GamePadState | ✅ | Real | `ToString()` matches FNA's `ValueType` default (task 733). `GetHashCode()` (`buttons_.GetHashCode() ^ (packetNumber_ * 31)`) is an accepted deviation, not a literal port: FNA's own `GetHashCode()` is `return base.GetHashCode()`, .NET's non-deterministic reflection-based default, which has no reproducible C++ equivalent. |
+| GamePadThumbSticks | ✅ | Real | `Circular`/`IndependentAxes`/`None` dead-zone math all implemented and tested (task 738); `GetHashCode` FNA-faithful (task 732). |
+| GamePadTriggers | ✅ | Real | Dead-zone exclusion + clamp implemented and tested (task 739); `GetHashCode` FNA-faithful (task 732). |
+| GamePadType (enum) | ✅ | N/A | Complete; pure value enum |
+| Keyboard | ✅ | Real | `GetState` wired to real SDL3 key events via `InputManager`; `GetKeyFromScancodeEXT` is a real layout-aware xnaMap/keyMap round-trip with both default and scancode (`FNA_KEYBOARD_USE_SCANCODES`) modes (Phase I5, tasks 760–768). |
+| KeyboardState | ✅ | Real | `GetPressedKeys()` ascending order, `GetHashCode()` FNA's 8-word XOR formula, and `ToString()` matching FNA's `ValueType` default are all FNA-faithful (tasks 760, 761, 766). |
+| Keys (enum) | ✅ | N/A | Complete; pure value enum; underlying type explicit `int` (task 767, cosmetic) |
+| KeyState (enum) | ✅ | N/A | Complete; pure value enum |
+| Mouse | ✅ | Real | `SetPosition`, `IsRelativeMouseModeEXT`, `ClickedEXT` all wired to real SDL3 mouse state (Phase I4, tasks 745–749). Known deviation: `SetPosition`'s `SDL_WarpMouseInWindow` target has no inverse logical→window coordinate transform, so it is off by the scale factor on a letterboxed/scaled window (documented in-source in `Mouse.cpp`; needs a graphics-layer addition, out of scope for this branch). |
+| MouseCursor | ✅ | Real | MonoGame-derived `NOXNA` extension — no `MouseCursor` type exists in FNA or XNA 4.0. **Status decision (Task 754): kept**, not dropped — it is the standard way MonoGame/FNA-family games set custom and stock OS cursors, and CNA's `Mouse::SetCursor(MouseCursor&)` already depends on it. CHECKLIST-compliant as of Phase I4 tasks 750-753 (correct SPDX, full `NOXNA` tagging, `FromTexture2D`, `Dispose`/`IDisposable`, lazy stock-cursor construction, `WaitCursor`→`WaitArrow` rename). No separate `Handle` property was added: the existing `NOXNA GetSDLCursor() const` (returning `SDL_Cursor*`) already serves as MonoGame's `IntPtr Handle` equivalent — a second handle accessor returning the same pointer reinterpreted as a generic integer would be pure duplication with no current consumer. |
+| MouseState | ✅ | Real | Populated from real SDL3 mouse position/button/scroll-wheel state. |
+| TextInputEXT | ✅ | Real | Wired to `SDL_EVENT_TEXT_INPUT`/`SDL_EVENT_TEXT_EDITING`, `SDL_StartTextInput`/`StopTextInput`, `SDL_SetTextInputArea` (Phase I1, tasks 700–708). `TextInput` callback is `charcs`/`char16_t` — one UTF-16 code unit per call (astral code points as surrogate pairs), matching FNA's `Action<char>` (task 806). `TextEditing` stays a UTF-8 `std::string` (a separate documented deviation). |
 
 ---
 
 ## `Microsoft::Xna::Framework::Input::Touch`
 
-| Class / Enum | Status | Notes |
-|---|---|---|
-| GestureSample | ✅ | API complete |
-| GestureType (enum) | ✅ | Complete |
-| TouchCollection | ✅ | API complete |
-| TouchLocation | ✅ | API complete |
-| TouchLocationState (enum) | ✅ | Complete |
-| TouchPanel | ✅ | API complete (stub behavior) |
-| TouchPanelCapabilities | ✅ | API complete |
+See the `Status`/`Runtime` note above the `Input` table — the same distinction applies here.
+Touch's runtime behavior went from effectively dead (Phase I2's root cause: SDL finger events
+never reached `GestureDetector`) to real and gesture-tested (`plan_input.md` Phase I2, tasks
+710–722).
+
+| Class / Enum | Status | Runtime | Notes |
+|---|---|---|---|
+| GestureSample | ✅ | Real | Constructed by `GestureDetector` from real touch input; both constructors (public 6-arg, internal 8-arg with finger ids) tested. |
+| GestureType (enum) | ✅ | N/A | Complete; pure value enum |
+| TouchCollection | ✅ | Real | Reflects real touch state via `InputManager`; settable indexer + `begin`/`end` iteration tested (task 718, 722). |
+| TouchLocation | ✅ | Real | `ToString`/`GetHashCode` FNA-faithful (task 715); `SetFinger`'s Moved/Released branches carry real previous-state/position so `TryGetPreviousLocation` succeeds (task 713). |
+| TouchLocationState (enum) | ✅ | N/A | Complete; pure value enum |
+| TouchPanel | ✅ | Real | `SDL_EVENT_FINGER_*` now feed `INTERNAL_onTouchEvent`, `TouchDeviceExists`, and `DisplayWidth`/`DisplayHeight` (from the real back buffer size), which is what makes `GestureDetector`'s Tap/DoubleTap/Hold/Drag/Flick/Pinch/PinchComplete recognition work end-to-end (tasks 710–712). Known deviation: `GetState()` falls back to `InputManager`'s event-driven touch snapshot rather than FNA's per-frame poll population of `touches_` (documented in-source, task 714). Known minor bug (not yet fixed): `GetCapabilities()` passes `MAX_TOUCHES` unconditionally in both branches instead of `0` when disconnected like FNA (noted, not fixed, in task 721). |
+| TouchPanelCapabilities | ✅ | Real | Reflects `TouchDeviceExists`/`MAX_TOUCHES` (see the `TouchPanel` gap above for the one known deviation from this). |
 
 ---
 

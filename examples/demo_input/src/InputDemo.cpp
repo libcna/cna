@@ -1,6 +1,8 @@
 #include "InputDemo.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "Microsoft/Xna/Framework/Input/GamePadButtons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDPad.hpp"
@@ -31,6 +33,7 @@ static const Color DPAD_OFF   {50,  50,  50,  255};
 static const Color DPAD_ON    {210, 210, 210, 255};
 static const Color TRIG_BG    {40,  40,  40,  255};
 static const Color TRIG_FILL  {200, 80,  0,   255};
+static const Color RUMBLE_FILL{255, 60,  180, 255};
 static const Color STICK_BG   {30,  30,  30,  255};
 static const Color STICK_DOT  {200, 200, 200, 255};
 static const Color CONN_YES   {0,   200, 80,  255};
@@ -55,6 +58,11 @@ InputDemo::InputDemo()
 
 InputDemo::~InputDemo()
 {
+    // Detach the text-input callbacks before destruction so no event can call into a
+    // destroyed InputDemo, and stop text input mode.
+    TextInputEXT::TextInput = nullptr;
+    TextInputEXT::TextEditing = nullptr;
+    TextInputEXT::StopTextInput();
     delete spriteBatch_;
 }
 
@@ -70,20 +78,121 @@ void InputDemo::LoadContent()
     pixel_ = Graphics::Texture2D(getGraphicsDeviceProperty(), 1, 1);
     Color white{255, 255, 255, 255};
     pixel_.SetData(&white, 1);
+
+    // Text input: collect committed characters and IME composition draft. The window
+    // handle is published by GraphicsDevice during initialization, so StartTextInput
+    // here targets the real window.
+    TextInputEXT::TextInput = [this](charcs c)
+    {
+        lastTextChar_ = static_cast<int>(c);
+        switch (c)
+        {
+        case 8:  // Backspace control char (synthesized from the Back key)
+            if (!textBuffer_.empty()) textBuffer_.pop_back();
+            pendingHighSurrogate_ = 0;
+            break;
+        case 13: // Enter control char clears the line
+            textBuffer_.clear();
+            pendingHighSurrogate_ = 0;
+            break;
+        default:
+            AppendTextCodeUnit(c);
+            break;
+        }
+    };
+    TextInputEXT::TextEditing = [this](const std::string& text, int, int)
+    {
+        editBuffer_ = text;
+    };
+
+    TextInputEXT::StartTextInput();
+    textInputActive_ = true;
 }
 
 // ---------------------------------------------------------------------------
 // Update
 // ---------------------------------------------------------------------------
 
+void InputDemo::AppendTextCodeUnit(const charcs c)
+{
+    // Combine UTF-16 surrogate pairs into a single code point, then append as UTF-8.
+    std::uint32_t cp;
+    if (c >= 0xD800 && c <= 0xDBFF)
+    {
+        pendingHighSurrogate_ = c; // high surrogate — wait for its low surrogate
+        return;
+    }
+    if (c >= 0xDC00 && c <= 0xDFFF)
+    {
+        if (pendingHighSurrogate_ == 0) return; // unpaired low surrogate — drop defensively
+        cp = 0x10000u
+           + ((static_cast<std::uint32_t>(pendingHighSurrogate_) - 0xD800u) << 10)
+           + (static_cast<std::uint32_t>(c) - 0xDC00u);
+        pendingHighSurrogate_ = 0;
+    }
+    else
+    {
+        pendingHighSurrogate_ = 0;
+        cp = c;
+    }
+
+    if (textBuffer_.size() > 64) return; // keep the demo line bounded
+
+    if (cp < 0x80)
+    {
+        textBuffer_ += static_cast<char>(cp);
+    }
+    else if (cp < 0x800)
+    {
+        textBuffer_ += static_cast<char>(0xC0 | (cp >> 6));
+        textBuffer_ += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+    else if (cp < 0x10000)
+    {
+        textBuffer_ += static_cast<char>(0xE0 | (cp >> 12));
+        textBuffer_ += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        textBuffer_ += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+    else
+    {
+        textBuffer_ += static_cast<char>(0xF0 | (cp >> 18));
+        textBuffer_ += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        textBuffer_ += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        textBuffer_ += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
+
 void InputDemo::Update(GameTime& gameTime)
 {
     (void)gameTime;
-    if (Keyboard::GetState().IsKeyDown(Keys::Escape))
+    ++frame_;
+
+    const KbState kb = Keyboard::GetState();
+    if (kb.IsKeyDown(Keys::Escape))
     {
         Exit();
     }
+
+    // F1 toggles text input on/off, exercising StartTextInput / StopTextInput end-to-end.
+    const bool toggle = kb.IsKeyDown(Keys::F1);
+    if (toggle && !prevToggleKey_)
+    {
+        textInputActive_ = !textInputActive_;
+        if (textInputActive_) TextInputEXT::StartTextInput();
+        else                  TextInputEXT::StopTextInput();
+    }
+    prevToggleKey_ = toggle;
+
     TouchPanel::Update();
+
+    // Drive rumble motors from trigger pressure for every player slot (One..Four), exercising
+    // GamePad::SetVibration end-to-end. Harmless no-op (returns false) for disconnected slots.
+    for (int p = 0; p < 4; ++p)
+    {
+        const auto playerIndex = static_cast<PlayerIndex>(p);
+        const auto& trig = GamePad::GetState(playerIndex).getTriggersProperty();
+        GamePad::SetVibration(playerIndex, trig.getLeftProperty(), trig.getRightProperty());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -96,22 +205,31 @@ void InputDemo::Draw(const GameTime& gameTime)
 
     getGraphicsDeviceProperty().Clear(BG);
 
-    const KbState kb = Keyboard::GetState();
-    const MsState ms = Mouse::GetState();
-    const GpState gp = GamePad::GetState(PlayerIndex::One);
-    const TC      tc = TouchPanel::GetState();
+    const KbState kb      = Keyboard::GetState();
+    const MsState ms      = Mouse::GetState();
+    const GpState gpOne   = GamePad::GetState(PlayerIndex::One);
+    const GpState gpTwo   = GamePad::GetState(PlayerIndex::Two);
+    const GpState gpThree = GamePad::GetState(PlayerIndex::Three);
+    const GpState gpFour  = GamePad::GetState(PlayerIndex::Four);
+    const TC      tc      = TouchPanel::GetState();
 
     spriteBatch_->Begin();
 
     // Section backgrounds
     DrawRect(10,  10,  440, 380, SECT_BG);  // keyboard section
     DrawRect(10,  400, 440, 190, SECT_BG);  // mouse section
-    DrawRect(460, 10,  330, 580, SECT_BG);  // gamepad section
+    DrawRect(460, 10,  330, 580, SECT_BG);  // gamepad section (Player One, detailed)
+    DrawRect(800, 10,  204, 580, SECT_BG);  // gamepad section (Players Two-Four, compact)
+    DrawRect(10,  600, 1004, 158, SECT_BG); // text input section
 
     DrawKeyboard(20, 20, kb);
     DrawMouse(20, 410, ms);
-    DrawGamePad(470, 20, gp);
+    DrawGamePad(470, 20, gpOne);
+    DrawGamePadMini(810, 20,  gpTwo);
+    DrawGamePadMini(810, 210, gpThree);
+    DrawGamePadMini(810, 400, gpFour);
     DrawTouchPoints(tc);
+    DrawTextPanel(10, 600, 1004, 158);
 
     spriteBatch_->End();
 }
@@ -310,6 +428,66 @@ void InputDemo::DrawGamePad(int ox, int oy, const GpState& gp)
 }
 
 // ---------------------------------------------------------------------------
+// GamePad section (compact — Players Two/Three/Four)
+// ---------------------------------------------------------------------------
+
+void InputDemo::DrawGamePadMini(int ox, int oy, const GpState& gp)
+{
+    const bool connected = gp.getIsConnectedProperty();
+    DrawRect(ox, oy, 184, 14, connected ? CONN_YES : CONN_NO);
+
+    if (!connected) return;
+
+    const auto& btns  = gp.getButtonsProperty();
+    const auto& dpad  = gp.getDPadProperty();
+    const auto& stick = gp.getThumbSticksProperty();
+    const auto& trig  = gp.getTriggersProperty();
+
+    auto btn = [&](int x, int y, bool pressed, Color c)
+    {
+        DrawRect(ox + x, oy + y, 14, 14, pressed ? c : GP_OFF);
+    };
+    auto dpadBtn = [&](int x, int y, bool pressed)
+    {
+        DrawRect(ox + x, oy + y, 12, 12, pressed ? DPAD_ON : DPAD_OFF);
+    };
+
+    // --- DPad (left)
+    const int dpx = 4, dpy = 20;
+    dpadBtn(dpx + 14, dpy,       dpad.getUpProperty()    == BS::Pressed);
+    dpadBtn(dpx,      dpy + 14,  dpad.getLeftProperty()  == BS::Pressed);
+    dpadBtn(dpx + 14, dpy + 14,  dpad.getDownProperty()  == BS::Pressed);
+    dpadBtn(dpx + 28, dpy + 14,  dpad.getRightProperty() == BS::Pressed);
+
+    // --- ABXY (diamond, right of DPad)
+    const int abx = 70, aby = 20;
+    btn(abx + 14, aby,      btns.getYProperty() == BS::Pressed, Color{220, 220, 0,   255});
+    btn(abx,      aby + 14, btns.getXProperty() == BS::Pressed, Color{80,  80,  220, 255});
+    btn(abx + 28, aby + 14, btns.getBProperty() == BS::Pressed, Color{220, 60,  60,  255});
+    btn(abx + 14, aby + 28, btns.getAProperty() == BS::Pressed, Color{60,  200, 60,  255});
+
+    // --- Shoulders
+    const bool lb = btns.getLeftShoulderProperty()  == BS::Pressed;
+    const bool rb = btns.getRightShoulderProperty() == BS::Pressed;
+    DrawRect(ox,      oy + 58, 88, 12, lb ? GP_ON : GP_OFF);
+    DrawRect(ox + 96, oy + 58, 88, 12, rb ? GP_ON : GP_OFF);
+
+    // --- Triggers as bars
+    DrawBar(ox,      oy + 74, 88, 10, trig.getLeftProperty(),  TRIG_BG, TRIG_FILL);
+    DrawBar(ox + 96, oy + 74, 88, 10, trig.getRightProperty(), TRIG_BG, TRIG_FILL);
+
+    // --- Rumble motor level currently sent to this pad (Update() mirrors it 1:1 from the
+    // trigger bars above via GamePad::SetVibration); shown separately so the feedback loop
+    // driving real hardware rumble is visible, not just the trigger input.
+    DrawBar(ox,      oy + 88, 88, 8, trig.getLeftProperty(),  TRIG_BG, RUMBLE_FILL);
+    DrawBar(ox + 96, oy + 88, 88, 8, trig.getRightProperty(), TRIG_BG, RUMBLE_FILL);
+
+    // --- Thumbstick visualizers
+    DrawStick(ox + 40,  oy + 132, 28, stick.getLeftProperty().X,  stick.getLeftProperty().Y);
+    DrawStick(ox + 144, oy + 132, 28, stick.getRightProperty().X, stick.getRightProperty().Y);
+}
+
+// ---------------------------------------------------------------------------
 // Touch points overlay
 // ---------------------------------------------------------------------------
 
@@ -328,6 +506,63 @@ void InputDemo::DrawTouchPoints(const TC& touches)
         DrawRect(tx - 18, ty - 18, 36, 36, Color{255, 200, 0, 80});
         // Inner dot
         DrawRect(tx - 8,  ty - 8,  16, 16, TOUCH_CLR);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Text input section (TextInputEXT)
+// ---------------------------------------------------------------------------
+
+void InputDemo::DrawTextPanel(int ox, int oy, int w, int h)
+{
+    (void)h;
+    const Color HEADER_ON  {0,   200, 80,  255};
+    const Color HEADER_OFF {160, 30,  30,  255};
+    const Color CELL_PRINT {70,  220, 70,  255};
+    const Color CELL_CTRL  {220, 140, 0,   255};
+    const Color EDIT_CELL  {220, 220, 60,  255};
+    const Color CARET      {255, 255, 255, 255};
+
+    // Active indicator — reflects SDL's real text-input state (falls back to the toggle
+    // flag when no window is available).
+    const bool active = TextInputEXT::IsTextInputActive() || textInputActive_;
+    DrawRect(ox + 12, oy + 12, 26, 26, active ? HEADER_ON : HEADER_OFF);
+
+    // Most recent TextInput byte as 8 bit-LEDs (MSB..LSB) so the actual value is verifiable
+    // (e.g. 'A' = 0100_0001, Backspace = 0000_1000, paste = 0001_0110).
+    const int bx = ox + w - 8 * 22 - 14;
+    for (int b = 0; b < 8; ++b)
+    {
+        const bool on = lastTextChar_ >= 0 && ((lastTextChar_ >> (7 - b)) & 1);
+        DrawRect(bx + b * 22, oy + 12, 18, 18, on ? CELL_PRINT : KEY_OFF);
+    }
+
+    // Committed text buffer: one cell per character (green = printable, orange = control/UTF-8).
+    constexpr int CW = 12, CH = 26, GAP = 2;
+    const int cellsX   = ox + 12;
+    const int cellsY   = oy + 56;
+    const int maxCells = (w - 24) / (CW + GAP);
+    const int total    = static_cast<int>(textBuffer_.size());
+    const int shown    = std::min(total, maxCells);
+    const int start    = total - shown;
+    for (int i = 0; i < shown; ++i)
+    {
+        const unsigned char ch = static_cast<unsigned char>(textBuffer_[start + i]);
+        const bool printable = ch >= 32 && ch < 127;
+        DrawRect(cellsX + i * (CW + GAP), cellsY, CW, CH, printable ? CELL_PRINT : CELL_CTRL);
+    }
+    // Blinking caret while text input is active.
+    if (active && (frame_ / 30) % 2 == 0)
+    {
+        DrawRect(cellsX + shown * (CW + GAP), cellsY, 3, CH, CARET);
+    }
+
+    // IME composition draft (TextEditing) rendered below as yellow cells.
+    const int editY     = oy + 100;
+    const int editShown = std::min(static_cast<int>(editBuffer_.size()), maxCells);
+    for (int i = 0; i < editShown; ++i)
+    {
+        DrawRect(cellsX + i * (CW + GAP), editY, CW, CH, EDIT_CELL);
     }
 }
 

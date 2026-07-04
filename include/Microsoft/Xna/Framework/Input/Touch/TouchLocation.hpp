@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
@@ -31,8 +32,13 @@ namespace Microsoft::Xna::Framework::Input::Touch
          */
         [[nodiscard]] const Microsoft::Xna::Framework::Vector2& getPositionProperty() const;
 
-        /** @brief Constructs an invalid touch location. */
-        TouchLocation();
+        /**
+         * @brief Constructs an invalid touch location.
+         * @note NOXNA — FNA's `TouchLocation` has no explicit parameterless constructor
+         *       (only the two below); this exists because C++ has no implicit
+         *       struct-default equivalent to write behavior into.
+         */
+        NOXNA TouchLocation();
 
         /**
          * @brief Constructs with id, state, and position. Previous state is Invalid.

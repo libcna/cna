@@ -125,3 +125,36 @@ TEST(GamePadInputTest, AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedSt
 
     ResetGamePadState();
 }
+
+TEST(GamePadInputTest, PacketNumberBumpsOnConnectButtonAndAxisChangesOnly)
+{
+    ResetGamePadState();
+
+    const auto disconnected = GamePad::GetState(PlayerIndex::One);
+    EXPECT_EQ(disconnected.getPacketNumberProperty(), 0);
+
+    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    const auto afterConnect = GamePad::GetState(PlayerIndex::One);
+    const int packetAfterConnect = afterConnect.getPacketNumberProperty();
+    EXPECT_GT(packetAfterConnect, 0);
+
+    const auto unchanged = GamePad::GetState(PlayerIndex::One);
+    EXPECT_EQ(unchanged.getPacketNumberProperty(), packetAfterConnect);
+
+    CNA::Internal::Input::InputManager::SetGamePadButtonState(PlayerIndex::One, CNA::Internal::Input::GamePadButton::A,
+                                                              ButtonState::Pressed);
+    const auto afterButton = GamePad::GetState(PlayerIndex::One);
+    const int packetAfterButton = afterButton.getPacketNumberProperty();
+    EXPECT_GT(packetAfterButton, packetAfterConnect);
+
+    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Internal::Input::GamePadAxis::LeftThumbstickX, 0.5f);
+    const auto afterAxis = GamePad::GetState(PlayerIndex::One);
+    EXPECT_GT(afterAxis.getPacketNumberProperty(), packetAfterButton);
+
+    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, false);
+    const auto afterDisconnect = GamePad::GetState(PlayerIndex::One);
+    EXPECT_EQ(afterDisconnect.getPacketNumberProperty(), 0);
+
+    ResetGamePadState();
+}

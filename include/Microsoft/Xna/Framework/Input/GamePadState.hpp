@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadButtons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDPad.hpp"
@@ -30,6 +31,13 @@ namespace Microsoft::Xna::Framework::Input
          * @return The packet number.
          */
         [[nodiscard]] int getPacketNumberProperty() const;
+
+        /**
+         * @brief Sets the packet number. FNA declares `PacketNumber`'s setter `internal`
+         * (platform-layer use only), not part of the public XNA API.
+         * @param value The new packet number.
+         */
+        NOXNA void setPacketNumberProperty(int value);
 
         /**
          * @brief Returns a structure identifying which buttons on the controller are pressed.

@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/GestureDetector.hpp"
 
 #include "Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp"
@@ -20,6 +19,17 @@ namespace
     using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
     using Clock = std::chrono::steady_clock;
     using TimePoint = std::chrono::time_point<Clock>;
+
+    // Injectable clock for deterministic gesture tests (task 830): when g_useTestClock is set,
+    // "now" is driven manually via GestureDetector's AdvanceTestClockMilliseconds instead of the
+    // real steady_clock, so Hold / Flick / DoubleTap timing is exercised without real sleeps.
+    bool      g_useTestClock = false;
+    TimePoint g_testNow{};
+
+    TimePoint Now()
+    {
+        return g_useTestClock ? g_testNow : std::chrono::steady_clock::now();
+    }
 
     constexpr int   MOVE_THRESHOLD    = 35;
     constexpr float MIN_FLICK_VELOCITY = 100.0f;
@@ -56,7 +66,7 @@ namespace
 
     System::TimeSpan GetGestureTimestamp()
     {
-        auto now = Clock::now();
+        auto now = Now();
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             now.time_since_epoch()
         ).count();
@@ -168,7 +178,7 @@ namespace CNA::Internal::Input
         {
             if (IsGestureEnabled(GestureType::DoubleTap))
             {
-                auto elapsed = Clock::now() - eventTimestamp;
+                auto elapsed = Now() - eventTimestamp;
                 if (elapsed <= std::chrono::milliseconds(300))
                 {
                     float dist = (touchPosition - pressPosition).Length();
@@ -189,7 +199,7 @@ namespace CNA::Internal::Input
 
         state          = GestureState::HOLDING;
         pressPosition  = touchPosition;
-        eventTimestamp = Clock::now();
+        eventTimestamp = Now();
     }
 
     void GestureDetector::OnReleased(int fingerId, Vector2 touchPosition)
@@ -216,7 +226,7 @@ namespace CNA::Internal::Input
 
             if (tapEnabled || dtapEnabled)
             {
-                auto held = Clock::now() - eventTimestamp;
+                auto held = Now() - eventTimestamp;
                 if (held < std::chrono::seconds(1))
                 {
                     if (!justDoubleTapped)
@@ -292,7 +302,7 @@ namespace CNA::Internal::Input
         if (state != GestureState::JUST_TAPPED)
             state = GestureState::NONE;
 
-        eventTimestamp = Clock::now();
+        eventTimestamp = Now();
     }
 
     void GestureDetector::OnMoved(int fingerId, Vector2 touchPosition, Vector2 delta)
@@ -393,19 +403,19 @@ namespace CNA::Internal::Input
         {
             if (updateTimestamp != TimePoint{})
             {
-                float dt = std::chrono::duration<float>(Clock::now() - updateTimestamp).count();
+                float dt = std::chrono::duration<float>(Now() - updateTimestamp).count();
                 Vector2 d = activeFingerPosition - lastUpdatePosition;
                 Vector2 instVelocity = d * (1.0f / (0.001f + dt));
                 velocity = velocity + (instVelocity - velocity) * 0.45f;
             }
             lastUpdatePosition = activeFingerPosition;
-            updateTimestamp    = Clock::now();
+            updateTimestamp    = Now();
         }
 
         // Hold detection
         if (IsGestureEnabled(GestureType::Hold) && state == GestureState::HOLDING)
         {
-            auto held = Clock::now() - eventTimestamp;
+            auto held = Now() - eventTimestamp;
             if (held >= std::chrono::seconds(1))
             {
                 TouchPanel::EnqueueGesture(GestureSample(
@@ -418,5 +428,41 @@ namespace CNA::Internal::Input
                 state = GestureState::HELD;
             }
         }
+    }
+
+    void GestureDetector::ResetForTests()
+    {
+        activeFingerId           = TouchPanel::NO_FINGER;
+        activeFingerPosition     = Vector2::Zero;
+        callBelatedPinchComplete = false;
+        eventTimestamp           = TimePoint{};
+        fingerIds.clear();
+        justDoubleTapped         = false;
+        lastUpdatePosition       = Vector2::Zero;
+        pressPosition            = Vector2::Zero;
+        secondFingerId           = TouchPanel::NO_FINGER;
+        secondFingerPosition     = Vector2::Zero;
+        state                    = GestureState::NONE;
+        updateTimestamp          = TimePoint{};
+        velocity                 = Vector2::Zero;
+    }
+
+    void GestureDetector::EnableTestClock()
+    {
+        g_useTestClock = true;
+        // Start at a non-zero base: TimePoint{} (the epoch) doubles as the "no prior update yet"
+        // sentinel for the flick-velocity calc (FNA's DateTime.MinValue), so a legitimate event at
+        // t=0 must not collide with it. One hour of headroom keeps every real timestamp distinct.
+        g_testNow      = TimePoint{} + std::chrono::hours(1);
+    }
+
+    void GestureDetector::DisableTestClock()
+    {
+        g_useTestClock = false;
+    }
+
+    void GestureDetector::AdvanceTestClockMilliseconds(const long milliseconds)
+    {
+        g_testNow += std::chrono::milliseconds(milliseconds);
     }
 }

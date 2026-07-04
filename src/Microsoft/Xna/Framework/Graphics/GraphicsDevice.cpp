@@ -12,6 +12,9 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #ifdef CNA_BACKEND_BGFX
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
@@ -153,6 +156,10 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             throw makeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO)");
         }
+
+        // The Touch Panel needs this for normalized-to-pixel touch coordinate scaling.
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayHeightProperty(virtualHeight_);
 
         createOrAttachWindow();
         applyPresentationParametersToWindow();
@@ -301,6 +308,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         virtualWidth_ = presentationParameters_.getBackBufferWidthProperty();
         virtualHeight_ = presentationParameters_.getBackBufferHeightProperty();
+
+        // The Touch Panel needs this too, for the same reason as the constructor.
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayHeightProperty(virtualHeight_);
 
         applyPresentationParametersToWindow();
 
@@ -1248,6 +1259,17 @@ namespace Microsoft::Xna::Framework::Graphics
         presentationParameters_.
             setDeviceWindowHandleProperty(reinterpret_cast<PresentationParameters::IntPtr>(window_));
 
+        // Publish the window to the text-input subsystem (mirrors FNA, which sets
+        // TextInputEXT.WindowHandle at window creation). Required for StartTextInput etc.
+        Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(
+            reinterpret_cast<std::uintptr_t>(window_));
+
+        // Publish the same window to Mouse (mirrors FNA setting Mouse.WindowHandle at window
+        // creation, SDL3_FNAPlatform.cs). Lets SetPosition / relative-mouse-mode target the
+        // real window instead of relying on the SDL_GetMouseFocus() fallback.
+        Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(
+            reinterpret_cast<std::uintptr_t>(window_));
+
         LogWindowDebugState(window_, "after SDL_CreateWindow");
     }
 
@@ -1288,6 +1310,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (window_ != nullptr && ownsWindow_)
         {
+            // Clear the text-input window handle if it points at this window
+            // (mirrors FNA DisposeWindow, SDL3_FNAPlatform.cs:463-466).
+            if (Microsoft::Xna::Framework::Input::TextInputEXT::getWindowHandleProperty()
+                == reinterpret_cast<std::uintptr_t>(window_))
+            {
+                Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(0);
+            }
+            if (Microsoft::Xna::Framework::Input::Mouse::getWindowHandleProperty()
+                == reinterpret_cast<std::uintptr_t>(window_))
+            {
+                Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(0);
+            }
             SDL_DestroyWindow(window_);
         }
 

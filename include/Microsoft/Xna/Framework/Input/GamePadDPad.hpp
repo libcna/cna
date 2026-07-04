@@ -5,6 +5,8 @@
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 
+#include <initializer_list>
+
 namespace Microsoft::Xna::Framework::Input
 {
     struct GamePadState;
@@ -52,11 +54,11 @@ namespace Microsoft::Xna::Framework::Input
                     ButtonState leftValue, ButtonState rightValue);
 
         /**
-         * @brief Derives DPad state from a combined Buttons flags value.
-         * @param buttons The combined button flags.
+         * @brief Derives a GamePadDPad from a list of Buttons flags values.
+         * @param buttons The list of button flags to combine.
          * @return The resulting GamePadDPad.
          */
-        NOXNA static GamePadDPad FromButtons(Buttons buttons);
+        NOXNA static GamePadDPad FromButtonArray(std::initializer_list<Buttons> buttons);
 
         /**
          * @brief Compares this instance with another for equality.

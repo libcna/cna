@@ -1311,6 +1311,28 @@ void main()
         return true;
     }
 
+    bool EasyGLGraphicsBackend::TransformLogicalToWindow(float logX, float logY,
+                                                         float& windowX, float& windowY) const
+    {
+        // Inverse of TransformWindowToLogical: logical = window * (virtualHeight_ / physH), so
+        // window = logical * (physH / virtualHeight_). This is a pure uniform scale with NO offset,
+        // which is exact for EasyGL's default FixedHeightDynamicWidth presentation: the logical
+        // height is fixed and the logical *width* is derived from the window aspect
+        // (getLogicalSize), so the logical viewport fills the whole window — there are no letterbox
+        // bars and hence no offset to apply (unlike the SDL_Renderer backend's true-letterbox
+        // modes, whose offset is handled by SDL_RenderCoordinates{From,To}Window). EasyGL does not
+        // implement per-mode offset transforms for its non-default modes; that is a pre-existing
+        // graphics-presentation concern, not an input-layer one, and the default mode is exact.
+        if (virtualHeight_ <= 0) return false;
+        int physW, physH;
+        SDL_GetWindowSize(window, &physW, &physH);
+        if (physH <= 0) return false;
+        const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
+        windowX = logX * invScale;
+        windowY = logY * invScale;
+        return true;
+    }
+
     void EasyGLGraphicsBackend::GetViewportSize(int& width, int& height)
     {
         getLogicalSize(width, height);

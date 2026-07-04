@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::Input
     {
     }
 
-    GamePadButtons GamePadButtons::FromButtons(std::initializer_list<Buttons> btns)
+    GamePadButtons GamePadButtons::FromButtonArray(std::initializer_list<Buttons> btns)
     {
         Buttons mask = static_cast<Buttons>(0);
         for (Buttons b : btns)

@@ -6,6 +6,7 @@
 #include <queue>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/GestureType.hpp"
@@ -102,15 +103,19 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Gets whether a touch device is currently known to exist.
+         * @note NOXNA — FNA declares `TouchDeviceExists` `internal`, not part of the
+         *       public XNA `TouchPanel` API. Exposed for the platform input bridge and
+         *       `FrameworkDispatcher`'s `Update()` gate.
          * @return True if a touch device exists; false otherwise.
          */
-        [[nodiscard]] static bool getTouchDeviceExistsProperty();
+        NOXNA [[nodiscard]] static bool getTouchDeviceExistsProperty();
 
         /**
          * @brief Sets whether a touch device is currently known to exist.
+         * @note NOXNA — see getTouchDeviceExistsProperty().
          * @param value True if a touch device exists; false otherwise.
          */
-        static void setTouchDeviceExistsProperty(bool value);
+        NOXNA static void setTouchDeviceExistsProperty(bool value);
 
         /**
          * @brief Returns touch panel capabilities.
@@ -132,12 +137,16 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Queues a gesture sample for later retrieval via ReadGesture.
+         * @note NOXNA — FNA declares `EnqueueGesture` `internal`, not part of the public
+         *       XNA `TouchPanel` API. Exposed for `GestureDetector`.
          * @param gesture The gesture sample to enqueue.
          */
-        static void EnqueueGesture(const GestureSample& gesture);
+        NOXNA static void EnqueueGesture(const GestureSample& gesture);
 
         /**
          * @brief Handles a normalized platform touch event used by gesture processing.
+         * @note NOXNA — FNA declares `INTERNAL_onTouchEvent` `internal`, not part of the
+         *       public XNA `TouchPanel` API. Exposed for the platform input bridge.
          * @param fingerId The finger identifier.
          * @param state The touch location state of this event.
          * @param x The normalized x coordinate.
@@ -145,7 +154,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
          * @param dx The x delta since the last event.
          * @param dy The y delta since the last event.
          */
-        static void INTERNAL_onTouchEvent(
+        NOXNA static void INTERNAL_onTouchEvent(
             intcs fingerId,
             TouchLocationState state,
             float x,
@@ -156,16 +165,28 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Updates one touch slot with a finger id and pixel position.
+         * @note NOXNA — FNA declares `SetFinger` `internal`, not part of the public XNA
+         *       `TouchPanel` API.
          * @param index The slot index to update.
          * @param fingerId The finger identifier.
          * @param fingerPos The current finger position in pixels.
          */
-        static void SetFinger(intcs index, intcs fingerId, const Microsoft::Xna::Framework::Vector2& fingerPos);
+        NOXNA static void SetFinger(intcs index, intcs fingerId, const Microsoft::Xna::Framework::Vector2& fingerPos);
 
         /**
          * @brief Advances touch panel state by one frame.
+         * @note NOXNA — FNA declares `Update` `internal`, not part of the public XNA
+         *       `TouchPanel` API. Exposed for `FrameworkDispatcher::Update()`.
          */
-        static void Update();
+        NOXNA static void Update();
+
+        /**
+         * @brief Test-only: resets all process-wide touch/gesture state — the touch arrays, the
+         *        gesture queue, the touch-device-exists flag, and enabled gestures — to defaults.
+         * @note NOXNA — a CNA test-support helper, not part of the XNA 4.0 API. Display size /
+         *       orientation are left untouched (tests set those explicitly).
+         */
+        NOXNA static void ResetForTests();
 
     private:
         static intcs displayWidth_;

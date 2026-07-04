@@ -2,8 +2,14 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
+#include "System/InvalidOperationException.hpp"
 
+#include <string>
+#include <vector>
+
+using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Vector2;
 using namespace Microsoft::Xna::Framework::Input::Touch;
 
@@ -85,4 +91,356 @@ TEST(TouchInputTest, GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder)
     EXPECT_EQ(state[1].getStateProperty(), TouchLocationState::Moved);
 
     ResetTouchState();
+}
+
+TEST(TouchInputTest, EnqueueGestureAndReadGestureFollowFifoOrder)
+{
+    while (TouchPanel::getIsGestureAvailableProperty())
+    {
+        (void)TouchPanel::ReadGesture();
+    }
+
+    const GestureSample first(GestureType::Tap, System::TimeSpan::FromMilliseconds(1.0),
+                               Vector2(1.0f, 2.0f), Vector2::Zero, Vector2::Zero, Vector2::Zero);
+    const GestureSample second(GestureType::Hold, System::TimeSpan::FromMilliseconds(2.0),
+                                Vector2(3.0f, 4.0f), Vector2::Zero, Vector2::Zero, Vector2::Zero);
+
+    TouchPanel::EnqueueGesture(first);
+    EXPECT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    TouchPanel::EnqueueGesture(second);
+
+    const GestureSample readFirst = TouchPanel::ReadGesture();
+    EXPECT_EQ(readFirst.getGestureTypeProperty(), GestureType::Tap);
+
+    EXPECT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample readSecond = TouchPanel::ReadGesture();
+    EXPECT_EQ(readSecond.getGestureTypeProperty(), GestureType::Hold);
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST(TouchInputTest, ReadGestureThrowsInvalidOperationExceptionWhenQueueIsEmpty)
+{
+    while (TouchPanel::getIsGestureAvailableProperty())
+    {
+        (void)TouchPanel::ReadGesture();
+    }
+
+    EXPECT_THROW((void)TouchPanel::ReadGesture(), System::InvalidOperationException);
+}
+
+TEST(TouchInputTest, GetCapabilitiesReportsConnectedWhenTouchDeviceExistsFlagIsSet)
+{
+    TouchPanel::setTouchDeviceExistsProperty(true);
+
+    const auto caps = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+
+    TouchPanel::setTouchDeviceExistsProperty(false);
+}
+
+TEST(TouchInputTest, GetCapabilitiesFallsBackToInputManagerTouchStateWhenFlagIsUnset)
+{
+    TouchPanel::setTouchDeviceExistsProperty(false);
+    ResetTouchState();
+
+    const auto disconnected = TouchPanel::GetCapabilities();
+    EXPECT_FALSE(disconnected.getIsConnectedProperty());
+    EXPECT_EQ(disconnected.getMaximumTouchCountProperty(), 0); // matches FNA: 0 when disconnected
+
+    CNA::Internal::Input::InputManager::SetTouchState(99, TouchLocationState::Pressed, Vector2(1.0f, 1.0f));
+    const auto connected = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(connected.getIsConnectedProperty());
+    EXPECT_EQ(connected.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+
+    ResetTouchState();
+}
+
+TEST(TouchInputTest, EnabledGesturesGetterAndSetterRoundTrip)
+{
+    const GestureType previous = TouchPanel::getEnabledGesturesProperty();
+
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap | GestureType::Hold);
+    EXPECT_EQ(TouchPanel::getEnabledGesturesProperty(), GestureType::Tap | GestureType::Hold);
+
+    TouchPanel::setEnabledGesturesProperty(GestureType::None);
+    EXPECT_EQ(TouchPanel::getEnabledGesturesProperty(), GestureType::None);
+
+    TouchPanel::setEnabledGesturesProperty(previous);
+}
+
+TEST(TouchInputTest, DisplayWidthHeightAndOrientationGetterAndSetterRoundTrip)
+{
+    const int previousWidth = TouchPanel::getDisplayWidthProperty();
+    const int previousHeight = TouchPanel::getDisplayHeightProperty();
+    const DisplayOrientation previousOrientation = TouchPanel::getDisplayOrientationProperty();
+
+    TouchPanel::setDisplayWidthProperty(1920);
+    TouchPanel::setDisplayHeightProperty(1080);
+    TouchPanel::setDisplayOrientationProperty(DisplayOrientation::LandscapeRight);
+
+    EXPECT_EQ(TouchPanel::getDisplayWidthProperty(), 1920);
+    EXPECT_EQ(TouchPanel::getDisplayHeightProperty(), 1080);
+    EXPECT_EQ(TouchPanel::getDisplayOrientationProperty(), DisplayOrientation::LandscapeRight);
+
+    TouchPanel::setDisplayWidthProperty(previousWidth);
+    TouchPanel::setDisplayHeightProperty(previousHeight);
+    TouchPanel::setDisplayOrientationProperty(previousOrientation);
+}
+
+// --- TouchCollection ---
+
+TEST(TouchCollectionTest, CountAndEmptyReflectContents)
+{
+    const TouchCollection empty;
+    EXPECT_EQ(empty.getCountProperty(), 0);
+    EXPECT_TRUE(empty.empty());
+
+    const std::vector<TouchLocation> locations{
+        TouchLocation(1, TouchLocationState::Pressed, Vector2(10.0f, 20.0f)),
+        TouchLocation(2, TouchLocationState::Moved, Vector2(30.0f, 40.0f))
+    };
+    const TouchCollection collection(locations);
+    EXPECT_EQ(collection.getCountProperty(), 2);
+    EXPECT_FALSE(collection.empty());
+}
+
+TEST(TouchCollectionTest, IsReadOnlyIsAlwaysTrue)
+{
+    const TouchCollection collection;
+    EXPECT_TRUE(collection.getIsReadOnlyProperty());
+}
+
+TEST(TouchCollectionTest, IsConnectedReflectsTouchDeviceExistsFlag)
+{
+    TouchPanel::setTouchDeviceExistsProperty(true);
+    const TouchCollection connected;
+    EXPECT_TRUE(connected.getIsConnectedProperty());
+
+    TouchPanel::setTouchDeviceExistsProperty(false);
+    const TouchCollection disconnected;
+    EXPECT_FALSE(disconnected.getIsConnectedProperty());
+}
+
+TEST(TouchCollectionTest, OperatorIndexConstAndMutableAccessTouchLocations)
+{
+    std::vector<TouchLocation> locations{
+        TouchLocation(5, TouchLocationState::Pressed, Vector2(1.0f, 2.0f))
+    };
+    TouchCollection collection(locations);
+
+    const TouchCollection& constRef = collection;
+    EXPECT_EQ(constRef[0].getIdProperty(), 5);
+
+    collection[0] = TouchLocation(6, TouchLocationState::Moved, Vector2(3.0f, 4.0f));
+    EXPECT_EQ(constRef[0].getIdProperty(), 6);
+    EXPECT_EQ(constRef[0].getStateProperty(), TouchLocationState::Moved);
+}
+
+TEST(TouchCollectionTest, ContainsFindsMatchingLocation)
+{
+    const TouchLocation present(1, TouchLocationState::Pressed, Vector2(1.0f, 1.0f));
+    const TouchLocation absent(2, TouchLocationState::Pressed, Vector2(2.0f, 2.0f));
+    const TouchCollection collection(std::vector<TouchLocation>{present});
+
+    EXPECT_TRUE(collection.Contains(present));
+    EXPECT_FALSE(collection.Contains(absent));
+}
+
+TEST(TouchCollectionTest, FindByIdReturnsMatchAndFalseWhenMissing)
+{
+    const TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(7, TouchLocationState::Pressed, Vector2(9.0f, 9.0f))
+    });
+
+    TouchLocation found;
+    EXPECT_TRUE(collection.FindById(7, found));
+    EXPECT_EQ(found.getIdProperty(), 7);
+
+    TouchLocation notFound;
+    EXPECT_FALSE(collection.FindById(999, notFound));
+}
+
+TEST(TouchCollectionTest, CopyToAppendsAllElementsInOrder)
+{
+    const TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(1, TouchLocationState::Pressed, Vector2::Zero),
+        TouchLocation(2, TouchLocationState::Pressed, Vector2::Zero)
+    });
+
+    std::vector<TouchLocation> destination;
+    collection.CopyTo(destination, 0);
+
+    ASSERT_EQ(destination.size(), 2u);
+    EXPECT_EQ(destination[0].getIdProperty(), 1);
+    EXPECT_EQ(destination[1].getIdProperty(), 2);
+}
+
+TEST(TouchCollectionTest, IndexOfReturnsPositionOrNegativeOne)
+{
+    const TouchLocation first(1, TouchLocationState::Pressed, Vector2::Zero);
+    const TouchLocation second(2, TouchLocationState::Pressed, Vector2::Zero);
+    const TouchLocation missing(3, TouchLocationState::Pressed, Vector2::Zero);
+    const TouchCollection collection(std::vector<TouchLocation>{first, second});
+
+    EXPECT_EQ(collection.IndexOf(first), 0);
+    EXPECT_EQ(collection.IndexOf(second), 1);
+    EXPECT_EQ(collection.IndexOf(missing), -1);
+}
+
+TEST(TouchCollectionTest, AddClearRemoveRemoveAtAndInsertMutateCollection)
+{
+    TouchCollection collection;
+    const TouchLocation a(1, TouchLocationState::Pressed, Vector2::Zero);
+    const TouchLocation b(2, TouchLocationState::Pressed, Vector2::Zero);
+    const TouchLocation c(3, TouchLocationState::Pressed, Vector2::Zero);
+
+    collection.Add(a);
+    collection.Add(b);
+    EXPECT_EQ(collection.getCountProperty(), 2);
+
+    collection.Insert(1, c);
+    ASSERT_EQ(collection.getCountProperty(), 3);
+    EXPECT_EQ(collection[1].getIdProperty(), 3);
+
+    EXPECT_TRUE(collection.Remove(c));
+    EXPECT_FALSE(collection.Remove(c));
+    EXPECT_EQ(collection.getCountProperty(), 2);
+
+    collection.RemoveAt(0);
+    ASSERT_EQ(collection.getCountProperty(), 1);
+    EXPECT_EQ(collection[0].getIdProperty(), 2);
+
+    collection.Clear();
+    EXPECT_EQ(collection.getCountProperty(), 0);
+    EXPECT_TRUE(collection.empty());
+}
+
+// --- TouchLocation ---
+
+TEST(TouchLocationTest, DefaultConstructorProducesInvalidLocation)
+{
+    const TouchLocation location;
+    EXPECT_EQ(location.getIdProperty(), 0);
+    EXPECT_EQ(location.getStateProperty(), TouchLocationState::Invalid);
+    EXPECT_EQ(location.getPositionProperty(), Vector2::Zero);
+}
+
+TEST(TouchLocationTest, ThreeArgConstructorSetsIdStateAndPosition)
+{
+    const TouchLocation location(4, TouchLocationState::Pressed, Vector2(11.0f, 12.0f));
+    EXPECT_EQ(location.getIdProperty(), 4);
+    EXPECT_EQ(location.getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(location.getPositionProperty(), Vector2(11.0f, 12.0f));
+
+    TouchLocation previous;
+    EXPECT_FALSE(location.TryGetPreviousLocation(previous));
+}
+
+TEST(TouchLocationTest, FiveArgConstructorTracksPreviousStateAndPosition)
+{
+    const TouchLocation location(4, TouchLocationState::Moved, Vector2(11.0f, 12.0f),
+                                  TouchLocationState::Pressed, Vector2(1.0f, 2.0f));
+
+    TouchLocation previous;
+    ASSERT_TRUE(location.TryGetPreviousLocation(previous));
+    EXPECT_EQ(previous.getIdProperty(), 4);
+    EXPECT_EQ(previous.getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(previous.getPositionProperty(), Vector2(1.0f, 2.0f));
+}
+
+TEST(TouchLocationTest, EqualityOperatorsForEqualAndDifferingInstances)
+{
+    const TouchLocation a(1, TouchLocationState::Pressed, Vector2(1.0f, 2.0f));
+    const TouchLocation sameAsA(1, TouchLocationState::Pressed, Vector2(1.0f, 2.0f));
+    const TouchLocation differentId(2, TouchLocationState::Pressed, Vector2(1.0f, 2.0f));
+    const TouchLocation differentPosition(1, TouchLocationState::Pressed, Vector2(9.0f, 9.0f));
+    const TouchLocation differentState(1, TouchLocationState::Moved, Vector2(1.0f, 2.0f));
+
+    EXPECT_TRUE(a.Equals(sameAsA));
+    EXPECT_TRUE(a == sameAsA);
+    EXPECT_FALSE(a != sameAsA);
+
+    EXPECT_FALSE(a.Equals(differentId));
+    EXPECT_TRUE(a != differentId);
+    EXPECT_FALSE(a == differentId);
+
+    EXPECT_FALSE(a.Equals(differentPosition));
+    EXPECT_FALSE(a.Equals(differentState));
+}
+
+TEST(TouchLocationTest, GetHashCodeIsConsistentForEqualInstances)
+{
+    const TouchLocation a(1, TouchLocationState::Pressed, Vector2(5.0f, 6.0f));
+    const TouchLocation sameAsA(1, TouchLocationState::Pressed, Vector2(5.0f, 6.0f));
+
+    EXPECT_EQ(a.GetHashCode(), sameAsA.GetHashCode());
+}
+
+TEST(TouchLocationTest, ToStringContainsPositionValues)
+{
+    const TouchLocation location(1, TouchLocationState::Pressed, Vector2(7.0f, 8.0f));
+    const std::string s = location.ToString();
+
+    EXPECT_EQ(s.rfind("{Position:", 0), 0u);
+    EXPECT_NE(s.find('7'), std::string::npos);
+    EXPECT_NE(s.find('8'), std::string::npos);
+}
+
+// --- GestureSample ---
+
+TEST(GestureSampleTest, DefaultConstructorProducesZeroedNoneSample)
+{
+    const GestureSample sample;
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::None);
+    EXPECT_EQ(sample.getTimestampProperty(), System::TimeSpan::Zero);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2::Zero);
+    EXPECT_EQ(sample.getPosition2Property(), Vector2::Zero);
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2::Zero);
+    EXPECT_EQ(sample.getDelta2Property(), Vector2::Zero);
+    EXPECT_EQ(sample.getFingerIdEXTProperty(), TouchPanel::NO_FINGER);
+    EXPECT_EQ(sample.getFingerId2EXTProperty(), TouchPanel::NO_FINGER);
+}
+
+TEST(GestureSampleTest, PublicConstructorSetsFieldsAndDefaultsFingerIdsToNoFinger)
+{
+    const GestureSample sample(GestureType::Tap, System::TimeSpan::FromMilliseconds(5.0),
+                                Vector2(1.0f, 2.0f), Vector2(3.0f, 4.0f),
+                                Vector2(5.0f, 6.0f), Vector2(7.0f, 8.0f));
+
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Tap);
+    EXPECT_EQ(sample.getTimestampProperty(), System::TimeSpan::FromMilliseconds(5.0));
+    EXPECT_EQ(sample.getPositionProperty(), Vector2(1.0f, 2.0f));
+    EXPECT_EQ(sample.getPosition2Property(), Vector2(3.0f, 4.0f));
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2(5.0f, 6.0f));
+    EXPECT_EQ(sample.getDelta2Property(), Vector2(7.0f, 8.0f));
+    EXPECT_EQ(sample.getFingerIdEXTProperty(), TouchPanel::NO_FINGER);
+    EXPECT_EQ(sample.getFingerId2EXTProperty(), TouchPanel::NO_FINGER);
+}
+
+TEST(GestureSampleTest, InternalConstructorSetsExplicitFingerIds)
+{
+    const GestureSample sample(GestureType::Pinch, System::TimeSpan::Zero,
+                                Vector2::Zero, Vector2::Zero, Vector2::Zero, Vector2::Zero,
+                                10, 20);
+
+    EXPECT_EQ(sample.getFingerIdEXTProperty(), 10);
+    EXPECT_EQ(sample.getFingerId2EXTProperty(), 20);
+}
+
+// --- TouchPanelCapabilities ---
+
+TEST(TouchPanelCapabilitiesTest, DefaultConstructorProducesDisconnectedZeroCapacity)
+{
+    const TouchPanelCapabilities caps;
+    EXPECT_FALSE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 0);
+}
+
+TEST(TouchPanelCapabilitiesTest, ParameterizedConstructorSetsConnectionAndMaxTouchCount)
+{
+    const TouchPanelCapabilities caps(true, 4);
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4);
 }

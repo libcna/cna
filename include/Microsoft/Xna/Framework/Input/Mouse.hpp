@@ -18,8 +18,17 @@ namespace Microsoft::Xna::Framework::Input
     public:
         Mouse() = delete;
 
-        /** @brief Gets or sets the native window handle used for mouse state queries. */
-        static std::uintptr_t WindowHandle;
+        /**
+         * @brief Gets the native window handle used for mouse state queries.
+         * @return The window handle, or 0 if none has been published.
+         */
+        [[nodiscard]] static std::uintptr_t getWindowHandleProperty();
+
+        /**
+         * @brief Sets the native window handle used for mouse state queries.
+         * @param value The window handle to associate the mouse with.
+         */
+        static void setWindowHandleProperty(std::uintptr_t value);
 
         /**
          * @brief Gets mouse state information including position and button presses.
@@ -43,24 +52,28 @@ namespace Microsoft::Xna::Framework::Input
         /** @brief FNA extension: fires when a mouse button is clicked. */
         NOXNA static std::function<void(int)> ClickedEXT;
 
-        /** @brief When true, mouse motion is reported as relative delta rather than absolute position. */
-        NOXNA static bool IsRelativeMouseModeEXT;
+        /**
+         * @brief FNA extension: gets whether mouse motion is reported as relative delta
+         * rather than absolute position.
+         * @return True if relative mouse mode is enabled for the current window.
+         */
+        NOXNA static bool getIsRelativeMouseModeEXTProperty();
 
-        /** @brief Internal: game window width used for coordinate scaling. */
-        NOXNA static int INTERNAL_WindowWidth;
-        /** @brief Internal: game window height used for coordinate scaling. */
-        NOXNA static int INTERNAL_WindowHeight;
-        /** @brief Internal: back buffer width used for coordinate scaling. */
-        NOXNA static int INTERNAL_BackBufferWidth;
-        /** @brief Internal: back buffer height used for coordinate scaling. */
-        NOXNA static int INTERNAL_BackBufferHeight;
-        /** @brief Internal: accumulated scroll wheel value. */
-        NOXNA static int INTERNAL_MouseWheel;
+        /**
+         * @brief FNA extension: sets whether mouse motion is reported as relative delta
+         * rather than absolute position.
+         * @param value True to enable relative mouse mode; false to disable it.
+         */
+        NOXNA static void setIsRelativeMouseModeEXTProperty(bool value);
 
         /**
          * @brief Internal: dispatches the ClickedEXT event for the given button index.
          * @param button The button index that was clicked.
          */
         NOXNA static void INTERNAL_onClicked(int button);
+
+    private:
+        /** @brief Backing store for the WindowHandle property. */
+        static std::uintptr_t windowHandle_;
     };
 }

@@ -15,10 +15,13 @@
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/GestureType.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "CNA/CNAHelper.hpp"
+
+#include <string>
 
 class InputDemo : public Microsoft::Xna::Framework::Game
 {
@@ -52,8 +55,23 @@ private:
     void DrawKeyboard(int ox, int oy, const KbState& kb);
     void DrawMouse(int ox, int oy, const MsState& ms);
     void DrawGamePad(int ox, int oy, const GpState& gp);
+    void DrawGamePadMini(int ox, int oy, const GpState& gp);
     void DrawTouchPoints(const TC& touches);
+    void DrawTextPanel(int ox, int oy, int w, int h);
+
+    // Appends one UTF-16 code unit from TextInputEXT::TextInput to textBuffer_ as UTF-8,
+    // buffering a high surrogate until its low surrogate arrives (astral code points).
+    void AppendTextCodeUnit(Microsoft::Xna::Framework::Input::charcs c);
 
     Microsoft::Xna::Framework::Graphics::SpriteBatch* spriteBatch_ = nullptr;
     Microsoft::Xna::Framework::Graphics::Texture2D pixel_;
+
+    // Text input (TextInputEXT) demo state.
+    std::string textBuffer_;   // committed characters typed via TextInputEXT::TextInput
+    std::string editBuffer_;   // in-progress IME composition via TextInputEXT::TextEditing
+    int  lastTextChar_ = -1;   // value of the most recent TextInput code unit (for the bit display)
+    Microsoft::Xna::Framework::Input::charcs pendingHighSurrogate_ = 0; // buffered high surrogate, 0 if none
+    bool textInputActive_ = false;
+    bool prevToggleKey_ = false;
+    int  frame_ = 0;
 };

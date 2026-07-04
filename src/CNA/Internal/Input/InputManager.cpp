@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 
@@ -32,6 +33,14 @@ namespace CNA::Internal::Input
             ButtonState MiddleButton = ButtonState::Released;
             ButtonState XButton1 = ButtonState::Released;
             ButtonState XButton2 = ButtonState::Released;
+
+            // FNA extension: while true, GetMouseState() reports X/Y as the
+            // accumulated pointer delta since the last GetMouseState() call (drained
+            // to 0 on read) instead of the absolute cursor position, matching FNA's
+            // SDL_GetRelativeMouseState-backed GetMouseState() in relative mode.
+            bool RelativeMode = false;
+            float RelativeDeltaX = 0.0f;
+            float RelativeDeltaY = 0.0f;
         };
 
         using Microsoft::Xna::Framework::Input::Buttons;
@@ -47,6 +56,12 @@ namespace CNA::Internal::Input
             float RightThumbstickY = 0.0f;
             float LeftTrigger      = 0.0f;
             float RightTrigger     = 0.0f;
+
+            // FNA increments PacketNumber whenever a poll of the device's raw state
+            // differs from the previous poll. CNA is event-driven rather than
+            // poll-driven, so the equivalent is tracked here: bumped whenever a Set*
+            // call below actually changes a stored value (connection, button, or axis).
+            int PacketNumber = 0;
         };
 
         struct InternalTouchLocationState
@@ -55,6 +70,10 @@ namespace CNA::Internal::Input
             TouchLocationState State = TouchLocationState::Invalid;
             Microsoft::Xna::Framework::Vector2 Position = Microsoft::Xna::Framework::Vector2();
             bool RemoveAfterSnapshot = false;
+            // Previous-frame location (what the last GetTouchState() reported), so a Moved/Released
+            // touch exposes TryGetPreviousLocation() (task 868–870). Invalid = no previous yet.
+            TouchLocationState PreviousState = TouchLocationState::Invalid;
+            Microsoft::Xna::Framework::Vector2 PreviousPosition = Microsoft::Xna::Framework::Vector2();
         };
 
         struct InternalInputState
@@ -90,6 +109,11 @@ namespace CNA::Internal::Input
             static InternalInputState state{};
             return state;
         }
+    }
+
+    void InputManager::ResetForTests()
+    {
+        getInternalInputState() = InternalInputState{};
     }
 
     void InputManager::SetMousePosition(const int x, const int y)
@@ -131,6 +155,27 @@ namespace CNA::Internal::Input
         mouseState.ScrollWheelValue += delta;
     }
 
+    void InputManager::SetMouseRelativeMode(const bool enabled)
+    {
+        auto& mouseState = getInternalInputState().Mouse;
+        mouseState.RelativeMode = enabled;
+        // Flush stale accumulated motion on toggle, matching SDL3_FNAPlatform's
+        // throwaway SDL_GetRelativeMouseState() call on enable.
+        mouseState.RelativeDeltaX = 0.0f;
+        mouseState.RelativeDeltaY = 0.0f;
+    }
+
+    void InputManager::AddMouseRelativeDelta(const float dx, const float dy)
+    {
+        auto& mouseState = getInternalInputState().Mouse;
+        if (!mouseState.RelativeMode)
+        {
+            return;
+        }
+        mouseState.RelativeDeltaX += dx;
+        mouseState.RelativeDeltaY += dy;
+    }
+
     void InputManager::SetKeyState(
         const Microsoft::Xna::Framework::Input::Keys key,
         const bool pressed
@@ -170,6 +215,10 @@ namespace CNA::Internal::Input
         auto& gamePadState = getInternalInputState().GamePads[slot.value()];
         if (isConnected)
         {
+            if (!gamePadState.IsConnected)
+            {
+                gamePadState.PacketNumber += 1;
+            }
             gamePadState.IsConnected = true;
             return;
         }
@@ -193,10 +242,13 @@ namespace CNA::Internal::Input
         const bool pressed = (state == Microsoft::Xna::Framework::Input::ButtonState::Pressed);
 
         auto setFlag = [&](Buttons flag) {
+            const Buttons before = gamePadState.Buttons_;
             if (pressed)
                 gamePadState.Buttons_ |= flag;
             else
                 gamePadState.Buttons_ &= ~flag;
+            if (gamePadState.Buttons_ != before)
+                gamePadState.PacketNumber += 1;
         };
 
         switch (button)
@@ -216,6 +268,12 @@ namespace CNA::Internal::Input
         case GamePadButton::DPadLeft:     setFlag(Buttons::DPadLeft);     break;
         case GamePadButton::DPadRight:    setFlag(Buttons::DPadRight);    break;
         case GamePadButton::BigButton:    setFlag(Buttons::BigButton);    break;
+        case GamePadButton::Misc1EXT:     setFlag(Buttons::Misc1EXT);     break;
+        case GamePadButton::Paddle1EXT:   setFlag(Buttons::Paddle1EXT);   break;
+        case GamePadButton::Paddle2EXT:   setFlag(Buttons::Paddle2EXT);   break;
+        case GamePadButton::Paddle3EXT:   setFlag(Buttons::Paddle3EXT);   break;
+        case GamePadButton::Paddle4EXT:   setFlag(Buttons::Paddle4EXT);   break;
+        case GamePadButton::TouchPadEXT:  setFlag(Buttons::TouchPadEXT);  break;
         }
     }
 
@@ -232,25 +290,32 @@ namespace CNA::Internal::Input
         }
 
         auto& gamePadState = getInternalInputState().GamePads[slot.value()];
+
+        auto setAxis = [&](float& field, const float newValue) {
+            if (newValue != field)
+                gamePadState.PacketNumber += 1;
+            field = newValue;
+        };
+
         switch (axis)
         {
         case GamePadAxis::LeftThumbstickX:
-            gamePadState.LeftThumbstickX = clamp_signed_unit(value);
+            setAxis(gamePadState.LeftThumbstickX, clamp_signed_unit(value));
             break;
         case GamePadAxis::LeftThumbstickY:
-            gamePadState.LeftThumbstickY = clamp_signed_unit(value);
+            setAxis(gamePadState.LeftThumbstickY, clamp_signed_unit(value));
             break;
         case GamePadAxis::RightThumbstickX:
-            gamePadState.RightThumbstickX = clamp_signed_unit(value);
+            setAxis(gamePadState.RightThumbstickX, clamp_signed_unit(value));
             break;
         case GamePadAxis::RightThumbstickY:
-            gamePadState.RightThumbstickY = clamp_signed_unit(value);
+            setAxis(gamePadState.RightThumbstickY, clamp_signed_unit(value));
             break;
         case GamePadAxis::LeftTrigger:
-            gamePadState.LeftTrigger = clamp_positive_unit(value);
+            setAxis(gamePadState.LeftTrigger, clamp_positive_unit(value));
             break;
         case GamePadAxis::RightTrigger:
-            gamePadState.RightTrigger = clamp_positive_unit(value);
+            setAxis(gamePadState.RightTrigger, clamp_positive_unit(value));
             break;
         }
     }
@@ -258,10 +323,21 @@ namespace CNA::Internal::Input
     Microsoft::Xna::Framework::Input::MouseState InputManager::GetMouseState()
     {
         using Microsoft::Xna::Framework::Input::ButtonState;
-        const auto& mouseState = getInternalInputState().Mouse;
+        auto& mouseState = getInternalInputState().Mouse;
+
+        int x = mouseState.X;
+        int y = mouseState.Y;
+        if (mouseState.RelativeMode)
+        {
+            x = static_cast<int>(mouseState.RelativeDeltaX);
+            y = static_cast<int>(mouseState.RelativeDeltaY);
+            mouseState.RelativeDeltaX = 0.0f;
+            mouseState.RelativeDeltaY = 0.0f;
+        }
+
         return Microsoft::Xna::Framework::Input::MouseState(
-            mouseState.X,
-            mouseState.Y,
+            x,
+            y,
             mouseState.ScrollWheelValue,
             mouseState.LeftButton,
             mouseState.MiddleButton,
@@ -315,7 +391,24 @@ namespace CNA::Internal::Input
             }
 
             auto& touchLocation = touchLocationIterator->second;
-            snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position);
+
+            // Expose the previous-frame location for Moved/Released touches (Pressed/new touches
+            // have no previous, matching FNA). Previous is "what the last GetTouchState reported".
+            if (touchLocation.PreviousState != TouchLocationState::Invalid)
+            {
+                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
+                                      touchLocation.PreviousState, touchLocation.PreviousPosition);
+            }
+            else
+            {
+                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position);
+            }
+
+            // Record the location just reported as "previous" for the next snapshot — done before
+            // the Pressed→Moved promotion below, so a promoted touch's previous is the Pressed
+            // location the game actually saw, not the promoted Moved state.
+            touchLocation.PreviousState    = touchLocation.State;
+            touchLocation.PreviousPosition = touchLocation.Position;
 
             if (touchLocation.RemoveAfterSnapshot)
             {
@@ -358,6 +451,7 @@ namespace CNA::Internal::Input
         raw.rightY       = g.RightThumbstickY;
         raw.leftTrigger  = g.LeftTrigger;
         raw.rightTrigger = g.RightTrigger;
+        raw.packetNumber = g.PacketNumber;
         return raw;
     }
 }

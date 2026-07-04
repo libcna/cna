@@ -30,6 +30,16 @@ namespace Microsoft::Xna::Framework::Input
 
     GamePadState GamePad::GetState(PlayerIndex playerIndex, GamePadDeadZone deadZoneMode)
     {
+        // FNA is poll-driven: SDL3_FNAPlatform.GetGamePadState() re-queries the SDL device
+        // (SDL_GetGamepadButton/SDL_GetGamepadAxis, etc.) fresh on every call. CNA is
+        // event-driven instead: SdlInputBridge::ProcessEvent accumulates the raw per-device
+        // state in InputManager as SDL events arrive, and GetRawGamePadState here just reads
+        // that accumulated snapshot. This is only "current" because Game::Tick() calls
+        // PollEvents() (SDL_PollEvent -> SdlInputBridge::ProcessEvent) exactly once per
+        // frame, unconditionally, before Update()/Draw() run — see Game.cpp:378 (and the
+        // Emscripten main-loop callback, which does the same). If a caller ever bypasses
+        // Game::Tick() (e.g. drives InputManager directly, as the unit tests do), this
+        // state simply reflects whatever was last pushed in, with no implicit polling.
         const auto raw = CNA::Internal::Input::InputManager::GetRawGamePadState(playerIndex);
         if (!raw.isConnected)
             return GamePadState();
@@ -41,9 +51,11 @@ namespace Microsoft::Xna::Framework::Input
 
         const GamePadTriggers triggers(raw.leftTrigger, raw.rightTrigger, deadZoneMode);
         const GamePadButtons  buttons(raw.buttons);
-        const GamePadDPad     dpad = GamePadDPad::FromButtons(raw.buttons);
+        const GamePadDPad     dpad = GamePadDPad::FromButtonArray({raw.buttons});
 
-        return GamePadState(thumbSticks, triggers, buttons, dpad);
+        GamePadState state(thumbSticks, triggers, buttons, dpad);
+        state.setPacketNumberProperty(raw.packetNumber);
+        return state;
     }
 
     bool GamePad::SetVibration(PlayerIndex playerIndex, float leftMotor, float rightMotor)
@@ -58,7 +70,7 @@ namespace Microsoft::Xna::Framework::Input
 
     void GamePad::SetLightBarEXT(PlayerIndex playerIndex, const Microsoft::Xna::Framework::Color& color)
     {
-        (void)playerIndex; (void)color;
+        CNA::Internal::Input::SdlInputBridge::SetLightBar(playerIndex, color);
     }
 
     bool GamePad::SetTriggerVibrationEXT(PlayerIndex playerIndex, float leftTrigger, float rightTrigger)
@@ -68,15 +80,11 @@ namespace Microsoft::Xna::Framework::Input
 
     bool GamePad::GetGyroEXT(PlayerIndex playerIndex, Microsoft::Xna::Framework::Vector3& gyro)
     {
-        (void)playerIndex;
-        gyro = Microsoft::Xna::Framework::Vector3::Zero;
-        return false;
+        return CNA::Internal::Input::SdlInputBridge::GetGyro(playerIndex, gyro);
     }
 
     bool GamePad::GetAccelerometerEXT(PlayerIndex playerIndex, Microsoft::Xna::Framework::Vector3& accel)
     {
-        (void)playerIndex;
-        accel = Microsoft::Xna::Framework::Vector3::Zero;
-        return false;
+        return CNA::Internal::Input::SdlInputBridge::GetAccelerometer(playerIndex, accel);
     }
 }

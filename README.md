@@ -184,6 +184,12 @@ git submodule update --init --recursive
 This populates `third_party/SDL`, `third_party/SDL_image`, and `third_party/SDL_mixer`.
 After that, no system SDL packages are required.
 
+> **Building from a source zip/tarball instead of a Git clone?** GitHub's "Download ZIP"
+> and release archives do **not** include submodule contents, so `third_party/SDL` will be
+> empty and CMake aborts with a clear error (`Missing vendored 'SDL' … Run: git submodule
+> update --init --recursive`, from `cmake/ThirdPartySDL.cmake`). Either clone with Git and run
+> the command above, or set `-DCNA_USE_SYSTEM_SDL=ON` to use system-installed SDL3 packages.
+
 ### Build (Linux — EASYGL backend, default)
 
 ```bash

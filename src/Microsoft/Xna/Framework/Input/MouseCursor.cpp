@@ -1,28 +1,163 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
+
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::Input
 {
     MouseCursor MouseCursor::MakeSystem(SDL_SystemCursor id)
     {
         SDL_Cursor* c = SDL_CreateSystemCursor(id);
-        return MouseCursor(c, /*owning=*/true);
+        MouseCursor cursor(c, /*owning=*/true);
+        cursor.isSystemSingleton_ = true; // process-lifetime shared cursor — never disposed
+        return cursor;
     }
 
-    // Static instances — created lazily on first program use via static initialisation.
-    MouseCursor MouseCursor::Arrow      = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_DEFAULT);
-    MouseCursor MouseCursor::Crosshair  = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_CROSSHAIR);
-    MouseCursor MouseCursor::Hand       = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_POINTER);
-    MouseCursor MouseCursor::IBeam      = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_TEXT);
-    MouseCursor MouseCursor::No         = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_NOT_ALLOWED);
-    MouseCursor MouseCursor::SizeAll    = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_MOVE);
-    MouseCursor MouseCursor::SizeNESW   = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_NESW_RESIZE);
-    MouseCursor MouseCursor::SizeNS     = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_NS_RESIZE);
-    MouseCursor MouseCursor::SizeNWSE   = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_NWSE_RESIZE);
-    MouseCursor MouseCursor::SizeWE     = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_EW_RESIZE);
-    MouseCursor MouseCursor::Wait       = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_WAIT);
-    MouseCursor MouseCursor::WaitCursor = MouseCursor::MakeSystem(SDL_SYSTEM_CURSOR_PROGRESS);
+    MouseCursor MouseCursor::FromTexture2D(const Graphics::Texture2D& texture, const int originX, const int originY)
+    {
+        const auto format = texture.getFormatProperty();
+        if (format != Graphics::SurfaceFormat::Color && format != Graphics::SurfaceFormat::ColorSrgbEXT)
+        {
+            throw std::invalid_argument(
+                "MouseCursor::FromTexture2D: only SurfaceFormat::Color or ColorSrgbEXT textures are accepted for mouse cursors");
+        }
+
+        const int width  = texture.getWidthProperty();
+        const int height = texture.getHeightProperty();
+
+        std::vector<Color> pixels(
+            static_cast<std::size_t>(width) * static_cast<std::size_t>(height), Color::Transparent);
+        texture.GetData(pixels.data(), static_cast<int>(pixels.size()));
+
+        // Color carries a vtable pointer (IPackedVectorT), so it is not a tightly
+        // packed RGBA8 buffer — extract each pixel's packed value into a raw array
+        // before handing it to SDL. PackedValue's byte layout (R,G,B,A; see
+        // Color.cpp) matches SDL_PIXELFORMAT_RGBA32 exactly.
+        std::vector<uint32_t> rgba(pixels.size());
+        for (std::size_t i = 0; i < pixels.size(); ++i)
+        {
+            rgba[i] = pixels[i].getPackedValueProperty();
+        }
+
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(
+            width, height, SDL_PIXELFORMAT_RGBA32,
+            rgba.data(), width * static_cast<int>(sizeof(uint32_t)));
+        if (surface == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("MouseCursor::FromTexture2D: SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
+        }
+
+        // Lifetime (verified against SDL3 src/events/SDL_mouse.c, task 831): SDL_CreateSurfaceFrom
+        // above does NOT copy — `surface` only references `rgba`. SDL_CreateColorCursor, however,
+        // copies the pixels: our RGBA32 surface differs from the cursor's required ARGB8888, so SDL
+        // makes an independent converted copy (SDL_ConvertSurface), the platform builds its own
+        // cursor from it, and SDL destroys that copy before returning. So the cursor owns its
+        // pixels and it is safe to destroy `surface` and let `rgba` go out of scope right after.
+        SDL_Cursor* cursor = SDL_CreateColorCursor(surface, originX, originY);
+        SDL_DestroySurface(surface);
+        if (cursor == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("MouseCursor::FromTexture2D: SDL_CreateColorCursor failed: ") + SDL_GetError());
+        }
+
+        return MouseCursor(cursor, /*owning=*/true);
+    }
+
+    // Stock cursors are lazily constructed function-local statics (Meyer's singleton),
+    // matching MonoGame's `static MouseCursor() { PlatformInitalize(); }` lazy static
+    // constructor. Building them as plain static member initializers instead would run
+    // SDL_CreateSystemCursor at static-init time, before SDL_Init() has necessarily run.
+    //
+    // Stock-cursor mapping audit (task 833). Each MonoGame MouseCursor maps to the closest SDL3
+    // system cursor. MonoGame targets SDL2's SDL_SYSTEM_CURSOR_* names; SDL3 renamed the enum, so
+    // CNA uses SDL3's equivalents:
+    //   Arrow     -> DEFAULT       (SDL2 ARROW)         IBeam  -> TEXT       (SDL2 IBEAM)
+    //   Wait      -> WAIT          (SDL2 WAIT)          Cross  -> CROSSHAIR  (SDL2 CROSSHAIR)
+    //   SizeNWSE  -> NWSE_RESIZE   (SDL2 SIZENWSE)      SizeNESW -> NESW_RESIZE (SDL2 SIZENESW)
+    //   SizeWE    -> EW_RESIZE     (SDL2 SIZEWE)        SizeNS -> NS_RESIZE  (SDL2 SIZENS)
+    //   SizeAll   -> MOVE          (SDL2 SIZEALL)       No     -> NOT_ALLOWED(SDL2 NO)
+    //   Hand      -> POINTER       (SDL2 HAND)
+    // Only one is not a pure rename: MonoGame's WaitArrow used SDL2's SDL_SYSTEM_CURSOR_WAITARROW,
+    // which SDL3 removed. WaitArrow maps to SDL3's SDL_SYSTEM_CURSOR_PROGRESS ("WAIT with an
+    // arrow") — the closest available match, and the exact meaning MonoGame's WaitArrow conveyed.
+    // The concrete glyph for every system cursor is chosen by the OS/desktop theme, so exact
+    // pixels differ per platform regardless of the enum used — an unavoidable SDL/OS difference.
+    MouseCursor& MouseCursor::getArrowProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_DEFAULT);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getCrosshairProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_CROSSHAIR);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getHandProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_POINTER);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getIBeamProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_TEXT);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getNoProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_NOT_ALLOWED);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeAllProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_MOVE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeNESWProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_NESW_RESIZE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeNSProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_NS_RESIZE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeNWSEProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_NWSE_RESIZE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getSizeWEProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_EW_RESIZE);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getWaitProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_WAIT);
+        return instance;
+    }
+
+    MouseCursor& MouseCursor::getWaitArrowProperty()
+    {
+        static MouseCursor instance = MakeSystem(SDL_SYSTEM_CURSOR_PROGRESS);
+        return instance;
+    }
 
     MouseCursor::MouseCursor()
         : sdlCursor_(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT))
@@ -36,12 +171,56 @@ namespace Microsoft::Xna::Framework::Input
     {
     }
 
+    MouseCursor::MouseCursor(MouseCursor&& other) noexcept
+        : sdlCursor_(other.sdlCursor_)
+        , owning_(other.owning_)
+        , isDisposed_(other.isDisposed_)
+        , isSystemSingleton_(other.isSystemSingleton_)
+    {
+        other.sdlCursor_  = nullptr;
+        other.owning_     = false;
+        other.isDisposed_ = true;
+    }
+
+    MouseCursor& MouseCursor::operator=(MouseCursor&& other) noexcept
+    {
+        if (this != &other)
+        {
+            Dispose();
+            sdlCursor_         = other.sdlCursor_;
+            owning_            = other.owning_;
+            isDisposed_        = other.isDisposed_;
+            isSystemSingleton_ = other.isSystemSingleton_;
+            other.sdlCursor_  = nullptr;
+            other.owning_     = false;
+            other.isDisposed_ = true;
+        }
+        return *this;
+    }
+
     MouseCursor::~MouseCursor()
     {
+        Dispose();
+    }
+
+    void MouseCursor::Dispose()
+    {
+        if (isDisposed_)
+        {
+            return;
+        }
+        // Stock system-cursor singletons are shared for the process lifetime: disposing one must
+        // not free the SDL cursor (that would corrupt it for every other holder and risk freeing
+        // after SDL_Quit at static teardown). Leave it fully intact and usable.
+        if (isSystemSingleton_)
+        {
+            return;
+        }
         if (owning_ && sdlCursor_ != nullptr)
         {
             SDL_DestroyCursor(sdlCursor_);
-            sdlCursor_ = nullptr;
         }
+        sdlCursor_  = nullptr;
+        isDisposed_ = true;
     }
 }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
@@ -24,6 +25,7 @@ namespace CNA::Internal::Input
         float rightY      = 0.0f;
         float leftTrigger  = 0.0f;
         float rightTrigger = 0.0f;
+        int packetNumber   = 0;
     };
 
     /**
@@ -62,6 +64,12 @@ namespace CNA::Internal::Input
         DPadLeft,
         DPadRight,
         BigButton,
+        Misc1EXT,
+        Paddle1EXT,
+        Paddle2EXT,
+        Paddle3EXT,
+        Paddle4EXT,
+        TouchPadEXT,
     };
 
     /**
@@ -87,6 +95,19 @@ namespace CNA::Internal::Input
      *
      * Currently supports Mouse, basic Keyboard, basic TouchPanel and basic GamePad state.
      *
+     * Architecturally, this is event-driven rather than poll-driven: FNA's platform layer
+     * (e.g. SDL3_FNAPlatform) re-queries SDL fresh on every `Get*State()` call, while this
+     * class only accumulates whatever `SdlInputBridge::ProcessEvent` has pushed in via
+     * `Set*State()`. State returned by the `Get*State()` methods here is only as current as
+     * the last `Game::Tick()` (which unconditionally pumps SDL events once per frame, before
+     * `Update()`/`Draw()` run — see `Game::PollEvents()`).
+     *
+     * @note Thread safety: this state is unsynchronized on purpose. Input is a single-threaded
+     *       (game-loop-thread) API — writes come from `SdlInputBridge::ProcessEvent` during
+     *       `Game::PollEvents()`, reads from game `Update()`/`Draw()`, all on the same thread
+     *       (matching XNA/FNA and required by SDL's event model). See `docs/input-backend.md` §6.
+     *       Do not call `Set*`/`Get*` from a background thread. No locking is added.
+     *
      * @note Status: PARTIAL
      */
     class InputManager
@@ -109,6 +130,19 @@ namespace CNA::Internal::Input
          * @brief Adds mouse wheel delta to internal state.
          */
         static void AddScrollWheelDelta(int delta);
+
+        /**
+         * @brief Toggles FNA extension relative-mouse-mode accumulation and flushes
+         * any pending relative delta (matches SDL3_FNAPlatform's flush-on-enable).
+         */
+        static void SetMouseRelativeMode(bool enabled);
+
+        /**
+         * @brief Accumulates a relative mouse motion delta. Only has an effect while
+         * relative mode is enabled (see SetMouseRelativeMode); fed from every mouse
+         * motion event regardless of mode, matching the SDL event stream.
+         */
+        static void AddMouseRelativeDelta(float dx, float dy);
 
         /**
          * @brief Sets pressed/released state for one keyboard key.
@@ -177,5 +211,15 @@ namespace CNA::Internal::Input
         static RawGamePadState GetRawGamePadState(
             Microsoft::Xna::Framework::PlayerIndex playerIndex
         );
+
+        /**
+         * @brief Test-only: resets all accumulated input state (mouse, keyboard, all gamepad
+         *        slots, touch) to defaults.
+         *
+         * The input state is a process-wide singleton shared across the whole test binary, so
+         * tests that mutate it (connect a gamepad, press keys, etc.) must reset it to avoid
+         * leaking state into later tests. Not part of the runtime input path — for tests only.
+         */
+        static void ResetForTests();
     };
 }

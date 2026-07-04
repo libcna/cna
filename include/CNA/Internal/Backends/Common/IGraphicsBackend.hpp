@@ -370,6 +370,12 @@ namespace CNA::Internal::Backends
         /// game coordinates. Returns true on success. Default: no-op (returns false).
         virtual bool TransformWindowToLogical(float windowX, float windowY,
                                               float& logX, float& logY) const { return false; }
+        /// Converts a point from logical (virtual) game coordinates to physical window
+        /// coordinates — the inverse of TransformWindowToLogical. Returns true on success.
+        /// Default: no-op (returns false), i.e. window == logical (no scaling). Used by
+        /// Mouse::SetPosition to place the OS cursor correctly on a scaled/letterboxed window.
+        virtual bool TransformLogicalToWindow(float logX, float logY,
+                                              float& windowX, float& windowY) const { return false; }
         // TODO: SDL dependency should be abstracted later
         virtual SDL_Window* GetWindowInternal() const = 0;
         virtual SDL_Renderer* GetRendererInternal() const = 0;

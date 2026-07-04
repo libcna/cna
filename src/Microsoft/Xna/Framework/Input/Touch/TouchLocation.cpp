@@ -59,12 +59,12 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     int TouchLocation::GetHashCode() const
     {
-        return id_ ^ (static_cast<int>(state_) * 31);
+        return id_ + position_.GetHashCode();
     }
 
     std::string TouchLocation::ToString() const
     {
-        return "[TouchLocation Id=" + std::to_string(id_) + "]";
+        return "{Position:" + position_.ToString() + "}";
     }
 
     bool operator==(const TouchLocation& value1, const TouchLocation& value2)

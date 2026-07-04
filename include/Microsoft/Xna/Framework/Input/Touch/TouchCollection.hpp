@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp"
 
 #include <cstddef>
@@ -31,8 +32,12 @@ namespace Microsoft::Xna::Framework::Input::Touch
          */
         [[nodiscard]] bool getIsReadOnlyProperty() const;
 
-        /** @brief Constructs an empty touch collection. */
-        TouchCollection();
+        /**
+         * @brief Constructs an empty touch collection.
+         * @note NOXNA — FNA's `TouchCollection` has no explicit parameterless constructor
+         *       (only the one taking a touch array).
+         */
+        NOXNA TouchCollection();
 
         /**
          * @brief Constructs from a vector of touch locations.
@@ -47,6 +52,18 @@ namespace Microsoft::Xna::Framework::Input::Touch
         explicit TouchCollection(std::vector<TouchLocation>&& touches);
 
         /**
+         * @brief Returns the touch location at the given index (mutable overload).
+         *
+         * Mirrors FNA's settable `this[int]` indexer; since the collection is never
+         * actually read-only in this implementation (unlike FNA's default-constructed,
+         * null-backed struct), assignment always succeeds.
+         *
+         * @param index The zero-based index to retrieve.
+         * @return A reference to the touch location.
+         */
+        [[nodiscard]] TouchLocation& operator[](std::size_t index);
+
+        /**
          * @brief Returns the touch location at the given index.
          * @param index The zero-based index to retrieve.
          * @return A const reference to the touch location.
@@ -55,9 +72,10 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Returns true if the collection has no touch locations.
+         * @note NOXNA STL-ergonomics helper; not part of the XNA `TouchCollection` API.
          * @return True if empty; false otherwise.
          */
-        [[nodiscard]] bool empty() const;
+        NOXNA [[nodiscard]] bool empty() const;
 
         /**
          * @brief Returns true if the collection contains the given touch location.
@@ -117,14 +135,17 @@ namespace Microsoft::Xna::Framework::Input::Touch
          */
         void Insert(int index, const TouchLocation& item);
 
-        /** @brief Returns an iterator to the beginning of the collection. */
-        std::vector<TouchLocation>::iterator begin();
-        /** @brief Returns an iterator past the end of the collection. */
-        std::vector<TouchLocation>::iterator end();
+        /**
+         * @brief Returns a mutable iterator to the beginning of the collection.
+         * @note NOXNA — replaces FNA's `IEnumerable<TouchLocation>::GetEnumerator()`.
+         */
+        NOXNA std::vector<TouchLocation>::iterator begin();
+        /** @brief Returns a mutable iterator past the end of the collection. */
+        NOXNA std::vector<TouchLocation>::iterator end();
         /** @brief Returns a const iterator to the beginning of the collection. */
-        [[nodiscard]] std::vector<TouchLocation>::const_iterator begin() const;
+        NOXNA [[nodiscard]] std::vector<TouchLocation>::const_iterator begin() const;
         /** @brief Returns a const iterator past the end of the collection. */
-        [[nodiscard]] std::vector<TouchLocation>::const_iterator end() const;
+        NOXNA [[nodiscard]] std::vector<TouchLocation>::const_iterator end() const;
 
     private:
         std::vector<TouchLocation> touches_;

@@ -125,7 +125,7 @@ namespace Microsoft::Xna::Framework::Input
          * @param btns The list of button flags to combine.
          * @return The resulting GamePadButtons.
          */
-        NOXNA static GamePadButtons FromButtons(std::initializer_list<Buttons> btns);
+        NOXNA static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns);
 
         /** @brief Packed button flags. For internal library use only. */
         NOXNA Buttons buttons_;

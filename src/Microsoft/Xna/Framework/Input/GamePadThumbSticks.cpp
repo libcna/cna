@@ -83,10 +83,7 @@ namespace Microsoft::Xna::Framework::Input
 
     int GamePadThumbSticks::GetHashCode() const
     {
-        return static_cast<int>(left_.X * 1000.0f) * 7 +
-               static_cast<int>(left_.Y * 1000.0f) * 37 +
-               static_cast<int>(right_.X * 1000.0f) * 17 +
-               static_cast<int>(right_.Y * 1000.0f) * 31;
+        return left_.GetHashCode() + 37 * right_.GetHashCode();
     }
 
     bool operator==(const GamePadThumbSticks& left, const GamePadThumbSticks& right)

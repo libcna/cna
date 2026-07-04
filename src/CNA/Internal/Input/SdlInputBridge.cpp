@@ -1,11 +1,18 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
+#include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <array>
 #include <optional>
@@ -18,8 +25,173 @@ namespace
     using Microsoft::Xna::Framework::PlayerIndex;
     using Microsoft::Xna::Framework::Input::ButtonState;
     using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
+    using Microsoft::Xna::Framework::Input::Keys;
+    using SharpRuntime::charcs;
 
     constexpr std::size_t MaxSupportedGamePads = 4;
+
+    // Mirrors FNA's GamePad.GAMEPAD_COUNT / FNA_GAMEPAD_NUM_GAMEPADS env override
+    // (GamePad.cs:34-53). FNA's comment notes that going *above* the default also
+    // requires adding more PlayerIndex names; CNA's PlayerIndex is frozen XNA API
+    // (only One-Four), so an override above MaxSupportedGamePads is clamped down.
+    // The practically useful direction — reducing/disabling gamepad tracking — works.
+    std::size_t effective_gamepad_count()
+    {
+        static const std::size_t count = []() -> std::size_t {
+            if (const char* envValue = std::getenv("FNA_GAMEPAD_NUM_GAMEPADS"))
+            {
+                try
+                {
+                    const long parsed = std::stol(envValue);
+                    if (parsed >= 0)
+                        return std::min(static_cast<std::size_t>(parsed), MaxSupportedGamePads);
+                }
+                catch (...)
+                {
+                }
+            }
+            return MaxSupportedGamePads;
+        }();
+        return count;
+    }
+
+    // Test-only override for use_scancode_mode(): nullopt means "use the cached env value".
+    // Because the env value is cached once (below), tests can't toggle FNA_KEYBOARD_USE_SCANCODES
+    // in-process; this hook lets a test exercise both modes without a subprocess.
+    std::optional<bool> g_scancodeModeTestOverride;
+
+    // Mirrors FNA's UseScancodes static readonly bool (SDL3_FNAPlatform.cs:33-35):
+    // evaluated once, so setting the env var after the first key event/lookup has no
+    // effect, matching FNA's own readonly-at-startup semantics.
+    bool use_scancode_mode()
+    {
+        if (g_scancodeModeTestOverride.has_value())
+            return g_scancodeModeTestOverride.value();
+        static const bool useScancodes = []() -> bool {
+            const char* envValue = std::getenv("FNA_KEYBOARD_USE_SCANCODES");
+            return envValue != nullptr && std::string(envValue) == "1";
+        }();
+        return useScancodes;
+    }
+
+    // --- Text input control-character synthesis ---
+    // SDL does not deliver TEXT_INPUT events for these control keys, so FNA synthesizes
+    // them on KEY_DOWN. Indices match kTextInputCharacters.
+    // (FNAPlatform.cs:261-280, SDL3_FNAPlatform.cs:903-953)
+    constexpr char kTextInputCharacters[7] = {
+        static_cast<char>(2),   // Home
+        static_cast<char>(3),   // End
+        static_cast<char>(8),   // Back (Backspace)
+        static_cast<char>(9),   // Tab
+        static_cast<char>(13),  // Enter
+        static_cast<char>(127), // Delete
+        static_cast<char>(22)   // Ctrl+V (Paste)
+    };
+
+    // True while the matching control character is held (index 6 = Ctrl+V).
+    bool g_textInputControlDown[7] = {};
+    // Suppresses the literal 'v' TEXT_INPUT that SDL emits alongside a Ctrl+V paste.
+    bool g_textInputSuppress = false;
+
+    // Decodes a NUL-terminated UTF-8 string into UTF-16 code units, invoking `emit` for each.
+    // This mirrors FNA's TEXT_INPUT handling (SDL3_FNAPlatform.cs:1166-1184), which runs SDL's
+    // UTF-8 bytes through Encoding.UTF8.GetChars() and dispatches each resulting C# char (a UTF-16
+    // code unit) to TextInputEXT.OnTextInput. A code point above U+FFFF is emitted as a high/low
+    // surrogate pair. A self-contained decoder is used here rather than sharp-runtime's Encoding
+    // (which is byte/std::string-oriented and has no UTF-16-code-unit output) — this is internal
+    // backend plumbing, the same category as the other file-local SDL translation helpers above.
+    // Malformed sequences are skipped defensively; SDL always delivers well-formed UTF-8.
+    template <typename Emit>
+    void decode_utf8_to_utf16(const char* text, Emit&& emit)
+    {
+        const auto* s = reinterpret_cast<const unsigned char*>(text);
+        while (*s != 0)
+        {
+            const unsigned char b0 = s[0];
+            std::uint32_t cp;
+            int len;
+            if (b0 < 0x80)                 { cp = b0;        len = 1; }
+            else if ((b0 & 0xE0) == 0xC0)  { cp = b0 & 0x1F; len = 2; }
+            else if ((b0 & 0xF0) == 0xE0)  { cp = b0 & 0x0F; len = 3; }
+            else if ((b0 & 0xF8) == 0xF0)  { cp = b0 & 0x07; len = 4; }
+            else                           { ++s; continue; } // invalid lead byte — resync
+
+            int i = 1;
+            for (; i < len; ++i)
+            {
+                if ((s[i] & 0xC0) != 0x80) break; // truncated/invalid continuation
+                cp = (cp << 6) | (s[i] & 0x3F);
+            }
+            if (i != len) { ++s; continue; } // malformed — skip one byte and resync
+            s += len;
+
+            if (cp <= 0xFFFF)
+            {
+                emit(static_cast<charcs>(cp));
+            }
+            else
+            {
+                cp -= 0x10000;
+                emit(static_cast<charcs>(0xD800 + (cp >> 10)));   // high surrogate
+                emit(static_cast<charcs>(0xDC00 + (cp & 0x3FF))); // low surrogate
+            }
+        }
+    }
+
+    std::optional<int> text_input_binding_index(const Keys key)
+    {
+        switch (key)
+        {
+        case Keys::Home:   return 0;
+        case Keys::End:    return 1;
+        case Keys::Back:   return 2;
+        case Keys::Tab:    return 3;
+        case Keys::Enter:  return 4;
+        case Keys::Delete: return 5;
+        default:           return std::nullopt;
+        }
+    }
+
+    bool control_key_held()
+    {
+        const auto kb = CNA::Internal::Input::InputManager::GetKeyboardState();
+        return kb.IsKeyDown(Keys::LeftControl) || kb.IsKeyDown(Keys::RightControl);
+    }
+
+    void handle_text_input_key_down(const Keys key, const bool repeat)
+    {
+        using Microsoft::Xna::Framework::Input::TextInputEXT;
+        if (const auto idx = text_input_binding_index(key))
+        {
+            if (!repeat)
+            {
+                g_textInputControlDown[*idx] = true;
+            }
+            TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(kTextInputCharacters[*idx]));
+        }
+        else if (control_key_held() && key == Keys::V)
+        {
+            if (!repeat)
+            {
+                g_textInputControlDown[6] = true;
+                g_textInputSuppress = true;
+            }
+            TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(kTextInputCharacters[6]));
+        }
+    }
+
+    void handle_text_input_key_up(const Keys key)
+    {
+        if (const auto idx = text_input_binding_index(key))
+        {
+            g_textInputControlDown[*idx] = false;
+        }
+        else if ((!control_key_held() && g_textInputControlDown[6]) || key == Keys::V)
+        {
+            g_textInputControlDown[6] = false;
+            g_textInputSuppress = false;
+        }
+    }
 
     std::array<SDL_Gamepad*, MaxSupportedGamePads>& get_opened_gamepads()
     {
@@ -61,7 +233,8 @@ namespace
     std::optional<std::size_t> try_find_free_gamepad_slot()
     {
         const auto& openedGamePads = get_opened_gamepads();
-        for (std::size_t slot = 0; slot < openedGamePads.size(); ++slot)
+        const std::size_t limit = effective_gamepad_count();
+        for (std::size_t slot = 0; slot < limit; ++slot)
         {
             if (openedGamePads[slot] == nullptr)
             {
@@ -116,6 +289,18 @@ namespace
             return GamePadButton::DPadRight;
         case SDL_GAMEPAD_BUTTON_GUIDE:
             return GamePadButton::BigButton;
+        case SDL_GAMEPAD_BUTTON_MISC1:
+            return GamePadButton::Misc1EXT;
+        case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1:
+            return GamePadButton::Paddle1EXT;
+        case SDL_GAMEPAD_BUTTON_LEFT_PADDLE1:
+            return GamePadButton::Paddle2EXT;
+        case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2:
+            return GamePadButton::Paddle3EXT;
+        case SDL_GAMEPAD_BUTTON_LEFT_PADDLE2:
+            return GamePadButton::Paddle4EXT;
+        case SDL_GAMEPAD_BUTTON_TOUCHPAD:
+            return GamePadButton::TouchPadEXT;
         default:
             return std::nullopt;
         }
@@ -364,6 +549,320 @@ namespace
         case SDLK_DELETE:   return Keys::Delete;
         case SDLK_PRINTSCREEN: return Keys::PrintScreen;
         case SDLK_PAUSE:       return Keys::Pause;
+        case SDLK_F13: return Keys::F13;
+        case SDLK_F14: return Keys::F14;
+        case SDLK_F15: return Keys::F15;
+        case SDLK_F16: return Keys::F16;
+        case SDLK_F17: return Keys::F17;
+        case SDLK_F18: return Keys::F18;
+        case SDLK_F19: return Keys::F19;
+        case SDLK_F20: return Keys::F20;
+        case SDLK_F21: return Keys::F21;
+        case SDLK_F22: return Keys::F22;
+        case SDLK_F23: return Keys::F23;
+        case SDLK_F24: return Keys::F24;
+        case SDLK_APPLICATION: return Keys::Apps;
+        case SDLK_MENU:        return Keys::Apps;
+        case SDLK_SLEEP:       return Keys::Sleep;
+        case SDLK_VOLUMEUP:    return Keys::VolumeUp;
+        case SDLK_VOLUMEDOWN:  return Keys::VolumeDown;
+        case SDLK_KP_CLEAR:    return Keys::OemClear;
+        case SDLK_KP_PERIOD:   return Keys::OemPeriod;
+        // Locale keyboard-layout fallbacks: SDL reports the character these physical keys
+        // produce on non-US layouts, which differs from the US-layout keycode already mapped
+        // above for the same physical key.
+        case 0x00B2: return Keys::OemTilde;     // '²' — AZERTY
+        case '|':    return Keys::OemPipe;      // Norwegian
+        case '+':    return Keys::OemPlus;      // Norwegian
+        case 0x00F8: return Keys::OemSemicolon; // 'ø' — Norwegian
+        case 0x00E6: return Keys::OemQuotes;    // 'æ' — Norwegian
+        case 0x00E9: return std::nullopt;       // 'é' — BEPO; no real Keys mapping exists yet
+        default: return std::nullopt;
+        }
+    }
+
+    /// Maps an SDL_Scancode (physical key position) directly to an XNA Keys value, mirroring
+    /// FNA's INTERNAL_scanMap (SDL3_FNAPlatform.cs:2490-2618). Used only in scancode mode
+    /// (FNA_KEYBOARD_USE_SCANCODES=1), where the physical key position is reported instead of
+    /// the character the current keyboard layout produces there.
+    std::optional<Microsoft::Xna::Framework::Input::Keys> try_convert_sdl_scancode(const SDL_Scancode scancode)
+    {
+        using Microsoft::Xna::Framework::Input::Keys;
+        switch (scancode)
+        {
+        case SDL_SCANCODE_A: return Keys::A;
+        case SDL_SCANCODE_B: return Keys::B;
+        case SDL_SCANCODE_C: return Keys::C;
+        case SDL_SCANCODE_D: return Keys::D;
+        case SDL_SCANCODE_E: return Keys::E;
+        case SDL_SCANCODE_F: return Keys::F;
+        case SDL_SCANCODE_G: return Keys::G;
+        case SDL_SCANCODE_H: return Keys::H;
+        case SDL_SCANCODE_I: return Keys::I;
+        case SDL_SCANCODE_J: return Keys::J;
+        case SDL_SCANCODE_K: return Keys::K;
+        case SDL_SCANCODE_L: return Keys::L;
+        case SDL_SCANCODE_M: return Keys::M;
+        case SDL_SCANCODE_N: return Keys::N;
+        case SDL_SCANCODE_O: return Keys::O;
+        case SDL_SCANCODE_P: return Keys::P;
+        case SDL_SCANCODE_Q: return Keys::Q;
+        case SDL_SCANCODE_R: return Keys::R;
+        case SDL_SCANCODE_S: return Keys::S;
+        case SDL_SCANCODE_T: return Keys::T;
+        case SDL_SCANCODE_U: return Keys::U;
+        case SDL_SCANCODE_V: return Keys::V;
+        case SDL_SCANCODE_W: return Keys::W;
+        case SDL_SCANCODE_X: return Keys::X;
+        case SDL_SCANCODE_Y: return Keys::Y;
+        case SDL_SCANCODE_Z: return Keys::Z;
+        case SDL_SCANCODE_0: return Keys::D0;
+        case SDL_SCANCODE_1: return Keys::D1;
+        case SDL_SCANCODE_2: return Keys::D2;
+        case SDL_SCANCODE_3: return Keys::D3;
+        case SDL_SCANCODE_4: return Keys::D4;
+        case SDL_SCANCODE_5: return Keys::D5;
+        case SDL_SCANCODE_6: return Keys::D6;
+        case SDL_SCANCODE_7: return Keys::D7;
+        case SDL_SCANCODE_8: return Keys::D8;
+        case SDL_SCANCODE_9: return Keys::D9;
+        case SDL_SCANCODE_KP_0: return Keys::NumPad0;
+        case SDL_SCANCODE_KP_1: return Keys::NumPad1;
+        case SDL_SCANCODE_KP_2: return Keys::NumPad2;
+        case SDL_SCANCODE_KP_3: return Keys::NumPad3;
+        case SDL_SCANCODE_KP_4: return Keys::NumPad4;
+        case SDL_SCANCODE_KP_5: return Keys::NumPad5;
+        case SDL_SCANCODE_KP_6: return Keys::NumPad6;
+        case SDL_SCANCODE_KP_7: return Keys::NumPad7;
+        case SDL_SCANCODE_KP_8: return Keys::NumPad8;
+        case SDL_SCANCODE_KP_9: return Keys::NumPad9;
+        case SDL_SCANCODE_KP_CLEAR: return Keys::OemClear;
+        case SDL_SCANCODE_KP_DECIMAL: return Keys::Decimal;
+        case SDL_SCANCODE_KP_DIVIDE: return Keys::Divide;
+        case SDL_SCANCODE_KP_ENTER: return Keys::Enter;
+        case SDL_SCANCODE_KP_MINUS: return Keys::Subtract;
+        case SDL_SCANCODE_KP_MULTIPLY: return Keys::Multiply;
+        case SDL_SCANCODE_KP_PERIOD: return Keys::OemPeriod;
+        case SDL_SCANCODE_KP_PLUS: return Keys::Add;
+        case SDL_SCANCODE_F1: return Keys::F1;
+        case SDL_SCANCODE_F2: return Keys::F2;
+        case SDL_SCANCODE_F3: return Keys::F3;
+        case SDL_SCANCODE_F4: return Keys::F4;
+        case SDL_SCANCODE_F5: return Keys::F5;
+        case SDL_SCANCODE_F6: return Keys::F6;
+        case SDL_SCANCODE_F7: return Keys::F7;
+        case SDL_SCANCODE_F8: return Keys::F8;
+        case SDL_SCANCODE_F9: return Keys::F9;
+        case SDL_SCANCODE_F10: return Keys::F10;
+        case SDL_SCANCODE_F11: return Keys::F11;
+        case SDL_SCANCODE_F12: return Keys::F12;
+        case SDL_SCANCODE_F13: return Keys::F13;
+        case SDL_SCANCODE_F14: return Keys::F14;
+        case SDL_SCANCODE_F15: return Keys::F15;
+        case SDL_SCANCODE_F16: return Keys::F16;
+        case SDL_SCANCODE_F17: return Keys::F17;
+        case SDL_SCANCODE_F18: return Keys::F18;
+        case SDL_SCANCODE_F19: return Keys::F19;
+        case SDL_SCANCODE_F20: return Keys::F20;
+        case SDL_SCANCODE_F21: return Keys::F21;
+        case SDL_SCANCODE_F22: return Keys::F22;
+        case SDL_SCANCODE_F23: return Keys::F23;
+        case SDL_SCANCODE_F24: return Keys::F24;
+        case SDL_SCANCODE_SPACE: return Keys::Space;
+        case SDL_SCANCODE_UP: return Keys::Up;
+        case SDL_SCANCODE_DOWN: return Keys::Down;
+        case SDL_SCANCODE_LEFT: return Keys::Left;
+        case SDL_SCANCODE_RIGHT: return Keys::Right;
+        case SDL_SCANCODE_LALT: return Keys::LeftAlt;
+        case SDL_SCANCODE_RALT: return Keys::RightAlt;
+        case SDL_SCANCODE_LCTRL: return Keys::LeftControl;
+        case SDL_SCANCODE_RCTRL: return Keys::RightControl;
+        case SDL_SCANCODE_LGUI: return Keys::LeftWindows;
+        case SDL_SCANCODE_RGUI: return Keys::RightWindows;
+        case SDL_SCANCODE_LSHIFT: return Keys::LeftShift;
+        case SDL_SCANCODE_RSHIFT: return Keys::RightShift;
+        case SDL_SCANCODE_APPLICATION: return Keys::Apps;
+        case SDL_SCANCODE_MENU: return Keys::Apps;
+        case SDL_SCANCODE_SLASH: return Keys::OemQuestion;
+        case SDL_SCANCODE_BACKSLASH: return Keys::OemPipe;
+        case SDL_SCANCODE_LEFTBRACKET: return Keys::OemOpenBrackets;
+        case SDL_SCANCODE_RIGHTBRACKET: return Keys::OemCloseBrackets;
+        case SDL_SCANCODE_CAPSLOCK: return Keys::CapsLock;
+        case SDL_SCANCODE_COMMA: return Keys::OemComma;
+        case SDL_SCANCODE_DELETE: return Keys::Delete;
+        case SDL_SCANCODE_END: return Keys::End;
+        case SDL_SCANCODE_BACKSPACE: return Keys::Back;
+        case SDL_SCANCODE_RETURN: return Keys::Enter;
+        case SDL_SCANCODE_ESCAPE: return Keys::Escape;
+        case SDL_SCANCODE_HOME: return Keys::Home;
+        case SDL_SCANCODE_INSERT: return Keys::Insert;
+        case SDL_SCANCODE_MINUS: return Keys::OemMinus;
+        case SDL_SCANCODE_NUMLOCKCLEAR: return Keys::NumLock;
+        case SDL_SCANCODE_PAGEUP: return Keys::PageUp;
+        case SDL_SCANCODE_PAGEDOWN: return Keys::PageDown;
+        case SDL_SCANCODE_PAUSE: return Keys::Pause;
+        case SDL_SCANCODE_PERIOD: return Keys::OemPeriod;
+        case SDL_SCANCODE_EQUALS: return Keys::OemPlus;
+        case SDL_SCANCODE_PRINTSCREEN: return Keys::PrintScreen;
+        case SDL_SCANCODE_APOSTROPHE: return Keys::OemQuotes;
+        case SDL_SCANCODE_SCROLLLOCK: return Keys::Scroll;
+        case SDL_SCANCODE_SEMICOLON: return Keys::OemSemicolon;
+        case SDL_SCANCODE_SLEEP: return Keys::Sleep;
+        case SDL_SCANCODE_TAB: return Keys::Tab;
+        case SDL_SCANCODE_GRAVE: return Keys::OemTilde;
+        case SDL_SCANCODE_VOLUMEUP: return Keys::VolumeUp;
+        case SDL_SCANCODE_VOLUMEDOWN: return Keys::VolumeDown;
+        case SDL_SCANCODE_UNKNOWN: return Keys::None;
+        // FIXME: The following scancodes need verification! (matches FNA's own comment)
+        case SDL_SCANCODE_NONUSHASH: return Keys::None;
+        case SDL_SCANCODE_NONUSBACKSLASH: return Keys::None;
+        default: return std::nullopt;
+        }
+    }
+
+    /// Maps a US-layout XNA Keys value to the SDL_Scancode of the physical key that produces
+    /// it, mirroring FNA's INTERNAL_xnaMap (SDL3_FNAPlatform.cs:2619-2742). Used by
+    /// GetKeyFromScancode to find the physical key position for a given Keys value before
+    /// asking SDL what character the *current* keyboard layout produces there.
+    ///
+    /// Intentionally unmapped Keys (fall through to std::nullopt), matching FNA's INTERNAL_xnaMap
+    /// omissions exactly (task 819 audit) — SDL3 exposes no scancode for these, so they cannot
+    /// round-trip through GetKeyFromScancode and are documented here rather than silently dropped:
+    ///   IME:      Kana, Kanji, ImeConvert, ImeNoConvert, ProcessKey
+    ///   System:   Select, Print, Execute, Help, Separator, Attn, Crsel, Exsel, EraseEof, Play,
+    ///             Zoom, Pa1
+    ///   Browser:  BrowserBack/Forward/Refresh/Stop/Search/Favorites/Home
+    ///   Media:    VolumeMute, MediaNextTrack, MediaPreviousTrack, MediaStop, MediaPlayPause,
+    ///             LaunchMail, SelectMedia, LaunchApplication1, LaunchApplication2
+    ///   Xbox:     ChatPadGreen, ChatPadOrange
+    ///   OEM:      Oem8, OemBackslash, OemCopy, OemAuto, OemEnlW
+    /// (Keys::None is NOT in this set — it maps to SDL_SCANCODE_UNKNOWN. The forward keycode and
+    /// scancode maps are otherwise byte-for-byte faithful ports of FNA's keyMap/scanMap.)
+    std::optional<SDL_Scancode> try_convert_keys_to_sdl_scancode(const Microsoft::Xna::Framework::Input::Keys key)
+    {
+        using Microsoft::Xna::Framework::Input::Keys;
+        switch (key)
+        {
+        case Keys::A: return SDL_SCANCODE_A;
+        case Keys::B: return SDL_SCANCODE_B;
+        case Keys::C: return SDL_SCANCODE_C;
+        case Keys::D: return SDL_SCANCODE_D;
+        case Keys::E: return SDL_SCANCODE_E;
+        case Keys::F: return SDL_SCANCODE_F;
+        case Keys::G: return SDL_SCANCODE_G;
+        case Keys::H: return SDL_SCANCODE_H;
+        case Keys::I: return SDL_SCANCODE_I;
+        case Keys::J: return SDL_SCANCODE_J;
+        case Keys::K: return SDL_SCANCODE_K;
+        case Keys::L: return SDL_SCANCODE_L;
+        case Keys::M: return SDL_SCANCODE_M;
+        case Keys::N: return SDL_SCANCODE_N;
+        case Keys::O: return SDL_SCANCODE_O;
+        case Keys::P: return SDL_SCANCODE_P;
+        case Keys::Q: return SDL_SCANCODE_Q;
+        case Keys::R: return SDL_SCANCODE_R;
+        case Keys::S: return SDL_SCANCODE_S;
+        case Keys::T: return SDL_SCANCODE_T;
+        case Keys::U: return SDL_SCANCODE_U;
+        case Keys::V: return SDL_SCANCODE_V;
+        case Keys::W: return SDL_SCANCODE_W;
+        case Keys::X: return SDL_SCANCODE_X;
+        case Keys::Y: return SDL_SCANCODE_Y;
+        case Keys::Z: return SDL_SCANCODE_Z;
+        case Keys::D0: return SDL_SCANCODE_0;
+        case Keys::D1: return SDL_SCANCODE_1;
+        case Keys::D2: return SDL_SCANCODE_2;
+        case Keys::D3: return SDL_SCANCODE_3;
+        case Keys::D4: return SDL_SCANCODE_4;
+        case Keys::D5: return SDL_SCANCODE_5;
+        case Keys::D6: return SDL_SCANCODE_6;
+        case Keys::D7: return SDL_SCANCODE_7;
+        case Keys::D8: return SDL_SCANCODE_8;
+        case Keys::D9: return SDL_SCANCODE_9;
+        case Keys::NumPad0: return SDL_SCANCODE_KP_0;
+        case Keys::NumPad1: return SDL_SCANCODE_KP_1;
+        case Keys::NumPad2: return SDL_SCANCODE_KP_2;
+        case Keys::NumPad3: return SDL_SCANCODE_KP_3;
+        case Keys::NumPad4: return SDL_SCANCODE_KP_4;
+        case Keys::NumPad5: return SDL_SCANCODE_KP_5;
+        case Keys::NumPad6: return SDL_SCANCODE_KP_6;
+        case Keys::NumPad7: return SDL_SCANCODE_KP_7;
+        case Keys::NumPad8: return SDL_SCANCODE_KP_8;
+        case Keys::NumPad9: return SDL_SCANCODE_KP_9;
+        case Keys::OemClear: return SDL_SCANCODE_KP_CLEAR;
+        case Keys::Decimal: return SDL_SCANCODE_KP_DECIMAL;
+        case Keys::Divide: return SDL_SCANCODE_KP_DIVIDE;
+        case Keys::Multiply: return SDL_SCANCODE_KP_MULTIPLY;
+        case Keys::Subtract: return SDL_SCANCODE_KP_MINUS;
+        case Keys::Add: return SDL_SCANCODE_KP_PLUS;
+        case Keys::F1: return SDL_SCANCODE_F1;
+        case Keys::F2: return SDL_SCANCODE_F2;
+        case Keys::F3: return SDL_SCANCODE_F3;
+        case Keys::F4: return SDL_SCANCODE_F4;
+        case Keys::F5: return SDL_SCANCODE_F5;
+        case Keys::F6: return SDL_SCANCODE_F6;
+        case Keys::F7: return SDL_SCANCODE_F7;
+        case Keys::F8: return SDL_SCANCODE_F8;
+        case Keys::F9: return SDL_SCANCODE_F9;
+        case Keys::F10: return SDL_SCANCODE_F10;
+        case Keys::F11: return SDL_SCANCODE_F11;
+        case Keys::F12: return SDL_SCANCODE_F12;
+        case Keys::F13: return SDL_SCANCODE_F13;
+        case Keys::F14: return SDL_SCANCODE_F14;
+        case Keys::F15: return SDL_SCANCODE_F15;
+        case Keys::F16: return SDL_SCANCODE_F16;
+        case Keys::F17: return SDL_SCANCODE_F17;
+        case Keys::F18: return SDL_SCANCODE_F18;
+        case Keys::F19: return SDL_SCANCODE_F19;
+        case Keys::F20: return SDL_SCANCODE_F20;
+        case Keys::F21: return SDL_SCANCODE_F21;
+        case Keys::F22: return SDL_SCANCODE_F22;
+        case Keys::F23: return SDL_SCANCODE_F23;
+        case Keys::F24: return SDL_SCANCODE_F24;
+        case Keys::Space: return SDL_SCANCODE_SPACE;
+        case Keys::Up: return SDL_SCANCODE_UP;
+        case Keys::Down: return SDL_SCANCODE_DOWN;
+        case Keys::Left: return SDL_SCANCODE_LEFT;
+        case Keys::Right: return SDL_SCANCODE_RIGHT;
+        case Keys::LeftAlt: return SDL_SCANCODE_LALT;
+        case Keys::RightAlt: return SDL_SCANCODE_RALT;
+        case Keys::LeftControl: return SDL_SCANCODE_LCTRL;
+        case Keys::RightControl: return SDL_SCANCODE_RCTRL;
+        case Keys::LeftWindows: return SDL_SCANCODE_LGUI;
+        case Keys::RightWindows: return SDL_SCANCODE_RGUI;
+        case Keys::LeftShift: return SDL_SCANCODE_LSHIFT;
+        case Keys::RightShift: return SDL_SCANCODE_RSHIFT;
+        case Keys::Apps: return SDL_SCANCODE_APPLICATION;
+        case Keys::OemQuestion: return SDL_SCANCODE_SLASH;
+        case Keys::OemPipe: return SDL_SCANCODE_BACKSLASH;
+        case Keys::OemOpenBrackets: return SDL_SCANCODE_LEFTBRACKET;
+        case Keys::OemCloseBrackets: return SDL_SCANCODE_RIGHTBRACKET;
+        case Keys::CapsLock: return SDL_SCANCODE_CAPSLOCK;
+        case Keys::OemComma: return SDL_SCANCODE_COMMA;
+        case Keys::Delete: return SDL_SCANCODE_DELETE;
+        case Keys::End: return SDL_SCANCODE_END;
+        case Keys::Back: return SDL_SCANCODE_BACKSPACE;
+        case Keys::Enter: return SDL_SCANCODE_RETURN;
+        case Keys::Escape: return SDL_SCANCODE_ESCAPE;
+        case Keys::Home: return SDL_SCANCODE_HOME;
+        case Keys::Insert: return SDL_SCANCODE_INSERT;
+        case Keys::OemMinus: return SDL_SCANCODE_MINUS;
+        case Keys::NumLock: return SDL_SCANCODE_NUMLOCKCLEAR;
+        case Keys::PageUp: return SDL_SCANCODE_PAGEUP;
+        case Keys::PageDown: return SDL_SCANCODE_PAGEDOWN;
+        case Keys::Pause: return SDL_SCANCODE_PAUSE;
+        case Keys::OemPeriod: return SDL_SCANCODE_PERIOD;
+        case Keys::OemPlus: return SDL_SCANCODE_EQUALS;
+        case Keys::PrintScreen: return SDL_SCANCODE_PRINTSCREEN;
+        case Keys::OemQuotes: return SDL_SCANCODE_APOSTROPHE;
+        case Keys::Scroll: return SDL_SCANCODE_SCROLLLOCK;
+        case Keys::OemSemicolon: return SDL_SCANCODE_SEMICOLON;
+        case Keys::Sleep: return SDL_SCANCODE_SLEEP;
+        case Keys::Tab: return SDL_SCANCODE_TAB;
+        case Keys::OemTilde: return SDL_SCANCODE_GRAVE;
+        case Keys::VolumeUp: return SDL_SCANCODE_VOLUMEUP;
+        case Keys::VolumeDown: return SDL_SCANCODE_VOLUMEDOWN;
+        case Keys::None: return SDL_SCANCODE_UNKNOWN;
         default: return std::nullopt;
         }
     }
@@ -377,6 +876,34 @@ namespace CNA::Internal::Input
         if (slot >= MaxSupportedGamePads)
             return nullptr;
         return get_opened_gamepads()[slot];
+    }
+
+    static bool read_gamepad_sensor(
+        SDL_Gamepad* gamepad,
+        const SDL_SensorType type,
+        Microsoft::Xna::Framework::Vector3& out
+    )
+    {
+        if (gamepad == nullptr)
+        {
+            out = Microsoft::Xna::Framework::Vector3::Zero;
+            return false;
+        }
+
+        if (!SDL_GamepadSensorEnabled(gamepad, type))
+        {
+            SDL_SetGamepadSensorEnabled(gamepad, type, true);
+        }
+
+        float data[3] = {};
+        if (!SDL_GetGamepadSensorData(gamepad, type, data, 3))
+        {
+            out = Microsoft::Xna::Framework::Vector3::Zero;
+            return false;
+        }
+
+        out = Microsoft::Xna::Framework::Vector3(data[0], data[1], data[2]);
+        return true;
     }
 
     bool SdlInputBridge::SetVibration(
@@ -407,18 +934,73 @@ namespace CNA::Internal::Input
         return SDL_RumbleGamepadTriggers(gamepad, left, right, 0);
     }
 
+    void SdlInputBridge::SetLightBar(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex,
+        Microsoft::Xna::Framework::Color color
+    )
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return;
+        SDL_SetGamepadLED(gamepad, color.getRProperty(), color.getGProperty(), color.getBProperty());
+    }
+
+    std::string SdlInputBridge::FormatGamePadGUIDEXT(const std::uint16_t vendor, const std::uint16_t product)
+    {
+        // FNA's GetGamePadGUID format (SDL3_FNAPlatform.cs:2176-2191): "xinput" for a device that
+        // reports no USB vendor/product (XInput on Windows), otherwise the vendor then product
+        // 16-bit IDs as 8 lowercase hex chars, each little-endian (low byte first).
+        if (vendor == 0x0000 && product == 0x0000)
+            return "xinput";
+        char buf[9];
+        std::snprintf(buf, sizeof(buf), "%02x%02x%02x%02x",
+                      vendor & 0xFF, (vendor >> 8) & 0xFF,
+                      product & 0xFF, (product >> 8) & 0xFF);
+        return std::string(buf);
+    }
+
     std::string SdlInputBridge::GetGUID(Microsoft::Xna::Framework::PlayerIndex playerIndex)
     {
         SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
         if (gamepad == nullptr)
             return "";
-        SDL_JoystickID joystickId = SDL_GetGamepadID(gamepad);
-        if (joystickId == 0)
+        SDL_Joystick* joystick = SDL_GetGamepadJoystick(gamepad);
+        if (joystick == nullptr)
             return "";
-        SDL_GUID guid = SDL_GetGamepadGUIDForID(joystickId);
-        char buf[33] = {};
-        SDL_GUIDToString(guid, buf, static_cast<int>(sizeof(buf)));
-        return std::string(buf);
+
+        const std::uint16_t vendor  = SDL_GetJoystickVendor(joystick);
+        const std::uint16_t product = SDL_GetJoystickProduct(joystick);
+        std::string guid = FormatGamePadGUIDEXT(vendor, product);
+
+        // Valve controllers report the Steam vendor id (0x28de); FNA remaps the re-exposed
+        // controller types to fixed GUIDs (SDL3_FNAPlatform.cs:2193-2210).
+        if (vendor == 0x28de)
+        {
+            const SDL_GamepadType type = SDL_GetGamepadType(gamepad);
+            if (type == SDL_GAMEPAD_TYPE_XBOX360 || type == SDL_GAMEPAD_TYPE_XBOXONE)
+                guid = "xinput";
+            else if (type == SDL_GAMEPAD_TYPE_PS4)
+                guid = "4c05c405";
+            else if (type == SDL_GAMEPAD_TYPE_PS5)
+                guid = "4c05e60c";
+        }
+        return guid;
+    }
+
+    bool SdlInputBridge::GetGyro(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex,
+        Microsoft::Xna::Framework::Vector3& gyro
+    )
+    {
+        return read_gamepad_sensor(get_sdl_gamepad_for_player(playerIndex), SDL_SENSOR_GYRO, gyro);
+    }
+
+    bool SdlInputBridge::GetAccelerometer(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex,
+        Microsoft::Xna::Framework::Vector3& accel
+    )
+    {
+        return read_gamepad_sensor(get_sdl_gamepad_for_player(playerIndex), SDL_SENSOR_ACCEL, accel);
     }
 
     static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)
@@ -448,64 +1030,105 @@ namespace CNA::Internal::Input
             return GamePadCapabilities{};
 
         GamePadCapabilities caps{};
-        caps.IsConnected = true;
+        caps.setIsConnectedProperty(true);
 
         // Joystick type → GamePadType
         SDL_Joystick* joystick = SDL_GetGamepadJoystick(gamepad);
         if (joystick != nullptr)
-            caps.GamePadType_ = sdl_joystick_type_to_gamepad_type(SDL_GetJoystickType(joystick));
+            caps.setGamePadTypeProperty(sdl_joystick_type_to_gamepad_type(SDL_GetJoystickType(joystick)));
 
         // Buttons
-        caps.HasAButton            = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
-        caps.HasBButton            = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_EAST);
-        caps.HasXButton            = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_WEST);
-        caps.HasYButton            = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH);
-        caps.HasBackButton         = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_BACK);
-        caps.HasBigButton          = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_GUIDE);
-        caps.HasStartButton        = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_START);
-        caps.HasLeftStickButton    = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK);
-        caps.HasRightStickButton   = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_STICK);
-        caps.HasLeftShoulderButton = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-        caps.HasRightShoulderButton= SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        caps.HasDPadUpButton       = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
-        caps.HasDPadDownButton     = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
-        caps.HasDPadLeftButton     = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
-        caps.HasDPadRightButton    = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+        caps.setHasAButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH));
+        caps.setHasBButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_EAST));
+        caps.setHasXButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_WEST));
+        caps.setHasYButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH));
+        caps.setHasBackButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_BACK));
+        caps.setHasBigButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_GUIDE));
+        caps.setHasStartButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_START));
+        caps.setHasLeftStickButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK));
+        caps.setHasRightStickButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_STICK));
+        caps.setHasLeftShoulderButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER));
+        caps.setHasRightShoulderButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
+        caps.setHasDPadUpButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP));
+        caps.setHasDPadDownButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN));
+        caps.setHasDPadLeftButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT));
+        caps.setHasDPadRightButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT));
 
         // Axes
-        caps.HasLeftXThumbStick  = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX);
-        caps.HasLeftYThumbStick  = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY);
-        caps.HasRightXThumbStick = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
-        caps.HasRightYThumbStick = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
-        caps.HasLeftTrigger      = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
-        caps.HasRightTrigger     = SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
+        caps.setHasLeftXThumbStickProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX));
+        caps.setHasLeftYThumbStickProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY));
+        caps.setHasRightXThumbStickProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX));
+        caps.setHasRightYThumbStickProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY));
+        caps.setHasLeftTriggerProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
+        caps.setHasRightTriggerProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
 
         // Rumble: probe with all-zero call — returns true if supported
         const bool hasRumble = SDL_RumbleGamepad(gamepad, 0, 0, 0);
-        caps.HasLeftVibrationMotor  = hasRumble;
-        caps.HasRightVibrationMotor = hasRumble;
+        caps.setHasLeftVibrationMotorProperty(hasRumble);
+        caps.setHasRightVibrationMotorProperty(hasRumble);
 
         // Trigger rumble
-        caps.HasTriggerVibrationMotorsEXT = SDL_RumbleGamepadTriggers(gamepad, 0, 0, 0);
+        caps.setHasTriggerVibrationMotorsEXTProperty(SDL_RumbleGamepadTriggers(gamepad, 0, 0, 0));
 
         // Light bar (RGB LED)
         const SDL_PropertiesID props = SDL_GetGamepadProperties(gamepad);
         if (props != 0)
-            caps.HasLightBarEXT = SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false);
+            caps.setHasLightBarEXTProperty(SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false));
 
         // Extended buttons
-        caps.HasMisc1EXT   = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_MISC1);
-        caps.HasPaddle1EXT = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1);
-        caps.HasPaddle2EXT = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1);
-        caps.HasPaddle3EXT = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2);
-        caps.HasPaddle4EXT = SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_PADDLE2);
+        caps.setHasMisc1EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_MISC1));
+        caps.setHasPaddle1EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1));
+        caps.setHasPaddle2EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1));
+        caps.setHasPaddle3EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2));
+        caps.setHasPaddle4EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_PADDLE2));
 
         // Touchpad, gyro, accelerometer
-        caps.HasTouchPadEXT      = SDL_GetNumGamepadTouchpads(gamepad) > 0;
-        caps.HasGyroEXT          = SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO);
-        caps.HasAccelerometerEXT = SDL_GamepadHasSensor(gamepad, SDL_SENSOR_ACCEL);
+        caps.setHasTouchPadEXTProperty(SDL_GetNumGamepadTouchpads(gamepad) > 0);
+        caps.setHasGyroEXTProperty(SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO));
+        caps.setHasAccelerometerEXTProperty(SDL_GamepadHasSensor(gamepad, SDL_SENSOR_ACCEL));
 
         return caps;
+    }
+
+    Microsoft::Xna::Framework::Input::Keys SdlInputBridge::GetKeyFromScancode(
+        const Microsoft::Xna::Framework::Input::Keys scancode
+    )
+    {
+        using Microsoft::Xna::Framework::Input::Keys;
+
+        if (use_scancode_mode())
+        {
+            return scancode;
+        }
+
+        const auto sdlScancode = try_convert_keys_to_sdl_scancode(scancode);
+        if (!sdlScancode.has_value())
+        {
+            return Keys::None;
+        }
+
+        const SDL_Keycode sym = SDL_GetKeyFromScancode(*sdlScancode, SDL_KMOD_NONE, true);
+        return try_convert_sdl_key(sym).value_or(Keys::None);
+    }
+
+    void SdlInputBridge::SetScancodeModeForTests(const bool enabled)
+    {
+        g_scancodeModeTestOverride = enabled;
+    }
+
+    void SdlInputBridge::ClearScancodeModeForTests()
+    {
+        g_scancodeModeTestOverride = std::nullopt;
+    }
+
+    void SdlInputBridge::ResetForTests()
+    {
+        g_textInputSuppress = false;
+        for (bool& down : g_textInputControlDown)
+            down = false;
+        get_finger_id_to_touch_id_map().clear();
+        get_next_touch_id() = 1;
+        g_scancodeModeTestOverride = std::nullopt;
     }
 
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)
@@ -519,6 +1142,7 @@ namespace CNA::Internal::Input
                                       : SDL_GetMouseFocus();
                 const auto pos = to_logical_position(win, event.motion.x, event.motion.y);
                 InputManager::SetMousePosition(static_cast<int>(pos.X), static_cast<int>(pos.Y));
+                InputManager::AddMouseRelativeDelta(event.motion.xrel, event.motion.yrel);
                 break;
             }
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -557,9 +1181,19 @@ namespace CNA::Internal::Input
                     const auto pos = to_logical_position(win, event.button.x, event.button.y);
                     InputManager::SetMousePosition(static_cast<int>(pos.X), static_cast<int>(pos.Y));
                 }
+
+                if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+                {
+                    Microsoft::Xna::Framework::Input::Mouse::INTERNAL_onClicked(event.button.button - 1);
+                }
                 break;
             }
         case SDL_EVENT_MOUSE_WHEEL:
+            // Only the vertical wheel is surfaced: XNA 4.0's MouseState and this FNA MouseState
+            // expose a single cumulative ScrollWheelValue (vertical) and no horizontal member, so
+            // event.wheel.x is intentionally dropped (task 805 / former task 749 — closed as
+            // won't-implement; adding a horizontal wheel would be a non-XNA NOXNA extension with
+            // no current consumer). FNA multiplies the wheel delta by 120 to match XNA units.
             InputManager::AddScrollWheelDelta(
                 static_cast<int>(event.wheel.y * 120.0f)
             );
@@ -567,12 +1201,12 @@ namespace CNA::Internal::Input
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
             {
-                if (event.type == SDL_EVENT_KEY_DOWN && event.key.repeat)
-                {
-                    break;
-                }
-
-                const auto key = try_convert_sdl_key(event.key.key);
+                // Mirrors FNA's ToXNAKey (SDL3_FNAPlatform.cs:2743-2766): in scancode mode,
+                // the physical key position (scancode) is used instead of the layout-dependent
+                // keycode, so games get consistent physical-key bindings across keyboard layouts.
+                const auto key = use_scancode_mode()
+                                      ? try_convert_sdl_scancode(event.key.scancode)
+                                      : try_convert_sdl_key(event.key.key);
 
 #ifdef __ANDROID__
                 {
@@ -607,8 +1241,26 @@ namespace CNA::Internal::Input
                     break;
                 }
 
-                const bool pressed = event.type == SDL_EVENT_KEY_DOWN;
-                InputManager::SetKeyState(key.value(), pressed);
+                const bool pressed  = event.type == SDL_EVENT_KEY_DOWN;
+                const bool isRepeat = pressed && event.key.repeat;
+
+                // Repeats keep the key down (state already set); FNA only re-emits text
+                // input on repeat, so skip the pressed-key state update for repeats.
+                if (!isRepeat)
+                {
+                    InputManager::SetKeyState(key.value(), pressed);
+                }
+
+                // Synthesize TextInput for control keys SDL doesn't deliver as TEXT_INPUT
+                // (Home/End/Back/Tab/Enter/Delete and Ctrl+V).
+                if (pressed)
+                {
+                    handle_text_input_key_down(key.value(), isRepeat);
+                }
+                else
+                {
+                    handle_text_input_key_up(key.value());
+                }
 
 #ifdef __ANDROID__
                 {
@@ -629,13 +1281,65 @@ namespace CNA::Internal::Input
 #endif
                 break;
             }
+        case SDL_EVENT_TEXT_INPUT:
+            {
+                // Suppress the literal character SDL emits alongside a synthesized paste
+                // (Ctrl+V): the paste control char (22) was already sent on KEY_DOWN.
+                if (g_textInputSuppress)
+                {
+                    break;
+                }
+                // SDL delivers UTF-8 text in event.text.text. Decode it to UTF-16 code units and
+                // dispatch each, matching FNA exactly (Encoding.UTF8.GetChars ->
+                // TextInputEXT.OnTextInput per char, SDL3_FNAPlatform.cs:1166-1184). CNA's
+                // TextInput callback is charcs (char16_t) — one UTF-16 code unit per call, with
+                // astral code points delivered as a surrogate pair, just like FNA's C# char.
+                if (const char* text = event.text.text)
+                {
+                    decode_utf8_to_utf16(text, [](const charcs cu)
+                    {
+                        Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(cu);
+                    });
+                }
+                break;
+            }
+        case SDL_EVENT_TEXT_EDITING:
+            {
+                // IME composition draft text (UTF-8). Pass the bytes straight through to
+                // CNA's UTF-8 std::string callback. FNA passes null for an empty composition;
+                // CNA maps that to an empty string with start/length 0 (std::string& can't be null).
+                if (event.edit.text != nullptr && event.edit.text[0] != '\0')
+                {
+                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditing(
+                        std::string(event.edit.text),
+                        event.edit.start,
+                        event.edit.length);
+                }
+                else
+                {
+                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditing(
+                        std::string(), 0, 0);
+                }
+                break;
+            }
         case SDL_EVENT_FINGER_DOWN:
             {
+                // Windows only notices a touch screen once it's touched (FNA SDL3_FNAPlatform.cs:972).
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::setTouchDeviceExistsProperty(true);
+
                 const int touchId = get_or_create_touch_id(event.tfinger.fingerID);
                 InputManager::SetTouchState(
                     touchId,
                     TouchLocationState::Pressed,
                     to_touch_pixel_position(event.tfinger)
+                );
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
+                    touchId,
+                    TouchLocationState::Pressed,
+                    event.tfinger.x,
+                    event.tfinger.y,
+                    0.0f,
+                    0.0f
                 );
                 break;
             }
@@ -646,6 +1350,14 @@ namespace CNA::Internal::Input
                     touchId,
                     TouchLocationState::Moved,
                     to_touch_pixel_position(event.tfinger)
+                );
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
+                    touchId,
+                    TouchLocationState::Moved,
+                    event.tfinger.x,
+                    event.tfinger.y,
+                    event.tfinger.dx,
+                    event.tfinger.dy
                 );
                 break;
             }
@@ -659,6 +1371,14 @@ namespace CNA::Internal::Input
                     touchId,
                     TouchLocationState::Released,
                     to_touch_pixel_position(event.tfinger)
+                );
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
+                    touchId,
+                    TouchLocationState::Released,
+                    event.tfinger.x,
+                    event.tfinger.y,
+                    0.0f,
+                    0.0f
                 );
                 release_touch_id_mapping(event.tfinger.fingerID);
                 break;
