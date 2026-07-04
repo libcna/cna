@@ -3,12 +3,14 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 
 using Microsoft::Xna::Framework::Graphics::Blend;
 using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::CullMode;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
@@ -121,6 +123,29 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClo
     GraphicsDevice gd;
     EXPECT_EQ(gd.getRasterizerStateProperty().getNameProperty(),
               "RasterizerState.CullCounterClockwise");
+}
+
+// Task 330: confirmed via direct FNA source read (Graphics/States/RasterizerState.cs) that FNA has
+// NO freeze/immutability enforcement for RasterizerState either - same finding as Task 310's
+// BlendState/DepthStencilState/RasterizerState-generic confirmation. Mirrors
+// MutatingBlendStateAfterAssignmentDoesNotAffectDevice exactly: CNA stores RasterizerState BY VALUE
+// (a deliberate, project-wide pattern - see Task 869), so mutating the original object after
+// assignment does NOT affect the device's already-applied copy, unlike FNA's reference semantics.
+TEST(GraphicsDeviceDefaultStateTest, MutatingRasterizerStateAfterAssignmentDoesNotAffectDevice)
+{
+    RasterizerState custom;
+    custom.setCullModeProperty(CullMode::None);
+
+    GraphicsDevice gd;
+    gd.setRasterizerStateProperty(custom);
+    ASSERT_EQ(gd.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+
+    // Mutate the ORIGINAL object after it has already been assigned to the device.
+    custom.setCullModeProperty(CullMode::CullClockwiseFace);
+
+    // CNA's value-copy semantics mean the device's copy is unaffected (a documented deviation from
+    // FNA's reference semantics, where this mutation would be visible - see comment above).
+    EXPECT_EQ(gd.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
 }
 
 // Task 319: FNA's GraphicsDevice.ReferenceStencil is a real, independent device property
