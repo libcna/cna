@@ -112,3 +112,87 @@ TEST(AndroidSensorOrientationTests, RightTiltIsAlwaysPositiveYRegardlessOfRotati
     EXPECT_GT(rotation90Result.Y, 0.0f);
     EXPECT_GT(rotation270Result.Y, 0.0f);
 }
+
+// Task P6-7: mirror of the tilt-right test above for the opposite physical
+// direction — a left tilt must be the sign-inverse of a right tilt in each
+// rotation (same magnitude, opposite raw sign as the tilt-right case),
+// consistently producing xnaY < 0 regardless of rotation.
+TEST(AndroidSensorOrientationTests, LeftTiltIsAlwaysNegativeYRegardlessOfRotation)
+{
+    constexpr float TiltMagnitude = 0.6f;
+
+    const Vector3 rotation90Result = ConvertAndroidPortraitToXnaLandscape(
+        0.0f, TiltMagnitude, 0.0f, AndroidSensorLandscapeOrientation::Rotation90);
+    const Vector3 rotation270Result = ConvertAndroidPortraitToXnaLandscape(
+        0.0f, -TiltMagnitude, 0.0f, AndroidSensorLandscapeOrientation::Rotation270);
+
+    EXPECT_LT(rotation90Result.Y, 0.0f);
+    EXPECT_LT(rotation270Result.Y, 0.0f);
+}
+
+// Task P6-7: Z is untouched by either rotation's formula (both return rawZ
+// verbatim) — laying the device flat, screen facing up (away from the
+// ground), is the "perpendicular to screen" case both files' doc comments
+// describe: the raw Z axis ("out of screen, toward the user") points away
+// from gravity, so a real accelerometer reports a positive value here.
+// Since the formula never negates or remaps Z, this holds identically in
+// both rotations — unlike X/Y, this does not depend on which landscape
+// rotation is active.
+TEST(AndroidSensorOrientationTests, FaceUpProducesPositiveZRegardlessOfRotation)
+{
+    constexpr float FaceUpMagnitude = 1.0f;
+
+    const Vector3 rotation90Result = ConvertAndroidPortraitToXnaLandscape(
+        0.0f, 0.0f, FaceUpMagnitude, AndroidSensorLandscapeOrientation::Rotation90);
+    const Vector3 rotation270Result = ConvertAndroidPortraitToXnaLandscape(
+        0.0f, 0.0f, FaceUpMagnitude, AndroidSensorLandscapeOrientation::Rotation270);
+
+    EXPECT_GT(rotation90Result.Z, 0.0f);
+    EXPECT_GT(rotation270Result.Z, 0.0f);
+}
+
+// Task P6-7: mirror of the face-up test — flipping the device face-down
+// (screen toward the ground) flips the raw Z sign, and since Z passes
+// through unchanged, this holds regardless of rotation too.
+TEST(AndroidSensorOrientationTests, FaceDownProducesNegativeZRegardlessOfRotation)
+{
+    constexpr float FaceDownMagnitude = -1.0f;
+
+    const Vector3 rotation90Result = ConvertAndroidPortraitToXnaLandscape(
+        0.0f, 0.0f, FaceDownMagnitude, AndroidSensorLandscapeOrientation::Rotation90);
+    const Vector3 rotation270Result = ConvertAndroidPortraitToXnaLandscape(
+        0.0f, 0.0f, FaceDownMagnitude, AndroidSensorLandscapeOrientation::Rotation270);
+
+    EXPECT_LT(rotation90Result.Z, 0.0f);
+    EXPECT_LT(rotation270Result.Z, 0.0f);
+}
+
+// Task P6-7: unlike Y (which has an explicit, WP7-documented absolute
+// convention — "right tilt -> Y > 0" — confirmed above), neither
+// Accelerometer.cpp/Gyroscope.cpp's own doc comment nor
+// docs/devices-hardware-checklist.md assert a single authoritative sign
+// for the forward/backward (X) axis; the checklist explicitly only
+// requires internal consistency ("Confirm Acceleration.X's sign matches
+// what feels like 'forward' tilt, consistently between runs"), deferring
+// the absolute physical direction to real-hardware verification. This
+// test therefore only confirms the code's own documented behavior: the
+// same raw +X magnitude ("Portrait +X" in each file's coordinate-system
+// comment) intentionally produces an XNA X with opposite sign between the
+// two rotations (xnaX = rawX for Rotation90, xnaX = -rawX for Rotation270)
+// — it does NOT assert which sign corresponds to "top edge down" versus
+// "bottom edge down" in the physical world, since that has never been
+// confirmed against real hardware and independently re-deriving it from
+// rotation geometry alone was found, during this task's own investigation,
+// to be easy to get backwards without a real device to check against.
+TEST(AndroidSensorOrientationTests, ForwardBackwardSignConventionIntentionallyFlipsBetweenRotations)
+{
+    constexpr float TiltMagnitude = 0.5f;
+
+    const Vector3 rotation90Result = ConvertAndroidPortraitToXnaLandscape(
+        TiltMagnitude, 0.0f, 0.0f, AndroidSensorLandscapeOrientation::Rotation90);
+    const Vector3 rotation270Result = ConvertAndroidPortraitToXnaLandscape(
+        TiltMagnitude, 0.0f, 0.0f, AndroidSensorLandscapeOrientation::Rotation270);
+
+    EXPECT_GT(rotation90Result.X, 0.0f);
+    EXPECT_LT(rotation270Result.X, 0.0f);
+}

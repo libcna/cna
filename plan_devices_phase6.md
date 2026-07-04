@@ -587,3 +587,66 @@ directly remains a theoretical risk shared by `VibrateController` and
 `Microsoft::Devices`-only pass per this phase's own scope rule. Worth
 flagging as a candidate for a future cross-cutting "SDL lifecycle
 ownership" pass spanning `Graphics` too, not a `Microsoft::Devices` task.
+
+## P6-7: Android axis remap — semantic example tests
+
+### Resolution
+
+Confirmed the audit's finding #7: the existing 5 tests covered sign-flip
+mechanics accurately but not the semantic examples the brief asked for
+(tilt right/left, face up/down, top/bottom edge down). Added 4 new tests
+to `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp`:
+
+- `LeftTiltIsAlwaysNegativeYRegardlessOfRotation` — mirrors the existing,
+  already-validated `RightTiltIsAlwaysPositiveYRegardlessOfRotation` with
+  negated raw signs (safe: doesn't require independently re-deriving
+  anything, just the sign-inverse of an already-correct test).
+- `FaceUpProducesPositiveZRegardlessOfRotation` /
+  `FaceDownProducesNegativeZRegardlessOfRotation` — Z passes through both
+  rotation formulas completely unchanged, so "face up"/"face down"
+  (perpendicular-to-screen) is the one semantic that does *not* depend on
+  which landscape rotation is active — safe to assert directly.
+- `ForwardBackwardSignConventionIntentionallyFlipsBetweenRotations` — for
+  the forward/backward (X) axis, deliberately does **not** assert an
+  absolute "this sign means top-edge-down" claim.
+
+**Why the X-axis test stops short of a "top/bottom edge down" label:**
+while implementing this task, an attempt to *independently re-derive*
+which raw X sign corresponds to "top edge down" from the rotation geometry
+alone (tracing the 90°/270° CCW rotation cycle by hand) produced a
+contradiction with the already-implemented and already-trusted Y-axis
+convention on the first pass, and was only reconciled after very carefully
+re-doing the rotation-cycle direction. This is precisely the kind of error
+docs/devices-hardware-checklist.md already warns about for the gyroscope
+axis ("there is no single authoritative WP7 sign convention documented...
+so use internal consistency... as the primary correctness bar") and
+implicitly for the accelerometer's X axis (the checklist's own Section 1
+step 3 only asks to confirm the sign "matches what feels like 'forward'
+tilt, **consistently between runs**" — it does not assert a required
+absolute sign either). Given real, first-hand difficulty getting this
+right by reasoning alone, asserting an unverified absolute physical claim
+in a test would be dishonest — it would look authoritative while
+potentially being backwards. The test instead confirms only what the code
+*itself* already claims (the formula intentionally flips X's sign between
+rotations), leaving the absolute direction to real-hardware verification,
+matching this phase's explicit quality bar ("do not fake hardware
+verification").
+
+Files changed:
+- `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp`.
+
+No changes needed to `docs/devices-hardware-checklist.md` — re-read
+Section 1/2 and confirmed they already use this same honest,
+internal-consistency framing for exactly this reason.
+
+Commands run:
+- `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` — clean build.
+- `./CnaTests --gtest_filter="AndroidSensorOrientationTests.*"` — 9/9
+  passed (5 previous + 4 new).
+- `ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase"`
+  — 211/211 passed (207 previous + 4 new), 2 expected skips.
+
+Remaining risk: none of these tests (old or new) prove physical hardware
+correctness — only that the pure function implements its own documented,
+internally-consistent convention. Real-device verification remains
+required and is tracked in `docs/devices-hardware-checklist.md`.
