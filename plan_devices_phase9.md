@@ -373,3 +373,46 @@ change).
 **Tests added:** none — pure documentation.
 
 **Remaining risk:** none — documentation only, no code changed.
+
+## P9-8: Native backend design boundary document
+
+### Resolution
+
+**Files changed:** `docs/devices-native-backend-design.md` (new).
+
+**What was created, and why it's design-only:** consolidated the native-backend
+architecture for `Compass`/`Motion` that had previously been scattered across
+`plan_devices_phase5.md` Tasks P5-8/P5-9 (prose Android/iOS field mappings) and
+`plan_devices_phase6.md` Task P6-8 (`ICompassBackend`/`IMotionBackend` interface
+sketch) into a single reference document, and extended the sketch with a common
+`IDeviceSensorBackend` base plus `IAccelerometerBackend`/`IGyroscopeBackend` for
+architectural symmetry — explicitly documented as never-to-be-implemented, since
+`Accelerometer`/`Gyroscope` already have a real, working SDL3 backend. Per this task's
+own instruction, **nothing was implemented**: no `.hpp`/`.cpp` file was added or
+changed, `Compass.hpp`/`.cpp` and `Motion.hpp`/`.cpp` are untouched, and the document
+says so explicitly in its own "Purpose and status" and "Explicitly not part of this
+document" sections.
+
+**Contents:** the interface sketch (documentation-only C++, not compiled); the Android
+backend path (`SensorManager`, `TYPE_MAGNETIC_FIELD`/`TYPE_ACCELEROMETER`/
+`TYPE_ROTATION_VECTOR` for Compass, `TYPE_ROTATION_VECTOR`/`TYPE_GAME_ROTATION_VECTOR`/
+`TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION`/`TYPE_GYROSCOPE` for Motion, `GeomagneticField`
+for true heading, `SENSOR_STATUS_*` for accuracy/`Calibrate`); the iOS backend path
+(`CLLocationManager`/`CLHeading` for Compass, `CMMotionManager`/`CMDeviceMotion` for
+Motion); permission/lifecycle notes (Android sensor permissions vs. iOS's
+location-permission-for-heading quirk and `NSMotionUsageDescription`, and reuse of
+`SensorBase<T>`'s existing disposal machinery rather than inventing a second one); and
+an explicit six-step migration plan whose first three steps are exactly "no existing
+public API changes," "backend selection is a new private seam added only inside
+Compass/Motion," and "the default/no-backend-yet case keeps today's exact
+`NotSupported` behavior" — so the plan cannot regress any platform that doesn't get a
+native backend.
+
+**Sanity check:** this is a pure documentation addition with no code touched. Re-ran the
+Devices-only test filter to confirm — 226 tests, 224 passed, 2 expected skips,
+unaffected, as expected.
+
+**Tests added:** none — pure documentation, no behavior to test.
+
+**Remaining risk:** none — no `.hpp`/`.cpp` file was added or changed; `Compass`/`Motion`
+behavior is byte-for-byte identical to before this task.
