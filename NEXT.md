@@ -27,8 +27,8 @@ verification — not API completeness.
   fixed, 1 decision task resolved, all 6 test-coverage tasks filled, 1
   low-priority research task partially resolved (no known bug either way).
 - `plan_devices_phase4.md` (14 tasks, user-authored hardening plan) — **open**.
-  Tasks P4-1 through P4-8 done (P4-1–P4-7 on 2026-07-03, P4-8 on 2026-07-04).
-  Tasks P4-9 through P4-14 not started.
+  Tasks P4-1 through P4-9 done (P4-1–P4-7 on 2026-07-03, P4-8/P4-9 on
+  2026-07-04). Tasks P4-10 through P4-14 not started.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -55,23 +55,23 @@ verification — not API completeness.
 ## 2. Current status
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
-(`cmake-build-debug`) as of the last verified build, HEAD `c378984`
-(2026-07-04, Task P4-8, not yet pushed). **`VULKAN`/`BGFX` have not been
-re-verified since 2026-07-02 (commit `8092f6e`)** — 10 commits of
+(`cmake-build-debug`) as of the last verified build, HEAD `dd925a4`
+(2026-07-04, Task P4-9, not yet pushed). **`VULKAN`/`BGFX` have not been
+re-verified since 2026-07-02 (commit `8092f6e`)** — 11 commits of
 `Microsoft::Devices` changes have landed since, across all of
-`plan_devices_phase3.md` and Tasks P4-1–P4-8. Nothing in those changes
+`plan_devices_phase3.md` and Tasks P4-1–P4-9. Nothing in those changes
 should affect backend-specific compilation (`Microsoft::Devices` has never
 interacted with the graphics backend, confirmed empirically
 pre-2026-07-03), but this is asserted, not re-confirmed since. See
 Section 8.
 
-**Tests:** last full `ctest` run (`EASYGL`): **1994 tests total, 97%
-passing** (2 more than the prior 1992, from Task P4-8's new
-`SensorSubsystemOwnershipTests.cpp`). The only failures are a fixed set of
-**64 pre-existing `EasyGL_*` graphics tests** that cannot run headless (no
-display/GPU in this dev environment) — present before `Microsoft::Devices`
-work began, unrelated to it. No regressions across the whole session's
-work.
+**Tests:** last full `ctest` run (`EASYGL`): **1995 tests total, 97%
+passing** (3 more than the prior 1992, from Task P4-8's
+`SensorSubsystemOwnershipTests.cpp` and Task P4-9's new concurrency test).
+The only failures are a fixed set of **64 pre-existing `EasyGL_*` graphics
+tests** that cannot run headless (no display/GPU in this dev environment)
+— present before `Microsoft::Devices` work began, unrelated to it. No
+regressions across the whole session's work.
 
 **Working:**
 - Full `Microsoft::Devices::Sensors` namespace: `Accelerometer` (real,
@@ -90,7 +90,8 @@ work.
   out haptic devices that are also connected gamepads (currently via
   fragile device-name matching — see Section 5) so it can't compete with
   `GamePad::SetVibration`. `Start()`/`StartLeftRight()` correctly cancel
-  each other's SDL effect (Task P3-5).
+  each other's SDL effect (Task P3-5). Now thread-safe (Task P4-9) — every
+  public method locks a mutex guarding `g_haptic`/`g_leftRightEffectId`.
 - `Accelerometer`/`Gyroscope`'s shared static sensor state is guarded
   against the SDL event-watch callback running off-thread (Task P3-4), and
   the callback-vs-`Dispose()` use-after-free window that fix left open is
@@ -113,9 +114,8 @@ work.
   in this dev container.
 - `VULKAN`/`BGFX` builds not re-run since before this session's Devices
   hardening work (see above).
-- `VibrateController` is not yet thread-safe (Task P4-9), and its
-  gamepad-exclusion filter still uses name matching despite a concrete
-  fix being known (Task P4-10).
+- `VibrateController`'s gamepad-exclusion filter still uses name matching
+  despite a concrete fix being known (Task P4-10).
 - No demo/manual-verification screen exists for `Microsoft::Devices` yet
   (Task P4-14).
 
@@ -186,8 +186,31 @@ work.
   crash or affect the other's state. Full `ctest`: 1994 tests, 97%
   passing, same 64 pre-existing headless `EasyGL_*` failures as baseline —
   no regressions.
-- All work committed. Last commit: `c378984` on `feature/devices`
-  (Task P4-8), not yet pushed.
+- **Task P4-9 done (2026-07-04):** added thread-safety to
+  `VibrateController`'s file-static `g_haptic`/`g_leftRightEffectId`,
+  previously read/written with zero synchronization. Added
+  `std::mutex g_mutex` to the anonymous namespace; every public
+  `VibrateController::` method (`Start()`, `Start(duration,intensity)`,
+  `Stop()`, `getIsSupportedProperty()`, `getDeviceNameProperty()`,
+  `StartLeftRight()`) locks it for its entire body. The anonymous-namespace
+  helpers that touch either variable (`AcquireHapticDeviceForProbe()`,
+  `DestroyLeftRightEffectIfAny()`) do not lock internally — documented as
+  requiring the caller to already hold the mutex, avoiding a deadlock from
+  the non-recursive mutex (`Start()` calls `DestroyLeftRightEffectIfAny()`
+  itself). Skipped the task's optional RAII-cleanup half (closing
+  `g_haptic` from a destructor at process exit) — the task explicitly
+  allowed skipping it if it introduced static-destruction-order risk, and
+  it does: `SDL_Quit()` from `Game`'s own shutdown path very plausibly runs
+  before C++ static destructors at true program exit, so calling
+  `SDL_CloseHaptic()` there could touch an already-torn-down device for no
+  practical benefit over the existing OS/SDL_Quit cleanup. Added
+  `VibrateControllerTests.cpp`'s
+  `ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadlock` (8 threads x 20
+  iterations hammering every public method concurrently). Full `ctest`:
+  1995 tests, 97% passing, same 64 pre-existing headless `EasyGL_*`
+  failures as baseline — no regressions.
+- All work committed. Last commit: `dd925a4` on `feature/devices`
+  (Task P4-9), not yet pushed.
 
 ---
 
@@ -217,10 +240,11 @@ an active failure.
   instance now pairs its own `SDL_InitSubSystem()`/`SDL_QuitSubSystem()`
   calls 1:1 via `subsystemHeld_`, independent of `instanceCount_`. See
   `plan_devices_phase4.md` Task P4-8's Resolution.
-- **Confirmed gap, not yet fixed:** `VibrateController`'s
-  `g_haptic`/`g_leftRightEffectId` have zero thread-safety (no mutex),
-  unlike the sensor classes (`Accelerometer`/`Gyroscope` fixed in Tasks
-  P3-4/P4-2). See Task P4-9.
+- **Fixed (Task P4-9, 2026-07-04):** `VibrateController`'s
+  `g_haptic`/`g_leftRightEffectId` now have thread-safety via a mutex
+  locked for the entire body of every public method, matching the sensor
+  classes' pattern (`Accelerometer`/`Gyroscope` fixed in Tasks P3-4/P4-2).
+  See `plan_devices_phase4.md` Task P4-9's Resolution.
 - **Confirmed gap, not yet fixed:** `VibrateController`'s gamepad-exclusion
   filter matches by device *name* string, which can misidentify distinct
   controllers reporting identical product names. A concrete fix exists —

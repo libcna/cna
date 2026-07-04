@@ -555,6 +555,30 @@ even though this project's own usage today is presumably single-threaded from `G
 
 **Files:** `src/Microsoft/Devices/VibrateController.cpp`.
 
+**Resolution (2026-07-04):** Implemented step 1 as scoped; skipped step 2 (RAII cleanup)
+per the task's own explicit permission to skip if it introduces static-destruction-order
+risk. Added `std::mutex g_mutex` to the anonymous namespace guarding `g_haptic`/
+`g_leftRightEffectId`. Rather than locking inside every helper (which would deadlock a
+non-recursive mutex, since e.g. `Start()` calls `DestroyLeftRightEffectIfAny()`), each
+public `VibrateController::` method (`Start()`, `Start(duration,intensity)`, `Stop()`,
+`getIsSupportedProperty()`, `getDeviceNameProperty()`, `StartLeftRight()`) takes a
+`std::lock_guard` for its entire body; the anonymous-namespace helpers that touch either
+variable (`AcquireHapticDeviceForProbe()`, `DestroyLeftRightEffectIfAny()`) are
+documented as requiring the caller to already hold `g_mutex`, since they are never
+called from outside an already-locked public method. Skipped the RAII cleanup: closing
+`g_haptic` from `VibrateController`'s destructor (run when the `getDefaultProperty()`
+function-local static is destroyed at process exit) risks calling `SDL_CloseHaptic()`
+after `SDL_Quit()` has already torn down the haptic subsystem elsewhere (e.g. from
+`Game`'s own shutdown path, which very plausibly runs before C++ static destructors at
+true program exit) — undefined behavior for zero practical benefit, since the existing
+"released by the OS/SDL_Quit at process exit" comment already describes harmless
+behavior today. Added `VibrateControllerTests.cpp`'s
+`ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadlock` — 8 threads x 20 iterations
+hammering every public method concurrently; can't assert on actual vibration state
+headless, but exercises the new locking under real contention. `CNA`/`CnaTests` build
+clean; full `ctest`: 1995 tests (1 more, from the new test), 97% passing, same 64
+pre-existing headless `EasyGL_*` failures as baseline — no regressions.
+
 ### Task P4-10 — Replace name-matching haptic↔gamepad correlation with `SDL_OpenHapticFromJoystick()`
 
 **Verified fix (not just research — a concrete API exists):**

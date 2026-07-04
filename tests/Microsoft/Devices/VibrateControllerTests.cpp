@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "Microsoft/Devices/VibrateController.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -221,6 +223,61 @@ TEST(VibrateControllerTests, AlternatingStartAndStartLeftRightRepeatedlyDoesNotT
     {
         EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(10), 0.5f));
         EXPECT_NO_THROW(controller->StartLeftRight(0.5f, 0.5f, TimeSpan::FromMilliseconds(10)));
+    }
+
+    EXPECT_NO_THROW(controller->Stop());
+}
+
+// Task P4-9: g_haptic/g_leftRightEffectId are now guarded by a mutex so
+// concurrent calls from multiple application threads (e.g. one thread
+// calling Start() while another calls Stop()/StartLeftRight()) can't race.
+// This environment has no real haptic hardware to actuate, so this can't
+// assert anything about actual vibration state — it only exercises the
+// locking under real concurrent contention (many threads hammering every
+// public method at once) and confirms nothing throws, deadlocks, or
+// crashes (e.g. under ThreadSanitizer, were it enabled for this build).
+TEST(VibrateControllerTests, ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadlock)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 20;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([controller, t]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                switch ((t + i) % 5)
+                {
+                case 0:
+                    controller->Start(TimeSpan::FromMilliseconds(1));
+                    break;
+                case 1:
+                    controller->Start(TimeSpan::FromMilliseconds(1), 0.5f);
+                    break;
+                case 2:
+                    controller->StartLeftRight(0.5f, 0.5f, TimeSpan::FromMilliseconds(1));
+                    break;
+                case 3:
+                    controller->Stop();
+                    break;
+                default:
+                    (void)controller->getIsSupportedProperty();
+                    (void)controller->getDeviceNameProperty();
+                    break;
+                }
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
     }
 
     EXPECT_NO_THROW(controller->Stop());

@@ -3,6 +3,7 @@
 #include "Microsoft/Devices/VibrateController.hpp"
 
 #include <algorithm>
+#include <mutex>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_haptic.h>
@@ -27,6 +28,18 @@ namespace Microsoft::Devices
         // uploaded effect slot — Stop() also calls SDL_DestroyHapticEffect()
         // on this ID for that. -1 means "none uploaded".
         SDL_HapticEffectID g_leftRightEffectId = -1;
+
+        // Guards g_haptic and g_leftRightEffectId (Task P4-9): unlike the
+        // sensor classes, VibrateController has no SDL event-watch callback,
+        // so the only risk is ordinary unsynchronized access from multiple
+        // application threads (e.g. one thread calling Start() while another
+        // calls Stop()). Each public VibrateController:: method locks this
+        // for its entire body; the anonymous-namespace helpers below that
+        // touch either variable (AcquireHapticDeviceForProbe(),
+        // DestroyLeftRightEffectIfAny()) do not lock it themselves — they are
+        // only ever called from within an already-locked method, and this
+        // mutex is not recursive.
+        std::mutex g_mutex;
 
         void ValidateVibrationDuration(const System::TimeSpan& duration)
         {
@@ -143,6 +156,7 @@ namespace Microsoft::Devices
         // opened one. Sets openedTemporary so the caller knows whether it
         // must close the returned device again — probing must not hold a
         // device open as a side effect (that's what Start() is for).
+        // Caller must already hold g_mutex.
         SDL_Haptic* AcquireHapticDeviceForProbe(bool& openedTemporary)
         {
             if (g_haptic != nullptr)
@@ -165,7 +179,8 @@ namespace Microsoft::Devices
         // Shared by Stop(), Start()/Start(duration,intensity) (so the plain
         // rumble path never runs layered on top of a still-active
         // StartLeftRight() effect), and StartLeftRight()'s own re-entry path
-        // (replacing a previous dual-motor effect with a new one).
+        // (replacing a previous dual-motor effect with a new one). Caller
+        // must already hold g_mutex.
         void DestroyLeftRightEffectIfAny()
         {
             if (g_haptic != nullptr && g_leftRightEffectId >= 0)
@@ -193,6 +208,8 @@ namespace Microsoft::Devices
         ValidateVibrationDuration(duration);
         const float clampedIntensity = std::clamp(intensity, 0.0f, 1.0f);
         const Uint32 durationMs = static_cast<Uint32>(duration.getTotalMillisecondsProperty());
+
+        std::lock_guard<std::mutex> lock(g_mutex);
 
         if (!EnsureHapticSubsystemInitialized())
         {
@@ -224,6 +241,8 @@ namespace Microsoft::Devices
 
     void VibrateController::Stop()
     {
+        std::lock_guard<std::mutex> lock(g_mutex);
+
         if (g_haptic != nullptr)
         {
             SDL_StopHapticEffects(g_haptic);
@@ -233,6 +252,8 @@ namespace Microsoft::Devices
 
     bool VibrateController::getIsSupportedProperty()
     {
+        std::lock_guard<std::mutex> lock(g_mutex);
+
         bool openedTemporary = false;
         SDL_Haptic* device = AcquireHapticDeviceForProbe(openedTemporary);
 
@@ -248,6 +269,8 @@ namespace Microsoft::Devices
 
     std::string VibrateController::getDeviceNameProperty()
     {
+        std::lock_guard<std::mutex> lock(g_mutex);
+
         bool openedTemporary = false;
         SDL_Haptic* device = AcquireHapticDeviceForProbe(openedTemporary);
 
@@ -275,6 +298,8 @@ namespace Microsoft::Devices
         const float clampedLarge = std::clamp(largeMotor, 0.0f, 1.0f);
         const float clampedSmall = std::clamp(smallMotor, 0.0f, 1.0f);
         const Uint32 durationMs = static_cast<Uint32>(duration.getTotalMillisecondsProperty());
+
+        std::lock_guard<std::mutex> lock(g_mutex);
 
         if (!EnsureHapticSubsystemInitialized())
         {
