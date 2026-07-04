@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include "Microsoft/Xna/Framework/GamerServices/AvatarAnimationPreset.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarBone.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarEye.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarEyebrow.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarMouth.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarRendererState.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/ControllerSensitivity.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GameDifficulty.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerPresenceMode.hpp"
@@ -99,4 +106,99 @@ TEST(RacingCameraAngleTest, ValuesExist) {
     EXPECT_EQ(RacingCameraAngle::Front,  RacingCameraAngle::Front);
     EXPECT_EQ(RacingCameraAngle::Inside, RacingCameraAngle::Inside);
     EXPECT_NE(RacingCameraAngle::Back,   RacingCameraAngle::Inside);
+}
+
+TEST(AvatarBodyTypeTest, ValuesExist) {
+    EXPECT_EQ(static_cast<int>(AvatarBodyType::Female), 0);
+    EXPECT_EQ(static_cast<int>(AvatarBodyType::Male),   1);
+    EXPECT_NE(AvatarBodyType::Female, AvatarBodyType::Male);
+}
+
+TEST(AvatarRendererStateTest, ValuesExist) {
+    EXPECT_EQ(static_cast<int>(AvatarRendererState::Loading),     0);
+    EXPECT_EQ(static_cast<int>(AvatarRendererState::Ready),       1);
+    EXPECT_EQ(static_cast<int>(AvatarRendererState::Unavailable), 2);
+}
+
+TEST(AvatarMouthTest, ValuesExist) {
+    EXPECT_EQ(static_cast<int>(AvatarMouth::Neutral),    0);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::Sad),        1);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::Angry),      2);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::Confused),   3);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::Laughing),   4);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::Shocked),    5);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::Happy),      6);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::PhoneticO),  7);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::PhoneticAi), 8);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::PhoneticEe), 9);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::PhoneticFv), 10);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::PhoneticW),  11);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::PhoneticL),  12);
+    EXPECT_EQ(static_cast<int>(AvatarMouth::PhoneticDth),13);
+}
+
+TEST(AvatarEyeTest, ValuesExist) {
+    EXPECT_EQ(static_cast<int>(AvatarEye::Neutral),  0);
+    EXPECT_EQ(static_cast<int>(AvatarEye::Sad),      1);
+    EXPECT_EQ(static_cast<int>(AvatarEye::Angry),    2);
+    EXPECT_EQ(static_cast<int>(AvatarEye::Confused), 3);
+    EXPECT_EQ(static_cast<int>(AvatarEye::Laughing), 4);
+    EXPECT_EQ(static_cast<int>(AvatarEye::Shocked),  5);
+    EXPECT_EQ(static_cast<int>(AvatarEye::Happy),    6);
+    EXPECT_EQ(static_cast<int>(AvatarEye::Yawning),  7);
+    EXPECT_EQ(static_cast<int>(AvatarEye::Sleeping), 8);
+    EXPECT_EQ(static_cast<int>(AvatarEye::LookUp),   9);
+    EXPECT_EQ(static_cast<int>(AvatarEye::LookDown), 10);
+    EXPECT_EQ(static_cast<int>(AvatarEye::LookLeft), 11);
+    EXPECT_EQ(static_cast<int>(AvatarEye::LookRight),12);
+    EXPECT_EQ(static_cast<int>(AvatarEye::Blink),    13);
+}
+
+TEST(AvatarEyebrowTest, ValuesExist) {
+    EXPECT_EQ(static_cast<int>(AvatarEyebrow::Neutral),  0);
+    EXPECT_EQ(static_cast<int>(AvatarEyebrow::Sad),      1);
+    EXPECT_EQ(static_cast<int>(AvatarEyebrow::Angry),    2);
+    EXPECT_EQ(static_cast<int>(AvatarEyebrow::Confused), 3);
+    EXPECT_EQ(static_cast<int>(AvatarEyebrow::Raised),   4);
+}
+
+TEST(AvatarAnimationPresetTest, FirstAndLastValue) {
+    EXPECT_EQ(static_cast<int>(AvatarAnimationPreset::Stand0),    0);
+    EXPECT_EQ(static_cast<int>(AvatarAnimationPreset::MaleYawn),  30);
+    EXPECT_NE(AvatarAnimationPreset::Stand0, AvatarAnimationPreset::MaleYawn);
+}
+
+TEST(AvatarAnimationPresetTest, RepresentativeValues) {
+    EXPECT_EQ(static_cast<int>(AvatarAnimationPreset::Clap),                  8);
+    EXPECT_EQ(static_cast<int>(AvatarAnimationPreset::Wave),                  9);
+    EXPECT_EQ(static_cast<int>(AvatarAnimationPreset::Celebrate),             10);
+    EXPECT_EQ(static_cast<int>(AvatarAnimationPreset::FemaleIdleCheckNails),  11);
+    EXPECT_EQ(static_cast<int>(AvatarAnimationPreset::MaleIdleLookAround),    21);
+    EXPECT_EQ(static_cast<int>(AvatarAnimationPreset::MaleSurprised),         29);
+}
+
+TEST(AvatarBoneTest, RootAndFirstFewValues) {
+    EXPECT_EQ(static_cast<int>(AvatarBone::Root),      0);
+    EXPECT_EQ(static_cast<int>(AvatarBone::BackLower),  1);
+    EXPECT_EQ(static_cast<int>(AvatarBone::HipLeft),    2);
+    EXPECT_EQ(static_cast<int>(AvatarBone::HipRight),   3);
+    // Gap at 4 (unnamed) - BackUpper is 5, not 4.
+    EXPECT_EQ(static_cast<int>(AvatarBone::BackUpper), 5);
+}
+
+TEST(AvatarBoneTest, GapsArePreservedExactly) {
+    // These explicit values (with gaps at unnamed slots) come directly from the real XNA
+    // reference assembly, not a contiguous 0..70 sequence - see AvatarBone.hpp's own doc comment.
+    EXPECT_EQ(static_cast<int>(AvatarBone::KneeLeft),    6);
+    EXPECT_EQ(static_cast<int>(AvatarBone::KneeRight),   8);
+    EXPECT_EQ(static_cast<int>(AvatarBone::AnkleLeft),   11);
+    EXPECT_EQ(static_cast<int>(AvatarBone::CollarLeft),  12);
+    EXPECT_EQ(static_cast<int>(AvatarBone::Neck),        14);
+    EXPECT_EQ(static_cast<int>(AvatarBone::AnkleRight),  15);
+    EXPECT_EQ(static_cast<int>(AvatarBone::CollarRight), 16);
+    EXPECT_EQ(static_cast<int>(AvatarBone::Head),        19);
+}
+
+TEST(AvatarBoneTest, LastValue) {
+    EXPECT_EQ(static_cast<int>(AvatarBone::FingerThumb3Right), 70);
 }

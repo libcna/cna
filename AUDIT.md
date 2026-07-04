@@ -329,6 +329,18 @@ All 19 types audited. Missing Vector-form constructors added.
 | GamerServicesDispatcher | ✅ | Full port: `IsInitialized`, `WindowHandle`, `InstallingTitleUpdate` event, `Initialize()` (creates 4 stub `SignedInGamer`s, fires `OnSignIn`), `Update()`, `UpdateAsync()`. `Initialize()` deliberately not exercised by the automated test suite (sets process-lifetime static state) |
 | GamerServicesComponent | ✅ | Full port — wires `Initialize()`/`Update()` to `GamerServicesDispatcher`; no tests (requires a live `Game`, same as `GameComponent`) |
 | Guide | ✅ | Full port — replaced the old `DEF_PROP`-based stub (which had an invented, non-FNA `Show(PlayerIndex)` method); tests complete except the always-empty `Show*` no-ops verified only for non-throw |
+| AvatarBodyType (enum) | ✅ | Complete |
+| AvatarRendererState (enum) | ✅ | Complete |
+| AvatarMouth (enum) | ✅ | Complete |
+| AvatarEye (enum) | ✅ | Complete |
+| AvatarEyebrow (enum) | ✅ | Complete |
+| AvatarAnimationPreset (enum) | ✅ | Complete |
+| AvatarBone (enum) | ✅ | Complete; explicit numeric values with gaps (0-70 range, 55 named values), verified byte-for-byte against the real reference assembly, not guessed |
+| AvatarExpression | ✅ | Full port; plain get/set struct |
+| IAvatarAnimation | ✅ | Full port; interface |
+| AvatarAnimation | ✅ | Full port. **Note: FNA has zero Avatar implementation** (Avatar required real Xbox Live cloud services FNA never built) — ported from the real, genuine Microsoft `Microsoft.Xna.Framework.Avatar.dll` reference assembly (v4.0.20823.0), decompiled via `monodis` for this port, since FNA's own tree has nothing to verify line-by-line against. Preserves real, verified quirks faithfully: the constructor never reads its `animationPreset` argument (every instance gets identical zero-valued bones and zero `Length`); `Update()` has real clamp logic, not a no-op, though `Length` being permanently zero makes every call collapse `CurrentPosition` back to zero regardless of the `loop` argument |
+| AvatarDescription | ✅ | Full port from the decompiled reference assembly (see AvatarAnimation's note — same FNA gap). Preserves a genuinely surprising, verified quirk: `CreateRandom()`/`CreateRandom(AvatarBodyType)`/`EndGetFromGamer()` never actually randomize or populate anything — all three always return an all-zero, invalid (1021-byte) description. `BeginGetFromGamer` invokes its callback synchronously before returning (a real behavior, not present as the actual "fake-async" pattern used elsewhere in this codebase's other Begin/End stubs). The disposed-`Gamer` branch of `BeginGetFromGamer` is not covered by a test — `Gamer` has no publicly/NOXNA-accessible way to become disposed anywhere in this codebase currently |
+| AvatarRenderer | ✅ | Full port from the decompiled reference assembly (see AvatarAnimation's note — same FNA gap). Preserves a genuinely surprising, verified quirk: `get_State()` unconditionally forces itself to `Unavailable` on *every single read* (not just an initial value) — nothing anywhere in the class ever sets it to `Ready` or `Loading`, so `BindPose`'s `state != Ready` guard always throws in practice. `ParentBones`' 71 real values decoded byte-for-byte from the assembly's static-array-init blob, not guessed. Both constructors ignore all of their arguments |
 
 ---
 
