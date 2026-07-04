@@ -728,6 +728,17 @@ gamepad-exclusion filter (Task P4-10) genuinely not competing with
 `GamePad::SetVibration()` on the same physical controller. This is a plain checklist
 document, not a task with a build/test cycle.
 
+**Resolution (2026-07-04):** Wrote `docs/devices-hardware-checklist.md` covering all 5
+items named in this task: accelerometer axis sign/orientation (both landscape
+rotations), gyroscope axis correctness, `VibrateController::Start()` actually vibrating
+the phone motor with intensity scaling, `StartLeftRight()` driving two distinct motors
+independently, and the Task P4-10 gamepad-exclusion filter not competing with
+`GamePad::SetVibration()` — including a re-evaluation-per-call check for
+connect/disconnect during a running game, since the exclusion probe isn't cached.
+Each item states which code it exercises, why it specifically needs real hardware (not
+just "untested" — the concrete gap in current verification), and concrete pass/fail
+steps. Documentation-only: no code changes.
+
 ---
 
 ## Phase 8: Demo / manual verification

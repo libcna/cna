@@ -28,8 +28,9 @@ verification — not API completeness.
   fixed, 1 decision task resolved, all 6 test-coverage tasks filled, 1
   low-priority research task partially resolved (no known bug either way).
 - `plan_devices_phase4.md` (14 tasks, user-authored hardening plan) — **open**.
-  Tasks P4-1 through P4-12 done (P4-1–P4-7 on 2026-07-03,
-  P4-8/P4-9/P4-10/P4-11/P4-12 on 2026-07-04). Tasks P4-13/P4-14 not started.
+  Tasks P4-1 through P4-13 done (P4-1–P4-7 on 2026-07-03,
+  P4-8 through P4-13 on 2026-07-04). Task P4-14 (demo screen) not started —
+  the only remaining task in this plan.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -292,8 +293,21 @@ unrelated to it. No regressions across the whole session's work.
   Documentation-only task: no code changes, this status is now explicit
   in `NEXT.md` (this section, Sections 2/5/8) rather than silently
   omitted.
-- All work committed. Last commit in `cna_devices`: `22cacb2` (Task
-  P4-11) on `feature/devices`, not yet pushed (Task P4-12's commit, this
+- **Task P4-13 done (2026-07-04):** wrote
+  `docs/devices-hardware-checklist.md`, a plain checklist (not a
+  build/test task) for whoever eventually runs `Microsoft::Devices` on
+  real hardware — covering all 5 items the task named: accelerometer axis
+  sign/orientation in both landscape rotations, gyroscope axis
+  correctness, `VibrateController::Start()` actually vibrating the phone
+  motor with working intensity scaling, `StartLeftRight()` driving two
+  distinct motors independently, and the Task P4-10 gamepad-exclusion
+  filter not competing with `GamePad::SetVibration()` (including
+  re-checking the exclusion isn't cached across a gamepad
+  disconnect/reconnect). Each item states which code it exercises, why it
+  specifically can't be verified in this headless container, and concrete
+  pass/fail steps. Documentation-only: no code changes.
+- All work committed. Last commit in `cna_devices`: `cfd05fe` (Task
+  P4-12) on `feature/devices`, not yet pushed (Task P4-13's commit, this
   one, follows it).
 
 ---
@@ -500,20 +514,8 @@ writing.
      7; spot-run the targeted Devices/Sensors/VibrateController suite on
      each backend afterward.
 
-2. **Task P4-13 — Manual hardware verification checklist.** A plain
-   checklist document (e.g. `docs/devices-hardware-checklist.md`) for
-   whoever eventually runs this on real hardware: accelerometer/gyroscope
-   axis sign/orientation in both landscape rotations (now compiles clean
-   for Android as of Task P4-11, but the actual tilt-direction math has
-   never been physically verified), `VibrateController::Start()` actually
-   vibrating the phone motor (not a connected gamepad), `StartLeftRight()`
-   driving two distinct motors, and the gamepad-exclusion filter (Task
-   P4-10) not competing with `GamePad::SetVibration()` on the same
-   physical controller.
-   - Files: new checklist file (or a `NEXT.md` section, if a new file is
-     judged unnecessary overhead).
-
-3. **Task P4-14 — `Microsoft::Devices` demo screen.** Mirror
+2. **Task P4-14 — `Microsoft::Devices` demo screen.** The only remaining
+   task in `plan_devices_phase4.md`. Mirror
    `examples/demo_input`'s `Game`-subclass pattern
    (`examples/demo_input/src/InputDemo.hpp`/`.cpp`): new
    `examples/demo_devices/src/DevicesDemo.hpp`/`.cpp`, displaying each
