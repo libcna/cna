@@ -31,6 +31,15 @@ namespace Microsoft::Xna::Framework::Audio
             return instance.loopLength_;
         }
 
+        // CP-20: SDL3_mixer has no stereo-pan getter (MIX_SetTrackStereo has no counterpart,
+        // same limitation noted for CP-3/T-4B's Apply3D coverage), so the is3D latch itself is
+        // the only thing that can be verified directly -- it's the actual mechanism that keeps
+        // setPanProperty() from clobbering Apply3D's own pan approximation.
+        static bool Is3D(const SoundEffectInstance& instance)
+        {
+            return instance.is3D_;
+        }
+
         // T-4C: wrappers for the private INTERNAL_apply* DSP methods, and a hook that drives the
         // filter's real per-sample math synchronously (the real SDL3_mixer callback only fires
         // asynchronously from the mixing thread, which would make a test flaky/need a real-time

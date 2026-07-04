@@ -61,6 +61,13 @@ namespace Microsoft::Xna::Framework::Audio
         float Pan_          = 0.0f;
         float Pitch_        = 0.0f;
 
+        // CP-20: once Apply3D has been called, matches FNA's `is3D` latch (SoundEffectInstance.cs)
+        // -- setPanProperty() still updates the Pan_ property (callers must keep reading back
+        // what they last set), but stops writing the real track output, since Apply3D's own pan
+        // approximation is what should keep governing the actual output until Apply3D runs
+        // again. Never reset back to false once set (matches FNA: is3D is only ever set to true).
+        bool  is3D_         = false;
+
         // Heap-allocated (not inline) so its address is stable across a move of *this* -- the
         // SDL3_mixer callback holds a raw pointer to it as userdata, and a unique_ptr move
         // transfers ownership without changing that address, so no callback re-registration is

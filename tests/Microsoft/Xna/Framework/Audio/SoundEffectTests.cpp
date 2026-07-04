@@ -497,6 +497,36 @@ TEST(SoundEffectTest, CreateInstanceProducesBoundInstance)
     EXPECT_FALSE(inst.getIsDisposedProperty());
 }
 
+// CP-22: the move-only static_asserts above only prove move-constructibility is possible, not
+// that a moved-to SoundEffect's underlying resource actually still works -- mirrors CP-12's
+// analogous SoundEffectInstance move tests.
+TEST(SoundEffectTest, MoveConstructedEffectStillCreatesAWorkingInstance)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    SoundEffect moved(std::move(*fx));
+    EXPECT_FALSE(moved.getIsDisposedProperty());
+
+    SoundEffectInstance inst = moved.CreateInstance();
+    inst.Play();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+}
+
+TEST(SoundEffectTest, MoveAssignedEffectStillCreatesAWorkingInstance)
+{
+    auto fx = makeEffect();
+    auto other = makeEffect();
+    if (!fx || !other) GTEST_SKIP() << "no audio device";
+
+    *other = std::move(*fx);
+    EXPECT_FALSE(other->getIsDisposedProperty());
+
+    SoundEffectInstance inst = other->CreateInstance();
+    inst.Play();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+}
+
 TEST(SoundEffectTest, PlayReturnsTrue)
 {
     auto fx = makeEffect();

@@ -1170,7 +1170,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   nemá crossfeed API), nebo ručně mixovat stereo pan; test porovnávající CNA gains proti FNA matici
   pro stereo zdroj při několika pan hodnotách.
 
-- [ ] **CP-20 — `setPanProperty()` ignoruje aktivní `Apply3D` stav.**
+- [x] **CP-20 — `setPanProperty()` ignoruje aktivní `Apply3D` stav.**
   FNA má `is3D` latch — jakmile byl `Apply3D` alespoň jednou zavolán, `Pan` setter už jen aktualizuje
   hodnotu property, nezasahuje do skutečné výstupní matice (ta se přepočítá až dalším `Apply3D`).
   CNA nemá žádný ekvivalent `is3D_` — `setPanProperty()` vždy okamžitě přepíše track's stereo gains,
@@ -1183,18 +1183,27 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* přidat `is3D_`-ekvivalentní flag; `setPanProperty` po `Apply3D()` už jen aktualizuje
   property, nezapisuje do tracku; test: `Apply3D(...)` → `setPanProperty(x)` → ověřit, že skutečné
   track gains pořád odpovídají 3D pozici, ne `x`.
+  *Pozn.:* přidán `is3D_` (nikdy se nereseituje, stejně jako FNA); `setPanProperty` po nastavení
+  `Pan_` vrací dřív, pokud `is3D_==true`. SDL3_mixer nemá stereo-pan getter (stejné omezení jako
+  u CP-3/T-4B), takže test ověřuje přímo `is3D_` stav přes nový `SoundEffectInstanceTestAccess::
+  Is3D`, ne skutečné track gains. `git stash` potvrdil kompilační selhání (chybějící pole) ve
+  všech souborech sdílejících `SoundEffectInstanceTestAccess.hpp`.
 
 - [ ] **CP-21 — `AudioCategory::SetVolume`'s doc v hlavičce `AudioCategory.hpp` odpovídá starému,
   už opravenému chování (drobný nález, patří spíš do XA — viz XA-10, zmíněno zde pro úplnost, ne
   duplicitně řešeno).**
 
-- [ ] **CP-22 — Test-mezera: `SoundEffect`'s move ctor/move-assignment nemá vlastní test.**
+- [x] **CP-22 — Test-mezera: `SoundEffect`'s move ctor/move-assignment nemá vlastní test.**
   `static_assert` ověřuje jen move-constructibility/assignability; žádný test skutečně nepřesune
   `SoundEffect` a neověří, že instance vytvořená před přesunem (přes `impl_` keep-alive) dál funguje.
   *CNA:* SoundEffect.hpp:105-109; SoundEffectTests.cpp:27-30 (jen `static_assert`).
   *Accept:* přidat `SoundEffectTest.MoveConstructor.../MoveAssignment...` testy analogicky k CP-12
   (u `SoundEffectInstance`), ověřující že `SoundEffectInstance` vytvořená z přesunutého `SoundEffect`
   dál přehrává správně.
+  *Pozn.:* přidány `MoveConstructedEffectStillCreatesAWorkingInstance`/
+  `MoveAssignedEffectStillCreatesAWorkingInstance` — vytvoří instanci z přesunutého `SoundEffect`,
+  zavolají `Play()` a ověří `State==Playing`. Čistě testovací doplněk, žádná změna produkčního
+  kódu (proto bez `git stash` kroku).
 
 - [x] **CP-23 — Test-mezera: bufferová konstrukce s `loopStart`/`loopLength` nemá success-path test.**
   Existující test pokrývá jen exception path pro špatný rozsah, ne skutečný efekt platného loop

@@ -170,6 +170,7 @@ namespace Microsoft::Xna::Framework::Audio
         , Volume_(other.Volume_)
         , Pan_(other.Pan_)
         , Pitch_(other.Pitch_)
+        , is3D_(other.is3D_)
         // filterState_ is heap-owned; moving the unique_ptr transfers ownership without moving
         // the FilterState object's address, so the callback registered on `track_` (also just
         // transferred, unchanged) stays valid with no re-registration needed (T-4C).
@@ -219,6 +220,7 @@ namespace Microsoft::Xna::Framework::Audio
             Volume_      = other.Volume_;
             Pan_         = other.Pan_;
             Pitch_       = other.Pitch_;
+            is3D_        = other.is3D_;
             // See the move constructor's identical rationale for why no callback
             // re-registration is needed here (T-4C).
             filterState_ = std::move(other.filterState_);
@@ -505,6 +507,8 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
 
+        is3D_ = true; // CP-20: latches setPanProperty() out of writing the real track output
+
         // SDL3_mixer does not support full 3D spatial audio (Doppler, HRTF, orientation).
         // This is a simplified linear distance/pan approximation.
 
@@ -593,6 +597,15 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ArgumentOutOfRangeException("value");
         }
         Pan_ = pan;
+
+        // CP-20: once Apply3D has run at least once, its own pan approximation is what should
+        // keep governing the real track output -- matches FNA's `if (is3D) return;` in Pan's
+        // setter (SoundEffectInstance.cs). The property itself still always reports what was
+        // last set, above.
+        if (is3D_)
+        {
+            return;
+        }
 
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrack(track_);

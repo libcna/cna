@@ -263,6 +263,31 @@ TEST_F(SoundEffectInstanceTest, Apply3DDoesNotModifyVolumeOrPanProperties)
     EXPECT_FLOAT_EQ(inst.getPanProperty(), -0.75f);
 }
 
+// CP-20: matches FNA's `is3D` latch (SoundEffectInstance.cs) -- once Apply3D has run, it (not
+// setPanProperty) should keep governing the real track output. SDL3_mixer has no stereo-pan
+// getter to directly observe the output matrix (same limitation as CP-3/T-4B's Apply3D
+// coverage), so this verifies the is3D_ state machine that setPanProperty() actually branches
+// on, via SoundEffectInstanceTestAccess.
+TEST_F(SoundEffectInstanceTest, SetPanAfterApply3DDoesNotClearIs3DLatch)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    EXPECT_FALSE(SoundEffectInstanceTestAccess::Is3D(inst));
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    inst.Apply3D(listener, emitter);
+    EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+
+    // Setting Pan afterward must still update the property (matches FNA) but must not clear the
+    // latch -- Apply3D's own pan approximation should keep governing the real output until
+    // Apply3D runs again, not this call.
+    inst.setPanProperty(0.9f);
+    EXPECT_FLOAT_EQ(inst.getPanProperty(), 0.9f);
+    EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+}
+
 TEST_F(SoundEffectInstanceTest, Apply3DAfterDisposeThrows)
 {
     REQUIRE_DEVICE();
