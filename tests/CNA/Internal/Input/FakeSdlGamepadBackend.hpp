@@ -1,0 +1,265 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+#include <SDL3/SDL.h>
+
+#include <array>
+#include <deque>
+#include <map>
+#include <memory>
+#include <set>
+#include <utility>
+
+#include "CNA/Internal/Input/SdlGamepadBackend.hpp"
+
+// Test-only fake implementation of the internal SDL gamepad seam. Lets gamepad runtime behavior
+// (hot-plug, slot assignment, capabilities, rumble, sensors, GUID) be exercised with NO real
+// hardware. Opaque SDL_Gamepad*/SDL_Joystick* handles are just reinterpret-cast FakeDevice pointers
+// that are only ever handed back to this fake. NOT compiled into production.
+namespace CNA::Internal::Input::test_support
+{
+    // Per-device fake description; register one per synthetic joystick instance id before delivering
+    // an SDL_EVENT_GAMEPAD_ADDED for that id.
+    struct FakeGamepadConfig
+    {
+        bool isGamepad = true;
+        std::set<SDL_GamepadButton> buttons;
+        std::set<SDL_GamepadAxis> axes;
+        std::set<SDL_SensorType> sensors;
+        int numTouchpads = 0;
+        bool rumble = false;
+        bool triggerRumble = false;
+        bool rgbLed = false;
+        Uint16 vendor = 0;
+        Uint16 product = 0;
+        SDL_GamepadType gamepadType = SDL_GAMEPAD_TYPE_STANDARD;
+        SDL_JoystickType joystickType = SDL_JOYSTICK_TYPE_GAMEPAD;
+        std::array<float, 3> gyroData{{0.0f, 0.0f, 0.0f}};
+        std::array<float, 3> accelData{{0.0f, 0.0f, 0.0f}};
+        bool sensorReadFails = false;
+    };
+
+    class FakeSdlGamepadBackend final : public ISdlGamepadBackend
+    {
+    public:
+        // --- test setup / introspection ---
+        void Register(SDL_JoystickID id, FakeGamepadConfig cfg) { registered_[id] = std::move(cfg); }
+
+        int openCount = 0;               // total OpenGamepad calls
+        int closeCount = 0;              // total CloseGamepad calls
+        int rumbleCalls = 0;             // total RumbleGamepad calls (used to prove GetCapabilities doesn't rumble)
+        int triggerRumbleCalls = 0;
+        int ledCalls = 0;
+        Uint16 lastRumbleLow = 0, lastRumbleHigh = 0;
+        Uint8 lastLedR = 0, lastLedG = 0, lastLedB = 0;
+
+        ~FakeSdlGamepadBackend() override
+        {
+            for (auto& d : devices_)
+                if (d->props != 0)
+                    SDL_DestroyProperties(d->props);
+        }
+
+        // --- ISdlGamepadBackend ---
+        bool IsGamepad(SDL_JoystickID id) override
+        {
+            const auto it = registered_.find(id);
+            return it != registered_.end() && it->second.isGamepad;
+        }
+
+        SDL_Gamepad* OpenGamepad(SDL_JoystickID id) override
+        {
+            const auto it = registered_.find(id);
+            if (it == registered_.end() || !it->second.isGamepad)
+                return nullptr;
+            auto dev = std::make_unique<FakeDevice>();
+            dev->id = id;
+            dev->cfg = it->second;
+            ++openCount;
+            FakeDevice* raw = dev.get();
+            devices_.push_back(std::move(dev));
+            return reinterpret_cast<SDL_Gamepad*>(raw);
+        }
+
+        void CloseGamepad(SDL_Gamepad* gamepad) override
+        {
+            if (FakeDevice* d = dev(gamepad))
+            {
+                d->closed = true;
+                ++closeCount;
+                lastClosedId = d->id;
+                if (d->props != 0)
+                {
+                    SDL_DestroyProperties(d->props);
+                    d->props = 0;
+                }
+            }
+        }
+
+        SDL_Joystick* GetGamepadJoystick(SDL_Gamepad* gamepad) override
+        {
+            return reinterpret_cast<SDL_Joystick*>(dev(gamepad));
+        }
+
+        SDL_JoystickType GetJoystickType(SDL_Joystick* joystick) override
+        {
+            FakeDevice* d = devFromJoystick(joystick);
+            return d ? d->cfg.joystickType : SDL_JOYSTICK_TYPE_UNKNOWN;
+        }
+
+        bool GamepadHasButton(SDL_Gamepad* gamepad, SDL_GamepadButton button) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d != nullptr && d->cfg.buttons.count(button) > 0;
+        }
+
+        bool GamepadHasAxis(SDL_Gamepad* gamepad, SDL_GamepadAxis axis) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d != nullptr && d->cfg.axes.count(axis) > 0;
+        }
+
+        int GetNumGamepadTouchpads(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d ? d->cfg.numTouchpads : 0;
+        }
+
+        bool GamepadHasSensor(SDL_Gamepad* gamepad, SDL_SensorType type) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d != nullptr && d->cfg.sensors.count(type) > 0;
+        }
+
+        SDL_PropertiesID GetGamepadProperties(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr)
+                return 0;
+            if (d->props == 0)
+            {
+                d->props = SDL_CreateProperties();
+                SDL_SetBooleanProperty(d->props, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, d->cfg.rumble);
+                SDL_SetBooleanProperty(d->props, SDL_PROP_GAMEPAD_CAP_TRIGGER_RUMBLE_BOOLEAN, d->cfg.triggerRumble);
+                SDL_SetBooleanProperty(d->props, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, d->cfg.rgbLed);
+            }
+            return d->props;
+        }
+
+        bool RumbleGamepad(SDL_Gamepad* gamepad, Uint16 lowFreq, Uint16 highFreq, Uint32) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr)
+                return false;
+            ++rumbleCalls;
+            lastRumbleLow = lowFreq;
+            lastRumbleHigh = highFreq;
+            return d->cfg.rumble;
+        }
+
+        bool RumbleGamepadTriggers(SDL_Gamepad* gamepad, Uint16, Uint16, Uint32) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr)
+                return false;
+            ++triggerRumbleCalls;
+            return d->cfg.triggerRumble;
+        }
+
+        bool SetGamepadLED(SDL_Gamepad* gamepad, Uint8 red, Uint8 green, Uint8 blue) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr)
+                return false;
+            ++ledCalls;
+            lastLedR = red;
+            lastLedG = green;
+            lastLedB = blue;
+            return d->cfg.rgbLed;
+        }
+
+        bool GamepadSensorEnabled(SDL_Gamepad* gamepad, SDL_SensorType type) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d != nullptr && d->enabledSensors.count(type) > 0;
+        }
+
+        bool SetGamepadSensorEnabled(SDL_Gamepad* gamepad, SDL_SensorType type, bool enabled) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr)
+                return false;
+            if (enabled)
+                d->enabledSensors.insert(type);
+            else
+                d->enabledSensors.erase(type);
+            return true;
+        }
+
+        bool GetGamepadSensorData(SDL_Gamepad* gamepad, SDL_SensorType type, float* data, int count) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr || d->cfg.sensorReadFails || data == nullptr || count < 3)
+                return false;
+            const auto& src = (type == SDL_SENSOR_GYRO) ? d->cfg.gyroData : d->cfg.accelData;
+            data[0] = src[0];
+            data[1] = src[1];
+            data[2] = src[2];
+            return true;
+        }
+
+        Uint16 GetJoystickVendor(SDL_Joystick* joystick) override
+        {
+            FakeDevice* d = devFromJoystick(joystick);
+            return d ? d->cfg.vendor : 0;
+        }
+
+        Uint16 GetJoystickProduct(SDL_Joystick* joystick) override
+        {
+            FakeDevice* d = devFromJoystick(joystick);
+            return d ? d->cfg.product : 0;
+        }
+
+        SDL_GamepadType GetGamepadType(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d ? d->cfg.gamepadType : SDL_GAMEPAD_TYPE_UNKNOWN;
+        }
+
+        SDL_JoystickID lastClosedId = 0;
+
+    private:
+        struct FakeDevice
+        {
+            SDL_JoystickID id = 0;
+            FakeGamepadConfig cfg;
+            bool closed = false;
+            SDL_PropertiesID props = 0;
+            std::set<SDL_SensorType> enabledSensors;
+        };
+
+        FakeDevice* dev(SDL_Gamepad* g) { return reinterpret_cast<FakeDevice*>(g); }
+        FakeDevice* devFromJoystick(SDL_Joystick* j) { return reinterpret_cast<FakeDevice*>(j); }
+
+        std::map<SDL_JoystickID, FakeGamepadConfig> registered_;
+        std::deque<std::unique_ptr<FakeDevice>> devices_;
+    };
+
+    // A fully-featured pad (all buttons/axes/sensors/rumble/LED) for the common case.
+    inline FakeGamepadConfig FullyFeaturedGamepad()
+    {
+        FakeGamepadConfig cfg;
+        for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; ++b)
+            cfg.buttons.insert(static_cast<SDL_GamepadButton>(b));
+        for (int a = 0; a < SDL_GAMEPAD_AXIS_COUNT; ++a)
+            cfg.axes.insert(static_cast<SDL_GamepadAxis>(a));
+        cfg.sensors = {SDL_SENSOR_GYRO, SDL_SENSOR_ACCEL};
+        cfg.numTouchpads = 1;
+        cfg.rumble = true;
+        cfg.triggerRumble = true;
+        cfg.rgbLed = true;
+        cfg.gamepadType = SDL_GAMEPAD_TYPE_XBOXONE;
+        cfg.joystickType = SDL_JOYSTICK_TYPE_GAMEPAD;
+        return cfg;
+    }
+}

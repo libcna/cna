@@ -97,11 +97,21 @@ not exactly identical.
   FNA's reflection-based `ValueType.GetHashCode()`. Deliberate; other sub-structs match FNA.
 - `GetGUID`/`GetCapabilities` are computed **live** each call rather than cached at connect.
 
-**Gaps / TODO (require a fake SDL layer — task 909, open):**
-- No injectable/fake SDL gamepad layer, so hot-plug, pre-connected-visibility, duplicate/unknown
-  events, `>4` handling, env-count values, live capabilities, rumble/LED/sensor, and per-`Buttons`
-  device-level mapping are **not** headless-tested. Value types are well covered; the SDL-bound
-  paths are audited-correct but hardware/manual-gated.
+**Fake-SDL unit coverage (Phase I15 — no real hardware):** an internal injectable seam
+(`ISdlGamepadBackend`, production = real SDL) lets a `FakeSdlGamepadBackend` drive the real
+`SdlInputBridge` event path in tests. Now headless-tested: pre-connected visibility, duplicate add
+(no leak/second slot), unknown remove, remove-closes-correct-handle + disconnect, `>4`
+no-free-slot, `FNA_GAMEPAD_NUM_GAMEPADS` parsing + slot limits, **all 21** `SDL_GamepadButton`
+mappings, axis Y-inversion + trigger normalization, connected/disconnected capabilities,
+rumble/trigger/LED support true/false, **reading capabilities not cancelling active rumble**,
+gyro/accel present/absent + read + graceful failure, and GUID formatting (xinput /
+vendor+product little-endian / Valve overrides).
+
+**Remaining gaps (real hardware / manual only — NOT a code gap):** the fake proves CNA's
+*translation and bookkeeping* are correct; it cannot prove the *physical device acts* — an actual
+rumble motor spinning, real trigger haptics, a real sensor's live values, or genuine OS hot-plug /
+per-controller GUID. Those stay in `docs/input-manual-verification-results.md`, kept **separate**
+from the fake-backend unit tests above.
 
 ---
 
@@ -184,11 +194,12 @@ Input is "done" when **all** of these hold — not before:
 
 1. Full configure succeeds in a **complete** checkout (submodules + sibling repos present).
 2. All input unit tests pass.
-3. Fake-SDL / gamepad tests pass (**blocked on task 909 — not yet satisfied**).
+3. Fake-SDL / gamepad tests pass (**satisfied — Phase I15**: 20 device-level tests via the injectable
+   `ISdlGamepadBackend`). Real-hardware *actuation* remains manual-only (see above).
 4. Docs updated (this file + `input-build-and-test.md`).
 5. Intentional FNA deviations listed (this file).
 6. No stale `Status: PARTIAL` comments unless still true.
 
-Coverage is **not** claimed as "100% FNA fidelity": the gamepad SDL-bound paths are audited-correct
-but not headless-testable until a fake SDL layer exists (task 909). See `plan_input.md` for the
-per-task status.
+Coverage is **not** claimed as "100% FNA fidelity". Phase I15 added the fake SDL gamepad layer, so
+the gamepad SDL-bound *translation/bookkeeping* paths are now headless-tested (not just audited); what
+remains is real-hardware *actuation*, which is manual-only. See `plan_input.md` for the per-task status.

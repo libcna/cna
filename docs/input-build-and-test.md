@@ -80,11 +80,13 @@ These are **not** missing code — they require real hardware, a real IME, or a 
 environment that the headless test binary does not provide. They are covered by targeted unit tests
 of the translation logic only, and are otherwise manual/hardware-gated:
 
-- **Real gamepad runtime paths** — hot-plug, live axis/button/trigger streams, rumble, trigger
-  rumble, light bar, gyro/accelerometer, GUID, and live `GamePadCapabilities`. There is currently
-  **no fake/injectable SDL gamepad layer** (Phase I13/I14 task 909 is open), so every SDL-device-bound
-  gamepad path is exercised only in its disconnected-fallback form. See `plan_input.md` (907–926) and
-  `docs/input-manual-verification-results.md`.
+- **Real gamepad *actuation*** — a physical rumble motor spinning, real trigger haptics, a real
+  sensor's live values, and genuine OS hot-plug / per-controller GUID. As of **Phase I15** the SDL
+  gamepad *translation and bookkeeping* (hot-plug/slot assignment, button/axis mapping, capabilities,
+  rumble/LED/sensor support, GUID formatting) IS headless-tested via an injectable fake SDL backend
+  (`ISdlGamepadBackend` / `FakeSdlGamepadBackend`, `*FakeGamepad*` tests). What the fake cannot prove
+  is that the physical device *acts* — that stays manual/hardware-gated. See `plan_input.md`
+  (Phase I15) and `docs/input-manual-verification-results.md`.
 - **IME / composition** — real `TextEditing` composition, cursor, and selection over a physical IME.
 - **Wayland OS-cursor landing** — `SDL_GetGlobalMouseState` is compositor-restricted, so the absolute
   landing pixel of `Mouse::SetPosition` is only readable under X11.

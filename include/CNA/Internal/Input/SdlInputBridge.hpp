@@ -2,6 +2,7 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -129,6 +130,23 @@ namespace CNA::Internal::Input
 
         /** @brief Test-only: reverts scancode mode to the `FNA_KEYBOARD_USE_SCANCODES` env value. */
         static void ClearScancodeModeForTests();
+
+        /**
+         * @brief Test-only: parses an `FNA_GAMEPAD_NUM_GAMEPADS` string exactly as the runtime does.
+         * @param envValue The raw env string (may be nullptr).
+         * @return The effective supported-gamepad count (0..4).
+         */
+        static std::size_t ParseGamepadCountForTests(const char* envValue);
+
+        /**
+         * @brief Test-only: overrides the effective supported-gamepad count (the cached
+         *        `FNA_GAMEPAD_NUM_GAMEPADS` value can't be changed in-process).
+         * @param count The number of gamepad slots to expose (clamped to the supported maximum).
+         */
+        static void SetGamepadCountForTests(std::size_t count);
+
+        /** @brief Test-only: reverts the supported-gamepad count to the env-derived value. */
+        static void ClearGamepadCountForTests();
 
         /**
          * @brief Test-only: resets `SdlInputBridge`'s process-wide file-static state — the

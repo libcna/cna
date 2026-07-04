@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SdlGamepadBackend.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
@@ -35,23 +36,35 @@ namespace
     // requires adding more PlayerIndex names; CNA's PlayerIndex is frozen XNA API
     // (only One-Four), so an override above MaxSupportedGamePads is clamped down.
     // The practically useful direction — reducing/disabling gamepad tracking — works.
+    // Pure parse of the FNA_GAMEPAD_NUM_GAMEPADS value: nullptr / negative / non-numeric ->
+    // MaxSupportedGamePads; a valid non-negative value is clamped to MaxSupportedGamePads (PlayerIndex
+    // is the frozen XNA enum One-Four). Extracted so the parsing is directly unit-testable.
+    std::size_t parse_gamepad_count(const char* envValue)
+    {
+        if (envValue != nullptr)
+        {
+            try
+            {
+                const long parsed = std::stol(envValue);
+                if (parsed >= 0)
+                    return std::min(static_cast<std::size_t>(parsed), MaxSupportedGamePads);
+            }
+            catch (...)
+            {
+            }
+        }
+        return MaxSupportedGamePads;
+    }
+
+    // Test-only override for effective_gamepad_count(); nullopt means "use the cached env value".
+    // The env value is read once (cached), so tests use this to exercise 0/1/4-slot behavior.
+    std::optional<std::size_t> g_gamepadCountTestOverride;
+
     std::size_t effective_gamepad_count()
     {
-        static const std::size_t count = []() -> std::size_t {
-            if (const char* envValue = std::getenv("FNA_GAMEPAD_NUM_GAMEPADS"))
-            {
-                try
-                {
-                    const long parsed = std::stol(envValue);
-                    if (parsed >= 0)
-                        return std::min(static_cast<std::size_t>(parsed), MaxSupportedGamePads);
-                }
-                catch (...)
-                {
-                }
-            }
-            return MaxSupportedGamePads;
-        }();
+        if (g_gamepadCountTestOverride.has_value())
+            return g_gamepadCountTestOverride.value();
+        static const std::size_t count = parse_gamepad_count(std::getenv("FNA_GAMEPAD_NUM_GAMEPADS"));
         return count;
     }
 
@@ -890,13 +903,13 @@ namespace CNA::Internal::Input
             return false;
         }
 
-        if (!SDL_GamepadSensorEnabled(gamepad, type))
+        if (!sdl_gamepad_backend().GamepadSensorEnabled(gamepad, type))
         {
-            SDL_SetGamepadSensorEnabled(gamepad, type, true);
+            sdl_gamepad_backend().SetGamepadSensorEnabled(gamepad, type, true);
         }
 
         float data[3] = {};
-        if (!SDL_GetGamepadSensorData(gamepad, type, data, 3))
+        if (!sdl_gamepad_backend().GetGamepadSensorData(gamepad, type, data, 3))
         {
             out = Microsoft::Xna::Framework::Vector3::Zero;
             return false;
@@ -917,7 +930,7 @@ namespace CNA::Internal::Input
             return false;
         const auto left  = static_cast<Uint16>(std::clamp(leftMotor,  0.0f, 1.0f) * 0xFFFF);
         const auto right = static_cast<Uint16>(std::clamp(rightMotor, 0.0f, 1.0f) * 0xFFFF);
-        return SDL_RumbleGamepad(gamepad, left, right, 0);
+        return sdl_gamepad_backend().RumbleGamepad(gamepad, left, right, 0);
     }
 
     bool SdlInputBridge::SetTriggerVibration(
@@ -931,7 +944,7 @@ namespace CNA::Internal::Input
             return false;
         const auto left  = static_cast<Uint16>(std::clamp(leftTrigger,  0.0f, 1.0f) * 0xFFFF);
         const auto right = static_cast<Uint16>(std::clamp(rightTrigger, 0.0f, 1.0f) * 0xFFFF);
-        return SDL_RumbleGamepadTriggers(gamepad, left, right, 0);
+        return sdl_gamepad_backend().RumbleGamepadTriggers(gamepad, left, right, 0);
     }
 
     void SdlInputBridge::SetLightBar(
@@ -942,7 +955,7 @@ namespace CNA::Internal::Input
         SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
         if (gamepad == nullptr)
             return;
-        SDL_SetGamepadLED(gamepad, color.getRProperty(), color.getGProperty(), color.getBProperty());
+        sdl_gamepad_backend().SetGamepadLED(gamepad, color.getRProperty(), color.getGProperty(), color.getBProperty());
     }
 
     std::string SdlInputBridge::FormatGamePadGUIDEXT(const std::uint16_t vendor, const std::uint16_t product)
@@ -964,19 +977,19 @@ namespace CNA::Internal::Input
         SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
         if (gamepad == nullptr)
             return "";
-        SDL_Joystick* joystick = SDL_GetGamepadJoystick(gamepad);
+        SDL_Joystick* joystick = sdl_gamepad_backend().GetGamepadJoystick(gamepad);
         if (joystick == nullptr)
             return "";
 
-        const std::uint16_t vendor  = SDL_GetJoystickVendor(joystick);
-        const std::uint16_t product = SDL_GetJoystickProduct(joystick);
+        const std::uint16_t vendor  = sdl_gamepad_backend().GetJoystickVendor(joystick);
+        const std::uint16_t product = sdl_gamepad_backend().GetJoystickProduct(joystick);
         std::string guid = FormatGamePadGUIDEXT(vendor, product);
 
         // Valve controllers report the Steam vendor id (0x28de); FNA remaps the re-exposed
         // controller types to fixed GUIDs (SDL3_FNAPlatform.cs:2193-2210).
         if (vendor == 0x28de)
         {
-            const SDL_GamepadType type = SDL_GetGamepadType(gamepad);
+            const SDL_GamepadType type = sdl_gamepad_backend().GetGamepadType(gamepad);
             if (type == SDL_GAMEPAD_TYPE_XBOX360 || type == SDL_GAMEPAD_TYPE_XBOXONE)
                 guid = "xinput";
             else if (type == SDL_GAMEPAD_TYPE_PS4)
@@ -1033,41 +1046,41 @@ namespace CNA::Internal::Input
         caps.setIsConnectedProperty(true);
 
         // Joystick type → GamePadType
-        SDL_Joystick* joystick = SDL_GetGamepadJoystick(gamepad);
+        SDL_Joystick* joystick = sdl_gamepad_backend().GetGamepadJoystick(gamepad);
         if (joystick != nullptr)
-            caps.setGamePadTypeProperty(sdl_joystick_type_to_gamepad_type(SDL_GetJoystickType(joystick)));
+            caps.setGamePadTypeProperty(sdl_joystick_type_to_gamepad_type(sdl_gamepad_backend().GetJoystickType(joystick)));
 
         // Buttons
-        caps.setHasAButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH));
-        caps.setHasBButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_EAST));
-        caps.setHasXButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_WEST));
-        caps.setHasYButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH));
-        caps.setHasBackButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_BACK));
-        caps.setHasBigButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_GUIDE));
-        caps.setHasStartButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_START));
-        caps.setHasLeftStickButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK));
-        caps.setHasRightStickButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_STICK));
-        caps.setHasLeftShoulderButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER));
-        caps.setHasRightShoulderButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
-        caps.setHasDPadUpButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP));
-        caps.setHasDPadDownButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN));
-        caps.setHasDPadLeftButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT));
-        caps.setHasDPadRightButtonProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT));
+        caps.setHasAButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_SOUTH));
+        caps.setHasBButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_EAST));
+        caps.setHasXButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_WEST));
+        caps.setHasYButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_NORTH));
+        caps.setHasBackButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_BACK));
+        caps.setHasBigButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_GUIDE));
+        caps.setHasStartButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_START));
+        caps.setHasLeftStickButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_LEFT_STICK));
+        caps.setHasRightStickButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_RIGHT_STICK));
+        caps.setHasLeftShoulderButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_LEFT_SHOULDER));
+        caps.setHasRightShoulderButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
+        caps.setHasDPadUpButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_DPAD_UP));
+        caps.setHasDPadDownButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_DPAD_DOWN));
+        caps.setHasDPadLeftButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_DPAD_LEFT));
+        caps.setHasDPadRightButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_DPAD_RIGHT));
 
         // Axes
-        caps.setHasLeftXThumbStickProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX));
-        caps.setHasLeftYThumbStickProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY));
-        caps.setHasRightXThumbStickProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX));
-        caps.setHasRightYThumbStickProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY));
-        caps.setHasLeftTriggerProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
-        caps.setHasRightTriggerProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+        caps.setHasLeftXThumbStickProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_LEFTX));
+        caps.setHasLeftYThumbStickProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_LEFTY));
+        caps.setHasRightXThumbStickProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_RIGHTX));
+        caps.setHasRightYThumbStickProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_RIGHTY));
+        caps.setHasLeftTriggerProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
+        caps.setHasRightTriggerProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
 
         // Rumble / trigger-rumble / light-bar capabilities: query the gamepad's capability
         // PROPERTIES rather than probing. Do NOT probe with SDL_RumbleGamepad(gamepad, 0, 0, 0):
         // a zero-magnitude rumble call STOPS any active vibration, so probing here would silently
         // cancel a game's SetVibration every time it reads capabilities. FNA sidesteps this by
         // caching capabilities once at connect; we instead read the non-mutating cap properties.
-        const SDL_PropertiesID props = SDL_GetGamepadProperties(gamepad);
+        const SDL_PropertiesID props = sdl_gamepad_backend().GetGamepadProperties(gamepad);
         const bool hasRumble = props != 0 &&
             SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
         caps.setHasLeftVibrationMotorProperty(hasRumble);
@@ -1080,16 +1093,16 @@ namespace CNA::Internal::Input
             caps.setHasLightBarEXTProperty(SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false));
 
         // Extended buttons
-        caps.setHasMisc1EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_MISC1));
-        caps.setHasPaddle1EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1));
-        caps.setHasPaddle2EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1));
-        caps.setHasPaddle3EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2));
-        caps.setHasPaddle4EXTProperty(SDL_GamepadHasButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_PADDLE2));
+        caps.setHasMisc1EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_MISC1));
+        caps.setHasPaddle1EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1));
+        caps.setHasPaddle2EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_LEFT_PADDLE1));
+        caps.setHasPaddle3EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2));
+        caps.setHasPaddle4EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_LEFT_PADDLE2));
 
         // Touchpad, gyro, accelerometer
-        caps.setHasTouchPadEXTProperty(SDL_GetNumGamepadTouchpads(gamepad) > 0);
-        caps.setHasGyroEXTProperty(SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO));
-        caps.setHasAccelerometerEXTProperty(SDL_GamepadHasSensor(gamepad, SDL_SENSOR_ACCEL));
+        caps.setHasTouchPadEXTProperty(sdl_gamepad_backend().GetNumGamepadTouchpads(gamepad) > 0);
+        caps.setHasGyroEXTProperty(sdl_gamepad_backend().GamepadHasSensor(gamepad,SDL_SENSOR_GYRO));
+        caps.setHasAccelerometerEXTProperty(sdl_gamepad_backend().GamepadHasSensor(gamepad,SDL_SENSOR_ACCEL));
 
         return caps;
     }
@@ -1125,6 +1138,21 @@ namespace CNA::Internal::Input
         g_scancodeModeTestOverride = std::nullopt;
     }
 
+    std::size_t SdlInputBridge::ParseGamepadCountForTests(const char* envValue)
+    {
+        return parse_gamepad_count(envValue);
+    }
+
+    void SdlInputBridge::SetGamepadCountForTests(const std::size_t count)
+    {
+        g_gamepadCountTestOverride = std::min(count, MaxSupportedGamePads);
+    }
+
+    void SdlInputBridge::ClearGamepadCountForTests()
+    {
+        g_gamepadCountTestOverride = std::nullopt;
+    }
+
     void SdlInputBridge::ResetForTests()
     {
         g_textInputSuppress = false;
@@ -1133,12 +1161,15 @@ namespace CNA::Internal::Input
         get_finger_id_to_touch_id_map().clear();
         get_next_touch_id() = 1;
         g_scancodeModeTestOverride = std::nullopt;
-        // Clear the gamepad slot/player maps. We deliberately do NOT SDL_CloseGamepad the opened
-        // handles here: in the headless test suite no real gamepad is ever opened (these stay
-        // null/empty), and closing an app-owned handle from a test reset would be unsafe. We only
-        // drop CNA's own bookkeeping so a synthetic add/remove test starts from a clean slate.
+        g_gamepadCountTestOverride = std::nullopt;
+        // Clear the gamepad slot/player maps. We deliberately do NOT close the opened handles here:
+        // with the real SDL backend no gamepad is ever opened headless (these stay null/empty), and
+        // closing an app-owned handle from a test reset would be unsafe. A test using the FAKE
+        // backend closes handles through its own bookkeeping. We only drop CNA's slot maps so a
+        // synthetic add/remove test starts clean, and restore the real SDL gamepad backend.
         get_opened_gamepads().fill(nullptr);
         get_gamepad_to_player_index_map().clear();
+        SetSdlGamepadBackendForTests(nullptr);
     }
 
     void SdlInputBridge::EnsureGamepadSubsystemInitialized()
@@ -1422,7 +1453,7 @@ namespace CNA::Internal::Input
             }
         case SDL_EVENT_GAMEPAD_ADDED:
             {
-                if (!SDL_IsGamepad(event.gdevice.which))
+                if (!sdl_gamepad_backend().IsGamepad(event.gdevice.which))
                 {
                     break;
                 }
@@ -1439,7 +1470,7 @@ namespace CNA::Internal::Input
                     break;
                 }
 
-                SDL_Gamepad* gamepad = SDL_OpenGamepad(event.gdevice.which);
+                SDL_Gamepad* gamepad = sdl_gamepad_backend().OpenGamepad(event.gdevice.which);
                 if (gamepad == nullptr)
                 {
                     break;
@@ -1466,7 +1497,7 @@ namespace CNA::Internal::Input
                     auto& openedGamePad = get_opened_gamepads()[slot.value()];
                     if (openedGamePad != nullptr)
                     {
-                        SDL_CloseGamepad(openedGamePad);
+                        sdl_gamepad_backend().CloseGamepad(openedGamePad);
                         openedGamePad = nullptr;
                     }
                 }

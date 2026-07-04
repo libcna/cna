@@ -431,25 +431,25 @@ behavior.
 ### GamePad runtime and FNA fidelity
 
 - [x] 907. **Done — REAL BUG fixed.** `SDL_INIT_GAMEPAD` was **never** initialized anywhere, so SDL produced NO gamepad add/remove/axis/button events — gamepads were entirely invisible at runtime. Added `SdlInputBridge::EnsureGamepadSubsystemInitialized()` (idempotent; sets `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS`), called lazily on first `ProcessEvent`. Initializing the subsystem makes SDL enumerate already-connected pads and queue `GAMEPAD_ADDED` for each. (Kept in the input layer; the SDL_INIT_VIDEO call in GraphicsDevice.cpp is out of this phase's scope.)
-- [ ] 908. **Open — blocked on 909.** No fake-SDL layer, so "pad connected before first frame is visible" cannot be exercised headless. The code path is now correct (907); verification is manual/hardware until 909.
-- [ ] 909. **Open (large infra).** No fake/injectable SDL gamepad layer exists. `SdlInputBridge` calls `SDL_OpenGamepad`/`SDL_GamepadHas*`/`SDL_Rumble*`/sensor APIs directly; faking them needs link-time seams or DI — a substantial change deferred out of this pass. **This blocks 908/910/911/912/914/923 and the device-level half of 921/926.** Recorded honestly, not faked.
-- [ ] 910. **Open — blocked on 909.** (Audited: CNA guards against duplicate-add before `SDL_OpenGamepad`, so no leak — safer than FNA — but this cannot be headless-tested without 909.)
-- [ ] 911. **Open — blocked on 909.** (Audited: unknown-remove is safely ignored.)
-- [ ] 912. **Open — blocked on 909.** (Audited: >4 pads → slot refused, matches FNA.)
-- [a] 913. **Audited — documented deviation.** `FNA_GAMEPAD_NUM_GAMEPADS` is read and clamped to 4 (0 disables, negative/garbage→4) because `PlayerIndex` is the frozen XNA enum; FNA leaves it unclamped. Matches FNA for all usable values 0–4. Documented.
-- [ ] 914. **Open — blocked on 909** for the >4 path (needs synthetic multi-pad add). Env parsing 0–4 is audited-correct.
+- [x] 908. **Done (Phase I15, fake SDL).** `FakeGamepadTest.PadConnectedBeforeFirstFrameBecomesVisible` — a synthetic `GAMEPAD_ADDED` (what SDL queues for a pad present at subsystem init) makes the pad visible to `GamePad::GetState` before the first frame.
+- [x] 909. **Done (Phase I15).** Implemented the injectable `ISdlGamepadBackend` seam (real SDL impl by default) + `FakeSdlGamepadBackend`; `SdlInputBridge`'s gamepad/joystick calls all route through it. 20 device-level gamepad tests pass. See Phase I15 (961–972).
+- [x] 910. **Done (Phase I15).** `FakeGamepadTest.DuplicateAddDoesNotLeakOrAllocateSecondSlot` — a duplicate add opens no second handle and claims no second slot.
+- [x] 911. **Done (Phase I15).** `FakeGamepadTest.UnknownRemoveIsIgnored` — a remove for a never-added id closes nothing and connects no player.
+- [x] 912. **Done (Phase I15).** `FakeGamepadTest.MoreThanFourPadsRefusedWhenNoFreeSlot` (5th pad refused) + `RemoveClosesCorrectHandleAndDisconnectsPlayer`.
+- [a] 913. **Audited — documented deviation.** `FNA_GAMEPAD_NUM_GAMEPADS` is read and clamped to 4 (0 disables, negative/garbage→4) because `PlayerIndex` is the frozen XNA enum; FNA leaves it unclamped. Matches FNA for all usable values 0–4. Now also test-covered (see 914).
+- [x] 914. **Done (Phase I15).** `FakeGamepadEnvCount.ParsesFnaGamepadNumGamepadsValues` (0/1/4/8→4/-1→4/"abc"→4/nullptr→4) + `GamepadCountOfOneLimitsToASingleSlot` + `GamepadCountOfZeroDisablesTracking` via a testable parse + count-override hook.
 - [a] 915. **Audited.** `PacketNumber` increments on raw per-field changes (event-driven) vs FNA's once-per-poll-on-processed-change; connect bumps, identical state doesn't, disconnect resets to 0. A within-dead-zone axis wobble can bump it (differs from FNA). Documented in fidelity doc.
 - [~] 916. **Partial.** `GamePadInputTests`/`GamePadMappingTests` cover connect-bumps / identical-no-bump / disconnect→0 (coarse ordering). The within-dead-zone over-increment vs FNA is documented but not asserted.
-- [a] 917. **Audited — matches FNA.** Disconnect resets the slot to default (`PacketNumber=0`, `IsConnected=false`); `GetState` returns default `GamePadState()`. Documented + tested (disconnect→0).
-- [a] 918. **Audited — matches FNA exactly.** Dead-zone constants (`7849`/`8689`/`30`) and Independent/Circular/None math are line-for-line ports. Covered by the value-type tests.
-- [a] 919. **Audited — matches FNA.** Thumbstick Y negated; triggers `/32767`. (Tiny neg-axis `/32768` normalization detail noted in fidelity doc.)
-- [a] 920. **Audited — matches FNA exactly.** All 21 SDL buttons incl. paddles/touchpad/guide→BigButton map to the correct `Buttons`.
-- [~] 921. **Partial.** `GamePadMappingTests` table-tests the `InputManager`-level `Buttons` mapping. The SDL-device-level `SDL_GamepadButton`→`Buttons` conversion is audited-correct but needs 909 to test end-to-end.
-- [x] 922. **Done — REAL BUG fixed.** `GetCapabilities` probed rumble with `SDL_RumbleGamepad(0,0,0)` — a zero rumble **stops active vibration**, so reading caps cancelled a game's `SetVibration` every call. Now reads non-mutating cap properties (`SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN` / `…_TRIGGER_RUMBLE_BOOLEAN` / `…_RGB_LED_BOOLEAN`).
-- [ ] 923. **Open — blocked on 909.** Rumble/trigger-rumble/LED/gyro/accel/unsupported-device paths need a fake device to test headless. Code audited-correct; the 922 side-effect is fixed.
-- [a] 924. **Audited — matches FNA.** `SetVibration`/`SetTriggerVibration`/`SetLightBar`/`GetGyro`/`GetAccelerometer`/`GetGUID` are faithful ports (GUID incl. "xinput" + Valve overrides). Minor: GUID/caps computed live vs FNA cached-at-connect. Documented.
+- [a] 917. **Audited — matches FNA.** Disconnect resets the slot to default (`PacketNumber=0`, `IsConnected=false`); `GetState` returns default `GamePadState()`. Documented + tested (disconnect→0, incl. the new device-level remove test).
+- [a] 918. **Audited — matches FNA exactly.** Dead-zone constants (`7849`/`8689`/`30`) and Independent/Circular/None math are line-for-line ports. Now also exercised device-level (`FakeGamepadTest.AxisMappingHandlesYInversionAndTriggerNormalization` uses raw pre-dead-zone values).
+- [x] 919. **Done (Phase I15).** `FakeGamepadTest.AxisMappingHandlesYInversionAndTriggerNormalization` — full-deflection LEFTX/LEFTY(±)/RIGHTX/trigger through the event path assert Y-inversion (SDL up→XNA +1) and trigger normalization on the raw state.
+- [x] 920. **Done (Phase I15).** All 21 SDL buttons map to the correct `Buttons` — now tested end-to-end via the event path (see 921).
+- [x] 921. **Done (Phase I15).** `FakeGamepadTest.EverySdlButtonMapsToTheExpectedXnaButton` — table of all 21 `SDL_GamepadButton`→`Buttons`, each asserted down then up through `ProcessEvent`.
+- [x] 922. **Done — REAL BUG fixed + now test-verified.** `GetCapabilities` no longer probes rumble with `SDL_RumbleGamepad(0,0,0)` (which stops active vibration); reads non-mutating cap properties. `FakeGamepadTest.RumbleSupportReportedTrueWithoutStoppingActiveRumble` proves reading caps does not call the fake's `RumbleGamepad` after a `SetVibration`.
+- [x] 923. **Done (Phase I15).** Fake-device tests for rumble true/false, trigger rumble, light bar, gyro/accel present+absent, sensor read + graceful failure (`RumbleSupportReported*`, `TriggerRumbleAndLightBarSupportReported`, `GyroAndAccelerometerSupportReported*`, `GyroAndAccelReadReturnData`, `SensorReadFailsGracefullyWhenUnavailable`).
+- [x] 924. **Done (Phase I15) + audited.** GUID formatting now tested: `FakeGamepadGuidFormat.FormatsXinput…` (pure) + `FakeGamepadTest.GetGuidUsesVendorProductAndValveOverrides` (little-endian vendor/product, Valve PS4→`4c05c405`, Valve Xbox→`xinput`, disconnected→""). `SetVibration`/`SetLightBar`/sensors covered by 923. Minor live-vs-cached deviation documented.
 - [a] 925. **Audited — documented deviation.** `GamePadState::GetHashCode()` = `buttons ^ packetNumber*31` (consistent for equal states) vs FNA's reflection `ValueType.GetHashCode()`; `ToString()` matches FNA (type name). Documented as intentional.
-- [~] 926. **Partial.** `GamePadStateTests` cover equality/hash consistency for the value types; full "differs only in thumbsticks/triggers/dpad/connection" matrix at the device level needs 909.
+- [x] 926. **Done.** `GamePadStateTests` cover equality/hash consistency for states differing in each field (value-type level); the fake now also lets connection/button/axis differences be built through the event path and asserted (mapping/capabilities/remove tests). No new equality-matrix gap remains.
 
 ### Mouse fidelity
 
@@ -535,6 +535,73 @@ iteration** (165/165) — after fixing the GestureDetector test-clock leak the s
 tests (908/910/911/912/914/923, device half of 921/926); exhaustive gesture matrix (906). Vulkan/bgfx
 backends were **not** re-run this phase (input is backend-agnostic and the code is unchanged across
 backends; only EasyGL was rebuilt+tested here) — a full 3-backend pass is the merge-time check.
+
+---
+
+## Phase I15 - Fake SDL GamePad Layer and Device-Level Tests
+
+> Goal: make SDL gamepad runtime behavior testable **without real hardware**, unblocking the
+> device-level tasks that Phase I13/I14 left open (908/909/910/911/912/914/920/921/923/924/926).
+> **No public API was expanded** — the seam is internal (`CNA::Internal::Input`) and never exposed in
+> the XNA layer. Input is **not** claimed 100% complete: real-hardware *actuation* (a motor actually
+> spinning, a real sensor's live values, real OS hot-plug) is still only manually verifiable.
+
+- [x] 961. **Done.** Designed + implemented `ISdlGamepadBackend` — an internal seam over the 18 SDL3
+  gamepad/joystick operations `SdlInputBridge` uses (`include/CNA/Internal/Input/SdlGamepadBackend.hpp`).
+  `RealSdlGamepadBackend` (default) forwards 1:1 to `SDL_*`; a global accessor returns the active
+  backend; `SetSdlGamepadBackendForTests(nullptr|fake)` swaps it. Not in the XNA API.
+- [x] 962. **Done.** Routed every `SDL_*` gamepad/joystick call in `SdlInputBridge.cpp` through the
+  seam (add/remove/open/close, has-button/-axis/-sensor, properties, rumble/trigger-rumble/LED,
+  sensor enable+read, vendor/product/type). `SDL_GetBooleanProperty` stays a direct read of the
+  property set the seam returns. Production behavior is byte-for-byte unchanged (real backend).
+- [x] 963. **Done.** Added the test-only `FakeSdlGamepadBackend` (`tests/.../FakeSdlGamepadBackend.hpp`):
+  register per-device configs (buttons/axes/sensors/vendor/product/type/rumble/LED), synthetic
+  handles via reinterpret-cast, real `SDL_CreateProperties` for capability booleans, and call
+  counters (open/close/rumble/LED) for leak + no-side-effect assertions.
+- [x] 964. **Done.** Extracted a pure `parse_gamepad_count()` + a `g_gamepadCountTestOverride`, exposed
+  as `SdlInputBridge::ParseGamepadCountForTests` / `SetGamepadCountForTests` / `ClearGamepadCountForTests`,
+  so the cached `FNA_GAMEPAD_NUM_GAMEPADS` env can be exercised in-process. Reset by `ResetForTests`.
+- [x] 965. **Done.** Hot-plug / slot tests (closes 908/910/911/912): pre-connected-visible, duplicate
+  add (no leak/second slot), unknown remove ignored, remove closes the right handle + disconnects,
+  5th pad refused when no free slot.
+- [x] 966. **Done.** Env-count tests (closes 914): parse of 0/1/4/8/-1/"abc"/nullptr, plus count-of-1
+  and count-of-0 slot behavior.
+- [x] 967. **Done.** Mapping tests (closes 920/921 and device-level 918/919): all 21 SDL buttons →
+  `Buttons`, and axis Y-inversion + trigger normalization on the raw state.
+- [x] 968. **Done.** Capability + actuation-seam tests (closes 923, verifies 922): rumble/trigger/LED
+  support true/false, **reading capabilities does not call `RumbleGamepad`** (so active vibration
+  isn't cancelled), gyro/accel present+absent, sensor read + graceful failure, connected vs
+  disconnected caps.
+- [x] 969. **Done.** GUID tests (closes 924): pure formatter (xinput / little-endian vendor+product)
+  and the device path incl. Valve PS4/Xbox overrides and disconnected→"".
+- [x] 970. **Done.** Updated `docs/input-fna-fidelity.md`: the GamePad "fake-SDL gap" is reduced to the
+  real-hardware-actuation residue; fake-backend unit coverage is listed separately from
+  manual/hardware verification.
+- [x] 971. **Done.** Ran full `CnaTests`, the input filter, a shuffled+repeated input filter, and the
+  focused GamePad/SdlInputBridge filter — see the Phase I15 audit note below.
+- [~] 972. **Partial by design (honest).** Real-hardware paths stay open/manual: an actual rumble
+  motor spinning / trigger haptics, a physical sensor's live values, real OS hot-plug/GUID from a
+  specific controller, and Wayland specifics. The fake proves CNA's *translation + bookkeeping* is
+  correct; it does not prove the physical device acts. Kept in `docs/input-manual-verification-results.md`.
+
+### Phase I15 audit note (task 971)
+
+**Commands (EasyGL):** reconfigure + `cmake --build … --target CnaTests`, then:
+```
+./cmake-build-input-easygl/CnaTests
+./cmake-build-input-easygl/CnaTests --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*'
+./cmake-build-input-easygl/CnaTests --gtest_filter='<input+fake>' --gtest_shuffle --gtest_repeat=5
+./cmake-build-input-easygl/CnaTests --gtest_filter='FakeGamepad*:FakeGamepadEnvCount*:FakeGamepadGuidFormat*'
+```
+**Results:** build clean. Full **2233 / 2233** (was 2213; +20 device-level gamepad tests). Input
+filter **256 / 256**. Shuffle × 5 **235/235 every iteration** (order-independent). Focused fake-gamepad
+filter **20 / 20**. No failures. (Vulkan/bgfx not re-run — input is backend-agnostic; the seam adds no
+backend-specific code. 3-backend pass is the merge-time check.)
+
+**Remaining GamePad / FNA deviations (unchanged by this phase, documented):** clamp-to-4
+`FNA_GAMEPAD_NUM_GAMEPADS`; event-driven per-field `PacketNumber` (within-dead-zone wobble can bump);
+`GamePadState::GetHashCode` partial-field vs FNA reflection; GUID/caps computed live vs FNA
+cached-at-connect. None are correctness bugs.
 
 ---
 
