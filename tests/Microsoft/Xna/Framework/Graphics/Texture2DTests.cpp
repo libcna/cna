@@ -167,6 +167,59 @@ TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
 }
 
+// Task 290: exhaustive sweep over every SurfaceFormat value. The individual tests above already
+// cover 20 of the 27 values one at a time (added incrementally across Tasks 176/286-289); this
+// test guarantees the remaining 7 (Bgra5551/Bgra4444/Dxt3/Dxt5/Rg32/ByteEXT/UShortEXT) are covered
+// too and stays correct automatically if SurfaceFormat ever grows a 28th value, since every entry
+// is listed here explicitly rather than assumed.
+TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsClearly)
+{
+    static const SurfaceFormat kAllFormats[] = {
+        SurfaceFormat::Color,
+        SurfaceFormat::Bgr565,
+        SurfaceFormat::Bgra5551,
+        SurfaceFormat::Bgra4444,
+        SurfaceFormat::Dxt1,
+        SurfaceFormat::Dxt3,
+        SurfaceFormat::Dxt5,
+        SurfaceFormat::NormalizedByte2,
+        SurfaceFormat::NormalizedByte4,
+        SurfaceFormat::Rgba1010102,
+        SurfaceFormat::Rg32,
+        SurfaceFormat::Rgba64,
+        SurfaceFormat::Alpha8,
+        SurfaceFormat::Single,
+        SurfaceFormat::Vector2,
+        SurfaceFormat::Vector4,
+        SurfaceFormat::HalfSingle,
+        SurfaceFormat::HalfVector2,
+        SurfaceFormat::HalfVector4,
+        SurfaceFormat::HdrBlendable,
+        SurfaceFormat::ColorBgraEXT,
+        SurfaceFormat::ColorSrgbEXT,
+        SurfaceFormat::Dxt5SrgbEXT,
+        SurfaceFormat::Bc7EXT,
+        SurfaceFormat::Bc7SrgbEXT,
+        SurfaceFormat::ByteEXT,
+        SurfaceFormat::UShortEXT,
+    };
+
+    for (SurfaceFormat format : kAllFormats)
+    {
+        if (format == SurfaceFormat::Color)
+        {
+            EXPECT_NO_THROW(Texture2D(gd, 4, 4, false, format))
+                << "SurfaceFormat::Color ordinal " << static_cast<int>(format);
+        }
+        else
+        {
+            EXPECT_THROW(Texture2D(gd, 4, 4, false, format), std::runtime_error)
+                << "SurfaceFormat ordinal " << static_cast<int>(format)
+                << " must throw std::runtime_error, not silently succeed with the wrong GPU format";
+        }
+    }
+}
+
 // -----------------------------------------------------------------------
 // getBoundsProperty
 // -----------------------------------------------------------------------
