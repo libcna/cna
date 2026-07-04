@@ -1153,6 +1153,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 308: ColorSourceBlend/ColorDestinationBlend operate independently from Alpha*Blend
+        cna_easygl_test(cna_test_easygl_blendstate_separate_factors
+                        examples/easygl_blendstate_separate_factors_test.cpp)
+        add_test(NAME EasyGL_BlendState_SeparateFactors
+                 COMMAND cna_test_easygl_blendstate_separate_factors)
+        set_tests_properties(EasyGL_BlendState_SeparateFactors PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1321,6 +1330,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_BlendState_SeparateFunctions
                  COMMAND cna_test_vulkan_blendstate_separate_functions)
         set_tests_properties(Vulkan_BlendState_SeparateFunctions PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 308: ColorSourceBlend/ColorDestinationBlend independence on Vulkan too (reuses the
+        # backend-agnostic EasyGL source). NOTE: expect Check A to coincidentally pass and Check B
+        # to fail per Task 868 - Vulkan always hardcodes SourceAlpha/InverseSourceAlpha for colour.
+        cna_vulkan_test(cna_test_vulkan_blendstate_separate_factors
+                        examples/easygl_blendstate_separate_factors_test.cpp)
+        add_test(NAME Vulkan_BlendState_SeparateFactors
+                 COMMAND cna_test_vulkan_blendstate_separate_factors)
+        set_tests_properties(Vulkan_BlendState_SeparateFactors PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
