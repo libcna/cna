@@ -17,9 +17,14 @@ namespace Microsoft::Devices
     namespace
     {
         // File-local state: the single haptic device opened by Start(), reused
-        // across calls so Stop() can act on it. Never explicitly closed; it is
-        // released by the OS/SDL_Quit at process exit, matching XNA's fire-and-
-        // forget static VibrateController design (no Dispose concept exists).
+        // across calls so Stop() can act on it. Closed by
+        // VibrateController::~VibrateController() (Task P5-11) when the
+        // process-lifetime singleton itself is destroyed at normal program
+        // termination — confirmed safe since this codebase never calls
+        // SDL_Quit() anywhere (grepped the whole tree), so SDL's subsystems
+        // stay valid until well after this runs. Previously left
+        // permanently unclosed based on an unverified assumption (Task
+        // P4-9) that SDL_Quit() might run first; that assumption was wrong.
         SDL_Haptic* g_haptic = nullptr;
 
         // File-local state: the currently-uploaded SDL_HAPTIC_LEFTRIGHT effect
@@ -41,6 +46,19 @@ namespace Microsoft::Devices
         // mutex is not recursive.
         std::mutex g_mutex;
 
+        // True once this process has made a successful
+        // SDL_InitSubSystem(SDL_INIT_HAPTIC) call. Paired with exactly one
+        // SDL_QuitSubSystem() call from ~VibrateController() (Task P5-11).
+        // Unlike the sensor classes (Accelerometer/Gyroscope, Task P4-8),
+        // this doesn't need SDL's own ref-counting to aggregate across
+        // multiple independent holders — VibrateController is a true
+        // process-wide singleton with exactly one call path in this
+        // codebase ever touching SDL_INIT_HAPTIC, so a single own-state
+        // flag is sufficient and simpler than always calling through to
+        // SDL_InitSubSystem() (as Accelerometer/Gyroscope now do) and
+        // relying on SDL's ref-count.
+        bool g_subsystemHeld = false;
+
         void ValidateVibrationDuration(const System::TimeSpan& duration)
         {
             static const System::TimeSpan MaxVibrationDuration = System::TimeSpan::FromSeconds(5);
@@ -54,14 +72,28 @@ namespace Microsoft::Devices
             }
         }
 
+        // Task P5-11: replaced the previous SDL_WasInit() guard with
+        // g_subsystemHeld's own bookkeeping — same "don't bypass real
+        // ref-counting with a guard that can't tell your own calls apart
+        // from anyone else's" principle Task P4-8 established for the
+        // sensor classes, just tracked via a single bool here since
+        // there's only one caller of SDL_InitSubSystem(SDL_INIT_HAPTIC)
+        // in this codebase (see g_subsystemHeld's own comment). Caller
+        // must already hold g_mutex.
         bool EnsureHapticSubsystemInitialized()
         {
-            if (SDL_WasInit(SDL_INIT_HAPTIC))
+            if (g_subsystemHeld)
             {
                 return true;
             }
 
-            return SDL_InitSubSystem(SDL_INIT_HAPTIC);
+            if (!SDL_InitSubSystem(SDL_INIT_HAPTIC))
+            {
+                return false;
+            }
+
+            g_subsystemHeld = true;
+            return true;
         }
 
         // Returns true if hapticId is a currently-connected joystick/gamepad's
@@ -206,6 +238,23 @@ namespace Microsoft::Devices
     {
         static VibrateController instance;
         return &instance;
+    }
+
+    VibrateController::~VibrateController()
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+
+        if (g_haptic != nullptr)
+        {
+            SDL_CloseHaptic(g_haptic);
+            g_haptic = nullptr;
+        }
+
+        if (g_subsystemHeld)
+        {
+            SDL_QuitSubSystem(SDL_INIT_HAPTIC);
+            g_subsystemHeld = false;
+        }
     }
 
     void VibrateController::Start(const System::TimeSpan& duration)

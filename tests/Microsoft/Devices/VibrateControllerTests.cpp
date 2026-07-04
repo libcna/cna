@@ -282,3 +282,38 @@ TEST(VibrateControllerTests, ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadl
 
     EXPECT_NO_THROW(controller->Stop());
 }
+
+// Task P5-11: g_subsystemHeld replaced the old SDL_WasInit() guard in
+// EnsureHapticSubsystemInitialized() — confirms many repeated probe calls
+// (which each internally call it) don't corrupt or leak anything
+// observable: the result stays consistent call to call, and device-name
+// consistency (Task P3-11's UnsupportedImpliesEmptyDeviceName invariant)
+// keeps holding under repetition, not just once.
+TEST(VibrateControllerTests, RepeatedProbeCallsStayConsistent)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    const bool firstSupported = controller->getIsSupportedProperty();
+    const std::string firstName = controller->getDeviceNameProperty();
+
+    for (int i = 0; i < 50; ++i)
+    {
+        EXPECT_EQ(controller->getIsSupportedProperty(), firstSupported);
+        EXPECT_EQ(controller->getDeviceNameProperty(), firstName);
+    }
+}
+
+// Task P5-11: confirms many repeated Start()/Stop() sequences (exercising
+// EnsureHapticSubsystemInitialized()'s g_subsystemHeld-gated init path
+// every time) don't crash, throw unexpectedly, or degrade — each cycle
+// behaves the same as the first.
+TEST(VibrateControllerTests, RepeatedStartStopSequencesDoNotDegrade)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    for (int i = 0; i < 50; ++i)
+    {
+        EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(1)));
+        EXPECT_NO_THROW(controller->Stop());
+    }
+}

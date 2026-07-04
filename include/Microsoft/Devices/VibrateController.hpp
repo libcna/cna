@@ -133,6 +133,22 @@ namespace Microsoft::Devices
          */
         NOXNA void StartLeftRight(float largeMotor, float smallMotor, const System::TimeSpan& duration);
 
+    public:
+        /**
+         * @brief Destroys the vibrate controller, releasing its haptic device and subsystem hold.
+         *
+         * Only ever runs once (Task P5-11), when the process-lifetime
+         * singleton returned by getDefaultProperty() is itself destroyed
+         * as part of normal program termination — confirmed safe since
+         * this codebase never calls SDL_Quit() anywhere, so SDL's
+         * subsystems remain valid for the entire process lifetime, well
+         * after this runs. NOXNA in spirit (the real WP7 VibrateController
+         * has no Dispose/destructor concept at all — it's a fire-and-
+         * forget static design), but not tagged since it's not a new
+         * *public API surface* addition a game would ever call directly.
+         */
+        ~VibrateController();
+
     private:
         /** @brief Private constructor; use getDefaultProperty() to obtain the singleton instance. */
         VibrateController() = default;

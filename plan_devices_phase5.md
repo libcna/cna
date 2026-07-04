@@ -768,6 +768,43 @@ this codebase.
 `tests/Microsoft/Devices/VibrateControllerTests.cpp`,
 `docs/devices-hardware-checklist.md`.
 
+**Resolution (2026-07-04):** Implemented as scoped. Added `~VibrateController()`
+(declared in the header, defined in the `.cpp`): locks `g_mutex`, closes `g_haptic` if
+non-null, releases `SDL_INIT_HAPTIC` if `g_subsystemHeld`. Confirmed safe per Audit
+finding 6 — this codebase never calls `SDL_Quit()` anywhere, so SDL's subsystems stay
+valid for the whole process lifetime, well past when this destructor runs (as part of
+normal static-destruction at program termination). Replaced
+`EnsureHapticSubsystemInitialized()`'s `SDL_WasInit()` guard with a new file-static
+`bool g_subsystemHeld`, mirroring the sensor classes' `subsystemHeld_` principle from
+Task P4-8 but simplified: `VibrateController` is a true process-wide singleton with
+exactly one call path ever touching `SDL_INIT_HAPTIC` in this codebase, so a single
+own-state flag (rather than always calling through to `SDL_InitSubSystem()` and
+trusting SDL's ref-count, as the sensor classes do) is sufficient and simpler — no
+cross-class aggregation to solve for, unlike the two-classes-sharing-one-subsystem case
+Task P4-8 fixed.
+
+Confirmed (re-verified in this task, not just carried over from the audit) that
+`getIsSupportedProperty()`/`getDeviceNameProperty()`'s temporarily-opened probe
+*device* handles were already properly closed — no change needed there, no leak.
+
+Added `RepeatedProbeCallsStayConsistent` (50 repeated
+`getIsSupportedProperty()`/`getDeviceNameProperty()` calls, confirming both stay
+consistent with the first call, not just individually crash-free) and
+`RepeatedStartStopSequencesDoNotDegrade` (50 `Start()`/`Stop()` cycles) to
+`VibrateControllerTests.cpp`. Also incidentally re-confirmed destruction-order safety
+empirically, not just by standard-mandated reasoning: the full `CnaTests` binary exits
+cleanly (exit code 0, no crash) after every test run, which exercises
+`~VibrateController()` firing for real as part of normal process teardown.
+
+Updated `docs/devices-hardware-checklist.md`'s Section 3 to note the RAII fix
+explicitly while reiterating it's a resource-lifetime change, not a hardware
+verification — the "never confirmed on real Android hardware" caveat (already written
+honestly in Task P4-13) is unchanged and still applies.
+
+Verified: `CNA`/`CnaTests` build clean; `VibrateControllerTests` 29/29 passing (up
+from 27); full `ctest` 2012 tests, same 2 pre-existing unrelated `EasyGL`/`easy-gl`
+failures as the Task P5-1 baseline — no regressions.
+
 ---
 
 ## Task P5-12 — Build reproducibility cleanup (`docs/devices-build.md`)

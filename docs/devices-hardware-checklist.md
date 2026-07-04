@@ -95,7 +95,12 @@ angular rate — the raw values represent), also covered by
 
 **Code under test:** `VibrateController.cpp`'s `OpenFirstHapticDevice()`/
 `IsConnectedGamepadHapticDevice()` (Task P4-10's ID-based gamepad-exclusion fix) and the
-plain `Start(TimeSpan)`/`Start(TimeSpan, intensity)` rumble path.
+plain `Start(TimeSpan)`/`Start(TimeSpan, intensity)` rumble path. As of
+`plan_devices_phase5.md` Task P5-11, `g_haptic` is now closed and `SDL_INIT_HAPTIC`
+released via `~VibrateController()` at process exit (previously left open forever, on
+an unverified assumption about `SDL_Quit()` ordering that turned out to be wrong — see
+that task's Resolution) — this is a resource-lifetime fix, **not** a hardware
+verification; the status below is unchanged by it.
 
 **Why this needs real hardware:** per `VibrateController.cpp`'s own comment, SDL3's
 Android haptic backend automatically registers the phone's own vibration motor as a
