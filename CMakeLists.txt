@@ -1264,6 +1264,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 326: FillMode::Solid baseline on EasyGL (reuses Task 327's backend-agnostic Vulkan
+        # source — its Solid sub-tests 1/3 previously only ran on Vulkan).
+        cna_easygl_test(cna_test_easygl_fill_mode
+                        examples/vulkan_fill_mode_test.cpp)
+        add_test(NAME EasyGL_FillMode_Solid
+                 COMMAND cna_test_easygl_fill_mode)
+        set_tests_properties(EasyGL_FillMode_Solid PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
