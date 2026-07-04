@@ -3,10 +3,10 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    const BlendState BlendState::Additive       {Blend::SourceAlpha, Blend::SourceAlpha, Blend::One,                Blend::One};
-    const BlendState BlendState::AlphaBlend     {Blend::One,         Blend::One,         Blend::InverseSourceAlpha, Blend::InverseSourceAlpha};
-    const BlendState BlendState::NonPremultiplied{Blend::SourceAlpha, Blend::SourceAlpha, Blend::InverseSourceAlpha, Blend::InverseSourceAlpha};
-    const BlendState BlendState::Opaque         {Blend::One,         Blend::One,         Blend::Zero,               Blend::Zero};
+    const BlendState BlendState::Additive        {"BlendState.Additive",        Blend::SourceAlpha, Blend::SourceAlpha, Blend::One,                Blend::One};
+    const BlendState BlendState::AlphaBlend      {"BlendState.AlphaBlend",      Blend::One,         Blend::One,         Blend::InverseSourceAlpha, Blend::InverseSourceAlpha};
+    const BlendState BlendState::NonPremultiplied{"BlendState.NonPremultiplied",Blend::SourceAlpha, Blend::SourceAlpha, Blend::InverseSourceAlpha, Blend::InverseSourceAlpha};
+    const BlendState BlendState::Opaque          {"BlendState.Opaque",          Blend::One,         Blend::One,         Blend::Zero,               Blend::Zero};
 
     BlendState::BlendState()
         : alphaBlendFunction_(BlendFunction::Add)
@@ -24,9 +24,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     }
 
-    BlendState::BlendState(Blend colorSrc, Blend alphaSrc, Blend colorDst, Blend alphaDst)
+    BlendState::BlendState(const std::string& name, Blend colorSrc, Blend alphaSrc, Blend colorDst, Blend alphaDst)
         : BlendState()
     {
+        setNameProperty(name);
         colorSourceBlend_      = colorSrc;
         alphaSourceBlend_      = alphaSrc;
         colorDestinationBlend_ = colorDst;

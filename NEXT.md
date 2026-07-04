@@ -13,10 +13,10 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–35 are now complete. **Phase 36 (BlendState
-  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) is starting** — Task 301 is next (see §8).
-  Phase 35 found and fixed a severe, project-wide bug (Task 293) and found-but-tracked a second one
-  (Task 867, not yet fixed) — see §3/§5, and the new `docs/sampler-state-support.md` for the full
-  Phase 35 writeup.
+  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) is in progress** — Task 301 done, Task 302 is
+  next (see §8). Phase 35 found and fixed a severe, project-wide bug (Task 293) and found-but-tracked
+  a second one (Task 867, not yet fixed) — see §3/§5, and the new `docs/sampler-state-support.md`
+  for the full Phase 35 writeup.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -40,13 +40,13 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2048/2050 (serial `-j1`) pass. 2 pre-existing,
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2054/2056 (serial `-j1`) pass. 2 pre-existing,
   unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. Some
   tests have each been observed failing once under parallel `-j` execution but passed cleanly both
   in isolation and on a repeat serial full run — treated as parallel-execution flakiness, not a
   regression (none confirmed as a stable failure): `EasyGL_SkinnedBones`,
   `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1986/1988 (serial `-j1`) pass (`Vulkan_RenderTargetUsage`
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1992/1994 (serial `-j1`) pass (`Vulkan_RenderTargetUsage`
   also failed in one full run this session, confirmed passing in isolation — same pre-existing
   order-dependent flakiness as `Vulkan_FillMode_WireFrame`, not a regression). `../sharp-runtime`
   (sibling repo) had a pre-existing, uncommitted local fix for a real `BitConverter.hpp` ambiguity
@@ -173,7 +173,8 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 300 | `docs/sampler-state-support.md` (new) | **Closes Phase 35.** Synthesizes Tasks 291–299's findings into one reference doc: API conformance, the central Task 293 per-slot-binding bug and its 3-backend fix, `TextureAddressMode`/`TextureFilter`/mipmap/anisotropic coverage, and a per-backend support matrix. Links to Tasks 866/867 rather than duplicating them. |
+| (uncommitted) Task 301 | `BlendState.hpp/.cpp`, `BlendStateTests.cpp` | **Opens Phase 36.** Audited `BlendState` against FNA — property surface, all 4 presets, default values all already matched exactly. Fixed the known Task 866 gap: presets didn't set `Name` (e.g. `"BlendState.Additive"`). Mirrors Task 291's `SamplerState` fix exactly. Closes Task 866's `BlendState` portion; `DepthStencilState`/`RasterizerState` remain open for their own later audit tasks. 6 new tests. EasyGL 2054/2056, Vulkan 1992/1994, both only pre-existing failures. |
+| `1646589` Task 300 | `docs/sampler-state-support.md` (new) | **Closes Phase 35.** Synthesizes Tasks 291–299's findings into one reference doc: API conformance, the central Task 293 per-slot-binding bug and its 3-backend fix, `TextureAddressMode`/`TextureFilter`/mipmap/anisotropic coverage, and a per-backend support matrix. Links to Tasks 866/867 rather than duplicating them. |
 | (uncommitted) Task 299 | `examples/easygl_texture_anisotropic_effect_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (Task 867 extended) | Audited `TextureFilter::Anisotropic`/`MaxAnisotropy` on all 3 backends: Vulkan correct (real device-cap query + clamp); EasyGL has zero anisotropy support at all (silently falls back to trilinear — underlying `easy-gl` library has no API for it); Bgfx enables the effect but ignores the requested level entirely. New test verifies the task's literal "caps and fallback" ask: `MaxAnisotropy=9999` (far beyond any cap) doesn't crash on either backend. Found an additional severe finding building it: `TextureFilter::Anisotropic` (and every `*Mip*` filter) renders solid black on any ordinary single-level `Texture2D` on EasyGL (GL mipmap-incompleteness) — same root cause as Task 867, scope extended to cover it, not fixed. |
 | (uncommitted) Task 298 | `examples/easygl_texture_mip_filter_effect_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (new Task 867) | EasyGL: verified real mip-level selection works for explicit `Mip*` filters (`LinearMipPoint` correctly samples a high mip level at 8x8px on a 128-texel texture); confirmed `Point`/`Linear` are deliberately non-mip-aware on EasyGL (documented tradeoff, avoids GL-incomplete textures). **Found a severe, separate bug while testing Vulkan**: `Texture2D::SetData(level>0)` is a total silent no-op on Vulkan/Bgfx (`UpdatePixelsLevel` never overridden) — same class as Task 865. Vulkan additionally hardcodes `mipLevels=1`/`levelCount=1`/never sets sampler `minLod`/`maxLod`. Un-registered the confounded Vulkan test rather than leave it misleadingly failing; tracked the full finding as new Task 867 (not fixed — multi-part, needs its own pass). |
 | (uncommitted) Task 297 | `examples/easygl_texture_filter_point_vs_linear_test.cpp` (new), `CMakeLists.txt` | First genuinely new-ground Phase 35 test — no prior test touched `TextureFilter`. New test draws 4 columns in one frame (magnification/minification × Point/Linear) on `DualTextureEffect`, sampling each at a texel boundary; `Point` reads pure, `Linear` reads a ~50/50 blend, in both scales. All 4 checks passed on both backends immediately — no bug found. Documented that magnification/minification share identical sampler math in CNA (flat `TextureFilter`→min+mag pair, no mipmaps), so this task's two scales confirm robustness at scale, not a distinct code path. |
@@ -343,20 +344,22 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 301 — audit `BlendState` API and static presets against FNA
-   (opens Phase 36)**
-   - Goal: audit CNA's `BlendState` against FNA's `Graphics/States/BlendState.cs`, mirroring
-     Task 291's `SamplerState` audit exactly (property surface, static presets — `Additive`,
-     `AlphaBlend`, `NonPremultiplied`, `Opaque` — and default-constructor values). **Known,
-     pre-confirmed finding to fix here**: Task 866 already found FNA sets `Name` on every
-     `BlendState` preset (e.g. `"BlendState.Additive"`), matching the exact gap Task 291 fixed for
-     `SamplerState` — this task can close Task 866's `BlendState` portion directly (see Task 866's
-     entry in `GRAPHICS_TASKS.md` for the fix shape: thread a `name` parameter through the private
-     preset constructor). `DepthStencilState`/`RasterizerState` are separate classes/tasks in this
-     phase list — check whether fixing all 3 in Task 301 or spreading them across their own later
-     audit tasks fits this phase's actual task breakdown before deciding scope.
-   - Files: `src/Microsoft/Xna/Framework/Graphics/BlendState.cpp`/`.hpp`,
-     `tests/Microsoft/Xna/Framework/Graphics/BlendStateTests.cpp`.
+1. **`GRAPHICS_TASKS.md` Task 302 — verify default `BlendState` on `GraphicsDevice` (unit test)**
+   - Goal: confirm `GraphicsDevice.BlendState` defaults to `BlendState.Opaque`, matching FNA's
+     `GraphicsDevice.cs` (`BlendState = BlendState.Opaque;` at init). **Pre-checked this session,
+     very likely the same bug shape as Task 292**: `GraphicsDevice`'s `blendState_` member
+     (`include/.../GraphicsDevice.hpp:748`) is a plain `BlendState blendState_;` with no initializer
+     in the constructor's member-init list — i.e. default-constructed, not copied from
+     `BlendState::Opaque`. The blend-factor *values* happen to coincide (`Opaque`'s
+     `{colorSrc=One, alphaSrc=One, colorDst=Zero, alphaDst=Zero}` exactly matches the default
+     constructor's values) — exactly why this went undetected, mirroring Task 292's
+     `SamplerStateCollection` finding precisely. Now that Task 301 gave `BlendState::Opaque` a
+     `Name` (`"BlendState.Opaque"`), a default-constructed `blendState_` would diverge (empty
+     `Name`). Zero existing test coverage for `GraphicsDevice.getBlendStateProperty()` at all
+     (confirmed via grep). Fix (if confirmed): initialize `blendState_` from `BlendState::Opaque`
+     in the constructor's member-init list instead of relying on the implicit default constructor.
+   - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`/`.hpp`, new test in
+     `tests/Microsoft/Xna/Framework/Graphics/GraphicsDeviceTests.cpp` (or similar).
    - Verification: unit tests for the 4 presets' property values plus (if fixed here) `Name`
      matching FNA's exact preset name strings, mirroring Task 291's `SamplerStateTests.cpp` additions.
 
@@ -445,13 +448,19 @@ non-mipmapped textures (GL mipmap-incompleteness, same root cause manifesting di
 zero anisotropy support at all, Bgfx enables the effect but ignores the requested level. Task 300
 closed the phase with a full synthesis doc, docs/sampler-state-support.md.
 
-Next task: GRAPHICS_TASKS.md Task 301 - audit BlendState API and static presets against FNA
-(opens Phase 36). Mirrors Task 291's SamplerState audit exactly. IMPORTANT: Task 866 (tracked,
-not yet fixed) already found that FNA sets Name on every BlendState preset (e.g.
-"BlendState.Additive"), the same gap Task 291 fixed for SamplerState - this task can close Task
-866's BlendState portion directly using the identical fix shape (thread a name parameter through
-the private preset constructor). Check GRAPHICS_TASKS.md's actual Phase 36 task breakdown for
-whether DepthStencilState/RasterizerState's matching Name gaps belong in this same task or their
-own later audit tasks before deciding scope - don't assume, verify against the task list.
+Task 301 (opens Phase 36) audited BlendState against FNA - property surface, all 4 presets, and
+default values all already matched exactly. Fixed the known Task 866 gap: presets didn't set Name
+(e.g. "BlendState.Additive"), mirroring Task 291's SamplerState fix exactly. Closes Task 866's
+BlendState portion; DepthStencilState/RasterizerState remain open for their own later audit tasks.
+
+Next task: GRAPHICS_TASKS.md Task 302 - verify default BlendState on GraphicsDevice (unit test).
+IMPORTANT, pre-checked this session: this is very likely the SAME bug shape as Task 292
+(SamplerStateCollection) - GraphicsDevice's blendState_ member (GraphicsDevice.hpp:748) is a plain
+default-constructed BlendState, not a copy of BlendState::Opaque, matching FNA's
+"BlendState = BlendState.Opaque" GraphicsDevice init. The blend-factor VALUES happen to coincide
+(Opaque's One/One/Zero/Zero matches the default constructor exactly) - same reason this went
+undetected before Name existed. Zero existing test coverage for GraphicsDevice.getBlendStateProperty()
+at all (confirmed via grep). Verify this hypothesis with a Name-checking test first, then fix by
+initializing blendState_ from BlendState::Opaque in the constructor's member-init list if confirmed.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
