@@ -25,11 +25,15 @@ namespace Microsoft::Devices::Sensors
 
     bool Gyroscope::EnsureSensorSubsystemInitialized()
     {
-        if (SDL_WasInit(SDL_INIT_SENSOR))
-        {
-            return true;
-        }
-
+        // Always call through to SDL — SDL_INIT_SENSOR is ref-counted
+        // internally by SDL itself (see SDL_InitSubSystem()'s own doc
+        // comment), and repeat calls are cheap. Bypassing that via
+        // SDL_WasInit() (as this used to do) let one class's
+        // Dispose()-triggered SDL_QuitSubSystem() undercut SDL's real
+        // ref-count and tear the subsystem down while another class's
+        // instances still expected it alive (Task P4-8). Callers are
+        // responsible for pairing each successful call here with exactly
+        // one SDL_QuitSubSystem() (see subsystemHeld_).
         return SDL_InitSubSystem(SDL_INIT_SENSOR);
     }
 
@@ -244,11 +248,16 @@ namespace Microsoft::Devices::Sensors
                 "Failed to start gyroscope data acquisition. Data acquisition already started.");
         }
 
-        if (!EnsureSensorSubsystemInitialized())
+        if (!subsystemHeld_)
         {
-            state_ = SensorState::NotSupported;
-            throw SensorFailedException(
-                "Failed to start gyroscope data acquisition. SDL sensor subsystem initialization failed.");
+            if (!EnsureSensorSubsystemInitialized())
+            {
+                state_ = SensorState::NotSupported;
+                throw SensorFailedException(
+                    "Failed to start gyroscope data acquisition. SDL sensor subsystem initialization failed.");
+            }
+
+            subsystemHeld_ = true;
         }
 
         {
@@ -337,11 +346,17 @@ namespace Microsoft::Devices::Sensors
                     g_sensor_ = nullptr;
                     g_sensorId_ = 0;
                 }
+            }
 
-                if (SDL_WasInit(SDL_INIT_SENSOR))
-                {
-                    SDL_QuitSubSystem(SDL_INIT_SENSOR);
-                }
+            // Balances this instance's own EnsureSensorSubsystemInitialized()
+            // call from Start() (if any) 1:1, independent of instanceCount_ —
+            // SDL's internal ref-count (not this class) decides whether this
+            // is the last holder across both Accelerometer and Gyroscope
+            // (Task P4-8).
+            if (subsystemHeld_)
+            {
+                SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                subsystemHeld_ = false;
             }
         }
 

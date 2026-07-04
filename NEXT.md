@@ -27,8 +27,8 @@ verification — not API completeness.
   fixed, 1 decision task resolved, all 6 test-coverage tasks filled, 1
   low-priority research task partially resolved (no known bug either way).
 - `plan_devices_phase4.md` (14 tasks, user-authored hardening plan) — **open**.
-  Tasks P4-1 through P4-7 done (2026-07-03). Tasks P4-8 through P4-14 not
-  started.
+  Tasks P4-1 through P4-8 done (P4-1–P4-7 on 2026-07-03, P4-8 on 2026-07-04).
+  Tasks P4-9 through P4-14 not started.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -55,20 +55,23 @@ verification — not API completeness.
 ## 2. Current status
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
-(`cmake-build-debug`) as of the last verified build, HEAD `ed6c931`
-(2026-07-03, pushed). **`VULKAN`/`BGFX` have not been re-verified since
-2026-07-02 (commit `8092f6e`)** — 9 commits of `Microsoft::Devices` changes
-have landed since, across all of `plan_devices_phase3.md` and Tasks
-P4-1–P4-7. Nothing in those changes should affect backend-specific
-compilation (`Microsoft::Devices` has never interacted with the graphics
-backend, confirmed empirically pre-2026-07-03), but this is asserted, not
-re-confirmed since. See Section 8.
+(`cmake-build-debug`) as of the last verified build, HEAD `c378984`
+(2026-07-04, Task P4-8, not yet pushed). **`VULKAN`/`BGFX` have not been
+re-verified since 2026-07-02 (commit `8092f6e`)** — 10 commits of
+`Microsoft::Devices` changes have landed since, across all of
+`plan_devices_phase3.md` and Tasks P4-1–P4-8. Nothing in those changes
+should affect backend-specific compilation (`Microsoft::Devices` has never
+interacted with the graphics backend, confirmed empirically
+pre-2026-07-03), but this is asserted, not re-confirmed since. See
+Section 8.
 
-**Tests:** last full `ctest` run (`EASYGL`): **1992 tests total, 97%
-passing.** The only failures are a fixed set of **64 pre-existing
-`EasyGL_*` graphics tests** that cannot run headless (no display/GPU in
-this dev environment) — present before `Microsoft::Devices` work began,
-unrelated to it. No regressions across the whole session's work.
+**Tests:** last full `ctest` run (`EASYGL`): **1994 tests total, 97%
+passing** (2 more than the prior 1992, from Task P4-8's new
+`SensorSubsystemOwnershipTests.cpp`). The only failures are a fixed set of
+**64 pre-existing `EasyGL_*` graphics tests** that cannot run headless (no
+display/GPU in this dev environment) — present before `Microsoft::Devices`
+work began, unrelated to it. No regressions across the whole session's
+work.
 
 **Working:**
 - Full `Microsoft::Devices::Sensors` namespace: `Accelerometer` (real,
@@ -95,6 +98,11 @@ unrelated to it. No regressions across the whole session's work.
 - Reading `Timestamp` values are now correct wall-clock time (Task P4-7) —
   previously always landed near `0001-01-01` due to a monotonic-vs-epoch
   ticks mixup.
+- `Accelerometer`/`Gyroscope` no longer bypass SDL3's own `SDL_INIT_SENSOR`
+  ref-counting (Task P4-8) — each instance's own `SDL_InitSubSystem()`/
+  `SDL_QuitSubSystem()` pair is now balanced 1:1 via a per-instance
+  `subsystemHeld_` flag, closing the premature cross-class subsystem
+  teardown race.
 
 **Does not work / not done yet:**
 - `Compass` and `Motion` are permanent stubs — SDL3 exposes no magnetometer
@@ -105,8 +113,6 @@ unrelated to it. No regressions across the whole session's work.
   in this dev container.
 - `VULKAN`/`BGFX` builds not re-run since before this session's Devices
   hardening work (see above).
-- SDL sensor subsystem ownership between `Accelerometer`/`Gyroscope` has a
-  confirmed, unfixed bug (Task P4-8).
 - `VibrateController` is not yet thread-safe (Task P4-9), and its
   gamepad-exclusion filter still uses name matching despite a concrete
   fix being known (Task P4-10).
@@ -163,8 +169,25 @@ unrelated to it. No regressions across the whole session's work.
     near-`0001-01-01` value. Now uses
     `System::DateTimeOffset::getUtcNowProperty()`; the now-dead
     `timestampNs` parameter was removed entirely from the call chain.
-- All work committed and pushed. Last pushed commit: `ed6c931` on
-  `feature/devices`.
+- **Task P4-8 done (2026-07-04):** fixed the confirmed SDL sensor
+  subsystem ownership bug between `Accelerometer`/`Gyroscope`. Removed the
+  `SDL_WasInit()` guard from both classes' `EnsureSensorSubsystemInitialized()`
+  so it always calls through to `SDL_InitSubSystem(SDL_INIT_SENSOR)` and
+  trusts SDL's own internal ref-counting instead of bypassing it. Added a
+  per-instance `bool subsystemHeld_` flag to both classes: `Start()` only
+  calls `EnsureSensorSubsystemInitialized()` on an instance's first
+  successful call, and `Dispose(bool)` calls `SDL_QuitSubSystem()`
+  unconditionally whenever `subsystemHeld_` is true for that instance
+  (independent of `instanceCount_`), keeping each instance's own init/quit
+  calls balanced 1:1. Added
+  `tests/Microsoft/Devices/Sensors/SensorSubsystemOwnershipTests.cpp` with
+  the plan's suggested cross-class regression test (both construction
+  orders): confirms disposing one of `Accelerometer`/`Gyroscope` doesn't
+  crash or affect the other's state. Full `ctest`: 1994 tests, 97%
+  passing, same 64 pre-existing headless `EasyGL_*` failures as baseline —
+  no regressions.
+- All work committed. Last commit: `c378984` on `feature/devices`
+  (Task P4-8), not yet pushed.
 
 ---
 
@@ -188,14 +211,12 @@ an active failure.
 
 ## 5. Known bugs and limitations
 
-- **Confirmed bug, not yet fixed:** SDL sensor subsystem ownership conflict
-  between `Accelerometer`/`Gyroscope`. `EnsureSensorSubsystemInitialized()`
-  bypasses SDL3's own built-in subsystem ref-counting via an
-  `SDL_WasInit()` guard, so one class's last-instance `Dispose()` can
-  prematurely `SDL_QuitSubSystem()` the sensor subsystem while the other
-  class still has active instances expecting it alive. See
-  `plan_devices_phase4.md` Task P4-8 for the full root-cause writeup and
-  recommended fix.
+- **Fixed (Task P4-8, 2026-07-04):** SDL sensor subsystem ownership
+  conflict between `Accelerometer`/`Gyroscope` — `EnsureSensorSubsystemInitialized()`
+  no longer bypasses SDL3's own built-in subsystem ref-counting; each
+  instance now pairs its own `SDL_InitSubSystem()`/`SDL_QuitSubSystem()`
+  calls 1:1 via `subsystemHeld_`, independent of `instanceCount_`. See
+  `plan_devices_phase4.md` Task P4-8's Resolution.
 - **Confirmed gap, not yet fixed:** `VibrateController`'s
   `g_haptic`/`g_leftRightEffectId` have zero thread-safety (no mutex),
   unlike the sensor classes (`Accelerometer`/`Gyroscope` fixed in Tasks

@@ -53,6 +53,19 @@ namespace Microsoft::Devices::Sensors
         bool started_;
 
         /**
+         * True once this instance has made its own successful
+         * SDL_InitSubSystem(SDL_INIT_SENSOR) call (on its first successful
+         * Start()). Paired with exactly one SDL_QuitSubSystem() call from
+         * this same instance's Dispose(), regardless of instanceCount_ or
+         * what any other instance (of this class or Accelerometer) is
+         * doing — SDL's own internal ref-counting aggregates all
+         * instances' balanced init/quit pairs correctly (Task P4-8). Never
+         * re-set once true; a later Start() after Stop() does not call
+         * SDL_InitSubSystem() again.
+         */
+        bool subsystemHeld_ = false;
+
+        /**
          * True while SensorEventWatch() is (possibly on another thread)
          * mid-call into this instance's ProcessSensorUpdateEvent(). Guarded
          * by mutex_. Dispose() waits for this to clear (after first

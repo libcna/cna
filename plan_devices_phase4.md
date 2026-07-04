@@ -494,6 +494,28 @@ provides one):**
 `include/Microsoft/Devices/Sensors/Gyroscope.hpp`,
 `src/Microsoft/Devices/Sensors/Gyroscope.cpp`.
 
+**Resolution (2026-07-04):** Implemented exactly as scoped. Removed the `SDL_WasInit()`
+guard from both classes' `EnsureSensorSubsystemInitialized()` — it now always calls
+`SDL_InitSubSystem(SDL_INIT_SENSOR)` and trusts SDL's own internal ref-counting. Added
+`bool subsystemHeld_ = false;` to both `Accelerometer` and `Gyroscope`; `Start()` only
+calls `EnsureSensorSubsystemInitialized()` when `subsystemHeld_` is still false (an
+instance's first successful `Start()`), setting it `true` on success — a later
+`Start()` after `Stop()` on the same instance does not call it again. `Dispose(bool)`
+now calls `SDL_QuitSubSystem(SDL_INIT_SENSOR)` unconditionally whenever `subsystemHeld_`
+is `true` for the disposing instance (replacing the `SDL_WasInit()` guard there too),
+independent of `instanceCount_` — each instance's own init/quit pair is now balanced
+1:1, and SDL's internal ref-count correctly aggregates across instances and across
+`Accelerometer`/`Gyroscope`, closing the premature-teardown race. Added
+`tests/Microsoft/Devices/Sensors/SensorSubsystemOwnershipTests.cpp` (new file) with the
+suggested cross-class regression test, in both construction orders: constructs an
+`Accelerometer` and a `Gyroscope`, starts both (or confirms both throw identically when
+unsupported), disposes one, and confirms the other's `getStateProperty()` is unaffected
+and it can still be disposed cleanly. As anticipated, this cannot observe SDL's internal
+ref-count directly in this headless environment — it only proves the code path doesn't
+crash or corrupt cross-class state. `CNA`/`CnaTests` build clean; full `ctest` run:
+1994 tests (2 more than the prior 1992, from the new file), 97% passing, same 64
+pre-existing headless `EasyGL_*` failures as baseline — no regressions.
+
 ---
 
 ## Phase 6: `VibrateController` hardening
