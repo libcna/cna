@@ -21,12 +21,14 @@ framework/runtime, not a game.
   re-audit against FNA (run 2026-07-02) that found 30 concrete bugs/gaps (prefixes
   `CP`/`XA`/`IN`/`MC`) — is **fully complete: 30 of 30 fixed/closed**. Of the handful of
   pre-existing older items from Fáze 3/4/6 that were never in scope for that audit (`T-3F`,
-  `T-3G`, `T-4B`, `T-4C`, `T-4D`, `T-6C`), **`T-4D`, `T-3F`, and `T-3G` were closed this session**
-  (2026-07-04); see §3. `T-4B`, `T-4C`, `T-6C` are still open — see §5.
+  `T-3G`, `T-4B`, `T-4C`, `T-4D`, `T-6C`), **`T-4D`, `T-3F`, `T-3G`, and `T-4B` were closed this
+  session** (2026-07-04); see §3. `T-4C`, `T-6C` are still open — see §5.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is
   parsed by a hand-written `XactParser` and mixed through SDL_mixer. Consequences: 3D HRTF and
-  Doppler are stored but never applied. `WaveBank`'s **streaming ctor now does real lazy per-entry
+  Doppler are stored but never applied — pan + distance-attenuation is now applied at **every**
+  level of the API (`SoundEffectInstance::Apply3D` since `CP-3`, and now `Cue::Apply3D`/3D
+  `SoundBank::PlayCue` too, `T-4B`). `WaveBank`'s **streaming ctor now does real lazy per-entry
   disk reads** (`T-3F`) — only the non-streaming ctor loads the whole `.xwb` eagerly, matching
   FNA's own eager/lazy split. `SoundEffect` is now **move-only, with real instance-tracking +
   Dispose cascade** (`T-3G`) — `SoundEffect::Dispose()` stops/disposes every live
@@ -41,17 +43,17 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean at `71b7a45` (`HEAD`). EasyGL backend, `SOUND_ENABLED` on, SDL3_mixer linked.
+- **Build:** clean at `feb6eda` (`HEAD`). EasyGL backend, `SOUND_ENABLED` on, SDL3_mixer linked.
   Verified immediately before writing this update; also rebuilt `cna_demo_sound`/`cna_demo_2d`
   (the example targets, `CNA_BUILD_EXAMPLES=ON` by default) since `T-3G` changed a public API
   shape (`SoundEffect` copyability) those depend on through `ContentManager::Load<SoundEffect>()`.
-- **Tests:** `CnaTests` **2029 / 2029 pass** (2020 at the last handoff snapshot; +1 for `T-4D`,
-  +3 for `T-3F`, +5 for `T-3G`). No known regressions.
+- **Tests:** `CnaTests` **2031 / 2031 pass** (2020 at the last handoff snapshot; +1 for `T-4D`,
+  +3 for `T-3F`, +5 for `T-3G`, +2 for `T-4B`). No known regressions.
   Re-run to check for drift: `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
 - **CLI/tools/apps:** none in the framework itself, but this session's `T-3G` work touched the
   two example demos (`cna_demo_sound`, `cna_demo_2d`) as collateral — see §7 for how to rebuild
   them; they're not part of `CnaTests` and easy to forget when just running `--target CnaTests`.
-- **This session's work: closed `T-4D`, `T-3F`, and `T-3G`** — see §3 for detail on all three.
+- **This session's work: closed `T-4D`, `T-3F`, `T-3G`, and `T-4B`** — see §3 for detail on all four.
   - `T-4D`: `AudioCategory::SetVolume` now re-applies to already-playing cues. This was the one
     task in the old §8 backlog that was a mechanical fix rather than an open design decision.
   - `T-3F`: asked the user how to close it (implement real streaming vs. document the deviation);
@@ -61,7 +63,11 @@ framework/runtime, not a game.
     Dispose cascade) over documenting the value-semantics deviation. This one had real teeth:
     making it correct required also making `SoundEffect` move-only and fixing a collateral
     `ContentManager::Load<T>()` compile break — see §3.
-  - `T-4B`, `T-4C`, `T-6C` remain open and still need a decision first (see §5/§8).
+  - `T-4B`: unlike the other three, `plan_audio.md` framed this as concrete accept criteria, not
+    an "implement vs. document" decision, so it was picked up directly without asking first —
+    `Cue::Apply3D`/3D `PlayCue` now forward to `SoundEffectInstance::Apply3D` (already working
+    since `CP-3`), instead of being no-ops.
+  - `T-4C`, `T-6C` remain open and still need a decision first (see §5/§8).
 - **Prior session's work (26 commits, all 30 Fáze 7 findings closed):**
   - **Bug fixes (13):** `IN-2`/`IN-3` (XWB parser over-read + integer-underflow bounds-check
     bypass), `MC-1` (Microphone sample-duration math), `CP-8`/`CP-9` (`SoundEffect` API
@@ -83,9 +89,6 @@ framework/runtime, not a game.
   - `plan_audio.md` §4 Fáze 7, `AUDIT.md`, and `CHECKLIST.md` are all updated; open decisions
     `D5`/`D7`/`D8` are resolved and documented in `plan_audio.md` §6.
 - **Does NOT work yet / known incomplete (all pre-existing, outside Fáze 7's scope):**
-  - `T-4B` — `Cue::Apply3D`/3D `PlayCue` are still no-ops; no pan/attenuation derived from
-    listener/emitter geometry at the `Cue`/`SoundBank` level (note: `SoundEffectInstance::Apply3D`
-    itself *does* work — that was `CP-3`, fixed earlier — this item is about the `Cue`-level API).
   - `T-4C` — no DSP filter/reverb routing (`applyReverb`/`applyLowPassFilter`/etc.) on
     `SoundEffectInstance`.
   - `T-6C` — the formal "build & report" checklist step was never explicitly checked off, though
@@ -96,6 +99,28 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
+- `feb6eda` — **T-4B**: `Cue::Apply3D` was a pure no-op (only checked `isDisposed_`); it now
+  iterates `Cue::active_` and calls `SoundEffectInstance::Apply3D` (already working since `CP-3`)
+  on each live instance — no new pan/attenuation math, just wiring to the mechanism `CP-3` already
+  built. `SoundBank::PlayCue(name, listener, emitter)` discarded both parameters and just called
+  the 2-arg overload; both overloads are refactored onto a shared private `PlayCueInternal(name,
+  listener*, emitter*)`, and the 3D one now calls `cue->Apply3D(...)` right after `cue->Play()`,
+  before storing the cue in `fireAndForget_` (matches FNA, where `FACT3DCalculate` runs before
+  `FACTSoundBank_Play3D` — a synchronous same-thread call here, so no observable ordering
+  difference). Doppler stays unapplied (existing accepted deviation); the `ObjectDisposedException`
+  half of the original task description was already done, nothing left to change there. Needed a
+  real WaveBank-backed fixture to test for real: none of the existing Cue/SoundBank fixtures
+  (`MakeCue()`, `SharedWeightedVariationBank()`, `SoundBankTests.cpp`'s "Explosion") have a
+  wavebank, so `Cue::active_` stays empty and there's nothing for `Apply3D` to reach. Added such a
+  fixture to both `CueTests.cpp` and `SoundBankTests.cpp`, extracted `SoundEffectInstanceTestAccess`
+  into a shared header (previously private to `SoundEffectInstanceTests.cpp`, same move
+  `CueTestAccess` got for `T-4D`), and added `CueTestAccess::ActiveInstance()`/
+  `SoundBankTestAccess::LastFireAndForgetCue()` so both new tests can read back the real
+  `MIX_GetTrackGain()` and confirm it changes with distance (SDL3_mixer has no stereo-pan getter,
+  so only attenuation is directly verifiable — the same limitation `CP-3`'s own `Apply3D` coverage
+  already has). Verified via `git stash`: both new tests fail with `farGain == nearGain` against
+  the pre-fix no-op code (not a compile break this time, since the test scaffolding itself doesn't
+  depend on the fix). Also verified clean under ASan+LeakSanitizer.
 - `71b7a45` — **T-3G**: `SoundEffect::Impl` gained a non-owning `std::vector<SoundEffectInstance*>
   instances`; `SoundEffectInstance` registers itself in its ctor (`SoundEffect::RegisterInstance`)
   and unregisters (plus drops its own `soundEffectKeepAlive_`) in `Dispose()`
@@ -225,14 +250,13 @@ findings, fixed in an earlier session).
 ## 4. Current blocker / main problem
 
 **No build- or test-breaking blocker.** No failing command, no failing test. The build is clean
-and all 2029 tests pass as of `71b7a45` (last commit with an actual code/test change; the NEXT.md
+and all 2031 tests pass as of `feb6eda` (last commit with an actual code/test change; the NEXT.md
 rewrite itself doesn't touch build state). `cna_demo_sound`/`cna_demo_2d` also rebuilt clean.
 
-**Fáze 7 is now fully closed (30/30), and `T-4D`/`T-3F`/`T-3G` from the older backlog are also
-closed.** There is no discrete backlog left from Fáze 7, and the older set is down to purely
-decision-first items. The remaining open work in §5 (`T-4B`, `T-4C`, `T-6C`) — none of these are
-bugs or regressions; they are either accepted deviations awaiting a product decision, or genuinely
-unimplemented (but documented-as-such) features.
+**Fáze 7 is now fully closed (30/30), and `T-4D`/`T-3F`/`T-3G`/`T-4B` from the older backlog are
+also closed.** There is no discrete backlog left from Fáze 7. The remaining open work in §5
+(`T-4C`, `T-6C`) — none of these are bugs or regressions; they are either accepted deviations
+awaiting a product decision, or genuinely unimplemented (but documented-as-such) features.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, which is under separate, active, concurrent development by another session.
@@ -248,12 +272,12 @@ it may just need a retry once that unrelated work lands, or a small compliance p
 
 | Status | Issue | Ref |
 |---|---|---|
-| **Confirmed, open** | `Cue::Apply3D`/3D `PlayCue` are no-ops — no pan/attenuation from listener/emitter geometry at the Cue/SoundBank level | `T-4B` |
 | **Confirmed, open** | No DSP filter/reverb routing on `SoundEffectInstance` | `T-4C` |
 | **Housekeeping, open** | Formal "build & report" step never explicitly checked off, though satisfied continuously during the Fáze 7 session | `T-6C` |
 | **Fixed 2026-07-04** | `AudioCategory::SetVolume` now retroactively re-applies to already-playing cues via `Cue::ApplyCategoryVolume` | `T-4D` |
 | **Fixed 2026-07-04** | `WaveBank`'s streaming ctor now does real lazy per-entry disk reads instead of eagerly loading the whole file like the non-streaming ctor | `T-3F` |
 | **Fixed 2026-07-04** | `SoundEffect` now has real instance-tracking + Dispose cascade (matches FNA's `SoundEffect.Instances`); `SoundEffect` is move-only as a result | `T-3G` |
+| **Fixed 2026-07-04** | `Cue::Apply3D`/3D `PlayCue` now forward to `SoundEffectInstance::Apply3D` instead of being no-ops | `T-4B` |
 | **Accepted deviation** | 3D positional audio is pan + distance-attenuation only, no elevation/Doppler | `CHECKLIST.md` |
 | **Accepted deviation** | Interactive-type (`type==3`) XACT variation tables fall back to a uniform pick instead of a variable-driven one (parser doesn't retain `var_min`/`var_max` per entry) | `CHECKLIST.md`, `XA-3` |
 | **Accepted deviation** | `SoundBank::IsInUse` only tracks fire-and-forget cues it owns; `GetCue`-obtained cues are caller-owned | `T-3B` |
@@ -296,6 +320,8 @@ AudioEngine/SoundBank/WaveBank/Cue
   → WaveBank's non-streaming ctor loads the whole .xwb eagerly; its streaming ctor reads only
     header/metadata upfront and does a lazy per-entry disk read in GetSoundEffect() -- T-3F
   → Cue::Play() selects a variation entry via a weighted lottery over weightMin/weightMax -- XA-3
+  → Cue::Apply3D()/3D SoundBank::PlayCue() forward to each active SoundEffectInstance::Apply3D()
+    (already working since CP-3) -- T-4B
 Microphone (capture)
   → getAllProperty() enumerates via SDL_GetAudioRecordingDevices
   → Start() opens a real SDL_AudioStream (SDL_OpenAudioDeviceStream); Stop() destroys it
@@ -351,6 +377,11 @@ Microphone (capture)
   wave/sound/compact_wave tables, matching FAudio's `get_active_variation_index` exactly (`XA-3`).
   Interactive-type (3) tables fall back to a uniform pick (documented deviation, `CHECKLIST.md`) —
   don't "fix" this without first deciding to parse `var_min`/`var_max` into `XsbVariEntry`.
+- **`Cue::Apply3D`/3D `SoundBank::PlayCue` forward to `SoundEffectInstance::Apply3D`** on every
+  active instance (`T-4B`) — don't revert to the old no-op. No new pan/attenuation math lives at
+  the `Cue`/`SoundBank` level; it's all in `SoundEffectInstance::Apply3D` (`CP-3`). Testing this
+  needs a WaveBank-backed fixture (`Cue::active_` stays empty without one) — see `SharedApply3DBank`/
+  `BuildApply3DXwbFixtureBytes` in `CueTests.cpp`/`SoundBankTests.cpp` for the pattern.
 - **`DynamicSoundEffectInstance::PendingBufferCount`** reflects real stream consumption
   (`SDL_GetAudioStreamQueued`), not submission (`CP-4`) — don't revert to counting
   `queuedBuffers_.size()` alone; that was the exact bug.
@@ -418,35 +449,34 @@ grep -n "<symbol>" /rv/data/library/github.com/FNA-XNA/FAudio/src/FACT_internal.
 ## 8. Next smallest tasks
 
 Fáze 7 (`plan_audio.md` §4) is fully closed — there is no `CP-`/`XA-`/`IN-`/`MC-` backlog left.
-`T-4D`, `T-3F`, and `T-3G` were closed 2026-07-04 — see §3. All remaining items below are
-**decision tasks**, not mechanical fixes — none have ready-made accept criteria as granular as
-Fáze 7's did.
+`T-4D`, `T-3F`, `T-3G`, and `T-4B` were closed 2026-07-04 — see §3. Two items remain:
 
-1. **`T-4B` — 3D pan/attenuation at the `Cue`/`SoundBank` level.**
-   - Note this is different from `SoundEffectInstance::Apply3D`, which already works (`CP-3`).
-     This is specifically about `Cue::Apply3D` and 3D `SoundBank::PlayCue` being no-ops.
-   - Files: `src/Microsoft/Xna/Framework/Audio/Cue.cpp` (`Apply3D`), `SoundBank.cpp` (3D
-     `PlayCue` overload).
-
-2. **`T-6C` — formal build & report checkpoint.** Genuinely small: run
+1. **`T-6C` — formal build & report checkpoint.** Genuinely small: run
    `cmake --build cmake-build-debug --target CNA` and `--target CnaTests`, confirm both are
    clean, write the short report `CLAUDE.md` §Build and Report asks for, check the box.
 
-`T-4C` (DSP filter/reverb routing) is the least-scoped of the remaining items — read
-`SoundEffectInstance.cs:488,518,536,554` in the FNA source first to size it before starting.
+2. **`T-4C` — DSP filter/reverb routing on `SoundEffectInstance`.** This one IS still framed as
+   a decision-ish task in `plan_audio.md` (add `INTERNAL_applyReverb`/`applyLowPassFilter`/etc.,
+   implemented via SDL_mixer where possible, documented no-op otherwise) — it's the
+   least-scoped of what's left. Read `SoundEffectInstance.cs:488,518,536,554` in the FNA source
+   first to size it before starting; ask/flag before picking the more invasive option if SDL_mixer
+   turns out to support real filtering (unclear without checking).
 
-**Note for whoever picks `T-4B` next:** if it needs a fixture with a real playing
-`SoundEffectInstance` (not just Cue state), the wavebank-less `SharedBank()`/`BuildXsbFixtureBytes`
-fixtures already in `CueTests.cpp`/`AudioCategoryTests.cpp` won't do — see `SharedVolBank()` /
-`BuildVolXwbFixtureBytes()` in `AudioCategoryTests.cpp` (added for `T-4D`), the real-WaveBank
-fixture in `WaveBankTests.cpp`, or `BuildMultiEntryXwbFixtureBytes()` (added for `T-3F`, two
-entries at different offsets/lengths) for patterns to copy.
+**If a future fixture needs a real playing `SoundEffectInstance`** (not just Cue state), the
+wavebank-less `SharedBank()`/`BuildXsbFixtureBytes` fixtures in `CueTests.cpp`/
+`AudioCategoryTests.cpp`/`SoundBankTests.cpp` won't do (`Cue::active_` stays empty). See
+`SharedVolBank()`/`BuildVolXwbFixtureBytes()` in `AudioCategoryTests.cpp` (`T-4D`),
+`BuildMultiEntryXwbFixtureBytes()` in `WaveBankTests.cpp` (`T-3F`, two entries at different
+offsets/lengths), or `SharedApply3DBank()`/`BuildApply3DXwbFixtureBytes()` in `CueTests.cpp`/
+`SoundBankTests.cpp` (`T-4B`) for patterns to copy.
 
-**On "implement vs. document" decision tasks generally:** both `T-3F` and `T-3G` were framed as
+**On "implement vs. document" decision tasks generally:** `T-3F` and `T-3G` were both framed as
 "either implement the real thing or document the deviation," and in both cases the user chose
 implement, and both turned out to have real, bounded implementations once actually scoped out —
 don't assume a task like this is bigger or smaller than it looks without first reading the FNA
-source it cites.
+source it cites. (`T-4B`, by contrast, had concrete accept criteria in `plan_audio.md` rather than
+an open decision, so it was picked up directly without asking — check which shape a task actually
+has before assuming it needs a decision.)
 
 ---
 
@@ -473,17 +503,16 @@ source it cites.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, then plan_audio.md for full task detail (Fáze 7, T-4D, T-3F, and T-3G are done
--- see §8 here for what's actually left: T-4B, T-4C, T-6C -- all decision tasks now, no more
-mechanical fixes in the backlog).
+Read NEXT.md first, then plan_audio.md for full task detail (Fáze 7, T-4D, T-3F, T-3G, and T-4B
+are done -- see §8 here for what's actually left: T-6C, T-4C).
 
-1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2029/2029 tests pass) --
+1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2031/2031 tests pass) --
    rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests to check for drift since
    this was last updated. Also rebuild cna_demo_sound/cna_demo_2d if you touch anything on the
    Audio public API surface -- they're not part of CnaTests and easy to forget.
-2. Pick exactly ONE task from NEXT.md §8. Every remaining task starts with a decision (see each
-   task's note) -- don't silently pick the more invasive option; ask/flag first, the way T-3F and
-   T-3G were both asked about this session.
+2. Pick exactly ONE task from NEXT.md §8. T-6C is purely mechanical. T-4C has real accept
+   criteria in plan_audio.md but some ambiguity about SDL_mixer's real filtering capability --
+   ask/flag before picking the more invasive option if that turns out to matter.
 3. Inspect only the files that task names. Do not refactor unrelated code.
 4. Make ONE small, verified improvement. Follow the established git-stash regression-verification
    pattern (see NEXT.md §7) for any behavioral fix: stash it, confirm the new test fails against
