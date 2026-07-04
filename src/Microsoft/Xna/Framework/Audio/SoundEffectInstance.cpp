@@ -140,6 +140,8 @@ namespace Microsoft::Xna::Framework::Audio
         // SoundEffect(path).CreateInstance() destroys it immediately (CP-7).
         : soundEffectKeepAlive_(soundEffect.impl_)
         , nativeAudioHandle_(soundEffect.getNativeAudioHandle())
+        , loopStart_(soundEffect.loopStart_)
+        , loopLength_(soundEffect.loopLength_)
     {
         // Register for SoundEffect::Dispose()'s cascade (T-3G, matches FNA's
         // parentEffect.Instances.Add(selfReference) in SoundEffectInstance's ctor).
@@ -157,6 +159,8 @@ namespace Microsoft::Xna::Framework::Audio
     SoundEffectInstance::SoundEffectInstance(SoundEffectInstance&& other) noexcept
         : soundEffectKeepAlive_(std::move(other.soundEffectKeepAlive_))
         , nativeAudioHandle_(other.nativeAudioHandle_)
+        , loopStart_(other.loopStart_)
+        , loopLength_(other.loopLength_)
         , track_(other.track_)
         , playing_(other.playing_)
         , hasStarted_(other.hasStarted_)
@@ -204,6 +208,8 @@ namespace Microsoft::Xna::Framework::Audio
 
             soundEffectKeepAlive_ = std::move(other.soundEffectKeepAlive_);
             nativeAudioHandle_ = other.nativeAudioHandle_;
+            loopStart_   = other.loopStart_;
+            loopLength_  = other.loopLength_;
             track_       = other.track_;
             playing_     = other.playing_;
             hasStarted_  = other.hasStarted_;
@@ -325,6 +331,27 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
         SDL_SetNumberProperty(props, MIX_PROP_PLAY_LOOPS_NUMBER, IsLooped_ ? -1 : 0);
+
+        // CP-17: apply the authored loop region (matches FNA's LoopBegin/LoopLength, only
+        // meaningful while IsLooped -- see SoundEffectInstance.cs's Play()). loopStart_==0 &&
+        // loopLength_==0 (the common case: no explicit loop region was ever given) leaves both
+        // properties at their SDL3_mixer defaults, which loop the entire track -- unchanged
+        // behavior for every effect that never had a loop region authored.
+        if (IsLooped_ && (loopStart_ != 0 || loopLength_ != 0))
+        {
+            SDL_SetNumberProperty(props, MIX_PROP_PLAY_LOOP_START_FRAME_NUMBER,
+                                   static_cast<Sint64>(loopStart_));
+            if (loopLength_ != 0)
+            {
+                // SDL3_mixer has no separate "loop end" property distinct from "track end" --
+                // MAX_FRAME_NUMBER treats this position as EOF for the whole track, which also
+                // (unlike FNA/XAudio2's LoopBegin/LoopLength) truncates the very first, pre-loop
+                // playthrough at the loop's end instead of only subsequent iterations. Accepted
+                // as the closest achievable match; see CHECKLIST.md.
+                SDL_SetNumberProperty(props, MIX_PROP_PLAY_MAX_FRAME_NUMBER,
+                                       static_cast<Sint64>(loopStart_) + static_cast<Sint64>(loopLength_));
+            }
+        }
 
         const bool ok = MIX_PlayTrack(track, props);
         SDL_DestroyProperties(props);

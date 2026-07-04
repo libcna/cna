@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -94,6 +95,40 @@ namespace
         w16(wav, blockAlign); w16(wav, bitsPerSample);
         tag(wav, "data"); w32(wav, audioLen);
         wav.resize(wav.size() + audioLen, 0); // silence
+
+        return wav;
+    }
+
+    // Same as BuildMinimalWavBytes, but with a trailing "smpl" chunk (one sample loop) after the
+    // "data" chunk -- regression fixture for CP-17's FromStream loop-point parsing.
+    std::vector<uint8_t> BuildWavBytesWithSmplChunk(uint32_t loopStartSample, uint32_t loopEndSample)
+    {
+        std::vector<uint8_t> wav = BuildMinimalWavBytes();
+
+        std::vector<uint8_t> smpl;
+        w32(smpl, 0); // Manufacturer
+        w32(smpl, 0); // Product
+        w32(smpl, 0); // Sample Period
+        w32(smpl, 0); // MIDI Unity Note
+        w32(smpl, 0); // MIDI Pitch Fraction
+        w32(smpl, 0); // SMPTE Format
+        w32(smpl, 0); // SMPTE Offset
+        w32(smpl, 1); // numSampleLoops
+        w32(smpl, 0); // samplerData
+        w32(smpl, 0);              // Cue Point ID
+        w32(smpl, 0);              // Type
+        w32(smpl, loopStartSample);
+        w32(smpl, loopEndSample);
+        w32(smpl, 0); // Fraction
+        w32(smpl, 0); // Play Count
+
+        tag(wav, "smpl");
+        w32(wav, static_cast<uint32_t>(smpl.size()));
+        wav.insert(wav.end(), smpl.begin(), smpl.end());
+
+        // Fix up the RIFF chunk size to include the appended smpl chunk.
+        const uint32_t riffPayload = static_cast<uint32_t>(wav.size()) - 8;
+        std::memcpy(wav.data() + 4, &riffPayload, 4);
 
         return wav;
     }
@@ -247,6 +282,25 @@ TEST(SoundEffectTest, BufferRangeConstructorThrowsOnBadRange)
                  System::ArgumentOutOfRangeException);
 }
 
+// CP-17/CP-23: a nonzero loop region given to the buffer-range constructor must reach the
+// SoundEffectInstance it creates (SDL3_mixer exposes no way to read back the loop-start/
+// max-frame play options actually passed to MIX_PlayTrack, so this checks the values that feed
+// that call rather than the mixed audio output itself -- see SoundEffectInstanceTestAccess).
+TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionToInstance)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
+                       100, 400);
+
+    SoundEffectInstance instance = effect.CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 100u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 400u);
+
+    instance.setIsLoopedProperty(true);
+    instance.Play(); // must not throw/crash with a real loop region applied
+}
+
 // ===================== FromStream (headless) =====================
 
 TEST(SoundEffectTest, FromStreamEmptyThrowsNotSupported)
@@ -295,6 +349,95 @@ TEST(SoundEffectTest, FromStreamValidWavSucceedsAndReportsNonzeroDuration)
     ASSERT_TRUE(fx != nullptr);
     EXPECT_FALSE(fx->getIsDisposedProperty());
     EXPECT_GT(fx->getDurationProperty().getTotalSecondsProperty(), 0.0);
+}
+
+// CP-17: FromStream must parse a WAV's "smpl" chunk into a real loop region, matching FNA's own
+// hand-rolled WAV parser (which scans for exactly this chunk after the "data" chunk).
+TEST(SoundEffectTest, FromStreamParsesSmplChunkIntoLoopRegion)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildWavBytesWithSmplChunk(500, 3000);
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream withLoop(s);
+
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx.reset(SoundEffect::FromStream(withLoop));
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+    ASSERT_TRUE(fx != nullptr);
+
+    SoundEffectInstance instance = fx->CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 500u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 2500u); // 3000 - 500
+}
+
+// A WAV with no "smpl" chunk (the common case) must leave the loop region at its default
+// (0, 0) -- i.e. "loop the entire track" once IsLooped is set, not some stale/garbage value.
+TEST(SoundEffectTest, FromStreamWithoutSmplChunkLeavesLoopRegionAtZero)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildMinimalWavBytes();
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream noLoop(s);
+
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx.reset(SoundEffect::FromStream(noLoop));
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+    ASSERT_TRUE(fx != nullptr);
+
+    SoundEffectInstance instance = fx->CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 0u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 0u);
+}
+
+// A "smpl" chunk that declares a sample loop but is truncated before the loop-entry bytes must
+// not crash/overread -- just leave the loop region at its default (0, 0).
+TEST(SoundEffectTest, FromStreamWithTruncatedSmplChunkDoesNotCrash)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildMinimalWavBytes();
+
+    std::vector<uint8_t> smpl;
+    w32(smpl, 0); w32(smpl, 0); w32(smpl, 0); w32(smpl, 0);
+    w32(smpl, 0); w32(smpl, 0); w32(smpl, 0);
+    w32(smpl, 1); // numSampleLoops = 1
+    w32(smpl, 0); // samplerData
+    // No loop-entry bytes follow, even though numSampleLoops claims one.
+
+    tag(bytes, "smpl");
+    w32(bytes, static_cast<uint32_t>(smpl.size()));
+    bytes.insert(bytes.end(), smpl.begin(), smpl.end());
+    const uint32_t riffPayload = static_cast<uint32_t>(bytes.size()) - 8;
+    std::memcpy(bytes.data() + 4, &riffPayload, 4);
+
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream truncated(s);
+
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx.reset(SoundEffect::FromStream(truncated));
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+    ASSERT_TRUE(fx != nullptr);
+
+    SoundEffectInstance instance = fx->CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 0u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 0u);
 }
 
 // ===================== path constructor (NOXNA) =====================

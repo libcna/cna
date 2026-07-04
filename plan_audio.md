@@ -1122,7 +1122,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   (nefunkční) implementaci, protože ta taky jen round-tripuje přes statické pole; opraveno na
   přímé `MIX_GetMixerGain` volání, `git stash` pak potvrdil selhání proti staré implementaci.
 
-- [ ] **CP-17 — `SoundEffect`'s loop region (`loopStart`/`loopLength`) se zachytí, ale nikdy nepoužije.**
+- [x] **CP-17 — `SoundEffect`'s loop region (`loopStart`/`loopLength`) se zachytí, ale nikdy nepoužije.**
   Bufferová konstrukce s explicitním loop rozsahem uloží `loopStart_`/`loopLength_`, ale nic je
   nikdy nečte. `FromStream` navíc vůbec neparsuje WAV `smpl` chunk. `Play()` vždy loopuje celý
   buffer (`MIX_PROP_PLAY_LOOPS_NUMBER`), nikdy jen autorský loop rozsah.
@@ -1132,6 +1132,21 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* `FromStream` parsuje `smpl` loop pointy jako FNA; `Play()` aplikuje `loopStart_`/
   `loopLength_` přes SDL3_mixer's `MIX_PROP_PLAY_LOOP_START_FRAME_NUMBER` (a délku, pokud to jde);
   test s nenulovým loop rozsahem ověří, že se loopuje jen daný úsek, ne celý buffer.
+  *Pozn.:* `SoundEffectInstance` teď při konstrukci kopíruje `loopStart_`/`loopLength_` ze
+  `SoundEffect` (stejný vzorec jako `nativeAudioHandle_` — CP-7 zakazuje držet si `SoundEffect&`).
+  `Play()` nastaví `MIX_PROP_PLAY_LOOP_START_FRAME_NUMBER`; pro délku SDL3_mixer nemá žádnou
+  "loop end" vlastnost odlišnou od "konec celé stopy" — použito `MIX_PROP_PLAY_MAX_FRAME_NUMBER`,
+  což ale (na rozdíl od FNA/XAudio2's `LoopBegin`/`LoopLength`) zkrátí i úplně první, před-loop
+  přehrání na `loopStart_+loopLength_`, ne jen další iterace — zdokumentováno jako přijatá
+  odchylka v CHECKLIST.md. `FromStream` teď navíc nezávisle na `MIX_LoadAudio_IO` skenuje syrové
+  WAV bajty pro `smpl` chunk (`TryParseWavSmplChunk`) — čistě bajtový parser, žádné SDL typy.
+  Přidány 4 testy (buffer-ctor propagace do instance, `FromStream` s/bez `smpl` chunku,
+  zkrácený/poškozený `smpl` chunk nesmí spadnout) přes nový `SoundEffectInstanceTestAccess::
+  LoopStart/LoopLength` (SDL3_mixer nemá způsob, jak zpětně přečíst loop-start/max-frame hodnoty
+  předané `MIX_PlayTrack`, takže skutečný namixovaný efekt nelze black-box ověřit bez dekódování
+  reálného zvukového výstupu). `git stash` potvrdil selhání (kompilační, kvůli chybějícím polím)
+  ve všech testovacích souborech sdílejících `SoundEffectInstanceTestAccess.hpp`. Čisté pod
+  ASan+LeakSanitizer.
 
 - [ ] **CP-18 — Chybějící audio hardware hlásí `std::runtime_error`, nikdy `NoAudioHardwareException`.**
   `AudioMixer::GetMixer()` (viz i IN-11) throwuje `std::runtime_error`, který dědí z `std::exception`,
@@ -1181,12 +1196,14 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   (u `SoundEffectInstance`), ověřující že `SoundEffectInstance` vytvořená z přesunutého `SoundEffect`
   dál přehrává správně.
 
-- [ ] **CP-23 — Test-mezera: bufferová konstrukce s `loopStart`/`loopLength` nemá success-path test.**
+- [x] **CP-23 — Test-mezera: bufferová konstrukce s `loopStart`/`loopLength` nemá success-path test.**
   Existující test pokrývá jen exception path pro špatný rozsah, ne skutečný efekt platného loop
   rozsahu na přehrávání — přesně to by odhalilo CP-17 dřív.
   *CNA:* SoundEffectTests.cpp:171-179.
   *Accept:* přidat test s nenulovým `loopStart`/`loopLength` až po opravě CP-17 (nebo test
   dokumentující dnešní "mrtvé pole" chování, pokud se CP-17 odloží).
+  *Pozn.:* vyřešeno spolu s CP-17 — `BufferRangeConstructorPropagatesLoopRegionToInstance` (viz
+  CP-17's `*Pozn.:*` výše pro plný seznam nových testů).
 
 #### 8.2 XACT (AudioEngine, AudioCategory, Cue, SoundBank, WaveBank)
 

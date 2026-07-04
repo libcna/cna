@@ -18,6 +18,19 @@ namespace Microsoft::Xna::Framework::Audio
             return static_cast<MIX_Track*>(instance.track_);
         }
 
+        // CP-17: read back the loop region cached from the originating SoundEffect at
+        // construction time, to verify it was captured correctly (SDL3_mixer exposes no way to
+        // read back the loop-start/max-frame play options passed to MIX_PlayTrack, so the actual
+        // applied effect can't be black-box verified without decoding real mixed audio output).
+        static SharpRuntime::uintcs LoopStart(const SoundEffectInstance& instance)
+        {
+            return instance.loopStart_;
+        }
+        static SharpRuntime::uintcs LoopLength(const SoundEffectInstance& instance)
+        {
+            return instance.loopLength_;
+        }
+
         // T-4C: wrappers for the private INTERNAL_apply* DSP methods, and a hook that drives the
         // filter's real per-sample math synchronously (the real SDL3_mixer callback only fires
         // asynchronously from the mixing thread, which would make a test flaky/need a real-time

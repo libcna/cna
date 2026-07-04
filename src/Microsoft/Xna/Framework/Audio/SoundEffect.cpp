@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <istream>
 #include <vector>
 
@@ -420,6 +421,65 @@ namespace Microsoft::Xna::Framework::Audio
         );
     }
 
+    namespace
+    {
+        // CP-17: FNA's FromStream hand-parses the WAV file and scans for an optional "smpl"
+        // chunk (RIFF metadata, not audio data) to recover an authored loop region. CNA's
+        // FromStream instead delegates the actual audio decode to MIX_LoadAudio_IO, but the
+        // smpl chunk still needs this small, independent, SDL-free scan to recover
+        // loopStart/loopLength for SoundEffectInstance::Play() to apply. Returns false (leaving
+        // loopStart/loopLength untouched) if the stream isn't a WAV file or has no smpl chunk.
+        bool TryParseWavSmplChunk(const std::vector<char>& bytes,
+                                   SharpRuntime::uintcs& loopStart,
+                                   SharpRuntime::uintcs& loopLength)
+        {
+            auto u32At = [&](std::size_t offset) -> uint32_t
+            {
+                uint32_t v;
+                std::memcpy(&v, bytes.data() + offset, 4);
+                return v;
+            };
+
+            if (bytes.size() < 12) return false;
+            if (std::memcmp(bytes.data(), "RIFF", 4) != 0) return false;
+            if (std::memcmp(bytes.data() + 8, "WAVE", 4) != 0) return false;
+
+            std::size_t pos = 12;
+            while (pos + 8 <= bytes.size())
+            {
+                const char* chunkId = bytes.data() + pos;
+                const uint32_t chunkSize = u32At(pos + 4);
+                const std::size_t chunkDataStart = pos + 8;
+
+                if (std::memcmp(chunkId, "smpl", 4) == 0)
+                {
+                    // Sampler chunk: 7 x u32 (Manufacturer..SMPTEOffset) + numSampleLoops +
+                    // samplerData = 36 bytes, then numSampleLoops x 24-byte loop entries.
+                    if (chunkDataStart + 36 > bytes.size()) return false;
+                    const uint32_t numSampleLoops = u32At(chunkDataStart + 28);
+                    if (numSampleLoops == 0) return false;
+
+                    const std::size_t firstLoopOffset = chunkDataStart + 36;
+                    if (firstLoopOffset + 24 > bytes.size()) return false;
+
+                    // Loop entry: CuePointID(4), Type(4), Start(4), End(4), Fraction(4),
+                    // PlayCount(4) -- only the first entry's Start/End matter (matches FNA).
+                    const uint32_t start = u32At(firstLoopOffset + 8);
+                    const uint32_t end   = u32At(firstLoopOffset + 12);
+                    if (end <= start) return false;
+
+                    loopStart  = static_cast<SharpRuntime::uintcs>(start);
+                    loopLength = static_cast<SharpRuntime::uintcs>(end - start);
+                    return true;
+                }
+
+                if (chunkDataStart + chunkSize > bytes.size()) return false;
+                pos = chunkDataStart + chunkSize + (chunkSize & 1u); // chunks are word-aligned
+            }
+            return false;
+        }
+    }
+
     SoundEffect* SoundEffect::FromStream(std::istream& stream)
     {
         // Read all bytes from the stream.
@@ -461,7 +521,9 @@ namespace Microsoft::Xna::Framework::Audio
             implPtr->channels   = static_cast<SharpRuntime::uintcs>(spec.channels);
         }
 
-        return new SoundEffect(std::move(implPtr));
+        auto* result = new SoundEffect(std::move(implPtr));
+        TryParseWavSmplChunk(bytes, result->loopStart_, result->loopLength_); // best-effort (CP-17)
+        return result;
 #else
         (void)bytes;
         return new SoundEffect(std::make_shared<Impl>());

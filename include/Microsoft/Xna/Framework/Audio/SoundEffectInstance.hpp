@@ -47,6 +47,14 @@ namespace Microsoft::Xna::Framework::Audio
         // Type-erased because SoundEffect::Impl is private and defined only in SoundEffect.cpp.
         std::shared_ptr<void> soundEffectKeepAlive_;
         void* nativeAudioHandle_ = nullptr; // MIX_Audio*, cached while soundEffect was alive
+
+        // Cached from the originating SoundEffect at construction time, same rationale as
+        // nativeAudioHandle_ above -- Play() must never dereference the SoundEffect itself
+        // (CP-7), so its loop region is copied out while it's definitely still alive rather
+        // than read through a stored reference/pointer (CP-17).
+        SharpRuntime::uintcs loopStart_  = 0;
+        SharpRuntime::uintcs loopLength_ = 0;
+
         bool  IsLooped_     = false;
         bool  isDisposed_   = false;
         float Volume_       = 1.0f;
