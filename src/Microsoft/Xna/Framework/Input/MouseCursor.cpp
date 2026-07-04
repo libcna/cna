@@ -49,6 +49,12 @@ namespace Microsoft::Xna::Framework::Input
                 std::string("MouseCursor::FromTexture2D: SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
         }
 
+        // Lifetime (verified against SDL3 src/events/SDL_mouse.c, task 831): SDL_CreateSurfaceFrom
+        // above does NOT copy — `surface` only references `rgba`. SDL_CreateColorCursor, however,
+        // copies the pixels: our RGBA32 surface differs from the cursor's required ARGB8888, so SDL
+        // makes an independent converted copy (SDL_ConvertSurface), the platform builds its own
+        // cursor from it, and SDL destroys that copy before returning. So the cursor owns its
+        // pixels and it is safe to destroy `surface` and let `rgba` go out of scope right after.
         SDL_Cursor* cursor = SDL_CreateColorCursor(surface, originX, originY);
         SDL_DestroySurface(surface);
         if (cursor == nullptr)

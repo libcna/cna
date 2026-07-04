@@ -10,8 +10,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
 #include <SDL3/SDL.h>
 
@@ -518,5 +520,46 @@ TEST(MouseCursorTest, MoveAssignmentDisposesPreviousHandleAndTransfersOwnership)
     EXPECT_EQ(a.GetSDLCursor(), rawB);
     EXPECT_EQ(b.GetSDLCursor(), nullptr);
 
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, ColorCursorSurvivesSourcePixelBufferDestruction)
+{
+    // Task 831: exercises the exact SDL lifetime pattern MouseCursor::FromTexture2D relies on,
+    // without needing a GraphicsDevice/Texture2D (which the headless suite excludes). A surface
+    // created via SDL_CreateSurfaceFrom only *references* the pixel buffer; SDL_CreateColorCursor
+    // must copy the pixels (verified against SDL3 source: it converts RGBA32 -> ARGB8888 into an
+    // independent surface and the platform builds its own cursor). So destroying the surface and
+    // the source buffer immediately afterward must leave the cursor valid and usable.
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    constexpr int w = 4;
+    constexpr int h = 4;
+    std::vector<std::uint32_t> rgba(static_cast<std::size_t>(w * h), 0xFF00FF00u); // opaque green
+
+    SDL_Surface* surface = SDL_CreateSurfaceFrom(
+        w, h, SDL_PIXELFORMAT_RGBA32, rgba.data(), w * static_cast<int>(sizeof(std::uint32_t)));
+    if (!surface)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateSurfaceFrom failed: " << SDL_GetError();
+    }
+
+    SDL_Cursor* cursor = SDL_CreateColorCursor(surface, 0, 0);
+    SDL_DestroySurface(surface);
+
+    // Scribble then release the source buffer: if the cursor still referenced it, later use would
+    // read freed/garbage memory.
+    std::fill(rgba.begin(), rgba.end(), 0xDEADBEEFu);
+    rgba.clear();
+    rgba.shrink_to_fit();
+
+    ASSERT_NE(cursor, nullptr) << "SDL_CreateColorCursor failed: " << SDL_GetError();
+    EXPECT_TRUE(SDL_SetCursor(cursor)); // still usable -> pixels were copied, not referenced
+
+    SDL_DestroyCursor(cursor);
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
