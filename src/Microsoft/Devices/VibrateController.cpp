@@ -64,26 +64,23 @@ namespace Microsoft::Devices
             return SDL_InitSubSystem(SDL_INIT_HAPTIC);
         }
 
-        // Returns true if a haptic device's name matches a currently
-        // connected joystick/gamepad's name.
+        // Returns true if hapticId is a currently-connected joystick/gamepad's
+        // own haptic motor.
         //
         // On Linux (and likely similarly on other desktop backends), a
         // rumble-capable game controller is enumerated by SDL_GetHaptics()
         // as its own independent haptic device, entirely separate from the
         // joystick/gamepad subsystem that
         // Microsoft::Xna::Framework::Input::GamePad::SetVibration() uses
-        // (SDL_RumbleGamepad). SDL provides no direct SDL_HapticID <->
-        // SDL_JoystickID correlation, so device name is the most reliable
-        // signal available without invasively opening every connected
-        // joystick just to probe it.
+        // (SDL_RumbleGamepad). Task P4-10: correlates by ID via
+        // SDL_OpenHapticFromJoystick() — SDL's own documented way to get a
+        // specific joystick's haptic device (third_party/SDL/include/SDL3/
+        // SDL_haptic.h's own usage example does exactly this) — rather than
+        // the previous device-*name* string comparison, which could not
+        // distinguish two physically distinct controllers reporting an
+        // identical product name.
         bool IsConnectedGamepadHapticDevice(SDL_HapticID hapticId)
         {
-            const char* hapticName = SDL_GetHapticNameForID(hapticId);
-            if (hapticName == nullptr)
-            {
-                return false;
-            }
-
             int joystickCount = 0;
             SDL_JoystickID* joysticks = SDL_GetJoysticks(&joystickCount);
             if (joysticks == nullptr)
@@ -92,14 +89,27 @@ namespace Microsoft::Devices
             }
 
             bool matchesGamepad = false;
-            for (int i = 0; i < joystickCount; ++i)
+
+            for (int i = 0; i < joystickCount && !matchesGamepad; ++i)
             {
-                const char* joystickName = SDL_GetJoystickNameForID(joysticks[i]);
-                if (joystickName != nullptr && SDL_strcmp(joystickName, hapticName) == 0)
+                SDL_Joystick* joystick = SDL_OpenJoystick(joysticks[i]);
+                if (joystick == nullptr)
                 {
-                    matchesGamepad = true;
-                    break;
+                    continue;
                 }
+
+                SDL_Haptic* joystickHaptic = SDL_OpenHapticFromJoystick(joystick);
+                if (joystickHaptic != nullptr)
+                {
+                    matchesGamepad = SDL_GetHapticID(joystickHaptic) == hapticId;
+
+                    // Probe only — don't hold this joystick's haptic device
+                    // open as a side effect of checking, same discipline as
+                    // AcquireHapticDeviceForProbe() below.
+                    SDL_CloseHaptic(joystickHaptic);
+                }
+
+                SDL_CloseJoystick(joystick);
             }
 
             SDL_free(joysticks);

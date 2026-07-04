@@ -27,8 +27,8 @@ verification — not API completeness.
   fixed, 1 decision task resolved, all 6 test-coverage tasks filled, 1
   low-priority research task partially resolved (no known bug either way).
 - `plan_devices_phase4.md` (14 tasks, user-authored hardening plan) — **open**.
-  Tasks P4-1 through P4-9 done (P4-1–P4-7 on 2026-07-03, P4-8/P4-9 on
-  2026-07-04). Tasks P4-10 through P4-14 not started.
+  Tasks P4-1 through P4-10 done (P4-1–P4-7 on 2026-07-03, P4-8/P4-9/P4-10 on
+  2026-07-04). Tasks P4-11 through P4-14 not started.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -55,11 +55,11 @@ verification — not API completeness.
 ## 2. Current status
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
-(`cmake-build-debug`) as of the last verified build, HEAD `dd925a4`
-(2026-07-04, Task P4-9, not yet pushed). **`VULKAN`/`BGFX` have not been
-re-verified since 2026-07-02 (commit `8092f6e`)** — 11 commits of
+(`cmake-build-debug`) as of the last verified build, HEAD `8f53104`
+(2026-07-04, Task P4-10, not yet pushed). **`VULKAN`/`BGFX` have not been
+re-verified since 2026-07-02 (commit `8092f6e`)** — 12 commits of
 `Microsoft::Devices` changes have landed since, across all of
-`plan_devices_phase3.md` and Tasks P4-1–P4-9. Nothing in those changes
+`plan_devices_phase3.md` and Tasks P4-1–P4-10. Nothing in those changes
 should affect backend-specific compilation (`Microsoft::Devices` has never
 interacted with the graphics backend, confirmed empirically
 pre-2026-07-03), but this is asserted, not re-confirmed since. See
@@ -67,11 +67,12 @@ Section 8.
 
 **Tests:** last full `ctest` run (`EASYGL`): **1995 tests total, 97%
 passing** (3 more than the prior 1992, from Task P4-8's
-`SensorSubsystemOwnershipTests.cpp` and Task P4-9's new concurrency test).
-The only failures are a fixed set of **64 pre-existing `EasyGL_*` graphics
-tests** that cannot run headless (no display/GPU in this dev environment)
-— present before `Microsoft::Devices` work began, unrelated to it. No
-regressions across the whole session's work.
+`SensorSubsystemOwnershipTests.cpp` and Task P4-9's new concurrency test;
+Task P4-10 added no new tests headless — no real gamepad to observe the
+exclusion). The only failures are a fixed set of **64 pre-existing
+`EasyGL_*` graphics tests** that cannot run headless (no display/GPU in
+this dev environment) — present before `Microsoft::Devices` work began,
+unrelated to it. No regressions across the whole session's work.
 
 **Working:**
 - Full `Microsoft::Devices::Sensors` namespace: `Accelerometer` (real,
@@ -87,10 +88,11 @@ regressions across the whole session's work.
   (`getDefaultProperty()`), SDL3 haptic-backed. XNA-compliant
   `Start(TimeSpan)`/`Stop()`, plus `NOXNA` extensions: variable intensity,
   capability introspection, dual-motor rumble (`StartLeftRight`). Filters
-  out haptic devices that are also connected gamepads (currently via
-  fragile device-name matching — see Section 5) so it can't compete with
+  out haptic devices that are also connected gamepads — now via a definitive
+  ID-based correlation (Task P4-10, `SDL_OpenHapticFromJoystick()`) rather
+  than fragile device-name matching — so it can't compete with
   `GamePad::SetVibration`. `Start()`/`StartLeftRight()` correctly cancel
-  each other's SDL effect (Task P3-5). Now thread-safe (Task P4-9) — every
+  each other's SDL effect (Task P3-5). Thread-safe (Task P4-9) — every
   public method locks a mutex guarding `g_haptic`/`g_leftRightEffectId`.
 - `Accelerometer`/`Gyroscope`'s shared static sensor state is guarded
   against the SDL event-watch callback running off-thread (Task P3-4), and
@@ -114,8 +116,6 @@ regressions across the whole session's work.
   in this dev container.
 - `VULKAN`/`BGFX` builds not re-run since before this session's Devices
   hardening work (see above).
-- `VibrateController`'s gamepad-exclusion filter still uses name matching
-  despite a concrete fix being known (Task P4-10).
 - No demo/manual-verification screen exists for `Microsoft::Devices` yet
   (Task P4-14).
 
@@ -209,8 +209,26 @@ regressions across the whole session's work.
   iterations hammering every public method concurrently). Full `ctest`:
   1995 tests, 97% passing, same 64 pre-existing headless `EasyGL_*`
   failures as baseline — no regressions.
-- All work committed. Last commit: `dd925a4` on `feature/devices`
-  (Task P4-9), not yet pushed.
+- **Task P4-10 done (2026-07-04):** replaced `VibrateController`'s
+  name-matching haptic↔gamepad correlation with an ID-based one.
+  `IsConnectedGamepadHapticDevice()` now enumerates connected joysticks,
+  opens each via `SDL_OpenJoystick()`, calls `SDL_OpenHapticFromJoystick()`
+  on it, and compares that haptic's `SDL_GetHapticID()` against the
+  candidate device under test — a match means it's definitively that
+  joystick's own motor, regardless of reported name (the previous
+  `SDL_GetHapticNameForID()`/`SDL_GetJoystickNameForID()`/`SDL_strcmp()`
+  approach could not distinguish two physically distinct controllers with
+  an identical product name). Confirmed safe against `GamePad`'s own SDL
+  usage: `SdlInputBridge.cpp` only opens gamepads via `SDL_OpenGamepad()`
+  and reads the underlying joystick via `SDL_GetGamepadJoystick()` (owned
+  by the gamepad handle), never a separate `SDL_OpenJoystick()` call, so
+  this function's own open/close pair doesn't fight over any handle
+  `GamePad` holds. No new test possible headless (no real gamepad to
+  observe the exclusion). `CNA`/`CnaTests` build clean; full `ctest`: 1995
+  tests (unchanged), 97% passing, same 64 pre-existing headless
+  `EasyGL_*` failures as baseline — no regressions.
+- All work committed. Last commit: `8f53104` on `feature/devices`
+  (Task P4-10), not yet pushed.
 
 ---
 

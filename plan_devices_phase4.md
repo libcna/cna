@@ -614,6 +614,27 @@ excluded/included together"*).
 
 **Files:** `src/Microsoft/Devices/VibrateController.cpp`.
 
+**Resolution (2026-07-04):** Implemented exactly as scoped. `IsConnectedGamepadHapticDevice()`
+now enumerates connected joysticks via `SDL_GetJoysticks()`, opens each via
+`SDL_OpenJoystick()`, and calls `SDL_OpenHapticFromJoystick()` on it — if that returns
+non-`NULL`, compares its `SDL_GetHapticID()` against the candidate `hapticId` under test.
+A match means that specific haptic device is definitively this joystick's own motor,
+regardless of what name it reports — replacing the old `SDL_GetHapticNameForID()`/
+`SDL_GetJoystickNameForID()`/`SDL_strcmp()` string comparison entirely (removed, along
+with its now-unused calls). Each probed joystick's haptic handle is closed immediately
+after the ID check (probe-only, matching `AcquireHapticDeviceForProbe()`'s discipline),
+and the joystick handle itself is also closed — confirmed safe to do irrespective of
+`Microsoft::Xna::Framework::Input::GamePad`: `SdlInputBridge.cpp` only ever opens
+gamepads via `SDL_OpenGamepad()`/`SDL_Gamepad*` and reads the underlying joystick via
+`SDL_GetGamepadJoystick()` (owned by the gamepad handle, never a separate
+`SDL_OpenJoystick()` call of its own), so this function's own `SDL_OpenJoystick()`/
+`SDL_CloseJoystick()` pair for probing doesn't share or fight over any handle GamePad
+holds open. No new test possible beyond confirming the changed code path still builds
+and behaves — same headless limitation as before (no real gamepad to observe the
+exclusion actually taking effect on). `CNA`/`CnaTests` build clean; full `ctest`: 1995
+tests (unchanged from Task P4-9, no new observable behavior headless), 97% passing,
+same 64 pre-existing headless `EasyGL_*` failures as baseline — no regressions.
+
 ---
 
 ## Phase 7: Cross-platform build
