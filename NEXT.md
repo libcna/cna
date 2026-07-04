@@ -19,9 +19,10 @@ framework/runtime, not a game.
 - **Current phase:** `plan_audio.md`'s original compliance/bugfix plan (Fáze 0–6) and T-4A (real
   microphone capture) were already done before this update. **Fáze 7** — a fresh line-by-line
   re-audit against FNA (run 2026-07-02) that found 30 concrete bugs/gaps (prefixes
-  `CP`/`XA`/`IN`/`MC`) — is now **fully complete: 30 of 30 fixed/closed**. A handful of
-  pre-existing older items from Fáze 3/4/6 (`T-3F`, `T-3G`, `T-4B`, `T-4C`, `T-4D`, `T-6C`) were
-  never in scope for that audit and are still open — see §5.
+  `CP`/`XA`/`IN`/`MC`) — is **fully complete: 30 of 30 fixed/closed**. Of the handful of
+  pre-existing older items from Fáze 3/4/6 that were never in scope for that audit (`T-3F`,
+  `T-3G`, `T-4B`, `T-4C`, `T-4D`, `T-6C`), **`T-4D` was closed this session** (2026-07-04); see §3.
+  `T-3F`, `T-3G`, `T-4B`, `T-4C`, `T-6C` are still open — see §5.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is
   parsed by a hand-written `XactParser` and mixed through SDL_mixer. Consequences: 3D HRTF and
@@ -37,14 +38,19 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean at `678258e` (`HEAD`). EasyGL backend, `SOUND_ENABLED` on, SDL3_mixer linked.
+- **Build:** clean at `d468dc4` (`HEAD`). EasyGL backend, `SOUND_ENABLED` on, SDL3_mixer linked.
   Verified immediately before writing this update.
-- **Tests:** `CnaTests` **2020 / 2020 pass** (1981 at the last handoff snapshot; +39 this session).
-  No known regressions. Re-run to check for drift: `./cmake-build-debug/CnaTests`.
+- **Tests:** `CnaTests` **2021 / 2021 pass** (2020 at the last handoff snapshot; +1 this session,
+  `T-4D`'s regression test). No known regressions.
+  Re-run to check for drift: `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
 - **CLI/tools/apps:** none. This repo is a library/framework, not an application — there is no
   standalone audio demo or CLI in this branch. Verification is via `CnaTests` (Google Test) plus
   one-off scratch probes (ASan/LeakSanitizer builds, deleted after use — see §7).
-- **This session's work (26 commits, all 30 Fáze 7 findings closed):**
+- **This session's work: closed `T-4D`** (`AudioCategory::SetVolume` now re-applies to
+  already-playing cues) — see §3 for detail. This was the one task in the old §8 backlog that
+  was a mechanical fix rather than an open design decision; `T-3F`/`T-3G`/`T-4B`/`T-4C`/`T-6C`
+  remain open and still need a decision first (see §5/§8).
+- **Prior session's work (26 commits, all 30 Fáze 7 findings closed):**
   - **Bug fixes (13):** `IN-2`/`IN-3` (XWB parser over-read + integer-underflow bounds-check
     bypass), `MC-1` (Microphone sample-duration math), `CP-8`/`CP-9` (`SoundEffect` API
     compliance: `System::Object` inheritance, private internal ctor), `XA-3` (weighted variation
@@ -76,19 +82,30 @@ framework/runtime, not a game.
     itself *does* work — that was `CP-3`, fixed earlier — this item is about the `Cue`-level API).
   - `T-4C` — no DSP filter/reverb routing (`applyReverb`/`applyLowPassFilter`/etc.) on
     `SoundEffectInstance`.
-  - `T-4D` — `AudioEngine::SetCategoryVolumeInternal` is a documented no-op ("skipped for
-    simplicity") — `AudioCategory::SetVolume()` never actually re-applies volume to already-
-    playing cues, only affects future `Play()` calls. **Freshly re-confirmed this session** while
-    writing `XA-5`'s test (noted there, not fixed — out of that task's scope).
   - `T-6C` — the formal "build & report" checklist step was never explicitly checked off, though
     its criteria (clean build, passing tests, changed-files report) were satisfied continuously
-    throughout this session.
+    during the Fáze 7 session.
 
 ---
 
 ## 3. Recent changes (this branch, newest first)
 
-All 26 commits below are this session's Fáze 7 closure work, `fed07f9`..`678258e`:
+- `d468dc4` — **T-4D**: `AudioEngine::SetCategoryVolumeInternal`'s no-op loop body now calls a new
+  `Cue::ApplyCategoryVolume(catVol)` for every active cue in the category. `Cue::PlaybackInstance`
+  gained a `baseVolume` field (the wave's own volume, already combined with sound/track volume at
+  parse time in `XactParser`); `ApplyCategoryVolume` recombines it with the new category volume
+  using the same `clamp(base*cat, 0, 1)` formula `Play()` already used, so re-applying volume and
+  the original apply-at-Play()-time path can never drift apart. Added
+  `AudioCategoryTest.SetVolumeReappliesToAlreadyPlayingCueInstance` — this needed a *new* fixture
+  with a real `WaveBank` (unlike the existing `PauseResumeStopRouteToRealActiveCueInCategory`
+  fixture, whose cue has no wavebank, so `Cue::active_` stays empty and there's no instance to
+  observe a volume change on). Extracted `CueTestAccess` (previously private to `CueTests.cpp`)
+  into a shared `tests/.../Audio/CueTestAccess.hpp` so `AudioCategoryTests.cpp` could reuse it,
+  and added `ActiveInstanceVolumes()` to it. Verified with the branch's `git stash` methodology:
+  stashing `Cue.hpp`/`Cue.cpp`/`AudioEngine.cpp` made the new test fail (`1 == 1`, i.e. genuinely
+  no change), confirming the test isn't a tautology.
+
+All 26 commits below are the *prior* session's Fáze 7 closure work, `fed07f9`..`678258e`:
 
 - `678258e` — **MC-4**: added `BufferReadyFiresWhenQueuedDataExceedsBufferDuration` (real capture,
   polls `CheckBuffer()` until `BufferReady` fires); fixed a latent test-infra issue
@@ -152,14 +169,14 @@ findings, fixed in an earlier session).
 ## 4. Current blocker / main problem
 
 **No build- or test-breaking blocker.** No failing command, no failing test. The build is clean
-and all 2020 tests pass as of `678258e` (last commit with an actual code/test change; the NEXT.md
+and all 2021 tests pass as of `d468dc4` (last commit with an actual code/test change; the NEXT.md
 rewrite itself doesn't touch build state).
 
-**Fáze 7 is now fully closed (30/30).** There is no discrete backlog left from that audit. The
-remaining open work is the older, smaller set of pre-Fáze-7 items in §5 (`T-3F`, `T-3G`, `T-4B`,
-`T-4C`, `T-4D`, `T-6C`) — none of these are bugs or regressions; they are either accepted
-deviations awaiting a product decision, or genuinely unimplemented (but documented-as-such)
-features.
+**Fáze 7 is now fully closed (30/30), and `T-4D` from the older backlog is also closed.** There is
+no discrete backlog left from Fáze 7, and no more mechanical fixes left in the older set either.
+The remaining open work in §5 (`T-3F`, `T-3G`, `T-4B`, `T-4C`, `T-6C`) — none of these are bugs or
+regressions; they are either accepted deviations awaiting a product decision, or genuinely
+unimplemented (but documented-as-such) features.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, which is under separate, active, concurrent development by another session.
@@ -179,8 +196,8 @@ it may just need a retry once that unrelated work lands, or a small compliance p
 | **Confirmed, open** | `SoundEffect::CreateInstance()`/`FromStream()` value semantics — no instance-tracking/Dispose-cascade (the specific dangling-pointer hazard this caused was fixed as `CP-7`; the broader decision is still open) | `T-3G` |
 | **Confirmed, open** | `Cue::Apply3D`/3D `PlayCue` are no-ops — no pan/attenuation from listener/emitter geometry at the Cue/SoundBank level | `T-4B` |
 | **Confirmed, open** | No DSP filter/reverb routing on `SoundEffectInstance` | `T-4C` |
-| **Confirmed, open** | `AudioCategory::SetVolume` doesn't retroactively re-apply to already-playing cues (`AudioEngine::SetCategoryVolumeInternal` is a documented no-op) — re-confirmed while writing `XA-5`'s test this session | `T-4D` |
-| **Housekeeping, open** | Formal "build & report" step never explicitly checked off, though satisfied continuously this session | `T-6C` |
+| **Housekeeping, open** | Formal "build & report" step never explicitly checked off, though satisfied continuously during the Fáze 7 session | `T-6C` |
+| **Fixed 2026-07-04** | `AudioCategory::SetVolume` now retroactively re-applies to already-playing cues via `Cue::ApplyCategoryVolume` | `T-4D` |
 | **Accepted deviation** | 3D positional audio is pan + distance-attenuation only, no elevation/Doppler | `CHECKLIST.md` |
 | **Accepted deviation** | Interactive-type (`type==3`) XACT variation tables fall back to a uniform pick instead of a variable-driven one (parser doesn't retain `var_min`/`var_max` per entry) | `CHECKLIST.md`, `XA-3` |
 | **Accepted deviation** | `SoundBank::IsInUse` only tracks fire-and-forget cues it owns; `GetCue`-obtained cues are caller-owned | `T-3B` |
@@ -319,22 +336,11 @@ grep -n "<symbol>" /rv/data/library/github.com/FNA-XNA/FAudio/src/FACT_internal.
 ## 8. Next smallest tasks
 
 Fáze 7 (`plan_audio.md` §4) is fully closed — there is no `CP-`/`XA-`/`IN-`/`MC-` backlog left.
-Remaining work is the smaller, older set below. None of these have ready-made accept criteria as
-granular as Fáze 7's did — each starts with a **decision**, not just a fix.
+`T-4D` (the one mechanical fix left in the older backlog) was closed 2026-07-04 — see §3. All
+remaining items below are **decision tasks**, not mechanical fixes — none have ready-made accept
+criteria as granular as Fáze 7's did.
 
-1. **`T-4D` — make `AudioCategory::SetVolume` actually affect already-playing cues.**
-   - Goal: `AudioEngine::SetCategoryVolumeInternal` (`AudioEngine.cpp:224-234`) currently has a
-     literal no-op comment ("Cue would need to re-apply volume — skipped for simplicity"). At
-     minimum, iterate `activeCues` for the category and re-apply volume to each cue's active
-     `SoundEffectInstance`(s).
-   - Files: `src/Microsoft/Xna/Framework/Audio/AudioEngine.cpp:224-234`,
-     `src/Microsoft/Xna/Framework/Audio/Cue.cpp` (may need a new internal method to re-apply
-     category volume to `active_`).
-   - Verify: extend `AudioCategoryTests.cpp`'s `PauseResumeStopRouteToRealActiveCueInCategory`
-     fixture (already has a real playing cue) to check the resulting `SoundEffectInstance`'s
-     volume changes after `SetVolume()`.
-
-2. **`T-3G` — decide `SoundEffect` instance-tracking vs. documented value-semantics deviation.**
+1. **`T-3G` — decide `SoundEffect` instance-tracking vs. documented value-semantics deviation.**
    - This is a **decision task**, not a mechanical fix: either implement FNA-style weak-ref
      instance tracking (`SoundEffect::Dispose()` stops/disposes all live instances), or formally
      write the value-semantics deviation into `CHECKLIST.md` as permanent (it's currently only
@@ -342,23 +348,29 @@ granular as Fáze 7's did — each starts with a **decision**, not just a fix.
    - Do not start implementing tracking without discussing the tradeoff first — it's a real API
      behavior change, not a bug fix.
 
-3. **`T-3F` — decide streaming `WaveBank` vs. documented in-memory-only deviation.**
+2. **`T-3F` — decide streaming `WaveBank` vs. documented in-memory-only deviation.**
    - Same shape as `T-3G`: either implement real offset/packetSize streaming reads, or formally
      close this as an accepted deviation in `CHECKLIST.md` (it's likely already the practical
      answer, given SDL3_mixer's own loading model, but has never been written down as final).
 
-4. **`T-4B` — 3D pan/attenuation at the `Cue`/`SoundBank` level.**
+3. **`T-4B` — 3D pan/attenuation at the `Cue`/`SoundBank` level.**
    - Note this is different from `SoundEffectInstance::Apply3D`, which already works (`CP-3`).
      This is specifically about `Cue::Apply3D` and 3D `SoundBank::PlayCue` being no-ops.
    - Files: `src/Microsoft/Xna/Framework/Audio/Cue.cpp` (`Apply3D`), `SoundBank.cpp` (3D
      `PlayCue` overload).
 
-5. **`T-6C` — formal build & report checkpoint.** Genuinely small: run
+4. **`T-6C` — formal build & report checkpoint.** Genuinely small: run
    `cmake --build cmake-build-debug --target CNA` and `--target CnaTests`, confirm both are
    clean, write the short report `CLAUDE.md` §Build and Report asks for, check the box.
 
 `T-4C` (DSP filter/reverb routing) is the least-scoped of the remaining items — read
 `SoundEffectInstance.cs:488,518,536,554` in the FNA source first to size it before starting.
+
+**Note for whoever picks `T-4B`/`T-3F`/`T-3G` next:** if it needs a fixture with a real playing
+`SoundEffectInstance` (not just Cue state), the wavebank-less `SharedBank()`/`BuildXsbFixtureBytes`
+fixtures already in `CueTests.cpp`/`AudioCategoryTests.cpp` won't do — see `SharedVolBank()` /
+`BuildVolXwbFixtureBytes()` in `AudioCategoryTests.cpp` (added for `T-4D`) or the existing
+real-WaveBank fixture in `WaveBankTests.cpp` for a pattern to copy.
 
 ---
 
@@ -388,17 +400,20 @@ granular as Fáze 7's did — each starts with a **decision**, not just a fix.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, then plan_audio.md for full task detail (Fáze 7 is done -- see §8 here for
-what's actually left: T-3F, T-3G, T-4B, T-4C, T-4D, T-6C).
+Read NEXT.md first, then plan_audio.md for full task detail (Fáze 7 and T-4D are done -- see §8
+here for what's actually left: T-3F, T-3G, T-4B, T-4C, T-6C -- all decision tasks now, no more
+mechanical fixes in the backlog).
 
-1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2020/2020 tests pass) --
-   rebuild and rerun ./cmake-build-debug/CnaTests to check for drift since this was last updated.
-2. Pick exactly ONE task from NEXT.md §8. Note that unlike Fáze 7's items, most of these start
-   with a decision (see each task's note) -- don't silently pick the more invasive option.
+1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2021/2021 tests pass) --
+   rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests to check for drift since
+   this was last updated.
+2. Pick exactly ONE task from NEXT.md §8. Every remaining task starts with a decision (see each
+   task's note) -- don't silently pick the more invasive option; ask/flag before implementing the
+   "real" alternative for T-3F/T-3G.
 3. Inspect only the files that task names. Do not refactor unrelated code.
 4. Make ONE small, verified improvement. Follow the established git-stash regression-verification
-   pattern from this session (see NEXT.md §7) for any behavioral fix: stash it, confirm the new
-   test fails against the pre-fix code, restore, confirm green.
+   pattern (see NEXT.md §7) for any behavioral fix: stash it, confirm the new test fails against
+   the pre-fix code, restore, confirm green.
 5. Run the task's verification command.
 
 After finishing, check the task's checkbox in plan_audio.md, update NEXT.md (status, recent
