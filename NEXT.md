@@ -33,11 +33,11 @@ verdict.
   Read `plan_devices_phase5.md`'s "Audit findings" section before trusting
   any specific claim from this plan's own Resolution notes without
   re-checking — that audit is what found the two issues above.
-- `plan_devices_phase5.md` (14 tasks, re-audit + hardening) — **open**, Tasks
-  P5-1 through P5-12 done as of this writing; P5-13 (this document's own
-  update) in progress; P5-14 (final verification + Resolution report) not
-  yet run. Full task-by-task detail, and the audit findings that motivated
-  each fix, live in that file.
+- `plan_devices_phase5.md` (14 tasks, re-audit + hardening) — **closed**, all
+  14 tasks done, including Task P5-14's final re-verification against all 3
+  graphics backends (`EASYGL`/`VULKAN`/`BGFX`) plus the Android
+  cross-compile. Full task-by-task detail, and the audit findings that
+  motivated each fix, live in that file.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -130,15 +130,17 @@ confirm the relevant functions are actually compiled in (the host's plain
 in this Linux container. Re-confirmed during Phase 5's own audit (not just
 carried over from Phase 4's finding).
 
-**`VULKAN`/`BGFX`** — last verified clean 2026-07-04 (commit `f576f0e`,
-before Phase 5's work began). **Not re-verified against Phase 5's changes**
-— see Section 8, item 1. Given how much Phase 5 touched
-`Accelerometer.hpp`/`.cpp` and `Gyroscope.hpp`/`.cpp` (a full internal
-refactor, Task P5-4), this should be re-checked, not assumed still fine
-just because `Microsoft::Devices` has never historically touched the
-graphics backend.
+**`VULKAN`/`BGFX` re-verified clean against Phase 5's full changeset**
+(Task P5-14, 2026-07-04) — both build `CNA`/`CnaTests` with zero errors;
+Devices-only filter 187/187 passing on each, matching `EASYGL` exactly.
+Full suite: `VULKAN` 1960 tests/99% passing (13 pre-existing `Vulkan_*`
+graphics-smoke failures needing a real GPU/driver, same baseline as
+before Phase 5); `BGFX` 1954 tests/99% passing (3 pre-existing `Bgfx_*`
+failures, same reason). This closes the one concrete gap this document
+itself flagged after Task P5-4's large `Accelerometer`/`Gyroscope`
+refactor — no regressions found on either backend.
 
-**Tests:** last full `ctest` run (`EASYGL`) as of Task P5-12: **2012 tests,
+**Tests:** last full `ctest` run (`EASYGL`) as of Task P5-14: **2012 tests,
 99% passing.** The 2 failures are pre-existing, unrelated `EasyGL`/
 `easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
 `easy-gl-resource-smoke-tests`) — this environment unexpectedly gained a
@@ -236,12 +238,11 @@ All work committed on `feature/devices`, not yet pushed.
 
 ## 4. Current blocker / main problem
 
-**No blocker**, but **`VULKAN`/`BGFX` need re-verification** before this can
-honestly be called fully green — Task P5-4 in particular was a substantial
-internal refactor of `Accelerometer`/`Gyroscope`, and it has not been built
-against either backend yet (only `EASYGL` and the Android cross-compile).
-See Section 8, item 1 — this is the most concrete, actionable next step,
-not a vague "come back later."
+**No blocker.** `plan_devices_phase5.md` is fully closed (Task P5-14, its
+final task, re-verified `EASYGL`/`VULKAN`/`BGFX`/Android all clean against
+the complete changeset — no regressions found anywhere). See Section 8 for
+what's next; none of it is a blocker, just unstarted or unverifiable in
+this environment (physical hardware, iOS toolchain).
 
 ---
 
@@ -251,8 +252,8 @@ not a vague "come back later."
   `SensorState::NotSupported` stubs — SDL3 has no magnetometer API on any
   platform. See `plan_devices_phase5.md`'s "Future native backend plan" for
   what a real implementation would need.
-- **Needs re-verification:** `VULKAN`/`BGFX` builds against Phase 5's
-  changes — see Section 4.
+- **Resolved (Task P5-14, 2026-07-04):** `VULKAN`/`BGFX` builds re-verified
+  clean against Phase 5's complete changeset — see Section 2.
 - **Needs verification, likely permanent:** iOS cross-compilation — no
   Apple toolchain possible in this Linux container.
 - **Needs physical hardware verification (never done, any session):**
@@ -422,26 +423,33 @@ writing.
 
 ## 8. Next smallest tasks
 
-1. **Re-verify `VULKAN`/`BGFX` builds against Phase 5's changes.** Not done
-   since 2026-07-02 for anything beyond Phase 4 — Task P5-4 in particular
-   substantially refactored `Accelerometer`/`Gyroscope` internals, and that
-   refactor has only been checked against `EASYGL` and the Android
-   cross-compile so far. This is the single most concrete, actionable next
-   step — see Section 4.
-   - Files: none (build-only task).
-   - Verify: the Vulkan/BGFX commands in Section 7; spot-run the Devices
-     test filter on each backend afterward.
+With `plan_devices_phase4.md` and `plan_devices_phase5.md` both fully closed and
+all 3 graphics backends + Android re-verified clean against the complete
+changeset (Task P5-14), there is no standing plan file driving further
+`Microsoft::Devices` work and no known outstanding code issue. Pick one of
+these, or ask the user what the next priority actually is — do not invent
+new `Microsoft::Devices` scope without a plan or explicit request.
 
-2. **Finish `plan_devices_phase5.md` Task P5-14** (final test run +
-   Resolution report) if not already done by the time this is read — check
-   that file's own status before assuming Section 8 item 1 above is the
-   true next step; P5-14 may already cover it.
-
-3. **Physical hardware verification**, if real Android/iOS hardware or a
+1. **Physical hardware verification**, if real Android/iOS hardware or a
    rumble-capable gamepad ever becomes available in a session: work through
    `docs/devices-hardware-checklist.md` using `cna_demo_devices`. Not
    attemptable in this headless container — don't attempt it here, just
-   note if the environment changes.
+   note if the environment changes. This is the single biggest remaining
+   gap — everything else in this namespace has been verified by code
+   reading, unit tests, or cross-compilation, never by real hardware.
+
+2. **Native Android/iOS backend for `Compass`/`Motion`**, if ever scoped as
+   its own task — `plan_devices_phase5.md`'s "Future native backend plan"
+   section has a starting sketch (Android `SensorManager`/JNI, iOS
+   `CLLocationManager`/`CMDeviceMotion`), not verified against any real
+   platform API. A real scoping/design pass would be needed first, not a
+   direct implementation from that sketch alone.
+
+3. **A third independent re-audit of `Microsoft::Devices`**, if a future
+   session has reason to doubt this one — Phase 5's entire premise was that
+   Phase 4's "complete" claims didn't survive re-reading the actual code;
+   the same discipline should apply to Phase 5's own claims, not just
+   Phase 4's.
 
 4. **Anything outside `Microsoft::Devices`.** Ask before assuming scope.
 
@@ -496,8 +504,10 @@ writing.
 Read NEXT.md first, especially Section 2's layered status (API vs. SDL
 runtime vs. native backend vs. hardware-verified) — do not summarize this
 project's Devices work as simply "complete."
-Check plan_devices_phase5.md's own status before assuming what's done —
-Task P5-14 (final verification) may or may not have run yet.
+plan_devices_phase4.md and plan_devices_phase5.md are both fully closed —
+there is no standing Microsoft::Devices plan left to work through. Ask the
+user what to work on next, or pick one of Section 8's items, before
+inventing new scope.
 If given a new task, make one small, verified improvement at a time.
 Run the relevant build/test command from Section 7 / docs/devices-build.md
 after each change.

@@ -969,3 +969,136 @@ of this plan's changes.
 - Update `NEXT.md` (status/recent-changes/known-bugs sections) after each task, per
   `CLAUDE.md`'s "always commit after finishing a task" rule.
 - Commit each task separately, staged by explicit filename, referencing the task ID.
+
+---
+
+## Task P5-14 — Final test run and report
+
+### Final verification run (2026-07-04, all 14 tasks' changes combined)
+
+Ran, in this session, on current `HEAD` (`ac5fa08` at the time this run started):
+
+1. **`EASYGL` (Linux, primary dev backend):** configured `cmake-build-debug`, built
+   `CNA` clean, built `CnaTests` clean, then a full top-level build (`cmake --build .`
+   with no target — every example/test target including `cna_demo_devices`) — clean.
+   Devices-only filter (`ctest -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation"`):
+   **187/187 passing** (2 correctly `GTEST_SKIP()`ed, hardware-dependent). Full `ctest`:
+   **2012 tests, 99% passing, 2 failures** — both pre-existing, unrelated
+   `EasyGL`/`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
+   `easy-gl-resource-smoke-tests`), traced in Task P5-1's Resolution to this
+   environment unexpectedly gaining a real GPU/display mid-session; not
+   `Microsoft::Devices`-related, not touched.
+2. **Android cross-compile:** re-ran `cmake-build-android` (NDK r30, arm64-v8a,
+   API 24) against *all* of this plan's changes, not just Task P4-11's original
+   snapshot — `CNA` built clean. Used the NDK's own `llvm-nm` to confirm every
+   Phase-5-introduced symbol actually compiled in:
+   `Detail::SdlSensorSubsystem<Accelerometer>::ProbeGuard`,
+   `Detail::ConvertAndroidPortraitToXnaLandscape()`,
+   `Accelerometer::GetSubsystem()`, and `VibrateController::~VibrateController()`
+   were all found present in their respective object files.
+3. **iOS:** re-checked (not assumed) — still no `xcodebuild`/`xcrun`/`osxcross`
+   anywhere on this filesystem. Confirmed still blocked.
+4. **`VULKAN`:** built `CNA`+`CnaTests` clean in `cmake-build-vulkan`. Devices-only
+   filter: **187/187 passing.** Full `ctest`: 1960 tests, 99% passing, 13 failures —
+   all pre-existing `Vulkan_*` graphics-smoke tests needing a real GPU/driver this
+   environment doesn't have, same baseline as before this plan's work began.
+5. **`BGFX`:** built `CNA`+`CnaTests` clean in `cmake-build-bgfx`. Devices-only
+   filter: **187/187 passing.** Full `ctest`: 1954 tests, 99% passing, 3 failures —
+   all pre-existing `Bgfx_*` graphics-smoke tests, same reason, same baseline.
+
+**No regressions found on any of the 3 graphics backends or the Android
+cross-compile from any of this plan's 14 tasks.** This closes the one concrete gap
+`NEXT.md` flagged after Task P5-4 in particular (a substantial internal refactor that
+had, until this run, only been checked against `EASYGL` and Android).
+
+### Files changed (this plan's entire diff, `891025a..HEAD`, excluding this plan file itself)
+
+18 files, +1993/−970 lines:
+- **New:** `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`,
+  `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`,
+  `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp`,
+  `docs/devices-build.md`, `docs/location-future-plan.md`.
+- **Modified (code):** `include/Microsoft/Devices/Sensors/Accelerometer.hpp`,
+  `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
+  `include/Microsoft/Devices/Sensors/Gyroscope.hpp`,
+  `src/Microsoft/Devices/Sensors/Gyroscope.cpp`,
+  `include/Microsoft/Devices/Sensors/SensorBase.hpp`,
+  `include/Microsoft/Devices/VibrateController.hpp`,
+  `src/Microsoft/Devices/VibrateController.cpp`.
+- **Modified (tests):** `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`,
+  `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`,
+  `tests/Microsoft/Devices/VibrateControllerTests.cpp`.
+- **Modified (docs):** `NEXT.md` (full rewrite), `AUDIT.md`,
+  `docs/devices-hardware-checklist.md`.
+
+### Tests added
+
+- `AccelerometerTests`/`GyroscopeTests`: `RepeatedSupportProbingDoesNotChangeSubsequentBehavior`,
+  `ConcurrentSyntheticUpdatesDoNotCrashAndDrainBeforeDispose`,
+  `DisposeFromWithinOwnCallbackDoesNotDeadlock`,
+  `InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported`,
+  `GetCurrentValuePropertyStillThrowsAfterSyntheticUpdateWhenNotMarkedSupported` (5 new
+  tests × 2 classes = 10).
+- `AndroidSensorOrientationTests` (new file): 5 tests.
+- `VibrateControllerTests`: `RepeatedProbeCallsStayConsistent`,
+  `RepeatedStartStopSequencesDoNotDegrade` (2 new tests).
+- **17 new tests total** (1995 → 2012 on `EASYGL`, matching exactly).
+
+### Commands run (this session, all re-verified working)
+
+See `docs/devices-build.md` (Task P5-12) for the full, standalone reference.
+
+### Failures / skips (all pre-existing, all unrelated to `Microsoft::Devices`)
+
+- `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests` (`EASYGL`) — real-GPU
+  graphics bugs newly surfaced by this environment's GPU/display becoming available
+  mid-session (Task P5-1's finding).
+- 13× `Vulkan_*` graphics-smoke tests (`VULKAN`) — need a real Vulkan
+  device/driver.
+- 3× `Bgfx_*` graphics-smoke tests (`BGFX`) — same reason.
+- `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`
+  — correctly `GTEST_SKIP()` themselves; this dev container has no real
+  accelerometer/gyroscope hardware, which is the expected result, not a failure.
+
+### Remaining risks / what this plan could not verify
+
+- **No physical hardware verification of anything, in any session to date.** Every
+  fix in this plan is verified by code reading, unit tests, and cross-compilation —
+  never by running on a real accelerometer, gyroscope, or haptic motor.
+  `docs/devices-hardware-checklist.md` + `cna_demo_devices` exist for whenever that
+  becomes possible.
+- **`CnaTests` was never cross-compiled for Android** (`googletest` isn't configured
+  for the NDK toolchain in this environment) — only the `CNA` static library itself
+  was verified to compile for Android. No Android-specific *test execution* has ever
+  happened, only compilation.
+- **The self-dispose deadlock fix (Task P5-3) and the concurrent-callback fix (Task
+  P5-2) are verified against real `std::thread` concurrency in this session's tests,
+  but never against genuine concurrent SDL hardware events** (this headless
+  environment cannot produce those) — the tests exercise the same counter/lock
+  machinery under real contention, which is the strongest verification available
+  here, but it's still a stand-in, not the real scenario Audit finding 2 describes.
+- **iOS remains completely unverified** — no toolchain, no code path exercised at
+  all beyond what compiles identically to desktop (no `#ifdef __IOS__`/similar
+  branches exist in the sensor classes today; iOS uses the same non-Android code
+  path as desktop).
+- **Native Android/iOS Compass/Motion backends remain unimplemented** — Tasks
+  P5-8/P5-9's "Future native backend plan" is a sketch, not verified against any
+  real platform API (no Android/iOS `SensorManager`/`CoreMotion` code was written
+  or compiled in this plan).
+- **This plan's own audit could be incomplete.** It re-read the code directly and
+  found real issues Phase 4 missed — but the same could be true of this plan's own
+  work, discoverable only by a *third* independent re-audit. Nothing here should be
+  read as a final, unquestionable verdict either; see `NEXT.md` Section 9's explicit
+  note against ever again framing this namespace as flatly "complete."
+
+### Summary
+
+All 14 tasks in this plan are done. The plan's core thesis — that Phase 4's own
+"complete"/"hardened" claims should not be trusted without re-auditing — was
+validated: real bugs were found (a subsystem leak Task P4-8 itself introduced, a
+`SensorBase<T>` data race untouched through 4 prior plans, an assumption about
+`SDL_Quit()` ordering that was never checked and was wrong) and fixed, alongside the
+explicitly-requested refactor (Task P5-4), test-coverage gaps (Tasks P5-1/P5-2/P5-3/
+P5-6/P5-7), and documentation-only planning work (Tasks P5-5/P5-8/P5-9/P5-10/P5-12/
+P5-13) for what remains honestly out of scope or unverified. No regressions found on
+any of `EASYGL`/`VULKAN`/`BGFX`/Android across the entire plan.
