@@ -13,7 +13,7 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–35 are now complete. **Phase 36 (BlendState
-  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) is in progress** — Tasks 301–302 done, Task 303
+  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) is in progress** — Tasks 301–303 done, Task 304
   is next (see §8). Phase 35 found and fixed a severe, project-wide bug (Task 293) and
   found-but-tracked a second one (Task 867, not yet fixed) — see §3/§5, and the new
   `docs/sampler-state-support.md` for the full Phase 35 writeup.
@@ -40,13 +40,13 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2056/2058 (serial `-j1`) pass. 2 pre-existing,
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2057/2059 (serial `-j1`) pass. 2 pre-existing,
   unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. Some
   tests have each been observed failing once under parallel `-j` execution but passed cleanly both
   in isolation and on a repeat serial full run — treated as parallel-execution flakiness, not a
   regression (none confirmed as a stable failure): `EasyGL_SkinnedBones`,
   `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1992/1995 (serial `-j1`) pass
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1995/1997 (serial `-j1`) pass
   (`Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame` both failed in one full run this session,
   both confirmed passing in isolation — same pre-existing order-dependent flakiness, not a
   regression). `../sharp-runtime`
@@ -174,7 +174,8 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 302 | `GraphicsDevice.cpp`, `GraphicsDeviceDefaultStateTests.cpp` (new) | **Found and fixed a real bug, same shape as Task 292.** `GraphicsDevice.blendState_` was a plain default-constructed `BlendState`, never copied from `BlendState::Opaque` (FNA's actual default) — values coincidentally matched, invisible until Task 301 gave `Opaque` a `Name`. Fixed via the constructor's member-init list. Flagged, not fixed: `depthStencilState_`/`rasterizerState_` are likely the same bug, out of this task's scope. |
+| (uncommitted) Task 303 | `examples/easygl_blendstate_opaque_test.cpp` (new), `CMakeLists.txt` | Found Task 255's existing `BlendState::Opaque` pixel test only uses a fully-opaque source colour, which can't distinguish `Opaque` from `AlphaBlend` (their math collapses to the same result at alpha=255). New test uses alpha=128 specifically, confirming destination + alpha are both genuinely discarded. Passed on both backends immediately — no bug found, closes a real coverage gap. |
+| `812dbb7` Task 302 | `GraphicsDevice.cpp`, `GraphicsDeviceDefaultStateTests.cpp` (new) | **Found and fixed a real bug, same shape as Task 292.** `GraphicsDevice.blendState_` was a plain default-constructed `BlendState`, never copied from `BlendState::Opaque` (FNA's actual default) — values coincidentally matched, invisible until Task 301 gave `Opaque` a `Name`. Fixed via the constructor's member-init list. Flagged, not fixed: `depthStencilState_`/`rasterizerState_` are likely the same bug, out of this task's scope. |
 | `2db584a` Task 301 | `BlendState.hpp/.cpp`, `BlendStateTests.cpp` | **Opens Phase 36.** Audited `BlendState` against FNA — property surface, all 4 presets, default values all already matched exactly. Fixed the known Task 866 gap: presets didn't set `Name` (e.g. `"BlendState.Additive"`). Mirrors Task 291's `SamplerState` fix exactly. Closes Task 866's `BlendState` portion; `DepthStencilState`/`RasterizerState` remain open for their own later audit tasks. 6 new tests. EasyGL 2054/2056, Vulkan 1992/1994, both only pre-existing failures. |
 | `1646589` Task 300 | `docs/sampler-state-support.md` (new) | **Closes Phase 35.** Synthesizes Tasks 291–299's findings into one reference doc: API conformance, the central Task 293 per-slot-binding bug and its 3-backend fix, `TextureAddressMode`/`TextureFilter`/mipmap/anisotropic coverage, and a per-backend support matrix. Links to Tasks 866/867 rather than duplicating them. |
 | (uncommitted) Task 299 | `examples/easygl_texture_anisotropic_effect_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (Task 867 extended) | Audited `TextureFilter::Anisotropic`/`MaxAnisotropy` on all 3 backends: Vulkan correct (real device-cap query + clamp); EasyGL has zero anisotropy support at all (silently falls back to trilinear — underlying `easy-gl` library has no API for it); Bgfx enables the effect but ignores the requested level entirely. New test verifies the task's literal "caps and fallback" ask: `MaxAnisotropy=9999` (far beyond any cap) doesn't crash on either backend. Found an additional severe finding building it: `TextureFilter::Anisotropic` (and every `*Mip*` filter) renders solid black on any ordinary single-level `Texture2D` on EasyGL (GL mipmap-incompleteness) — same root cause as Task 867, scope extended to cover it, not fixed. |
@@ -346,18 +347,20 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 303 — pixel test: `BlendState::Opaque` (source replaces destination)**
-   - Goal: first real GPU pixel test in Phase 36 — confirm `BlendState::Opaque` actually makes the
-     backend ignore destination content and write source colour directly (`colorSrc=One,
-     colorDst=Zero` should mean the shader's output completely replaces whatever was already in the
-     render target/backbuffer, regardless of its alpha). Mirror the established pattern from
-     Phase 35's pixel tests (Tasks 293–299): clear to a distinct background colour, draw a quad with
-     a known colour and `BlendState::Opaque` explicitly set, read back a pixel, confirm it's exactly
-     the drawn colour with zero contribution from the cleared background — including with a
-     partially-transparent source colour, since `Opaque` must ignore alpha entirely (unlike
-     `AlphaBlend`/`NonPremultiplied`, tested in Tasks 304/305).
-   - Files: new `examples/easygl_blendstate_opaque_test.cpp` (or similar), registered on EasyGL and
-     Vulkan mirroring Phase 35's dual-backend test registration pattern.
+1. **`GRAPHICS_TASKS.md` Task 304 — pixel test: `BlendState::AlphaBlend` premultiplied alpha**
+   - Goal: confirm `BlendState::AlphaBlend` (`colorSrc=alphaSrc=One`,
+     `colorDst=alphaDst=InverseSourceAlpha`) implements the blend equation literally — i.e. it
+     expects an **already-premultiplied** source colour and does NOT multiply by alpha itself
+     (that's `NonPremultiplied`'s job, via `SourceAlpha`/`InverseSourceAlpha`, tested in Task 305).
+     Suggested design: feed a correctly-premultiplied 50%-alpha red — `Color(128, 0, 0, 128)`
+     (raw red `255,0,0` at 50% opacity, premultiplied) — over a green background. Expected output:
+     `R ≈ 128*1 + 0*(1-0.5) ≈ 128`, `G ≈ 0*1 + 255*(1-0.5) ≈ 127`. Check both channels land in a
+     tight mid-range band. Critically, verify the result is `R≈128` (not `R≈64`, which is what
+     you'd get if the shader incorrectly re-multiplied an already-premultiplied colour by alpha
+     again, i.e. accidentally implemented `NonPremultiplied`'s equation instead) — that
+     distinguishing check is the actual point of this test, not just "some blend happened."
+   - Files: new `examples/easygl_blendstate_alphablend_test.cpp`, registered on EasyGL and Vulkan.
+   - Verification: pixel-readback test on both backends.
    - Verification: pixel-readback test on both EasyGL and Vulkan.
    - Verification: unit tests for the 4 presets' property values plus (if fixed here) `Name`
      matching FNA's exact preset name strings, mirroring Task 291's `SamplerStateTests.cpp` additions.
@@ -424,11 +427,11 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-35 are fully complete. Phase 36 (BlendState conformance,
-GRAPHICS_TASKS.md Tasks 301-310) is in progress: Tasks 301-302 done. All three backends are green:
-EasyGL 2056/2058, Vulkan 1992/1995 (Vulkan_RenderTargetUsage/Vulkan_FillMode_WireFrame both failed
-once in a full run, both confirmed passing in isolation - pre-existing order-dependent flakiness,
-not regressions), Bgfx 1977/1977 (100%, not rebuilt this specific session) - only pre-existing,
-documented failures remain anywhere (see NEXT.md §5).
+GRAPHICS_TASKS.md Tasks 301-310) is in progress: Tasks 301-303 done. All three backends are green:
+EasyGL 2057/2059, Vulkan 1995/1997 (Vulkan_RenderTargetUsage/Vulkan_FillMode_WireFrame observed
+failing in one full run, both confirmed passing in isolation - pre-existing order-dependent
+flakiness, not regressions), Bgfx 1977/1977 (100%, not rebuilt this specific session) - only
+pre-existing, documented failures remain anywhere (see NEXT.md §5).
 
 Phase 35's headline result (full writeup: docs/sampler-state-support.md): Task 293 found and fixed
 a severe, project-wide bug across all 3 backends - GraphicsDevice.SamplerStates was being silently
@@ -448,11 +451,18 @@ the constructor's member-init list (positioned to match declaration order, avoid
 Flagged, not fixed: depthStencilState_/rasterizerState_ are very likely the same bug (FNA also
 defaults DepthStencilState=DepthStencilState.Default, RasterizerState=RasterizerState.CullCounterClockwise)
 - out of Task 302's BlendState-only scope, should be checked when their own audit tasks come up.
+Task 303 found the existing BlendState::Opaque pixel test (Task 255) only ever used a fully-opaque
+source colour, which can't distinguish Opaque from AlphaBlend (same result at alpha=255). New test
+uses alpha=128 specifically and confirms destination+alpha are both genuinely discarded - passed on
+both backends immediately, no bug found, closes a real coverage gap.
 
-Next task: GRAPHICS_TASKS.md Task 303 - pixel test: BlendState::Opaque (source replaces
-destination). This is the first real GPU pixel test in Phase 36, mirroring Phase 35's established
-pattern (Tasks 293-299): clear to a distinct background colour, draw with BlendState::Opaque and a
-known colour (including partially-transparent, since Opaque must ignore alpha entirely), read back
-a pixel, confirm zero background contribution. Register on both EasyGL and Vulkan.
+Next task: GRAPHICS_TASKS.md Task 304 - pixel test: BlendState::AlphaBlend premultiplied alpha.
+Confirm AlphaBlend (colorSrc=alphaSrc=One, colorDst=alphaDst=InverseSourceAlpha) expects an
+ALREADY-premultiplied source colour and does not multiply by alpha itself (that's
+NonPremultiplied's job, Task 305). Suggested design: feed a correctly-premultiplied 50%-alpha red -
+Color(128,0,0,128) - over a green background. Expected: R≈128, G≈127 (mid-range, not R≈64, which
+would mean the shader incorrectly re-multiplied by alpha, accidentally implementing
+NonPremultiplied's equation instead) - that distinguishing check is the actual point of this test.
+Register on both EasyGL and Vulkan.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```

@@ -1108,6 +1108,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 303: BlendState::Opaque discards destination + source alpha entirely
+        cna_easygl_test(cna_test_easygl_blendstate_opaque
+                        examples/easygl_blendstate_opaque_test.cpp)
+        add_test(NAME EasyGL_BlendState_Opaque
+                 COMMAND cna_test_easygl_blendstate_opaque)
+        set_tests_properties(EasyGL_BlendState_Opaque PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1226,6 +1235,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_TextureAnisotropic_DualTextureEffect
                  COMMAND cna_test_vulkan_texture_anisotropic_effect)
         set_tests_properties(Vulkan_TextureAnisotropic_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 303: BlendState::Opaque on Vulkan too (reuses the backend-agnostic EasyGL source)
+        cna_vulkan_test(cna_test_vulkan_blendstate_opaque
+                        examples/easygl_blendstate_opaque_test.cpp)
+        add_test(NAME Vulkan_BlendState_Opaque
+                 COMMAND cna_test_vulkan_blendstate_opaque)
+        set_tests_properties(Vulkan_BlendState_Opaque PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
