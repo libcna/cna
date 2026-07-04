@@ -60,24 +60,43 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean (uncommitted changes on top of `cdec800`, `HEAD` at last commit). EasyGL
+- **Build:** clean (uncommitted changes on top of `1cb2b75`, `HEAD` at last commit). EasyGL
   backend, `SOUND_ENABLED` on, SDL3_mixer linked. Verified via BOTH the long-standing manual
-  `cmake-build-debug/` AND the new `tests` CMake preset (`cmake-build-tests/`, freshly deleted and
-  reconfigured from scratch); also rebuilt `cna_demo_sound`/`cna_demo_2d` — no failures.
-- **Tests:** `CnaTests` **2090 / 2090 pass, reliably** (2064 at the last handoff snapshot, +26 net
-  new across Fáze 9's `P9-LIFECYCLE-001..015`, `P9-CATEGORY-001..004`, and `P9-VALIDATION-001..015`;
-  `P9-DOCS` was docs-only). Stress-tested 5+ consecutive full-suite runs post-`P9-BUILD-007` fix
-  (see below) with zero failures, across both build directories. Also verified clean under a full
-  ASan+UBSan build.
+  `cmake-build-debug/` AND the `tests` CMake preset; also rebuilt `cna_demo_sound`/`cna_demo_2d` —
+  no failures.
+- **Tests:** `CnaTests` **2093 / 2093 pass, reliably** (2064 at the last handoff snapshot, +29 net
+  new across Fáze 9's `P9-LIFECYCLE-001..015`, `P9-CATEGORY-001..004`, `P9-VALIDATION-001..015`, and
+  `P9-STOP-001..010`; `P9-DOCS` was docs-only). Also verified clean under a full ASan+UBSan build.
   Re-run to check for drift: `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
 - **CLI/tools/apps:** none in the framework itself. `cna_demo_sound`/`cna_demo_2d` aren't part of
   `CnaTests` and are easy to forget when just running `--target CnaTests` — see §7 for how to
   rebuild them; both still build clean as of this update.
 - **Fáze 9 (started 2026-07-04, user-directed "audio correctness hardening" pass): `P9-LIFECYCLE`,
-  `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, and `P9-BUILD` are now fully closed, 5 of Fáze 9's 11
-  task groups untouched.** This is the user's own scoped plan (not a repeat of the Fáze 7/8 "fresh
-  full audit against FNA" pattern) — see `plan_audio.md`'s new "Phase 9" section for the complete
-  task list.
+  `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, and `P9-STOP` are now fully closed, 4 of
+  Fáze 9's 11 task groups untouched.** This is the user's own scoped plan (not a repeat of the
+  Fáze 7/8 "fresh full audit against FNA" pattern) — see `plan_audio.md`'s new "Phase 9" section
+  for the complete task list.
+  - **`P9-STOP-001..010` (2026-07-04): found and fixed a real bug in `Cue::Stop(AsAuthored)`.**
+    The old code always set `state_ = State::Stopped` and unregistered from `waveBanksUsed_`/
+    `AudioEngine` immediately, regardless of whether real active instances (`active_`) were still
+    audibly playing their release tail — inconsistent with `active_` itself staying populated
+    (`XA-6`'s own fix). Read `FACTCue_Stop` (`FACT.c`) line-by-line: real FACT only reaches
+    `FACT_STATE_STOPPED` synchronously for an immediate stop, a paused cue, or one with no sound
+    at all (`playingSound == NULL`) — with a real tail it begins a fade-out/RPC-release and stays
+    non-stopped until that finishes. Fixed: a non-immediate stop with a real tail now sets the
+    already-defined-but-previously-unused `State::Stopping` instead, and defers
+    `waveBanksUsed_`/`AudioEngine` unregistration until the cue is actually immediate-stopped or
+    disposed; `ReconcileState()` promotes `Stopping` → `Stopped` the same way it already promotes
+    `Playing`, once every `active_` instance actually finishes. A stop with no real tail (empty
+    `active_`, e.g. wavebank-less test fixtures) still goes straight to `Stopped`, matching FACT's
+    own `playingSound == NULL` rule. 4 new/extended tests, `git stash`-verified to fail against the
+    pre-fix code. Documented remaining gap in `CHECKLIST.md`: the tail's *duration* is however long
+    the wave naturally takes, not an authored `fadeOutMS` curve (`XactParser` doesn't retain
+    per-cue fade timing into `XsbCue` at all). Caught and fixed a second, self-inflicted flakiness
+    bug while verifying this: the category-level test initially used a 200-byte (~1.13ms) fixture,
+    which could finish its tail naturally between `Play()` and the assertion under full-suite load
+    — fixed with a dedicated 1-second fixture, matching the pattern this branch already established
+    (`CueTests.cpp`'s `"LongCue"`) for exactly this class of race.
   - **`P9-BUILD-001..007` (2026-07-04): found and fixed a real, reproducible data race while
     verifying "all audio tests pass from a clean checkout."** Added `CMakePresets.json`'s first
     native desktop preset (`tests` — EasyGL, Debug, tests+examples on; the only prior preset was
@@ -286,7 +305,16 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
-- *(uncommitted)* — **`P9-BUILD-001..007`**: added `CMakePresets.json`'s first native desktop
+- *(uncommitted)* — **`P9-STOP-001..010`**: found and fixed a real bug — `Cue::Stop(AsAuthored)`
+  always set `state_=Stopped` and unregistered from `waveBanksUsed_`/`AudioEngine` immediately,
+  even while `active_` was still populated with a real, audibly-playing release tail. Fixed by
+  using the already-defined-but-unused `State::Stopping` for a non-immediate stop with a real
+  tail, deferring registry unregistration until the cue is actually immediate-stopped/disposed,
+  and extending `ReconcileState()` to promote `Stopping`→`Stopped` once the tail naturally
+  finishes. 4 new/extended tests, `git stash`-verified. `P9-STOP` group now fully closed (10/10).
+  Documented remaining gap (tail duration ≠ authored `fadeOutMS`) in `CHECKLIST.md`. See
+  §2/§5/§6/`plan_audio.md`'s Phase 9 section for full detail.
+- `47a58f5`/`1cb2b75` — **`P9-BUILD-001..007`**: added `CMakePresets.json`'s first native desktop
   preset (`tests`); found and fixed a real, reproducible data race in 3 `T-4C` DSP-filter tests
   (real SDL3_mixer mixing thread racing the test's synchronous filter-processing calls on shared
   `FilterState`), confirmed by ~15-25% failure rate over repeated runs and fixed by stopping the
@@ -533,18 +561,17 @@ findings, fixed in an earlier session).
 ## 4. Current blocker / main problem
 
 **No build- or test-breaking blocker.** No failing command, no failing test. The build is clean
-and all 2090 tests pass reliably (stress-tested, see §2). `cna_demo_sound`/`cna_demo_2d` also
-rebuilt clean. Changes are **uncommitted** on top of `cdec800` (`HEAD`) — see §8 for the suggested
-commit boundary.
+and all 2093 tests pass reliably. `cna_demo_sound`/`cna_demo_2d` also rebuilt clean. Changes are
+**uncommitted** on top of `1cb2b75` (`HEAD`) — see §8 for the suggested commit boundary.
 
 **Fáze 7, the pre-existing older backlog, and Fáze 8 are fully closed. `P9-LIFECYCLE` (15/15),
-`P9-CATEGORY` (4/4), `P9-VALIDATION` (15/15), `P9-DOCS` (7/7), and `P9-BUILD` (7/7) are now also
-fully closed. Fáze 9 as a whole (user-directed hardening pass, started 2026-07-04) is still NOT
-fully closed** — every other one of Fáze 9's 6 remaining task groups (`P9-STOP`/`P9-XACT`/`P9-3D`/
-`P9-HARDWARE`/`P9-DYNAMIC`, plus `P9-AUDIT` itself) are still open. This is real, tracked open
-work — not a "no known open item" state like the prior handoff. See `plan_audio.md`'s "Phase 9"
-section for the full unchecked list, and §8 below for the user-specified implementation order to
-continue in.
+`P9-CATEGORY` (4/4), `P9-VALIDATION` (15/15), `P9-DOCS` (7/7), `P9-BUILD` (7/7), and `P9-STOP`
+(10/10) are now also fully closed. Fáze 9 as a whole (user-directed hardening pass, started
+2026-07-04) is still NOT fully closed** — every other one of Fáze 9's 5 remaining task groups
+(`P9-XACT`/`P9-3D`/`P9-HARDWARE`/`P9-DYNAMIC`, plus `P9-AUDIT` itself) are still open. This is
+real, tracked open work — not a "no known open item" state like the prior handoff. See
+`plan_audio.md`'s "Phase 9" section for the full unchecked list, and §8 below for the
+user-specified implementation order to continue in.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, which is under separate, active, concurrent development by another session.
@@ -567,6 +594,8 @@ it may just need a retry once that unrelated work lands, or a small compliance p
 | **Fixed 2026-07-04** | **Real out-of-bounds read, confirmed by a segfault:** `offset+count` validated as a plain `int32` addition in `SoundEffect`'s buffer/range ctor and `DynamicSoundEffectInstance::SubmitBuffer`/`SubmitFloatBufferEXT` — could overflow and wrap negative, bypassing the range check | `P9-VALIDATION-003`, `010`, `011` |
 | **Fixed 2026-07-04** | `SoundEffectInstance`/`DynamicSoundEffectInstance::Resume()` didn't call `Play()` when never-started/disposed (FNA: "XNA4 just plays if we've not started yet") — was a silent no-op instead | `P9-VALIDATION-010` |
 | **Fixed 2026-07-04** | `DynamicSoundEffectInstance::SubmitBuffer`/`SubmitFloatBufferEXT` had no disposed guard — could queue buffers forever after `Dispose()` | `P9-VALIDATION-011` |
+| **Fixed 2026-07-04** | `Cue::Stop(AsAuthored)` set `state_=Stopped` and unregistered from `waveBanksUsed_`/`AudioEngine` immediately even while `active_` was still populated with a real, audibly-playing release tail — new `State::Stopping` now models this correctly | `P9-STOP-002..005` |
+| **Accepted deviation** | `Cue::Stop(AsAuthored)`'s release-tail *duration* is however long the wave naturally takes, not an authored `fadeOutMS`/RPC-release curve — `XactParser` doesn't retain per-cue fade timing into `XsbCue` at all | `CHECKLIST.md`, `P9-STOP-010` |
 | **Open (Fáze 9)** | Real FACT/FNA lets `IsPlaying` and `IsPaused` be `true` simultaneously (pausing never clears the `PLAYING` bit); CNA's `Cue::State` enum keeps them mutually exclusive — found during the audit above, not yet fixed (would ripple into `AudioEngine::PauseCategoryInternal`/`ResumeCategoryInternal` and existing tests) | `P9-LIFECYCLE-013` |
 | **Fixed 2026-07-04** | `.xwb` entry `nChannels` no longer read with a spurious `+1` — matches raw on-disk value on every entry | `IN-7` |
 | **Fixed 2026-07-04** | COMPLEX sound + RPC/DSP flag: per-track metadata now parsed after the RPC/DSP block, matching FACT's real order | `IN-8` |
@@ -605,10 +634,10 @@ it may just need a retry once that unrelated work lands, or a small compliance p
 All Fáze 0–7 findings (`T-1A`–`T-1H`, `T-2A`–`T-2G`, `T-3A`–`T-3E`, `T-5A`–`T-5O`, `T-4A`, `T-6A`,
 `T-6B`, and all 30 of `CP-1`..`CP-14`/`XA-1`..`XA-5`/`IN-1`..`IN-6`/`MC-1`..`MC-5`) are fixed, and so
 are all 25 of Fáze 8's findings (22 fixed, 3 closed as documented deviations above). **Fáze 9 is
-partial**: all 15 of `P9-LIFECYCLE`, all 4 of `P9-CATEGORY`, and all 15 of `P9-VALIDATION`
-fixed/tested as above; `P9-STOP`/`P9-XACT`/`P9-3D`/`P9-HARDWARE`/`P9-DYNAMIC`/`P9-DOCS`/`P9-BUILD`
-(plus `P9-AUDIT` itself) remain open — see `plan_audio.md`'s "Phase 9" section for the full
-checked/unchecked list with verification notes.
+partial**: all 15 of `P9-LIFECYCLE`, all 4 of `P9-CATEGORY`, all 15 of `P9-VALIDATION`, all 7 of
+`P9-DOCS`, all 7 of `P9-BUILD`, and all 10 of `P9-STOP` fixed/tested as above;
+`P9-XACT`/`P9-3D`/`P9-HARDWARE`/`P9-DYNAMIC` (plus `P9-AUDIT` itself) remain open — see
+`plan_audio.md`'s "Phase 9" section for the full checked/unchecked list with verification notes.
 
 ---
 
@@ -798,6 +827,18 @@ Microphone (capture)
 - **`Cue::StopInternal` only destroys active instances (`active_.clear()`) for an immediate
   stop** (`XA-6`) — a non-immediate (`AsAuthored`) stop must leave them owned by `active_` so their
   already-triggered release/loop tail keeps playing, until this `Cue` is later disposed.
+- **A non-immediate (`AsAuthored`) `StopInternal` with a real tail (`active_` non-empty) sets
+  `state_ = State::Stopping`, NOT `Stopped`, and does NOT unregister from `waveBanksUsed_`/
+  `AudioEngine`** (`P9-STOP-002..005`, fixed 2026-07-04 — the old code did both unconditionally,
+  which was inconsistent with `active_` staying populated and made `WaveBank::IsInUse`/category
+  operations lose track of a cue while its tail was still audible). `ReconcileState()`
+  (`P9-LIFECYCLE-001`) promotes `Stopping` → `Stopped` the same way it promotes `Playing`, once
+  every `active_` instance actually finishes — still without touching those registries itself
+  (same mutate-during-iteration hazard). A non-immediate stop on a cue with NO real tail
+  (`active_` empty, e.g. the wavebank-less `MakeCue()`/`SharedBank()` fixtures) still goes straight
+  to `Stopped`, matching FACT's own `playingSound == NULL` "stop immediately anyway" rule. Known
+  remaining gap: the tail's *duration* is however long the wave naturally takes, not an authored
+  `fadeOutMS` curve (`XactParser` doesn't retain per-cue fade timing at all — `CHECKLIST.md`).
 - **Fire-and-forget sweep and `IsInUse` (`SoundBank` and `WaveBank`) treat `IsPlaying || IsPaused`
   as alive** (`XA-7`) — checking `IsPlaying` alone silently destroys/misreports a paused cue.
 - **`SoundEffectInstance::Pause()`/`Resume()` are `virtual`**, with a `DynamicSoundEffectInstance`
@@ -909,27 +950,26 @@ grep -n "<symbol>" /rv/data/library/github.com/FNA-XNA/FAudio/src/FACT_internal.
 **Fáze 9 is a real, user-specified, still-open task list — continue it, don't invent a new one.**
 The user gave an explicit implementation order; pick up exactly where it left off:
 
-**`P9-LIFECYCLE` (15/15), `P9-CATEGORY` (4/4), `P9-VALIDATION` (15/15), `P9-DOCS` (7/7), and
-`P9-BUILD` (7/7) are now fully closed as of 2026-07-04.** The one thing left behind is a genuine
-open decision, not a task: the `IsPlaying`+`IsPaused` coexistence deviation (§5/§6, now also in
-`CHECKLIST.md`) — fixing it would touch `PauseCategoryInternal`/`ResumeCategoryInternal` and
-existing tests, similar in shape to the Fáze 8 `CP-19`/`CP-18`/`XA-9` "touches shared
-infrastructure" decisions, so ask the user before implementing rather than picking a side. It is
-NOT blocking anything else in Fáze 9.
+**`P9-LIFECYCLE` (15/15), `P9-CATEGORY` (4/4), `P9-VALIDATION` (15/15), `P9-DOCS` (7/7),
+`P9-BUILD` (7/7), and `P9-STOP` (10/10) are now fully closed as of 2026-07-04.** Two genuine open
+decisions are left behind, neither a task: the `IsPlaying`+`IsPaused` coexistence deviation (§5/§6,
+`CHECKLIST.md`), and `Stop(AsAuthored)`'s tail-duration-not-authored-fade-curve gap (§5/§6,
+`CHECKLIST.md`, `P9-STOP-010`) — both would need real feature work (parser changes + a time-driven
+update mechanism for the fade case) or touch shared category-pause infrastructure (the `IsPlaying`/
+`IsPaused` case), so ask the user before implementing either rather than picking a side. Neither is
+blocking anything else in Fáze 9.
 
-1. **`P9-STOP`, `P9-XACT`, `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`** are all that's left of Fáze 9's
-   explicit task groups — the user's order doesn't distinguish priority among these five, so any
-   reasonable starting point is fine; `P9-STOP` (stop semantics/authored-stop-tail correctness) is
-   the most natural next pick since it's the closest in spirit to the just-closed `P9-LIFECYCLE`/
-   `P9-CATEGORY` work.
+1. **`P9-XACT`, `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`** are all that's left of Fáze 9's explicit task
+   groups — the user's order doesn't distinguish priority among these four, so any reasonable
+   starting point is fine.
 2. **`P9-AUDIT-001..005`** (the fresh-read audit tasks) were never in the user's explicit
    implementation order and remain unchecked; the per-file reading needed to fix
-   `P9-LIFECYCLE`/`P9-CATEGORY`/`P9-VALIDATION`/`P9-BUILD` happened ad hoc but the formal audit
-   deliverable (comparison write-up) was never produced — pick this up if asked, or fold it into
-   whichever group is being worked when a stale-doc inconsistency is found.
+   `P9-LIFECYCLE`/`P9-CATEGORY`/`P9-VALIDATION`/`P9-BUILD`/`P9-STOP` happened ad hoc but the formal
+   audit deliverable (comparison write-up) was never produced — pick this up if asked, or fold it
+   into whichever group is being worked when a stale-doc inconsistency is found.
 
-**Commit boundary:** everything in this handoff (`P9-BUILD-001..007` fix + this `NEXT.md` update)
-is currently uncommitted on top of `cdec800` — commit before starting the next group so this fix
+**Commit boundary:** everything in this handoff (`P9-STOP-001..010` fix + this `NEXT.md` update)
+is currently uncommitted on top of `1cb2b75` — commit before starting the next group so this fix
 isn't bundled with unrelated work.
 
 ---
@@ -962,24 +1002,24 @@ isn't bundled with unrelated work.
 ```
 Read NEXT.md first, then plan_audio.md if you need file-by-file history. Fáze 7 (30 items),
 Fáze 8 (25 items), and now all 15 of P9-LIFECYCLE, all 4 of P9-CATEGORY, all 15 of
-P9-VALIDATION, all 7 of P9-DOCS, and all 7 of P9-BUILD are fully done (2026-07-04). Fáze 9 as a
-whole is still IN PROGRESS: P9-STOP/P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC/P9-AUDIT are all still
-open -- see §4/§8. This is real open work, don't treat this branch as "nothing left to do."
+P9-VALIDATION, all 7 of P9-DOCS, all 7 of P9-BUILD, and all 10 of P9-STOP are fully done
+(2026-07-04). Fáze 9 as a whole is still IN PROGRESS: P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC/
+P9-AUDIT are all still open -- see §4/§8. This is real open work, don't treat this branch as
+"nothing left to do."
 
-1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2090/2090 tests pass,
-   reliably -- stress-test with a few repeated runs if you're not sure, see §2's P9-BUILD-007
-   note) -- rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests (or the new
+1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2093/2093 tests pass,
+   reliably) -- rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests (or the
    `tests` CMake preset, see §7) to check for drift since this was last updated. Also rebuild
    cna_demo_sound/cna_demo_2d if you touch anything on the Audio public API surface -- they're not
    part of CnaTests and easy to forget.
-2. Commit the uncommitted P9-BUILD-001..007 work first (see §8's "Commit boundary") if it isn't
+2. Commit the uncommitted P9-STOP-001..010 work first (see §8's "Commit boundary") if it isn't
    already committed, so the next group starts from a clean base.
 3. Continue Fáze 9 in the order specified in plan_audio.md's "Phase 9" section / this file's §8:
-   P9-STOP/P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC are all that's left (no further ordering among
-   them from the user). Don't invent a "Fáze 10" full re-audit on your own initiative (see §9) --
-   Fáze 9's own task list is not exhausted yet. The one leftover decision from P9-LIFECYCLE
-   (IsPlaying+IsPaused coexistence, §5/§6, CHECKLIST.md) is NOT blocking -- ask the user before
-   implementing it, don't let it stall the next group.
+   P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC are all that's left (no further ordering among them from
+   the user). Don't invent a "Fáze 10" full re-audit on your own initiative (see §9) -- Fáze 9's
+   own task list is not exhausted yet. Two leftover decisions (IsPlaying+IsPaused coexistence from
+   P9-LIFECYCLE, and Stop(AsAuthored)'s tail-duration gap from P9-STOP -- both §5/§6, CHECKLIST.md)
+   are NOT blocking -- ask the user before implementing either, don't let them stall the next group.
 4. Follow the established git-stash regression-verification pattern (see NEXT.md §7) for any
    behavioral fix -- stash it, confirm the new test fails against the pre-fix code, restore,
    confirm green. Run ASan+LeakSanitizer too if the change touches memory lifetime, ownership, or
