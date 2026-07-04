@@ -2,9 +2,9 @@
 
 Every command below was actually run in a session working on `Microsoft::Devices`
 (`plan_devices_phase4.md`/`plan_devices_phase5.md`/`plan_devices_phase6.md`/
-`plan_devices_phase7.md`), not copy-pasted from documentation without running it.
-Where a command's success is asserted, it was verified in this repository, on
-this branch, this session.
+`plan_devices_phase7.md`/`plan_devices_phase8.md`), not copy-pasted from
+documentation without running it. Where a command's success is asserted, it was
+verified in this repository, on this branch, this session.
 
 **ZIP-export caveat (Task P7-6):** every claim in this document describes a real
 `git clone` of this repository with submodules initialized (Section 0 below) — it
@@ -43,7 +43,7 @@ cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
 ```
 
 Both targets build clean as of this writing (2026-07-04, `feature/devices`,
-`plan_devices_phase7.md`) — compiled and tested locally in this session's
+`plan_devices_phase8.md`) — compiled and tested locally in this session's
 git checkout; see the ZIP-export caveat above for what this does not claim.
 
 ## 2. Devices-only test filter
@@ -58,12 +58,12 @@ git checkout; see the ZIP-export caveat above for what this does not claim.
 # those suites too):
 cd cmake-build-debug && ctest --output-on-failure \
     -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase|ScopeExit"
-# 220 tests, 100% passing, as of plan_devices_phase7.md Task P7-7 (last verified this way).
+# 226 tests, 100% passing, as of plan_devices_phase8.md Task P8-8 (last verified this way).
 
 # Or directly via the test binary's own gtest filter — narrower: only the 9
 # "main" per-class suites, not the Reading/EventArgs/FailedException ones:
 ./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:VibrateControllerTests.*:SensorSubsystemOwnershipTests.*:AndroidSensorOrientationTests.*:SensorBaseTests.*:ScopeExitTests.*"
-# 140 tests, 138 passing, as of plan_devices_phase7.md Task P7-7 (last verified this way).
+# 146 tests, 144 passing, as of plan_devices_phase8.md Task P8-8 (last verified this way).
 ```
 
 Both commands' 2 skips are the same pair: `AccelerometerTests`/`GyroscopeTests`'
@@ -118,7 +118,7 @@ propagating anywhere — it never will.
 cd cmake-build-debug && ctest --output-on-failure
 ```
 
-As of this writing: 2045 tests, 2 failures — both pre-existing, unrelated `EasyGL`/
+As of this writing: 2051 tests, 2 failures — both pre-existing, unrelated `EasyGL`/
 `easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
 `easy-gl-resource-smoke-tests`) that this session's environment happens to have a real
 GPU/display to actually run for the first time (previously silently `Not Run`
@@ -164,14 +164,18 @@ actual new symbols (`GetGlobalSdlSensorMutex()`, `WaitForDisposalToComplete()`,
 `Detail::SdlSensorSubsystem<...>::DispatchToInstances<...>()`) in
 `Accelerometer.cpp.o`/`Gyroscope.cpp.o`, not just re-confirming the Task P4-11-era
 landscape symbols still compile — see that task's Resolution for the exact commands.
+`plan_devices_phase8.md` Task P8-8 did the same again for Phase 8's actual new symbols
+(`dispatchToken_`, the lock-proof-parameter overloads of
+`EnsureSubsystemInitialized()`/`OpenDefaultSensorLocked()`/`ProbeIsSupported()`).
 
 ## 5. iOS — confirmed still blocked, not attempted
 
 No Apple/iOS toolchain of any kind exists in this Linux dev container — confirmed by
 actually checking (`plan_devices_phase4.md` Task P4-12, re-confirmed
-`plan_devices_phase5.md` Task P5-1's audit, `plan_devices_phase6.md` Task P6-10, and
-`plan_devices_phase7.md` Task P7-7): no `xcodebuild`, no `xcrun`, no `osxcross`,
-nothing matching `*ios*toolchain*` anywhere on the filesystem. Unlike Android (a
+`plan_devices_phase5.md` Task P5-1's audit, `plan_devices_phase6.md` Task P6-10,
+`plan_devices_phase7.md` Task P7-7, and `plan_devices_phase8.md` Task P8-8): no
+`xcodebuild`, no `xcrun`, no `osxcross`, nothing matching `*ios*toolchain*` anywhere
+on the filesystem. Unlike Android (a
 missing NDK package, which this session found had since been installed), iOS
 cross-compilation fundamentally requires macOS/Xcode to obtain and run its own
 toolchain — not fixable by installing a package in a Linux container. Re-check before

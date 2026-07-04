@@ -618,3 +618,65 @@ cd .. && ctest --output-on-failure
 **Remaining risk:** negligible. This task's only code change is a defensive
 consistency fix for an already-non-reachable edge case; every genuinely reachable
 resource-ownership path was re-confirmed already correct, not newly fixed.
+
+## P8-7: Documentation accuracy pass
+
+### Resolution
+
+**Files changed:**
+- `NEXT.md` — Section 1 (phase history now mentions five hardening passes, with
+  Phase 8's use-after-free fix and its one deliberately-left-open boundary
+  summarized); Section 2 (SDL runtime implementation bullets extended with all three
+  P8-1/P8-2/P8-3 fixes; build/test/Android/iOS/VULKAN/BGFX paragraphs point at Task
+  P8-8; Devices-only count updated to 226/224); Section 3 (full Phase 8 task-by-task
+  summary block added); Section 4 (blocker — Phase 8 also fully closed); Section 5
+  (known bugs — new bullet for the Accelerometer `CurrentValueChanged` self-destroy
+  boundary; Phase 8's fixes added to "resolved"); Section 6 (architecture notes —
+  `SensorBase<T>`'s now-fully-locked field list, `dispatchToken_`'s design and the
+  explicit boundary it doesn't cover, the lock-proof parameter pattern, all with
+  explicit "do not remove/revert" callouts); Section 7 (commands — test counts
+  updated, sanitizer preset commands added); Section 8 (next tasks — renumbered,
+  item 3 now frames a sixth re-audit against Phase 8's own claims, including its
+  documented boundary); Section 9 (do-not-do — four new bullets for
+  P8-1/P8-2/P8-3, each citing the confirmed failure mode); Section 10 (resume
+  prompt updated to mention sanitizer presets alongside the stress-loop discipline).
+- `AUDIT.md` — `Accelerometer`, `Gyroscope`, `SensorBase<T>`, `VibrateController` rows
+  extended with Phase 8 findings/fixes paragraphs, matching the existing per-phase
+  annotation style. `Compass`/`Motion` rows left unchanged — Phase 8 did not touch
+  either class directly (only `SensorBase<T>`'s shared `Dispose(bool)` pattern, already
+  covered in Phase 7's row entries for those two classes).
+- `docs/devices-build.md` — updated throughout during Tasks P8-1 through P8-6 as each
+  landed (ZIP-export caveat already present from Phase 7; new Section 6 for sanitizers
+  from Task P8-4; exception-swallowing policy note from Task P8-5); this task's own
+  pass corrected the remaining stale Phase-7-era test counts (Devices-only: 220→226 via
+  `ctest -R`, 140/138→146/144 via direct `--gtest_filter`; full suite: 2045→2051) and
+  updated the header/Android/iOS sections' plan-file references to include Phase 8.
+- `docs/devices-hardware-checklist.md` — read in full; confirmed **no changes needed**.
+  Phase 8's work (dispatch-lifetime bookkeeping, `TimeBetweenUpdates` locking,
+  lock-proof parameters, a `VibrateController` destructor consistency fix) touches
+  none of the physically-observable hardware behavior this checklist exists to verify
+  (Android axis-remap sign conventions, `VibrateController`'s actual motor output,
+  gamepad-exclusion) — matches the precedent Task P6-9 set for
+  `docs/location-future-plan.md` (reviewed, confirmed unaffected, left unmodified
+  rather than touched just to "look busy").
+
+**Rules from this task's own brief, confirmed followed:**
+- **No Android/iOS hardware verification claimed** — every reference above is to
+  compile-only Android cross-compilation or explicitly-blocked iOS, never to a claim of
+  running on real hardware. `docs/devices-hardware-checklist.md` still states plainly
+  that none of its items have ever been verified, any session.
+- **No ZIP-export self-containment claimed** — the Task P7-6 caveat is preserved
+  verbatim in both `NEXT.md` and `docs/devices-build.md`, unchanged by this task.
+- **`Compass`/`Motion` remain honest `NotSupported` stubs** — not touched this phase,
+  confirmed by re-reading their `AUDIT.md` rows (last substantively touched in Phase 6,
+  Task P6-8) before deciding not to edit them.
+- **GPS stays out of `Microsoft.Devices.Sensors`** — `docs/location-future-plan.md` not
+  touched this phase either; nothing in Phase 8's scope came near this boundary.
+
+**Tests added:** none — pure documentation.
+
+**Commands run:** none beyond the sanity re-run of the Devices-only test filter to
+confirm the doc-only changes didn't accidentally touch anything (226 tests, 224 passed,
+2 skipped — unchanged from Task P8-6).
+
+**Remaining risk:** none — documentation only, no code changed.
