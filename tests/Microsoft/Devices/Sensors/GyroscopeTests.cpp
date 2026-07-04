@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -442,6 +443,25 @@ TEST(GyroscopeTests, CurrentValueChangedReceivesWallClockTimestamp)
 
     EXPECT_GE(receivedTimestamp, beforeInjection);
     EXPECT_LE(receivedTimestamp, afterInjection);
+}
+
+// Task P6-4: see AccelerometerTests.cpp's identical test for the full
+// rationale — a throwing CurrentValueChanged handler must not leave
+// dispatchingThreadIds_ corrupted and hang a future Dispose() call.
+TEST(GyroscopeTests, ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose)
+{
+    auto gyroscope = std::make_unique<Gyroscope>();
+    gyroscope->SetStartedForTesting(true);
+
+    gyroscope->CurrentValueChanged += [](
+        System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        throw std::runtime_error("synthetic handler failure");
+    };
+
+    EXPECT_THROW(gyroscope->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f), std::runtime_error);
+
+    EXPECT_NO_THROW(gyroscope->Dispose());
 }
 
 // Task P4-6: confirms Stop() actually disables further synthetic-event

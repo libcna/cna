@@ -15,6 +15,46 @@
 namespace Microsoft::Devices::Sensors::Detail
 {
     /**
+     * @brief Minimal RAII scope-exit guard (Task P6-4).
+     *
+     * Runs a callable on destruction, including during exception
+     * unwinding — used by SensorEventWatch() so a dispatched call's
+     * dispatchingThreadIds_ cleanup still runs even if that call throws
+     * (previously a plain post-call statement, skipped entirely if
+     * ProcessSensorUpdateEvent() — or transitively a user's
+     * CurrentValueChanged/ReadingChanged handler — threw, permanently
+     * corrupting dispatchingThreadIds_ and deadlocking any current or
+     * future Dispose() call on that instance).
+     */
+    template <typename F>
+    class ScopeExit
+    {
+    public:
+        explicit ScopeExit(F onExit)
+            : onExit_(std::move(onExit))
+        {
+        }
+
+        ~ScopeExit()
+        {
+            onExit_();
+        }
+
+        ScopeExit(const ScopeExit&) = delete;
+        ScopeExit& operator=(const ScopeExit&) = delete;
+
+    private:
+        F onExit_;
+    };
+
+    /** @brief Deduces F so callers can write `auto guard = MakeScopeExit([]{ ... });`. */
+    template <typename F>
+    ScopeExit<F> MakeScopeExit(F onExit)
+    {
+        return ScopeExit<F>(std::move(onExit));
+    }
+
+    /**
      * Internal implementation detail (Task P5-4) — never included by a
      * public CNA header, not part of any XNA/WP7-facing API surface. Owns
      * the SDL_INIT_SENSOR subsystem lifetime, default-sensor discovery,
@@ -274,7 +314,16 @@ namespace Microsoft::Devices::Sensors::Detail
          * instance's ProcessSensorUpdateEvent() outside the lock (so a
          * handler re-entering Start()/Stop()/Dispose() doesn't self-deadlock
          * on mutex_), clearing its dispatch entry and notifying
-         * callbackFinished_ after each one returns.
+         * callbackFinished_ after each one returns — via a ScopeExit guard
+         * (Task P6-4) so this cleanup still runs even if
+         * ProcessSensorUpdateEvent() throws. Any exception from
+         * ProcessSensorUpdateEvent() (or transitively a user's
+         * CurrentValueChanged/ReadingChanged handler) is caught and
+         * swallowed per-instance (Task P6-4): this is an SDL_EventFilter
+         * callback invoked directly by SDL_PushEvent(), a C API that does
+         * not expect a C++ exception to unwind through its own call
+         * frames, and swallowing it here also lets the remaining
+         * snapshotted instances still get dispatched to and cleaned up.
          */
         static bool SensorEventWatch(void* userdata, void* eventData)
         {
@@ -311,23 +360,33 @@ namespace Microsoft::Devices::Sensors::Detail
 
             for (TSensor* instance : instancesSnapshot)
             {
-                instance->ProcessSensorUpdateEvent(
-                    sensorId,
-                    event->sensor.data[0],
-                    event->sensor.data[1],
-                    event->sensor.data[2]
-                );
-
+                auto cleanupGuard = MakeScopeExit([&subsystem, instance, thisThreadId]()
                 {
-                    std::lock_guard<std::mutex> lock(subsystem.mutex_);
-                    auto& ids = instance->dispatchingThreadIds_;
-                    const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
-                    if (it != ids.end())
                     {
-                        ids.erase(it);
+                        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+                        auto& ids = instance->dispatchingThreadIds_;
+                        const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
+                        if (it != ids.end())
+                        {
+                            ids.erase(it);
+                        }
                     }
+                    subsystem.callbackFinished_.notify_all();
+                });
+
+                try
+                {
+                    instance->ProcessSensorUpdateEvent(
+                        sensorId,
+                        event->sensor.data[0],
+                        event->sensor.data[1],
+                        event->sensor.data[2]
+                    );
                 }
-                subsystem.callbackFinished_.notify_all();
+                catch (...)
+                {
+                    // Swallowed deliberately — see this method's doc comment.
+                }
             }
 
             return true;

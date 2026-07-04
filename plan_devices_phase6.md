@@ -399,3 +399,80 @@ own doc comment) — this is a deliberate, proportionate scope decision, not
 an oversight. No TSan/ASan run was available in this environment to
 independently corroborate the absence of data races beyond code review and
 stress-test repetition; noted as a residual verification gap.
+
+## P6-4: RAII dispatch guard for exception-safe cleanup in `SensorEventWatch()`
+
+### Resolution
+
+The audit (finding #4) refined the brief's framing: the raw `TSensor*`
+snapshot design in `SensorEventWatch()` is provably lifetime-safe today for
+the non-throwing path (traced by hand — `Stop()` removing an instance from
+`startedInstances_` under the same lock before `Dispose()`'s wait begins
+prevents any *new* dispatch from targeting a disposing instance). The real,
+previously-undiscovered bug was narrower: the per-dispatch
+`dispatchingThreadIds_` cleanup (erase + `notify_all()`) was a plain
+post-call statement with no `try`/`catch` or RAII — skipped entirely if
+`ProcessSensorUpdateEvent()` (or transitively a user's
+`CurrentValueChanged`/`ReadingChanged` handler) threw, permanently
+corrupting `dispatchingThreadIds_` and deadlocking any current or future
+`Dispose()` call on that instance.
+
+While implementing the fix, a second, related issue surfaced: naively
+wrapping only the failing instance's cleanup in a guard would still abort
+the whole `SensorEventWatch()` loop on the first exception, leaving *later*
+snapshotted instances' `dispatchingThreadIds_` entries (already pushed
+upfront, before the dispatch loop starts) permanently stuck too. `SensorEventWatch()`
+is also an `SDL_EventFilter` invoked directly by `SDL_PushEvent()`, a C API
+that does not expect a C++ exception to unwind through its own call frames
+— letting an exception escape this function at all is unsafe independent
+of the `dispatchingThreadIds_` bug.
+
+Files changed:
+- `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp` — added
+  a minimal generic `Detail::ScopeExit<F>`/`MakeScopeExit()` RAII helper.
+  `SensorEventWatch()`'s per-instance dispatch now constructs a
+  `ScopeExit` before calling `ProcessSensorUpdateEvent()` (cleanup runs via
+  the guard's destructor whether the call returns normally or throws), and
+  the call itself is wrapped in `try { ... } catch (...) {}` — deliberately
+  swallowed, so one instance's failure doesn't abort dispatch/cleanup for
+  the remaining snapshotted instances and no exception crosses the SDL
+  callback boundary.
+- `src/Microsoft/Devices/Sensors/Accelerometer.cpp`/`Gyroscope.cpp` —
+  `InjectSyntheticSensorUpdate()` (the NOXNA synthetic-injection test hook,
+  which goes through the same `dispatchingThreadIds_` bookkeeping) now uses
+  the same `ScopeExit` guard for its cleanup. Unlike the real SDL
+  event-watch path, this is a regular C++ call site, not a C-library
+  callback boundary — the exception is deliberately allowed to propagate to
+  this method's own caller after cleanup runs, rather than swallowed.
+
+Tests added: `ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose`
+(both `AccelerometerTests.cpp`/`GyroscopeTests.cpp`) — a `CurrentValueChanged`
+handler that throws `std::runtime_error` during `InjectSyntheticSensorUpdate()`;
+asserts the exception propagates to the caller, then asserts a subsequent
+`Dispose()` call returns (doesn't hang) — this would time out under CI
+before this fix.
+
+Commands run:
+- `cmake --build cmake-build-debug --target CNA -j$(nproc)` — clean build
+  (also confirms the `ScopeExit` lambda's access to `Accelerometer`/
+  `Gyroscope`'s private `dispatchingThreadIds_` compiles correctly through
+  the existing `friend class Detail::SdlSensorSubsystem<TSensor>;`
+  declaration for the `SensorEventWatch()` case, and directly via `this`
+  for the `InjectSyntheticSensorUpdate()` case).
+- `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` — clean build.
+- `ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation"`
+  (run with an external `timeout 60` guard, given this task is specifically
+  about a hang/deadlock fix) — 201/201 passed (199 previous + 2 new), 2
+  expected skips, no timeout.
+- `ctest --output-on-failure` (full suite) — 2024/2026 passed; the same 2
+  pre-existing, unrelated `EasyGL`/`easy-gl` failures.
+
+Remaining risk: `SensorEventWatch()`'s own catch-and-swallow behavior could
+not be exercised via a genuine SDL `SDL_EVENT_SENSOR_UPDATE` event in this
+headless container (no real accelerometer/gyroscope hardware) — only
+`InjectSyntheticSensorUpdate()`'s equivalent path (identical
+`dispatchingThreadIds_` bookkeeping, same `ScopeExit` mechanism) was
+exercised directly. This matches the project's existing, honest
+documentation stance that real-hardware event dispatch is
+compile-tested/reasoned about, not hardware-verified
+(`docs/devices-hardware-checklist.md`).

@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -565,6 +566,29 @@ TEST(AccelerometerTests, StopPreventsSubsequentSyntheticEventFromDispatching)
     a.InjectSyntheticSensorUpdate(0.0f, StandardGravity, 0.0f);
     EXPECT_EQ(invokedCount, 1);
     EXPECT_EQ(lastAcceleration, accelerationBeforeStop);
+}
+
+// Task P6-4: a CurrentValueChanged handler that throws during
+// InjectSyntheticSensorUpdate() previously left dispatchingThreadIds_
+// permanently corrupted (its cleanup was a plain post-call statement,
+// skipped entirely on an exception) — any current or future Dispose() call
+// on the same instance would then hang forever waiting for a dispatch that
+// can never finish draining. If this test hangs, ScopeExit's cleanup-on-throw
+// guarantee (Task P6-4) has regressed — gtest/CI will show it as a timeout.
+TEST(AccelerometerTests, ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose)
+{
+    auto accelerometer = std::make_unique<Accelerometer>();
+    accelerometer->SetStartedForTesting(true);
+
+    accelerometer->CurrentValueChanged += [](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        throw std::runtime_error("synthetic handler failure");
+    };
+
+    EXPECT_THROW(accelerometer->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f), std::runtime_error);
+
+    EXPECT_NO_THROW(accelerometer->Dispose());
 }
 
 // Task P3-6: CurrentValueChanged is the primary, non-deprecated event

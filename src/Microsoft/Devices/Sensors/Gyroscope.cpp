@@ -372,17 +372,22 @@ namespace Microsoft::Devices::Sensors
             dispatchingThreadIds_.push_back(thisThreadId);
         }
 
-        DispatchSensorReading(x, y, z);
-
+        // Task P6-4: see Accelerometer::InjectSyntheticSensorUpdate()'s
+        // identical fix for the full rationale.
+        auto cleanupGuard = Detail::MakeScopeExit([this, &subsystem, thisThreadId]()
         {
-            std::lock_guard<std::mutex> lock(subsystem.mutex_);
-            const auto it = std::find(dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), thisThreadId);
-            if (it != dispatchingThreadIds_.end())
             {
-                dispatchingThreadIds_.erase(it);
+                std::lock_guard<std::mutex> lock(subsystem.mutex_);
+                const auto it = std::find(dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), thisThreadId);
+                if (it != dispatchingThreadIds_.end())
+                {
+                    dispatchingThreadIds_.erase(it);
+                }
             }
-        }
-        subsystem.callbackFinished_.notify_all();
+            subsystem.callbackFinished_.notify_all();
+        });
+
+        DispatchSensorReading(x, y, z);
     }
 
     void Gyroscope::SetStartedForTesting(bool started)
