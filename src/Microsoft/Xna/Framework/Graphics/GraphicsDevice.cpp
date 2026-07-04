@@ -140,6 +140,7 @@ namespace Microsoft::Xna::Framework::Graphics
           graphicsProfile_(graphicsProfile),
           presentationParameters_(presentationParameters),
           isDisposed_(false),
+          blendState_(BlendState::Opaque),
           blendFactor_(Color::White)
     {
 #ifdef __ANDROID__
