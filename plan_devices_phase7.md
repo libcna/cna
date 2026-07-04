@@ -469,3 +469,58 @@ cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean, picked
 utility; every current call site's cleanup callable is a plain lock+erase+notify sequence
 that does not throw in practice, but the class itself no longer depends on that being
 true.
+
+## P7-6: Documentation accuracy pass
+
+### Resolution
+
+**Files changed:**
+- `NEXT.md` — Section 1 (phase history now mentions four hardening passes, with Phase
+  7's three real gaps summarized); Section 2 (SDL runtime implementation bullets rewritten
+  with all three P7-1/P7-2/P7-3 fixes; build/test counts updated to 220 Devices-only /
+  2045 full-suite; `VULKAN`/`BGFX`/Android/iOS paragraphs point at Task P7-7); Section 3
+  (full Phase 7 task-by-task summary block added); Section 4 (blocker — Phase 7 also
+  fully closed); Section 5 (known bugs — the double-dispose limitation's description
+  updated to describe the new wait-instead-of-race behavior; a new bullet documents the
+  still-latent self-dispose-of-own-sender tradeoff is unaffected by Task P7-3's fix;
+  Phase 7's fixes added to "resolved"); Section 6 (architecture notes — `SensorBase<T>`'s
+  `WaitForDisposalToComplete()`, the global SDL mutex's lock order, `DispatchToInstances()`'s
+  re-validation design, all with explicit "do not remove" callouts); Section 7 (commands
+  — test counts updated, a ZIP-export caveat added at the top); Section 8 (next tasks —
+  renumbered, item 3 now frames a fifth re-audit against Phase 7's own claims); Section 9
+  (do-not-do — three new bullets for P7-1/P7-2/P7-3, each citing the confirmed failure
+  mode); Section 10 (resume prompt updated).
+- `AUDIT.md` — `Accelerometer`, `Gyroscope`, `Compass`, `Motion`, `SensorBase<T>` rows
+  extended with Phase 7 findings/fixes paragraphs, matching the existing per-phase
+  annotation style. `VibrateController`'s row left unchanged — Phase 7 did not touch that
+  class.
+- `docs/devices-build.md` — added an explicit ZIP-export caveat (both near the top and
+  restated in Section 3) distinguishing this document's claims (a real git checkout with
+  submodules initialized) from a bare source export (which has empty vendored
+  third-party directories and will not build); test counts updated (220 via `ctest -R`
+  including the new `ScopeExitTests` suite; 140/138 via direct `--gtest_filter`; 2045/2
+  full suite); Section 2's stress-test note extended with Phase 7's own two
+  confirmed-via-loop/confirmed-via-revert findings; Section 4 (Android) notes Task
+  P7-7's `llvm-nm` re-check against Phase 7's actual new symbols; Section 5 (iOS) date
+  references updated.
+
+**Distinguishing verification tiers (per the brief's explicit request):**
+- **Code compiled locally by Claude Code this session:** all of Phase 7's changes, on
+  `EASYGL`/`VULKAN`/`BGFX` (desktop Linux) and Android (library only) — see Task P7-7.
+- **Tests run locally by Claude Code this session:** all new/existing Devices-only
+  tests, on `EASYGL`/`VULKAN`/`BGFX`, including the stress loops and the two deliberate
+  temporary-revert regression-proof checks (P7-3's 5/5 segfault, P7-5's `std::terminate()`).
+- **Android cross-compile only:** confirmed to compile (library, not test binary) via
+  the NDK toolchain; no APK packaging, no emulator/device run, ever.
+- **Real Android/iOS hardware:** never verified, any phase, any session — see
+  `docs/devices-hardware-checklist.md`.
+- **ZIP export:** not self-contained without `git submodule update --init --recursive`
+  having been run first — see the new caveats in `NEXT.md`/`docs/devices-build.md`.
+
+**Tests added:** none — pure documentation.
+
+**Commands run:** none beyond the sanity re-run of the Devices-only test filter to
+confirm the doc-only changes didn't accidentally touch anything (140 tests, 138 passed,
+2 skipped — unchanged from P7-5).
+
+**Remaining risk:** none — documentation only, no code changed.

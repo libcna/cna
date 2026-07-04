@@ -10,25 +10,36 @@ preserves XNA-style public APIs (`Microsoft::Xna::Framework`,
 `Microsoft::Devices`) while using modern C++ internally. It targets desktop
 Linux/Windows/macOS, Android, and iOS. Branch: `feature/devices`.
 
-**`Microsoft::Devices` has now been through three hardening passes** —
+**`Microsoft::Devices` has now been through four hardening passes** —
 `plan_devices_phase4.md` (2026-07-03/04), `plan_devices_phase5.md`
-(2026-07-04), and `plan_devices_phase6.md` (2026-07-04). Each pass's own
-explicit premise was to **not trust the previous pass's "complete"/"hardened"
-claims** and re-audit from the actual code. Phase 5's audit found Phase 4 had,
-as a side effect of fixing one real bug (Task P4-8), introduced a *different*
-real bug in the same commit (Task P5-1), left at least one confirmed data race
-unfixed in the shared `SensorBase<T>` base class (Task P5-2), and had skipped
-an RAII cleanup based on an assumption that was never actually checked and
-turned out to be false (Task P5-11). Phase 6's audit found Phase 5's own
-"correctly thread-safe" claim about `SensorBase<T>` didn't fully hold either
+(2026-07-04), `plan_devices_phase6.md` (2026-07-04), and
+`plan_devices_phase7.md` (2026-07-04). Each pass's own explicit premise was to
+**not trust the previous pass's "complete"/"hardened" claims** and re-audit
+from the actual code. Phase 5's audit found Phase 4 had, as a side effect of
+fixing one real bug (Task P4-8), introduced a *different* real bug in the same
+commit (Task P5-1), left at least one confirmed data race unfixed in the
+shared `SensorBase<T>` base class (Task P5-2), and had skipped an RAII
+cleanup based on an assumption that was never actually checked and turned out
+to be false (Task P5-11). Phase 6's audit found Phase 5's own "correctly
+thread-safe" claim about `SensorBase<T>` didn't fully hold either
 (`disposed_`/`isSupported_` still inconsistently locked, Task P6-3), and —
 most notably — **a single passing test run is not proof a concurrency fix is
 correct**: Phase 6's own new instance-counting test (Task P6-1) only revealed
 a real, reproducible heap-corruption bug (concurrent, unsynchronized calls
 into SDL's sensor API, violating SDL3's own documented thread-safety contract)
-after being run in a loop tens of times, not once. **Read this as the honest
-status, not as another "now it's really done" claim** — see Section 2's
-layered breakdown instead of a single verdict.
+after being run in a loop tens of times, not once. **Phase 7's audit found
+Phase 6's own fixes still had three real gaps**: the P6-1 addendum's
+per-class mutex didn't serialize `Accelerometer`'s and `Gyroscope`'s real SDL
+calls *against each other* (Task P7-1); a losing concurrent `Dispose()` call
+could flip `disposed_` true while the winner's own cleanup was still relying
+on it being false, causing the winner's own `Stop()` call to throw mid-cleanup
+and leak resources (Task P7-2); and, most seriously, a callback disposing a
+*different*, not-yet-dispatched instance in the same SDL event-watch batch
+could leave the dispatch loop holding a genuinely dangling pointer — confirmed
+as a real, reliably reproducible (5/5) segfault via a deliberate temporary
+revert (Task P7-3). **Read this as the honest status, not as another "now
+it's really done" claim** — see Section 2's layered breakdown instead of a
+single verdict.
 
 **Plan history:**
 - `plan_devices.md` (31 tasks) — closed.
@@ -64,6 +75,23 @@ layered breakdown instead of a single verdict.
   established convention (Task P6-6); added semantic Android axis tests
   (Task P6-7); reconfirmed `Compass`/`Motion` honesty and sketched future
   native backend interfaces (Task P6-8).
+- `plan_devices_phase7.md` (7 tasks, re-audit + hardening) — **closed**, all
+  7 tasks done. Found and fixed: `Accelerometer`'s and `Gyroscope`'s real SDL
+  sensor-subsystem calls were serialized only against *each class's own*
+  other calls, not against each other, despite sharing SDL's one global
+  `SDL_INIT_SENSOR` subsystem (Task P7-1, a new process-wide
+  `Detail::GetGlobalSdlSensorMutex()`); a losing concurrent `Dispose()` call
+  could flip `disposed_` true while the winner's own cleanup was still
+  relying on it being false, making the winner's own internal `Stop()` call
+  throw mid-cleanup and leak `instanceCount_`/the open sensor/the subsystem
+  hold (Task P7-2, `SensorBase::WaitForDisposalToComplete()`); a real,
+  reliably reproducible use-after-free when one instance's dispatch callback
+  disposed a *different*, not-yet-dispatched instance from the same SDL
+  event-watch batch (Task P7-3, confirmed via a deliberate temporary revert
+  that segfaulted 5/5 times — the most serious bug found this phase); one
+  remaining unguarded test-only getter (Task P7-4); `ScopeExit`'s missing
+  `<utility>` include and non-`noexcept` destructor, confirmed via a
+  temporary revert to actually call `std::terminate()` (Task P7-5).
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -96,9 +124,43 @@ layer has not changed in Phase 5 and is the most trustworthy claim in this
 document.
 
 **SDL runtime implementation (`Accelerometer`/`Gyroscope`/`VibrateController`):**
-real, SDL3-backed, and — as of Phase 6 — the specific bugs actual
+real, SDL3-backed, and — as of Phase 7 — the specific bugs actual
 line-by-line re-audits and (crucially) repeated stress-testing found are now
 fixed:
+- **Phase 7's three fixes, each found by *not* trusting Phase 6's own "fixed"
+  claims:** (1) `getIsSupportedProperty()`'s per-class `subsystem.mutex_`
+  lock (Task P6-1's addendum) only serialized each class's own SDL calls
+  against *itself* — `Accelerometer` and `Gyroscope` lock two different
+  mutexes, so their real SDL sensor-subsystem calls could still run fully
+  concurrently with each other, against SDL's one shared `SDL_INIT_SENSOR`
+  subsystem. Fixed with a new process-wide `Detail::GetGlobalSdlSensorMutex()`
+  (Task P7-1), nested inside each class's own `subsystem.mutex_` in a fixed,
+  proven-acyclic order, verified with a new cross-class concurrent
+  construct/destroy/probe stress test (40/40 clean loop iterations).
+  (2) A losing concurrent `Dispose()` call (one that failed
+  `ClaimDisposalOnce()`) previously fell through immediately to the base
+  `SensorBase<T>::Dispose(bool)`, flipping `disposed_` true while the
+  winner's own cleanup — which calls the public `Stop()`, guarded by that
+  same disposed-state precondition — could still be running, making the
+  winner's own `Stop()` call throw `ObjectDisposedException` mid-cleanup and
+  leak `instanceCount_`/the open sensor/the subsystem hold. Fixed with
+  `SensorBase::WaitForDisposalToComplete()` (Task P7-2): the loser now waits
+  for the winner's cleanup to actually finish instead of racing ahead,
+  verified with a regression test that reliably reproduced the exact failure
+  when temporarily reverted. (3) **The most serious bug found this phase:**
+  `SensorEventWatch()` used to mark *every* snapshotted instance's
+  `dispatchingThreadIds_` up front, before dispatching to any of them — if
+  one instance's callback disposed a *different*, not-yet-reached instance
+  from the same batch, that instance's pre-marked entry made its concurrent
+  `Dispose()` call look like a same-thread self-dispose (exempt from
+  waiting), so it was fully disposed (and possibly freed) with no wait, and
+  the dispatch loop would then call into the now-dangling pointer on its next
+  iteration. Fixed (Task P7-3) by re-validating each pointer against the
+  *live* `startedInstances_` list — by pointer value only, never
+  dereferencing until validated — atomically with marking it, immediately
+  before dispatching to that specific instance. Confirmed as a genuine bug,
+  not a theoretical one: temporarily reverting to the old bulk-marking
+  bookkeeping made the new regression test **segfault 5 times out of 5**.
 - Subsystem probe/instance-ownership init-quit balancing is correct for both
   `SDL_INIT_SENSOR` (Task P5-1, fixing a leak Task P4-8 itself introduced;
   Task P6-2 additionally fixed a subsystem-hold leak on a *failed* `Start()`)
@@ -177,8 +239,11 @@ whenever real hardware becomes available; `examples/demo_devices/`
 (`cna_demo_devices`, Task P4-14) is the tool to use when it does.
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
-(`cmake-build-debug`) as of `plan_devices_phase6.md`'s latest commit on
-`feature/devices` (2026-07-04, not yet pushed).
+(`cmake-build-debug`) as of `plan_devices_phase7.md`'s latest commit on
+`feature/devices` (2026-07-04). All Phase 7 commits are local to this
+session's git checkout (a real clone with submodules initialized) — see the
+ZIP-export caveat below and `docs/devices-build.md` for what "builds
+cleanly" does and does not mean for a bare source export.
 
 **`CNA` also builds clean for Android** (arm64-v8a, NDK r30, API 24,
 `cmake-build-android/`) — re-verified against Phase 6's complete changeset
@@ -188,42 +253,36 @@ whenever real hardware becomes available; `examples/demo_devices/`
 just that *something* compiled. Still **compile-only** — no APK
 packaging, no emulator/device run, `CnaTests` itself not cross-compiled
 (`googletest` not configured for the NDK toolchain in this session, same
-as every prior phase).
+as every prior phase). Phase 7's Android re-verification is
+`plan_devices_phase7.md` Task P7-7 — see that task's Resolution for the
+exact re-run against Phase 7's actual new symbols
+(`GetGlobalSdlSensorMutex()`, `WaitForDisposalToComplete()`,
+`DispatchToInstances()`).
 
 **iOS cross-compilation confirmed still blocked** — no toolchain of any kind
-in this Linux container. Re-confirmed during Phase 5's own audit and again
-during Phase 6's Task P6-10 (2026-07-04) — checked fresh each time, not
-assumed carried over.
+in this Linux container. Re-confirmed during Phase 5's own audit, again
+during Phase 6's Task P6-10, and again during Phase 7's Task P7-7
+(2026-07-04) — checked fresh each time, not assumed carried over.
 
-**`VULKAN`/`BGFX` re-verified clean against Phase 6's complete changeset**
-(Task P6-10, 2026-07-04) — both build `CNA`/`CnaTests` with zero errors;
-Devices-only filter 211/211 passing on each, matching `EASYGL` exactly.
-The concurrency stress loop that found Task P6-1's heap-corruption bug on
-`EASYGL` was specifically re-run on both `VULKAN` and `BGFX` too (30/30
-clean on each) — not just assumed fixed everywhere because it was fixed on
-one backend. Full suite: `VULKAN` 1984 tests/99% passing (13 pre-existing
-`Vulkan_*` graphics-smoke failures needing a real GPU/driver, same
-baseline as Phase 5, count grown only by the Devices tests Phase 6 added);
-`BGFX` 1978 tests/99% passing (3 pre-existing `Bgfx_*` failures, same
-reason). No regressions found on either backend from any of Phase 6's
-changes.
+**`VULKAN`/`BGFX` re-verified clean against Phase 7's complete changeset**
+(Task P7-7, 2026-07-04) — see that task's Resolution for exact commands and
+counts, including the cross-class/dispose/dispatch stress loops re-run on
+both backends, not just assumed fixed everywhere because they were fixed on
+`EASYGL`.
 
-**Tests:** last full `ctest` run (`EASYGL`) as of `plan_devices_phase6.md`
-Task P6-10 (2026-07-04, final, after Task P6-1's addendum fix): **2036
-tests, 2 failures** (99.9% passing). The 2 failures are pre-existing,
-unrelated `EasyGL`/`easy-gl` graphics-backend bugs
-(`EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`) — this
-environment unexpectedly gained a real GPU/display mid-Phase-5 (Task
-P5-1's own discovery), which surfaced these for the first time (previously
-silently `Not Run` headless, which is why every prior session's baseline
-said "64 failures" — that was actually "64 tests never run at all," not 64
-failing tests). Devices-only filter: **211 tests via `ctest -R`, 100%
-passing** (plus 2 tests that correctly `GTEST_SKIP()` themselves on
-hardware-dependent paths this machine doesn't have) — see
-`docs/devices-build.md` for the exact command, including a Section 2 note
-on why concurrency tests specifically must be re-run in a loop, not
-trusted from a single pass (Task P6-1's own addendum found a real bug this
-way).
+**Tests:** last full `ctest` run (`EASYGL`) as of `plan_devices_phase7.md`
+Task P7-7 (2026-07-04, final): **2045 tests, 2 failures** (99.9% passing).
+The 2 failures are pre-existing, unrelated `EasyGL`/`easy-gl`
+graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
+`easy-gl-resource-smoke-tests`) — unrelated to `Microsoft::Devices`, not
+fixed here, the same 2 tests every phase since Phase 5. Devices-only
+filter: **220 tests via `ctest -R`, 100% passing** (plus 2 tests that
+correctly `GTEST_SKIP()` themselves on hardware-dependent paths this
+machine doesn't have) — see `docs/devices-build.md` for the exact command,
+including a Section 2 note on why concurrency tests specifically must be
+re-run in a loop, not trusted from a single pass (both Task P6-1's
+addendum and Phase 7's own Tasks P7-1/P7-3 found real bugs this way — see
+below).
 
 ---
 
@@ -384,18 +443,92 @@ consistently the same 2 pre-existing, unrelated `EasyGL`/`easy-gl` failures
 throughout, no regressions at any point once the P6-1 addendum fix landed.
 See `plan_devices_phase6.md`'s per-task Resolution notes for full detail.
 
+**2026-07-04 — `plan_devices_phase7.md`, all 7 tasks done (re-audit +
+hardening, not new features):**
+- **Audit (before any code change):** re-read `SdlSensorSubsystem.hpp`,
+  `SensorBase.hpp`, and all four sensor classes' `Dispose(bool)` directly
+  against the vendored SDL3 headers' own `\threadsafety` doc comments,
+  on the same "don't trust the previous phase's claims" premise Phase 6
+  itself established. Confirmed all six audit points the brief raised were
+  real (see `plan_devices_phase7.md`'s "Audit findings" section for the
+  full per-point detail), one of them (the cross-instance dispose-during-
+  dispatch bug) more serious than a data race — a genuine use-after-free.
+- **P7-1** — added `Detail::GetGlobalSdlSensorMutex()`, a process-wide mutex
+  nested inside each class's own `subsystem.mutex_` (fixed, proven-acyclic
+  lock order), serializing every real SDL sensor-subsystem call across
+  *both* `Accelerometer` and `Gyroscope`, not just within one class. The
+  P6-1-era per-class-only locking left this open: `getIsSupportedProperty()`
+  locked a different mutex per class, so the two classes' real SDL calls
+  could still run fully concurrently with each other. New cross-class
+  concurrent construct/destroy/probe stress test, 40/40 clean.
+- **P7-2** — added `SensorBase::WaitForDisposalToComplete()`: a losing
+  concurrent `Dispose()` call now waits for the winner's cleanup to actually
+  finish (checking `disposed_` via a condition variable) instead of falling
+  through immediately to the base `Dispose(bool)`, which previously flipped
+  `disposed_` true while the winner's own `Stop()` call — guarded by that
+  same precondition — could still be running, causing it to throw
+  mid-cleanup and leak `instanceCount_`/the open sensor/the subsystem hold.
+  Verified with a regression test using a new NOXNA delayed-cleanup test
+  hook; confirmed via a temporary revert that the old behavior really did
+  throw `ObjectDisposedException` from the *winner's* own `Stop()` call and
+  leak state exactly as the audit predicted.
+- **P7-3** — **the most serious bug found this phase.** Refactored
+  `SensorEventWatch()`'s dispatch bookkeeping into a shared
+  `DispatchToInstances()` method that re-validates each snapshotted pointer
+  against the *live* `startedInstances_` list (by pointer value only, never
+  dereferencing until validated), marking it as actively dispatching
+  atomically with that check, immediately before dispatching to that
+  specific instance — not in bulk, up front, for the whole batch, as the old
+  code did. The old bookkeeping let one instance's callback dispose a
+  *different*, not-yet-reached instance from the same batch without the
+  dispatch loop ever noticing, leaving it holding a dangling pointer.
+  Confirmed as a real, not theoretical, bug: a new regression test
+  (disposing — by `unique_ptr::reset()`, not just `Dispose()`, so the memory
+  is genuinely freed — a different in-batch instance from within another's
+  callback) segfaulted **5 times out of 5** when the fix was temporarily
+  reverted, and passes cleanly (including a 40-iteration stress loop) with
+  the fix in place.
+- **P7-4** — found and fixed the one remaining unguarded NOXNA test-only
+  hook: `GetSubsystemHeldForTesting()` read `subsystemHeld_` with no lock,
+  while every write to it happens under `subsystem.mutex_`. Audited every
+  other test-only hook (including the ones added earlier in this same
+  phase) and found the rest already correctly guarded.
+- **P7-5** — `ScopeExit` now includes `<utility>` directly (previously relied
+  on a transitive include) and its destructor is `noexcept`, swallowing any
+  exception the cleanup callable throws — confirmed via a temporary revert
+  that the old behavior really did call `std::terminate()` and abort the
+  process when a cleanup callable threw during unwinding.
+- **P7-6** — this documentation pass: `NEXT.md`/`AUDIT.md`/
+  `docs/devices-build.md` updated with Phase 7's findings and current test
+  counts, plus an explicit caveat distinguishing what was actually compiled/
+  tested locally in this session from Android-cross-compile-only,
+  never-verified-on-real-hardware, and a bare ZIP export's lack of
+  self-containment without initialized git submodules.
+- **P7-7** — final re-verification across `EASYGL`/`VULKAN`/`BGFX`/Android;
+  see Section 2 for the resulting counts and `plan_devices_phase7.md`'s own
+  Resolution for exact commands.
+
+Every task above re-ran the Devices-relevant test filter (and, for the
+concurrency-sensitive ones — P7-1 and P7-3 especially — looped it dozens of
+times, each confirmed via a deliberate temporary revert to actually fail
+without the fix, not just assumed correct from a single green run) plus the
+full `ctest` suite — consistently the same 2 pre-existing, unrelated
+`EasyGL`/`easy-gl` failures throughout, no regressions at any point. See
+`plan_devices_phase7.md`'s per-task Resolution notes for full detail, exact
+commands run, and the reasoning behind every non-obvious choice.
+
 All work committed on `feature/devices`, not yet pushed.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No blocker.** `plan_devices_phase5.md` and `plan_devices_phase6.md` are
-both fully closed — Task P6-10, its final task, re-verified `EASYGL`/
-`VULKAN`/`BGFX`/Android all clean against the complete changeset (no
-regressions found anywhere), including specifically re-running the
-concurrency stress loop that found Task P6-1's heap-corruption bug on
-`VULKAN`/`BGFX` too, not just the backend it was originally found on. See
+**No blocker.** `plan_devices_phase5.md`, `plan_devices_phase6.md`, and
+`plan_devices_phase7.md` are all fully closed — Task P7-7, its final task,
+re-verified `EASYGL`/`VULKAN`/`BGFX`/Android all clean against the complete
+changeset (no regressions found anywhere), including specifically re-running
+the cross-class/dispose/dispatch stress loops Phase 7 added on `VULKAN`/
+`BGFX` too, not just the backend they were originally found on. See
 Section 8 for what's next; none of it is a blocker, just unstarted or
 unverifiable in this environment (physical hardware, iOS toolchain).
 
@@ -408,16 +541,28 @@ unverifiable in this environment (physical hardware, iOS toolchain).
   platform. See `plan_devices_phase5.md`'s "Future native backend plan" (and
   `plan_devices_phase6.md` Task P6-8's interface sketch) for what a real
   implementation would need.
-- **Deliberate, documented limitation (Task P6-3, 2026-07-04):** calling
-  `Dispose()` on the *same* sensor instance concurrently from two different
-  threads is not guaranteed to give the second caller a clean
-  `ObjectDisposedException` — `SensorBase::ClaimDisposalOnce()` guarantees
-  the *shared state* (e.g. instance counters) is never corrupted by this,
-  but the two callers' individual outcomes aren't both deterministic. This
-  matches the conventional .NET `IDisposable` contract (Dispose() is not
-  generally required to be thread-safe against concurrent callers) and is a
-  proportionate scope decision, not an oversight — see `SensorBase::Dispose()`'s
-  own doc comment.
+- **Deliberate, documented limitation (Task P6-3, refined Task P7-2,
+  2026-07-04):** calling `Dispose()` on the *same* sensor instance
+  concurrently from two different threads is not guaranteed to give the
+  second caller a clean `ObjectDisposedException` — the second (losing)
+  caller instead blocks in `SensorBase::WaitForDisposalToComplete()` until
+  the first (winning) caller's cleanup genuinely finishes, then returns as a
+  silent no-op. `ClaimDisposalOnce()`/`WaitForDisposalToComplete()` together
+  guarantee the *shared state* (e.g. instance counters, the winner's own
+  `Stop()` call) is never corrupted by this, but the two callers' individual
+  outcomes still aren't both deterministic (neither is guaranteed a clean
+  exception). This matches the conventional .NET `IDisposable` contract
+  (`Dispose()` is not generally required to be thread-safe against
+  concurrent callers) and is a proportionate scope decision, not an
+  oversight — see `SensorBase::Dispose()`'s own doc comment.
+- **Deliberate, unfixed by design (confirmed, not newly introduced, Task
+  P7-3, 2026-07-04):** a handler that disposes its *own* sender reentrantly
+  (same instance, from within its own dispatch callback) still relies on
+  the pre-existing Task P5-2/P5-3 self-dispose exemption, which lets
+  `Dispose()` proceed without waiting even though the object's memory may be
+  freed before its own callback frame finishes unwinding — a pre-existing,
+  already-documented Phase 5 design tradeoff, unaffected by Phase 7's fix
+  for the *different*-instance case (Task P7-3's actual bug).
 - **Needs verification, likely permanent:** iOS cross-compilation — no
   Apple toolchain possible in this Linux container.
 - **Needs physical hardware verification (never done, any session):**
@@ -446,6 +591,22 @@ unverifiable in this environment (physical hardware, iOS toolchain).
   future `Dispose()` (Task P6-4).
 - **Resolved (Task P6-10, 2026-07-04):** `VULKAN`/`BGFX` builds and Android
   cross-compile re-verified clean against Phase 6's complete changeset —
+  see Section 2.
+- **Resolved as of Phase 7 (do not re-list as open):** `Accelerometer`'s and
+  `Gyroscope`'s real SDL sensor-subsystem calls were serialized only against
+  each class's own other calls, not against each other, despite sharing
+  SDL's one global subsystem (Task P7-1); a losing concurrent `Dispose()`
+  call could flip `disposed_` true while the winner's own cleanup was still
+  relying on it being false, causing the winner's own `Stop()` call to throw
+  mid-cleanup and leak state (Task P7-2); a real, reliably reproducible
+  (5/5 segfault) use-after-free when one instance's dispatch callback
+  disposed a different, not-yet-dispatched instance from the same SDL
+  event-watch batch (Task P7-3 — the most serious bug found this phase); one
+  remaining unguarded test-only getter (Task P7-4); `ScopeExit`'s missing
+  `<utility>` include and non-`noexcept` destructor, confirmed to actually
+  call `std::terminate()` when reverted (Task P7-5).
+- **Resolved (Task P7-7, 2026-07-04):** `VULKAN`/`BGFX` builds and Android
+  cross-compile re-verified clean against Phase 7's complete changeset —
   see Section 2.
 - **Unverified, low priority, no evidence of an actual bug:**
   `SensorFailedException`'s exact constructor overload signature remains an
@@ -482,12 +643,22 @@ Also has `ClaimDisposalOnce()` (Task P6-3, protected) — derived
 `Dispose(bool)` overrides must call this (not just check
 `getIsDisposedProperty()`) to decide whether to run their own cleanup, so
 two threads calling `Dispose()` on the same instance concurrently can't
-both run cleanup once each. Concrete sensors override `Start()`, `Stop()`,
-`Dispose(bool)`, and must call `setIsSupportedProperty()` once from their
-constructor. **Do not restructure this class further** — stable, used by
-production code. **Do not remove `ClaimDisposalOnce()` or revert
-`Dispose(bool)` overrides to a plain `if (!getIsDisposedProperty() && disposing)`
-guard** — Task P6-3 found and closed a real double-cleanup race there.
+both run cleanup once each. **As of Task P7-2**, also has
+`WaitForDisposalToComplete()` (protected): the caller that loses
+`ClaimDisposalOnce()` must call this and then simply return — it must
+**never** call the base `Dispose(bool)` itself, since doing so (the old
+pre-P7-2 behavior) flips `disposed_` true while the winner's own cleanup may
+still be relying on it being false (e.g. the winner's own internal `Stop()`
+call, guarded by that same precondition). Only the winner calls the base
+`Dispose(bool)`, and only after its cleanup has fully finished; the base
+implementation now also `notify_all()`s a condition variable so the loser's
+wait wakes up. Concrete sensors override `Start()`, `Stop()`, `Dispose(bool)`,
+and must call `setIsSupportedProperty()` once from their constructor. **Do
+not restructure this class further** — stable, used by production code. **Do
+not remove `ClaimDisposalOnce()`/`WaitForDisposalToComplete()` or let a
+losing `Dispose(bool)` call the base `Dispose(bool)` directly** — Tasks
+P6-3/P7-2 found and closed two related double-cleanup/premature-disposed-
+state races there.
 
 **Invariant:** any class overriding `Dispose(bool)` **must** add `using
 SensorBase<T>::Dispose;`, or C++ name-hiding silently breaks the inherited
@@ -508,27 +679,47 @@ bookkeeping (Tasks P5-2/P5-3). `state_`/`started_`/`subsystemHeld_`/
 `dispatchingThreadIds_` remain genuine per-instance members on
 `Accelerometer`/`Gyroscope` themselves, consistently guarded by the shared
 subsystem's mutex wherever touched (Task P6-3 — `Start()` now holds this
-lock for its *entire* body, not just part of it). `getIsSupportedProperty()`
-also locks this same mutex for its whole call (Task P6-1's addendum) —
-**this is not optional/removable**: SDL3's own `SDL_InitSubSystem()`/
+lock for its *entire* body, not just part of it). **As of Task P7-1**, every
+real SDL sensor-subsystem call (`SDL_InitSubSystem`/`SDL_QuitSubSystem`/
+`SDL_GetSensors`/`SDL_OpenSensor`/`SDL_CloseSensor`/`SDL_GetSensorType`) is
+additionally serialized against a process-wide `Detail::GetGlobalSdlSensorMutex()`
+— nested *inside* the per-class `subsystem.mutex_` in `Start()`/`Dispose(bool)`
+(always acquire the per-class mutex first, the global mutex second, never
+the reverse), or acquired alone (no per-class mutex at all) in
+`getIsSupportedProperty()`, which touches no per-class subsystem state.
+**Both locks are not optional/removable**: SDL3's own `SDL_InitSubSystem()`/
 `SDL_QuitSubSystem()` are documented "should only be called on the main
-thread"/"not thread safe", and calling this method concurrently from
-multiple threads without the lock reproducibly corrupts the heap (verified
-by actually stress-testing it, not just reasoning about it — see
-`plan_devices_phase6.md` Task P6-1's addendum). `ProcessSensorUpdateEvent()`
-validates the event belongs to this instance's open device, then delegates
-to `DispatchSensorReading()` — this split lets the `NOXNA` test-only
+thread"/"not thread safe", `SDL_GetSensors()`/`SDL_OpenSensor()`/
+`SDL_GetSensorType()`/`SDL_CloseSensor()` carry no `\threadsafety` annotation
+at all, and calling any of them concurrently — including *across*
+`Accelerometer` and `Gyroscope`, not just within one class — reproducibly
+corrupts the heap (verified by actually stress-testing it, not just
+reasoning about it — see `plan_devices_phase6.md` Task P6-1's addendum and
+`plan_devices_phase7.md` Task P7-1). `ProcessSensorUpdateEvent()` validates
+the event belongs to this instance's open device, then delegates to
+`DispatchSensorReading()` — this split lets the `NOXNA` test-only
 `InjectSyntheticSensorUpdate()`/`SetStartedForTesting()`/`SetSupportedForTesting()`
 hooks exercise the real dispatch path without a real, opened SDL sensor.
-Both `SensorEventWatch()` (the real SDL event-watch callback) and
-`InjectSyntheticSensorUpdate()` wrap their dispatch call in a
-`Detail::ScopeExit` RAII guard (Task P6-4) so dispatch-tracking cleanup
-still runs if the dispatched call throws — `SensorEventWatch()`
-additionally catches and swallows any such exception (it's an
-`SDL_EventFilter` callback; letting a C++ exception cross that C-API
-boundary is unsafe on its own, independent of the cleanup concern).
-`Timestamp` on dispatched readings is always
-`System::DateTimeOffset::getUtcNowProperty()` — real wall-clock time.
+Both the real SDL event-watch path and `InjectSyntheticSensorUpdate()` wrap
+their dispatch call in a `Detail::ScopeExit` RAII guard (Task P6-4, hardened
+`noexcept` in Task P7-5) so dispatch-tracking cleanup still runs if the
+dispatched call throws — the real path additionally catches and swallows
+any such exception (it's an `SDL_EventFilter` callback; letting a C++
+exception cross that C-API boundary is unsafe on its own, independent of the
+cleanup concern). **As of Task P7-3**, the real event-watch path's
+per-instance dispatch bookkeeping (`Detail::SdlSensorSubsystem<TSensor>::
+DispatchToInstances()`) re-validates each snapshotted instance pointer
+against the *live* `startedInstances_` list — by pointer value only, never
+dereferencing until validated — atomically with marking it as actively
+dispatching, immediately before dispatching to *that* specific instance, not
+in bulk up front for the whole batch as before. **This re-validation is not
+optional/removable**: without it, a callback disposing a *different*,
+not-yet-dispatched instance from the same batch left the dispatch loop
+holding a dangling pointer — confirmed as a real, reliably reproducible
+(5/5) use-after-free/segfault via a deliberate temporary revert, not a
+theoretical concern (`plan_devices_phase7.md` Task P7-3). `Timestamp` on
+dispatched readings is always `System::DateTimeOffset::getUtcNowProperty()`
+— real wall-clock time.
 Android's axis-remap sign math is a pure function,
 `Detail::ConvertAndroidPortraitToXnaLandscape()`
 (`include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`,
@@ -544,7 +735,10 @@ reference counter; SDL already provides one, and `SdlSensorSubsystem`'s
 `ProbeGuard`/per-instance `subsystemHeld_` already use it correctly. **Any
 new concurrency test added to this namespace must be re-run in a loop
 (20-60+ iterations) before being trusted** — a single `ctest` pass missed
-the Task P6-1 addendum's heap-corruption bug entirely.
+both the Task P6-1 addendum's heap-corruption bug and, this phase, would
+have missed Task P7-1's cross-class race and Task P7-3's use-after-free too
+(both confirmed only by a deliberate temporary revert plus repeated runs,
+not a single pass).
 
 **Stub pattern (`Compass`/`Motion`):** always `SensorState::NotSupported`;
 `Start()` always throws `SensorFailedException`; still expose the
@@ -596,6 +790,14 @@ don't (e.g. `AccelerometerReading`-style value types) declare a plain
 
 ## 7. Useful commands
 
+**ZIP-export caveat (Task P7-6):** every command and count below was run
+against a real `git clone` of this repository with submodules initialized
+(`git submodule update --init --recursive`) — see `docs/devices-build.md`
+Section 0. A bare ZIP/tarball export of this source tree, without that step,
+has empty `third_party/SDL` (and `SDL_image`/`SDL_mixer`, `vendor/googletest`)
+directories and will not configure, let alone build. Nothing in this
+document implies a raw source snapshot is self-contained.
+
 See `docs/devices-build.md` (Task P5-12) for the full, individually
 re-verified set with exact test counts. Quick reference:
 
@@ -612,10 +814,10 @@ cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 # Run all tests:
 cd cmake-build-debug && ctest --output-on-failure
 
-# Run only Devices/Sensors + VibrateController tests (211 tests as of Task P6-9;
+# Run only Devices/Sensors + VibrateController tests (220 tests as of Task P7-7;
 # see docs/devices-build.md Section 2 for the loop command to use for any new
 # concurrency test before trusting a single pass):
-cd cmake-build-debug && ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase"
+cd cmake-build-debug && ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase|ScopeExit"
 
 # Build the Devices demo screen:
 cmake --build cmake-build-debug --target cna_demo_devices -j$(nproc)
@@ -628,7 +830,7 @@ cmake -S . -B cmake-build-android -G Ninja \
 cmake --build cmake-build-android --target CNA -j$(nproc)
 
 # Cross-platform build verification (Vulkan/BGFX; last verified 2026-07-04
-# against Phase 6's complete changeset, Task P6-10):
+# against Phase 7's complete changeset, Task P7-7):
 cmake --build cmake-build-vulkan --target CNA --target CnaTests -j$(nproc)
 cmake --build cmake-build-bgfx   --target CNA --target CnaTests -j$(nproc)
 ```
@@ -640,14 +842,14 @@ writing.
 
 ## 8. Next smallest tasks
 
-With `plan_devices_phase4.md`, `plan_devices_phase5.md`, and
-`plan_devices_phase6.md` **all fully closed** (Task P6-10, its final task,
-re-verified `EASYGL`/`VULKAN`/`BGFX`/Android all clean against the complete
-changeset — no regressions found anywhere), there is no standing plan file
-driving further `Microsoft::Devices` work and no known outstanding code
-issue. Pick one of these, or ask the user what the next priority actually
-is — do not invent new `Microsoft::Devices` scope without a plan or
-explicit request.
+With `plan_devices_phase4.md`, `plan_devices_phase5.md`,
+`plan_devices_phase6.md`, and `plan_devices_phase7.md` **all fully closed**
+(Task P7-7, its final task, re-verified `EASYGL`/`VULKAN`/`BGFX`/Android all
+clean against the complete changeset — no regressions found anywhere), there
+is no standing plan file driving further `Microsoft::Devices` work and no
+known outstanding code issue. Pick one of these, or ask the user what the
+next priority actually is — do not invent new `Microsoft::Devices` scope
+without a plan or explicit request.
 
 1. **Physical hardware verification**, if real Android/iOS hardware or a
    rumble-capable gamepad ever becomes available in a session: work through
@@ -666,13 +868,15 @@ explicit request.
    would be needed first, not a direct implementation from that sketch
    alone.
 
-3. **A fourth independent re-audit of `Microsoft::Devices`**, if a future
-   session has reason to doubt this one — Phase 6's entire premise was that
-   Phase 5's "correctly thread-safe" claims didn't fully survive re-reading
-   the actual code (and, more importantly, didn't survive actually
-   stress-testing new concurrency tests in a loop rather than trusting a
-   single pass); the same discipline should apply to Phase 6's own claims
-   too.
+3. **A fifth independent re-audit of `Microsoft::Devices`**, if a future
+   session has reason to doubt this one — Phase 7's entire premise was that
+   Phase 6's own fixes still had three real gaps (a cross-class SDL race, a
+   premature-disposed-state race, and a genuine use-after-free) that didn't
+   survive re-reading the actual code against the vendored SDL headers'
+   own thread-safety documentation, and, for the use-after-free, didn't
+   survive a deliberate temporary revert to confirm the regression test
+   actually caught it; the same discipline should apply to Phase 7's own
+   claims too.
 
 4. **Anything outside `Microsoft::Devices`.** Ask before assuming scope.
 
@@ -684,7 +888,8 @@ explicit request.
   statement — use Section 2's layered breakdown instead. Phase 5 exists
   specifically because Phase 4 made that mistake and it hid real bugs;
   Phase 6 exists because Phase 5's own "correctly thread-safe" claim about
-  `SensorBase<T>` didn't fully hold either.
+  `SensorBase<T>` didn't fully hold either; Phase 7 exists because Phase 6's
+  own fixes still had three real gaps (Tasks P7-1/P7-2/P7-3).
 - Do not "fix" the SDL sensor subsystem ownership pattern by building a
   separate hand-rolled reference counter — SDL3 already provides one (see
   Section 6).
@@ -704,15 +909,37 @@ explicit request.
   `Dispose(bool)` override to a plain `if (!getIsDisposedProperty() && disposing)`
   guard (Task P6-3) — closes a real double-cleanup race between two
   threads calling `Dispose()` on the same instance concurrently.
+- Do not remove `SensorBase::WaitForDisposalToComplete()` or let a losing
+  `Dispose(bool)` call (one that failed `ClaimDisposalOnce()`) call the base
+  `Dispose(bool)` directly instead of waiting (Task P7-2) — confirmed via a
+  temporary revert that this makes the *winner's* own `Stop()` call throw
+  `ObjectDisposedException` mid-cleanup and leak `instanceCount_`/the open
+  sensor/the subsystem hold.
+- Do not remove `Detail::GetGlobalSdlSensorMutex()` or its acquisition in
+  `Accelerometer`/`Gyroscope`'s `getIsSupportedProperty()`/`Start()`/
+  `Dispose(bool)` (Task P7-1) — the per-class `subsystem.mutex_` alone does
+  not serialize `Accelerometer`'s and `Gyroscope`'s real SDL sensor-subsystem
+  calls against *each other*, only against each class's own other calls.
+- Do not revert `Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()`
+  back to marking every snapshotted instance's `dispatchingThreadIds_` up
+  front, before dispatching to any of them (Task P7-3) — confirmed via a
+  temporary revert that this causes a real, reliably reproducible (5/5)
+  segfault when one instance's callback disposes a different, not-yet-
+  dispatched instance from the same batch. Each instance must be
+  re-validated against the live `startedInstances_` list (by pointer value
+  only) and marked atomically with that check, immediately before
+  dispatching to it.
 - Do not trust a single passing `ctest`/`--gtest_filter` run as proof a new
   concurrency test (or a fix to existing concurrent code) is correct — Task
-  P6-1's own addendum found a real heap-corruption bug that only showed up
-  after looping the same test binary invocation dozens of times. See
+  P6-1's own addendum, and Phase 7's own Tasks P7-1/P7-3, each found a real
+  bug (heap corruption, a cross-class race, and a use-after-free
+  respectively) that only showed up after looping the same test binary
+  invocation dozens of times, or after a deliberate temporary revert. See
   `docs/devices-build.md` Section 2 for the loop command.
 - Do not refactor or restructure `SensorBase<T>`, `Detail::SdlSensorSubsystem`,
   or `ISensorReading` further without a concrete need — stable, used by
-  production code, and Tasks P5-4/P6-1/P6-3/P6-4 already did the hardening
-  that was actually needed.
+  production code, and Tasks P5-4/P6-1/P6-3/P6-4/P7-1/P7-2/P7-3 already did
+  the hardening that was actually needed.
 - Do not expand `Microsoft::Devices` to camera, radio, phone-hardware APIs,
   or GPS/location (including as `NOXNA`) — see Section 6 and
   `docs/location-future-plan.md`.
@@ -745,16 +972,17 @@ explicit request.
 Read NEXT.md first, especially Section 2's layered status (API vs. SDL
 runtime vs. native backend vs. hardware-verified) — do not summarize this
 project's Devices work as simply "complete."
-plan_devices_phase4.md, plan_devices_phase5.md, and plan_devices_phase6.md
-are all fully closed — there is no standing Microsoft::Devices plan left to
-work through. Ask the user what to work on next, or pick one of Section 8's
-items, before inventing new scope.
+plan_devices_phase4.md through plan_devices_phase7.md are all fully closed —
+there is no standing Microsoft::Devices plan left to work through. Ask the
+user what to work on next, or pick one of Section 8's items, before
+inventing new scope.
 If given a new task, make one small, verified improvement at a time.
 Run the relevant build/test command from Section 7 / docs/devices-build.md
 after each change — and if the change touches concurrency, re-run the
 relevant test in a loop (20-60+ iterations, see docs/devices-build.md
-Section 2), not just once: Task P6-1's own addendum found a real
-heap-corruption bug that a single passing run completely missed.
+Section 2), not just once: Task P6-1's own addendum, and Phase 7's own
+Tasks P7-1/P7-3, each found a real bug (heap corruption, a cross-class
+race, a use-after-free) that a single passing run completely missed.
 Update NEXT.md after finishing, and keep Section 2 honest rather than
 declaring victory.
 ```
