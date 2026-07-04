@@ -875,3 +875,95 @@ Remaining risk: none identified for the documentation itself. Task P6-10
 still needs to re-verify `VULKAN`/`BGFX`/Android against this phase's
 complete changeset — explicitly flagged as not-yet-done throughout the
 updated docs, not silently assumed clean.
+
+## P6-10: Reproducible final verification
+
+### Commands run and exact results (2026-07-04, all 9 completed tasks' changes combined, `HEAD` = `f36ade8` at the start of this task)
+
+1. **Submodules:** `git submodule status` — all four (`third_party/SDL`,
+   `third_party/SDL_image`, `third_party/SDL_mixer`, `vendor/googletest`)
+   present and checked out at a commit (no `-` prefix indicating
+   uninitialized); no `git submodule update --init --recursive` needed.
+
+2. **`EASYGL` (Linux, primary dev backend), full changeset including this
+   task itself:** already built/tested repeatedly throughout P6-1 through
+   P6-9 above; final state re-confirmed as part of P6-9: Devices-only
+   filter 211/211 passed; full `ctest` 2034/2036 passed (2 pre-existing,
+   unrelated `EasyGL`/`easy-gl` failures, unchanged from Phase 5's
+   baseline).
+
+3. **`VULKAN`:**
+   - `cmake --build cmake-build-vulkan --target CNA -j$(nproc)` — clean build.
+   - `cmake --build cmake-build-vulkan --target CnaTests -j$(nproc)` — clean build.
+   - `ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase"`
+     — **211/211 passed**, 2 expected skips.
+   - Concurrency stress loop (the specific area Task P6-1's addendum found
+     a real bug in) — `for i in $(seq 1 30); do ./CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*"; done`
+     — **30/30 clean**, no crashes.
+   - Full `ctest --output-on-failure` — **1984 tests, 13 failures** — all
+     13 are `Vulkan_*` graphics-smoke tests reported `Not Run` (no real
+     GPU/driver in this container), matching Phase 5's own documented
+     `VULKAN` baseline (13 pre-existing failures, same reason). The test
+     count grew from Phase 5's 1960 to 1984 (+24), consistent with the
+     Devices-only tests added across Phase 6 (`SensorBaseTests` (6) plus
+     new concurrency/semantic tests in existing suites). No new failures.
+
+4. **`BGFX`:**
+   - `cmake --build cmake-build-bgfx --target CNA -j$(nproc)` — clean build.
+   - `cmake --build cmake-build-bgfx --target CnaTests -j$(nproc)` — clean build.
+   - `ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase"`
+     — **211/211 passed**, 2 expected skips.
+   - Same concurrency stress loop — **30/30 clean**, no crashes.
+   - Full `ctest --output-on-failure` — **1978 tests, 3 failures** — all 3
+     are pre-existing `Bgfx_*` graphics-smoke tests reported `Not Run`,
+     matching Phase 5's own documented `BGFX` baseline (3 pre-existing
+     failures, same reason). No new failures.
+
+5. **Android cross-compile:** re-ran against Phase 6's complete changeset
+   (NDK r30.0.14904198, arm64-v8a, API 24, `-DCNA_BUILD_TESTS=OFF` — same
+   as every prior phase's check; `googletest` still not configured for the
+   NDK toolchain in this session):
+   ```
+   cmake -S . -B cmake-build-android -G Ninja \
+     -DCMAKE_TOOLCHAIN_FILE=$HOME/Android/Sdk/ndk/30.0.14904198/build/cmake/android.toolchain.cmake \
+     -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DCNA_BUILD_TESTS=OFF
+   cmake --build cmake-build-android --target CNA -j$(nproc)
+   ```
+   `CNA` static library built clean. Used the NDK's own `llvm-nm` (the
+   host's plain `nm` gives empty/wrong output against cross-compiled ARM64
+   object files) to confirm Phase 6's actual new symbols compiled in, not
+   just that *something* compiled:
+   `Microsoft::Devices::Sensors::SensorBase<AccelerometerReading>::ClaimDisposalOnce()`,
+   `Microsoft::Devices::Sensors::Detail::ScopeExit<...>` (both the
+   `SensorEventWatch()` and `InjectSyntheticSensorUpdate()`
+   instantiations), and `Accelerometer::GetSubsystemHeldForTesting()` were
+   all found present in `Accelerometer.cpp.o`; the mirrored `Gyroscope.cpp.o`
+   symbols were also confirmed present. This is a **compile-only**
+   verification — no APK packaging, no emulator/device run, and `CnaTests`
+   itself was not cross-compiled (matching every prior phase's own
+   documented limitation) — not claiming Android *tests* ran, only that the
+   Android-relevant code (including the `#ifdef __ANDROID__` axis-remap
+   paths, unchanged this phase) still compiles with Phase 6's changes.
+
+6. **iOS:** re-checked (not assumed carried over) —
+   `which xcodebuild xcrun osxcross` and a filesystem search for
+   `*ios*toolchain*` both came back empty, same as every prior phase.
+   Confirmed still blocked; no Apple/macOS toolchain of any kind exists in
+   this Linux container.
+
+**No regressions found on `EASYGL`, `VULKAN`, `BGFX`, or the Android
+cross-compile from any of this phase's 9 prior tasks' changes**, including
+specifically re-stress-testing the exact concurrency-sensitive test suites
+that Task P6-1's own addendum found a real, previously-undiscovered bug in
+— this time on `VULKAN` and `BGFX` as well as `EASYGL`, not just the one
+backend the bug was originally found on. This closes Task P6-10, the last
+open item in `plan_devices_phase6.md`.
+
+Files changed: none (verification only). `NEXT.md` updated separately (see
+below) to remove the "not yet re-verified" caveats P6-9 had explicitly
+flagged.
+
+Remaining risk: none identified beyond what's already documented elsewhere
+in this plan (real-hardware verification, iOS toolchain, the deliberate
+concurrent-`Dispose()`-from-two-threads limitation). `plan_devices_phase6.md`
+is now fully closed, all 10 tasks done.

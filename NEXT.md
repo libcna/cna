@@ -45,9 +45,9 @@ layered breakdown instead of a single verdict.
   graphics backends (`EASYGL`/`VULKAN`/`BGFX`) plus the Android
   cross-compile. Full task-by-task detail, and the audit findings that
   motivated each fix, live in that file.
-- `plan_devices_phase6.md` (10 tasks, re-audit + hardening) — all 10 tasks
-  done except Task P6-10's own final reproducible-verification writeup
-  (in progress as of this writing). Found and fixed: an unlocked
+- `plan_devices_phase6.md` (10 tasks, re-audit + hardening) — **closed**,
+  all 10 tasks done, including Task P6-10's final re-verification against
+  `EASYGL`/`VULKAN`/`BGFX`/Android. Found and fixed: an unlocked
   `instanceCount_` race in all four sensor classes' constructors (Task
   P6-1) — whose own new concurrency test then surfaced a *second*, more
   serious bug only visible under repeated stress-testing, not a single run:
@@ -180,40 +180,50 @@ whenever real hardware becomes available; `examples/demo_devices/`
 (`cmake-build-debug`) as of `plan_devices_phase6.md`'s latest commit on
 `feature/devices` (2026-07-04, not yet pushed).
 
-**`CNA` also built clean for Android** during Phase 5 (arm64-v8a, NDK r30,
-API 24, `cmake-build-android/`) — Phase 6 has not yet re-run this
-cross-compile against its own changes (tracked as part of Task P6-10, not
-yet complete as of this writing); Phase 6's changes are all thread-safety/
-locking-discipline fixes to code that already compiled for Android in
-Phase 5, so a regression is unlikely but not yet *confirmed* the way Phase
-5's own changes were.
+**`CNA` also builds clean for Android** (arm64-v8a, NDK r30, API 24,
+`cmake-build-android/`) — re-verified against Phase 6's complete changeset
+(Task P6-10, 2026-07-04) using the NDK's own `llvm-nm` to confirm Phase
+6's actual new symbols (`SensorBase::ClaimDisposalOnce()`,
+`Detail::ScopeExit<...>`, `GetSubsystemHeldForTesting()`) compiled in, not
+just that *something* compiled. Still **compile-only** — no APK
+packaging, no emulator/device run, `CnaTests` itself not cross-compiled
+(`googletest` not configured for the NDK toolchain in this session, same
+as every prior phase).
 
 **iOS cross-compilation confirmed still blocked** — no toolchain of any kind
-in this Linux container. Re-confirmed during Phase 5's own audit (not just
-carried over from Phase 4's finding); not independently re-checked in
-Phase 6 (no reason to expect it changed).
+in this Linux container. Re-confirmed during Phase 5's own audit and again
+during Phase 6's Task P6-10 (2026-07-04) — checked fresh each time, not
+assumed carried over.
 
-**`VULKAN`/`BGFX` re-verified clean against Phase 5's full changeset**
-(Task P5-14, 2026-07-04) — both build `CNA`/`CnaTests` with zero errors;
-Devices-only filter 187/187 passing on each, matching `EASYGL` exactly at
-that point in time. **Not yet re-verified against Phase 6's changes** —
-tracked as part of Task P6-10.
+**`VULKAN`/`BGFX` re-verified clean against Phase 6's complete changeset**
+(Task P6-10, 2026-07-04) — both build `CNA`/`CnaTests` with zero errors;
+Devices-only filter 211/211 passing on each, matching `EASYGL` exactly.
+The concurrency stress loop that found Task P6-1's heap-corruption bug on
+`EASYGL` was specifically re-run on both `VULKAN` and `BGFX` too (30/30
+clean on each) — not just assumed fixed everywhere because it was fixed on
+one backend. Full suite: `VULKAN` 1984 tests/99% passing (13 pre-existing
+`Vulkan_*` graphics-smoke failures needing a real GPU/driver, same
+baseline as Phase 5, count grown only by the Devices tests Phase 6 added);
+`BGFX` 1978 tests/99% passing (3 pre-existing `Bgfx_*` failures, same
+reason). No regressions found on either backend from any of Phase 6's
+changes.
 
 **Tests:** last full `ctest` run (`EASYGL`) as of `plan_devices_phase6.md`
-Task P6-9 (2026-07-04, after Task P6-1's addendum fix): **2036 tests, 2
-failures** (99.9% passing). The 2 failures are pre-existing, unrelated
-`EasyGL`/`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
-`easy-gl-resource-smoke-tests`) — this environment unexpectedly gained a
-real GPU/display mid-Phase-5 (Task P5-1's own discovery), which surfaced
-these for the first time (previously silently `Not Run` headless, which is
-why every prior session's baseline said "64 failures" — that was actually
-"64 tests never run at all," not 64 failing tests). Devices-only filter:
-**211 tests via `ctest -R`, 100% passing** (plus 2 tests that correctly
-`GTEST_SKIP()` themselves on hardware-dependent paths this machine doesn't
-have) — see `docs/devices-build.md` for the exact command, including a new
-Section 2 note on why concurrency tests specifically must be re-run in a
-loop, not trusted from a single pass (Task P6-1's own addendum found a real
-bug this way).
+Task P6-10 (2026-07-04, final, after Task P6-1's addendum fix): **2036
+tests, 2 failures** (99.9% passing). The 2 failures are pre-existing,
+unrelated `EasyGL`/`easy-gl` graphics-backend bugs
+(`EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`) — this
+environment unexpectedly gained a real GPU/display mid-Phase-5 (Task
+P5-1's own discovery), which surfaced these for the first time (previously
+silently `Not Run` headless, which is why every prior session's baseline
+said "64 failures" — that was actually "64 tests never run at all," not 64
+failing tests). Devices-only filter: **211 tests via `ctest -R`, 100%
+passing** (plus 2 tests that correctly `GTEST_SKIP()` themselves on
+hardware-dependent paths this machine doesn't have) — see
+`docs/devices-build.md` for the exact command, including a Section 2 note
+on why concurrency tests specifically must be re-run in a loop, not
+trusted from a single pass (Task P6-1's own addendum found a real bug this
+way).
 
 ---
 
@@ -295,8 +305,8 @@ point. See `plan_devices_phase5.md`'s per-task Resolution notes for full
 detail, exact commands run, and the reasoning behind every non-obvious
 choice — this document only summarizes.
 
-**2026-07-04 — `plan_devices_phase6.md`, Tasks P6-1 through P6-9 done
-(re-audit + hardening, not new features; Task P6-10 in progress):**
+**2026-07-04 — `plan_devices_phase6.md`, all 10 tasks done (re-audit +
+hardening, not new features):**
 - **Audit (before any code change):** re-read every sensor/`VibrateController`
   file and test directly, on the same "don't trust the previous phase's
   claims" premise Phase 5 itself established. Found Phase 5's own
@@ -355,8 +365,17 @@ choice — this document only summarizes.
 - **P6-8** — reconfirmed `Compass`/`Motion` remain honest stubs; sketched
   (documentation only) `ICompassBackend`/`IMotionBackend` interface shapes
   for a future native backend, without adding unused compiled code.
-- **P6-9** (this update) — `NEXT.md`/`AUDIT.md`/`docs/devices-build.md`
-  updated with current test counts and Phase 6's findings.
+- **P6-9** — `NEXT.md`/`AUDIT.md`/`docs/devices-build.md`/
+  `docs/devices-hardware-checklist.md` updated with current test counts and
+  Phase 6's findings.
+- **P6-10** — final re-verification against the complete changeset:
+  `EASYGL`/`VULKAN`/`BGFX` all built and tested clean (Devices-only filter
+  211/211 on each); the concurrency stress loop that found Task P6-1's
+  heap-corruption bug was specifically re-run on `VULKAN`/`BGFX` too
+  (30/30 clean on each), not just assumed fixed everywhere because it was
+  fixed on `EASYGL`; Android cross-compile re-confirmed with the NDK's own
+  `llvm-nm` showing Phase 6's actual new symbols present; iOS re-confirmed
+  still blocked.
 
 Every task above re-ran the Devices-relevant test filter (and, for the
 concurrency-sensitive ones, looped it dozens of times — see P6-1's addendum
@@ -371,11 +390,14 @@ All work committed on `feature/devices`, not yet pushed.
 
 ## 4. Current blocker / main problem
 
-**No blocker.** `plan_devices_phase5.md` is fully closed. `plan_devices_phase6.md`
-has Tasks P6-1 through P6-9 done; Task P6-10 (final reproducible
-verification across `VULKAN`/`BGFX`/Android, mirroring Phase 5's own P5-14)
-is the one remaining item, in progress as of this writing — not a blocker,
-just not yet finished. See Section 8 for what's next after that.
+**No blocker.** `plan_devices_phase5.md` and `plan_devices_phase6.md` are
+both fully closed — Task P6-10, its final task, re-verified `EASYGL`/
+`VULKAN`/`BGFX`/Android all clean against the complete changeset (no
+regressions found anywhere), including specifically re-running the
+concurrency stress loop that found Task P6-1's heap-corruption bug on
+`VULKAN`/`BGFX` too, not just the backend it was originally found on. See
+Section 8 for what's next; none of it is a blocker, just unstarted or
+unverifiable in this environment (physical hardware, iOS toolchain).
 
 ---
 
@@ -422,8 +444,9 @@ just not yet finished. See Section 8 for what's next after that.
   `disposed_`/`isSupported_` and a double-dispose corruption race (Task
   P6-3); an exception-safety gap in dispatch cleanup that could deadlock a
   future `Dispose()` (Task P6-4).
-- **Not yet re-verified against Phase 6's changes (tracked as Task P6-10,
-  in progress):** `VULKAN`/`BGFX` builds, Android cross-compile.
+- **Resolved (Task P6-10, 2026-07-04):** `VULKAN`/`BGFX` builds and Android
+  cross-compile re-verified clean against Phase 6's complete changeset —
+  see Section 2.
 - **Unverified, low priority, no evidence of an actual bug:**
   `SensorFailedException`'s exact constructor overload signature remains an
   educated guess — its MSDN doc page consistently lacks a Constructors
@@ -605,8 +628,7 @@ cmake -S . -B cmake-build-android -G Ninja \
 cmake --build cmake-build-android --target CNA -j$(nproc)
 
 # Cross-platform build verification (Vulkan/BGFX; last verified 2026-07-04
-# against Phase 5's changes (Task P5-14) — NOT yet re-run against Phase 6's
-# changes, tracked as Task P6-10, see Section 4/8):
+# against Phase 6's complete changeset, Task P6-10):
 cmake --build cmake-build-vulkan --target CNA --target CnaTests -j$(nproc)
 cmake --build cmake-build-bgfx   --target CNA --target CnaTests -j$(nproc)
 ```
@@ -618,22 +640,16 @@ writing.
 
 ## 8. Next smallest tasks
 
-With `plan_devices_phase4.md`/`plan_devices_phase5.md` fully closed and
-`plan_devices_phase6.md` at Task P6-9 (Task P6-10, final cross-backend
-re-verification, still open), the immediate next step is finishing Task
-P6-10: re-verify `VULKAN`/`BGFX`/Android against Phase 6's complete
-changeset, the same way Task P5-14 did for Phase 5. After that closes,
-there is no standing plan file driving further `Microsoft::Devices` work.
-Pick one of these, or ask the user what the next priority actually is — do
-not invent new `Microsoft::Devices` scope without a plan or explicit
-request.
+With `plan_devices_phase4.md`, `plan_devices_phase5.md`, and
+`plan_devices_phase6.md` **all fully closed** (Task P6-10, its final task,
+re-verified `EASYGL`/`VULKAN`/`BGFX`/Android all clean against the complete
+changeset — no regressions found anywhere), there is no standing plan file
+driving further `Microsoft::Devices` work and no known outstanding code
+issue. Pick one of these, or ask the user what the next priority actually
+is — do not invent new `Microsoft::Devices` scope without a plan or
+explicit request.
 
-1. **Finish Task P6-10** (if not already done by the time this is read):
-   `VULKAN`/`BGFX` build + Devices-only test re-verification, Android
-   cross-compile re-check, full `ctest` run, all against Phase 6's complete
-   changeset. Append results to `plan_devices_phase6.md`.
-
-2. **Physical hardware verification**, if real Android/iOS hardware or a
+1. **Physical hardware verification**, if real Android/iOS hardware or a
    rumble-capable gamepad ever becomes available in a session: work through
    `docs/devices-hardware-checklist.md` using `cna_demo_devices`. Not
    attemptable in this headless container — don't attempt it here, just
@@ -641,7 +657,7 @@ request.
    gap — everything else in this namespace has been verified by code
    reading, unit tests, or cross-compilation, never by real hardware.
 
-3. **Native Android/iOS backend for `Compass`/`Motion`**, if ever scoped as
+2. **Native Android/iOS backend for `Compass`/`Motion`**, if ever scoped as
    its own task — `plan_devices_phase5.md`'s "Future native backend plan"
    section plus `plan_devices_phase6.md` Task P6-8's `ICompassBackend`/
    `IMotionBackend` interface sketch have a starting point (Android
@@ -650,7 +666,7 @@ request.
    would be needed first, not a direct implementation from that sketch
    alone.
 
-4. **A fourth independent re-audit of `Microsoft::Devices`**, if a future
+3. **A fourth independent re-audit of `Microsoft::Devices`**, if a future
    session has reason to doubt this one — Phase 6's entire premise was that
    Phase 5's "correctly thread-safe" claims didn't fully survive re-reading
    the actual code (and, more importantly, didn't survive actually
@@ -658,7 +674,7 @@ request.
    single pass); the same discipline should apply to Phase 6's own claims
    too.
 
-5. **Anything outside `Microsoft::Devices`.** Ask before assuming scope.
+4. **Anything outside `Microsoft::Devices`.** Ask before assuming scope.
 
 ---
 
@@ -729,10 +745,8 @@ request.
 Read NEXT.md first, especially Section 2's layered status (API vs. SDL
 runtime vs. native backend vs. hardware-verified) — do not summarize this
 project's Devices work as simply "complete."
-plan_devices_phase4.md and plan_devices_phase5.md are fully closed;
-plan_devices_phase6.md has Tasks P6-1 through P6-9 done, Task P6-10 (final
-cross-backend re-verification) still open — finish that first if picking
-this back up, then there is no standing Microsoft::Devices plan left to
+plan_devices_phase4.md, plan_devices_phase5.md, and plan_devices_phase6.md
+are all fully closed — there is no standing Microsoft::Devices plan left to
 work through. Ask the user what to work on next, or pick one of Section 8's
 items, before inventing new scope.
 If given a new task, make one small, verified improvement at a time.
