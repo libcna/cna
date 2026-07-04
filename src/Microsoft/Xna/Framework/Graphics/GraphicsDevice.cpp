@@ -547,6 +547,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 }
             }
         }
+        applySamplerStatesToBackend();
         backend_->DrawInstancedPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
             currentIndexBuffer_->GetBackend(),
@@ -608,6 +609,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
+        applySamplerStatesToBackend();
         backend_->DrawColoredPrimitives(*tmpVb, world, view, proj, primitiveType, primitiveCount);
     }
 
@@ -673,6 +675,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
+        applySamplerStatesToBackend();
         backend_->DrawIndexedColoredPrimitives(*tmpVb, *tmpIb, world, view, proj, primitiveType, primitiveCount);
     }
 
@@ -751,6 +754,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
@@ -775,6 +779,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
@@ -801,6 +806,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
@@ -826,6 +832,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
@@ -849,6 +856,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        applySamplerStatesToBackend();
         backend_->DrawPrimitivesEx(*vb, world, view, proj, type, primitiveCount, p);
     }
 
@@ -899,6 +907,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -927,6 +936,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -957,6 +967,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -986,6 +997,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1017,6 +1029,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1045,6 +1058,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1075,6 +1089,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1104,6 +1119,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1131,6 +1147,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        applySamplerStatesToBackend();
         backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
     }
 
@@ -1156,6 +1173,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        applySamplerStatesToBackend();
         backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
     }
 

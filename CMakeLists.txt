@@ -1054,6 +1054,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0]
+        cna_easygl_test(cna_test_easygl_sampler_state_effect
+                        examples/easygl_sampler_state_effect_test.cpp)
+        add_test(NAME EasyGL_SamplerState_DualTextureEffect
+                 COMMAND cna_test_easygl_sampler_state_effect)
+        set_tests_properties(EasyGL_SamplerState_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1117,6 +1126,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_DualTextureEffect_Blend
                  COMMAND cna_test_vulkan_dual_texture)
         set_tests_properties(Vulkan_DualTextureEffect_Blend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0] on
+        # Vulkan too — reuses the backend-agnostic EasyGL test source (public XNA API only).
+        cna_vulkan_test(cna_test_vulkan_sampler_state_effect
+                        examples/easygl_sampler_state_effect_test.cpp)
+        add_test(NAME Vulkan_SamplerState_DualTextureEffect
+                 COMMAND cna_test_vulkan_sampler_state_effect)
+        set_tests_properties(Vulkan_SamplerState_DualTextureEffect PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
