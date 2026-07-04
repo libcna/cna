@@ -428,8 +428,26 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   streaming wavebank, hodnotová `CreateInstance`, GetHashCode int). *(hotovo 2026-07-02, viz §7 dodatek.)*
 - [x] **T-6B — Aktualizovat `AUDIT.md`** — nahradit paušální „✅ / stub behavior" reálným stavem po každé fázi
   (per soubor: implementováno / akceptovaná odchylka / testy). *(hotovo 2026-07-02, viz §7 dodatek.)*
-- [ ] **T-6C — Build & report** — `cmake --build cmake-build-debug --target CNA` a `--target CnaTests`
+- [x] **T-6C — Build & report** — `cmake --build cmake-build-debug --target CNA` a `--target CnaTests`
   zelené; krátký report (změněné soubory, odchylky, zbývající mezery) dle `CLAUDE.md` §Build and Report.
+  *Pozn.:* Hotovo 2026-07-04. Build: `CNA` i `CnaTests` zelené (nic k přebudování, oba už aktuální
+  z předchozích commitů), `CnaTests` **2031/2031** zelené (`SDL_AUDIODRIVER=dummy`).
+  **Changed files** (tato session, commity `d468dc4`..`feb6eda`, 4 úkoly T-4D/T-3F/T-3G/T-4B):
+  `AudioEngine.{hpp,cpp}`, `Cue.{hpp,cpp}`, `SoundBank.{hpp,cpp}`, `WaveBank.{hpp,cpp}`,
+  `SoundEffect.{hpp,cpp}`, `SoundEffectInstance.cpp`, `XactTypes.hpp`, `XactParser.cpp`,
+  `ContentManager.{hpp,cpp}` (kolaterální oprava pro T-3G), plus testy
+  (`AudioCategoryTests.cpp`, `CueTests.cpp`, `SoundBankTests.cpp`, `WaveBankTests.cpp`,
+  `SoundEffectTests.cpp`, `SoundEffectInstanceTests.cpp`, `XactParserTests.cpp`) a dva nové
+  sdílené test-access headery (`CueTestAccess.hpp`, `SoundEffectInstanceTestAccess.hpp`).
+  **Přidané stuby:** žádné. **Chybějící závislosti:** žádné.
+  **Úmyslné odchylky** (viz `CHECKLIST.md`, řádky `Audio:`): 3D poziční audio jen pan+attenuace
+  bez elevace; Doppler uložen, nikdy aplikován; `GetHashCode()` přes `std::hash` místo .NET
+  algoritmu; streaming `WaveBank`'s `offset`/`packetSize` nepoužité (shoda s FNA); `SoundEffect`
+  move-only; `ContentManager::Load<SoundEffect>()` necachuje; interaktivní (`type==3`) variation
+  tabulky uniform-pick místo variable-driven.
+  **Zbývající mezery** (viz `NEXT.md` §5): jen `T-4C` (DSP filtry/reverb na
+  `SoundEffectInstance`) zůstává otevřené jako skutečná nedodělaná práce; zbytek jsou úmyslné,
+  zdokumentované odchylky výše.
 
 ### Fáze 7 — Doplňkový audit (2026-07-02): nové nálezy nad rámec Fází 0–6
 
