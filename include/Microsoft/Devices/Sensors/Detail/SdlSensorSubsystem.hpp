@@ -55,6 +55,45 @@ namespace Microsoft::Devices::Sensors::Detail
     }
 
     /**
+     * @brief Process-wide mutex serializing every real SDL_INIT_SENSOR-related
+     * SDL API call across *every* sensor class (Task P7-1).
+     *
+     * `Accelerometer` and `Gyroscope` each own their own
+     * `Detail::SdlSensorSubsystem<TSensor>` instance (Task P5-4) and therefore
+     * their own, distinct `mutex_` — correct for serializing each class's own
+     * per-class shared state (instanceCount_, sensor_, startedInstances_,
+     * ...), but insufficient for the actual real SDL sensor-subsystem calls
+     * (SDL_InitSubSystem/SDL_QuitSubSystem/SDL_GetSensors/SDL_OpenSensor/
+     * SDL_CloseSensor/SDL_GetSensorType), which touch SDL's *one* global
+     * SDL_INIT_SENSOR subsystem — a class-specific lock does nothing to stop
+     * Accelerometer's and Gyroscope's real SDL calls from running fully
+     * concurrently with each other. SDL3's own documentation states
+     * SDL_InitSubSystem() "should only be called on the main thread" and
+     * SDL_QuitSubSystem() "is not thread safe"; SDL_GetSensors()/
+     * SDL_OpenSensor()/SDL_GetSensorType()/SDL_CloseSensor() carry no
+     * `\threadsafety` annotation at all, so none of them can be assumed safe
+     * for concurrent access either. This single mutex, function-local static
+     * inside an `inline` function (one instance for the whole process, per
+     * ordinary C++ inline-function singleton rules), serializes all of them
+     * across both sensor classes.
+     *
+     * Lock order (Task P7-1): whenever a caller already holds a
+     * `SdlSensorSubsystem<TSensor>::mutex_`, it must acquire *this* mutex
+     * only after that lock (nest this mutex inside the per-class one), never
+     * the reverse — see `Accelerometer::getIsSupportedProperty()`/`Start()`/
+     * `Dispose(bool)` for the exact acquisition sites. `getIsSupportedProperty()`
+     * acquires only this mutex (no per-class lock at all — `ProbeIsSupported()`
+     * touches no per-class subsystem state), so it never participates in the
+     * nesting order at all; this is safe precisely because it never also
+     * holds a per-class `mutex_` while doing so.
+     */
+    inline std::mutex& GetGlobalSdlSensorMutex()
+    {
+        static std::mutex mutex;
+        return mutex;
+    }
+
+    /**
      * Internal implementation detail (Task P5-4) — never included by a
      * public CNA header, not part of any XNA/WP7-facing API surface. Owns
      * the SDL_INIT_SENSOR subsystem lifetime, default-sensor discovery,

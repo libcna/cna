@@ -45,12 +45,14 @@ namespace Microsoft::Devices::Sensors
             return false;
         }
 
-        // Task P6-9: see Accelerometer::getIsSupportedProperty()'s
-        // identical fix for the full rationale — serializes this class's
-        // own real SDL sensor-subsystem calls against every other SDL
-        // sensor call this class makes.
-        auto& subsystem = GetSubsystem();
-        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        // Task P7-1: see Accelerometer::getIsSupportedProperty()'s
+        // identical fix for the full rationale — this class's own
+        // subsystem.mutex_ (as P6-9 used it) does not serialize against
+        // Accelerometer's identical real SDL sensor-subsystem calls, which
+        // lock a *different* mutex. ProbeIsSupported() touches no per-class
+        // subsystem state, so this now locks only the shared global SDL
+        // sensor mutex.
+        std::lock_guard<std::mutex> lock(Detail::GetGlobalSdlSensorMutex());
         return Detail::SdlSensorSubsystem<Gyroscope>::ProbeIsSupported();
     }
 
@@ -129,34 +131,40 @@ namespace Microsoft::Devices::Sensors
         // call is released on failure below.
         bool acquiredSubsystemThisCall = false;
 
-        if (!subsystemHeld_)
         {
-            if (!Detail::SdlSensorSubsystem<Gyroscope>::EnsureSubsystemInitialized())
+            // Task P7-1: see Accelerometer::Start()'s identical fix for the
+            // full rationale.
+            std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+
+            if (!subsystemHeld_)
+            {
+                if (!Detail::SdlSensorSubsystem<Gyroscope>::EnsureSubsystemInitialized())
+                {
+                    state_ = SensorState::NotSupported;
+                    throw SensorFailedException(
+                        "Failed to start gyroscope data acquisition. SDL sensor subsystem initialization failed.");
+                }
+
+                subsystemHeld_ = true;
+                acquiredSubsystemThisCall = true;
+            }
+
+            if (subsystem.OpenDefaultSensorLocked() == nullptr)
             {
                 state_ = SensorState::NotSupported;
+
+                // Task P6-2: previously left subsystemHeld_ true here forever
+                // (until this instance's eventual Dispose()) even though
+                // Start() itself failed — a real subsystem-hold leak.
+                if (acquiredSubsystemThisCall)
+                {
+                    SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                    subsystemHeld_ = false;
+                }
+
                 throw SensorFailedException(
-                    "Failed to start gyroscope data acquisition. SDL sensor subsystem initialization failed.");
+                    "Failed to start gyroscope data acquisition. No default sensor found.");
             }
-
-            subsystemHeld_ = true;
-            acquiredSubsystemThisCall = true;
-        }
-
-        if (subsystem.OpenDefaultSensorLocked() == nullptr)
-        {
-            state_ = SensorState::NotSupported;
-
-            // Task P6-2: previously left subsystemHeld_ true here forever
-            // (until this instance's eventual Dispose()) even though
-            // Start() itself failed — a real subsystem-hold leak.
-            if (acquiredSubsystemThisCall)
-            {
-                SDL_QuitSubSystem(SDL_INIT_SENSOR);
-                subsystemHeld_ = false;
-            }
-
-            throw SensorFailedException(
-                "Failed to start gyroscope data acquisition. No default sensor found.");
         }
 
         started_ = true;
@@ -228,6 +236,10 @@ namespace Microsoft::Devices::Sensors
             {
                 subsystem.instanceCount_ = 0;
             }
+
+            // Task P7-1: see Accelerometer::Dispose(bool)'s identical fix
+            // for the full rationale.
+            std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
 
             if (subsystem.instanceCount_ == 0)
             {

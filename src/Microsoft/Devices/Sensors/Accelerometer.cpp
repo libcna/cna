@@ -60,16 +60,23 @@ namespace Microsoft::Devices::Sensors
         // testing (a P6-1 regression test constructing instances from 8
         // threads at once reproduced glibc's "unaligned tcache chunk
         // detected"/"malloc(): unaligned tcache chunk detected" abort in
-        // roughly 1 in 4 runs). Locking subsystem.mutex_ for the whole
-        // call serializes it against every other SDL sensor call this
-        // class makes (Start()'s EnsureSubsystemInitialized()/
-        // OpenDefaultSensorLocked() already run under this same lock), so
-        // no two SDL sensor-subsystem calls from this class ever run
-        // concurrently with each other. Does not risk deadlock: the
-        // constructor's own instanceCount_ lock is fully released before
-        // calling this method, and Start() never calls this method itself.
-        auto& subsystem = GetSubsystem();
-        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        // roughly 1 in 4 runs).
+        //
+        // Task P7-1: subsystem.mutex_ alone (as P6-9 used it) only
+        // serializes this against *this class's own* other SDL calls —
+        // Gyroscope's identical getIsSupportedProperty() locks a
+        // *different* mutex (Gyroscope::GetSubsystem().mutex_), so the two
+        // classes' real SDL sensor-subsystem calls could still run fully
+        // concurrently with each other, against the exact same SDL global
+        // SDL_INIT_SENSOR subsystem the P6-1 addendum bug already proved
+        // unsafe. ProbeIsSupported() touches no per-class subsystem state
+        // (sensor_/sensorId_/instanceCount_/...) at all — it only needs to
+        // be serialized against every other real SDL sensor call, from
+        // *any* sensor class — so this now locks only the shared global SDL
+        // sensor mutex, not subsystem.mutex_ (dropped entirely; see
+        // GetGlobalSdlSensorMutex()'s doc comment for the full lock-order
+        // rule this participates in).
+        std::lock_guard<std::mutex> lock(Detail::GetGlobalSdlSensorMutex());
         return Detail::SdlSensorSubsystem<Accelerometer>::ProbeIsSupported();
     }
 
@@ -163,37 +170,49 @@ namespace Microsoft::Devices::Sensors
         // release to Dispose(), same as always.
         bool acquiredSubsystemThisCall = false;
 
-        if (!subsystemHeld_)
         {
-            if (!Detail::SdlSensorSubsystem<Accelerometer>::EnsureSubsystemInitialized())
+            // Task P7-1: EnsureSubsystemInitialized()/OpenDefaultSensorLocked()
+            // below make real SDL_InitSubSystem/SDL_GetSensors/SDL_OpenSensor/
+            // SDL_GetSensorType/SDL_CloseSensor calls — serialize them against
+            // every other SDL sensor call across both Accelerometer and
+            // Gyroscope via the shared global mutex, nested inside
+            // subsystem.mutex_ (already held for this whole method) — always
+            // acquired in that order, never the reverse; see
+            // GetGlobalSdlSensorMutex()'s doc comment for the full rule.
+            std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+
+            if (!subsystemHeld_)
+            {
+                if (!Detail::SdlSensorSubsystem<Accelerometer>::EnsureSubsystemInitialized())
+                {
+                    state_ = SensorState::NotSupported;
+                    throw AccelerometerFailedException(
+                        "Failed to start accelerometer data acquisition. SDL sensor subsystem initialization failed.");
+                }
+
+                subsystemHeld_ = true;
+                acquiredSubsystemThisCall = true;
+            }
+
+            if (subsystem.OpenDefaultSensorLocked() == nullptr)
             {
                 state_ = SensorState::NotSupported;
+
+                // Task P6-2: previously left subsystemHeld_ true here forever
+                // (until this instance's eventual Dispose()) even though
+                // Start() itself failed — a real subsystem-hold leak for any
+                // caller that constructs, fails Start(), and never disposes
+                // promptly (e.g. a retry loop). Release only the hold this
+                // call itself just acquired.
+                if (acquiredSubsystemThisCall)
+                {
+                    SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                    subsystemHeld_ = false;
+                }
+
                 throw AccelerometerFailedException(
-                    "Failed to start accelerometer data acquisition. SDL sensor subsystem initialization failed.");
+                    "Failed to start accelerometer data acquisition. No default sensor found.");
             }
-
-            subsystemHeld_ = true;
-            acquiredSubsystemThisCall = true;
-        }
-
-        if (subsystem.OpenDefaultSensorLocked() == nullptr)
-        {
-            state_ = SensorState::NotSupported;
-
-            // Task P6-2: previously left subsystemHeld_ true here forever
-            // (until this instance's eventual Dispose()) even though
-            // Start() itself failed — a real subsystem-hold leak for any
-            // caller that constructs, fails Start(), and never disposes
-            // promptly (e.g. a retry loop). Release only the hold this
-            // call itself just acquired.
-            if (acquiredSubsystemThisCall)
-            {
-                SDL_QuitSubSystem(SDL_INIT_SENSOR);
-                subsystemHeld_ = false;
-            }
-
-            throw AccelerometerFailedException(
-                "Failed to start accelerometer data acquisition. No default sensor found.");
         }
 
         started_ = true;
@@ -276,6 +295,14 @@ namespace Microsoft::Devices::Sensors
             {
                 subsystem.instanceCount_ = 0;
             }
+
+            // Task P7-1: SDL_CloseSensor()/SDL_QuitSubSystem() below are
+            // real SDL sensor-subsystem calls — serialize them against
+            // every other SDL sensor call across both Accelerometer and
+            // Gyroscope via the shared global mutex, nested inside the
+            // subsystem.mutex_ already held above (same lock order as
+            // Start(); see GetGlobalSdlSensorMutex()'s doc comment).
+            std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
 
             if (subsystem.instanceCount_ == 0)
             {

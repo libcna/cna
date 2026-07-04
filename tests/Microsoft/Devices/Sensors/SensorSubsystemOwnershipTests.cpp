@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <memory>
+#include <thread>
+#include <vector>
 
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
@@ -89,4 +92,88 @@ TEST(SensorSubsystemOwnershipTests, DisposingGyroscopeDoesNotAffectAccelerometer
 
     EXPECT_EQ(accelerometer.getStateProperty(), accelerometerStateBeforeDispose);
     EXPECT_NO_THROW(accelerometer.Dispose());
+}
+
+// Task P7-1: getIsSupportedProperty() previously locked each class's *own*
+// SdlSensorSubsystem<T>::mutex_ around its real SDL sensor-subsystem calls —
+// two different mutexes for Accelerometer and Gyroscope, so nothing actually
+// serialized their real SDL_InitSubSystem/SDL_GetSensors/SDL_OpenSensor/
+// SDL_GetSensorType/SDL_CloseSensor/SDL_QuitSubSystem calls against each
+// other. Unlike plan_devices_phase6.md's P6-1 addendum test (which only
+// stressed one class at a time and still reliably reproduced heap
+// corruption), this test constructs/destroys/probes *both* classes
+// concurrently, from separate thread pools, in the same test — the scenario
+// the shared GetGlobalSdlSensorMutex() fix (Task P7-1) exists for. This
+// test's value is in running clean under real concurrent cross-class
+// contention (see docs/devices-build.md's stress-loop guidance — a single
+// green run does not by itself prove this is fixed).
+TEST(SensorSubsystemOwnershipTests, ConcurrentCrossClassConstructDestroyProbeDoesNotCrash)
+{
+    constexpr int ThreadCountPerClass = 8;
+    constexpr int IterationsPerThread = 50;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCountPerClass * 4);
+
+    for (int t = 0; t < ThreadCountPerClass; ++t)
+    {
+        threads.emplace_back([]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                const Accelerometer a;
+                (void)a;
+            }
+        });
+
+        threads.emplace_back([]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                const Gyroscope g;
+                (void)g;
+            }
+        });
+
+        threads.emplace_back([]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                const bool supported = Accelerometer::getIsSupportedProperty();
+                (void)supported;
+            }
+        });
+
+        threads.emplace_back([]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                const bool supported = Gyroscope::getIsSupportedProperty();
+                (void)supported;
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+
+    // Sanity check: both classes' own instance-count bookkeeping must still
+    // be internally consistent after the cross-class contention above —
+    // each independently allows exactly MaxSensorCount (10) simultaneous
+    // instances and rejects the 11th.
+    std::vector<std::unique_ptr<Accelerometer>> accelerometers;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(accelerometers.push_back(std::make_unique<Accelerometer>()));
+    }
+    EXPECT_THROW({ const Accelerometer overflow; (void)overflow; }, SensorFailedException);
+
+    std::vector<std::unique_ptr<Gyroscope>> gyroscopes;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(gyroscopes.push_back(std::make_unique<Gyroscope>()));
+    }
+    EXPECT_THROW({ const Gyroscope overflow; (void)overflow; }, SensorFailedException);
 }
