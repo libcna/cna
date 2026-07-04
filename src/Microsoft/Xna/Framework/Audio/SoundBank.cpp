@@ -5,16 +5,27 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <exception>
 #include <fstream>
 #include <iostream>
-#include <stdexcept>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Audio
 {
+    namespace
+    {
+        // Force-sweep a still-playing fire-and-forget cue after this long, purely as a safety
+        // net against unbounded growth (see FireAndForget's comment in SoundBank.hpp) -- far
+        // longer than any normal one-shot SFX, so it never affects ordinary playback.
+        constexpr std::chrono::minutes kFireAndForgetSafetyNet{5};
+    }
+
     // ── Internal impl ─────────────────────────────────────────────────────────
 
     struct SoundBank::XactSoundBankImpl
@@ -32,9 +43,9 @@ namespace Microsoft::Xna::Framework::Audio
         : engine_(audioEngine)
     {
         if (!audioEngine)
-            throw std::invalid_argument("audioEngine must not be null");
+            throw System::ArgumentNullException("audioEngine");
         if (filename.empty())
-            throw std::invalid_argument("filename must not be empty");
+            throw System::ArgumentNullException("filename");
 
         std::ifstream f(filename, std::ios::binary | std::ios::ate);
         if (!f.is_open())
@@ -53,6 +64,7 @@ namespace Microsoft::Xna::Framework::Audio
                       << " cues=" << xsb.cues.size()
                       << " sounds=" << xsb.sounds.size() << "\n";
             xactImpl_ = std::make_unique<XactSoundBankImpl>(std::move(xsb));
+            engine_->RegisterSoundBank(this); // XA-8: lets AudioEngine::Dispose() cascade here
         }
         catch (const std::exception& ex)
         {
@@ -68,7 +80,17 @@ namespace Microsoft::Xna::Framework::Audio
     // ── Properties ────────────────────────────────────────────────────────────
 
     bool SoundBank::getIsDisposedProperty() const { return isDisposed_; }
-    bool SoundBank::getIsInUseProperty()    const { return false; }
+
+    bool SoundBank::getIsInUseProperty() const
+    {
+        // XA-7: a paused fire-and-forget cue is still in use -- FACT_STATE_INUSE (which FNA's
+        // IsInUse reflects) stays set while paused, it only clears once the cue is genuinely
+        // stopped. Checking IsPlaying alone made a paused cue look unused.
+        for (const auto& faf : fireAndForget_)
+            if (faf.cue && (faf.cue->getIsPlayingProperty() || faf.cue->getIsPausedProperty()))
+                return true;
+        return false;
+    }
 
     const CNA::Internal::Audio::XsbData* SoundBank::GetXsbData() const
     {
@@ -80,59 +102,80 @@ namespace Microsoft::Xna::Framework::Audio
     Cue* SoundBank::GetCue(const std::string& name)
     {
         if (name.empty())
-            throw std::invalid_argument("name must not be empty");
+            throw System::ArgumentNullException("name");
         if (isDisposed_)
-            throw std::runtime_error("SoundBank is disposed");
-
-        uint16_t cueIndex = 0xFFFF;
+            throw System::ObjectDisposedException("SoundBank");
 
         if (xactImpl_)
         {
             auto it = xactImpl_->data.cueNameMap.find(name);
             if (it != xactImpl_->data.cueNameMap.end())
-                cueIndex = it->second;
-            else
-                std::cerr << "[SoundBank] Cue not found: " << name << "\n";
+                return new Cue(name, this, it->second);
         }
 
-        return new Cue(name, this, cueIndex);
+        throw System::InvalidOperationException("Invalid cue name!");
     }
 
     // ── PlayCue ───────────────────────────────────────────────────────────────
 
     void SoundBank::PlayCue(const std::string& name)
     {
-        if (name.empty())
-            throw std::invalid_argument("name must not be empty");
-        if (isDisposed_)
-            throw std::runtime_error("SoundBank is disposed");
+        PlayCueInternal(name, nullptr, nullptr);
+    }
 
-        // Sweep fire-and-forget cues older than 5 seconds. Destroying a Cue
-        // whose sound has already finished is effectively a no-op (the SDL3_mixer
-        // track is stopped, then destroyed — both harmless on a completed track).
+    void SoundBank::PlayCue(const std::string& name,
+                             const AudioListener& listener,
+                             const AudioEmitter& emitter)
+    {
+        PlayCueInternal(name, &listener, &emitter);
+    }
+
+    void SoundBank::SweepFireAndForget()
+    {
+        // Sweep fire-and-forget cues that have finished playing (destroying a Cue whose sound
+        // has already stopped is effectively a no-op) plus any still-playing entry past the
+        // safety-net timeout -- NOT simply "older than N seconds", which would cut off any
+        // one-shot or music cue longer than that regardless of whether it was still playing.
         auto now = std::chrono::steady_clock::now();
         fireAndForget_.erase(
             std::remove_if(
                 fireAndForget_.begin(), fireAndForget_.end(),
                 [&now](const FireAndForget& faf)
                 {
-                    return std::chrono::duration_cast<std::chrono::seconds>(
-                               now - faf.created).count() >= 5;
+                    // XA-7: a paused cue is still alive too -- only a genuinely stopped cue
+                    // (neither playing nor paused) should be swept unconditionally. Without
+                    // this, pausing a fire-and-forget cue's category made the very next
+                    // PlayCue() on this bank silently destroy it.
+                    if (faf.cue && (faf.cue->getIsPlayingProperty() || faf.cue->getIsPausedProperty()))
+                    {
+                        return now - faf.created >= kFireAndForgetSafetyNet;
+                    }
+                    return true;
                 }),
             fireAndForget_.end());
+    }
+
+    void SoundBank::PlayCueInternal(const std::string& name,
+                                     const AudioListener* listener,
+                                     const AudioEmitter* emitter)
+    {
+        if (name.empty())
+            throw System::ArgumentNullException("name");
+        if (isDisposed_)
+            throw System::ObjectDisposedException("SoundBank");
+
+        SweepFireAndForget();
 
         std::unique_ptr<Cue> cue(GetCue(name));
         cue->Play();
+        // FNA computes the 3D dsp settings before FACTSoundBank_Play3D, so the cue is already
+        // positioned from its very first output frame -- Apply3D() here runs synchronously,
+        // before this thread's next real audio callback, so there is no observable difference.
+        if (listener && emitter)
+            cue->Apply3D(*listener, *emitter);
         // Keep the Cue alive so its SoundEffectInstances (and their SDL3_mixer
         // tracks) are not destroyed before the sound has had a chance to play.
-        fireAndForget_.push_back({std::move(cue), now});
-    }
-
-    void SoundBank::PlayCue(const std::string& name,
-                             const AudioListener& /*listener*/,
-                             const AudioEmitter& /*emitter*/)
-    {
-        PlayCue(name);
+        fireAndForget_.push_back({std::move(cue), std::chrono::steady_clock::now()});
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────
@@ -142,11 +185,12 @@ namespace Microsoft::Xna::Framework::Audio
         if (!isDisposed_)
         {
             Disposing.Raise(this, System::EventArgs::Empty);
+            if (engine_) engine_->UnregisterSoundBank(this); // XA-8
             fireAndForget_.clear(); // stops any still-playing fire-and-forget cues
             xactImpl_.reset();
             isDisposed_ = true;
         }
     }
 
-    GetTypeNameCPP(SoundBank, "Microsoft::Xna::Framework::Audio::SoundBank")
+    GetTypeNameCPP(SoundBank, "Microsoft.Xna.Framework.Audio.SoundBank")
 }

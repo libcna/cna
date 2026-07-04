@@ -227,4 +227,13 @@ namespace Microsoft::Xna::Framework::Content
     // preventing per-world RAM growth when worlds load unique background textures.
     template<>
     Graphics::Texture2D ContentManager::Load<Graphics::Texture2D>(const std::string& assetName);
+
+    // Explicit specialisation: SoundEffect is move-only with per-owner Dispose-cascade
+    // semantics (T-3G) -- sharing one cached instance across unrelated Load<SoundEffect>()
+    // call sites would let disposing one caller's copy silently cascade-stop another,
+    // unrelated caller's still-playing instances. Each call gets its own independently-owned
+    // SoundEffect instead; the generic loadedAssets_ any-cache (which requires T to be
+    // CopyConstructible) is skipped entirely for this type.
+    template<>
+    Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& assetName);
 }

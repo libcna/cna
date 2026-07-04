@@ -2,10 +2,12 @@
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
 
 #include <algorithm>
-#include <stdexcept>
 
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
@@ -34,11 +36,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     DynamicSoundEffectInstance::~DynamicSoundEffectInstance()
     {
-        if (!disposed_)
+        if (!getIsDisposedProperty())
         {
-            Stop();
-            DestroyStream();
-            disposed_ = true;
+            Dispose();
         }
     }
 
@@ -47,7 +47,7 @@ namespace Microsoft::Xna::Framework::Audio
     SharpRuntime::intcs DynamicSoundEffectInstance::getPendingBufferCountProperty() const
     {
         std::lock_guard<std::mutex> lock(queueMutex_);
-        return static_cast<SharpRuntime::intcs>(queuedBuffers_.size());
+        return static_cast<SharpRuntime::intcs>(queuedBuffers_.size() + submittedChunkSizes_.size());
     }
 
     bool DynamicSoundEffectInstance::getIsLoopedProperty() const
@@ -55,14 +55,14 @@ namespace Microsoft::Xna::Framework::Audio
         return false;
     }
 
-    void DynamicSoundEffectInstance::setIsLoopedProperty(bool /*value*/)
+    void DynamicSoundEffectInstance::setIsLoopedProperty(const bool& /*looped*/)
     {
-        // Dynamic instances cannot loop.
+        // No-op: DynamicSoundEffectInstance cannot be looped.
     }
 
-    bool DynamicSoundEffectInstance::getIsDisposedProperty() const
+    void DynamicSoundEffectInstance::setIsLoopedProperty(bool&& /*looped*/)
     {
-        return disposed_;
+        // No-op: DynamicSoundEffectInstance cannot be looped.
     }
 
     SoundState DynamicSoundEffectInstance::getStateProperty() const
@@ -79,29 +79,25 @@ namespace Microsoft::Xna::Framework::Audio
     System::TimeSpan DynamicSoundEffectInstance::GetSampleDuration(
         SharpRuntime::intcs sizeInBytes) const
     {
-        const int bpf = getBytesPerSampleFrame();
-        if (bpf <= 0 || sampleRate_ <= 0) return System::TimeSpan::Zero;
-        return System::TimeSpan::FromSeconds(
-            static_cast<double>(sizeInBytes) /
-            static_cast<double>(sampleRate_ * bpf)
-        );
+        // FNA delegates straight to SoundEffect.GetSampleDuration, which always assumes 16-bit
+        // PCM regardless of whether SubmitFloatBufferEXT put this instance in float (32-bit)
+        // mode -- match that exactly rather than computing from the real bytes-per-sample.
+        return SoundEffect::GetSampleDuration(sizeInBytes, sampleRate_, channels_);
     }
 
     SharpRuntime::intcs DynamicSoundEffectInstance::GetSampleSizeInBytes(
         System::TimeSpan duration) const
     {
-        return static_cast<SharpRuntime::intcs>(
-            duration.getTotalSecondsProperty() * sampleRate_ * getBytesPerSampleFrame()
-        );
+        return SoundEffect::GetSampleSizeInBytes(duration, sampleRate_, channels_);
     }
 
     // --- playback control ---
 
     void DynamicSoundEffectInstance::Play()
     {
-        if (disposed_)
+        if (getIsDisposedProperty())
         {
-            throw std::runtime_error("Cannot Play a disposed DynamicSoundEffectInstance");
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         }
 
         SoundState current = getStateProperty();
@@ -147,7 +143,9 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        MIX_SetTrackGain(track, getVolumeProperty() * SoundEffect::getMasterVolumeProperty());
+        // CP-16: master volume is applied globally via MIX_SetMixerGain, not baked into each
+        // track's own gain (that would double-apply it -- see SoundEffect::setMasterVolumeProperty).
+        MIX_SetTrackGain(track, getVolumeProperty());
 
         SDL_PropertiesID props = SDL_CreateProperties();
         if (props != 0)
@@ -178,6 +176,26 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
+    void DynamicSoundEffectInstance::Stop(bool immediate)
+    {
+        // Matches FNA's early return when there is no active voice/track yet (e.g. Stop() called
+        // before any Play()) -- only once playback has actually started does a non-immediate
+        // Stop become a meaningful (and, for dynamic instances, invalid) request.
+#ifdef SOUND_ENABLED
+        if (!AsTrackD(dynamicTrack_))
+        {
+            return;
+        }
+#endif
+        // FNA throws for a non-immediate Stop on a dynamic instance: there is no authored loop
+        // for FAudioSourceVoice_ExitLoop to release into, unlike a static SoundEffectInstance.
+        if (!immediate)
+        {
+            throw System::InvalidOperationException();
+        }
+        Stop();
+    }
+
     void DynamicSoundEffectInstance::Stop()
     {
 #ifdef SOUND_ENABLED
@@ -199,6 +217,55 @@ namespace Microsoft::Xna::Framework::Audio
         streams.erase(std::remove(streams.begin(), streams.end(), this), streams.end());
     }
 
+    void DynamicSoundEffectInstance::Pause()
+    {
+#ifdef SOUND_ENABLED
+        // CP-15: the base SoundEffectInstance::Pause() operates on the protected `track_`
+        // member, which a dynamic instance never populates (Play()/Stop() above manage their
+        // own `dynamicTrack_` instead) -- without this override, Pause()/Resume() were silent
+        // no-ops on every DynamicSoundEffectInstance.
+        MIX_Track* track = AsTrackD(dynamicTrack_);
+        if (track && getStateProperty() == SoundState::Playing)
+        {
+            MIX_PauseTrack(track);
+            State_   = SoundState::Paused;
+            playing_ = false;
+        }
+#endif
+    }
+
+    void DynamicSoundEffectInstance::Resume()
+    {
+#ifdef SOUND_ENABLED
+        MIX_Track* track = AsTrackD(dynamicTrack_);
+        if (!track)
+        {
+            // P9-VALIDATION-010: same FNA-matching rationale as the base class override -- see
+            // SoundEffectInstance::Resume(). Play() is this class's own override, so this also
+            // pumps BufferNeeded/registers with FrameworkDispatcher like a direct Play() call would.
+            Play();
+            return;
+        }
+        if (getStateProperty() == SoundState::Paused)
+        {
+            MIX_ResumeTrack(track);
+            State_   = SoundState::Playing;
+            playing_ = true;
+        }
+#endif
+    }
+
+    void DynamicSoundEffectInstance::Dispose()
+    {
+        if (getIsDisposedProperty())
+        {
+            return;
+        }
+        Stop();                          // stops/destroys the dynamic track and deregisters from the dispatcher
+        DestroyStream();                 // frees the SDL audio stream
+        SoundEffectInstance::Dispose();  // releases the base track (none) and marks the instance disposed
+    }
+
     // --- buffer submission ---
 
     void DynamicSoundEffectInstance::SubmitBuffer(
@@ -212,10 +279,27 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs offset,
         SharpRuntime::intcs count)
     {
-        if (offset < 0 || count < 0 ||
-            offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
+        // P9-VALIDATION-011: cannot queue buffers after disposal -- without this, a caller that
+        // keeps submitting after Dispose() would grow queuedBuffers_ unboundedly (the buffers
+        // would never be consumed, since Dispose() nulls dynamicTrack_ and getStateProperty()
+        // reports Stopped, so SubmitQueuedToStream() is never reached below).
+        if (getIsDisposedProperty())
         {
-            throw std::out_of_range("buffer range");
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
+        }
+
+        // P9-VALIDATION-010: offset+count must never be computed as a plain intcs addition -- see
+        // SoundEffect's buffer/range constructor for why (int32 overflow can silently wrap past
+        // this check, then buffer.begin()+offset+count below is out-of-bounds iterator arithmetic).
+        if (offset < 0 || count < 0)
+        {
+            throw System::ArgumentOutOfRangeException("count");
+        }
+        const auto off = static_cast<std::size_t>(offset);
+        const auto cnt = static_cast<std::size_t>(count);
+        if (off > buffer.size() || cnt > buffer.size() - off)
+        {
+            throw System::ArgumentOutOfRangeException("count");
         }
 
         std::vector<SharpRuntime::bytecs> chunk(
@@ -246,10 +330,29 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs offset,
         SharpRuntime::intcs count)
     {
-        if (offset < 0 || count < 0 ||
-            offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
+        // P9-VALIDATION-011: see SubmitBuffer's identical guard above.
+        if (getIsDisposedProperty())
         {
-            throw std::out_of_range("buffer range");
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
+        }
+
+        // P9-VALIDATION-010: overflow-safe bounds check, see SubmitBuffer above.
+        if (offset < 0 || count < 0)
+        {
+            throw System::ArgumentOutOfRangeException("count");
+        }
+        const auto off = static_cast<std::size_t>(offset);
+        const auto cnt = static_cast<std::size_t>(count);
+        if (off > buffer.size() || cnt > buffer.size() - off)
+        {
+            throw System::ArgumentOutOfRangeException("count");
+        }
+
+        // The format may only switch from int to float while stopped; otherwise the live
+        // S16 stream would be fed F32 bytes. EnsureStream rebuilds the stream on the next Play.
+        if (!isFloat_ && getStateProperty() != SoundState::Stopped)
+        {
+            throw System::InvalidOperationException("Submit a float buffer before Playing!");
         }
 
         isFloat_ = true;
@@ -280,6 +383,7 @@ namespace Microsoft::Xna::Framework::Audio
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
             queuedBuffers_.clear();
+            submittedChunkSizes_.clear();
         }
 
 #ifdef SOUND_ENABLED
@@ -301,6 +405,29 @@ namespace Microsoft::Xna::Framework::Audio
         // Submit any freshly queued buffers.
         SubmitQueuedToStream();
 
+#ifdef SOUND_ENABLED
+        // A submitted chunk only counts as consumed once the stream reports it no longer holds
+        // that many bytes queued as input (matches FNA polling the native voice's real
+        // BuffersQueued state) -- not the instant it was handed to SDL.
+        SDL_AudioStream* stream = AsStream(audioStream_);
+        if (stream)
+        {
+            const int queuedBytes = SDL_GetAudioStreamQueued(stream);
+            if (queuedBytes >= 0)
+            {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                std::size_t total = 0;
+                for (std::size_t size : submittedChunkSizes_) total += size;
+                while (!submittedChunkSizes_.empty() &&
+                       total > static_cast<std::size_t>(queuedBytes))
+                {
+                    total -= submittedChunkSizes_.front();
+                    submittedChunkSizes_.pop_front();
+                }
+            }
+        }
+#endif
+
         // Raise BufferNeeded while we are short of MINIMUM_BUFFER_CHECK worth of data.
         for (
             SharpRuntime::intcs i = MINIMUM_BUFFER_CHECK - getPendingBufferCountProperty();
@@ -314,16 +441,15 @@ namespace Microsoft::Xna::Framework::Audio
 
     // --- private helpers ---
 
-    SharpRuntime::intcs DynamicSoundEffectInstance::getBytesPerSampleFrame() const
-    {
-        const int bytesPerSample = isFloat_ ? 4 : 2;
-        return static_cast<SharpRuntime::intcs>(channels_) * bytesPerSample;
-    }
-
     void DynamicSoundEffectInstance::EnsureStream()
     {
 #ifdef SOUND_ENABLED
-        if (audioStream_) return;
+        if (audioStream_ && streamIsFloat_ == isFloat_) return;
+        if (audioStream_)
+        {
+            // The sample format changed (int -> float) since the stream was created; rebuild it.
+            DestroyStream();
+        }
 
         SDL_AudioSpec spec{};
         spec.format   = isFloat_ ? SDL_AUDIO_F32LE : SDL_AUDIO_S16LE;
@@ -332,6 +458,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         // dst_spec nullptr → SDL3 uses the device's native format for output conversion.
         audioStream_ = SDL_CreateAudioStream(&spec, nullptr);
+        streamIsFloat_ = isFloat_;
 #endif
     }
 
@@ -366,6 +493,9 @@ namespace Microsoft::Xna::Framework::Audio
                 chunk.data(),
                 static_cast<int>(chunk.size())
             );
+
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            submittedChunkSizes_.push_back(chunk.size());
         }
 #endif
     }

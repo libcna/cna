@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #ifdef SOUND_ENABLED
@@ -28,6 +29,10 @@ namespace CNA::Internal::Audio
             g_mixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
             if (!g_mixer)
             {
+                // IN-11: MIX_Init()/MIX_Quit() are reference-counted; without this, every
+                // failed retry (e.g. no audio hardware present) leaks another MIX_Init()
+                // refcount that's never balanced by a matching MIX_Quit().
+                MIX_Quit();
                 throw std::runtime_error(std::string("MIX_CreateMixerDevice failed: ") + SDL_GetError());
             }
         }

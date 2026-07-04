@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
+
 #include <chrono>
 #include <memory>
 #include <string>
@@ -32,6 +34,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param audioEngine The audio engine that owns this bank.
          * @param filename    Path to the .XSB SoundBank file.
+         * @throws System::ArgumentNullException if @p audioEngine is null or @p filename is empty.
          */
         SoundBank(AudioEngine* audioEngine, const std::string& filename);
 
@@ -51,7 +54,10 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Gets whether this sound bank is still in use by active cues.
          *
-         * @return true if any cue from this bank is still active; otherwise false.
+         * Reflects only fire-and-forget cues owned by this bank (created internally by
+         * PlayCue); cues obtained via GetCue are owned by the caller and not tracked here.
+         *
+         * @return true if an owned cue is still playing; otherwise false.
          */
         [[nodiscard]] bool getIsInUseProperty() const;
 
@@ -60,6 +66,9 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param name Cue name as defined in the .XSB file.
          * @return Pointer to the new Cue (caller is responsible for disposal).
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::ObjectDisposedException if the bank has been disposed.
+         * @throws System::InvalidOperationException if @p name is not a valid cue name.
          */
         [[nodiscard]] Cue* GetCue(const std::string& name);
 
@@ -67,6 +76,9 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Plays the named cue as a fire-and-forget sound.
          *
          * @param name Cue name as defined in the .XSB file.
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::ObjectDisposedException if the bank has been disposed.
+         * @throws System::InvalidOperationException if @p name is not a valid cue name.
          */
         void PlayCue(const std::string& name);
 
@@ -76,6 +88,9 @@ namespace Microsoft::Xna::Framework::Audio
          * @param name     Cue name as defined in the .XSB file.
          * @param listener Position and orientation of the audio listener.
          * @param emitter  Position and orientation of the sound emitter.
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::ObjectDisposedException if the bank has been disposed.
+         * @throws System::InvalidOperationException if @p name is not a valid cue name.
          */
         void PlayCue(const std::string& name,
                      const AudioListener& listener,
@@ -84,8 +99,15 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Releases the sound bank and all its cue resources. */
         void Dispose() override;
 
+        GetTypeNameHPP()
+
     private:
         friend class Cue;
+        // P9-LIFECYCLE-008/009: AudioEngine::Update() calls SweepFireAndForget() on every
+        // registered bank, mirroring FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork, which
+        // is what actually destroys managed/fire-and-forget cues once FACT_STATE_STOPPED
+        // (FACT_internal.c) instead of waiting for this bank's next PlayCue() call.
+        friend class AudioEngine;
 
         AudioEngine* engine_;
         bool isDisposed_ = false;
@@ -95,8 +117,22 @@ namespace Microsoft::Xna::Framework::Audio
 
         const CNA::Internal::Audio::XsbData* GetXsbData() const;
 
-        // Fire-and-forget cues from PlayCue() — kept alive until the sound
-        // duration has elapsed, then swept on the next PlayCue() call.
+        // Shared by both PlayCue() overloads; listener/emitter are null for the non-3D one, in
+        // which case Apply3D isn't called (T-4B).
+        void PlayCueInternal(const std::string& name,
+                              const AudioListener* listener,
+                              const AudioEmitter* emitter);
+
+        // Removes finished fire-and-forget cues; factored out of PlayCueInternal so
+        // AudioEngine::Update() can also trigger it promptly (see the AudioEngine friend
+        // declaration above) instead of only sweeping on this bank's next PlayCue() call.
+        void SweepFireAndForget();
+
+        // Fire-and-forget cues from PlayCue() — kept alive while playing (FNA has no C#-visible
+        // handle for these; FACT tracks cue lifetime natively), swept once IsPlaying goes false
+        // on the next PlayCue() call. A long safety-net timeout also force-sweeps a still-playing
+        // entry so a caller that only ever PlayCue()s a looping/very long cue can't grow this
+        // list unbounded; ordinary finite-duration cues are always swept via IsPlaying first.
         struct FireAndForget
         {
             std::unique_ptr<Cue> cue;
@@ -104,6 +140,8 @@ namespace Microsoft::Xna::Framework::Audio
         };
         std::vector<FireAndForget> fireAndForget_;
 
-        GetTypeNameHPP()
+        // Tests need to inspect fireAndForget_'s size and backdate entries to exercise the sweep
+        // logic's time-based branches without a real-time wait.
+        NOXNA friend struct SoundBankTestAccess;
     };
 }

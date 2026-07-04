@@ -2,12 +2,17 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
+#include <algorithm>
+#include <exception>
 #include <fstream>
 #include <iostream>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -25,6 +30,10 @@ namespace Microsoft::Xna::Framework::Audio
 
         // Wavebank registry (bank name → pointer)
         std::unordered_map<std::string, WaveBank*> waveBanks;
+
+        // SoundBank registry, symmetric to waveBanks above (XA-8) -- no natural unique key like
+        // WaveBank's bank name, so this is just a flat list of every live SoundBank.
+        std::vector<SoundBank*> soundBanks;
 
         // Active cues (for category-level operations)
         std::vector<Cue*> activeCues;
@@ -44,8 +53,11 @@ namespace Microsoft::Xna::Framework::Audio
                              System::TimeSpan /*lookAheadTime*/,
                              const std::string& /*rendererId*/)
     {
+        // lookAheadTime/rendererId are intentionally unused: CNA has exactly one backend
+        // (SDL3_mixer, see getRendererDetailsProperty()), so there is nothing to select between,
+        // and SDL3_mixer has no FACT-style scheduling look-ahead to configure (plan_audio.md XA-4).
         if (settingsFile.empty())
-            throw std::invalid_argument("settingsFile must not be empty");
+            throw System::ArgumentNullException("settingsFile");
 
         Init(settingsFile);
     }
@@ -116,9 +128,9 @@ namespace Microsoft::Xna::Framework::Audio
     AudioCategory AudioEngine::GetCategory(const std::string& name)
     {
         if (name.empty())
-            throw std::invalid_argument("name must not be empty");
+            throw System::ArgumentNullException("name");
         if (isDisposed_)
-            throw std::runtime_error("AudioEngine is disposed");
+            throw System::ObjectDisposedException("AudioEngine");
 
         if (xactImpl_)
         {
@@ -127,16 +139,15 @@ namespace Microsoft::Xna::Framework::Audio
                 return AudioCategory(this, it->second, name);
         }
 
-        // Unknown category — return stub with an out-of-range index so operations are no-ops
-        return AudioCategory(this, static_cast<unsigned short>(0xFFFF), name);
+        throw System::InvalidOperationException("Invalid category name!");
     }
 
     float AudioEngine::GetGlobalVariable(const std::string& name) const
     {
         if (name.empty())
-            throw std::invalid_argument("name must not be empty");
+            throw System::ArgumentNullException("name");
         if (isDisposed_)
-            throw std::runtime_error("AudioEngine is disposed");
+            throw System::ObjectDisposedException("AudioEngine");
 
         if (xactImpl_)
         {
@@ -144,23 +155,51 @@ namespace Microsoft::Xna::Framework::Audio
             if (it != xactImpl_->globalVariables.end())
                 return it->second;
         }
-        throw std::runtime_error("Invalid global variable name: " + name);
+        throw System::InvalidOperationException("Invalid variable name!");
     }
 
     void AudioEngine::SetGlobalVariable(const std::string& name, float value)
     {
         if (name.empty())
-            throw std::invalid_argument("name must not be empty");
+            throw System::ArgumentNullException("name");
         if (isDisposed_)
-            throw std::runtime_error("AudioEngine is disposed");
+            throw System::ObjectDisposedException("AudioEngine");
 
         if (xactImpl_)
-            xactImpl_->globalVariables[name] = value;
+        {
+            auto it = xactImpl_->globalVariables.find(name);
+            if (it == xactImpl_->globalVariables.end())
+                throw System::InvalidOperationException("Invalid variable name!");
+            it->second = value;
+        }
+    }
+
+    const std::string* AudioEngine::GetVariableNameByIndex(SharpRuntime::shortcs index) const
+    {
+        if (!xactImpl_ || index < 0
+            || static_cast<std::size_t>(index) >= xactImpl_->xgs.variables.size())
+            return nullptr;
+        return &xactImpl_->xgs.variables[static_cast<std::size_t>(index)].name;
+    }
+
+    const CNA::Internal::Audio::XgsRpc* AudioEngine::FindRpcByCode(SharpRuntime::uintcs code) const
+    {
+        if (!xactImpl_) return nullptr;
+        auto it = xactImpl_->xgs.rpcCodeMap.find(code);
+        if (it == xactImpl_->xgs.rpcCodeMap.end()) return nullptr;
+        return &xactImpl_->xgs.rpcs[it->second];
     }
 
     void AudioEngine::Update()
     {
-        // No streaming or notification work needed for SDL3_mixer.
+        // P9-LIFECYCLE-008/009: mirrors FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork,
+        // which is what actually destroys managed/fire-and-forget cues once FACT_STATE_STOPPED
+        // (FACT_internal.c), instead of only sweeping lazily on a bank's next PlayCue() call.
+        // Cue-level Playing/Paused/Stopped reconciliation itself is live and per-call (see
+        // Cue::ReconcileState()), so it needs no help from Update() to stay accurate.
+        if (!xactImpl_) return;
+        for (auto* sb : xactImpl_->soundBanks)
+            if (sb) sb->SweepFireAndForget();
     }
 
     void AudioEngine::Dispose()
@@ -168,8 +207,37 @@ namespace Microsoft::Xna::Framework::Audio
         if (!isDisposed_)
         {
             Disposing.Raise(this, System::EventArgs::Empty);
+
+            // XA-8: cascade disposal to every WaveBank/SoundBank/Cue this engine created,
+            // matching FNA's native OnXACTNotification(WAVEBANKDESTROYED/SOUNDBANKDESTROYED/
+            // CUEDESTROYED), which immediately flips IsDisposed on every dependent wrapper once
+            // the native engine goes away. Snapshot the registries into local vectors and reset
+            // xactImpl_ FIRST: each object's own Dispose() below calls back into
+            // Unregister{WaveBank,SoundBank,Cue}(), which would otherwise mutate these same
+            // containers while we're iterating them; with xactImpl_ already null, those
+            // reentrant calls become harmless no-ops (see their own null guards).
+            std::vector<WaveBank*> waveBanks;
+            std::vector<SoundBank*> soundBanks;
+            std::vector<Cue*> cues;
+            if (xactImpl_)
+            {
+                waveBanks.reserve(xactImpl_->waveBanks.size());
+                for (auto& [name, wb] : xactImpl_->waveBanks)
+                    waveBanks.push_back(wb);
+                soundBanks = xactImpl_->soundBanks;
+                cues       = xactImpl_->activeCues;
+            }
+
             rendererDetails_.clear();
             xactImpl_.reset();
+
+            for (auto* cue : cues)
+                if (cue) cue->Dispose();
+            for (auto* sb : soundBanks)
+                if (sb) sb->Dispose();
+            for (auto* wb : waveBanks)
+                if (wb) wb->Dispose();
+
             isDisposed_ = true;
         }
     }
@@ -197,6 +265,21 @@ namespace Microsoft::Xna::Framework::Audio
         return (it != xactImpl_->waveBanks.end()) ? it->second : nullptr;
     }
 
+    // ── SoundBank registry ────────────────────────────────────────────────────
+
+    void AudioEngine::RegisterSoundBank(SoundBank* sb)
+    {
+        if (!sb || !xactImpl_) return;
+        xactImpl_->soundBanks.push_back(sb);
+    }
+
+    void AudioEngine::UnregisterSoundBank(SoundBank* sb)
+    {
+        if (!sb || !xactImpl_) return;
+        auto& v = xactImpl_->soundBanks;
+        v.erase(std::remove(v.begin(), v.end(), sb), v.end());
+    }
+
     // ── Category state ────────────────────────────────────────────────────────
 
     float AudioEngine::GetCategoryVolume(unsigned short idx) const
@@ -215,19 +298,22 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!xactImpl_ || idx >= xactImpl_->categoryVolumes.size()) return;
         xactImpl_->categoryVolumes[idx] = vol;
-        // Apply to all active cues in this category
-        for (auto* cue : xactImpl_->activeCues)
-        {
+        // P9-CATEGORY-001: snapshot before iterating -- ApplyCategoryVolume() itself never
+        // mutates activeCues today, but this stays consistent with the other three category
+        // operations below (one of which has a real reentrant-mutation bug) rather than relying
+        // on "this particular callee happens not to touch the registry" staying true forever.
+        std::vector<Cue*> cues = xactImpl_->activeCues;
+        for (auto* cue : cues)
             if (cue && cue->categoryIdx_ == idx)
-                ; // Cue would need to re-apply volume — skipped for simplicity
-        }
+                cue->ApplyCategoryVolume(vol);
     }
 
     void AudioEngine::PauseCategoryInternal(unsigned short idx)
     {
         if (!xactImpl_ || idx >= xactImpl_->categoryPaused.size()) return;
         xactImpl_->categoryPaused[idx] = true;
-        for (auto* cue : xactImpl_->activeCues)
+        std::vector<Cue*> cues = xactImpl_->activeCues; // P9-CATEGORY-001, see SetCategoryVolumeInternal
+        for (auto* cue : cues)
             if (cue && cue->categoryIdx_ == idx && cue->getIsPlayingProperty())
                 cue->Pause();
     }
@@ -236,7 +322,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!xactImpl_ || idx >= xactImpl_->categoryPaused.size()) return;
         xactImpl_->categoryPaused[idx] = false;
-        for (auto* cue : xactImpl_->activeCues)
+        std::vector<Cue*> cues = xactImpl_->activeCues; // P9-CATEGORY-001, see SetCategoryVolumeInternal
+        for (auto* cue : cues)
             if (cue && cue->categoryIdx_ == idx && cue->getIsPausedProperty())
                 cue->Resume();
     }
@@ -245,7 +332,16 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!xactImpl_) return;
         auto opt = immediate ? AudioStopOptions::Immediate : AudioStopOptions::AsAuthored;
-        for (auto* cue : xactImpl_->activeCues)
+        // P9-CATEGORY-001: MUST snapshot here, unlike the three methods above this is a real bug,
+        // not just defensive symmetry -- Cue::Stop() cascades to StopInternal(), which
+        // unconditionally calls AudioEngine::UnregisterCue(), erasing the cue from this exact
+        // xactImpl_->activeCues vector. Iterating the live vector directly means the erase
+        // invalidates the range-for's cached end() iterator mid-loop; with 3+ cues in the same
+        // category this reliably skips stopping at least one of them (verified by hand-tracing
+        // std::remove's element shifts, and by a real regression test -- see
+        // StopStopsAllActiveCuesInCategoryNotJustSomeOfThem in AudioCategoryTests.cpp).
+        std::vector<Cue*> cues = xactImpl_->activeCues;
+        for (auto* cue : cues)
             if (cue && cue->categoryIdx_ == idx)
                 cue->Stop(opt);
     }
@@ -255,7 +351,14 @@ namespace Microsoft::Xna::Framework::Audio
     void AudioEngine::RegisterCue(Cue* cue)
     {
         if (!xactImpl_ || !cue) return;
-        xactImpl_->activeCues.push_back(cue);
+        // P9-LIFECYCLE-011: Cue::Play() already rejects being called twice on an already
+        // Playing/Paused/Stopping/Stopped cue (see Cue::Play()'s ReconcileState() + state guard),
+        // so this path shouldn't be reachable in practice; guarded anyway as defense-in-depth for
+        // the registry itself, since a duplicate entry here would make every category-wide
+        // operation (Pause/Resume/Stop/SetVolume) apply itself twice to the same cue.
+        auto& v = xactImpl_->activeCues;
+        if (std::find(v.begin(), v.end(), cue) != v.end()) return;
+        v.push_back(cue);
     }
 
     void AudioEngine::UnregisterCue(Cue* cue)
@@ -265,5 +368,15 @@ namespace Microsoft::Xna::Framework::Audio
         v.erase(std::remove(v.begin(), v.end(), cue), v.end());
     }
 
-    GetTypeNameCPP(AudioEngine, "Microsoft::Xna::Framework::Audio::AudioEngine")
+    bool AudioEngine::IsValidVariableName(const std::string& name) const
+    {
+        return xactImpl_ && xactImpl_->globalVariables.find(name) != xactImpl_->globalVariables.end();
+    }
+
+    std::size_t AudioEngine::ActiveCueCountForTest() const
+    {
+        return xactImpl_ ? xactImpl_->activeCues.size() : 0;
+    }
+
+    GetTypeNameCPP(AudioEngine, "Microsoft.Xna.Framework.Audio.AudioEngine")
 }

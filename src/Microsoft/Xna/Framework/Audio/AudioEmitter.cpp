@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 
-#include <stdexcept>
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -23,7 +23,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (value < 0.0f)
         {
-            throw std::out_of_range("AudioEmitter.DopplerScale must be >= 0.0f");
+            throw System::ArgumentOutOfRangeException(
+                "AudioEmitter.DopplerScale must be greater than or equal to 0.0f");
         }
         dopplerScale_ = value;
     }

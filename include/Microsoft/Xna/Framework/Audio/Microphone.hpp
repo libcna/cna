@@ -14,6 +14,8 @@
 #include "System/TimeSpan.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
+struct SDL_AudioStream;
+
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Represents a microphone capture device. */
@@ -25,6 +27,14 @@ namespace Microsoft::Xna::Framework::Audio
 
         /** @brief Raised when enough captured data is available to be read. */
         System::EventHandler<System::EventArgs> BufferReady;
+
+        /** @brief Destructor; closes this device's capture stream if it is still open. */
+        ~Microphone() override;
+
+        Microphone(const Microphone&) = delete;
+        Microphone& operator=(const Microphone&) = delete;
+        Microphone(Microphone&&) = delete;
+        Microphone& operator=(Microphone&&) = delete;
 
         /**
          * @brief Gets the list of all available microphone devices.
@@ -40,9 +50,6 @@ namespace Microsoft::Xna::Framework::Audio
          */
         [[nodiscard]] static Microphone* getDefaultProperty();
 
-        /** @brief Cached microphone list used by the framework dispatcher. */
-        NOXNA static std::vector<Microphone*>* micList;
-
         /**
          * @brief Gets the duration threshold used for BufferReady notifications.
          *
@@ -54,6 +61,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets the duration threshold used for BufferReady notifications.
          *
          * @param value New buffer duration.
+         * @throws System::ArgumentOutOfRangeException if the millisecond component of
+         *         @p value is outside [100, 999] or is not a multiple of 10.
          */
         void setBufferDurationProperty(System::TimeSpan value);
 
@@ -93,6 +102,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @param offset Byte offset within the buffer to start writing.
          * @param count  Maximum number of bytes to read.
          * @return Number of bytes actually read.
+         * @throws System::ArgumentException if @p offset is negative or beyond @p buffer,
+         *         or if @p count is not positive or @p offset + @p count exceeds @p buffer.
          */
         SharpRuntime::intcs GetData(std::vector<SharpRuntime::bytecs>& buffer, SharpRuntime::intcs offset,
                                     SharpRuntime::intcs count);
@@ -119,20 +130,34 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Stops capturing audio samples from this device. */
         void Stop();
 
-        /** @brief Checks whether enough data is queued and raises BufferReady when needed. */
-        NOXNA void CheckBuffer();
+        /** @brief Calls CheckBuffer() on every known microphone (used by FrameworkDispatcher::Update). */
+        NOXNA static void CheckAllBuffers();
 
-        /** @brief Fixed capture sample rate used by XNA microphone capture. */
-        NOXNA static constexpr SharpRuntime::intcs SAMPLERATE = 44100;
+        GetTypeNameHPP()
 
     private:
-        friend class MicrophoneFactory;
+        // MC-6: FNA has this as `internal void CheckBuffer()` -- it must not be a public C++ API
+        // method (CLAUDE.md's Visibility Mapping; also T-1H's own accept criterion). The public,
+        // sanctioned bridge for FrameworkDispatcher is the static CheckAllBuffers() above, which
+        // already has private-member access to every instance's CheckBuffer() as a same-class
+        // static method, so it doesn't need CheckBuffer() itself to be public.
+        NOXNA void CheckBuffer();
+
+        // Production Microphone instances are constructed directly by getAllProperty() from
+        // the enumerated SDL3 capture devices; tests need a way to construct an isolated
+        // instance directly, independent of whatever the current machine/driver enumerates.
+        NOXNA friend struct MicrophoneTestAccess;
 
         Microphone(SharpRuntime::uintcs id, std::string name);
 
         System::TimeSpan bufferDuration_;
         SharpRuntime::uintcs handle_;
         MicrophoneState state_;
+        SDL_AudioStream* captureStream_ = nullptr;
+
+        // FNA internals (Microphone.cs: micList, SAMPLERATE are both `internal`), not CNA additions.
+        static std::vector<Microphone*>* micList;
+        static constexpr SharpRuntime::intcs SAMPLERATE = 44100;
 
         static std::vector<std::unique_ptr<Microphone>> microphoneStorage_;
 

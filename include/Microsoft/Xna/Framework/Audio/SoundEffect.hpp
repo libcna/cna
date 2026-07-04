@@ -8,16 +8,16 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
-#include "Microsoft/Xna/Framework/Audio/SoundEffectI.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "System/IDisposable.hpp"
+#include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Represents a loaded sound effect asset. */
-    class SoundEffect final : public SoundEffectI, public System::IDisposable
+    class SoundEffect final : public System::Object, public System::IDisposable
     {
         friend class SoundEffectInstance;
 
@@ -39,6 +39,15 @@ namespace Microsoft::Xna::Framework::Audio
 
         /** @brief Internal constructor that wraps a preloaded Impl. */
         explicit SoundEffect(std::shared_ptr<Impl> impl, std::string name = {});
+
+        // Instance-tracking + Dispose cascade (T-3G, matches FNA's SoundEffect.Instances):
+        // SoundEffectInstance registers itself here on construction against the type-erased
+        // keep-alive it holds (see SoundEffectInstance::soundEffectKeepAlive_), unregisters on
+        // Dispose(), and re-points registration when moved (its own address changes). Static and
+        // keyed by the keep-alive pointer, not a SoundEffect&, because an instance must be able
+        // to unregister itself long after the original SoundEffect object is gone.
+        static void RegisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance);
+        static void UnregisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance);
 
     public:
         /**
@@ -81,9 +90,22 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Destroys the sound effect and releases audio resources. */
         ~SoundEffect() override;
 
-        SoundEffect(const SoundEffect&) = default;
-        SoundEffect& operator=(const SoundEffect&) = default;
+        /**
+         * @brief SoundEffect is move-only (T-3G): matching FNA's single-object instance
+         * tracking (SoundEffect::Dispose() cascades to every live SoundEffectInstance created
+         * via CreateInstance()) requires a single, unambiguous owner per underlying resource --
+         * two independent copies could otherwise disagree about which one's Dispose() call
+         * is authoritative.
+         */
+        SoundEffect(const SoundEffect&) = delete;
+
+        /** @brief Deleted; see the copy constructor's rationale. */
+        SoundEffect& operator=(const SoundEffect&) = delete;
+
+        /** @brief Move-constructs a SoundEffect, transferring ownership of the underlying resource. */
         SoundEffect(SoundEffect&&) noexcept = default;
+
+        /** @brief Move-assigns a SoundEffect, transferring ownership of the underlying resource. */
         SoundEffect& operator=(SoundEffect&&) noexcept = default;
 
         // --- Properties ---
@@ -129,7 +151,9 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] static float getMasterVolumeProperty();
 
         /**
-         * @brief Sets the global master volume applied to all sound effects. Clamped to [0, 1].
+         * @brief Sets the global master volume applied to all sound effects.
+         *
+         * Values are passed through unclamped (matching FNA).
          *
          * @param v New master volume.
          */
@@ -193,7 +217,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @return A new SoundEffectInstance bound to this effect.
          */
-        [[nodiscard]] SoundEffectInstance CreateInstance() const override;
+        [[nodiscard]] SoundEffectInstance CreateInstance() const;
 
         /**
          * @brief Plays the sound effect once at full volume with default pitch and pan.
@@ -206,9 +230,10 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Plays the sound effect once with explicit volume, pitch, and pan.
          *
          * @param volume Volume in the range [0, 1].
-         * @param pitch  Pitch adjustment in the range [-1, 1].
+         * @param pitch  Pitch adjustment; clamped to [-1, 1].
          * @param pan    Pan in the range [-1 (left), 1 (right)].
          * @return true if the sound started playing; false if the instance limit was reached.
+         * @throws System::ArgumentOutOfRangeException if @p pan is outside [-1, 1].
          */
         bool Play(float volume, float pitch, float pan);
 
@@ -250,5 +275,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @return Pointer to the newly created SoundEffect.
          */
         [[nodiscard]] static SoundEffect* FromStream(std::istream& stream);
+
+        GetTypeNameHPP()
     };
 }

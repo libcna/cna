@@ -27,9 +27,14 @@ namespace Microsoft::Xna::Framework::Audio
         return friendlyName_;
     }
 
-    bool RendererDetail::operator==(const RendererDetail& other) const
+    bool RendererDetail::Equals(const RendererDetail& other) const
     {
         return rendererId_ == other.rendererId_;
+    }
+
+    bool RendererDetail::operator==(const RendererDetail& other) const
+    {
+        return Equals(other);
     }
 
     bool RendererDetail::operator!=(const RendererDetail& other) const

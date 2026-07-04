@@ -67,27 +67,32 @@ and corrected or confirmed as expected C++ adaptations.
 
 ## `Microsoft::Xna::Framework::Audio`
 
+> **Last synchronized against real code: 2026-07-04 (Fáze 9 `P9-DOCS-001`).** For the full,
+> up-to-date compatibility table (implemented / approximate / intentionally unsupported / not yet
+> implemented) and the SDL3_mixer-vs-FAudio backend limitations behind these notes, see
+> `docs/xna-4-api-coverage.md`'s Audio section. This table is a per-class summary only.
+
 | Class / Enum | Status | Notes |
 |---|---|---|
-| AudioCategory | ✅ | API complete |
+| AudioCategory | ✅ | API complete; `Pause`/`Resume`/`Stop`/`SetVolume` route to every real active `Cue` in the category over a mutation-safe snapshot (`P9-CATEGORY-001`), not a live-iterated list; `SetVolume` retroactively re-applies to already-playing instances (`T-4D`) |
 | AudioChannels (enum) | ✅ | Complete |
 | AudioEmitter | ✅ | API complete |
-| AudioEngine | ✅ | API complete (stub behavior) |
+| AudioEngine | ✅ | API complete; real `System::` exceptions; validated `GetCategory`/`SetGlobalVariable`; category-volume live re-apply to already-playing cues (`T-4D`); `Update()` sweeps every registered `SoundBank`'s finished fire-and-forget cues (`P9-LIFECYCLE-008`); `Dispose()` cascades to every `WaveBank`/`SoundBank`/`Cue` it created (`XA-8`). 3D pan/attenuation is real (see `Cue`/`SoundEffectInstance` below), not stubbed |
 | AudioListener | ✅ | API complete |
 | AudioStopOptions (enum) | ✅ | Complete |
-| Cue | ✅ | API complete (stub behavior) |
-| DynamicSoundEffectInstance | ✅ | API complete |
+| Cue | ✅ | API complete; real state machine that naturally reconciles `IsPlaying`/`IsPaused`/`IsStopped` once playback actually finishes (`P9-LIFECYCLE-001`, was previously stuck `Playing` forever); `Play()` rejects being called again on an already Playing/Paused/Stopped cue (`P9-LIFECYCLE-010`); `GetVariable`/`SetVariable` throw `ObjectDisposedException` (`P9-LIFECYCLE-015`); `Apply3D` forwards to `SoundEffectInstance::Apply3D` (`T-4B`) — a real effect, not a no-op. Accepted deviation: `IsPlaying`/`IsPaused` are mutually exclusive here, unlike real FACT where pausing never clears the `PLAYING` bit (`P9-LIFECYCLE-013`, documented not fixed) |
+| DynamicSoundEffectInstance | ✅ | API complete; `Pause`/`Resume` operate on the real `dynamicTrack_` (`CP-15`); `Resume()` starts playback when never-played, matching FNA (`P9-VALIDATION-010`); `SubmitBuffer`/`SubmitFloatBufferEXT` reject disposal (`P9-VALIDATION-011`) and validate `offset`/`count` overflow-safely (`P9-VALIDATION-003`/`010`, fixes a real out-of-bounds read confirmed by a segfault) |
 | InstancePlayLimitException | ✅ | Complete |
-| Microphone | ✅ | API complete (stub behavior) |
+| Microphone | ✅ | API complete — real SDL3 capture (enumeration, Start/Stop, GetData/GetQueuedBytes); GetSampleDuration/GetSampleSizeInBytes delegates to SoundEffect (plan_audio.md MC-1, done); `CheckBuffer()` is private, matching FNA's `internal` (`MC-6`) |
 | MicrophoneState (enum) | ✅ | Complete |
-| NoAudioHardwareException | ✅ | Complete |
+| NoAudioHardwareException | ✅ | Type complete; never actually thrown by the audio backend (accepted deviation, `CP-18`/`XA-9`, consulted with the user) |
 | NoMicrophoneConnectedException | ✅ | Complete |
 | RendererDetail | ✅ | API complete |
-| SoundBank | ✅ | API complete (stub behavior) |
-| SoundEffect | ✅ | Implemented (SDL_mixer) |
-| SoundEffectInstance | ✅ | Implemented (SDL_mixer) |
+| SoundBank | ✅ | API complete; real `IsInUse` (treats `IsPlaying \|\| IsPaused` as alive, `XA-7`) and `GetCue` (throws on invalid name); 3D `PlayCue` forwards to `Cue::Apply3D` (`T-4B`) — uses the real listener/emitter, doesn't ignore them; registers with `AudioEngine` for the `Dispose()` cascade (`XA-8`) |
+| SoundEffect | ✅ | Implemented (SDL3_mixer); move-only with real instance-tracking + `Dispose()` cascade to every live `SoundEffectInstance` (`T-3G`); `MasterVolume` reads/writes the real live SDL3_mixer master gain (`CP-16`); loop region (`loopStart`/`loopLength`) actually applied at `Play()`, `FromStream` parses the WAV `smpl` chunk (`CP-17`/`CP-23`); buffer/range constructor validates `offset`/`count` overflow-safely (`P9-VALIDATION-003`, fixes a real out-of-bounds read confirmed by a segfault) |
+| SoundEffectInstance | ✅ | Implemented (SDL3_mixer); real low/high/band-pass filters via a per-track callback, reverb stays a documented no-op (`T-4C`); `Apply3D` is a real pan + distance-attenuation approximation (`CP-3`); `Resume()` starts playback when never-played or after `Dispose()` (`P9-VALIDATION-010`, matches FNA's own quirk) |
 | SoundState (enum) | ✅ | Complete |
-| WaveBank | ✅ | API complete (stub behavior) |
+| WaveBank | ✅ | API complete; real `IsInUse`; streaming ctor does real lazy per-entry disk reads (`T-3F`) — only the non-streaming ctor loads the whole file eagerly |
 
 ---
 

@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <mutex>
 #include <vector>
 
@@ -56,16 +57,15 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Attempting to set IsLooped on a dynamic instance has no effect.
          *
-         * @param value Ignored.
+         * @param looped Ignored.
          */
-        void setIsLoopedProperty(bool value);
+        void setIsLoopedProperty(const bool& looped) override;
 
-        /**
-         * @brief Gets whether this instance has been disposed.
-         *
-         * @return true if disposed; otherwise false.
-         */
-        [[nodiscard]] bool getIsDisposedProperty() const;
+        /** @brief Attempting to set IsLooped on a dynamic instance has no effect (move overload). */
+        NOXNA void setIsLoopedProperty(bool&& looped) override;
+
+        /** @brief Stops playback, releases the dynamic audio stream, and disposes the instance. */
+        void Dispose() override;
 
         /**
          * @brief Converts a byte count to playback duration for this instance's format.
@@ -88,6 +88,21 @@ namespace Microsoft::Xna::Framework::Audio
 
         /** @brief Stops playback and clears all queued buffers. */
         void Stop() override;
+
+        /**
+         * @brief Stops playback and clears all queued buffers.
+         *
+         * @param immediate Must be true; dynamic instances have no authored loop to release
+         *        into, so a non-immediate stop is not a valid operation.
+         * @throws System::InvalidOperationException if @p immediate is false.
+         */
+        void Stop(bool immediate) override;
+
+        /** @brief Pauses playback of this instance. */
+        void Pause() override;
+
+        /** @brief Resumes a paused instance. */
+        void Resume() override;
 
         /**
          * @brief Submits a complete 16-bit PCM byte buffer for playback.
@@ -141,11 +156,13 @@ namespace Microsoft::Xna::Framework::Audio
          */
         [[nodiscard]] SoundState getStateProperty() const override;
 
+        GetTypeNameHPP()
+
     private:
         SharpRuntime::intcs sampleRate_;
         AudioChannels       channels_;
         bool                isFloat_ = false;
-        bool                disposed_ = false;
+        bool                streamIsFloat_ = false; // format the live audioStream_ was created with
 
         void* dynamicTrack_   = nullptr;
         void* audioStream_    = nullptr; // SDL_AudioStream*
@@ -153,13 +170,18 @@ namespace Microsoft::Xna::Framework::Audio
         mutable std::mutex queueMutex_;
         std::vector<std::vector<SharpRuntime::bytecs>> queuedBuffers_;
 
+        // Byte size of each chunk handed to audioStream_ via SubmitQueuedToStream(), oldest
+        // first. A chunk is only popped once Update() observes (via SDL_GetAudioStreamQueued)
+        // that the stream no longer holds that many bytes queued as input -- i.e. once it has
+        // actually been consumed by playback, not merely submitted. Counted alongside
+        // queuedBuffers_ by getPendingBufferCountProperty() (matches FNA's PendingBufferCount,
+        // which only shrinks once the native voice reports a buffer as consumed).
+        std::deque<std::size_t> submittedChunkSizes_;
+
         static constexpr SharpRuntime::intcs MINIMUM_BUFFER_CHECK = 3;
 
-        [[nodiscard]] SharpRuntime::intcs getBytesPerSampleFrame() const;
         void EnsureStream();
         void DestroyStream();
         void SubmitQueuedToStream();
-
-        GetTypeNameHPP()
     };
 }

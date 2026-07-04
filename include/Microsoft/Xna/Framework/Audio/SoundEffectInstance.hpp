@@ -7,16 +7,28 @@
 #include "System/Object.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
+#include <memory>
+
 namespace Microsoft::Xna::Framework::Audio
 {
     class AudioEmitter;
     class AudioListener;
     class SoundEffect;
 
+    // T-4C: DSP filter state (kind/coefficients/recursive state), fully defined only in
+    // SoundEffectInstance.cpp where SDL3_mixer's callback-registration types are available.
+    // Namespace-scope (not a nested class of SoundEffectInstance) so the free-function
+    // SDL3_mixer callback that reads it doesn't need friend access -- it's still effectively
+    // private, since nothing outside SoundEffectInstance.cpp ever names it.
+    struct FilterState;
+
     /** @brief Controls playback of a sound effect instance, including volume, pitch, pan, and looping. */
     class SoundEffectInstance : public System::Object, public System::IDisposable
     {
         friend class SoundEffect;
+        // Tests need read access to the underlying MIX_Track handle to verify Play() idempotency
+        // (that a repeated call while already playing doesn't restart the track).
+        NOXNA friend struct SoundEffectInstanceTestAccess;
 
     protected:
         /** @brief Default constructor for use by DynamicSoundEffectInstance. */
@@ -25,24 +37,79 @@ namespace Microsoft::Xna::Framework::Audio
         // These members are protected so DynamicSoundEffectInstance can manage its own state.
         void* track_        = nullptr;
         bool  playing_      = false;
+        bool  hasStarted_   = false; // true once Play() has been called; never reset (gates IsLooped)
         SoundState State_   = SoundState::Stopped;
 
     private:
-        const SoundEffect* soundEffect_ = nullptr;
+        // Keeps the sound effect's underlying audio resource alive for the lifetime of this
+        // instance, independent of whether the originating SoundEffect object itself still
+        // exists (e.g. after `SoundEffect(path).CreateInstance()` on a temporary) -- CP-7.
+        // Type-erased because SoundEffect::Impl is private and defined only in SoundEffect.cpp.
+        std::shared_ptr<void> soundEffectKeepAlive_;
+        void* nativeAudioHandle_ = nullptr; // MIX_Audio*, cached while soundEffect was alive
+
+        // Cached from the originating SoundEffect at construction time, same rationale as
+        // nativeAudioHandle_ above -- Play() must never dereference the SoundEffect itself
+        // (CP-7), so its loop region is copied out while it's definitely still alive rather
+        // than read through a stored reference/pointer (CP-17).
+        SharpRuntime::uintcs loopStart_  = 0;
+        SharpRuntime::uintcs loopLength_ = 0;
+
         bool  IsLooped_     = false;
         bool  isDisposed_   = false;
         float Volume_       = 1.0f;
         float Pan_          = 0.0f;
         float Pitch_        = 0.0f;
 
-    public:
+        // CP-20: once Apply3D has been called, matches FNA's `is3D` latch (SoundEffectInstance.cs)
+        // -- setPanProperty() still updates the Pan_ property (callers must keep reading back
+        // what they last set), but stops writing the real track output, since Apply3D's own pan
+        // approximation is what should keep governing the actual output until Apply3D runs
+        // again. Never reset back to false once set (matches FNA: is3D is only ever set to true).
+        bool  is3D_         = false;
+
+        // Heap-allocated (not inline) so its address is stable across a move of *this* -- the
+        // SDL3_mixer callback holds a raw pointer to it as userdata, and a unique_ptr move
+        // transfers ownership without changing that address, so no callback re-registration is
+        // needed after moving a SoundEffectInstance with an active filter (T-4C).
+        std::unique_ptr<FilterState> filterState_;
+
+        // SDL3_mixer has no aux-send/return bus (no equivalent to FAudio's shared ReverbVoice),
+        // so this stays a documented no-op (T-4C). Matches FNA: SoundEffectInstance.cs never has
+        // any caller for this method either -- FACT applies XACT reverb routing natively,
+        // invisible to the C# layer -- so there is no observable behavior gap versus reference.
+        void INTERNAL_applyReverb(float rvGain);
+
+        // Real state-variable filter (T-4C), matching FAudio's own algorithm exactly (see
+        // FAudio_internal.c's FAudio_INTERNAL_FilterVoice) via an SDL3_mixer per-track "cooked"
+        // callback. `cutoff`/`center` are the pre-computed normalized frequency FAudio expects
+        // (2*sin(pi*cutoffHz/sampleRate), range [0,1]), not raw Hz -- matches
+        // FAudioFilterParameters::Frequency exactly, since these methods just forward it. No-op
+        // if the track hasn't been created yet (matches FNA's `handle == IntPtr.Zero` guard);
+        // not sticky across Stop(true)/replay, again matching FNA (the filter lives on the
+        // voice/track, not the instance).
+        void INTERNAL_applyLowPassFilter(float cutoff);
+        void INTERNAL_applyHighPassFilter(float cutoff);
+        void INTERNAL_applyBandPassFilter(float center);
+
+        // Test-only hook (SoundEffectInstanceTestAccess): runs this instance's filter state
+        // through the exact same math the real SDL3_mixer callback uses, but synchronously and
+        // directly -- the real callback only fires asynchronously from the mixing thread, which
+        // would make a test either flaky or need a real-time wait. No-op if no filter is active.
+        void ProcessFilterSamplesForTest(float* pcm, int channels, int samples);
+
         /**
          * @brief Constructs a SoundEffectInstance bound to the given sound effect.
+         *
+         * FNA's equivalent constructor is `internal`; only SoundEffect::CreateInstance() (a
+         * friend) is meant to call this. Direct external construction is not part of the
+         * public API and must not compile.
          *
          * @param soundEffect The sound effect to bind this instance to.
          */
         explicit SoundEffectInstance(const SoundEffect& soundEffect);
 
+    public:
         /** @brief Destroys the instance and releases its audio track. */
         ~SoundEffectInstance() override;
 
@@ -65,14 +132,16 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Stops playback of this instance.
          *
          * @param immediate If true, cuts off immediately; if false, allows release tails.
+         * @throws System::InvalidOperationException if called on a DynamicSoundEffectInstance
+         *         with @p immediate false (there is no authored loop to release into).
          */
-        void Stop(bool immediate);
+        virtual void Stop(bool immediate);
 
         /** @brief Pauses playback of this instance. */
-        void Pause();
+        virtual void Pause();
 
         /** @brief Resumes a paused instance. */
-        void Resume();
+        virtual void Resume();
 
         /** @brief Releases this sound effect instance. */
         void Dispose() override;
@@ -80,21 +149,24 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Applies 3D spatial audio properties using listener and emitter positions.
          *
-         * SDL3_mixer does not support full 3D audio; this is a distance and pan approximation.
+         * SDL3_mixer does not support full 3D audio; this is a distance and pan approximation
+         * applied directly to the underlying track. It does not modify the Volume or Pan
+         * properties, which continue to report only what was last set through their setters.
          *
          * @param listener Position and orientation of the audio listener.
          * @param emitter  Position and orientation of the sound emitter.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
          */
         void Apply3D(const AudioListener& listener, const AudioEmitter& emitter);
 
         /**
          * @brief Multi-listener overload; only a single listener is supported.
          *
-         * Throws std::runtime_error if listenerCount > 1.
-         *
-         * @param listeners    Array of listener descriptions.
+         * @param listeners     Array of listener descriptions.
          * @param listenerCount Number of listeners (must be 1).
          * @param emitter       Position and orientation of the sound emitter.
+         * @throws System::ArgumentNullException if @p listeners is null.
+         * @throws System::NotSupportedException if @p listenerCount is not 1.
          */
         void Apply3D(const AudioListener* listeners, int listenerCount, const AudioEmitter& emitter);
 
@@ -103,7 +175,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @return true if disposed; otherwise false.
          */
-        [[nodiscard]] bool getIsDisposedProperty() const;
+        [[nodiscard]] virtual bool getIsDisposedProperty() const;
 
         /**
          * @brief Gets the playback volume. Range [0, 1].
@@ -113,7 +185,7 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] float getVolumeProperty() const;
 
         /**
-         * @brief Sets the playback volume. Range [0, 1].
+         * @brief Sets the playback volume. Values are passed through unclamped (matching FNA).
          *
          * @param volume New volume value.
          */
@@ -133,6 +205,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets the stereo pan. Range [-1 (left), 1 (right)].
          *
          * @param pan New pan value.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
+         * @throws System::ArgumentOutOfRangeException if @p pan is outside [-1, 1].
          */
         void setPanProperty(const float& pan);
 
@@ -167,6 +241,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets whether the sound loops continuously.
          *
          * @param looped New loop flag.
+         * @throws System::InvalidOperationException if the instance has already been played.
          */
         virtual void setIsLoopedProperty(const bool& looped);
 

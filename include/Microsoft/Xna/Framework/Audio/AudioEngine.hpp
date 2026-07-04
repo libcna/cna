@@ -12,6 +12,9 @@
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
+
+namespace CNA::Internal::Audio { struct XgsRpc; }
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -28,7 +31,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
     public:
         /** @brief XACT content version this engine targets. */
-        static constexpr int ContentVersion = 46;
+        static constexpr SharpRuntime::intcs ContentVersion = 46;
 
         /** @brief Raised when the engine is about to be disposed. */
         System::EventHandler<System::EventArgs> Disposing;
@@ -43,9 +46,14 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Constructs an AudioEngine with explicit look-ahead time and renderer selection.
          *
+         * CNA has a single backend (SDL3_mixer), so @p lookAheadTime and @p rendererId are
+         * accepted for API compatibility but currently have no effect — any value (including
+         * an unrecognized renderer ID) behaves identically to the single-argument constructor.
+         *
          * @param settingsFile    Path to the .XGS XACT global settings file.
-         * @param lookAheadTime   Scheduling look-ahead duration.
+         * @param lookAheadTime   Scheduling look-ahead duration. Currently unused.
          * @param rendererId      Renderer identifier string, or empty for the default renderer.
+         *                        Currently unused; any value is accepted.
          */
         AudioEngine(const std::string& settingsFile,
                     System::TimeSpan lookAheadTime,
@@ -101,6 +109,8 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Releases all audio resources and marks the engine disposed. */
         void Dispose() override;
 
+        GetTypeNameHPP()
+
     private:
         friend class AudioCategory;
         friend class WaveBank;
@@ -120,6 +130,12 @@ namespace Microsoft::Xna::Framework::Audio
         void UnregisterWaveBank(WaveBank* wb);
         WaveBank* FindWaveBank(const std::string& bankName) const;
 
+        // SoundBank registry (called by SoundBank constructor/destructor), symmetric to the
+        // WaveBank registry above -- lets Dispose() cascade to every SoundBank it created,
+        // matching FNA's native OnXACTNotification(SOUNDBANKDESTROYED) (XA-8).
+        void RegisterSoundBank(SoundBank* sb);
+        void UnregisterSoundBank(SoundBank* sb);
+
         // Category state access
         float GetCategoryVolume(unsigned short idx) const;
         bool  IsCategoryPaused(unsigned short idx) const;
@@ -134,6 +150,30 @@ namespace Microsoft::Xna::Framework::Audio
         void RegisterCue(Cue* cue);
         void UnregisterCue(Cue* cue);
 
-        GetTypeNameHPP()
+        // Used by Cue::GetVariable/SetVariable to validate a per-cue-instance variable
+        // name against the engine's parsed global variable set (XACT per-cue variables
+        // are the same named global variables, just individually overridable per cue).
+        bool IsValidVariableName(const std::string& name) const;
+
+        // Resolves an interactive variation table's variable index (XsbVariation::variable,
+        // parsed straight from the .xsb) to its declared name in the engine's XGS variable
+        // table, or nullptr if out of range. Used by Cue::Play() to evaluate INTERACTIVE
+        // (type==3) variation-table selection by reusing Cue::GetVariable()'s existing
+        // cue-local-then-global fallback instead of duplicating it (P9-XACT-003).
+        const std::string* GetVariableNameByIndex(SharpRuntime::shortcs index) const;
+
+        // Resolves an RPC code (absolute XGS-file byte offset, from XsbSound::rpcCodes) to its
+        // parsed curve, or nullptr if not found. Used by Cue::Play() for one-shot RPC
+        // volume/pitch evaluation (P9-XACT-006/007).
+        const CNA::Internal::Audio::XgsRpc* FindRpcByCode(SharpRuntime::uintcs code) const;
+
+        // P9-LIFECYCLE-012: exposes the active-cue registry's size to AudioEngineTestAccess so a
+        // regression test can prove repeated category operations never duplicate an
+        // already-registered cue. XactEngineImpl (and therefore activeCues) is only defined in
+        // AudioEngine.cpp, so a test-only friend struct can't read it directly the way
+        // SoundBankTestAccess reads SoundBank::fireAndForget_.
+        NOXNA [[nodiscard]] std::size_t ActiveCueCountForTest() const;
+
+        NOXNA friend struct AudioEngineTestAccess;
     };
 }
