@@ -605,6 +605,28 @@ namespace Microsoft::Xna::Framework::Graphics
         return tex;
     }
 
+    Texture2D Texture2D::CreateCpuOnlyForTests(int w, int h, SurfaceFormat format,
+                                               const std::vector<Color>& pixels)
+    {
+        Texture2D tex;              // default ctor: no GraphicsDevice, null backend
+        tex.width       = w;
+        tex.height      = h;
+        tex.format_     = format;
+        tex.levelCount_ = 1;
+
+        auto buf = std::make_shared<std::vector<uint8_t>>();
+        buf->reserve(pixels.size() * 4);
+        for (const Color& c : pixels)
+        {
+            buf->push_back(c.getRProperty());
+            buf->push_back(c.getGProperty());
+            buf->push_back(c.getBProperty());
+            buf->push_back(c.getAProperty());
+        }
+        tex.cpuPixels_ = std::move(buf);
+        return tex;
+    }
+
     Texture2D Texture2D::ReconstructFromCache(GraphicsDevice& device,
                                               int w, int h,
                                               SurfaceFormat fmt,

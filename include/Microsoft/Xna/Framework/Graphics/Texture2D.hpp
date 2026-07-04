@@ -204,6 +204,20 @@ namespace Microsoft::Xna::Framework::Graphics
                                                 const std::vector<std::uint8_t>& rgba);
 
         /**
+         * @brief NOXNA test-only: builds a CPU-only Texture2D (no GraphicsDevice, no GPU backend)
+         *        from raw pixels, so headless tests can exercise CPU pixel paths such as
+         *        MouseCursor::FromTexture2D without a real graphics device.
+         *
+         * @param w      Width in pixels.
+         * @param h      Height in pixels.
+         * @param format Surface format the texture reports.
+         * @param pixels w * h Color values in row-major order.
+         * @return A Texture2D holding the pixels CPU-side with a null backend.
+         */
+        NOXNA static Texture2D CreateCpuOnlyForTests(int w, int h, SurfaceFormat format,
+                                                     const std::vector<Color>& pixels);
+
+        /**
          * @brief Reconstructs a Texture2D from a cached backend and CPU pixel buffer without reloading from disk.
          *
          * @param device    The device to associate with the texture.

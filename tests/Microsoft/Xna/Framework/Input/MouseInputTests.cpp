@@ -12,17 +12,24 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
 #include <SDL3/SDL.h>
 
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 
 using namespace Microsoft::Xna::Framework::Input;
+using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 namespace
 {
@@ -561,5 +568,66 @@ TEST(MouseCursorTest, ColorCursorSurvivesSourcePixelBufferDestruction)
     EXPECT_TRUE(SDL_SetCursor(cursor)); // still usable -> pixels were copied, not referenced
 
     SDL_DestroyCursor(cursor);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+// Task 832: FromTexture2D via a CPU-only Texture2D fixture (Texture2D::CreateCpuOnlyForTests),
+// which avoids the GraphicsDevice the real construction path needs.
+
+TEST(MouseCursorTest, FromTexture2DCreatesCursorFromColorTexture)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    const std::vector<Color> pixels(16, Color::White); // 4x4 opaque white
+    const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::Color, pixels);
+
+    MouseCursor cursor = MouseCursor::FromTexture2D(tex, 0, 0);
+    EXPECT_NE(cursor.GetSDLCursor(), nullptr);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, FromTexture2DAcceptsColorSrgbTexture)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    const std::vector<Color> pixels(16, Color::White);
+    const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::ColorSrgb, pixels);
+
+    MouseCursor cursor = MouseCursor::FromTexture2D(tex, 1, 2);
+    EXPECT_NE(cursor.GetSDLCursor(), nullptr);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, FromTexture2DRejectsNonColorSurfaceFormat)
+{
+    // The format check throws std::invalid_argument before any SDL call, so no video is needed.
+    const std::vector<Color> pixels(16, Color::White);
+    const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::Bgr565, pixels);
+
+    EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, 0, 0), std::invalid_argument);
+}
+
+TEST(MouseCursorTest, FromTexture2DThrowsWhenOriginIsOutsideTheTexture)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    const std::vector<Color> pixels(16, Color::White);
+    const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::Color, pixels);
+
+    // originX/Y = 100 lie outside the 4x4 cursor; SDL_CreateColorCursor rejects the hot spot,
+    // so FromTexture2D surfaces it as std::runtime_error.
+    EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, 100, 100), std::runtime_error);
+
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
