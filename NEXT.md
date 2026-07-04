@@ -181,6 +181,25 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
     manual steps and the full clip-name → Mixamo-source substitution table (31 presets, ~16-20
     distinct clips, both body meshes reusing the same converted clips since they share MakeHuman's
     "Mixamo" skeleton preset — verify this assumption once both bodies actually exist).
+  - **MakeHuman automation was attempted and abandoned this session (user's choice), don't
+    re-attempt without discussing first.** Findings, so a future session doesn't have to
+    re-derive them: MakeHuman IS installable via `pip install makehuman` (a real ~30MB wheel
+    matching the genuine GitHub project's version tags), but has **no headless/`--nogui` CLI
+    export mode** — it's a Qt/OpenGL GUI app. Its actual mesh/rig/skeleton *data* isn't in the
+    pip wheel; the current, non-deprecated source is
+    `https://github.com/makehumancommunity/makehuman-assets.git` (Git LFS). MakeHuman's own
+    website (`makehumancommunity.org`) and its legacy FTP asset mirror
+    (`download.tuxfamily.org`) both **refuse connections** from this environment (confirmed
+    repeatedly, not transient) — GitHub and PyPI are reachable, those two are not. Getting
+    further requires installing `git-lfs` (no `apt`/root access in this environment; a static
+    binary release from GitHub was reachable via curl) and then cloning/running MakeHuman's own
+    Python code to script body construction + skeleton assignment + export — **this was where a
+    fork attempt was correctly stopped by Claude Code's own permission classifier**, since
+    running a freshly-downloaded third-party binary and executing a large external codebase
+    wasn't something the user's instruction specifically authorized at that level. The user
+    chose to do the MakeHuman export manually instead of granting that permission. If asked to
+    retry automation, get explicit, specific sign-off first (which exact commands/binaries) —
+    don't assume a general "try MakeHuman automation" covers it.
   - User's explicit choice: **two body meshes (male + female) from the start**, not a unisex MVP,
     to match XNA's own `AvatarBodyType` concept.
 
