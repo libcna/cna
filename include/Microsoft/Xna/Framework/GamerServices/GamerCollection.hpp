@@ -48,6 +48,12 @@ namespace Microsoft::Xna::Framework::GamerServices
             /** @brief Releases enumerator resources. */
             void Dispose() { collection_ = nullptr; }
 
+            /**
+             * @brief Constructs an enumerator over coll, positioned at pos.
+             *
+             * @param coll The collection to enumerate.
+             * @param pos The zero-based starting position (typically -1, before the first element).
+             */
             NOXNA GamerCollectionEnumerator(const std::vector<T*>* coll, int pos)
                 : collection_(coll), position_(pos) {}
 

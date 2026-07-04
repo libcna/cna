@@ -19,6 +19,7 @@ namespace Microsoft::Xna::Framework::Net
     class NetworkSessionProperties : public System::Collections::Generic::IList<std::optional<int>>
     {
     public:
+        /** @brief Initializes a new, empty instance of NetworkSessionProperties. */
         NetworkSessionProperties() = default;
 
         /**
@@ -131,9 +132,17 @@ namespace Microsoft::Xna::Framework::Net
         class Enumerator : public System::Collections::Generic::IEnumerator<std::optional<int>>
         {
         public:
+            /** @brief Constructs an enumerator over items, positioned before the first element. */
             explicit Enumerator(const std::vector<std::optional<int>>& items) : items_(items) {}
+            /**
+             * @brief Advances the enumerator to the next element.
+             *
+             * @return true if there is a next element; otherwise false.
+             */
             bool MoveNext() override { return ++index_ < static_cast<int>(items_.size()); }
+            /** @brief Resets the enumerator to before the first element. */
             void Reset() override { index_ = -1; }
+            /** @brief Gets the element at the current position of the enumerator. */
             [[nodiscard]] const std::optional<int>& Current() const override
             {
                 return items_[static_cast<std::size_t>(index_)];

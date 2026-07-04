@@ -21,6 +21,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     class Gamer
     {
     public:
+        /** @brief Virtual destructor for safe polymorphic destruction. */
         virtual ~Gamer() = default;
 
         /**

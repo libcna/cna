@@ -651,6 +651,17 @@ namespace Microsoft::Xna::Framework::Net
         class NetworkSessionAction : public System::IAsyncResult
         {
         public:
+            /**
+             * @brief Constructs a NetworkSessionAction already positioned to complete.
+             *
+             * @param state The user-defined async state.
+             * @param callback The callback to invoke on completion.
+             * @param maxLocal The maximum number of local gamers for this action.
+             * @param localGamers The explicit local gamers for this action, if any.
+             * @param maxPrivateSlots The maximum number of private gamer slots.
+             * @param properties The session properties to search/create with.
+             * @param type The NetworkSessionType this action operates on.
+             */
             NetworkSessionAction(
                 std::any state,
                 System::AsyncCallback callback,
@@ -661,10 +672,19 @@ namespace Microsoft::Xna::Framework::Net
                 NetworkSessionType type
             );
 
+            /** @brief Gets the user-defined state supplied to the Begin* call. */
             [[nodiscard]] const std::any& getAsyncStateProperty() const override;
+            /** @brief Always false; this stub never completes synchronously. */
             [[nodiscard]] bool getCompletedSynchronouslyProperty() const override;
+            /** @brief Gets whether the asynchronous operation has completed. */
             [[nodiscard]] bool getIsCompletedProperty() const override;
+            /**
+             * @brief Sets whether the asynchronous operation has completed.
+             *
+             * @param value The new completion state.
+             */
             void setIsCompletedProperty(bool value);
+            /** @brief Gets the wait handle signalled when the operation completes. */
             [[nodiscard]] System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override;
 
             const System::AsyncCallback Callback;

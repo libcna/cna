@@ -13,22 +13,22 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
 
 - **Main goal:** full XNA 4.0 API coverage with behavior fidelity to FNA, backed by unit tests
   (plus pixel-readback integration tests for graphics).
-- **Current phase:** Phase 8 (Avatar) just completed. Status of everything:
+- **Current phase:** Phase 9 (docs/audit) just completed — **`plan_net.md`'s entire Net/
+  GamerServices/Avatar plan is now fully done.** Status of everything:
   - Phases 1–31 (graphics) and Phase 2 (`GamerServices` core): complete, stable, long-standing.
   - Phase 5 (real ENet networking backend for `Net`): **complete**.
-  - Phase 6 (platform-specific `Net` work — Linux/Windows/Web/Android): **complete**. Tasks
-    6.1–6.3 committed and pushed (`9c7ce0b`, `ff4c09b`). Task 6.4 (Android) **complete, verified,
-    not yet committed** — see section 3/4. Full per-task bug-by-bug history is in git log/prior
+  - Phase 6 (platform-specific `Net` work — Linux/Windows/Web/Android): **complete, committed,
+    pushed** (`9c7ce0b`, `ff4c09b`, `c697af5`). Full per-task bug-by-bug history is in git log/prior
     revisions of this file; only the durable architecture notes are kept below (section 6).
   - Phase 7 (integration tests): **already fully satisfied** by Phase 5's own test-driven
     development — all 7 of `plan_net.md`'s Task 7.1–7.7 scenarios already had real test coverage
     before this was even checked. No new work was needed or done.
-  - Phase 8 (Avatar): **complete, verified, not yet committed** — see section 3/4. **FNA has no
-    Avatar implementation whatsoever** (just an assembly-forwarding stub — Avatar required real
-    Xbox Live cloud services FNA never built), so this port was done from a genuine, real Microsoft
+  - Phase 8 (Avatar): **complete, committed, pushed** (`1a482b0`). **FNA has no Avatar
+    implementation whatsoever** (just an assembly-forwarding stub — Avatar required real Xbox Live
+    cloud services FNA never built), so this port was done from a genuine, real Microsoft
     reference assembly instead (decompiled via `monodis`) — see section 3 for the full explanation.
-  - Phase 9 (docs/audit) Task 9.2 (AUDIT.md) is done for Avatar as part of this session's own work;
-    the rest of Phase 9 has not been started — see section 8.
+  - Phase 9 (docs/audit): **complete, verified, not yet committed** — see section 3/4. All 4 tasks
+    done: Doxygen audit (9.1), `AUDIT.md` (9.2), `NEXT.md` (9.3, this file), `README.md` (9.4).
 - **Important architectural decisions:**
   - Graphics backend selection is compile-time via `CNA_GRAPHICS_BACKEND`.
   - `CNA_GamerServices` and `CNA_Net` are separate CMake static libraries, excluded from the main
@@ -114,21 +114,21 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
 
 ## 3. Recent changes
 
-- **Committed & pushed:** Task 6.1 (`9c7ce0b`), Tasks 6.2+6.3 (`ff4c09b`) — Windows/Wine and
-  Web/Emscripten platform verification for `Net`. Full bug-by-bug history is in git log; durable
-  architecture notes are in section 6.
-- **Not yet committed — Task 6.4, Android NDK, fully green** (230/230 Net tests on a real
-  emulator). Two real infra bugs fixed: `cmake/ThirdPartySDL.cmake`'s SDL sub-builds weren't
-  forwarding `ANDROID_ABI`/`ANDROID_PLATFORM` to their own separate `cmake` invocations (silently
-  built the wrong architecture); `TwoProcessLoopbackTest.cpp`'s exclusion extended to `ANDROID`.
-  Also found (not fixed, user's explicit choice, out of `Net` scope): `TitleContainer`'s Android
-  `SDL_LoadFile` fallback segfaults without a real JNI/Activity context.
+- **Committed & pushed:** Task 6.1 (`9c7ce0b`), Tasks 6.2+6.3 (`ff4c09b`), Task 6.4 (`c697af5`) —
+  Windows/Wine, Web/Emscripten, and Android NDK platform verification for `Net`. Full bug-by-bug
+  history is in git log; durable architecture notes are in section 6. Task 6.4's Android NDK run
+  went fully green (230/230 Net tests on a real emulator) after two real infra bugs were fixed:
+  `cmake/ThirdPartySDL.cmake`'s SDL sub-builds weren't forwarding `ANDROID_ABI`/`ANDROID_PLATFORM`
+  to their own separate `cmake` invocations (silently built the wrong architecture);
+  `TwoProcessLoopbackTest.cpp`'s exclusion extended to `ANDROID`. Also found (not fixed, user's
+  explicit choice, out of `Net` scope): `TitleContainer`'s Android `SDL_LoadFile` fallback
+  segfaults without a real JNI/Activity context.
 - **sharp-runtime (sibling repo):** all of this session's work is committed and pushed
   (`678d61d`→`c4f76d3`, `ec97562`→`604635b`). **Important process note:** the second of those two
   commits was made without an explicit prior go-ahead from the user — caught and flagged after the
   fact, then approved and pushed. The project's "ask before every sharp-runtime commit" rule
   applies to *every* commit there, not just the first one in a session.
-- **Not yet committed (this session) — Phase 8, Avatar subsystem, now fully green (69 new tests,
+- **Committed & pushed (`1a482b0`) — Phase 8, Avatar subsystem, fully green (69 new tests,
   2146/2146 total on native Linux).**
 
   **Why this port looks different from every other phase:** FNA (this project's normal
@@ -202,18 +202,44 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
   None of this touches `Microsoft::Xna::Framework::Net`'s public API shapes, `third_party/enet`,
   or `sharp-runtime`.
 
+- **Not yet committed (this session) — Phase 9, docs/audit, all 4 tasks complete.**
+  - **Task 9.1 (Doxygen audit):** wrote a small Python script
+    (mechanical check, not an agent — a prior fork attempt failed by trying to exhaustively
+    re-read all 74 `GamerServices`/`Net` headers in one pass and hit a context limit) to flag
+    public declarations without an immediately-preceding `/** */` block across all 74 `.hpp` files
+    in both directories. Found 19 candidates; most were false positives from the script's shallow
+    one-line lookback (multi-line return types splitting the declaration from its doc comment).
+    6 were real gaps, all fixed: `AvatarAnimation.hpp`'s 4 override property getters (mistakenly
+    left undocumented on the assumption the base `IAvatarAnimation` interface's docs were
+    "enough" — they aren't; every `.hpp` needs its own), `GamerCollectionEnumerator`'s constructor,
+    `Gamer`'s destructor, `GamerServicesDispatcher`/`Guide`'s deleted default constructors, and
+    (for consistency with the already-documented `Gamer::GamerAction`/`GamerCollectionEnumerator`
+    precedent) `NetworkSession::NetworkSessionAction`'s members and
+    `NetworkSessionProperties::Enumerator`'s members — both private nested implementation classes,
+    not strictly required by the "public API" rule, fixed anyway for internal consistency.
+  - **Task 9.2 (`AUDIT.md`):** already done incrementally throughout this session (GamerServices
+    Avatar rows added as part of Phase 8's own commit).
+  - **Task 9.3 (`NEXT.md`):** this file, updated continuously throughout the session.
+  - **Task 9.4 (`README.md`):** had **zero** mentions of `GamerServices`/`Net`/`Avatar`/ENet before
+    this session. Added a new "Networking, Services & Avatar" section (renumbering every
+    subsequent section by one), added ENet to the Technology Stack list, and corrected two stale
+    claims: the "Architecture is future-friendly for Android and Web" line (both are now actually
+    implemented and verified, not just architecturally planned) and the "Tested Compilers" table
+    (Windows cross-compile was listed as "planned" — now marked verified via Task 6.2's actual
+    Wine run; added Web/Android rows, both marked verified).
+
 ---
 
 ## 4. Current blocker / main problem
 
-**None.** Open decision points:
+**None — `plan_net.md`'s entire Net/GamerServices/Avatar/docs plan is done.** Open decision points:
 
-1. Whether to commit/push this session's Task 6.4 (Android) and Phase 8 (Avatar) `cna_net` changes
-   to `feature/net` (see section 8).
-2. Whether to re-verify Windows/Web/Android builds against the new Avatar files before/after
-   committing (low risk — Avatar doesn't touch anything platform-specific — but not yet done).
-3. What to work on next once the above are resolved: the rest of Phase 9 (docs/audit — Doxygen
-   pass, README update) is the only remaining planned work; nothing else is queued.
+1. Whether to commit/push this session's Phase 9 (docs/audit) `cna_net` changes to `feature/net`
+   (see section 8).
+2. Whether to re-verify Windows/Web/Android builds against the Phase 8 Avatar files (low risk —
+   Avatar doesn't touch anything platform-specific — but still not yet actually done).
+3. What to work on next once the above are resolved: nothing from `plan_net.md` remains queued.
+   Ask the user for a new direction rather than assuming one.
 
 ---
 
@@ -396,25 +422,21 @@ with a reduced `-j` and a longer timeout rather than assuming a real compile err
 
 ## 8. Next smallest tasks
 
-1. **Decide (with the user) whether to commit this session's Task 6.4 + Phase 8 changes to
-   `feature/net`.**
-   Goal: land the Android cross-build fixes and the entire Avatar subsystem.
-   Verify: native `CnaTests` (2146/2146) before committing; ideally also re-run Windows/Web/Android
-   builds to confirm the Avatar additions don't regress those (low risk, not yet done).
+1. **Decide (with the user) whether to commit this session's Phase 9 changes to `feature/net`.**
+   Goal: land the Doxygen fixes (6 real gaps across `AvatarAnimation.hpp`, `GamerCollection.hpp`,
+   `Gamer.hpp`, `GamerServicesDispatcher.hpp`, `Guide.hpp`, `NetworkSession.hpp`,
+   `NetworkSessionProperties.hpp`) and the `README.md` rewrite.
+   Verify: native `CnaTests` (2146/2146) before committing.
 
-2. **Re-verify Windows/Web/Android builds against the new Avatar files.**
-   Goal: confirm no cross-platform surprises in the new Avatar code (unlikely — it's pure
-   value-type/logic code with no platform-specific branches — but not yet actually run).
+2. **Re-verify Windows/Web/Android builds against the Phase 8 Avatar files.**
+   Goal: confirm no cross-platform surprises in the Avatar code (unlikely — pure value-type/logic
+   code with no platform-specific branches — but not yet actually run since Task 6.4).
    Verify: `wine cmake-build-windows/CnaTests.exe`, `node cmake-build-web/CnaTests.js`, and the
-   Android on-device run all still pass with the new `*Avatar*` tests included.
+   Android on-device run all still pass with the `*Avatar*` tests included.
 
-3. **Once tasks 1–2 are resolved, finish Phase 9 (docs/audit).**
-   Goal: Task 9.1 (Doxygen pass — already done inline for everything ported this session, but a
-   full audit of older files hasn't been done), Task 9.2 (AUDIT.md — Avatar rows added this
-   session, GamerServices/Net sections may need a final pass), Task 9.4 (README.md mention of
-   GamerServices/Net/Avatar/ENet).
-   Files: `AUDIT.md`, `README.md`.
-   Verify: N/A (documentation tasks).
+3. **Once tasks 1–2 are resolved, ask the user what's next.**
+   Goal: `plan_net.md` has nothing left queued. Don't assume a new phase or direction — ask.
+   Verify: N/A.
 
 ---
 
@@ -439,32 +461,31 @@ with a reduced `-j` and a longer timeout rather than assuming a real compile err
 - No trusting `plan_net.md`'s Phase 8 task descriptions' FNA file citations (they don't exist) or
   its behavioral claims about `CreateRandom()` (wrong) — re-decompile the real reference assembly
   if Avatar needs touching again (see section 6).
-- No unilaterally starting new phases beyond finishing Phase 9 — ask the user first.
+- No unilaterally starting new work — `plan_net.md` is fully done (Phases 1-9). Ask the user for a
+  new direction rather than assuming one.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, in full, before doing anything else. Phases 1-31 (graphics), Phase 2/Phase 6
-(GamerServices/Net, all platforms), and Phase 7 (integration tests, already satisfied by existing
-coverage) are all COMPLETE. Phase 8 (Avatar) is COMPLETE AND VERIFIED this session (69 new tests,
-2146/2146 total on native Linux) but NOT YET COMMITTED, alongside Task 6.4's Android fixes - see
-section 3 for full detail, especially the Avatar port's unusual methodology (FNA has zero Avatar
-implementation; ported from a real decompiled Microsoft reference assembly instead) and its several
-genuinely surprising, verified-real, deliberately-preserved behavioral quirks.
+Read NEXT.md first, in full, before doing anything else. plan_net.md's ENTIRE plan is now
+COMPLETE: Phases 1-31 (graphics), Phase 2/6 (GamerServices/Net, all 4 platforms), Phase 7
+(integration tests, already satisfied by existing coverage), Phase 8 (Avatar), and Phase 9
+(docs/audit) are all done. Phase 9 is COMPLETE AND VERIFIED this session (Doxygen audit + fixes,
+README.md rewrite) but NOT YET COMMITTED - see section 3 for full detail.
 
 Before doing anything else:
 1. Run `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"` then `cmake-build-debug/CnaTests`
    to confirm the native Linux build is still healthy (expect 2146/2146).
-2. Run `git status` in this repo — expect the Task 6.4 + Phase 8 changes still uncommitted on
-   `feature/net`. Run `cd ../sharp-runtime && git status` — expect a clean tree there (all of this
-   session's sharp-runtime work is committed and pushed), though the other session maintaining
-   that repo may have added new uncommitted work independently by the time you read this.
+2. Run `git status` in this repo — expect the Phase 9 changes still uncommitted on `feature/net`.
+   Run `cd ../sharp-runtime && git status` — expect a clean tree there (all of this session's
+   sharp-runtime work is committed and pushed), though the other session maintaining that repo may
+   have added new uncommitted work independently by the time you read this.
 
 Then: ask the user whether to commit this session's cna_net changes, whether to re-verify
-Windows/Web/Android against the new Avatar files first, and what to work on next (section 8;
-section 9 lists what NOT to assume).
+Windows/Web/Android against the Phase 8 Avatar files (still not yet done), and what to work on
+next now that plan_net.md is fully done (section 8; section 9 lists what NOT to assume).
 
 Make one small, verified improvement at a time; do not refactor unrelated code. After finishing,
 update NEXT.md to reflect the new state.

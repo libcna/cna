@@ -27,9 +27,20 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         explicit AvatarAnimation(AvatarAnimationPreset animationPreset);
 
+        /**
+         * @brief Gets the current bone transform matrices for the animation.
+         *
+         * @return A read-only collection of 71 bone transform matrices (always zero-valued —
+         * see the class remarks).
+         */
         [[nodiscard]] System::Collections::ObjectModel::ReadOnlyCollection<Microsoft::Xna::Framework::Matrix>
         getBoneTransformsProperty() const override;
 
+        /**
+         * @brief Gets the current playback position within the animation.
+         *
+         * @return The current position.
+         */
         [[nodiscard]] System::TimeSpan getCurrentPositionProperty() const override;
 
         /**
@@ -42,8 +53,19 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         void setCurrentPositionProperty(System::TimeSpan value) override;
 
+        /**
+         * @brief Gets the total length of the animation.
+         *
+         * @return The animation length (always TimeSpan::Zero() — see the class remarks).
+         */
         [[nodiscard]] System::TimeSpan getLengthProperty() const override;
 
+        /**
+         * @brief Gets the facial expression at the current playback position.
+         *
+         * @return The current facial expression (always a default-constructed, all-Neutral
+         * AvatarExpression — nothing in this class ever changes it).
+         */
         [[nodiscard]] AvatarExpression getExpressionProperty() const override;
 
         /**

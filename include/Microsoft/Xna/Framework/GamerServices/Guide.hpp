@@ -22,6 +22,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     class Guide
     {
     public:
+        /** @brief Deleted; all members are static. */
         Guide() = delete;
 
         /**

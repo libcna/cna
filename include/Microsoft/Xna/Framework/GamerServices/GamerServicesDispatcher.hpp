@@ -14,6 +14,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     class GamerServicesDispatcher
     {
     public:
+        /** @brief Deleted; all members are static. */
         GamerServicesDispatcher() = delete;
 
         /**
