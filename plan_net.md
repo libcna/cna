@@ -661,46 +661,55 @@ All backend code under `src/CNA/Internal/Net/` and `include/CNA/Internal/Net/`.
 
 ---
 
-## Phase 8 — Avatar (Deferred, Lower Priority)
+## Phase 8 — Avatar (Deferred, Lower Priority) — ✅ COMPLETE
 
 All Avatar types live in the `Microsoft::Xna::Framework::GamerServices` namespace.  
 Port after all GamerServices and Net work is stable.
 
+**Status note:** this phase's checkboxes were left unchecked in earlier revisions of this file —
+checkboxes here were historically never maintained live; `NEXT.md` was the actual source of truth
+for status. They are now checked off retroactively to match reality: FNA has zero real Avatar
+implementation, so this port was done from the real, genuine Microsoft
+`Microsoft.Xna.Framework.Avatar.dll` reference assembly (decompiled via `monodis`) instead —
+see `NEXT.md` for the full methodology and the list of verified-real behavioral quirks preserved
+faithfully (e.g. `AvatarRenderer.Draw()` is a genuine, permanent no-op off-Xbox). Committed and
+pushed (`1a482b0`).
+
 ### 8a — Enums
 
-- [ ] **Task 8.1** — `AvatarAnimationPreset` (enum, 31 values)  
+- [x] **Task 8.1** — `AvatarAnimationPreset` (enum, 31 values)  
   Copy all values from FNA verbatim.  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPreset.hpp`
 
-- [ ] **Task 8.2** — `AvatarBodyType` (enum)  
+- [x] **Task 8.2** — `AvatarBodyType` (enum)  
   Values: `Female`, `Male`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp`
 
-- [ ] **Task 8.3** — `AvatarBone` (enum, 71 values with gaps)  
+- [x] **Task 8.3** — `AvatarBone` (enum, 71 values with gaps)  
   Copy all values and explicit numeric assignments from FNA verbatim.  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarBone.hpp`
 
-- [ ] **Task 8.4** — `AvatarEye` (enum, 14 values)  
+- [x] **Task 8.4** — `AvatarEye` (enum, 14 values)  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarEye.hpp`
 
-- [ ] **Task 8.5** — `AvatarEyebrow` (enum, 5 values)  
+- [x] **Task 8.5** — `AvatarEyebrow` (enum, 5 values)  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarEyebrow.hpp`
 
-- [ ] **Task 8.6** — `AvatarMouth` (enum, 14 values)  
+- [x] **Task 8.6** — `AvatarMouth` (enum, 14 values)  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarMouth.hpp`
 
-- [ ] **Task 8.7** — `AvatarRendererState` (enum)  
+- [x] **Task 8.7** — `AvatarRendererState` (enum)  
   Values: `Loading`, `Ready`, `Unavailable`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarRendererState.hpp`
 
 ### 8b — Structs and Interfaces
 
-- [ ] **Task 8.8** — `AvatarExpression` (struct)  
+- [x] **Task 8.8** — `AvatarExpression` (struct)  
   Properties (get+set): `Mouth` (`AvatarMouth`), `LeftEye`, `RightEye` (`AvatarEye`),  
   `LeftEyebrow`, `RightEyebrow` (`AvatarEyebrow`).  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarExpression.hpp`
 
-- [ ] **Task 8.9** — `IAvatarAnimation` (interface)  
+- [x] **Task 8.9** — `IAvatarAnimation` (interface)  
   Properties: `BoneTransforms` (`ReadOnlyCollection<Matrix>`), `CurrentPosition` (get+set, `TimeSpan`),  
   `Length` (`TimeSpan`), `Expression` (`AvatarExpression`).  
   Method: `Update(TimeSpan, bool)`.  
@@ -708,7 +717,7 @@ Port after all GamerServices and Net work is stable.
 
 ### 8c — Classes
 
-- [ ] **Task 8.10** — `AvatarAnimation`  
+- [x] **Task 8.10** — `AvatarAnimation`  
   FNA: `Avatar/AvatarAnimation.cs`  
   Derives from `IAvatarAnimation`, implements `IDisposable`.  
   Properties: `BoneTransforms` (71 default-constructed `Matrix` objects in `ReadOnlyCollection`),  
@@ -717,7 +726,7 @@ Port after all GamerServices and Net work is stable.
   Methods: `Update(TimeSpan, bool)` (no-op), `Dispose()` (no-op).  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp`
 
-- [ ] **Task 8.11** — `AvatarDescription`  
+- [x] **Task 8.11** — `AvatarDescription`  
   FNA: `Avatar/AvatarDescription.cs`  
   Properties: `Description` (`std::vector<bytecs>`, copy on access), `IsValid` (description[0] != 0),  
   `Height` (`float`), `BodyType` (`AvatarBodyType`).  
@@ -730,7 +739,7 @@ Port after all GamerServices and Net work is stable.
   `BeginGetFromGamer(Gamer*, AsyncCallback, void*)`, `EndGetFromGamer(IAsyncResult*)`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp`
 
-- [ ] **Task 8.12** — `AvatarRenderer`  
+- [x] **Task 8.12** — `AvatarRenderer`  
   FNA: `Avatar/AvatarRenderer.cs`  
   Derives from `IDisposable`.  
   Constant `BoneCount = 71`.  
@@ -743,7 +752,7 @@ Port after all GamerServices and Net work is stable.
   `Dispose()`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp`
 
-- [ ] **Task 8.13** — Unit tests for Phase 8 types  
+- [x] **Task 8.13** — Unit tests for Phase 8 types  
   All enum values present.  
   `AvatarDescription` constructor validates length (throws on wrong size).  
   `AvatarDescription::CreateRandom()` returns valid description.  
@@ -753,12 +762,202 @@ Port after all GamerServices and Net work is stable.
 
 ---
 
-## Phase 9 — Documentation and Audit
+## Phase 9 — Documentation and Audit — ✅ COMPLETE
 
-- [ ] **Task 9.1** — Doxygen comments on all public `.hpp` files in `GamerServices/` and `Net/`
-- [ ] **Task 9.2** — Add GamerServices and Net sections to `AUDIT.md`
-- [ ] **Task 9.3** — Update `NEXT.md` with Net/GamerServices/Avatar handoff notes
-- [ ] **Task 9.4** — Update `README.md` to mention GamerServices, Net, Avatar subsystems and ENet dependency
+- [x] **Task 9.1** — Doxygen comments on all public `.hpp` files in `GamerServices/` and `Net/`
+- [x] **Task 9.2** — Add GamerServices and Net sections to `AUDIT.md`
+- [x] **Task 9.3** — Update `NEXT.md` with Net/GamerServices/Avatar handoff notes
+- [x] **Task 9.4** — Update `README.md` to mention GamerServices, Net, Avatar subsystems and ENet dependency
+
+With Phase 9 complete, **the entire original plan (Phases 0-9) is done.** Everything below (Phase
+10, Phase 11) is new work added after the original plan was finished — see each phase's own intro
+for rationale.
+
+---
+
+## Phase 10 — Avatar Real-Rendering Extension (NOXNA/EXT) — ✅ COMPLETE
+
+Not part of the original plan — added after Phase 9 completed, when the user asked for Avatar
+rendering to actually draw something real instead of remaining a permanent, faithful no-op. Full
+design doc: `docs/avatar-real-rendering-ext.md`. Full session narrative: `NEXT.md`. This phase
+built the **engine/pipeline side only** — a real GPU-skinned-mesh rendering path, proven against a
+synthetic test fixture. It intentionally does **not** include any real avatar body/animation
+content; that is Phase 11's job.
+
+Key design point: this is an entirely additive, opt-in (`NOXNA`/`*EXT`-tagged) layer. It never
+changes the faithful XNA-spec `AvatarRenderer`/`AvatarAnimation`/`AvatarDescription` behavior from
+Phase 8 — those stay exactly as ported, and all their existing tests still pass unmodified.
+
+- [x] **Task 10.1** — `Graphics::VertexPositionNormalTextureSkinned` (NOXNA GPU-skinned vertex:
+  position/normal/texcoord/4 blend weights/4 blend indices) + matching `VertexBuffer::SetData`
+  overloads.  
+  Files: `include/`+`src/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.{hpp,cpp}`
+
+- [x] **Task 10.2** — `Graphics::SkinnedModelEXT` + `AnimationClipEXT`/`BoneTrackEXT`/`KeyframeEXT`
+  containers, with `ComputeBoneTransformsEXT` (Lerp/Slerp interpolation, bone-hierarchy world
+  transform composition). Deliberately not built on `Model`/`ModelBone` (those are for *rigid*
+  multi-part model animation, the wrong shape for per-vertex GPU skinning). Its bone hierarchy is
+  fully independent of `AvatarRenderer`'s real 71-bone Xbox arrays from Phase 8.  
+  Files: `include/`+`src/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.{hpp,cpp}`
+
+- [x] **Task 10.3** — `SkinnedModelTypeReader` content-pipeline reader (new
+  `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin` schema), registered in
+  `ContentManager::RegisterBuiltinLoaders()`. Hand-rolled JSON parsing, matching the existing
+  `ModelTypeReader`/`SpriteFontTypeReader` style (no new JSON library dependency).  
+  File: `src/Microsoft/Xna/Framework/Content/ContentManager.cpp`
+
+- [x] **Task 10.4** — Unit tests for Tasks 10.1–10.3 (synthetic fixtures, no real assets required).
+
+- [x] **Task 10.5** — `AvatarAnimationPresetToClipNameEXT` helper mapping all 31
+  `AvatarAnimationPreset` values to clip-name lookup keys.  
+  Files: `include/`+`src/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.{hpp,cpp}`
+
+- [x] **Task 10.6** — `AvatarAppearanceEXT` struct (CNA-invented skin/hair tint — explicitly not a
+  reconstruction of the real, undocumented, proprietary 1021-byte `AvatarDescription` format).  
+  File: `include/Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp`
+
+- [x] **Task 10.7** — `AvatarRenderer::EnableRealRenderingEXT`/`IsRealRenderingEnabledEXT`/
+  `SetAppearanceEXT`/`DrawRealEXT`, fully decoupled from the faithful `Draw()` overloads and
+  71-bone arrays (both untouched, still tested unchanged).  
+  Files: `AvatarRenderer.{hpp,cpp}`
+
+- [x] **Task 10.8** — `AvatarAnimation::SetRealClipNameEXT`/`GetRealClipNameEXT`, defaulting to
+  `AvatarAnimationPresetToClipNameEXT(preset)` at construction.  
+  Files: `AvatarAnimation.{hpp,cpp}`
+
+- [x] **Task 10.9** — Unit tests for Tasks 10.5–10.8.
+
+- [x] **Task 10.10** — `examples/avatar_real_render_integration_test.cpp`: real GPU-skinned
+  rendering through the entire `AvatarRenderer::EnableRealRenderingEXT`/`DrawRealEXT` →
+  `SkinnedModelEXT::ComputeBoneTransformsEXT` → `SkinnedEffect` → `GraphicsDevice` pipeline,
+  pixel-readback verified on EasyGL. Registered in `CMakeLists.txt` as
+  `EasyGL_AvatarRenderer_RealRender`.
+
+- [x] **Task 10.11** — Docs: `docs/avatar-real-rendering-ext.md`, `THIRD_PARTY_NOTICES.md`,
+  `AUDIT.md` rows for the new types/members.
+
+- [ ] **Task 10.12** — (Optional, non-blocking) Vulkan/Bgfx smoke test of the real-rendering
+  extension. Needs a fresh `cmake-build-vulkan` configure and `glslc` (not installed as of this
+  writing).
+
+Committed and pushed to `feature/net` (`2b653bc`, `7b56eab`, `1cc42d1`).
+
+---
+
+## Phase 11 — Procedural Avatar Asset Generator (Blender Pipeline)
+
+**Not started.** Added after the user decided CNA should actually have avatars, and that the real
+body/skeleton/animation content should be generated by Claude Code itself via a procedural Blender
+pipeline — rather than relying on external GUI tools (MakeHuman) or external character-creator
+repos (CharMorph/Blender), both of which were attempted in the same session and stopped by
+permission-classifier safety gates around downloading/executing third-party tooling and code (see
+`NEXT.md` section 3 for the full account). A procedural generator sidesteps that class of problem
+entirely: every script is original code written by Claude Code, run through the already-installed,
+already-trusted local Blender (confirmed this session: Blender 4.3.2, `blender --background
+--python script.py` runs fully headless) — no third-party downloads, no unfamiliar external
+codebase to execute.
+
+**Key design advantage over MakeHuman/CharMorph:** those approaches needed bone-name retargeting
+between an externally-authored rig (MakeHuman's "Mixamo" preset, or CharMorph's Rigify rig) and
+externally-sourced Mixamo animation clips — a real source of engineering risk and visual artifacts
+(documented in `NEXT.md`). Here, **the same script that builds the skeleton also authors the
+animations**, on that exact skeleton, so bone names match by construction. Zero retargeting.
+
+Scope honestly set at "functional, not polished": procedural low-poly stylized geometry, a small
+number of shape keys, and a couple of placeholder animations for the first milestone. Realistic
+hair/faces/clothing-without-clipping/production-quality skin weights are explicitly **not** a
+near-term goal — see the "Do not do yet" style caveats per task below, and iterate visually
+(screenshots from Blender) before calling any stage "done."
+
+### 11a — Pipeline Foundation (first milestone: one male + one female avatar that draws)
+
+- [ ] **Task 11.1** — `tools/avatar_builder/generate_skeleton.py`  
+  Builds a **new, CNA-original canonical skeleton** via `bpy` armature edit-mode bone creation —
+  NOT the real Xbox 71-bone hierarchy (Phase 8's `AvatarRenderer::ParentBones` stays untouched and
+  unrelated) and NOT Mixamo/Rigify naming. A compact biped is enough for a first milestone: e.g.
+  `Hips, Spine, Spine1, Neck, Head, Shoulder.L/R, UpperArm.L/R, LowerArm.L/R, Hand.L/R,
+  UpperLeg.L/R, LowerLeg.L/R, Foot.L/R` (~19 bones). Document the exact list and hierarchy in
+  `tools/avatar_builder/README.md` as the single source of truth other scripts key off of.
+
+- [ ] **Task 11.2** — `tools/avatar_builder/generate_body.py`  
+  Procedural stylized low-poly humanoid mesh (head/torso/arms/legs from primitive-derived shapes,
+  e.g. scaled cubes/capsules/UV-spheres, subdivided/shaped as needed). Parent to the Task 11.1
+  armature with automatic weights (`bpy.ops.object.parent_set(type='ARMATURE_AUTO')`) as the
+  starting point — expect and document that automatic weights need manual correction passes for
+  elbows/knees/shoulders before this looks acceptable in motion; do not claim "done" until a
+  visual check confirms no gross bending artifacts on the Task 11.6 test animations.
+
+- [ ] **Task 11.3** — `tools/avatar_builder/generate_materials.py`  
+  Minimal PBR materials: skin, hair, shirt, pants, shoes, each a simple base-color parameter (no
+  texture painting at this stage).
+
+- [ ] **Task 11.4** — `tools/avatar_builder/generate_morphs.py`  
+  At least two shape keys: `Smile`, `Blink`. Document how additional morphs get added later.
+
+- [ ] **Task 11.5** — `tools/avatar_builder/generate_hair.py` + `generate_clothes.py`  
+  Simple placeholder geometry layered over the body (hair as a basic cap/helmet-like shape;
+  shirt/pants/shoes as offset shells over the body mesh). Explicitly expected to look crude at
+  this stage (per the ChatGPT-sourced analysis this phase was scoped from: "vlasy... budou vypadat
+  jako helma" is an accepted, known limitation of a first pass, not a bug to chase down yet).
+
+- [ ] **Task 11.6** — `tools/avatar_builder/generate_animations.py`  
+  Placeholder animations `Stand0` (idle) and `Wave`, keyframed directly on the Task 11.1 skeleton
+  (simple bone rotations — no motion capture, no external clip source). Because this script and
+  Task 11.1 share the same bone names by construction, there is no retargeting step.
+
+- [ ] **Task 11.7** — `tools/avatar_builder/export_gltf.py` + `tools/avatar_builder/generate_avatar.py`  
+  Orchestrates Tasks 11.1–11.6 and exports via `bpy.ops.export_scene.gltf(...)`. Driven headless:
+  `blender --background --python generate_avatar.py -- --gender male --out assets/avatar/generated/male_avatar.glb`
+  (and again with `--gender female`, same skeleton/rig, adjusted body proportions/scale). Output
+  must be deterministic (same inputs → byte-identical or near-identical output) and must reopen
+  cleanly in Blender.
+
+- [ ] **Task 11.8** — `tools/avatar_builder/validate_gltf.py`  
+  Sanity-check each exported GLB using `pygltflib` (already a project dependency from Phase 10):
+  non-empty mesh, skin/joints present with the expected bone count/names from Task 11.1, both
+  `Stand0`/`Wave` animations present, both `Smile`/`Blink` shape keys present. Fail loudly, don't
+  silently accept a hollow/broken export.
+
+- [ ] **Task 11.9** — `tools/avatar_builder/README.md`  
+  Usage instructions, the canonical skeleton bone list, design rationale (why procedural, why no
+  retargeting needed), how to run each script standalone vs. via the top-level driver, and a clear
+  statement of what's placeholder-quality vs. intended to be improved later.
+
+### 11b — CNA Integration (first real, non-synthetic proof)
+
+- [ ] **Task 11.10** — Feed `male_avatar.glb`/`female_avatar.glb` through the existing
+  `tools/avatar_asset_pipeline/convert_avatar.py` (built in Phase 10, structurally verified only
+  against a synthetic fixture until now) to produce real
+  `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin` content. This is the first time that converter
+  runs against real generated content — expect and fix real bugs, don't assume it works unchanged.
+
+- [ ] **Task 11.11** — Wire the converted content through
+  `ContentManager::Load<shared_ptr<SkinnedModelEXT>>` and `AvatarRenderer::EnableRealRenderingEXT`/
+  `DrawRealEXT` in a real, non-headless windowed demo (not another synthetic-fixture integration
+  test) — the actual visual proof that Phase 10's engine work and Phase 11's content now draw a
+  real, if simple, animated humanoid on screen.
+
+- [ ] **Task 11.12** — Map `AvatarBodyType::Male`/`Female` to the two generated bodies at whatever
+  call-site convention makes sense (document the chosen approach in
+  `docs/avatar-real-rendering-ext.md`, since Phase 8's faithful `AvatarDescription` doesn't carry
+  real body-type data that could drive this automatically).
+
+### 11c — Iteration (procedural variety) — deferred, lower priority than 11a/11b
+
+- [ ] **Task 11.13** — Parametric body variation (height, shoulder width, head size) as script
+  parameters, conceptually echoing `AvatarDescription`'s customization intent without attempting
+  to reconstruct its real, undocumented byte format.
+- [ ] **Task 11.14** — Additional hair styles / clothing variants as separate attachable GLB
+  pieces rather than baked into the base body.
+- [ ] **Task 11.15** — Additional animation presets beyond `Stand0`/`Wave`, working toward covering
+  more of the 31 `AvatarAnimationPreset` values with self-authored placeholder motion.
+
+### 11d — Future, optional, not started
+
+- [ ] **Task 11.16** — Revisit MakeHuman or CharMorph/Blender as a higher-quality body *source*
+  (better anatomy/topology than fully procedural generation can practically achieve) only if the
+  user wants to invest in resolving the automation/permission questions documented in `NEXT.md`
+  directly — not assumed, not scheduled, purely optional future work.
 
 ---
 
@@ -774,8 +973,10 @@ Phase 0 (build)
                                 ├─> Phase 6 (platform)
                                 ├─> Phase 7 (integration tests)
                                 └─> Phase 9 (docs/audit)
-              └─> Phase 8 (Avatar — deferred)
+              └─> Phase 8 (Avatar — complete)
                     └─> Phase 9 (docs/audit)
+                          └─> Phase 10 (Avatar real-rendering engine — complete)
+                                └─> Phase 11 (procedural avatar asset generator — not started)
 ```
 
 ---
