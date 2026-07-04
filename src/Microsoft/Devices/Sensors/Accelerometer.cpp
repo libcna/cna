@@ -6,6 +6,7 @@
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <mutex>
 #include <utility>
 
@@ -96,7 +97,8 @@ namespace Microsoft::Devices::Sensors
 
     Accelerometer::Accelerometer()
         : state_(SensorState::NotSupported),
-          started_(false)
+          started_(false),
+          dispatchToken_(std::make_shared<std::vector<std::thread::id>>())
     {
         auto& subsystem = GetSubsystem();
 
@@ -301,15 +303,19 @@ namespace Microsoft::Devices::Sensors
             // object's lifetime end, closing the use-after-free window
             // left open by Task P3-4.
             // Task P5-2/P5-3: waits until no *other* thread's entry
-            // remains in dispatchingThreadIds_ — a handler reentrantly
-            // disposing its own sender must not wait on itself; only
-            // genuinely other threads' in-flight dispatches are waited for.
+            // remains in *dispatchToken_ — a handler reentrantly disposing
+            // its own sender must not wait on itself; only genuinely other
+            // threads' in-flight dispatches are waited for. Task P8-1: reads
+            // dispatchToken_ (a shared_ptr) via `this`, which is always
+            // valid for the entire duration of this Dispose(bool) call
+            // (unlike the dispatch-loop's own cleanup guard, this method
+            // never runs after the object has been destroyed).
             subsystem.callbackFinished_.wait(lock, [this]
             {
                 const std::thread::id currentThreadId = std::this_thread::get_id();
-                const auto selfCount = std::count(
-                    dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), currentThreadId);
-                return dispatchingThreadIds_.size() == static_cast<std::size_t>(selfCount);
+                const auto& ids = *dispatchToken_;
+                const auto selfCount = std::count(ids.begin(), ids.end(), currentThreadId);
+                return ids.size() == static_cast<std::size_t>(selfCount);
             });
 
             --subsystem.instanceCount_;
@@ -529,7 +535,7 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        // Task P5-2/P5-3: participates in the same dispatchingThreadIds_
+        // Task P5-2/P5-3: participates in the same dispatch-tracking
         // bookkeeping as the real event-watch path, so a handler that
         // calls Dispose() on this same instance from within a
         // synthetic-update-triggered callback is recognized identically to
@@ -537,35 +543,46 @@ namespace Microsoft::Devices::Sensors
         const std::thread::id thisThreadId = std::this_thread::get_id();
         auto& subsystem = GetSubsystem();
 
-        // Task P6-3: started_'s read folded into the same lock scope as
-        // the dispatchingThreadIds_ push — previously read separately with
-        // no lock at all.
+        // Task P8-1: copies dispatchToken_ (a shared_ptr) into a local
+        // *before* DispatchSensorReading() below, while `this` is still
+        // definitely valid. The cleanup guard captures this local `token`
+        // copy, not `this` — so if the callback this triggers destroys this
+        // same instance, the guard (which runs after the callback returns)
+        // still safely erases the entry via the token, never touching the
+        // now-possibly-freed `this` again. See Accelerometer.hpp's
+        // dispatchToken_ doc comment and plan_devices_phase8.md Task P8-1
+        // for the full analysis, including the boundary this does not
+        // cover (DispatchSensorReading() itself still touches `this` again
+        // before conditionally raising ReadingChanged).
+        std::shared_ptr<std::vector<std::thread::id>> token;
         {
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
             if (!started_)
             {
                 return;
             }
-            dispatchingThreadIds_.push_back(thisThreadId);
+            token = dispatchToken_;
+            token->push_back(thisThreadId);
         }
 
         // Task P6-4: cleanup now runs via a ScopeExit guard, so it still
         // happens if DispatchSensorReading() (or transitively a user's
         // CurrentValueChanged/ReadingChanged handler) throws — previously
         // a plain post-call statement, skipped entirely on an exception
-        // and permanently corrupting dispatchingThreadIds_. Unlike the
+        // and permanently corrupting the dispatch token. Unlike the
         // real SDL event-watch path (SensorEventWatch()), this is a
         // regular C++ call site, not a C-library callback boundary, so the
         // exception is allowed to propagate to this method's own caller
         // after cleanup runs.
-        auto cleanupGuard = Detail::MakeScopeExit([this, &subsystem, thisThreadId]()
+        auto cleanupGuard = Detail::MakeScopeExit([&subsystem, token, thisThreadId]()
         {
             {
                 std::lock_guard<std::mutex> lock(subsystem.mutex_);
-                const auto it = std::find(dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), thisThreadId);
-                if (it != dispatchingThreadIds_.end())
+                auto& ids = *token;
+                const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
+                if (it != ids.end())
                 {
-                    dispatchingThreadIds_.erase(it);
+                    ids.erase(it);
                 }
             }
             subsystem.callbackFinished_.notify_all();

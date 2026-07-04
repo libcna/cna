@@ -667,3 +667,53 @@ TEST(GyroscopeTests, DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUse
 
     EXPECT_NO_THROW(a->Dispose());
 }
+
+// Task P8-1: Gyroscope::DispatchSensorReading() raises CurrentValueChanged as its
+// last statement and touches `this` for nothing afterward, so — with the
+// dispatchToken_ fix — a handler that destroys (not just Dispose()s) this exact
+// instance from within its own CurrentValueChanged handler is fully supported for
+// this class. Uses unique_ptr::reset() (not Dispose()) so the object's memory is
+// genuinely freed before InjectSyntheticSensorUpdate()'s cleanup guard runs — if
+// the guard still touched `this`/the old plain dispatchingThreadIds_ member instead
+// of the token, this would be a real use-after-free.
+TEST(GyroscopeTests, SelfDestroyingFromOwnCallbackDuringInjectSyntheticSensorUpdateDoesNotUseAfterFree)
+{
+    auto gyroscope = std::make_unique<Gyroscope>();
+    gyroscope->SetStartedForTesting(true);
+
+    Gyroscope* rawPtr = gyroscope.get();
+    bool handlerRan = false;
+    rawPtr->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        handlerRan = true;
+        gyroscope.reset();
+    };
+
+    EXPECT_NO_THROW(rawPtr->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+    EXPECT_TRUE(handlerRan);
+}
+
+// Task P8-1: same as above, but through the batch-dispatch path
+// (DispatchToInstancesForTesting(), which shares the exact same
+// DispatchToInstances() bookkeeping the real SDL event-watch path uses) rather than
+// InjectSyntheticSensorUpdate() — proves the token fix covers both dispatch entry
+// points, not just one.
+TEST(GyroscopeTests, SelfDestroyingFromOwnCallbackDuringBatchDispatchDoesNotUseAfterFree)
+{
+    auto gyroscope = std::make_unique<Gyroscope>();
+    gyroscope->SetStartedForTesting(true);
+    Gyroscope::RegisterStartedInstanceForTesting(*gyroscope);
+
+    Gyroscope* rawPtr = gyroscope.get();
+    bool handlerRan = false;
+    rawPtr->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        handlerRan = true;
+        gyroscope.reset();
+    };
+
+    const std::vector<Gyroscope*> batch{rawPtr};
+    EXPECT_NO_THROW(Gyroscope::DispatchToInstancesForTesting(batch, 1.0f, 0.0f, 0.0f));
+
+    EXPECT_TRUE(handlerRan);
+}

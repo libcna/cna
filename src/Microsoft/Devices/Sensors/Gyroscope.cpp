@@ -3,6 +3,7 @@
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <mutex>
 #include <utility>
 
@@ -69,7 +70,8 @@ namespace Microsoft::Devices::Sensors
 
     Gyroscope::Gyroscope()
         : state_(SensorState::NotSupported),
-          started_(false)
+          started_(false),
+          dispatchToken_(std::make_shared<std::vector<std::thread::id>>())
     {
         auto& subsystem = GetSubsystem();
 
@@ -240,14 +242,16 @@ namespace Microsoft::Devices::Sensors
             // object's lifetime end, closing the use-after-free window
             // left open by Task P3-4.
             // Task P5-2/P5-3: waits until no *other* thread's entry
-            // remains in dispatchingThreadIds_ — see Accelerometer.cpp's
+            // remains in *dispatchToken_ — see Accelerometer.cpp's
             // identical wait predicate for the full self-dispose rationale.
+            // Task P8-1: reads dispatchToken_ via `this`, always valid for
+            // this method's entire execution.
             subsystem.callbackFinished_.wait(lock, [this]
             {
                 const std::thread::id currentThreadId = std::this_thread::get_id();
-                const auto selfCount = std::count(
-                    dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), currentThreadId);
-                return dispatchingThreadIds_.size() == static_cast<std::size_t>(selfCount);
+                const auto& ids = *dispatchToken_;
+                const auto selfCount = std::count(ids.begin(), ids.end(), currentThreadId);
+                return ids.size() == static_cast<std::size_t>(selfCount);
             });
 
             --subsystem.instanceCount_;
@@ -394,33 +398,38 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        // Task P5-2/P5-3: participates in the same dispatchingThreadIds_
+        // Task P5-2/P5-3: participates in the same dispatch-tracking
         // bookkeeping as the real event-watch path — see
         // Accelerometer.cpp's identical hook for the full rationale.
         const std::thread::id thisThreadId = std::this_thread::get_id();
         auto& subsystem = GetSubsystem();
 
-        // Task P6-3: started_'s read folded into the same lock scope as
-        // the dispatchingThreadIds_ push.
+        // Task P8-1: see Accelerometer::InjectSyntheticSensorUpdate()'s
+        // identical fix for the full rationale — copies dispatchToken_
+        // into a local before DispatchSensorReading() below, so the
+        // cleanup guard never touches `this` again.
+        std::shared_ptr<std::vector<std::thread::id>> token;
         {
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
             if (!started_)
             {
                 return;
             }
-            dispatchingThreadIds_.push_back(thisThreadId);
+            token = dispatchToken_;
+            token->push_back(thisThreadId);
         }
 
         // Task P6-4: see Accelerometer::InjectSyntheticSensorUpdate()'s
         // identical fix for the full rationale.
-        auto cleanupGuard = Detail::MakeScopeExit([this, &subsystem, thisThreadId]()
+        auto cleanupGuard = Detail::MakeScopeExit([&subsystem, token, thisThreadId]()
         {
             {
                 std::lock_guard<std::mutex> lock(subsystem.mutex_);
-                const auto it = std::find(dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), thisThreadId);
-                if (it != dispatchingThreadIds_.end())
+                auto& ids = *token;
+                const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
+                if (it != ids.end())
                 {
-                    dispatchingThreadIds_.erase(it);
+                    ids.erase(it);
                 }
             }
             subsystem.callbackFinished_.notify_all();

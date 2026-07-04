@@ -848,3 +848,31 @@ TEST(AccelerometerTests, DisposingDifferentInstanceDuringSameBatchDispatchDoesNo
 
     EXPECT_NO_THROW(a->Dispose());
 }
+
+// Task P8-1: DispatchSensorReading() raises CurrentValueChanged, then
+// unconditionally touches `this` again (getIsDataValidProperty()) before deciding
+// whether to also raise the legacy ReadingChanged event — so destroying this same
+// instance from within a *CurrentValueChanged* handler is NOT safe for
+// Accelerometer specifically (documented, not tested — see this class's own
+// dispatchToken_ doc comment and plan_devices_phase8.md Task P8-1; the project has
+// no death-test convention to exercise the known-unsafe path directly). ReadingChanged
+// is the *last* statement DispatchSensorReading() executes, though — nothing touches
+// `this` afterward — so destroying the instance from within ReadingChanged's handler
+// is safe, exactly like Gyroscope's single-event case. This test proves that specific,
+// safe boundary.
+TEST(AccelerometerTests, SelfDestroyingFromOwnReadingChangedCallbackDuringInjectSyntheticSensorUpdateDoesNotUseAfterFree)
+{
+    auto accelerometer = std::make_unique<Accelerometer>();
+    accelerometer->SetStartedForTesting(true);
+
+    Accelerometer* rawPtr = accelerometer.get();
+    bool handlerRan = false;
+    rawPtr->ReadingChanged += [&](System::Object*, const AccelerometerReadingEventArgs&)
+    {
+        handlerRan = true;
+        accelerometer.reset();
+    };
+
+    EXPECT_NO_THROW(rawPtr->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+    EXPECT_TRUE(handlerRan);
+}

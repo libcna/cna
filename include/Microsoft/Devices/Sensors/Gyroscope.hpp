@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -70,8 +71,17 @@ namespace Microsoft::Devices::Sensors
          * latter must not wait, since this thread's own dispatch frame
          * can only finish unwinding after Dispose() itself returns. See
          * Dispose(bool)'s wait predicate.
+         *
+         * Task P8-1: changed from a plain member vector to a `shared_ptr` to
+         * a heap-allocated one — see Accelerometer.hpp's identical member
+         * for the full rationale. Unlike Accelerometer, Gyroscope's
+         * DispatchSensorReading() raises CurrentValueChanged as its last
+         * statement and touches `this` for nothing afterward, so — with
+         * this token fix — destroying this same instance from within its
+         * own CurrentValueChanged handler is fully supported for this
+         * class (see plan_devices_phase8.md Task P8-1).
          */
-        std::vector<std::thread::id> dispatchingThreadIds_;
+        std::shared_ptr<std::vector<std::thread::id>> dispatchToken_;
 
         /**
          * Test-only hook (Task P7-2): see Accelerometer.hpp's identical

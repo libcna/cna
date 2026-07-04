@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -79,8 +80,25 @@ namespace Microsoft::Devices::Sensors
          * latter must not wait, since this thread's own dispatch frame
          * can only finish unwinding after Dispose() itself returns. See
          * Dispose(bool)'s wait predicate.
+         *
+         * Task P8-1: changed from a plain member vector to a `shared_ptr` to
+         * a heap-allocated one, created once in the constructor and never
+         * replaced. `Detail::SdlSensorSubsystem<Accelerometer>::DispatchToInstances()`
+         * and `InjectSyntheticSensorUpdate()` now copy this `shared_ptr`
+         * into their dispatch-cleanup guard *before* invoking the user
+         * callback, so that cleanup step (which runs after the callback
+         * returns) touches the shared token, never `this` again — closing a
+         * real use-after-free if a callback destroys (not just Dispose()s)
+         * this same instance during its own dispatch. See
+         * plan_devices_phase8.md Task P8-1 for the full analysis, including
+         * the remaining, deliberately-undefended boundary: destroying this
+         * instance from within its own `CurrentValueChanged` handler is
+         * still unsupported, because `DispatchSensorReading()` itself
+         * unconditionally touches `this` again afterward (to decide whether
+         * to also raise the legacy `ReadingChanged` event) — a class-design
+         * property this token cannot fix.
          */
-        std::vector<std::thread::id> dispatchingThreadIds_;
+        std::shared_ptr<std::vector<std::thread::id>> dispatchToken_;
 
         /**
          * Test-only hook (Task P7-2): if set, invoked once by Dispose(bool)

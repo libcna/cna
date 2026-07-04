@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <condition_variable>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <utility>
@@ -143,9 +144,12 @@ namespace Microsoft::Devices::Sensors::Detail
      *   - provide a private `void ProcessSensorUpdateEvent(std::int64_t
      *     sensorId, float x, float y, float z)` method;
      *   - provide private `bool subsystemHeld_` and
-     *     `std::vector<std::thread::id> dispatchingThreadIds_` members
-     *     (Tasks P4-8/P5-3) — these remain genuinely per-*instance* data
-     *     on TSensor itself, not here.
+     *     `std::shared_ptr<std::vector<std::thread::id>> dispatchToken_`
+     *     members (Tasks P4-8/P5-3, refactored to a shared_ptr in Task P8-1)
+     *     — these remain genuinely per-*instance* data on TSensor itself,
+     *     not here; `dispatchToken_` must be created once (e.g.
+     *     `std::make_shared<std::vector<std::thread::id>>()`) in TSensor's
+     *     constructor and never replaced afterward.
      */
     template <typename TSensor>
     class SdlSensorSubsystem
@@ -402,6 +406,23 @@ namespace Microsoft::Devices::Sensors::Detail
          * that could let it be destroyed) — so the pointer-value-only
          * re-check here safely detects that and skips it, never touching
          * (dereferencing) the possibly-freed memory.
+         *
+         * Task P8-1: the cleanup guard below now captures a *copy* of
+         * `instance->dispatchToken_` (a `shared_ptr`), taken while `instance`
+         * is confirmed still alive+started under the lock, instead of
+         * capturing `instance` itself. This closes a further use-after-free:
+         * if a callback *destroys* (not just Dispose()s) the exact instance
+         * it was invoked for — `dispatchOne(instance)`, below — the cleanup
+         * guard would previously dereference `instance->dispatchingThreadIds_`
+         * on freed memory the moment it ran. The token, kept alive by the
+         * guard's own captured shared_ptr, survives even if the instance does
+         * not. This does not, and cannot, protect a TSensor-specific method
+         * that itself keeps touching `this` after raising an event on the
+         * same dispatch (e.g. Accelerometer::DispatchSensorReading() checking
+         * `getIsDataValidProperty()` again before conditionally raising
+         * ReadingChanged) — that is a class-design property, documented as
+         * an explicit unsupported boundary, not a dispatch-bookkeeping gap
+         * this method can close. See plan_devices_phase8.md Task P8-1.
          */
         template <typename DispatchFn>
         void DispatchToInstances(const std::vector<TSensor*>& instancesSnapshot, DispatchFn&& dispatchOne)
@@ -410,27 +431,27 @@ namespace Microsoft::Devices::Sensors::Detail
 
             for (TSensor* instance : instancesSnapshot)
             {
-                bool stillStarted = false;
+                std::shared_ptr<std::vector<std::thread::id>> token;
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     if (std::find(startedInstances_.begin(), startedInstances_.end(), instance)
                         != startedInstances_.end())
                     {
-                        instance->dispatchingThreadIds_.push_back(thisThreadId);
-                        stillStarted = true;
+                        token = instance->dispatchToken_;
+                        token->push_back(thisThreadId);
                     }
                 }
 
-                if (!stillStarted)
+                if (!token)
                 {
                     continue;
                 }
 
-                auto cleanupGuard = MakeScopeExit([this, instance, thisThreadId]()
+                auto cleanupGuard = MakeScopeExit([this, token, thisThreadId]()
                 {
                     {
                         std::lock_guard<std::mutex> lock(mutex_);
-                        auto& ids = instance->dispatchingThreadIds_;
+                        auto& ids = *token;
                         const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
                         if (it != ids.end())
                         {
