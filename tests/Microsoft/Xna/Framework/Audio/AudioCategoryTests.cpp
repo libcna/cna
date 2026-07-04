@@ -468,6 +468,62 @@ TEST(AudioCategoryTest, PauseResumeStopRouteToRealActiveCueInCategory)
     EXPECT_FALSE(cue->getIsPlayingProperty());
 }
 
+// P9-CATEGORY-001/002: StopCategoryInternal used to iterate AudioEngine::activeCues directly
+// while Cue::Stop() cascades into UnregisterCue(), which erases from that same vector --
+// mutating a vector while range-for-iterating it invalidates the loop's cached end() iterator.
+// With 3+ cues in one category this reliably skips stopping at least one of them (traced by hand
+// through std::remove's element-shift pattern: the skipped cue is always the one whose slot gets
+// backfilled from beyond the range-for's stale cached end()). Needs 3, not 2, cues to reliably
+// reproduce -- with exactly 2, the single leftover stale slot happens to still hold the right
+// pointer by accident of std::remove's shift, masking the bug.
+TEST(AudioCategoryTest, StopStopsAllActiveCuesInCategoryNotJustSomeOfThem)
+{
+    AudioCategory cat = SharedEngine().GetCategory("Default");
+    std::unique_ptr<Cue> cueA(SharedBank().GetCue("TestCue"));
+    std::unique_ptr<Cue> cueB(SharedBank().GetCue("TestCue"));
+    std::unique_ptr<Cue> cueC(SharedBank().GetCue("TestCue"));
+
+    cueA->Play();
+    cueB->Play();
+    cueC->Play();
+    ASSERT_TRUE(cueA->getIsPlayingProperty());
+    ASSERT_TRUE(cueB->getIsPlayingProperty());
+    ASSERT_TRUE(cueC->getIsPlayingProperty());
+
+    cat.Stop(AudioStopOptions::Immediate);
+
+    EXPECT_TRUE(cueA->getIsStoppedProperty());
+    EXPECT_TRUE(cueB->getIsStoppedProperty());
+    EXPECT_TRUE(cueC->getIsStoppedProperty());
+}
+
+// P9-CATEGORY-003: Pause()/Resume() don't have Stop()'s reentrant-mutation bug (neither cascades
+// into UnregisterCue()), so this wouldn't fail against the pre-P9-CATEGORY-001 code -- it's a
+// completeness/regression test for the multi-cue case, not a bug reproduction.
+TEST(AudioCategoryTest, PauseAndResumeAffectAllActiveCuesInCategory)
+{
+    AudioCategory cat = SharedEngine().GetCategory("Default");
+    std::unique_ptr<Cue> cueA(SharedBank().GetCue("TestCue"));
+    std::unique_ptr<Cue> cueB(SharedBank().GetCue("TestCue"));
+    std::unique_ptr<Cue> cueC(SharedBank().GetCue("TestCue"));
+
+    cueA->Play();
+    cueB->Play();
+    cueC->Play();
+
+    cat.Pause();
+    EXPECT_TRUE(cueA->getIsPausedProperty());
+    EXPECT_TRUE(cueB->getIsPausedProperty());
+    EXPECT_TRUE(cueC->getIsPausedProperty());
+
+    cat.Resume();
+    EXPECT_TRUE(cueA->getIsPlayingProperty());
+    EXPECT_TRUE(cueB->getIsPlayingProperty());
+    EXPECT_TRUE(cueC->getIsPlayingProperty());
+
+    cat.Stop(AudioStopOptions::Immediate);
+}
+
 // T-4D: AudioEngine::SetCategoryVolumeInternal must re-apply the new volume to already-active
 // cue instances, not just affect future Play() calls. This needs a real SoundEffectInstance in
 // Cue::active_ (SharedVolBank's cue, unlike SharedBank's TestCue, has a real WaveBank behind
@@ -498,6 +554,54 @@ TEST(AudioCategoryTest, SetVolumeReappliesToAlreadyPlayingCueInstance)
             EXPECT_LT(volumesAfterSetVolume[i], volumesAtPlay[i]);
 
         cue->Stop(AudioStopOptions::Immediate);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// P9-CATEGORY-004: same as SetVolumeReappliesToAlreadyPlayingCueInstance above, but with two
+// simultaneously-active real cue instances in the category, to prove the volume change reaches
+// every one of them, not just whichever happens to be first in AudioEngine::activeCues.
+// ApplyCategoryVolume() doesn't mutate activeCues, so this wouldn't fail against the
+// pre-P9-CATEGORY-001 code either -- a completeness test, not a bug reproduction.
+TEST(AudioCategoryTest, SetVolumeAppliesToAllActivePlayingCueInstancesInCategory)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioCategory cat = SharedEngine().GetCategory("Default");
+        cat.SetVolume(1.0f); // known baseline, see SetVolumeReappliesToAlreadyPlayingCueInstance
+
+        std::unique_ptr<Cue> cueA(SharedVolBank().GetCue("VolCue"));
+        std::unique_ptr<Cue> cueB(SharedVolBank().GetCue("VolCue"));
+        cueA->Play();
+        cueB->Play();
+
+        const auto volAAtPlay = CueTestAccess::ActiveInstanceVolumes(*cueA);
+        const auto volBAtPlay = CueTestAccess::ActiveInstanceVolumes(*cueB);
+        if (volAAtPlay.empty() || volBAtPlay.empty())
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+
+        EXPECT_NO_THROW(cat.SetVolume(0.5f));
+
+        const auto volAAfter = CueTestAccess::ActiveInstanceVolumes(*cueA);
+        const auto volBAfter = CueTestAccess::ActiveInstanceVolumes(*cueB);
+        ASSERT_EQ(volAAfter.size(), volAAtPlay.size());
+        ASSERT_EQ(volBAfter.size(), volBAtPlay.size());
+        for (std::size_t i = 0; i < volAAtPlay.size(); ++i)
+            EXPECT_LT(volAAfter[i], volAAtPlay[i]);
+        for (std::size_t i = 0; i < volBAtPlay.size(); ++i)
+            EXPECT_LT(volBAfter[i], volBAtPlay[i]);
+
+        cueA->Stop(AudioStopOptions::Immediate);
+        cueB->Stop(AudioStopOptions::Immediate);
     }
     catch (...)
     {

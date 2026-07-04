@@ -282,8 +282,12 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!xactImpl_ || idx >= xactImpl_->categoryVolumes.size()) return;
         xactImpl_->categoryVolumes[idx] = vol;
-        // Apply to all active cues in this category
-        for (auto* cue : xactImpl_->activeCues)
+        // P9-CATEGORY-001: snapshot before iterating -- ApplyCategoryVolume() itself never
+        // mutates activeCues today, but this stays consistent with the other three category
+        // operations below (one of which has a real reentrant-mutation bug) rather than relying
+        // on "this particular callee happens not to touch the registry" staying true forever.
+        std::vector<Cue*> cues = xactImpl_->activeCues;
+        for (auto* cue : cues)
             if (cue && cue->categoryIdx_ == idx)
                 cue->ApplyCategoryVolume(vol);
     }
@@ -292,7 +296,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!xactImpl_ || idx >= xactImpl_->categoryPaused.size()) return;
         xactImpl_->categoryPaused[idx] = true;
-        for (auto* cue : xactImpl_->activeCues)
+        std::vector<Cue*> cues = xactImpl_->activeCues; // P9-CATEGORY-001, see SetCategoryVolumeInternal
+        for (auto* cue : cues)
             if (cue && cue->categoryIdx_ == idx && cue->getIsPlayingProperty())
                 cue->Pause();
     }
@@ -301,7 +306,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!xactImpl_ || idx >= xactImpl_->categoryPaused.size()) return;
         xactImpl_->categoryPaused[idx] = false;
-        for (auto* cue : xactImpl_->activeCues)
+        std::vector<Cue*> cues = xactImpl_->activeCues; // P9-CATEGORY-001, see SetCategoryVolumeInternal
+        for (auto* cue : cues)
             if (cue && cue->categoryIdx_ == idx && cue->getIsPausedProperty())
                 cue->Resume();
     }
@@ -310,7 +316,16 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!xactImpl_) return;
         auto opt = immediate ? AudioStopOptions::Immediate : AudioStopOptions::AsAuthored;
-        for (auto* cue : xactImpl_->activeCues)
+        // P9-CATEGORY-001: MUST snapshot here, unlike the three methods above this is a real bug,
+        // not just defensive symmetry -- Cue::Stop() cascades to StopInternal(), which
+        // unconditionally calls AudioEngine::UnregisterCue(), erasing the cue from this exact
+        // xactImpl_->activeCues vector. Iterating the live vector directly means the erase
+        // invalidates the range-for's cached end() iterator mid-loop; with 3+ cues in the same
+        // category this reliably skips stopping at least one of them (verified by hand-tracing
+        // std::remove's element shifts, and by a real regression test -- see
+        // StopStopsAllActiveCuesInCategoryNotJustSomeOfThem in AudioCategoryTests.cpp).
+        std::vector<Cue*> cues = xactImpl_->activeCues;
+        for (auto* cue : cues)
             if (cue && cue->categoryIdx_ == idx)
                 cue->Stop(opt);
     }
