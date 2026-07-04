@@ -70,7 +70,7 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (most recent Fáze 9 groups, newest first)
 
-- **`P9-XACT-001..009`** (uncommitted at time of writing) — two independent fixes to data that was
+- **`P9-XACT-001..009`** (`8800254`) — two independent fixes to data that was
   parsed but never used. (1) Interactive (`type==3`) variation tables now select an entry by
   finding which one's `[varMin, varMax]` contains the bound variable's current value (matching
   FAudio's `get_active_variation_index`), instead of falling back to a uniform random pick —
