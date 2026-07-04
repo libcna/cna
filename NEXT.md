@@ -68,17 +68,28 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
   `EasyGL_MRT_TwoAttachments`; `easy-gl-resource-smoke-tests`) are pre-existing, unrelated to
   Phase 10 (none touch files changed this session — confirmed via `git status`), not
   investigated further as part of this work.
-- **Windows cross-build** (`cmake-build-windows/`): clean, **2076/2076** under Wine (verified as of
-  Task 6.4; not yet re-verified against the new Phase 8 Avatar files — see section 8).
-- **Web/Emscripten cross-build** (`cmake-build-web/`): clean, `CnaTests.js` builds and runs under
-  Node.js, **Net/Gamer/ENet/Packet filter: 229/229 passing, 1 intentionally skipped**; full suite
-  374 tests pass with zero failures before an unrelated, pre-existing `GameWindowTest` DOM crash
-  (not yet re-verified against the new Phase 8 Avatar files — see section 8).
-- **Android NDK cross-build** (`cmake-build-android/`): clean, runs on the real `Medium_Phone`
-  x86_64 emulator via `adb shell`, **Net/Gamer/ENet/Packet filter: 230/230 passing, zero
-  workarounds needed** (real bionic sockets); full suite 1831 tests pass before a real, separate,
-  documented `TitleContainer`/SDL segfault (not yet re-verified against the new Phase 8 Avatar
-  files — see section 8).
+- **Windows cross-build** (`cmake-build-windows/`): **re-verified this session against Phase
+  8+10** — clean, **2190/2190** under Wine (full suite; the 1-test difference from native Linux's
+  2191 is an expected SDL_Renderer-vs-EasyGL backend test-set difference, not a failure). All 114
+  Avatar/Skinned/Phase-10 tests pass.
+- **Web/Emscripten cross-build** (`cmake-build-web/`): **re-verified this session against Phase
+  8+10** — clean, `CnaTests.js` builds and runs under Node.js,
+  **Net/Gamer/ENet/Packet/Avatar/Skinned filter: 343/343 passing, 1 intentionally skipped**
+  (`ENetHostHandleTest.CreateHostBindsToEphemeralPort`, documented Emscripten platform limit).
+  Full suite still hits the same unrelated, pre-existing `GameWindowTest` DOM crash under Node
+  (needs a real browser `window` object) documented before Phase 8. **This re-verify surfaced and
+  fixed a real, unrelated `sharp-runtime` bug**: `String::GetHashCode`'s `h >> 32` shifted by the
+  full width of `std::size_t` on Emscripten's 32-bit wasm target (fine on 64-bit Linux/Windows,
+  where the bug was invisible) — added by another session's concurrent work
+  (`sharp-runtime@a3044d6`), fixed and pushed with the user's explicit go-ahead
+  (`sharp-runtime@e400f92`, widened to `uint64_t` before shifting).
+- **Android NDK cross-build** (`cmake-build-android/`): **build re-verified this session against
+  Phase 8+10** — compiles cleanly (Clang/NDK toolchain, same nodiscard warnings as native/Windows,
+  none new). **On-device test run blocked**: this environment currently has no `/dev/kvm` (no
+  hardware virtualization), so the `Medium_Phone` x86_64 emulator that Task 6.4 successfully used
+  before cannot boot here (`"x86_64 emulation currently requires hardware acceleration"`). This is
+  an environment/infrastructure limitation, not a code issue — re-run the on-device test suite
+  once KVM is available again (see section 7 for the exact commands, unchanged from Task 6.4).
 - `GamerServices` namespace: complete, including Avatar (Phase 8, this session).
 - `Net` namespace: complete API surface (5 enums + 18 classes). `SystemLink` sessions do real ENet
   networking on every platform (raw UDP on native/Windows/Android, real WebSocket on Web).
@@ -112,9 +123,10 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
   codebase currently (its `isDisposed_` field is `protected` but no existing
   `Gamer`/`SignedInGamer`/`NetworkGamer` code path ever sets it). Not fixed as part of the Avatar
   port — would mean touching a different, already-stable, previously-completed class.
-- Windows/Web/Android cross-builds have **not yet been re-verified** against the new Phase 8
-  Avatar files (native Linux has been; the Avatar port doesn't touch anything platform-specific, so
-  this is expected to be low-risk, but hasn't actually been re-run — see section 8).
+- Windows/Web cross-builds **re-verified this session** against Phase 8 + Phase 10 (both fully
+  green). Android **build** re-verified (compiles cleanly); the on-device **test run** could not
+  be re-verified this session — no `/dev/kvm` available in this environment, so the emulator used
+  by Task 6.4 can't boot here. Re-run once KVM is available (section 7 has the exact commands).
 - Runtime-added local gamers, host migration, `SimulatedLatency`/`SimulatedPacketLoss`: still
   out of scope (Phase 5 plan).
 - `NetworkSession::Find()`'s full public path can't be end-to-end tested with a real hosted session
@@ -347,11 +359,13 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
    this headless environment. `tools/avatar_asset_pipeline/convert_avatar.py` is written and
    structurally verified against a synthetic fixture; it is ready to run as soon as a human
    completes the manual steps in that tool's `README.md`.
-2. Everything else in Phase 10 (10a, 10c, 10d, 10e) is done and tested against a synthetic
-   fixture, precisely so it doesn't block on (1) — see section 3.
-3. Secondary open decisions: whether to commit this session's Phase 9 *and* Phase 10 changes to
-   `feature/net` (both currently uncommitted); whether to re-verify Windows/Web/Android builds
-   against the Phase 8 Avatar files (still not done, low risk, unrelated to Phase 10).
+2. Everything else in Phase 10 (10a, 10c, 10d, 10e) is done, tested against a synthetic fixture
+   (precisely so it doesn't block on (1)), **committed and pushed** to `feature/net` (`2b653bc`),
+   and **re-verified on Windows/Web** (both green — see section 2). Android re-verification is
+   build-only; the on-device run needs `/dev/kvm`, unavailable in this environment right now.
+3. A concurrent session's work on `sharp-runtime` introduced a real (unrelated) 32-bit portability
+   bug this session found and fixed while re-verifying the Web build — see section 2/3, already
+   fixed and pushed (`sharp-runtime@e400f92`) with the user's go-ahead.
 
 ---
 
@@ -572,20 +586,17 @@ with a reduced `-j` and a longer timeout rather than assuming a real compile err
    Verify: load the converted content through `ContentManager::Load<shared_ptr<SkinnedModelEXT>>`
    and drive `AvatarRenderer::DrawRealEXT` in a real windowed demo.
 
-2. **Decide (with the user) whether to commit this session's Phase 9 + Phase 10 changes to
-   `feature/net`.** Both are currently uncommitted.
-   Verify: native `CnaTests` (2191/2191) before committing; also run the full `ctest` suite and
-   confirm only the 3 known-unrelated pre-existing failures remain (section 2).
+2. **Done this session — Phase 9 + Phase 10 changes committed and pushed** to `feature/net`
+   (`2b653bc`). Windows/Web cross-builds re-verified green; Android build re-verified green
+   (on-device run blocked by no `/dev/kvm` in this environment — see section 2).
 
 3. **Best-effort: smoke-test the Avatar real-rendering extension on Vulkan/Bgfx** (Task 10.15,
    non-blocking). Needs a fresh `cmake-build-vulkan` configure + `glslc` installed (currently
    missing from this environment).
 
-4. **Re-verify Windows/Web/Android builds against the Phase 8 Avatar files.**
-   Goal: confirm no cross-platform surprises in the Avatar code (unlikely — pure value-type/logic
-   code with no platform-specific branches — but not yet actually run since Task 6.4).
-   Verify: `wine cmake-build-windows/CnaTests.exe`, `node cmake-build-web/CnaTests.js`, and the
-   Android on-device run all still pass with the `*Avatar*` tests included.
+4. **Re-run the Android on-device test suite once `/dev/kvm` is available again** — the build
+   itself is already confirmed clean against Phase 8+10; only the actual emulator run is
+   outstanding. Same commands as Task 6.4 (section 7).
 
 5. **Once the above are resolved, ask the user what's next.** Verify: N/A.
 
@@ -639,21 +650,24 @@ with a reduced `-j` and a longer timeout rather than assuming a real compile err
 ```
 Read NEXT.md first, in full, before doing anything else. plan_net.md's ENTIRE plan (Phases 1-9)
 is COMPLETE. Phase 10 (Avatar real-rendering NOXNA/EXT extension — a new CNA-original initiative,
-not part of plan_net.md) is IN PROGRESS: 10a/10c/10d/10e are done and tested; 10b (real MakeHuman
-export + Mixamo animation downloads) needs a human to complete manual GUI/browser steps this
-environment can't automate — see tools/avatar_asset_pipeline/README.md. NONE of this is committed
-yet (Phase 9 AND Phase 10 changes are both still sitting uncommitted on feature/net).
+not part of plan_net.md) is IN PROGRESS and COMMITTED+PUSHED to feature/net (2b653bc): 10a/10c/
+10d/10e are done, tested, and re-verified green on native Linux + Windows + Web; 10b (real
+MakeHuman export + Mixamo animation downloads) still needs a human to complete manual GUI/browser
+steps this environment can't automate — see tools/avatar_asset_pipeline/README.md. Android build
+re-verified clean; the on-device test run is blocked by no /dev/kvm in this environment (not a
+code issue).
 
 Before doing anything else:
 1. Run `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"` then `cmake-build-debug/CnaTests`
    to confirm the native Linux build is still healthy (expect 2191/2191).
-2. Run `git status` in this repo — expect Phase 9 + Phase 10 changes still uncommitted on
-   `feature/net`. Run `cd ../sharp-runtime && git status` — Phase 10 did not touch sharp-runtime
-   at all; expect whatever state the other session maintaining that repo left it in.
+2. Run `git status` in this repo — expect a clean tree on `feature/net` (everything from this
+   session is committed/pushed). Run `cd ../sharp-runtime && git status` — expect clean; this
+   session's one fix there (String::GetHashCode 32-bit shift bug) is committed and pushed
+   (e400f92), merged with a large concurrent batch from the other session maintaining that repo.
 
 Then: ask the user whether Phase 10b's manual asset-acquisition steps have been done (if so, wire
-the real content through and verify visually), whether to commit the Phase 9 + Phase 10 changes,
-and what to work on next (section 8; section 9 lists what NOT to assume/do).
+the real content through and verify visually), whether /dev/kvm is available yet for the Android
+on-device re-run, and what to work on next (section 8; section 9 lists what NOT to assume/do).
 
 Make one small, verified improvement at a time; do not refactor unrelated code. After finishing,
 update NEXT.md to reflect the new state.
