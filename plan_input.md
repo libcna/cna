@@ -271,7 +271,7 @@ violations in the internal layer, and very thin test coverage.
 | 835 | Audit thread-safety of static input state; document input APIs as main-thread/game-loop unless intended otherwise. | ✅ | **Audited: zero locking anywhere** under `src/CNA/Internal/Input/` or `src/Microsoft/Xna/Framework/Input/` (no `mutex`/`atomic`/`thread`), and that's correct — input is a **single-threaded (game-loop-thread) API**: writes come from `Game::PollEvents()` → `SdlInputBridge::ProcessEvent` → `InputManager::Set*`, reads from game `Update()`/`Draw()` via `Get*State()`, all on the one thread (matching XNA/FNA, and required by SDL — `SDL_PollEvent` must be pumped on the video/window thread). The function-local-static singletons rely on C++11 thread-safe *initialization*; their mutation is unsynchronized, which is fine under the single-thread contract. Documented in a new `docs/input-backend.md` §6 "Thread safety" + a `@note` on `InputManager`'s class doc. **No locking added** (unnecessary per-frame overhead), per the task's guidance. |
 | 836 | Add a manual `examples/demo_input` verification checklist to docs (keys, text/IME, warp, relative, wheel, touch gestures, 4 pads, rumble, sensors). | ✅ | New `docs/demo-input-checklist.md`: build/run steps, a table of what each panel shows, and per-device manual checklists (keyboard, text input + IME incl. accents/emoji/composition, mouse position/buttons/wheel, multi-touch, 4 gamepads with analog triggers + rumble). **Honestly flags what the demo does NOT surface** — relative mouse mode, `SetPosition` warp, gamepad sensors (gyro/accel), light bar, and touch *gestures* (the demo shows raw points) — pointing each to where it *is* verified (unit tests / task 783 / `plan.md` a-0001) so the checklist doesn't imply coverage it lacks. |
 | 837 | Add platform notes (Linux/X11, Wayland, Windows, Android, iOS) for input limitations (warp/global pos on Wayland; touch/screen keyboard on mobile). | ✅ | New `docs/platform-input-notes.md`, one section per platform, each item marked **verified** (with the task) vs. documented SDL/OS behavior: X11 (warp/global-pos pixel-exact, task 783); **Wayland** (global cursor pos restricted → `(0,0)`, task 783; absolute warp constrained, relative mode = pointer lock works); Windows (XInput → `"xinput"` GUID, task 816); **Android** (touch primary + noticed-only-once, task 712; on-screen keyboard; `__ANDROID__` log path, task 822); iOS (touch-only, no cursor, on-screen keyboard). Plus a cross-cutting section (letterbox warp → `a-0001`, scancode mode + 40 unmappable keys, no horizontal wheel, main-thread-only). |
-| 838 | Recalculate realistic input coverage split into XNA 4.0 core / FNA EXT / MonoGame MouseCursor / NOXNA / platform-dependent. | ⬜ | Don't mix core with extensions in one %. |
+| 838 | Recalculate realistic input coverage split into XNA 4.0 core / FNA EXT / MonoGame MouseCursor / NOXNA / platform-dependent. | ✅ | Replaced the old blended estimate table with the authoritative **category-split** coverage in the "XNA 4.0 Input API coverage — final split" section above: (1) **XNA 4.0 core** ~99% behavior / ~99% tested — complete & FNA-faithful; (2) **FNA EXT** ~95% behavior / ~85% tested — all implemented, untested slice hardware/IME-gated; (3) **MonoGame `MouseCursor`** complete for the exposed surface; (4) **CNA/NOXNA-only** (internal backend + test hooks); (5) **platform-dependent/hardware-gated** items enumerated with their dependency. Per the review's rule, **no blended "input is 100% complete" number is claimed** — the categories are kept separate. |
 | 839 | Update `docs/xna-4-api-coverage.md` with final verified input status. | ⬜ | |
 | 840 | Final clean run: build + run full `CnaTests` on EasyGL, Vulkan, bgfx after all input changes; record exact commands/results here. | ⬜ | Only then may Phase I9 be marked complete. |
 
@@ -286,27 +286,76 @@ behavior.
 
 ---
 
-## XNA 4.0 Input API coverage
+## XNA 4.0 Input API coverage — final split (task 838)
 
-> **Reading note (task 792):** the **"Runtime behavior (now)"** column below is the *pre-plan
-> baseline* captured when this plan was written. As of Phases I1–I8 (tasks 700–791, all complete),
-> the current state is the **"After this plan"** column. These are the original estimates; the
-> **final verified coverage split** (XNA core / FNA EXT / MonoGame / NOXNA / platform-dependent) is
-> produced by Phase I9 **task 838** — treat that as authoritative once done, not these numbers.
+> **This is the authoritative coverage assessment** (as of Phase I9). Per the review's rule,
+> coverage is split by API *category* — XNA 4.0 core / FNA extensions / MonoGame-inspired /
+> CNA-NOXNA-only / platform-dependent — and **not** blended into one "XNA 4.0 Input is complete"
+> number, because the categories mean different things. "Surface" = API present with FNA-faithful
+> signatures; "Behavior" = FNA-faithful runtime behavior wired to SDL3; "Tests" = automated
+> `CnaTests` coverage. The pre-plan estimate table this replaces is in git history.
 
-| Area | API surface | Runtime behavior (pre-plan baseline) | After Phases I1–I8 (current) |
-|------|-------------|------------------------|-----------------|
-| Enums (Buttons, Keys, GamePadType, GestureType, …) | 100% | 100% | 100% |
-| GamePad value types + dead-zone math | 100% | ~95% (EXT buttons/PacketNumber missing) | ~100% |
-| GamePad EXT (LED, gyro, accelerometer) | 100% | ~0% (stubbed) | ~90% |
-| Keyboard | 100% | ~80% (map gaps, ordering, scancode) | ~98% |
-| Mouse | 100% | ~70% (no warp, dead relative mode/Clicked) | ~95% |
-| MouseCursor (MonoGame ext) | ~70% | ~60% (system cursors only) | ~90% |
-| Touch `GetState` | 100% | ~80% (via fallback) | ~95% |
-| Touch gestures (Tap…Pinch) | 100% | **~0% (pipeline dead)** | ~90% |
-| TextInputEXT / IME | 100% | **~0% (fully unwired)** | ~90% |
-| Unit-test coverage | — | ~20% | ~85% |
-| **Overall realistic input coverage** | **~100% surface** | **~55% behavior** | **~93% behavior** |
+### 1. XNA 4.0 core Input API
+
+| Area | Surface | Behavior | Tests | Notes |
+|------|---------|----------|-------|-------|
+| Enums (`Buttons`, `Keys`, `KeyState`, `ButtonState`, `GamePadType`, `GamePadDeadZone`, `GestureType`, `TouchLocationState`) | 100% | 100% | 100% | 1:1 value parity with FNA (task 776 audit). |
+| Keyboard / `KeyboardState` | 100% | 100% | 100% | Ordered `GetPressedKeys`, FNA `GetHashCode`, indexer, complete keycode/scancode maps (I5; 819–821). |
+| Mouse / `MouseState` | 100% | ~99% | 100% | Warp/relative-mode/`ClickedEXT` wired (I4). Sole gap: `SetPosition` letterbox scale factor → platform-dependent (a-0001). |
+| GamePad value types + dead-zone math (`GamePadState/Buttons/DPad/ThumbSticks/Triggers`) | 100% | 100% | 100% | Dead-zone/clamp/packing line-for-line FNA; button/axis mapping tested (812/813). |
+| GamePad `GetState` / connection | 100% | 100% | ~95% | Connection + button/axis via InputManager tested; bridge SDL slot-assignment edge cases hardware-gated (811, see §5). |
+| Touch `TouchPanel.GetState` / `TouchCollection` / `TouchLocation` | 100% | ~98% | 100% | Event-driven `GetState` fallback (documented deviation, 825); `>MAX_TOUCHES` uncapped vs FNA's 8 (documented, 826). |
+| Touch gestures (`GestureDetector`, Tap…Pinch, `GestureSample`) | 100% | 100% | 100% | Byte-faithful FNA port (829); deterministic tests (830). |
+| **XNA 4.0 core — overall** | **100%** | **~99%** | **~99%** | Complete and FNA-faithful; residual gaps are documented platform-dependent items, not missing API. |
+
+### 2. FNA extensions (`*EXT`)
+
+| Area | Surface | Behavior | Tests | Notes |
+|------|---------|----------|-------|-------|
+| `TextInputEXT` (text input + IME) | 100% | ~95% | ~90% | Wired to SDL3; `TextInput` is `char16_t`/UTF-16 (806); Unicode/emoji/composition tests (807). Live IME needs a real IME. |
+| `Mouse` EXT (`IsRelativeMouseModeEXT`, `ClickedEXT`) | 100% | 100% | 100% | Real SDL relative mode + click dispatch; null-safe (802–804). |
+| `GamePad` rumble/EXT buttons (`SetVibration`, `SetTriggerVibrationEXT`, EXT `Buttons`) | 100% | 100% | ~90% | FNA-faithful (duration 0, verified 817). Live rumble needs hardware. |
+| `GamePad` `GetGUIDEXT` | 100% | 100% | ~90% | Format fixed to FNA's `xinput`/8-hex/Valve logic (816); formatter unit-tested; live device needs hardware. |
+| `GamePad` sensors/LED (`GetGyroEXT`, `GetAccelerometerEXT`, `SetLightBarEXT`) | 100% | ~90% | ~60% | Enable/read/zero-on-failure faithful (726/727/818); only the disconnected path is unit-testable — live values are hardware-gated (§5). |
+| `Keyboard.GetKeyFromScancodeEXT` + scancode mode | 100% | 100% | 100% | Both modes tested via a test override (821). |
+| **FNA EXT — overall** | **100%** | **~95%** | **~85%** | All implemented and FNA-faithful; the untested slice is hardware/IME-gated, not missing logic. |
+
+### 3. MonoGame-inspired
+
+| Area | Surface | Behavior | Tests | Notes |
+|------|---------|----------|-------|-------|
+| `MouseCursor` (12 stock cursors, `FromTexture2D`, `IDisposable`) | ~100% | 100% | ~95% | No XNA/FNA equivalent (`NOXNA class`). Stock-cursor mapping audited (833); `FromTexture2D` (832) + singleton-dispose policy (834) tested. |
+
+### 4. CNA / NOXNA-only (internal + test support)
+
+| Area | Notes |
+|------|-------|
+| `SdlInputBridge` / `InputManager` / `GestureDetector` | Internal backend (not public XNA API). Fully functional; covered directly (bridge/gesture/mapping tests) and indirectly. |
+| Test-only hooks | `InputManager::ResetForTests` (823), `GestureDetector::{ResetForTests,EnableTestClock,…}` (824/830), `TouchPanel::ResetForTests`, `SdlInputBridge::SetScancodeModeForTests` (821), `Texture2D::CreateCpuOnlyForTests` (832). NOXNA/test-support, no runtime-path effect. |
+
+### 5. Platform-dependent / hardware-gated (not headless-verifiable)
+
+These are correct-by-code-review + FNA-faithful, but their observable behavior depends on the OS,
+compositor, or physical hardware and can't be fully asserted in the headless `CnaTests` suite. See
+[`docs/platform-input-notes.md`](docs/platform-input-notes.md) and
+[`docs/demo-input-checklist.md`](docs/demo-input-checklist.md).
+
+| Item | Dependency |
+|------|-----------|
+| `Mouse::SetPosition` letterbox scale factor | Graphics-layer inverse transform (deferred → `plan.md` a-0001) |
+| Wayland global cursor position → `(0,0)` | Wayland compositor security model (task 783) |
+| Gamepad live gyro/accelerometer values, rumble strength | Physical controller with sensors/haptics |
+| Gamepad hotplug slot-assignment (dup / no-free / env-count / removed-unknown) | Real `SDL_OpenGamepad` device (task 811 — partial) |
+| `GetGUIDEXT` platform format (`xinput` vs vendor/product) | OS controller driver (task 816) |
+| On-screen keyboard, touch-noticed-once | Mobile (Android/iOS) |
+
+### Summary
+
+**XNA 4.0 core Input: complete and FNA-faithful (~99% behavior, ~99% tested).** FNA extensions:
+all implemented (~95% behavior; untested slice is hardware/IME-gated). MonoGame `MouseCursor`:
+complete for the exposed surface. The only non-cosmetic deferral is the graphics-layer
+`SetPosition` letterbox transform (`plan.md` a-0001). No blended "input is 100% complete" figure is
+claimed — see the per-category numbers above.
 
 ---
 
