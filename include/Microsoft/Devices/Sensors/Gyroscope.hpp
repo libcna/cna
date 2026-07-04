@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
@@ -66,24 +67,30 @@ namespace Microsoft::Devices::Sensors
         bool subsystemHeld_ = false;
 
         /**
-         * Count of calls currently (possibly on another thread, possibly
-         * more than one concurrently) mid-call into this instance's
-         * ProcessSensorUpdateEvent()/InjectSyntheticSensorUpdate(). Guarded
-         * by mutex_. Dispose() waits for this to reach 0 (after first
-         * removing the instance from startedInstances_, so no *new*
-         * callback can start) before letting the object's lifetime end,
-         * closing the use-after-free window left open by Task P3-4.
+         * Thread IDs of calls currently mid-dispatch into this instance's
+         * ProcessSensorUpdateEvent()/InjectSyntheticSensorUpdate(), one
+         * entry per in-flight call (its size is the in-flight count).
+         * Guarded by mutex_. Dispose() waits until no *other* thread's
+         * entry remains (after first removing the instance from
+         * startedInstances_, so no *new* callback can start) before
+         * letting the object's lifetime end, closing the use-after-free
+         * window left open by Task P3-4.
          *
          * Task P5-2: was a single bool (inFlightCallback_) until this task
          * — see Accelerometer.hpp's identical member for the full
          * rationale (SDL's own documented "may run in a different thread"
          * event-watch warning).
          *
-         * @note As of Task P5-2, a handler that calls Dispose() on *this
-         * same instance* from within its own callback still deadlocks
-         * here, same as the old bool. Fixed in Task P5-3.
+         * Task P5-3: changed from a plain int counter to a vector of the
+         * dispatching thread id(s), so Dispose() can tell "some other
+         * thread is still dispatching to me, I must wait" apart from "the
+         * only still-in-flight dispatch(es) are on my own thread" (a
+         * handler calling Dispose() on its own sender reentrantly) — the
+         * latter must not wait, since this thread's own dispatch frame can
+         * only finish unwinding after Dispose() itself returns. See
+         * Dispose(bool)'s wait predicate.
          */
-        int inFlightCallbackCount_ = 0;
+        std::vector<std::thread::id> dispatchingThreadIds_;
 
     private:
         static bool EnsureSensorSubsystemInitialized();

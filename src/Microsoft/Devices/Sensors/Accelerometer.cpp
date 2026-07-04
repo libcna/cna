@@ -171,6 +171,8 @@ namespace Microsoft::Devices::Sensors
 
         const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
 
+        const std::thread::id thisThreadId = std::this_thread::get_id();
+
         std::vector<Accelerometer*> instancesSnapshot;
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -178,7 +180,7 @@ namespace Microsoft::Devices::Sensors
             {
                 if (accelerometer != nullptr)
                 {
-                    ++accelerometer->inFlightCallbackCount_;
+                    accelerometer->dispatchingThreadIds_.push_back(thisThreadId);
                     instancesSnapshot.push_back(accelerometer);
                 }
             }
@@ -195,7 +197,12 @@ namespace Microsoft::Devices::Sensors
 
             {
                 std::lock_guard<std::mutex> lock(mutex_);
-                --accelerometer->inFlightCallbackCount_;
+                auto& ids = accelerometer->dispatchingThreadIds_;
+                const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
+                if (it != ids.end())
+                {
+                    ids.erase(it);
+                }
             }
             callbackFinished_.notify_all();
         }
@@ -375,10 +382,24 @@ namespace Microsoft::Devices::Sensors
             // instance's ProcessSensorUpdateEvent() on another thread. Wait
             // for that to finish before letting this object's lifetime end,
             // closing the use-after-free window left open by Task P3-4.
-            // Task P5-2: waits for the count to reach 0, not for a single
-            // bool to clear — see inFlightCallbackCount_'s own comment for
-            // why a bool could under-count concurrent dispatches.
-            callbackFinished_.wait(lock, [this] { return inFlightCallbackCount_ == 0; });
+            // Task P5-2: waits for the count (dispatchingThreadIds_.size())
+            // to reach 0, not for a single bool to clear — see
+            // dispatchingThreadIds_'s own comment for why a bool could
+            // under-count concurrent dispatches.
+            // Task P5-3: ...except for entries belonging to *this* thread —
+            // if a CurrentValueChanged/ReadingChanged handler calls
+            // Dispose() on its own sender reentrantly, this thread's own
+            // dispatch frame is what's still "in flight", and it can only
+            // finish unwinding after this very Dispose() call returns.
+            // Waiting on it would deadlock. Only genuinely *other* threads'
+            // in-flight dispatches are waited for.
+            callbackFinished_.wait(lock, [this]
+            {
+                const std::thread::id currentThreadId = std::this_thread::get_id();
+                const auto selfCount = std::count(
+                    dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), currentThreadId);
+                return dispatchingThreadIds_.size() == static_cast<std::size_t>(selfCount);
+            });
 
             --instanceCount_;
             if (instanceCount_ < 0)
@@ -593,21 +614,27 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        // Task P5-2/P5-3: participates in the same inFlightCallbackCount_
+        // Task P5-2/P5-3: participates in the same dispatchingThreadIds_
         // bookkeeping as the real SensorEventWatch() path, so a handler
         // that calls Dispose() on this same instance from within a
         // synthetic-update-triggered callback is recognized identically to
         // the real event path (see Dispose(bool)'s self-dispose check).
+        const std::thread::id thisThreadId = std::this_thread::get_id();
+
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            ++inFlightCallbackCount_;
+            dispatchingThreadIds_.push_back(thisThreadId);
         }
 
         DispatchSensorReading(x, y, z);
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            --inFlightCallbackCount_;
+            const auto it = std::find(dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), thisThreadId);
+            if (it != dispatchingThreadIds_.end())
+            {
+                dispatchingThreadIds_.erase(it);
+            }
         }
         callbackFinished_.notify_all();
     }

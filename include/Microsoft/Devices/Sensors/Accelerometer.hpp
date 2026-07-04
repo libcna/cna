@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
@@ -90,19 +91,21 @@ namespace Microsoft::Devices::Sensors
          * the first call to finish would clear it while the second was
          * still in flight, letting a concurrently-waiting Dispose() wake up
          * and free the object out from under the still-running second
-         * call. A count fixes this: every dispatch increments before
-         * running and decrements after, and Dispose() only proceeds once
-         * the count is genuinely back to 0.
+         * call. A count (this member's .size()) fixes this: every dispatch
+         * pushes its thread id before running and erases it after, and
+         * Dispose() only proceeds once no *other* thread's entry remains.
          *
-         * @note As of Task P5-2, a handler that calls Dispose() on *this
-         * same instance* from within its own callback (reentrantly, on the
-         * same thread already executing a dispatch for this instance)
-         * still deadlocks here, same as the old bool — Dispose() would
-         * wait on a count only that same, currently-blocked call could
-         * decrement. Fixed in Task P5-3, which tracks the dispatching
-         * thread id so Dispose() can recognize and skip waiting on itself.
+         * Task P5-3: changed from a plain int counter to a vector of the
+         * dispatching thread id(s), so Dispose() can tell "some other
+         * thread is still dispatching to me, I must wait" apart from "the
+         * only still-in-flight dispatch(es) are on my own thread" — the
+         * latter happens when a CurrentValueChanged/ReadingChanged
+         * handler calls Dispose() on its own sender reentrantly, and
+         * waiting in that case would deadlock: this thread's own dispatch
+         * frame can only finish unwinding *after* Dispose() itself
+         * returns. See Dispose(bool)'s wait predicate.
          */
-        int inFlightCallbackCount_ = 0;
+        std::vector<std::thread::id> dispatchingThreadIds_;
 
     private:
         static bool EnsureSensorSubsystemInitialized();

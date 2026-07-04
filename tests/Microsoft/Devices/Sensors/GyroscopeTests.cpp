@@ -332,3 +332,24 @@ TEST(GyroscopeTests, ConcurrentSyntheticUpdatesDoNotCrashAndDrainBeforeDispose)
     EXPECT_EQ(receivedCount.load(), ThreadCount * IterationsPerThread);
     EXPECT_NO_THROW(gyroscope->Dispose());
 }
+
+// Task P5-3: mirrors AccelerometerTests.DisposeFromWithinOwnCallbackDoesNotDeadlock
+// — see that test for the full rationale. If this test hangs, the fix has
+// regressed (shows as a timeout, not a clean assertion failure).
+TEST(GyroscopeTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
+{
+    auto gyroscope = std::make_unique<Gyroscope>();
+    gyroscope->SetStartedForTesting(true);
+
+    bool handlerRan = false;
+    gyroscope->CurrentValueChanged += [&](
+        System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        handlerRan = true;
+        gyroscope->Dispose();
+    };
+
+    EXPECT_NO_THROW(gyroscope->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+    EXPECT_TRUE(handlerRan);
+    EXPECT_THROW(gyroscope->Dispose(), System::ObjectDisposedException);
+}

@@ -439,3 +439,31 @@ TEST(AccelerometerTests, ConcurrentSyntheticUpdatesDoNotCrashAndDrainBeforeDispo
     EXPECT_EQ(receivedCount.load(), ThreadCount * IterationsPerThread);
     EXPECT_NO_THROW(accelerometer->Dispose());
 }
+
+// Task P5-3: a CurrentValueChanged handler that disposes its own sender
+// reentrantly, from within the same dispatch that's invoking it, used to
+// be a documented, accepted deadlock (Accelerometer.hpp's own comment
+// history, Task P4-2). If this test hangs, it has regressed — gtest/CI
+// will show it as a timeout, not a clean assertion failure, which is the
+// nature of testing a deadlock fix.
+TEST(AccelerometerTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
+{
+    auto accelerometer = std::make_unique<Accelerometer>();
+    accelerometer->SetStartedForTesting(true);
+
+    bool handlerRan = false;
+    accelerometer->CurrentValueChanged += [&](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        handlerRan = true;
+        accelerometer->Dispose();
+    };
+
+    EXPECT_NO_THROW(accelerometer->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+    EXPECT_TRUE(handlerRan);
+
+    // The reentrant call above already disposed it; a second, external
+    // Dispose() call must still throw exactly as it would for any other
+    // already-disposed instance.
+    EXPECT_THROW(accelerometer->Dispose(), System::ObjectDisposedException);
+}

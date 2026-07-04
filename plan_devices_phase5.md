@@ -353,6 +353,50 @@ still not be freed while any *other* thread's dispatch for it is in flight.
 `include/Microsoft/Devices/Sensors/Gyroscope.hpp`,
 `src/Microsoft/Devices/Sensors/Gyroscope.cpp`, relevant test files.
 
+**Resolution (2026-07-04):** Implemented a more general design than the single
+`dispatchingThreadId_` sketched above, after tracing a correctness gap in that simpler
+version: with only *one* stored thread id, a genuine cross-thread concurrent dispatch
+(the scenario Task P5-2 already established as plausible) happening at the same moment
+as a reentrant self-dispose could have the *other* thread's id clobber the
+self-dispatching thread's own id in that single slot — so when the self-disposing
+thread checked "is the stored id mine?", it could find someone else's id instead and
+incorrectly decide it must wait, recreating the exact deadlock this task exists to fix
+(traced by hand: thread A dispatching + reentrantly disposing, thread B also
+dispatching concurrently to the same instance; if B's write to the single slot lands
+after A's, A's own self-check sees B's id, not its own, and waits forever on a count
+that only A's own return-from-Dispose() could ever complete draining).
+
+Replaced `inFlightCallbackCount_` (the plain `int` from Task P5-2) with
+`std::vector<std::thread::id> dispatchingThreadIds_` — one entry pushed per in-flight
+dispatch (its `.size()` is the count, same as before), each entry independently
+identifying which thread it belongs to. `Dispose(bool)`'s wait predicate now checks
+`dispatchingThreadIds_.size() == (number of entries matching this thread)` — i.e. wait
+only if some *other* thread's entry remains; proceed as soon as every remaining entry
+(if any) belongs to the calling thread itself. Re-traced the same A/B scenario against
+this design: B finishing and erasing its own entry leaves only A's — at that point A's
+self-check (`size() == selfCount`) is satisfied and it proceeds correctly, regardless
+of which thread's push happened to land in whatever slot. Applied identically to both
+`Accelerometer`/`Gyroscope`, including their `InjectSyntheticSensorUpdate()` test hooks
+(so a reentrant self-dispose from a synthetic-update-triggered handler is recognized
+the same way a real SDL-event-triggered one would be).
+
+Tests: added `DisposeFromWithinOwnCallbackDoesNotDeadlock` to both
+`AccelerometerTests.cpp`/`GyroscopeTests.cpp` — a `CurrentValueChanged` handler that
+calls `Dispose()` on its own sender, triggered via `InjectSyntheticSensorUpdate()`;
+asserts no deadlock/crash (a regression here shows as a test-runner timeout, not a
+clean assertion failure) and that dispatch-then-dispose leaves the instance correctly
+disposed (a *second*, external `Dispose()` call afterward still throws
+`ObjectDisposedException` exactly as for any other already-disposed instance).
+
+Verified: `CNA`/`CnaTests` build clean; both new tests pass in well under a second
+(no hang); Devices-only filter 41/41 passing (2 expected skips); full `ctest` 2001
+tests, same 2 pre-existing unrelated `EasyGL`/`easy-gl` failures as the Task
+P5-1/P5-2 baseline — no regressions. The header doc comments that used to describe
+this as a permanently-accepted limitation (`Accelerometer.hpp`/`Gyroscope.hpp`) were
+already rewritten in place during Tasks P5-2/P5-3's own edits; `NEXT.md`'s older
+"accepted limitation" language is updated in Task P5-13 (this task only touches
+`Microsoft::Devices` source/tests/this plan file, per scope discipline).
+
 ---
 
 ## Task P5-4 — Shared internal SDL sensor subsystem manager

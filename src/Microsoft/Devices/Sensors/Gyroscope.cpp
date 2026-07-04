@@ -160,6 +160,8 @@ namespace Microsoft::Devices::Sensors
 
         const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
 
+        const std::thread::id thisThreadId = std::this_thread::get_id();
+
         std::vector<Gyroscope*> instancesSnapshot;
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -167,7 +169,7 @@ namespace Microsoft::Devices::Sensors
             {
                 if (gyroscope != nullptr)
                 {
-                    ++gyroscope->inFlightCallbackCount_;
+                    gyroscope->dispatchingThreadIds_.push_back(thisThreadId);
                     instancesSnapshot.push_back(gyroscope);
                 }
             }
@@ -184,7 +186,12 @@ namespace Microsoft::Devices::Sensors
 
             {
                 std::lock_guard<std::mutex> lock(mutex_);
-                --gyroscope->inFlightCallbackCount_;
+                auto& ids = gyroscope->dispatchingThreadIds_;
+                const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
+                if (it != ids.end())
+                {
+                    ids.erase(it);
+                }
             }
             callbackFinished_.notify_all();
         }
@@ -364,9 +371,16 @@ namespace Microsoft::Devices::Sensors
             // instance's ProcessSensorUpdateEvent() on another thread. Wait
             // for that to finish before letting this object's lifetime end,
             // closing the use-after-free window left open by Task P3-4.
-            // Task P5-2: waits for the count to reach 0, not for a single
-            // bool to clear.
-            callbackFinished_.wait(lock, [this] { return inFlightCallbackCount_ == 0; });
+            // Task P5-2/P5-3: waits until no *other* thread's entry
+            // remains in dispatchingThreadIds_ — see Accelerometer.cpp's
+            // identical wait predicate for the full self-dispose rationale.
+            callbackFinished_.wait(lock, [this]
+            {
+                const std::thread::id currentThreadId = std::this_thread::get_id();
+                const auto selfCount = std::count(
+                    dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), currentThreadId);
+                return dispatchingThreadIds_.size() == static_cast<std::size_t>(selfCount);
+            });
 
             --instanceCount_;
             if (instanceCount_ < 0)
@@ -517,19 +531,25 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        // Task P5-2/P5-3: participates in the same inFlightCallbackCount_
+        // Task P5-2/P5-3: participates in the same dispatchingThreadIds_
         // bookkeeping as the real SensorEventWatch() path — see
         // Accelerometer.cpp's identical hook for the full rationale.
+        const std::thread::id thisThreadId = std::this_thread::get_id();
+
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            ++inFlightCallbackCount_;
+            dispatchingThreadIds_.push_back(thisThreadId);
         }
 
         DispatchSensorReading(x, y, z);
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            --inFlightCallbackCount_;
+            const auto it = std::find(dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), thisThreadId);
+            if (it != dispatchingThreadIds_.end())
+            {
+                dispatchingThreadIds_.erase(it);
+            }
         }
         callbackFinished_.notify_all();
     }
