@@ -167,6 +167,61 @@ landscape symbols still compile — see that task's Resolution for the exact com
 `plan_devices_phase8.md` Task P8-8 did the same again for Phase 8's actual new symbols
 (`dispatchToken_`, the lock-proof-parameter overloads of
 `EnsureSubsystemInitialized()`/`OpenDefaultSensorLocked()`/`ProbeIsSupported()`).
+`plan_devices_phase9.md` Task P9-4 re-confirmed the library cross-compile once more
+(no source changes since Task P8-8, so `ninja` correctly reported nothing to rebuild).
+
+### 4.1 APK packaging and emulator/device run — investigated, not available (Task P9-4)
+
+**Library cross-compile only, still true.** No `Microsoft::Devices` example
+(`cna_demo_devices` or any other) has ever been packaged into a runnable Android APK in
+this project's history. This subsection documents exactly what was checked and what is
+actually missing, rather than repeating the same "compile-only" caveat without detail.
+
+**What exists, actually checked this session:**
+- A JDK (`java`/`javac`), Android SDK `build-tools` (33.0.1/34.0.0/36.1.0/37.0.0) and
+  `platforms` (android-34/35/36.1), and the Android emulator binary are all present in
+  `~/Android/Sdk/`.
+- The vendored `third_party/SDL` submodule ships its own complete, ready-to-use
+  Android Studio/Gradle project template (`third_party/SDL/android-project/`, with a
+  working `gradlew` wrapper) and a generator script
+  (`third_party/SDL/build-scripts/create-android-project.py`) that adapts it for a
+  specific native app.
+- An existing AVD, `Medium_Phone` (x86_64, `android-35/google_apis_playstore`), is
+  already configured under `~/.android/avd/`.
+
+**What does not exist:** `CNA`'s own build system has **zero integration** connecting
+any of this to any CNA CMake target — no copied/adapted `android-project`, no
+`AndroidManifest.xml`, no Gradle `externalNativeBuild` pointing at CNA's own
+`CMakeLists.txt`, no chosen package name/permissions/`SDL_main` entry point wiring for
+`cna_demo_devices` or any other example. Building this integration from scratch is real,
+multi-step engineering work (Gradle/CMake glue is failure-prone even with a working
+emulator to iterate against) — **explicitly out of scope for this phase**, per this
+task's own instruction not to invent a large Android app framework unless separately
+scoped. Not attempted here.
+
+**Emulator run — actually attempted, real hard failure, not a guess:**
+```bash
+~/Android/Sdk/emulator/emulator -avd Medium_Phone -no-window -no-audio -gpu swiftshader_indirect -no-snapshot
+```
+Result: the emulator process exits immediately with
+```
+ERROR | x86_64 emulation currently requires hardware acceleration!
+CPU acceleration status: /dev/kvm is not found: VT disabled in BIOS or KVM kernel module not loaded
+```
+`ls /dev/kvm` confirms no KVM device node exists in this container. This is a **hard
+failure, not merely "slow without acceleration"** — the existing `Medium_Phone` AVD is
+an x86_64 system image, and SDL/Android emulators require hardware virtualization for
+x86_64 targets. `adb devices` confirms no device ever attached. **Re-check in a future
+session** (containers/hosts can change, as the Android NDK's own availability did
+between `plan_devices_phase3.md` and `plan_devices_phase4.md` Task P4-11) — an
+ARM-image AVD, or a host with `/dev/kvm` exposed, could change this result.
+
+**Summary (Task P9-4):**
+- Library cross-compile: **passed** (re-confirmed, no regressions).
+- APK/demo packaging: **not available** — no integration exists; building one is
+  explicitly out of scope for this phase.
+- Emulator/device run: **failed** — attempted for real, hard KVM-acceleration failure,
+  not a theoretical blocker.
 
 ## 5. iOS — confirmed still blocked, not attempted
 

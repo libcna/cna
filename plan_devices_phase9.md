@@ -183,3 +183,58 @@ time they're needed again).
 exactly; the one TSan finding is confirmed (via its actual stack, not assumed) to be the
 same pre-existing, out-of-scope `sharp-runtime` issue, unrelated to any
 `Microsoft::Devices` code.
+
+## P9-4: Android build and APK/demo path
+
+### Resolution
+
+**Files changed:** `docs/devices-build.md` — added Section 4.1 documenting the exact
+investigation and findings below.
+
+**1. Library cross-compile:** re-ran
+`cmake --build cmake-build-android --target CNA -j"$(nproc)"` — `ninja: no work to do`
+(no source changes since Task P8-8, correctly nothing to rebuild). **Passed.**
+
+**2. APK/demo packaging — investigated, does not exist, not built this task.** Checked
+for existing packaging infrastructure: no `AndroidManifest.xml`, no `*.gradle*` file,
+no Android-Studio-project directory anywhere in this repo outside the vendored
+`third_party/SDL` submodule (confirmed via `find`). `third_party/SDL/android-project/`
+*does* ship a complete, working Gradle/Android-Studio template with its own `gradlew`,
+and `third_party/SDL/build-scripts/create-android-project.py` can adapt it for a
+specific native app — real, usable infrastructure, but **CNA's own build system has no
+wiring connecting any of it to any CNA CMake target**. Building that wiring (Gradle
+`externalNativeBuild` pointing at CNA's `CMakeLists.txt`, an `AndroidManifest.xml`,
+package name/permissions, `SDL_main`/JNI entry-point glue for `cna_demo_devices`
+specifically) is real, multi-step engineering work — explicitly out of scope for this
+phase per the task's own "do not invent a large Android app framework unless explicitly
+scoped" instruction. **Not available; not attempted; documented precisely instead.**
+
+**3. Emulator/device run — actually attempted, real hard failure, not inferred.**
+Confirmed present: a JDK, Android SDK `build-tools`/`platforms`, the emulator binary,
+and an existing AVD (`Medium_Phone`, x86_64). Launched it for real:
+```bash
+~/Android/Sdk/emulator/emulator -avd Medium_Phone -no-window -no-audio -gpu swiftshader_indirect -no-snapshot
+```
+Result: immediate hard failure —
+```
+ERROR | x86_64 emulation currently requires hardware acceleration!
+CPU acceleration status: /dev/kvm is not found: VT disabled in BIOS or KVM kernel module not loaded
+```
+Confirmed via `ls /dev/kvm` (no such device) and `adb devices` (no device ever
+attached) — not a slowness/timeout guess, a genuine, immediate, reproducible failure
+specific to this AVD's x86_64 architecture requiring hardware virtualization this
+container does not expose. **Failed — real attempt, real blocker, not a theoretical
+one.**
+
+**Summary:**
+- Library cross-compile: **passed**.
+- APK/demo packaging: **not available** (no integration exists; out of scope to build
+  here).
+- Emulator/device run: **failed** (KVM unavailable, confirmed via a real launch
+  attempt).
+
+**Tests added:** none — infrastructure investigation, not a code change.
+
+**Remaining risk:** none introduced. The gap (no APK packaging, no working emulator)
+is pre-existing and now precisely documented with real evidence, not just repeated as
+an assumption.
