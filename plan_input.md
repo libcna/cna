@@ -292,7 +292,7 @@ behavior.
 
 ---
 
-## Phase I10 — Input final stabilization (tasks 841–855)
+## Phase I10 — Input final stabilization ✅ COMPLETE (tasks 841–855)
 
 > **Origin:** second external-review pass, relayed by the user. A *stabilization* phase, not a new
 > feature phase: verify build/test reproducibility, fix the one remaining real fidelity gap
@@ -317,7 +317,7 @@ behavior.
 | 852 | Verify `TextInputEXT` with Czech + ≥1 astral char in a real SDL window if possible. | ✅ | Headless: added `TextInputEventDecodesCzechDiacritics` (drives `žluťoučký` — ž/ť/č/ý, U+017E/0165/010D/00FD — through `ProcessEvent`, asserting the exact 9-code-unit UTF-16 output); astral emoji surrogate pair already covered (807). Real-window text-input *activation* is verified (task 809). **Honest gap:** actual IME composition / physical Czech typing needs a human + IME — not verified (recorded in the results doc). |
 | 853 | Verify Wayland behavior separately from X11 on Linux. | ✅ | The a-0001 conversion test passes under both ambient **Wayland** and `SDL_VIDEODRIVER=x11`. Confirmed (task 783 + this pass) that `SDL_GetGlobalMouseState` returns `(0,0)` under this Wayland session (compositor policy), so the OS-cursor *landing* pixel is only readable under X11; relative mouse mode (pointer lock) is the Wayland path. Documented in `docs/platform-input-notes.md` (Wayland section) + the results doc. |
 | 854 | One small XNA-like sample using Keyboard+Mouse+GamePad+Touch+TextInput together in one update loop. | ✅ | New `examples/input_smoke/InputSmoke.cpp` + `cna_input_smoke` CMake target: a ~110-line `Game` subclass that reads Keyboard/Mouse/GamePad(One)/Touch/TextInput each `Update()`, logs a compact status line twice a second, and self-exits on Esc or after a frame budget (`CNA_INPUT_SMOKE_FRAMES`). Ran it (`CNA_INPUT_SMOKE_FRAMES=120`): clean self-exit (exit 0), and it **captured real live input** (a key-down at frame 30; mouse movement `(780,324)→(799,324)` at frames 90/120). |
-| 855 | Finalize `feature/input`: concise final handoff in `NEXT.md` (done / remains-outside-branch / next branch). | ⬜ | Short + factual. |
+| 855 | Finalize `feature/input`: concise final handoff in `NEXT.md` (done / remains-outside-branch / next branch). | ✅ | Rewrote `NEXT.md` §1 (phase status → I1–I10 finalized, clean-built on all 3 backends), §8 (now a "Final handoff": what's done on-branch, what remains **outside** the branch — hardware/human verification + graphics/audio/content — and the user's merge-vs-next-branch decision), and §10 (resume prompt: input is done, don't invent tasks, don't merge to master without confirmation). Short + factual. |
 
 **Order:** 841–845 (reproducibility) → 846–848 (the real fix) → 849–854 (manual/runtime, honest) →
 855 (handoff). No new input API features unless a test/sample proves them necessary.

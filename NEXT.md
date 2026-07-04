@@ -11,17 +11,21 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   from the FNA reference to CNA — not just API surface, but FNA-faithful runtime behavior wired
   to SDL3, CHECKLIST-compliant, and covered by tests. The original plan was `plan_input.md`
   (Phases I1–I7, tasks 700–783); all of it is now complete.
-- **Current development phase: everything currently planned is done again.** Phases I1–I7
-  (700–783), Phase I8 (790–791), and **Phase I9 (792–840) are all complete and verified on
-  EasyGL/Vulkan/bgfx** (task 840: 1961/1961, 1961/1961, 1965/1965; 214 input tests each). There is
-  no next numbered task — see Section 8.
-- **The ChatGPT Plus review happened** (relayed 2026-07-04) and became **Phase I9** in
-  `plan_input.md` (renamed from the review's "Phase I8" to avoid colliding with 790–791). All 49
-  tasks are done except **800/801**, which were **deferred by user decision** to the new
-  cross-cutting plan **`plan.md` as task `a-0001`** (`Mouse::SetPosition` inverse logical→window
-  transform — graphics-layer scope). Task **811 is partial** (bridge SDL slot-assignment edge
-  cases are hardware-gated). Real fixes this phase: `GetGUIDEXT` format (816), `TextInput`→
-  `char16_t` (806), touch display-size guard (828), `MouseCursor` singleton disposal (834).
+- **Current development phase: `feature/input` is FINALIZED.** Phases I1–I10 (tasks 700–855) are
+  all complete and verified clean-built on **EasyGL/Vulkan/bgfx** (task 843: **1963/1963,
+  1963/1963, 1967/1967**; 215 input tests each). There is no next numbered task — see Section 8.
+- **Two external-review passes drove the last two phases.** The first (2026-07-04) became **Phase
+  I9 (792–840)**; the second became **Phase I10 (841–855)**, a stabilization pass. The one
+  previously-deferred item — `Mouse::SetPosition`'s scaled/letterboxed logical→window transform
+  (`plan.md` a-0001) — is now **implemented** (Phase I10 task 846; the graphics-layer change was
+  authorized in Phase I10). Task **811 stays partial** (bridge SDL gamepad slot-assignment edge
+  cases are hardware-gated). Real fixes across I9–I10: `GetGUIDEXT` format (816), `TextInput`→
+  `char16_t` (806), touch display-size guard (828), `MouseCursor` singleton disposal (834),
+  `SetPosition` logical→window transform (846).
+- **Honestly unverified (hardware/human-gated, not missing code):** live gamepad rumble/sensors/
+  light bar/hotplug (no controller), real IME composition + physical Czech typing (no IME/human),
+  Wayland OS-cursor-landing readback (compositor policy). All recorded in
+  `docs/input-manual-verification-results.md` and Section 5.
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -361,28 +365,32 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ---
 
-## 8. Next smallest tasks
+## 8. Final handoff (task 855)
 
-**The ChatGPT Plus review already happened** (2026-07-04) and became **Phase I9 (792–840) in
-`plan_input.md`, now complete** — so don't ask whether the review happened; it did, and it's done.
+**`feature/input` is finalized.** Phases I1–I10 (tasks 700–855) are all done and clean-built +
+tested on all three backends (task 843: EasyGL/Vulkan 1963, bgfx 1967; 215 input tests each). Both
+external-review passes (→ Phase I9, then Phase I10) are complete. There is **no next numbered
+task**; the previously-deferred `plan.md` a-0001 is now **implemented** (task 846).
 
-**There is no next task anywhere in `plan_input.md`.** Phases I1–I9 (700–840) are all done and
-verified on all three backends (task 840). This is again the user's call, not a default to pick:
+**What is done (on this branch):** the full XNA 4.0 `Input` + `Input::Touch` surface, FNA-faithful
+runtime behavior on SDL3, FNA `*EXT` extensions, the MonoGame-style `MouseCursor`, `TextInputEXT`
+(UTF-16), gesture recognition, and `Mouse::SetPosition` logical→window scaling. 215 input tests + a
+combined `cna_input_smoke` sample. Coverage is documented **by category** (never blended) in
+`plan_input.md`'s "final split" and `docs/xna-4-api-coverage.md`.
 
-1. **Merge/PR `feature/input` into `master`.** Scope complete, tested on EasyGL/Vulkan/bgfx, and
-   documented (`plan_input.md`, `AUDIT.md`, `docs/input-backend.md`, `docs/xna-4-api-coverage.md`,
-   `docs/platform-input-notes.md`, `docs/demo-input-checklist.md`). Confirm before merging/pushing
-   to `master` — a repo-affecting action.
-2. **Define more new follow-up tasks**, if wanted. The one known deferred item is graphics-layer
-   (`plan.md` `a-0001`, below); anything else is a fresh discovery — verify it's real first.
-3. **Do nothing further and report the branch as complete** — a valid, honest answer.
+**What remains — outside this branch (do NOT do here):**
+- **Hardware/human verification** (not code): live gamepad rumble/sensors/light bar/hotplug, real
+  IME composition + Czech typing, Wayland OS-cursor-landing. Run `docs/input-manual-verification-
+  results.md`'s checklist on a machine with a controller + IME + X11 session. Task **811** stays
+  partial for the same reason (bridge SDL slot-assignment needs a real device).
+- **Anything graphics/audio/content.** `GRAPHICS_TASKS.md` is the graphics track; `plan.md` holds
+  cross-cutting `a-NNNN` items (a-0001 now done).
 
-**Deferred, not forgotten:** `Mouse::SetPosition`'s letterbox scale-factor deviation (needs an
-`IGraphicsBackend` inverse logical→window transform) is Phase I9 tasks 800/801, **deferred by user
-decision to the new `plan.md` as task `a-0001`** (a cross-cutting/deferred plan using an `a-NNNN`
-id scheme). It's graphics-layer scope; don't add it back to `plan_input.md`. Task **811 is
-partial** — the bridge's SDL slot-assignment edge cases (dup-add / no-free / env-count /
-removed-unknown) need a real `SDL_OpenGamepad` device and aren't headless-testable.
+**The user's call now (a repo-affecting decision, confirm first):**
+1. **Merge/PR `feature/input` → `master`** — scope complete, tested, documented.
+2. Report the branch complete and **switch to the next branch** (graphics work on
+   `GRAPHICS_TASKS.md`, or whatever the user prioritizes) — nothing input-side is pending.
+3. Define new follow-up tasks only if a real gap is discovered (verify first — do not invent).
 
 ---
 
@@ -420,19 +428,19 @@ removed-unknown) need a real `SDL_OpenGamepad` device and aren't headless-testab
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Phases I1-I9 (700-840) are all complete and verified on EasyGL/Vulkan/bgfx
-(task 840) — there is no next numbered task to pick up.
+Read NEXT.md first. feature/input is FINALIZED: Phases I1-I10 (700-855) are all complete and
+clean-built + tested on EasyGL/Vulkan/bgfx (task 843: 1963/1963/1967, 215 input tests each).
+There is no next numbered input task to pick up.
 
-The ChatGPT Plus review already happened and became Phase I9 (792-840) in plan_input.md, now
-complete — do NOT ask whether the review happened; it did. One item is deferred by user decision:
-tasks 800/801 (Mouse::SetPosition inverse transform, graphics-layer) live in the new plan.md as
-task a-0001. Task 811 is partial (bridge SDL slot-assignment edge cases are hardware-gated).
+Both external-review passes are done (Phase I9, then Phase I10). plan.md a-0001
+(Mouse::SetPosition logical->window transform) is now IMPLEMENTED (task 846). Task 811 stays
+partial and the manual/hardware checks in docs/input-manual-verification-results.md stay open
+ONLY because they need real hardware/IME/X11 - not missing code. Do NOT re-open these as input
+tasks.
 
-The decision now is Section 8's three options — merge/PR feature/input into master (confirm before
-pushing), define new follow-up tasks, or report the branch complete. Do NOT merge/push to master
-without explicit confirmation.
-
-If the user gives a new task, treat it like any other: inspect only the files it needs, make one
-small, verified improvement, run the relevant build/test command (cmake-build-input-easygl is the
-kept-current EasyGL dir), and update NEXT.md + plan_input.md before finishing.
+The decision now (Section 8) is the user's: merge/PR feature/input into master (confirm before
+pushing - do NOT merge/push to master without explicit confirmation), or report complete and
+move to the next branch (graphics = GRAPHICS_TASKS.md). Do not invent new input tasks; the input
+layer is done. If the user reports a real, reproduced input bug, treat it as a normal small fix
+(inspect only the files it needs, build+test via cmake-build-input-easygl, update the plans).
 ```
