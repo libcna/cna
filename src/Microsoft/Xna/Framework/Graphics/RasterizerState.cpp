@@ -3,9 +3,9 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    const RasterizerState RasterizerState::CullClockwise{CullMode::CullClockwiseFace};
-    const RasterizerState RasterizerState::CullCounterClockwise{CullMode::CullCounterClockwiseFace};
-    const RasterizerState RasterizerState::CullNone{CullMode::None};
+    const RasterizerState RasterizerState::CullClockwise{"RasterizerState.CullClockwise", CullMode::CullClockwiseFace};
+    const RasterizerState RasterizerState::CullCounterClockwise{"RasterizerState.CullCounterClockwise", CullMode::CullCounterClockwiseFace};
+    const RasterizerState RasterizerState::CullNone{"RasterizerState.CullNone", CullMode::None};
 
     RasterizerState::RasterizerState()
         : cullMode_(CullMode::CullCounterClockwiseFace)
@@ -17,9 +17,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     }
 
-    RasterizerState::RasterizerState(CullMode cullMode)
+    RasterizerState::RasterizerState(const std::string& name, CullMode cullMode)
         : RasterizerState()
     {
+        setNameProperty(name);
         cullMode_ = cullMode;
     }
 

@@ -95,6 +95,16 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClo
     EXPECT_EQ(rs.getFillModeProperty(), RasterizerState::CullCounterClockwise.getFillModeProperty());
 }
 
+// Task 321: now that RasterizerState::CullCounterClockwise has a Name (Task 321 fixed the last
+// remaining portion of Task 866), this closes the loose end left by Task 312 (which deliberately
+// skipped this check since the Name gap wasn't fixed yet).
+TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClockwiseName)
+{
+    GraphicsDevice gd;
+    EXPECT_EQ(gd.getRasterizerStateProperty().getNameProperty(),
+              "RasterizerState.CullCounterClockwise");
+}
+
 // Task 319: FNA's GraphicsDevice.ReferenceStencil is a real, independent device property
 // (FNA3D_Get/SetReferenceStencil) - but assigning a whole DepthStencilState (which carries its own
 // ReferenceStencil field) applies that state atomically, the same way BlendState.BlendFactor is

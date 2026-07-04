@@ -92,7 +92,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void setSlopeScaleDepthBiasProperty(float value);
 
     private:
-        explicit RasterizerState(CullMode cullMode);
+        RasterizerState(const std::string& name, CullMode cullMode);
 
         CullMode cullMode_;
         float depthBias_;

@@ -133,3 +133,34 @@ TEST(RasterizerStateTest, SetScissorTestEnable)
     rs.setScissorTestEnableProperty(true);
     EXPECT_TRUE(rs.getScissorTestEnableProperty());
 }
+
+// --- Preset Name (Task 321: FNA sets Name on every preset; CNA previously did not - same gap
+// already found and fixed in SamplerState (Task 291), BlendState (Task 301), and
+// DepthStencilState (Task 311); closes the last remaining portion of Task 866) ---
+
+TEST(RasterizerStateTest, CullClockwiseName)
+{
+    EXPECT_EQ(RasterizerState::CullClockwise.getNameProperty(), "RasterizerState.CullClockwise");
+}
+
+TEST(RasterizerStateTest, CullCounterClockwiseName)
+{
+    EXPECT_EQ(RasterizerState::CullCounterClockwise.getNameProperty(),
+              "RasterizerState.CullCounterClockwise");
+}
+
+TEST(RasterizerStateTest, CullNoneName)
+{
+    EXPECT_EQ(RasterizerState::CullNone.getNameProperty(), "RasterizerState.CullNone");
+}
+
+TEST(RasterizerStateTest, PresetToStringReturnsName)
+{
+    EXPECT_EQ(RasterizerState::CullCounterClockwise.ToString(), "RasterizerState.CullCounterClockwise");
+}
+
+TEST(RasterizerStateTest, DefaultConstructedNameIsEmpty)
+{
+    RasterizerState rs;
+    EXPECT_TRUE(rs.getNameProperty().empty());
+}
