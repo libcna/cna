@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/XactTypes.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -363,6 +364,32 @@ namespace CNA::Internal::Audio
 
     // ── XWB Parser ───────────────────────────────────────────────────────────
 
+    namespace
+    {
+        // Reads magic + version + (optional) headerVersion + the fixed 5-entry segment table,
+        // shared by ParseXwb and ParseXwbStreamingHeader so both agree on segment layout.
+        void ReadXwbSegmentTable(Ctx& ctx, uint32_t (&segOffset)[5], uint32_t (&segLength)[5])
+        {
+            uint32_t magic = ctx.u32();
+            if (magic != 0x444E4257u)
+                throw std::runtime_error("XWB: invalid magic (expected WBND)");
+
+            uint32_t version = ctx.u32();
+            if (version > 46)
+                std::cerr << "[XWB] Warning: version " << version << " may not be fully supported\n";
+
+            if (version > 43)
+                ctx.u32(); // headerVersion
+
+            // 5 segments: each {dwOffset: u32, dwLength: u32}
+            for (int i = 0; i < 5; ++i)
+            {
+                segOffset[i] = ctx.u32();
+                segLength[i] = ctx.u32();
+            }
+        }
+    }
+
     XwbData ParseXwb(std::vector<uint8_t> fileData)
     {
         XwbData result;
@@ -374,24 +401,8 @@ namespace CNA::Internal::Audio
 
         Ctx ctx{fd.data(), fd.data() + fd.size(), fd.data()};
 
-        uint32_t magic = ctx.u32();
-        if (magic != 0x444E4257u)
-            throw std::runtime_error("XWB: invalid magic (expected WBND)");
-
-        uint32_t version = ctx.u32();
-        if (version > 46)
-            std::cerr << "[XWB] Warning: version " << version << " may not be fully supported\n";
-
-        if (version > 43)
-            ctx.u32(); // headerVersion
-
-        // 5 segments: each {dwOffset: u32, dwLength: u32}
         uint32_t segOffset[5], segLength[5];
-        for (int i = 0; i < 5; ++i)
-        {
-            segOffset[i] = ctx.u32();
-            segLength[i] = ctx.u32();
-        }
+        ReadXwbSegmentTable(ctx, segOffset, segLength);
 
         // BANKDATA segment
         // Layout: flags(u32), entryCount(u32), bankName[64], entryMetaDataSize(u32),
@@ -549,6 +560,45 @@ namespace CNA::Internal::Audio
             }
         }
 
+        return result;
+    }
+
+    XwbData ParseXwbStreamingHeader(const std::string& path)
+    {
+        std::ifstream f(path, std::ios::binary);
+        if (!f.is_open())
+            throw std::runtime_error("XWB: cannot open file for streaming");
+
+        // Large enough to safely cover magic + version + optional headerVersion + the fixed
+        // 5-entry segment table (at most 4+4+4+40 = 52 bytes) without knowing the version yet.
+        std::vector<uint8_t> preamble(64);
+        f.read(reinterpret_cast<char*>(preamble.data()), static_cast<std::streamsize>(preamble.size()));
+        const auto preambleRead = f.gcount();
+        if (preambleRead < 52)
+            throw std::runtime_error("XWB: file too small");
+        preamble.resize(static_cast<std::size_t>(preambleRead));
+
+        Ctx headCtx{preamble.data(), preamble.data() + preamble.size(), preamble.data()};
+        uint32_t segOffset[5], segLength[5];
+        ReadXwbSegmentTable(headCtx, segOffset, segLength);
+
+        // Segments 0-3 (bank data, entry metadata, seek tables, entry names) must be resident
+        // for ParseXwb to build entries/names; segment 4 (wave data) is by far the largest part
+        // of a real .xwb and is read lazily, per entry, from `path` in WaveBank::GetSoundEffect.
+        uint64_t prefixLen = 0;
+        for (int i = 0; i < 4; ++i)
+            prefixLen = std::max<uint64_t>(prefixLen, static_cast<uint64_t>(segOffset[i]) + segLength[i]);
+
+        std::vector<uint8_t> prefix(static_cast<std::size_t>(prefixLen));
+        f.clear();
+        f.seekg(0);
+        f.read(reinterpret_cast<char*>(prefix.data()), static_cast<std::streamsize>(prefixLen));
+        if (static_cast<uint64_t>(f.gcount()) != prefixLen)
+            throw std::runtime_error("XWB: truncated header/metadata segments");
+
+        XwbData result = ParseXwb(std::move(prefix));
+        result.streaming  = true;
+        result.sourcePath = path;
         return result;
     }
 

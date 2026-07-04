@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "System/IDisposable.hpp"
@@ -93,6 +95,15 @@ namespace Microsoft::Xna::Framework::Audio
         std::unique_ptr<XactWaveBankImpl> xactImpl_;
 
         void Init(const std::string& filename);
+        void InitStreaming(const std::string& filename);
+
+        // Test-only internal queries (T-3F): whether this bank uses streaming/lazy per-entry
+        // wave-data reads, and how many file bytes are actually resident in memory (the whole
+        // file when not streaming; only the header/metadata segments when streaming). Exposed
+        // as private methods rather than directly to WaveBankTestAccess because XactWaveBankImpl
+        // is a pimpl type fully defined only in WaveBank.cpp.
+        bool StreamingInternal() const;
+        std::size_t ResidentFileBytesInternal() const;
 
         /** @brief Returns the bank name parsed from the .XWB file header. */
         const std::string& getBankName() const;
@@ -112,5 +123,9 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<Cue*> activeCues_;
         void RegisterCue(Cue* cue);
         void UnregisterCue(Cue* cue);
+
+        // Tests need to observe streaming-vs-in-memory internal state (T-3F) without a public
+        // XNA-surface way to distinguish them.
+        NOXNA friend struct WaveBankTestAccess;
     };
 }

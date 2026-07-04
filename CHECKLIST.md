@@ -75,6 +75,6 @@ If the class depends on `Game` / SDL / graphics backend, document it and skip te
 | Audio: 3D positional audio is pan + distance-attenuation only, no elevation (`Mix_SetPosition`) | SDL_mixer has no FAudio F3DAudio equivalent |
 | Audio: `DopplerScale`/`Velocity` are stored but never applied to pitch | SDL_mixer has no per-source velocity-based pitch shift |
 | Audio: `GetHashCode()` uses `std::hash` on the category/cue name, doesn't match C# `String.GetHashCode()` | Platform C++ hash instead of .NET's algorithm; internal consistency preserved |
-| Audio: FACT `DoWork`/streaming wavebanks not implemented — `.xwb` is always loaded fully into memory | Backend is SDL3_mixer, not FACT; no real offset/packetSize streaming (`plan_audio.md` T-3F) |
+| Audio: streaming `WaveBank` ctor's `offset`/`packetSize` parameters are unused | Matches FNA's own `WaveBank.cs`, which never forwards them to `FACTStreamingParameters` either (only `.file` is set); real per-entry lazy disk reads are implemented (`plan_audio.md` T-3F) |
 | Audio: `SoundEffect::CreateInstance()`/`FromStream()` return by value, no instance-tracking or Dispose-cascade | C++ value semantics instead of C# heap-reference semantics (`plan_audio.md` T-3G) |
 | Audio: interactive-type (`type==3`) variation tables fall back to a uniform pick instead of selecting by a per-cue/global variable's value range | Parser doesn't retain `var_min`/`var_max` per entry yet; weighted selection is implemented for wave/sound/compact_wave tables (`plan_audio.md` XA-3) |

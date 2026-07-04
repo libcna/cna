@@ -97,8 +97,17 @@ namespace CNA::Internal::Audio
         std::vector<XwbEntry>    entries;
         /** @brief Per-entry names; may be empty if the bank has no name table. */
         std::vector<std::string> entryNames;
-        /** @brief Entire XWB file, kept in memory for audio extraction. */
+        /**
+         * @brief Header/metadata segments of the file (everything except the wave-data
+         * segment). When @ref streaming is false, this holds the entire file, and entry audio
+         * is sliced directly out of it. When true, entry audio must instead be read lazily
+         * from @ref sourcePath (see WaveBank's streaming constructor).
+         */
         std::vector<uint8_t>     fileData;
+        /** @brief True if this bank was parsed via ParseXwbStreamingHeader (see @ref fileData). */
+        bool                     streaming = false;
+        /** @brief Source file path; only meaningful when @ref streaming is true. */
+        std::string              sourcePath;
     };
 
     // ── XSB ─────────────────────────────────────────────────────────────────
@@ -206,6 +215,17 @@ namespace CNA::Internal::Audio
      * @return Parsed wave bank data.
      */
     XwbData ParseXwb(std::vector<uint8_t> fileData);
+
+    /**
+     * @brief Parses a .XWB wave bank's header/metadata segments only, reading them directly
+     * from disk (the wave-data segment is left unread; entry audio must be read lazily from
+     * @p path later, per entry, via its dataOffset/dataLength).
+     *
+     * @param path Path to the .XWB file on disk.
+     * @return Parsed wave bank data with XwbData::streaming set to true.
+     * @throws std::runtime_error if @p path cannot be opened or the header is truncated/invalid.
+     */
+    XwbData ParseXwbStreamingHeader(const std::string& path);
 
     /**
      * @brief Parses a .XSB sound bank file.

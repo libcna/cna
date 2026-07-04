@@ -63,8 +63,10 @@ ne odstranit (pokud se nerozhodne jinak v úkolu, který je explicitně zmiňuje
    se ukládá, ale neaplikuje.
 3. **`GetHashCode()` → `int`/`size_t`** přes `std::hash` — hodnota se neshoduje s C# `String.GetHashCode`,
    ale je konzistentní (akceptováno dle CHECKLIST.md).
-4. **FACT `DoWork` / streaming wavebanky** — celý wavebank se načítá do paměti; skutečný streaming
-   (offset/packetSize) není implementován. (úkol T-3F to buď doplní, nebo natvrdo zdokumentuje)
+4. **FACT `DoWork`** — kategorie fade a instance-limity z FACT `DoWork` nejsou implementovány
+   (per-cue re-apply hlasitosti kategorie ale ano, viz T-4D). Streaming `WaveBank` byl doplněn
+   (T-3F, 2026-07-04): streamující ctor čte hlavičku/metadata z disku a data položky líné, ne
+   celý soubor eager.
 5. **`CreateInstance`/`FromStream` hodnotová vs. heap-reference sémantika** — řeší úkol T-3G
    (buď instance-tracking, nebo doložená odchylka).
 
@@ -239,11 +241,29 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Důvod:* není XNA API a jediný volající (`Cue.cpp:186`) drží konkrétní `SoundEffect*`.
   *Accept:* žádný neobalený non-XNA abstraktní typ v XNA namespace; build zelený; Cue se překládá. (A6)
 
-- [ ] **T-3F — Streaming WaveBank: offset/packetSize.**
+- [x] **T-3F — Streaming WaveBank: offset/packetSize.**
   Buď implementovat skutečný streaming ctor (`WaveBank.cpp:149-155` dnes deleguje na in-memory a
   ignoruje offset/packetSize), nebo natvrdo zdokumentovat jako akceptovanou odchylku (vše do paměti).
   *FNA:* WaveBank.cs:104-143.
   *Accept:* doložené rozhodnutí; pokud implementováno, test na korektní offsetované čtení. (B z #3)
+  *Pozn.:* Hotovo 2026-07-04 -- implementován skutečný streaming (rozhodnutí padlo pro "implementovat",
+  ne pro doložení odchylky). Nová `ParseXwbStreamingHeader(path)` (XactParser.cpp) čte z disku jen
+  segmenty 0-3 (bankdata/entrymetadata/seektables/entrynames), segment 4 (wave data, typicky
+  zdaleka největší část souboru) se nenačítá; `XwbData` má nové `streaming`/`sourcePath` pole.
+  `WaveBank::GetSoundEffect()` pak pro streamující banku čte data konkrétní položky líné, přímo
+  z disku (`sourcePath`, seek na `entry.dataOffset`, přečte `entry.dataLength` bajtů), místo
+  slice z `fileData` (které u streamující banky obsahuje jen hlavičku/metadata). Non-streaming ctor
+  se chová beze změny (celý soubor eager, jako FNA). `offset`/`packetSize` zůstávají nepoužité --
+  ověřeno na FNA referenci (`WaveBank.cs:104-143`), že FNA samo tyto dva parametry nikdy nekopíruje
+  do `FACTStreamingParameters` (jen `.file`), takže shoda s FNA znamená, že mají zůstat mrtvé i
+  v CNA. Testy: `WaveBankTest.NonStreamingCtorLoadsEntireFileIntoMemory`,
+  `StreamingCtorDoesNotLoadWaveDataSegmentIntoMemory` (paměťová stopa přes nový
+  `WaveBankTestAccess`/`StreamingInternal`/`ResidentFileBytesInternal`),
+  `StreamingGetSoundEffectReadsCorrectPerEntryOffsetAndLength` (dvou-entry fixtura s různou
+  délkou/offsetem -- chytí i "čte špatný, ale stejně dlouhý rozsah" bug, ne jen "nečte vůbec").
+  Ověřeno ASan+LeakSanitizer buildem (žádný leak/UB v novém file-I/O kódu) a `git stash`
+  metodikou (bez opravy `WaveBankTestAccess` ani nejde zkompilovat, protože `StreamingInternal`
+  atd. neexistují -- genuine compile failure, ne jen selhávající assert).
 
 - [ ] **T-3G — SoundEffect: instance-tracking + Dispose-kaskáda (rozhodnutí).**
   Buď evidovat živé instance (weak refs) a `SoundEffect::Dispose()` je zastaví/disposne (FNA),
@@ -965,7 +985,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 |----|---------------------|--------------------|
 | D1 | `CreateInstance`/`FromStream`: hodnota vs. heap-reference + instance-tracking (T-3G) | Ponechat hodnotu, **zdokumentovat** odchylku; tracking jen pokud demo/hra vyžaduje Dispose-kaskádu |
 | D2 | Pan/Volume klamp vs. throw/pass-through (T-3C) | Sladit s FNA (throw na range, pass-through volume); klamp jen vědomě + do CHECKLIST |
-| D3 | Streaming WaveBank (T-3F) | Zatím doložená odchylka (vše do paměti); skutečný streaming jako pozdější úkol |
+| D3 | ~~Streaming WaveBank (T-3F)~~ | **Rozhodnuto a implementováno 2026-07-04** — skutečný streaming: `ParseXwbStreamingHeader` čte jen hlavičku/metadata z disku, `WaveBank::GetSoundEffect` čte data položky líné přímo ze souboru. Non-streaming ctor beze změny (celý soubor eager, jako FNA). |
 | D4 | ~~Rozsah `AudioEngine::Update` / FACT DoWork (T-4D)~~ | **Rozhodnuto a implementováno 2026-07-04** — minimální rozsah: `SetCategoryVolumeInternal` teď volá `Cue::ApplyCategoryVolume` pro re-apply na aktivní instance; fade kategorií a instance-limity (zbytek FACT `DoWork`) zůstávají dokumentovaně mimo rozsah. |
 | D5 | ~~Vlastnictví `SoundEffect` vs. `SoundEffectInstance` — dangling-safe kontrakt vs. sdílené vlastnictví (CP-7)~~ | **Rozhodnuto a implementováno 2026-07-03** — sdílené vlastnictví: `SoundEffectInstance` drží type-erased `shared_ptr<void>` na `SoundEffect::impl_` plus cache'ovaný native handle, žádná dereference syrového `SoundEffect*` za konstrukcí. Ověřeno reálným ASan buildem. |
 | D6 | ~~Fire-and-forget cue cleanup: čas vs. stav přehrávání (XA-1)~~ | **Rozhodnuto a implementováno 2026-07-02** — mazat podle `!IsPlaying`, časový safety-net (5 min) jen jako krajní pojistka. |

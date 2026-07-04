@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/EventArgs.hpp"
@@ -22,7 +23,27 @@ using Microsoft::Xna::Framework::Audio::AudioEngine;
 using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
 using Microsoft::Xna::Framework::Audio::SoundBank;
+using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::WaveBank;
+
+namespace Microsoft::Xna::Framework::Audio
+{
+    // Test-only accessor for T-3F: whether a bank loaded via streaming/lazy per-entry reads
+    // (XwbData::streaming) vs eagerly loading the whole file, how many file bytes are actually
+    // resident in memory, and direct access to the private GetSoundEffect() so offset/length
+    // correctness can be checked without going through a real Cue/SoundBank/audio-device pipeline.
+    struct WaveBankTestAccess
+    {
+        static bool IsStreaming(const WaveBank& wb) { return wb.StreamingInternal(); }
+        static std::size_t ResidentFileBytes(const WaveBank& wb) { return wb.ResidentFileBytesInternal(); }
+        static const SoundEffect* GetSoundEffect(WaveBank& wb, unsigned short index)
+        {
+            return wb.GetSoundEffect(index);
+        }
+    };
+}
+
+using Microsoft::Xna::Framework::Audio::WaveBankTestAccess;
 
 namespace
 {
@@ -246,6 +267,90 @@ namespace
             (std::filesystem::temp_directory_path() / "cna_wavebank_test_nonexistent.xgs").string());
         return engine;
     }
+
+    constexpr const char* kMultiEntryWaveBankName = "MultiEntryWaveBank";
+
+    // Non-compact .xwb (standard 24-byte entryMetaDataSize) with two mono 16-bit PCM entries at
+    // different offsets/lengths within the wave-data segment (entry 0: 100 bytes at offset 0;
+    // entry 1: 300 bytes at offset 100) -- needed to prove streaming's lazy per-entry disk reads
+    // (T-3F) land on the correct byte range, not just "some" range. A single-entry fixture
+    // couldn't catch an offset bug, since entry 0 always starts at offset 0 either way.
+    std::vector<uint8_t> BuildMultiEntryXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 2;
+        constexpr uint32_t entryMetaDataSize = 24;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t entry0Length      = 100;
+        constexpr uint32_t entry1Length      = 300;
+        constexpr uint32_t waveDataLength    = entry0Length + entry1Length;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0u); // wbFlags: not compact, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, kMultiEntryWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, 4); // alignment (unused, non-compact)
+        AppendU32(data, 0); // compactFormat (unused, non-compact)
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        const uint32_t fmt =
+              (0u)          // fmtTag: PCM
+            | (0u << 2)     // channels-1 = 0 -> mono
+            | (44100u << 5) // sample rate
+            | (2u << 23)    // wBlockAlign: 2 bytes/sample
+            | (1u << 31);   // 16-bit
+
+        // Entry 0: playOffset=0, playLength=entry0Length
+        AppendU32(data, 0u); // flagsAndDuration (unused by CNA)
+        AppendU32(data, fmt);
+        AppendU32(data, 0u);
+        AppendU32(data, entry0Length);
+        AppendU32(data, 0u); // loopStart
+        AppendU32(data, 0u); // loopTotal
+
+        // Entry 1: playOffset=entry0Length, playLength=entry1Length
+        AppendU32(data, 0u);
+        AppendU32(data, fmt);
+        AppendU32(data, entry0Length);
+        AppendU32(data, entry1Length);
+        AppendU32(data, 0u);
+        AppendU32(data, 0u);
+
+        for (uint32_t i = 0; i < entry0Length; ++i)
+            data.push_back(0xAA);
+        for (uint32_t i = 0; i < entry1Length; ++i)
+            data.push_back(0xBB);
+
+        return data;
+    }
+
+    const std::string& MultiEntryXwbFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "multifixture.xwb", BuildMultiEntryXwbFixtureBytes());
+        return path;
+    }
 }
 
 // ===================== Constructors =====================
@@ -282,6 +387,84 @@ TEST(WaveBankTest, StreamingCtorLoadsValidFixture)
     WaveBank wb(&SharedEngine(), XwbFixturePath(), 0, 2048);
     EXPECT_FALSE(wb.getIsDisposedProperty());
     EXPECT_TRUE(wb.getIsPreparedProperty());
+}
+
+// ===================== Streaming vs. in-memory loading (T-3F) =====================
+
+// The non-streaming ctor must keep the FNA-matching "everything eager" behavior: the entire
+// file is resident, and WaveBank::StreamingInternal() reports false.
+TEST(WaveBankTest, NonStreamingCtorLoadsEntireFileIntoMemory)
+{
+    const auto& path = XwbFixturePath();
+    const auto fullFileSize = std::filesystem::file_size(path);
+
+    WaveBank wb(&SharedEngine(), path);
+    ASSERT_TRUE(wb.getIsPreparedProperty());
+
+    EXPECT_FALSE(WaveBankTestAccess::IsStreaming(wb));
+    EXPECT_EQ(WaveBankTestAccess::ResidentFileBytes(wb), fullFileSize);
+}
+
+// The streaming ctor must NOT eagerly load the (by far largest) wave-data segment -- only the
+// header/metadata segments should be resident; this is the actual memory-footprint payoff of
+// T-3F's real streaming implementation, as opposed to the old "streaming ctor secretly loads
+// everything anyway" behavior.
+TEST(WaveBankTest, StreamingCtorDoesNotLoadWaveDataSegmentIntoMemory)
+{
+    const auto& path = XwbFixturePath();
+    const auto fullFileSize = std::filesystem::file_size(path);
+
+    WaveBank wb(&SharedEngine(), path, 0, 2048);
+    ASSERT_TRUE(wb.getIsPreparedProperty());
+
+    EXPECT_TRUE(WaveBankTestAccess::IsStreaming(wb));
+    const auto residentBytes = WaveBankTestAccess::ResidentFileBytes(wb);
+    EXPECT_LT(residentBytes, fullFileSize);
+    // BuildXwbFixtureBytes' single entry is 200 bytes of wave data with no name table --
+    // resident size must be exactly fullFileSize minus that wave-data segment.
+    EXPECT_EQ(residentBytes, fullFileSize - 200);
+}
+
+// Regression coverage for T-3F's "correct offsetted reading" accept criterion: a single-entry
+// fixture can't distinguish "read the right bytes" from "read the wrong bytes that happen to be
+// the same length", so this uses a two-entry fixture where entry 1 sits at a nonzero offset and
+// has a different length than entry 0. If the streaming path's lazy read used the wrong offset
+// (e.g. always reading from the start of the wave-data segment, or reusing entry 0's range),
+// entry 1's decoded duration would not match its own non-streaming counterpart.
+TEST(WaveBankTest, StreamingGetSoundEffectReadsCorrectPerEntryOffsetAndLength)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        WaveBank streamingWb(&SharedEngine(), MultiEntryXwbFixturePath(), 0, 0);
+        ASSERT_TRUE(streamingWb.getIsPreparedProperty());
+        ASSERT_TRUE(WaveBankTestAccess::IsStreaming(streamingWb));
+
+        WaveBank eagerWb(&SharedEngine(), MultiEntryXwbFixturePath());
+        ASSERT_TRUE(eagerWb.getIsPreparedProperty());
+        ASSERT_FALSE(WaveBankTestAccess::IsStreaming(eagerWb));
+
+        const SoundEffect* streamedEntry0 = WaveBankTestAccess::GetSoundEffect(streamingWb, 0);
+        const SoundEffect* streamedEntry1 = WaveBankTestAccess::GetSoundEffect(streamingWb, 1);
+        const SoundEffect* eagerEntry1    = WaveBankTestAccess::GetSoundEffect(eagerWb, 1);
+
+        if (!streamedEntry0 || !streamedEntry1 || !eagerEntry1)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffect";
+        }
+
+        // Entry 1 is 3x longer than entry 0 (300 vs 100 bytes) -- an offset bug would either
+        // fail to decode, or produce entry 0's duration instead of entry 1's.
+        EXPECT_EQ(streamedEntry1->getDurationProperty(), eagerEntry1->getDurationProperty());
+        EXPECT_NE(streamedEntry0->getDurationProperty(), streamedEntry1->getDurationProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise WaveBank playback";
+    }
 }
 
 // ===================== IsDisposed / IsPrepared =====================

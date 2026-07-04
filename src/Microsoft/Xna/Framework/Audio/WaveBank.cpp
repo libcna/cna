@@ -133,12 +133,16 @@ namespace Microsoft::Xna::Framework::Audio
                        SharpRuntime::shortcs /*packetSize*/)
         : engine_(audioEngine)
     {
+        // offset/packetSize are unused: FNA's own streaming ctor (WaveBank.cs) never forwards
+        // them to FACTStreamingParameters either (only .file is set) -- FAudio only consults
+        // packetSize when a custom I/O layer is installed, which FNA never does, so matching
+        // FNA exactly means these two ctor parameters are dead on both sides (T-3F).
         if (!audioEngine)
             throw System::ArgumentNullException("audioEngine");
         if (streamingWaveBankFilename.empty())
             throw System::ArgumentNullException("streamingWaveBankFilename");
 
-        Init(streamingWaveBankFilename);
+        InitStreaming(streamingWaveBankFilename);
     }
 
     void WaveBank::Init(const std::string& filename)
@@ -166,6 +170,24 @@ namespace Microsoft::Xna::Framework::Audio
         catch (const std::exception& ex)
         {
             std::cerr << "[WaveBank] XWB parse error (" << filename << "): " << ex.what() << "\n";
+        }
+    }
+
+    void WaveBank::InitStreaming(const std::string& filename)
+    {
+        try
+        {
+            auto xwb = CNA::Internal::Audio::ParseXwbStreamingHeader(filename);
+            std::cerr << "[WaveBank] Loaded XWB (streaming): " << filename
+                      << " bank=\"" << xwb.bankName << "\""
+                      << " entries=" << xwb.entries.size() << "\n";
+            xactImpl_ = std::make_unique<XactWaveBankImpl>(std::move(xwb));
+            engine_->RegisterWaveBank(this);
+        }
+        catch (const std::exception& ex)
+        {
+            std::cerr << "[WaveBank] XWB streaming parse error (" << filename << "): "
+                      << ex.what() << "\n";
         }
     }
 
@@ -206,6 +228,16 @@ namespace Microsoft::Xna::Framework::Audio
         return xactImpl_ ? xactImpl_->data.bankName : empty;
     }
 
+    bool WaveBank::StreamingInternal() const
+    {
+        return xactImpl_ && xactImpl_->data.streaming;
+    }
+
+    std::size_t WaveBank::ResidentFileBytesInternal() const
+    {
+        return xactImpl_ ? xactImpl_->data.fileData.size() : 0;
+    }
+
     const SoundEffect* WaveBank::GetSoundEffect(unsigned short waveIndex)
     {
         if (!xactImpl_ || waveIndex >= xactImpl_->data.entries.size())
@@ -217,17 +249,44 @@ namespace Microsoft::Xna::Framework::Audio
 
         const auto& entry = xactImpl_->data.entries[waveIndex];
 
-        // Check that data range is valid. Widen to 64-bit before summing so a corrupt/adversarial
-        // entry can't wrap this check via uint32_t overflow and pass with an out-of-range offset.
-        const auto& fd = xactImpl_->data.fileData;
-        if (static_cast<uint64_t>(entry.dataOffset) + entry.dataLength > fd.size())
-        {
-            std::cerr << "[WaveBank] Wave " << waveIndex << " data out of range\n";
-            return nullptr;
-        }
+        std::vector<uint8_t> streamedBytes;
+        const uint8_t* audioData;
+        const uint32_t audioLen = entry.dataLength;
 
-        const uint8_t* audioData = fd.data() + entry.dataOffset;
-        uint32_t       audioLen  = entry.dataLength;
+        if (xactImpl_->data.streaming)
+        {
+            // Lazy per-entry disk read: xactImpl_->data.fileData only holds the header/metadata
+            // segments (see ParseXwbStreamingHeader), not wave audio.
+            std::ifstream sf(xactImpl_->data.sourcePath, std::ios::binary);
+            if (!sf.is_open())
+            {
+                std::cerr << "[WaveBank] Cannot reopen streaming source for wave " << waveIndex
+                          << ": " << xactImpl_->data.sourcePath << "\n";
+                return nullptr;
+            }
+            sf.seekg(static_cast<std::streamoff>(entry.dataOffset));
+            streamedBytes.resize(audioLen);
+            sf.read(reinterpret_cast<char*>(streamedBytes.data()), static_cast<std::streamsize>(audioLen));
+            if (static_cast<uint32_t>(sf.gcount()) != audioLen)
+            {
+                std::cerr << "[WaveBank] Wave " << waveIndex << " streaming read truncated\n";
+                return nullptr;
+            }
+            audioData = streamedBytes.data();
+        }
+        else
+        {
+            // Check that data range is valid. Widen to 64-bit before summing so a corrupt/
+            // adversarial entry can't wrap this check via uint32_t overflow and pass with an
+            // out-of-range offset.
+            const auto& fd = xactImpl_->data.fileData;
+            if (static_cast<uint64_t>(entry.dataOffset) + entry.dataLength > fd.size())
+            {
+                std::cerr << "[WaveBank] Wave " << waveIndex << " data out of range\n";
+                return nullptr;
+            }
+            audioData = fd.data() + entry.dataOffset;
+        }
 
         try
         {
