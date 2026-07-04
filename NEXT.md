@@ -13,8 +13,8 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–34 are complete. **Phase 35 (SamplerState/texture
-  sampling conformance, `GRAPHICS_TASKS.md` Tasks 291–300) is in progress** — Tasks 291–294 done,
-  Task 295 is next (see §8). **Task 293 found and fixed a severe, project-wide bug** — see §3/§5.
+  sampling conformance, `GRAPHICS_TASKS.md` Tasks 291–300) is in progress** — Tasks 291–296 done,
+  Task 297 is next (see §8). **Task 293 found and fixed a severe, project-wide bug** — see §3/§5.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -38,13 +38,13 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2044/2046 (serial `-j1`) pass. 2 pre-existing,
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2045/2047 (serial `-j1`) pass. 2 pre-existing,
   unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. Some
   tests have each been observed failing once under parallel `-j` execution but passed cleanly both
   in isolation and on a repeat serial full run — treated as parallel-execution flakiness, not a
   regression (none confirmed as a stable failure): `EasyGL_SkinnedBones`,
   `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1983/1985 (serial `-j1`) pass. `../sharp-runtime`
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1984/1986 (serial `-j1`) pass. `../sharp-runtime`
   (sibling repo) had a pre-existing, uncommitted local fix for a real `BitConverter.hpp` ambiguity
   bug (`System::Single`, the static-utility class from `Half.hpp`, collided with `BitConverter`'s
   own `using SharpRuntime::Single` for the float alias — any TU including both failed to compile).
@@ -146,7 +146,9 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 294 | `examples/easygl_texture_address_mode_clamp_effect_test.cpp` (new), `CMakeLists.txt` | Confirmed Task 269's existing address-mode test is `SpriteBatch`-only (a different code path from Task 293's fix), so a real 3D-stock-effect test was needed. New test mirrors Task 293's `DualTextureEffect` pattern with `SamplerState::PointClamp` (expects the opposite, edge-extend/`GREEN` result vs. `PointWrap`'s repeat/`RED`). Registered on both EasyGL and Vulkan — both pass, confirming Task 293's fix holds for `Clamp` too, not just `Wrap`. |
+| (uncommitted) Task 296 | `examples/easygl_texture_address_mode_mirror_effect_test.cpp` (new), `CMakeLists.txt` | New `Mirror` pixel test on `DualTextureEffect`, mirroring Tasks 293/294's pattern. FNA has no `PointMirror` preset, so this builds a custom `SamplerState`. Deliberately sampled at raw `u=1.6` (not `1.25`, where `Mirror` and `Clamp` coincidentally agree) so only a genuinely correct `Mirror` implementation passes. All 3 backends already correctly mapped `Mirror` to their GPU's mirrored-repeat mode — no bug found, pure coverage addition. Registered and passing on both EasyGL and Vulkan. |
+| (uncommitted) Task 295 | `GRAPHICS_TASKS.md` only | **Already fully satisfied, no new code** — Task 293's own fix-proof test already is a `TextureAddressMode::Wrap` pixel test on a 3D stock effect. Documented the mapping so it isn't duplicated. |
+| `f70a169` Task 294 | `examples/easygl_texture_address_mode_clamp_effect_test.cpp` (new), `CMakeLists.txt` | Confirmed Task 269's existing address-mode test is `SpriteBatch`-only (a different code path from Task 293's fix), so a real 3D-stock-effect test was needed. New test mirrors Task 293's `DualTextureEffect` pattern with `SamplerState::PointClamp` (expects the opposite, edge-extend/`GREEN` result vs. `PointWrap`'s repeat/`RED`). Registered on both EasyGL and Vulkan — both pass, confirming Task 293's fix holds for `Clamp` too, not just `Wrap`. |
 | `8649227` Task 293 (+Vulkan/Bgfx follow-up) | `GraphicsDevice.cpp` (18 sites), `VulkanGraphicsBackend.cpp/.hpp`, `BgfxGraphicsBackend.cpp`, `examples/easygl_sampler_state_effect_test.cpp` (new), `CMakeLists.txt` | **Found and fixed a severe, project-wide bug across all 3 backends.** EasyGL: all 18 `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives` overloads skipped `applySamplerStatesToBackend()`; fixed. Vulkan: `GetOrCreateDualTexDescSet` hardcoded `defaultSampler_` and cached by view-only key, ignoring `slotSamplers_`; fixed by threading samplers through + widening the cache key. Bgfx: dual-texture draw used `samplerFlags_[0]` for both texture slots instead of `samplerFlags_[1]` for slot 1; fixed. New pixel test (`DualTextureEffect` + `SamplerStates[0]=PointWrap`, UV past 1.0) proves the fix on both EasyGL and Vulkan (reused test source, registered as both `EasyGL_SamplerState_DualTextureEffect` and `Vulkan_SamplerState_DualTextureEffect`); Bgfx confirmed via full-suite no-regression only (no pixel-readback API). Along the way, also verified and committed a pre-existing, unrelated uncommitted fix in the sibling `sharp-runtime` repo (`BitConverter.hpp` `System::Single` ambiguity) that had been silently blocking any Vulkan build. Directly unblocks Tasks 294–299. All three backends' full ctest suites reconfirmed with zero regressions: EasyGL 2043/2045, Vulkan 1983/1984, Bgfx 1977/1977 (100%). |
 | (uncommitted) Task 292 | `SamplerStateCollection.cpp`, `SamplerStateCollectionTests.cpp` (new) | Found and fixed a real bug uncovered directly by Task 291: `SamplerStateCollection`'s constructor default-constructed each of 16 slots instead of copying `SamplerState::LinearWrap` (FNA's actual behavior). Values coincided (both Linear+Wrap×3) so this was invisible until `Name` existed to distinguish them. Zero prior test coverage for this class or `GraphicsDevice`'s sampler defaults existed. Fixed + added a full new test file. 2042/2044 EasyGL ctest pass serially. |
 | (uncommitted) Task 291 | `SamplerState.hpp/.cpp`, `SamplerStateTests.cpp` | **Opens Phase 35.** Audited `SamplerState` against FNA: property surface, all 6 presets, and default values already matched FNA exactly. Real finding: FNA sets `Name` on every preset (e.g. `"SamplerState.PointClamp"`); CNA's private preset constructor never did. Fixed by threading a `name` param through the constructor. Also found the same gap exists in `BlendState`/`DepthStencilState`/`RasterizerState` — tracked separately as Task 866, not fixed here (scope discipline). 8 new tests. 2032/2034 EasyGL ctest pass serially. |
@@ -310,19 +312,23 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 295 — pixel test: `TextureAddressMode::Wrap` (out-of-range UV)**
-   - Goal: continue Phase 35. **Likely already fully satisfied** — Task 293's own fix-proof test
-     (`examples/easygl_sampler_state_effect_test.cpp`, registered as both
-     `EasyGL_SamplerState_DualTextureEffect` and `Vulkan_SamplerState_DualTextureEffect`) already
-     *is* a `SamplerState::PointWrap` pixel test on a 3D stock effect (`DualTextureEffect`), using
-     the exact 2-texel red/green + UV-past-1.0 technique this task would otherwise ask for. Check
-     first whether this task should just be marked done pointing at that existing test (mirroring
-     how Tasks 285–289 turned out to be "already covered, verify only") rather than writing a
-     near-duplicate — only write new code if there's a genuine gap (e.g. a specific address/filter
-     combination, or a second backend/slot scenario, not already exercised).
-   - Files: none expected, or a small addition to the existing test if a real gap is found.
-   - Verification: re-run the existing `*_SamplerState_DualTextureEffect` tests and confirm they
-     already prove exactly what Task 295 asks for; document the mapping in `GRAPHICS_TASKS.md`.
+1. **`GRAPHICS_TASKS.md` Task 297 — pixel test: `TextureFilter::Point` vs `Linear`
+   (magnification/minification)**
+   - Goal: continue Phase 35. Unlike Tasks 295 (already covered) and 296 (pure coverage gap, no
+     bug), this task is genuinely untested ground — no existing test exercises `TextureFilter`
+     itself (only `TextureAddressMode` has been covered so far in Phase 35). Needs two distinct
+     scenarios: **magnification** (draw a small texture large on screen — `Point` shows hard texel
+     edges, `Linear` blends across them) and **minification** (draw a texture smaller than its
+     source texels map to — `Point` picks one texel per pixel, `Linear` averages neighbors). A
+     2-texel red/green pattern (as used in Tasks 293–296) works for magnification (sample near a
+     texel boundary: `Point` gives a pure colour, `Linear` gives a blend); minification needs a
+     higher-frequency pattern (e.g. a checkerboard) to show a measurable difference, since a single
+     boundary averaged over a huge minified area washes out either way.
+   - Files: new `examples/easygl_texture_filter_point_vs_linear_test.cpp` (or two, if magnification
+     and minification don't fit one file cleanly); register on both EasyGL and Vulkan mirroring
+     Tasks 293–296.
+   - Verification: pixel-readback test(s) confirming `Point` gives a crisp/unblended sample and
+     `Linear` gives a measurably blended one, for both magnification and minification.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -386,16 +392,13 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-34 are fully complete. Phase 35 (SamplerState/texture sampling
-conformance, GRAPHICS_TASKS.md Tasks 291-300) is in progress: Tasks 291-294 done. All three
-backends are green: EasyGL 2044/2046, Vulkan 1983/1985, Bgfx 1977/1977 (100%) - only pre-existing,
-documented failures remain anywhere (see NEXT.md §5; Vulkan_FillMode_WireFrame was newly observed
-failing even in isolation this session, strengthening but not changing its pre-existing
-flaky-not-regression status). Tasks 291/292 fixed real, small SamplerState/SamplerStateCollection
-Name conformance bugs (Task 866 tracks a related BlendState/DepthStencilState/RasterizerState gap,
-not yet fixed).
+conformance, GRAPHICS_TASKS.md Tasks 291-300) is in progress: Tasks 291-296 done. All three
+backends are green: EasyGL 2045/2047, Vulkan 1984/1986, Bgfx 1977/1977 (100%) - only pre-existing,
+documented failures remain anywhere (see NEXT.md §5; Vulkan_FillMode_WireFrame is confirmed flaky
+even in isolation, not a regression).
 
-Task 293 found and fixed something much bigger, across all 3 backends: GraphicsDevice.SamplerStates
-was being silently ignored by essentially all 3D stock-effect texture draws
+Task 293 found and fixed something big, across all 3 backends: GraphicsDevice.SamplerStates was
+being silently ignored by essentially all 3D stock-effect texture draws
 (BasicEffect/DualTextureEffect/AlphaTestEffect/EnvironmentMapEffect/SkinnedEffect), for 3 different
 backend-specific reasons - EasyGL: all 18 DrawUserPrimitives/DrawUserIndexedPrimitives/
 DrawInstancedPrimitives overloads never called applySamplerStatesToBackend(); Vulkan:
@@ -404,18 +407,20 @@ slotSamplers_; Bgfx: dual-texture draw used samplerFlags_[0] for both texture sl
 samplerFlags_[1] for slot 1. All 3 fixed and pixel/regression-verified. Also found and committed a
 pre-existing, unrelated uncommitted fix in the sibling sharp-runtime repo (BitConverter.hpp:
 System::Single ambiguity) that had been silently blocking any Vulkan build (sharp-runtime commit
-ec97562). Task 294 confirmed Task 269's existing address-mode test is SpriteBatch-only (a
-different code path from Task 293's fix) and added a genuine 3D-stock-effect Clamp test
-(easygl_texture_address_mode_clamp_effect_test.cpp), registered on both EasyGL and Vulkan, both
-passing - confirms Task 293's fix holds for Clamp, not just the Wrap case its own fix-proof test
-happened to use.
+ec97562). Tasks 294/295/296 rounded out TextureAddressMode coverage (Clamp/Wrap/Mirror) on 3D
+stock effects, each registered on both EasyGL and Vulkan: Task 294 added a genuine new Clamp test
+(Task 269's existing test was SpriteBatch-only); Task 295 found Task 293's own fix-proof test
+already covers Wrap, so no new code was needed; Task 296 added a genuine new Mirror test (FNA has
+no PointMirror preset, so it builds a custom SamplerState) - picked sample point u=1.6 deliberately
+since u=1.25 would have let Mirror and Clamp coincidentally agree, hiding a fallback-to-Clamp bug.
 
-Next task: GRAPHICS_TASKS.md Task 295 - pixel test: TextureAddressMode::Wrap (out-of-range UV).
-IMPORTANT: this is likely ALREADY fully satisfied - Task 293's own fix-proof test
-(examples/easygl_sampler_state_effect_test.cpp, registered as EasyGL_SamplerState_DualTextureEffect
-and Vulkan_SamplerState_DualTextureEffect) already IS a SamplerState::PointWrap pixel test on a 3D
-stock effect, using exactly the technique this task would otherwise ask for. Check this first
-before writing new code - mirror how Tasks 285-289 turned out to be "already covered, just verify"
-situations. Only add new code if there's a genuine gap not already exercised by that existing test.
+Next task: GRAPHICS_TASKS.md Task 297 - pixel test: TextureFilter::Point vs Linear
+(magnification/minification). This is genuinely new ground - no test in Phase 35 so far has
+exercised TextureFilter itself (only TextureAddressMode). Needs two distinct scenarios:
+magnification (small texture drawn large - Point shows hard texel edges, Linear blends) and
+minification (texture drawn smaller than its texel density - Point picks one texel per pixel,
+Linear averages neighbors; needs a higher-frequency pattern like a checkerboard, since a single
+colour boundary washes out under heavy minification regardless of filter). Mirror Tasks 293-296's
+DualTextureEffect + custom-SamplerState pattern; register on both EasyGL and Vulkan.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```

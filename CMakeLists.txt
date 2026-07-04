@@ -1072,6 +1072,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 296: TextureAddressMode::Mirror on a 3D stock effect (DualTextureEffect)
+        cna_easygl_test(cna_test_easygl_texture_address_mode_mirror_effect
+                        examples/easygl_texture_address_mode_mirror_effect_test.cpp)
+        add_test(NAME EasyGL_TextureAddressMode_Mirror_DualTextureEffect
+                 COMMAND cna_test_easygl_texture_address_mode_mirror_effect)
+        set_tests_properties(EasyGL_TextureAddressMode_Mirror_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1155,6 +1164,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_TextureAddressMode_Clamp_DualTextureEffect
                  COMMAND cna_test_vulkan_texture_address_mode_clamp_effect)
         set_tests_properties(Vulkan_TextureAddressMode_Clamp_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 296: TextureAddressMode::Mirror on a 3D stock effect on Vulkan too (reuses the
+        # backend-agnostic EasyGL test source).
+        cna_vulkan_test(cna_test_vulkan_texture_address_mode_mirror_effect
+                        examples/easygl_texture_address_mode_mirror_effect_test.cpp)
+        add_test(NAME Vulkan_TextureAddressMode_Mirror_DualTextureEffect
+                 COMMAND cna_test_vulkan_texture_address_mode_mirror_effect)
+        set_tests_properties(Vulkan_TextureAddressMode_Mirror_DualTextureEffect PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
