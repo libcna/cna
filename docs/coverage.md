@@ -18,8 +18,11 @@ XNA 4.0 documentation and GRAPHICS_TASKS.md. Build was not run during analysis.
 | Functional gameplay code — Bgfx | **~63 %** |
 
 **Justification for ~70 % functional (EasyGL/Vulkan):**  
-Graphics (the largest namespace) is ~92–93 % functional. Input is ~90 %. Basic audio
-playback (SoundEffect/SoundEffectInstance) is ~70 %. Media playback (Song/Video via
+Graphics (the largest namespace) is ~92–93 % functional. Input is ~90 %. Audio
+(`SoundEffect`/`SoundEffectInstance` plus real XACT `AudioEngine`/`SoundBank`/`WaveBank`/`Cue`
+and `Microphone` capture — see `plan_audio.md` for the full file-by-file history) is ~90 %,
+updated 2026-07-04 (Fáze 9 `P9-DOCS-003`; the XACT/Microphone stub status this figure used to
+describe predates that branch's work by roughly two weeks). Media playback (Song/Video via
 SDL3_mixer + FFmpeg) is ~55 %. Content is ~60 % for the custom JSON/PNG/OGG descriptor
 format; the XNA binary `.xnb` format is entirely absent. Framework.Net is 0 %.
 GamerServices is ~5 %.
@@ -27,8 +30,9 @@ GamerServices is ~5 %.
 Weighted by how commonly each namespace is used in real XNA 4.0 games (Graphics + Input
 dominate; Net appears in fewer than 10 % of XNA titles; GamerServices only in Xbox Live
 games), a game using only Graphics / Input / Audio / Content and no networking can run
-at roughly **80–88 % fidelity**. A game depending on `.xnb` content loading or the XACT
-audio runtime will break immediately. A multiplayer game will not compile at all.
+at roughly **80–88 % fidelity**. A game depending on `.xnb` content loading will break
+immediately (the XACT audio runtime itself no longer breaks — see the Audio row below). A
+multiplayer game will not compile at all.
 
 ---
 
@@ -39,7 +43,7 @@ audio runtime will break immediately. A multiplayer game will not compile at all
 | **Framework** (Game, math, collision, curves) | ~50 | 41 | ~95 % | ~90 % | Game loop, all math types, BoundingBox/Sphere/Frustum, Curve, MathHelper fully implemented |
 | **Framework.Graphics** | ~75 | 117 | ~95 % | see per-backend table | Detailed in next section |
 | **Framework.Input** | ~20 | 26 | ~100 % | ~90 % | Keyboard, Mouse, GamePad, Touch wired to SDL3; rumble/vibration untested |
-| **Framework.Audio** | ~15 | 20 | ~100 % | ~70 % | SoundEffect/Instance real (SDL3_mixer); AudioEngine/Cue/WaveBank/SoundBank partial stubs; Microphone stub-only |
+| **Framework.Audio** | ~15 | 20 | ~100 % | ~90 % | SoundEffect/Instance real (SDL3_mixer, real filters, instance-tracking cascade); AudioEngine/Cue/WaveBank/SoundBank real (hand-written XACT parser, category/lifecycle/3D all functional); Microphone real (SDL3 capture). Remaining gaps are documented accepted deviations (no HRTF/Doppler, `instanceLimit`/fade parsed not enforced), not stubs — updated 2026-07-04, see `plan_audio.md` |
 | **Framework.Media** | ~25 | 24 | ~100 % | ~55 % | MediaPlayer and VideoPlayer real (FFmpeg); Song/Album/Artist/Genre/Picture/MediaLibrary = pure stubs |
 | **Framework.Content** | ~20 | 4 | ~20 % | ~60 % | ContentManager works with custom JSON/PNG/OGG descriptors; **no .xnb binary support** |
 | **Framework.Storage** | ~5 | 3 | ~100 % | ~75 % | StorageDevice/Container with filesystem; async patterns simplified |
@@ -136,8 +140,8 @@ audio runtime will break immediately. A multiplayer game will not compile at all
 | **Framework.Net — 0 %** | Blocking for multiplayer games | NetworkSession, NetworkGamer, PacketReader/Writer, LocalNetworkGamer entirely absent — no headers, no stubs |
 | **Content pipeline (.xnb) — 0 %** | Blocking for most existing XNA games | XNA binary asset format not supported; ContentManager requires CNA custom JSON/PNG/OGG descriptors |
 | **GamerServices — ~5 %** | Blocking for Xbox Live games | Achievements, leaderboards, Gamer profiles, FriendCollection absent |
-| **XACT audio runtime — ~30 %** | Partial gap | AudioEngine/Cue/SoundBank/WaveBank partially stubbed; low-level SoundEffect playback works |
-| **Microphone — ~10 %** | Minor | Headers and state machine present; no SDL audio capture wired |
+| **XACT audio runtime — ~90 %** | Mostly closed (updated 2026-07-04) | Real hand-written `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; remaining gap is documented accepted deviations (`instanceLimit`/fade parsed not enforced, no HRTF/Doppler), not stubbing — see `plan_audio.md` |
+| **Microphone — ~95 %** | Minor (updated 2026-07-04) | Real SDL3 capture device enumeration, Start/Stop, GetData/GetQueuedBytes, BufferReady event |
 | **Media library (Album/Artist/Genre) — ~5 %** | Minor for most games | Song/Video playback real; device media-library browsing = pure stubs |
 | **Bgfx: EnvironmentMapEffect** | Medium | No cube-map reflection shader; falls back to lit shader |
 | **Bgfx: ShaderEffect** | Medium | Custom GLSL/SPIR-V effects not wired in Bgfx backend |

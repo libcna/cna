@@ -1900,13 +1900,20 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
 
 ## P9-DOCS — Documentation synchronization
 
-* [ ] P9-DOCS-001 Update `AUDIT.md` audio rows so they no longer describe implemented features as stubs.
-* [ ] P9-DOCS-002 Update `docs/xna-4-api-coverage.md` for current Audio coverage.
-* [ ] P9-DOCS-003 Update `docs/coverage.md` for current Audio/XACT/Microphone status.
-* [ ] P9-DOCS-004 Update `NEXT.md` so it does not claim both "all audio tasks complete" and stale pending/uncommitted Phase 8 status.
-* [ ] P9-DOCS-005 Add a concise Audio compatibility table: implemented, approximate, intentionally unsupported, not yet implemented.
-* [ ] P9-DOCS-006 Document SDL3/SDL_mixer backend limitations versus FAudio/FACT.
-* [ ] P9-DOCS-007 Document which behavior is intended to match FNA and which behavior is a CNA-specific compatibility compromise.
+* [x] P9-DOCS-001 Update `AUDIT.md` audio rows so they no longer describe implemented features as stubs.
+  *Note:* Rewrote every row in `AUDIT.md`'s Audio table — several referenced `T-4D`/`T-4B`/`T-3F` as still-open/stubbed ("3D pan/attenuation still stubbed", "Apply3D is a no-op", "3D PlayCue ignores listener/emitter", "streaming ctor still delegates to full in-memory load"), all of which were actually completed earlier this branch. Added a "last synchronized" pointer to `docs/xna-4-api-coverage.md` for the full compatibility table.
+* [x] P9-DOCS-002 Update `docs/xna-4-api-coverage.md` for current Audio coverage.
+  *Note:* This document predated essentially all of this branch's audio work (dated 2026-06-26, referencing Tasks 197-199) — its Audio section claimed `AudioEngine`/`SoundBank`/`WaveBank`/`Cue` "XACT audio is unimplemented" and `Microphone`/`DynamicSoundEffectInstance` as "backends are stub". Rewrote the section, the namespace-coverage table row, the §8 coverage-estimate row (~0%→~90%, removed "XACT" from the overall gap list), §10's recommended-order entry, and §11's "what remains missing"/"recommended next steps" (removed the now-false "Implement XACT audio" action item).
+* [x] P9-DOCS-003 Update `docs/coverage.md` for current Audio/XACT/Microphone status.
+  *Note:* This whole-project static-analysis doc (dated 2026-06-21) had `Framework.Audio` at "~70% functional... AudioEngine/Cue/WaveBank/SoundBank partial stubs; Microphone stub-only" and a "Biggest gaps" table entry "XACT audio runtime — ~30%"/"Microphone — ~10%, no SDL audio capture wired". Updated the audio-specific rows/paragraphs only (Framework.Audio row, the two "Biggest gaps" rows, the justification paragraph) to ~90%/~95% with a 2026-07-04 note — left all non-audio rows (Graphics/Media/Content/etc.) untouched since they're outside this task's scope and unverified by this session.
+* [x] P9-DOCS-004 Update `NEXT.md` so it does not claim both "all audio tasks complete" and stale pending/uncommitted Phase 8 status.
+  *Note:* Already satisfied — `NEXT.md` has been kept continuously in sync with each Fáze 9 sub-phase's actual completion state throughout this session (see its own git history this session), explicitly distinguishing "Fáze 7/8 fully complete" from "Fáze 9 still open" rather than conflating them. No contradictory claim found on re-check.
+* [x] P9-DOCS-005 Add a concise Audio compatibility table: implemented, approximate, intentionally unsupported, not yet implemented.
+  *Note:* Added to `docs/xna-4-api-coverage.md`'s Audio section — a single 4-row table (Implemented / Approximate / Intentionally unsupported / Not yet implemented / open decision) summarizing every deviation already itemized in `CHECKLIST.md`, for an at-a-glance answer without reading every `CHECKLIST.md` row.
+* [x] P9-DOCS-006 Document SDL3/SDL_mixer backend limitations versus FAudio/FACT.
+  *Note:* Added a dedicated subsection to `docs/xna-4-api-coverage.md` tracing every approximate/unsupported behavior back to its specific SDL3_mixer architectural limitation (no `F3DAudio` equivalent, no per-source Doppler, no aux-send bus, single per-track cooked-callback slot, 2-value stereo gain instead of a 4-coefficient matrix, single max-frame loop property instead of `LoopBegin`/`LoopLength`) plus the one case where SDL3_mixer's model is actually simpler/better (global mixer gain, `CP-16`).
+* [x] P9-DOCS-007 Document which behavior is intended to match FNA and which behavior is a CNA-specific compatibility compromise.
+  *Note:* Added a subsection distinguishing the two categories explicitly: (1) permanent SDL3_mixer-forced compromises (documented in `CHECKLIST.md`, not bugs to fix), vs (2) Fáze 9's own fixes, which made CNA *more* faithful to FNA (not new compromises) — including the two cases (`Cue::GetVariable`/`SetVariable`/`Resume()` after Dispose) where CNA deliberately throws instead of replicating an FNA/FAudio native-crash bug.
 
 ## P9-BUILD — Reproducible build and test workflow
 
