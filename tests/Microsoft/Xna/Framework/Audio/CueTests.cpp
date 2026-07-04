@@ -86,17 +86,32 @@ namespace
         buf.push_back(0);
     }
 
-    // Minimal .xgs fixture with one category ("Default") and one variable ("Volume",
-    // initial value 0.5) — gives Cue::GetVariable/SetVariable a real engine-known name.
+    // Layout constants for the two RPC curves BuildXgsFixtureBytes appends after its existing
+    // category/variable data -- shared with BuildXsbFixtureBytesWithRpc so the .xsb's
+    // sound-level RPC code references (absolute file offsets) match these curves exactly
+    // (P9-XACT-006/007/008/009). Both curves are bound to variable index 0 ("Volume", range
+    // [0,1]): the VOLUME curve maps 0.0->-2000 centibels (10^(-2000/2000) = 0.1x amplitude) and
+    // 1.0->0 centibels (unity gain); the PITCH curve maps 0.0->-600 cents and 1.0->+600 cents.
+    constexpr uint32_t kXgsHeaderSize       = 69; // 65 (pre-RPC) + 4 (new rpcOffset header field)
+    constexpr uint32_t kXgsCategoryDataSize = 10;
+    constexpr uint32_t kXgsVariableDataSize = 13;
+    constexpr uint32_t kXgsCategoryNameSize = 8; // "Default\0"
+    constexpr uint32_t kXgsVariableNameSize = 7; // "Volume\0"
+    constexpr uint32_t kXgsRpcOffset        = kXgsHeaderSize + kXgsCategoryDataSize
+        + kXgsVariableDataSize + kXgsCategoryNameSize + kXgsVariableNameSize;
+    constexpr uint32_t kXgsRpcEntrySize     = 23; // variable(2)+pointCount(1)+parameter(2)+2*(x(4)+y(4)+type(1))
+    constexpr uint32_t kVolumeRpcCode       = kXgsRpcOffset;
+    constexpr uint32_t kPitchRpcCode        = kXgsRpcOffset + kXgsRpcEntrySize;
+
+    // Minimal .xgs fixture with one category ("Default"), one variable ("Volume", initial value
+    // 0.5) -- gives Cue::GetVariable/SetVariable a real engine-known name -- and two RPC curves
+    // (see the constants above) bound to that variable, for P9-XACT-006/007's one-shot RPC
+    // volume/pitch evaluation.
     std::vector<uint8_t> BuildXgsFixtureBytes()
     {
-        constexpr uint32_t headerSize        = 65;
-        constexpr uint32_t categoryDataSize  = 10;
-        constexpr uint32_t variableDataSize  = 13;
-
-        const uint32_t categoryOffset     = headerSize;
-        const uint32_t variableOffset     = categoryOffset + categoryDataSize;
-        const uint32_t categoryNameOffset = variableOffset + variableDataSize;
+        const uint32_t categoryOffset     = kXgsHeaderSize;
+        const uint32_t variableOffset     = categoryOffset + kXgsCategoryDataSize;
+        const uint32_t categoryNameOffset = variableOffset + kXgsVariableDataSize;
         const std::string categoryName    = "Default";
         const uint32_t variableNameOffset = categoryNameOffset + static_cast<uint32_t>(categoryName.size()) + 1;
         const std::string variableName    = "Volume";
@@ -115,7 +130,7 @@ namespace
         AppendU16(data, 1); // variableCount
         AppendU16(data, 0); // blob1Count
         AppendU16(data, 0); // blob2Count
-        AppendU16(data, 0); // rpcCount
+        AppendU16(data, 2); // rpcCount
         AppendU16(data, 0); // dspPresetCount
         AppendU16(data, 0); // dspParameterCount
 
@@ -127,6 +142,7 @@ namespace
         AppendU32(data, 0); // variableNameIndexOffset
         AppendU32(data, categoryNameOffset);
         AppendU32(data, variableNameOffset);
+        AppendU32(data, kXgsRpcOffset);
 
         // Category: instanceLimit, fadeInMS, fadeOutMS, maxInstanceBehavior(skip), parentIndex, volume, visibility
         AppendU8(data, 0xFF);
@@ -145,6 +161,20 @@ namespace
 
         AppendCStr(data, categoryName);
         AppendCStr(data, variableName);
+
+        // RPC 0 (VOLUME): variable=0, 2 points, linear.
+        AppendU16(data, 0); // variable
+        AppendU8(data, 2);  // pointCount
+        AppendU16(data, 0); // parameter = VOLUME
+        AppendF32(data, 0.0f); AppendF32(data, -2000.0f); AppendU8(data, 0); // point 0: linear
+        AppendF32(data, 1.0f); AppendF32(data, 0.0f);     AppendU8(data, 0); // point 1: linear
+
+        // RPC 1 (PITCH): variable=0, 2 points, linear.
+        AppendU16(data, 0); // variable
+        AppendU8(data, 2);  // pointCount
+        AppendU16(data, 1); // parameter = PITCH
+        AppendF32(data, 0.0f); AppendF32(data, -600.0f); AppendU8(data, 0); // point 0: linear
+        AppendF32(data, 1.0f); AppendF32(data, 600.0f);  AppendU8(data, 0); // point 1: linear
 
         return data;
     }
@@ -313,6 +343,119 @@ namespace
         return data;
     }
 
+    // .xsb with 2 simple sounds (distinguished only by categoryIndex: 0 and 1) and one complex
+    // cue ("Interactive") referencing an INTERACTIVE-type (type==3) variation table with 2
+    // entries whose [varMin, varMax] ranges are disjoint and don't cover the full [0, 1] range
+    // -- regression fixture for P9-XACT-002/003. The table's `variable` field (0) indexes
+    // fixture.xgs's sole declared variable, "Volume" (see BuildXgsFixtureBytes above), so
+    // Cue::SetVariable("Volume", ...) before Play() deterministically selects an entry instead
+    // of a weighted-random pick. Like BuildXsbFixtureBytesWithWeightedVariation, neither sound
+    // references a real wavebank, so Cue::Play() cannot spawn a SoundEffectInstance -- but it
+    // still resolves and stores the picked sound's category index (categoryIdx_) before
+    // attempting to, which is enough to observe the pick without a working audio device.
+    std::vector<uint8_t> BuildXsbFixtureBytesWithInteractiveVariation()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize; // 138
+        constexpr uint32_t soundSize    = 12; // simple sound: flags+cat+vol+pitch+prio+len+waveIdx+wbIdx
+        constexpr uint32_t entrySize    = 16; // INTERACTIVE: soundCode(4)+varMin(4)+varMax(4)+linger(4)
+
+        const uint32_t soundOffset        = baseOffset;                 // 138
+        const uint32_t sound0Code         = soundOffset;                 // 138
+        const uint32_t sound1Code         = soundOffset + soundSize;     // 150
+        const uint32_t variationOffset    = soundOffset + 2 * soundSize; // 162
+        const uint32_t tableSize          = 4 + 2 + 2 + 2 * entrySize;   // 40
+        const uint32_t cueComplexOffset   = variationOffset + tableSize;
+        const uint32_t cueNameIndexOffset = cueComplexOffset + 15;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName         = "Interactive";
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 1); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 0);  // wavebankCount
+        AppendU16(data, 2); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, static_cast<int32_t>(cueComplexOffset));
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, static_cast<int32_t>(variationOffset));
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "InteractiveTestBank", bankNameSize);
+
+        // Sound 0: categoryIndex=0 ("low range" pick)
+        AppendU8(data, 0);   // flags: simple, no RPC/DSP
+        AppendU16(data, 0);  // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte (unused by this test)
+        AppendU16(data, 0);  // pitchCents
+        AppendU8(data, 0);   // priority
+        AppendU16(data, 0);  // soundLength (skipped)
+        AppendU16(data, 0);  // waveIdx
+        AppendU8(data, 0);   // wbIdx
+
+        // Sound 1: categoryIndex=1 ("high range" pick)
+        AppendU8(data, 0);
+        AppendU16(data, 1);
+        AppendU8(data, 0xFF);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+        AppendU16(data, 0);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+
+        // Variation table: type=INTERACTIVE(3), 2 entries, bound to variable index 0 ("Volume").
+        const uint32_t entryCountAndFlags = 2u | (3u << 19); // entryCount=2, type=3 (INTERACTIVE)
+        AppendU32(data, entryCountAndFlags);
+        AppendU16(data, 0);  // unknown
+        AppendU16(data, 0);  // variable = 0 ("Volume" in fixture.xgs)
+
+        AppendU32(data, sound0Code);  // entry 0
+        AppendF32(data, 0.0f);        // varMin
+        AppendF32(data, 0.4f);        // varMax
+        AppendU32(data, 0);           // linger (unused)
+
+        AppendU32(data, sound1Code);  // entry 1
+        AppendF32(data, 0.6f);        // varMin
+        AppendF32(data, 1.0f);        // varMax
+        AppendU32(data, 0);           // linger (unused)
+
+        // Complex cue "Interactive": not single-sound, sbCode points at the variation table.
+        AppendU8(data, 0);   // flags (CUE_FLAG_SINGLE_SOUND clear)
+        AppendU32(data, variationOffset); // sbCode
+        AppendU32(data, 0); // transitionOffset
+        AppendU8(data, 0xFF); // instanceLimit
+        AppendU16(data, 0); // fadeInMS
+        AppendU16(data, 0); // fadeOutMS
+        AppendU8(data, 0);  // maxInstanceBehavior
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0); // unknown
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
     std::string WriteFixture(const std::string& dirName, const std::string& fileName,
                               const std::vector<uint8_t>& bytes)
     {
@@ -345,6 +488,13 @@ namespace
         return path;
     }
 
+    const std::string& XsbInteractiveVariationFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_cue_test", "fixture_interactive.xsb", BuildXsbFixtureBytesWithInteractiveVariation());
+        return path;
+    }
+
     // Both fixtures are parseable, unlike the "stub" AudioEngine used by
     // SoundBankTests.cpp/WaveBankTests.cpp, so "Volume" is a real, engine-known
     // global variable Cue::GetVariable/SetVariable can validate against.
@@ -363,6 +513,12 @@ namespace
     SoundBank& SharedWeightedVariationBank()
     {
         static SoundBank bank(&SharedEngine(), XsbWeightedVariationFixturePath());
+        return bank;
+    }
+
+    SoundBank& SharedInteractiveVariationBank()
+    {
+        static SoundBank bank(&SharedEngine(), XsbInteractiveVariationFixturePath());
         return bank;
     }
 
@@ -629,11 +785,120 @@ namespace
         return wb;
     }
 
+    // .xsb with 2 simple cues ("VolumeRpcCue"/"PitchRpcCue"), both referencing LongWaveBank
+    // (real 1-second audio, so a real SoundEffectInstance is spawned) but each sound has
+    // SOUND_FLAG_HAS_RPC (0x02) set with a single sound-level RPC code -- kVolumeRpcCode for the
+    // first, kPitchRpcCode for the second -- referencing the two curves BuildXgsFixtureBytes
+    // appends to fixture.xgs. Regression fixture for P9-XACT-006/007/008/009.
+    std::vector<uint8_t> BuildRpcXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize; // 138
+        constexpr uint32_t soundSize    = 12 + 7; // simple wave ref (12) + RPC block (2+1+4=7)
+
+        const uint32_t wavebankNameOffset = baseOffset;             // 138
+        const uint32_t soundOffset        = wavebankNameOffset + 64; // 202
+        const uint32_t sound0Code         = soundOffset;             // 202
+        const uint32_t sound1Code         = soundOffset + soundSize; // 221
+        const uint32_t cueSimpleOffset    = soundOffset + 2 * soundSize; // 240
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 2 * 5;     // 250 (2 entries, 5 bytes each)
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 2 * 6;  // 262 (2 entries, 6 bytes each)
+        const std::string cueName0        = "VolumeRpcCue";
+        const std::string cueName1        = "PitchRpcCue";
+        const uint32_t cueName1StrOffset  = cueNameStrOffset + static_cast<uint32_t>(cueName0.size()) + 1;
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 2); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 2); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "RpcSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
+
+        // Sound 0: HAS_RPC, bound to the VOLUME curve. Volume raw byte 0x64 (~0.31x amplitude,
+        // not 0xFF/~2.0x) so that even the RPC curve's unity-gain (var=1.0) end doesn't saturate
+        // the final [0,1] clamp -- "Default" category's own volume is also ~2.0x (0xFF raw byte,
+        // shared fixture.xgs), so 0xFF*0xFF*1.0 would clamp and hide the RPC curve's real effect.
+        AppendU8(data, 0x02); // flags: SOUND_FLAG_HAS_RPC
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0x64); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+        AppendU16(data, 7);   // rpcDataLength (informational, unused): 2+1(count)+4(code)
+        AppendU8(data, 1);    // rpc code count
+        AppendU32(data, kVolumeRpcCode);
+
+        // Sound 1: HAS_RPC, bound to the PITCH curve.
+        AppendU8(data, 0x02);
+        AppendU16(data, 0);
+        AppendU8(data, 0xFF);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+        AppendU16(data, 0);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+        AppendU16(data, 7);
+        AppendU8(data, 1);
+        AppendU32(data, kPitchRpcCode);
+
+        // Simple cues.
+        AppendU8(data, 0);
+        AppendU32(data, sound0Code);
+        AppendU8(data, 0);
+        AppendU32(data, sound1Code);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+        AppendU32(data, cueName1StrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName0);
+        AppendCStr(data, cueName1);
+
+        return data;
+    }
+
     SoundBank& SharedLongBank()
     {
         (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
         static SoundBank bank(&SharedEngine(), WriteFixture(
             "cna_cue_test", "long.xsb", BuildLongXsbFixtureBytes()));
+        return bank;
+    }
+
+    SoundBank& SharedRpcBank()
+    {
+        (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&SharedEngine(), WriteFixture(
+            "cna_cue_test", "rpc.xsb", BuildRpcXsbFixtureBytes()));
         return bank;
     }
 
@@ -1202,4 +1467,118 @@ TEST(CueTest, PlayWeightedVariationFavorsHigherWeightEntryStatistically)
     // Uniform (unweighted) selection between the two entries would land close to 50%, so an
     // 80% threshold cleanly distinguishes weighted selection from the old uniform pick.
     EXPECT_GT(highWeightPicks, kIterations * 0.8);
+}
+
+// P9-XACT-002/003/004: interactive (type==3) variation tables select by a bound variable's
+// current value falling inside an entry's [varMin, varMax] range (FAudio's
+// get_active_variation_index, VARIATION_TABLE_TYPE_INTERACTIVE branch), not a weighted lottery.
+// fixture_interactive.xsb binds entry 0 to [0.0, 0.4] -> categoryIndex 0, and entry 1 to
+// [0.6, 1.0] -> categoryIndex 1, against fixture.xgs's "Volume" variable (index 0).
+
+TEST(CueTest, PlayInteractiveVariationSelectsLowRangeEntryWhenVariableInLowRange)
+{
+    auto cue = std::unique_ptr<Cue>(SharedInteractiveVariationBank().GetCue("Interactive"));
+    cue->SetVariable("Volume", 0.2f);
+    cue->Play();
+    EXPECT_EQ(CueTestAccess::CategoryIndex(*cue), 0);
+}
+
+TEST(CueTest, PlayInteractiveVariationSelectsHighRangeEntryWhenVariableInHighRange)
+{
+    auto cue = std::unique_ptr<Cue>(SharedInteractiveVariationBank().GetCue("Interactive"));
+    cue->SetVariable("Volume", 0.8f);
+    cue->Play();
+    EXPECT_EQ(CueTestAccess::CategoryIndex(*cue), 1);
+}
+
+TEST(CueTest, PlayInteractiveVariationRespectsInclusiveRangeBoundaries)
+{
+    auto lowBoundaryCue = std::unique_ptr<Cue>(SharedInteractiveVariationBank().GetCue("Interactive"));
+    lowBoundaryCue->SetVariable("Volume", 0.4f); // exactly entry 0's varMax
+    lowBoundaryCue->Play();
+    EXPECT_EQ(CueTestAccess::CategoryIndex(*lowBoundaryCue), 0);
+
+    auto highBoundaryCue = std::unique_ptr<Cue>(SharedInteractiveVariationBank().GetCue("Interactive"));
+    highBoundaryCue->SetVariable("Volume", 0.6f); // exactly entry 1's varMin
+    highBoundaryCue->Play();
+    EXPECT_EQ(CueTestAccess::CategoryIndex(*highBoundaryCue), 1);
+}
+
+// FAudio: no entry's range contains the value -> get_active_variation_index() returns false and
+// create_sound() aborts entirely -- the cue stays Playing but produces no sound at all, rather
+// than falling back to any entry. categoryIdx_'s 0xFFFF default (Cue.hpp) only ever changes once
+// a sound is actually resolved, so it staying 0xFFFF proves no entry was picked.
+TEST(CueTest, PlayInteractiveVariationWithValueOutsideAllRangesStaysPlayingButSilent)
+{
+    auto cue = std::unique_ptr<Cue>(SharedInteractiveVariationBank().GetCue("Interactive"));
+    cue->SetVariable("Volume", 0.5f); // strictly between entry 0's and entry 1's ranges
+    cue->Play();
+    EXPECT_TRUE(cue->getIsPlayingProperty());
+    EXPECT_EQ(CueTestAccess::CategoryIndex(*cue), 0xFFFF);
+}
+
+// ===================== RPC volume/pitch (P9-XACT-006/007/008/009) =====================
+//
+// fixture.xgs's two RPC curves (see BuildXgsFixtureBytes/kVolumeRpcCode/kPitchRpcCode) are both
+// bound to the "Volume" variable: VOLUME maps [0,1] -> [-2000, 0] centibels (a 20dB/10x amplitude
+// range), PITCH maps [0,1] -> [-600, +600] cents. "VolumeRpcCue"/"PitchRpcCue" (fixture_rpc's
+// real LongWaveBank-backed sounds) reference exactly one of the two, so each test isolates one
+// parameter.
+
+TEST(CueTest, PlayScalesVolumeByRpcCurveEvaluatedAtCurrentVariableValue)
+{
+    auto lowCue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("VolumeRpcCue"));
+    lowCue->SetVariable("Volume", 0.0f); // curve -> -2000 centibels -> 0.1x amplitude multiplier
+    lowCue->Play();
+    auto* lowInst = CueTestAccess::ActiveInstance(*lowCue, 0);
+    ASSERT_NE(lowInst, nullptr);
+    const float lowVolume = lowInst->getVolumeProperty();
+    ASSERT_GT(lowVolume, 0.0f);
+
+    auto highCue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("VolumeRpcCue"));
+    highCue->SetVariable("Volume", 1.0f); // curve -> 0 centibels -> unity multiplier
+    highCue->Play();
+    auto* highInst = CueTestAccess::ActiveInstance(*highCue, 0);
+    ASSERT_NE(highInst, nullptr);
+    const float highVolume = highInst->getVolumeProperty();
+
+    // -2000 vs 0 centibels is a 20dB (10x amplitude) difference; the ratio is checked (rather
+    // than an absolute value) so the test doesn't depend on the unrelated 0xFF volume-byte ->
+    // amplitude conversion's exact result.
+    EXPECT_NEAR(highVolume / lowVolume, 10.0f, 0.5f);
+}
+
+TEST(CueTest, PlayShiftsPitchByRpcCurveEvaluatedAtCurrentVariableValue)
+{
+    auto lowCue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("PitchRpcCue"));
+    lowCue->SetVariable("Volume", 0.0f); // curve -> -600 cents
+    lowCue->Play();
+    auto* lowInst = CueTestAccess::ActiveInstance(*lowCue, 0);
+    ASSERT_NE(lowInst, nullptr);
+    EXPECT_NEAR(lowInst->getPitchProperty(), -0.5f, 0.001f); // -600/1200
+
+    auto midCue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("PitchRpcCue"));
+    midCue->SetVariable("Volume", 0.5f); // curve -> 0 cents (midpoint)
+    midCue->Play();
+    auto* midInst = CueTestAccess::ActiveInstance(*midCue, 0);
+    ASSERT_NE(midInst, nullptr);
+    EXPECT_NEAR(midInst->getPitchProperty(), 0.0f, 0.001f);
+
+    auto highCue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("PitchRpcCue"));
+    highCue->SetVariable("Volume", 1.0f); // curve -> +600 cents
+    highCue->Play();
+    auto* highInst = CueTestAccess::ActiveInstance(*highCue, 0);
+    ASSERT_NE(highInst, nullptr);
+    EXPECT_NEAR(highInst->getPitchProperty(), 0.5f, 0.001f); // +600/1200
+}
+
+// P9-XACT-006: a sound with no RPC codes at all must not be perturbed by unrelated RPC curves
+// existing elsewhere in the engine's XGS data.
+TEST(CueTest, PlaySoundWithNoRpcCodesIsUnaffectedByEngineRpcCurves)
+{
+    auto cue = std::unique_ptr<Cue>(SharedLongBank().GetCue("LongCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+    EXPECT_FLOAT_EQ(inst->getPitchProperty(), 0.0f);
 }

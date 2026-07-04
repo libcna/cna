@@ -45,6 +45,34 @@ namespace CNA::Internal::Audio
         uint8_t     accessibility;
     };
 
+    /** @brief One control point in an RPC (Runtime Parameter Control) curve. */
+    struct XgsRpcPoint
+    {
+        /** @brief X axis: the bound variable's value at this point. */
+        float   x;
+        /** @brief Y axis: the resulting parameter value (centibels for volume, cents for pitch) at this point. */
+        float   y;
+        /** @brief Interpolation shape from this point to the next: 0=linear, 1=fast, 2=slow, 3=sin/cos. */
+        uint8_t type;
+    };
+
+    /**
+     * @brief One RPC (Runtime Parameter Control) curve parsed from a .XGS file: maps a bound
+     * variable's value to a sound parameter via a piecewise curve.
+     */
+    struct XgsRpc
+    {
+        /** @brief Index into XgsData::variables that this curve's X axis reads from. */
+        uint16_t                 variable;
+        /**
+         * @brief Target parameter: 0=volume, 1=pitch, 2=reverb send, 3=filter frequency,
+         * 4=filter Q factor; 5 or greater targets a DSP preset parameter (unsupported).
+         */
+        uint16_t                 parameter;
+        /** @brief Curve control points, in file (X-ascending) order. */
+        std::vector<XgsRpcPoint> points;
+    };
+
     /** @brief Parsed contents of a .XGS global settings file. */
     struct XgsData
     {
@@ -52,10 +80,14 @@ namespace CNA::Internal::Audio
         std::vector<XgsCategory>                  categories;
         /** @brief All global variables, in file order. */
         std::vector<XgsVariable>                  variables;
+        /** @brief All RPC curves, in file order. */
+        std::vector<XgsRpc>                        rpcs;
         /** @brief Category name to index into categories. */
         std::unordered_map<std::string, uint16_t> categoryNameMap;
         /** @brief Variable name to index into variables. */
         std::unordered_map<std::string, uint16_t> variableNameMap;
+        /** @brief Absolute byte offset of each RPC (as referenced by XsbSound::rpcCodes) to index into rpcs. */
+        std::unordered_map<uint32_t, uint16_t>    rpcCodeMap;
     };
 
     // ── XWB ─────────────────────────────────────────────────────────────────
@@ -138,6 +170,13 @@ namespace CNA::Internal::Audio
         uint8_t                  priority;
         /** @brief One entry per track (simplified: first PlayWave event each). */
         std::vector<XsbWaveRef>  waves;
+        /**
+         * @brief Absolute byte offsets into the owning AudioEngine's parsed XgsData::rpcs
+         * (resolved via XgsData::rpcCodeMap); empty if this sound has no bound RPC curves.
+         * Sound-level only -- per-track RPC references are parsed for cursor alignment but not
+         * retained (CHECKLIST.md).
+         */
+        std::vector<uint32_t>    rpcCodes;
     };
 
     /** @brief One entry in a variation table (see XsbVariation). */
@@ -155,6 +194,10 @@ namespace CNA::Internal::Audio
         uint8_t  weightMin;
         /** @brief Upper bound of this entry's selection weight range. */
         uint8_t  weightMax;
+        /** @brief Lower bound of the interactive variable's value range; valid only when the owning XsbVariation::type is 3 (interactive). */
+        float    varMin = 0.0f;
+        /** @brief Upper bound of the interactive variable's value range; valid only when the owning XsbVariation::type is 3 (interactive). */
+        float    varMax = 0.0f;
     };
 
     /** @brief A cue's variation table: the set of sounds/waves it can pick from on Play(). */

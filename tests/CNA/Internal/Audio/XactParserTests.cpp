@@ -673,10 +673,9 @@ namespace
     }
 
     // Minimal .xsb with two simple (non-complex) sounds: sound 0 has SOUND_FLAG_HAS_RPC set with
-    // a self-inclusive 2-byte rpcDataLength field (unlike the DSP block's leading field, this one
-    // genuinely IS a self-inclusive skip length per the parser). Sound 1 has a distinctive wave
-    // reference; if sound 0's RPC block is mis-skipped, the cursor desyncs and sound 1's fields
-    // come out wrong. Coverage fixture for IN-6.
+    // a real sound-level RPC code list (count:u8 + one code:u32, P9-XACT-006). Sound 1 has a
+    // distinctive wave reference; if sound 0's RPC block is mis-parsed, the cursor desyncs and
+    // sound 1's fields come out wrong. Coverage fixture for IN-6/P9-XACT-006.
     std::vector<uint8_t> BuildXsbWithRpcThenSecondSound()
     {
         constexpr uint32_t headerSize   = 74;
@@ -725,9 +724,10 @@ namespace
         AppendU16(data, 0);    // simple wave: waveIdx (unused by this test)
         AppendU8(data, 0);     // simple wave: wbIdx (unused by this test)
 
-        // RPC block: rpcDataLength is self-inclusive (includes its own 2 bytes) -> 6 means
-        // 4 bytes of RPC codes follow.
-        AppendU16(data, 6);
+        // RPC block: rpcDataLength (unused by the parser, informational only) + count:u8=1 +
+        // one code:u32.
+        AppendU16(data, 7);
+        AppendU8(data, 1);
         AppendU32(data, 0xAAAAAAAAu);
 
         // Sound 1: simple (non-complex), no flags, distinctive wave reference.
@@ -764,8 +764,8 @@ namespace
         constexpr uint32_t soundOffset  = headerSize + bankNameSize; // 138
         // Sound 0 fixed fields (flags+cat+vol+pitch+prio+len = 9) + trackCount(1) = 10 bytes.
         constexpr uint32_t rpcBlockOffset = soundOffset + 10;
-        // RPC block: rpcDataLength(2, self-inclusive=6) + 4 bytes of code = 6 bytes.
-        constexpr uint32_t trackMetaOffset = rpcBlockOffset + 6;
+        // RPC block: rpcDataLength(2, unused) + count(1) + one code(4) = 7 bytes.
+        constexpr uint32_t trackMetaOffset = rpcBlockOffset + 7;
         // Per-track metadata (1 track): vol(1) + code(4) + filterData(2) + frequency(2) = 9 bytes.
         constexpr uint32_t sound1Offset = trackMetaOffset + 9;
         // Sound 1 (simple): flags+cat+vol+pitch+prio+len (9) + waveIdx(2) + wbIdx(1) = 12 bytes.
@@ -812,8 +812,9 @@ namespace
         AppendU16(data, 0);          // soundLength (skipped)
         AppendU8(data, 1);           // trackCount
 
-        // RPC block (self-inclusive length = 6 -> 4 bytes of code follow).
-        AppendU16(data, 6);
+        // RPC block: rpcDataLength(unused) + count:u8=1 + one code:u32.
+        AppendU16(data, 7);
+        AppendU8(data, 1);
         AppendU32(data, 0xAAAAAAAAu);
 
         // Per-track metadata (1 track): volume byte, code (absolute offset to event array,
@@ -1290,6 +1291,18 @@ TEST(XactParserTest, VariationTypeInteractiveParsesSixteenByteEntry)
     EXPECT_EQ(xsb.variations[0].entries[0].soundIndex, 0u);
 }
 
+// P9-XACT-002: varMin/varMax used to be read and discarded; Cue::Play() now needs them to
+// evaluate interactive-variation selection (P9-XACT-003), so the parser must retain them.
+TEST(XactParserTest, VariationTypeInteractiveRetainsVarMinAndVarMax)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithVariationOfType(3));
+
+    ASSERT_EQ(xsb.variations.size(), 1u);
+    ASSERT_EQ(xsb.variations[0].entries.size(), 1u);
+    EXPECT_FLOAT_EQ(xsb.variations[0].entries[0].varMin, 0.0f);
+    EXPECT_FLOAT_EQ(xsb.variations[0].entries[0].varMax, 1.0f);
+}
+
 TEST(XactParserTest, VariationTypeClipThrows)
 {
     EXPECT_THROW(ParseXsb(BuildXsbWithVariationOfType(2)), std::runtime_error);
@@ -1349,6 +1362,18 @@ TEST(XactParserTest, RpcBlockIsSkippedCorrectly)
     EXPECT_EQ(xsb.sounds[1].waves[0].waveIndex, 77u);
 }
 
+// P9-XACT-006: the sound-level RPC code list used to be read only far enough to skip past
+// (rpcDataLength-driven), discarding the codes entirely; it's now retained on XsbSound::rpcCodes.
+TEST(XactParserTest, SoundLevelRpcCodeIsRetained)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithRpcThenSecondSound());
+
+    ASSERT_EQ(xsb.sounds.size(), 2u);
+    ASSERT_EQ(xsb.sounds[0].rpcCodes.size(), 1u);
+    EXPECT_EQ(xsb.sounds[0].rpcCodes[0], 0xAAAAAAAAu);
+    EXPECT_TRUE(xsb.sounds[1].rpcCodes.empty());
+}
+
 TEST(XactParserTest, ComplexTrackSkipsRampPitchEventToFindPlayWave)
 {
     const XsbData xsb = ParseXsb(
@@ -1370,6 +1395,8 @@ TEST(XactParserTest, ComplexSoundWithRpcParsesTrackAndDoesNotDesyncSecondSound)
     ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
     EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 3);
     EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 42u);
+    ASSERT_EQ(xsb.sounds[0].rpcCodes.size(), 1u);
+    EXPECT_EQ(xsb.sounds[0].rpcCodes[0], 0xAAAAAAAAu);
 
     ASSERT_EQ(xsb.sounds[1].waves.size(), 1u);
     EXPECT_EQ(xsb.sounds[1].waves[0].wavebankIndex, 7);

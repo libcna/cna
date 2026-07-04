@@ -14,6 +14,8 @@
 #include "System/TimeSpan.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
+namespace CNA::Internal::Audio { struct XgsRpc; }
+
 namespace Microsoft::Xna::Framework::Audio
 {
     class AudioCategory;
@@ -152,6 +154,18 @@ namespace Microsoft::Xna::Framework::Audio
         // name against the engine's parsed global variable set (XACT per-cue variables
         // are the same named global variables, just individually overridable per cue).
         bool IsValidVariableName(const std::string& name) const;
+
+        // Resolves an interactive variation table's variable index (XsbVariation::variable,
+        // parsed straight from the .xsb) to its declared name in the engine's XGS variable
+        // table, or nullptr if out of range. Used by Cue::Play() to evaluate INTERACTIVE
+        // (type==3) variation-table selection by reusing Cue::GetVariable()'s existing
+        // cue-local-then-global fallback instead of duplicating it (P9-XACT-003).
+        const std::string* GetVariableNameByIndex(SharpRuntime::shortcs index) const;
+
+        // Resolves an RPC code (absolute XGS-file byte offset, from XsbSound::rpcCodes) to its
+        // parsed curve, or nullptr if not found. Used by Cue::Play() for one-shot RPC
+        // volume/pitch evaluation (P9-XACT-006/007).
+        const CNA::Internal::Audio::XgsRpc* FindRpcByCode(SharpRuntime::uintcs code) const;
 
         // P9-LIFECYCLE-012: exposes the active-cue registry's size to AudioEngineTestAccess so a
         // regression test can prove repeated category operations never duplicate an

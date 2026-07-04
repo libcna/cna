@@ -22,16 +22,63 @@ namespace Microsoft::Xna::Framework::Audio
 
     namespace
     {
-        // Convert XACT pitch (cents, range -1200..+1200) to XNA [-1..+1]
-        float CentsToPitch(int16_t cents)
+        // Convert XACT pitch (cents, range -1200..+1200) to XNA [-1..+1]. Takes a float (rather
+        // than the underlying int16_t storage) so a sound's base pitch and an RPC pitch curve's
+        // result (P9-XACT-007) can be summed in cents before converting once, matching FAudio's
+        // own additive-then-convert-once combination (FACT_internal.c update_sound_data).
+        float CentsToPitch(float cents)
         {
-            return std::clamp(static_cast<float>(cents) / 1200.0f, -1.0f, 1.0f);
+            return std::clamp(cents / 1200.0f, -1.0f, 1.0f);
         }
 
         std::mt19937& Rng()
         {
             static std::mt19937 rng{std::random_device{}()};
             return rng;
+        }
+
+        // Evaluates one RPC (Runtime Parameter Control) curve at a given variable value, matching
+        // FAudio's FACT_INTERNAL_CalculateRPC (FACT_internal.c): clamps to the first/last point's
+        // Y outside the curve's domain, otherwise piecewise-interpolates between the bracketing
+        // points using the left point's interpolation type (linear/fast/slow/sin-cos).
+        float EvaluateRpcCurve(const CNA::Internal::Audio::XgsRpc& rpc, float var)
+        {
+            if (rpc.points.empty()) return 0.0f;
+            if (var <= rpc.points.front().x) return rpc.points.front().y;
+            if (var >= rpc.points.back().x)  return rpc.points.back().y;
+
+            float result = 0.0f;
+            for (std::size_t i = 0; i + 1 < rpc.points.size(); ++i)
+            {
+                result = rpc.points[i].y;
+                if (var >= rpc.points[i].x && var <= rpc.points[i + 1].x)
+                {
+                    const float maxX = rpc.points[i + 1].x - rpc.points[i].x;
+                    const float maxY = rpc.points[i + 1].y - rpc.points[i].y;
+                    const float t    = (maxX != 0.0f) ? (var - rpc.points[i].x) / maxX : 0.0f;
+
+                    switch (rpc.points[i].type)
+                    {
+                        case 1: // FAST
+                            result += maxY * (1.0f - std::pow(1.0f - std::pow(t, 1.0f / 1.5f), 1.5f));
+                            break;
+                        case 2: // SLOW
+                            result += maxY * (1.0f - std::pow(1.0f - std::pow(t, 1.5f), 1.0f / 1.5f));
+                            break;
+                        case 3: // SINCOS
+                            if (maxY > 0.0f)
+                                result += maxY * (1.0f - std::pow(1.0f - std::sqrt(t), 2.0f));
+                            else
+                                result += maxY * (1.0f - std::sqrt(1.0f - std::pow(t, 2.0f)));
+                            break;
+                        default: // 0 == LINEAR
+                            result += maxY * t;
+                            break;
+                    }
+                    break;
+                }
+            }
+            return result;
         }
 
         // Standard per-cue 3D variables that XACT projects always define (used by
@@ -200,18 +247,42 @@ namespace Microsoft::Xna::Framework::Audio
         {
             const XsbVariation& var = xsb->variations[cueDef.varIndex];
 
-            if (!var.entries.empty())
+            if (!var.entries.empty() && var.type == 3) // INTERACTIVE
+            {
+                // FACT selects an interactive table's entry by locating the one whose
+                // [varMin, varMax] range contains the current value of the table's bound
+                // variable (FAudio's get_active_variation_index, VARIATION_TABLE_TYPE_INTERACTIVE
+                // branch) -- first matching entry in file order wins, matching FAudio's forward
+                // linear scan. GetVariable() already implements the right cue-local-then-global
+                // fallback FACT uses to resolve a variable's current value, so it's reused here
+                // instead of duplicating that logic (P9-XACT-003).
+                const std::string* varName = eng ? eng->GetVariableNameByIndex(var.variable) : nullptr;
+                if (varName && !varName->empty())
+                {
+                    const float value = GetVariable(*varName);
+                    for (const auto& e : var.entries)
+                    {
+                        if (value >= e.varMin && value <= e.varMax)
+                        {
+                            if (e.isSoundEntry && e.soundIndex < xsb->sounds.size())
+                                sound = &xsb->sounds[e.soundIndex];
+                            break;
+                        }
+                    }
+                }
+                // FAudio: no matching entry (or an unresolvable variable) means
+                // get_active_variation_index() returns false and create_sound() aborts entirely
+                // -- the cue stays Playing but is silent, not an error. `sound` is left nullptr,
+                // which the fallback below already handles the same way.
+            }
+            else if (!var.entries.empty())
             {
                 // FACT selects a variation entry via a weighted lottery over each entry's
                 // [weightMin, weightMax) range (FAudio's get_active_variation_index): entries
                 // authored with a wider weight range are proportionally more likely to be
                 // picked, not merely one-of-N uniformly. This applies to every non-interactive
                 // table type (wave/sound/compact_wave) -- FAudio itself uses the identical
-                // algorithm for all of them. Interactive tables (type==3) instead select by a
-                // per-cue/global variable's value range, but the parser does not yet retain
-                // that range in XsbVariEntry, so those (and any other degenerate all-zero-
-                // weight table) fall back to a uniform pick (documented deviation, see
-                // CHECKLIST.md).
+                // algorithm for all of them.
                 uint32_t totalWeight = 0;
                 for (const auto& e : var.entries)
                     totalWeight += static_cast<uint32_t>(e.weightMax) - e.weightMin;
@@ -272,7 +343,40 @@ namespace Microsoft::Xna::Framework::Audio
 
         categoryIdx_ = sound->categoryIndex;
         float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
-        float pitch  = CentsToPitch(sound->pitchCents);
+
+        // P9-XACT-006/007: RPC (Runtime Parameter Control) volume/pitch, evaluated once here
+        // against each bound variable's *current* value -- not continuously re-evaluated while
+        // playing like real FACT's per-tick FACT_INTERNAL_UpdateRPCs (see CHECKLIST.md). Volume
+        // curves are authored in centibels (same unit as a sound's own base volume before
+        // amplitude conversion), summed across every bound curve, then converted to a multiplier
+        // once -- mathematically identical to FAudio summing centibels and converting once,
+        // since 10^((a+b)/2000) == 10^(a/2000) * 10^(b/2000). Pitch curves are authored directly
+        // in cents, so they're summed with the sound's own pitchCents before one CentsToPitch().
+        float rpcVolumeCentibels = 0.0f;
+        float rpcPitchCents      = 0.0f;
+        if (eng)
+        {
+            for (uint32_t code : sound->rpcCodes)
+            {
+                const XgsRpc* rpc = eng->FindRpcByCode(code);
+                if (!rpc) continue;
+
+                const std::string* varName =
+                    eng->GetVariableNameByIndex(static_cast<int16_t>(rpc->variable));
+                if (!varName || varName->empty()) continue;
+
+                const float value  = GetVariable(*varName);
+                const float result = EvaluateRpcCurve(*rpc, value);
+
+                if (rpc->parameter == 0)      rpcVolumeCentibels += result; // RPC_PARAMETER_VOLUME
+                else if (rpc->parameter == 1) rpcPitchCents += result;      // RPC_PARAMETER_PITCH
+                // REVERBSEND/FILTERFREQUENCY/FILTERQFACTOR/DSP-preset (>=5): unsupported, see
+                // CHECKLIST.md.
+            }
+        }
+        const float rpcVolumeMultiplier =
+            static_cast<float>(std::pow(10.0, rpcVolumeCentibels / 2000.0));
+        const float pitch = CentsToPitch(static_cast<float>(sound->pitchCents) + rpcPitchCents);
 
         // Spawn one SoundEffectInstance per wave reference
         for (const auto& waveRef : sound->waves)
@@ -289,7 +393,7 @@ namespace Microsoft::Xna::Framework::Audio
             if (!sf) continue;
 
             auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
-            float combinedVol = std::clamp(waveRef.volume * catVol, 0.0f, 1.0f);
+            float combinedVol = std::clamp(waveRef.volume * catVol * rpcVolumeMultiplier, 0.0f, 1.0f);
             inst->setVolumeProperty(combinedVol);
             inst->setPitchProperty(pitch);
             inst->setIsLoopedProperty(waveRef.loopCount > 0);

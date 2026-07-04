@@ -174,6 +174,22 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
+    const std::string* AudioEngine::GetVariableNameByIndex(SharpRuntime::shortcs index) const
+    {
+        if (!xactImpl_ || index < 0
+            || static_cast<std::size_t>(index) >= xactImpl_->xgs.variables.size())
+            return nullptr;
+        return &xactImpl_->xgs.variables[static_cast<std::size_t>(index)].name;
+    }
+
+    const CNA::Internal::Audio::XgsRpc* AudioEngine::FindRpcByCode(SharpRuntime::uintcs code) const
+    {
+        if (!xactImpl_) return nullptr;
+        auto it = xactImpl_->xgs.rpcCodeMap.find(code);
+        if (it == xactImpl_->xgs.rpcCodeMap.end()) return nullptr;
+        return &xactImpl_->xgs.rpcs[it->second];
+    }
+
     void AudioEngine::Update()
     {
         // P9-LIFECYCLE-008/009: mirrors FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork,

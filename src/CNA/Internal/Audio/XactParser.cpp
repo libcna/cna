@@ -282,7 +282,7 @@ namespace CNA::Internal::Audio
         uint16_t variableCount      = ctx.u16();
         ctx.u16(); // blob1Count
         ctx.u16(); // blob2Count
-        ctx.u16(); // rpcCount
+        uint16_t rpcCount           = ctx.u16();
         ctx.u16(); // dspPresetCount
         ctx.u16(); // dspParameterCount
 
@@ -294,7 +294,9 @@ namespace CNA::Internal::Audio
         ctx.u32(); // variableNameIndexOffset
         uint32_t categoryNameOffset     = ctx.u32();
         uint32_t variableNameOffset     = ctx.u32();
-        // rest of offsets not needed
+        uint32_t rpcOffset              = ctx.u32();
+        // dspPresetOffset/dspParameterOffset not needed -- CNA has no DSP preset system
+        // (P9-XACT-005, CHECKLIST.md)
 
         // Category names (sequential null-terminated at categoryNameOffset)
         std::vector<std::string> catNames;
@@ -350,6 +352,34 @@ namespace CNA::Internal::Audio
                 v.initialValue  = vc.f32();
                 v.minValue      = vc.f32();
                 v.maxValue      = vc.f32();
+            }
+        }
+
+        // RPC data (rpcOffset): variable:u16 + pointCount:u8 + parameter:u16, then pointCount
+        // points of {x:f32, y:f32, type:u8} (FACT_internal.c FACT_INTERNAL_ParseAudioEngine).
+        // Each entry's own starting offset is recorded as its "code" (rpcCodeMap), the same
+        // absolute-offset lookup scheme XsbSound::rpcCodes and XsbVariation entries both use
+        // for cross-referencing into a sibling table (P9-XACT-005/006).
+        result.rpcs.resize(rpcCount);
+        if (rpcCount > 0)
+        {
+            Ctx rc = ctx;
+            rc.seek(rpcOffset);
+            for (uint16_t i = 0; i < rpcCount; ++i)
+            {
+                const uint32_t code = rc.pos();
+                auto& rpc = result.rpcs[i];
+                rpc.variable  = rc.u16();
+                uint8_t pointCount = rc.u8();
+                rpc.parameter = rc.u16();
+                rpc.points.resize(pointCount);
+                for (uint8_t j = 0; j < pointCount; ++j)
+                {
+                    rpc.points[j].x    = rc.f32();
+                    rpc.points[j].y    = rc.f32();
+                    rpc.points[j].type = rc.u8();
+                }
+                result.rpcCodeMap[code] = i;
             }
         }
 
@@ -724,13 +754,37 @@ namespace CNA::Internal::Audio
                     sound.waves.push_back({wbIdx, waveIdx, 0, sound.volume});
                 }
 
-                // Skip RPC data
+                // RPC code references. Layout (FACT_internal.c, FACTSoundBank_Prepare's
+                // SOUND_FLAG_RPC_MASK branch, parse_rpc_codes): rpcDataLength:u16 (unused --
+                // parsed structurally instead of skipped by length), then if HAS_RPC a
+                // sound-level list (count:u8 + count*code:u32), then if HAS_TRACK_RPC one such
+                // list per track. Only the sound-level list is retained (P9-XACT-006): CNA
+                // applies RPC curves at the whole-sound level, not per-track, matching how
+                // per-track state elsewhere in this parser is already simplified down to "first
+                // PlayWave event each" -- the per-track lists are still walked byte-for-byte so
+                // the cursor stays in sync with the rest of the sound entries.
                 if (flags & SOUND_FLAG_RPC_MASK)
                 {
-                    uint16_t rpcDataLength = sc.u16();
-                    // rpcDataLength includes the 2-byte length field itself
-                    if (rpcDataLength >= 2)
-                        sc.skip(rpcDataLength - 2);
+                    sc.u16(); // rpcDataLength -- unused
+
+                    if (flags & SOUND_FLAG_HAS_RPC)
+                    {
+                        const uint8_t rpcCodeCount = sc.u8();
+                        sound.rpcCodes.reserve(rpcCodeCount);
+                        for (uint8_t r = 0; r < rpcCodeCount; ++r)
+                            sound.rpcCodes.push_back(sc.u32());
+                    }
+
+                    if (flags & SOUND_FLAG_HAS_TRACK_RPC)
+                    {
+                        const uint8_t trackRpcOwnerCount =
+                            (flags & SOUND_FLAG_COMPLEX) ? trackCount : static_cast<uint8_t>(1);
+                        for (uint8_t t = 0; t < trackRpcOwnerCount; ++t)
+                        {
+                            const uint8_t trackRpcCodeCount = sc.u8();
+                            sc.skip(static_cast<std::size_t>(trackRpcCodeCount) * 4);
+                        }
+                    }
                 }
 
                 // Skip DSP data. The leading 2-byte field is NOT a self-inclusive length to
@@ -892,9 +946,10 @@ namespace CNA::Internal::Audio
                             {
                                 entry.isSoundEntry  = true;
                                 uint32_t code       = vc.u32();
-                                // var_min/var_max not yet retained in XsbVariEntry -- Cue::Play
-                                // falls back to a uniform pick for this type (plan_audio.md XA-3).
-                                vc.f32(); vc.f32(); // var_min, var_max
+                                entry.varMin        = vc.f32();
+                                entry.varMax        = vc.f32();
+                                // "linger" (FACT_internal.c) is only surfaced via FACTGetCueProperties,
+                                // which has no XNA-public equivalent on Cue -- read and discarded.
                                 vc.u32(); // linger
                                 auto sit = soundCodeMap.find(code);
                                 entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : 0;
