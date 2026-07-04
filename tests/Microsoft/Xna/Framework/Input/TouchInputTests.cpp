@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "System/InvalidOperationException.hpp"
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -275,6 +276,55 @@ TEST(TouchCollectionTest, CopyToAppendsAllElementsInOrder)
     ASSERT_EQ(destination.size(), 2u);
     EXPECT_EQ(destination[0].getIdProperty(), 1);
     EXPECT_EQ(destination[1].getIdProperty(), 2);
+}
+
+TEST(TouchCollectionTest, CopyToThrowsOnOutOfRangeIndexInsteadOfUndefinedBehavior)
+{
+    // Task 902: a negative or past-the-end arrayIndex previously formed an invalid iterator and
+    // hit std::vector::insert UB. It must now throw std::out_of_range.
+    const TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(1, TouchLocationState::Pressed, Vector2::Zero)
+    });
+
+    std::vector<TouchLocation> destination(2); // size 2 -> valid indices are 0,1,2
+
+    EXPECT_THROW(collection.CopyTo(destination, -1), std::out_of_range);
+    EXPECT_THROW(collection.CopyTo(destination, 3), std::out_of_range);   // 3 > size()
+    EXPECT_NO_THROW(collection.CopyTo(destination, 2));                   // 2 == size() is valid (append)
+}
+
+TEST(TouchCollectionTest, CopyToInsertsAtValidNonZeroIndex)
+{
+    const TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(9, TouchLocationState::Pressed, Vector2::Zero)
+    });
+    std::vector<TouchLocation> destination{
+        TouchLocation(1, TouchLocationState::Pressed, Vector2::Zero),
+        TouchLocation(2, TouchLocationState::Pressed, Vector2::Zero)
+    };
+
+    collection.CopyTo(destination, 1);
+
+    ASSERT_EQ(destination.size(), 3u);
+    EXPECT_EQ(destination[0].getIdProperty(), 1);
+    EXPECT_EQ(destination[1].getIdProperty(), 9);
+    EXPECT_EQ(destination[2].getIdProperty(), 2);
+}
+
+TEST(TouchCollectionTest, IndexerThrowsOnOutOfRangeAccess)
+{
+    // Task 904: out-of-range indexer access must throw std::out_of_range, not read OOB.
+    const TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(1, TouchLocationState::Pressed, Vector2::Zero)
+    });
+    EXPECT_NO_THROW((void)collection[0]);
+    EXPECT_THROW((void)collection[1], std::out_of_range);
+    EXPECT_THROW((void)collection[std::size_t{100}], std::out_of_range);
+
+    const TouchCollection empty;
+    EXPECT_EQ(empty.getCountProperty(), 0);
+    EXPECT_TRUE(empty.getIsReadOnlyProperty()); // XNA/FNA: TouchCollection.IsReadOnly is always true
+    EXPECT_THROW((void)empty[0], std::out_of_range);
 }
 
 TEST(TouchCollectionTest, IndexOfReturnsPositionOrNegativeOne)

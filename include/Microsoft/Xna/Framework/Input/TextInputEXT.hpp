@@ -103,6 +103,11 @@ namespace Microsoft::Xna::Framework::Input
          */
         NOXNA static void INTERNAL_OnTextEditing(const std::string& text, int start, int length);
 
+        /**
+         * @brief Test-only: resets TextInputEXT's static state (callbacks, window handle).
+         */
+        NOXNA static void ResetForTests();
+
     private:
         /** @brief Backing store for the window handle property. */
         static std::uintptr_t windowHandle_;

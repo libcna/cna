@@ -377,6 +377,167 @@ behavior.
 
 ---
 
+## Phase I13/I14 - Input FNA Fidelity, SDL Edge Cases, Test Determinism, and Reproducibility
+
+> **Honesty rules for this phase (do not violate):**
+> - A task is checked `[x]` **only** when the code and/or tests were actually changed *and* a build+test
+>   run in this checkout proved it, **or** the audit proved the behavior was already correct (stated as
+>   "already-satisfied, evidence: …"). Otherwise it stays `[ ]` open.
+> - No "100% complete / verified / merge-ready" claims unless the full configure+build+tests actually ran
+>   here. Hardware/IME-gated items that cannot be exercised headless are marked `[~]` (partial) with the
+>   reason, never `[x]`.
+> - This section starts optimistic-claim-free: the prior phases' "~99–100% FNA fidelity" wording is
+>   treated as **unproven** until the edge-case + fake-SDL tests below exist and pass (see task 957).
+>
+> **Checkbox legend:** `[ ]` open · `[x]` done+proven · `[~]` partial/blocked (reason given) · `[a]` audited-only (finding recorded, no code change needed or follow-up filed).
+
+### Build and reproducibility tasks
+
+- [x] 879. **Verified in this checkout (2026-07-04).** `cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON` then `cmake --build … --target CnaTests` → **configure + build succeed**. Env: Debian GNU/Linux 13 (trixie), kernel 6.12.90; CMake 3.31.6; Ninja 1.12.1; g++ (Debian 14.2.0-19) 14.2.0. Test run: **CnaTests 2198/2198 pass**, input filter **221/221**. (Also previously clean on Vulkan/bgfx: 1968/1968 · 1972/1972 pre-merge; graphics+input merge added tests → 2198.)
+- [x] 880. **Not applicable — nothing missing.** All vendored submodules populated (`third_party/SDL`, `SDL_image`, `SDL_mixer`, `vendor/googletest`) and both sibling repos present (`../sharp-runtime` e400f92, `../easy-gl` 21887e1). Bootstrap for a fresh clone documented in task 883. No test result was claimed from an incomplete archive — the build above is real.
+- [x] 881. **Done.** SDL family already had per-submodule `FATAL_ERROR` guidance (`cmake/ThirdPartySDL.cmake`). Added existence guards + actionable `FATAL_ERROR` messages for the two **sibling repos** `../sharp-runtime` (required) and `../easy-gl` (EASYGL only) in `CMakeLists.txt`, since those are NOT submodules and previously produced only CMake's generic "not an existing directory" error.
+- [a] 882. **Audited — works, documented.** `CNA_USE_SYSTEM_SDL` exists (`cmake/ThirdPartySDL.cmake:3`) and `find_package`s SDL3/SDL3_image/SDL3_mixer when ON. Not broken; documented as an option in `docs/input-build-and-test.md`. (Not exercised here — this checkout uses vendored SDL.)
+- [x] 883. **Done.** Added `docs/input-build-and-test.md` (bootstrap, configure/build/run, and an explicit "what CANNOT be verified headless" section: real gamepad, IME, Wayland cursor).
+- [x] 884. **Done.** Input-verification checklist folded into `docs/input-build-and-test.md` (§"Input verification checklist").
+- [~] 885. **Partial.** Reviewed input headers for stale `Status: PARTIAL` markers; only rewrite once the behavior+tests are truly complete. The GamePad SDL-bound paths stay honestly partial (task 909 open). No stale marker flipped to "complete" without evidence.
+- [x] 886. **Done.** This phase's preamble treats prior "~99–100% fidelity" wording as unproven; §"Summary" and the new `docs/input-fna-fidelity.md` state coverage by category with the fake-SDL gap called out (see 957).
+
+### Global input state and test isolation
+
+- [x] 887. **Done.** Added `InputManager::ResetAllForTests()` — central entry point that fans out to every subsystem in deterministic order.
+- [x] 888. **Done.** `ResetAllForTests()` covers `SdlInputBridge`, `InputManager`, `TouchPanel`, `GestureDetector`, `Mouse`, `TextInputEXT`. Added the missing `Mouse::ResetForTests()` and `TextInputEXT::ResetForTests()`. Tested by `InputResetTests.cpp`.
+- [x] 889. **Done.** `TouchPanel::ResetForTests()` now also resets `displayWidth_`/`displayHeight_`/`displayOrientation_`/`windowHandle_` (previously worked around by save/restore in the touch tests). Tested.
+- [x] 890. **Done.** `SdlInputBridge::ResetForTests()` now also clears `get_opened_gamepads()` and `get_gamepad_to_player_index_map()` (finger map, next-touch-id, scancode override already covered). Deliberately does NOT `SDL_CloseGamepad` (no real handle is opened headless). Text-input window handle is reset via `TextInputEXT::ResetForTests()` in the central reset.
+- [x] 891. **Done — and it found a real bug.** Added `InputResetTests` + ran the input suite `--gtest_shuffle --gtest_repeat`. The shuffle run **exposed** an order-dependence: `GestureDetector::ResetForTests()` didn't reset the manual test-clock, so real-timing Tap/Flick tests failed intermittently. Fixed (ResetForTests now restores the real-clock baseline) and converted `SdlInputBridgeTouchGestureTests` off its fragile press/release hack onto `ResetAllForTests()`. Shuffle×5 now green (165/165 every iteration).
+
+### Touch and gesture fidelity
+
+- [x] 892. **Done — REAL BUG fixed.** `SDL_EVENT_FINGER_CANCELED` was unhandled (fell through the switch), leaving a stuck Pressed/Moved touch + leaked finger-id mapping + leaked gesture tracking. Added `case SDL_EVENT_FINGER_CANCELED:` sharing the `FINGER_UP` body (Released + free mapping), matching FNA's `FINGER_UP || FINGER_CANCELED`.
+- [x] 893. **Done.** `SdlInputBridgeTouchGestureTests`: `FingerCanceledReleasesTouchLikeFingerUp` (canceled finger → Released once, then gone) + `FingerIdReusableAfterCancel` (mapping freed).
+- [x] 894. **Done — REAL BUG (latent) fixed.** `GetCapabilities()` fallback called the state-consuming `InputManager::GetTouchState()` (promoted Pressed→Moved, consumed Released). Now uses the non-mutating `HasAnyTouch()`.
+- [x] 895. **Done.** Added `InputManager::HasAnyTouch()` (non-mutating touch-presence peek).
+- [x] 896. **Done.** `TouchEdgeCaseTests`: `GetCapabilitiesHasNoSideEffectOnTouchState` — repeated `GetCapabilities()` leaves the Pressed touch unchanged for the next `GetState()`.
+- [a] 897. **Audited — functionally inert.** CNA copies current→previous before the gesture update (FNA does gesture update first); the two statements touch disjoint state, so order doesn't matter. Documented in `docs/input-fna-fidelity.md`; not reordered (no behavioral effect).
+- [x] 898. **Done.** Previous-location across Pressed/Moved/Released covered by the I12 `EventDrivenPathPreservesPreviousLocation` test + the new bridge `FingerEventsExposePreviousLocationThroughTouchPanelGetState`.
+- [a] 899. **Audited — documented deviation.** Compact sequential IDs (opaque to games) vs FNA's cast SDL finger id; stable mapping across a finger's lifetime is covered by the existing id-reuse tests. Documented.
+- [~] 900. **Partial.** Overflow is theoretical only (~2³¹ distinct fingers/session); documented as a known, practically-unreachable limit. No wrap guard added (would be dead code); revisit only if a long-run soak is required.
+- [a] 901. **Audited — documented + already tested.** Event-driven `InputManager` path is intentionally uncapped vs FNA's 8 (`MoreThanMaxTouchesAreAllReportedByEventDrivenInputManager`). `GetCapabilities` reports `MaximumTouchCount=8` while XNA/FNA report 4 — recorded as a known reporting deviation in the fidelity doc (not silently changed).
+- [x] 902. **Done — UB fixed.** `TouchCollection::CopyTo` now validates `arrayIndex` (throws `std::out_of_range`) before the `vector::insert`, which previously formed an invalid iterator on a bad index.
+- [a] 903. **Audited — equivalent/documented.** CNA's empty-vector replaces FNA's null-list sentinel; `Count`/`Contains`/`CopyTo`/`IndexOf`/indexer behavior matches. Documented.
+- [x] 904. **Done.** `TouchInputTests`: `CopyToThrowsOnOutOfRangeIndex…`, `CopyToInsertsAtValidNonZeroIndex`, `IndexerThrowsOnOutOfRangeAccess` (+ `Count`, `IsReadOnly`=true per XNA). Existing tests already cover `Contains`/mutation.
+- [a] 905. **Audited — matches FNA.** `GetHashCode`(`id+pos`), `Equals`, `==`/`!=` all match FNA; `TryGetPreviousLocation` true/false covered. One minor deviation: false-path leaves out-param unwritten (documented).
+- [~] 906. **Partial.** Tap/Flick/Hold/DoubleTap/Pinch covered by `GestureDetectorTests` + the end-to-end bridge tests (incl. the new cancel path). A single table-driven pass over every gesture + interruption combination is not yet exhaustive — left open.
+
+### GamePad runtime and FNA fidelity
+
+- [x] 907. **Done — REAL BUG fixed.** `SDL_INIT_GAMEPAD` was **never** initialized anywhere, so SDL produced NO gamepad add/remove/axis/button events — gamepads were entirely invisible at runtime. Added `SdlInputBridge::EnsureGamepadSubsystemInitialized()` (idempotent; sets `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS`), called lazily on first `ProcessEvent`. Initializing the subsystem makes SDL enumerate already-connected pads and queue `GAMEPAD_ADDED` for each. (Kept in the input layer; the SDL_INIT_VIDEO call in GraphicsDevice.cpp is out of this phase's scope.)
+- [ ] 908. **Open — blocked on 909.** No fake-SDL layer, so "pad connected before first frame is visible" cannot be exercised headless. The code path is now correct (907); verification is manual/hardware until 909.
+- [ ] 909. **Open (large infra).** No fake/injectable SDL gamepad layer exists. `SdlInputBridge` calls `SDL_OpenGamepad`/`SDL_GamepadHas*`/`SDL_Rumble*`/sensor APIs directly; faking them needs link-time seams or DI — a substantial change deferred out of this pass. **This blocks 908/910/911/912/914/923 and the device-level half of 921/926.** Recorded honestly, not faked.
+- [ ] 910. **Open — blocked on 909.** (Audited: CNA guards against duplicate-add before `SDL_OpenGamepad`, so no leak — safer than FNA — but this cannot be headless-tested without 909.)
+- [ ] 911. **Open — blocked on 909.** (Audited: unknown-remove is safely ignored.)
+- [ ] 912. **Open — blocked on 909.** (Audited: >4 pads → slot refused, matches FNA.)
+- [a] 913. **Audited — documented deviation.** `FNA_GAMEPAD_NUM_GAMEPADS` is read and clamped to 4 (0 disables, negative/garbage→4) because `PlayerIndex` is the frozen XNA enum; FNA leaves it unclamped. Matches FNA for all usable values 0–4. Documented.
+- [ ] 914. **Open — blocked on 909** for the >4 path (needs synthetic multi-pad add). Env parsing 0–4 is audited-correct.
+- [a] 915. **Audited.** `PacketNumber` increments on raw per-field changes (event-driven) vs FNA's once-per-poll-on-processed-change; connect bumps, identical state doesn't, disconnect resets to 0. A within-dead-zone axis wobble can bump it (differs from FNA). Documented in fidelity doc.
+- [~] 916. **Partial.** `GamePadInputTests`/`GamePadMappingTests` cover connect-bumps / identical-no-bump / disconnect→0 (coarse ordering). The within-dead-zone over-increment vs FNA is documented but not asserted.
+- [a] 917. **Audited — matches FNA.** Disconnect resets the slot to default (`PacketNumber=0`, `IsConnected=false`); `GetState` returns default `GamePadState()`. Documented + tested (disconnect→0).
+- [a] 918. **Audited — matches FNA exactly.** Dead-zone constants (`7849`/`8689`/`30`) and Independent/Circular/None math are line-for-line ports. Covered by the value-type tests.
+- [a] 919. **Audited — matches FNA.** Thumbstick Y negated; triggers `/32767`. (Tiny neg-axis `/32768` normalization detail noted in fidelity doc.)
+- [a] 920. **Audited — matches FNA exactly.** All 21 SDL buttons incl. paddles/touchpad/guide→BigButton map to the correct `Buttons`.
+- [~] 921. **Partial.** `GamePadMappingTests` table-tests the `InputManager`-level `Buttons` mapping. The SDL-device-level `SDL_GamepadButton`→`Buttons` conversion is audited-correct but needs 909 to test end-to-end.
+- [x] 922. **Done — REAL BUG fixed.** `GetCapabilities` probed rumble with `SDL_RumbleGamepad(0,0,0)` — a zero rumble **stops active vibration**, so reading caps cancelled a game's `SetVibration` every call. Now reads non-mutating cap properties (`SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN` / `…_TRIGGER_RUMBLE_BOOLEAN` / `…_RGB_LED_BOOLEAN`).
+- [ ] 923. **Open — blocked on 909.** Rumble/trigger-rumble/LED/gyro/accel/unsupported-device paths need a fake device to test headless. Code audited-correct; the 922 side-effect is fixed.
+- [a] 924. **Audited — matches FNA.** `SetVibration`/`SetTriggerVibration`/`SetLightBar`/`GetGyro`/`GetAccelerometer`/`GetGUID` are faithful ports (GUID incl. "xinput" + Valve overrides). Minor: GUID/caps computed live vs FNA cached-at-connect. Documented.
+- [a] 925. **Audited — documented deviation.** `GamePadState::GetHashCode()` = `buttons ^ packetNumber*31` (consistent for equal states) vs FNA's reflection `ValueType.GetHashCode()`; `ToString()` matches FNA (type name). Documented as intentional.
+- [~] 926. **Partial.** `GamePadStateTests` cover equality/hash consistency for the value types; full "differs only in thumbsticks/triggers/dpad/connection" matrix at the device level needs 909.
+
+### Mouse fidelity
+
+- [x] 927. **Done — matched FNA.** Wheel was `static_cast<int>(event.wheel.y * 120.0f)` (multiply-then-cast, leaked sub-notch precision). Changed to `static_cast<int>(event.wheel.y) * 120` (cast-then-multiply) to match FNA's whole-notch `(int) evt.wheel.y * 120`, and rewrote the misleading "matches FNA" comment.
+- [x] 928. **Done.** `SdlInputBridgeMouseTests`: positive/negative/whole-notch, zero, **fractional** (0.5→0, 1.9→120 — the crux), and repeated-accumulate. Drives real `SDL_EVENT_MOUSE_WHEEL` through `ProcessEvent`.
+- [a] 929. **Audited — safe.** `SetPosition` with no window: relative-mode getter returns false, `logical_to_window` passes through, `SDL_WarpMouseInWindow(nullptr,…)` is a safe no-op; requested position is cached and self-heals on the next motion event. No harmful inconsistency. Documented.
+- [~] 930. **Partial (existing coverage).** `SetPositionConvertsLogicalToWindowForLetterboxedRenderer` + `SetPositionHandlesLetterboxOffsetNotJustScale` already cover the renderer path. EasyGL `TransformLogicalToWindow` path not separately unit-tested (no offset in its default mode).
+- [x] 931. **Done (existing).** `SetPositionIsNoOpWhenRelativeModeEnabled` proves the relative-mode early-return.
+- [a] 932. **Audited — documented latent risk.** `InputManager` caches relative-mode (set only via the public setter, which updates it next line), so it can't diverge through CNA's API; would only desync if SDL relative mode were toggled externally. Recommendation (read-live or reset-on-focus-loss) documented in fidelity doc; not changed (no in-API failure).
+- [x] 933. **Done (existing).** `SdlInputBridgeMouseTests` fully covers `ClickedEXT` button mapping (0-based, down-only).
+- [a] 934. **Audited — documented deviation.** `ClickedEXT` is a single `std::function` (single-subscriber) vs FNA's multicast `Action<int>`. Kept as-is (low impact; NOXNA extension); the single-subscriber semantics are documented in `docs/input-fna-fidelity.md`.
+
+### Keyboard fidelity
+
+- [a] 935. **Audited — all values match.** Exhaustive CNA `Keys` vs FNA `Keys.cs` comparison: every numeric value identical (incl. hex outliers); no duplicate/alias divergence. Table in `docs/input-fna-fidelity.md`.
+- [a] 936. **Audited — faithful port.** SDL keycode + scancode maps are byte-for-byte ports of FNA's `INTERNAL_keyMap`/`INTERNAL_scanMap`.
+- [a] 937. **Audited — inherited FNA FIXME, unresolvable.** The `NONUSHASH`/`NONUSBACKSLASH`→`Keys::None` FIXME is verbatim from FNA (ISO-layout keys with no XNA equivalent). Documented; stays in lock-step with FNA.
+- [~] 938. **Partial (existing coverage).** `SdlInputBridgeKeyboardTests` table-tests both maps + both scancode modes across letters/digits/function/arrows/modifiers/numpad/OEM. A single exhaustive every-`Keys` table is not added (the 40 intentionally-unmappable keys are documented).
+- [a] 939. **Audited — state correct.** Repeated key-down de-dupes via `unordered_set` (matches FNA). Text-synthesis gates on SDL `repeat` flag — minor edge deviation documented.
+- [a] 940. **Audited — matches FNA.** Key-up without key-down is a no-op; neither FNA nor CNA clears keys on focus loss (see 951).
+
+### Text input and IME
+
+- [a] 941. **Audited — semantics match FNA** (+ null-window guards). Documented.
+- [a] 942. **Audited — documented deviation.** `TextInput`/`TextEditing` are single `std::function`s vs FNA's multicast `Action`. Documented (single-subscriber, low impact); not re-architected.
+- [~] 943. **Partial (existing coverage).** `SdlInputBridgeTextInputTests` already exhaustively covers BMP (2/3-byte) + astral surrogate-pair decode. Audited-correct.
+- [a] 944. **Audited — documented.** Malformed UTF-8 is skipped (FNA emits U+FFFD). Unreachable via SDL (guarantees well-formed UTF-8); documented rather than tested against impossible input.
+- [~] 945. **Partial (existing coverage).** `TEXT_EDITING` composition text/start/length forwarded and tested; selection-length semantics passed through unremapped by both CNA and FNA.
+- [a] 946. **Audited — faithful ports** (Start/Stop/SetInputRectangle/active-window). Documented.
+- [~] 947. **Partial.** `TextInputEXTTests` covers no-window guards + a real hidden-window Start/Stop/IsActive/SetRectangle round-trip. Window-disposed/changed mid-session lifecycle not separately exercised.
+
+### SDL bridge robustness
+
+- [~] 948. **Partial (existing coverage).** Focused bridge tests exist for mouse (motion/button/wheel), keyboard (down/up, both scancode modes), touch (down/motion/up/**cancel**), and text (input/editing). Gamepad event types need 909.
+- [a] 949. **Audited — satisfied.** `ProcessEvent`'s switch has a `default: break;`; unmapped keys/buttons/axes return `nullopt` and are dropped. Unknown events are safely ignored by construction.
+- [a] 950. **Audited — satisfied.** Window handles are derived defensively (`SDL_GetWindowFromID` → `SDL_GetMouseFocus()` fallback; `nullptr` treated as 1×1); all `windowHandle_` consumers guard null. No unguarded deref.
+- [a] 951. **Audited — decision documented, matches FNA.** Neither FNA nor CNA clears input on `WINDOW_FOCUS_LOST`. FNA is safe via per-frame re-poll; CNA (event-driven) *can* leave a key/button stuck. A runtime focus-loss clear would be an improvement **beyond** FNA — left as an open decision in `docs/input-fna-fidelity.md` rather than silently diverging from the reference.
+- [a] 952. **Audited — documented.** Mouse + `InputManager` touch snapshot are consistent (renderer-logical space); the gesture path uses a display-size basis that can differ under letterboxing; `displayOrientation_` is stored but not applied. All flagged in the fidelity doc.
+- [x] 953. **Done.** Event-driven-vs-poll architecture documented in `docs/input-fna-fidelity.md` (§Architecture note): input state updates at SDL-event-processing time, not once per frame.
+
+### Documentation and coverage correction
+
+- [x] 954. **Done.** Created `docs/input-fna-fidelity.md`.
+- [x] 955. **Done.** That doc lists FNA-matching behavior, intentional CNA deviations (with reasons), and TODO gaps, per area.
+- [x] 956. **Done.** Per-area sections/tables: Keyboard, Mouse, GamePad, TouchPanel/TouchCollection/TouchLocation, Gestures, TextInputEXT, SDL bridge.
+- [x] 957. **Done — conservative wording.** This phase does **not** claim 99–100% FNA fidelity: the GamePad SDL-bound paths are audited-correct but **not headless-tested** (fake-SDL layer, task 909, is open), so coverage is stated by category with that gap explicit here and in the fidelity doc.
+- [x] 958. **Done.** "Definition of Done for Input" added to `docs/input-fna-fidelity.md`; item 3 (fake-SDL/gamepad tests) is explicitly **not yet satisfied** (task 909).
+- [x] 959. **Done — see the "Phase I13/I14 final audit note" below** (exact commands + results).
+- [x] 960. **Honored.** Every `[x]` above reflects an actual code+test change or an audit that proved the behavior already correct; unproven/blocked items are `[ ]`/`[~]`/`[a]`, not `[x]`. Nothing hardware-gated is marked verified.
+
+---
+
+### Phase I13/I14 final audit note (task 959)
+
+**Environment:** Debian GNU/Linux 13 (trixie), kernel 6.12.90; CMake 3.31.6; Ninja 1.12.1;
+g++ (Debian 14.2.0-19) 14.2.0. Sibling repos present: `../sharp-runtime`, `../easy-gl`. All vendored
+submodules populated.
+
+**Commands run (EasyGL backend):**
+```
+cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-input-easygl --target CnaTests
+./cmake-build-input-easygl/CnaTests
+./cmake-build-input-easygl/CnaTests --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*'
+./cmake-build-input-easygl/CnaTests --gtest_filter='<input+reset>' --gtest_shuffle --gtest_repeat=5
+```
+
+**Results:** configure + build succeed. Full suite **2213 / 2213 pass** (was 2198 pre-phase; +15
+new input tests). Input filter **236 / 236 pass**. Shuffle × 5 (order-independence) **green every
+iteration** (165/165) — after fixing the GestureDetector test-clock leak the shuffle run exposed.
+
+**Real bugs found & fixed this phase (code + tests, build-verified):**
+1. `SDL_EVENT_FINGER_CANCELED` unhandled → stuck touch (892/893).
+2. `TouchPanel::GetCapabilities()` mutated touch state via `GetTouchState()` (894–896).
+3. `TouchCollection::CopyTo` out-of-range → UB (902/904).
+4. Mouse wheel multiply-then-cast leaked sub-notch deltas vs FNA (927/928).
+5. **`SDL_INIT_GAMEPAD` never initialized** → gamepads invisible at runtime (907).
+6. `GamePadCapabilities` rumble probe cancelled active vibration (922).
+7. `GestureDetector::ResetForTests` didn't reset the test-clock → order-dependent gesture tests
+   (found via the 891 shuffle run; fixed).
+
+**Still open (honest):** the fake/injectable SDL gamepad layer (909) and its dependent device-level
+tests (908/910/911/912/914/923, device half of 921/926); exhaustive gesture matrix (906). Vulkan/bgfx
+backends were **not** re-run this phase (input is backend-agnostic and the code is unchanged across
+backends; only EasyGL was rebuilt+tested here) — a full 3-backend pass is the merge-time check.
+
+---
+
 ## XNA 4.0 Input API coverage — final split (task 838)
 
 > **This is the authoritative coverage assessment** (as of Phase I9). Per the review's rule,

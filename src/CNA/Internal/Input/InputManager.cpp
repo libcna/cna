@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Internal/Input/GestureDetector.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
+#include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <algorithm>
 #include <array>
@@ -114,6 +119,19 @@ namespace CNA::Internal::Input
     void InputManager::ResetForTests()
     {
         getInternalInputState() = InternalInputState{};
+    }
+
+    void InputManager::ResetAllForTests()
+    {
+        // Deterministic order: clear the bridge's file-static event bookkeeping first, then the
+        // accumulated input singleton, then the higher-level panels/handlers. All entries are
+        // independent process-wide statics, so ordering is for reproducibility, not correctness.
+        SdlInputBridge::ResetForTests();
+        ResetForTests();
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::ResetForTests();
+        GestureDetector::ResetForTests();
+        Microsoft::Xna::Framework::Input::Mouse::ResetForTests();
+        Microsoft::Xna::Framework::Input::TextInputEXT::ResetForTests();
     }
 
     void InputManager::SetMousePosition(const int x, const int y)
@@ -364,6 +382,11 @@ namespace CNA::Internal::Input
         }
 #endif
         return Microsoft::Xna::Framework::Input::KeyboardState(pressedKeys);
+    }
+
+    bool InputManager::HasAnyTouch()
+    {
+        return !getInternalInputState().TouchLocations.empty();
     }
 
     Microsoft::Xna::Framework::Input::Touch::TouchCollection InputManager::GetTouchState()

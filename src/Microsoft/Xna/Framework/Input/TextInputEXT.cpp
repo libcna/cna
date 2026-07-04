@@ -98,4 +98,11 @@ namespace Microsoft::Xna::Framework::Input
         if (TextEditing)
             TextEditing(text, start, length);
     }
+
+    void TextInputEXT::ResetForTests()
+    {
+        TextInput    = nullptr;
+        TextEditing  = nullptr;
+        windowHandle_ = 0;
+    }
 }

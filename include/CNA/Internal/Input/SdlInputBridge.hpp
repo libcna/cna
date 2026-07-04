@@ -29,6 +29,18 @@ namespace CNA::Internal::Input
         static void ProcessEvent(const SDL_Event& event);
 
         /**
+         * @brief Ensures the SDL gamepad subsystem is initialized so gamepad events are delivered.
+         *
+         * SDL_INIT_VIDEO does not imply SDL_INIT_GAMEPAD, so without this no
+         * SDL_EVENT_GAMEPAD_ADDED/REMOVED/AXIS/BUTTON events are ever produced — gamepads would be
+         * invisible to GamePad::GetState. Idempotent (ref-counted by SDL); safe to call repeatedly.
+         * Initializing the subsystem makes SDL enumerate already-connected pads and queue
+         * SDL_EVENT_GAMEPAD_ADDED for each, so pads connected before the first frame become visible.
+         * ProcessEvent() calls this lazily on first use; startup code may also call it explicitly.
+         */
+        static void EnsureGamepadSubsystemInitialized();
+
+        /**
          * @brief Triggers rumble on the gamepad for the given player.
          * @return true if vibration was successfully set.
          */

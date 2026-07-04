@@ -197,6 +197,16 @@ namespace CNA::Internal::Input
         static Microsoft::Xna::Framework::Input::Touch::TouchCollection GetTouchState();
 
         /**
+         * @brief Returns whether any touch point is currently tracked, without mutating state.
+         *
+         * Unlike GetTouchState(), this does not advance previous-location tracking, consume
+         * Released touches, or promote Pressed to Moved. Safe to call from capability queries.
+         *
+         * @return true if at least one touch location is currently tracked.
+         */
+        static bool HasAnyTouch();
+
+        /**
          * @brief Returns a snapshot of current gamepad state for one player.
          */
         static Microsoft::Xna::Framework::Input::GamePadState GetGamePadState(
@@ -221,5 +231,16 @@ namespace CNA::Internal::Input
          * leaking state into later tests. Not part of the runtime input path — for tests only.
          */
         static void ResetForTests();
+
+        /**
+         * @brief Test-only: resets ALL input subsystems' process-wide state in a deterministic order.
+         *
+         * Central entry point that fans out to every input subsystem so a test does not have to
+         * know (and remember) the full list of individual reset helpers: SdlInputBridge file-static
+         * state, this InputManager singleton, TouchPanel statics (incl. display metrics + window
+         * handle), GestureDetector statics, Mouse statics, and TextInputEXT callbacks/handle.
+         * Call this in a fixture SetUp()/TearDown() to guarantee input tests are order-independent.
+         */
+        static void ResetAllForTests();
     };
 }

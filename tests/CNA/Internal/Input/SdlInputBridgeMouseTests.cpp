@@ -70,3 +70,62 @@ TEST(SdlInputBridgeMouseTest, ButtonUpDoesNotFireClickedEXT)
 
     Mouse::ClickedEXT = nullptr;
 }
+
+namespace
+{
+    SDL_Event mouseWheelEvent(const float y)
+    {
+        SDL_Event e{};
+        e.type = SDL_EVENT_MOUSE_WHEEL;
+        e.wheel.x = 0.0f;
+        e.wheel.y = y;
+        e.wheel.windowID = 0;
+        return e;
+    }
+
+    // Applies one wheel event and returns the resulting change in the cumulative
+    // ScrollWheelValue (which is process-lifetime cumulative, matching XNA), so tests are
+    // independent of any prior accumulation.
+    int wheelDelta(const float y)
+    {
+        const int before = Mouse::GetState().getScrollWheelValueProperty();
+        SDL_Event e = mouseWheelEvent(y);
+        SdlInputBridge::ProcessEvent(e);
+        return Mouse::GetState().getScrollWheelValueProperty() - before;
+    }
+}
+
+TEST(SdlInputBridgeMouseWheelTest, WholeNotchesScaleBy120)
+{
+    // FNA: `(int) evt.wheel.y * 120` — one notch up/down is +/-120 XNA units.
+    EXPECT_EQ(wheelDelta(1.0f), 120);
+    EXPECT_EQ(wheelDelta(-1.0f), -120);
+    EXPECT_EQ(wheelDelta(3.0f), 360);
+}
+
+TEST(SdlInputBridgeMouseWheelTest, ZeroDeltaLeavesValueUnchanged)
+{
+    EXPECT_EQ(wheelDelta(0.0f), 0);
+}
+
+TEST(SdlInputBridgeMouseWheelTest, FractionalSubNotchIsTruncatedBeforeScaling)
+{
+    // The crux of the FNA-fidelity fix: the SDL float is cast to int BEFORE multiplying by 120,
+    // so sub-notch precision-wheel motion is discarded (FNA/XNA report whole notches only). A
+    // multiply-then-cast implementation would wrongly yield 60 / 108 / -60 here.
+    EXPECT_EQ(wheelDelta(0.5f), 0);
+    EXPECT_EQ(wheelDelta(0.9f), 0);
+    EXPECT_EQ(wheelDelta(1.9f), 120);   // truncates to 1 notch
+    EXPECT_EQ(wheelDelta(-0.5f), 0);
+    EXPECT_EQ(wheelDelta(-1.9f), -120); // truncates toward zero to -1 notch
+}
+
+TEST(SdlInputBridgeMouseWheelTest, RepeatedEventsAccumulate)
+{
+    const int before = Mouse::GetState().getScrollWheelValueProperty();
+    SDL_Event up = mouseWheelEvent(1.0f);
+    SdlInputBridge::ProcessEvent(up);
+    SdlInputBridge::ProcessEvent(up);
+    SdlInputBridge::ProcessEvent(up);
+    EXPECT_EQ(Mouse::GetState().getScrollWheelValueProperty() - before, 360);
+}

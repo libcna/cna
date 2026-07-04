@@ -29,6 +29,14 @@ if(CNA_ENABLE_NET)
 endif()
 
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime/CMakeLists.txt")
+    message(FATAL_ERROR
+        "CNA: required sibling repository 'sharp-runtime' was not found at "
+        "'${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime'.\n"
+        "sharp-runtime is CNA's C++ reimplementation of the .NET runtime and is NOT a git "
+        "submodule of this repo — it must be checked out next to cna_input. Clone it with:\n"
+        "    git clone <sharp-runtime-url> ${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime")
+endif()
 add_subdirectory(../sharp-runtime SHARP_RUNTIME)
 
 #find_package(SDL3_ttf REQUIRED)
@@ -80,6 +88,13 @@ endif()
 if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
         message(WARNING "CNA: EASYGL backend is primarily tested on Linux. Other platforms may require additional setup.")
+    endif()
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
+        message(FATAL_ERROR
+            "CNA: the EASYGL backend requires the sibling repository 'easy-gl' at "
+            "'${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl', which was not found.\n"
+            "easy-gl is NOT a git submodule — check it out next to cna_input, or configure with a "
+            "different backend, e.g. -DCNA_GRAPHICS_BACKEND=VULKAN (or BGFX / SDL_RENDERER).")
     endif()
     add_subdirectory(../easy-gl easy-gl)
 endif()

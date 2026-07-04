@@ -208,6 +208,29 @@ TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsConnectedViaInputManagerFallbackWhenF
     EXPECT_EQ(caps.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
 }
 
+TEST_F(TouchEdgeCaseTest, GetCapabilitiesHasNoSideEffectOnTouchState)
+{
+    // Regression (task 894/896): the InputManager-fallback branch of GetCapabilities() must NOT
+    // consume a frame of touch state. Previously it called GetTouchState(), which advances
+    // previous-location tracking and promotes Pressed->Moved, so a GetCapabilities() call silently
+    // corrupted the next GetState(). With the non-mutating HasAnyTouch() peek, the Pressed touch
+    // must survive unchanged.
+    InputManager::SetTouchState(7, TouchLocationState::Pressed, Vector2(5, 5));
+
+    // Call it repeatedly — none of these may mutate touch state.
+    (void) TouchPanel::GetCapabilities();
+    (void) TouchPanel::GetCapabilities();
+
+    const TouchCollection state = TouchPanel::GetState();
+    ASSERT_EQ(state.getCountProperty(), 1);
+    EXPECT_EQ(state[0].getIdProperty(), 7);
+    EXPECT_EQ(state[0].getStateProperty(), TouchLocationState::Pressed)
+        << "GetCapabilities() must not promote Pressed to Moved";
+    TouchLocation prev;
+    EXPECT_FALSE(state[0].TryGetPreviousLocation(prev))
+        << "the first GetState after a press has no previous location";
+}
+
 TEST_F(TouchEdgeCaseTest, GetCapabilitiesReturnsToDisconnectedAfterReset)
 {
     TouchPanel::setTouchDeviceExistsProperty(true);

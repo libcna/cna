@@ -1062,16 +1062,20 @@ namespace CNA::Internal::Input
         caps.setHasLeftTriggerProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
         caps.setHasRightTriggerProperty(SDL_GamepadHasAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
 
-        // Rumble: probe with all-zero call — returns true if supported
-        const bool hasRumble = SDL_RumbleGamepad(gamepad, 0, 0, 0);
+        // Rumble / trigger-rumble / light-bar capabilities: query the gamepad's capability
+        // PROPERTIES rather than probing. Do NOT probe with SDL_RumbleGamepad(gamepad, 0, 0, 0):
+        // a zero-magnitude rumble call STOPS any active vibration, so probing here would silently
+        // cancel a game's SetVibration every time it reads capabilities. FNA sidesteps this by
+        // caching capabilities once at connect; we instead read the non-mutating cap properties.
+        const SDL_PropertiesID props = SDL_GetGamepadProperties(gamepad);
+        const bool hasRumble = props != 0 &&
+            SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
         caps.setHasLeftVibrationMotorProperty(hasRumble);
         caps.setHasRightVibrationMotorProperty(hasRumble);
 
-        // Trigger rumble
-        caps.setHasTriggerVibrationMotorsEXTProperty(SDL_RumbleGamepadTriggers(gamepad, 0, 0, 0));
+        caps.setHasTriggerVibrationMotorsEXTProperty(props != 0 &&
+            SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_TRIGGER_RUMBLE_BOOLEAN, false));
 
-        // Light bar (RGB LED)
-        const SDL_PropertiesID props = SDL_GetGamepadProperties(gamepad);
         if (props != 0)
             caps.setHasLightBarEXTProperty(SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false));
 
@@ -1129,10 +1133,32 @@ namespace CNA::Internal::Input
         get_finger_id_to_touch_id_map().clear();
         get_next_touch_id() = 1;
         g_scancodeModeTestOverride = std::nullopt;
+        // Clear the gamepad slot/player maps. We deliberately do NOT SDL_CloseGamepad the opened
+        // handles here: in the headless test suite no real gamepad is ever opened (these stay
+        // null/empty), and closing an app-owned handle from a test reset would be unsafe. We only
+        // drop CNA's own bookkeeping so a synthetic add/remove test starts from a clean slate.
+        get_opened_gamepads().fill(nullptr);
+        get_gamepad_to_player_index_map().clear();
+    }
+
+    void SdlInputBridge::EnsureGamepadSubsystemInitialized()
+    {
+        if (SDL_WasInit(SDL_INIT_GAMEPAD) & SDL_INIT_GAMEPAD)
+        {
+            return;
+        }
+        // Deliver gamepad button/axis events even when the game window is not focused, matching
+        // FNA (SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS = "1").
+        SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+        SDL_InitSubSystem(SDL_INIT_GAMEPAD);
     }
 
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)
     {
+        // SDL_INIT_VIDEO does not init the gamepad subsystem; do it lazily on first event so
+        // gamepad add/remove/axis/button events flow (and already-connected pads are enumerated).
+        EnsureGamepadSubsystemInitialized();
+
         switch (event.type)
         {
         case SDL_EVENT_MOUSE_MOTION:
@@ -1193,9 +1219,14 @@ namespace CNA::Internal::Input
             // expose a single cumulative ScrollWheelValue (vertical) and no horizontal member, so
             // event.wheel.x is intentionally dropped (task 805 / former task 749 — closed as
             // won't-implement; adding a horizontal wheel would be a non-XNA NOXNA extension with
-            // no current consumer). FNA multiplies the wheel delta by 120 to match XNA units.
+            // no current consumer). FNA truncates the SDL wheel delta to whole notches BEFORE
+            // scaling by 120 (`(int) evt.wheel.y * 120`, SDL3_FNAPlatform.cs) — the cast binds
+            // tighter than the multiply, so sub-notch fractional motion from high-resolution /
+            // precision trackpads is discarded, keeping ScrollWheelValue a clean multiple of 120
+            // exactly as XNA reports. We cast first to match that; do NOT multiply the float then
+            // cast (that would leak fractional deltas and diverge from FNA/XNA).
             InputManager::AddScrollWheelDelta(
-                static_cast<int>(event.wheel.y * 120.0f)
+                static_cast<int>(event.wheel.y) * 120
             );
             break;
         case SDL_EVENT_KEY_DOWN:
@@ -1362,7 +1393,13 @@ namespace CNA::Internal::Input
                 break;
             }
         case SDL_EVENT_FINGER_UP:
+        case SDL_EVENT_FINGER_CANCELED:
             {
+                // FNA treats a canceled finger identically to a lifted one
+                // (`FINGER_UP || FINGER_CANCELED` -> Released, SDL3_FNAPlatform.cs): both must
+                // release the touch in InputManager, notify TouchPanel/GestureDetector with
+                // Released, and free the finger-id mapping. Without the CANCELED case the touch
+                // would stay stuck Pressed/Moved forever and leak its id mapping + gesture tracking.
                 const int touchId = try_get_touch_id(event.tfinger.fingerID).value_or(
                     get_or_create_touch_id(event.tfinger.fingerID)
                 );

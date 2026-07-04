@@ -72,6 +72,13 @@ namespace Microsoft::Xna::Framework::Input
          */
         NOXNA static void INTERNAL_onClicked(int button);
 
+        /**
+         * @brief Test-only: resets Mouse's process-wide static state (window handle, ClickedEXT).
+         *
+         * Does not touch the SDL cursor or InputManager mouse state (reset those separately).
+         */
+        NOXNA static void ResetForTests();
+
     private:
         /** @brief Backing store for the WindowHandle property. */
         static std::uintptr_t windowHandle_;

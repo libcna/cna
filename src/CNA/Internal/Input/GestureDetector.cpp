@@ -445,6 +445,12 @@ namespace CNA::Internal::Input
         state                    = GestureState::NONE;
         updateTimestamp          = TimePoint{};
         velocity                 = Vector2::Zero;
+        // Return to the real-clock baseline. Without this, a test that enabled the manual test
+        // clock and forgot to disable it (or was interrupted) would leak frozen-time mode into
+        // later real-timing tests (e.g. the SDL-bridge Tap/Flick tests), making them order-
+        // dependent. Tests that want the manual clock call EnableTestClock() after reset.
+        g_useTestClock           = false;
+        g_testNow                = TimePoint{};
     }
 
     void GestureDetector::EnableTestClock()

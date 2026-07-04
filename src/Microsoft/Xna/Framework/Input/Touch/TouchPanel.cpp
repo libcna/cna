@@ -98,8 +98,10 @@ namespace Microsoft::Xna::Framework::Input::Touch
             return TouchPanelCapabilities(true, MAX_TOUCHES);
         }
 
-        const TouchCollection state = CNA::Internal::Input::InputManager::GetTouchState();
-        const bool isConnected = !state.empty();
+        // Query touch presence WITHOUT mutating state. GetTouchState() advances previous-location
+        // tracking, consumes Released touches, and promotes Pressed->Moved — a capability query
+        // must not consume a frame of input, so use the non-mutating HasAnyTouch() peek instead.
+        const bool isConnected = CNA::Internal::Input::InputManager::HasAnyTouch();
         return TouchPanelCapabilities(isConnected, isConnected ? MAX_TOUCHES : 0);
     }
 
@@ -276,8 +278,16 @@ namespace Microsoft::Xna::Framework::Input::Touch
         {
             gestures_.pop();
         }
-        touchDeviceExists_ = false;
-        enabledGestures_   = GestureType::None;
+        touchDeviceExists_  = false;
+        enabledGestures_    = GestureType::None;
+        // Also reset the display metrics + window handle. INTERNAL_onTouchEvent scales touch
+        // coordinates by displayWidth_/displayHeight_ and early-returns when either is <= 0, so a
+        // leaked display size from a prior test silently corrupts another test's touch/gesture
+        // coordinates. These were previously worked around by save/restore in the touch tests.
+        displayWidth_       = 0;
+        displayHeight_      = 0;
+        displayOrientation_ = DisplayOrientation::Default;
+        windowHandle_       = 0;
     }
 
     void TouchPanel::updateInputManagerTouch(intcs fingerId, TouchLocationState state, const Vector2& position)

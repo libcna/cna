@@ -148,4 +148,10 @@ namespace Microsoft::Xna::Framework::Input
         if (ClickedEXT)
             ClickedEXT(button);
     }
+
+    void Mouse::ResetForTests()
+    {
+        windowHandle_ = 0;
+        ClickedEXT    = nullptr;
+    }
 }

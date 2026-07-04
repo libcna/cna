@@ -36,57 +36,24 @@ namespace
         return e;
     }
 
-    void DrainGestures()
-    {
-        while (TouchPanel::getIsGestureAvailableProperty())
-        {
-            (void)TouchPanel::ReadGesture();
-        }
-    }
-
-    // GestureDetector's state machine lives in file-static variables with no reset hook (same
-    // caveat as GestureDetectorTests.cpp). A neutral press/release cycle with all gestures
-    // disabled reliably drives it back to idle between tests.
-    void ResetGestureDetector()
-    {
-        TouchPanel::setEnabledGesturesProperty(GestureType::None);
-        TouchPanel::INTERNAL_onTouchEvent(900101, TouchLocationState::Pressed, 0.0f, 0.0f, 0.0f, 0.0f);
-        TouchPanel::INTERNAL_onTouchEvent(900101, TouchLocationState::Released, 0.0f, 0.0f, 0.0f, 0.0f);
-        DrainGestures();
-    }
-
-    // InputManager's touch map is also process-wide static (matches TouchInputTests.cpp's own
-    // ResetTouchState helper); a Released touch is only actually removed on its second
-    // GetTouchState() read (RemoveAfterSnapshot), so flush any leftovers between tests here too.
-    void ResetTouchState()
-    {
-        const auto currentSnapshot = InputManager::GetTouchState();
-        for (const auto& touchLocation : currentSnapshot)
-        {
-            InputManager::SetTouchState(
-                touchLocation.getIdProperty(),
-                TouchLocationState::Released,
-                touchLocation.getPositionProperty()
-            );
-        }
-        (void)TouchPanel::GetState();
-        (void)TouchPanel::GetState();
-    }
-
     struct SdlInputBridgeTouchGestureTest : ::testing::Test
     {
         void SetUp() override
         {
+            // Central reset (task 887/888) gives every input subsystem a deterministic clean
+            // baseline — including restoring the REAL gesture clock — so these real-timing gesture
+            // tests are order-independent under --gtest_shuffle. (They previously used a fragile
+            // press/release hack that did NOT reset the leaked test-clock mode, so a shuffled-
+            // earlier test that used the manual clock could make Tap/Flick fail intermittently.)
+            // Set the display size AFTER the reset, which zeroes it.
+            InputManager::ResetAllForTests();
             TouchPanel::setDisplayWidthProperty(DisplaySize);
             TouchPanel::setDisplayHeightProperty(DisplaySize);
-            ResetGestureDetector();
-            ResetTouchState();
         }
 
         void TearDown() override
         {
-            ResetGestureDetector();
-            ResetTouchState();
+            InputManager::ResetAllForTests();
         }
     };
 }
@@ -165,4 +132,47 @@ TEST_F(SdlInputBridgeTouchGestureTest, FingerEventsExposePreviousLocationThrough
         TouchLocation prev;
         EXPECT_TRUE(s[0].TryGetPreviousLocation(prev));
     }
+}
+
+// Task 892/893: SDL_EVENT_FINGER_CANCELED must release the touch exactly like FINGER_UP — it may
+// not leave a permanently pressed/moved touch, and it must free the internal finger mapping.
+TEST_F(SdlInputBridgeTouchGestureTest, FingerCanceledReleasesTouchLikeFingerUp)
+{
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 8001, 0.5f, 0.5f));
+    {
+        const TouchCollection down = TouchPanel::GetState();
+        ASSERT_EQ(down.getCountProperty(), 1);
+        EXPECT_EQ(down[0].getStateProperty(), TouchLocationState::Pressed);
+    }
+
+    // Cancel instead of lifting the finger.
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_CANCELED, 8001, 0.5f, 0.5f));
+
+    // The touch is reported Released exactly once (not stuck Pressed/Moved), then disappears.
+    {
+        const TouchCollection afterCancel = TouchPanel::GetState();
+        ASSERT_EQ(afterCancel.getCountProperty(), 1);
+        EXPECT_EQ(afterCancel[0].getStateProperty(), TouchLocationState::Released)
+            << "a canceled finger must transition to Released, not stay Pressed/Moved";
+    }
+    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 0)
+        << "a canceled finger must not remain tracked forever";
+}
+
+// Task 892: after a cancel, SDL may reuse the same finger id for a brand-new press; the internal
+// finger->touch mapping must have been freed so the new press is a fresh Pressed touch, not a
+// continuation.
+TEST_F(SdlInputBridgeTouchGestureTest, FingerIdReusableAfterCancel)
+{
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 8100, 0.1f, 0.1f));
+    (void)TouchPanel::GetState();
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_CANCELED, 8100, 0.1f, 0.1f));
+    (void)TouchPanel::GetState();
+    (void)TouchPanel::GetState(); // flush the Released removal
+
+    // Same SDL finger id pressed again -> a fresh Pressed touch.
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 8100, 0.2f, 0.2f));
+    const TouchCollection reuse = TouchPanel::GetState();
+    ASSERT_EQ(reuse.getCountProperty(), 1);
+    EXPECT_EQ(reuse[0].getStateProperty(), TouchLocationState::Pressed);
 }
