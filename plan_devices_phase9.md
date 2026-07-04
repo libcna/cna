@@ -238,3 +238,48 @@ one.**
 **Remaining risk:** none introduced. The gap (no APK packaging, no working emulator)
 is pre-existing and now precisely documented with real evidence, not just repeated as
 an assumption.
+
+## P9-5: Physical hardware checklist execution
+
+### Resolution
+
+**Files changed:** `docs/devices-hardware-checklist.md` — added a new "Phase 9 execution
+results" section (right after the existing Purpose section) marking each of the
+brief's 6 hardware cases with an honest, evidence-backed status.
+
+**Actually run, not assumed:**
+- Confirmed this container has no accelerometer, gyroscope, haptic device, or
+  joystick/gamepad attached by reading `/proc/bus/input/devices` (only keyboard/power/
+  lid/sleep/video input nodes present) and confirming no `/dev/input/js*` exists.
+- Ran 8 specific tests directly (not just as part of the full suite):
+  `AccelerometerTests.GetIsSupportedPropertyDoesNotCrash`/
+  `StartOnUnsupportedPlatformThrows`/`GetCurrentValuePropertyThrowsWhenUnsupported`,
+  the identical three for `GyroscopeTests`, and
+  `VibrateControllerTests.GetIsSupportedPropertyDoesNotCrash`/
+  `UnsupportedImpliesEmptyDeviceName` — all 8 passed.
+  `GetCurrentValuePropertyThrowsWhenUnsupported` contains its own `GTEST_SKIP()` guard
+  that would have skipped itself had this machine genuinely had real hardware — it did
+  not skip, which is itself live, positive confirmation of "no hardware here," not an
+  assumption.
+
+**Case-by-case result (full detail in the checklist file itself):**
+1. Android phone accelerometer — **NOT RUN** (no device, no working emulator — Task P9-4).
+2. Android phone gyroscope — **NOT RUN** (same blocker).
+3. Android phone vibration — **NOT RUN** for the "buzzes a real motor" claim; the
+   "no crash if unsupported" and duration-cap software guarantees ARE verified, on this
+   desktop, this session.
+4. Desktop without sensors — **VERIFIED**, live, this session (the one case this
+   container can actually exercise).
+5. Desktop with gamepad — **NOT RUN** (no gamepad/joystick connected to this container).
+6. iOS device/toolchain — **NOT RUN**, confirmed unavailable (no toolchain, re-checked
+   fresh).
+
+**Net: 1 of 6 cases verified, 5 of 6 not run — each for a concrete, checked reason, not
+a vague "can't do hardware here" blanket statement.**
+
+**Tests added:** none — this task runs existing tests as live evidence, it doesn't add
+new ones (there's nothing new to test; the existing suite already covers the
+software-observable half of every case that's reachable in this environment).
+
+**Remaining risk:** none. No claim of hardware verification beyond what was actually,
+physically possible in this container.

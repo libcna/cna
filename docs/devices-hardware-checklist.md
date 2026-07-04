@@ -25,6 +25,64 @@ a plain checklist, not a task with its own build/test cycle.
 
 ---
 
+## Phase 9 (2026-07-04) execution results — honest status per case
+
+`plan_devices_phase9.md` Task P9-5 actually attempted every hardware case its brief
+listed, in this exact container, this session — not a re-statement of the assumption
+above. Nothing below is marked verified unless it was physically run.
+
+1. **Android phone accelerometer** (`IsSupported`/`Start`/`Stop`/`CurrentValueChanged`/
+   axis direction/timestamp sanity): **NOT RUN.** No physical Android device attached to
+   this container; the only Android emulator configured here (`Medium_Phone`, x86_64)
+   fails to start at all — confirmed via a real launch attempt (Task P9-4): "x86_64
+   emulation currently requires hardware acceleration!", `/dev/kvm` absent. No APK
+   packaging exists to install onto a device even if one were attached (Task P9-4).
+2. **Android phone gyroscope** (same sub-items): **NOT RUN.** Same blocker as case 1.
+3. **Android phone vibration** (`VibrateController::Start(TimeSpan)`/`Stop`/duration
+   cap/no crash if unsupported): **NOT RUN** for the "on a real phone" claim (same
+   blocker as case 1) — but the **software-level guarantees are verified on this
+   desktop**: `VibrateControllerTests.StartWithNegativeDurationThrows`/
+   `StartWithOverlongDurationThrows` (the duration-cap boundary) and every
+   `Start`/`Stop`/`StartLeftRight` test in the suite pass cleanly with no crash when no
+   haptic hardware is present (confirmed live this session, see case 4) — this is the
+   "no crash if unsupported" half of this item, not the "actually buzzes a real motor"
+   half, which remains genuinely unverified.
+4. **Desktop without sensors — silent/expected unsupported behavior**: **VERIFIED, live,
+   this session, on this actual machine.** This container has no accelerometer,
+   gyroscope, haptic device, or joystick/gamepad attached (confirmed via
+   `/proc/bus/input/devices` showing only keyboard/power/lid/sleep/video input nodes,
+   and no `/dev/input/js*`). Ran
+   `AccelerometerTests.GetIsSupportedPropertyDoesNotCrash`/`StartOnUnsupportedPlatformThrows`/
+   `GetCurrentValuePropertyThrowsWhenUnsupported`, the identical three for
+   `GyroscopeTests`, and `VibrateControllerTests.GetIsSupportedPropertyDoesNotCrash`/
+   `UnsupportedImpliesEmptyDeviceName` directly (not just as part of the full suite) —
+   all 8 passed. Notably, `GetCurrentValuePropertyThrowsWhenUnsupported` contains its own
+   `GTEST_SKIP()` guard that would skip itself if this machine *did* have real hardware —
+   it did not skip, which is itself live confirmation this desktop has none. This is the
+   one case in this list this container can actually verify, and it is genuinely
+   verified, not inferred.
+5. **Desktop with gamepad** (`VibrateController` must not steal gamepad rumble from
+   `GamePad::SetVibration()`): **NOT RUN.** No gamepad or joystick device is connected to
+   this container (confirmed via `/proc/bus/input/devices` and the absence of
+   `/dev/input/js*` — same check as case 4). The exclusion logic itself
+   (`IsConnectedGamepadHapticDevice()`, ID-correlation via
+   `SDL_OpenHapticFromJoystick()`) is unit-tested and reasoned-about against SDL3's own
+   documented API contract, but has never been exercised against a real, physically
+   connected controller, in any session to date.
+6. **iOS device/toolchain**: **NOT RUN — unavailable, confirmed explicitly.** No
+   `xcodebuild`/`xcrun`/`osxcross`, nothing matching `*ios*toolchain*` anywhere on this
+   filesystem (re-checked fresh this session, same result as every prior phase since
+   `plan_devices_phase4.md` Task P4-12). iOS cross-compilation fundamentally requires
+   macOS/Xcode — not fixable by installing a package in this Linux container.
+
+**Net result: 1 of 6 cases verified (case 4, live, this session); 5 of 6 remain
+genuinely unverified**, each for a concrete, confirmed reason (no device, no working
+emulator, no APK packaging, no toolchain) — not vague unavailability. This checklist
+stays the authoritative source for whoever eventually has the missing hardware/toolchain
+available.
+
+---
+
 ## 1. Accelerometer axis sign/orientation
 
 **Code under test:** `Accelerometer.cpp`'s `ConvertAndroidAccelerometerToXnaLandscape()`
