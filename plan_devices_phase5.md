@@ -858,7 +858,23 @@ the `llvm-nm`-based verification, and iOS's confirmed-still-blocked status.
 
 **Files:** `NEXT.md`, `AUDIT.md`, `NOXNA.md`, `docs/devices-hardware-checklist.md`.
 
----
+**Resolution (2026-07-04):** Rewrote `NEXT.md` in full (rather than patching in place)
+— the prior version's own opening line, *"`Microsoft::Devices` hardening is now
+complete"*, is exactly the kind of claim this plan's audit found to be false in
+practice (Task P4-8 fixed one bug while introducing another in the same commit,
+undetected through the rest of Phase 4). Replaced the single-verdict framing with
+Section 2's explicit 4-layer breakdown (API surface / SDL runtime implementation /
+native mobile backend / hardware manually verified), matching this task's own
+instruction. Updated `AUDIT.md`'s `Accelerometer`/`Gyroscope`/`VibrateController`/
+`SensorBase<T>` table rows to append what Phase 5 found and fixed in each, without
+deleting the Phase 2–4 history already there (so a reader sees the full trail, not a
+rewritten-to-look-clean history). Checked `NOXNA.md` — confirmed it documents a
+completely different subsystem (the `CNA_NOXNA`-gated 3D/Graphics extension layer,
+`CNA::Graphics` namespace), unrelated to the inline `NOXNA` marker macro
+`Microsoft::Devices` uses; no Devices-related content exists there to correct, and
+Task P5-5 already reached the same conclusion. `docs/devices-hardware-checklist.md`
+was already tightened incrementally in Tasks P5-7/P5-11 as each landed; re-read it in
+full for this task and found no further inaccuracy to fix.
 
 ## Task P5-14 — Final test run and report
 

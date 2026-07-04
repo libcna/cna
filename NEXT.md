@@ -10,14 +10,18 @@ preserves XNA-style public APIs (`Microsoft::Xna::Framework`,
 `Microsoft::Devices`) while using modern C++ internally. It targets desktop
 Linux/Windows/macOS, Android, and iOS. Branch: `feature/devices`.
 
-**`Microsoft::Devices` hardening is now complete.** `Microsoft::Devices::Sensors`
-(`Accelerometer`, `Compass`, `Gyroscope`, `Motion`, their reading/event-args/
-exception types) plus `Microsoft::Devices::VibrateController` have a complete
-API surface, real thread-safety, real event-path test coverage, a fixed
-timestamp bug, verified Android cross-compilation, and a manual hardware
-checklist + demo screen for whatever this dev container itself cannot verify.
-There is no more open plan for this namespace as of 2026-07-04 — see Section 8
-for what a next session should actually pick up.
+**`Microsoft::Devices` has now been through two hardening passes** —
+`plan_devices_phase4.md` (2026-07-03/04) and `plan_devices_phase5.md`
+(2026-07-04). The second pass's own explicit premise was to **not trust the
+first pass's "complete"/"hardened" claims** and re-audit from the actual code.
+That audit found the first pass had, as a side effect of fixing one real bug
+(Task P4-8), introduced a *different* real bug in the same commit (Task
+P5-1), left at least one confirmed data race unfixed in the shared
+`SensorBase<T>` base class (Task P5-2), and had skipped an RAII cleanup based
+on an assumption that was never actually checked and turned out to be false
+(Task P5-11). **Read this as the honest status, not as another "now it's
+really done" claim** — see Section 2's layered breakdown instead of a single
+verdict.
 
 **Plan history:**
 - `plan_devices.md` (31 tasks) — closed.
@@ -25,10 +29,15 @@ for what a next session should actually pick up.
   Android/iOS build verification) is superseded by `plan_devices_phase4.md`
   Tasks P4-11 (Android, done) / P4-12 (iOS, confirmed still blocked).
 - `plan_devices_phase3.md` (12 tasks) — closed.
-- `plan_devices_phase4.md` (14 tasks, user-authored hardening plan) —
-  **closed, all 14 tasks done** (P4-1–P4-7 on 2026-07-03; P4-8 through
-  P4-14 on 2026-07-04). Full task-by-task detail and every Resolution note
-  lives in that file; this document only summarizes.
+- `plan_devices_phase4.md` (14 tasks) — closed 2026-07-04, all 14 tasks done.
+  Read `plan_devices_phase5.md`'s "Audit findings" section before trusting
+  any specific claim from this plan's own Resolution notes without
+  re-checking — that audit is what found the two issues above.
+- `plan_devices_phase5.md` (14 tasks, re-audit + hardening) — **open**, Tasks
+  P5-1 through P5-12 done as of this writing; P5-13 (this document's own
+  update) in progress; P5-14 (final verification + Resolution report) not
+  yet run. Full task-by-task detail, and the audit findings that motivated
+  each fix, live in that file.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -39,9 +48,10 @@ for what a next session should actually pick up.
   shared base for all sensor classes (`CurrentValue`, `IsDataValid`,
   `TimeBetweenUpdates`, `CurrentValueChanged`, `Dispose()`, and an
   `isSupported_` flag gating `CurrentValue`'s `InvalidOperationException`).
+  Now has its own private mutex (Task P5-2) — see Section 6.
 - `VibrateController` is a singleton reached via `getDefaultProperty()`. It
   does not derive `SensorBase<T>`/`IDisposable` — it does not follow the
-  sensor pattern.
+  sensor pattern. Now has a real destructor (Task P5-11) — see Section 6.
 - FNA (the usual local reference tree for XNA behavior) implements **no**
   equivalent of `Microsoft::Devices` (it's WP7-only) — API completeness was
   judged from archived Microsoft Learn "previous-versions" WP7 SDK docs.
@@ -50,175 +60,188 @@ for what a next session should actually pick up.
 
 ---
 
-## 2. Current status
+## 2. Current status — layered, not a single verdict
+
+**API surface (matches documented WP7 shape):** implemented and stable.
+`Accelerometer`, `Compass`, `Gyroscope`, `Motion`, `VibrateController`, and
+every reading/event-args/exception type match the archived WP7 SDK docs
+(`plan_devices_phase2.md` Task P2-2's independent re-verification). This
+layer has not changed in Phase 5 and is the most trustworthy claim in this
+document.
+
+**SDL runtime implementation (`Accelerometer`/`Gyroscope`/`VibrateController`):**
+real, SDL3-backed, and — as of Phase 5 — the specific bugs an actual
+line-by-line re-audit found are now fixed:
+- Subsystem probe/instance-ownership init-quit balancing is correct for both
+  `SDL_INIT_SENSOR` (Task P5-1, fixing a leak Task P4-8 itself introduced)
+  and `SDL_INIT_HAPTIC` (Task P5-11, with an RAII destructor now closing
+  `VibrateController`'s haptic device — previously left open on a wrong
+  assumption).
+- `SensorBase<T>`'s `currentValue_`/`isDataValid_` are now mutex-protected
+  (Task P5-2) — previously a real, unguarded data race between the SDL
+  callback thread and the game thread, undetected through 4 prior plans.
+- `Accelerometer`/`Gyroscope`'s callback quiescence tracking is a
+  per-thread-id vector, not a bool or plain counter (Tasks P5-2/P5-3) — the
+  single-bool version could under-count concurrent dispatches, and a
+  handler disposing its own sender from inside its own callback used to
+  deadlock (previously an accepted, documented limitation — now fixed, not
+  just documented).
+- The two classes' subsystem/event-watch machinery is now a shared,
+  de-duplicated internal template (`Detail::SdlSensorSubsystem<TSensor>`,
+  Task P5-4) instead of two hand-maintained near-copies — verified
+  byte-for-byte behavior-preserving against the full existing test suite.
+
+Still **not independently verified against real hardware** — see the next
+paragraph.
+
+**Native mobile backend (Compass/Motion magnetometer, real device sensor
+fusion):** **missing, by design, not a gap to silently close.** SDL3 exposes
+no magnetometer/compass API on any platform. `Compass`/`Motion` are honest
+`SensorState::NotSupported` stubs — confirmed still true and still tested
+(Task P5-9). `plan_devices_phase5.md`'s "Future native backend plan" section
+sketches concrete Android (`SensorManager`/JNI, `TYPE_MAGNETIC_FIELD`,
+`TYPE_ROTATION_VECTOR`) and iOS (`CLLocationManager` heading APIs,
+`CMDeviceMotion`) paths — not implemented, planning only. GPS/location is
+explicitly **not** part of this — see `docs/location-future-plan.md`
+(Task P5-10).
+
+**Hardware manually verified:** **none of it, on any physical device, in any
+session to date.** Every claim above is verified by code reading, unit
+tests, and cross-compilation — never by running on a real accelerometer,
+gyroscope, or haptic motor. `docs/devices-hardware-checklist.md` (Task
+P4-13, tightened in Task P5-7) exists specifically to close this gap
+whenever real hardware becomes available; `examples/demo_devices/`
+(`cna_demo_devices`, Task P4-14) is the tool to use when it does.
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
-(`cmake-build-debug`), HEAD at Task P4-14's commit on `feature/devices`
-(2026-07-04, not yet pushed). A full top-level build (`cmake --build .`, no
-target argument — every example/test target) also builds clean.
+(`cmake-build-debug`) as of Task P5-12's commit on `feature/devices`
+(2026-07-04, not yet pushed). A full top-level build (`cmake --build .`,
+every target including `cna_demo_devices`) also builds clean — re-verified
+after Task P5-4's large refactor specifically, since it touched the most
+surface area of any single task in either phase.
 
 **`CNA` (static lib only) also builds clean for Android** (arm64-v8a, NDK
-r30, API 24, `SDL_RENDERER` backend, `cmake-build-android/` — new local,
-gitignored build dir), verified for the first time in this project's history
-(Task P4-11). This surfaced and required fixing 3 pre-existing, unrelated
-bugs in the sibling `sharp-runtime` repo — see Section 3.
+r30, API 24, `cmake-build-android/`) — re-verified after Task P5-7's changes
+to the Android-specific axis-remap code, using the NDK's own `llvm-nm` to
+confirm the relevant functions are actually compiled in (the host's plain
+`nm` gives empty/wrong output against the cross-compiled object files).
 
-**iOS cross-compilation confirmed still blocked** (Task P4-12) — no
-toolchain of any kind in this Linux container, and unlike Android's missing
-NDK (just needed installing), Apple's toolchain fundamentally needs
-macOS/Xcode. Don't expect this to spontaneously unblock the way Android did.
+**iOS cross-compilation confirmed still blocked** — no toolchain of any kind
+in this Linux container. Re-confirmed during Phase 5's own audit (not just
+carried over from Phase 4's finding).
 
-**`VULKAN`/`BGFX` re-verified clean (2026-07-04, HEAD `f576f0e`)** — both
-`CNA` and `CnaTests` build with zero errors on both backends
-(`cmake-build-vulkan/`, `cmake-build-bgfx/`), confirming the 14 commits of
-`Microsoft::Devices` changes since the last check (2026-07-02, commit
-`8092f6e`) didn't touch anything backend-sensitive, as expected.
-Devices/Sensors/VibrateController-relevant tests: 168 passed, 2 skipped
-(same as `EASYGL`) on **both** backends. Full suite: `VULKAN` 99% passing
-(13 pre-existing `Vulkan_*` graphics-smoke failures, need a real GPU/driver,
-unrelated to `Microsoft::Devices`); `BGFX` 99% passing (3 pre-existing
-`Bgfx_*` graphics-smoke failures, same reason). No regressions on either.
+**`VULKAN`/`BGFX`** — last verified clean 2026-07-04 (commit `f576f0e`,
+before Phase 5's work began). **Not re-verified against Phase 5's changes**
+— see Section 8, item 1. Given how much Phase 5 touched
+`Accelerometer.hpp`/`.cpp` and `Gyroscope.hpp`/`.cpp` (a full internal
+refactor, Task P5-4), this should be re-checked, not assumed still fine
+just because `Microsoft::Devices` has never historically touched the
+graphics backend.
 
-**Tests:** last full `ctest` run (`EASYGL`): **1995 tests total, 97%
-passing.** The only failures are a fixed set of **64 pre-existing `EasyGL_*`
-graphics tests** that cannot run headless (no display/GPU in this dev
-environment) — present before `Microsoft::Devices` work began, unrelated to
-it. No regressions across the whole session's work (started at 1992 tests,
-+3 from this session's new test files).
-
-**Working:**
-- Full `Microsoft::Devices::Sensors` namespace: `Accelerometer`/`Gyroscope`
-  (real, SDL3-backed), `Compass`/`Motion` (permanent stubs — SDL3 exposes no
-  magnetometer API on any platform). All thread-safe, all with real
-  event-path test coverage via `NOXNA` synthetic-injection hooks
-  (`InjectSyntheticSensorUpdate()`/`SetStartedForTesting()`).
-- `Accelerometer`/`Gyroscope` no longer bypass SDL3's own `SDL_INIT_SENSOR`
-  ref-counting — each instance's own init/quit calls are balanced 1:1,
-  closing a premature cross-class subsystem-teardown race (Task P4-8).
-- `Microsoft::Devices::VibrateController` — thread-safe (Task P4-9), with a
-  definitive ID-based (not name-matching) gamepad-exclusion filter (Task
-  P4-10, `SDL_OpenHapticFromJoystick()`).
-- Reading `Timestamp` values are correct wall-clock time (Task P4-7).
-- Android cross-compilation of `CNA` verified clean, zero warnings,
-  including `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__`
-  landscape-remap code (Task P4-11).
-- `docs/devices-hardware-checklist.md` (Task P4-13) and
-  `examples/demo_devices/` (Task P4-14, `cna_demo_devices` target) exist for
-  whoever eventually runs this on real hardware — see Section 5.
-
-**Does not work / not done yet:**
-- `Compass`/`Motion` — permanent `NotSupported` stubs, by design, until SDL3
-  gains magnetometer support.
-- iOS cross-compilation — see above, likely permanent for this environment.
-- `VULKAN`/`BGFX` builds — unverified since 2026-07-02 (see above).
-- The Android axis-remap math (`ConvertAndroidAccelerometerToXnaLandscape()`/
-  `ConvertAndroidGyroscopeToXnaLandscape()`) compiles clean but is still
-  **physically unverified** — no real device/emulator run this session. This
-  is exactly what `docs/devices-hardware-checklist.md` and
-  `examples/demo_devices/` (`cna_demo_devices`) exist for.
+**Tests:** last full `ctest` run (`EASYGL`) as of Task P5-12: **2012 tests,
+99% passing.** The 2 failures are pre-existing, unrelated `EasyGL`/
+`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
+`easy-gl-resource-smoke-tests`) — this environment unexpectedly gained a
+real GPU/display mid-session (Task P5-1's own discovery), which surfaced
+these for the first time (previously silently `Not Run` headless, which is
+why every prior session's baseline said "64 failures" — that was actually
+"64 tests never run at all," not 64 failing tests). Devices-only filter:
+187 tests via `ctest -R`, 100% passing (plus 2 tests that correctly
+`GTEST_SKIP()` themselves on hardware-dependent paths this machine doesn't
+have).
 
 ---
 
 ## 3. Recent changes
 
-**2026-07-03 — `plan_devices_phase3.md` closed, `plan_devices_phase4.md`
-created and Tasks P4-1–P4-7 done.** 3 confirmed real bugs fixed
-(`SensorBase<T>.CurrentValue` throw-when-unsupported; `Accelerometer`/
-`Gyroscope` shared-state thread-safety; `VibrateController` mutual
-exclusion), the `Accelerometer`/`Gyroscope` callback-lifetime use-after-free
-window closed via `inFlightCallback_` + the `NOXNA` synthetic-injection test
-hooks (Task P4-2), first-ever real event-path tests using those hooks (Tasks
-P4-3–P4-6), and the confirmed `Timestamp` bug fixed — readings previously
-landed near `0001-01-01` from feeding monotonic `SDL_GetTicksNS()` into a
-ticks-since-epoch constructor; now uses
-`System::DateTimeOffset::getUtcNowProperty()` (Task P4-7).
+**2026-07-03/04 — `plan_devices_phase4.md`, all 14 tasks.** Summarized in
+that file; the short version, now qualified by what Phase 5 found: fixed 3
+confirmed real bugs, closed a callback-lifetime use-after-free window,
+added the first real event-path tests via `NOXNA` synthetic-injection
+hooks, fixed a `Timestamp` bug, fixed a *different* SDL subsystem-ownership
+bug (Task P4-8) while — unnoticed until Phase 5 — introducing a new one in
+the same commit, added `VibrateController` thread-safety (implemented
+correctly, but skipped an RAII cleanup based on an unverified assumption
+that Phase 5 found was wrong), replaced a fragile gamepad-exclusion
+heuristic with an ID-based one, verified Android/iOS build status, wrote
+a hardware checklist, and added a demo screen.
 
-**2026-07-04 — Tasks P4-8 through P4-14 done, closing `plan_devices_phase4.md`:**
-- **P4-8** — `EnsureSensorSubsystemInitialized()` no longer bypasses SDL3's
-  own `SDL_INIT_SENSOR` ref-counting via an `SDL_WasInit()` guard; a
-  per-instance `subsystemHeld_` flag balances each instance's own
-  init/quit calls 1:1, regardless of what the other sensor class is doing.
-  New `tests/Microsoft/Devices/Sensors/SensorSubsystemOwnershipTests.cpp`.
-- **P4-9** — `VibrateController`'s file-static `g_haptic`/
-  `g_leftRightEffectId` gained a `std::mutex`, locked for the entire body of
-  every public method (helpers that touch either variable require the
-  caller already holds it, avoiding a non-recursive-mutex deadlock). Skipped
-  the task's optional RAII-cleanup half — closing `g_haptic` from a
-  destructor at process exit risks touching an already-`SDL_Quit()`-torn-down
-  device, which the task explicitly allowed skipping. New
-  `ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadlock` test (8 threads).
-- **P4-10** — replaced `VibrateController`'s device-*name*-string gamepad
-  exclusion (couldn't distinguish two controllers with identical product
-  names) with an ID-based one via `SDL_OpenHapticFromJoystick()`. Confirmed
-  safe against `GamePad`'s own SDL usage (`SdlInputBridge.cpp` only opens
-  gamepads via `SDL_OpenGamepad()`, never a separate `SDL_OpenJoystick()`).
-- **P4-11** — re-checked the environment before assuming still blocked (per
-  the task's own instruction) and found `~/Android/Sdk/ndk/` now present.
-  Built `CNA` clean for Android (arm64-v8a, API 24) for the first time ever,
-  confirmed via `nm` that the `#ifdef __ANDROID__` remap functions are
-  actually compiled in. This surfaced 3 unrelated pre-existing bugs in the
-  sibling `sharp-runtime` repo (invisible on this project's Linux/GCC build,
-  fatal under Android/Clang's stricter warnings-as-errors), fixed there
-  (commit `2c49474` on `sharp-runtime`'s `develop` branch — all 8467 tests
-  passing): missing `override` on `DateTime`/`DateTimeOffset::GetHashCode()`;
-  a missing `<thread>`/`<chrono>` include in `Task.hpp`; a genuinely dead,
-  shadowed file-scope `MsPerDay` constant in `TimeOnly.cpp`.
-- **P4-12** — confirmed (not assumed) iOS is still blocked: no
-  `xcodebuild`/`xcrun`/`osxcross`/anything Apple-toolchain-shaped anywhere on
-  this filesystem. Documentation-only.
-- **P4-13** — wrote `docs/devices-hardware-checklist.md`: 5 items nothing in
-  this headless container can verify (accelerometer/gyroscope axis
-  correctness in both landscape rotations, `VibrateController::Start()`
-  actually vibrating a phone motor with working intensity scaling,
-  `StartLeftRight()` driving two distinct motors, the P4-10 gamepad-exclusion
-  filter not competing with `GamePad::SetVibration()`).
-- **P4-14** — new `examples/demo_devices/` (`cna_demo_devices` CMake
-  target, registered in root `CMakeLists.txt` mirroring `cna_demo_input`'s
-  block exactly). `DevicesDemo` constructs all 4 sensor classes, subscribes
-  `CurrentValueChanged` on each to track the latest reading + an event
-  counter, and draws per-sensor supported/state/event-flash indicators plus
-  signed bars for each reading's key vector fields — same colored-rectangle
-  style as `InputDemo` (no `SpriteFont`/Content dependency), plus the window
-  title updated every 10 frames with exact numeric values (precision
-  `InputDemo`'s bars alone can't give, which matters for verifying axis-sign
-  correctness against the Task P4-13 checklist). Keyboard bindings `D1`–`D6`
-  exercise `Start(TimeSpan)`/the `NOXNA` intensity overload/`StartLeftRight()`
-  large-only/small-only/both; `Space` calls `Stop()`. Verified: builds and
-  links clean (zero warnings); running it headless fails with the exact same
-  `SDL_CreateWindow`/no-GPU error as the pre-existing `cna_demo_input` under
-  the same invocation — this dev container's existing limitation, not a bug
-  in the new demo.
+**2026-07-04 — `plan_devices_phase5.md`, Tasks P5-1 through P5-12 done
+(re-audit + hardening, not new features):**
+- **Audit (before any code change):** re-read every sensor/`VibrateController`
+  file and test directly rather than trusting Phase 4's own claims. Found:
+  a real subsystem-refcount leak Task P4-8 introduced as a side effect of
+  fixing a different one; a plausible (SDL-documented, not reproduced
+  headless) use-after-free window from a single-bool callback-quiescence
+  flag; confirmed data races in `SensorBase<T>` and in
+  `started_`/`state_`/`subsystemHeld_`'s inconsistent locking; and that
+  Task P4-9's stated reason for skipping `VibrateController` RAII cleanup
+  (an assumed `SDL_Quit()` ordering) was never actually checked and is
+  false — this codebase never calls `SDL_Quit()` anywhere.
+- **P5-1** — fixed the leak: `getIsSupportedProperty()`'s probe now uses a
+  balanced `SensorSubsystemProbeGuard` RAII pair instead of an unbalanced
+  `EnsureSensorSubsystemInitialized()` call.
+- **P5-2** — replaced the single-bool callback-quiescence flag with a
+  `std::vector<std::thread::id>` count; fixed `SensorBase<T>`'s
+  `currentValue_`/`isDataValid_` data race with a new private mutex, never
+  held across `CurrentValueChanged.Raise()`. `getCurrentValueProperty()`
+  now returns by value, not by reference (matches the real WP7 API's
+  value-type semantics more closely too).
+- **P5-3** — removed the self-dispose deadlock Task P4-2 had explicitly
+  accepted as permanent: `Dispose()` now recognizes when every remaining
+  in-flight dispatch belongs to its own calling thread and doesn't wait on
+  itself, while still correctly waiting for genuinely other threads.
+- **P5-4** — extracted `Accelerometer`/`Gyroscope`'s near-duplicate
+  subsystem/event-watch machinery into a shared internal
+  `Detail::SdlSensorSubsystem<TSensor>` template, keeping SDL types out of
+  both public headers (forward-declared, function-local-static storage,
+  same idiom as the old `void* g_sensor_`). Verified byte-for-byte
+  behavior-preserving against all 41 pre-existing tests, plus a full
+  top-level rebuild.
+- **P5-5** — documented that `CurrentValueChanged`/`ReadingChanged` fire
+  synchronously on whatever thread SDL invokes the event watch on, not
+  necessarily the game thread; evaluated and explicitly declined to add a
+  speculative main-thread dispatch queue with no concrete need for it yet.
+- **P5-6** — added `SetSupportedForTesting()` (separate from
+  `SetStartedForTesting()`) and tests proving `getCurrentValueProperty()`
+  both reflects synthetic updates when marked supported *and* still throws
+  on unsupported hardware when not — closing a documentation/test gap
+  around behavior that was already correct.
+- **P5-7** — extracted the Android axis-remap sign math into a pure,
+  platform-independent function (`Detail::ConvertAndroidPortraitToXnaLandscape()`),
+  testable on any platform; added 5 unit tests; re-verified the Android
+  cross-compile afterward.
+- **P5-8/P5-9/P5-10** — wrote (documentation only, no code) a native
+  Android/iOS backend plan sketch for `Compass`/`Motion`, and
+  `docs/location-future-plan.md` stating GPS/location does not belong in
+  `Microsoft::Devices::Sensors`.
+- **P5-11** — added `~VibrateController()` RAII cleanup for `g_haptic`
+  (confirmed safe per the audit above), replacing `EnsureHapticSubsystemInitialized()`'s
+  `SDL_WasInit()` guard with explicit own-state tracking.
+- **P5-12** — wrote `docs/devices-build.md`; every command in it was
+  actually re-run this session, which caught and corrected one inaccuracy
+  in the first draft (two test-invocation forms don't cover the same tests,
+  contrary to the draft's initial assumption).
 
-All of Tasks P4-8–P4-14 individually re-ran the full `ctest` suite after
-their change: consistently 1994–1995 tests (growing as new test files were
-added), 97% passing, the same 64 pre-existing headless `EasyGL_*` failures
-throughout — no regressions at any point in this session.
+Every task above re-ran the Devices-relevant test filter and the full
+`ctest` suite after its change — consistently the same 2 pre-existing,
+unrelated `EasyGL`/`easy-gl` failures throughout, no regressions at any
+point. See `plan_devices_phase5.md`'s per-task Resolution notes for full
+detail, exact commands run, and the reasoning behind every non-obvious
+choice — this document only summarizes.
 
-**2026-07-04 — `VULKAN`/`BGFX` re-verified (Section 8 item 1, the one
-`plan_devices_phase4.md` follow-up left after that plan closed):** both
-backends' `CNA`/`CnaTests` build with zero errors; the same
-Devices/Sensors/VibrateController test filter (168 tests) passes identically
-on both, matching `EASYGL`. Full suite: `VULKAN` 1943 tests/99% passing (13
-pre-existing `Vulkan_*` graphics-smoke failures needing a real GPU/driver);
-`BGFX` 1937 tests/99% passing (3 pre-existing `Bgfx_*` graphics-smoke
-failures, same reason). Confirms the 14 commits of `Microsoft::Devices`
-changes since the prior check (2026-07-02, `8092f6e`) didn't touch anything
-backend-sensitive.
-
-All work committed on `feature/devices`, not yet pushed. Task-by-task commit
-detail (and the exact reasoning behind every non-obvious choice) lives in
-`plan_devices_phase4.md`'s per-task Resolution notes — read there first if
-`NEXT.md`'s summary raises a question this document doesn't answer.
+All work committed on `feature/devices`, not yet pushed.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No blocker.** Build and tests are green on all 3 graphics backends
-(`EASYGL`/`VULKAN`/`BGFX`), nothing is broken, and `plan_devices_phase4.md`
-— the plan that was driving all recent work — is fully closed with its one
-follow-up item (cross-platform re-verification) also now done. There is no
-outstanding known issue in `Microsoft::Devices` as of this writing.
+**No blocker**, but **`VULKAN`/`BGFX` need re-verification** before this can
+honestly be called fully green — Task P5-4 in particular was a substantial
+internal refactor of `Accelerometer`/`Gyroscope`, and it has not been built
+against either backend yet (only `EASYGL` and the Android cross-compile).
+See Section 8, item 1 — this is the most concrete, actionable next step,
+not a vague "come back later."
 
 ---
 
@@ -226,25 +249,24 @@ outstanding known issue in `Microsoft::Devices` as of this writing.
 
 - **By design, not a bug:** `Compass`/`Motion` are permanent
   `SensorState::NotSupported` stubs — SDL3 has no magnetometer API on any
-  platform.
-- **Needs verification, low risk:** `VULKAN`/`BGFX` builds — see Section 4.
+  platform. See `plan_devices_phase5.md`'s "Future native backend plan" for
+  what a real implementation would need.
+- **Needs re-verification:** `VULKAN`/`BGFX` builds against Phase 5's
+  changes — see Section 4.
 - **Needs verification, likely permanent:** iOS cross-compilation — no
-  Apple toolchain possible in this Linux container (Task P4-12).
-- **Needs physical verification:** Android's axis-remap math
-  (`ConvertAndroidAccelerometerToXnaLandscape()`/
-  `ConvertAndroidGyroscopeToXnaLandscape()`) compiles clean (Task P4-11) but
-  the actual tilt-direction correctness has never been observed on real
-  hardware. Use `docs/devices-hardware-checklist.md` + `cna_demo_devices`
-  (Tasks P4-13/P4-14) when real hardware is available.
-- **Needs physical verification:** `VibrateController::Start()`/
-  `StartLeftRight()` actually actuating a real phone motor / two distinct
-  motors, and the Task P4-10 gamepad-exclusion filter not competing with
-  `GamePad::SetVibration()` on a real connected gamepad — same checklist.
-- **Accepted, documented limitation:** `Accelerometer`/`Gyroscope`'s
-  `Dispose()` would deadlock if a `CurrentValueChanged`/`ReadingChanged`
-  handler reentrantly calls `Dispose()` on its own sender from within the
-  handler itself. Judged an unusual enough pattern to accept; see Task
-  P4-2's Resolution in `plan_devices_phase4.md`.
+  Apple toolchain possible in this Linux container.
+- **Needs physical hardware verification (never done, any session):**
+  Android's axis-remap math's actual tilt-direction correctness;
+  `VibrateController::Start()`/`StartLeftRight()` actually actuating a real
+  phone motor / two distinct motors; the gamepad-exclusion filter not
+  competing with `GamePad::SetVibration()` on a real connected gamepad. Use
+  `docs/devices-hardware-checklist.md` + `cna_demo_devices` when real
+  hardware is available — nothing in this codebase can verify these itself.
+- **Resolved as of Phase 5 (previously listed here as accepted
+  limitations — do not re-list these as open):** the self-dispose deadlock
+  (Task P5-3), the `SensorBase<T>` data race (Task P5-2), the subsystem
+  probe leak (Task P5-1), and `VibrateController`'s unclosed haptic device
+  (Task P5-11).
 - **Unverified, low priority, no evidence of an actual bug:**
   `SensorFailedException`'s exact constructor overload signature remains an
   educated guess — its MSDN doc page consistently lacks a Constructors
@@ -256,22 +278,29 @@ outstanding known issue in `Microsoft::Devices` as of this writing.
 ## 6. Architecture notes
 
 ```
-include/Microsoft/Devices/Sensors/   ← XNA WP7 sensor API headers
-src/Microsoft/Devices/Sensors/       ← sensor implementations (SDL3-backed)
-tests/Microsoft/Devices/Sensors/     ← Google Test suites per class
-include/Microsoft/Devices/           ← VibrateController.hpp
-src/Microsoft/Devices/               ← VibrateController.cpp
-tests/Microsoft/Devices/             ← VibrateControllerTests.cpp
-examples/demo_devices/               ← DevicesDemo (Task P4-14, cna_demo_devices target)
-docs/devices-hardware-checklist.md   ← manual real-hardware verification steps (Task P4-13)
+include/Microsoft/Devices/Sensors/          ← XNA WP7 sensor API headers
+include/Microsoft/Devices/Sensors/Detail/   ← internal-only (Task P5-4/P5-7), never in public headers
+src/Microsoft/Devices/Sensors/              ← sensor implementations (SDL3-backed)
+tests/Microsoft/Devices/Sensors/            ← Google Test suites per class
+include/Microsoft/Devices/                  ← VibrateController.hpp
+src/Microsoft/Devices/                      ← VibrateController.cpp
+tests/Microsoft/Devices/                    ← VibrateControllerTests.cpp
+examples/demo_devices/                      ← DevicesDemo (cna_demo_devices target)
+docs/devices-hardware-checklist.md          ← manual real-hardware verification steps
+docs/devices-build.md                       ← reproducible build/test commands (Task P5-12)
+docs/location-future-plan.md                ← why GPS/location isn't here (Task P5-10)
 ```
 
 **`SensorBase<T>`** (header-only template) owns `CurrentValue`,
-`IsDataValid`, `TimeBetweenUpdates`, `CurrentValueChanged`, `Dispose()`, and
-an `isSupported_` flag gating `CurrentValue`'s `InvalidOperationException`.
+`IsDataValid`, `TimeBetweenUpdates`, `CurrentValueChanged`, `Dispose()`, an
+`isSupported_` flag gating `CurrentValue`'s `InvalidOperationException`,
+and (Task P5-2) a private `mutable std::mutex` guarding
+`currentValue_`/`isDataValid_` — never held across `CurrentValueChanged.Raise()`.
+`getCurrentValueProperty()` returns by value (Task P5-2), not by reference.
 Concrete sensors override `Start()`, `Stop()`, `Dispose(bool)`, and must
 call `setIsSupportedProperty()` once from their constructor. **Do not
-restructure this class** — stable, used by production code.
+restructure this class further** — stable, used by production code, and
+now correctly thread-safe.
 
 **Invariant:** any class overriding `Dispose(bool)` **must** add `using
 SensorBase<T>::Dispose;`, or C++ name-hiding silently breaks the inherited
@@ -279,26 +308,33 @@ public no-arg `Dispose()`. This bug has already been found and fixed 4
 times across the project's history — don't reintroduce it in any new
 sensor class.
 
-**Sensor pattern (real, SDL3-backed — `Accelerometer`/`Gyroscope`):** static
-`g_sensor_`/`g_sensorId_` hold the single open SDL sensor handle; static
-`instanceCount_` enforces a ≤10 simultaneous-instance limit; static
-`eventWatchRegistered_` guards the SDL event filter lifecycle; static
-`startedInstances_` is the list the event-watch callback iterates, guarded
-by a `static std::mutex mutex_`. Each instance also has a
-`bool inFlightCallback_` (guarded by the same mutex) that `Dispose()` waits
-on via a shared `static std::condition_variable callbackFinished_` before
-letting the object's lifetime end. `ProcessSensorUpdateEvent()` validates
+**Sensor pattern (real, SDL3-backed — `Accelerometer`/`Gyroscope`):** as of
+Task P5-4, the shared subsystem/event-watch machinery lives in
+`Detail::SdlSensorSubsystem<TSensor>` (`include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`)
+— one instantiation per class, reached via each class's own private
+`static GetSubsystem()` (defined in that class's own `.cpp` as a
+function-local static, keeping SDL types out of the public header, same
+"opaque handle" idiom the old `void* g_sensor_` used). It owns: balanced
+subsystem probe/instance init-quit (Task P5-1), default-sensor discovery,
+event-watch registration, and the started-instances/dispatching-thread-id
+bookkeeping (Tasks P5-2/P5-3). `state_`/`started_`/`subsystemHeld_`/
+`dispatchingThreadIds_` remain genuine per-instance members on
+`Accelerometer`/`Gyroscope` themselves, consistently guarded by the shared
+subsystem's mutex wherever touched. `ProcessSensorUpdateEvent()` validates
 the event belongs to this instance's open device, then delegates to
-`DispatchSensorReading()` for the actual conversion+dispatch — this split
-lets the `NOXNA` test-only `InjectSyntheticSensorUpdate()`/
-`SetStartedForTesting()` hooks exercise the real dispatch path without a
-real, opened SDL sensor. `Timestamp` on dispatched readings is always
+`DispatchSensorReading()` — this split lets the `NOXNA` test-only
+`InjectSyntheticSensorUpdate()`/`SetStartedForTesting()`/`SetSupportedForTesting()`
+hooks exercise the real dispatch path without a real, opened SDL sensor.
+`Timestamp` on dispatched readings is always
 `System::DateTimeOffset::getUtcNowProperty()` — real wall-clock time.
-Each instance's own `subsystemHeld_` flag (Task P4-8) balances its
-`SDL_InitSubSystem()`/`SDL_QuitSubSystem()` calls 1:1, independent of
-`instanceCount_` — SDL's own internal ref-count aggregates correctly across
-instances *and* across `Accelerometer`/`Gyroscope`. **Do not** "fix" this by
-building a separate hand-rolled reference counter; SDL already provides one.
+Android's axis-remap sign math is a pure function,
+`Detail::ConvertAndroidPortraitToXnaLandscape()`
+(`include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`,
+Task P5-7), shared identically by both classes and unit-tested on any
+platform. **Do not** "fix" the subsystem pattern by building a separate
+hand-rolled reference counter; SDL already provides one, and
+`SdlSensorSubsystem`'s `ProbeGuard`/per-instance `subsystemHeld_` already
+use it correctly.
 
 **Stub pattern (`Compass`/`Motion`):** always `SensorState::NotSupported`;
 `Start()` always throws `SensorFailedException`; still expose the
@@ -308,11 +344,15 @@ building a separate hand-rolled reference counter; SDL already provides one.
 via `getDefaultProperty()`), no `SensorBase<T>`, no `IDisposable`, lives
 directly in `Microsoft::Devices` (not `::Sensors`). Drives SDL3's haptic API
 directly; file-static `g_haptic`/`g_leftRightEffectId` guarded by a
-`std::mutex` locked for the entire body of every public method (Task P4-9).
-Excludes haptic devices that are also connected joysticks/gamepads from
-device selection via ID correlation (`SDL_OpenHapticFromJoystick()`, Task
-P4-10), not name matching. `Start()`/`StartLeftRight()` correctly stop each
-other's SDL effect before starting (Task P3-5).
+`std::mutex` locked for the entire body of every public method. As of Task
+P5-11, `~VibrateController()` closes `g_haptic` and releases
+`SDL_INIT_HAPTIC` (tracked via a file-static `g_subsystemHeld` bool, not
+`SDL_WasInit()`) when the singleton is destroyed at normal process
+termination — confirmed safe since this codebase never calls `SDL_Quit()`
+anywhere. Excludes haptic devices that are also connected joysticks/gamepads
+from device selection via ID correlation (`SDL_OpenHapticFromJoystick()`),
+not name matching. `Start()`/`StartLeftRight()` correctly stop each other's
+SDL effect before starting.
 
 **`GetTypeName()` invariant:** must return `.`-separated fully-qualified
 .NET names (e.g. `"Microsoft.Devices.Sensors.Compass"`), tagged `NOXNA`.
@@ -332,12 +372,16 @@ don't (e.g. `AccelerometerReading`-style value types) declare a plain
   separate from `cna_devices`'s.
 - Do not expand `Microsoft::Devices` scope to camera, radio, or
   phone-call/photo-picker APIs — explicitly out of scope.
-- Do not implement sensor fusion in `Motion` — it stays a `NotSupported`
-  stub until SDL3 itself gains magnetometer access.
+- Do not implement sensor fusion in `Motion`, and do not add any GPS/
+  location member to `Microsoft::Devices::Sensors` under any circumstances
+  (including as `NOXNA`) — see `docs/location-future-plan.md`.
 
 ---
 
 ## 7. Useful commands
+
+See `docs/devices-build.md` (Task P5-12) for the full, individually
+re-verified set with exact test counts. Quick reference:
 
 ```bash
 # Configure (only needed once, or if CMakeCache.txt is stale/points elsewhere):
@@ -345,36 +389,28 @@ cmake -S /rv/data/development/github.com/openeggbert/cna_devices \
       -B /rv/data/development/github.com/openeggbert/cna_devices/cmake-build-debug \
       -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
 
-# Build library:
+# Build library / tests:
 cmake --build cmake-build-debug --target CNA -j$(nproc)
-
-# Build tests:
 cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 
 # Run all tests:
 cd cmake-build-debug && ctest --output-on-failure
 
-# Run only Devices/Sensors + VibrateController tests:
-cd cmake-build-debug && ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership"
+# Run only Devices/Sensors + VibrateController tests (187 tests as of Task P5-12):
+cd cmake-build-debug && ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation"
 
-# Run one suite directly:
-./cmake-build-debug/CnaTests --gtest_filter="GyroscopeTests*"
-
-# Build the Devices demo screen (Task P4-14):
+# Build the Devices demo screen:
 cmake --build cmake-build-debug --target cna_demo_devices -j$(nproc)
-./cmake-build-debug/cna_demo_devices   # needs a real display; SDL_VIDEODRIVER=dummy fails headless (no GPU here), same as cna_demo_input
+./cmake-build-debug/cna_demo_devices   # needs a real display; fails headless (no GPU/display), same as cna_demo_input
 
-# Android cross-compile check (Task P4-11's exact repro — NDK now present in
-# this container at ~/Android/Sdk/ndk/):
+# Android cross-compile check (NDK present in this container at ~/Android/Sdk/ndk/):
 cmake -S . -B cmake-build-android -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=$HOME/Android/Sdk/ndk/30.0.14904198/build/cmake/android.toolchain.cmake \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DCNA_BUILD_TESTS=OFF
 cmake --build cmake-build-android --target CNA -j$(nproc)
 
-# Cross-platform build verification (Vulkan/BGFX; last re-verified clean
-# 2026-07-04 — see Section 3. BGFX's configure step fetches bgfx.cmake
-# from GitHub — takes several minutes; both build dirs already exist in
-# this checkout under cmake-build-vulkan/cmake-build-bgfx):
+# Cross-platform build verification (Vulkan/BGFX; last verified 2026-07-04
+# BEFORE Phase 5's changes — needs re-running, see Section 4/8):
 cmake --build cmake-build-vulkan --target CNA --target CnaTests -j$(nproc)
 cmake --build cmake-build-bgfx   --target CNA --target CnaTests -j$(nproc)
 ```
@@ -386,81 +422,85 @@ writing.
 
 ## 8. Next smallest tasks
 
-With `plan_devices_phase4.md` fully closed and `VULKAN`/`BGFX` re-verified
-clean (2026-07-04), there is no standing plan file driving further
-`Microsoft::Devices` work and no known outstanding issue. Pick one of these,
-or ask the user what the next priority actually is — do not invent new
-`Microsoft::Devices` scope without a plan or explicit request (see Section
-6's boundaries).
+1. **Re-verify `VULKAN`/`BGFX` builds against Phase 5's changes.** Not done
+   since 2026-07-02 for anything beyond Phase 4 — Task P5-4 in particular
+   substantially refactored `Accelerometer`/`Gyroscope` internals, and that
+   refactor has only been checked against `EASYGL` and the Android
+   cross-compile so far. This is the single most concrete, actionable next
+   step — see Section 4.
+   - Files: none (build-only task).
+   - Verify: the Vulkan/BGFX commands in Section 7; spot-run the Devices
+     test filter on each backend afterward.
 
-1. **Physical hardware verification**, if real Android/iOS hardware or a
+2. **Finish `plan_devices_phase5.md` Task P5-14** (final test run +
+   Resolution report) if not already done by the time this is read — check
+   that file's own status before assuming Section 8 item 1 above is the
+   true next step; P5-14 may already cover it.
+
+3. **Physical hardware verification**, if real Android/iOS hardware or a
    rumble-capable gamepad ever becomes available in a session: work through
-   `docs/devices-hardware-checklist.md` using `cna_demo_devices` (Task
-   P4-14). Not attemptable in this headless container — don't attempt it
-   here, just note if the environment changes.
+   `docs/devices-hardware-checklist.md` using `cna_demo_devices`. Not
+   attemptable in this headless container — don't attempt it here, just
+   note if the environment changes.
 
-2. **Anything outside `Microsoft::Devices`.** This namespace's hardening
-   work is done; the next task is likely a different subsystem entirely.
-   Ask before assuming scope.
+4. **Anything outside `Microsoft::Devices`.** Ask before assuming scope.
 
 ---
 
 ## 9. Do not do yet
 
+- Do not claim `Microsoft::Devices` is "complete"/"hardened" as a flat
+  statement — use Section 2's layered breakdown instead. Phase 5 exists
+  specifically because Phase 4 made that mistake and it hid real bugs.
 - Do not "fix" the SDL sensor subsystem ownership pattern by building a
-  separate hand-rolled reference counter — SDL3 already provides one; the
-  fix (already applied, Task P4-8) is to stop bypassing it (see Section 6).
-- Do not add a synthetic concurrency/thread test for the
-  `Accelerometer`/`Gyroscope` event-watch-callback thread-safety fix (Task
-  P3-4) or its lifetime-safety follow-up (Task P4-2) — neither can be
-  meaningfully exercised without real concurrent hardware events;
-  confirming the existing full-suite pass is the only verification this
-  environment can give.
-- Do not attempt to solve Task P4-2's documented reentrant-`Dispose()`
-  deadlock limitation — accepted as out of scope; don't add complexity for
-  an unusual pattern without a concrete need.
-- Do not refactor or restructure `SensorBase<T>` or `ISensorReading`
-  further — stable, used by production code.
-- Do not expand `Microsoft::Devices` to camera, radio, or phone-hardware
-  APIs (`PhotoCamera`, `CameraButtons`, `PhotoChooserTask`, etc.) — not
-  sensor/vibration functionality, explicitly out of scope.
-- Do not implement real sensor fusion in `Motion` — keep it a
-  `NotSupported` stub until SDL3 gains magnetometer access.
+  separate hand-rolled reference counter — SDL3 already provides one (see
+  Section 6).
+- Do not re-introduce a single bool/counter for callback quiescence
+  tracking — the `std::vector<std::thread::id>` design (Tasks P5-2/P5-3)
+  exists because simpler versions have concrete, traced failure modes.
+- Do not re-add the self-dispose deadlock as an "accepted limitation" —
+  it's fixed (Task P5-3), not merely documented.
+- Do not refactor or restructure `SensorBase<T>`, `Detail::SdlSensorSubsystem`,
+  or `ISensorReading` further without a concrete need — stable, used by
+  production code, and Task P5-4 already did the one refactor that was
+  actually asked for.
+- Do not expand `Microsoft::Devices` to camera, radio, phone-hardware APIs,
+  or GPS/location (including as `NOXNA`) — see Section 6 and
+  `docs/location-future-plan.md`.
+- Do not implement real sensor fusion in `Motion`, or a real magnetometer
+  in `Compass` — keep both `NotSupported` stubs until SDL3 itself gains
+  magnetometer access, or until a native (non-SDL) backend is separately
+  scoped per `plan_devices_phase5.md`'s "Future native backend plan".
 - Do not edit anything under `third_party/SDL` — vendored, has its own
   `CLAUDE.md` forbidding AI-authored contributions; read-only for research.
 - Do not assume iOS cross-compilation is still blocked without checking
   first each time — but Android's NDK situation (present as of Task P4-11,
   after being absent repeatedly across this project's history) is a poor
-  prior for iOS: Apple's toolchain fundamentally needs macOS/Xcode, which no
-  amount of package installation fixes on a Linux container.
+  prior for iOS: Apple's toolchain fundamentally needs macOS/Xcode.
 - Do not re-attempt to configure `cmake-build-android/` from scratch to
-  re-verify Task P4-11 unless something in `Microsoft::Devices` actually
-  changed Android-relevant code — it's a verified-clean, one-time compile
-  check, not something that needs re-running per unrelated task.
-- Do not perform the cross-cutting `GetTypeNameCPP` dot/colon cleanup
-  outside `Microsoft::Devices` (`Cue.cpp`, `AudioEngine.cpp`, etc.) — a
-  separate, larger, unrelated cleanup outside this plan's scope.
+  re-verify past tasks unless something in `Microsoft::Devices` actually
+  changed Android-relevant code since the last check.
 - Do not run `cmake --build` without first checking `CMakeCache.txt` points
   at the correct source directory (this repo has hit stale-cache issues
   before).
 - Do not fix bugs discovered in `sharp-runtime` by editing files there
-  without also verifying `sharp-runtime`'s own build/tests independently
-  (`cd /rv/data/development/github.com/openeggbert/sharp-runtime/build &&
-  cmake --build . && ./SharpRuntimeTests`) — it's a separate repo with its
-  own `CLAUDE.md` requiring zero warnings and all tests passing before any
-  commit there, and its own git history (do not conflate its commits with
-  `cna_devices`'s).
+  without also verifying `sharp-runtime`'s own build/tests independently —
+  it's a separate repo with its own `CLAUDE.md` requiring zero warnings and
+  all tests passing before any commit there, and its own git history.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first.
-plan_devices_phase4.md is fully closed — there is no standing Microsoft::Devices
-plan left to work through. Ask the user what to work on next, or pick one of
-Section 8's items, before inventing new scope.
+Read NEXT.md first, especially Section 2's layered status (API vs. SDL
+runtime vs. native backend vs. hardware-verified) — do not summarize this
+project's Devices work as simply "complete."
+Check plan_devices_phase5.md's own status before assuming what's done —
+Task P5-14 (final verification) may or may not have run yet.
 If given a new task, make one small, verified improvement at a time.
-Run the relevant build/test command from Section 7 after each change.
-Update NEXT.md after finishing.
+Run the relevant build/test command from Section 7 / docs/devices-build.md
+after each change.
+Update NEXT.md after finishing, and keep Section 2 honest rather than
+declaring victory.
 ```
