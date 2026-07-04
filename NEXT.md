@@ -21,14 +21,15 @@ verification — not API completeness.
 **Plan history:**
 - `plan_devices.md` (31 tasks) — closed.
 - `plan_devices_phase2.md` (17 tasks) — closed except Task P2-7
-  (Android/iOS build verification), blocked by missing toolchain in this
-  dev container.
+  (Android/iOS build verification) — Android half now superseded by
+  `plan_devices_phase4.md` Task P4-11 (done); iOS half still blocked (no
+  toolchain in this dev container).
 - `plan_devices_phase3.md` (12 tasks) — closed. All 3 confirmed real bugs
   fixed, 1 decision task resolved, all 6 test-coverage tasks filled, 1
   low-priority research task partially resolved (no known bug either way).
 - `plan_devices_phase4.md` (14 tasks, user-authored hardening plan) — **open**.
-  Tasks P4-1 through P4-10 done (P4-1–P4-7 on 2026-07-03, P4-8/P4-9/P4-10 on
-  2026-07-04). Tasks P4-11 through P4-14 not started.
+  Tasks P4-1 through P4-11 done (P4-1–P4-7 on 2026-07-03, P4-8/P4-9/P4-10/P4-11
+  on 2026-07-04). Tasks P4-12 through P4-14 not started.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -55,11 +56,16 @@ verification — not API completeness.
 ## 2. Current status
 
 **Build:** `CNA` and `CnaTests` build cleanly with the `EASYGL` backend
-(`cmake-build-debug`) as of the last verified build, HEAD `8f53104`
-(2026-07-04, Task P4-10, not yet pushed). **`VULKAN`/`BGFX` have not been
-re-verified since 2026-07-02 (commit `8092f6e`)** — 12 commits of
+(`cmake-build-debug`) as of the last verified build (2026-07-04, Task
+P4-11, not yet committed — see Section 3). **`CNA` (static lib only, no
+tests) now also builds clean for Android** (arm64-v8a, NDK r30, API 24,
+`SDL_RENDERER` backend, `cmake-build-android/` — new local, gitignored
+build dir) as of Task P4-11, the first time this has ever been verified in
+this project's history; see Task P4-11's Resolution in
+`plan_devices_phase4.md` for exact repro steps. **`VULKAN`/`BGFX` have not
+been re-verified since 2026-07-02 (commit `8092f6e`)** — 13 commits of
 `Microsoft::Devices` changes have landed since, across all of
-`plan_devices_phase3.md` and Tasks P4-1–P4-10. Nothing in those changes
+`plan_devices_phase3.md` and Tasks P4-1–P4-11. Nothing in those changes
 should affect backend-specific compilation (`Microsoft::Devices` has never
 interacted with the graphics backend, confirmed empirically
 pre-2026-07-03), but this is asserted, not re-confirmed since. See
@@ -106,14 +112,27 @@ unrelated to it. No regressions across the whole session's work.
   `SDL_QuitSubSystem()` pair is now balanced 1:1 via a per-instance
   `subsystemHeld_` flag, closing the premature cross-class subsystem
   teardown race.
+- Android cross-compilation of `CNA` (including `Accelerometer.cpp`/
+  `Gyroscope.cpp`'s `#ifdef __ANDROID__` landscape-remap code) now verified
+  clean, zero warnings, for the first time ever (Task P4-11) — see below
+  for the 3 unrelated `sharp-runtime` bugs this surfaced and fixed.
 
 **Does not work / not done yet:**
 - `Compass` and `Motion` are permanent stubs — SDL3 exposes no magnetometer
   API on any platform, so both are always `SensorState::NotSupported` and
   `Start()` always throws. By design, not a gap, until SDL3 gains
   magnetometer support.
-- Android/iOS cross-compilation has **never** been verified — no toolchain
-  in this dev container.
+- iOS cross-compilation still **never** verified — no toolchain available
+  in this Linux dev container (unlike Android, see above). This is a
+  different kind of gap than a missing NDK-equivalent binary: Apple's own
+  toolchain fundamentally requires macOS/Xcode, so this is very unlikely to
+  become unblocked in *any* Linux container, unlike Android's NDK which
+  just needed installing.
+- `Accelerometer.cpp`/`Gyroscope.cpp`'s Android axis-remap math is compiled
+  and warning-free but still **physically unverified** — no real Android
+  device/emulator run in this session, so the actual tilt-direction
+  correctness (`ConvertAndroidAccelerometerToXnaLandscape()`'s sign
+  choices) remains reasoned-about-from-docs only. See Task P4-13.
 - `VULKAN`/`BGFX` builds not re-run since before this session's Devices
   hardening work (see above).
 - No demo/manual-verification screen exists for `Microsoft::Devices` yet
@@ -227,8 +246,40 @@ unrelated to it. No regressions across the whole session's work.
   observe the exclusion). `CNA`/`CnaTests` build clean; full `ctest`: 1995
   tests (unchanged), 97% passing, same 64 pre-existing headless
   `EasyGL_*` failures as baseline — no regressions.
-- All work committed. Last commit: `8f53104` on `feature/devices`
-  (Task P4-10), not yet pushed.
+- **Task P4-11 done (2026-07-04):** re-checked the environment per the
+  task's own instruction before assuming still blocked — found
+  `~/Android/Sdk/ndk/{29.0.14206865,30.0.14904198}` now present (not
+  available in any prior session). Configured `cmake-build-android/` via
+  the NDK's own CMake toolchain file (arm64-v8a, API 24, Ninja) and built
+  `CNA`. This surfaced 3 pre-existing bugs in the separate `sharp-runtime`
+  repo (a sibling working directory, not `cna_devices` itself), invisible
+  on this project's own Linux/GCC build but fatal under `-Werror` on
+  Android/Clang, all fixed since they blocked reaching the actual target
+  files:
+  - `System::DateTime`/`DateTimeOffset::GetHashCode()` were missing the
+    `override` keyword (fatal under Clang's
+    `-Winconsistent-missing-override`).
+  - `System::Threading::Tasks::Task.hpp` used `std::this_thread::sleep_for()`
+    without `#include <thread>`/`<chrono>` — silently worked under
+    libstdc++ via a transitive include that doesn't happen under Android's
+    libc++.
+  - `TimeOnly.cpp` had a genuinely dead, shadowed file-scope
+    `static constexpr int MsPerDay` — its own member functions'
+    unqualified `MsPerDay` already resolves to the class's
+    `TimeOnly::MsPerDay` member via member-lookup precedence; removed.
+  All 3 fixes verified not to regress the Linux `EASYGL` build (full
+  `ctest`: still 1995 tests, 97% passing, no change). With those fixed,
+  `CNA` built clean with zero warnings for Android; confirmed via `nm`
+  that `ConvertAndroidAccelerometerToXnaLandscape()`/
+  `ConvertAndroidGyroscopeToXnaLandscape()` are actually present in the
+  compiled objects, not silently skipped. Static-lib compile check only —
+  no APK packaging, no emulator/device run, `CnaTests` not
+  cross-compiled (see Task P4-13 for the still-needed physical
+  verification).
+- All work committed. Last commit in `cna_devices`: (Task P4-11, this
+  commit) on `feature/devices`, not yet pushed. The 3 `sharp-runtime`
+  fixes above are committed separately in that sibling repo (not part of
+  `cna_devices`'s own git history).
 
 ---
 
@@ -275,11 +326,16 @@ an active failure.
   pattern to accept rather than solve further; see Task P4-2's Resolution
   in `plan_devices_phase4.md`.
 - **Needs verification:** `VULKAN`/`BGFX` builds — see Section 4.
-- **Needs verification:** Android/iOS cross-compilation — no NDK/toolchain
-  in this dev container. `Accelerometer.cpp`/`Gyroscope.cpp`'s
-  `#ifdef __ANDROID__` branches have never been compiled by any compiler.
-  See `plan_devices_phase2.md` Task P2-7 (blocked) and
-  `plan_devices_phase4.md` Tasks P4-11/P4-12.
+- **Fixed (Task P4-11, 2026-07-04):** Android cross-compilation of `CNA`
+  (including `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__`
+  branches) now verified clean for the first time — an NDK is now present
+  in this dev container (wasn't in any prior session). Still only a
+  static-lib compile check, not a physical device/emulator run — see
+  Task P4-13. See `plan_devices_phase4.md` Task P4-11's Resolution.
+- **Needs verification:** iOS cross-compilation — no toolchain in this
+  Linux dev container; unlike Android's NDK, this is unlikely to become
+  available in any Linux container (Apple's toolchain needs macOS/Xcode).
+  See `plan_devices_phase4.md` Task P4-12.
 - **By design, not a bug:** `Compass` and `Motion` are permanent
   `SensorState::NotSupported` stubs — SDL3 has no magnetometer API on any
   platform.
@@ -422,46 +478,47 @@ writing.
 ## 8. Next smallest tasks
 
 1. **Re-verify `VULKAN`/`BGFX` builds.** Not done since 2026-07-02
-   (commit `8092f6e`); 9 commits of `Microsoft::Devices` changes have
+   (commit `8092f6e`); 13 commits of `Microsoft::Devices` changes have
    landed since. Low risk but unverified — see Section 4.
    - Files: none (build-only task).
    - Verify: the "Cross-platform build verification" commands in Section
      7; spot-run the targeted Devices/Sensors/VibrateController suite on
      each backend afterward.
 
-2. **Task P4-8 — SDL sensor subsystem ownership.** Stop
-   `EnsureSensorSubsystemInitialized()` from bypassing SDL3's own
-   subsystem ref-counting via an `SDL_WasInit()` guard; add a
-   per-instance `bool subsystemHeld_` flag so each instance's own
-   `SDL_InitSubSystem()`/`SDL_QuitSubSystem()` calls stay balanced 1:1,
-   letting SDL's own ref-count correctly aggregate across instances and
-   across `Accelerometer`/`Gyroscope`. Full design in
-   `plan_devices_phase4.md` Task P4-8.
-   - Files: `Accelerometer.hpp`/`.cpp`, `Gyroscope.hpp`/`.cpp`.
-   - Verify: full `ctest --output-on-failure` (hard to assert on SDL's
-     internal ref-count directly headless; focus on no regressions plus
-     any test that can at least exercise the code path safely).
+2. **Task P4-12 — Compile the iOS branch, or explicitly mark it
+   unverified.** No toolchain available in this Linux dev container —
+   unlike Android (Task P4-11, done 2026-07-04, an NDK turned out to be
+   present), this is unlikely to become available in any Linux container
+   at all (Apple's own toolchain needs macOS/Xcode). If still genuinely
+   unattemptable, this task is really just confirming `NEXT.md` says so
+   explicitly (it now does, see Section 2/5) rather than further build
+   attempts.
+   - Files: none expected (build-only task, likely a documentation-only
+     resolution).
 
-3. **Task P4-9 — `VibrateController` thread-safety.** Add a
-   `static std::mutex` guarding `g_haptic`/`g_leftRightEffectId`,
-   mirroring the sensor classes' Task P3-4 pattern. Consider RAII cleanup
-   for `g_haptic` alongside (see plan for the destruction-order caveat).
-   - Files: `src/Microsoft/Devices/VibrateController.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="VibrateControllerTests*"`,
-     then full `ctest --output-on-failure`.
+3. **Task P4-13 — Manual hardware verification checklist.** A plain
+   checklist document (e.g. `docs/devices-hardware-checklist.md`) for
+   whoever eventually runs this on real hardware: accelerometer/gyroscope
+   axis sign/orientation in both landscape rotations (now compiles clean
+   for Android as of Task P4-11, but the actual tilt-direction math has
+   never been physically verified), `VibrateController::Start()` actually
+   vibrating the phone motor (not a connected gamepad), `StartLeftRight()`
+   driving two distinct motors, and the gamepad-exclusion filter (Task
+   P4-10) not competing with `GamePad::SetVibration()` on the same
+   physical controller.
+   - Files: new checklist file (or a `NEXT.md` section, if a new file is
+     judged unnecessary overhead).
 
-4. **Task P4-10 — Replace name-matching gamepad exclusion.** Use
-   `SDL_OpenHapticFromJoystick()` (confirmed present in vendored SDL3) to
-   correlate haptic devices with connected joysticks by ID instead of by
-   name string.
-   - Files: `src/Microsoft/Devices/VibrateController.cpp`.
-   - Verify: `./cmake-build-debug/CnaTests --gtest_filter="VibrateControllerTests*"`.
-
-5. **Tasks P4-11–P4-14 — cross-platform build and demo screen.** Likely
-   still blocked for Android/iOS in this environment (re-check whether a
-   toolchain has become available before assuming so). The demo screen
-   (P4-14, mirroring `examples/demo_input`'s `Game`-subclass pattern) has
-   no environment blocker and can be picked up independently at any time.
+4. **Task P4-14 — `Microsoft::Devices` demo screen.** Mirror
+   `examples/demo_input`'s `Game`-subclass pattern
+   (`examples/demo_input/src/InputDemo.hpp`/`.cpp`): new
+   `examples/demo_devices/src/DevicesDemo.hpp`/`.cpp`, displaying each
+   sensor's `getIsSupportedProperty()`/`getStateProperty()`/latest reading/
+   event count, plus keyboard bindings to trigger
+   `VibrateController::Start()`/`Stop()`/`StartLeftRight()`. No
+   environment blocker; can be picked up independently at any time.
+   - Files: new `examples/demo_devices/` directory; whatever
+     root/`examples/CMakeLists.txt` wiring registers new demo targets.
 
 ---
 
@@ -488,9 +545,15 @@ writing.
   `NotSupported` stub until SDL3 gains magnetometer access.
 - Do not edit anything under `third_party/SDL` — vendored, has its own
   `CLAUDE.md` forbidding AI-authored contributions; read-only for research.
-- Do not attempt Android/iOS cross-compilation in this environment without
-  first checking whether a toolchain has actually become available — it
-  has not been, repeatedly, across this project's history.
+- Do not assume iOS cross-compilation is still blocked without checking
+  first — but Android's NDK situation (present as of Task P4-11, after
+  being absent repeatedly across this project's history) is a poor prior
+  for iOS: Apple's toolchain fundamentally needs macOS/Xcode, which no
+  amount of package installation fixes on a Linux container.
+- Do not re-attempt to configure `cmake-build-android/` from scratch to
+  re-verify Task P4-11 unless something in `Microsoft::Devices` actually
+  changed Android-relevant code — it's a verified-clean, one-time compile
+  check, not something that needs re-running per unrelated task.
 - Do not perform the cross-cutting `GetTypeNameCPP` dot/colon cleanup
   outside `Microsoft::Devices` (`Cue.cpp`, `AudioEngine.cpp`, etc.) — a
   separate, larger, unrelated cleanup outside this plan's scope.

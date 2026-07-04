@@ -646,10 +646,53 @@ never been compiled by any compiler in this project's history (confirmed repeate
 across `plan_devices.md`/`plan_devices_phase2.md`/`plan_devices_phase3.md`'s own status
 notes) — same for anything `VibrateController.cpp` does differently on Android (currently
 nothing `#ifdef`-gated there; its Android behavior comment notes SDL3's Android haptic
-backend needs no CNA-side branching). **Blocked in this environment** — no Android NDK
+backend needs no CNA-side branching). **Was blocked** in prior sessions — no Android NDK
 available in this dev container, same blocker as `plan_devices_phase2.md` Task P2-7.
 Re-check whether the environment has changed before assuming this is still blocked; if
 still blocked, this needs a different environment or CI, not further attempts here.
+
+**Resolution (2026-07-04):** Environment re-check found the blocker no longer applies —
+`~/Android/Sdk/ndk/{29.0.14206865,30.0.14904198}` is now present in this dev container
+(not available in any prior session). Configured a fresh `cmake-build-android` build dir
+via the NDK's own CMake toolchain file
+(`~/Android/Sdk/ndk/30.0.14904198/build/cmake/android.toolchain.cmake`,
+`ANDROID_ABI=arm64-v8a`, `ANDROID_PLATFORM=android-24`, `-G Ninja`,
+`CNA_BUILD_TESTS=OFF`) and built the `CNA` target. This surfaced 3 pre-existing bugs in
+the separate `sharp-runtime` repo, invisible on this project's Linux/GCC build (either a
+GCC-vs-Clang warning difference, or an ODR/shadowing bug GCC also can't detect) but fatal
+under `-Werror` on Android/Clang — fixed all 3, since they blocked reaching the actual
+Task P4-11 target files entirely:
+- `System::DateTime::GetHashCode()`/`System::DateTimeOffset::GetHashCode()` override
+  `System::Object::GetHashCode()` but were missing the `override` keyword — fatal under
+  Clang's `-Winconsistent-missing-override` (`DateTime.hpp`/`DateTimeOffset.hpp`).
+- `System::Threading::Tasks::Task`'s `std::this_thread::sleep_for()` call compiled only
+  because some other transitively-included header happened to pull in `<thread>` under
+  libstdc++ — missing explicit `#include <thread>`/`#include <chrono>` in `Task.hpp`,
+  fatal under Android's libc++ where that transitive include doesn't happen.
+- `TimeOnly.cpp` declared its own file-scope `static constexpr int MsPerDay`, entirely
+  shadowed and unused: `AddHours()`/`AddMinutes()`/`FromTimeSpan()` are `TimeOnly` member
+  functions, so their unqualified `MsPerDay` already resolves to the class's own
+  `TimeOnly::MsPerDay` member (`TimeOnly.hpp`) via member-lookup precedence — genuine
+  dead code (not just a warning false-positive), removed.
+
+All 3 fixes verified not to regress the Linux `EASYGL` build (`CNA`/`CnaTests` rebuilt
+clean, full `ctest`: still 1995 tests, 97% passing, same 64 pre-existing headless
+`EasyGL_*` failures — no change). With those fixed, `CNA` (default `SDL_RENDERER`
+backend, Android's non-Linux/non-Emscripten default per `CMakeLists.txt`) built clean
+with **zero warnings** on Android — confirmed via `nm` that
+`ConvertAndroidAccelerometerToXnaLandscape()`/`ConvertAndroidGyroscopeToXnaLandscape()`
+(the `#ifdef __ANDROID__` remap functions) are actually present in the compiled object
+files, not silently skipped. This is a static-library compile check only — no APK
+packaging, no emulator/device run, no `CnaTests` cross-compiled (`gtest` wasn't
+configured for the Android toolchain) — the physical axis-sign correctness still needs
+real-hardware verification per Task P4-13's checklist. `cmake-build-android/` is a new,
+uncommitted local build directory (gitignored or left as scratch — not part of this
+task's file changes below).
+
+**Files:** `sharp-runtime/include/System/DateTime.hpp`,
+`sharp-runtime/include/System/DateTimeOffset.hpp`,
+`sharp-runtime/include/System/Threading/Tasks/Task.hpp`,
+`sharp-runtime/src/System/TimeOnly.cpp`.
 
 ### Task P4-12 — Compile the iOS branch, or explicitly mark it unverified
 
