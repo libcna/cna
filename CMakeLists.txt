@@ -1189,6 +1189,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 315: DepthStencilState.StencilEnable actually gates the stencil test
+        cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_enable
+                        examples/easygl_depthstencilstate_stencil_enable_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_StencilEnable
+                 COMMAND cna_test_easygl_depthstencilstate_stencil_enable)
+        set_tests_properties(EasyGL_DepthStencilState_StencilEnable PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1402,6 +1411,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_DepthStencilState_CompareFunction
                  COMMAND cna_test_vulkan_depthstencilstate_compare_function)
         set_tests_properties(Vulkan_DepthStencilState_CompareFunction PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 315: DepthStencilState.StencilEnable on Vulkan (reuses the backend-agnostic EasyGL
+        # source). NOTE: expected to FAIL Check A per Task 870 - stencil testing is completely
+        # non-functional on Vulkan (stencilTestEnable never set), so no gating ever happens.
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_enable
+                        examples/easygl_depthstencilstate_stencil_enable_test.cpp)
+        add_test(NAME Vulkan_DepthStencilState_StencilEnable
+                 COMMAND cna_test_vulkan_depthstencilstate_stencil_enable)
+        set_tests_properties(Vulkan_DepthStencilState_StencilEnable PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

@@ -1025,6 +1025,9 @@ void main()
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+        // Without this, no window ever gets stencil bits (SDL defaults to 0), making
+        // DepthStencilState.StencilEnable a permanent no-op regardless of what's requested.
+        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
         // NOTE: GL context IS owned by EasyGL backend.
         gl_context = SDL_GL_CreateContext(window);

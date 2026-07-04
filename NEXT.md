@@ -13,7 +13,7 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–36 are now complete. **Phase 37 (DepthStencilState
-  conformance, `GRAPHICS_TASKS.md` Tasks 311–319) is in progress** — Tasks 311–314 done, Task 315
+  conformance, `GRAPHICS_TASKS.md` Tasks 311–319) is in progress** — Tasks 311–315 done, Task 316
   is next (see §8). Task 311 fixed `DepthStencilState`'s portion of the known Task 866 preset-`Name`
   gap (mirroring Tasks 291/301). Task 312 found and fixed a THIRD bug of the same shape as Task 302:
   `GraphicsDevice`'s `depthStencilState_`/`rasterizerState_` were never actually copied from
@@ -27,7 +27,14 @@ minimal API-surface changes.
   negative Z silently; EasyGL doesn't) — see the test file's own header comment. **Task 314 fully
   and directly reconfirmed Task 870**: of 5 `CompareFunction` checks, only `Less` passes on
   Vulkan — exactly the pattern predicted by the pipeline hardcoding `VK_COMPARE_OP_LESS`
-  regardless of what's requested.
+  regardless of what's requested. **Task 315 found and FIXED a severe, previously-undiscovered bug
+  on EasyGL**: no EasyGL window in this project ever requested `SDL_GL_STENCIL_SIZE`, so no window
+  ever had a real stencil buffer, making stencil testing moot there too (state-application code was
+  always correct; the GPU resource just never existed) — fixed with a one-line SDL attribute
+  addition, zero regressions. Task 315 also fully reconfirmed Task 870 for stencil specifically on
+  Vulkan, and found an additional compounding Vulkan-only cause: `FindDepthFormat()` prefers a
+  stencil-less format. New Task 871 tracks a separate, real, not-yet-fixed bug found along the way:
+  `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` on every backend — see §3/§5.
   **Phase 36 (BlendState conformance, Tasks 301–310) closed in an earlier session** — all 10 tasks
   done. **Task 304 found a MASSIVE bug: Vulkan's blend state support is almost entirely fake
   (Task 868, not yet fixed)** — reconfirmed a fifth time by Task 309, see §3/§5. Task 309 also
@@ -63,22 +70,23 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2074/2076 (serial `-j1`) pass. 2 pre-existing,
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2075/2077 (serial `-j1`) pass. 2 pre-existing,
   unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. New
   `DepthStencilStateTest.*Name*` (Task 311),
   `GraphicsDeviceDefaultStateTest.DefaultDepthStencilStateMatches*`/`DefaultRasterizerStateMatches*`
-  (Task 312), `EasyGL_DepthStencilState_WriteEnable` (Task 313), and
-  `EasyGL_DepthStencilState_CompareFunction` (Task 314, all 5 `CompareFunction` checks) all pass.
-  Some tests have each been observed failing once under parallel `-j` execution but passed cleanly
-  both in isolation and on a repeat serial full run — treated as parallel-execution flakiness, not
-  a regression (none confirmed as a stable failure): `EasyGL_SkinnedBones`,
-  `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 2006/2014 (serial `-j1`) pass. Only
+  (Task 312), `EasyGL_DepthStencilState_WriteEnable` (Task 313),
+  `EasyGL_DepthStencilState_CompareFunction` (Task 314, all 5 `CompareFunction` checks), and
+  `EasyGL_DepthStencilState_StencilEnable` (Task 315, both checks — see the SDL stencil-buffer fix
+  below) all pass. Some tests have each been observed failing once under parallel `-j` execution
+  but passed cleanly both in isolation and on a repeat serial full run — treated as
+  parallel-execution flakiness, not a regression (none confirmed as a stable failure):
+  `EasyGL_SkinnedBones`, `EasyGL_TransformMatrix_Translation`.
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 2006/2015 (serial `-j1`) pass. Only
   `Vulkan_DepthBias` (pre-existing, usual single sub-case), 5 confirmed-real, documented known
   failures — `Vulkan_BlendState_AlphaBlend`/`Additive`/`SeparateFunctions`/`SeparateFactors`/
   `BlendFactor` (all Task 304/306/307/308/309/868 findings, kept registered rather than hidden) —
-  and the new `Vulkan_DepthStencilState_CompareFunction` (Task 314, 4 of 5 checks fail — a full,
-  direct reconfirmation of Task 870, kept registered rather than hidden) failed this run.
+  and the new `Vulkan_DepthStencilState_CompareFunction`/`StencilEnable` (Tasks 314/315, both Task
+  870 confirmations, kept registered rather than hidden) failed this run.
   `Vulkan_FillMode_WireFrame`'s pre-existing order-dependent flakiness (see §5) recurred this run.
   `Vulkan_DepthStencilState_WriteEnable` (Task 313) passes cleanly — `DepthBufferWriteEnable`
   itself is confirmed correct on Vulkan, even though `DepthBufferFunction`/stencil testing are
@@ -88,14 +96,20 @@ build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` conf
   sequentially, not concurrently. `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails consistently
   (pre-existing, documented). `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` remain the
   same pre-existing, order/timing-sensitive issues tracked since Task 279 — flaky (not stable
-  failures), unrelated to any change made this session (Tasks 311/312/313/314 only touch
-  `DepthStencilState`/`GraphicsDevice`'s constructor and add two new pixel tests, nothing in the
-  render-target or rasterization pipeline).
+  failures), unrelated to any change made this session. **Task 315 made a real EasyGL backend
+  source change** (not just an example/test file): added `SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,
+  8)` to `EasyGLGraphicsBackend`'s context creation — full ctest reconfirmed zero regressions on
+  both backends after this change.
 - **Bgfx (`cmake-build-bgfx`), full `ctest`:** **1985/1985 (100%)** as of Task 309's fix. Not
-  rebuilt/rerun for Tasks 311–314 (all backend-agnostic changes — `DepthStencilState`'s value
-  layout, `GraphicsDevice`'s constructor member-init list, and two new EasyGL/Vulkan-registered
-  pixel tests — already covered by the EasyGL/Vulkan runs above). Bgfx has no GPU pixel-readback API
-  in this project, so its integration coverage remains smoke-test-only by design.
+  rebuilt/rerun for Tasks 311–315 (all EasyGL/Vulkan-only changes — `DepthStencilState`'s value
+  layout, `GraphicsDevice`'s constructor member-init list, three new EasyGL/Vulkan-registered pixel
+  tests, and the EasyGL-specific `SDL_GL_STENCIL_SIZE` fix — none touch Bgfx). Bgfx's own
+  `ApplyDepthStencilState` was already confirmed fully correct by code reading (Task 870's
+  write-up) — whether Bgfx's window/backbuffer actually has a physical stencil buffer (the same
+  class of gap just found and fixed on EasyGL) has NOT been verified; worth checking before
+  assuming Bgfx's stencil support is any better than EasyGL's was before this session's fix. Bgfx
+  has no GPU pixel-readback API in this project, so its integration coverage remains
+  smoke-test-only by design.
 
 ### What currently works
 - Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (including
@@ -201,7 +215,8 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 314 | `examples/easygl_depthstencilstate_compare_function_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (Task 870 updated) | 5-column pixel test, one per `CompareFunction` (`Always`/`Never`/`Less`/`LessEqual`/`Greater`), each with a depth chosen to give an unambiguous, function-distinguishing expected result. **EasyGL: all 5 pass exactly as predicted.** **Vulkan: 4 of 5 fail — a full, direct reconfirmation of Task 870** (only `Less` passes, exactly matching the hardcoded `VK_COMPARE_OP_LESS` pipeline predicted by Task 313's finding). Kept `Vulkan_DepthStencilState_CompareFunction` registered as a documented known failure. |
+| (uncommitted) Task 315 | `examples/easygl_depthstencilstate_stencil_enable_test.cpp` (new), `EasyGLGraphicsBackend.cpp` (fix), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (new Task 871, Task 870 updated) | Two-column differential pixel test for `StencilEnable`. **Found and fixed a real, severe bug**: no EasyGL window ever requested `SDL_GL_STENCIL_SIZE`, so no window had a real stencil buffer at all — the stencil test trivially always-passed at the GL level regardless of `StencilEnable`, even though the state-application code (`glStencilFunc`/`glStencilOp`/`glEnable(GL_STENCIL_TEST)`) was already correct. Fixed with a one-line SDL attribute addition. **After the fix, both checks pass on EasyGL.** **Vulkan: Check A fails outright — a full, direct reconfirmation of Task 870** for stencil specifically; also found `FindDepthFormat()` prefers a stencil-less format as a compounding cause, noted in Task 870. **New Task 871, NOT fixed**: `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` on every backend — found while needing to work around it for this test's stencil baseline. |
+| `65d3d21` Task 314 | `examples/easygl_depthstencilstate_compare_function_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (Task 870 updated) | 5-column pixel test, one per `CompareFunction` (`Always`/`Never`/`Less`/`LessEqual`/`Greater`), each with a depth chosen to give an unambiguous, function-distinguishing expected result. **EasyGL: all 5 pass exactly as predicted.** **Vulkan: 4 of 5 fail — a full, direct reconfirmation of Task 870** (only `Less` passes, exactly matching the hardcoded `VK_COMPARE_OP_LESS` pipeline predicted by Task 313's finding). Kept `Vulkan_DepthStencilState_CompareFunction` registered as a documented known failure. |
 | `eccbb9e` Task 313 | `examples/easygl_depthstencilstate_write_enable_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (new Task 870) | Three-quad differential pixel test confirms `DepthBufferWriteEnable` works correctly on both EasyGL and Vulkan. **Found and documented two real, separate discoveries while designing it**: (1) Vulkan's `colored3d.vert.glsl` expects clip-space Z in DirectX's `[0,+w]` range (matching real XNA semantics) — a raw negative Z silently clips away entirely on Vulkan only, a gotcha for any future identity-matrix depth pixel test in this codebase. (2) **A new MASSIVE bug, tracked as Task 870, NOT fixed**: `VulkanGraphicsBackend::ApplyDepthStencilState` ignores `DepthBufferFunction` (hardcoded per-pipeline as `LESS`/`LESS_OR_EQUAL`) and the entire stencil-test parameter set (stencil testing is completely non-functional on Vulkan) — the same shape/severity as Task 868's `BlendState` finding. EasyGL/Bgfx both fully correct by contrast. Expect Tasks 314 (`DepthBufferFunction`) and 315–319 (stencil) to hit this directly. |
 | `a1bcf20` Task 312 | `GraphicsDevice.cpp`, `GraphicsDeviceDefaultStateTests.cpp` (extended) | **Found and fixed a THIRD bug of the same shape as Task 302, flagged by Task 311.** `GraphicsDevice`'s `depthStencilState_`/`rasterizerState_` were plain default-constructed, never copied from `DepthStencilState::Default`/`RasterizerState::CullCounterClockwise` (FNA's actual constructor behavior). Fixed via the constructor's member-init list, ordered to avoid `-Wreorder`. 3 new tests. |
 | (uncommitted) Task 311 | `DepthStencilState.hpp/.cpp`, `DepthStencilStateTests.cpp`, `GRAPHICS_TASKS.md` (Task 866 updated) | **Opens Phase 37.** Audited `DepthStencilState` against FNA — full 16-property surface, all 3 presets, default values all already matched exactly. Fixed the known Task 866 gap: presets didn't set `Name` (e.g. `"DepthStencilState.Default"`). Mirrors Tasks 291/301 exactly. Closes `DepthStencilState`'s portion of Task 866; `RasterizerState` remains open. 5 new tests. Flagged (not fixed here) the Task-302-shaped `GraphicsDevice` default-state bug fixed immediately after by Task 312. |
@@ -290,7 +305,9 @@ on returned pixel values).
 | Confirmed, architectural, documented (Task 310) | `GraphicsDevice` stores `BlendState`/`DepthStencilState`/`RasterizerState` **by value**, unlike FNA's reference-type aliasing (`nextBlend = value;` stores the same object) — mutating a custom state object *after* assigning it to `GraphicsDevice` is silently a no-op in CNA but would take effect in real XNA/FNA. Deliberate, consistent, project-wide pattern (not `BlendState`-specific); no game/example code in this repo relies on the FNA behavior. Tracked as Task 869, not fixed — would need every affected state property to become a reference/pointer type, a real architecture decision. Confirmed by contrast: FNA has NO freeze/immutability enforcement on these classes either, so there's no "throws after first use" behavior missing from CNA — only this value-vs-reference divergence. |
 | Fixed (Task 311) | `DepthStencilState`'s 3 static presets (`Default`/`DepthRead`/`None`) didn't set `Name`, matching the same gap already fixed in `SamplerState` (Task 291)/`BlendState` (Task 301). Fixed by threading a `name` param through the private preset constructor. Closes `DepthStencilState`'s portion of Task 866; `RasterizerState`'s portion remains open (Phase 38). |
 | Fixed (Task 312), same shape as Task 302 | `GraphicsDevice`'s `depthStencilState_`/`rasterizerState_` were plain default-constructed, never copied from `DepthStencilState::Default`/`RasterizerState::CullCounterClockwise` (FNA's actual constructor behavior). Values coincided for `depthStencilState_` (invisible until Task 311 gave `Default` a `Name`). Fixed via the constructor's member-init list. |
-| Confirmed bug, MASSIVE, silent failure (Task 313 finding) | **Vulkan's `DepthStencilState` support is almost entirely fake — the same shape/severity as Task 868's `BlendState` finding.** `VulkanGraphicsBackend::ApplyDepthStencilState` only stores `depthEnable`/`depthWriteEnable`; `DepthBufferFunction` is ignored (every one of the 7 Vulkan 3D pipeline-creation functions hardcodes its own `depthCompareOp` — a mix of `VK_COMPARE_OP_LESS`/`LESS_OR_EQUAL`, unrelated to what's actually requested), and stencil testing is **completely non-functional** (`stencilTestEnable`/front/back never set anywhere in the Vulkan backend, confirmed via grep). EasyGL and Bgfx are both fully, correctly implemented by contrast. Tracked as Task 870, not fixed — large, multi-pipeline-site change needing its own dedicated task, exactly like Task 868. **Update (Task 314):** directly and fully reconfirmed — of 5 `CompareFunction` checks, only `Less` passes on Vulkan, exactly matching the hardcoded `VK_COMPARE_OP_LESS` pipeline. Expect Tasks 315–319 (stencil) to hit this same root cause too. |
+| Confirmed bug, MASSIVE, silent failure (Task 313 finding) | **Vulkan's `DepthStencilState` support is almost entirely fake — the same shape/severity as Task 868's `BlendState` finding.** `VulkanGraphicsBackend::ApplyDepthStencilState` only stores `depthEnable`/`depthWriteEnable`; `DepthBufferFunction` is ignored (every one of the 7 Vulkan 3D pipeline-creation functions hardcodes its own `depthCompareOp` — a mix of `VK_COMPARE_OP_LESS`/`LESS_OR_EQUAL`, unrelated to what's actually requested), and stencil testing is **completely non-functional** (`stencilTestEnable`/front/back never set anywhere in the Vulkan backend, confirmed via grep). EasyGL and Bgfx's *state-application code* is both fully, correctly implemented by contrast. Tracked as Task 870, not fixed — large, multi-pipeline-site change needing its own dedicated task, exactly like Task 868. **Update (Task 314):** directly and fully reconfirmed — of 5 `CompareFunction` checks, only `Less` passes on Vulkan, exactly matching the hardcoded `VK_COMPARE_OP_LESS` pipeline. **Update (Task 315):** directly reconfirmed for stencil specifically — `StencilEnable=true` never gates fragments on Vulkan. Also found `VulkanGraphicsBackend::FindDepthFormat()` prefers a stencil-less format (`VK_FORMAT_D32_SFLOAT`) before stencil-capable ones — a compounding, additional root cause. Expect Tasks 316–319 (stencil masks/ops) to hit this same root cause too. |
+| Fixed (Task 315), severe | No EasyGL window in this project ever requested `SDL_GL_STENCIL_SIZE`, so no window ever had a physical stencil buffer — the GL stencil test trivially always-passed regardless of `DepthStencilState.StencilEnable`, even though the state-application code (`glStencilFunc`/`glStencilOp`/`glEnable(GL_STENCIL_TEST)`) was already correct (this is why Task 870's write-up called EasyGL "fully correct" — true of the code, not of the runtime behavior until this fix). Fixed with a one-line `SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8)` addition to `EasyGLGraphicsBackend`'s context creation. Confirmed via `EasyGL_DepthStencilState_StencilEnable`; full ctest reconfirmed zero regressions. Whether Bgfx's window has a real stencil buffer is unverified — worth checking before assuming its stencil support is any better than EasyGL's was. |
+| Confirmed bug, universal, not fixed (Task 315 finding, tracked as Task 871) | `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` and the `stencil` clear value entirely on every backend — confirmed via reading the full function body (`(void)stencil;`, no `hasClearFlag(options, ClearOptions::Stencil)` check anywhere). FNA's real `Clear(Color)` clears Target+DepthBuffer+Stencil together. Confirmed on EasyGL specifically: none of `Clear`/`ClearColorAndDepth`/`ClearDepth` ever pass a Stencil GL clear flag. On Vulkan the effect is compounded by a separate quirk (`stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE` on every render pass, so stencil content is undefined regardless of `Clear()`). Found while needing a reliable stencil baseline for Task 315's pixel test — worked around by explicitly "stamping" a known value via a real draw instead of relying on `Clear()`. Not fixed — needs its own dedicated task touching all 3 backends' `Clear`-family methods. |
 | Incomplete | `SpriteBatch`'s `SamplerState` is a no-op on Vulkan and Bgfx (EasyGL only) — a separate code path from Task 293's fix; `SpriteBatch` doesn't go through `GraphicsDevice.DrawUserPrimitives`. |
 | Incomplete | EasyGL/Bgfx stride-keyed vertex layout only supports strides 16/20/24/32/52. |
 | Incomplete | Vulkan: `Tangent`/`Binormal` `VertexElementUsage` values have no mapping. |
@@ -392,20 +409,23 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 315 — verify stencil enable/disable behavior (EasyGL/Vulkan/Bgfx)**
-   - Goal: pixel test proving `DepthStencilState.StencilEnable` actually gates the stencil test —
-     e.g. write a stencil value with one draw, then draw a second quad whose colour write is gated
-     by a stencil compare (`StencilFunction=Equal`, `ReferenceStencil` matching/not-matching the
-     written value) with `StencilEnable=true` vs `StencilEnable=false` as the variable under test.
-   - **This WILL hit Task 870 on Vulkan** — confirmed via code reading (not yet via a failing
-     test) that `VulkanGraphicsBackend::ApplyDepthStencilState` never sets
-     `VkPipelineDepthStencilStateCreateInfo::stencilTestEnable`/`front`/`back` at all, so stencil
-     testing is completely non-functional there regardless of `StencilEnable`. Expect the Vulkan
-     variant to fail outright (not just some checks) — do not re-diagnose this as a new bug, just
-     confirm it and keep the failing Vulkan variant registered as a documented known failure.
-   - Files: new `examples/easygl_depthstencilstate_stencil_enable_test.cpp`, `CMakeLists.txt`.
-   - Verification: register on both EasyGL and Vulkan; keep identity-matrix Z within `[0,1]` per
-     Task 313's documented Vulkan clip-space gotcha.
+1. **`GRAPHICS_TASKS.md` Task 316 — verify stencil read/write masks**
+   - Goal: pixel test proving `DepthStencilState.StencilMask` (read mask, applied to both the
+     buffer value and `ReferenceStencil` before comparing) and `StencilWriteMask` (masks which
+     bits of a stencil write actually take effect) behave correctly — e.g. stamp a multi-bit
+     stencil value, then use a narrow `StencilMask` that would change the compare outcome if
+     ignored, and a narrow `StencilWriteMask` that should leave some bits of a `Replace` write
+     untouched if honored.
+   - **This WILL hit Task 870 on Vulkan** — `ApplyDepthStencilState` discards `stencilMask`/
+     `stencilWriteMask` entirely (unused parameters), so expect it to fail outright, same pattern
+     as Tasks 314/315. Confirm/reconfirm, don't try to fix it here.
+   - Files: new `examples/easygl_depthstencilstate_stencil_mask_test.cpp` or extend the Task 315
+     test file, `CMakeLists.txt`.
+   - Verification: register on both EasyGL and Vulkan. Remember: `PresentationParameters
+     .DepthStencilFormat` must be `Depth24Stencil8` (via `GraphicsDeviceManager`) for a real
+     stencil buffer to exist at all — see Task 315's test file header. Also remember
+     `GraphicsDevice::Clear` cannot be used to reset stencil (Task 871) — stamp a known baseline
+     via a real draw instead, matching Task 315's pattern.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -469,16 +489,15 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-36 are fully complete. Phase 37 (DepthStencilState conformance,
-GRAPHICS_TASKS.md Tasks 311-319) is in progress: Tasks 311-314 done, Task 315 is next. EasyGL is
-fully green: 2074/2076 (2 pre-existing failures). Vulkan: 2006/2014 - only Vulkan_DepthBias
+GRAPHICS_TASKS.md Tasks 311-319) is in progress: Tasks 311-315 done, Task 316 is next. EasyGL is
+fully green: 2075/2077 (2 pre-existing failures). Vulkan: 2006/2015 - only Vulkan_DepthBias
 (pre-existing, usual single sub-case), Vulkan_FillMode_WireFrame (pre-existing order-dependent
-flake, recurred this run), and 6 confirmed-real, documented known failures
+flake), and 7 confirmed-real, documented known failures
 (Vulkan_BlendState_AlphaBlend/Additive/SeparateFunctions/SeparateFactors/BlendFactor - Task 868 -
-plus Vulkan_DepthStencilState_CompareFunction - Task 870). Bgfx: 1985/1985 (100%) as of Task 309's
-fix, not rebuilt for Tasks 311-314 (all backend-agnostic changes, already covered by EasyGL/Vulkan
-runs). Caution: don't run EasyGL's and Vulkan's full ctest suites concurrently - an earlier
-session saw transient false failures from GPU/driver contention that vanished on a sequential
-rerun (see NEXT.md §2).
+plus Vulkan_DepthStencilState_CompareFunction/StencilEnable - Task 870). Bgfx: 1985/1985 (100%) as
+of Task 309's fix, not rebuilt for Tasks 311-315 (none touch Bgfx). Caution: don't run EasyGL's and
+Vulkan's full ctest suites concurrently - an earlier session saw transient false failures from
+GPU/driver contention that vanished on a sequential rerun (see NEXT.md §2).
 
 Phase 35's headline result (full writeup: docs/sampler-state-support.md): Task 293 found and fixed
 a severe, project-wide bug across all 3 backends - GraphicsDevice.SamplerStates was being silently
@@ -532,14 +551,33 @@ passes on Vulkan - exactly the pattern predicted by "every comparison actually e
 strict-Less regardless of what's requested." Kept Vulkan_DepthStencilState_CompareFunction
 registered as a documented known failure, same as Task 868's Vulkan_BlendState_* tests.
 
-Next task: GRAPHICS_TASKS.md Task 315 - verify stencil enable/disable behavior (EasyGL/Vulkan/Bgfx).
-Build a pixel test proving DepthStencilState.StencilEnable actually gates the stencil test (e.g.
-write a stencil value with one draw, then a second quad's colour write gated by a stencil compare,
-with StencilEnable=true vs false as the variable under test). This WILL hit Task 870 on Vulkan -
-already confirmed via code reading (not yet a failing test) that
-VulkanGraphicsBackend::ApplyDepthStencilState never sets stencilTestEnable/front/back at all, so
-expect the Vulkan variant to fail outright. Confirm it and keep the failing Vulkan variant
-registered as a documented known failure - don't try to fix Task 870 here. Keep identity-matrix Z
-within [0,1] per Task 313's documented Vulkan clip-space gotcha. Register on both EasyGL and Vulkan.
+Task 315 (verify stencil enable/disable) found and FIXED a severe, previously-undiscovered bug:
+no EasyGL window in this project ever requested SDL_GL_STENCIL_SIZE, so no window ever had a
+physical stencil buffer at all - the GL stencil test trivially always-passed regardless of
+StencilEnable, even though the state-application code was already correct. Fixed with a one-line
+SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8) addition to EasyGLGraphicsBackend's context creation;
+full ctest reconfirmed zero regressions on both backends. After the fix, the new two-column
+differential pixel test (examples/easygl_depthstencilstate_stencil_enable_test.cpp) passes cleanly
+on EasyGL. IMPORTANT: this test needs PresentationParameters.DepthStencilFormat =
+DepthFormat::Depth24Stencil8 (set via GraphicsDeviceManager in the constructor) since the default
+is DepthFormat::Depth24 (no stencil) - any future stencil pixel test needs the same setup, see the
+test file header. On Vulkan, Check A fails outright - a full, direct reconfirmation of Task 870 for
+stencil specifically - and a compounding, Vulkan-only cause was found:
+VulkanGraphicsBackend::FindDepthFormat() checks VK_FORMAT_D32_SFLOAT (stencil-less) BEFORE the
+stencil-capable formats, so even fixing ApplyDepthStencilState wouldn't be enough on its own.
+New Task 871, NOT fixed: GraphicsDevice::Clear ignores ClearOptions::Stencil (and the stencil clear
+value) on every backend - found because Task 315's test needed a reliable stencil baseline and had
+to work around this by stamping a known value via a real draw instead of using Clear().
+
+Next task: GRAPHICS_TASKS.md Task 316 - verify stencil read/write masks. Build a pixel test proving
+StencilMask (read mask, applied before comparing) and StencilWriteMask (masks which bits of a
+stencil write take effect) work correctly - e.g. stamp a multi-bit stencil value, use a narrow
+StencilMask that would change the compare outcome if ignored, and a narrow StencilWriteMask that
+should leave some bits of a Replace write untouched if honored. This WILL hit Task 870 on Vulkan
+(stencilMask/stencilWriteMask are both discarded, unused parameters in ApplyDepthStencilState) -
+confirm/reconfirm, don't try to fix it here. Remember: DepthStencilFormat must be Depth24Stencil8
+(GraphicsDeviceManager) for a real stencil buffer to exist, and GraphicsDevice::Clear cannot reset
+stencil (Task 871) - stamp a known baseline via a real draw instead, matching Task 315's pattern.
+Register on both EasyGL and Vulkan.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
