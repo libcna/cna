@@ -1148,7 +1148,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   ve všech testovacích souborech sdílejících `SoundEffectInstanceTestAccess.hpp`. Čisté pod
   ASan+LeakSanitizer.
 
-- [ ] **CP-18 — Chybějící audio hardware hlásí `std::runtime_error`, nikdy `NoAudioHardwareException`.**
+- [x] **CP-18 — Chybějící audio hardware hlásí `std::runtime_error`, nikdy `NoAudioHardwareException`.**
   `AudioMixer::GetMixer()` (viz i IN-11) throwuje `std::runtime_error`, který dědí z `std::exception`,
   ne z `System::Exception` — kód dělající `catch (const System::Exception&)` ho vůbec nezachytí.
   `NoAudioHardwareException` existuje a je otestovaná izolovaně, ale nikde se skutečně nethrowuje.
@@ -1158,6 +1158,11 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* `GetMixer()` (nebo volající) throwuje `Microsoft::Xna::Framework::Audio::
   NoAudioHardwareException` místo `std::runtime_error`; test simulující selhání vytvoření mixeru
   ověří správný typ výjimky. (Provázáno s XA-9 — řešit spolu.)
+  *Pozn.:* konzultováno s uživatelem spolu s XA-9 (stejná otázka, stejná odpověď) — zvolena
+  zdokumentovaná odchylka. Viz XA-9's `*Pozn.:*` pro plné odůvodnění (přepis `SharedEngine()` ve
+  4 test souborech by byl nutný i pro tuhle část, protože `AudioEngine::NoAudioHardwareException`
+  by teoreticky mělo jít throwovat i z `AudioEngine`'s vlastního konstruktoru, ne jen z
+  `AudioMixer::GetMixer()`). Zdokumentováno v CHECKLIST.md.
 
 - [x] **CP-19 — Pan u stereo zdroje ztlumí celý opačný kanál místo crossfeed blendu.**
   `ApplyTrackProperties`'s pan vzorec (`left=(pan<0)?1:(1-pan)`) u `Pan=1.0` (tvrdě doprava) dá
@@ -1286,7 +1291,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `Play()`ovaný, se do registru vůbec nedostane (stejné omezení jako existující
   `RegisterCue`/`UnregisterCue` mechanismus) — mimo rozsah tohoto nálezu.
 
-- [ ] **XA-9 — `AudioEngine`/`SoundBank`/`WaveBank` konstruktory tiše polykají chybějící soubor i
+- [x] **XA-9 — `AudioEngine`/`SoundBank`/`WaveBank` konstruktory tiše polykají chybějící soubor i
   parse chybu místo throw; `NoAudioHardwareException` se nikdy nethrowuje z `AudioEngine`.**
   Všechny tři konstruktory: nejde otevřít soubor → `cerr` + return; parse throwne → `cerr` +
   polknuto. Objekt zůstane v tichém "stub" stavu (bez kategorií/cues/waves); pozdější lookupy
@@ -1303,6 +1308,13 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   vědomě rozhodnutá odchylka (upozornění: existující testovací fixtury, např.
   `SoundBankTests.cpp`'s `SharedEngine()`, na tomto stub chování aktivně stavějí — varianta (a)
   by je musela upravit).
+  *Pozn.:* konzultováno s uživatelem — zvolena varianta (b), zdokumentovaná odchylka. `SharedEngine()`
+  je nezávisle definovaná ve 4 test souborech (`CueTests.cpp`, `WaveBankTests.cpp`,
+  `SoundBankTests.cpp`, `AudioCategoryTests.cpp`) a záměrně ukazuje na neexistující `.xgs` cestu;
+  varianta (a) by ji musela ve všech čtyřech přepsat na reálnou fixturu a znovu ověřit ~80+ testů,
+  které na ní stojí — široký, průřezový zásah do sdíleného základu kvůli okrajovému případu
+  (chybějící/poškozený content soubor, chybějící audio hardware), ne uživatelsky viditelné chybě
+  přehrávání. Zdokumentováno v CHECKLIST.md (spolu s CP-18).
 
 - [x] **XA-10 — `AudioCategory.hpp`'s Doxygen odporuje skutečnému (správnému) chování `SetVolume`.**
   Doc tvrdí, že `SetVolume` neovlivní už hrající cues — od T-4D opravy to už neplatí (`SetVolume`
