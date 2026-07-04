@@ -12,19 +12,24 @@ minimal API-surface changes.
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit tests and
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
-- **Current development phase:** Phases 1–36 are now complete. **Phase 36 (BlendState
-  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) closed this session** — all 10 tasks done (see
-  §8 for Phase 37's opening task). **Task 304 found a MASSIVE bug: Vulkan's blend state support is
+- **Current development phase:** Phases 1–36 are now complete. **Phase 37 (DepthStencilState
+  conformance, `GRAPHICS_TASKS.md` Tasks 311–319) is in progress** — Tasks 311–312 done, Task 313
+  is next (see §8). Task 311 fixed `DepthStencilState`'s portion of the known Task 866 preset-`Name`
+  gap (mirroring Tasks 291/301). Task 312 found and fixed a THIRD bug of the same shape as Task 302:
+  `GraphicsDevice`'s `depthStencilState_`/`rasterizerState_` were never actually copied from
+  `DepthStencilState::Default`/`RasterizerState::CullCounterClockwise` — fixed via the constructor's
+  member-init list. **Phase 36 (BlendState conformance, Tasks 301–310) closed in an earlier
+  session** — all 10 tasks done. **Task 304 found a MASSIVE bug: Vulkan's blend state support is
   almost entirely fake (Task 868, not yet fixed)** — reconfirmed a fifth time by Task 309, see
   §3/§5. Task 309 also found and fixed a real, universal `BlendFactor`-propagation bug
   (`GraphicsDevice.setBlendStateProperty` never forwarded a `BlendState`'s own `BlendFactor`) plus
   a Bgfx-specific gap where the computed blend-constant colour was never passed to
-  `bgfx::setState()`. Task 310 (closing the phase) confirmed FNA has no state-object
-  freeze/immutability enforcement at all, but found a separate, real architectural divergence:
-  CNA's `GraphicsDevice` stores `BlendState`/`DepthStencilState`/`RasterizerState` by value, unlike
-  FNA's reference-type aliasing — tracked as Task 869, not fixed (see §3/§5). Phase 35 found and
-  fixed a severe, project-wide bug (Task 293) and found-but-tracked a second one (Task 867, not yet
-  fixed) — see §3/§5, and the new `docs/sampler-state-support.md` for the full Phase 35 writeup.
+  `bgfx::setState()`. Task 310 confirmed FNA has no state-object freeze/immutability enforcement at
+  all, but found a separate, real architectural divergence: CNA's `GraphicsDevice` stores
+  `BlendState`/`DepthStencilState`/`RasterizerState` by value, unlike FNA's reference-type aliasing
+  — tracked as Task 869, not fixed (see §3/§5). Phase 35 found and fixed a severe, project-wide bug
+  (Task 293) and found-but-tracked a second one (Task 867, not yet fixed) — see §3/§5, and the new
+  `docs/sampler-state-support.md` for the full Phase 35 writeup.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -48,41 +53,34 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2064/2066 (serial `-j1`) pass. 2 pre-existing,
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2072/2074 (serial `-j1`) pass. 2 pre-existing,
   unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. New
-  `EasyGL_BlendState_BlendFactor` (Task 309) passes exactly as predicted; new
-  `GraphicsDeviceDefaultStateTest.MutatingBlendStateAfterAssignmentDoesNotAffectDevice` (Task 310)
-  also passes, pinning CNA's value-copy `BlendState` semantics. Some tests have each been observed
-  failing once under parallel `-j` execution but passed cleanly both in isolation and on a repeat
-  serial full run — treated as parallel-execution flakiness, not a regression (none confirmed as a
-  stable failure): `EasyGL_SkinnedBones`, `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1998/2004 (serial `-j1`) pass. Only
+  `DepthStencilStateTest.*Name*` (Task 311) and
+  `GraphicsDeviceDefaultStateTest.DefaultDepthStencilStateMatches*`/`DefaultRasterizerStateMatches*`
+  (Task 312) all pass. Some tests have each been observed failing once under parallel `-j`
+  execution but passed cleanly both in isolation and on a repeat serial full run — treated as
+  parallel-execution flakiness, not a regression (none confirmed as a stable failure):
+  `EasyGL_SkinnedBones`, `EasyGL_TransformMatrix_Translation`.
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 2006/2012 (serial `-j1`) pass. Only
   `Vulkan_DepthBias` (pre-existing, usual single sub-case) and 5 confirmed-real, documented known
   failures — `Vulkan_BlendState_AlphaBlend`/`Additive`/`SeparateFunctions`/`SeparateFactors`/
   `BlendFactor` (all Task 304/306/307/308/309/868 findings, kept registered rather than hidden) —
-  failed this run; `Vulkan_FillMode_WireFrame` did NOT recur this run (its known order-dependent
-  flakiness — see §5 — did briefly resurface earlier in the session, see the concurrency caution
-  below). **Caution for future sessions:** running the EasyGL and Vulkan full `ctest` suites
-  concurrently in this session produced 2 extra transient failures (`Vulkan_DepthBias` failing all
-  4 sub-cases instead of its usual 1; `Vulkan_FillMode_WireFrame`'s "Solid" check) that did NOT
-  reproduce when the Vulkan suite was rerun alone immediately after — apparent GPU/driver
-  contention from concurrent heavy GPU load, not a real regression. Prefer running the two
-  backends' full suites sequentially, not concurrently, to avoid this false-failure noise.
-  `../sharp-runtime` (sibling repo) had a pre-existing, uncommitted local fix for a real
-  `BitConverter.hpp` ambiguity bug (`System::Single`, the static-utility class from `Half.hpp`,
-  collided with `BitConverter`'s own `using SharpRuntime::Single` for the float alias — any TU
-  including both failed to compile). That fix was verified and committed in an earlier session
-  (`sharp-runtime` commit `ec97562`), unblocking the Vulkan build. `Vulkan_DepthBias`'s
-  `DepthBias=-1e6` sub-case fails consistently (pre-existing, documented).
-  `Vulkan_FillMode_WireFrame` remains the same pre-existing, order/timing-sensitive issue tracked
-  since Task 279 — flaky (not a stable failure), unrelated to any change made this session (Task
-  310's only production-code-adjacent change was a new unit test; no backend code touched).
-- **Bgfx (`cmake-build-bgfx`), full `ctest`:** **1985/1985 (100%)**. Rebuilt and reverified after
-  Task 309's fix (`blendFactorPacked_` now passed to all 5 `bgfx::setState()` call sites). No
-  regressions. Not re-run after Task 310 (added no Bgfx-specific code, only a backend-agnostic unit
-  test already covered by the EasyGL/Vulkan runs above). Bgfx has no GPU pixel-readback API in this
-  project, so its integration coverage remains smoke-test-only by design — the `BlendFactor` fix
-  itself isn't pixel-verified on Bgfx, only confirmed not to crash/regress.
+  failed this run. `Vulkan_FillMode_WireFrame` did not recur this run; a lone recurrence of
+  `Vulkan_RenderTargetUsage`'s pre-existing parallel/order-dependent flakiness (see §5) appeared in
+  Task 311's full-suite run but was reconfirmed unrelated via 3/3 passes in isolation immediately
+  after. **Caution for future sessions:** running the EasyGL and Vulkan full `ctest` suites
+  concurrently produced transient false failures in an earlier session (see the git history in §3)
+  — prefer running the two backends' full suites sequentially, not concurrently.
+  `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails consistently (pre-existing, documented).
+  `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` remain the same pre-existing,
+  order/timing-sensitive issues tracked since Task 279 — flaky (not stable failures), unrelated to
+  any change made this session (Tasks 311/312 only touch `DepthStencilState`/`GraphicsDevice`'s
+  constructor, nothing in the render-target or rasterization pipeline).
+- **Bgfx (`cmake-build-bgfx`), full `ctest`:** **1985/1985 (100%)** as of Task 309's fix. Not
+  rebuilt/rerun for Tasks 311/312 (both changes are backend-agnostic — `DepthStencilState`'s value
+  layout and `GraphicsDevice`'s constructor member-init list — already covered by the EasyGL/Vulkan
+  runs above). Bgfx has no GPU pixel-readback API in this project, so its integration coverage
+  remains smoke-test-only by design.
 
 ### What currently works
 - Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (including
@@ -188,7 +186,9 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 310 | `GraphicsDeviceDefaultStateTests.cpp` (extended), `GRAPHICS_TASKS.md` (new Task 869) | **Closes Phase 36.** Confirmed via FNA source that `BlendState`/`DepthStencilState`/`RasterizerState`/`SamplerState` have NO freeze/immutability enforcement at all — no bug, CNA matches (also none). Found a real, separate architectural divergence while verifying: FNA's `GraphicsDevice` state setters store a *reference* to the assigned object (mutating it afterward changes what's applied); CNA stores all of them *by value* (a deliberate, consistent, project-wide pattern, not `BlendState`-specific), so post-assignment mutation is silently a no-op in CNA. New test pins this behavior. Tracked as Task 869, not fixed — needs a dedicated architecture decision if ever pursued. |
+| (uncommitted) Task 312 | `GraphicsDevice.cpp`, `GraphicsDeviceDefaultStateTests.cpp` (extended) | **Found and fixed a THIRD bug of the same shape as Task 302, flagged by Task 311.** `GraphicsDevice`'s `depthStencilState_`/`rasterizerState_` were plain default-constructed, never copied from `DepthStencilState::Default`/`RasterizerState::CullCounterClockwise` (FNA's actual constructor behavior). Fixed via the constructor's member-init list, ordered to avoid `-Wreorder`. 3 new tests. |
+| (uncommitted) Task 311 | `DepthStencilState.hpp/.cpp`, `DepthStencilStateTests.cpp`, `GRAPHICS_TASKS.md` (Task 866 updated) | **Opens Phase 37.** Audited `DepthStencilState` against FNA — full 16-property surface, all 3 presets, default values all already matched exactly. Fixed the known Task 866 gap: presets didn't set `Name` (e.g. `"DepthStencilState.Default"`). Mirrors Tasks 291/301 exactly. Closes `DepthStencilState`'s portion of Task 866; `RasterizerState` remains open. 5 new tests. Flagged (not fixed here) the Task-302-shaped `GraphicsDevice` default-state bug fixed immediately after by Task 312. |
+| `52326b3` Task 310 | `GraphicsDeviceDefaultStateTests.cpp` (extended), `GRAPHICS_TASKS.md` (new Task 869) | **Closes Phase 36.** Confirmed via FNA source that `BlendState`/`DepthStencilState`/`RasterizerState`/`SamplerState` have NO freeze/immutability enforcement at all — no bug, CNA matches (also none). Found a real, separate architectural divergence while verifying: FNA's `GraphicsDevice` state setters store a *reference* to the assigned object (mutating it afterward changes what's applied); CNA stores all of them *by value* (a deliberate, consistent, project-wide pattern, not `BlendState`-specific), so post-assignment mutation is silently a no-op in CNA. New test pins this behavior. Tracked as Task 869, not fixed — needs a dedicated architecture decision if ever pursued. |
 | `239aba5` Task 309 | `GraphicsDevice.cpp`, `BgfxGraphicsBackend.cpp`, `examples/easygl_blendstate_blendfactor_test.cpp` (new), `CMakeLists.txt` | **Found and fixed a real, universal bug**: `GraphicsDevice::setBlendStateProperty` never propagated a `BlendState`'s own `BlendFactor` to the device (FNA applies it atomically as part of the whole native blend-state struct); fixed by calling `setBlendFactorProperty` from within `setBlendStateProperty`. New test proves it on EasyGL (`200,100,0` exactly as predicted). **Fails on Vulkan — a fifth confirmation of Task 868**, not a new bug (hardcoded equation never selects `VK_BLEND_FACTOR_CONSTANT_COLOR`). Also fixed a separate Bgfx-specific gap found while investigating: `blendFactorPacked_` was computed but never passed to any of Bgfx's 5 `bgfx::setState()` call sites — all 5 fixed (smoke-tested only, no Bgfx readback API). `MultiSampleMask` confirmed a complete, universal no-op across all 3 backends (documented, not fixed — no consumer, would need new backend-interface surface). |
 | (uncommitted) Task 308 | `examples/easygl_blendstate_separate_factors_test.cpp` (new), `CMakeLists.txt` | Mirrors Task 307 but for blend *factors* (`ColorSourceBlend`/`ColorDestinationBlend` vs `Alpha*Blend`) instead of functions. Two checks with alpha factors swapped, expecting opposite colour results (source-only vs destination-only). Both pass on EasyGL exactly as predicted. **On Vulkan, Check A coincidentally passes and Check B cleanly fails — a fourth confirmation of Task 868**, same asymmetric-pass pattern as Task 305. |
 | (uncommitted) Task 307 | `examples/easygl_blendstate_separate_functions_test.cpp` (new), `CMakeLists.txt` | New test building 2 custom `BlendState`s to verify `ColorBlendFunction`/`AlphaBlendFunction` are independent (none of the 4 presets vary `BlendFunction`). Both checks pass exactly as predicted on EasyGL. **Both fail on Vulkan — a third, clean confirmation of Task 868**: both readbacks show the unmodified source colour, since Task 868's hardcoded destination factor evaluates to exactly 0 at alpha=255, making the requested `BlendFunction` moot regardless of which one is set. |
@@ -271,10 +271,12 @@ on returned pixel values).
 | Fixed (Task 309) | `GraphicsDevice::setBlendStateProperty` never propagated a `BlendState`'s own `BlendFactor` to the device — fixed by calling `setBlendFactorProperty` internally. Also fixed a separate Bgfx-specific gap: `blendFactorPacked_` was computed but never passed to any of Bgfx's 5 `bgfx::setState()` call sites. Confirmed via `*_BlendState_BlendFactor` (EasyGL passes; Vulkan fails, but only as a further Task 868 confirmation, not a new bug). |
 | By design, documented (Task 309) | `GraphicsDevice.MultiSampleMask` is a complete no-op on all 3 backends — zero references to any sample-mask concept anywhere in backend code. Not fixed: no consumer exists yet, and supporting it would need new backend-interface surface on all 3 backends for a niche, rarely-used DX9-era feature. |
 | Confirmed, architectural, documented (Task 310) | `GraphicsDevice` stores `BlendState`/`DepthStencilState`/`RasterizerState` **by value**, unlike FNA's reference-type aliasing (`nextBlend = value;` stores the same object) — mutating a custom state object *after* assigning it to `GraphicsDevice` is silently a no-op in CNA but would take effect in real XNA/FNA. Deliberate, consistent, project-wide pattern (not `BlendState`-specific); no game/example code in this repo relies on the FNA behavior. Tracked as Task 869, not fixed — would need every affected state property to become a reference/pointer type, a real architecture decision. Confirmed by contrast: FNA has NO freeze/immutability enforcement on these classes either, so there's no "throws after first use" behavior missing from CNA — only this value-vs-reference divergence. |
+| Fixed (Task 311) | `DepthStencilState`'s 3 static presets (`Default`/`DepthRead`/`None`) didn't set `Name`, matching the same gap already fixed in `SamplerState` (Task 291)/`BlendState` (Task 301). Fixed by threading a `name` param through the private preset constructor. Closes `DepthStencilState`'s portion of Task 866; `RasterizerState`'s portion remains open (Phase 38). |
+| Fixed (Task 312), same shape as Task 302 | `GraphicsDevice`'s `depthStencilState_`/`rasterizerState_` were plain default-constructed, never copied from `DepthStencilState::Default`/`RasterizerState::CullCounterClockwise` (FNA's actual constructor behavior). Values coincided for `depthStencilState_` (invisible until Task 311 gave `Default` a `Name`). Fixed via the constructor's member-init list. |
 | Incomplete | `SpriteBatch`'s `SamplerState` is a no-op on Vulkan and Bgfx (EasyGL only) — a separate code path from Task 293's fix; `SpriteBatch` doesn't go through `GraphicsDevice.DrawUserPrimitives`. |
 | Incomplete | EasyGL/Bgfx stride-keyed vertex layout only supports strides 16/20/24/32/52. |
 | Incomplete | Vulkan: `Tangent`/`Binormal` `VertexElementUsage` values have no mapping. |
-| Incomplete, tracked | `BlendState`/`DepthStencilState`/`RasterizerState` static presets don't set `Name` (FNA does, e.g. `"BlendState.Additive"`) — same gap `SamplerState` had before Task 291 fixed it there. Tracked as Task 866, deliberately not fixed under Task 291 (out of its `SamplerState`-only scope). |
+| Incomplete, tracked | `RasterizerState` static presets don't set `Name` (FNA does, e.g. `"RasterizerState.CullCounterClockwise"`) — same gap `SamplerState`/`BlendState`/`DepthStencilState` had before Tasks 291/301/311 fixed it in each. Tracked as Task 866, now only `RasterizerState`'s portion remains — its own later audit task in Phase 38's list. |
 | Incomplete | `SurfaceFormat` support is Color-only everywhere for actual GPU texture formats (only `Color` passes `Texture::ValidateFormat`); Phase 34 (Tasks 281–290) is complete and covers CPU-side size/packing math + throw-clearly behavior for all 27 formats, not real non-Color GPU mapping. |
 | Incomplete | SDL_Renderer: no 3D support at all (`CreateVertexBuffer` always throws), by design. |
 | Incomplete | Bgfx: no GPU pixel-readback API, so its tests are smoke-only, by design. |
@@ -372,16 +374,18 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 311 — audit `DepthStencilState` API and static presets against FNA**
-   - Goal: opens Phase 37. Same shape as Tasks 291 (`SamplerState`)/301 (`BlendState`): audit the
-     full property surface, all 3 static presets (`Default`/`DepthRead`/`None`), and default
-     constructor values against FNA's `DepthStencilState.cs` line-by-line. Given Task 866's
-     tracked finding, expect the same `Name`-not-set-on-presets gap found in `SamplerState`/
-     `BlendState` — fix it here the same way (thread a `name` param through the private preset
-     constructor) if confirmed, closing `DepthStencilState`'s portion of Task 866.
-   - Files: `DepthStencilState.hpp/.cpp`, `DepthStencilStateTests.cpp`.
-   - Verification: new/extended unit tests for `Name`/`ToString()` per preset, mirroring
-     `BlendStateTests.cpp`'s Task 301 additions exactly.
+1. **`GRAPHICS_TASKS.md` Task 313 — pixel test: depth write enabled vs disabled**
+   - Goal: new pixel test using two overlapping quads (near quad drawn second) to prove
+     `DepthStencilState.DepthBufferWriteEnable` actually gates whether the near quad's depth value
+     is written — e.g. draw far quad, then near quad with `DepthBufferWriteEnable=false`, then a
+     second far-distance quad at the same depth as the first: if writes were truly disabled, the
+     third quad should still pass the depth test and render on top, since the buffer never
+     recorded the near quad's depth. Mirrors the two-overlapping-quads pattern already used
+     elsewhere in this codebase for depth tests (check existing `easygl_*depth*test.cpp` files
+     first for a reusable pattern before writing from scratch).
+   - Files: new `examples/easygl_depthstencilstate_write_enable_test.cpp`, `CMakeLists.txt`.
+   - Verification: register on both EasyGL and Vulkan (backend-agnostic `Game`-based test,
+     reusing the same source per Tasks 303+'s established pattern).
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -444,15 +448,16 @@ Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
-Current status: Phases 1-36 are fully complete. Phase 36 (BlendState conformance,
-GRAPHICS_TASKS.md Tasks 301-310) closed this session - all 10 tasks done. EasyGL is fully green:
-2064/2066 (2 pre-existing failures). Vulkan: 1998/2004 - only Vulkan_DepthBias (pre-existing, usual
-single sub-case) and 5 confirmed-real, documented known failures (Vulkan_BlendState_AlphaBlend/
-Additive/SeparateFunctions/SeparateFactors/BlendFactor - all Task 868, kept registered rather than
-hidden); Vulkan_FillMode_WireFrame (pre-existing order-dependent flake) did not recur on the final
-run. Bgfx: 1985/1985 (100%), rebuilt and reverified after Task 309's fix. Caution: don't run
-EasyGL's and Vulkan's full ctest suites concurrently - this session saw 2 transient false failures
-from GPU/driver contention that vanished on a sequential rerun (see NEXT.md §2).
+Current status: Phases 1-36 are fully complete. Phase 37 (DepthStencilState conformance,
+GRAPHICS_TASKS.md Tasks 311-319) is in progress: Tasks 311-312 done, Task 313 is next. EasyGL is
+fully green: 2072/2074 (2 pre-existing failures). Vulkan: 2006/2012 - only Vulkan_DepthBias
+(pre-existing, usual single sub-case) and 5 confirmed-real, documented known failures
+(Vulkan_BlendState_AlphaBlend/Additive/SeparateFunctions/SeparateFactors/BlendFactor - all Task
+868, kept registered rather than hidden). Bgfx: 1985/1985 (100%) as of Task 309's fix, not
+rebuilt for Tasks 311/312 (backend-agnostic changes, already covered by EasyGL/Vulkan runs).
+Caution: don't run EasyGL's and Vulkan's full ctest suites concurrently - an earlier session saw
+transient false failures from GPU/driver contention that vanished on a sequential rerun (see
+NEXT.md §2).
 
 Phase 35's headline result (full writeup: docs/sampler-state-support.md): Task 293 found and fixed
 a severe, project-wide bug across all 3 backends - GraphicsDevice.SamplerStates was being silently
@@ -460,46 +465,35 @@ ignored by essentially all 3D stock-effect texture draws. Task 298/299 found a S
 tracked as Task 867, not yet fixed: Texture2D::SetData(level>0,...) is a total silent no-op on
 Vulkan/Bgfx, plus related Vulkan mip-allocation and EasyGL mipmap-incompleteness findings.
 
-Phase 36 summary: Task 301 audited BlendState against FNA (all core values already correct; fixed
-the known Task 866 Name gap). Task 302 found and fixed a THIRD bug of the same shape as Task 292:
-GraphicsDevice.blendState_ was never actually copied from BlendState::Opaque - fixed via the
-constructor's member-init list. Task 303 closed a real coverage gap (no bug).
+Phase 36 (BlendState conformance, Tasks 301-310) is fully closed. Headline results: Task 304 found
+something MASSIVE - Vulkan's blend state support is almost entirely fake
+(VulkanGraphicsBackend::ApplyBlendState ignores every specific blend-factor/function parameter,
+hardcoding ONE equation for anything except exactly Opaque) - tracked as Task 868, confirmed FIVE
+times across Tasks 304/306/307/308/309, NOT fixed (large multi-pipeline-site change needing its
+own dedicated task). Task 309 found and fixed a real, universal bug:
+GraphicsDevice::setBlendStateProperty never propagated a BlendState's own BlendFactor to the
+device - fixed, plus a Bgfx-specific blendFactorPacked_ propagation gap also fixed.
+GraphicsDevice.MultiSampleMask confirmed a complete, universal no-op on all 3 backends - documented,
+not fixed. Task 310 (closing the phase) confirmed FNA has NO state-object freeze/immutability
+enforcement at all (no bug), but found a real architectural divergence: CNA's GraphicsDevice stores
+BlendState/DepthStencilState/RasterizerState BY VALUE, unlike FNA's reference-type aliasing -
+tracked as Task 869, not fixed (deliberate, project-wide pattern, needs an architecture decision).
 
-Task 304 found something MASSIVE: Vulkan's blend state support is almost entirely fake.
-VulkanGraphicsBackend::ApplyBlendState ignores every specific blend-factor/function parameter,
-only checking "is this exactly Opaque's values?" - ANY other BlendState gets ONE hardcoded blend
-equation baked into every pipeline, regardless of what was actually requested. Tracked as Task 868,
-NOT fixed - large multi-pipeline-site change needing its own dedicated task. Confirmed on real
-Vulkan hardware (AMD RADV) FIVE times across Tasks 304/306/307/308/309: AlphaBlend (R=64 not 128,
-double-multiply signature), Additive (destination dropped entirely), SeparateFunctions (both
-checks collapse to raw source colour), SeparateFactors (one of two checks fails, asymmetric
-pattern), BlendFactor (Task 309, never selects VK_BLEND_FACTOR_CONSTANT_COLOR). Task 305's
-NonPremultiplied test and one of Task 308's two checks are the exceptions - pass on Vulkan purely
-by coincidence. Bgfx has a narrower, related gap (colour factors correctly mapped; alpha factors
-and blend functions still ignored - the BlendFactor-propagation piece was fixed by Task 309). EasyGL
-confirmed fully, correctly implemented by contrast - passes every one of Tasks 304-310 exactly as
-predicted.
+Phase 37 so far: Task 311 audited DepthStencilState against FNA (all 16 properties, all 3 presets,
+and default constructor values already matched exactly - no bug). Fixed the known Task 866 Name
+gap (mirrors Tasks 291/301 exactly) - closes DepthStencilState's portion of Task 866;
+RasterizerState's portion remains open for its own later Phase 38 audit task. Task 312 found and
+fixed a THIRD bug of the same shape as Task 302: GraphicsDevice's depthStencilState_/
+rasterizerState_ were never actually copied from DepthStencilState::Default/
+RasterizerState::CullCounterClockwise - values coincided for depthStencilState_ (invisible until
+Task 311 gave Default a Name), fixed via the constructor's member-init list.
 
-Task 309 found and fixed a real, universal bug: GraphicsDevice::setBlendStateProperty never
-propagated a BlendState's own BlendFactor to the device - fixed by calling setBlendFactorProperty
-internally. Also fixed a Bgfx-specific gap (blendFactorPacked_ never passed to bgfx::setState()).
-MultiSampleMask confirmed a complete, universal no-op on all 3 backends - documented, not fixed.
-
-Task 310 (closing the phase) confirmed FNA has NO state-object freeze/immutability enforcement at
-all (no bug - CNA matches). Found a separate, real architectural divergence: CNA's GraphicsDevice
-stores BlendState/DepthStencilState/RasterizerState BY VALUE, unlike FNA's reference-type aliasing
-(mutating a state object after assignment has no effect in CNA but would in real XNA/FNA) - a
-deliberate, project-wide pattern, not a quick fix. Tracked as Task 869.
-
-Next task: GRAPHICS_TASKS.md Task 311 - opens Phase 37 (DepthStencilState conformance). Audit
-DepthStencilState's full property surface, all 3 static presets (Default/DepthRead/None), and
-default constructor values against FNA's DepthStencilState.cs line-by-line - same shape as Tasks
-291 (SamplerState) and 301 (BlendState). Given Task 866's tracked finding, expect the same
-Name-not-set-on-presets gap already found and fixed in SamplerState/BlendState; fix it here the
-same way (thread a name param through the private preset constructor) if confirmed, closing
-DepthStencilState's portion of Task 866. Also worth checking while auditing (per Task 302's
-precedent): does GraphicsDevice's default DepthStencilState actually match DepthStencilState.Default,
-or is it (like blendState_ was before Task 302) a plain default-constructed value that only
-coincidentally matches?
+Next task: GRAPHICS_TASKS.md Task 313 - pixel test: depth write enabled vs disabled. Build a new
+test with two overlapping quads (e.g. draw far quad, then near quad with
+DepthBufferWriteEnable=false, then a THIRD quad at the far quad's depth) proving that when writes
+are disabled the depth buffer never actually records the near quad's depth, so the third quad still
+passes the depth test and renders on top. Check existing easygl_*depth*test.cpp files first for a
+reusable two-quad pattern before writing from scratch. Register on both EasyGL and Vulkan
+(backend-agnostic Game-based test, reusing the same source per the established Tasks 303+ pattern).
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```

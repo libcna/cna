@@ -141,6 +141,8 @@ namespace Microsoft::Xna::Framework::Graphics
           presentationParameters_(presentationParameters),
           isDisposed_(false),
           blendState_(BlendState::Opaque),
+          depthStencilState_(DepthStencilState::Default),
+          rasterizerState_(RasterizerState::CullCounterClockwise),
           blendFactor_(Color::White)
     {
 #ifdef __ANDROID__

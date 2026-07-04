@@ -3,9 +3,9 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    const DepthStencilState DepthStencilState::Default{true, true};
-    const DepthStencilState DepthStencilState::DepthRead{true, false};
-    const DepthStencilState DepthStencilState::None{false, false};
+    const DepthStencilState DepthStencilState::Default{"DepthStencilState.Default", true, true};
+    const DepthStencilState DepthStencilState::DepthRead{"DepthStencilState.DepthRead", true, false};
+    const DepthStencilState DepthStencilState::None{"DepthStencilState.None", false, false};
 
     DepthStencilState::DepthStencilState()
         : depthBufferEnable_(true)
@@ -27,9 +27,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     }
 
-    DepthStencilState::DepthStencilState(bool depthEnable, bool depthWriteEnable)
+    DepthStencilState::DepthStencilState(const std::string& name, bool depthEnable, bool depthWriteEnable)
         : DepthStencilState()
     {
+        setNameProperty(name);
         depthBufferEnable_      = depthEnable;
         depthBufferWriteEnable_ = depthWriteEnable;
     }
