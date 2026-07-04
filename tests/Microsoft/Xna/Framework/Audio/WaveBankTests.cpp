@@ -572,6 +572,18 @@ TEST(WaveBankTest, IsPreparedFalseWhenFileMissing)
     EXPECT_FALSE(wb.getIsPreparedProperty());
 }
 
+// XA-13: a file that EXISTS but isn't a valid .xwb (bad magic/garbage) must behave the same as
+// a missing one -- construction doesn't throw, the bank just stays unprepared. (XA-9 decided to
+// keep this "silent stub" behavior rather than throw; this locks in that decision explicitly, on
+// the "exists but corrupt" path specifically, which the file-missing test above cannot cover.)
+TEST(WaveBankTest, IsPreparedFalseForExistingButCorruptFile)
+{
+    const auto corrupt = WriteFixture("cna_wavebank_test", "corrupt.xwb",
+                                       {'n', 'o', 't', ' ', 'a', ' ', 'w', 'a', 'v', 'e', 'b', 'a', 'n', 'k'});
+    WaveBank wb(&SharedEngine(), corrupt);
+    EXPECT_FALSE(wb.getIsPreparedProperty());
+}
+
 TEST(WaveBankTest, IsDisposedFalseInitiallyAndTrueAfterDispose)
 {
     WaveBank wb(&SharedEngine(), XwbFixturePath());

@@ -418,6 +418,20 @@ TEST(AudioEngineTest, GetCategoryAfterDisposeThrowsObjectDisposed)
     EXPECT_THROW((void)engine.GetCategory("Default"), System::ObjectDisposedException);
 }
 
+// XA-13: a file that EXISTS but isn't a valid .xgs (bad magic/garbage) must behave the same as
+// a missing one -- construction doesn't throw, GetCategory() on any name then throws
+// InvalidOperationException (matching GetCategoryInvalidNameThrowsInvalidOperation's error), not
+// some other unhandled exception. (XA-9 decided to keep this "silent stub" behavior rather than
+// throw; this locks in that decision explicitly, on the "exists but corrupt" path specifically.)
+TEST(AudioEngineTest, ConstructorWithExistingButCorruptFileStaysInStubState)
+{
+    const auto corrupt = WriteFixture(
+        "corrupt.xgs", {'n', 'o', 't', ' ', 'a', ' ', 's', 'e', 't', 't', 'i', 'n', 'g', 's'});
+    AudioEngine engine(corrupt);
+    EXPECT_FALSE(engine.getIsDisposedProperty());
+    EXPECT_THROW((void)engine.GetCategory("Default"), System::InvalidOperationException);
+}
+
 // ===================== GetGlobalVariable =====================
 
 TEST(AudioEngineTest, GetGlobalVariableValidReturnsInitialValue)

@@ -1345,7 +1345,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Pozn.:* hotovo přesně dle accept kritéria; `SharpRuntime/SharpRuntimeHelper.hpp` přidán do
   `AudioEngine.hpp`'s includes. Žádná změna testu potřeba.
 
-- [ ] **XA-13 — Test-mezera: žádný test nekonstruuje `AudioEngine`/`SoundBank`/`WaveBank` proti
+- [x] **XA-13 — Test-mezera: žádný test nekonstruuje `AudioEngine`/`SoundBank`/`WaveBank` proti
   existujícímu, ale poškozenému `.xgs`/`.xsb`/`.xwb` souboru.**
   Existující testy pokrývají jen "soubor neexistuje" a "validní fixtura" — nikdy "soubor existuje,
   ale obsahuje odpad" na úrovni wrapper konstruktoru (na rozdíl od `XactParserTests.cpp`, který
@@ -1353,6 +1353,12 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *CNA:* AudioEngineTests.cpp; SoundBankTests.cpp; WaveBankTests.cpp.
   *Accept:* přidat po jednom testu pro každou třídu s existujícím-ale-poškozeným souborem,
   ověřujícím aktuální (nebo nově rozhodnuté po XA-9) chování explicitně.
+  *Pozn.:* XA-9 rozhodl ponechat současné "tiché stub" chování, takže testy uzamykají PRÁVĚ TOTO
+  chování (ne nové). Přidán po jednom testu pro každou třídu: konstruktor s existujícím, ale
+  poškozeným souborem nevyhodí výjimku a objekt zůstane v tichém stub stavu (`AudioEngine`/
+  `SoundBank`: následné `GetCategory`/`GetCue` na libovolné jméno hodí `InvalidOperationException`,
+  stejně jako pro chybějící soubor; `WaveBank`: `getIsPreparedProperty()==false`). Čistě testovací
+  doplněk, žádná změna produkčního kódu.
 
 #### 8.3 Interní backend (AudioMixer, XactParser, XactTypes)
 

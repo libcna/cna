@@ -412,6 +412,20 @@ TEST(SoundBankTest, GetCueInvalidNameThrowsInvalidOperation)
     EXPECT_THROW((void)bank.GetCue("NoSuchCue"), System::InvalidOperationException);
 }
 
+// XA-13: a file that EXISTS but isn't a valid .xsb (bad magic/garbage) must behave the same as
+// a missing/empty one -- construction doesn't throw, GetCue() on any name then throws
+// InvalidOperationException (matching GetCueInvalidNameThrowsInvalidOperation's error), not some
+// other unhandled exception. (XA-9 decided to keep this "silent stub" behavior rather than
+// throw; this locks in that decision explicitly, on the "exists but corrupt" path specifically.)
+TEST(SoundBankTest, ConstructorWithExistingButCorruptFileStaysInStubState)
+{
+    const auto corrupt = WriteFixture("cna_soundbank_test", "corrupt.xsb",
+                                       {'n', 'o', 't', ' ', 'a', ' ', 's', 'o', 'u', 'n', 'd', 'b', 'a', 'n', 'k'});
+    SoundBank bank(&SharedEngine(), corrupt);
+    EXPECT_FALSE(bank.getIsDisposedProperty());
+    EXPECT_THROW((void)bank.GetCue("Explosion"), System::InvalidOperationException);
+}
+
 TEST(SoundBankTest, GetCueAfterDisposeThrowsObjectDisposed)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
