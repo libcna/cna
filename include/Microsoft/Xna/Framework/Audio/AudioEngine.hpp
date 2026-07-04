@@ -128,6 +128,12 @@ namespace Microsoft::Xna::Framework::Audio
         void UnregisterWaveBank(WaveBank* wb);
         WaveBank* FindWaveBank(const std::string& bankName) const;
 
+        // SoundBank registry (called by SoundBank constructor/destructor), symmetric to the
+        // WaveBank registry above -- lets Dispose() cascade to every SoundBank it created,
+        // matching FNA's native OnXACTNotification(SOUNDBANKDESTROYED) (XA-8).
+        void RegisterSoundBank(SoundBank* sb);
+        void UnregisterSoundBank(SoundBank* sb);
+
         // Category state access
         float GetCategoryVolume(unsigned short idx) const;
         bool  IsCategoryPaused(unsigned short idx) const;

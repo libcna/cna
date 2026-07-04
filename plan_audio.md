@@ -1263,7 +1263,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   "Explosion" fixtura stejná jako sousední sweep testy. `git stash` potvrdil selhání všech 3
   nových testů proti staré logice.
 
-- [ ] **XA-8 — `AudioEngine::Dispose()` nekaskáduje do už zkonstruovaných `SoundBank`/`WaveBank`/`Cue`.**
+- [x] **XA-8 — `AudioEngine::Dispose()` nekaskáduje do už zkonstruovaných `SoundBank`/`WaveBank`/`Cue`.**
   FNA přes native `OnXACTNotification` (WAVEBANKDESTROYED/SOUNDBANKDESTROYED/CUEDESTROYED) okamžitě
   nastaví `IsDisposed=true` na každém závislém wrapperu, jakmile native engine zanikne. CNA's
   `AudioEngine::Dispose()` jen resetuje vlastní `xactImpl_` — žádný `WaveBank`/`Cue` (a pro
@@ -1274,6 +1274,17 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `getIsDisposedProperty()==true` (test pro všechny tři) — vyžaduje `SoundBank` registr symetrický
   k existujícímu `WaveBank` registru; nebo doložit jako akceptovanou odchylku v CHECKLIST.md, pokud
   je to úmyslně mimo rozsah.
+  *Pozn.:* přidán `SoundBank` registr (`RegisterSoundBank`/`UnregisterSoundBank`, symetrický k
+  `WaveBank`'s). `Dispose()` teď nejdřív odloží snapshoty všech tří registrů (`WaveBank*`,
+  `SoundBank*`, `Cue*`) do lokálních vektorů, PAK resetuje `xactImpl_` (aby reentrantní
+  `Unregister*` volání z jejich vlastních `Dispose()` byla bezpečná no-op), a teprve pak volá
+  `Dispose()` na každém — v pořadí cues → soundbanks → wavebanks. Idempotentní `Dispose()` vzorec
+  (`if (!isDisposed_)`) už v kódu existoval, takže žádné dvojité uvolnění, i když např. `SoundBank`
+  svůj `fireAndForget_` cue později znovu zkusí disposnout. Přidán test s vlastním (ne sdíleným)
+  `AudioEngine`, protože test engine disponuje. `git stash` potvrdil selhání proti staré logice.
+  Čisté pod ASan+LeakSanitizer. Vědomě neřešeno: cue, který byl jen `GetCue()`ovaný, ale nikdy
+  `Play()`ovaný, se do registru vůbec nedostane (stejné omezení jako existující
+  `RegisterCue`/`UnregisterCue` mechanismus) — mimo rozsah tohoto nálezu.
 
 - [ ] **XA-9 — `AudioEngine`/`SoundBank`/`WaveBank` konstruktory tiše polykají chybějící soubor i
   parse chybu místo throw; `NoAudioHardwareException` se nikdy nethrowuje z `AudioEngine`.**

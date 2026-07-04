@@ -64,6 +64,7 @@ namespace Microsoft::Xna::Framework::Audio
                       << " cues=" << xsb.cues.size()
                       << " sounds=" << xsb.sounds.size() << "\n";
             xactImpl_ = std::make_unique<XactSoundBankImpl>(std::move(xsb));
+            engine_->RegisterSoundBank(this); // XA-8: lets AudioEngine::Dispose() cascade here
         }
         catch (const std::exception& ex)
         {
@@ -179,6 +180,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (!isDisposed_)
         {
             Disposing.Raise(this, System::EventArgs::Empty);
+            if (engine_) engine_->UnregisterSoundBank(this); // XA-8
             fireAndForget_.clear(); // stops any still-playing fire-and-forget cues
             xactImpl_.reset();
             isDisposed_ = true;

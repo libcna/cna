@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -28,6 +29,10 @@ namespace Microsoft::Xna::Framework::Audio
 
         // Wavebank registry (bank name → pointer)
         std::unordered_map<std::string, WaveBank*> waveBanks;
+
+        // SoundBank registry, symmetric to waveBanks above (XA-8) -- no natural unique key like
+        // WaveBank's bank name, so this is just a flat list of every live SoundBank.
+        std::vector<SoundBank*> soundBanks;
 
         // Active cues (for category-level operations)
         std::vector<Cue*> activeCues;
@@ -178,8 +183,37 @@ namespace Microsoft::Xna::Framework::Audio
         if (!isDisposed_)
         {
             Disposing.Raise(this, System::EventArgs::Empty);
+
+            // XA-8: cascade disposal to every WaveBank/SoundBank/Cue this engine created,
+            // matching FNA's native OnXACTNotification(WAVEBANKDESTROYED/SOUNDBANKDESTROYED/
+            // CUEDESTROYED), which immediately flips IsDisposed on every dependent wrapper once
+            // the native engine goes away. Snapshot the registries into local vectors and reset
+            // xactImpl_ FIRST: each object's own Dispose() below calls back into
+            // Unregister{WaveBank,SoundBank,Cue}(), which would otherwise mutate these same
+            // containers while we're iterating them; with xactImpl_ already null, those
+            // reentrant calls become harmless no-ops (see their own null guards).
+            std::vector<WaveBank*> waveBanks;
+            std::vector<SoundBank*> soundBanks;
+            std::vector<Cue*> cues;
+            if (xactImpl_)
+            {
+                waveBanks.reserve(xactImpl_->waveBanks.size());
+                for (auto& [name, wb] : xactImpl_->waveBanks)
+                    waveBanks.push_back(wb);
+                soundBanks = xactImpl_->soundBanks;
+                cues       = xactImpl_->activeCues;
+            }
+
             rendererDetails_.clear();
             xactImpl_.reset();
+
+            for (auto* cue : cues)
+                if (cue) cue->Dispose();
+            for (auto* sb : soundBanks)
+                if (sb) sb->Dispose();
+            for (auto* wb : waveBanks)
+                if (wb) wb->Dispose();
+
             isDisposed_ = true;
         }
     }
@@ -205,6 +239,21 @@ namespace Microsoft::Xna::Framework::Audio
         if (!xactImpl_) return nullptr;
         auto it = xactImpl_->waveBanks.find(bankName);
         return (it != xactImpl_->waveBanks.end()) ? it->second : nullptr;
+    }
+
+    // ── SoundBank registry ────────────────────────────────────────────────────
+
+    void AudioEngine::RegisterSoundBank(SoundBank* sb)
+    {
+        if (!sb || !xactImpl_) return;
+        xactImpl_->soundBanks.push_back(sb);
+    }
+
+    void AudioEngine::UnregisterSoundBank(SoundBank* sb)
+    {
+        if (!sb || !xactImpl_) return;
+        auto& v = xactImpl_->soundBanks;
+        v.erase(std::remove(v.begin(), v.end(), sb), v.end());
     }
 
     // ── Category state ────────────────────────────────────────────────────────
