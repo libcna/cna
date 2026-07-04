@@ -573,6 +573,29 @@ document). No code changes in this task — `AUDIT.md` only.
 `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`,
 `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`.
 
+**Resolution (2026-07-04):** Implemented as scoped. Added `NOXNA void
+SetSupportedForTesting(bool)` to both `Accelerometer`/`Gyroscope`, calling the
+protected `SensorBase<T>::setIsSupportedProperty()` — deliberately separate from
+`SetStartedForTesting()`, documented cross-referencing each other so the split (which
+gate controls dispatch vs. which gate controls the `getCurrentValueProperty()` throw)
+is unambiguous. Added
+`InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported` to both test
+files — confirms `getIsDataValidProperty()`/`getCurrentValueProperty()` start at their
+defaults (`false`/`Vector3::Zero`, verified against `AccelerometerReading`'s/
+`GyroscopeReading`'s actual default constructors before relying on it), then reflect
+the injected reading afterward. Added
+`GetCurrentValuePropertyStillThrowsAfterSyntheticUpdateWhenNotMarkedSupported` to both
+— confirms the existing, correct contract explicitly: without the new
+`SetSupportedForTesting(true)` call, `getCurrentValueProperty()` still throws
+`InvalidOperationException` on unsupported hardware even after
+`SetStartedForTesting(true)` + `InjectSyntheticSensorUpdate()`, closing Audit finding
+4's test gap (this was already the actual behavior, just never directly tested).
+
+Verified: `CNA`/`CnaTests` build clean; Devices-only filter 45/45 passing (2 expected
+skips, both the pre-existing "supported platform" skips, unrelated to this task's new
+tests); full `ctest` 2005 tests, same 2 pre-existing unrelated `EasyGL`/`easy-gl`
+failures as the Task P5-1 baseline — no regressions.
+
 ---
 
 ## Task P5-7 — Android axis conversion unit tests

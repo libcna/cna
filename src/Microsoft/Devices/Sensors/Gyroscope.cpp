@@ -345,5 +345,10 @@ namespace Microsoft::Devices::Sensors
         started_ = started;
     }
 
+    void Gyroscope::SetSupportedForTesting(bool supported)
+    {
+        setIsSupportedProperty(supported);
+    }
+
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")
 } // namespace Microsoft::Devices::Sensors

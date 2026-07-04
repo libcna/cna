@@ -225,6 +225,28 @@ namespace Microsoft::Devices::Sensors
         NOXNA void SetStartedForTesting(bool started);
 
         /**
+         * @brief Test-only hook (Task P5-6): directly sets the base
+         * class's isSupported_ flag, without requiring real accelerometer
+         * hardware to be present.
+         *
+         * Deliberately separate from SetStartedForTesting(): the two
+         * gate different things. SetStartedForTesting() controls whether
+         * InjectSyntheticSensorUpdate() dispatches at all;
+         * getCurrentValueProperty()/getIsDataValidProperty() are governed
+         * solely by isSupported_ (SensorBase<T>), which this method — not
+         * SetStartedForTesting() — controls. Without calling this,
+         * getCurrentValueProperty() still throws
+         * System::InvalidOperationException on unsupported hardware even
+         * after SetStartedForTesting(true) + InjectSyntheticSensorUpdate()
+         * — that is the correct, intentional contract (matching the real
+         * hardware-support check, Task P3-1), not a gap this hook should
+         * bypass by default.
+         *
+         * @param supported New value for the base class's isSupported_ flag.
+         */
+        NOXNA void SetSupportedForTesting(bool supported);
+
+        /**
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.
          *
          * Deprecated in favor of CurrentValueChanged, which is the WP7 7.1

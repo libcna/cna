@@ -219,5 +219,21 @@ namespace Microsoft::Devices::Sensors
          * @param started New value for the internal started flag.
          */
         NOXNA void SetStartedForTesting(bool started);
+
+        /**
+         * @brief Test-only hook (Task P5-6): directly sets the base
+         * class's isSupported_ flag, without requiring real gyroscope
+         * hardware to be present.
+         *
+         * Deliberately separate from SetStartedForTesting() — see
+         * Accelerometer.hpp's identical hook for the full rationale.
+         * Without calling this, getCurrentValueProperty() still throws
+         * System::InvalidOperationException on unsupported hardware even
+         * after SetStartedForTesting(true) + InjectSyntheticSensorUpdate()
+         * — that is the correct, intentional contract (Task P3-1).
+         *
+         * @param supported New value for the base class's isSupported_ flag.
+         */
+        NOXNA void SetSupportedForTesting(bool supported);
     };
 } // namespace Microsoft::Devices::Sensors

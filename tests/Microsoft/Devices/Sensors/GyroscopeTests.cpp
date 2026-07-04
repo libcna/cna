@@ -239,6 +239,45 @@ TEST(GyroscopeTests, CurrentValueChangedReceivesExpectedReading)
     EXPECT_EQ(receivedReading.getRotationRateProperty(), expectedRotationRate);
 }
 
+// Task P5-6: mirrors AccelerometerTests.InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported
+// — see that test for the full rationale.
+TEST(GyroscopeTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported)
+{
+    Gyroscope g;
+    g.SetSupportedForTesting(true);
+    g.SetStartedForTesting(true);
+
+    EXPECT_FALSE(g.getIsDataValidProperty());
+    EXPECT_EQ(g.getCurrentValueProperty().getRotationRateProperty(), Vector3::Zero);
+
+    const float rawX = 0.5f;
+    const float rawY = -1.25f;
+    const float rawZ = 2.0f;
+
+    g.InjectSyntheticSensorUpdate(rawX, rawY, rawZ);
+
+    EXPECT_TRUE(g.getIsDataValidProperty());
+    const Vector3 expectedRotationRate(rawX, rawY, rawZ);
+    EXPECT_EQ(g.getCurrentValueProperty().getRotationRateProperty(), expectedRotationRate);
+}
+
+// Task P5-6: mirrors AccelerometerTests.GetCurrentValuePropertyStillThrowsAfterSyntheticUpdateWhenNotMarkedSupported
+// — see that test for the full rationale (this is the real, intentional
+// contract, Task P3-1, not a gap).
+TEST(GyroscopeTests, GetCurrentValuePropertyStillThrowsAfterSyntheticUpdateWhenNotMarkedSupported)
+{
+    if (Gyroscope::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Gyroscope is supported on this platform; unsupported-path test not applicable.";
+    }
+
+    Gyroscope g;
+    g.SetStartedForTesting(true);
+    g.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+
+    EXPECT_THROW((void)g.getCurrentValueProperty(), System::InvalidOperationException);
+}
+
 // Task P4-7: Timestamp is now the real wall-clock time of the call
 // (System::DateTimeOffset::getUtcNowProperty()), not a bogus near-year-1
 // value derived from SDL_GetTicksNS(). Asserts "close to now" with a

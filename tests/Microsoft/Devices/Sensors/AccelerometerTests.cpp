@@ -275,6 +275,58 @@ TEST(AccelerometerTests, CurrentValueChangedReceivesExpectedReading)
     EXPECT_EQ(receivedReading.getAccelerationProperty(), expectedAcceleration);
 }
 
+// Task P5-6: CurrentValueChangedReceivesExpectedReading above only proves
+// the *event* carries the right data — it never asserts on
+// getCurrentValueProperty()/getIsDataValidProperty() themselves, since
+// those independently throw on unsupported hardware (Task P3-1) regardless
+// of any synthetic injection. SetSupportedForTesting(true) closes that gap
+// by making isSupported_ true without needing real hardware, so this test
+// can assert on the getters directly.
+TEST(AccelerometerTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported)
+{
+    Accelerometer a;
+    a.SetSupportedForTesting(true);
+    a.SetStartedForTesting(true);
+
+    // Before any dispatch, isDataValid_ is still its default (false) and
+    // CurrentValue is still a default-constructed reading — confirms this
+    // test's later assertions are actually detecting InjectSyntheticSensorUpdate()'s
+    // effect, not a value that was already there beforehand.
+    EXPECT_FALSE(a.getIsDataValidProperty());
+    EXPECT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), Vector3::Zero);
+
+    constexpr float StandardGravity = 9.80665f;
+    const float rawX = 0.0f;
+    const float rawY = StandardGravity;
+    const float rawZ = 0.0f;
+
+    a.InjectSyntheticSensorUpdate(rawX, rawY, rawZ);
+
+    EXPECT_TRUE(a.getIsDataValidProperty());
+    const Vector3 expectedAcceleration(rawX / StandardGravity, rawY / StandardGravity, rawZ / StandardGravity);
+    EXPECT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), expectedAcceleration);
+}
+
+// Task P5-6: without SetSupportedForTesting(), getCurrentValueProperty()
+// must still throw on unsupported hardware — confirming
+// SetStartedForTesting()+InjectSyntheticSensorUpdate() alone never bypass
+// the isSupported_ gate. This is the real, intentional contract (Task
+// P3-1), not a gap; this test makes it explicit and enforced rather than
+// only implied by a code comment.
+TEST(AccelerometerTests, GetCurrentValuePropertyStillThrowsAfterSyntheticUpdateWhenNotMarkedSupported)
+{
+    if (Accelerometer::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Accelerometer is supported on this platform; unsupported-path test not applicable.";
+    }
+
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+    a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+
+    EXPECT_THROW((void)a.getCurrentValueProperty(), System::InvalidOperationException);
+}
+
 // Task P4-7: Timestamp is now the real wall-clock time of the call
 // (System::DateTimeOffset::getUtcNowProperty()), not a bogus near-year-1
 // value derived from SDL_GetTicksNS(). Asserts "close to now" with a

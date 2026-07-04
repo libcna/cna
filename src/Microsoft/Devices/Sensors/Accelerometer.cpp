@@ -415,5 +415,10 @@ namespace Microsoft::Devices::Sensors
         started_ = started;
     }
 
+    void Accelerometer::SetSupportedForTesting(bool supported)
+    {
+        setIsSupportedProperty(supported);
+    }
+
     GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")
 } // namespace Microsoft::Devices::Sensors
