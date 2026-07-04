@@ -824,6 +824,23 @@ failures as the Task P5-1 baseline — no regressions.
 
 **Files:** new `docs/devices-build.md`.
 
+**Resolution (2026-07-04):** Wrote `docs/devices-build.md`. Checked
+`cmake/ThirdPartySDL.cmake`/`.gitmodules` before writing anything about the vendoring
+mechanism (per this task's own instruction not to guess) — confirmed `third_party/SDL`/
+`SDL_image`/`SDL_mixer` and `vendor/googletest` are real git submodules, and that
+`cna_configure_vendored_sdl()` hard-fails with `FATAL_ERROR` (printing the exact fix)
+if a submodule is missing, rather than silently doing something unexpected. Every
+command in the doc was actually re-run in this session before being written down as
+working — including catching and fixing an inaccuracy while doing so: the doc's first
+draft claimed the `ctest -R` regex and the direct `--gtest_filter` invocation cover the
+same tests ("~220"); re-running both showed they don't (187 vs. 107 — the regex also
+matches `*ReadingTests`/`*EventArgsTests`/`*FailedExceptionTests` suites the filter
+list didn't name), so the doc now states each command's actual, separately-verified
+count instead of a shared guess. Documents: submodule setup, desktop debug build,
+Devices-only test filter (both forms, now accurately described), full suite (2012
+tests, 2 pre-existing unrelated failures), the Android cross-compile command including
+the `llvm-nm`-based verification, and iOS's confirmed-still-blocked status.
+
 ---
 
 ## Task P5-13 — Update status docs accurately
