@@ -68,11 +68,16 @@ toolchain of any kind in this Linux container, and unlike Android's missing
 NDK (just needed installing), Apple's toolchain fundamentally needs
 macOS/Xcode. Don't expect this to spontaneously unblock the way Android did.
 
-**`VULKAN`/`BGFX` have not been re-verified since 2026-07-02** (commit
-`8092f6e`) — 14 commits of `Microsoft::Devices` changes have landed since.
-`Microsoft::Devices` has never interacted with the graphics backend
-(confirmed empirically pre-2026-07-03), so risk is low, but this is asserted,
-not re-confirmed. See Section 8, item 1.
+**`VULKAN`/`BGFX` re-verified clean (2026-07-04, HEAD `f576f0e`)** — both
+`CNA` and `CnaTests` build with zero errors on both backends
+(`cmake-build-vulkan/`, `cmake-build-bgfx/`), confirming the 14 commits of
+`Microsoft::Devices` changes since the last check (2026-07-02, commit
+`8092f6e`) didn't touch anything backend-sensitive, as expected.
+Devices/Sensors/VibrateController-relevant tests: 168 passed, 2 skipped
+(same as `EASYGL`) on **both** backends. Full suite: `VULKAN` 99% passing
+(13 pre-existing `Vulkan_*` graphics-smoke failures, need a real GPU/driver,
+unrelated to `Microsoft::Devices`); `BGFX` 99% passing (3 pre-existing
+`Bgfx_*` graphics-smoke failures, same reason). No regressions on either.
 
 **Tests:** last full `ctest` run (`EASYGL`): **1995 tests total, 97%
 passing.** The only failures are a fixed set of **64 pre-existing `EasyGL_*`
@@ -189,6 +194,17 @@ their change: consistently 1994–1995 tests (growing as new test files were
 added), 97% passing, the same 64 pre-existing headless `EasyGL_*` failures
 throughout — no regressions at any point in this session.
 
+**2026-07-04 — `VULKAN`/`BGFX` re-verified (Section 8 item 1, the one
+`plan_devices_phase4.md` follow-up left after that plan closed):** both
+backends' `CNA`/`CnaTests` build with zero errors; the same
+Devices/Sensors/VibrateController test filter (168 tests) passes identically
+on both, matching `EASYGL`. Full suite: `VULKAN` 1943 tests/99% passing (13
+pre-existing `Vulkan_*` graphics-smoke failures needing a real GPU/driver);
+`BGFX` 1937 tests/99% passing (3 pre-existing `Bgfx_*` graphics-smoke
+failures, same reason). Confirms the 14 commits of `Microsoft::Devices`
+changes since the prior check (2026-07-02, `8092f6e`) didn't touch anything
+backend-sensitive.
+
 All work committed on `feature/devices`, not yet pushed. Task-by-task commit
 detail (and the exact reasoning behind every non-obvious choice) lives in
 `plan_devices_phase4.md`'s per-task Resolution notes — read there first if
@@ -198,15 +214,11 @@ detail (and the exact reasoning behind every non-obvious choice) lives in
 
 ## 4. Current blocker / main problem
 
-**No blocker.** Build and tests are green, nothing is broken, and
-`plan_devices_phase4.md` — the plan that was driving all recent work — is
-now fully closed.
-
-The most significant known gap is the same one from before this session:
-**`VULKAN`/`BGFX` backends haven't been re-verified since commit `8092f6e`
-(2026-07-02)**, and 14 commits of `Microsoft::Devices` changes have landed
-since. Low risk (this namespace has never touched the graphics backend) but
-unconfirmed against current `HEAD`. See Section 8, item 1.
+**No blocker.** Build and tests are green on all 3 graphics backends
+(`EASYGL`/`VULKAN`/`BGFX`), nothing is broken, and `plan_devices_phase4.md`
+— the plan that was driving all recent work — is fully closed with its one
+follow-up item (cross-platform re-verification) also now done. There is no
+outstanding known issue in `Microsoft::Devices` as of this writing.
 
 ---
 
@@ -359,8 +371,8 @@ cmake -S . -B cmake-build-android -G Ninja \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DCNA_BUILD_TESTS=OFF
 cmake --build cmake-build-android --target CNA -j$(nproc)
 
-# Cross-platform build verification (Vulkan/BGFX; not re-run since
-# 2026-07-02 — see Section 4/8. BGFX's configure step fetches bgfx.cmake
+# Cross-platform build verification (Vulkan/BGFX; last re-verified clean
+# 2026-07-04 — see Section 3. BGFX's configure step fetches bgfx.cmake
 # from GitHub — takes several minutes; both build dirs already exist in
 # this checkout under cmake-build-vulkan/cmake-build-bgfx):
 cmake --build cmake-build-vulkan --target CNA --target CnaTests -j$(nproc)
@@ -374,26 +386,20 @@ writing.
 
 ## 8. Next smallest tasks
 
-With `plan_devices_phase4.md` fully closed, there is no standing plan file
-driving further `Microsoft::Devices` work. Pick one of these, or ask the user
-what the next priority actually is — do not invent new `Microsoft::Devices`
-scope without a plan or explicit request (see Section 6's boundaries).
+With `plan_devices_phase4.md` fully closed and `VULKAN`/`BGFX` re-verified
+clean (2026-07-04), there is no standing plan file driving further
+`Microsoft::Devices` work and no known outstanding issue. Pick one of these,
+or ask the user what the next priority actually is — do not invent new
+`Microsoft::Devices` scope without a plan or explicit request (see Section
+6's boundaries).
 
-1. **Re-verify `VULKAN`/`BGFX` builds.** Not done since 2026-07-02 (commit
-   `8092f6e`); 14 commits of `Microsoft::Devices` changes have landed since.
-   Low risk but unverified — see Section 4.
-   - Files: none (build-only task).
-   - Verify: the "Cross-platform build verification" commands in Section 7;
-     spot-run the targeted Devices/Sensors/VibrateController suite on each
-     backend afterward.
-
-2. **Physical hardware verification**, if real Android/iOS hardware or a
+1. **Physical hardware verification**, if real Android/iOS hardware or a
    rumble-capable gamepad ever becomes available in a session: work through
    `docs/devices-hardware-checklist.md` using `cna_demo_devices` (Task
    P4-14). Not attemptable in this headless container — don't attempt it
    here, just note if the environment changes.
 
-3. **Anything outside `Microsoft::Devices`.** This namespace's hardening
+2. **Anything outside `Microsoft::Devices`.** This namespace's hardening
    work is done; the next task is likely a different subsystem entirely.
    Ask before assuming scope.
 
