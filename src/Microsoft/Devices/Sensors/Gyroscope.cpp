@@ -442,6 +442,9 @@ namespace Microsoft::Devices::Sensors
 
     bool Gyroscope::GetSubsystemHeldForTesting() const
     {
+        // Task P7-4: see Accelerometer::GetSubsystemHeldForTesting()'s
+        // identical fix for the full rationale.
+        std::lock_guard<std::mutex> lock(GetSubsystem().mutex_);
         return subsystemHeld_;
     }
 

@@ -378,3 +378,51 @@ the pre-existing Task P5-2/P5-3 self-dispose exemption — that mechanism is unt
 this fix and still relies on the object remaining valid (not literally freed) through the
 remainder of its own callback frame, a pre-existing, already-documented design tradeoff
 from Phase 5, not something this task's scope covers.
+
+## P7-4: Lock test-only getters/setters consistently
+
+### Resolution
+
+**Files changed:**
+- `src/Microsoft/Devices/Sensors/Accelerometer.cpp` / `Gyroscope.cpp` —
+  `GetSubsystemHeldForTesting()` now locks `GetSubsystem().mutex_` around the
+  `subsystemHeld_` read (previously unguarded, while every write to `subsystemHeld_`
+  happens under this same lock — a real, if narrow, data race).
+
+**Audit of every other NOXNA test-only hook (Accelerometer/Gyroscope), confirming no
+further gaps:**
+- `SetStartedForTesting()` — already locks `subsystem.mutex_`. No change needed.
+- `SetSupportedForTesting()` — forwards to `SensorBase::setIsSupportedProperty()`, which
+  locks `SensorBase`'s own `mutex_`. No change needed.
+- `InjectSyntheticSensorUpdate()` — already locks `subsystem.mutex_` around its
+  `started_` check and `dispatchingThreadIds_` push. No change needed.
+- `SetDisposalCleanupHookForTesting()` (P7-2) — writes `disposalTestHook_` with no lock,
+  but is documented (and used, in every test) as write-once in a test's single-threaded
+  setup phase, before any thread that calls `Dispose()` is spawned — thread creation
+  itself provides the happens-before guarantee, so no lock is needed for this specific,
+  documented usage pattern.
+- `RegisterStartedInstanceForTesting()` / `UnregisterStartedInstanceForTesting()` (P7-3)
+  — already lock `subsystem.mutex_` around the `RegisterStartedInstanceLocked()`/
+  `UnregisterStartedInstanceLocked()` call.
+- `DispatchToInstancesForTesting()` (P7-3) — forwards to `DispatchToInstances()`, which
+  does its own correct per-instance locking internally; the wrapper itself touches no
+  shared state directly.
+
+So the only real gap this task found was `GetSubsystemHeldForTesting()` — everything
+else, including every hook added earlier in this same phase, was already correct.
+
+**Tests added:** none — this is a pure data-race fix with no user-observable behavior
+change; the existing `FailedStartReleasesSubsystemHoldItAcquired`-style tests already
+exercise this getter and continue to pass.
+
+**Commands run:**
+```bash
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean
+./cmake-build-debug/CnaTests --gtest_filter="Accelerometer*:Gyroscope*:Compass*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*"
+# 136 tests, 134 passed, 2 skipped (expected) — unchanged from P7-3.
+```
+
+**Remaining risk:** negligible — a one-line lock addition around a single field read,
+matching the exact locking discipline every other read/write of `subsystemHeld_` already
+uses.

@@ -587,6 +587,11 @@ namespace Microsoft::Devices::Sensors
 
     bool Accelerometer::GetSubsystemHeldForTesting() const
     {
+        // Task P7-4: subsystemHeld_ is written only under subsystem.mutex_
+        // (Start()/Dispose(bool)), but was previously read here with no
+        // lock at all — a real, if narrow, data race under the C++ memory
+        // model.
+        std::lock_guard<std::mutex> lock(GetSubsystem().mutex_);
         return subsystemHeld_;
     }
 
