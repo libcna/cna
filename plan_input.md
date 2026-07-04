@@ -43,12 +43,12 @@ violations in the internal layer, and very thin test coverage.
 
 | Device | API surface | SDL3 wiring | Behavior fidelity | Tests |
 |--------|-------------|-------------|-------------------|-------|
-| Keyboard | ✅ complete | ✅ key down/up → `KeyboardState` | ⚠️ incomplete keycode map; no scancode mode; `GetPressedKeys` unordered; identity `GetKeyFromScancodeEXT` | ⚠️ minimal |
-| Mouse | ✅ complete | ✅ motion/button/wheel → `MouseState` | ⚠️ `SetPosition` doesn't warp; relative-mode dead; `ClickedEXT` never fires; dead `INTERNAL_*` fields | ❌ none |
+| Keyboard | ✅ complete | ✅ key down/up → `KeyboardState` | ✅ complete keycode map + scancode mode (`FNA_KEYBOARD_USE_SCANCODES`); `GetPressedKeys` ascending; real `GetKeyFromScancodeEXT` | ✅ 21 tests | **(Phase I5 complete)** |
+| Mouse | ✅ complete | ✅ motion/button/wheel → `MouseState` | ✅ `SetPosition` warps (scale-factor deviation on letterboxed windows only — task 800); relative mode real; `ClickedEXT` fires; dead `INTERNAL_*` fields removed | ✅ 26 tests | **(Phase I4 complete)** |
 | GamePad | ✅ complete | ✅ hotplug + button/axis + rumble + caps + LED/gyro/accel + EXT buttons | ✅ `PacketNumber` increments on raw-state change; `GamePadCapabilities` reworked to properties; `FromButtonArray` renamed/reconciled; `GetHashCode`/`ToString` FNA-faithful | ✅ 58 tests | **(Phase I3 complete)** |
 | Touch | ✅ complete | ✅ fingers → `GetState` + gesture pipeline (`INTERNAL_onTouchEvent`/`Update`/`TouchDeviceExists`) live | ✅ `SetFinger` prev-state fixed; `DisplayWidth/Height` set from backbuffer; `GetState()`'s `InputManager` fallback documented as an intentional deviation from FNA's poll model | ✅ 41 tests | **(Phase I2 complete)** |
 | TextInput | ✅ surface | ✅ SDL3 wired (Start/Stop/SetRect/active) + TEXT_INPUT/EDITING dispatch + control-char synthesis | ✅ events raised; Ctrl+V suppress | ✅ 9 tests | **(Phase I1 complete)** |
-| MouseCursor | ⚠️ MonoGame ext | ✅ system cursors only | ⚠️ no `FromTexture2D`/`Dispose`; SPDX/NOXNA wrong | ❌ none |
+| MouseCursor | ℹ️ MonoGame ext (kept — task 754) | ✅ system + custom cursors (`FromTexture2D`) | ✅ `FromTexture2D`/`Dispose`/`IDisposable` done; SPDX `MS-PL` + `NOXNA class` fixed | ✅ 7 tests | **(Phase I4 complete)** |
 
 ---
 
@@ -205,9 +205,96 @@ violations in the internal layer, and very thin test coverage.
 
 ---
 
+## Phase I9 — Input hardening, reproducibility, and fidelity audit
+
+> **Origin:** external (ChatGPT Plus) review of the completed input work, relayed by the user
+> 2026-07-04. Delivered by the reviewer titled "Phase I8", but **renamed to Phase I9 here** because
+> a Phase I8 (tasks 790–791) already exists and is committed — keeping the reviewer's title would
+> make the two Phase-I8 blocks contradict each other (plan rule 7). Task numbers (792–840) are
+> unchanged from the review and do not collide with 790–791.
+>
+> **Two review premises corrected up front (verified 2026-07-04):**
+> - *"Current zip/archive cannot configure because `third_party/SDL` is missing"* — in this git
+>   checkout SDL/SDL_image/SDL_mixer are present and populated as submodules
+>   (`git submodule status` clean). The premise applies to a source **zip export** that omits
+>   submodules, not to a `git clone`. Task 793 is scoped accordingly (document the init command;
+>   the guard below already exists).
+> - *"ensure CMake fails with clear instructions if SDL is absent"* — already implemented:
+>   `cmake/ThirdPartySDL.cmake:32–38` emits `FATAL_ERROR "Missing vendored '<dep>' … Run: git
+>   submodule update --init --recursive"`. Task 793 verifies/documents this rather than adding it.
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 792 | Reconcile `plan_input.md` with the actual code state (stale per-device table, "Known limitations" Task-754-pending row, coverage "now" column). | ✅ | Updated the per-device wiring table's Keyboard/Mouse/MouseCursor rows (were still pre-I4/I5: "no scancode mode"/"SetPosition doesn't warp"/"no FromTexture2D/Dispose") to reflect Phases I4–I5; fixed the "Known limitations" table (Task 754 "pending"→"made, kept"; Task 734 env override + tasks 726–727 sensors marked implemented; horizontal-wheel/warp rows repointed to tasks 805/800); added a reading note to the coverage-% table clarifying the "now" column is the pre-plan baseline and task 838 produces the final split. Also fixed a stale "not fixed" note in `docs/input-backend.md` for `GetCapabilities()` (task 790 fixed it). Docs-only; no build impact. |
+| 793 | Make the branch reproducibly buildable from a fresh checkout/archive: document `git submodule update --init --recursive`; confirm CMake fails clearly if SDL absent. | ✅ | Verified the CMake guard already exists (`ThirdPartySDL.cmake:32–38`: `FATAL_ERROR "Missing vendored '<dep>' … Run: git submodule update --init --recursive"`) and the README already documents the submodule init prominently (lines 14, 178–182, and every per-backend build block). Added a README note to the "Initialise Submodules" section covering the actual gap — a **source zip/tarball export** (GitHub "Download ZIP") omits submodule contents, so `third_party/SDL` is empty and CMake aborts with that error; clone via Git, or use `-DCNA_USE_SYSTEM_SDL=ON`. Docs-only. |
+| 794 | Clean configure/build/test EasyGL: `cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON`, build `CnaTests`, run Keyboard/Mouse/GamePad/Touch/Gesture/TextInput filter. | ✅ | Fresh `cmake-build-input-easygl` (rm -rf first), clean configure + `cmake --build … --target CnaTests` succeeded (exit 0). Full suite = **1912 tests**; input filter `--gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'` = **165 tests from 22 suites, all PASSED**. |
+| 795 | Repeat clean build/test for Vulkan. | ✅ | Fresh `cmake-build-input-vulkan` (`-DCNA_GRAPHICS_BACKEND=VULKAN`), clean configure + build (exit 0). Full suite = **1912 tests**; input filter = **165 tests, all PASSED** — identical to EasyGL. |
+| 796 | Repeat clean build/test for bgfx. | ✅ | Fresh `cmake-build-input-bgfx` (`-DCNA_GRAPHICS_BACKEND=BGFX`; `bgfx.cmake` FetchContent clone), clean configure + build (exit 0). Full suite = **1916 tests** — 4 more than EasyGL/Vulkan, confirmed to be exactly the 4 bgfx-specific tests (`BgfxApiIsLinkedForBgfxBackend`, `BgfxRendererTypeDefaultIsSafeForPlatform`, `BgfxRendererTypeOverrideParsingWorks`, `BgfxRendererTypeOverrideRejectsInvalidValue`), input-unrelated. Input filter = **165 tests, all PASSED** — identical to the other two backends. |
+| 797 | Add a documented command/script in `docs/input-backend.md` to run all input tests (`--gtest_filter` covering Input, Keyboard, Mouse, GamePad, Touch, Gesture, TextInput, SdlInputBridge). | ✅ | Added §5 "Running the input tests" to `docs/input-backend.md`: the exact submodule-init → configure → build → `--gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'` command (165 tests), a `--gtest_shuffle --gtest_repeat=10` variant for the process-wide static-state suites, and how to swap the backend. Docs-only. |
+| 798 | Audit `Mouse::WindowHandle`: convert public static field → `getWindowHandleProperty()`/`setWindowHandleProperty()` like `TextInputEXT`, unless deliberate reason not to. | ⬜ | Update all call sites/tests. |
+| 799 | Ensure `Mouse` window handle is populated at window creation and cleared at destruction, like `TextInputEXT`. | ⬜ | Verify in `GraphicsDevice`/window owner. |
+| 800 | Fix `Mouse::SetPosition` coordinate fidelity for scaled/letterboxed/backbuffer rendering (inverse logical→window transform via graphics backend abstraction). | ⬜ | Currently a documented deviation; turn into implementation. NOTE: graphics-layer scope — reconcile with NEXT.md §9 / `GRAPHICS_TASKS.md` before implementing. |
+| 801 | Add backend/integration tests for `Mouse::SetPosition` with logical size ≠ physical window size. | ⬜ | Manual demo checklist if headless impossible. |
+| 802 | Make `Mouse::getIsRelativeMouseModeEXTProperty()`/`setIsRelativeMouseModeEXTProperty()` safe with no SDL window (return false/no-op). | ⬜ | |
+| 803 | Make `Mouse::SetCursor()` safe when cursor is disposed/null internally (decide throw/no-op/FNA-match; document + test). | ⬜ | |
+| 804 | Verify `Mouse::ClickedEXT` button numbering vs FNA (`INTERNAL_onClicked(event.button.button - 1)`) for L/R/M/X buttons; add synthetic-event tests. | ⬜ | |
+| 805 | Complete or explicitly close task 749 (horizontal scroll wheel): document why XNA/FNA can't expose it, or design a NOXNA extension + tests. | ⬜ | Don't leave 749 dangling. |
+| 806 | Audit `TextInputEXT::TextInput` type (`std::function<void(char)>`, per-UTF-8-byte): decide `char16_t`/`char32_t`/UTF-8-string event for correct Unicode/IME modeling. | ⬜ | Important for IME, accents, non-Latin, emoji. |
+| 807 | Add Unicode text-input tests: multi-byte UTF-8, combining chars, surrogate/emoji, IME composition; document chosen semantics. | ⬜ | |
+| 808 | Verify `TextInputEXT::SetInputRectangle` cursor parameter vs FNA/SDL3 (currently offset 0); add FNA reference comment. | ⬜ | |
+| 809 | Verify `IsTextInputActive`/`StartTextInput`/`StopTextInput`/screen-keyboard vs real SDL window behavior. | ⬜ | Existing tests cover no-window default. |
+| 810 | Add a fake/mockable SDL input backend for GamePad tests, or isolate gamepad state translation enough to test without hardware. | ⬜ | Current tests cover disconnected fallback only. |
+| 811 | Gamepad hotplug tests: added, duplicate added, removed, removed-unknown, four slots, no free slots, env count < 4. | ⬜ | Use fake SDL layer. |
+| 812 | Gamepad button mapping tests: A/B/X/Y, shoulders, sticks, guide/big button, DPad, paddles, misc, touchpad — verify `Buttons` flags exactly. | ⬜ | |
+| 813 | Gamepad axis normalization tests: both sticks, Y inversion, triggers, min/max/zero, deadzone interaction, packet-number-on-raw-change; cover `IndependentAxes`/`Circular`/`None`. | ⬜ | |
+| 814 | Audit `GamePadCapabilities`: avoid side-effecting capability checks; verify rumble/trigger-rumble/lightbar/sensor/touchpad vs FNA/SDL3. | ⬜ | Confirm zero-rumble probe is acceptable. |
+| 815 | `GamePadCapabilities` tests with a fake connected controller with partial capabilities; cover every XNA + EXT property. | ⬜ | |
+| 816 | Verify `GamePad::GetGUIDEXT` formatting vs FNA/SDL; tests for null device, valid GUID, invalid joystick id. | ⬜ | |
+| 817 | Verify `GamePad::SetVibration` duration semantics (passes 0 to SDL rumble); confirm vs FNA + doc/test. | ⬜ | |
+| 818 | Verify `GamePad::GetGyroEXT`/`GetAccelerometerEXT`: sensor enabling, failure handling, zeroing, units, axes, repeat calls; tests with fake sensor data. | ⬜ | |
+| 819 | Audit Keyboard keycode/scancode maps vs FNA tables; list `Keys` values that intentionally can't map via SDL3. | ⬜ | Document, don't silently forget. |
+| 820 | Table-driven tests for `try_convert_sdl_key`/`try_convert_sdl_scancode` (expose test-only helper or drive via synthetic events): letters/digits/numpad/OEM/modifiers/function/media keys. | ⬜ | |
+| 821 | Tests for `Keyboard::GetKeyFromScancodeEXT` in normal and `FNA_KEYBOARD_USE_SCANCODES=1` mode (subprocess/separate binary since env var is cached). | ⬜ | |
+| 822 | Verify Android keyboard logging path doesn't change behavior or introduce SDL problems off-Android (logs behind `__ANDROID__`). | ⬜ | |
+| 823 | Add `InputManager::ResetForTests()` (test-only) to stop tests leaking global input state. | ⬜ | Centralize under test-only flag/internal API. |
+| 824 | Add `GestureDetector::ResetForTests()` (test-only). | ⬜ | File-local global state → order-dependent tests. |
+| 825 | Audit `TouchPanel::GetState()` `touches_`→`InputManager` fallback: no double-reporting/stale state when `SetFinger` + real SDL finger events mix; tests both + mixed. | ⬜ | |
+| 826 | Multi-touch edge tests: > `MAX_TOUCHES`, release unknown finger, repeat down same id, id reuse after release; verify `InputManager` + `GestureDetector`. | ⬜ | |
+| 827 | `TouchPanel::GetCapabilities()` tests: before/after touch, after reset, fallback state exists but `touchDeviceExists_` false; confirm `MaximumTouchCount==0` when disconnected. | ⬜ | 790 already fixed the value; this adds coverage. |
+| 828 | Verify touch coordinate scaling with `DisplayWidth/DisplayHeight` zero/normal/resized/non-integer; avoid bogus all-zero gestures before display size published. | ⬜ | |
+| 829 | Audit `GestureDetector` timing thresholds vs FNA: tap, double-tap, hold, flick, drag threshold, pinch complete. | ⬜ | Confirm exact hardcoded constants. |
+| 830 | Deterministic gesture tests with an injectable clock/time source instead of real `steady_clock` sleeps. | ⬜ | Stabilizes Hold/Flick/DoubleTap. |
+| 831 | Verify `MouseCursor::FromTexture2D` pixel format/lifetime: confirm `SDL_CreateColorCursor` copies pixels before local vector destroyed; tests if possible. | ⬜ | |
+| 832 | `MouseCursor::FromTexture2D` tests with a minimal/fake `Texture2D`: Color, ColorSrgb, invalid format, invalid origin, disposed texture. | ⬜ | |
+| 833 | Verify all `MouseCursor` system cursors map to closest MonoGame/FNA cursor; document unavoidable SDL differences. | ⬜ | |
+| 834 | `MouseCursor` IDisposable tests: double dispose, move ctor, move assignment, system-singleton disposal policy (don't free shared singletons). | ⬜ | |
+| 835 | Audit thread-safety of static input state; document input APIs as main-thread/game-loop unless intended otherwise. | ⬜ | No heavy locking unless needed. |
+| 836 | Add a manual `examples/demo_input` verification checklist to docs (keys, text/IME, warp, relative, wheel, touch gestures, 4 pads, rumble, sensors). | ⬜ | |
+| 837 | Add platform notes (Linux/X11, Wayland, Windows, Android, iOS) for input limitations (warp/global pos on Wayland; touch/screen keyboard on mobile). | ⬜ | |
+| 838 | Recalculate realistic input coverage split into XNA 4.0 core / FNA EXT / MonoGame MouseCursor / NOXNA / platform-dependent. | ⬜ | Don't mix core with extensions in one %. |
+| 839 | Update `docs/xna-4-api-coverage.md` with final verified input status. | ⬜ | |
+| 840 | Final clean run: build + run full `CnaTests` on EasyGL, Vulkan, bgfx after all input changes; record exact commands/results here. | ⬜ | Only then may Phase I9 be marked complete. |
+
+**Implementation order:** 792–797 (reproducibility) → 798–805 (Mouse) → 806–809 (TextInput/Unicode)
+→ 810–818 (GamePad) → 819–822 (Keyboard) → 823–830 (global state/Touch/Gesture) → 831–834
+(MouseCursor) → 835–840 (docs/platform/coverage/final verification). Build `CnaTests` + run the
+input filter + update this plan + commit source/docs/tests (not build dirs) after each small batch.
+
+**Do not claim "XNA 4.0 Input is complete"** until task 838's coverage table separates: XNA 4.0
+core API · FNA extensions · MonoGame-inspired APIs · CNA/NOXNA-only APIs · platform-dependent
+behavior.
+
+---
+
 ## XNA 4.0 Input API coverage
 
-| Area | API surface | Runtime behavior (now) | After this plan |
+> **Reading note (task 792):** the **"Runtime behavior (now)"** column below is the *pre-plan
+> baseline* captured when this plan was written. As of Phases I1–I8 (tasks 700–791, all complete),
+> the current state is the **"After this plan"** column. These are the original estimates; the
+> **final verified coverage split** (XNA core / FNA EXT / MonoGame / NOXNA / platform-dependent) is
+> produced by Phase I9 **task 838** — treat that as authoritative once done, not these numbers.
+
+| Area | API surface | Runtime behavior (pre-plan baseline) | After Phases I1–I8 (current) |
 |------|-------------|------------------------|-----------------|
 | Enums (Buttons, Keys, GamePadType, GestureType, …) | 100% | 100% | 100% |
 | GamePad value types + dead-zone math | 100% | ~95% (EXT buttons/PacketNumber missing) | ~100% |
@@ -227,11 +314,11 @@ violations in the internal layer, and very thin test coverage.
 
 | Item | Reason |
 |------|--------|
-| `MouseCursor` | No FNA counterpart (MonoGame-derived); status decision pending (Task 754) |
-| Gamepad sensors/touchpad event stream | Capabilities advertise gyro/accel/touchpad; only on-demand reads planned (Tasks 726–727), not an event stream |
-| `FNA_GAMEPAD_NUM_GAMEPADS` env override | Backend hardcodes 4 slots; low priority (Task 734) |
-| Horizontal scroll wheel | This FNA `MouseState` has no horizontal-scroll member; gated on XNA-layer support (Task 749) |
-| `Mouse::SetPosition` warp scale-factor deviation | `SDL_WarpMouseInWindow`'s target has no inverse (logical→window) coordinate transform, so it's off by the scale factor on a letterboxed/scaled window (documented in-source in `Mouse.cpp`; verified correct when window size matches logical/render resolution — task 783). Fixing it needs an `IGraphicsBackend` addition, which is graphics-layer, not input-layer, scope — belongs in `GRAPHICS_TASKS.md`'s track (not added as a `plan_input.md` task; not yet added to `GRAPHICS_TASKS.md` either as of this note) |
+| `MouseCursor` | No FNA counterpart (MonoGame-derived); **status decision made — kept** (Task 754, recorded in `AUDIT.md`), CHECKLIST-compliant as of tasks 750–753 |
+| Gamepad sensors/touchpad event stream | Capabilities advertise gyro/accel/touchpad; on-demand reads **implemented** (`GetGyroEXT`/`GetAccelerometerEXT`, tasks 726–727), not an event stream — by design |
+| `FNA_GAMEPAD_NUM_GAMEPADS` env override | **Implemented** (Task 734): `effective_gamepad_count()` parses the env var, clamped to the 4 frozen `PlayerIndex` slots |
+| Horizontal scroll wheel | This FNA `MouseState` has no horizontal-scroll member; still open, tracked as Phase I9 **task 805** (complete-or-explicitly-close, was task 749) |
+| `Mouse::SetPosition` warp scale-factor deviation | `SDL_WarpMouseInWindow`'s target has no inverse (logical→window) coordinate transform, so it's off by the scale factor on a letterboxed/scaled window (documented in-source in `Mouse.cpp`; verified correct when window size matches logical/render resolution — task 783). Fixing it needs an `IGraphicsBackend` addition (graphics-layer scope). Phase I9 **task 800** re-opens this as an implementation task — see NEXT.md §9 / `GRAPHICS_TASKS.md` for the graphics-track constraint before implementing |
 
 ---
 

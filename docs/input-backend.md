@@ -192,9 +192,9 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
   comment ("Windows only notices a touch screen once it's touched").
 - Known deviation: `TouchPanel::GetState()` falls back to `InputManager`'s event-driven snapshot
   rather than FNA's per-frame `SetFinger` poll population of `touches_` — see §3.
-- Known minor bug (not yet fixed): `TouchPanel::GetCapabilities()` passes `MAX_TOUCHES`
-  unconditionally in both the connected and disconnected branches; FNA returns `0` when
-  disconnected (task 721 noted it, not fixed).
+- `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and
+  `MAX_TOUCHES` when connected, matching FNA's `touchDeviceExists ? 4 : 0` (fixed in task 790;
+  task 721 originally noted the pre-fix bug).
 
 ### TextInputEXT
 
@@ -205,3 +205,34 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
 - Known deviation: the `TextInput`/`INTERNAL_OnTextInput` callback is `char`-based, so UTF-8
   text is forwarded one byte at a time; FNA's C# callback is UTF-16-code-unit-based. A consumer
   appending bytes to a `std::string` reconstructs the original UTF-8 text correctly either way.
+
+---
+
+## 5. Running the input tests
+
+All input coverage lives in the single `CnaTests` binary. To build and run just the input
+suites (Keyboard, Mouse, MouseCursor, GamePad, Touch, Gesture, TextInputEXT, and the internal
+`SdlInputBridge` bridge tests) on the default EasyGL backend:
+
+```bash
+git submodule update --init --recursive   # first time only (see README)
+cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-input-easygl --target CnaTests -j"$(nproc)"
+
+./cmake-build-input-easygl/CnaTests \
+  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'
+```
+
+This filter selects the 165 input-related tests out of the full suite. To shake out
+order-dependence in the process-wide static input state (`InputManager`, `GestureDetector`, and
+the `MouseCursor` stock-cursor singletons all persist for the process lifetime), add:
+
+```bash
+./cmake-build-input-easygl/CnaTests \
+  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*' \
+  --gtest_shuffle --gtest_repeat=10
+```
+
+Swap `-DCNA_GRAPHICS_BACKEND=EASYGL` for `VULKAN` or `BGFX` to verify the same input tests on the
+other backends (bgfx adds 4 backend-specific, input-unrelated tests). The full suite is just
+`./cmake-build-input-easygl/CnaTests` with no filter.
