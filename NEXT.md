@@ -1,363 +1,332 @@
 # NEXT.md — CNA Project Handoff
 
----
-
 ## 1. Project summary
 
-**CNA** is a C++23 reimplementation of the XNA 4.0 programming model (`Microsoft::Xna::Framework`),
-built on SDL3 with a pluggable 3D graphics backend layer. It is a framework/runtime — not a game —
-designed so XNA/FNA game code can be ported to C++ with minimal API-surface changes.
+**CNA** is a C++23 reimplementation of the XNA 4.0 programming model, built on SDL3
+with a pluggable graphics backend (`EASYGL` / `VULKAN` / `BGFX`). It preserves
+XNA-style public APIs (`Microsoft::Xna::Framework`, `Microsoft::Devices`) while using
+modern C++ internally. Targets desktop Linux/Windows/macOS and Android; iOS is planned
+but has no toolchain in this environment. Branch: `feature/devices`.
 
-- **Main goal:** full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit tests and
-  pixel-readback integration tests, verified against the authoritative FNA reference source
-  (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
-  `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
-- **Current development phase:** Phases 1–38 are complete. **Phase 39 (RenderTarget2D and
-  RenderTargetCube completeness, `GRAPHICS_TASKS.md` Tasks 331–340) is open** — Task 331 done,
-  **Task 332 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
-  closed phases have synthesis docs: `docs/sampler-state-support.md` (Phase 35),
-  `docs/depthstencilstate-support.md` (Phase 37), `docs/rasterizerstate-support.md` (Phase 38).
-- **Key architectural decisions:**
-  - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
-    (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
-    `SDL_Renderer` is 2D-only by design (no 3D pipeline at all).
-  - The `sharp-runtime` sibling repo (`../sharp-runtime/`) provides all `System.*` types and
-    primitive type aliases (`bytecs`, `Single`, `String`, …) used on the XNA API surface.
-  - Vertex layout dispatch is **stride-keyed**: EasyGL/Vulkan/Bgfx select their GPU vertex layout
-    from the raw byte stride of the bound buffer, not from `VertexDeclaration` contents. Only
-    strides 16/20/24/32/52 are handled correctly.
-  - `Texture3D` and `TextureCube` inherit `GraphicsResource` directly, **not** `Texture` — unlike
-    FNA, where both inherit `Texture`. Known, documented architectural gap (see §5/§6) with real
-    downstream consequences (texture-in-shader sampling, `EffectParameter` storage).
-  - `GraphicsDevice` stores state objects (`BlendState`/`DepthStencilState`/`RasterizerState`) **by
-    value**, unlike FNA's reference-type aliasing. Deliberate, project-wide, not fixed (Task 869).
+Current development phase: `Microsoft::Devices`/`Microsoft::Devices::Sensors` has been
+through nine hardening/audit passes (`plan_devices.md` through `plan_devices_phase9.md`,
+all closed). Phase 9 ended with an explicit decision
+(`plan_devices_phase9.md` Task P9-9): **Accepted for merge as SDL-backed Devices
+baseline.** There is no open plan file for this namespace right now.
+
+**Important architectural decisions:**
+- Public API names/signatures match XNA 4.0 (or, for `Microsoft::Devices`, the
+  archived WP7 SDK docs — FNA has no equivalent) exactly; C# properties become
+  `getXProperty()`/`setXProperty()`.
+- Non-XNA extensions are tagged `NOXNA` on the public declaration.
+- `Microsoft::Devices::Sensors::SensorBase<T>` (header-only template) is the shared
+  base for `Accelerometer`/`Compass`/`Gyroscope`/`Motion` — see Section 6.
+- `VibrateController` is a singleton (`getDefaultProperty()`), lives directly in
+  `Microsoft::Devices` (not `::Sensors`), does not derive `SensorBase<T>`/`IDisposable`.
+- Tests live under `tests/` mirroring the `include`/`src` namespace path 1:1, Google Test.
+
+**Plan history (all closed, no open plan file):** `plan_devices.md` (31 tasks),
+`plan_devices_phase2.md` (17), `plan_devices_phase3.md` (12), `plan_devices_phase4.md`
+(14), `plan_devices_phase5.md` (14), `plan_devices_phase6.md` (10),
+`plan_devices_phase7.md` (7), `plan_devices_phase8.md` (8), `plan_devices_phase9.md`
+(9). Each phase's premise was to *not* trust the previous phase's "done" claims and
+re-audit from the actual code — several real concurrency/lifetime bugs were found and
+fixed this way across Phases 5-8 (see `AUDIT.md` and each plan file's own "Audit
+findings" section for the full detail; not repeated here to keep this file concise).
 
 ---
 
 ## 2. Current status
 
-### Build status
-- **EasyGL** (`cmake-build-debug`) and **Vulkan** (`cmake-build-vulkan`): both configured, build
-  cleanly, rebuilt and verified in the current session.
-- **Bgfx** (`cmake-build-bgfx`): last verified in an earlier session (Task 309); not rebuilt since
-  — none of the more recent sessions' changes touch Bgfx code, but this is unconfirmed for the
-  current tree.
+**Build:** `CNA` and `CnaTests` build cleanly under `EASYGL` (`cmake-build-debug`),
+`VULKAN`, and `BGFX`. Android cross-compiles cleanly (`arm64-v8a`, NDK r30, API 24,
+compile-only — no APK packaging, `CnaTests` itself not cross-compiled). iOS: no
+toolchain in this Linux container, confirmed blocked every phase to date.
 
-### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 2301/2304 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 2228/2241 pass. 13 pre-existing/documented failures (see §5):
-  5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
-  `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
-  `Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame` (order-dependent flakiness — only one of
-  the two fails per run).
-- **Bgfx:** last confirmed 1985/1985 (100%) as of Task 309; stale, not rerun since.
-- **Caution:** run EasyGL's and Vulkan's full `ctest` suites **sequentially, never concurrently**
-  — concurrent runs previously produced transient GPU/driver-contention false failures. If a
-  single run shows an anomaly beyond the documented list, re-run that test in isolation before
-  treating it as a regression.
+**Tests:** Devices-only filter is 226 tests — 224 passing, 2 expected `GTEST_SKIP()`s
+on hardware-dependent paths (this container has no accelerometer/gyroscope hardware).
+Full `ctest` suite has 2 pre-existing, unrelated `EasyGL`/`easy-gl` graphics-backend
+failures (not caused by, or fixed by, any Devices work). See Section 7 for commands.
 
-### What currently works
-- Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (arbitrary
-  sub-regions, `startIndex`, mip levels on EasyGL), argument validation, `Dispose`.
-- `SurfaceFormat` enum: all 27 values match FNA exactly, including ordinals.
-- `SamplerState`/`BlendState`/`DepthStencilState`/`RasterizerState`: full property surfaces, all
-  static presets (including `Name`), and `GraphicsDevice` defaults all verified against FNA and
-  pixel-tested where applicable (Phases 35–38).
-- `GraphicsDevice.SamplerStates`/`VertexSamplerStates` are honored by all 3D stock-effect draws on
-  all 3 backends (Task 293 fix).
-- `EnvironmentMapEffect` and `SpriteBatch` (all 20 FNA public methods) work on all 3 backends.
-- Vulkan rendering is colorspace-correct (`Texture2D`/swapchain both fixed from sRGB to UNORM).
-- `RenderTarget2D`: constructors, `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`, and
-  now `IsContentLost`/`ContentLost` (Task 331) all match FNA at the property level. Basic
-  render-to-texture round trip pixel-verified on EasyGL and Vulkan.
+**Sanitizers:** `devices-asan`/`devices-ubsan` presets clean. `devices-tsan`'s only
+finding is one pre-existing, out-of-scope race in `sharp-runtime`'s
+`System::TimeSpan::TimeSpan(const TimeSpan&)` copy constructor (an unsynchronized debug
+counter in a sibling repo) — confirmed via the actual stack trace, not just the summary
+line, to touch no `Microsoft::Devices` field or lock.
 
-### What does NOT work yet
-- **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
-  equations / depth-compare ops / no stencil testing at all, regardless of what's requested.
-  Tracked as Task 868/Task 870, confirmed repeatedly via pixel tests, not fixed (large,
-  multi-pipeline-site changes).
-- `GraphicsDevice.ReferenceStencil`'s independent-override behavior has zero backend connection on
-  all 3 backends (Task 872). `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` everywhere
-  (Task 871).
-- `RenderTarget2D`'s `mipMap` parameter is silently ignored (level count always 1; no backend
-  allocates render-target mip storage) — Task 336. `preferredMultiSampleCount` is stored verbatim
-  and never clamped/wired to any backend — Task 337. Both found this session (Task 331), deferred.
-- `Texture3D`/`TextureCube::GetData` is a total silent no-op on Vulkan/Bgfx (Task 865).
-  `TextureCube::DDSFromStreamEXT` is a non-functional stub (Task 663).
-- `Texture2D::SetData(level>0,...)` is a silent no-op on Vulkan/Bgfx; EasyGL's non-mip-aware
-  filters render solid black on mip-incomplete textures (Task 867).
-- `SpriteBatch`'s `SamplerState` is a no-op on Vulkan/Bgfx (EasyGL only). Multiple
-  `SpriteBatch::Begin()`/`End()` per frame on Vulkan: only the last batch renders.
-- `Texture3D` sampling cannot be wired into any shader without an architecture change (Task 863).
+**Working:** `Accelerometer`/`Gyroscope` — real, SDL3-backed, thread-safe (global SDL
+sensor mutex + per-class subsystem mutex), lifetime-safe (dispatch-token fix survives
+self-destroy-during-dispatch, verified under ASan). `VibrateController` — real, SDL3
+haptic-backed. `examples/demo_devices` (`cna_demo_devices`) builds and runs without
+crashing on a real X11/OpenGL display (rendered content itself not visually confirmed
+in this session's restricted display environment — see Section 5).
+
+**Not working / not implemented:** `Compass`/`Motion` are permanent, honest
+`SensorState::NotSupported` stubs — SDL3 has no magnetometer/fused-orientation API on
+any platform. A native-backend design (not implementation) exists at
+`docs/devices-native-backend-design.md`. `System.Device.Location` (GPS) is not
+implemented and is explicitly out of scope for `Microsoft::Devices::Sensors` — see
+`docs/location-future-plan.md`. **No physical hardware verification has ever been done,
+in any session** — everything above is verified by code reading, unit tests,
+cross-compilation, and sanitizers only.
 
 ---
 
 ## 3. Recent changes
 
-Most recent first. Full history (including everything before Task 271, and full detail for every
-task below) is in `GRAPHICS_TASKS.md` and `git log`.
+**`plan_devices_phase9.md` (2026-07-04) — physical verification and release gate, all
+9 tasks closed:**
+- Fresh audit of Phase 8's six specific claims against current code — none had
+  regressed (Task P9-1).
+- Reproduced the Devices test matrix and sanitizer gates directly, not from memory
+  (Tasks P9-2/P9-3).
+- Investigated Android APK packaging/emulator run: SDL3's vendored `android-project`
+  Gradle template exists but has no CNA build-system integration; the one configured
+  AVD (`Medium_Phone`, x86_64) fails immediately — `/dev/kvm` absent in this container
+  (Task P9-4).
+- Physically confirmed (via `/proc/bus/input/devices`) this container has zero
+  sensor/haptic/gamepad hardware; ran the hardware-dependent unsupported-path tests
+  live as evidence (Task P9-5).
+- `DevicesDemo`: added `IsDataValid`/`VibrateController` device-name/sensor start-stop
+  toggle keys (`A`/`G`) to the window-title diagnostics (Task P9-6,
+  `examples/demo_devices/src/DevicesDemo.{hpp,cpp}`).
+- Wrote a precise per-component status table into `AUDIT.md`/`NEXT.md` (Task P9-7).
+- Consolidated the Compass/Motion native-backend architecture into
+  `docs/devices-native-backend-design.md` — design only, nothing implemented
+  (Task P9-8).
+- Final acceptance decision: **Accepted for merge as SDL-backed Devices baseline**
+  (Task P9-9) — normal tests and sanitizers clean, docs honest, only
+  hardware/native-backend/Android-packaging/iOS-toolchain gaps remain.
 
-| Commit / Task | Change |
-|---|---|
-| `3fdb6c6` Task 331 | **Opens Phase 39.** Audited `RenderTarget2D` against FNA line-by-line. Fixed a real gap: added missing `IsContentLost`/`ContentLost` (mirroring `RenderTargetCube`). Found and deliberately deferred two gaps to dedicated tasks: `mipMap` ignored (Task 336), `MultiSampleCount` not clamped/wired (Task 337). New pixel-free property test on both backends (15/15 pass each). |
-| `e81d443` Task 330 | **Closes Phase 38.** Confirmed (no bug) `RasterizerState` has no freeze/immutability enforcement, matching FNA. Wrote `docs/rasterizerstate-support.md` synthesizing Phase 38 — found **no new tracked bugs**, only test-coverage gaps. |
-| `4ab72c7` Task 326 | Registered the existing backend-agnostic `FillMode` pixel test for EasyGL too (previously Vulkan-only). No bug found. |
-| `14e58da` Tasks 323–325 | One `CullMode` pixel test (contrast-checked across `None`/`CullClockwiseFace`/`CullCounterClockwiseFace`, 6/6 both backends) satisfies all 3 tasks. Found (not fixed, out of scope) Task 318's quad-naming was backwards. |
-| `b61aee8` Task 322 | Extended `GraphicsDevice`'s default-`RasterizerState` test to the full 6-property surface. No bug. |
-| `c18b0f3` Task 321 | **Opens Phase 38.** Fixed the last portion of Task 866 (preset `Name` gap) — closes Task 866 entirely across all 4 state classes. |
-| `ba6011e` Task 320 | **Closes Phase 37.** `docs/depthstencilstate-support.md` synthesis. |
-| `6652573` Tasks 318–319 | 5th reconfirmation of Task 870 (Vulkan stencil fake). Fixed a `ReferenceStencil`-propagation bug (Task 309-shaped); found a 2nd universal bug — `ReferenceStencil` has zero backend connection anywhere (new Task 872). |
-| `95abf99`/`d86c1f4`/`c1d8e74`/`65d3d21`/`eccbb9e` Tasks 313–317 | Per-property `DepthStencilState` pixel tests; Task 313 discovered Task 870 (Vulkan depth/stencil almost entirely fake), reconfirmed 4 more times; Task 315 found and **fixed** a real bug (`SDL_GL_STENCIL_SIZE` never requested on EasyGL); found Task 871 (`Clear` ignores stencil). |
-| `a1bcf20` Tasks 311–312 | **Opens Phase 37.** Fixed `DepthStencilState`'s preset `Name` gap; fixed `GraphicsDevice`'s default `DepthStencilState`/`RasterizerState` never actually copying their FNA-specified presets. |
-
-Older history (Phases 34–36, Tasks 271–310): see `GRAPHICS_TASKS.md` and
-`docs/sampler-state-support.md`. Headline: Task 293 fixed a severe, project-wide bug (per-slot
-`SamplerState` silently ignored by all 3D draws, all 3 backends); Task 304 found Vulkan's
-`BlendState` support is almost entirely fake (Task 868, not fixed, confirmed 5×).
+Full task-by-task detail (including exact commands run and every audit finding) is in
+`plan_devices_phase9.md`; Phases 5-8's detail is in their own plan files. This section
+intentionally does not restate that history.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**There is no build-breaking or test-breaking blocker.** The repository builds and the test suites
-pass at the rates given in §2 on EasyGL and Vulkan (Bgfx unverified this session, last known-good).
+**No code-level blocker.** All 9 Devices plan files are closed; Phase 9's own fresh
+audit found no regressions and no new bugs. What remains is exclusively
+environment/scope-limited:
+- No physical Android/iOS device or rumble-capable gamepad in this session.
+- No `/dev/kvm` in this container, so the one configured Android emulator AVD cannot
+  boot (`x86_64 emulation currently requires hardware acceleration!`).
+- No Apple toolchain in this Linux container (iOS cross-compilation impossible here).
+- No native (non-SDL) backend implemented for `Compass`/`Motion` — a design exists,
+  not code.
 
-The most significant *correctness* gap is architectural, not a build/test failure: `Texture3D`/
-`TextureCube` do not inherit `Texture` in CNA (they inherit `GraphicsResource` directly), which
-structurally prevents `Texture3D` from ever being sampled via the normal
-`GraphicsDevice.Textures[slot]` path. No failing command or test is tied to this — it manifests as
-a compile-time impossibility if game code tries `GraphicsDevice.Textures[i] = my3DTexture` the way
-real XNA/FNA code would. See `GRAPHICS_TASKS.md` Task 863.
-
-The most significant *silent-failure* gaps (compile and run without error, wrong or no data):
-Vulkan's `BlendState`/`DepthStencilState` support (Tasks 868/870), `TextureCube::DDSFromStreamEXT`
-(Task 663), `Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), and `RenderTarget2D`'s
-`mipMap`/`MultiSampleCount` params being accepted but not actually wired to any backend
-(Tasks 336/337, found this session). None have a test that currently fails loudly — they're only
-visible via dedicated pixel tests or direct code reading.
+None of these are bugs to "fix" in this repo; they're gaps to close only when the
+environment or scope changes (see Section 8).
 
 ---
 
 ## 5. Known bugs and limitations
 
-| Status | Issue | Tracking |
-|---|---|---|
-| Confirmed, MASSIVE, not fixed | Vulkan's `BlendState` support is almost entirely fake — hardcodes one blend equation regardless of request. Confirmed 5× via pixel tests. EasyGL fully correct. | Task 868 |
-| Confirmed, MASSIVE, not fixed | Vulkan's `DepthStencilState` support is almost entirely fake — `DepthBufferFunction` hardcoded, entire stencil-test parameter set unused. Confirmed 5× via pixel tests. EasyGL fully correct. | Task 870 |
-| Confirmed, universal, not fixed | `GraphicsDevice.ReferenceStencil`'s independent-override has zero backend connection on all 3 backends. | Task 872 |
-| Confirmed, universal, not fixed | `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` on every backend. | Task 871 |
-| Confirmed, not fixed (found Task 331) | `RenderTarget2D`'s `mipMap` is silently ignored — level count always 1; no backend allocates RT mip storage. | Task 336 |
-| Confirmed, not fixed (found Task 331) | `RenderTarget2D`'s `preferredMultiSampleCount` is stored verbatim, never clamped/wired to any backend. | Task 337 |
-| Confirmed, severe, silent failure | `TextureCube::DDSFromStreamEXT` ignores its stream argument, always returns a blank 1×1 texture. | Task 663 |
-| Confirmed, severe, silent failure | `Texture3D`/`TextureCube::GetData` total no-op on Vulkan/Bgfx. | Task 865 |
-| Confirmed, silent failure | `Texture2D::SetData(level>0,...)` no-op on Vulkan/Bgfx; EasyGL renders solid black for mip filters on mip-incomplete textures. | Task 867 |
-| Confirmed, architectural, not fixed | `Texture3D`/`TextureCube` can't be sampled in any shader — don't inherit `Texture`. | Task 863 |
-| Confirmed, architectural, deliberate | `GraphicsDevice` stores state objects by value, unlike FNA's reference-type aliasing. No game code here relies on FNA's behavior. | Task 869 |
-| Confirmed bug | `SpriteBatch` with multiple `Begin()`/`End()` per frame on Vulkan: only the last batch renders. | — |
-| Confirmed, incomplete | `SpriteBatch`'s `SamplerState` (`Begin()`) is a no-op on Vulkan/Bgfx (EasyGL only). | — |
-| Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. Not caused by recent work. | — |
-| Confirmed, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` aborts on an internal assert in the sibling `easy-gl` repo. | — |
-| Confirmed, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. | — |
-| Confirmed, pre-existing, flaky | `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`: order-dependent, only one fails per full-suite run. | — |
-| Suspected, not reproduced | Vulkan/Bgfx likely have the same mip-allocation bug already fixed on EasyGL's `TextureCube` (Task 276), for `Texture3D`/`TextureCube` on both backends. | Task 864 |
-| Needs verification | Whether Bgfx's window actually has a physical stencil buffer (the same class of gap just found/fixed on EasyGL) has not been checked. | — |
-| Incomplete, by design | Stride-keyed vertex layout only supports strides 16/20/24/32/52. Vulkan has no `Tangent`/`Binormal` mapping. `SurfaceFormat` support is Color-only for real GPU formats. `SDL_Renderer` has no 3D at all. Bgfx has no GPU pixel-readback API. | — |
-| Risky assumption | `GraphicsDevice`'s user-primitive scratch buffers never shrink — fine for typical use, but memory stays at the high-water mark for the device's lifetime. | — |
+- **By design, not a bug:** `Compass`/`Motion` are permanent `NotSupported` stubs —
+  SDL3 exposes no magnetometer API on any platform.
+- **Deliberate, documented limitation:** concurrent `Dispose()` calls on the *same*
+  sensor instance from two threads is not guaranteed to give the losing caller a clean
+  exception — it blocks until the winner's cleanup finishes, then returns as a silent
+  no-op. Shared state is never corrupted; this matches the conventional .NET
+  `IDisposable` contract (not required to be thread-safe against concurrent callers).
+- **Deliberate, unfixed by design:** destroying (not just `Dispose()`-ing)
+  `Accelerometer` specifically from within its own `CurrentValueChanged` handler is
+  unsafe — `DispatchSensorReading()` unconditionally touches `this` again afterward to
+  decide whether to also raise the legacy `ReadingChanged` event. This is a
+  class-design property (`ReadingChanged` is itself a member of `this`), not a
+  dispatch-bookkeeping gap; fixing it needs a larger redesign, out of scope so far.
+  `Gyroscope` has no second event and is fully safe.
+- **Needs verification, likely permanent:** iOS cross-compilation — no Apple toolchain
+  possible in this Linux container.
+- **Needs physical hardware verification (never done):** Android axis-remap
+  tilt-direction correctness beyond the semantic tests already in place;
+  `VibrateController::Start()`/`StartLeftRight()` actually actuating a real motor;
+  gamepad-exclusion not competing with `GamePad::SetVibration()` on a real controller.
+- **Unverified, low priority, no evidence of an actual bug:** `SensorFailedException`'s
+  exact constructor overload signature is an educated guess (its MSDN doc page lacks a
+  Constructors table).
+- **Out of scope, not this repo's bug:** `sharp-runtime`'s `TimeSpan` copy-constructor
+  TSan race (see Section 2) — a sibling repo issue, do not fix it from here.
 
 ---
 
 ## 6. Architecture notes
 
-### Main modules
+```
+include/Microsoft/Devices/Sensors/          ← XNA WP7 sensor API headers
+include/Microsoft/Devices/Sensors/Detail/   ← internal-only, never in public headers
+src/Microsoft/Devices/Sensors/              ← sensor implementations (SDL3-backed)
+tests/Microsoft/Devices/Sensors/            ← Google Test suites per class
+include/Microsoft/Devices/                  ← VibrateController.hpp
+src/Microsoft/Devices/                      ← VibrateController.cpp
+examples/demo_devices/                      ← DevicesDemo (cna_demo_devices target)
+docs/devices-hardware-checklist.md          ← manual real-hardware verification steps
+docs/devices-build.md                       ← reproducible build/test commands
+docs/devices-native-backend-design.md       ← Compass/Motion native backend design (not implemented)
+docs/location-future-plan.md                ← why GPS/location isn't here
+```
 
-| Layer | Location | Notes |
-|---|---|---|
-| XNA public API | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
-| Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, `IVertexBuffer`, etc. |
-| EasyGL backend | `src/CNA/Internal/Backends/EasyGL/` | Primary; OpenGL ES 3.2 via EasyGL wrapper |
-| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | `VulkanVertexFormatHelper.hpp` for per-format mapping |
-| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | `BgfxVertexFormatHelper.hpp`; no readback API |
-| CNA utilities | `include/CNA/`, `src/CNA/` | `NOXNA` helpers, logging, math |
-| sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types, primitive aliases |
-
-### Critical invariants (do not break these)
-
-- **`NOXNA` macro** tags every non-XNA extension in public headers — required for any new CNA-only
-  public method/constructor/type. Requires `#include "CNA/CNAHelper.hpp"`.
-- **C# properties** → `getXProperty()` / `setXProperty()` — never public fields on the XNA surface.
-- **`static readonly`** (C#) → `static const` member in `.hpp` + definition in `.cpp`.
-- **Type aliases** from `SharpRuntime/SharpRuntimeHelper.hpp` (`bytecs`, `Single`, `String`, …) must
-  be used on XNA API surfaces — never raw `uint8_t`/`float`/`std::string` directly.
-- **Backend selection is compile-time** — no runtime branch between backends in the same binary.
-- **Stride-keyed vertex layout** — only strides 16/20/24/32/52 work correctly for 3D.
-- **Doxygen required** on every public `.hpp` member: full `/** @brief … @param … @return */`.
-- **SPDX header** `// SPDX-License-Identifier: MS-PL` at the top of every `.hpp`/`.cpp`.
-- **`Texture3D`/`TextureCube` inherit `GraphicsResource`, not `Texture`** — a known deviation from
-  FNA (see §5). Do not assume code that works for `Texture2D` "just works" for these two.
-- **`SurfaceFormat` ordinal values are load-bearing** — every backend does
-  `static_cast<int>(format)`. Any enum edit must preserve FNA's exact ordinals (verified 0–26).
-- **`Texture::ValidateFormat` blocks every format except `Color`** at construction time.
-- **`GraphicsDevice::userVertexScratch_`/`userIndexScratch_`** are shared, growable, non-shrinking
-  scratch buffers used by all `DrawUserPrimitives`/`DrawUserIndexedPrimitives` overloads. Never
-  resize down; never reenter mid-write.
-- **No backend's `CreateRenderTarget2D`/`CreateRenderTargetCube` accepts a mip count or a
-  multisample count** — `RenderTarget2D`/`RenderTargetCube`'s `mipMap`/`multiSampleCount`
-  constructor parameters are currently accepted but not wired through (Tasks 336/337/332).
-
-### FNA reference
-
-Authoritative behavioral reference: `/rv/data/library/github.com/FNA-XNA/FNA/src`. When CNA
-intentionally diverges from FNA, document it in the commit/PR description and in `GRAPHICS_TASKS.md`
-— not as a source comment explaining the deviation's rationale.
+- **`SensorBase<T>`** owns `CurrentValue`, `IsDataValid`, `TimeBetweenUpdates`,
+  `CurrentValueChanged`, `Dispose()`. Every field is mutex-guarded; getters return by
+  value. Has `ClaimDisposalOnce()`/`WaitForDisposalToComplete()` (protected) — derived
+  `Dispose(bool)` overrides must use these, never call the base `Dispose(bool)`
+  directly on a losing concurrent call. **Do not restructure further** — stable,
+  hardened across 5 phases.
+- **Invariant:** any class overriding `Dispose(bool)` must add
+  `using SensorBase<T>::Dispose;`, or C++ name-hiding breaks the inherited public
+  no-arg `Dispose()`.
+- **`Accelerometer`/`Gyroscope`** share `Detail::SdlSensorSubsystem<TSensor>` for
+  subsystem/event-watch machinery. Every real SDL sensor call is serialized by a
+  process-wide `Detail::GetGlobalSdlSensorMutex()`, nested inside each class's own
+  `subsystem.mutex_` (per-class mutex first, global mutex second, never reversed) —
+  **not optional**: SDL3 documents `SDL_InitSubSystem()`/`SDL_QuitSubSystem()` as
+  main-thread-only/not-thread-safe, and concurrent calls have reproducibly corrupted
+  the heap in testing. `EnsureSubsystemInitialized()`/`OpenDefaultSensorLocked()`/
+  `ProbeIsSupported()` require a `const std::lock_guard<std::mutex>&` parameter as
+  compile-time proof the lock is held. Dispatch uses `dispatchToken_` (a
+  `std::shared_ptr<std::vector<std::thread::id>>`), copied into the cleanup guard
+  *before* invoking the user callback — required so a callback that destroys its own
+  instance mid-dispatch doesn't leave the guard touching freed memory (confirmed via
+  ASan). `Timestamp` on readings is real wall-clock time
+  (`System::DateTimeOffset::getUtcNowProperty()`).
+- **Stub pattern (`Compass`/`Motion`):** always `SensorState::NotSupported`; `Start()`
+  always throws `SensorFailedException`; still expose `Calibrate` for API completeness.
+- **`VibrateController`:** file-static `g_haptic`/`g_leftRightEffectId` guarded by one
+  mutex locked for each public method's entire body; RAII destructor closes the haptic
+  device and releases `SDL_INIT_HAPTIC`. Excludes haptic devices that are also
+  connected gamepads via ID correlation, not name matching.
+- **`GetTypeName()` invariant:** returns `.`-separated fully-qualified .NET names
+  (e.g. `"Microsoft.Devices.Sensors.Compass"`), tagged `NOXNA`.
+- **Boundaries — do not cross:**
+  - `third_party/SDL` is vendored with its own `CLAUDE.md` forbidding AI-authored
+    contributions — read-only for research.
+  - `sharp-runtime` is a sibling repo under separate development, its own git history —
+    if a build breaks in a file Devices work didn't touch, check there first.
+  - Do not expand `Microsoft::Devices` scope to camera, radio, or
+    phone-call/photo-picker APIs.
+  - Do not implement sensor fusion in `Motion`, and do not add GPS/location to
+    `Microsoft::Devices::Sensors` under any circumstances (including as `NOXNA`) —
+    see `docs/location-future-plan.md`.
 
 ---
 
 ## 7. Useful commands
 
+**ZIP-export caveat:** every command below assumes a real `git clone` with submodules
+initialized (`git submodule update --init --recursive`) — a bare source export has
+empty `third_party/SDL`/`SDL_image`/`SDL_mixer`/`vendor/googletest` and will not
+configure. See `docs/devices-build.md` Section 0.
+
 ```bash
-# Configure (EasyGL — primary)
-cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+# Configure (only if CMakeCache.txt is stale/missing):
+cmake -S . -B cmake-build-debug \
+      -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
 
-# Configure (Vulkan)
-cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
-
-# Configure (Bgfx)
-cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
-
-# Build CNA library
+# Build:
 cmake --build cmake-build-debug --target CNA -j$(nproc)
-
-# Build and run all unit tests (EasyGL)
 cmake --build cmake-build-debug --target CnaTests -j$(nproc)
-./cmake-build-debug/CnaTests
 
-# Run a specific unit test suite
-./cmake-build-debug/CnaTests --gtest_filter="Texture2DTest.*"
+# Run all tests:
+cd cmake-build-debug && ctest --output-on-failure
 
-# Build Vulkan (single-threaded is more reliable for link stability)
-cmake --build cmake-build-vulkan --target CNA -j1
+# Devices-only filter (226 tests; see docs/devices-build.md Section 2 for the
+# loop-it-20-60x convention before trusting a single pass on new concurrency tests):
+cd cmake-build-debug && ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase|ScopeExit"
 
-# Full ctest run (unit + integration), any backend build dir — run sequentially, not concurrently
-# across backends (see §2)
-cd cmake-build-debug && ctest -j1 --output-on-failure
-cd cmake-build-debug && ctest -R <TestName>          # run one test in isolation (useful for flaky tests)
+# Build and run the Devices demo (needs a real display):
+cmake --build cmake-build-debug --target cna_demo_devices -j$(nproc)
+./cmake-build-debug/cna_demo_devices
 
-# Run a specific EasyGL/Vulkan integration/example test directly (needs an X server on :0)
-SDL_VIDEODRIVER=x11 DISPLAY=:0 ./cmake-build-debug/cna_test_easygl_rendertarget2d_properties
+# Android cross-compile check (NDK at ~/Android/Sdk/ndk/):
+cmake -S . -B cmake-build-android -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$HOME/Android/Sdk/ndk/30.0.14904198/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DCNA_BUILD_TESTS=OFF
+cmake --build cmake-build-android --target CNA -j$(nproc)
+
+# Vulkan/BGFX:
+cmake --build cmake-build-vulkan --target CNA --target CnaTests -j$(nproc)
+cmake --build cmake-build-bgfx   --target CNA --target CnaTests -j$(nproc)
+
+# Sanitizer builds (see docs/devices-build.md Section 6 for findings history):
+cmake --preset devices-asan && cmake --build --preset devices-asan
+cmake --preset devices-tsan && cmake --build --preset devices-tsan
+cmake --preset devices-ubsan && cmake --build --preset devices-ubsan
 ```
 
-There is no known reproducible failing build command right now (see §4).
+No dedicated lint/format tooling is configured for this project.
 
 ---
 
 ## 8. Next smallest tasks
 
-In priority order:
+No open plan file drives further `Microsoft::Devices` work. Pick one, or ask the user
+first — do not invent new scope, and do not open a "Phase 10" solely to keep
+re-auditing code that four consecutive audits (Phases 6-9) found nothing new in.
 
-1. **`GRAPHICS_TASKS.md` Task 332 — audit `RenderTargetCube` constructors and properties against FNA**
-   - Goal: same audit shape as Task 331 (just done), one class over. Read FNA's
-     `RenderTargetCube.cs` line-by-line and check CNA's `RenderTargetCube.hpp/.cpp` against it —
-     constructor overload(s), `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`, and (per
-     the task's own note) faces and mipmaps specifically. **Known lead**: `RenderTargetCube.cpp`'s
-     constructor takes `bool /*mipMap*/` — completely unused (commented out), same bug shape as
-     Task 331's Task-336 finding for `RenderTarget2D`, but not yet confirmed against FNA
-     line-by-line or written up as its own tracked task. `IsContentLost`/`ContentLost` are already
-     present and correct on `RenderTargetCube` — do not re-add them.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/RenderTargetCube.cpp`, `RenderTargetCubeTests.cpp`
-     (check if it exists first).
-   - Verification: unit tests for the constructor and every property; do not assume conformance
-     without reading the FNA source directly.
-
-2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
-   - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
-     flag, reuse `Texture2D.cpp`'s DXT decode helpers, 6×`levelCount` `SetData` calls).
-   - Files: `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp`, `TextureCubeTests.cpp`.
-   - Verification: build a real/hand-built DDS cube-map test fixture **first**, then implement
-     against it — do not mark done on "compiles and doesn't throw" alone (see §9).
-
-3. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
-   - Goal: `vkCmdCopyImageToBuffer` + host-visible staging buffer, mirroring the existing upload
-     path's staging-buffer pattern in reverse.
-   - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
-     (`VulkanTexture3DBackend`/`VulkanTextureCubeBackend::GetData`).
-   - Verification: new Vulkan pixel-readback test analogous to the EasyGL ones in
-     `easygl_texture3d_partial_box_readback_test.cpp`.
-
-4. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
-   - Goal: confirm (via a failing test first, matching the Task 276 methodology) that `Texture3D`/
-     `TextureCube` mip levels >0 silently fail on Vulkan and Bgfx, then fix by pre-allocating every
-     mip level at image/texture creation time.
-   - Files: `VulkanGraphicsBackend.cpp` (`VkImageCreateInfo::mipLevels`),
-     `BgfxGraphicsBackend.cpp` (`hasMips` parameter to `bgfx::createTexture3D`/`createTextureCube`).
-   - Verification: new mip round-trip test per backend, mirroring
-     `examples/easygl_texturecube_mip_test.cpp`.
+1. **Physical hardware verification**, if real Android/iOS hardware or a
+   rumble-capable gamepad becomes available. Goal: work through
+   `docs/devices-hardware-checklist.md` using `cna_demo_devices`, mark each item
+   verified/failed with evidence. Files: none changed unless a real bug is found.
+   Verification: the checklist itself, updated with results.
+2. **Android APK packaging + CNA CMake integration**, if `/dev/kvm` or a physical
+   device becomes available. Goal: connect SDL3's vendored `android-project` Gradle
+   template to a CNA build target, package `examples/demo_devices`, run it on a
+   device/emulator. Files: new build glue under `examples/demo_devices/` or a new
+   `android/` project dir; `docs/devices-build.md` updated with the exact steps.
+   Verification: an installed, launchable APK.
+3. **Native Compass/Motion backend implementation**, only once explicitly scoped as
+   its own task. Goal: implement `ICompassBackend`/`IMotionBackend` for one platform
+   per `docs/devices-native-backend-design.md`. Files: new `.hpp`/`.cpp` under
+   `include/src/Microsoft/Devices/Sensors/Detail/`, new tests under
+   `tests/Microsoft/Devices/Sensors/`. Verification: new unit tests plus the existing
+   Devices-only `ctest` filter still green.
+4. **Anything outside `Microsoft::Devices`.** Ask before assuming scope.
 
 ---
 
 ## 9. Do not do yet
 
-- **No architecture change to make `Texture3D`/`TextureCube` inherit `Texture`** (Task 863) without
-  a deliberate, scoped design pass — it touches `EffectParameter`, `TextureCollection`, and every
-  backend's texture-bind code. Not a small patch.
-- **No rushed `TextureCube::DDSFromStreamEXT` implementation** without a real DDS cube-map test
-  fixture built first — a "looks plausible" parser that isn't verified against real data just
-  trades one silent-failure stub for a differently-silent one.
-- **No SpriteBatch Vulkan multi-batch fix** until the root cause is isolated — a wrong fix could
-  silently break single-batch rendering.
-- **No opportunistic fixes** for `EasyGL_MRT_TwoAttachments`, `Vulkan_DepthBias`, or
-  `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` flakiness — each needs its own dedicated
-  root-cause investigation, not a guess bundled into an unrelated task.
-- **No investigation of `easy-gl-resource-smoke-tests`** as part of a CNA task — it lives in the
-  sibling `easy-gl` repo.
-- **No refactor of the stride-keyed vertex layout system** — load-bearing for all 3D tests across
-  all backends; needs its own dedicated phase with full regression testing.
-- **No further changes to the `GraphicsDevice` user-primitive scratch buffers** without re-running
-  the full `DrawUserPrimitives`/`DrawUserIndexedPrimitives` pixel-readback suite.
-- **No API renames or namespace moves** — XNA API names and shapes are frozen by the FNA reference.
-- **No mass Doxygen or NOXNA cleanup passes** — fix tags only on files you're already touching for
-  a real reason.
-- **No opportunistic fix for Task 868 (Vulkan blend state) or Task 870 (Vulkan
-  `DepthBufferFunction`/stencil testing)** bundled into an unrelated task — both are large,
-  multi-pipeline-site changes confirmed across many tests; each needs its own dedicated task and
-  full regression pass.
-- **No opportunistic fix for Task 871/872 (stencil `Clear`/`ReferenceStencil` backend gaps) or
-  Tasks 336/337 (RenderTarget2D mip/multisample gaps)** — verify with a real test first, same
-  discipline as every other tracked bug.
+- Do not claim `Microsoft::Devices` is "complete" as a flat statement — use Section 2's
+  layered breakdown (API vs. SDL runtime vs. native backend vs. hardware-verified).
+- Do not restructure `SensorBase<T>`, `Detail::SdlSensorSubsystem<TSensor>`, or the
+  `dispatchToken_`/global-mutex locking scheme without a concrete, newly-found bug —
+  five phases of hardening already closed the gaps that were actually there.
+- Do not fake `Compass`/`Motion` from `Accelerometer`/`Gyroscope` data, and do not add
+  GPS/location to `Microsoft::Devices::Sensors` under any circumstances (including as
+  `NOXNA`) — see `docs/location-future-plan.md`.
+- Do not claim Android/iOS hardware support, or an APK/emulator run, unless it was
+  actually done in the current session.
+- Do not edit anything under `third_party/SDL` — vendored, has its own `CLAUDE.md`
+  forbidding AI-authored contributions.
+- Do not fix bugs found in `sharp-runtime` by editing files there directly — it's a
+  separate repo with its own build/test/commit process.
+- Do not trust a single passing `ctest` run as proof a new concurrency/lifetime change
+  is correct — loop it (20-60+ iterations) and/or run it under a sanitizer preset
+  first; this exact gap has caused real, previously-undetected bugs in this namespace's
+  history (see `docs/devices-build.md` Section 2/6).
+- Do not open a new Devices plan/phase file just to keep iterating — only for a
+  concrete, newly-found code-level issue.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8.
-Do not refactor unrelated code. Make one small, verified improvement.
-Run the relevant build/test command before declaring the task done.
-Update NEXT.md after finishing.
+Read NEXT.md first. Microsoft::Devices is accepted for merge as an SDL-backed
+baseline (plan_devices_phase9.md Task P9-9) — there is no open plan file for this
+namespace. Do not summarize it as flatly "complete"; use Section 2's layered status.
 
-Current status: Phases 1-38 are fully complete. Phase 39 (RenderTarget2D and RenderTargetCube
-completeness, GRAPHICS_TASKS.md Tasks 331-340) is open, Task 331 done, Task 332 next. EasyGL:
-2301/2304 pass (3 documented pre-existing failures). Vulkan: 2228/2241 pass (13 documented
-pre-existing failures). Bgfx: last known-good 1985/1985, not rebuilt this session. Caution: run
-EasyGL's and Vulkan's full ctest suites sequentially, never concurrently (see NEXT.md §2); if a
-single run shows an anomaly beyond the documented list, re-run in isolation before treating it as
-a regression.
+Inspect only the files needed for the first task you pick from Section 8 (or ask the
+user what to prioritize). Do not refactor unrelated code. Make one small, verified
+improvement at a time.
 
-Task 331 (just done) audited RenderTarget2D against FNA's RenderTarget2D.cs line-by-line. Fixed a
-real gap: added missing IsContentLost/ContentLost (mirroring RenderTargetCube). Found and
-deliberately deferred two gaps to their own tasks: mipMap is silently ignored (level count always
-1, no backend allocates RT mip storage) - Task 336; preferredMultiSampleCount is stored verbatim,
-never clamped/wired to any backend - Task 337.
+Run the relevant build/test command from Section 7 after each change — and if the
+change touches concurrency or object lifetime, also loop the test (20-60+ iterations,
+docs/devices-build.md Section 2) and/or run it under a sanitizer preset
+(devices-asan/devices-tsan/devices-ubsan, Section 6) before trusting it, per Section 9.
 
-Next task: GRAPHICS_TASKS.md Task 332 - audit RenderTargetCube constructors and properties against
-FNA. Same audit shape as Task 331, one class over: read FNA's RenderTargetCube.cs line-by-line,
-check the constructor overload(s), every property, and default values against CNA's current
-RenderTargetCube. Known lead: RenderTargetCube.cpp's constructor takes bool /*mipMap*/ -
-completely unused (commented out) - same bug shape as Task 331's Task-336 finding for
-RenderTarget2D, but not yet confirmed against FNA line-by-line or tracked as its own task.
-IsContentLost/ContentLost are ALREADY correct on RenderTargetCube - do not re-add them. Per the
-task's own note, pay particular attention to faces and mipmaps. Files: RenderTargetCube.hpp/.cpp,
-RenderTargetCubeTests.cpp (check if it exists first).
-Update GRAPHICS_TASKS.md and NEXT.md after finishing.
+Update NEXT.md after finishing, keeping it concise — this file should stay a short,
+current-state handoff, not a full phase-by-phase history (that detail belongs in each
+plan_devices_phaseN.md file).
 ```
