@@ -1436,7 +1436,7 @@ namespace CNA::Internal::Backends::Bgfx
             if (params.texture1 && bgfx::isValid(texColor3DSampler2_))
             {
                 auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
-                bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[0]);
+                bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
             }
             bgfx::submit(currentViewId_, dualTexture3DProgram_);
         }

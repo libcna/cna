@@ -2801,12 +2801,15 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("vkCreatePipelineLayout (DualTex3D) failed");
     }
 
-    VkDescriptorSet VulkanGraphicsBackend::GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1)
+    VkDescriptorSet VulkanGraphicsBackend::GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1,
+                                                                       VkSampler sampler0, VkSampler sampler1)
     {
         EnsureDualTexResources();
 
-        const uint64_t key = reinterpret_cast<uint64_t>(view0) * 2654435761ULL
-                           ^ reinterpret_cast<uint64_t>(view1);
+        const uint64_t key = reinterpret_cast<uint64_t>(view0)    * 2654435761ULL
+                           ^ reinterpret_cast<uint64_t>(view1)    * 40503ULL
+                           ^ reinterpret_cast<uint64_t>(sampler0) * 2246822519ULL
+                           ^ reinterpret_cast<uint64_t>(sampler1) * 3266489917ULL;
         auto it = dualTexDescSets_.find(key);
         if (it != dualTexDescSets_.end()) return it->second;
 
@@ -2820,10 +2823,10 @@ namespace CNA::Internal::Backends::Vulkan
             return VK_NULL_HANDLE;
 
         VkDescriptorImageInfo imgInfo[2]{};
-        imgInfo[0].sampler     = defaultSampler_;
+        imgInfo[0].sampler     = sampler0;
         imgInfo[0].imageView   = view0;
         imgInfo[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imgInfo[1].sampler     = defaultSampler_;
+        imgInfo[1].sampler     = sampler1;
         imgInfo[1].imageView   = view1;
         imgInfo[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -4711,7 +4714,7 @@ namespace CNA::Internal::Backends::Vulkan
             const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
             VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
             VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
-            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1);
+            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1, slotSamplers_[0], slotSamplers_[1]);
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
@@ -4808,7 +4811,7 @@ namespace CNA::Internal::Backends::Vulkan
             const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
             VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
             VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
-            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1);
+            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1, slotSamplers_[0], slotSamplers_[1]);
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;

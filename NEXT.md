@@ -44,22 +44,22 @@ build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` conf
   in isolation and on a repeat serial full run — treated as parallel-execution flakiness, not a
   regression (none confirmed as a stable failure): `EasyGL_SkinnedBones`,
   `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`):** **could not build this session** — `cmake -B cmake-build-vulkan`
-  configures fine, but the build fails in the sibling `sharp-runtime` repo (`BitConverter.hpp`,
-  `System::Single()` deleted-constructor error) due to **pre-existing uncommitted local changes in
-  that sibling repo**, not caused by anything in this session (confirmed via `git status`/`git log`
-  in `../sharp-runtime`). Not touched/fixed here — out of scope for a CNA graphics task, and touching
-  another repo's uncommitted in-progress work without being asked would be inappropriate. Last known
-  good state (an earlier session): 1944/1945 (serial `-j1`) / 1943/1945 (parallel `-j`), only
-  `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case failing consistently; `Vulkan_FillMode_WireFrame`/
-  `Vulkan_RenderTargetUsage` order-dependent flakiness confirmed pre-existing via `git stash`
-  bisection (Task 279). **Should be re-verified once `sharp-runtime`'s local state is resolved**,
-  especially for Task 293's fix (see below) and its new `Vulkan_SamplerState_DualTextureEffect` test.
-- **Bgfx (`cmake-build-bgfx`), full `ctest`:** 1939/1939 (100%) as of Task 283. **Not rebuilt/retested
-  since** — low risk for header-only/EasyGL/Vulkan-only changes, but Task 293's `GraphicsDevice.cpp`
-  fix is backend-agnostic and directly relevant to Bgfx too; not empirically reverified this session.
-  Bgfx has no GPU pixel-readback API in this project, so its integration coverage is smoke-test-only
-  by design.
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** **1983/1984** (serial `-j1`) pass. `../sharp-runtime`
+  (sibling repo) had a pre-existing, uncommitted local fix for a real `BitConverter.hpp` ambiguity
+  bug (`System::Single`, the static-utility class from `Half.hpp`, collided with `BitConverter`'s
+  own `using SharpRuntime::Single` for the float alias — any TU including both failed to compile).
+  That fix was verified and committed this session (`sharp-runtime` commit `ec97562`), unblocking
+  the Vulkan build. Only `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails (pre-existing,
+  documented). `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` order-dependent flakiness
+  (Task 279) was not re-triggered this run but is known parallel/ordering-sensitive, not a stable
+  failure.
+- **Bgfx (`cmake-build-bgfx`), full `ctest`:** **1977/1977 (100%)**. Rebuilt and reverified this
+  session after Task 293's `GraphicsDevice.cpp` fix (backend-agnostic, applies here too) plus a
+  Bgfx-specific follow-up fix: `DrawPrimitivesEx`'s dual-texture branch bound `texture1` (slot 1)
+  using `samplerFlags_[0]` instead of `samplerFlags_[1]`, so the second texture always inherited
+  slot 0's sampler state. Fixed. No regressions. Bgfx has no GPU pixel-readback API in this project,
+  so its integration coverage remains smoke-test-only by design — the sampler-state fix itself
+  isn't pixel-verified on Bgfx, only confirmed not to crash/regress.
 
 ### What currently works
 - Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (including
@@ -90,23 +90,26 @@ build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` conf
   Task 292 — previously each slot was a default-constructed `SamplerState` (functionally identical
   filter/address values, but empty `Name`, and completely untested before this task).
 - **`GraphicsDevice.SamplerStates`/`VertexSamplerStates` are now actually honored by 3D stock-effect
-  draws on EasyGL** (Task 293, severe finding — see below for the full story). Any game code drawing
-  textured 3D geometry via `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives`
-  (the normal way to use `BasicEffect`/`DualTextureEffect`/`AlphaTestEffect`/`EnvironmentMapEffect`/
-  `SkinnedEffect`) previously had its assigned `SamplerState` silently ignored — `TextureAddressMode`
-  and `TextureFilter` had zero effect, always sampling as if `Clamp`+`Linear` were assigned (EasyGL's
-  texture-creation-time hardcoded default) or whatever state happened to be left over from an
-  unrelated earlier draw. Fixed by adding the missing `applySamplerStatesToBackend()` call — already
-  present and correct in `DrawPrimitives`/`DrawIndexedPrimitives` — to all 18 of the
-  `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives` overloads that were
-  missing it. **This directly unblocks Tasks 294–299** (pixel tests for `Clamp`/`Wrap`/`Mirror`,
+  draws, confirmed on all three backends** (Task 293, severe finding — see below for the full
+  story). Any game code drawing textured 3D geometry via
+  `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives` (the normal way to use
+  `BasicEffect`/`DualTextureEffect`/`AlphaTestEffect`/`EnvironmentMapEffect`/`SkinnedEffect`)
+  previously had its assigned `SamplerState` silently ignored on every backend — `TextureAddressMode`
+  and `TextureFilter` had zero effect. Three separate, backend-specific root causes, all fixed:
+  **EasyGL/shared `GraphicsDevice`** — all 18 `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/
+  `DrawInstancedPrimitives` overloads skipped the `applySamplerStatesToBackend()` call that
+  `DrawPrimitives`/`DrawIndexedPrimitives` correctly make; fixed by adding it to all 18.
+  **Vulkan** — `GetOrCreateDualTexDescSet` hardcoded `defaultSampler_` into both descriptor slots
+  and cached the descriptor set keyed only by image views, ignoring the correctly-computed
+  `slotSamplers_[0]`/`[1]`; fixed by threading both samplers through and folding them into the cache
+  key. **Bgfx** — the dual-texture draw branch bound texture slot 1 using `samplerFlags_[0]` instead
+  of `samplerFlags_[1]`, so the second texture always inherited slot 0's sampler; fixed to use the
+  correct index. **This directly unblocks Tasks 294–299** (pixel tests for `Clamp`/`Wrap`/`Mirror`,
   `Point`/`Linear` filtering, mipmap filters, anisotropic filtering) — before this fix, every one of
-  those tests would have failed identically for this same root cause on EasyGL, regardless of what
-  each task's title suggests it's individually testing. **Not yet verified on Vulkan/Bgfx** — the
-  fix lives in the shared, backend-agnostic `GraphicsDevice` layer and both backends already have
-  real `ApplySamplerState` implementations (confirmed by code reading), so it should apply equally,
-  but `cmake-build-vulkan` couldn't be built this session (see §2) and Bgfx wasn't rebuilt. Verify
-  both before relying on this being fixed everywhere.
+  those tests would have failed identically for this same root cause, regardless of what each task's
+  title suggests it's individually testing. Verified: `EasyGL_SamplerState_DualTextureEffect` and
+  `Vulkan_SamplerState_DualTextureEffect` both pixel-verify the fix (same test source, reused);
+  Bgfx has no pixel-readback API so its fix is confirmed only by full-suite no-regression (1977/1977).
 
 ### What does NOT work yet
 - `Texture3D`/`TextureCube::GetData` is a **total silent no-op on both Vulkan and Bgfx** — neither
@@ -139,7 +142,7 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 293 | `GraphicsDevice.cpp` (18 call sites), `examples/easygl_sampler_state_effect_test.cpp` (new), `CMakeLists.txt` | **Found and fixed a severe, project-wide bug.** New pixel test (`DualTextureEffect` + `SamplerStates[0]=PointWrap`, UV past 1.0) initially FAILED — sampler state had zero effect. Root cause: all 18 `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives` overloads skip the `applySamplerStatesToBackend()` call that `DrawPrimitives`/`DrawIndexedPrimitives` correctly make — meaning `GraphicsDevice.SamplerStates` was silently ignored for essentially all 3D stock-effect texture draws. Fixed by adding the missing call to all 18 sites (mechanical, matches the existing correct pattern exactly). Test now passes. Registered a Vulkan variant too (reuses the same backend-agnostic source) but couldn't build/verify it — `cmake-build-vulkan` fails due to unrelated, pre-existing uncommitted changes in the sibling `sharp-runtime` repo. Directly unblocks Tasks 294–299, which would otherwise all fail for this same root cause. 2043/2045 EasyGL ctest pass serially, zero regressions. |
+| (uncommitted) Task 293 (+Vulkan/Bgfx follow-up) | `GraphicsDevice.cpp` (18 sites), `VulkanGraphicsBackend.cpp/.hpp`, `BgfxGraphicsBackend.cpp`, `examples/easygl_sampler_state_effect_test.cpp` (new), `CMakeLists.txt` | **Found and fixed a severe, project-wide bug across all 3 backends.** EasyGL: all 18 `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives` overloads skipped `applySamplerStatesToBackend()`; fixed. Vulkan: `GetOrCreateDualTexDescSet` hardcoded `defaultSampler_` and cached by view-only key, ignoring `slotSamplers_`; fixed by threading samplers through + widening the cache key. Bgfx: dual-texture draw used `samplerFlags_[0]` for both texture slots instead of `samplerFlags_[1]` for slot 1; fixed. New pixel test (`DualTextureEffect` + `SamplerStates[0]=PointWrap`, UV past 1.0) proves the fix on both EasyGL and Vulkan (reused test source, registered as both `EasyGL_SamplerState_DualTextureEffect` and `Vulkan_SamplerState_DualTextureEffect`); Bgfx confirmed via full-suite no-regression only (no pixel-readback API). Along the way, also verified and committed a pre-existing, unrelated uncommitted fix in the sibling `sharp-runtime` repo (`BitConverter.hpp` `System::Single` ambiguity) that had been silently blocking any Vulkan build. Directly unblocks Tasks 294–299. All three backends' full ctest suites reconfirmed with zero regressions: EasyGL 2043/2045, Vulkan 1983/1984, Bgfx 1977/1977 (100%). |
 | (uncommitted) Task 292 | `SamplerStateCollection.cpp`, `SamplerStateCollectionTests.cpp` (new) | Found and fixed a real bug uncovered directly by Task 291: `SamplerStateCollection`'s constructor default-constructed each of 16 slots instead of copying `SamplerState::LinearWrap` (FNA's actual behavior). Values coincided (both Linear+Wrap×3) so this was invisible until `Name` existed to distinguish them. Zero prior test coverage for this class or `GraphicsDevice`'s sampler defaults existed. Fixed + added a full new test file. 2042/2044 EasyGL ctest pass serially. |
 | (uncommitted) Task 291 | `SamplerState.hpp/.cpp`, `SamplerStateTests.cpp` | **Opens Phase 35.** Audited `SamplerState` against FNA: property surface, all 6 presets, and default values already matched FNA exactly. Real finding: FNA sets `Name` on every preset (e.g. `"SamplerState.PointClamp"`); CNA's private preset constructor never did. Fixed by threading a `name` param through the constructor. Also found the same gap exists in `BlendState`/`DepthStencilState`/`RasterizerState` — tracked separately as Task 866, not fixed here (scope discipline). 8 new tests. 2032/2034 EasyGL ctest pass serially. |
 | `7c3e051` Task 290 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | **Closes Phase 34.** Found 7 of 27 `SurfaceFormat` values still untested for throw-behavior (`Bgra5551`/`Bgra4444`/`Dxt3`/`Dxt5`/`Rg32`/`ByteEXT`/`UShortEXT`). Added one exhaustive `EverySurfaceFormatEitherWorksOrThrowsClearly` test iterating all 27 values instead of more one-off tests. Confirmed `Texture::ValidateFormat` is backend-agnostic (called from the shared `Texture2D`/`Texture3D`/`TextureCube` constructors), so this holds for Vulkan/Bgfx too. No bug found. |
@@ -200,7 +203,7 @@ on returned pixel values).
 | Confirmed bug, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. Not investigated further. |
 | Confirmed bug, pre-existing, order-dependent | `Vulkan_FillMode_WireFrame` fails only when run as part of the full suite (parallel or serial), passes in isolation. Confirmed via `git stash` bisection to predate recent sessions. `Vulkan_RenderTargetUsage` shows similar parallel-only flakiness. |
 | Likely bug, not yet confirmed | Vulkan and Bgfx probably have the same mip-level-allocation bug fixed for EasyGL's `TextureCube` (Task 276), for both `Texture3D` and `TextureCube`, on both backends. Tracked as Task 864, not reproduced with a test. |
-| Fixed (Task 293), Vulkan/Bgfx unverified | `GraphicsDevice.SamplerStates`/`VertexSamplerStates` were silently ignored by all `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives` calls (missing `applySamplerStatesToBackend()`, present in 18 overloads) — fixed and pixel-test-confirmed on EasyGL. Vulkan/Bgfx should benefit identically (same shared `GraphicsDevice` code path, both already have real `ApplySamplerState` backend implementations) but couldn't be built/verified this session (see §2) — re-verify before assuming fixed there too. |
+| Fixed (Task 293), all 3 backends | `GraphicsDevice.SamplerStates`/`VertexSamplerStates` were silently ignored by 3D stock-effect draws on every backend, for 3 different backend-specific reasons (missing `applySamplerStatesToBackend()` on EasyGL/shared code; hardcoded `defaultSampler_` + view-only descriptor cache key on Vulkan; `samplerFlags_[0]` reused for texture slot 1 on Bgfx). All 3 fixed and reverified: EasyGL/Vulkan pixel-test-confirmed (`*_SamplerState_DualTextureEffect`), Bgfx confirmed via full-suite no-regression (no pixel-readback API). |
 | Incomplete | `SpriteBatch`'s `SamplerState` is a no-op on Vulkan and Bgfx (EasyGL only) — a separate code path from Task 293's fix; `SpriteBatch` doesn't go through `GraphicsDevice.DrawUserPrimitives`. |
 | Incomplete | EasyGL/Bgfx stride-keyed vertex layout only supports strides 16/20/24/32/52. |
 | Incomplete | Vulkan: `Tangent`/`Binormal` `VertexElementUsage` values have no mapping. |
@@ -304,20 +307,21 @@ In priority order:
 
 1. **`GRAPHICS_TASKS.md` Task 294 — pixel test: `TextureAddressMode::Clamp` (out-of-range UV)**
    - Goal: continue Phase 35. Task 293 just fixed a severe bug where `GraphicsDevice.SamplerStates`
-     was silently ignored by the entire `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/
-     `DrawInstancedPrimitives` family on EasyGL (18 missing `applySamplerStatesToBackend()` calls,
-     now added) — **this task and Tasks 295–299 should now actually be able to pass on EasyGL**,
-     whereas before Task 293's fix they'd all have failed identically regardless of what each one
-     nominally tests. `examples/easygl_sampler_state_effect_test.cpp` (Task 293) already
-     demonstrates the `Wrap` case pattern (repeat/tile past UV 1.0) — this task needs the `Clamp`
-     counterpart (edge-extend past UV 1.0, or below UV 0.0), ideally reusing the same 2-texel
-     red/green-style texture and UV-past-range technique.
+     was silently ignored by 3D stock-effect draws on **all three backends** (EasyGL: 18 missing
+     `applySamplerStatesToBackend()` calls; Vulkan: hardcoded default sampler + wrong descriptor
+     cache key; Bgfx: wrong sampler-flags index for texture slot 1 — all fixed and reverified,
+     zero regressions on any backend) — **this task and Tasks 295–299 should now actually be able
+     to pass**, whereas before Task 293's fix they'd all have failed identically regardless of what
+     each one nominally tests. `examples/easygl_sampler_state_effect_test.cpp` (Task 293, also
+     registered as a Vulkan test) already demonstrates the `Wrap` case pattern (repeat/tile past
+     UV 1.0) — this task needs the `Clamp` counterpart (edge-extend past UV 1.0, or below UV 0.0),
+     ideally reusing the same 2-texel red/green-style texture and UV-past-range technique.
    - Files: new `examples/easygl_texture_address_mode_clamp_test.cpp` (or extend the existing
      `easygl_texture_address_mode_test.cpp` from Task 269, which already covers this ground for
      **`SpriteBatch`** specifically — check whether it already effectively covers this task before
      writing a near-duplicate for the 3D stock-effect path).
-   - Verification: pixel-readback test; also worth spot-checking on Vulkan once `cmake-build-vulkan`
-     is buildable again (see §2's `sharp-runtime` blocker) — Task 293's fix is unverified there.
+   - Verification: pixel-readback test; register on both EasyGL and Vulkan (both are buildable and
+     green now) mirroring Task 293's dual-backend test registration.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -381,36 +385,40 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-34 are fully complete. Phase 35 (SamplerState/texture sampling
-conformance, GRAPHICS_TASKS.md Tasks 291-300) is in progress: Tasks 291-293 done.
-EasyGL (cmake-build-debug) is green: 2043/2045, only 2 pre-existing unrelated failures (see
-NEXT.md §5). cmake-build-vulkan currently FAILS TO BUILD due to unrelated, pre-existing
-uncommitted changes in the sibling sharp-runtime repo (BitConverter.hpp) - not caused by this
-session, not fixed (out of scope, don't touch another repo's in-progress work uninvited). Bgfx
-not rebuilt this session. Tasks 291/292 fixed real, small SamplerState/SamplerStateCollection
-Name conformance bugs (see GRAPHICS_TASKS.md for details; Task 866 tracks a related
-BlendState/DepthStencilState/RasterizerState gap, not yet fixed).
+conformance, GRAPHICS_TASKS.md Tasks 291-300) is in progress: Tasks 291-293 done. All three
+backends are green: EasyGL 2043/2045, Vulkan 1983/1984, Bgfx 1977/1977 (100%) - only pre-existing,
+documented failures remain anywhere (see NEXT.md §5). Tasks 291/292 fixed real, small
+SamplerState/SamplerStateCollection Name conformance bugs (see GRAPHICS_TASKS.md for details;
+Task 866 tracks a related BlendState/DepthStencilState/RasterizerState gap, not yet fixed).
 
-Task 293 found and fixed something much bigger: GraphicsDevice.SamplerStates was being silently
-ignored by the ENTIRE DrawUserPrimitives/DrawUserIndexedPrimitives/DrawInstancedPrimitives family
-(18 overloads) because they never called applySamplerStatesToBackend() - unlike DrawPrimitives/
-DrawIndexedPrimitives, which do. This meant TextureAddressMode/TextureFilter had literally zero
-effect on any 3D stock-effect draw (BasicEffect/DualTextureEffect/AlphaTestEffect/
-EnvironmentMapEffect/SkinnedEffect) issued via the User-primitive draw calls - the primary way
-most game/test code actually draws. Fixed by adding the missing call to all 18 sites. Proved with
-a new pixel test (examples/easygl_sampler_state_effect_test.cpp,
-EasyGL_SamplerState_DualTextureEffect ctest) that initially failed and now passes. Also registered
-as a Vulkan test (reuses the same backend-agnostic source) but couldn't verify it due to the
-sharp-runtime build blocker above - re-run once that's resolved.
+Task 293 found and fixed something much bigger, across all 3 backends: GraphicsDevice.SamplerStates
+was being silently ignored by essentially all 3D stock-effect texture draws
+(BasicEffect/DualTextureEffect/AlphaTestEffect/EnvironmentMapEffect/SkinnedEffect), for 3 different
+backend-specific reasons. EasyGL/shared GraphicsDevice: all 18
+DrawUserPrimitives/DrawUserIndexedPrimitives/DrawInstancedPrimitives overloads never called
+applySamplerStatesToBackend() (unlike DrawPrimitives/DrawIndexedPrimitives, which do) - fixed by
+adding it to all 18. Vulkan: GetOrCreateDualTexDescSet hardcoded defaultSampler_ into both
+descriptor slots and cached the descriptor set keyed only by image views, ignoring the
+correctly-computed slotSamplers_[0]/[1] - fixed by threading both samplers through and widening the
+cache key (mirroring the already-correct single-texture GetOrCreateTexSamplerDescSet pattern).
+Bgfx: the dual-texture draw branch bound texture slot 1 using samplerFlags_[0] instead of
+samplerFlags_[1] - fixed. Proved with a new pixel test
+(examples/easygl_sampler_state_effect_test.cpp) registered on both EasyGL and Vulkan
+(EasyGL_SamplerState_DualTextureEffect / Vulkan_SamplerState_DualTextureEffect) - both initially
+failed and now pass; Bgfx confirmed via full-suite no-regression only (no pixel-readback API).
+Along the way, also found and committed a pre-existing, unrelated uncommitted fix in the sibling
+sharp-runtime repo (BitConverter.hpp: System::Single ambiguity between the static-utility class and
+the float alias) that had been silently blocking any Vulkan build - verified it resolves the build,
+committed it there (commit ec97562), separate from any CNA change.
 
 Next task: GRAPHICS_TASKS.md Task 294 - pixel test: TextureAddressMode::Clamp (out-of-range UV).
 IMPORTANT CONTEXT: this task (and 295-299) would ALL have failed identically before Task 293's fix,
-regardless of what each one individually tests - they all depend on the same
-applySamplerStatesToBackend() plumbing that's now fixed on EasyGL. Check examples/
-easygl_texture_address_mode_test.cpp (Task 269) first - it already tests Clamp vs Wrap for
-SpriteBatch specifically; confirm whether this task needs a separate 3D-stock-effect-path version
-(most likely yes, since Task 269's test is SpriteBatch-only, a different code path from Task 293's
-fix) before writing new code. Task 293's own new test already demonstrates the Wrap-side pattern to
-mirror for Clamp. If cmake-build-vulkan is buildable again by now, also verify Task 293's fix and
-this new test on Vulkan.
+regardless of what each one individually tests - they all depend on the same sampler-application
+plumbing that's now fixed on all 3 backends. Check examples/easygl_texture_address_mode_test.cpp
+(Task 269) first - it already tests Clamp vs Wrap for SpriteBatch specifically; confirm whether
+this task needs a separate 3D-stock-effect-path version (most likely yes, since Task 269's test is
+SpriteBatch-only, a different code path from Task 293's fix) before writing new code. Task 293's
+own new test already demonstrates the Wrap-side pattern to mirror for Clamp - register the new test
+on both EasyGL and Vulkan, both are buildable and green now.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
