@@ -55,11 +55,18 @@ namespace
         return count;
     }
 
+    // Test-only override for use_scancode_mode(): nullopt means "use the cached env value".
+    // Because the env value is cached once (below), tests can't toggle FNA_KEYBOARD_USE_SCANCODES
+    // in-process; this hook lets a test exercise both modes without a subprocess.
+    std::optional<bool> g_scancodeModeTestOverride;
+
     // Mirrors FNA's UseScancodes static readonly bool (SDL3_FNAPlatform.cs:33-35):
     // evaluated once, so setting the env var after the first key event/lookup has no
     // effect, matching FNA's own readonly-at-startup semantics.
     bool use_scancode_mode()
     {
+        if (g_scancodeModeTestOverride.has_value())
+            return g_scancodeModeTestOverride.value();
         static const bool useScancodes = []() -> bool {
             const char* envValue = std::getenv("FNA_KEYBOARD_USE_SCANCODES");
             return envValue != nullptr && std::string(envValue) == "1";
@@ -717,6 +724,20 @@ namespace
     /// it, mirroring FNA's INTERNAL_xnaMap (SDL3_FNAPlatform.cs:2619-2742). Used by
     /// GetKeyFromScancode to find the physical key position for a given Keys value before
     /// asking SDL what character the *current* keyboard layout produces there.
+    ///
+    /// Intentionally unmapped Keys (fall through to std::nullopt), matching FNA's INTERNAL_xnaMap
+    /// omissions exactly (task 819 audit) — SDL3 exposes no scancode for these, so they cannot
+    /// round-trip through GetKeyFromScancode and are documented here rather than silently dropped:
+    ///   IME:      Kana, Kanji, ImeConvert, ImeNoConvert, ProcessKey
+    ///   System:   Select, Print, Execute, Help, Separator, Attn, Crsel, Exsel, EraseEof, Play,
+    ///             Zoom, Pa1
+    ///   Browser:  BrowserBack/Forward/Refresh/Stop/Search/Favorites/Home
+    ///   Media:    VolumeMute, MediaNextTrack, MediaPreviousTrack, MediaStop, MediaPlayPause,
+    ///             LaunchMail, SelectMedia, LaunchApplication1, LaunchApplication2
+    ///   Xbox:     ChatPadGreen, ChatPadOrange
+    ///   OEM:      Oem8, OemBackslash, OemCopy, OemAuto, OemEnlW
+    /// (Keys::None is NOT in this set — it maps to SDL_SCANCODE_UNKNOWN. The forward keycode and
+    /// scancode maps are otherwise byte-for-byte faithful ports of FNA's keyMap/scanMap.)
     std::optional<SDL_Scancode> try_convert_keys_to_sdl_scancode(const Microsoft::Xna::Framework::Input::Keys key)
     {
         using Microsoft::Xna::Framework::Input::Keys;
@@ -1088,6 +1109,16 @@ namespace CNA::Internal::Input
 
         const SDL_Keycode sym = SDL_GetKeyFromScancode(*sdlScancode, SDL_KMOD_NONE, true);
         return try_convert_sdl_key(sym).value_or(Keys::None);
+    }
+
+    void SdlInputBridge::SetScancodeModeForTests(const bool enabled)
+    {
+        g_scancodeModeTestOverride = enabled;
+    }
+
+    void SdlInputBridge::ClearScancodeModeForTests()
+    {
+        g_scancodeModeTestOverride = std::nullopt;
     }
 
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)

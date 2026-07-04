@@ -108,6 +108,16 @@ namespace CNA::Internal::Input
          * layout produces at that same physical key position. Returns Keys::None if no
          * mapping exists in either direction.
          */
+        /**
+         * @brief Test-only: forces scancode mode on/off, overriding the cached
+         *        `FNA_KEYBOARD_USE_SCANCODES` env value (which can't be changed in-process).
+         * @param enabled True to force scancode mode on, false to force it off.
+         */
+        static void SetScancodeModeForTests(bool enabled);
+
+        /** @brief Test-only: reverts scancode mode to the `FNA_KEYBOARD_USE_SCANCODES` env value. */
+        static void ClearScancodeModeForTests();
+
         static Microsoft::Xna::Framework::Input::Keys GetKeyFromScancode(
             Microsoft::Xna::Framework::Input::Keys scancode
         );

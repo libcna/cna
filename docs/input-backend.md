@@ -152,6 +152,14 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
 - Storage remains an `std::unordered_set<Keys>` rather than FNA's native bitfield representation
   — an accepted internal-representation deviation; the ordering/hash *contract* matches FNA, the
   storage layout doesn't need to.
+- The three SDL↔XNA mapping tables (`try_convert_sdl_key`, `try_convert_sdl_scancode`,
+  `try_convert_keys_to_sdl_scancode`) were audited against FNA's `keyMap`/`scanMap`/`xnaMap` (task
+  819) and are faithful 1:1 ports — zero missing entries, zero mismatches. The only CNA-specific
+  addition is `SDLK_AC_BACK → Keys::Escape` (Android back button; no FNA equivalent). **40 XNA
+  `Keys` values have no SDL scancode and intentionally cannot round-trip** through
+  `GetKeyFromScancodeEXT` — the IME keys (Kana, Kanji, ImeConvert, …), browser/media keys,
+  ChatPad keys, and a few OEM/system keys (Attn, Crsel, Pa1, …); the full list is documented in a
+  source comment on `try_convert_keys_to_sdl_scancode`. This matches FNA's own `xnaMap` omissions.
 
 ### Mouse
 
