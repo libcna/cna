@@ -60,16 +60,34 @@ namespace Microsoft::Devices::Sensors
     {
         auto& subsystem = GetSubsystem();
 
-        if (subsystem.instanceCount_ >= MaxSensorCount)
+        // Task P6-1: see Accelerometer::Accelerometer()'s identical fix for
+        // the full rationale — the check+increment must be atomic with
+        // Dispose()'s decrement (already under this same lock), and the
+        // lock must be released before the slow SDL probe below.
         {
-            throw SensorFailedException(
-                "The limit of 10 simultaneous instances of the Gyroscope class per application has been exceeded.");
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+
+            if (subsystem.instanceCount_ >= MaxSensorCount)
+            {
+                throw SensorFailedException(
+                    "The limit of 10 simultaneous instances of the Gyroscope class per application has been exceeded.");
+            }
+
+            ++subsystem.instanceCount_;
         }
 
-        ++subsystem.instanceCount_;
-        const bool supported = getIsSupportedProperty();
-        state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
-        setIsSupportedProperty(supported);
+        try
+        {
+            const bool supported = getIsSupportedProperty();
+            state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
+            setIsSupportedProperty(supported);
+        }
+        catch (...)
+        {
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            --subsystem.instanceCount_;
+            throw;
+        }
     }
 
     Gyroscope::~Gyroscope()

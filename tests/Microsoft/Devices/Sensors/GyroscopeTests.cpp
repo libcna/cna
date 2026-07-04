@@ -136,6 +136,44 @@ TEST(GyroscopeTests, EleventhSimultaneousInstanceThrows)
     EXPECT_THROW({ const Gyroscope overflow; (void)overflow; }, SensorFailedException);
 }
 
+// Task P6-1: see AccelerometerTests.cpp's identical test for the full
+// rationale — instanceCount_'s check+increment/decrement previously used an
+// inconsistent locking discipline, a real data race under concurrent
+// construct/destroy.
+TEST(GyroscopeTests, ConcurrentConstructDestroyKeepsInstanceCountBalanced)
+{
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 50;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                const Gyroscope g;
+                (void)g;
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+
+    std::vector<std::unique_ptr<Gyroscope>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(instances.push_back(std::make_unique<Gyroscope>()));
+    }
+
+    EXPECT_THROW({ const Gyroscope overflow; (void)overflow; }, SensorFailedException);
+}
+
 // Task P3-7: catches the dot-vs-colon GetTypeNameCPP naming-convention
 // mistake that Task P2-4 fixed for Accelerometer; nothing previously
 // verified this for Gyroscope.

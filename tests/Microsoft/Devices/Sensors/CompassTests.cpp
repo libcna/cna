@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
@@ -90,6 +91,44 @@ TEST(CompassTests, DisposingOneOfTenAllowsAnotherConstruction)
     instances.erase(instances.begin());
 
     EXPECT_NO_THROW({ const Compass eleventh; (void)eleventh; });
+}
+
+// Task P6-1: Compass's instanceCount_ is a plain static int with the same
+// unguarded increment/decrement pattern Accelerometer/Gyroscope had — now
+// guarded by its own instanceCountMutex_. See AccelerometerTests.cpp's
+// identical test for the full rationale.
+TEST(CompassTests, ConcurrentConstructDestroyKeepsInstanceCountBalanced)
+{
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 50;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                const Compass c;
+                (void)c;
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+
+    std::vector<std::unique_ptr<Compass>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(instances.push_back(std::make_unique<Compass>()));
+    }
+
+    EXPECT_THROW({ const Compass overflow; (void)overflow; }, SensorFailedException);
 }
 
 TEST(CompassTests, GetCurrentValuePropertyThrowsInvalidOperationException)

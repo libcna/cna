@@ -7,6 +7,7 @@
 namespace Microsoft::Devices::Sensors
 {
     int Motion::instanceCount_ = 0;
+    std::mutex Motion::instanceCountMutex_;
 
     bool Motion::getIsSupportedProperty()
     {
@@ -26,13 +27,21 @@ namespace Microsoft::Devices::Sensors
         : state_(SensorState::NotSupported),
           started_(false)
     {
-        if (instanceCount_ >= MaxSensorCount)
+        // Task P6-1: previously unguarded, a real data race between
+        // concurrent constructors/Dispose() calls on this shared static
+        // counter.
         {
-            throw SensorFailedException(
-                "The limit of 10 simultaneous instances of the Motion class per application has been exceeded.");
+            std::lock_guard<std::mutex> lock(instanceCountMutex_);
+
+            if (instanceCount_ >= MaxSensorCount)
+            {
+                throw SensorFailedException(
+                    "The limit of 10 simultaneous instances of the Motion class per application has been exceeded.");
+            }
+
+            ++instanceCount_;
         }
 
-        ++instanceCount_;
         const bool supported = getIsSupportedProperty();
         state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
         setIsSupportedProperty(supported);
@@ -71,6 +80,7 @@ namespace Microsoft::Devices::Sensors
                 Stop();
             }
 
+            std::lock_guard<std::mutex> lock(instanceCountMutex_);
             --instanceCount_;
             if (instanceCount_ < 0)
             {

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <mutex>
+
 #include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
@@ -24,6 +26,9 @@ namespace Microsoft::Devices::Sensors
     {
     private:
         static int instanceCount_;
+
+        /** @brief Guards instanceCount_'s check+increment/decrement (Task P6-1) against concurrent construct/destroy. */
+        static std::mutex instanceCountMutex_;
 
         static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
 

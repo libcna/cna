@@ -182,6 +182,46 @@ TEST(AccelerometerTests, DisposingOneOfTenAllowsAnotherConstruction)
     EXPECT_NO_THROW({ const Accelerometer eleventh; (void)eleventh; });
 }
 
+// Task P6-1: instanceCount_'s check+increment (constructor) and decrement
+// (Dispose()) previously used an inconsistent locking discipline (unlocked
+// vs. locked) — a real data race under concurrent construct/destroy. If the
+// race regresses, concurrent contention could leak/lose increments, either
+// falsely tripping the 10-instance cap below or falsely allowing more than
+// 10 to coexist; either would make this test fail.
+TEST(AccelerometerTests, ConcurrentConstructDestroyKeepsInstanceCountBalanced)
+{
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 50;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                const Accelerometer a;
+                (void)a;
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+
+    std::vector<std::unique_ptr<Accelerometer>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(instances.push_back(std::make_unique<Accelerometer>()));
+    }
+
+    EXPECT_THROW({ const Accelerometer overflow; (void)overflow; }, SensorFailedException);
+}
+
 TEST(AccelerometerTests, GetTypeName)
 {
     const Accelerometer a;
