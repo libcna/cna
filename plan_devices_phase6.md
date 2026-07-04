@@ -476,3 +476,57 @@ exercised directly. This matches the project's existing, honest
 documentation stance that real-hardware event dispatch is
 compile-tested/reasoned about, not hardware-verified
 (`docs/devices-hardware-checklist.md`).
+
+## P6-5: `SensorBase<T>` event semantics — add `TimeBetweenUpdates` tests
+
+### Resolution
+
+Per the audit's finding #5: `CurrentValueChanged`'s update-then-notify
+order and the `TimeBetweenUpdates` default-init path were both confirmed
+correct by direct code reading, but `TimeBetweenUpdates` had **zero**
+existing tests anywhere (every existing test only exercises
+`SensorBase<T>` indirectly through a concrete sensor class, none of which
+ever change `TimeBetweenUpdates`). The claimed "duplicate comment line"
+near `TimeBetweenUpdates` was checked and **not found** in the current
+file — noted honestly rather than fixing a phantom problem.
+
+`TimeBetweenUpdatesChanged` is `protected` in the real WP7 API (matching
+the real .NET source), so it cannot be subscribed to from a plain `TEST()`
+function. Rather than adding new `NOXNA` test-only hooks to the public API
+surface of every concrete sensor class, added a dedicated
+`tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` with a minimal
+concrete `TestSensorBase : SensorBase<TestSensorReading>` test fixture (a
+standard C++ testing technique: a derived class can access a base class's
+protected members) — this tests `SensorBase<T>`'s own logic directly,
+independent of any concrete sensor class's SDL-specific behavior.
+
+Files changed:
+- `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (new file).
+
+Tests added (6):
+- `DefaultTimeBetweenUpdatesIsTwoMilliseconds` — confirms the
+  `Zero`-then-`FromMilliseconds(2.0)` constructor-body pattern actually
+  produces a 2ms default.
+- `SetTimeBetweenUpdatesPropertyToNewValueChangesGetterAndRaisesEvent` /
+  `SetTimeBetweenUpdatesPropertyToSameValueDoesNotRaiseEvent` /
+  `RepeatedSetTimeBetweenUpdatesPropertyToSameValueRaisesOnlyOnce` — confirm
+  the getter reflects the new value and `TimeBetweenUpdatesChanged` fires
+  exactly once per actual change, never for a same-value no-op.
+- `SetCurrentValuePropertyUpdatesBeforeRaisingEvent` — confirms
+  `getCurrentValueProperty()` already reflects the new value from *inside*
+  a `CurrentValueChanged` handler (the update-then-notify ordering
+  guarantee, tested directly rather than only inferred from reading the
+  source).
+- `CurrentValueChangedEventArgsCarryTheNewValue` — confirms the event args
+  themselves carry the new value.
+
+Commands run:
+- `cmake --build cmake-build-debug --target CnaTests -j$(nproc)` — clean
+  build (new test file auto-discovered via the existing
+  `GLOB_RECURSE CNA_TEST_SOURCES`).
+- `./CnaTests --gtest_filter="SensorBaseTests.*"` — 6/6 passed.
+- `ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase"`
+  — 207/207 passed (201 previous + 6 new), 2 expected skips.
+
+Remaining risk: none identified — this task added test coverage for
+already-correct, already-reviewed behavior; no production code changed.
