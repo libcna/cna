@@ -82,8 +82,11 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool SoundBank::getIsInUseProperty() const
     {
+        // XA-7: a paused fire-and-forget cue is still in use -- FACT_STATE_INUSE (which FNA's
+        // IsInUse reflects) stays set while paused, it only clears once the cue is genuinely
+        // stopped. Checking IsPlaying alone made a paused cue look unused.
         for (const auto& faf : fireAndForget_)
-            if (faf.cue && faf.cue->getIsPlayingProperty())
+            if (faf.cue && (faf.cue->getIsPlayingProperty() || faf.cue->getIsPausedProperty()))
                 return true;
         return false;
     }
@@ -145,7 +148,11 @@ namespace Microsoft::Xna::Framework::Audio
                 fireAndForget_.begin(), fireAndForget_.end(),
                 [&now](const FireAndForget& faf)
                 {
-                    if (faf.cue && faf.cue->getIsPlayingProperty())
+                    // XA-7: a paused cue is still alive too -- only a genuinely stopped cue
+                    // (neither playing nor paused) should be swept unconditionally. Without
+                    // this, pausing a fire-and-forget cue's category made the very next
+                    // PlayCue() on this bank silently destroy it.
+                    if (faf.cue && (faf.cue->getIsPlayingProperty() || faf.cue->getIsPausedProperty()))
                     {
                         return now - faf.created >= kFireAndForgetSafetyNet;
                     }

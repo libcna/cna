@@ -637,6 +637,42 @@ TEST(WaveBankTest, IsInUseTrueWhilePlayingThenFalseAfterStop)
     }
 }
 
+// XA-7: IsInUse used to only check IsPlaying, so pausing the only cue using this bank made it
+// falsely report itself as not in use.
+TEST(WaveBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, XwbFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+        SoundBank sb(&engine, XsbFixturePath());
+
+        std::unique_ptr<Cue> cue(sb.GetCue("Boom"));
+        cue->Play();
+
+        if (!wb.getIsInUseProperty())
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not exercise WaveBank playback";
+        }
+
+        cue->Pause();
+        ASSERT_TRUE(cue->getIsPausedProperty());
+        EXPECT_TRUE(wb.getIsInUseProperty());
+
+        cue->Stop(AudioStopOptions::Immediate);
+        EXPECT_FALSE(wb.getIsInUseProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise WaveBank playback";
+    }
+}
+
 // Regression coverage for XA-2: WaveBank::GetSoundEffect's 8-bit-PCM branch wraps the raw wave
 // data in a WAV and goes through SoundEffect::FromStream (unlike the 16-bit PCM path above, which
 // constructs a SoundEffect directly). FromStream used to leak the heap SoundEffect it returns.

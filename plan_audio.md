@@ -1245,7 +1245,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   (XA-1/XA-7) může takovou "releasing" (Stopped, ale ne Paused) cue smést dřív, než release
   doopravdy doběhne — mimo rozsah tohoto nálezu, audit ho nezmínil.
 
-- [ ] **XA-7 — Fire-and-forget sweep v `SoundBank::PlayCueInternal` smaže i cue, který je jen PAUSED.**
+- [x] **XA-7 — Fire-and-forget sweep v `SoundBank::PlayCueInternal` smaže i cue, který je jen PAUSED.**
   Ověřeno přímo ve zdroji: sweep predikát kontroluje jen `getIsPlayingProperty()` — pokud je cue
   paused (`state_==Paused`), `getIsPlayingProperty()` vrací `false`, takže se cue smete
   bezpodmínečně (`return true;`) hned při dalším `PlayCue()` na stejné bance. `getIsInUseProperty()`
@@ -1255,6 +1255,12 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* sweep predikát (a `IsInUse`) musí brát `IsPlaying || IsPaused` (nebo obecněji "ještě ne
   `IsStopped`") jako živé; test: pauznout kategorii obsahující fire-and-forget cue, spustit další
   `PlayCue()` na stejné bance, ověřit že paused cue přežije a jde ho ještě `Resume()`.
+  *Pozn.:* sweep predikát i obě `getIsInUseProperty()` (SoundBank i WaveBank) teď berou
+  `IsPlaying || IsPaused` jako živé. Testy volají `Cue::Pause()` přímo (ne přes
+  `AudioCategory::Pause()`) — cue-level stavový přechod je nezávislý na tom, jestli má cue reálný
+  WaveBank (`Pause()`'s guard běží i s prázdným `active_`), takže postačí wavebank-less
+  "Explosion" fixtura stejná jako sousední sweep testy. `git stash` potvrdil selhání všech 3
+  nových testů proti staré logice.
 
 - [ ] **XA-8 — `AudioEngine::Dispose()` nekaskáduje do už zkonstruovaných `SoundBank`/`WaveBank`/`Cue`.**
   FNA přes native `OnXACTNotification` (WAVEBANKDESTROYED/SOUNDBANKDESTROYED/CUEDESTROYED) okamžitě

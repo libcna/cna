@@ -536,6 +536,25 @@ TEST(SoundBankTest, IsInUseTrueAfterPlayCueThenFalseAfterDispose)
     EXPECT_FALSE(bank.getIsInUseProperty());
 }
 
+// XA-7: IsInUse used to only check IsPlaying, so pausing a fire-and-forget cue made the bank
+// falsely report itself as not in use -- FACT_STATE_INUSE (which IsInUse reflects) stays set
+// while paused, it only clears once the cue is genuinely stopped.
+TEST(SoundBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    bank.PlayCue("Explosion");
+    ASSERT_TRUE(bank.getIsInUseProperty());
+
+    Cue* cue = SoundBankTestAccess::LastFireAndForgetCue(bank);
+    ASSERT_NE(cue, nullptr);
+    cue->Pause();
+    ASSERT_TRUE(cue->getIsPausedProperty());
+
+    EXPECT_TRUE(bank.getIsInUseProperty());
+
+    bank.Dispose();
+}
+
 // Regression coverage for XA-2's XA-1 sibling bug: PlayCue()'s sweep used to remove any
 // fire-and-forget cue older than 5 seconds regardless of whether it was still playing, cutting
 // off any one-shot or music cue longer than that. It must now only remove entries that have
@@ -569,6 +588,31 @@ TEST(SoundBankTest, FireAndForgetCueIsForceSweptPastSafetyNetEvenIfStillPlaying)
 
     bank.PlayCue("Explosion");
     EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u); // old entry swept; only the new one remains
+
+    bank.Dispose();
+}
+
+// XA-7: the sweep predicate used to check only IsPlaying, so pausing a fire-and-forget cue's
+// category made the very next PlayCue() on this bank silently destroy it. A paused cue must
+// survive the sweep exactly like a still-playing one, and remain genuinely resumable afterward
+// -- not just "not yet garbage-collected".
+TEST(SoundBankTest, PausedFireAndForgetCueSurvivesSweepAndCanStillBeResumed)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    bank.PlayCue("Explosion");
+    ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u);
+
+    Cue* cue = SoundBankTestAccess::LastFireAndForgetCue(bank);
+    ASSERT_NE(cue, nullptr);
+    cue->Pause();
+    ASSERT_TRUE(cue->getIsPausedProperty());
+    ASSERT_FALSE(cue->getIsPlayingProperty());
+
+    bank.PlayCue("Explosion"); // triggers the sweep again
+    EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 2u); // paused entry must have survived
+
+    cue->Resume();
+    EXPECT_TRUE(cue->getIsPlayingProperty());
 
     bank.Dispose();
 }
