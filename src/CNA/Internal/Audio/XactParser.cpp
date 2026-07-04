@@ -446,16 +446,36 @@ namespace CNA::Internal::Audio
                 ctx.skip(entryMetaDataSize - 4); // advance past entry
             }
 
-            uint8_t wba = static_cast<uint8_t>((compactFormat >> 23) & 0xFFu);
+            uint8_t wba          = static_cast<uint8_t>((compactFormat >> 23) & 0xFFu);
+            uint8_t compactFmtTag = static_cast<uint8_t>(compactFormat & 0x3u);
+            uint8_t compactChannels = static_cast<uint8_t>((compactFormat >> 2) & 0x7u);
+
+            // Compact-bank format bits are shared by every entry, so this is computed once --
+            // same ADPCM formula the non-compact branch below applies per entry (IN-10: the
+            // compact branch previously never derived these for ADPCM-encoded compact banks).
+            uint16_t compactBlockAlign;
+            uint16_t compactSamplesPerBlock;
+            if (compactFmtTag == 2) // ADPCM
+            {
+                compactSamplesPerBlock = static_cast<uint16_t>((wba + 16) * 2);
+                compactBlockAlign      = static_cast<uint16_t>((wba + 22) * compactChannels);
+            }
+            else // PCM
+            {
+                compactSamplesPerBlock = 0;
+                compactBlockAlign      = wba;
+            }
+
             for (uint32_t i = 0; i < entryCount; ++i)
             {
                 uint32_t offset = rawOffsetUnits[i] * alignment;
 
-                result.entries[i].format        = static_cast<XwbFormat>(compactFormat & 0x3u);
-                result.entries[i].channels      = static_cast<uint8_t>(((compactFormat >> 2) & 0x7u) + 1);
-                result.entries[i].sampleRate    = (compactFormat >> 5) & 0x3FFFFu;
-                result.entries[i].bitsPerSample = ((compactFormat >> 31) & 1u) ? 16 : 8;
-                result.entries[i].blockAlign    = wba;
+                result.entries[i].format          = static_cast<XwbFormat>(compactFmtTag);
+                result.entries[i].channels        = compactChannels;
+                result.entries[i].sampleRate      = (compactFormat >> 5) & 0x3FFFFu;
+                result.entries[i].bitsPerSample   = ((compactFormat >> 31) & 1u) ? 16 : 8;
+                result.entries[i].blockAlign      = compactBlockAlign;
+                result.entries[i].samplesPerBlock = compactSamplesPerBlock;
 
                 result.entries[i].dataOffset    = segOffset[4] + offset;
 
@@ -517,7 +537,7 @@ namespace CNA::Internal::Audio
 
                 // Decode FACTWaveBankMiniWaveFormat bitfield
                 uint8_t  fmtTag    = static_cast<uint8_t>(fmt & 0x3u);
-                uint8_t  channels  = static_cast<uint8_t>(((fmt >> 2) & 0x7u) + 1);
+                uint8_t  channels  = static_cast<uint8_t>((fmt >> 2) & 0x7u);
                 uint32_t sampleRate = (fmt >> 5) & 0x3FFFFu;
                 uint8_t  wBlockAlign = static_cast<uint8_t>((fmt >> 23) & 0xFFu);
                 uint8_t  bps        = static_cast<uint8_t>((fmt >> 31) & 0x1u);
@@ -685,30 +705,16 @@ namespace CNA::Internal::Audio
                 sound.priority       = sc.u8();
                 sc.u16(); // soundLength — skip
 
+                // FACT reads (per FACTSoundBank_Prepare, FACT_internal.c): trackCount (complex)
+                // or the inline simple wave ref -- THEN the RPC block -- THEN the DSP block --
+                // and only THEN, for complex sounds, the per-track metadata array and track
+                // events (IN-8: this used to read per-track metadata/events immediately after
+                // trackCount, before the RPC/DSP blocks, misinterpreting RPC/DSP bytes as track
+                // metadata and cascading corruption into every sound parsed after this one).
+                uint8_t trackCount = 0;
                 if (flags & SOUND_FLAG_COMPLEX)
                 {
-                    uint8_t trackCount = sc.u8();
-                    struct TrackMeta { float vol; uint32_t code; };
-                    std::vector<TrackMeta> tracks(trackCount);
-
-                    for (uint8_t t = 0; t < trackCount; ++t)
-                    {
-                        tracks[t].vol  = ReadVolByteAsAmplitude(sc);
-                        tracks[t].code = sc.u32();
-                        // filter data (2 bytes) + frequency (2 bytes)
-                        sc.u16(); // filterData
-                        sc.u16(); // frequency
-                    }
-
-                    // Parse track events (they're at absolute offsets)
-                    sound.waves.reserve(trackCount);
-                    for (uint8_t t = 0; t < trackCount; ++t)
-                    {
-                        XsbWaveRef wr = ParseFirstPlayWave(sc, tracks[t].code, tracks[t].vol);
-                        // Combine track vol with sound vol
-                        wr.volume *= sound.volume;
-                        sound.waves.push_back(wr);
-                    }
+                    trackCount = sc.u8();
                 }
                 else
                 {
@@ -738,6 +744,31 @@ namespace CNA::Internal::Audio
                     sc.u16(); // DSP presets length -- unused
                     const uint8_t dspCodeCount = sc.u8();
                     sc.skip(static_cast<std::size_t>(dspCodeCount) * 4);
+                }
+
+                if (flags & SOUND_FLAG_COMPLEX)
+                {
+                    struct TrackMeta { float vol; uint32_t code; };
+                    std::vector<TrackMeta> tracks(trackCount);
+
+                    for (uint8_t t = 0; t < trackCount; ++t)
+                    {
+                        tracks[t].vol  = ReadVolByteAsAmplitude(sc);
+                        tracks[t].code = sc.u32();
+                        // filter data (2 bytes) + frequency (2 bytes)
+                        sc.u16(); // filterData
+                        sc.u16(); // frequency
+                    }
+
+                    // Parse track events (they're at absolute offsets)
+                    sound.waves.reserve(trackCount);
+                    for (uint8_t t = 0; t < trackCount; ++t)
+                    {
+                        XsbWaveRef wr = ParseFirstPlayWave(sc, tracks[t].code, tracks[t].vol);
+                        // Combine track vol with sound vol
+                        wr.volume *= sound.volume;
+                        sound.waves.push_back(wr);
+                    }
                 }
             }
         }

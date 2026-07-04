@@ -264,8 +264,32 @@ namespace Microsoft::Xna::Framework::Audio
                           << ": " << xactImpl_->data.sourcePath << "\n";
                 return nullptr;
             }
+
+            // IN-9: dataOffset/dataLength come straight from the parsed .xwb header and are
+            // never range-checked for the streaming path (unlike the non-streaming path below,
+            // which checks against the fully-resident buffer's size) -- a corrupt/adversarial
+            // dataLength could otherwise drive an unbounded resize() before any try/catch runs.
+            // Bound it against the real on-disk file size first.
+            sf.seekg(0, std::ios::end);
+            const std::streamoff fileSize = sf.tellg();
+            if (fileSize < 0 ||
+                static_cast<uint64_t>(entry.dataOffset) + audioLen > static_cast<uint64_t>(fileSize))
+            {
+                std::cerr << "[WaveBank] Wave " << waveIndex << " streaming data out of range\n";
+                return nullptr;
+            }
             sf.seekg(static_cast<std::streamoff>(entry.dataOffset));
-            streamedBytes.resize(audioLen);
+
+            try
+            {
+                streamedBytes.resize(audioLen);
+            }
+            catch (const std::exception& ex)
+            {
+                std::cerr << "[WaveBank] Wave " << waveIndex << " streaming allocation failed: "
+                          << ex.what() << "\n";
+                return nullptr;
+            }
             sf.read(reinterpret_cast<char*>(streamedBytes.data()), static_cast<std::streamsize>(audioLen));
             if (static_cast<uint32_t>(sf.gcount()) != audioLen)
             {

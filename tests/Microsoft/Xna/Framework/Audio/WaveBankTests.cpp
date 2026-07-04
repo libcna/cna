@@ -129,7 +129,7 @@ namespace
         AppendU32(data, alignment);
         const uint32_t compactFormat =
               (0u)                                  // format tag: PCM
-            | (0u << 2)                              // channels - 1 = 0 -> mono
+            | (1u << 2)                              // channels: raw field IS the real channel count -> mono (IN-7)
             | (44100u << 5)                          // sample rate
             | ((eightBitPcm ? 1u : 2u) << 23)         // wBlockAlign: bytes/sample (mono)
             | ((eightBitPcm ? 0u : 1u) << 31);        // bits-per-sample flag -> 8-bit or 16-bit
@@ -316,7 +316,7 @@ namespace
 
         const uint32_t fmt =
               (0u)          // fmtTag: PCM
-            | (0u << 2)     // channels-1 = 0 -> mono
+            | (1u << 2)     // channels: raw field IS the real channel count -> mono (IN-7)
             | (44100u << 5) // sample rate
             | (2u << 23)    // wBlockAlign: 2 bytes/sample
             | (1u << 31);   // 16-bit
@@ -349,6 +349,83 @@ namespace
     {
         static const std::string path = WriteFixture(
             "cna_wavebank_test", "multifixture.xwb", BuildMultiEntryXwbFixtureBytes());
+        return path;
+    }
+
+    constexpr const char* kOversizedWaveBankName = "OversizedEntryWaveBank";
+
+    // Non-compact .xwb with one entry whose dataLength (1,000,000 bytes) claims far more data
+    // than the file genuinely contains (16 real bytes of wave data). The streaming ctor only
+    // reads segments 0-3 upfront (ParseXwbStreamingHeader never touches segment 4), so nothing
+    // at load time catches this -- only WaveBank::GetSoundEffect's streaming path can (IN-9).
+    // Regression fixture: proves GetSoundEffect bounds-checks against the real on-disk file size
+    // before attempting an allocation, rather than trusting the parsed dataLength outright.
+    std::vector<uint8_t> BuildOversizedStreamingXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 24;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t realWaveDataLength = 16; // genuinely written to disk below
+        constexpr uint32_t claimedDataLength  = 1000000; // wildly exceeds the real file size
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        // segLength[4] (the header's own claimed wave-data segment size) is set to match the
+        // corrupt entry, matching how a genuinely corrupt/adversarial file would look -- the bug
+        // is that nothing cross-checks either of these against the real file size at load time.
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, claimedDataLength };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0u); // wbFlags: not compact, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, kOversizedWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, 4); // alignment (unused, non-compact)
+        AppendU32(data, 0); // compactFormat (unused, non-compact)
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        const uint32_t fmt =
+              (0u)          // fmtTag: PCM
+            | (1u << 2)     // channels: mono (IN-7)
+            | (44100u << 5) // sample rate
+            | (2u << 23)    // wBlockAlign: 2 bytes/sample
+            | (1u << 31);   // 16-bit
+
+        AppendU32(data, 0u); // flagsAndDuration (unused by CNA)
+        AppendU32(data, fmt);
+        AppendU32(data, 0u);                 // playOffset
+        AppendU32(data, claimedDataLength);  // playLength -- the lie
+        AppendU32(data, 0u);                 // loopStart
+        AppendU32(data, 0u);                 // loopTotal
+
+        // Only realWaveDataLength bytes are actually written -- the file ends here.
+        for (uint32_t i = 0; i < realWaveDataLength; ++i)
+            data.push_back(0xCC);
+
+        return data;
+    }
+
+    const std::string& OversizedStreamingXwbFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "oversized.xwb", BuildOversizedStreamingXwbFixtureBytes());
         return path;
     }
 }
@@ -465,6 +542,24 @@ TEST(WaveBankTest, StreamingGetSoundEffectReadsCorrectPerEntryOffsetAndLength)
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not exercise WaveBank playback";
     }
+}
+
+// Regression coverage for IN-9: a streaming entry whose parsed dataLength exceeds the real
+// on-disk file size must not drive an unbounded/oversized allocation attempt -- GetSoundEffect
+// must bounds-check against the real file and return nullptr instead of resizing to the
+// (corrupt) claimed length. Note: for this fixture's moderate 1MB claimed length, the pre-fix
+// code also returns nullptr (its post-read gcount() check happens to catch the short read), so
+// this specific assertion doesn't discriminate old vs. new behavior via git stash -- the fix's
+// real value is skipping the allocation attempt entirely up front, which matters most for
+// claimed lengths large enough (e.g. multi-GB) to risk OOM before ever reaching that check, which
+// isn't safely reproducible in a fast unit test.
+TEST(WaveBankTest, StreamingGetSoundEffectRejectsEntryLengthExceedingRealFileSize)
+{
+    WaveBank streamingWb(&SharedEngine(), OversizedStreamingXwbFixturePath(), 0, 0);
+    ASSERT_TRUE(streamingWb.getIsPreparedProperty());
+    ASSERT_TRUE(WaveBankTestAccess::IsStreaming(streamingWb));
+
+    EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(streamingWb, 0), nullptr);
 }
 
 // ===================== IsDisposed / IsPrepared =====================

@@ -175,7 +175,7 @@ namespace
         AppendU32(data, alignment);
         const uint32_t compactFormat =
               (0u)          // format tag: PCM
-            | (0u << 2)     // channels - 1 = 0 -> mono
+            | (1u << 2)     // channels: raw field IS the real channel count -> mono (IN-7)
             | (44100u << 5) // sample rate
             | (2u << 23)    // wBlockAlign
             | (1u << 31);   // bits-per-sample flag -> 16-bit
@@ -235,7 +235,7 @@ namespace
         AppendU32(data, alignment);
         const uint32_t compactFormat =
               (0u)          // format tag: PCM
-            | (0u << 2)     // channels - 1 = 0 -> mono
+            | (1u << 2)     // channels: raw field IS the real channel count -> mono (IN-7)
             | (44100u << 5) // sample rate
             | (2u << 23)    // wBlockAlign
             | (1u << 31);   // bits-per-sample flag -> 16-bit
@@ -294,12 +294,130 @@ namespace
         AppendU32(data, 0); // entryNameElementSize
         AppendU32(data, alignment);
         const uint32_t compactFormat =
-              (0u) | (0u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+              (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
         AppendU32(data, compactFormat);
         for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
 
         // entry 0 (only/last): offset=10*4=40, past the 8-byte wave-data segment: underflow.
         AppendU32(data, (10u));
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
+    // Compact .xwb with the channel field encoded as raw "2" (stereo) -- IN-7 regression
+    // fixture, independent of any fixture that assumed the old (buggy) "field is channels
+    // minus one" convention.
+    std::vector<uint8_t> BuildCompactXwbFixtureStereo()
+    {
+        constexpr uint32_t alignment         = 4;
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 8;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "IN-7-stereo", 64); // bank name
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u)          // format tag: PCM
+            | (2u << 2)     // channels: raw field IS the real channel count -> stereo (IN-7)
+            | (44100u << 5) // sample rate
+            | (4u << 23)    // wBlockAlign: 4 bytes/frame (2ch * 16-bit)
+            | (1u << 31);   // bits-per-sample flag -> 16-bit
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        // single (and therefore last) entry: offset=0, length = remaining wave-data segment.
+        AppendU32(data, 0u);
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
+    // Compact .xwb with a single ADPCM entry -- IN-10 regression fixture. The compact branch
+    // used to never derive samplesPerBlock/blockAlign for ADPCM at all (only the non-compact
+    // branch did), leaving them at their raw/default values even for a fully valid compact+ADPCM
+    // combination.
+    std::vector<uint8_t> BuildCompactXwbFixtureAdpcm()
+    {
+        constexpr uint32_t alignment         = 4;
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 16;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "IN-10-adpcm", 64); // bank name
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        constexpr uint32_t wBlockAlign = 8u;
+        const uint32_t compactFormat =
+              (2u)                // format tag: ADPCM
+            | (1u << 2)           // channels: mono
+            | (22050u << 5)       // sample rate
+            | (wBlockAlign << 23)
+            | (0u << 31);         // bps flag (unused for ADPCM)
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        // single (and therefore last) entry: offset=0, length = remaining wave-data segment.
+        AppendU32(data, 0u);
 
         for (uint32_t i = 0; i < waveDataLength; ++i)
             data.push_back(static_cast<uint8_t>(i));
@@ -625,6 +743,189 @@ namespace
         return data;
     }
 
+    // Minimal .xsb with a COMPLEX sound carrying SOUND_FLAG_HAS_RPC (sound 0, one track, one
+    // PlayWave event) followed by a second, distinctly-identifiable simple sound. Per FACT
+    // (FACT_internal.c's FACTSoundBank_Prepare), the real byte order for a COMPLEX+RPC sound is:
+    // trackCount -> RPC block -> per-track metadata -> track events. This parser used to read
+    // per-track metadata immediately after trackCount, before the RPC block, misinterpreting RPC
+    // bytes as track metadata and leaving the cursor desynced for every sound parsed afterward.
+    // Regression fixture for IN-8.
+    //
+    // Track event data is NOT contiguous with a sound's own header/metadata -- FACT's sequential
+    // sound-list cursor never walks through it (each track's events are reached only via the
+    // absolute `code` offset, from a *separate* region of the file); sound HEADERS are what must
+    // be contiguous from one sound to the next. So sound 1's header follows immediately after
+    // sound 0's per-track metadata, and sound 0's track-0 event array is placed after sound 1,
+    // referenced purely by absolute offset.
+    std::vector<uint8_t> BuildXsbWithComplexRpcThenSecondSound()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t soundOffset  = headerSize + bankNameSize; // 138
+        // Sound 0 fixed fields (flags+cat+vol+pitch+prio+len = 9) + trackCount(1) = 10 bytes.
+        constexpr uint32_t rpcBlockOffset = soundOffset + 10;
+        // RPC block: rpcDataLength(2, self-inclusive=6) + 4 bytes of code = 6 bytes.
+        constexpr uint32_t trackMetaOffset = rpcBlockOffset + 6;
+        // Per-track metadata (1 track): vol(1) + code(4) + filterData(2) + frequency(2) = 9 bytes.
+        constexpr uint32_t sound1Offset = trackMetaOffset + 9;
+        // Sound 1 (simple): flags+cat+vol+pitch+prio+len (9) + waveIdx(2) + wbIdx(1) = 12 bytes.
+        constexpr uint32_t trackEventsOffset = sound1Offset + 12;
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 0);  // wavebankCount
+        AppendU16(data, 2); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset
+        AppendS32(data, -1); // cueNameIndexOffset
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "TestSoundBank", bankNameSize);
+
+        // Sound 0: COMPLEX | HAS_RPC.
+        AppendU8(data, 0x01 | 0x02); // flags
+        AppendU16(data, 0);          // categoryIndex
+        AppendU8(data, 0xFF);        // volume byte
+        AppendS16(data, 0);          // pitchCents
+        AppendU8(data, 0);           // priority
+        AppendU16(data, 0);          // soundLength (skipped)
+        AppendU8(data, 1);           // trackCount
+
+        // RPC block (self-inclusive length = 6 -> 4 bytes of code follow).
+        AppendU16(data, 6);
+        AppendU32(data, 0xAAAAAAAAu);
+
+        // Per-track metadata (1 track): volume byte, code (absolute offset to event array,
+        // placed after sound 1 below), filterData, frequency.
+        AppendU8(data, 0xFF);
+        AppendU32(data, trackEventsOffset);
+        AppendU16(data, 0); // filterData
+        AppendU16(data, 0); // frequency
+
+        // Sound 1: simple (non-complex), no flags, distinctive wave reference. Immediately
+        // follows sound 0's per-track metadata -- sound headers are contiguous.
+        AppendU8(data, 0x00);   // flags
+        AppendU16(data, 0);     // categoryIndex
+        AppendU8(data, 0xFF);   // volume byte
+        AppendS16(data, 0);     // pitchCents
+        AppendU8(data, 0);      // priority
+        AppendU16(data, 0);     // soundLength (skipped)
+        AppendU16(data, 99);    // waveIdx
+        AppendU8(data, 7);      // wbIdx
+
+        // Sound 0's track-0 event array, out-of-line: eventCount followed by one PlayWave event.
+        const auto event = BuildPlayWaveEventBytes(42, 3, 0);
+        AppendU8(data, 1);
+        data.insert(data.end(), event.begin(), event.end());
+
+        return data;
+    }
+
+    // Same as BuildXsbWithComplexRpcThenSecondSound but with SOUND_FLAG_HAS_DSP instead of
+    // SOUND_FLAG_HAS_RPC -- covers the DSP-block variant of the same IN-8 ordering bug
+    // separately, since the DSP block's byte layout (and skip logic) differs from RPC's.
+    std::vector<uint8_t> BuildXsbWithComplexDspThenSecondSound()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t soundOffset  = headerSize + bankNameSize; // 138
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 0);  // wavebankCount
+        AppendU16(data, 2); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset
+        AppendS32(data, -1); // cueNameIndexOffset
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "TestSoundBank", bankNameSize);
+
+        // Sound 0: COMPLEX | HAS_DSP.
+        AppendU8(data, 0x01 | 0x10); // flags
+        AppendU16(data, 0);          // categoryIndex
+        AppendU8(data, 0xFF);        // volume byte
+        AppendS16(data, 0);          // pitchCents
+        AppendU8(data, 0);           // priority
+        AppendU16(data, 0);          // soundLength (skipped)
+        AppendU8(data, 1);           // trackCount
+
+        // DSP block: presetsLength(2, unused) + dspCodeCount(1) + codes(4 each) = 7 bytes.
+        AppendU16(data, 5);       // DSP presets length -- unused
+        AppendU8(data, 1);        // dspCodeCount
+        AppendU32(data, 0xDEADBEEFu);
+
+        // trackEventsOffset: soundOffset(138) + 9(fixed)+1(trackCount) + 7(DSP block)
+        //                    + 9(per-track meta) + 12(sound 1 header) = 176.
+        constexpr uint32_t trackEventsOffset = soundOffset + 9 + 1 + 7 + 9 + 12;
+
+        // Per-track metadata (1 track): code points past sound 1, to the out-of-line event array.
+        AppendU8(data, 0xFF);
+        AppendU32(data, trackEventsOffset);
+        AppendU16(data, 0); // filterData
+        AppendU16(data, 0); // frequency
+
+        // Sound 1: simple (non-complex), no flags, distinctive wave reference. Immediately
+        // follows sound 0's per-track metadata -- sound headers are contiguous.
+        AppendU8(data, 0x00);   // flags
+        AppendU16(data, 0);     // categoryIndex
+        AppendU8(data, 0xFF);   // volume byte
+        AppendS16(data, 0);     // pitchCents
+        AppendU8(data, 0);      // priority
+        AppendU16(data, 0);     // soundLength (skipped)
+        AppendU16(data, 88);    // waveIdx
+        AppendU8(data, 9);      // wbIdx
+
+        // Sound 0's track-0 event array, out-of-line: eventCount followed by one PlayWave event.
+        const auto event = BuildPlayWaveEventBytes(55, 8, 0);
+        AppendU8(data, 1);
+        data.insert(data.end(), event.begin(), event.end());
+
+        return data;
+    }
+
     // Minimal non-compact .xwb with a single, full-size (entryMetaDataSize==24) ADPCM entry --
     // covers both the "standard" (non-narrow) non-compact entry layout and ADPCM's
     // samplesPerBlock/blockAlign derivation from wBlockAlign (IN-6).
@@ -672,7 +973,7 @@ namespace
         constexpr uint32_t wBlockAlign = 8u;
         const uint32_t fmt =
               (2u)                    // fmtTag: ADPCM
-            | (0u << 2)               // channels-1 = 0 -> mono
+            | (1u << 2)               // channels: raw field IS the real channel count -> mono (IN-7)
             | (22050u << 5)           // sample rate
             | (wBlockAlign << 23)
             | (0u << 31);             // bps flag (unused for ADPCM)
@@ -682,6 +983,66 @@ namespace
         AppendU32(data, waveDataLength); // playLength
         AppendU32(data, 100u);           // loopStart
         AppendU32(data, 200u);           // loopTotal
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
+    // Minimal non-compact .xwb with a single PCM entry whose channel field is raw "2" (stereo) --
+    // the non-compact counterpart to BuildCompactXwbFixtureStereo (IN-7).
+    std::vector<uint8_t> BuildNonCompactXwbFixtureStereo()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 24;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 16;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0u); // wbFlags: not compact, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "IN-7-nc-stereo", 64); // bank name
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, 4); // alignment (unused, non-compact)
+        AppendU32(data, 0); // compactFormat (unused, non-compact)
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        const uint32_t fmt =
+              (0u)            // fmtTag: PCM
+            | (2u << 2)       // channels: raw field IS the real channel count -> stereo (IN-7)
+            | (44100u << 5)   // sample rate
+            | (4u << 23)      // wBlockAlign: 4 bytes/frame (2ch * 16-bit)
+            | (1u << 31);     // 16-bit
+        AppendU32(data, 0u);  // flagsAndDuration (unused by CNA)
+        AppendU32(data, fmt);
+        AppendU32(data, 0u);             // playOffset
+        AppendU32(data, waveDataLength); // playLength
+        AppendU32(data, 0u);             // loopStart
+        AppendU32(data, 0u);             // loopTotal
 
         for (uint32_t i = 0; i < waveDataLength; ++i)
             data.push_back(static_cast<uint8_t>(i));
@@ -848,6 +1209,26 @@ TEST(XactParserTest, CompactWaveBankThrowsWhenLastEntryOffsetExceedsWaveDataSegm
     EXPECT_THROW(ParseXwb(BuildCompactXwbFixtureWithOffsetPastSegment()), std::runtime_error);
 }
 
+TEST(XactParserTest, CompactWaveBankChannelFieldIsRawChannelCountNotMinusOne)
+{
+    const XwbData wb = ParseXwb(BuildCompactXwbFixtureStereo());
+    ASSERT_EQ(wb.entries.size(), 1u);
+    EXPECT_EQ(wb.entries[0].channels, 2);
+}
+
+TEST(XactParserTest, CompactAdpcmEntryComputesBlockAlignAndSamplesPerBlock)
+{
+    const XwbData wb = ParseXwb(BuildCompactXwbFixtureAdpcm());
+    ASSERT_EQ(wb.entries.size(), 1u);
+    const auto& e = wb.entries[0];
+    EXPECT_EQ(e.format, XwbFormat::ADPCM);
+    EXPECT_EQ(e.channels, 1);
+    // wSamplesPerBlock = (wBlockAlign + 16) * 2 = (8+16)*2 = 48
+    EXPECT_EQ(e.samplesPerBlock, 48);
+    // nBlockAlign = (wBlockAlign + 22) * channels = (8+22)*1 = 30
+    EXPECT_EQ(e.blockAlign, 30);
+}
+
 TEST(XactParserTest, NonCompactWaveBankWithNarrowEntryMetaDataDoesNotReadForeignBytes)
 {
     const XwbData wb = ParseXwb(BuildNonCompactXwbWithNarrowEntryMetaData());
@@ -980,6 +1361,36 @@ TEST(XactParserTest, ComplexTrackSkipsRampPitchEventToFindPlayWave)
     EXPECT_EQ(xsb.sounds[0].waves[0].loopCount, 2);
 }
 
+TEST(XactParserTest, ComplexSoundWithRpcParsesTrackAndDoesNotDesyncSecondSound)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithComplexRpcThenSecondSound());
+
+    ASSERT_EQ(xsb.sounds.size(), 2u);
+
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 3);
+    EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 42u);
+
+    ASSERT_EQ(xsb.sounds[1].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[1].waves[0].wavebankIndex, 7);
+    EXPECT_EQ(xsb.sounds[1].waves[0].waveIndex, 99u);
+}
+
+TEST(XactParserTest, ComplexSoundWithDspParsesTrackAndDoesNotDesyncSecondSound)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithComplexDspThenSecondSound());
+
+    ASSERT_EQ(xsb.sounds.size(), 2u);
+
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 8);
+    EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 55u);
+
+    ASSERT_EQ(xsb.sounds[1].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[1].waves[0].wavebankIndex, 9);
+    EXPECT_EQ(xsb.sounds[1].waves[0].waveIndex, 88u);
+}
+
 TEST(XactParserTest, NonCompactAdpcmEntryComputesBlockAlignAndSamplesPerBlock)
 {
     const XwbData wb = ParseXwb(BuildNonCompactAdpcmXwbFixture());
@@ -994,6 +1405,13 @@ TEST(XactParserTest, NonCompactAdpcmEntryComputesBlockAlignAndSamplesPerBlock)
     EXPECT_EQ(e.dataLength, 16u);
     EXPECT_EQ(e.loopStartSample, 100u);
     EXPECT_EQ(e.loopTotalSamples, 200u);
+}
+
+TEST(XactParserTest, NonCompactWaveBankChannelFieldIsRawChannelCountNotMinusOne)
+{
+    const XwbData wb = ParseXwb(BuildNonCompactXwbFixtureStereo());
+    ASSERT_EQ(wb.entries.size(), 1u);
+    EXPECT_EQ(wb.entries[0].channels, 2);
 }
 
 // ===================== Truncated files / bad magic (IN-6) =====================

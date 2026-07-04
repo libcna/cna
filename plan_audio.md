@@ -1052,6 +1052,366 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Pozn.:* žádná změna produkčního kódu. Přidán `MicrophoneTest.GetDataNegativeCountThrows`
   (`count=-5`) hned za existující test. Celá sada 1997/1997 testů zelená.
 
+### Fáze 8 — Druhý doplňkový audit (2026-07-04): nové nálezy nad rámec Fáze 7
+
+> Po uzavření celého zbývajícího backlogu (T-4D, T-3F, T-3G, T-4B, T-6C, T-4C — viz jejich `*Pozn.:*`
+> výše) proběhl na žádost uživatele **druhý čerstvý** line-by-line audit celého
+> `Microsoft::Xna::Framework::Audio` clusteru proti FNA, strukturovaný stejně jako Fáze 7 — 4
+> paralelní kontroly (Core Playback, XACT, interní backend, Mic/data/enumy/výjimky), každá jako
+> samostatný agent s vlastním, nezávislým průchodem zdrojem. Nejzávažnější dva nálezy (IN-7, IN-8)
+> byly navíc ručně ověřeny přímo proti `FAudio/src/FACT_internal.c` (ne jen převzaty z reportu
+> agenta), stejně jako XA-6/XA-7/CP-15 přímo proti aktuálnímu zdroji CNA — viz jejich `*Pozn.:*`.
+>
+> ID pokračují ve stávajících prefixech z Fáze 7 (`CP`/`XA`/`IN`/`MC`), aby se nálezy daly řadit
+> podle clusteru bez kolize s T-* ani s Fáze-7 čísly. Řazeno uvnitř clusteru podle závažnosti
+> (reálné bugy → compliance/chování/doložené odchylky → testovací mezery).
+
+**Nejzávažnější nálezy (rychlý přehled, detaily níže):**
+- **IN-7** — kanálový počet (`nChannels`) se u KAŽDÉ `.xwb` položky (compact i non-compact) čte s
+  chybným `+1` — mono se hraje jako stereo a naopak. Ověřeno přímo proti `FACT_internal.c`.
+- **IN-8** — u COMPLEX zvuku s RPC nebo DSP flagem se per-track metadata (volume/code/filter/
+  frequency) čtou PŘED RPC/DSP blokem místo PO něm — obrácené pořadí proti FACT, kaskádová
+  korupce parsování zbytku souboru. Ověřeno přímo proti `FACT_internal.c`.
+- **XA-6** — `Cue::Stop(AudioStopOptions::AsAuthored)` se chová identicky jako `Stop(Immediate)` —
+  `StopInternal` vždy zavolá `active_.clear()`, což tvrdě zničí i instance, které měly jen doznít.
+- **XA-7** — `SoundBank`'s fire-and-forget sweep smaže i cue, který je jen PAUSED (kontroluje jen
+  `IsPlaying`), takže `category.Pause()` na fire-and-forget cue → další `PlayCue()` na stejné bance
+  ho tiše zničí.
+- **CP-15** — `DynamicSoundEffectInstance::Pause()`/`Resume()` jsou mrtvý kód — dědí se z base třídy,
+  která pracuje s `track_`, ale `DynamicSoundEffectInstance` vždy používá vlastní `dynamicTrack_`.
+- **CP-16** — `SoundEffect::MasterVolume` nemá žádný efekt na už hrající zvuky, jen na budoucí `Play()`.
+
+#### 8.1 Core Playback (SoundEffect, SoundEffectInstance, DynamicSoundEffectInstance)
+
+- [ ] **CP-15 — `DynamicSoundEffectInstance::Pause()`/`Resume()` jsou mrtvý kód.**
+  `Pause()`/`Resume()` (SoundEffectInstance.cpp:373-397) nejsou `virtual` a vždy pracují s
+  chráněným `track_`. `DynamicSoundEffectInstance::Play()`/`Stop()` mají vlastní override, ale
+  pracují výhradně s vlastním `dynamicTrack_` (`track_` u dynamic instance zůstává navždy
+  `nullptr`) — volání `Pause()`/`Resume()` na `DynamicSoundEffectInstance` je tedy vždy tichý no-op.
+  *FNA:* SoundEffectInstance.cs:375-397 (sdílené `handle` pole pro static i dynamic).
+  *CNA:* SoundEffectInstance.hpp:88-92 (nevirtuální); DynamicSoundEffectInstance.hpp/.cpp (žádný
+  override, žádná reference na `track_`).
+  *Accept:* `DynamicSoundEffectInstance::Pause()`/`Resume()` (přes `virtual` na base, nebo sdílenou
+  abstrakcí handle) skutečně pozastaví/obnoví `dynamicTrack_`; test: `Play()`→`Pause()`→assert
+  `State==Paused`→`Resume()`→assert `State==Playing`, pod dummy driverem.
+
+- [ ] **CP-16 — `SoundEffect::MasterVolume` neovlivňuje už hrající zvuky.**
+  `MasterVolume_` je statický float násobený do gain jen v okamžiku `Play()`/`setVolumeProperty()`.
+  Změna `MasterVolume` po spuštění zvuku nemá na již hrající instance (ani na fire-and-forget
+  `SoundEffect::Play()` tracky) žádný vliv — SDL3_mixer přitom má reálný globální mixer gain
+  (`MIX_SetMixerGain`/`MIX_GetMixerGain`), který se nikde nepoužívá.
+  *FNA:* SoundEffect.cs:51-70 (`MasterVolume` jde přímo na sdílený mastering voice).
+  *CNA:* SoundEffect.cpp:210-223,298-311; SoundEffectInstance.cpp:314,541.
+  *Accept:* `setMasterVolumeProperty` použije `MIX_SetMixerGain` (nebo re-aplikuje gain na všechny
+  živé tracky); test ověří `MIX_GetTrackGain` po změně `MasterVolume` na již hrající instanci.
+
+- [ ] **CP-17 — `SoundEffect`'s loop region (`loopStart`/`loopLength`) se zachytí, ale nikdy nepoužije.**
+  Bufferová konstrukce s explicitním loop rozsahem uloží `loopStart_`/`loopLength_`, ale nic je
+  nikdy nečte. `FromStream` navíc vůbec neparsuje WAV `smpl` chunk. `Play()` vždy loopuje celý
+  buffer (`MIX_PROP_PLAY_LOOPS_NUMBER`), nikdy jen autorský loop rozsah.
+  *FNA:* SoundEffect.cs:476-513 (`smpl` chunk v `FromStream`); SoundEffectInstance.cs:350-361
+  (`LoopBegin`/`LoopLength` nastaveny před submitem bufferu).
+  *CNA:* SoundEffect.hpp:35-36,82-88; SoundEffect.cpp:118-129,406-452; SoundEffectInstance.cpp:314-337.
+  *Accept:* `FromStream` parsuje `smpl` loop pointy jako FNA; `Play()` aplikuje `loopStart_`/
+  `loopLength_` přes SDL3_mixer's `MIX_PROP_PLAY_LOOP_START_FRAME_NUMBER` (a délku, pokud to jde);
+  test s nenulovým loop rozsahem ověří, že se loopuje jen daný úsek, ne celý buffer.
+
+- [ ] **CP-18 — Chybějící audio hardware hlásí `std::runtime_error`, nikdy `NoAudioHardwareException`.**
+  `AudioMixer::GetMixer()` (viz i IN-11) throwuje `std::runtime_error`, který dědí z `std::exception`,
+  ne z `System::Exception` — kód dělající `catch (const System::Exception&)` ho vůbec nezachytí.
+  `NoAudioHardwareException` existuje a je otestovaná izolovaně, ale nikde se skutečně nethrowuje.
+  *FNA:* SoundEffect.cs:784-817 (`Device()` throwuje `NoAudioHardwareException`).
+  *CNA:* src/CNA/Internal/Audio/AudioMixer.cpp:15-36; volající SoundEffect.cpp:86,143,298,428,
+  SoundEffectInstance.cpp:292.
+  *Accept:* `GetMixer()` (nebo volající) throwuje `Microsoft::Xna::Framework::Audio::
+  NoAudioHardwareException` místo `std::runtime_error`; test simulující selhání vytvoření mixeru
+  ověří správný typ výjimky. (Provázáno s XA-9 — řešit spolu.)
+
+- [ ] **CP-19 — Pan u stereo zdroje ztlumí celý opačný kanál místo crossfeed blendu.**
+  `ApplyTrackProperties`'s pan vzorec (`left=(pan<0)?1:(1-pan)`) u `Pan=1.0` (tvrdě doprava) dá
+  `left gain=0` — u stereo zdroje tak úplně zmizí levý kanál. FNA má explicitní komentář, že tvrdé
+  panování NEMÁ eliminovat celý kanál, a používá plnou 4-koeficientovou matici pro stereo→stereo.
+  U MONO zdrojů je CNA vzorec bit-přesně stejný jako FNA — problém je jen u stereo obsahu.
+  *FNA:* SoundEffectInstance.cs:606-648 (`SetPanMatrixCoefficients`).
+  *CNA:* SoundEffectInstance.cpp:51-67; SoundEffect.cpp:313-316 (duplicitní vzorec).
+  *Accept:* buď doložit jako akceptovanou odchylku v CHECKLIST.md (SDL3_mixer's `MIX_StereoGains`
+  nemá crossfeed API), nebo ručně mixovat stereo pan; test porovnávající CNA gains proti FNA matici
+  pro stereo zdroj při několika pan hodnotách.
+
+- [ ] **CP-20 — `setPanProperty()` ignoruje aktivní `Apply3D` stav.**
+  FNA má `is3D` latch — jakmile byl `Apply3D` alespoň jednou zavolán, `Pan` setter už jen aktualizuje
+  hodnotu property, nezasahuje do skutečné výstupní matice (ta se přepočítá až dalším `Apply3D`).
+  CNA nemá žádný ekvivalent `is3D_` — `setPanProperty()` vždy okamžitě přepíše track's stereo gains,
+  takže manuální `setPanProperty()` mezi dvěma `Apply3D()` voláními (nebo po jediném `Apply3D()`)
+  přepíše 3D pozicování špatnou hodnotou. Stejná třída chyby jako už opravené CP-3, ale v opačném
+  pořadí volání.
+  *FNA:* SoundEffectInstance.cs:52-84 (`Pan` setter: `if (is3D) return;`).
+  *CNA:* SoundEffectInstance.cpp:556-583 (`setPanProperty`); `Apply3D` na řádcích 471-506 (žádný
+  `is3D_`-ekvivalent flag).
+  *Accept:* přidat `is3D_`-ekvivalentní flag; `setPanProperty` po `Apply3D()` už jen aktualizuje
+  property, nezapisuje do tracku; test: `Apply3D(...)` → `setPanProperty(x)` → ověřit, že skutečné
+  track gains pořád odpovídají 3D pozici, ne `x`.
+
+- [ ] **CP-21 — `AudioCategory::SetVolume`'s doc v hlavičce `AudioCategory.hpp` odpovídá starému,
+  už opravenému chování (drobný nález, patří spíš do XA — viz XA-10, zmíněno zde pro úplnost, ne
+  duplicitně řešeno).**
+
+- [ ] **CP-22 — Test-mezera: `SoundEffect`'s move ctor/move-assignment nemá vlastní test.**
+  `static_assert` ověřuje jen move-constructibility/assignability; žádný test skutečně nepřesune
+  `SoundEffect` a neověří, že instance vytvořená před přesunem (přes `impl_` keep-alive) dál funguje.
+  *CNA:* SoundEffect.hpp:105-109; SoundEffectTests.cpp:27-30 (jen `static_assert`).
+  *Accept:* přidat `SoundEffectTest.MoveConstructor.../MoveAssignment...` testy analogicky k CP-12
+  (u `SoundEffectInstance`), ověřující že `SoundEffectInstance` vytvořená z přesunutého `SoundEffect`
+  dál přehrává správně.
+
+- [ ] **CP-23 — Test-mezera: bufferová konstrukce s `loopStart`/`loopLength` nemá success-path test.**
+  Existující test pokrývá jen exception path pro špatný rozsah, ne skutečný efekt platného loop
+  rozsahu na přehrávání — přesně to by odhalilo CP-17 dřív.
+  *CNA:* SoundEffectTests.cpp:171-179.
+  *Accept:* přidat test s nenulovým `loopStart`/`loopLength` až po opravě CP-17 (nebo test
+  dokumentující dnešní "mrtvé pole" chování, pokud se CP-17 odloží).
+
+#### 8.2 XACT (AudioEngine, AudioCategory, Cue, SoundBank, WaveBank)
+
+- [ ] **XA-6 — `Cue::Stop(AudioStopOptions::AsAuthored)` se chová identicky jako `Stop(Immediate)`.**
+  Ověřeno přímo ve zdroji: `StopInternal` nejdřív správně zavolá `pi.instance->Stop(immediate)`
+  (pro `immediate=false` jen `MIX_SetTrackLoops(track,0)`, track zůstává hrát), ale HNED další
+  řádek je bezpodmínečné `active_.clear()`, které zničí `unique_ptr<SoundEffectInstance>` →
+  `~SoundEffectInstance()` → `Dispose()` → `DestroyTrackSafe()` → tvrdý stop. `AsAuthored` tak
+  nikdy nenechá znít release/loop tail.
+  *FNA:* Cue.cs:257-265 (`FACT_FLAG_STOP_RELEASE` nechá voice doznít asynchronně, cue se netvrdě
+  neničí).
+  *CNA:* Cue.cpp:292-306 (`StopInternal`).
+  *Accept:* u reálné WaveBank-backed cue (např. `Apply3DCue`/`VolCue`-styl fixtura) `Stop(AsAuthored)`
+  na loopované instanci nechá track hrát dál hned po volání (jen ukončí loop), zatímco
+  `Stop(Immediate)` ho tvrdě zastaví okamžitě — test čte skutečný `MIX_Track*` přes
+  `SoundEffectInstanceTestAccess`, ne jen `Cue`'s vlastní state.
+
+- [ ] **XA-7 — Fire-and-forget sweep v `SoundBank::PlayCueInternal` smaže i cue, který je jen PAUSED.**
+  Ověřeno přímo ve zdroji: sweep predikát kontroluje jen `getIsPlayingProperty()` — pokud je cue
+  paused (`state_==Paused`), `getIsPlayingProperty()` vrací `false`, takže se cue smete
+  bezpodmínečně (`return true;`) hned při dalším `PlayCue()` na stejné bance. `getIsInUseProperty()`
+  na `SoundBank` i `WaveBank` má identickou chybu.
+  *FNA:* SoundBank.cs:28-36 (`IsInUse` odráží `FACT_STATE_INUSE`, které zůstává nastavené i při pauze).
+  *CNA:* SoundBank.cpp:142-154 (sweep), :83-89 (`getIsInUseProperty`); WaveBank.cpp:204-210.
+  *Accept:* sweep predikát (a `IsInUse`) musí brát `IsPlaying || IsPaused` (nebo obecněji "ještě ne
+  `IsStopped`") jako živé; test: pauznout kategorii obsahující fire-and-forget cue, spustit další
+  `PlayCue()` na stejné bance, ověřit že paused cue přežije a jde ho ještě `Resume()`.
+
+- [ ] **XA-8 — `AudioEngine::Dispose()` nekaskáduje do už zkonstruovaných `SoundBank`/`WaveBank`/`Cue`.**
+  FNA přes native `OnXACTNotification` (WAVEBANKDESTROYED/SOUNDBANKDESTROYED/CUEDESTROYED) okamžitě
+  nastaví `IsDisposed=true` na každém závislém wrapperu, jakmile native engine zanikne. CNA's
+  `AudioEngine::Dispose()` jen resetuje vlastní `xactImpl_` — žádný `WaveBank`/`Cue` (a pro
+  `SoundBank` neexistuje registr vůbec) se nedozví, že engine zanikl.
+  *FNA:* AudioEngine.cs:382-432; WaveBank.cs:204-222; SoundBank.cs:270-280; Cue.cs:271-276.
+  *CNA:* AudioEngine.cpp:176-185 (`Dispose`); AudioEngine.hpp:112-147 (žádný `SoundBank` registr).
+  *Accept:* po `AudioEngine::Dispose()` každý `WaveBank`/`SoundBank`/`Cue` z něj vytvořený hlásí
+  `getIsDisposedProperty()==true` (test pro všechny tři) — vyžaduje `SoundBank` registr symetrický
+  k existujícímu `WaveBank` registru; nebo doložit jako akceptovanou odchylku v CHECKLIST.md, pokud
+  je to úmyslně mimo rozsah.
+
+- [ ] **XA-9 — `AudioEngine`/`SoundBank`/`WaveBank` konstruktory tiše polykají chybějící soubor i
+  parse chybu místo throw; `NoAudioHardwareException` se nikdy nethrowuje z `AudioEngine`.**
+  Všechny tři konstruktory: nejde otevřít soubor → `cerr` + return; parse throwne → `cerr` +
+  polknuto. Objekt zůstane v tichém "stub" stavu (bez kategorií/cues/waves); pozdější lookupy
+  hlásí jen obecný `InvalidOperationException`, ne signál z doby konstrukce.
+  `AudioEngine`'s ctor navíc nikdy nezjišťuje reálnou dostupnost audio hardware —
+  `rendererDetails_` má vždy přesně jeden natvrdo daný `RendererDetail`, takže
+  `NoAudioHardwareException` z `AudioEngine` nikdy nemůže vystřelit (viz i CP-18).
+  *FNA:* AudioEngine.cs:117-184 (`TitleContainer.ReadToPointer` throwuje na chybějící soubor;
+  `rendererCount==0` → `throw new NoAudioHardwareException()`); SoundBank.cs:73-74; WaveBank.cs:84-87.
+  *CNA:* AudioEngine.cpp:64-109 (`Init`); SoundBank.cpp:42-72; WaveBank.cpp:148-192.
+  *Accept:* buď (a) konstruktory throwují odpovídající `System::` výjimku na chybějící soubor/
+  poškozená data podle FNA kontraktu (test s neexistující cestou a s poškozeným-ale-přítomným
+  souborem pro každou třídu), nebo (b) "tiché stub" chování se zapíše do CHECKLIST.md jako
+  vědomě rozhodnutá odchylka (upozornění: existující testovací fixtury, např.
+  `SoundBankTests.cpp`'s `SharedEngine()`, na tomto stub chování aktivně stavějí — varianta (a)
+  by je musela upravit).
+
+- [ ] **XA-10 — `AudioCategory.hpp`'s Doxygen odporuje skutečnému (správnému) chování `SetVolume`.**
+  Doc tvrdí, že `SetVolume` neovlivní už hrající cues — od T-4D opravy to už neplatí (`SetVolume`
+  se retroaktivně aplikuje, ověřeno passing testem `SetVolumeReappliesToAlreadyPlayingCueInstance`).
+  *CNA:* AudioCategory.hpp:16-20,33-38 (doc); AudioEngine.cpp:224-232 (skutečné chování).
+  *Accept:* přepsat oba Doxygen bloky tak, aby odpovídaly skutečnému, správnému chování (stejně
+  přesně jako sousední `Pause`/`Resume`/`Stop` doc bloky).
+
+- [ ] **XA-11 — Kategorie `instanceLimit`/`fadeInMS`/`fadeOutMS` se parsují, ale nikde se
+  nevynucují ani neaplikují — mezera nezapsaná v CHECKLIST.md.**
+  Toto bylo vědomě odloženo u T-4D (viz jeho `*Pozn.:*`), ale rozhodnutí se nikdy nepropsalo do
+  CHECKLIST.md's tabulky odchylek, na rozdíl od každého jiného podobného rozhodnutí (D1-D8).
+  *CNA:* XactTypes.hpp:26-30 (pole existují); XactParser.cpp:309-322 (parsují se); žádný
+  spotřebitel v AudioEngine.cpp/AudioCategory.cpp/Cue.cpp.
+  *Accept:* přidat řádek do CHECKLIST.md dokumentující, že fade in/out kategorie a instance-limit
+  vynucování jsou mimo rozsah (nebo je implementovat).
+
+- [ ] **XA-12 — `AudioEngine::ContentVersion` používá syrový `int` místo `SharpRuntime::intcs`.**
+  Jediná veřejná integer konstanta v celém Audio clusteru, která nepoužívá projektový alias
+  (CLAUDE.md's typová tabulka).
+  *CNA:* AudioEngine.hpp:31.
+  *Accept:* změnit na `static constexpr SharpRuntime::intcs ContentVersion = 46;`; existující
+  `ContentVersionIs46` test beze změny dál projde.
+
+- [ ] **XA-13 — Test-mezera: žádný test nekonstruuje `AudioEngine`/`SoundBank`/`WaveBank` proti
+  existujícímu, ale poškozenému `.xgs`/`.xsb`/`.xwb` souboru.**
+  Existující testy pokrývají jen "soubor neexistuje" a "validní fixtura" — nikdy "soubor existuje,
+  ale obsahuje odpad" na úrovni wrapper konstruktoru (na rozdíl od `XactParserTests.cpp`, který
+  tohle testuje na úrovni samotného parseru, ne wrapperu).
+  *CNA:* AudioEngineTests.cpp; SoundBankTests.cpp; WaveBankTests.cpp.
+  *Accept:* přidat po jednom testu pro každou třídu s existujícím-ale-poškozeným souborem,
+  ověřujícím aktuální (nebo nově rozhodnuté po XA-9) chování explicitně.
+
+#### 8.3 Interní backend (AudioMixer, XactParser, XactTypes)
+
+- [x] **IN-7 — `nChannels` se u KAŽDÉ `.xwb` položky (compact i non-compact) čte s chybným `+1`.**
+  Ověřeno ručně proti `FAudio/src/FACT_internal.c:1782,1793,1855,1866` — `entry->Format.nChannels`
+  se používá PŘÍMO jako násobitel v byte-size matematice, žádné `+1` nikde. Raw 3bitové pole na
+  disku už JE skutečný počet kanálů (1=mono, 2=stereo), ne "počet kanálů minus jedna". CNA přičítá
+  `+1` na obou místech (`compactFormat`, `fmt`), takže mono se rozparsuje jako stereo (a stereo
+  jako 3-kanálové) pro KAŽDOU reálnou `.xwb` položku, ne jen poškozená data.
+  *FAudio ref:* FACT_internal.c:1782,1793,1855,1866 (přímé použití bez úpravy).
+  *CNA:* XactParser.cpp:455 (compact), :520 (non-compact).
+  *Accept:* odstranit `+1` na obou místech; regresní test se syntetickou compact i non-compact
+  fixturou s raw `nChannels` polem `1` a `2`, ověřující `entry.channels==1`/`==2` — proti nezávisle
+  odvozené očekávané hodnotě, ne proti existujícím fixturám, které samy předpokládají dnešní
+  (chybnou) konvenci.
+  *Pozn.:* `+1` odstraněno na obou místech (`XactParser.cpp:454`, `:519`). Všech 9 existujících
+  fixtur, které kódovaly mono/stereo přes starou "pole = kanály minus jedna" konvenci
+  (`XactParserTests.cpp` ×3, `SoundBankTests.cpp`, `CueTests.cpp`, `AudioCategoryTests.cpp`,
+  `WaveBankTests.cpp` ×2), opraveno na raw hodnotu přímo. Přidány 4 nové testy s nezávisle
+  odvozenou hodnotou (compact stereo, non-compact stereo, plus mono přes existující ADPCM/compact
+  testy) — `git stash` na `XactParser.cpp` potvrdil selhání 2 z nich proti staré `+1` logice.
+  Celá sada 2045/2045 testů zelená, čisté pod ASan+LeakSanitizer.
+
+- [x] **IN-8 — U COMPLEX zvuku s RPC nebo DSP flagem se per-track metadata čtou PŘED RPC/DSP
+  blokem místo PO něm — obrácené pořadí proti FACT.**
+  Ověřeno ručně proti `FAudio/src/FACT_internal.c:2580-2704` — skutečné pořadí je: `trackCount`
+  (jen to) → RPC blok (pokud `SOUND_FLAG_RPC_MASK`) → DSP blok (pokud `SOUND_FLAG_HAS_DSP`) →
+  teprve PAK per-track `vol/code/filterData/frequency` smyčka + track-event pole. CNA čte per-track
+  smyčku HNED po `trackCount`, před kontrolou RPC/DSP flagů — pro complex zvuk s RPC/DSP flagem se
+  tak čtou RPC/DSP bajty jako by byly track metadata a naopak, `track.code` (absolutní offset pro
+  seek na track's event pole) skončí s odpadem. Tohle přežilo Fáze 7's IN-1 opravu (ta řešila jen
+  špatnou interpretaci DÉLKY DSP bloku, ne tohle strukturální pořadí).
+  *FAudio ref:* FACT_internal.c:2580 (trackCount), :2621-2661 (RPC+DSP bloky), :2668-2696 (per-track
+  metadata + track-event pole, AŽ TEĎ).
+  *CNA:* XactParser.cpp:688-741 (celá "Sound parsing" smyčka pro `SOUND_FLAG_COMPLEX`).
+  *Accept:* přesunout per-track `vol/code/filterData/frequency` smyčku (a track-event parsing) AŽ
+  ZA RPC-skip a DSP-skip bloky; regresní test s COMPLEX zvukem (`SOUND_FLAG_COMPLEX|
+  SOUND_FLAG_HAS_RPC`, a zvlášť `|SOUND_FLAG_HAS_DSP`) následovaným druhým, odlišitelným zvukem —
+  ověřit, že druhý zvuk se rozparsuje správně (analogicky ke stávajícím
+  `BuildXsbWithDspThenSecondSound`/`BuildXsbWithRpcThenSecondSound` fixturám, ale s PRVNÍM zvukem
+  COMPLEX místo simple).
+  *Pozn.:* per-track metadata smyčka (a track-event parsing) přesunuta až za RPC-skip a DSP-skip
+  bloky (`XactParser.cpp`'s Sound parsing smyčka). Přidány `BuildXsbWithComplexRpcThenSecondSound`/
+  `BuildXsbWithComplexDspThenSecondSound` — track-event data musí ležet MIMO souvislý proud
+  sound-hlaviček (referencováno jen absolutním offsetem), takže hlavička sound 1 následuje hned
+  za per-track metadaty sound 0, a event pole je až za sound 1 (odhaleno až při psaní testu — první
+  pokus s event polem hned za metadaty způsobil "read past end", protože `ParseFirstPlayWave`
+  hlavní kurzor po seek+read vrací zpět, takže formát musí mít hlavičky souvislé, ne event data).
+  `git stash` na `XactParser.cpp` potvrdil selhání obou nových testů proti staré logice.
+
+- [x] **IN-9 — Streaming `WaveBank::GetSoundEffect` může zkusit neomezenou alokaci z
+  poškozením/útokem kontrolovatelné `dataLength`, bez try/catch.**
+  `audioLen = entry.dataLength` (odvozeno z parsovaného `.xwb` headeru) se u STREAMING cesty nikde
+  neporovná proti skutečné velikosti souboru (na rozdíl od non-streaming cesty, která má přesně
+  tuhle kontrolu). `streamedBytes.resize(audioLen)` navíc běží PŘED `try` blokem, takže
+  `std::length_error`/`std::bad_alloc` propadne nezachyceno až z `Cue::Play()`.
+  *CNA:* WaveBank.cpp:267-269 (resize+read před try na řádku 291); volající Cue.cpp:244 (žádný
+  try/catch v řetězci až po `Cue::Play`).
+  *Accept:* před `resize` zkontrolovat `entry.dataLength` proti rozumné mezi (skutečná zbývající
+  velikost souboru přes `seekg(0,end)`/`tellg()`), a/nebo přesunout resize+read do existujícího
+  try/catch a vrátit `nullptr` při selhání; regresní test se streaming fixturou, jejíž entry
+  `dataLength` přesahuje reálnou velikost souboru, ověřující `GetSoundEffect` vrátí `nullptr`
+  místo throw/crash.
+  *Pozn.:* `WaveBank::GetSoundEffect`'s streaming větev teď před `resize` ověří
+  `dataOffset+dataLength` proti skutečné velikosti souboru na disku (`seekg(0,end)`/`tellg()`),
+  a `resize` samotný je navíc obalen try/catch. Přidán `WaveBankTest.
+  StreamingGetSoundEffectRejectsEntryLengthExceedingRealFileSize` — pro zvolenou (mírně)
+  nadsazenou délku (1 MB) vrací `nullptr` i stará i nová cesta (stará přes post-read
+  `gcount()` kontrolu), takže `git stash` tenhle konkrétní test nerozliší; skutečný přínos opravy
+  (zabránění pokusu o alokaci u řádově větších — GB — hodnot) není bezpečně testovatelný v
+  rychlém unit testu — zdokumentováno přímo u testu. Sada zelená, čisté pod ASan+LeakSanitizer.
+
+- [x] **IN-10 — Compact-format `.xwb` položky nikdy neodvodí ADPCM `samplesPerBlock`/`blockAlign`
+  — jen non-compact cesta to dělá.**
+  Non-compact větev správně počítá `samplesPerBlock=(wBlockAlign+16)*2`/`blockAlign=
+  (wBlockAlign+22)*channels` pro `fmtTag==2` (ADPCM). Compact větev nemá žádnou format-tag
+  podmínku vůbec — `blockAlign` zůstane syrové `wBlockAlign`, `samplesPerBlock` zůstane na
+  výchozí `0`, i když compact banka celá kóduje ADPCM (validní, i když méně častá kombinace).
+  *FAudio ref:* FACT_internal.c:1790-1793,1863-1866 (aplikuje vzorec bez ohledu na zdroj formátu).
+  *CNA:* XactParser.cpp:449-481 (compact — chybí větev), :535-546 (non-compact — správně).
+  *Accept:* aplikovat stejnou `fmtTag==2` větev (nebo sdílenou helper funkci) i v compact smyčce;
+  regresní test s compact fixturou kódující ADPCM, ověřující stejný vzorec jako existující
+  `NonCompactAdpcmEntryComputesBlockAlignAndSamplesPerBlock`.
+  *Pozn.:* compact smyčka teď před hlavní `for` počítá `compactSamplesPerBlock`/
+  `compactBlockAlign` stejným vzorcem jako non-compact větev (sdílené pro celou banku, protože
+  formát je u compact bank společný pro všechny položky). Přidán `XactParserTest.
+  CompactAdpcmEntryComputesBlockAlignAndSamplesPerBlock`; `git stash` na `XactParser.cpp`
+  potvrdil selhání proti staré (chybějící) logice.
+
+- [x] **IN-11 — `AudioMixer::GetMixer()` leakuje `MIX_Init()` refcount, když `MIX_CreateMixerDevice`
+  selže.**
+  `MIX_Init()`/`MIX_Quit()` jsou reference-counted. `GetMixer()` zavolá `MIX_Init()`, a pokud
+  `MIX_CreateMixerDevice()` selže, throwne `std::runtime_error` BEZ vyrovnávacího `MIX_Quit()`.
+  `g_mixer` zůstane `nullptr`, takže každé další volání (~10 míst v `SoundEffect.cpp`/
+  `SoundEffectInstance.cpp`/`DynamicSoundEffectInstance.cpp`/`MediaPlayer.cpp`) zavolá `GetMixer()`
+  znovu a dál nabaluje nevyrovnaný počet, dokud audio hardware nechybí.
+  *CNA:* src/CNA/Internal/Audio/AudioMixer.cpp:17-36.
+  *Accept:* při selhání `MIX_CreateMixerDevice` zavolat `MIX_Quit()` před throw (nebo obalit celou
+  inicializační sekvenci tak, aby každá chybová cesta vyrovnala `MIX_Init`); test není prakticky
+  proveditelný bez reálného/mockovaného SDL audio subsystému — oprava je ale přímočará defenzivní
+  úprava.
+  *Pozn.:* `MIX_Quit()` přidáno do chybové větve před `throw`. Bez automatizovaného testu
+  (dle accept kritéria samotného — vyžadovalo by reálný/mockovaný SDL audio subsystém); pokryto
+  jen manuální revizí + `AudioMixerTests.cpp`'s "no tests" komentářem (IN-12).
+
+- [x] **IN-12 — Test-mezery v `XactParserTests.cpp` (22 testů) a úplná absence testů zaměřených na
+  `AudioMixer`/`ParseXwbStreamingHeader`.**
+  Žádný test nekombinuje `SOUND_FLAG_COMPLEX` s RPC/DSP flagy (proto IN-8 unikl); `RPC_internal`
+  Existující RPC/DSP fixtury (`BuildXsbWithRpcThenSecondSound`/`BuildXsbWithDspThenSecondSound`)
+  používají výslovně SIMPLE zvuky. `ParseXwbStreamingHeader` nemá žádný přímý unit test (jen
+  nepřímo přes `WaveBankTests.cpp`'s malé validní fixtury) — chybí truncated/malformed header,
+  zero-entry streaming banka, streaming entry s `dataLength` přesahující reálnou velikost souboru
+  (viz IN-9). Žádný test neuzamkne správnou (ne off-by-one) hodnotu kanálů proti nezávisle
+  ověřené hodnotě (viz IN-7 — stávající fixtury by prošly beze změny i po špatné i po správné
+  opravě). Žádný test pro compact-format ADPCM položku (IN-10). `AudioMixer` nemá testovací
+  soubor vůbec (rozumné vzhledem k závislosti na reálném/mockovaném SDL audio zařízení, ale bez
+  komentáře podle CHECKLIST.md's konvence pro netestovatelné třídy).
+  *CNA:* tests/CNA/Internal/Audio/XactParserTests.cpp (celý soubor); žádný `AudioMixerTests.cpp`.
+  *Accept:* přidat fixtury popsané v accept kritériích IN-7/IN-8/IN-9/IN-10; pro `AudioMixer`
+  přidat aspoň jednořádkový komentář (podle CHECKLIST.md's konvence) vysvětlující, proč netestován.
+  *Pozn.:* fixtury pro IN-7 (compact+non-compact stereo), IN-8 (COMPLEX+RPC, COMPLEX+DSP), IN-9
+  (streaming oversized-length), IN-10 (compact ADPCM) všechny přidány u svých vlastních položek
+  výše. `tests/CNA/Internal/Audio/AudioMixerTests.cpp` přidán jako prázdný "no tests" stub
+  (stejná konvence jako `GameComponentTests.cpp` apod.). `XactParserTests.cpp` teď 27 testů
+  (bylo 22).
+
+#### 8.4 Mic/data/enumy/výjimky
+
+- [ ] **MC-6 — `Microphone::CheckBuffer()` je veřejná, i když nemusí být — zbytečně rozšiřuje API
+  povrch a odporuje vlastnímu T-1H accept kritériu.**
+  FNA má `CheckBuffer()` jako `internal` — nejde zavolat mimo assembly. CNA ji má `public`
+  (označenou `NOXNA`), přímo proti CLAUDE.md's Visibility Mapping ("C# `internal` ... by se
+  neměl stát public C++ API metodou") a proti T-1H's vlastnímu accept kritériu ("žádné public
+  interní členy"). `CheckAllBuffers()` (nový, sanctioned NOXNA most pro `FrameworkDispatcher`) je
+  `static` metoda stejné třídy, takže má už private-member přístup k `CheckBuffer()` bez nutnosti
+  být `CheckBuffer()` sama veřejná.
+  *FNA:* Microphone.cs:204-213 (`internal void CheckBuffer()`).
+  *CNA:* Microphone.hpp:133-134; Microphone.cpp:210-230.
+  *Accept:* `CheckBuffer()` přesunout do `private` (ponechat `CheckAllBuffers()` veřejnou dle T-1H);
+  `MicrophoneTestAccess` rozšířit o tenký static wrapper, aby `MicrophoneTests.cpp`'s přímá volání
+  `mic.CheckBuffer()` dál fungovala.
+
+- [ ] **MC-7 — Test-mezera: žádný deterministický test, že `BufferReady` mlčí, když queued duration
+  je pod `BufferDuration`.**
+  Existující testy pokrývají jen "no subscriber → nethrowuje" (zkratkuje se na `Empty()` kontrole,
+  nikdy nezacvičí samotné `>` porovnání) a "reálný capture, dost času → časem vystřelí" (jen
+  pozitivní cesta, potřebuje SDL dummy driver a až 2s pollingu). Chybí deterministický,
+  instance-izolovaný test pro negativní případ.
+  *CNA:* MicrophoneTests.cpp:267-276,357-374; Microphone.cpp:210-216.
+  *Accept:* nový test s izolovaným (nikdy `Start()`-nutým) `Microphone` přes `MicrophoneTestAccess`,
+  zaregistrovat počítající lambda na `BufferReady`, zavolat `CheckBuffer()` přímo, ověřit že
+  counter zůstane `0`; bonus: ověřit že `sender` argument předaný handleru je sama mic instance.
+
 ---
 
 ## 5. Doporučené pořadí a milníky

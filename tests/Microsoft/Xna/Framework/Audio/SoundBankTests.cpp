@@ -248,7 +248,7 @@ namespace
         AppendU32(data, alignment);
         const uint32_t compactFormat =
               (0u)            // format tag: PCM
-            | (0u << 2)       // channels - 1 = 0 -> mono
+            | (1u << 2)       // channels: raw field IS the real channel count -> mono (IN-7)
             | (44100u << 5)   // sample rate
             | (2u << 23)      // wBlockAlign: 2 bytes/sample
             | (1u << 31);     // 16-bit
