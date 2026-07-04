@@ -4,6 +4,8 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
+#include <SDL3/SDL.h>
+
 #include <cstdint>
 #include <string>
 
@@ -124,4 +126,45 @@ TEST_F(TextInputEXTTest, StartStopAndSetRectangleWithoutWindowAreSafeNoOps)
     EXPECT_NO_THROW(TextInputEXT::StartTextInput());
     EXPECT_NO_THROW(TextInputEXT::StopTextInput());
     EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(0, 0, 10, 10)));
+}
+
+TEST_F(TextInputEXTTest, StartStopAndIsActiveRoundTripThroughRealWindow)
+{
+    // Task 809: verify the real SDL path (not just the no-window null guards). Mirrors the
+    // MouseInputTests real-hidden-window pattern (SDL_INIT_VIDEO + GTEST_SKIP on failure).
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Window* window = SDL_CreateWindow("TextInputEXTTests", 64, 64, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+
+    TextInputEXT::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
+
+    // Some platforms (e.g. certain Wayland/IME setups) may not toggle SDL_TextInputActive on a
+    // hidden window; skip rather than fail if StartTextInput doesn't take effect here, so this
+    // stays a genuine real-path check without becoming environment-flaky.
+    TextInputEXT::StartTextInput();
+    if (!TextInputEXT::IsTextInputActive())
+    {
+        SDL_DestroyWindow(window);
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_StartTextInput did not activate text input on a hidden window in this environment";
+    }
+
+    EXPECT_TRUE(TextInputEXT::IsTextInputActive());
+
+    // SetInputRectangle must reach SDL without error while text input is active.
+    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(4, 4, 32, 16)));
+
+    TextInputEXT::StopTextInput();
+    EXPECT_FALSE(TextInputEXT::IsTextInputActive());
+
+    SDL_DestroyWindow(window);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }

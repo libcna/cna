@@ -78,7 +78,11 @@ namespace Microsoft::Xna::Framework::Input
             rect.y = rectangle.Y;
             rect.w = rectangle.Width;
             rect.h = rectangle.Height;
-            // Cursor offset 0: FNA passes 0 here as well (no IME cursor hint).
+            // Cursor offset 0 matches FNA exactly (SetTextInputRectangle,
+            // SDL3_FNAPlatform.cs:779: `SDL_SetTextInputArea(window, ref rect, 0)`). SDL3's third
+            // argument is the text cursor's x-offset relative to rect->x (an optional IME
+            // placement hint); FNA passes 0 and flags it with its own `// FIXME SDL3: Do we need a
+            // cursor here?` — CNA follows FNA rather than inventing a cursor offset it doesn't have.
             SDL_SetTextInputArea(window, &rect, 0);
         }
     }
