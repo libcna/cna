@@ -374,6 +374,58 @@ TEST(MouseTest, SetCursorIsSafeNoOpForDisposedCursor)
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
+TEST(MouseTest, SetPositionConvertsLogicalToWindowForLetterboxedRenderer)
+{
+    // Task 847 / a-0001: on a scaled/letterboxed window the OS cursor must land at the correct
+    // *window* pixel — SetPosition converts the caller's logical coords back to window space. This
+    // exercises the SDL_Renderer path (SDL_RenderCoordinatesToWindow) that logical_to_window uses.
+    ResetMouseState();
+
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Window* window = SDL_CreateWindow("MouseWarpTest", 200, 200, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (!renderer)
+    {
+        SDL_DestroyWindow(window);
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateRenderer failed: " << SDL_GetError();
+    }
+
+    // Logical 100x100 presented into a 200x200 window → a uniform 2x scale (square, no bars).
+    SDL_SetRenderLogicalPresentation(renderer, 100, 100, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+
+    // The exact conversion Mouse::SetPosition applies for the renderer path: logical (50,50) center
+    // maps to window (100,100). This is what gets fed to SDL_WarpMouseInWindow.
+    float wx = 0.0f, wy = 0.0f;
+    ASSERT_TRUE(SDL_RenderCoordinatesToWindow(renderer, 50.0f, 50.0f, &wx, &wy));
+    EXPECT_NEAR(wx, 100.0f, 1.0f);
+    EXPECT_NEAR(wy, 100.0f, 1.0f);
+
+    // SetPosition keeps GetState() reporting the *logical* position the caller set (the warp target
+    // is window-space; the OS-cursor landing itself is verified manually — global-mouse readback is
+    // Wayland-restricted here, see docs/input-manual-verification-results.md).
+    Mouse::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
+    Mouse::SetPosition(50, 50);
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getXProperty(), 50);
+    EXPECT_EQ(state.getYProperty(), 50);
+
+    Mouse::setWindowHandleProperty(0);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    ResetMouseState();
+}
+
 // ===========================================================================
 // MouseCursor
 // ===========================================================================

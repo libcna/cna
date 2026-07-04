@@ -20,7 +20,24 @@
 
 ## a-0001 — `Mouse::SetPosition` inverse logical→window coordinate transform
 
-**Status:** ⛔ Deferred (graphics-layer scope)
+**Status:** ✅ Done — implemented in Phase I10 task 846 (the deferral was lifted by the user, who
+authorized the graphics-layer change in Phase I10's rule 6).
+
+**Resolution.** Added the symmetric inverse virtual `IGraphicsBackend::TransformLogicalToWindow`
+(default no-op passthrough) and implemented it in EasyGL (`window = logical * physH/virtualHeight_`,
+the algebraic inverse of `TransformWindowToLogical`). `Mouse::SetPosition` now converts the caller's
+logical coordinates to window space via a new `logical_to_window` helper (SDL_Renderer path via
+`SDL_RenderCoordinatesToWindow`; other backends via `TransformLogicalToWindow`; pass-through when no
+scaling transform exists) before `SDL_WarpMouseInWindow`, so the OS cursor lands at the correct
+physical pixel on a scaled/letterboxed window. Vulkan/bgfx use the no-op passthrough (they don't do
+logical-presentation scaling). Verified by `MouseInputTests` (`SetPositionConvertsLogicalToWindowFor
+LetterboxedRenderer`, passing under both ambient Wayland and `SDL_VIDEODRIVER=x11`) and the stale
+`Mouse.cpp` deviation comment was replaced (task 848). The historical deferral rationale is retained
+below for context.
+
+---
+
+**(Historical — original deferral rationale, superseded by the resolution above.)**
 
 **Origin:** Phase I9 tasks **800** and **801** in `plan_input.md`, from the external (ChatGPT Plus)
 review of the input work. Deferred here by explicit user decision (2026-07-04) rather than

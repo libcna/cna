@@ -1276,6 +1276,21 @@ void main()
         return true;
     }
 
+    bool EasyGLGraphicsBackend::TransformLogicalToWindow(float logX, float logY,
+                                                         float& windowX, float& windowY) const
+    {
+        // Inverse of TransformWindowToLogical: logical = window * (virtualHeight_ / physH), so
+        // window = logical * (physH / virtualHeight_).
+        if (virtualHeight_ <= 0) return false;
+        int physW, physH;
+        SDL_GetWindowSize(window, &physW, &physH);
+        if (physH <= 0) return false;
+        const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
+        windowX = logX * invScale;
+        windowY = logY * invScale;
+        return true;
+    }
+
     void EasyGLGraphicsBackend::GetViewportSize(int& width, int& height)
     {
         getLogicalSize(width, height);

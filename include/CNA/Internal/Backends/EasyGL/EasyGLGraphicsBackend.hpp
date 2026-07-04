@@ -419,6 +419,8 @@ namespace CNA::Internal::Backends::EasyGL
         void getPhysicalSize(int& width, int& height) const;
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
 
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;

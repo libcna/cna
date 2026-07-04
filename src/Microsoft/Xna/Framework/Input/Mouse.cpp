@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include <SDL3/SDL.h>
 
@@ -13,6 +14,41 @@ namespace
         return windowHandle != 0
             ? reinterpret_cast<SDL_Window*>(windowHandle)
             : SDL_GetMouseFocus();
+    }
+
+    /// Converts a point from logical (game/render) coordinates to physical window coordinates —
+    /// the inverse of SdlInputBridge::to_logical_position, so SetPosition warps the OS cursor to
+    /// the right pixel on a scaled/letterboxed window (plan.md a-0001). Mirrors the same two
+    /// backend paths: SDL_Renderer via SDL_RenderCoordinatesToWindow, other backends via
+    /// IGraphicsBackend::TransformLogicalToWindow. Falls back to pass-through (window == logical)
+    /// when no scaling transform is available — correct when window size == render resolution.
+    void logical_to_window(SDL_Window* window, float logX, float logY, float& outX, float& outY)
+    {
+        outX = logX;
+        outY = logY;
+        if (window == nullptr)
+            return;
+
+        if (SDL_Renderer* renderer = SDL_GetRenderer(window))
+        {
+            float wx = logX, wy = logY;
+            if (SDL_RenderCoordinatesToWindow(renderer, logX, logY, &wx, &wy))
+            {
+                outX = wx;
+                outY = wy;
+                return;
+            }
+        }
+
+        if (auto* backend = CNA::Internal::Backends::IGraphicsBackend::GetForWindow(window))
+        {
+            float wx = logX, wy = logY;
+            if (backend->TransformLogicalToWindow(logX, logY, wx, wy))
+            {
+                outX = wx;
+                outY = wy;
+            }
+        }
     }
 }
 
@@ -31,21 +67,14 @@ namespace Microsoft::Xna::Framework::Input
         windowHandle_ = value;
     }
 
-    // Intentional deviation from Mouse.cs: FNA scales GetState()/SetPosition
-    // coordinates by a fixed INTERNAL_WindowWidth/Height <-> INTERNAL_BackBufferWidth/
-    // Height ratio (its "faux-backbuffer"). CNA solves the equivalent window<->logical
-    // coordinate problem more generally: SdlInputBridge's to_logical_position() already
-    // converts every mouse position CNA stores via IGraphicsBackend::TransformWindowToLogical
-    // (or SDL_RenderCoordinatesFromWindow for the SDL_Renderer backend) before it reaches
-    // InputManager, so GetState() needs no extra scaling. There is currently no inverse
-    // (logical -> window) transform on IGraphicsBackend, so SetPosition passes coordinates
-    // straight through to SDL_WarpMouseInWindow as window-space; this is correct when the
-    // window size matches the logical/render resolution and will be off by the letterbox
-    // scale factor otherwise. Adding a general inverse transform is a graphics-layer change
-    // (IGraphicsBackend + all backend implementations), out of scope for this input branch.
-    // FNA's separate INTERNAL_MouseWheel accumulator (SDL3_FNAPlatform.cs) has no CNA
-    // equivalent field either, for the same reason ScrollWheelValue already needs no local
-    // mirror here: InputManager::AddScrollWheelDelta already accumulates it cumulatively.
+    // Coordinate model: FNA scales GetState()/SetPosition by a fixed INTERNAL_WindowWidth/Height
+    // <-> INTERNAL_BackBufferWidth/Height ratio (its "faux-backbuffer"). CNA solves the equivalent
+    // window<->logical problem more generally through the graphics backend: SdlInputBridge's
+    // to_logical_position() converts stored positions window->logical (so GetState() returns
+    // logical coords), and SetPosition() below converts the caller's logical coords back to window
+    // space via logical_to_window() before warping (plan.md a-0001). FNA's separate
+    // INTERNAL_MouseWheel accumulator has no CNA equivalent field: InputManager::AddScrollWheelDelta
+    // already accumulates ScrollWheelValue cumulatively.
 
     MouseState Mouse::GetState()
     {
@@ -60,8 +89,15 @@ namespace Microsoft::Xna::Framework::Input
             return;
         }
 
+        // Keep GetState() reporting the logical position the caller set...
         CNA::Internal::Input::InputManager::SetMousePosition(x, y);
-        SDL_WarpMouseInWindow(resolve_mouse_window(windowHandle_), static_cast<float>(x), static_cast<float>(y));
+
+        // ...but warp the OS cursor in window space: convert logical -> window so the cursor lands
+        // at the correct physical pixel on a scaled/letterboxed window (a-0001).
+        SDL_Window* window = resolve_mouse_window(windowHandle_);
+        float windowX, windowY;
+        logical_to_window(window, static_cast<float>(x), static_cast<float>(y), windowX, windowY);
+        SDL_WarpMouseInWindow(window, windowX, windowY);
     }
 
     void Mouse::SetCursor(MouseCursor& cursor)

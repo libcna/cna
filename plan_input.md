@@ -292,6 +292,38 @@ behavior.
 
 ---
 
+## Phase I10 — Input final stabilization (tasks 841–855)
+
+> **Origin:** second external-review pass, relayed by the user. A *stabilization* phase, not a new
+> feature phase: verify build/test reproducibility, fix the one remaining real fidelity gap
+> (`plan.md` a-0001), then do honest manual/runtime validation and a final handoff. **Rule 6 of
+> this phase explicitly authorizes the graphics-layer change for `a-0001`** (task 846) — the change
+> deferred in Phase I9 is now in scope. Hardware/platform-gated checks must be marked honestly, not
+> faked.
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 841 | Clean EasyGL configure/build/full tests/input-filter from a fresh build dir. | ⬜ | Record exact command + result. |
+| 842 | Same, Vulkan. | ⬜ | |
+| 843 | Same, bgfx. | ⬜ | Note the 4 bgfx-specific tests. |
+| 844 | Verify a source zip without submodule contents fails with the intended clear CMake error (not a runtime failure); document the user action. | ⬜ | Guard at `ThirdPartySDL.cmake:32–38`. |
+| 845 | Re-check `plan_input.md`/`docs/input-backend.md`/`docs/xna-4-api-coverage.md`/`NEXT.md` for overconfident claims; use category-specific wording. | ⬜ | Truthful + non-contradictory. |
+| 846 | Implement `plan.md` a-0001: inverse logical→window transform in the graphics backend abstraction; use it in `Mouse::SetPosition`. | ✅ | Added the symmetric inverse `IGraphicsBackend::TransformLogicalToWindow` (default no-op passthrough) + EasyGL impl (`window = logical * physH/virtualHeight_`). `Mouse::SetPosition` now converts logical→window via a new `logical_to_window` helper (SDL_Renderer via `SDL_RenderCoordinatesToWindow`; other backends via `TransformLogicalToWindow`; passthrough otherwise) before `SDL_WarpMouseInWindow`. Vulkan/bgfx use the passthrough (no logical-presentation scaling). `plan.md` a-0001 marked done. |
+| 847 | Tests / manual integration check for `Mouse::SetPosition` when logical/back-buffer size ≠ window size. | ✅ | New `MouseInputTests` `SetPositionConvertsLogicalToWindowForLetterboxedRenderer`: real window+`SDL_Renderer` with 100×100 logical presentation on a 200×200 window (2× letterbox); asserts the exact conversion `SetPosition` applies (`SDL_RenderCoordinatesToWindow(50,50)→(100,100)`) and that `GetState()` still reports the logical position. Passes under ambient Wayland **and** `SDL_VIDEODRIVER=x11`. The OS-cursor *landing* pixel is verified manually (global-mouse readback is Wayland-restricted — see task 850). |
+| 848 | Remove/update the known-limitation comment in `Mouse.cpp` once a-0001 is fixed. | ✅ | Replaced the "no inverse transform … off by the letterbox scale factor … out of scope" comment with an accurate description of the now-implemented logical↔window conversion. No stale comment remains. |
+| 849 | Run `examples/demo_input` on a desktop; update `docs/demo-input-checklist.md` with what was actually verified. | ⬜ | Honest about the headless environment. |
+| 850 | Add `docs/input-manual-verification-results.md` for hardware/platform checks not coverable headless. | ⬜ | Date, OS, display server, controller, pass/fail. |
+| 851 | If no real gamepad available, mark rumble/sensors/lightbar "implemented but hardware-unverified" (don't fake). | ⬜ | |
+| 852 | Verify `TextInputEXT` with Czech + ≥1 astral char in a real SDL window if possible. | ⬜ | Real IME/text needs a human. |
+| 853 | Verify Wayland behavior separately from X11 on Linux. | ⬜ | Warp/global-pos differ by compositor policy. |
+| 854 | One small XNA-like sample using Keyboard+Mouse+GamePad+Touch+TextInput together in one update loop. | ⬜ | Practical smoke test. |
+| 855 | Finalize `feature/input`: concise final handoff in `NEXT.md` (done / remains-outside-branch / next branch). | ⬜ | Short + factual. |
+
+**Order:** 841–845 (reproducibility) → 846–848 (the real fix) → 849–854 (manual/runtime, honest) →
+855 (handoff). No new input API features unless a test/sample proves them necessary.
+
+---
+
 ## XNA 4.0 Input API coverage — final split (task 838)
 
 > **This is the authoritative coverage assessment** (as of Phase I9). Per the review's rule,
