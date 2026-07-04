@@ -14,14 +14,16 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
 - **Current development phase: `feature/input` is FINALIZED — READY TO MERGE.** Phases I1–I10
   (tasks 700–855) complete, pre-merge-audited (Phase I11, 856–864), plus a final touch-fidelity +
   doc hardening pass (Phase I12, 865–878).
-  **Latest clean 3-backend verification (2026-07-04, task 876):** `rm -rf` + configure + build +
-  run `CnaTests` on each backend from initialized submodules:
+  **Final merge verification (2026-07-04):** `git submodule update --init --recursive` (completed
+  clean, incl. all nested SDL_image/SDL_mixer codec submodules), then `rm -rf` + configure + build +
+  run `CnaTests` on each backend — counts reproduced exactly from the Phase I12 run (task 876):
   - **EasyGL: 1968/1968** full · **221/221** input-filter
   - **Vulkan: 1968/1968** full · **221/221** input-filter
   - **bgfx: 1972/1972** full (+4 bgfx-specific, input-unrelated) · **221/221** input-filter
   - Input filter: `--gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'`
 
-  All green. `feature/input` is **ready to merge**. There is no next numbered task — see Section 8.
+  All green, no test failures on any backend. `feature/input` is **ready for merge / PR review**.
+  There is no next numbered task — see Section 8.
   (Hardware/human-gated checks — real gamepad/IME/mobile — stay documented-as-unverified in
   `docs/input-manual-verification-results.md`, not faked.)
 - **Phase I12 fixed one real fidelity gap:** the event-driven touch path (`InputManager`, which is
@@ -143,7 +145,7 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   `System::IAsyncResult` interface change that broke this repo's `StorageDevice.cpp`.
 
 ### What does NOT work yet
-Everything planned (Phases I1–I10, tasks 700–855) is done. The one previously-deferred item —
+Everything planned (Phases I1–I12, tasks 700–878) is done. The one previously-deferred item —
 `Mouse::SetPosition`'s scaled/letterboxed logical→window transform — was **implemented in Phase I10
 (a-0001 / task 846)**. Remaining unverifiable items are platform/hardware-gated only (real gamepad
 hardware, real IME, Wayland global-mouse), documented honestly in Section 5 and
@@ -423,10 +425,11 @@ combined `cna_input_smoke` sample. Coverage is documented **by category** (never
   Section 6).
 - No graphics changes on this branch — graphics is tracked in `GRAPHICS_TASKS.md` on its own
   track.
-- Do not add the `Mouse::SetPosition` scale-factor fix as a `plan_input.md` task — it's
-  graphics-layer scope, intentionally routed to `GRAPHICS_TASKS.md`'s track instead (Section 8).
-  Don't edit `GRAPHICS_TASKS.md` either unless specifically asked — it's a separate, large,
-  actively-maintained plan not owned by this branch's work.
+- Do not re-open `Mouse::SetPosition` / `a-0001` unless a regression is found — it was resolved in
+  Phase I10 task 846 (logical→window transform via `IGraphicsBackend::TransformLogicalToWindow` +
+  `SDL_RenderCoordinatesToWindow`; the graphics-layer change was authorized then). Don't edit
+  `GRAPHICS_TASKS.md` unless specifically asked — it's a separate, large, actively-maintained plan
+  not owned by this branch's work.
 - Do not invent new tasks unprompted now that Phases I1–I8 (700–791) are all done — ask the user
   which of Section 8's options applies, same as when Phase I8 itself was created.
 - Do not merge or push `feature/input` to `master` without confirming with the user first — the
