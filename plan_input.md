@@ -205,7 +205,13 @@ violations in the internal layer, and very thin test coverage.
 
 ---
 
-## Phase I9 — Input hardening, reproducibility, and fidelity audit
+## Phase I9 — Input hardening, reproducibility, and fidelity audit ✅ COMPLETE (tasks 792–840)
+
+> All tasks done and verified on EasyGL/Vulkan/bgfx (task 840). Two tasks are **deferred by
+> decision, not skipped**: 800/801 (`Mouse::SetPosition` inverse transform — graphics-layer scope)
+> → `plan.md` task `a-0001`. Task 811 is **partial** (bridge SDL slot-assignment edge cases are
+> hardware-gated). Real fixes found and made this phase: 816 (`GetGUIDEXT` format), 806 (`TextInput`
+> → `char16_t`), 828 (touch display-size guard), 834 (singleton disposal), 790-adjacent doc fixes.
 
 > **Origin:** external (ChatGPT Plus) review of the completed input work, relayed by the user
 > 2026-07-04. Delivered by the reviewer titled "Phase I8", but **renamed to Phase I9 here** because
@@ -273,7 +279,7 @@ violations in the internal layer, and very thin test coverage.
 | 837 | Add platform notes (Linux/X11, Wayland, Windows, Android, iOS) for input limitations (warp/global pos on Wayland; touch/screen keyboard on mobile). | ✅ | New `docs/platform-input-notes.md`, one section per platform, each item marked **verified** (with the task) vs. documented SDL/OS behavior: X11 (warp/global-pos pixel-exact, task 783); **Wayland** (global cursor pos restricted → `(0,0)`, task 783; absolute warp constrained, relative mode = pointer lock works); Windows (XInput → `"xinput"` GUID, task 816); **Android** (touch primary + noticed-only-once, task 712; on-screen keyboard; `__ANDROID__` log path, task 822); iOS (touch-only, no cursor, on-screen keyboard). Plus a cross-cutting section (letterbox warp → `a-0001`, scancode mode + 40 unmappable keys, no horizontal wheel, main-thread-only). |
 | 838 | Recalculate realistic input coverage split into XNA 4.0 core / FNA EXT / MonoGame MouseCursor / NOXNA / platform-dependent. | ✅ | Replaced the old blended estimate table with the authoritative **category-split** coverage in the "XNA 4.0 Input API coverage — final split" section above: (1) **XNA 4.0 core** ~99% behavior / ~99% tested — complete & FNA-faithful; (2) **FNA EXT** ~95% behavior / ~85% tested — all implemented, untested slice hardware/IME-gated; (3) **MonoGame `MouseCursor`** complete for the exposed surface; (4) **CNA/NOXNA-only** (internal backend + test hooks); (5) **platform-dependent/hardware-gated** items enumerated with their dependency. Per the review's rule, **no blended "input is 100% complete" number is claimed** — the categories are kept separate. |
 | 839 | Update `docs/xna-4-api-coverage.md` with final verified input status. | ✅ | Updated the Input rows to the by-category assessment (XNA core ~99% / FNA EXT ~95% / MonoGame `MouseCursor` / platform-dependent — not blended), matching task 838's split; the `Input::Touch` section and §8 estimate rows; and the §10 Input summary (Phases I1–I9, tasks 700–840, with pointers to the final-split table + `platform-input-notes.md` + `demo-input-checklist.md`). **Fixed the stale doc claim** that `GetCapabilities()` still had the disconnected-count bug — task 790 resolved it. Bumped the doc's update date/line for Phase I9. |
-| 840 | Final clean run: build + run full `CnaTests` on EasyGL, Vulkan, bgfx after all input changes; record exact commands/results here. | ⬜ | Only then may Phase I9 be marked complete. |
+| 840 | Final clean run: build + run full `CnaTests` on EasyGL, Vulkan, bgfx after all input changes; record exact commands/results here. | ✅ | Rebuilt `CnaTests` in all three configured build dirs (`cmake-build-input-{easygl,vulkan,bgfx}`, `cmake --build … --target CnaTests`) after every Phase I9 change, then ran the full suite + the input filter (`--gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'`) on each. **Results — all green:** EasyGL **1961/1961** (214 input), Vulkan **1961/1961** (214 input), bgfx **1965/1965** (214 input; +4 pre-existing bgfx-specific tests, input-unrelated). The input suite grew 165→214 (+49 Phase I9 tests), identical on all three backends. **Phase I9 is complete.** |
 
 **Implementation order:** 792–797 (reproducibility) → 798–805 (Mouse) → 806–809 (TextInput/Unicode)
 → 810–818 (GamePad) → 819–822 (Keyboard) → 823–830 (global state/Touch/Gesture) → 831–834
