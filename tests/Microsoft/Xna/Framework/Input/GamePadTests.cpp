@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 
+using CNA::Internal::Input::SdlInputBridge;
 using Microsoft::Xna::Framework::Vector3;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
@@ -81,6 +83,36 @@ TEST(GamePadTest, GetAccelerometerEXTReturnsFalseAndZeroesOutputWhenNoGamePadCon
 TEST(GamePadTest, GetGUIDEXTReturnsEmptyStringWhenNoGamePadConnected)
 {
     EXPECT_EQ(GamePad::GetGUIDEXT(PlayerIndex::One), "");
+}
+
+// --- Task 816: GUID formatting (matches FNA's GetGamePadGUID, not the full SDL GUID string) ---
+
+TEST(GamePadTest, FormatGUIDReturnsXinputWhenVendorAndProductAreZero)
+{
+    // XInput controllers report no USB vendor/product; FNA returns the literal "xinput".
+    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x0000, 0x0000), "xinput");
+}
+
+TEST(GamePadTest, FormatGUIDEmitsVendorThenProductLittleEndianHex)
+{
+    // Sony DualShock 4: vendor 0x054C, product 0x05C4 -> bytes 4c 05 c4 05 -> "4c05c405"
+    // (the exact string FNA hard-codes for a Valve-re-exposed PS4 pad).
+    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x054C, 0x05C4), "4c05c405");
+
+    // Sony DualSense (PS5): vendor 0x054C, product 0x0CE6 -> 4c 05 e6 0c -> "4c05e60c".
+    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x054C, 0x0CE6), "4c05e60c");
+
+    // Microsoft Xbox 360 wired: vendor 0x045E, product 0x028E -> 5e 04 8e 02 -> "5e048e02".
+    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x045E, 0x028E), "5e048e02");
+
+    // Arbitrary IDs, to pin the byte order unambiguously.
+    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x1234, 0x5678), "34127856");
+}
+
+TEST(GamePadTest, FormatGUIDIsAlwaysEightHexCharsForNonZeroIds)
+{
+    // Low ids must stay zero-padded to the full 8 chars (no truncation).
+    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x0001, 0x0002), "01000200");
 }
 
 // --- GamePadCapabilities ---

@@ -205,5 +205,15 @@ namespace CNA::Internal::Input
         static RawGamePadState GetRawGamePadState(
             Microsoft::Xna::Framework::PlayerIndex playerIndex
         );
+
+        /**
+         * @brief Test-only: resets all accumulated input state (mouse, keyboard, all gamepad
+         *        slots, touch) to defaults.
+         *
+         * The input state is a process-wide singleton shared across the whole test binary, so
+         * tests that mutate it (connect a gamepad, press keys, etc.) must reset it to avoid
+         * leaking state into later tests. Not part of the runtime input path — for tests only.
+         */
+        static void ResetForTests();
     };
 }

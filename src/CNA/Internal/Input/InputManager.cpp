@@ -107,6 +107,11 @@ namespace CNA::Internal::Input
         }
     }
 
+    void InputManager::ResetForTests()
+    {
+        getInternalInputState() = InternalInputState{};
+    }
+
     void InputManager::SetMousePosition(const int x, const int y)
     {
         auto& mouseState = getInternalInputState().Mouse;

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <cstdint>
 #include <string>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -60,6 +61,20 @@ namespace CNA::Internal::Input
          * @brief Returns the SDL GUID string for the gamepad at the given player slot.
          */
         static std::string GetGUID(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+
+        /**
+         * @brief Formats an FNA-style GamePad GUID string from a device's USB vendor/product IDs.
+         *
+         * Mirrors FNA's `GetGamePadGUID` formatting (`SDL3_FNAPlatform.cs:2176-2191`): returns
+         * `"xinput"` when both IDs are zero, otherwise 8 lowercase hex chars — the 16-bit vendor
+         * then product IDs each emitted little-endian (low byte first). Exposed for unit testing;
+         * `GetGUID()` calls it (and additionally applies FNA's Valve-controller overrides).
+         *
+         * @param vendor The USB vendor ID.
+         * @param product The USB product ID.
+         * @return The FNA-style GUID string.
+         */
+        static std::string FormatGamePadGUIDEXT(std::uint16_t vendor, std::uint16_t product);
 
         /**
          * @brief Reads gyroscope sensor data for the gamepad at the given player, enabling

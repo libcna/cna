@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <array>
@@ -923,18 +924,46 @@ namespace CNA::Internal::Input
         SDL_SetGamepadLED(gamepad, color.getRProperty(), color.getGProperty(), color.getBProperty());
     }
 
+    std::string SdlInputBridge::FormatGamePadGUIDEXT(const std::uint16_t vendor, const std::uint16_t product)
+    {
+        // FNA's GetGamePadGUID format (SDL3_FNAPlatform.cs:2176-2191): "xinput" for a device that
+        // reports no USB vendor/product (XInput on Windows), otherwise the vendor then product
+        // 16-bit IDs as 8 lowercase hex chars, each little-endian (low byte first).
+        if (vendor == 0x0000 && product == 0x0000)
+            return "xinput";
+        char buf[9];
+        std::snprintf(buf, sizeof(buf), "%02x%02x%02x%02x",
+                      vendor & 0xFF, (vendor >> 8) & 0xFF,
+                      product & 0xFF, (product >> 8) & 0xFF);
+        return std::string(buf);
+    }
+
     std::string SdlInputBridge::GetGUID(Microsoft::Xna::Framework::PlayerIndex playerIndex)
     {
         SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
         if (gamepad == nullptr)
             return "";
-        SDL_JoystickID joystickId = SDL_GetGamepadID(gamepad);
-        if (joystickId == 0)
+        SDL_Joystick* joystick = SDL_GetGamepadJoystick(gamepad);
+        if (joystick == nullptr)
             return "";
-        SDL_GUID guid = SDL_GetGamepadGUIDForID(joystickId);
-        char buf[33] = {};
-        SDL_GUIDToString(guid, buf, static_cast<int>(sizeof(buf)));
-        return std::string(buf);
+
+        const std::uint16_t vendor  = SDL_GetJoystickVendor(joystick);
+        const std::uint16_t product = SDL_GetJoystickProduct(joystick);
+        std::string guid = FormatGamePadGUIDEXT(vendor, product);
+
+        // Valve controllers report the Steam vendor id (0x28de); FNA remaps the re-exposed
+        // controller types to fixed GUIDs (SDL3_FNAPlatform.cs:2193-2210).
+        if (vendor == 0x28de)
+        {
+            const SDL_GamepadType type = SDL_GetGamepadType(gamepad);
+            if (type == SDL_GAMEPAD_TYPE_XBOX360 || type == SDL_GAMEPAD_TYPE_XBOXONE)
+                guid = "xinput";
+            else if (type == SDL_GAMEPAD_TYPE_PS4)
+                guid = "4c05c405";
+            else if (type == SDL_GAMEPAD_TYPE_PS5)
+                guid = "4c05e60c";
+        }
+        return guid;
     }
 
     bool SdlInputBridge::GetGyro(
