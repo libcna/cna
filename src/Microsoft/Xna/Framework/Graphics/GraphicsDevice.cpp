@@ -1463,6 +1463,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 (int)value.getCounterClockwiseStencilPassProperty(),
                 (int)value.getCounterClockwiseStencilFailProperty(),
                 (int)value.getCounterClockwiseStencilDepthBufferFailProperty());
+        // FNA applies a DepthStencilState's own ReferenceStencil atomically as part of the whole
+        // native state struct, the same way BlendState's own BlendFactor is applied (Task 309) -
+        // keep GraphicsDevice.ReferenceStencil in sync with whatever state was just assigned.
+        setReferenceStencilProperty(value.getReferenceStencilProperty());
     }
 
     RasterizerState& GraphicsDevice::getRasterizerStateProperty() { return rasterizerState_; }

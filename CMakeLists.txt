@@ -1217,6 +1217,25 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 318: DepthStencilState.TwoSidedStencilMode / back-face (CCW) stencil ops
+        cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_twosided
+                        examples/easygl_depthstencilstate_stencil_twosided_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_StencilTwoSided
+                 COMMAND cna_test_easygl_depthstencilstate_stencil_twosided)
+        set_tests_properties(EasyGL_DepthStencilState_StencilTwoSided PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 319: GraphicsDevice.ReferenceStencil independent-override behavior (Task 872 -
+        # confirmed a universal, not-Vulkan-specific gap; registered as a documented known failure)
+        cna_easygl_test(cna_test_easygl_graphicsdevice_reference_stencil
+                        examples/easygl_graphicsdevice_reference_stencil_test.cpp)
+        add_test(NAME EasyGL_GraphicsDevice_ReferenceStencil
+                 COMMAND cna_test_easygl_graphicsdevice_reference_stencil)
+        set_tests_properties(EasyGL_GraphicsDevice_ReferenceStencil PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1463,6 +1482,27 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_DepthStencilState_StencilOps
                  COMMAND cna_test_vulkan_depthstencilstate_stencil_ops)
         set_tests_properties(Vulkan_DepthStencilState_StencilOps PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 318: DepthStencilState.TwoSidedStencilMode on Vulkan (reuses the backend-agnostic
+        # EasyGL source). NOTE: expected to FAIL the contrast check per Task 870 - stencil testing
+        # never gates on Vulkan.
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_twosided
+                        examples/easygl_depthstencilstate_stencil_twosided_test.cpp)
+        add_test(NAME Vulkan_DepthStencilState_StencilTwoSided
+                 COMMAND cna_test_vulkan_depthstencilstate_stencil_twosided)
+        set_tests_properties(Vulkan_DepthStencilState_StencilTwoSided PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 319: GraphicsDevice.ReferenceStencil independent-override behavior on Vulkan (Task
+        # 872, universal gap, reuses the backend-agnostic EasyGL source).
+        cna_vulkan_test(cna_test_vulkan_graphicsdevice_reference_stencil
+                        examples/easygl_graphicsdevice_reference_stencil_test.cpp)
+        add_test(NAME Vulkan_GraphicsDevice_ReferenceStencil
+                 COMMAND cna_test_vulkan_graphicsdevice_reference_stencil)
+        set_tests_properties(Vulkan_GraphicsDevice_ReferenceStencil PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
