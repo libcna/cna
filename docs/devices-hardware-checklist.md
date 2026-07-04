@@ -28,15 +28,26 @@ a plain checklist, not a task with its own build/test cycle.
 ## 1. Accelerometer axis sign/orientation
 
 **Code under test:** `Accelerometer.cpp`'s `ConvertAndroidAccelerometerToXnaLandscape()`
-(Android only — desktop/iOS have no equivalent remap and report raw SDL axes directly).
+(Android only — desktop/iOS have no equivalent remap and report raw SDL axes directly),
+which since `plan_devices_phase5.md` Task P5-7 delegates its actual sign/axis math to
+`Detail::ConvertAndroidPortraitToXnaLandscape()`
+(`include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`) — a pure
+function taking an explicit `AndroidSensorLandscapeOrientation` instead of querying SDL
+directly, so it's unit-testable on any platform.
+`tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp` now covers both
+rotations for both sensor classes' representative magnitudes (5 tests, all passing in
+this headless container).
 
-**Why this needs real hardware:** the remap's sign choices were derived entirely by
-reasoning about SDL3's and Android's documented coordinate systems (see the function's
-own doc comment in `Accelerometer.cpp`), never observed against a real accelerometer.
-Task P4-11 (2026-07-04) confirmed this code *compiles* cleanly under the Android NDK for
-the first time in this project's history, but compiling is not the same as being
-correct — a sign error would compile fine and only show up as the game tilting the
-wrong direction.
+**Why this still needs real hardware despite the new unit tests:** the unit tests only
+prove the code *implements the documented sign convention correctly* — they were derived
+from, and assert against, the same reasoning-about-SDL3/Android-documentation write-up
+in the function's own doc comment, never observed against a real accelerometer. Task
+P4-11 (2026-07-04) confirmed this code *compiles* cleanly under the Android NDK for the
+first time in this project's history, and Task P5-7 (2026-07-04) confirmed the
+documented convention is what the code actually does — but neither step can prove the
+convention itself is physically correct. A wrong assumption baked into both the
+implementation and its own tests would still pass every automated check here and only
+show up as the game tilting the wrong direction on a real device.
 
 **Steps:**
 1. Run a game (or the Task P4-14 demo screen, once it exists) on a real Android device
@@ -55,15 +66,20 @@ wrong direction.
 5. Confirm `Acceleration.Z` behaves as "perpendicular to the screen" in both rotations
    (e.g. laying the device flat face-up vs. face-down should flip its sign).
 6. If any sign is backwards, the fix is a sign change in
-   `ConvertAndroidAccelerometerToXnaLandscape()` only — per its own doc comment, never in
-   downstream game code.
+   `Detail::ConvertAndroidPortraitToXnaLandscape()` (shared by both
+   `Accelerometer.cpp`/`Gyroscope.cpp` — see Section 2) — never in downstream game code,
+   and remember to update/add a case in `AndroidSensorOrientationTests.cpp` for whatever
+   convention turns out to be correct.
 
 ## 2. Gyroscope axis correctness
 
 **Code under test:** `Gyroscope.cpp`'s `ConvertAndroidGyroscopeToXnaLandscape()` — same
-caveat and same never-physically-verified status as the accelerometer remap above (it
-mirrors the same sign logic, per its own doc comment referring back to
-`Accelerometer.cpp`).
+caveat and same never-physically-verified status as the accelerometer remap above. As
+of Task P5-7, it delegates to the exact same
+`Detail::ConvertAndroidPortraitToXnaLandscape()` pure function `Accelerometer.cpp` uses
+(the sign remap doesn't depend on which physical quantity — linear acceleration vs.
+angular rate — the raw values represent), also covered by
+`AndroidSensorOrientationTests.cpp`.
 
 **Steps:**
 1. Same device/rotation setup as Section 1.

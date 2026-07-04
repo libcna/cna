@@ -624,6 +624,45 @@ failures as the Task P5-1 baseline — no regressions.
 orientation enum/pure function if factored out to avoid duplication, new test file(s),
 `docs/devices-hardware-checklist.md`.
 
+**Resolution (2026-07-04):** Implemented as scoped, factoring the shared logic into a
+new `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp` — a header-only
+`enum class AndroidSensorLandscapeOrientation { Rotation90, Rotation270 }` plus a pure
+`ConvertAndroidPortraitToXnaLandscape(rawX, rawY, rawZ, orientation)` function. Confirmed
+`Accelerometer.cpp`'s and `Gyroscope.cpp`'s sign-remap math was *already byte-for-byte
+identical* (only Accelerometer's version had extra debug logging) — one shared function
+covers both, rather than one per class. Each `#ifdef __ANDROID__` wrapper now only maps
+`SDL_GetCurrentDisplayOrientation()`'s result to the new enum and calls the shared
+function; `Accelerometer.cpp`'s debug log line was updated to read the returned
+`Vector3`'s fields instead of local `xnaX`/`xnaY`/`xnaZ` variables.
+
+Added `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp` — 5 tests, not
+gated by `#ifdef __ANDROID__` (the pure function needs no Android/SDL dependency at
+all): the 4 the task asked for (accelerometer × `Rotation90`/`Rotation270`, gyroscope ×
+`Rotation90`/`Rotation270` — using each class's realistic value ranges even though it's
+verifiably the same underlying function, documented as such in the test file's own
+comment) plus a fifth cross-check confirming the documented "right tilt → `Y > 0`"
+WP7 convention holds under *both* rotations' opposite raw-sign conventions, not just the
+raw sign-flip mechanics in isolation.
+
+Verified the Android-specific code path too, not just the shared-platform parts: re-ran
+the `cmake-build-android` cross-compile (Task P4-11's setup) after this change — builds
+clean — and used the NDK's own `llvm-nm` (the host's `nm` produced empty/wrong output
+against the ARM64 object file) to confirm both
+`Detail::ConvertAndroidPortraitToXnaLandscape()` and the `Accelerometer`-specific
+wrapper are actually present in the compiled object, not silently skipped.
+
+Tightened `docs/devices-hardware-checklist.md`'s Sections 1–2 to reference the new
+shared function and note the unit tests exist, while keeping the "still needs a real
+device" caveat explicit and prominent: the unit tests prove the code implements the
+*documented* convention correctly, not that the convention itself is physically
+correct — a wrong assumption baked into both the implementation and its own tests
+would still pass every check here.
+
+Verified: `CNA` builds clean on both `EASYGL` (Linux) and the Android cross-compile;
+Devices-only filter 50/50 passing (2 expected skips); full `ctest` 2010 tests, same 2
+pre-existing unrelated `EasyGL`/`easy-gl` failures as the Task P5-1 baseline — no
+regressions.
+
 ---
 
 ## Task P5-8 — Native Android/iOS compass backend plan (documentation only)

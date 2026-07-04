@@ -13,6 +13,7 @@
 #include <SDL3/SDL_sensor.h>
 
 #include "CNA/Platform.hpp"
+#include "Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp"
 #include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
@@ -253,24 +254,19 @@ namespace Microsoft::Devices::Sensors
         const SDL_DisplayOrientation orient =
             SDL_GetCurrentDisplayOrientation(SDL_GetPrimaryDisplay());
 
-        float xnaX, xnaY, xnaZ;
+        // Task P5-7: the actual sign-remap math is a pure function shared
+        // with Gyroscope.cpp (identical for both), moved to
+        // Detail::ConvertAndroidPortraitToXnaLandscape() so it can be unit
+        // tested on any platform. This function's only remaining job is
+        // mapping SDL's live display orientation to that function's
+        // platform-independent enum, plus the debug log below.
+        const Detail::AndroidSensorLandscapeOrientation mappedOrientation =
+            (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
+                ? Detail::AndroidSensorLandscapeOrientation::Rotation270
+                : Detail::AndroidSensorLandscapeOrientation::Rotation90;
 
-        if (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
-        {
-            // ROTATION_270: portrait-top → landscape-RIGHT.
-            // Tilt right → rawY positive; negate X to keep forward/back consistent.
-            xnaX = -rawX;
-            xnaY = rawY;
-            xnaZ = rawZ;
-        }
-        else
-        {
-            // ROTATION_90 (default / fallback): portrait-top → landscape-LEFT.
-            // Tilt right → rawY negative; negate Y to match WP7 convention.
-            xnaX = rawX;
-            xnaY = -rawY;
-            xnaZ = rawZ;
-        }
+        const Microsoft::Xna::Framework::Vector3 converted =
+            Detail::ConvertAndroidPortraitToXnaLandscape(rawX, rawY, rawZ, mappedOrientation);
 
 #ifndef NDEBUG
     const char* orientName =
@@ -279,10 +275,10 @@ namespace Microsoft::Devices::Sensors
             : "LANDSCAPE(ROTATION_90)";
     SDL_Log (
 "[SpeedyBlupi][Accelerometer] displayRotation=%s raw=(%.3f,%.3f,%.3f) converted=(%.3f,%.3f,%.3f) orientation=sensorLandscape",
-    orientName, rawX, rawY, rawZ, xnaX, xnaY, xnaZ);
+    orientName, rawX, rawY, rawZ, converted.X, converted.Y, converted.Z);
 #endif
 
-    return {xnaX, xnaY, xnaZ};
+    return converted;
     }
 #endif // __ANDROID__
 

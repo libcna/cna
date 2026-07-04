@@ -10,6 +10,7 @@
 #include <SDL3/SDL_sensor.h>
 
 #include "CNA/Platform.hpp"
+#include "Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp"
 #include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
@@ -219,22 +220,18 @@ namespace Microsoft::Devices::Sensors
         const SDL_DisplayOrientation orient =
             SDL_GetCurrentDisplayOrientation(SDL_GetPrimaryDisplay());
 
-        float xnaX, xnaY, xnaZ;
+        // Task P5-7: the actual sign-remap math is a pure function shared
+        // with Accelerometer.cpp (identical for both), moved to
+        // Detail::ConvertAndroidPortraitToXnaLandscape() so it can be unit
+        // tested on any platform. This function's only remaining job is
+        // mapping SDL's live display orientation to that function's
+        // platform-independent enum.
+        const Detail::AndroidSensorLandscapeOrientation mappedOrientation =
+            (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
+                ? Detail::AndroidSensorLandscapeOrientation::Rotation270
+                : Detail::AndroidSensorLandscapeOrientation::Rotation90;
 
-        if (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
-        {
-            xnaX = -rawX;
-            xnaY = rawY;
-            xnaZ = rawZ;
-        }
-        else
-        {
-            xnaX = rawX;
-            xnaY = -rawY;
-            xnaZ = rawZ;
-        }
-
-        return {xnaX, xnaY, xnaZ};
+        return Detail::ConvertAndroidPortraitToXnaLandscape(rawX, rawY, rawZ, mappedOrientation);
     }
 #endif // __ANDROID__
 
