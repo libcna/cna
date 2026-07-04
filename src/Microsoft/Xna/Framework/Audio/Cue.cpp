@@ -87,6 +87,15 @@ namespace Microsoft::Xna::Framework::Audio
 
     float Cue::GetVariable(const std::string& name) const
     {
+        // P9-LIFECYCLE-015: matches Play()/Apply3D()'s own disposed guard in this class. Real
+        // FACT has no equivalent guard at all -- FACTCue_GetVariableIndex dereferences
+        // pCue->parentBank BEFORE its `pCue == NULL` check (FACT.c), so calling this on a
+        // disposed FNA Cue (handle == IntPtr.Zero after OnCueDestroyed()) would crash natively
+        // rather than throw a catchable exception. That's an unintentional native bug, not a
+        // documented contract worth reproducing -- throwing here is strictly safer and matches
+        // this class's own established precedent instead.
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Cue");
         if (name.empty())
             throw System::ArgumentNullException("name");
 
@@ -106,6 +115,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Cue::SetVariable(const std::string& name, float value)
     {
+        // P9-LIFECYCLE-015: see GetVariable()'s comment above -- same rationale.
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Cue");
         if (name.empty())
             throw System::ArgumentNullException("name");
 

@@ -988,6 +988,16 @@ TEST(CueTest, GetVariableNameOutsideKnownSetThrowsInvalidOperation)
     EXPECT_THROW((void)cue->GetVariable("NoSuchVariable"), System::InvalidOperationException);
 }
 
+// P9-LIFECYCLE-015: GetVariable() had no disposed guard at all, unlike Play()/Apply3D() in this
+// same class -- an inconsistency, since a disposed cue's bank_/engine_ pointers happening to
+// still be valid was incidental, not a guaranteed contract.
+TEST(CueTest, GetVariableAfterDisposeThrowsObjectDisposed)
+{
+    auto cue = MakeCue();
+    cue->Dispose();
+    EXPECT_THROW((void)cue->GetVariable("Volume"), System::ObjectDisposedException);
+}
+
 // ===================== SetVariable =====================
 
 TEST(CueTest, SetVariableValidEngineVariableUpdatesValue)
@@ -1014,6 +1024,14 @@ TEST(CueTest, SetVariableNameOutsideKnownSetThrowsInvalidOperation)
 {
     auto cue = MakeCue();
     EXPECT_THROW(cue->SetVariable("NoSuchVariable", 1.0f), System::InvalidOperationException);
+}
+
+// P9-LIFECYCLE-015: see GetVariableAfterDisposeThrowsObjectDisposed above -- same rationale.
+TEST(CueTest, SetVariableAfterDisposeThrowsObjectDisposed)
+{
+    auto cue = MakeCue();
+    cue->Dispose();
+    EXPECT_THROW(cue->SetVariable("Volume", 0.5f), System::ObjectDisposedException);
 }
 
 // ===================== Play / Pause / Resume / Stop =====================
@@ -1059,6 +1077,37 @@ TEST(CueTest, StopImmediateTransitionsToStopped)
     cue->Stop(AudioStopOptions::Immediate);
     EXPECT_TRUE(cue->getIsStoppedProperty());
     EXPECT_FALSE(cue->getIsPlayingProperty());
+}
+
+// P9-LIFECYCLE-013/014: unlike Play()/Apply3D()/GetVariable()/SetVariable(), Pause()/Resume()/
+// Stop() deliberately do NOT throw when disposed -- this matches real FACT/FNA exactly:
+// FACTCue_Pause/FACTCue_Stop both check `if (pCue == NULL) return <error code>;` (FACT.c), and a
+// disposed FNA Cue's handle is IntPtr.Zero, so calling any of these after Dispose() is a silent
+// no-op in FNA too, not an exception. Don't "fix" these to throw for consistency with
+// GetVariable/SetVariable -- that would be a regression away from FNA, not toward it.
+TEST(CueTest, PauseAfterDisposeIsANoOp)
+{
+    auto cue = MakeCue();
+    cue->Play();
+    cue->Dispose();
+    EXPECT_NO_THROW(cue->Pause());
+}
+
+TEST(CueTest, ResumeAfterDisposeIsANoOp)
+{
+    auto cue = MakeCue();
+    cue->Play();
+    cue->Dispose();
+    EXPECT_NO_THROW(cue->Resume());
+}
+
+TEST(CueTest, StopAfterDisposeIsANoOp)
+{
+    auto cue = MakeCue();
+    cue->Play();
+    cue->Dispose();
+    EXPECT_NO_THROW(cue->Stop(AudioStopOptions::Immediate));
+    EXPECT_TRUE(cue->getIsDisposedProperty());
 }
 
 // ===================== Dispose =====================

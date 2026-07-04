@@ -80,6 +80,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @param name Variable name as defined in the SoundBank, or one of the built-in
          *        3D variables ("Distance", "DopplerPitchScalar", "OrientationAngle").
          * @return Current value of the variable.
+         * @throws System::ObjectDisposedException if the cue has been disposed.
          * @throws System::ArgumentNullException if @p name is empty.
          * @throws System::InvalidOperationException if @p name is not a valid variable name.
          */
@@ -91,6 +92,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @param name  Variable name as defined in the SoundBank, or one of the built-in
          *        3D variables ("Distance", "DopplerPitchScalar", "OrientationAngle").
          * @param value New value.
+         * @throws System::ObjectDisposedException if the cue has been disposed.
          * @throws System::ArgumentNullException if @p name is empty.
          * @throws System::InvalidOperationException if @p name is not a valid variable name.
          */
