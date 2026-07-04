@@ -94,3 +94,22 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClo
     EXPECT_EQ(rs.getCullModeProperty(), RasterizerState::CullCounterClockwise.getCullModeProperty());
     EXPECT_EQ(rs.getFillModeProperty(), RasterizerState::CullCounterClockwise.getFillModeProperty());
 }
+
+// Task 319: FNA's GraphicsDevice.ReferenceStencil is a real, independent device property
+// (FNA3D_Get/SetReferenceStencil) - but assigning a whole DepthStencilState (which carries its own
+// ReferenceStencil field) applies that state atomically, the same way BlendState.BlendFactor is
+// applied via GraphicsDevice.BlendState (Task 309). Found and fixed the same shape of bug:
+// setDepthStencilStateProperty never propagated the assigned state's own ReferenceStencil into
+// GraphicsDevice's own referenceStencil_, so GraphicsDevice.getReferenceStencilProperty() could
+// return stale data after assigning a state with a different ReferenceStencil. Fixed by calling
+// setReferenceStencilProperty from within setDepthStencilStateProperty, mirroring Task 309 exactly.
+TEST(GraphicsDeviceDefaultStateTest, AssigningDepthStencilStatePropagatesReferenceStencil)
+{
+    DepthStencilState custom;
+    custom.setReferenceStencilProperty(42);
+
+    GraphicsDevice gd;
+    gd.setDepthStencilStateProperty(custom);
+
+    EXPECT_EQ(gd.getReferenceStencilProperty(), 42);
+}
