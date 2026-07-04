@@ -18,6 +18,50 @@
 
 namespace Microsoft::Devices::Sensors
 {
+    namespace
+    {
+        // Task P5-1: EnsureSensorSubsystemInitialized() (below) always calls
+        // through to a real SDL_InitSubSystem(SDL_INIT_SENSOR) call — correct
+        // for Start(), which pairs it with exactly one SDL_QuitSubSystem()
+        // via subsystemHeld_/Dispose(), but getIsSupportedProperty() only
+        // ever probes; nothing paired its own call with a matching quit,
+        // leaking one subsystem ref-count increment per probe (every
+        // constructor call, and any standalone getIsSupportedProperty()
+        // call) with no corresponding decrement — a real regression Task
+        // P4-8 introduced as a side effect of removing the SDL_WasInit()
+        // guard that used to (accidentally) make repeat calls a no-op. This
+        // guard makes a probe's own init/quit pair balanced 1:1, trusting
+        // SDL's own ref-counting to correctly coexist with whatever a live
+        // Start()'d instance (of this class or Gyroscope) separately holds.
+        class SensorSubsystemProbeGuard
+        {
+        public:
+            SensorSubsystemProbeGuard()
+                : initialized_(SDL_InitSubSystem(SDL_INIT_SENSOR))
+            {
+            }
+
+            ~SensorSubsystemProbeGuard()
+            {
+                if (initialized_)
+                {
+                    SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                }
+            }
+
+            SensorSubsystemProbeGuard(const SensorSubsystemProbeGuard&) = delete;
+            SensorSubsystemProbeGuard& operator=(const SensorSubsystemProbeGuard&) = delete;
+
+            [[nodiscard]] bool IsInitialized() const
+            {
+                return initialized_;
+            }
+
+        private:
+            bool initialized_;
+        };
+    } // namespace
+
     void* Accelerometer::g_sensor_ = nullptr;
     std::int64_t Accelerometer::g_sensorId_ = 0;
     int Accelerometer::instanceCount_ = 0;
@@ -170,7 +214,8 @@ namespace Microsoft::Devices::Sensors
             return false;
         }
 
-        if (!EnsureSensorSubsystemInitialized())
+        const SensorSubsystemProbeGuard subsystemGuard;
+        if (!subsystemGuard.IsInitialized())
         {
             return false;
         }

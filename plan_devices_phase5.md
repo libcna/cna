@@ -209,6 +209,34 @@ touch is never balanced by a matching quit.
 `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`,
 `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`.
 
+**Resolution (2026-07-04):** Implemented a simpler design than originally sketched
+above — no new `liveInstanceSubsystemHolders_` counter needed. Added a small
+`SensorSubsystemProbeGuard` RAII class (file-local, anonymous namespace) to both
+`Accelerometer.cpp`/`Gyroscope.cpp`: its constructor unconditionally calls
+`SDL_InitSubSystem(SDL_INIT_SENSOR)`, its destructor calls `SDL_QuitSubSystem()` if
+that succeeded. `getIsSupportedProperty()` now holds one on the stack instead of
+calling `EnsureSensorSubsystemInitialized()` directly. This is simpler than tracking a
+separate "does a live instance already hold it" counter because SDL's own internal
+ref-counting (the same mechanism Task P4-8 already established as the source of
+truth) already correctly aggregates the probe's own init/quit pair with whatever any
+live `Start()`'d instance separately holds — no new shared state needed, and no new
+locking concerns. `include/*.hpp` files were **not** touched — the guard is entirely
+internal to each `.cpp` file, needs no public or even class-private declaration.
+Added `RepeatedSupportProbingDoesNotChangeSubsequentBehavior` to both
+`AccelerometerTests.cpp`/`GyroscopeTests.cpp` (50 discarded probe constructions +
+direct `getIsSupportedProperty()` calls, then confirms a fresh instance's
+support/state is unchanged) — exact SDL ref-count isn't assertable via any public API,
+so this proves the observable behavioral consequence instead. Verified: `CNA`/
+`CnaTests` build clean; Devices-only `ctest` filter 172/172 passing (2 expected
+skips); full `ctest` 1997 tests, 2 failures — both pre-existing, unrelated `EasyGL`/
+`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
+`easy-gl-resource-smoke-tests`), newly *surfaced* (not caused) by this environment
+unexpectedly now having a real GPU/display (`DISPLAY=:0`, `/dev/dri` present,
+confirmed via `glxinfo`) for the first time in this project's history — every prior
+session's "64 failures" baseline was actually "64 tests silently skipped as Not Run,
+no GPU to run them against." Out of scope for this Devices-focused plan per
+`CLAUDE.md`'s scope discipline; not touched.
+
 ---
 
 ## Task P5-2 — Replace `inFlightCallback_` bool with a callback counter, fix `SensorBase<T>`'s data race

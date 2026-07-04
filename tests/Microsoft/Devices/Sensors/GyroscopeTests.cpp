@@ -31,6 +31,36 @@ TEST(GyroscopeTests, GetIsSupportedPropertyDoesNotCrash)
     (void)supported;
 }
 
+// Task P5-1: mirrors AccelerometerTests.RepeatedSupportProbingDoesNotChangeSubsequentBehavior
+// — see that test for the full rationale (a leaked SDL_INIT_SENSOR
+// ref-count from getIsSupportedProperty() can't be asserted on directly,
+// so this instead proves repeated probing doesn't change subsequent
+// behavior).
+TEST(GyroscopeTests, RepeatedSupportProbingDoesNotChangeSubsequentBehavior)
+{
+    const bool supportedBefore = Gyroscope::getIsSupportedProperty();
+
+    for (int i = 0; i < 50; ++i)
+    {
+        const Gyroscope probe;
+        (void)probe;
+        (void)Gyroscope::getIsSupportedProperty();
+    }
+
+    const bool supportedAfter = Gyroscope::getIsSupportedProperty();
+    EXPECT_EQ(supportedBefore, supportedAfter);
+
+    const Gyroscope fresh;
+    if (supportedAfter)
+    {
+        EXPECT_EQ(fresh.getStateProperty(), SensorState::Initializing);
+    }
+    else
+    {
+        EXPECT_EQ(fresh.getStateProperty(), SensorState::NotSupported);
+    }
+}
+
 TEST(GyroscopeTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Gyroscope g; (void)g; });

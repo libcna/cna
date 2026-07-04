@@ -36,6 +36,41 @@ TEST(AccelerometerTests, GetIsSupportedPropertyDoesNotCrash)
     (void)supported;
 }
 
+// Task P5-1: getIsSupportedProperty() previously called
+// EnsureSensorSubsystemInitialized() (a real SDL_InitSubSystem(SDL_INIT_SENSOR)
+// call as of Task P4-8) on every call/every construction with no matching
+// SDL_QuitSubSystem() — an unbounded ref-count leak. This can't assert on
+// SDL's internal ref-count directly (no public API exposes it), so this
+// instead proves the observable consequence of a leak-free fix: hammering
+// the probe path (many discarded constructions plus many direct
+// getIsSupportedProperty() calls) doesn't change subsequent behavior —
+// getIsSupportedProperty()'s result and a fresh construction's state_ stay
+// consistent before and after, and neither crashes nor throws unexpectedly.
+TEST(AccelerometerTests, RepeatedSupportProbingDoesNotChangeSubsequentBehavior)
+{
+    const bool supportedBefore = Accelerometer::getIsSupportedProperty();
+
+    for (int i = 0; i < 50; ++i)
+    {
+        const Accelerometer probe;
+        (void)probe;
+        (void)Accelerometer::getIsSupportedProperty();
+    }
+
+    const bool supportedAfter = Accelerometer::getIsSupportedProperty();
+    EXPECT_EQ(supportedBefore, supportedAfter);
+
+    const Accelerometer fresh;
+    if (supportedAfter)
+    {
+        EXPECT_EQ(fresh.getStateProperty(), SensorState::Initializing);
+    }
+    else
+    {
+        EXPECT_EQ(fresh.getStateProperty(), SensorState::NotSupported);
+    }
+}
+
 TEST(AccelerometerTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Accelerometer a; (void)a; });

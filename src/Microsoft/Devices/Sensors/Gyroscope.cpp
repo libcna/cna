@@ -15,6 +15,42 @@
 
 namespace Microsoft::Devices::Sensors
 {
+    namespace
+    {
+        // Task P5-1: mirrors Accelerometer.cpp's identical guard — see that
+        // file's copy for the full root-cause writeup. getIsSupportedProperty()
+        // only ever probes; nothing paired its own EnsureSensorSubsystemInitialized()
+        // call with a matching SDL_QuitSubSystem(), leaking one subsystem
+        // ref-count increment per probe with no corresponding decrement.
+        class SensorSubsystemProbeGuard
+        {
+        public:
+            SensorSubsystemProbeGuard()
+                : initialized_(SDL_InitSubSystem(SDL_INIT_SENSOR))
+            {
+            }
+
+            ~SensorSubsystemProbeGuard()
+            {
+                if (initialized_)
+                {
+                    SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                }
+            }
+
+            SensorSubsystemProbeGuard(const SensorSubsystemProbeGuard&) = delete;
+            SensorSubsystemProbeGuard& operator=(const SensorSubsystemProbeGuard&) = delete;
+
+            [[nodiscard]] bool IsInitialized() const
+            {
+                return initialized_;
+            }
+
+        private:
+            bool initialized_;
+        };
+    } // namespace
+
     void* Gyroscope::g_sensor_ = nullptr;
     std::int64_t Gyroscope::g_sensorId_ = 0;
     int Gyroscope::instanceCount_ = 0;
@@ -167,7 +203,8 @@ namespace Microsoft::Devices::Sensors
             return false;
         }
 
-        if (!EnsureSensorSubsystemInitialized())
+        const SensorSubsystemProbeGuard subsystemGuard;
+        if (!subsystemGuard.IsInitialized())
         {
             return false;
         }
