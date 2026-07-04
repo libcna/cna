@@ -89,8 +89,8 @@ DevicesDemo::DevicesDemo()
     // always throw SensorFailedException (no SDL3 magnetometer API on any
     // platform — see their own class doc comments) so their failure here is
     // expected, not an error worth surfacing.
-    try { accelerometer_.Start(); } catch (const System::Exception&) {}
-    try { gyroscope_.Start(); } catch (const System::Exception&) {}
+    try { accelerometer_.Start(); accelStarted_ = true; } catch (const System::Exception&) {}
+    try { gyroscope_.Start(); gyroStarted_ = true; } catch (const System::Exception&) {}
     try { compass_.Start(); } catch (const System::Exception&) {}
     try { motion_.Start(); } catch (const System::Exception&) {}
 }
@@ -128,6 +128,7 @@ void DevicesDemo::Update(GameTime& gameTime)
     }
 
     HandleVibrationInput(kb);
+    HandleSensorToggleInput(kb);
     previousKeyboardState_ = kb;
 
     ++accelFramesSinceEvent_;
@@ -192,20 +193,68 @@ void DevicesDemo::HandleVibrationInput(const KbState& kb)
     }
 }
 
+// Task P9-6: 'A'/'G' toggle the Accelerometer/Gyroscope between Start() and
+// Stop() — previously these two were only ever Start()'d once, in the
+// constructor, with no interactive way to exercise Stop()/re-Start() on a
+// running demo. Both wrapped in try/catch matching the constructor's own
+// unsupported-platform handling; the on-screen State indicator (already
+// drawn every frame) reflects the result (Ready green vs. Disabled purple)
+// without needing its own separate visual element.
+void DevicesDemo::HandleSensorToggleInput(const KbState& kb)
+{
+    auto justPressed = [&](Keys key)
+    {
+        return kb.IsKeyDown(key) && !previousKeyboardState_.IsKeyDown(key);
+    };
+
+    if (justPressed(Keys::A))
+    {
+        try
+        {
+            if (accelStarted_) { accelerometer_.Stop(); accelStarted_ = false; }
+            else { accelerometer_.Start(); accelStarted_ = true; }
+        }
+        catch (const System::Exception&) {}
+    }
+
+    if (justPressed(Keys::G))
+    {
+        try
+        {
+            if (gyroStarted_) { gyroscope_.Stop(); gyroStarted_ = false; }
+            else { gyroscope_.Start(); gyroStarted_ = true; }
+        }
+        catch (const System::Exception&) {}
+    }
+}
+
 void DevicesDemo::UpdateWindowTitle()
 {
     const Vector3& accel = latestAccelReading_.getAccelerationProperty();
     const Vector3& rot    = latestGyroReading_.getRotationRateProperty();
 
+    // Task P9-6: added IsDataValid for Accelerometer/Gyroscope (previously
+    // shown nowhere — only the underlying SensorState indicator square,
+    // which doesn't distinguish "started but no reading has arrived yet"
+    // from "the last reading is/isn't trustworthy"), the VibrateController
+    // NOXNA device name diagnostic (getDeviceNameProperty(), previously
+    // queried nowhere in this demo), and an explicit Compass/Motion
+    // "not supported by SDL backend" note — this demo deliberately has no
+    // SpriteFont/Content dependency (see this class's own header comment),
+    // so the window title remains its one text-output channel for all of
+    // this, not a crash or silent blank reading.
     std::ostringstream title;
     title.setf(std::ios::fixed);
     title.precision(2);
     title << "CNA Devices Demo | "
+          << "[A/G toggle sensors, 1-6 vibrate, Space stop] | "
           << "Accel(" << accel.X << "," << accel.Y << "," << accel.Z << ") #" << accelEventCount_
+          << " valid=" << (accelerometer_.getIsDataValidProperty() ? "Y" : "N")
           << " | Gyro(" << rot.X << "," << rot.Y << "," << rot.Z << ") #" << gyroEventCount_
-          << " | Compass #" << compassEventCount_
-          << " | Motion #" << motionEventCount_
-          << " | Vibrate " << (vibrateController_->getIsSupportedProperty() ? "supported" : "unsupported");
+          << " valid=" << (gyroscope_.getIsDataValidProperty() ? "Y" : "N")
+          << " | Compass/Motion: not supported by SDL backend"
+          << " | Vibrate " << (vibrateController_->getIsSupportedProperty() ? "supported" : "unsupported")
+          << " (" << vibrateController_->getDeviceNameProperty() << ")";
 
     Game::getWindowProperty().setTitleProperty(title.str());
 }

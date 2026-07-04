@@ -283,3 +283,68 @@ software-observable half of every case that's reachable in this environment).
 
 **Remaining risk:** none. No claim of hardware verification beyond what was actually,
 physically possible in this container.
+
+## P9-6: DevicesDemo usability pass
+
+### Resolution
+
+**Files changed:** `examples/demo_devices/src/DevicesDemo.hpp`/`.cpp`.
+
+**Gaps found against the brief's exact checklist, each fixed minimally (no
+`SpriteFont`/`Content` dependency added — this demo's own header comment deliberately
+avoids that, so all new diagnostics go through the existing window-title text channel,
+same mechanism the demo already used for Accel/Gyro readings and event counts):**
+- **`IsDataValid` was shown nowhere** for either Accelerometer or Gyroscope (only
+  `IsSupported`/`State` had on-screen indicators). Added `valid=Y`/`valid=N` to each
+  sensor's window-title segment via `getIsDataValidProperty()`.
+- **`VibrateController`'s NOXNA device name was never queried or shown.** Added
+  `getDeviceNameProperty()`'s result to the title's `Vibrate supported/unsupported (name)`
+  segment.
+- **No key bindings existed to Start()/Stop() the Accelerometer or Gyroscope
+  interactively** — both were `Start()`'d once in the constructor and never touched
+  again; only vibration had start/stop keys. Added `HandleSensorToggleInput()`: `A`
+  toggles the Accelerometer, `G` toggles the Gyroscope, each wrapped in the same
+  `try`/`catch (const System::Exception&)` pattern the constructor already uses. The
+  existing per-frame `State` indicator square (already drawn, Ready-green vs.
+  Disabled-purple) reflects the toggle with no new visual element needed.
+- **No clear "Compass/Motion not supported by SDL backend" message existed** — only a
+  red `Unsupported` indicator square and permanently-zero reading bars, which reads as
+  "supported but idle," not "will never report data." Added an explicit
+  `Compass/Motion: not supported by SDL backend` segment to the window title.
+
+**Build and runtime verification:**
+```bash
+cmake --build cmake-build-debug --target cna_demo_devices -j"$(nproc)"
+# clean
+```
+This container has a real X11 display (`DISPLAY=:0`) — ran the demo directly (not just
+compiled it): the process starts, logs successful `SDL_CreateWindow` and
+`EasyGLGraphicsBackend initialized with OpenGL OpenGL ES 3.2 Mesa 25.0.7-2`, runs for
+several seconds without crashing (tried twice — once with default video driver, once
+with `SDL_VIDEODRIVER=x11` forced, matching the exact env-var convention
+`NOXNA.md`'s own Quick Start section uses), and exits cleanly on `SIGTERM` with no error
+output either time.
+
+**Honest limitation, not claimed as verified:** attempted to confirm the actual
+on-screen rendering and window-title text via `xdotool search`/`getwindowname`,
+`xwininfo -root -tree`, and a raw root-window screen capture (`import -window root`) —
+**all three failed to find or capture the demo's window** in this specific display
+environment (a GNOME Shell/mutter session where the window tree shows only WM-internal
+windows, never the demo's own — likely a restricted/virtual display setup that doesn't
+expose ordinary top-level windows to standard X11 introspection tools the way a normal
+desktop session would). Per this project's own "if you can't test the UI, say so
+explicitly rather than claiming success" standard: **the demo is confirmed to build and
+run without crashing, using a real display and a real OpenGL ES backend, but the actual
+rendered content and window-title text could not be visually confirmed in this
+environment.** Re-running the existing `Accelerometer*`/`Gyroscope*`/etc. `CnaTests`
+suite (226/224/2 skipped) confirms the demo-only changes didn't affect the library
+itself, which is a different, already-covered claim.
+
+**Tests added:** none — this is example/demo code, not covered by the unit test suite;
+no dedicated demo tests exist or were added.
+
+**Remaining risk:** low. The added code paths (`getIsDataValidProperty()`,
+`getDeviceNameProperty()`, `Stop()`/`Start()` toggling) are all pre-existing, already
+publicly-tested library APIs, called through the same try/catch pattern the demo
+already used successfully — the risk surface is the demo's own new code, and it's a
+small, mechanical addition to an already-working file, verified to compile and run.

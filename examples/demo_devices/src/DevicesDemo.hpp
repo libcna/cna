@@ -71,6 +71,7 @@ private:
     void DrawVibrationSection(int ox, int oy);
 
     void HandleVibrationInput(const KbState& kb);
+    void HandleSensorToggleInput(const KbState& kb);
     void UpdateWindowTitle();
 
     Microsoft::Xna::Framework::Graphics::SpriteBatch* spriteBatch_ = nullptr;
@@ -107,4 +108,12 @@ private:
 
     KbState previousKeyboardState_;
     int frameCounter_ = 0;
+
+    // Task P9-6: tracks whether the demo's own last Start()/Stop() call for
+    // each real sensor succeeded, so the 'A'/'G' toggle keys below know
+    // which direction to go next. Independent of getStateProperty() (which
+    // can also read NotSupported/NoPermissions/etc.) — this is purely
+    // "what did the demo itself last ask for."
+    bool accelStarted_ = false;
+    bool gyroStarted_ = false;
 };
