@@ -673,6 +673,16 @@ heading; integrating it drifts unboundedly with no magnetometer to correct again
 See "Future native backend plan" below for the concrete Android/iOS design. Current SDL
 backend (`Compass::getIsSupportedProperty()` returning `false`) is unchanged.
 
+**Resolution (2026-07-04):** Wrote the Android and iOS sections of "Future native
+backend plan" (below) covering the JNI/`SensorManager` (`TYPE_MAGNETIC_FIELD`, optional
+`TYPE_ROTATION_VECTOR`) and `CLLocationManager` heading-API paths respectively, the
+`CompassReading` field mapping for each, and the accuracy/calibration mapping to
+`HeadingAccuracy`/`Compass::Calibrate`. No code changes — `Compass.cpp`'s
+`getIsSupportedProperty()` stays a hardcoded `return false;`, confirmed still true and
+still tested (`CompassTests.GetIsSupportedPropertyDoesNotCrash` already asserts
+`EXPECT_FALSE(...)`, `CompassTests.StartThrowsSensorFailedException` confirms `Start()`
+still always throws).
+
 ---
 
 ## Task P5-9 — Native Motion backend plan (documentation only)
@@ -684,6 +694,17 @@ below. Add a test explicitly asserting `Motion::getIsSupportedProperty()` stays 
 and `Start()` keeps throwing, so a future accidental partial implementation doesn't
 silently start reporting "supported" without the plan's Android/iOS backend actually
 landing.
+
+**Resolution (2026-07-04):** Wrote the Android and iOS sections of "Future native
+backend plan" (below) covering the `TYPE_ROTATION_VECTOR`/`TYPE_GRAVITY`/
+`TYPE_LINEAR_ACCELERATION` and `CMDeviceMotion` paths respectively, with an
+almost-direct field-for-field mapping noted for the iOS case
+(`CMDeviceMotion.attitude`/`.gravity`/`.userAcceleration`/`.rotationRate` →
+`MotionReading`'s 4 fields). The requested "explicit test that SDL backend stays
+`NotSupported`" already existed from an earlier phase —
+`MotionTests.GetIsSupportedPropertyIsFalse` (`EXPECT_FALSE(Motion::getIsSupportedProperty())`)
+and `MotionTests.StartThrowsSensorFailedException` — confirmed both still pass
+unchanged; no new test needed. No code changes.
 
 ---
 
@@ -697,6 +718,19 @@ belongs under a `System::Device::Location`-shaped namespace, never under
 `Microsoft::Devices::Sensors`, with a sketch of the Android (`LocationManager` for
 AOSP/no-GMS, optional Google Fused Location Provider as a separate opt-in backend) and
 iOS (`CoreLocation`) native paths. No implementation in this task.
+
+**Resolution (2026-07-04):** Wrote `docs/location-future-plan.md` as scoped: confirms
+GPS/location is genuinely absent from real WP7 `Microsoft.Devices.Sensors` (a separate
+`System.Device.Location` assembly/namespace), sketches the likely
+`GeoCoordinateWatcher`/`GeoCoordinate`/`GeoPositionChangedEventArgs<T>`/
+`GeoPositionStatus` API shape (explicitly flagged as an unverified starting sketch, not
+independently re-verified against an archived MSDN page the way
+`Microsoft::Devices::Sensors` itself was), and the Android (AOSP `LocationManager`
+required baseline, optional Play-Services Fused Location Provider as a strictly
+opt-in enhancement) and iOS (`CoreLocation`) native paths. Explicitly states no GPS/
+location member should ever be added to `Microsoft::Devices::Sensors`, including as a
+`NOXNA` extension. No implementation — no `System::Device::Location` type exists in
+this codebase.
 
 ---
 
