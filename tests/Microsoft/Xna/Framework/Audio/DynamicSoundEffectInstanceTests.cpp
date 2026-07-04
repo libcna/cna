@@ -121,6 +121,35 @@ TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferRangeThrows)
     EXPECT_THROW(d.SubmitFloatBufferEXT(buf, 0, 32), System::ArgumentOutOfRangeException);
 }
 
+// P9-VALIDATION-010/011: offset+count must be checked without computing the (possibly
+// overflowing) sum directly -- see SoundEffect's identical fix/test for the full rationale.
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferRangeIntegerOverflowThrows)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<unsigned char> pcm(16, 0);
+    constexpr int hugeOffset = 2000000000;
+    constexpr int hugeCount  = 2000000000; // offset+count overflows int32
+    EXPECT_THROW(d.SubmitBuffer(pcm, hugeOffset, hugeCount), System::ArgumentOutOfRangeException);
+}
+
+// P9-VALIDATION-011: without this, a caller that keeps submitting after Dispose() would grow
+// queuedBuffers_ unboundedly (the buffers can never be consumed once dynamicTrack_ is gone).
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferAfterDisposeThrowsObjectDisposed)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.Dispose();
+    std::vector<unsigned char> pcm(16, 0);
+    EXPECT_THROW(d.SubmitBuffer(pcm), System::ObjectDisposedException);
+}
+
+TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferEXTAfterDisposeThrowsObjectDisposed)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.Dispose();
+    std::vector<float> buf(16, 0.0f);
+    EXPECT_THROW(d.SubmitFloatBufferEXT(buf), System::ObjectDisposedException);
+}
+
 TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferBeforePlayingIsAllowed)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -142,6 +171,35 @@ TEST(DynamicSoundEffectInstanceTest, PlayAfterDisposeThrowsObjectDisposed)
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
     d.Dispose();
     EXPECT_THROW(d.Play(), System::ObjectDisposedException);
+}
+
+// P9-VALIDATION-010: Resume() delegates to Play() when there's no active dynamicTrack_, which is
+// also how a disposed instance surfaces this instead of silently no-op'ing -- see
+// SoundEffectInstanceTests.cpp's identical base-class test for the full FNA-matching rationale.
+TEST(DynamicSoundEffectInstanceTest, ResumeAfterDisposeThrowsObjectDisposed)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.Dispose();
+    EXPECT_THROW(d.Resume(), System::ObjectDisposedException);
+}
+
+TEST(DynamicSoundEffectInstanceTest, ResumeOnNeverPlayedInstanceStartsPlayback)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    std::vector<unsigned char> pcm(4 * 256, 0); // 256 stereo S16 frames of silence
+    d.SubmitBuffer(pcm);
+
+    ASSERT_EQ(d.getStateProperty(), SoundState::Stopped);
+    try
+    {
+        d.Resume();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
 }
 
 TEST(DynamicSoundEffectInstanceTest, StopWhileStoppedIsSafe)

@@ -419,7 +419,19 @@ namespace Microsoft::Xna::Framework::Audio
     {
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrack(track_);
-        if (track && getStateProperty() == SoundState::Paused)
+        if (!track)
+        {
+            // P9-VALIDATION-010: matches FNA (SoundEffectInstance.cs Resume(): "XNA4 just plays
+            // if we've not started yet") -- when there's no active voice/track, Resume() calls
+            // Play() instead of being a no-op. In CNA's model this covers both "never played"
+            // (track_ starts null) and "disposed" (Dispose() nulls track_): for a disposed
+            // instance this makes Resume() surface Play()'s own ObjectDisposedException instead
+            // of silently doing nothing, which is safer than FNA's real behavior (FNA's Play()
+            // has no disposed guard at all, so it would silently resurrect a disposed instance).
+            Play();
+            return;
+        }
+        if (getStateProperty() == SoundState::Paused)
         {
             MIX_ResumeTrack(track);
             State_   = SoundState::Playing;

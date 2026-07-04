@@ -238,7 +238,15 @@ namespace Microsoft::Xna::Framework::Audio
     {
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrackD(dynamicTrack_);
-        if (track && getStateProperty() == SoundState::Paused)
+        if (!track)
+        {
+            // P9-VALIDATION-010: same FNA-matching rationale as the base class override -- see
+            // SoundEffectInstance::Resume(). Play() is this class's own override, so this also
+            // pumps BufferNeeded/registers with FrameworkDispatcher like a direct Play() call would.
+            Play();
+            return;
+        }
+        if (getStateProperty() == SoundState::Paused)
         {
             MIX_ResumeTrack(track);
             State_   = SoundState::Playing;
@@ -271,8 +279,25 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs offset,
         SharpRuntime::intcs count)
     {
-        if (offset < 0 || count < 0 ||
-            offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
+        // P9-VALIDATION-011: cannot queue buffers after disposal -- without this, a caller that
+        // keeps submitting after Dispose() would grow queuedBuffers_ unboundedly (the buffers
+        // would never be consumed, since Dispose() nulls dynamicTrack_ and getStateProperty()
+        // reports Stopped, so SubmitQueuedToStream() is never reached below).
+        if (getIsDisposedProperty())
+        {
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
+        }
+
+        // P9-VALIDATION-010: offset+count must never be computed as a plain intcs addition -- see
+        // SoundEffect's buffer/range constructor for why (int32 overflow can silently wrap past
+        // this check, then buffer.begin()+offset+count below is out-of-bounds iterator arithmetic).
+        if (offset < 0 || count < 0)
+        {
+            throw System::ArgumentOutOfRangeException("count");
+        }
+        const auto off = static_cast<std::size_t>(offset);
+        const auto cnt = static_cast<std::size_t>(count);
+        if (off > buffer.size() || cnt > buffer.size() - off)
         {
             throw System::ArgumentOutOfRangeException("count");
         }
@@ -305,8 +330,20 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs offset,
         SharpRuntime::intcs count)
     {
-        if (offset < 0 || count < 0 ||
-            offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
+        // P9-VALIDATION-011: see SubmitBuffer's identical guard above.
+        if (getIsDisposedProperty())
+        {
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
+        }
+
+        // P9-VALIDATION-010: overflow-safe bounds check, see SubmitBuffer above.
+        if (offset < 0 || count < 0)
+        {
+            throw System::ArgumentOutOfRangeException("count");
+        }
+        const auto off = static_cast<std::size_t>(offset);
+        const auto cnt = static_cast<std::size_t>(count);
+        if (off > buffer.size() || cnt > buffer.size() - off)
         {
             throw System::ArgumentOutOfRangeException("count");
         }

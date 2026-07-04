@@ -282,6 +282,20 @@ TEST(SoundEffectTest, BufferRangeConstructorThrowsOnBadRange)
                  System::ArgumentOutOfRangeException);
 }
 
+// P9-VALIDATION-003: offset+count must be checked without computing the (possibly overflowing)
+// sum directly -- two individually-plausible int32 values can overflow, and on a typical
+// two's-complement wraparound the result can come out small/negative, silently passing a naive
+// "offset + count > buffer.size()" check while still reading far out of bounds via
+// buffer.data() + offset. This must throw, not attempt the out-of-bounds read.
+TEST(SoundEffectTest, BufferRangeConstructorRejectsOffsetCountIntegerOverflow)
+{
+    std::vector<unsigned char> pcm(16, 0);
+    constexpr int hugeOffset = 2000000000;
+    constexpr int hugeCount  = 2000000000; // offset+count overflows int32 (INT32_MAX ~2.147e9)
+    EXPECT_THROW(SoundEffect(pcm, hugeOffset, hugeCount, 44100, AudioChannels::Stereo, 0, 0),
+                 System::ArgumentOutOfRangeException);
+}
+
 // CP-17/CP-23: a nonzero loop region given to the buffer-range constructor must reach the
 // SoundEffectInstance it creates (SDL3_mixer exposes no way to read back the loop-start/
 // max-frame play options actually passed to MIX_PlayTrack, so this checks the values that feed
@@ -495,6 +509,27 @@ TEST(SoundEffectTest, CreateInstanceProducesBoundInstance)
     if (!fx) GTEST_SKIP() << "no audio device";
     SoundEffectInstance inst = fx->CreateInstance();
     EXPECT_FALSE(inst.getIsDisposedProperty());
+}
+
+// P9-VALIDATION-012/013: matches FNA exactly -- FNA's CreateInstance()/SoundEffectInstance ctor
+// don't check IsDisposed either (SoundEffectInstance.cs's internal ctor only reads
+// parentEffect.channels, a plain field that survives Dispose()); a disposed SoundEffect only
+// becomes observable once Play() is attempted on the resulting instance, at which point it
+// fails safely (getNativeAudioHandle() returns nullptr) rather than crashing. Locks in that
+// CNA already matches this "deferred failure" pattern rather than throwing eagerly.
+TEST(SoundEffectTest, CreateInstanceOnDisposedSoundEffectDoesNotThrowButResultingPlayIsInert)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    fx->Dispose();
+
+    SoundEffectInstance inst = fx->CreateInstance();
+    EXPECT_FALSE(inst.getIsDisposedProperty());
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+
+    EXPECT_NO_THROW(inst.Play());
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped); // inert: no native audio to play
 }
 
 // CP-22: the move-only static_asserts above only prove move-constructibility is possible, not

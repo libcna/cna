@@ -126,11 +126,25 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs loopLength)
         : impl_(std::make_shared<Impl>())
     {
+        // P9-VALIDATION-002: loopStart/loopLength are intentionally NOT validated here, matching
+        // FNA's own internal ctor (SoundEffect.cs: `this.loopStart = (uint) loopStart;`) -- a
+        // negative value wraps to a huge unsigned value in both FNA and here, identically.
         loopStart_  = static_cast<SharpRuntime::uintcs>(loopStart);
         loopLength_ = static_cast<SharpRuntime::uintcs>(loopLength);
 
-        if (count < 0 || offset < 0 ||
-            offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
+        // P9-VALIDATION-003: offset+count must never be computed as a plain intcs addition --
+        // two individually-plausible-looking values can overflow int32 (UB), and on a typical
+        // two's-complement wraparound the overflowed sum can come out negative/small, silently
+        // passing this check while `buffer.data() + offset` below is a wildly out-of-bounds
+        // pointer. FNA gets away without this check because C#'s array bounds checking is the
+        // real safety net there; C++ has none, so this has to be exact.
+        if (offset < 0 || count < 0)
+        {
+            throw System::ArgumentOutOfRangeException("count");
+        }
+        const auto off = static_cast<std::size_t>(offset);
+        const auto cnt = static_cast<std::size_t>(count);
+        if (off > buffer.size() || cnt > buffer.size() - off)
         {
             throw System::ArgumentOutOfRangeException("count");
         }

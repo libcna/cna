@@ -226,6 +226,27 @@ TEST_F(SoundEffectInstanceTest, PauseResume)
     EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
 }
 
+// P9-VALIDATION-010: matches FNA (SoundEffectInstance.cs Resume(): "XNA4 just plays if we've not
+// started yet") -- Resume() on a never-played instance isn't a no-op, it starts playback.
+TEST_F(SoundEffectInstanceTest, ResumeOnNeverPlayedInstanceStartsPlayback)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    inst.Resume();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+}
+
+// P9-VALIDATION-010: Resume() delegates to Play() when there's no active track, which is also
+// how a disposed instance (Dispose() nulls track_) surfaces this instead of silently no-op'ing.
+TEST_F(SoundEffectInstanceTest, ResumeAfterDisposeThrowsObjectDisposed)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Dispose();
+    EXPECT_THROW(inst.Resume(), System::ObjectDisposedException);
+}
+
 TEST_F(SoundEffectInstanceTest, Apply3DSingleListener)
 {
     REQUIRE_DEVICE();
