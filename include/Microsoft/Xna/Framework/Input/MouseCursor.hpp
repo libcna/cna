@@ -53,6 +53,11 @@ namespace Microsoft::Xna::Framework::Input
 
         /**
          * @brief Releases the SDL cursor if owned. Safe to call more than once.
+         *
+         * @note For the stock system-cursor singletons (getArrowProperty() etc.) this is a
+         *       deliberate no-op — they are process-lifetime shared instances, so disposing one
+         *       must not free the SDL cursor out from under every other user. Do not `std::move`
+         *       a stock-cursor reference either; obtain and use it in place.
          */
         NOXNA void Dispose() override;
 
@@ -124,9 +129,13 @@ namespace Microsoft::Xna::Framework::Input
         NOXNA [[nodiscard]] static MouseCursor& getWaitArrowProperty();
 
     private:
-        SDL_Cursor* sdlCursor_  = nullptr;
-        bool        owning_     = false;
-        bool        isDisposed_ = false;
+        SDL_Cursor* sdlCursor_        = nullptr;
+        bool        owning_           = false;
+        bool        isDisposed_       = false;
+        // True for the stock system-cursor singletons: Dispose()/destructor no-op so the shared
+        // process-lifetime SDL cursor is never freed (which would corrupt it for every other user
+        // and risks a free-after-SDL_Quit at static teardown).
+        bool        isSystemSingleton_ = false;
 
         NOXNA static MouseCursor MakeSystem(SDL_SystemCursor id);
     };

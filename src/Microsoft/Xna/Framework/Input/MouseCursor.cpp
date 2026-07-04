@@ -11,7 +11,9 @@ namespace Microsoft::Xna::Framework::Input
     MouseCursor MouseCursor::MakeSystem(SDL_SystemCursor id)
     {
         SDL_Cursor* c = SDL_CreateSystemCursor(id);
-        return MouseCursor(c, /*owning=*/true);
+        MouseCursor cursor(c, /*owning=*/true);
+        cursor.isSystemSingleton_ = true; // process-lifetime shared cursor — never disposed
+        return cursor;
     }
 
     MouseCursor MouseCursor::FromTexture2D(const Graphics::Texture2D& texture, const int originX, const int originY)
@@ -173,6 +175,7 @@ namespace Microsoft::Xna::Framework::Input
         : sdlCursor_(other.sdlCursor_)
         , owning_(other.owning_)
         , isDisposed_(other.isDisposed_)
+        , isSystemSingleton_(other.isSystemSingleton_)
     {
         other.sdlCursor_  = nullptr;
         other.owning_     = false;
@@ -184,9 +187,10 @@ namespace Microsoft::Xna::Framework::Input
         if (this != &other)
         {
             Dispose();
-            sdlCursor_  = other.sdlCursor_;
-            owning_     = other.owning_;
-            isDisposed_ = other.isDisposed_;
+            sdlCursor_         = other.sdlCursor_;
+            owning_            = other.owning_;
+            isDisposed_        = other.isDisposed_;
+            isSystemSingleton_ = other.isSystemSingleton_;
             other.sdlCursor_  = nullptr;
             other.owning_     = false;
             other.isDisposed_ = true;
@@ -202,6 +206,13 @@ namespace Microsoft::Xna::Framework::Input
     void MouseCursor::Dispose()
     {
         if (isDisposed_)
+        {
+            return;
+        }
+        // Stock system-cursor singletons are shared for the process lifetime: disposing one must
+        // not free the SDL cursor (that would corrupt it for every other holder and risk freeing
+        // after SDL_Quit at static teardown). Leave it fully intact and usable.
+        if (isSystemSingleton_)
         {
             return;
         }

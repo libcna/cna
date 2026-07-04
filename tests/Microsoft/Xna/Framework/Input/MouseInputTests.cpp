@@ -415,6 +415,34 @@ TEST(MouseCursorTest, StockCursorGetterReturnsTheSameInstanceOnRepeatedCalls)
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
+TEST(MouseCursorTest, DisposingAStockSingletonIsANoOpAndKeepsItUsable)
+{
+    // Task 834: the system-cursor singletons are shared for the process lifetime; disposing one
+    // must NOT free the SDL cursor (that would break it for every other holder, and this same
+    // binary's other tests rely on the stock cursors staying valid). Dispose() is a no-op for them.
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    MouseCursor& crosshair = MouseCursor::getCrosshairProperty();
+    SDL_Cursor* handle = crosshair.GetSDLCursor();
+    ASSERT_NE(handle, nullptr);
+
+    crosshair.Dispose(); // must be a no-op
+    crosshair.Dispose(); // idempotent
+
+    // The handle is unchanged (not freed/nulled), and a fresh getter returns the same instance.
+    // Without the singleton guard, Dispose() would have nulled sdlCursor_ and this would fail.
+    // (We deliberately don't SDL_SetCursor(handle) here: SDL destroys all cursors on
+    // SDL_QuitSubSystem(VIDEO), so across the shared binary's per-test init/quit cycles the cached
+    // handle may reference a torn-down SDL session — the pointer identity is what task 834 checks.)
+    EXPECT_EQ(crosshair.GetSDLCursor(), handle);
+    EXPECT_EQ(MouseCursor::getCrosshairProperty().GetSDLCursor(), handle);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
 TEST(MouseCursorTest, DefaultConstructorCreatesNonNullOwningCursor)
 {
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
