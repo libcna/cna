@@ -82,7 +82,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imgInfo.imageType     = VK_IMAGE_TYPE_2D;
-        imgInfo.format        = VK_FORMAT_R8G8B8A8_SRGB;
+        imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
         imgInfo.extent        = { static_cast<uint32_t>(data.width), static_cast<uint32_t>(data.height), 1 };
         imgInfo.mipLevels     = 1;
         imgInfo.arrayLayers   = 1;
@@ -122,7 +122,7 @@ namespace CNA::Internal::Backends::Vulkan
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image    = image_;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format   = VK_FORMAT_R8G8B8A8_SRGB;
+        viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
         viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel   = 0;
         viewInfo.subresourceRange.levelCount     = 1;
@@ -1051,9 +1051,13 @@ namespace CNA::Internal::Backends::Vulkan
         vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &fn, nullptr);
         std::vector<VkSurfaceFormatKHR> fmts(fn);
         vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &fn, fmts.data());
+        // FNA's SurfaceFormat.Color (the default backbuffer format) is linear, not sRGB — a
+        // separate SurfaceFormat.ColorSrgbEXT exists for the gamma-encoded variant. An SRGB
+        // swapchain format would apply an automatic linear-to-sRGB encode to every presented
+        // pixel regardless of content, which XNA/FNA does not do by default. Prefer UNORM.
         VkSurfaceFormatKHR fmt = fmts[0];
         for (auto& f : fmts)
-            if (f.format == VK_FORMAT_B8G8R8A8_SRGB && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             { fmt = f; break; }
 
         uint32_t mn = 0;
@@ -2797,12 +2801,15 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("vkCreatePipelineLayout (DualTex3D) failed");
     }
 
-    VkDescriptorSet VulkanGraphicsBackend::GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1)
+    VkDescriptorSet VulkanGraphicsBackend::GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1,
+                                                                       VkSampler sampler0, VkSampler sampler1)
     {
         EnsureDualTexResources();
 
-        const uint64_t key = reinterpret_cast<uint64_t>(view0) * 2654435761ULL
-                           ^ reinterpret_cast<uint64_t>(view1);
+        const uint64_t key = reinterpret_cast<uint64_t>(view0)    * 2654435761ULL
+                           ^ reinterpret_cast<uint64_t>(view1)    * 40503ULL
+                           ^ reinterpret_cast<uint64_t>(sampler0) * 2246822519ULL
+                           ^ reinterpret_cast<uint64_t>(sampler1) * 3266489917ULL;
         auto it = dualTexDescSets_.find(key);
         if (it != dualTexDescSets_.end()) return it->second;
 
@@ -2816,10 +2823,10 @@ namespace CNA::Internal::Backends::Vulkan
             return VK_NULL_HANDLE;
 
         VkDescriptorImageInfo imgInfo[2]{};
-        imgInfo[0].sampler     = defaultSampler_;
+        imgInfo[0].sampler     = sampler0;
         imgInfo[0].imageView   = view0;
         imgInfo[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imgInfo[1].sampler     = defaultSampler_;
+        imgInfo[1].sampler     = sampler1;
         imgInfo[1].imageView   = view1;
         imgInfo[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -3877,6 +3884,14 @@ namespace CNA::Internal::Backends::Vulkan
             barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        } else if (from == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                   to   == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            // Needed by VulkanTextureBackend::UpdatePixels to re-upload a texture that has
+            // already been sampled at least once (i.e. every SetData call after the first).
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         } else {
             throw std::runtime_error("Vulkan: unsupported image layout transition");
         }
@@ -4699,7 +4714,7 @@ namespace CNA::Internal::Backends::Vulkan
             const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
             VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
             VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
-            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1);
+            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1, slotSamplers_[0], slotSamplers_[1]);
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
@@ -4796,7 +4811,7 @@ namespace CNA::Internal::Backends::Vulkan
             const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
             VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
             VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
-            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1);
+            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1, slotSamplers_[0], slotSamplers_[1]);
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;

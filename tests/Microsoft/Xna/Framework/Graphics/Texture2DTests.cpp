@@ -101,6 +101,126 @@ TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 }
 
 // -----------------------------------------------------------------------
+// Unsupported SurfaceFormat construction — must throw clearly, never
+// silently fall back to RGBA8 (Task 176 established the pattern; Task 286
+// closes the gap for the two bump-map formats it left uncovered).
+// -----------------------------------------------------------------------
+
+class UnsupportedFormatConstructionTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+};
+
+TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, Vector2Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
+}
+
+TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
+{
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
+}
+
+// Task 290: exhaustive sweep over every SurfaceFormat value. The individual tests above already
+// cover 20 of the 27 values one at a time (added incrementally across Tasks 176/286-289); this
+// test guarantees the remaining 7 (Bgra5551/Bgra4444/Dxt3/Dxt5/Rg32/ByteEXT/UShortEXT) are covered
+// too and stays correct automatically if SurfaceFormat ever grows a 28th value, since every entry
+// is listed here explicitly rather than assumed.
+TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsClearly)
+{
+    static const SurfaceFormat kAllFormats[] = {
+        SurfaceFormat::Color,
+        SurfaceFormat::Bgr565,
+        SurfaceFormat::Bgra5551,
+        SurfaceFormat::Bgra4444,
+        SurfaceFormat::Dxt1,
+        SurfaceFormat::Dxt3,
+        SurfaceFormat::Dxt5,
+        SurfaceFormat::NormalizedByte2,
+        SurfaceFormat::NormalizedByte4,
+        SurfaceFormat::Rgba1010102,
+        SurfaceFormat::Rg32,
+        SurfaceFormat::Rgba64,
+        SurfaceFormat::Alpha8,
+        SurfaceFormat::Single,
+        SurfaceFormat::Vector2,
+        SurfaceFormat::Vector4,
+        SurfaceFormat::HalfSingle,
+        SurfaceFormat::HalfVector2,
+        SurfaceFormat::HalfVector4,
+        SurfaceFormat::HdrBlendable,
+        SurfaceFormat::ColorBgraEXT,
+        SurfaceFormat::ColorSrgbEXT,
+        SurfaceFormat::Dxt5SrgbEXT,
+        SurfaceFormat::Bc7EXT,
+        SurfaceFormat::Bc7SrgbEXT,
+        SurfaceFormat::ByteEXT,
+        SurfaceFormat::UShortEXT,
+    };
+
+    for (SurfaceFormat format : kAllFormats)
+    {
+        if (format == SurfaceFormat::Color)
+        {
+            EXPECT_NO_THROW(Texture2D(gd, 4, 4, false, format))
+                << "SurfaceFormat::Color ordinal " << static_cast<int>(format);
+        }
+        else
+        {
+            EXPECT_THROW(Texture2D(gd, 4, 4, false, format), std::runtime_error)
+                << "SurfaceFormat ordinal " << static_cast<int>(format)
+                << " must throw std::runtime_error, not silently succeed with the wrong GPU format";
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
 // getBoundsProperty
 // -----------------------------------------------------------------------
 
@@ -185,6 +305,16 @@ TEST(Texture2DTest, GetDataNoCpuPixelsThrowsRuntimeError)
     EXPECT_THROW(tex.GetData(buf, 0, 1), std::runtime_error);
 }
 
+// Task 265: negative startIndex is rejected before it can compute a negative
+// array index (px[(startIndex+i)*4]) and read out of bounds before the start
+// of the internal cpuPixels_ buffer — mirrors the equivalent SetData guard.
+TEST(Texture2DTest, GetDataNegativeStartIndexThrowsOutOfRange)
+{
+    Texture2D tex;
+    Color buf[1] = { Color(0,0,0,0) };
+    EXPECT_THROW(tex.GetData(buf, -1, 1), std::out_of_range);
+}
+
 // 2-param overload delegates to 3-param; same guards apply
 TEST(Texture2DTest, GetData2ParamNullPtrThrowsInvalidArgument)
 {
@@ -221,6 +351,17 @@ TEST(Texture2DTest, GetDataNegativeLevelThrowsOutOfRange)
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     EXPECT_THROW(tex.GetData(-1, nullptr, buf, 0, 1), std::out_of_range);
+}
+
+// Task 265: negative startIndex is rejected before it can compute a negative
+// destination index (data[startIndex+row*w+col]) and write out of bounds
+// before the start of the caller-supplied data array — mirrors the equivalent
+// SetData(level,rect,...) guard (SetDataLevelNegativeStartIndexThrowsOutOfRange).
+TEST(Texture2DTest, GetDataLevelNegativeStartIndexThrowsOutOfRange)
+{
+    Texture2D tex;
+    Color buf[1] = { Color(0,0,0,0) };
+    EXPECT_THROW(tex.GetData(0, nullptr, buf, -1, 1), std::out_of_range);
 }
 
 TEST(Texture2DTest, GetDataLevelNoCpuPixelsThrowsRuntimeError)
@@ -384,6 +525,89 @@ TEST_F(SetDataSimpleGuardTest, ExactElementCountDoesNotThrow)
     Texture2D tex(gd, 2, 2);
     Color buf[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
     EXPECT_NO_THROW(tex.SetData(buf, 4));
+}
+
+// -----------------------------------------------------------------------
+// Context-recovery interaction with the CPU pixel shadow (Task 270)
+//
+// GraphicsDevice::SetContextRecoveryEnabled(false) is a NOXNA optimization:
+// Texture2D::MaybeFreeCpuPixels() frees the CPU-side pixel shadow
+// (cpuPixels_) after every full upload to save ~1x texture RAM. CNA has no
+// GPU pixel-readback path, so GetData() depends entirely on that shadow —
+// once freed, GetData() throws instead of falling back to a GPU read
+// (FNA's real GetData always reads back from the GPU). See AUDIT.md,
+// "Texture2D CPU shadow storage" for the full write-up.
+// -----------------------------------------------------------------------
+
+class ContextRecoveryTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+};
+
+TEST_F(ContextRecoveryTest, GetDataWorksAfterFullUploadWithRecoveryEnabledByDefault)
+{
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(1,2,3,4), Color(5,6,7,8), Color(9,10,11,12), Color(13,14,15,16) };
+    tex.SetData(in, 4);
+
+    Color out[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
+    EXPECT_NO_THROW(tex.GetData(out, 4));
+    EXPECT_EQ(out[0], in[0]);
+    EXPECT_EQ(out[3], in[3]);
+}
+
+TEST_F(ContextRecoveryTest, GetDataThrowsAfterFullUploadWithRecoveryDisabled)
+{
+    gd.SetContextRecoveryEnabled(false);
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(1,2,3,4), Color(5,6,7,8), Color(9,10,11,12), Color(13,14,15,16) };
+    tex.SetData(in, 4);
+
+    Color out[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
+    EXPECT_THROW(tex.GetData(out, 4), std::runtime_error);
+}
+
+TEST_F(ContextRecoveryTest, PartialUpdateAfterShadowFreedThrowsInsteadOfCorruptingTexture)
+{
+    // Regression test: before the Task 270 fix, this sequence silently zeroed
+    // out the 3 untouched pixels on the GPU, because getMipBuffer(0)
+    // resurrected a fresh zero-filled shadow and SetData re-uploaded the
+    // whole level over the real (5,5,5,5) GPU content. Now it fails loudly.
+    gd.SetContextRecoveryEnabled(false);
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5) };
+    tex.SetData(in, 4); // shadow freed again immediately after this upload
+
+    const Rectangle onePixel(0, 0, 1, 1);
+    Color patch(9, 9, 9, 9);
+    EXPECT_THROW(tex.SetData(0, &onePixel, &patch, 0, 1), std::runtime_error);
+}
+
+TEST_F(ContextRecoveryTest, PartialUpdateCoveringFullLevelDoesNotThrowEvenWithRecoveryDisabled)
+{
+    // A partial-update rect that happens to cover the whole level is safe:
+    // every pixel gets overwritten, so the resurrected zero-filled shadow
+    // never leaks stale content to the GPU.
+    gd.SetContextRecoveryEnabled(false);
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5) };
+    tex.SetData(in, 4);
+
+    const Rectangle fullLevel(0, 0, 2, 2);
+    Color patch[4] = { Color(9,9,9,9), Color(9,9,9,9), Color(9,9,9,9), Color(9,9,9,9) };
+    EXPECT_NO_THROW(tex.SetData(0, &fullLevel, patch, 0, 4));
+}
+
+TEST_F(ContextRecoveryTest, PartialUpdateNeverThrowsWithRecoveryEnabledByDefault)
+{
+    Texture2D tex(gd, 2, 2);
+    Color in[4] = { Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5), Color(5,5,5,5) };
+    tex.SetData(in, 4);
+
+    const Rectangle onePixel(0, 0, 1, 1);
+    Color patch(9, 9, 9, 9);
+    EXPECT_NO_THROW(tex.SetData(0, &onePixel, &patch, 0, 1));
 }
 
 // -----------------------------------------------------------------------

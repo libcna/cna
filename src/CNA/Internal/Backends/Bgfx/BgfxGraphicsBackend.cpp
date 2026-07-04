@@ -720,6 +720,10 @@ namespace CNA::Internal::Backends::Bgfx
                                                              "vs_instanced3d",
                                                              "fs_instanced3d",
                                                              "instanced3d");
+                envMap3DProgram_          = tryCreateProgram(kEnvMap3dShaders,
+                                                             "vs_env_map3d",
+                                                             "fs_env_map3d",
+                                                             "env_map3d");
 
                 wvpUniform_         = bgfx::createUniform("u_wvp",            bgfx::UniformType::Mat4);
                 diffuseColor3DUnif_ = bgfx::createUniform("u_diffuseColor",   bgfx::UniformType::Vec4);
@@ -732,6 +736,13 @@ namespace CNA::Internal::Backends::Bgfx
                 texColor3DSampler2_ = bgfx::createUniform("s_texColor2",      bgfx::UniformType::Sampler);
                 bonesUnif_          = bgfx::createUniform("u_bones",          bgfx::UniformType::Mat4, 72);
                 vpInstanced3DUnif_  = bgfx::createUniform("u_vp",            bgfx::UniformType::Mat4);
+
+                world3DUnif_         = bgfx::createUniform("u_world",          bgfx::UniformType::Mat4);
+                eyePos3DUnif_        = bgfx::createUniform("u_eyePos",         bgfx::UniformType::Vec4);
+                emissiveColor3DUnif_ = bgfx::createUniform("u_emissiveColor",  bgfx::UniformType::Vec4);
+                envMapAmountUnif_    = bgfx::createUniform("u_envMapAmount",   bgfx::UniformType::Vec4);
+                envMapSpecularUnif_  = bgfx::createUniform("u_envMapSpecular", bgfx::UniformType::Vec4);
+                envMapSampler_       = bgfx::createUniform("s_envMap",         bgfx::UniformType::Sampler);
             }
 
             if (!bgfx::isValid(textureSampler))
@@ -784,6 +795,12 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(texColor3DSampler2_);
         destroyU(bonesUnif_);
         destroyU(vpInstanced3DUnif_);
+        destroyU(world3DUnif_);
+        destroyU(eyePos3DUnif_);
+        destroyU(emissiveColor3DUnif_);
+        destroyU(envMapAmountUnif_);
+        destroyU(envMapSpecularUnif_);
+        destroyU(envMapSampler_);
         destroyP(colored3DProgram_);
         destroyP(textured3DProgram_);
         destroyP(coloredTextured3DProgram_);
@@ -792,6 +809,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyP(dualTexture3DProgram_);
         destroyP(skinned3DProgram_);
         destroyP(instanced3DProgram_);
+        destroyP(envMap3DProgram_);
         if (bgfx::isValid(mrtFbo_))         { bgfx::destroy(mrtFbo_);         mrtFbo_         = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(textureSampler))  { bgfx::destroy(textureSampler);  textureSampler  = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(spriteProgram))   { bgfx::destroy(spriteProgram);   spriteProgram   = BGFX_INVALID_HANDLE; }
@@ -973,7 +991,7 @@ namespace CNA::Internal::Backends::Bgfx
         if (scissorW_ > 0 && scissorH_ > 0)
             bgfx::setScissor(scissorX_, scissorY_, scissorW_, scissorH_);
         bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_MSAA
-                       | blendFlags_ | depthFlags_ | cullFlags_);
+                       | blendFlags_ | depthFlags_ | cullFlags_, blendFactorPacked_);
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::submit(spriteViewId, spriteProgram);
     }
@@ -1356,7 +1374,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                        | blendFlags_ | depthFlags_ | cullFlags_)
-                       | ToTopologyFlag(primitive));
+                       | ToTopologyFlag(primitive), blendFactorPacked_);
         bgfx::submit(currentViewId_, colored3DProgram_);
     }
 
@@ -1381,7 +1399,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                        | blendFlags_ | depthFlags_ | cullFlags_)
-                       | ToTopologyFlag(primitive));
+                       | ToTopologyFlag(primitive), blendFactorPacked_);
         bgfx::submit(currentViewId_, colored3DProgram_);
     }
 
@@ -1404,7 +1422,7 @@ namespace CNA::Internal::Backends::Bgfx
         const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                                 | blendFlags_ | depthFlags_ | cullFlags_)
                                | ToTopologyFlag(primitive);
-        bgfx::setState(state);
+        bgfx::setState(state, blendFactorPacked_);
 
         const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
         if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
@@ -1418,7 +1436,7 @@ namespace CNA::Internal::Backends::Bgfx
             if (params.texture1 && bgfx::isValid(texColor3DSampler2_))
             {
                 auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
-                bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[0]);
+                bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
             }
             bgfx::submit(currentViewId_, dualTexture3DProgram_);
         }
@@ -1441,6 +1459,38 @@ namespace CNA::Internal::Backends::Bgfx
                 bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
             }
             bgfx::submit(currentViewId_, skinned3DProgram_);
+        }
+        else if (params.envMapping && bgfx::isValid(envMap3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_,  params.diffuseColor);
+            bgfx::setUniform(world3DUnif_,          params.worldColMajor);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            float dir[4]  = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir);
+            float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                               params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff);
+            float amount[4] = { params.envMapAmount, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(envMapAmountUnif_, amount);
+            float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],
+                                   params.envMapSpecular[2], 0.0f };
+            bgfx::setUniform(envMapSpecularUnif_, specular);
+            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            {
+                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+            }
+            if (params.envMap && bgfx::isValid(envMapSampler_))
+            {
+                auto& cube = static_cast<const BgfxTextureCubeBackend&>(*params.envMap);
+                bgfx::setTexture(1, envMapSampler_, cube.handle);
+            }
+            bgfx::submit(currentViewId_, envMap3DProgram_);
         }
         else if (alphaTestActive && bgfx::isValid(alphaTest3DProgram_))
         {
@@ -1545,7 +1595,7 @@ namespace CNA::Internal::Backends::Bgfx
         const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                                 | blendFlags_ | depthFlags_ | cullFlags_)
                                | ToTopologyFlag(primitive);
-        bgfx::setState(state);
+        bgfx::setState(state, blendFactorPacked_);
         bgfx::submit(currentViewId_, instanced3DProgram_);
         (void)primitiveCount;
     }

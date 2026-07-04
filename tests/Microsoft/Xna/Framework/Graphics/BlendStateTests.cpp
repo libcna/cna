@@ -210,3 +210,36 @@ TEST(BlendStateTest, SetMultiSampleMask)
     bs.setMultiSampleMaskProperty(0xFF);
     EXPECT_EQ(bs.getMultiSampleMaskProperty(), 0xFF);
 }
+
+// --- Preset Name (Task 301: FNA sets Name on every preset; CNA previously did not) ---
+
+TEST(BlendStateTest, AdditiveName)
+{
+    EXPECT_EQ(BlendState::Additive.getNameProperty(), "BlendState.Additive");
+}
+
+TEST(BlendStateTest, AlphaBlendName)
+{
+    EXPECT_EQ(BlendState::AlphaBlend.getNameProperty(), "BlendState.AlphaBlend");
+}
+
+TEST(BlendStateTest, NonPremultipliedName)
+{
+    EXPECT_EQ(BlendState::NonPremultiplied.getNameProperty(), "BlendState.NonPremultiplied");
+}
+
+TEST(BlendStateTest, OpaqueName)
+{
+    EXPECT_EQ(BlendState::Opaque.getNameProperty(), "BlendState.Opaque");
+}
+
+TEST(BlendStateTest, PresetToStringReturnsName)
+{
+    EXPECT_EQ(BlendState::Opaque.ToString(), "BlendState.Opaque");
+}
+
+TEST(BlendStateTest, DefaultConstructedNameIsEmpty)
+{
+    BlendState bs;
+    EXPECT_TRUE(bs.getNameProperty().empty());
+}

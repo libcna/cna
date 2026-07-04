@@ -98,6 +98,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param data         Pointer to the Color array.
          * @param startIndex   First element in @p data to use.
          * @param elementCount Number of Color elements to upload.
+         * @throws std::runtime_error if @p level is 0, @p rect does not cover the full level,
+         *         and the CPU-side pixel shadow has been freed because context recovery is
+         *         disabled (see GraphicsDevice::SetContextRecoveryEnabled) — reconstructing a
+         *         partial update from a freed shadow would silently corrupt already-uploaded
+         *         GPU pixels outside @p rect.
          */
         void SetData(int level, const Rectangle* rect, const Color* data, int startIndex, int elementCount);
 

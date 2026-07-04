@@ -3,12 +3,12 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    const SamplerState SamplerState::AnisotropicClamp{TextureFilter::Anisotropic, TextureAddressMode::Clamp,  TextureAddressMode::Clamp,  TextureAddressMode::Clamp};
-    const SamplerState SamplerState::AnisotropicWrap {TextureFilter::Anisotropic, TextureAddressMode::Wrap,   TextureAddressMode::Wrap,   TextureAddressMode::Wrap};
-    const SamplerState SamplerState::LinearClamp     {TextureFilter::Linear,      TextureAddressMode::Clamp,  TextureAddressMode::Clamp,  TextureAddressMode::Clamp};
-    const SamplerState SamplerState::LinearWrap      {TextureFilter::Linear,      TextureAddressMode::Wrap,   TextureAddressMode::Wrap,   TextureAddressMode::Wrap};
-    const SamplerState SamplerState::PointClamp      {TextureFilter::Point,       TextureAddressMode::Clamp,  TextureAddressMode::Clamp,  TextureAddressMode::Clamp};
-    const SamplerState SamplerState::PointWrap       {TextureFilter::Point,       TextureAddressMode::Wrap,   TextureAddressMode::Wrap,   TextureAddressMode::Wrap};
+    const SamplerState SamplerState::AnisotropicClamp{"SamplerState.AnisotropicClamp", TextureFilter::Anisotropic, TextureAddressMode::Clamp,  TextureAddressMode::Clamp,  TextureAddressMode::Clamp};
+    const SamplerState SamplerState::AnisotropicWrap {"SamplerState.AnisotropicWrap",  TextureFilter::Anisotropic, TextureAddressMode::Wrap,   TextureAddressMode::Wrap,   TextureAddressMode::Wrap};
+    const SamplerState SamplerState::LinearClamp     {"SamplerState.LinearClamp",      TextureFilter::Linear,      TextureAddressMode::Clamp,  TextureAddressMode::Clamp,  TextureAddressMode::Clamp};
+    const SamplerState SamplerState::LinearWrap      {"SamplerState.LinearWrap",       TextureFilter::Linear,      TextureAddressMode::Wrap,   TextureAddressMode::Wrap,   TextureAddressMode::Wrap};
+    const SamplerState SamplerState::PointClamp      {"SamplerState.PointClamp",       TextureFilter::Point,       TextureAddressMode::Clamp,  TextureAddressMode::Clamp,  TextureAddressMode::Clamp};
+    const SamplerState SamplerState::PointWrap       {"SamplerState.PointWrap",        TextureFilter::Point,       TextureAddressMode::Wrap,   TextureAddressMode::Wrap,   TextureAddressMode::Wrap};
 
     SamplerState::SamplerState()
         : addressU_(TextureAddressMode::Wrap)
@@ -21,12 +21,14 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     }
 
-    SamplerState::SamplerState(TextureFilter filter,
+    SamplerState::SamplerState(const std::string& name,
+                               TextureFilter filter,
                                TextureAddressMode addressU,
                                TextureAddressMode addressV,
                                TextureAddressMode addressW)
         : SamplerState()
     {
+        setNameProperty(name);
         filter_   = filter;
         addressU_ = addressU;
         addressV_ = addressV;

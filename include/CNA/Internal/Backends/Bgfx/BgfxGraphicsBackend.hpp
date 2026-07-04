@@ -269,6 +269,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ProgramHandle dualTexture3DProgram_     = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle skinned3DProgram_         = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle instanced3DProgram_       = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle envMap3DProgram_          = BGFX_INVALID_HANDLE;
         // Uniforms shared across 3D draw calls
         bgfx::UniformHandle wvpUniform_         = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle diffuseColor3DUnif_ = BGFX_INVALID_HANDLE;
@@ -281,6 +282,13 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle texColor3DSampler2_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle bonesUnif_          = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle vpInstanced3DUnif_  = BGFX_INVALID_HANDLE;
+        // EnvironmentMapEffect-specific uniforms
+        bgfx::UniformHandle world3DUnif_        = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle eyePos3DUnif_       = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle emissiveColor3DUnif_= BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle envMapAmountUnif_   = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle envMapSpecularUnif_ = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle envMapSampler_      = BGFX_INVALID_HANDLE;
 
         explicit BgfxGraphicsBackend(SDL_Window* window, int swapInterval = 1);
         ~BgfxGraphicsBackend() override;

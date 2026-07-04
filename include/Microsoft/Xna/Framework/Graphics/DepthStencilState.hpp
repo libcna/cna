@@ -202,7 +202,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void setCounterClockwiseStencilPassProperty(StencilOperation value);
 
     private:
-        DepthStencilState(bool depthEnable, bool depthWriteEnable);
+        DepthStencilState(const std::string& name, bool depthEnable, bool depthWriteEnable);
 
         bool depthBufferEnable_;
         bool depthBufferWriteEnable_;

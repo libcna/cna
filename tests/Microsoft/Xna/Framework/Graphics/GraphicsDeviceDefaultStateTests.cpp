@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: MS-PL
+
+#include <gtest/gtest.h>
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+
+using Microsoft::Xna::Framework::Graphics::Blend;
+using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::RasterizerState;
+
+// Task 302: FNA's GraphicsDevice.cs initializes "BlendState = BlendState.Opaque". Verifies the
+// default BlendState's Name matches Opaque's exactly (not just its blend-factor values, which
+// happen to coincide with a plain default-constructed BlendState — see Task 292's identical
+// SamplerStateCollection finding for why Name is the value that actually distinguishes them).
+
+TEST(GraphicsDeviceDefaultStateTest, DefaultBlendStateMatchesOpaqueName)
+{
+    GraphicsDevice gd;
+    EXPECT_EQ(gd.getBlendStateProperty().getNameProperty(), "BlendState.Opaque");
+}
+
+TEST(GraphicsDeviceDefaultStateTest, DefaultBlendStateMatchesOpaqueValues)
+{
+    GraphicsDevice gd;
+    const BlendState& bs = gd.getBlendStateProperty();
+    EXPECT_EQ(bs.getColorSourceBlendProperty(), BlendState::Opaque.getColorSourceBlendProperty());
+    EXPECT_EQ(bs.getColorDestinationBlendProperty(), BlendState::Opaque.getColorDestinationBlendProperty());
+    EXPECT_EQ(bs.getAlphaSourceBlendProperty(), BlendState::Opaque.getAlphaSourceBlendProperty());
+    EXPECT_EQ(bs.getAlphaDestinationBlendProperty(), BlendState::Opaque.getAlphaDestinationBlendProperty());
+}
+
+// Task 310: FNA's BlendState/DepthStencilState/RasterizerState have no freeze/immutability
+// enforcement at all (confirmed via FNA source: no exception, no frozen flag anywhere in
+// States/BlendState.cs et al.) - so there is no "throws if mutated after first use" behavior to
+// replicate. But FNA's GraphicsDevice.BlendState setter ("nextBlend = value;") stores a
+// *reference* to the same C# object, since BlendState is a reference type - mutating that same
+// object afterward changes what the device applies on the next Draw. CNA's GraphicsDevice stores
+// BlendState by VALUE ("blendState_ = value;" copies), a deliberate, project-wide pattern shared by
+// DepthStencilState/RasterizerState/SamplerStateCollection - so mutating the original object after
+// assignment does NOT affect the device's already-applied copy in CNA, unlike real XNA/FNA. This
+// is a real, confirmed, intentional architectural deviation (documented in GRAPHICS_TASKS.md
+// Task 869), not a bug: no game code observed in this codebase relies on post-assignment mutation,
+// and matching FNA's reference-aliasing exactly would require every state property to become a
+// reference/pointer type project-wide.
+TEST(GraphicsDeviceDefaultStateTest, MutatingBlendStateAfterAssignmentDoesNotAffectDevice)
+{
+    BlendState custom;
+    custom.setColorSourceBlendProperty(Blend::One);
+
+    GraphicsDevice gd;
+    gd.setBlendStateProperty(custom);
+    ASSERT_EQ(gd.getBlendStateProperty().getColorSourceBlendProperty(), Blend::One);
+
+    // Mutate the ORIGINAL object after it has already been assigned to the device.
+    custom.setColorSourceBlendProperty(Blend::Zero);
+
+    // CNA's value-copy semantics mean the device's copy is unaffected (a documented deviation from
+    // FNA's reference semantics, where this mutation would be visible - see comment above).
+    EXPECT_EQ(gd.getBlendStateProperty().getColorSourceBlendProperty(), Blend::One);
+}
+
+// Task 312: FNA's GraphicsDevice.cs initializes "DepthStencilState = DepthStencilState.Default"
+// and "RasterizerState = RasterizerState.CullCounterClockwise". Found the same bug shape as
+// Task 302's BlendState finding: depthStencilState_/rasterizerState_ were plain
+// default-constructed members, never actually copied from the FNA-specified presets. Values
+// coincided (Default's DepthBufferEnable/WriteEnable=true,true matches the plain default
+// constructor's own values) so this was invisible until Task 311 gave DepthStencilState's presets
+// a Name - the same "coincided until Name existed to distinguish them" pattern as Task 302.
+
+TEST(GraphicsDeviceDefaultStateTest, DefaultDepthStencilStateMatchesDefaultName)
+{
+    GraphicsDevice gd;
+    EXPECT_EQ(gd.getDepthStencilStateProperty().getNameProperty(), "DepthStencilState.Default");
+}
+
+TEST(GraphicsDeviceDefaultStateTest, DefaultDepthStencilStateMatchesDefaultValues)
+{
+    GraphicsDevice gd;
+    const DepthStencilState& ds = gd.getDepthStencilStateProperty();
+    EXPECT_EQ(ds.getDepthBufferEnableProperty(), DepthStencilState::Default.getDepthBufferEnableProperty());
+    EXPECT_EQ(ds.getDepthBufferWriteEnableProperty(), DepthStencilState::Default.getDepthBufferWriteEnableProperty());
+    EXPECT_EQ(ds.getDepthBufferFunctionProperty(), DepthStencilState::Default.getDepthBufferFunctionProperty());
+}
+
+TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClockwiseValues)
+{
+    GraphicsDevice gd;
+    const RasterizerState& rs = gd.getRasterizerStateProperty();
+    EXPECT_EQ(rs.getCullModeProperty(), RasterizerState::CullCounterClockwise.getCullModeProperty());
+    EXPECT_EQ(rs.getFillModeProperty(), RasterizerState::CullCounterClockwise.getFillModeProperty());
+}

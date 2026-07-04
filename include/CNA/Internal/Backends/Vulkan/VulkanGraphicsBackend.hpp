@@ -824,7 +824,8 @@ namespace CNA::Internal::Backends::Vulkan
                                                    uint32_t colorAttachmentCount = 1, bool wireframe = false,
                                                    bool msaa = false);
         void       EnsureDualTexResources();
-        VkDescriptorSet GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1);
+        VkDescriptorSet GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1,
+                                                    VkSampler sampler0, VkSampler sampler1);
         VkPipeline GetOrCreatePipelineDualTex3D(VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,

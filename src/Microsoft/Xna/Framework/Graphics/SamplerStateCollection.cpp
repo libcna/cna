@@ -6,7 +6,7 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     SamplerStateCollection::SamplerStateCollection()
-        : samplers_(MaxSamplers)
+        : samplers_(MaxSamplers, SamplerState::LinearWrap)
     {
     }
 

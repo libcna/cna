@@ -46,19 +46,19 @@ namespace Microsoft::Xna::Framework::Graphics
         HalfVector4,
         /** @brief Float pixel format for high dynamic range data. */
         HdrBlendable,
-        /** @brief Unsigned 32-bit ARGB sRGB pixel format storing 8 bits per channel; values are sRGB-encoded and read as linear in shaders. */
-        ColorSrgb,
-        /** @brief Unsigned 16-bit BGR sRGB pixel format: 5 bits blue, 6 bits green, 5 bits red; sRGB-encoded. */
-        Bgr565Srgb,
-        /** @brief Unsigned 16-bit BGRA sRGB pixel format: 5 bits per color, 1 bit alpha; sRGB-encoded. */
-        Bgra5551Srgb,
-        /** @brief Unsigned 16-bit BGRA sRGB pixel format storing 4 bits per channel; sRGB-encoded. */
-        Bgra4444Srgb,
-        /** @brief DXT1 compressed sRGB texture format; dimensions must be a multiple of 4; sRGB-encoded. */
-        Dxt1Srgb,
-        /** @brief DXT3 compressed sRGB texture format; dimensions must be a multiple of 4; sRGB-encoded. */
-        Dxt3Srgb,
-        /** @brief DXT5 compressed sRGB texture format; dimensions must be a multiple of 4; sRGB-encoded. */
-        Dxt5Srgb
+        /** @brief Unsigned 32-bit ABGR pixel format storing 8 bits per channel (XNA3). */
+        ColorBgraEXT,
+        /** @brief Unsigned 32-bit ARGB pixel format storing 8 bits per channel; values are sRGB-encoded and read as linear in shaders. */
+        ColorSrgbEXT,
+        /** @brief DXT5 compressed texture format; surface dimensions must be a multiple of 4; sRGB-encoded, read as linear in shaders. */
+        Dxt5SrgbEXT,
+        /** @brief BC7 block texture format. */
+        Bc7EXT,
+        /** @brief BC7 block texture format where the R/G/B values are non-linear sRGB. */
+        Bc7SrgbEXT,
+        /** @brief Unsigned 8-bit R pixel format. */
+        ByteEXT,
+        /** @brief Unsigned 16-bit R pixel format. */
+        UShortEXT
     };
 }

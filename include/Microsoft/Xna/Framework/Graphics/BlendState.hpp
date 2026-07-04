@@ -162,7 +162,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void setMultiSampleMaskProperty(int value);
 
     private:
-        BlendState(Blend colorSrc, Blend alphaSrc, Blend colorDst, Blend alphaDst);
+        BlendState(const std::string& name, Blend colorSrc, Blend alphaSrc, Blend colorDst, Blend alphaDst);
 
         BlendFunction alphaBlendFunction_;
         Blend alphaDestinationBlend_;

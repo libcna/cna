@@ -22,6 +22,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class TextureCube : public GraphicsResource
     {
     public:
+        using GraphicsResource::Dispose;
+
         /**
          * @brief Creates a cube map texture with the given face size and format.
          *
@@ -55,6 +57,16 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetData(CubeMapFace face, const Color* data, int elementCount);
 
         /**
+         * @brief Uploads a subset of data to the entire specified cube face.
+         *
+         * @param face         The cube map face to write to.
+         * @param data         Pointer to the source Color array.
+         * @param startIndex   First element within @p data to start reading.
+         * @param elementCount Number of Color elements to upload.
+         */
+        void SetData(CubeMapFace face, const Color* data, int startIndex, int elementCount);
+
+        /**
          * @brief Uploads data to a sub-rectangle of a mip level on the specified cube face.
          *
          * @param face         The cube map face to write to.
@@ -75,6 +87,16 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of Color elements to read.
          */
         void GetData(CubeMapFace face, Color* data, int elementCount) const;
+
+        /**
+         * @brief Reads a subset of data from the entire specified cube face.
+         *
+         * @param face         The cube map face to read from.
+         * @param data         Output array to receive the Color data.
+         * @param startIndex   First element within @p data to write to.
+         * @param elementCount Number of Color elements to read.
+         */
+        void GetData(CubeMapFace face, Color* data, int startIndex, int elementCount) const;
 
         /**
          * @brief Reads data from a sub-rectangle of a mip level on the specified cube face.
@@ -119,6 +141,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Returns the raw backend pointer (used by RenderTargetCube to retrieve the RT handle). */
         NOXNA [[nodiscard]] CNA::Internal::Backends::ITextureCubeBackend* GetBackendRaw() const { return backend_.get(); }
+
+        /** @brief Releases the backend cube texture handle when the resource is disposed. */
+        void Dispose(bool disposing) override;
 
     private:
         int size_;

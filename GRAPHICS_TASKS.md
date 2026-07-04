@@ -6,6 +6,36 @@
 > **SDL_Renderer is intentionally 2D-only.** All 3D calls throw `std::runtime_error`.
 > This is correct XNA/FNA behavior — SDL_Renderer cannot do 3D.
 
+> **Task numbering:** 1–663 = original core plan (Phases 1–55, all non-WebGPU work).
+> 664+ = additions made after the original plan was written (session 2026-07-02 onward),
+> including the full Phase 70–73 backend-perfection wave below.
+> **10001+ = WebGPU** (Phases 56–69, renumbered 2026-07-02 from their original 501–661 to
+> free up the low range for further core-plan growth; WebGPU is deliberately deprioritized —
+> see "Execution order" below).
+
+## Execution order (priority, not document order)
+
+1. **Phases 1–55** (core, Tasks 1–663) — in progress, ~44% done as of 2026-07-02.
+2. **Phase 70 — SDL_Renderer** (Tasks 666–731) — the 2D-only backend must reach verified
+   perfection first: it's the smallest, simplest surface, and every other backend's SpriteBatch/
+   Texture2D work builds on the same XNA semantics SDL_Renderer has to get exactly right.
+3. **Phase 71 — EasyGL final gap closure** (Tasks 732–739) — EasyGL is already the de facto
+   target of most unlabeled tasks in Phases 34–55, so this phase is deliberately small: it only
+   covers what genuinely isn't tracked elsewhere yet (real `SurfaceFormat` GPU forwarding,
+   `FillMode::WireFrame` emulation, mip-chain generation for `Texture3D`/`TextureCube`).
+4. **Phase 72 — Bgfx parity** (Tasks 740–824) — full pixel-verified breadth, replicated from
+   Phases 35–50's EasyGL-default testing matrix, starting from wiring up the pixel-readback path
+   (`GetBackBufferData` exists per Task 117 but no current Bgfx test calls it).
+5. **Phase 73 — Vulkan parity** (Tasks 664–665, 825–861) — Vulkan already has more infrastructure
+   done than Bgfx (per-slot samplers, instancing, wireframe, MSAA, RenderTargetCube, stock-effect
+   SPIR-V shaders), so this phase is gap-closure sized, not a full replication — plus the two
+   SpriteBatch bugs found 2026-07-02 (multi-batch, dropped `SamplerState`).
+6. **Phases 56–69 (WebGPU, Tasks 10001+)** — parked. Revisit only after 1–5 above are done.
+
+> Phases 70–73 physically appear after Phase 69 in this document (append-only, to avoid
+> renumbering existing WebGPU content) but run **before** it — see the priority order above,
+> not the phase numbers, for actual execution sequence.
+
 ---
 
 ## Legend
@@ -415,6 +445,7 @@ All 100 original tasks addressed.
 | 258 | Add tests for `DrawUserIndexedPrimitives` with 32-bit indices                                  | ✅      | `examples/easygl_draw_user_indexed_primitives_32_test.cpp`; full-NDC red quad via typed VPC + uint32_t overload; 2 sub-tests (vertexOffset=0/indexOffset=0, vertexOffset=1/indexOffset=1); centre=(255,0,0) 2/2 PASS |
 | 259 | Validate user primitive arrays for null, invalid offsets, invalid primitive count              | ✅      | `DrawUserPrimitivesTests.cpp` extended: primitiveCount<=0 throws `ArgumentOutOfRangeException` for all 5 `DrawUserPrimitives` overloads (VPC/VPT/VPCT/VPNT + VertexDeclaration), zero and negative counts; 10/10 new unit tests |
 | 260 | Optimize user primitive staging to avoid unnecessary heap allocation per draw                  | ✅      | Added 2 per-device reusable scratch buffers (`userVertexScratch_`/`userIndexScratch_`, grow-only `resize`) shared by all 4 `DrawUserPrimitives` + 8 `DrawUserIndexedPrimitives` typed overloads + 2 indexed VertexDeclaration overloads; replaces 22 per-call `std::vector` heap allocations with buffer reuse once capacity stabilizes. 1813/1813 unit tests + 8/8 pixel-readback checks (Tasks 255–258) still pass — no rendering regression. |
+| — | `GraphicsDevice.cpp`, `DrawUserIndexedPrimitivesTests.cpp`, `GRAPHICS_TASKS.md` | Added the `primitiveCount<=0` argument-guard unit tests for `DrawUserIndexedPrimitives` that Task 252 claimed but never actually landed (mirrors Task 259's `DrawUserPrimitives` coverage): all 8 typed overloads + 2 `VertexDeclaration` overloads, zero and negative counts. Also found and fixed a real gap while writing these: the untyped raw-`void*` overload (predates the Task 252 typed overloads) had no `primitiveCount` guard at all — added `ArgumentOutOfRangeException::ThrowIfNegativeOrZero`, matching the other 10 overloads. 22 new unit tests; 1840/1840 total pass. |
 
 ---
 
@@ -426,12 +457,12 @@ All 100 original tasks addressed.
 | 262 | Verify `Texture2D::FromStream` supports PNG, JPG, BMP if FNA/XNA-compatible  | ✅      | Verified via round-trip tests: PNG (lossless), JPEG (lossy, tolerance-checked), BMP (hand-built, exact); DDS/DXT1/3/5 already worked (Task 125). Documented in `docs/texture-stream-formats.md`. Also added the missing `FromStream(device, stream, width, height, zoom)` overload found in the Task 261 audit, matching FNA3D's resize/crop semantics. 5 new unit tests. |
 | 263 | Verify `Texture2D::SaveAsPng` if present                                     | ✅      | 6 new tests: null-stream/no-CPU-pixels guards; multi-pixel round-trip with alpha (catches spatial/transposition bugs, exact match); non-square size (3x5); save-time resize (2x2→6x4); filename-based NOXNA overload via temp file. |
 | 264 | Verify `Texture2D::SaveAsJpeg` if present                                    | ✅      | 8 new tests: error guards; multi-pixel round-trip within tolerance (lossy); alpha-channel drop verified (JPEG has none); non-square size; save-time resize; filename overload; `FNA_GRAPHICS_JPEG_SAVE_QUALITY` env var now honored (was hardcoded to 100 — Task 261 audit finding, fixed here). |
-| 265 | Implement exact bounds checking for `GetData<T>` rectangles                  | ⬜      | Match FNA exceptions                    |
+| 265 | Implement exact bounds checking for `GetData<T>` rectangles                  | ✅      | FNA's real `GetData<T>` doesn't bounds-check `rect` at the managed level at all (delegates to native `FNA3D_GetTextureData2D`) — CNA's existing rect-bounds check is a deliberate safety improvement, not a literal-parity gap. Found and fixed a real, symmetric bug instead: neither `GetData` overload validated `startIndex < 0` (the equivalent `SetData` overloads already do) — negative `startIndex` caused an OOB read from `cpuPixels_` (3-arg overload) or an OOB write into the caller's array (5-arg overload). Fixed both, mirroring `SetData`'s existing guard. 2 new unit tests; 1842/1842 pass on EasyGL/Vulkan/Bgfx. Closes Phase 32. See `AUDIT.md`. |
 | 266 | Implement exact bounds checking for `SetData<T>` rectangles                  | ✅      | Fixed both OOB bugs from Task 261 audit: (1) `SetData(level,rect,...)` now throws `std::out_of_range` when rect exceeds mip-level bounds (mirrors `GetData`'s existing check); (2) `SetData(Color*,elementCount)` now throws `std::out_of_range` when `elementCount < width*height` instead of building a size-mismatched `ImageData`. 7 new unit tests (5 rect-bounds + 2 buffer-size); 1789/1789 total pass. |
 | 267 | Verify `LevelCount` behavior for mipmapped and non-mipmapped textures        | ✅      | 5 new tests confirming `getLevelCountProperty()` matches FNA's `CalculateMipLevels` formula: 2-arg ctor and `mipMap=false` always yield 1; `mipMap=true` verified for square power-of-two, non-square power-of-two, and non-power-of-two sizes (3x5→3, 7x11→4, 16x16→5, etc). |
-| 268 | Verify non-power-of-two textures across all backends                         | ⬜      | 3×5, 7×11                               |
-| 269 | Verify texture sampling at edges for clamp/wrap modes                        | ⬜      | Pixel tests                             |
-| 270 | Add CPU-side shadow storage only where required for `GetData`; document cost | ⬜      | Avoid accidental memory bloat           |
+| 268 | Verify non-power-of-two textures across all backends                         | ✅      | No POT/NPOT branching found anywhere (Texture2D, EasyGL/Vulkan/Bgfx texture creation) — all support NPOT natively; verified end-to-end on EasyGL via new pixel-readback test (3×5, 5 solid-colour rows, full-screen SpriteBatch draw, 5/5 rows read back correctly); Vulkan/Bgfx verified by code inspection only (no texture-level pixel-readback infra). See `AUDIT.md` "NPOT textures and SpriteBatch edge sampling". |
+| 269 | Verify texture sampling at edges for clamp/wrap modes                        | ✅      | Found and fixed 2 real bugs on EasyGL: (1) `SpriteBatch::Begin()`'s `SamplerState` had zero effect on EasyGL/Vulkan/Bgfx (only `Filter` was even read, and only SDL_Renderer's backend implemented `SetSamplerFilter`) — added `ISpriteBatchBackend::SetSamplerAddressMode`, wired `SpriteBatch::Begin()` to always resolve+apply `SamplerState` (default `LinearClamp`, matching FNA) via EasyGL's existing `ApplySamplerState` GL-sampler mechanism; (2) EasyGL's SpriteBatch UV math hard-clamped to [0,1], making `Wrap`/`Mirror` unreachable even with fix #1 — removed the clamp (FNA never clamps). New `EasyGL_TextureAddressMode` pixel-readback test proves `PointWrap` vs `PointClamp` now sample distinctly (Red vs Blue) at U=1.25 past the texture edge. Vulkan/Bgfx not fixed (documented gap). See `AUDIT.md`. |
+| 270 | Add CPU-side shadow storage only where required for `GetData`; document cost | ✅      | See `AUDIT.md` "Texture2D CPU shadow storage". Confirmed `GetData` throws (no GPU readback fallback) once the level-0 shadow is freed by `SetContextRecoveryEnabled(false)`. Found and fixed a real bug: partial `SetData(level,rect,...)` after the shadow was freed silently zero-filled the rest of the GPU texture; now throws `std::runtime_error` instead, and the level-0 branch calls `MaybeFreeCpuPixels()` so partial updates don't defeat the RAM-saving feature. `extraMipLevels_` (mip >0) is never freed — documented as an open gap, not fixed (out of scope). 5 new unit tests; 1818/1818 total pass. |
 
 ---
 
@@ -439,16 +470,27 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                     | Status | Notes                                  |
 | --- | ------------------------------------------------------------------------ | ------ | -------------------------------------- |
-| 271 | Audit `Texture3D` API against FNA                                        | ⬜      | Constructors, getters, SetData/GetData |
-| 272 | Audit `TextureCube` API against FNA                                      | ⬜      | Faces, mip levels, formats             |
-| 273 | Add `Texture3D` partial box upload tests                                 | ⬜      | x/y/z region                           |
-| 274 | Add `Texture3D` partial box readback tests                               | ⬜      | x/y/z region                           |
-| 275 | Add `TextureCube` face upload/readback tests for all six faces           | ⬜      | Exact color per face                   |
-| 276 | Add `TextureCube` mip-level tests for all six faces                      | ⬜      | Distinct mip colors                    |
-| 277 | Verify `Texture3D` sampling in EasyGL stock/custom effect                | ⬜      | If API exposes 3D textures to shaders  |
-| 278 | Verify `TextureCube` sampling in EasyGL/Vulkan/Bgfx EnvironmentMapEffect | ⬜      | Cross-backend                          |
-| 279 | Add validation for invalid `CubeMapFace` values                          | ⬜      | Unit test                              |
-| 280 | Document `Texture3D` and `TextureCube` backend support matrix            | ⬜      | API coverage doc                       |
+| 271 | Audit `Texture3D` API against FNA                                        | ✅      | Found and fixed 3 real bugs, mirroring Tasks 261/265/266's Texture2D pattern: (1) `LevelCount` hardcoded to 1, ignoring `mipMap` — now computes `CalculateMipLevels(w,h)`; (2) `SetData`/`GetData` had almost no validation — null data caused a crash, negative `elementCount` risked a huge-allocation crash, negative `startIndex` caused OOB read/write, no box-bounds check on the 10-arg overloads — all fixed with guards matching `Texture2D`'s exception-type convention; (3) missing `Dispose(bool)` override left the GPU resource unreleased on explicit `Dispose()` — fixed. 31 new unit tests (new `Texture3DTests.cpp`); 1873/1873(EasyGL/Vulkan)/1877(Bgfx) pass; EasyGL ctest 1942/1944 (2 pre-existing, unrelated failures). Documented, not fixed: EasyGL backend ignores `mipMap`/`SurfaceFormat` entirely (always single-level Rgba8). See `AUDIT.md`. |
+| 272 | Audit `TextureCube` API against FNA                                      | ✅      | Found and fixed the same 3 bug classes as Task 271's `Texture3D` audit — confirmed a systemic pattern: (1) `LevelCount` hardcoded to 1 regardless of `mipMap` — now `CalculateMipLevels(size,size)`; (2) `SetData`/`GetData` had essentially zero input validation (not even a null check) — fixed with the same guard set as `Texture3D`, plus a rect-bounds check on both `SetData`/`GetData` (FNA has neither, unlike `Texture3D`'s `GetData`-only check — extends safety consistently); (3) missing `Dispose(bool)` override — fixed. Plus 2 `TextureCube`-specific findings: (4) the `SetData`/`GetData(face,data,startIndex,elementCount)` overload was missing from the API entirely — added; (5) `rect==nullptr` at `level>0` ignored `level`, always using the full face `Size` instead of `Size>>level` — fixed via a `mipDim()` helper matching `Texture2D`/`Texture3D`'s pattern. **Also found: `DDSFromStreamEXT` is a non-functional stub** that ignores its `stream` argument and always returns a blank 1×1 texture — documented, not fixed (see Task 663). 27 new unit tests (new `TextureCubeTests.cpp`); 1900/1900 (EasyGL/Vulkan) / 1904/1904 (Bgfx) pass; EasyGL ctest 1969/1971 (2 pre-existing, unrelated failures). See `AUDIT.md`. |
+| 273 | Add `Texture3D` partial box upload tests                                 | ✅      | Task 173's existing test only varies z (full-width/height slices) — would miss an x/y-axis bug. New `examples/easygl_texture3d_partial_box_test.cpp` (`EasyGL_Texture3D_PartialBox_RoundTrip` ctest) uses boxes with distinct width/height/depth, offset on every axis: (A) asymmetric off-origin box in a 4×5×3 volume, (B) single-voxel box, (C) box touching the far corner (right==width/bottom==height/back==depth, verifying exclusive-bound semantics). All 3 sub-tests pass against the existing `EasyGLTexture3DBackend::SetData`/`GetData` (glTexSubImage3D/glReadPixels-per-slice) — no bug found; confirms genuine x/y/z sub-region upload already works correctly. 1972/1972 EasyGL ctest pass (2 pre-existing unrelated failures unchanged: `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`). |
+| 274 | Add `Texture3D` partial box readback tests                               | ✅      | New `examples/easygl_texture3d_partial_box_readback_test.cpp` (`EasyGL_Texture3D_PartialBox_Readback` ctest). Unlike Task 273's binary Red/Blue split, this fills a 4×3×5 volume with a per-voxel-unique colour (`R=20+x*40, G=20+y*60, B=20+z*40`) so a `GetData` box that reads the wrong offset/axis is always detectable, not just boxes crossing a colour boundary. 3 sub-tests: (A) asymmetric off-origin box read, (B) non-zero `startIndex` into a sentinel-padded output array (mirrors Task 170B's `Texture2D` pattern), (C) box touching the far corner (`right==width`/`bottom==height`/`back==depth`). All pass — no bug found; confirms `EasyGLTexture3DBackend::GetData`'s per-slice `glReadPixels` correctly honours arbitrary x/y/z box offsets on the read path too. Also confirmed (via FNA `Texture3D.cs`/`Texture2D.cs` `GetData<T>`) that FNA itself never validates `elementCount` against box volume — only `data.Length >= startIndex+elementCount` — so CNA's matching lack of a box-volume-vs-elementCount check is faithful behavior, not a gap. 1971/1973 EasyGL ctest pass (2 pre-existing unrelated failures unchanged). |
+| 275 | Add `TextureCube` face upload/readback tests for all six faces           | ✅      | Task 172's existing test already gives pixel-exact whole-face round-trip coverage for all 6 faces via the simple 2-arg `SetData`/`GetData(face,data,elementCount)` overload — but only that overload; `TextureCubeTests.cpp`'s rect-based/startIndex overload coverage was argument-guards only (no pixel verification). New `examples/easygl_texturecube_partial_rect_test.cpp` (`EasyGL_TextureCube_PartialRect_RoundTrip` ctest) closes that gap: (A) all six faces get their own background colour plus an off-centre 2×2 White rect via the 6-arg rect overload, verified pixel-exact per face with no cross-face bleed; (B) `SetData` `startIndex` with real data (mirrors Task 170A); (C) `GetData` `startIndex` into a sentinel-padded array (mirrors Task 170B). All pass — no bug found; confirms `EasyGLTextureCubeBackend`'s `set_sub_image_2d`/FBO-`glReadPixels` correctly honour arbitrary per-face x/y rects. 1972/1974 EasyGL ctest pass (2 pre-existing unrelated failures unchanged). |
+| 276 | Add `TextureCube` mip-level tests for all six faces                      | ✅      | **Found and fixed a real bug.** New `examples/easygl_texturecube_mip_test.cpp` (`EasyGL_TextureCube_Mip_RoundTrip` ctest, mirrors Task 171's `Texture2D` mip test) initially FAILED: mip levels 1 and 2 always read back `(0,0,0)` regardless of what was written, on all six faces. Root cause: `EasyGLTextureCubeBackend`'s constructor only allocated GPU storage for level 0 (`set_image_2d`, one call per face, no level loop), while `SetData` writes via `set_sub_image_2d` (`glTexSubImage2D`), which requires the target level to already have a defined image — level 0 worked by luck, levels 1+ silently failed. Fixed by pre-allocating every mip level for every face in the constructor (`CalculateCubeMipLevels` + a per-level `set_image_2d(nullptr)` loop), mirroring `TextureCube.cpp`'s own `CalculateMipLevels`/`mipDim` logic. All 126 checks (6 faces × 21 pixels across 3 levels) now pass. 1973/1975 EasyGL ctest pass (2 pre-existing unrelated failures unchanged). **Same bug shape likely also affects `Texture3D`** (`EasyGLTexture3DBackend`'s constructor has the identical single-level-only pattern, documented but not fixed under Task 271) — not fixed here as it's outside this task's TextureCube scope; flagged for a follow-up task. |
+| 277 | Verify `Texture3D` sampling in EasyGL stock/custom effect                | ✅      | **Verified: the API does not expose `Texture3D` sampling to any shader today — no code change, audit-only finding.** No stock XNA effect (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) ever samples a `Texture3D` in real FNA/XNA either, so the only realistic path is a custom `ShaderEffect` — which has **zero** texture-binding API of any kind (`ShaderEffect`/`IEffectBackend` only expose scalar/vector/matrix uniform setters, confirmed by reading both headers). The generic path (`GraphicsDevice.Textures[slot] = tex`) is structurally blocked too: FNA's `Texture3D : Texture` (confirmed in FNA source) so it fits `TextureCollection`'s `Texture*` slots; CNA's `Texture3D : GraphicsResource` (not `Texture` — confirmed in `Texture3D.hpp`), so it cannot be assigned into `TextureCollection` at all. `EffectParameter::SetValue(Texture3D*)`/`GetValueTexture3D()` (added for Task 271/272-adjacent API completeness) has zero consumers anywhere in any backend (`EasyGL`/`Vulkan`/`Bgfx` all grepped clean) — it stores a pointer nobody ever reads. Existing `EffectParameterTests.cpp` already fully covers the only piece that actually works (pointer round-trip storage); no further test was added since there is no positive GPU-sampling behavior to lock in. Tracked as new Task 863 (see below) since fixing this is a real architecture change (making `Texture3D` inherit `Texture`, or adding a parallel 3D-texture-binding path), well outside this verify-only task's scope. See `AUDIT.md`. |
+| 278 | Verify `TextureCube` sampling in EasyGL/Vulkan/Bgfx EnvironmentMapEffect | ✅      | Unlike Task 277's custom-effect finding, stock effects have their own hardcoded cube-texture path (`GpuDrawParams::envMap`, `ITextureCubeBackend*`) that bypasses the broken generic `EffectParameter`/`TextureCollection` route entirely — so this needed real per-backend verification, not an assumption. **EasyGL**: already fully wired (`EnsureEnvMapped3DProgram`, `samplerCube uEnvMap`, existing pixel-verified `EasyGL_EnvironmentMapEffect_Readback` test, reconfirmed passing). **Vulkan**: already fully wired (dedicated descriptor set layout/pipeline, `env_map3d.frag.glsl`'s `samplerCube uEnvMap`, existing pixel-verified `Vulkan_EnvironmentMapEffect_Readback` test, reconfirmed passing). **Bgfx: found and fixed a real gap** — `DrawPrimitivesEx` never checked `params.envMapping` at all, so `EnvironmentMapEffect` silently fell through to the plain lit-textured branch (`params.lightingEnabled`), rendering with no reflection and no crash — a silent behavioral gap, not a crash. Fixed by adding a full Bgfx shader pair (`vs_env_map3d.sc`/`fs_env_map3d.sc`, mirroring the EasyGL/Vulkan reflection formula: `reflect(-E,N)` sampled via `samplerCube`), a new `envMap3DProgram_` + 6 new uniforms, and a `params.envMapping` branch in `DrawPrimitivesEx`. Required building bgfx's `shaderc` tool from source (`-DCNA_BGFX_BUILD_SHADERC=ON -DBGFX_BUILD_TOOLS=ON`, not built by default) to regenerate `bgfx_shaders.hpp`. Bgfx has no GPU readback API (documented pre-existing limitation), so added `Bgfx_EnvironmentMapEffect_Smoke` (new `examples/bgfx_env_map_test.cpp`) instead of a pixel-verified test — exercises all 4 of the EasyGL/Vulkan test's configurations across 3 frames, verifies no crash/exception. 1908/1908 Bgfx ctest pass (100%, no regressions). See `AUDIT.md`. |
+| 279 | Add validation for invalid `CubeMapFace` values                          | ✅      | Confirmed via FNA source (`TextureCube.cs`) that FNA itself never validates `cubeMapFace` — passed straight through to `FNA3D_SetTextureDataCube`/`GetTextureDataCube` with no range check. All 3 CNA backends already guarded against out-of-range face at the backend layer (`if (face < 0 \|\| face >= 6) return;` in EasyGL/Vulkan/Bgfx), so this was already memory-safe — just a silent no-op instead of a clear error. Added an `IsValidCubeMapFace()` check (throws `std::out_of_range`) to `TextureCube::SetData`/`GetData`'s 6-arg overload (the other overloads delegate to it), matching the established CNA-safety-extra pattern from Tasks 265/271/272. 7 new unit tests (below/above range for both `SetData`/`GetData`, both the simple and rect-based overloads, plus one confirming all 6 valid faces still work). 1980/1982 EasyGL ctest pass, 1915/1915 Bgfx ctest pass (100%), Vulkan 34/34 `TextureCubeTest` pass (full-suite Vulkan run separately has 2 pre-existing, order-dependent failures unrelated to this change — confirmed via git-stash bisection; see `NEXT.md` §5). |
+| 280 | Document `Texture3D` and `TextureCube` backend support matrix            | ✅      | New `docs/texture3d-texturecube-support.md`. Compiling it surfaced a significant, previously-undocumented finding: **`Texture3D`/`TextureCube::GetData` is a total silent no-op on both Vulkan and Bgfx** — neither backend overrides `GetData` (both fall through to `ITexture3DBackend`/`ITextureCubeBackend`'s empty base-class default), so the caller's output buffer is left completely untouched, with no error of any kind. Existing `Texture3DTests.cpp`/`TextureCubeTests.cpp` never caught this because their `GetData` tests are argument-guard-only (no value assertions) — confirmed by cross-referencing "34/34 TextureCubeTest pass on Vulkan" (Task 279) against the actual backend source. Also confirmed, via code-pattern comparison to Task 276's fixed bug, that Vulkan and Bgfx very likely have the same "mip level >0 GPU storage never allocated" bug as EasyGL's pre-Task-276 `TextureCube` bug, for **both** `Texture3D` and `TextureCube` (`imgInfo.mipLevels = 1` hardcoded in Vulkan; `hasMips=false` hardcoded in Bgfx) — flagged as likely (🔍), not confirmed with a reproducing test, since writing+fixing 4 more mip-level bugs is out of this documentation task's scope. Tracked as new Tasks 864 (Vulkan/Bgfx mip-level allocation) and 865 (Vulkan `GetData` readback implementation) — see `GRAPHICS_TASKS.md` below and `AUDIT.md`. **Phase 33 is now fully complete (Tasks 271–280).** |
+| 663 | Implement `TextureCube::DDSFromStreamEXT` for real (Task 272 finding)    | ⬜      | Currently a silent stub: ignores `stream`, always returns a blank 1×1 texture. Needs DDS header parsing (`isCube` flag, width/levels), reusing `Texture2D.cpp`'s `TryDecodeDds`/`DxtUtil` decode helpers, and 6×levelCount `SetData` calls. See `AUDIT.md` "TextureCube detailed audit" finding #6. |
+| 862 | Fix `Texture3D` mip levels >0: `EasyGLTexture3DBackend` constructor only allocates level 0 (Task 276 finding) | ⬜ | Same bug shape as the `TextureCube` mip-allocation bug fixed by Task 276: `EasyGLTexture3DBackend`'s constructor calls `set_image_3d` once per volume with no level loop, while `SetData` writes via `set_sub_image_3d` (`glTexSubImage3D`), which requires the target level to already exist. `SetData(level>0,...)` on a mipmapped `Texture3D` almost certainly silently fails today, mirroring what Task 276 found and fixed for `TextureCube`. Fix shape: mirror Task 276's fix — pre-allocate every mip level in the constructor via a per-level `set_image_3d(nullptr)` loop using the existing `CalculateMipLevels(w,h)` formula. Not fixed under Task 276 itself since that task's scope was `TextureCube` only; not yet verified with a reproducing test (Task 271's audit only documented the general `mipMap`-ignored limitation, not a level>0 `SetData` failure specifically). |
+| 863 | Wire `Texture3D` sampling into shaders (stock/custom effects) — currently structurally impossible (Task 277 finding) | ⬜ | FNA's `Texture3D : Texture` lets any texture (2D/3D/Cube) go into `GraphicsDevice.Textures[slot]` and be sampled by a shader; CNA's `Texture3D : GraphicsResource` (not `Texture`) cannot be assigned into `TextureCollection` at all, and `ShaderEffect`/`IEffectBackend` have no texture-binding API whatsoever (only scalar/vector/matrix uniforms) for any texture type, so there is no custom-effect workaround either. `EffectParameter::SetValue(Texture3D*)`/`GetValueTexture3D()` exist but have zero consumers in any backend — a write-only dead end. Fix requires a real architecture decision: (a) make `Texture3D` (and `TextureCube`, same issue — see Task 278) inherit `Texture` to match FNA and unify `TextureCollection` handling, likely a non-trivial refactor touching `EffectParameter`, `TextureCollection`, and every backend's texture-bind code; or (b) add a parallel, `Texture3D`-specific GPU-binding path outside `TextureCollection`. Out of scope for the Task 277/278 verify-only audits. See `AUDIT.md`. |
+| 864 | Fix Vulkan and Bgfx mip-level allocation for `Texture3D`/`TextureCube` — `mipLevels`/`hasMips` hardcoded to 1/false regardless of `mipMap` (Task 280 finding) | ⬜ | Same bug shape as Task 276's fixed EasyGL `TextureCube` bug and Task 862's tracked EasyGL `Texture3D` bug, but for the other two backends, both texture types: `VulkanGraphicsBackend::CreateTexture3D`/`CreateTextureCube` take `bool /*mipMap*/` and drop it entirely — `VulkanTexture3DBackend`/`VulkanTextureCubeBackend`'s `VkImageCreateInfo::mipLevels` is hardcoded to `1`. `BgfxTexture3DBackend`'s constructor takes `bool /*mipMap*/` and calls `bgfx::createTexture3D(..., /*hasMips=*/false, ...)`; `BgfxTextureCubeBackend` similarly hardcodes `bgfx::createTextureCube(size, false, 1, ...)`. `SetData(level>0,...)` on a mipmapped `Texture3D`/`TextureCube` on either backend almost certainly silently fails or hits a validation error, mirroring Task 276's finding — not yet reproduced with a test (flagged 🔍 in `docs/texture3d-texturecube-support.md`, not confirmed). Fix shape: mirror Task 276 — compute the real level count from `mipMap` and pre-allocate every level at image/texture creation time. |
+| 865 | Implement real GPU readback for `Texture3D`/`TextureCube::GetData` on Vulkan (Task 280 finding) | ⬜ | Neither `VulkanTexture3DBackend` nor `VulkanTextureCubeBackend` overrides `GetData` — both silently fall through to `ITexture3DBackend`/`ITextureCubeBackend`'s empty base-class default (`virtual void GetData(...) const {}`). Calling `Texture3D::GetData`/`TextureCube::GetData` on Vulkan leaves the caller's buffer completely untouched, with no error of any kind — a severe, currently undocumented-until-now silent-failure gap (same "fails silently" severity class as Task 663's `DDSFromStreamEXT` stub). Existing unit tests never caught this because `GetData` test coverage is argument-guard-only (no value assertions) — see `docs/texture3d-texturecube-support.md` for the full explanation of why "34/34 tests pass on Vulkan" is consistent with this bug. Fix shape: implement `vkCmdCopyImageToBuffer` + a host-visible staging buffer, mirroring the upload path's staging-buffer pattern in reverse, respecting `level`/`x,y,z,face`/`w,h,depth`. Bgfx has no equivalent fix — its lack of a GPU readback API is an accepted, already-documented, project-wide limitation, not a bug to fix. |
+| 866 | Set `Name` on `BlendState`/`DepthStencilState`/`RasterizerState` static presets, matching FNA (Task 291 finding) | 🟡 | Task 291's `SamplerState` audit found FNA's private preset constructor sets `Name` (e.g. `"SamplerState.PointClamp"`) on every preset; CNA's `SamplerState` didn't, and was fixed under Task 291. Checking sibling state classes during that audit found the identical gap in all 3 of `BlendState`/`DepthStencilState`/`RasterizerState`. **`BlendState`'s portion fixed under Task 301**, **`DepthStencilState`'s portion fixed under Task 311** (both their own natural audit tasks), matching Task 291's fix shape exactly. **`RasterizerState` remains open** — not yet fixed, has its own later audit task in Phase 38's list where this should land naturally. |
+| 867 | Implement real GPU upload for `Texture2D::SetData(level>0,...)` on Vulkan and Bgfx, and fix EasyGL's mip-incomplete-texture black-screen bug (Task 298/299 findings) | ⬜ | **Severe, silent-failure bug, same class as Task 865.** `ITextureBackend::UpdatePixelsLevel(level, rgba, w, h)` (the virtual hook `Texture2D::SetData(level, rect, data, ...)` calls for `level>0`) has an empty no-op default body in `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp`, and **neither `VulkanTextureBackend` nor the Bgfx texture backend overrides it** — confirmed by grep, zero matches in either backend's `.cpp`. Calling `Texture2D::SetData(level>0, ...)` on a mipmapped `Texture2D` on Vulkan or Bgfx silently does nothing; the mip level's GPU content is whatever it was at texture creation (uninitialized/zero), with no error of any kind. Only EasyGL implements this correctly (confirmed working via Task 171's existing `easygl_texture2d_mip_test.cpp` and this session's new Task 298 test). Found while building Task 298's mipmap-filter pixel test: the Vulkan run showed the expected-high-mip-level colour never appearing, which traced back to this — not a filter/sampler issue at all, a data-upload issue. **Additional, related findings needed for a complete fix on Vulkan specifically** (found while tracing this): `VulkanTextureBackend`'s `VkImageCreateInfo::mipLevels` is hardcoded to `1` (same bug shape as Task 864's `Texture3D`/`TextureCube` finding, but for `Texture2D` — previously undocumented), its `VkImageViewCreateInfo::subresourceRange.levelCount` is also hardcoded to `1` (so even a real multi-level image wouldn't be visible past level 0 through this view), and `VulkanGraphicsBackend::ApplySamplerState`'s `VkSamplerCreateInfo` never sets `minLod`/`maxLod` (both default to `0.0`, clamping the shader's automatic LOD selection to level 0 regardless of `mipmapMode`) — all three must be fixed together, not just `UpdatePixelsLevel`, for Vulkan `Texture2D` mips to work end-to-end. Bgfx's fix shape is unconfirmed beyond the missing `UpdatePixelsLevel` override — not investigated further this session. **Task 299 found a related, EasyGL-specific finding from the same root cause** (Texture2D mip-level metadata never threaded into backend resource creation, manifesting differently per backend): `TextureFilter::Anisotropic` (and every other `*Mip*`-suffixed `TextureFilter` value — `LinearMipPoint`, `PointMipLinear`, all four `Min*Mag*Mip*` combinations) maps to a GL minFilter with a `_MIPMAP_` suffix (e.g. `LinearMipmapLinear`), which OpenGL requires a *complete* mipmap chain for; since EasyGL never sets `GL_TEXTURE_MAX_LEVEL` to match each texture's real level count (confirmed via `easygl_texture_anisotropic_effect_test.cpp`: assigning `TextureFilter::Anisotropic` to an ordinary single-level `Texture2D::CreateFromPixels` texture — the overwhelmingly common case for real game textures — renders **solid black**, a classic GL mipmap-incompleteness symptom). Vulkan does not share this specific symptom (confirmed via the same test: renders correctly even on a single-level texture) — its issue is purely the missing `maxLod`/`mipLevels`/`levelCount` plumbing above, not incompleteness. Fix shape: for Vulkan/Bgfx, mirror the existing level-0 upload path (staging buffer for Vulkan, `bgfx::updateTexture2D` for Bgfx) generalized to arbitrary `level`, plus the three Vulkan-side allocation/view/sampler fixes above; for EasyGL, set `GL_TEXTURE_MAX_LEVEL` on every `Texture2D` at creation time to match its real level count (1 for non-mipmapped, `CalculateMipLevels(w,h)-1` for mipmapped), which requires threading `mipMap`/level-count into `EasyGLGraphicsBackend::CreateTexture` (currently takes no such parameter, unlike `CreateTexture3D`/`CreateTextureCube`). Not fixed here — this is a multi-part, three-backend-touching fix needing its own dedicated task and full regression pass, not something to bundle into a pixel-test task. |
+| 868 | Implement real per-`Blend`/`BlendFunction` blend-state mapping on Vulkan; fix separate-alpha/blend-function gaps on Bgfx (Task 304 finding) | ⬜ | **Massive, severe, previously undiscovered bug — Vulkan's blend state support is almost entirely fake.** `VulkanGraphicsBackend::ApplyBlendState` ignores every one of its 6 parameters (`colorSrcBlend`/`alphaSrcBlend`/`colorDstBlend`/`alphaDstBlend`/`colorBlendFunc`/`alphaBlendFunc`) except to compute a single boolean: `blendEnabled_ = !(colorSrcBlend==0 && colorDstBlend==1 && alphaSrcBlend==0 && alphaDstBlend==1)` (i.e. "is this exactly `BlendState.Opaque`'s values?"). Whenever that's false — `BlendState.Additive`, `AlphaBlend`, any custom `BlendState`, literally anything except `Opaque` — every pipeline hardcodes `srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA`, `dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA`, `srcAlphaBlendFactor=VK_BLEND_FACTOR_ONE`, `dstAlphaBlendFactor=VK_BLEND_FACTOR_ZERO`, `colorBlendOp=alphaBlendOp=VK_BLEND_OP_ADD` (confirmed at 9 separate `cbs{}` pipeline-creation call sites in `VulkanGraphicsBackend.cpp` — this is baked into every pipeline variant, not one central place). That hardcoded equation happens to be exactly `BlendState.NonPremultiplied`'s — meaning `BlendState.AlphaBlend` (which requires `colorSrc=One`, premultiplied input) is silently rendered using `NonPremultiplied`'s equation instead, and `BlendState.Additive` (`colorSrc=SourceAlpha, colorDst=One`) is *also* silently rendered as `NonPremultiplied`. Found via Task 304's `AlphaBlend` pixel test: expected `R≈128` (correct premultiplied-input math), got `R=64` (exactly the double-alpha-multiplication signature of the wrong, hardcoded equation) — confirmed on real Vulkan hardware (AMD RADV), not a theoretical read of the code. **Bgfx has a narrower, more scoped gap** (found while cross-checking): `BgfxGraphicsBackend::ApplyBlendState`'s `XnaBlendToBgfxFactor` helper *does* correctly map all 12 `Blend` enum values individually, and color source/destination factors are applied correctly via `BGFX_STATE_BLEND_FUNC(src,dst)` — but `alphaSrcBlend`/`alphaDstBlend` are unused parameters (commented out in the signature), so the alpha channel always reuses the color channel's factors instead of its own, and `colorBlendFunc`/`alphaBlendFunc` (`BlendFunction`: `Add`/`Subtract`/`ReverseSubtract`/`Max`/`Min`) are entirely ignored — always implicitly `Add`. **EasyGL is fully, correctly implemented** for contrast/confirmation: `ApplyBlendState` uses `glBlendFuncSeparate` with a complete, correct per-value `Blend`→`GLenum` mapping for all 12 values, and `glBlendEquationSeparate` with a complete, correct `BlendFunction`→`GLenum` mapping for all 5 values, independently for color and alpha channels — this is why Task 304's EasyGL test passed exactly as predicted while Vulkan's failed. **This affects most/all of Phase 36's remaining Vulkan pixel tests** (306 `Additive`, 307 separate color/alpha functions, 308 separate blend factors, 309 `BlendFactor`/`MultiSampleMask`) — expect them to reveal the SAME root cause repeatedly on Vulkan until this is fixed; do not re-diagnose it as a new bug each time. **Update (Task 309):** confirmed a fifth time via `Vulkan_BlendState_BlendFactor` (`Blend::BlendFactor` never selects `VK_BLEND_FACTOR_CONSTANT_COLOR` in the hardcoded equation, so the correctly-set `vkCmdSetBlendConstants` value is moot on Vulkan) — no new information, same root cause. Task 309 also fixed the Bgfx-specific `BlendFactor`-propagation piece of Bgfx's narrower gap (`blendFactorPacked_` now passed to all 5 `bgfx::setState()` call sites); Bgfx's remaining gap — `alphaSrcBlend`/`alphaDstBlend` unused, `colorBlendFunc`/`alphaBlendFunc` always `Add` — is still open and unaffected by that fix. Fix shape for Vulkan: replace the single hardcoded `cba`/`cbs` blend-attachment setup (duplicated across ~9 pipeline-creation sites) with a real `Blend`→`VkBlendFactor` and `BlendFunction`→`VkBlendOp` mapping (mirroring EasyGL's/Bgfx's helper-function pattern), threading the actual `colorSrcBlend`/`alphaSrcBlend`/`colorDstBlend`/`alphaDstBlend`/`colorBlendFunc`/`alphaBlendFunc` values into every pipeline variant — likely needs the blend state baked into the existing per-pipeline cache key (mirroring how fill-mode/MSAA/depth already vary pipeline selection) since Vulkan pipelines fix blend state at creation time. Fix shape for Bgfx: thread `alphaSrcBlend`/`alphaDstBlend` through a `BGFX_STATE_BLEND_FUNC_SEPARATE`-style call, and map `colorBlendFunc`/`alphaBlendFunc` via `BGFX_STATE_BLEND_EQUATION_*`/`BGFX_STATE_BLEND_EQUATION_SEPARATE`. Not fixed here — large, correctness-critical, multi-pipeline-site change needing its own dedicated task and full regression pass on both backends. |
+| 869 | `GraphicsDevice` state properties (`BlendState`/`DepthStencilState`/`RasterizerState`) use value semantics instead of FNA's reference semantics (Task 310 finding) | ⬜ | FNA's `GraphicsDevice.BlendState`/`DepthStencilState`/`RasterizerState` setters store a **reference** to the assigned C# object (e.g. `nextBlend = value;`), since these are C# reference types — mutating that same object *after* assigning it to the device changes what's applied on the next `ApplyState()`/Draw, with no copy ever taken. CNA's `GraphicsDevice` stores all 3 (plus `SamplerStateCollection`'s per-slot `SamplerState`s) **by value** (`blendState_`/`depthStencilState_`/`rasterizerState_` are plain value members, confirmed via `GraphicsDevice.hpp`) — `setBlendStateProperty`/equivalent setters copy the struct rather than aliasing it, so mutating the original object post-assignment is silently a no-op on the device's already-applied copy, unlike real XNA/FNA. This is a deliberate, consistent, project-wide architectural pattern, not a `BlendState`-specific oversight — confirmed no game/example code in this repo relies on post-assignment mutation taking effect. New test `GraphicsDeviceDefaultStateTests.cpp::MutatingBlendStateAfterAssignmentDoesNotAffectDevice` pins CNA's current (deliberate) value-copy behavior for `BlendState`; `DepthStencilState`/`RasterizerState`/`SamplerState` are presumed to share the identical pattern (same value-member shape in `GraphicsDevice.hpp`) but not independently pinned by a test yet. Fix shape, if ever pursued: would require every affected `GraphicsDevice` state property to become a reference/pointer type (e.g. `std::shared_ptr<BlendState>`) project-wide — a real architecture decision with ripple effects across all 4 state classes and their call sites, not a small patch. One deliberate upside already noted (Tasks 291/301): because CNA's static presets (`BlendState::Opaque` etc.) are C++ `static const`, they structurally cannot be accidentally mutated the way FNA's mutable `static readonly` reference-type presets technically can (`BlendState.Opaque.AlphaBlendFunction = ...;` compiles in C# and corrupts the shared static instance app-wide) — so this value-semantics deviation trades away one XNA/FNA behavior in exchange for eliminating a different, real XNA/FNA footgun. Not fixed here — needs its own dedicated architecture task, and only if a concrete game use case ever needs it. |
+| 870 | Implement real `DepthBufferFunction` mapping and full stencil-test support on Vulkan (Task 313 finding) | ⬜ | **Massive, severe, previously undiscovered bug — Vulkan's `DepthStencilState` support is almost entirely fake, the same shape and severity class as Task 868's `BlendState` finding.** `VulkanGraphicsBackend::ApplyDepthStencilState` takes 15 parameters but only stores 2 of them (`depthEnable`→`depthTestEnabled_`, `depthWriteEnable`→`depthWriteEnabled_`); the other 13 are unused (commented-out parameter names): `depthFunc`, `stencilEnable`, `stencilFunc`, `stencilPass`, `stencilFail`, `stencilDepthFail`, `stencilMask`, `stencilWriteMask`, `referenceStencil`, `twoSidedStencilMode`, `ccwStencilFunc`, `ccwStencilPass`, `ccwStencilFail`, `ccwStencilDepthFail`. Concretely: (1) `DepthStencilState.DepthBufferFunction` is completely ignored — every one of the 7 separate Vulkan 3D pipeline-creation functions hardcodes its own `VkPipelineDepthStencilStateCreateInfo::depthCompareOp` constant instead (confirmed via grep: 2 functions hardcode `VK_COMPARE_OP_LESS`, the other 5 hardcode `VK_COMPARE_OP_LESS_OR_EQUAL` — an arbitrary split unrelated to what any caller actually requests, and neither ever matches a non-`LessEqual`/non-`Less` request like `Greater`/`Always`/`Never`/`Equal`/`NotEqual`/`GreaterEqual`). (2) Stencil testing is **completely non-functional** — confirmed via grep that `stencilTestEnable`/`.front`/`.back`/any `VK_STENCIL_OP_*` never appear anywhere in the Vulkan backend; every pipeline's `VkPipelineDepthStencilStateCreateInfo` leaves `stencilTestEnable` at its zero-initialized `VK_FALSE` default regardless of `DepthStencilState.StencilEnable`. Found while designing Task 313's `DepthBufferWriteEnable` pixel test: an initial test design comparing a third quad at the SAME depth as an earlier one failed on Vulkan for the wrong reason (an equal-depth compare always fails under the hardcoded strict `VK_COMPARE_OP_LESS` pipeline, unrelated to the property actually under test) — redesigned with an unambiguous in-between depth to isolate `DepthBufferWriteEnable` cleanly, which now passes correctly on both EasyGL and Vulkan. **EasyGL and Bgfx are both fully, correctly implemented by contrast** (confirmed by direct code reading): EasyGL's `ApplyDepthStencilState` calls real `set_depth_func`/`set_stencil_func_separate`/`set_stencil_op_separate`/`set_stencil_mask_separate` for front AND back faces independently; Bgfx's maps `depthFunc` via a complete `BGFX_STATE_DEPTH_TEST_*` switch and builds real front/back `BGFX_STENCIL_*` state via `BuildBgfxStencil`. **Caveat added by Task 315**: EasyGL's *state-application code* was always correct, but a SEPARATE bug (now fixed, see Task 315) meant no EasyGL window ever had a physical stencil buffer at all, making the stencil test moot there too until that fix landed — so "EasyGL is fully correct" was true of the code but not, until Task 315, of the actual runtime behavior. **This affects Phase 37's remaining Vulkan pixel tests** — Task 314 (`DepthBufferFunction` pixel test: `Less`/`LessEqual`/`Greater`/`Always`/`Never`) and Tasks 315–319 (stencil enable, masks, front-face ops, two-sided ops, `ReferenceStencil`) will all hit this SAME root cause on Vulkan; do not re-diagnose it as a new bug each time. **Update (Task 314):** confirmed directly and completely — of 5 `CompareFunction` checks (`Always`/`Never`/`Less`/`LessEqual`/`Greater`), only `Less` passes on Vulkan (the one that happens to coincide with the hardcoded `VK_COMPARE_OP_LESS`); the other 4 fail in exactly the pattern predicted by "every comparison actually evaluates as strict-Less regardless of what's requested" — no new information, full reconfirmation of the diagnosis above. **Update (Task 315):** confirmed directly for stencil specifically — `StencilEnable=true` fails to gate fragments on Vulkan at all (both halves of a differential stencil-compare test show the same result), while `StencilEnable=false` passes coincidentally (matches "no gating ever happens" either way). **Also found an additional, compounding root cause specific to Vulkan**: `VulkanGraphicsBackend::FindDepthFormat()` checks `VK_FORMAT_D32_SFLOAT` (a stencil-LESS format) *before* the two stencil-capable formats (`VK_FORMAT_D32_SFLOAT_S8_UINT`/`VK_FORMAT_D24_UNORM_S8_UINT`) — since `D32_SFLOAT` has mandatory support on essentially all Vulkan hardware, the chosen depth attachment almost never has a stencil aspect at all, so fixing `ApplyDepthStencilState` alone would NOT be sufficient; this format-preference order needs fixing too, as part of the same effort. **Update (Task 316):** confirmed a third time via `StencilMask`/`StencilWriteMask` — 2 of 4 checks fail, the 2 that expect a PASS result pass only by coincidence (nothing ever gates on Vulkan, so every column renders green regardless of mask), while the 2 contrast checks correctly fail — no new information, same root cause. **Update (Task 317):** confirmed a fourth time via front-face `StencilFail`/`StencilDepthBufferFail`/`StencilPass` operations — 3 of 4 checks pass on Vulkan only by coincidence (nothing ever gates, so the read-back's `Equal` compare trivially "passes" regardless of the actual buffer content), while a dedicated contrast column (same setup, deliberately wrong reference value, must reject) correctly fails, again revealing the bug cleanly — no new information, same root cause. Fix shape: thread `depthFunc` into each of the 7 pipeline-creation functions' `depthCompareOp` (mirroring EasyGL's/Bgfx's `CompareFunction`→native-enum helper pattern, likely needs `depthFunc` baked into the existing per-pipeline cache key alongside `depthTest`/`depthWrite`, since Vulkan pipelines fix depth-compare state at creation time); add a real `VkStencilOpState` front/back mapping (`CompareFunction`→`VkCompareOp`, `StencilOperation`→`VkStencilOp`) plus `vkCmdSetStencilReference`/`vkCmdSetStencilCompareMask`/`vkCmdSetStencilWriteMask` for the dynamic mask/reference values; and reorder/extend `FindDepthFormat()` to prefer a stencil-capable format when stencil is actually needed. Not fixed here — large, correctness-critical, multi-pipeline-site change needing its own dedicated task and full regression pass, exactly like Task 868. |
+| 871 | `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` and the `stencil` clear value entirely, on every backend (Task 315 finding) | ⬜ | `GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)` explicitly discards its `stencil` parameter (`(void)stencil;`) and never checks `hasClearFlag(options, ClearOptions::Stencil)` — confirmed via reading the full function body, there is no code path that clears the stencil buffer to any value, requested or not. This is a real divergence from FNA, where `GraphicsDevice.Clear(Color)` (the single-arg overload) actually clears `Target \| DepthBuffer \| Stencil` together, and the full overload threads `stencil` through to `FNA3D_Clear` correctly. Confirmed on EasyGL specifically: none of `EasyGLGraphicsBackend::Clear`/`ClearColorAndDepth`/`ClearDepth` ever pass `::easygl::ClearFlags::Stencil` to the underlying `device.clear(...)` call. On Vulkan, the effect is masked by a separate quirk: `stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE` on every render pass means the stencil aspect's initial content is undefined at the start of each render pass regardless of what `Clear()` does — so the two bugs compound rather than one hiding the other. Found while designing Task 315's `StencilEnable` pixel test: had to work around this by explicitly "stamping" a known stencil value via a real draw call instead of relying on `GraphicsDevice::Clear(ClearOptions::Stencil, ...)`, which would otherwise silently do nothing. Fix shape: add stencil clearing to `GraphicsDevice::Clear` (threading the requested `stencil` value into each backend's `Clear`/`ClearColorAndDepth`/`ClearDepth`-equivalent calls, likely needs new `ClearColorDepthAndStencil`/`ClearStencil` backend methods mirroring the existing depth ones) and set Vulkan's `stencilLoadOp` appropriately (`VK_ATTACHMENT_LOAD_OP_CLEAR` when a stencil clear is requested, `LOAD` otherwise, matching the existing depth `loadOp` handling). Not fixed here — small in principle but touches all 3 backends' `Clear`-family methods; needs its own dedicated task with a real pixel/unit test proving the stencil clear value round-trips correctly, not bundled into Phase 37's per-property verification tasks. |
 
 ---
 
@@ -456,16 +498,16 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                 | Status | Notes                        |
 | --- | ---------------------------------------------------------------------------------------------------- | ------ | ---------------------------- |
-| 281 | Create canonical table of all XNA/FNA `SurfaceFormat` enum values                                    | ⬜      | Include numeric values       |
-| 282 | For each format, define CPU bytes-per-pixel or compressed block size                                 | ⬜      | Shared helper                |
-| 283 | Implement `SurfaceFormatHelper::GetSize` equivalent if missing                                       | ⬜      | Required for SetData/GetData |
-| 284 | Implement/verify `Color` format mapping: EasyGL/Vulkan/Bgfx                                          | ⬜      | RGBA/BGRA correctness        |
-| 285 | Implement/verify `Bgr565`, `Bgra5551`, `Bgra4444` packing/unpacking                                  | ⬜      | Golden tests                 |
-| 286 | Implement/verify `NormalizedByte2/4`, `NormalizedShort2/4` texture/storage behavior if supported     | ⬜      | Or throw clearly             |
-| 287 | Implement/verify float formats: `Single`, `Vector2`, `Vector4`                                       | ⬜      | GL/Vulkan format mapping     |
-| 288 | Implement/verify half-float formats: `HalfSingle`, `HalfVector2`, `HalfVector4`                      | ⬜      | GL/Vulkan format mapping     |
-| 289 | Implement/verify HDR formats: `HdrBlendable`, `Rgba1010102`, `Rgba64`                                | ⬜      | Document fallback            |
-| 290 | Add test that every `SurfaceFormat` either works or throws a deliberate unsupported-format exception | ⬜      | No silent wrong mapping      |
+| 281 | Create canonical table of all XNA/FNA `SurfaceFormat` enum values                                    | ✅      | **Found and fixed a real enum-conformance bug** while building the table. `docs/surface-format-support.md`'s new canonical table (27 values, 0–26, sourced directly from FNA's `SurfaceFormat.cs`) exposed that CNA's enum diverged from FNA starting at ordinal 20: CNA declared 7 invented "Srgb" variants (`ColorSrgb`, `Bgr565Srgb`, `Bgra5551Srgb`, `Bgra4444Srgb`, `Dxt1Srgb`, `Dxt3Srgb`, `Dxt5Srgb`) with no FNA equivalent at those ordinals, while omitting FNA's real values (`ColorBgraEXT`, `ColorSrgbEXT`, `Dxt5SrgbEXT`, `Bc7EXT`, `Bc7SrgbEXT`, `ByteEXT`, `UShortEXT`) entirely — a direct violation of the project's "enum names must match XNA/FNA exactly" rule. Fixed `SurfaceFormat.hpp` to match FNA's 27 values exactly, same order/ordinals. Blast radius was small (grepped first): only one example test referenced the old names, since `Texture::ValidateFormat` only special-cases `Color` and throws for everything else — updated it to use the real FNA names instead. 7 new ordinal-value unit tests added to the pre-existing `SurfaceFormatTests.cpp` (which already had 0–19 pinned, with a comment implying 20+ was known-incomplete) for ordinals 20–26. Verified across all 3 backends: EasyGL 1987/1989, Bgfx 1922/1922 (100%), Vulkan 1924/1927 (all pre-existing/documented failures, no regressions). |
+| 282 | For each format, define CPU bytes-per-pixel or compressed block size                                 | ✅      | Found FNA already has the exact shared helper this task and Task 283 are asking for: `Texture.GetBlockSizeSquaredEXT(SurfaceFormat)` and `Texture.GetFormatSizeEXT(SurfaceFormat)`, both public static methods in FNA's `Texture.cs` (region "Static SurfaceFormat Size Methods") — real FNA API, not a CNA invention, so ported these directly onto CNA's `Texture` class rather than inventing a separate `SurfaceFormatHelper` class name (matches the project rule to follow FNA's actual API shape over the plan's guessed name). Ported both switch statements line-by-line against FNA source, covering all 27 `SurfaceFormat` values (fixed by Task 281): `GetBlockSizeSquaredEXT` returns 16 for the 6 block-compressed formats (`Dxt1/3/5`, `Dxt5SrgbEXT`, `Bc7EXT`, `Bc7SrgbEXT`) and 1 for everything else; `GetFormatSizeEXT` returns the exact per-format byte size (8/16/1/2/4/8/16 depending on format). Also found and fixed a pre-existing, unrelated conformance gap while touching this file: `Texture::ValidateFormat` (a CNA-only extension, not in FNA) was missing its `NOXNA` tag — added it. 22 new unit tests in new `TextureTests.cpp` (exhaustive per-format coverage for both methods, plus invalid-enum-value throws `std::out_of_range` for both). Verified across all 3 backends: EasyGL 1998/2000, Vulkan (targeted `TextureTest.*` clean), Bgfx 1933/1933 (100%), no regressions. Lays the groundwork for Task 283 — FNA's same region also has `ValidateGetDataFormat`/`GetPixelStoreAlignment`, which build on `GetFormatSizeEXT` and are the actual "required for SetData/GetData" consumers; not yet ported (Task 283's scope). |
+| 283 | Implement `SurfaceFormatHelper::GetSize` equivalent if missing                                       | ✅      | Ported FNA's remaining "Static SurfaceFormat Size Methods": `Texture.GetPixelStoreAlignment(format)` (`min(8, GetFormatSizeEXT(format))`, the OpenGL 2.1 `GL_PACK/UNPACK_ALIGNMENT` cap) and `Texture.ValidateGetDataFormat(format, elementSizeInBytes)` (throws unless `elementSizeInBytes` evenly divides the format's byte size). Both are `internal` in FNA; made `public static` on CNA's `Texture` since 3 of the 4 real call sites (`Texture3D::GetData`, `TextureCube::GetData`, `GraphicsDevice::GetBackBufferData`) aren't subclasses of `Texture` in CNA (Task 277/863 finding) and so couldn't reach a `protected` member — a documented, intentional visibility deviation (see `AUDIT.md`), not a CNA extension. Wired `ValidateGetDataFormat` into all 4 real call sites, matching FNA's `Texture2D.cs`/`Texture3D.cs`/`TextureCube.cs`/`GraphicsDevice.cs` exactly: `Texture2D::GetData` (both overloads), `Texture3D::GetData`, `TextureCube::GetData`, `GraphicsDevice::GetBackBufferData`. Currently a no-op in practice everywhere it's called (always `Color`/4-byte-elements, which always divides evenly), since `Texture::ValidateFormat` blocks every other format before this logic would run — but it's the correct, forward-looking infrastructure for when later Phase 34 tasks add real non-`Color` format support. 6 new unit tests (exact-division passes, uneven-division throws `std::invalid_argument`, invalid-format throws `std::out_of_range`, plus alignment-clamping checks). Verified across all 3 backends: EasyGL 2004/2006, Vulkan 1942/1944 (2 pre-existing failures, unrelated), Bgfx 1939/1939 (100%) — no regressions from wiring the new check into 4 existing `GetData` call sites. |
+| 284 | Implement/verify `Color` format mapping: EasyGL/Vulkan/Bgfx                                          | ✅      | **Found and fixed a real Vulkan gamma bug** — channel order (RGBA/BGRA) itself was already correct everywhere (confirmed via dozens of existing exact-color pixel-readback tests), but all of those only use saturated 0/255 values, which can't reveal a linear-vs-sRGB colorspace mixup (both are sRGB-curve fixed points). Testing with a genuine mid-range value (128) found: `VulkanTextureBackend` (`Texture2D`) created its image as `VK_FORMAT_R8G8B8A8_SRGB` (inconsistent with `Texture3D`/`TextureCube`/`RenderTarget2D`'s `UNORM`, and wrong regardless — FNA's `SurfaceFormat.Color` is linear, not sRGB), **and** the Vulkan swapchain surface format selection explicitly preferred `VK_FORMAT_B8G8R8A8_SRGB`, applying an unwanted gamma encode to every presented pixel. The two bugs partially canceled for textured content (decode-then-encode ≈ identity) but left all non-textured rendering (vertex colors, lighting output, blends) badly wrong — a nominal 128 read back as 188. Fixed both to `UNORM`. New `examples/vulkan_texture_srgb_test.cpp` (`Vulkan_Texture2D_ColorFormat_Linear` ctest) proves it: before the fix, vertex-color vs. textured mid-grey diverged by 60; after, both read exactly 128. Verified EasyGL and Bgfx have no equivalent bug (no `SRGB` reference anywhere in either backend). Full Vulkan ctest suite: 1944/1945 (only the pre-existing, already-documented `Vulkan_DepthBias` failure remains) — no regressions from this pipeline-wide fix. See `AUDIT.md` and `docs/surface-format-support.md`. |
+| 285 | Implement/verify `Bgr565`, `Bgra5551`, `Bgra4444` packing/unpacking                                  | ✅      | Verified, not greenfield: all 3 `PackedVector` types already existed (`Bgr565.hpp`/`Bgra5551.hpp`/`Bgra4444.hpp`) with pack/unpack math matching FNA's `Bgr565.cs`/`Bgra5551.cs`/`Bgra4444.cs` bit layouts exactly (confirmed line-by-line: 5-6-5, 5-5-5-1, 4-4-4-4 channel order and shift amounts), and `tests/PackedVectorGolden.md` already had a golden reference table for all three (computed independently in Python against FNA's arithmetic). What was missing: the golden values weren't actually pinned in `PackedVectorTests.cpp` — `Bgr565` only tested Red/Half (not Green/Blue), and `Bgra4444`/`Bgra5551` had zero golden-value tests at all (only zero/max/equality checks). Added 8 new golden tests (`Bgr565Test.GoldenGreen/GoldenBlue`, `Bgra4444Test.GoldenRedOpaque/GoldenGreenHalfAlpha/GoldenHalf`, `Bgra5551Test.GoldenRedOpaque/GoldenBlueTransparent/GoldenHalfOpaque`) pinning every remaining row from the golden doc (packed hex value + `ToVector4()` output). No bug found — these 3 formats' CPU-side packing was already correct; this task closed the test-coverage gap. Not in scope here (per Phase 34's one-task-at-a-time rule): actual GPU texture support for these formats — `Texture::ValidateFormat` still throws for everything except `Color`, same as all other non-Color formats (Task 290's scope). 2012/2014 EasyGL ctest pass (2 pre-existing, unrelated failures unchanged: `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`). |
+| 286 | Implement/verify `NormalizedByte2/4`, `NormalizedShort2/4` texture/storage behavior if supported     | ✅      | **Found the task's own premise was half wrong: `NormalizedShort2`/`NormalizedShort4` are not `SurfaceFormat` texture values in FNA at all** — confirmed via FNA's actual `SurfaceFormat.cs` (only `NormalizedByte2`/`NormalizedByte4` exist there); `NormalizedShort2`/`NormalizedShort4` exist solely as `VertexElementFormat` values (`VertexElementFormat.cs`), a vertex-attribute concept, not a texture-storage one. CNA's `VertexElementFormat` enum already matches FNA exactly (ordinals 8/9), and both Vulkan (`VK_FORMAT_R16G16(B16A16)_SNORM`) and Bgfx (`AttribType::Int16`, normalized) already map them to real GPU vertex formats with existing unit/smoke-test coverage (`VertexDeclarationTests.cpp`, `VertexElementTests.cpp`, `vulkan_vertex_format_test.cpp`, `bgfx_vertex_format_test.cpp`) — no gap, no fix needed; EasyGL's vertex handling is stride-keyed rather than per-format (a separate, already-documented, out-of-scope limitation). For the real `SurfaceFormat` values, `NormalizedByte2`/`NormalizedByte4`: `Texture.GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` already correctly handle both (Task 282, verified against FNA byte-for-byte: 2 and 4 bytes respectively) with existing exhaustive unit tests. The one genuine, scoped gap found: no test anywhere confirmed `Texture2D` construction actually throws for these two formats (`Texture::ValidateFormat` blocks every non-`Color` format, but this specific pair was absent from the representative Task 176 throw-test list). Added `UnsupportedFormatConstructionTest.NormalizedByte2Throws`/`NormalizedByte4Throws` to `Texture2DTests.cpp`, confirming `std::runtime_error` for both. All 4 `PackedVector` CPU types (`NormalizedByte2/4`, `NormalizedShort2/4`) already existed with full golden-value test coverage already in place (unlike Task 285's `Bgr565`/`Bgra5551`/`Bgra4444`, which needed golden tests added) — no test-coverage gap there either. 2016/2018 EasyGL ctest pass serially (2 pre-existing, unrelated failures unchanged: `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`; `EasyGL_TransformMatrix_Translation` failed once under parallel `-j` but passed in isolation and on a serial rerun — parallel-execution flakiness, same class as `EasyGL_SkinnedBones`, not a regression). |
+| 287 | Implement/verify float formats: `Single`, `Vector2`, `Vector4`                                       | ✅      | Same verify-only shape as Tasks 285/286: `Texture::GetBlockSizeSquaredEXT` (1, non-compressed) and `GetFormatSizeEXT` (4/8/16 respectively) were already correctly ported from FNA (Task 282) with existing exhaustive unit tests; no backend (EasyGL/Vulkan/Bgfx) special-cases any of these 3 formats — confirmed via grep, all fall through to the universal "only `Color` is GPU-backed" path. The only gap: no test confirmed `Texture2D` construction actually throws for these 3 formats. Added `UnsupportedFormatConstructionTest.SingleThrows`/`Vector2Throws`/`Vector4Throws` to `Texture2DTests.cpp`, mirroring Task 286's additions. No bug found, no GPU mapping work needed (real GL/Vulkan float-texture mapping is out of scope until `Texture::ValidateFormat` itself is widened to accept non-`Color` formats, which is Task 290's/a later task's concern, not this one's). 2017/2019 EasyGL ctest pass serially (2 pre-existing, unrelated failures unchanged: `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`). |
+| 288 | Implement/verify half-float formats: `HalfSingle`, `HalfVector2`, `HalfVector4`                      | ✅      | Same verify-only shape as Tasks 285–287: `GetBlockSizeSquaredEXT`(1)/`GetFormatSizeEXT` (`HalfSingle`=2/`HalfVector2`=4/`HalfVector4`=8) already correct (Task 282, already tested); no backend special-cases any of the 3 (confirmed via grep, all fall through to the "only `Color` is GPU-backed" path). Added `UnsupportedFormatConstructionTest.HalfSingleThrows`/`HalfVector2Throws`/`HalfVector4Throws` to `Texture2DTests.cpp`. No bug found. Real GL/Vulkan half-float texture mapping remains out of scope until `Texture::ValidateFormat` is deliberately widened (a later task, not 285–289's verify-only scope). 2020/2022 EasyGL ctest pass serially (2 pre-existing, unrelated failures unchanged). |
+| 289 | Implement/verify HDR formats: `HdrBlendable`, `Rgba1010102`, `Rgba64`                                | ✅      | Same verify-only shape as Tasks 285–288: `GetBlockSizeSquaredEXT`(1)/`GetFormatSizeEXT` (`Rgba1010102`=4/`Rgba64`=8/`HdrBlendable`=8) already correct (Task 282, already tested); fallback status already documented in `docs/surface-format-support.md` (Task 281 — `HdrBlendable` noted there as FNA's alias for RGBA16F, same underlying format as `HalfVector4`); no backend special-cases any of the 3. Added `UnsupportedFormatConstructionTest.HdrBlendableThrows`/`Rgba1010102Throws`/`Rgba64Throws` to `Texture2DTests.cpp`. No bug found, no new documentation needed (already existed). 2023/2025 EasyGL ctest pass serially (2 pre-existing, unrelated failures unchanged). |
+| 290 | Add test that every `SurfaceFormat` either works or throws a deliberate unsupported-format exception | ✅      | **Closes Phase 34.** Unlike Tasks 285–289 (each already fully covered by construction-throw tests added incrementally), this task had genuine remaining scope: cross-referencing every `SurfaceFormat::` reference across `Texture2DTests.cpp` and `examples/easygl_surface_format_throws_test.cpp` against the full 27-value enum found 7 values still untested for throw-behavior — `Bgra5551`, `Bgra4444`, `Dxt3`, `Dxt5`, `Rg32`, `ByteEXT`, `UShortEXT`. Rather than adding 7 more one-off `TEST_F` cases, added a single exhaustive `UnsupportedFormatConstructionTest.EverySurfaceFormatEitherWorksOrThrowsClearly` test (`Texture2DTests.cpp`) that iterates a hardcoded list of all 27 `SurfaceFormat` values, asserting `Color` never throws and every other value throws `std::runtime_error` — self-documenting and will catch a future un-vetted 28th value automatically (it just won't be in the list yet, which is a visible, deliberate gap rather than a silent one). Confirmed `Texture::ValidateFormat` is called from the shared, backend-agnostic `Texture2D`/`Texture3D`/`TextureCube` constructors (not per-backend), so this one EasyGL-build test result applies identically to Vulkan/Bgfx. 2024/2026 EasyGL ctest pass serially (2 pre-existing, unrelated failures unchanged). |
 
 ---
 
@@ -473,16 +515,16 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                       | Status | Notes                                          |
 | --- | ------------------------------------------------------------------------------------------ | ------ | ---------------------------------------------- |
-| 291 | Audit `SamplerState` API and static presets against FNA                                    | ⬜      | LinearClamp, PointClamp, AnisotropicWrap, etc. |
-| 292 | Verify default sampler states for all slots                                                | ⬜      | Unit test                                      |
-| 293 | Verify per-slot sampler binding with two textures using different sampler states           | ⬜      | DualTextureEffect test                         |
-| 294 | Pixel test: `TextureAddressMode::Clamp`                                                    | ⬜      | Out-of-range UV                                |
-| 295 | Pixel test: `TextureAddressMode::Wrap`                                                     | ⬜      | Out-of-range UV                                |
-| 296 | Pixel test: `TextureAddressMode::Mirror`                                                   | ⬜      | Out-of-range UV                                |
-| 297 | Pixel test: `TextureFilter::Point` vs `Linear`                                             | ⬜      | Magnification/minification                     |
-| 298 | Verify mipmap filter behavior: `MipPoint`, `MipLinear`, `MinLinearMagPointMipLinear`, etc. | ⬜      | If backend supports                            |
-| 299 | Verify anisotropic filtering caps and fallback                                             | ⬜      | Query backend max anisotropy                   |
-| 300 | Document sampler behavior differences by backend                                           | ⬜      | API coverage doc                               |
+| 291 | Audit `SamplerState` API and static presets against FNA                                    | ✅      | **Opens Phase 35.** Audited CNA's `SamplerState` against FNA's `Graphics/States/SamplerState.cs` line-by-line: the 7-property surface, all 6 static presets (`AnisotropicClamp/Wrap`, `LinearClamp/Wrap`, `PointClamp/Wrap` — confirmed FNA has no 7th "Default" preset), default-constructor values (`Linear`/`Wrap`×3/anisotropy=4/maxMip=0/lodBias=0), and every preset's filter/address values already matched FNA exactly — no bug in the core state values. **One real, genuine finding**: FNA's private preset constructor sets `Name` (e.g. `"SamplerState.AnisotropicClamp"`) on each preset; CNA's equivalent constructor never called `setNameProperty`, so preset `Name`/`ToString()` silently diverged from FNA (no existing test caught this). Fixed by threading a `name` parameter through `SamplerState`'s private preset constructor (`SamplerState.hpp`/`.cpp`) and calling `setNameProperty`, matching FNA's exact preset name strings. Added 8 new tests (`Name` per preset ×6, `ToString()` returns preset name, default-constructed `Name` is empty) to `SamplerStateTests.cpp`. **Also found the identical gap is systemic**, not `SamplerState`-specific: `BlendState`/`DepthStencilState`/`RasterizerState` presets in FNA all set `Name` too (e.g. `"BlendState.Additive"`), and none of CNA's equivalents do — deliberately not fixed here (this task's literal scope is `SamplerState` only, per the project's no-bundling convention), tracked as new Task 866. 2032/2034 EasyGL ctest pass serially (2 pre-existing, unrelated failures unchanged). |
+| 292 | Verify default sampler states for all slots                                                | ✅      | **Found and fixed a real bug**, uncovered directly by Task 291's `Name` fix: FNA's `SamplerStateCollection` constructor (`SamplerStateCollection.cs`) fills every slot with `SamplerState.LinearWrap`; CNA's constructor instead default-constructed each of the 16 slots (`samplers_(MaxSamplers)`). The filter/address *values* coincided (both are `Linear`+`Wrap`×3), which is exactly why this was invisible until `Name` existed to tell them apart — `coll[i].getNameProperty()` was empty instead of `"SamplerState.LinearWrap"`. Zero tests existed for `SamplerStateCollection` or `GraphicsDevice`'s sampler defaults at all before this task. Fixed the constructor to `samplers_(MaxSamplers, SamplerState::LinearWrap)`. Added new `SamplerStateCollectionTests.cpp` (16-slot default filter/addressing/`Name` checks, indexer assignment, negative/over-range throws for both mutable and const indexers) plus `GraphicsDeviceSamplerStatesTest` confirming both `GraphicsDevice.SamplerStates` and `VertexSamplerStates` default every slot to `LinearWrap`. 2042/2044 EasyGL ctest pass serially (2 pre-existing, unrelated failures unchanged). |
+| 293 | Verify per-slot sampler binding with two textures using different sampler states           | ✅      | **Found and fixed a severe, previously-undocumented, project-wide bug.** New `examples/easygl_sampler_state_effect_test.cpp` (`EasyGL_SamplerState_DualTextureEffect` ctest) renders a `DualTextureEffect` quad with a UV range past 1.0 and `SamplerStates[0] = SamplerState::PointWrap` assigned; it initially **FAILED** — the result was always the `Clamp` answer regardless of the assigned `TextureAddressMode`/`TextureFilter`. Root cause, traced precisely: `GraphicsDevice::DrawPrimitives`/`DrawIndexedPrimitives` (buffer-bound draws) correctly call `applySamplerStatesToBackend()` before delegating to the backend, but **all 18 of the `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives` overloads never did** — meaning every textured 3D draw issued through the `DrawUserPrimitives` family (the primary way stock effects like `BasicEffect`/`DualTextureEffect`/`AlphaTestEffect`/`EnvironmentMapEffect`/`SkinnedEffect` actually draw in most game/test code) silently ignored `GraphicsDevice.SamplerStates`/`VertexSamplerStates` entirely, always sampling with whatever GPU state happened to be bound from a prior, unrelated draw (or the texture's own hardcoded creation-time default: Linear+ClampToEdge on EasyGL). Fixed by adding the same `applySamplerStatesToBackend()` call already used correctly in `DrawPrimitives`/`DrawIndexedPrimitives` to all 18 missing call sites (mechanical, uniform, matches the existing sibling-method pattern exactly — not a design change). Test now passes (confirmed `RED`, the `PointWrap`-correct answer, not `GREEN`, the previous silently-`Clamp`ed answer). Also registered the same backend-agnostic test source as `Vulkan_SamplerState_DualTextureEffect`, but could not build/run it this session — `cmake-build-vulkan` failed with an unrelated, pre-existing compile error from **uncommitted local changes in the sibling `sharp-runtime` repo** (`BitConverter.hpp`, not touched this session); the fix itself is at the shared, backend-agnostic `GraphicsDevice` layer, so it should benefit Vulkan/Bgfx identically (both already have real `ApplySamplerState` implementations, confirmed by code reading), but this is unverified pending a clean Vulkan build. 2043/2045 EasyGL ctest pass serially (2 pre-existing, unrelated failures unchanged) — zero regressions from a fix touching 18 call sites across the entire `GraphicsDevice` draw surface. **Follow-up (same session): the `sharp-runtime` build blocker was resolved** (pre-existing uncommitted fix in that sibling repo, unrelated to CNA, committed separately) **and Vulkan/Bgfx were then verified — both had their own, backend-specific sampler bugs, now also fixed.** Vulkan: `GetOrCreateDualTexDescSet` hardcoded `defaultSampler_` (Linear+ClampToEdge) into both descriptor slots and cached the descriptor set keyed only by image views, completely ignoring `slotSamplers_[0]`/`slotSamplers_[1]` (which `ApplySamplerState` correctly computes) — fixed by threading both samplers through as parameters and folding them into the cache key (mirroring the already-correct single-texture `GetOrCreateTexSamplerDescSet(view, sampler)` pattern). The reused `easygl_sampler_state_effect_test.cpp` source, now also registered as `Vulkan_SamplerState_DualTextureEffect`, initially failed identically to the pre-fix EasyGL result and now passes. Bgfx: found and fixed a distinct one-line bug in the same code path — `DrawPrimitivesEx`'s dual-texture branch bound `texture1` (slot 1) using `samplerFlags_[0]` instead of `samplerFlags_[1]`, so the second texture always inherited the first texture's sampler state regardless of what was assigned to slot 1. Fixed to use `samplerFlags_[1]`. Full ctest suites reconfirmed on all three backends after these follow-up fixes: EasyGL unchanged (2043/2045), **Vulkan 1983/1984** (only the pre-existing `Vulkan_DepthBias` failure), **Bgfx 1977/1977 (100%)** — zero regressions anywhere. |
+| 294 | Pixel test: `TextureAddressMode::Clamp`                                                    | ✅      | Confirmed Task 269's `easygl_texture_address_mode_test.cpp` only covers `Clamp`/`Wrap` for **`SpriteBatch`**, a different code path from Task 293's fix — a separate 3D-stock-effect test was genuinely needed. New `examples/easygl_texture_address_mode_clamp_effect_test.cpp` mirrors Task 293's `DualTextureEffect` pattern exactly (2-texel red/green pattern texture + white second texture + UV range 0–2), but assigns `SamplerState::PointClamp` and asserts the opposite (edge-extend/`GREEN`) result instead of `PointWrap`'s repeat/`RED`. Registered on **both** EasyGL (`EasyGL_TextureAddressMode_Clamp_DualTextureEffect`) and Vulkan (`Vulkan_TextureAddressMode_Clamp_DualTextureEffect`, reusing the same backend-agnostic source) — both pass, confirming Task 293's fix holds for `Clamp` specifically on both backends, not just the `Wrap` case the fix-proof test happened to use. EasyGL ctest: 2044/2046 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 1983/1985 — only `Vulkan_DepthBias` (pre-existing) plus `Vulkan_FillMode_WireFrame`, which was also observed failing **in isolation** this session (fail/pass/fail across 3 repeat runs) — strengthens rather than contradicts its existing "order/timing-dependent flakiness" documentation (NEXT.md §5); confirmed unrelated to this task's changes (which touch only descriptor-set caching for dual-texture draws, nothing in the fill-mode/rasterization pipeline). |
+| 295 | Pixel test: `TextureAddressMode::Wrap`                                                     | ✅      | **Already fully satisfied by Task 293's own fix-proof test** — no new code needed. `examples/easygl_sampler_state_effect_test.cpp` assigns `SamplerState::PointWrap` to slot 0 on a `DualTextureEffect` 3D draw, samples past UV 1.0 (raw u=1.25, out-of-range), and asserts the repeat/`RED` result — exactly this task's literal ask. Already registered and passing on both EasyGL (`EasyGL_SamplerState_DualTextureEffect`) and Vulkan (`Vulkan_SamplerState_DualTextureEffect`). This entry exists purely to record the mapping so the test isn't duplicated later. |
+| 296 | Pixel test: `TextureAddressMode::Mirror`                                                   | ✅      | New `examples/easygl_texture_address_mode_mirror_effect_test.cpp`, mirroring the Task 293/294 `DualTextureEffect` pattern. FNA has no `PointMirror` static preset (only `*Clamp`/`*Wrap` combinations exist), so this test builds a custom `SamplerState` (`Filter=Point`, `AddressU=AddressV=Mirror`) rather than using a preset. Chose sample point raw `u=1.6` deliberately — at the more obvious `u=1.25` used by Tasks 293/294, `Mirror`'s reflected answer (`2.0-1.25=0.75`) coincidentally lands in the same texel as `Clamp`'s answer, so it wouldn't distinguish a real `Mirror` implementation from one that silently fell back to `Clamp`; at `u=1.6`, `Mirror` reflects to `0.4` (left texel, `RED`) while both `Wrap` (`frac(1.6)=0.6`) and `Clamp` (clamped to `1.0`) land on the right texel (`GREEN`), so only a correct `Mirror` implementation passes. Registered on both EasyGL (`EasyGL_TextureAddressMode_Mirror_DualTextureEffect`) and Vulkan (`Vulkan_TextureAddressMode_Mirror_DualTextureEffect`) — both pass on the first try (all three backends already correctly map `TextureAddressMode::Mirror` to `GL_MIRRORED_REPEAT`/`VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT`/Bgfx's mirror flag, confirmed via grep before writing the test) — no bug found, this was a genuine coverage gap, not a hidden defect. EasyGL ctest: 2045/2047 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 1984/1986 (`Vulkan_DepthBias` pre-existing; `Vulkan_FillMode_WireFrame`'s known flakiness recurred, unrelated — see Task 294's entry). |
+| 297 | Pixel test: `TextureFilter::Point` vs `Linear`                                             | ✅      | First genuinely new-ground test in Phase 35 — no prior test exercised `TextureFilter` itself (only `TextureAddressMode`, Tasks 293–296). New `examples/easygl_texture_filter_point_vs_linear_test.cpp` draws 4 columns in one frame on a `DualTextureEffect`, each with its own `SamplerState`: magnification (2-texel red/green texture stretched across a 256px column) × {`Point`,`Linear`}, and minification (256-texel alternating-red/green texture compressed into a 128px column, 2 texels/pixel) × {`Point`,`Linear`}. Each is sampled exactly at a texel boundary (guaranteed not to coincide with any texel center): `Point` must read a pure, unblended colour there; `Linear` must read a genuine ~50/50 blend. All 4 checks passed on the first run on both backends, with blend values landing almost exactly at 127–128 as predicted — no bug found. Documented finding: CNA maps XNA's single `TextureFilter` value to one GL/Vulkan min+mag filter pair (matching FNA's flat enum, which has no separate min/mag control) and generates no mipmaps by default, so magnification and minification exercise *identical* underlying sampler math here — this task's two scales confirm scale itself doesn't break anything, not a functionally distinct GPU code path. Registered on both EasyGL (`EasyGL_TextureFilter_PointVsLinear`) and Vulkan (`Vulkan_TextureFilter_PointVsLinear`). EasyGL ctest: 2046/2048 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 1985/1987 (both pre-existing/documented: `Vulkan_DepthBias`, `Vulkan_FillMode_WireFrame`'s known flakiness). |
+| 298 | Verify mipmap filter behavior: `MipPoint`, `MipLinear`, `MinLinearMagPointMipLinear`, etc. | ✅      | **EasyGL: verified correct. Found a real, severe Vulkan/Bgfx bug along the way (tracked separately as Task 867), not fixed here.** New `examples/easygl_texture_mip_filter_effect_test.cpp`: a 128×128 `mipMap` `Texture2D` (8 levels) with levels 0–2 solid Red, levels 3–7 solid Green, drawn at a tiny 8×8px on-screen size (forcing automatic GPU LOD ≈4, deep in the Green range with wide margin either side against driver-specific rounding). On EasyGL: `TextureFilter::LinearMipPoint` correctly samples a high mip level (Green) — real mip-level selection works when an explicit `Mip*` filter is requested. `TextureFilter::Point` (and the default `Linear`) always sample level 0 (Red) regardless of minification — **a real, confirmed, deliberate EasyGL/Vulkan deviation from FNA semantics** (XNA's `Point`/`Linear` are supposed to be mip-aware too), documented as an accepted tradeoff: CNA doesn't set `GL_TEXTURE_MAX_LEVEL` to match each texture's real level count, so using a mip-aware GL filter unconditionally for the common non-mipmapped (single-level) texture case would render it GL-incomplete (typically solid black) — tracked as part of Task 867's scope, not fixed here. **On Vulkan, the test initially failed for a completely different, more severe reason**: `Texture2D::SetData(level>0,...)` is a **total silent no-op** — `ITextureBackend::UpdatePixelsLevel` has an empty default body that neither `VulkanTextureBackend` nor Bgfx's texture backend overrides, so none of the Green mip-level data the test tries to upload ever reaches the GPU on either backend; tracing this further found Vulkan also hardcodes `VkImageCreateInfo::mipLevels=1`, `VkImageViewCreateInfo::levelCount=1`, and never sets `VkSamplerCreateInfo::minLod`/`maxLod` (defaulting to 0, clamping LOD selection to level 0 regardless of `mipmapMode`) — three more fixes needed together for Vulkan `Texture2D` mips to work at all. **Un-registered the Vulkan variant of this test** (it would fail for the wrong, confounding reason — a data-upload bug, not a filter-selection bug) rather than leave a misleadingly-labeled failing test; tracked the full finding as new Task 867. EasyGL ctest: confirmed passing, no regressions (this task added no production-code changes, test-only). |
+| 299 | Verify anisotropic filtering caps and fallback                                             | ✅      | Audited all 3 backends' `TextureFilter::Anisotropic` + `SamplerState.MaxAnisotropy` handling. **Vulkan: correct.** Queries `VkPhysicalDeviceFeatures.samplerAnisotropy` support and the real device cap (`VkPhysicalDeviceProperties.limits.maxSamplerAnisotropy`), clamps the requested value to it before creating the sampler. **EasyGL: no anisotropic support at all** — `TextureFilter::Anisotropic` silently falls back to plain trilinear filtering; the underlying `easy-gl` library has zero anisotropy-related API (confirmed via grep — no `SamplerParameter` enum value for it exists), so `MaxAnisotropy` has no effect whatsoever, on any value. **Bgfx: partial** — enables `BGFX_SAMPLER_MIN/MAG_ANISOTROPIC` flags (some anisotropic filtering does occur) but the `maxAnisotropy` parameter itself is unused (`/*maxAnisotropy*/` in the function signature) — the requested level is never communicated, only "on/off". A true visual-quality pixel test (comparing detail preservation under oblique/aspect-skewed minification) was judged too driver-dependent/fragile to assert precisely — the task's own "caps and fallback" framing was tested literally instead: new `examples/easygl_texture_anisotropic_effect_test.cpp` assigns `MaxAnisotropy=9999` (far beyond any real cap) and confirms no crash/exception on both EasyGL and Vulkan, which is this test's real, load-bearing assertion. **Found an additional, severe finding while building this test**: assigning `TextureFilter::Anisotropic` (or any `*Mip*` filter) to an ordinary single-level `Texture2D` renders **solid black on EasyGL** (a classic GL mipmap-incompleteness symptom — `Anisotropic` maps to a `_MIPMAP_`-suffixed GL filter requiring a complete mip chain, but EasyGL never sets `GL_TEXTURE_MAX_LEVEL` to match a texture's real level count). Vulkan does not share this symptom (renders correctly even on a single-level texture). This is the same root architectural gap as Task 867 manifesting differently — Task 867's tracked scope extended to cover it; not fixed here (documented only, per this test's file-header comment — the test does not fail on the black result, only on an actual crash). Registered on both EasyGL (`EasyGL_TextureAnisotropic_DualTextureEffect`) and Vulkan (`Vulkan_TextureAnisotropic_DualTextureEffect`). EasyGL ctest: 2048/2050 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 1986/1988 (`Vulkan_DepthBias` pre-existing; `Vulkan_RenderTargetUsage` failed once in a full run, confirmed passing in isolation — pre-existing order-dependent flakiness per Task 279, not a regression). |
+| 300 | Document sampler behavior differences by backend                                           | ✅      | **Closes Phase 35.** New `docs/sampler-state-support.md` synthesizes all of Tasks 291–299's findings into one reference: `SamplerState` API/preset conformance, default sampler states, the central Task 293 per-slot-binding bug (root cause + fix per backend), `TextureAddressMode`/`TextureFilter`/mipmap-filter/anisotropic-filtering coverage, and a summary support matrix across all 3 backends with explicit ✅/❌/⚠️/🔍 status per feature. Links out to the two open, tracked follow-up items (Task 866, Task 867) rather than duplicating their full writeups. |
 
 ---
 
@@ -490,16 +532,16 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                     | Status | Notes                                          |
 | --- | ---------------------------------------------------------------------------------------- | ------ | ---------------------------------------------- |
-| 301 | Audit `BlendState` API and static presets against FNA                                    | ⬜      | AlphaBlend, Additive, NonPremultiplied, Opaque |
-| 302 | Verify default `BlendState` on `GraphicsDevice`                                          | ⬜      | Unit test                                      |
-| 303 | Pixel test: `BlendState::Opaque`                                                         | ⬜      | Source replaces destination                    |
-| 304 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha                                 | ⬜      | XNA-compatible result                          |
-| 305 | Pixel test: `BlendState::NonPremultiplied`                                               | ⬜      | Compare with expected formula                  |
-| 306 | Pixel test: `BlendState::Additive`                                                       | ⬜      | Saturation behavior                            |
-| 307 | Verify separate color/alpha blend functions                                              | ⬜      | `ColorBlendFunction`, `AlphaBlendFunction`     |
-| 308 | Verify separate color/alpha source/destination blend factors                             | ⬜      | All common factors                             |
-| 309 | Verify `BlendFactor` and `MultiSampleMask` behavior                                      | ⬜      | Backends differ                                |
-| 310 | Verify changing blend state after first use follows XNA immutability rules if applicable | ⬜      | State object freeze semantics                  |
+| 301 | Audit `BlendState` API and static presets against FNA                                    | ✅      | **Opens Phase 36.** Audited CNA's `BlendState` against FNA's `Graphics/States/BlendState.cs` line-by-line: the 12-property surface, all 4 static presets (`Additive`/`AlphaBlend`/`NonPremultiplied`/`Opaque`), and the default-constructor values (`ColorBlendFunction=AlphaBlendFunction=Add`, `ColorSourceBlend=AlphaSourceBlend=One`, `ColorDestinationBlend=AlphaDestinationBlend=Zero`, all 4 `ColorWriteChannels*=All`, `BlendFactor=White`, `MultiSampleMask=-1`) already matched FNA exactly — no bug in the core state values (already covered by existing `BlendStateTests.cpp`). **Real, expected finding** (already tracked as Task 866 from Task 291's audit): FNA's private preset constructor sets `Name` (e.g. `"BlendState.Additive"`) on each preset; CNA's didn't. Fixed by threading a `name` parameter through the private preset constructor, mirroring Task 291's `SamplerState` fix exactly. Added 6 new tests (`Name` per preset ×4, `ToString()` returns preset name, default-constructed `Name` is empty) to `BlendStateTests.cpp`. This closes Task 866's `BlendState` portion — `DepthStencilState`/`RasterizerState` remain open (their own audit tasks later in the phase list, not bundled here). Noted but out of this audit's scope: FNA's own `BlendFunction` enum doc comments for `Max`/`Min` are famously swapped (`Max`'s doc says "extract minimum", `Min`'s doc says "extract maximum") — a well-known real XNA/FNA quirk; CNA's enum ordinals match FNA exactly but its doc comments describe the *unswapped* (intuitive) meaning. Whether CNA's backend blend-equation mapping (`GL_MIN`/`GL_MAX` etc.) replicates FNA's actual (swapped) runtime behavior is Task 307/308's job to verify, not this API/preset audit's. EasyGL ctest: 2054/2056 (2 pre-existing, unrelated failures unchanged). |
+| 302 | Verify default `BlendState` on `GraphicsDevice`                                          | ✅      | **Found and fixed a real bug — same shape as Task 292's `SamplerStateCollection` finding.** FNA's `GraphicsDevice` constructor sets `BlendState = BlendState.Opaque`; CNA's `blendState_` member was a plain default-constructed `BlendState`, never copied from `BlendState::Opaque`. The blend-factor *values* coincidentally matched (`Opaque`'s `{One,One,Zero,Zero}` equals the default constructor's values), which is exactly why this went undetected — until Task 301 gave `BlendState::Opaque` a `Name`, making the divergence (`""` vs `"BlendState.Opaque"`) newly detectable. Zero test coverage existed for `GraphicsDevice.getBlendStateProperty()` at all before this task (confirmed via grep). Fixed by initializing `blendState_` from `BlendState::Opaque` in the constructor's member-init list (positioned to match declaration order, avoiding a `-Wreorder` warning). New `GraphicsDeviceDefaultStateTests.cpp` with 2 tests (`Name` match, blend-factor-values match). **Flagged, not fixed**: `depthStencilState_`/`rasterizerState_` (declared immediately after `blendState_` in `GraphicsDevice.hpp`) are ALSO plain default-constructed members, and FNA's `GraphicsDevice` constructor similarly sets `DepthStencilState = DepthStencilState.Default`/`RasterizerState = RasterizerState.CullCounterClockwise` — very likely the same bug, out of this task's `BlendState`-only scope; their own later Phase 37/38 audit tasks should check this. EasyGL ctest: full suite pass, only 2 pre-existing unrelated failures. Vulkan ctest: full suite pass, only 2 pre-existing unrelated failures. |
+| 303 | Pixel test: `BlendState::Opaque`                                                         | ✅      | Found that the existing `DrawUserPrimitives<VertexPositionColor>` pixel test (Task 255) already exercises `BlendState::Opaque`, but only with a fully-opaque (`alpha=255`) source colour — a case that can't actually distinguish `Opaque` from `AlphaBlend`, since `AlphaBlend`'s math collapses to the same result when source alpha is 255. New `examples/easygl_blendstate_opaque_test.cpp` closes that real gap: clears to green, draws with a **partially-transparent** red (`alpha=128`) under `BlendState::Opaque`, and confirms the result is pure red with zero green bleed-through — proving destination content and source alpha are both genuinely discarded (`colorSrc=One, colorDst=Zero` applied literally), not just "doesn't look broken with an opaque source." Passed on both EasyGL and Vulkan on the first run — no bug found, this closes a real test-coverage gap. Registered as `EasyGL_BlendState_Opaque`/`Vulkan_BlendState_Opaque`. |
+| 304 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha                                 | ✅      | **EasyGL: passes exactly as predicted (`R=128, G=127`), confirming correct premultiplied-alpha blend semantics.** New `examples/easygl_blendstate_alphablend_test.cpp` draws a correctly-premultiplied 50%-alpha red (`Color(128,0,0,128)`) over a green background under `BlendState::AlphaBlend`, checking the result lands at `R≈128` (not `R≈64`, which would mean the source was incorrectly re-multiplied by alpha — `NonPremultiplied`'s equation applied instead). **Vulkan: found and confirmed a massive, severe, previously-undiscovered bug — tracked as new Task 868, not fixed here.** The test fails on real hardware with `R=64`, exactly matching the double-alpha-multiplication signature: `VulkanGraphicsBackend::ApplyBlendState` ignores every specific blend-factor/function parameter and only checks "is this exactly `Opaque`'s values?" — any other `BlendState` (including `AlphaBlend`, `Additive`, and any custom state) gets a single hardcoded blend equation baked into every pipeline, which happens to be `NonPremultiplied`'s equation, not the one actually requested. See Task 868 for the full writeup, severity assessment, and fix shape (including a narrower, related gap found in Bgfx while cross-checking: colour blend factors are correctly per-value mapped there, but alpha factors and blend functions are ignored). Kept `Vulkan_BlendState_AlphaBlend` registered as a known, tracked failure (like `Vulkan_DepthBias`) rather than hiding a genuinely correct, informative test result — see `NEXT.md` §5. |
+| 305 | Pixel test: `BlendState::NonPremultiplied`                                               | ✅      | New `examples/easygl_blendstate_nonpremultiplied_test.cpp` draws a raw (non-premultiplied) 50%-alpha red (`Color(255,0,0,128)`) over green under `BlendState::NonPremultiplied`, confirming the pipeline itself multiplies by alpha (`R≈128, G≈127`) — the mirror-image check of Task 304's `AlphaBlend` test, together proving *which stage* performs the alpha multiplication. Passes on EasyGL exactly as predicted. **Passes on Vulkan too, but for the WRONG reason — flagged prominently in the test's own file header, not silently accepted as evidence Task 868 is fixed.** Task 868 (Task 304's finding) established that Vulkan hardcodes ONE blend equation for any non-`Opaque` `BlendState`, and that hardcoded equation's *colour-channel* factors (`SourceAlpha`/`InverseSourceAlpha`) happen to exactly match `NonPremultiplied`'s own colour factors by coincidence — so this RGB-only test can't distinguish "Vulkan correctly read `NonPremultiplied`'s fields" from "Vulkan ignored them and got lucky." Confirmed this is exactly what's happening (same hardcoded path, not a real per-state lookup). No new bug found by this task itself; its value is closing real `NonPremultiplied` coverage on EasyGL and documenting the Vulkan false-positive risk clearly enough that a future task doesn't mistake this pass for Task 868 being resolved. |
+| 306 | Pixel test: `BlendState::Additive`                                                       | ✅      | New `examples/easygl_blendstate_additive_test.cpp`: background `Color(200,50,0,255)`, opaque source `Color(255,100,0,255)`, `BlendState::Additive`. Checks two things at once: (1) saturation — `R=255+200=455` must clamp to `255`, not wrap/overflow; (2) `colorDestinationBlend=One` means the destination must be **fully** added regardless of source alpha, unlike `AlphaBlend`/`NonPremultiplied`'s `InverseSourceAlpha` — `G=100+50=150` (an exact, non-saturated value) is the distinguishing check. **EasyGL: passes exactly as predicted** (`255,150,0`). **Vulkan: fails, definitively re-confirming Task 868 — this time unambiguously, not coincidentally like Task 305.** Got `G=100` instead of `150`: Task 868's hardcoded blend equation uses `InverseSourceAlpha` for the destination factor, which evaluates to `(1 - 1) = 0` at `alpha=255`, completely dropping the destination instead of fully adding it — exactly the predicted failure signature, confirming Task 868's root cause is the systemic hardcoded path (not a one-off). Kept `Vulkan_BlendState_Additive` registered as a documented known failure alongside `Vulkan_BlendState_AlphaBlend`. |
+| 307 | Verify separate color/alpha blend functions                                              | ✅      | None of the 4 static `BlendState` presets vary `BlendFunction` from the default `Add`, so this task needed a genuinely new test: new `examples/easygl_blendstate_separate_functions_test.cpp` builds two custom `BlendState`s (`colorSrc=alphaSrc=colorDst=alphaDst=One`, isolating the *function* from the *factors*) — Check A: `ColorBlendFunction=Subtract, AlphaBlendFunction=Add`; Check B: swapped. Both checks only read back RGB (no established, verified alpha-backbuffer-readback pattern exists in this project), but together still prove independence: if either function ever leaked into the other's channel, one check would show the wrong colour result. **EasyGL: both checks pass exactly as predicted** (`150,0,0` and `250,250,0` respectively) — `ColorBlendFunction`/`AlphaBlendFunction` are correctly independent via `glBlendEquationSeparate`. **Vulkan: both checks fail, for the SAME reason — a third, cleanly consistent confirmation of Task 868.** Both readbacks show `(200,50,0)`, the *source colour unmodified* — because Task 868's hardcoded equation (`SourceAlpha`/`InverseSourceAlpha`, always `VK_BLEND_OP_ADD`) evaluates its destination factor to exactly `0` at `alpha=255` regardless of the blend function requested, collapsing the result to "source only" either way (`Subtract: src-dst*0=src`; `Add: src+dst*0=src` — indistinguishable once the destination weight is zero). This is a *different* failure signature than Tasks 304/306 predicted for this test (a coincidental pass was NOT expected here, and indeed neither check passed) but is fully consistent with, and further confirms, Task 868's root cause. Kept both `Vulkan_BlendState_SeparateFunctions`-embedded checks registered as one documented known failure. |
+| 308 | Verify separate color/alpha source/destination blend factors                             | ✅      | Mirrors Task 307's approach (custom `BlendState`, since no preset varies colour and alpha factors independently) but for *factors* instead of *functions*. New `examples/easygl_blendstate_separate_factors_test.cpp`, two checks with alpha factors deliberately swapped between them: Check A (`ColorSrc=One,ColorDst=Zero` → expect pure source `200,50,0`) and Check B (`ColorSrc=Zero,ColorDst=One` → expect pure destination `50,200,0`, the opposite result). **EasyGL: both pass exactly as predicted.** **Vulkan: Check A coincidentally passes, Check B cleanly fails — a fourth confirmation of Task 868.** At `alpha=255`, Task 868's hardcoded `SourceAlpha`/`InverseSourceAlpha` colour factors collapse to "source only," which happens to match Check A's expectation by coincidence but not Check B's (still shows `200,50,0` instead of the expected `50,200,0`) — the same asymmetric-pass pattern already seen in Tasks 305/308's Check A. Kept `Vulkan_BlendState_SeparateFactors` registered as a fourth documented known failure. |
+| 309 | Verify `BlendFactor` and `MultiSampleMask` behavior                                      | ✅      | **Found and fixed a real, universal bug: `GraphicsDevice::setBlendStateProperty` never propagated the assigned `BlendState`'s own `BlendFactor` to the device/backend.** FNA's `ApplyState()` applies a `BlendState` atomically via `FNA3D_SetBlendState(GLDevice, ref nextBlend.state)`, which passes the whole native state struct — including its baked-in `BlendFactor` — in one call; CNA's `setBlendStateProperty` only forwarded the 6 factor/function fields, silently dropping `BlendFactor` (and `MultiSampleMask`) every time a `BlendState` was assigned, so `Blend::BlendFactor`/`InverseBlendFactor` only ever picked up whatever `GraphicsDevice.BlendFactor` happened to be from a *previous*, separate call (defaulting to `White`) instead of the state's own value. Fixed by calling `setBlendFactorProperty(value.getBlendFactorProperty())` from within `setBlendStateProperty`. New `examples/easygl_blendstate_blendfactor_test.cpp`: custom `BlendState` with `ColorSourceBlend=Blend::BlendFactor`, a distinctive baked-in `BlendFactor` colour `(200,100,0)`, and an all-ones source colour, applied via `setBlendStateProperty` alone (no separate `setBlendFactorProperty` call) — proves the propagation without it. **EasyGL: passes exactly as predicted** (`200,100,0`), confirming the fix. **Vulkan: fails, but NOT a new bug — a fifth confirmation of Task 868** (`255,255,255`, i.e. the hardcoded blend equation ignores `BlendFactor` entirely since it never selects `VK_BLEND_FACTOR_CONSTANT_COLOR`); `vkCmdSetBlendConstants` was already confirmed correct in an earlier pass over this task, so this is purely downstream of Task 868, not a new BlendFactor-specific gap. Registered `Vulkan_BlendState_BlendFactor` as a further documented known failure. **Also fixed a genuinely separate, Bgfx-specific bug found while investigating**: `blendFactorPacked_` was correctly computed by `SetBlendFactor` but never passed to any of Bgfx's 5 `bgfx::setState()` call sites (the sprite path plus 4 3D draw paths) — all 5 now pass it as the second (`_rgba`) argument; confirmed via grep this was the only remaining Bgfx blend-state gap (colour/alpha factors and functions already correctly mapped per Task 304's cross-check). Bgfx has no GPU readback API so this fix is smoke-tested (compiles, no crash) rather than pixel-verified. **`MultiSampleMask`: confirmed a complete, universal no-op across all 3 backends** (zero references to it or any sample-mask concept in any backend `.cpp`/`IGraphicsBackend.hpp`, confirmed via grep) — documented as an accepted limitation rather than fixed; XNA's `MultiSampleMask` (per-sample coverage masking) is a niche feature with no consumer in this codebase yet and would require new backend-interface surface across all 3 backends to support, judged out of scope for this verification task. EasyGL ctest: 2063/2065 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 1996/2003 — only pre-existing/documented failures: `Vulkan_DepthBias` (its usual single sub-case), `Vulkan_FillMode_WireFrame` (pre-existing order-dependent flake, unrelated — see Task 294's entry), and 5 Task-868 confirmations (4 pre-existing + this task's new `BlendFactor` one). |
+| 310 | Verify changing blend state after first use follows XNA immutability rules if applicable | ✅      | **Closes Phase 36.** Confirmed via FNA source (`BlendState.cs`/`DepthStencilState.cs`/`RasterizerState.cs`/`SamplerState.cs`/`GraphicsDevice.cs`): FNA has **no freeze/immutability enforcement whatsoever** for these state objects — no exception, no frozen flag, nothing — so there is no "throws if mutated after first use" behavior for CNA to replicate, and none exists in CNA either (matches, no bug). **Found a real, confirmed, but different architectural divergence while verifying this**: FNA's `GraphicsDevice.BlendState` setter (`nextBlend = value;`) stores a **reference** to the same C# object (`BlendState` is a reference type) — mutating that same object *after* assigning it to the device changes what gets applied on the next `ApplyState()`/Draw, since the device is holding an alias, not a snapshot. CNA's `GraphicsDevice::setBlendStateProperty` copies **by value** (`blendState_ = value;`, a plain `BlendState` value member) — a deliberate, consistent, project-wide pattern shared by `DepthStencilState`/`RasterizerState`/`SamplerStateCollection` (all stored by value in `GraphicsDevice.hpp`), not a `BlendState`-specific oversight. Practical effect: mutating a custom `BlendState` object after assigning it to `GraphicsDevice.BlendState` is silently a no-op in CNA (the device keeps its already-copied values) but would take effect in real XNA/FNA. New test `GraphicsDeviceDefaultStateTests.cpp::MutatingBlendStateAfterAssignmentDoesNotAffectDevice` pins CNA's actual (deliberate) behavior. Tracked as new Task 869 (not fixed — matching FNA's reference-aliasing exactly would require every `GraphicsDevice` state property to become a reference/pointer type project-wide, a real architecture decision, not a quick patch; no game code observed in this codebase relies on post-assignment mutation). One upside of CNA's value-copy approach already noted in Task 301/291: since presets (`BlendState::Opaque` etc.) are C++ `static const`, they can't be accidentally mutated at all — a real XNA/FNA footgun (`BlendState.Opaque.AlphaBlendFunction = ...;` compiles in C# and corrupts the shared static preset for the whole app) that's structurally impossible in CNA. EasyGL: 2064/2066 (2 pre-existing failures unchanged). Vulkan: 1998/2004 (only pre-existing/documented failures: `Vulkan_DepthBias`'s usual sub-case, 5 Task-868 confirmations; `Vulkan_FillMode_WireFrame` did not recur this run). |
 
 ---
 
@@ -507,13 +549,13 @@ All 100 original tasks addressed.
 
 | #   | Task                                                           | Status | Notes                                   |
 | --- | -------------------------------------------------------------- | ------ | --------------------------------------- |
-| 311 | Audit `DepthStencilState` API and static presets against FNA   | ⬜      | Default, DepthRead, None                |
-| 312 | Verify default depth/stencil state on `GraphicsDevice`         | ⬜      | Unit test                               |
-| 313 | Pixel test: depth write enabled vs disabled                    | ⬜      | Two overlapping quads                   |
-| 314 | Pixel test: depth comparison functions                         | ⬜      | Less, LessEqual, Greater, Always, Never |
-| 315 | Verify stencil enable/disable behavior                         | ⬜      | EasyGL/Vulkan/Bgfx                      |
-| 316 | Verify stencil read/write masks                                | ⬜      | Unit + pixel test                       |
-| 317 | Verify front-face stencil operations                           | ⬜      | Keep, Replace, Increment, Decrement     |
+| 311 | Audit `DepthStencilState` API and static presets against FNA   | ✅      | **Opens Phase 37.** Audited CNA's `DepthStencilState` against FNA's `Graphics/States/DepthStencilState.cs` line-by-line: the full 16-property surface, all 3 static presets (`Default`/`DepthRead`/`None`), and the default-constructor values (`DepthBufferEnable=DepthBufferWriteEnable=true`, `DepthBufferFunction=LessEqual`, `StencilEnable=false`, `StencilFunction=CounterClockwiseStencilFunction=Always`, all 4 stencil-op fields `=Keep`, `TwoSidedStencilMode=false`, `StencilMask=StencilWriteMask=Int32.MaxValue`, `ReferenceStencil=0`) already matched FNA exactly — no bug in the core state values (now covered by the existing `DepthStencilStateTests.cpp`). **Real, expected finding** (already tracked as Task 866 from Task 291's audit): FNA's private preset constructor sets `Name` (e.g. `"DepthStencilState.Default"`) on each preset; CNA's didn't. Fixed by threading a `name` parameter through the private preset constructor, mirroring Task 291 (`SamplerState`)/Task 301 (`BlendState`) exactly. Added 5 new tests (`Name` per preset ×3, `ToString()` returns preset name, default-constructed `Name` is empty) to `DepthStencilStateTests.cpp`. This closes `DepthStencilState`'s portion of Task 866 — `RasterizerState` remains open (its own later audit task in this phase list). **Found and flagged (not fixed, per Task 301→302 precedent) a Task-302-shaped bug for Task 312 to fix**: `GraphicsDevice`'s constructor never initializes `depthStencilState_`/`rasterizerState_` from `DepthStencilState::Default`/`RasterizerState::CullCounterClockwise` (confirmed via `GraphicsDevice.cpp`'s constructor member-init list — only `blendState_` is initialized there, from Task 302's fix; `depthStencilState_`/`rasterizerState_` are absent, so they use their own plain default constructors). Since `DepthStencilState::Default`'s values (`true,true`) coincide with `DepthStencilState()`'s own default values, this was invisible until this task's `Name` fix — exactly Task 302's "coincided until Name existed to distinguish them" pattern. Confirmed via FNA's `GraphicsDevice.cs` constructor: `DepthStencilState = DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;`. EasyGL ctest: 2069/2071 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 2002/2009 (5 Task-868 confirmations, `Vulkan_DepthBias`'s usual sub-case, and one recurrence of `Vulkan_RenderTargetUsage`'s pre-existing parallel/order-dependent flakiness — reconfirmed unrelated via 3/3 passes in isolation immediately after). |
+| 312 | Verify default depth/stencil state on `GraphicsDevice`         | ✅      | **Found and fixed a real bug, same shape as Task 302's `BlendState` finding, flagged by Task 311.** FNA's `GraphicsDevice` constructor sets `DepthStencilState = DepthStencilState.Default;` and `RasterizerState = RasterizerState.CullCounterClockwise;` (confirmed via `GraphicsDevice.cs`); CNA's `depthStencilState_`/`rasterizerState_` members were plain default-constructed, never copied from the presets. Values coincidentally matched for `depthStencilState_` (`DepthStencilState::Default`'s `{true,true}` equals the plain default constructor's own values) — invisible until Task 311 gave `Default` a `Name`, making the divergence (`""` vs `"DepthStencilState.Default"`) newly detectable, exactly Task 302's pattern. Fixed by initializing both `depthStencilState_(DepthStencilState::Default)` and `rasterizerState_(RasterizerState::CullCounterClockwise)` in the constructor's member-init list, positioned in declaration order (`blendState_`, `depthStencilState_`, `rasterizerState_`, then `blendFactor_`) to avoid `-Wreorder`. 3 new tests in `GraphicsDeviceDefaultStateTests.cpp`: `DepthStencilState`'s `Name` and value match, and `RasterizerState`'s value match (deliberately no `RasterizerState` `Name` test — its preset `Name` gap, Task 866's remaining portion, isn't fixed yet, so testing an empty-vs-empty `Name` match would be meaningless; add that test alongside `RasterizerState`'s own future audit task). EasyGL ctest: 2072/2074 (2 pre-existing failures unchanged). Vulkan ctest: 2006/2012 (only pre-existing/documented failures: `Vulkan_DepthBias`'s usual sub-case, 5 Task-868 confirmations). |
+| 313 | Pixel test: depth write enabled vs disabled                    | ✅      | New `examples/easygl_depthstencilstate_write_enable_test.cpp`: three-quad differential test — far quad A (depth 0.8, writes), near quad B (depth 0.2, `DepthBufferWriteEnable` is the variable under test), then quad C at an in-between depth (0.5) with normal writes-on state; C's pass/fail reveals whether the depth buffer still holds A's 0.8 (write correctly skipped → C passes → BLUE) or was overwritten by B's 0.2 (write bug → C rejected → GREEN). A second check (B drawn with writes ON) is a sanity control proving the depth test itself works, not just a broken always-reject/always-pass state. **Confirms `DepthBufferWriteEnable` works correctly on both EasyGL and Vulkan** — both checks pass on both backends. **Found and had to work around two real, separate discoveries while designing this test, both now documented so future tasks don't re-diagnose them:** (1) with an identity World/View/Projection (as used here), this project's Vulkan backend's `colored3d.vert.glsl` passes vertex Z straight through as clip-space Z, and (correctly, matching real XNA/DirectX semantics, confirmed via the shader's own comment) expects it in DirectX's `[0,+w]` range, NOT OpenGL's `[-1,+1]` — a raw negative Z is silently clipped away entirely on Vulkan (but not on EasyGL/OpenGL, which is more permissive), so any future identity-matrix depth pixel test on this project MUST keep Z within `[0,1]` or it will silently lose geometry on Vulkan only, with no error. (2) **A new, severe, MASSIVE bug, tracked as Task 870, NOT fixed here**: `VulkanGraphicsBackend::ApplyDepthStencilState` discards 13 of its 15 parameters — `depthFunc` (so `DepthBufferFunction` is ignored, hardcoded per-pipeline-creation-function as a mix of `VK_COMPARE_OP_LESS`/`VK_COMPARE_OP_LESS_OR_EQUAL` instead of FNA's actual `LessEqual` default) and the *entire* stencil-test parameter set (`stencilEnable` and everything downstream of it) — confirmed via grep that no Vulkan pipeline ever sets `VkPipelineDepthStencilStateCreateInfo::stencilTestEnable`/`front`/`back` at all, so stencil testing is completely non-functional on Vulkan regardless of `DepthStencilState.StencilEnable`. EasyGL and Bgfx are both fully, correctly implemented by contrast (real compare-func mapping plus full front/back stencil op support) — confirmed by direct code reading, the same "one backend hardcodes/ignores, the other two are correct" shape as Task 868's `BlendState` finding. This directly explains why my first test design (C at the SAME depth as A) failed on Vulkan for the WRONG reason (equal-depth comparisons always fail under the hardcoded strict-`LESS` pipeline, regardless of `DepthBufferWriteEnable`) — fixed by moving C to an unambiguous in-between depth instead. **Expect Task 314 (`DepthBufferFunction` pixel test) and Task 315 (stencil enable/disable) to hit Task 870 directly** — do not re-diagnose it as a new bug. EasyGL ctest: 2073/2075 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 2007/2013 (only pre-existing/documented failures: `Vulkan_DepthBias`'s usual sub-case, 5 Task-868 confirmations; `Vulkan_FillMode_WireFrame` did not recur this run). |
+| 314 | Pixel test: depth comparison functions                         | ✅      | New `examples/easygl_depthstencilstate_compare_function_test.cpp`: 5 side-by-side columns, one per `CompareFunction` (`Always`/`Never`/`Less`/`LessEqual`/`Greater`), each drawing a reference quad A (depth 0.5, `DepthStencilState::Default`) then a quad B at a depth chosen to give an unambiguous, function-distinguishing expected result (`Always`@0.9→PASS, `Never`@0.1→FAIL, `Less`@0.3→PASS, `LessEqual`@0.5 equal→PASS, `Greater`@0.7→PASS — `Less`/`Greater` use opposite depth directions so a direction swap would be caught, and `LessEqual`'s equal-depth case distinguishes it from strict `Less`). **EasyGL: all 5 checks pass exactly as predicted.** **Vulkan: 4 of 5 checks fail — a full, direct reconfirmation of Task 870 (found by Task 313), not a new bug.** The failure pattern is fully consistent with the exercised pipeline hardcoding `VK_COMPARE_OP_LESS` regardless of what's requested: only `Less` (which happens to coincide with the hardcoded behavior) passes; `Always`/`Never`/`LessEqual`/`Greater` all fail in exactly the way predicted by "every comparison actually evaluates as strict-Less no matter what `DepthBufferFunction` is set to." Kept `Vulkan_DepthStencilState_CompareFunction` registered as a documented known failure (same pattern as Task 868's `Vulkan_BlendState_*` tests). EasyGL ctest: 2074/2076 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 2006/2014 (5 Task-868 confirmations, this task's Task-870 confirmation, `Vulkan_FillMode_WireFrame`'s pre-existing order-dependent flake, and `Vulkan_DepthBias`'s usual sub-case — all pre-existing/documented). |
+| 315 | Verify stencil enable/disable behavior                         | ✅      | New `examples/easygl_depthstencilstate_stencil_enable_test.cpp`: two-column differential test — a "stamp" pass writes stencil=1 on each column's left half (0 elsewhere via an explicit full-screen zero-stamp first, since `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` entirely, tracked as new Task 871), then a GREEN quad drawn over the whole column with `StencilFunction=Equal, ReferenceStencil=1` and `StencilEnable` as the variable under test (`true` for Check A, `false` for Check B). **Found and fixed a real, severe, previously-undiscovered bug while running this on EasyGL first**: the test initially failed identically to Vulkan (both stencil halves showed GREEN regardless of `StencilEnable`) — traced to `EasyGLGraphicsBackend`'s SDL/GL context creation never requesting `SDL_GL_STENCIL_SIZE`, so **no EasyGL window in this project has ever had a real stencil buffer**, making the stencil test trivially always-pass at the GL level (per spec, when there's no stencil plane) regardless of how correctly `ApplyDepthStencilState`'s `glStencilFunc`/`glStencilOp`/`glEnable(GL_STENCIL_TEST)` calls were already wired (confirmed correct by code reading in Task 313/314's write-ups — the bug was the underlying GPU resource never existing, not the state-application code). Fixed with a one-line `SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8)` addition; full ctest reconfirmed zero regressions. **After the fix, both checks pass correctly on EasyGL** — `StencilEnable` genuinely gates the stencil test. **Vulkan: Check A fails outright (both halves GREEN, no gating at all) — a full, direct reconfirmation of Task 870** (stencil testing is completely non-functional there); Check B passes coincidentally (same pattern as the `DepthBufferFunction` test). **Also found an additional, compounding root cause for Vulkan specifically while investigating**: `VulkanGraphicsBackend::FindDepthFormat()` checks `VK_FORMAT_D32_SFLOAT` (a stencil-LESS format) *before* the two stencil-capable formats (`VK_FORMAT_D32_SFLOAT_S8_UINT`/`VK_FORMAT_D24_UNORM_S8_UINT`) — since `D32_SFLOAT` is a mandatory-support Vulkan format on essentially all hardware, Vulkan's depth attachment almost never has a stencil aspect at all, so even a hypothetical fix to `ApplyDepthStencilState` (Task 870) would still need this format-preference order fixed too. Noted as an addendum to Task 870, not a separate task number (same root fix effort). **Flagged, not investigated**: whether `RenderTarget2D`/`RenderTargetCube`'s own separate depth/stencil renderbuffer allocation on EasyGL requests stencil bits — the fix here only covers the default backbuffer/window; render-target stencil support is an open question for whichever future task first needs it. EasyGL ctest: 2075/2077 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 2006/2015 (5 Task-868 confirmations, `Vulkan_DepthStencilState_CompareFunction`/`StencilEnable` — both Task-870 confirmations, `Vulkan_FillMode_WireFrame`'s pre-existing order-dependent flake, `Vulkan_DepthBias`'s usual sub-case — all pre-existing/documented). |
+| 316 | Verify stencil read/write masks                                | ✅      | New `examples/easygl_depthstencilstate_stencil_mask_test.cpp`: 4 columns, 2 differential pairs. `StencilMask` (read mask) pair: stamp stencil=0x05, then compare `ReferenceStencil=0x01` with a narrow `StencilMask=0x01` (expect PASS: `0x01&0x01==0x05&0x01`) vs a full `StencilMask=0xFF` (expect FAIL: `0x01!=0x05` unmasked) — the opposite expected outcomes prove the mask is genuinely applied, not coincidental. `StencilWriteMask` pair: stamp stencil=0xFF, then `Replace` with `ReferenceStencil=0x00` under a narrow `StencilWriteMask=0x0F` (only lower 4 bits writable, expect final buffer `0xF0`, read back and confirmed PASS) vs a full `StencilWriteMask=0xFF` (expect final buffer `0x00`, same read-back check correctly FAILs). **EasyGL: all 4 checks pass exactly as predicted.** **Vulkan: 2 of 4 fail — a further, clean reconfirmation of Task 870** (`stencilMask`/`stencilWriteMask` are both discarded, unused parameters in `ApplyDepthStencilState`, and stencil testing never gates at all since `stencilTestEnable` is never set) — the 2 checks that *expect* PASS pass purely by coincidence (nothing ever gates, so every column renders green regardless of mask), while the 2 contrast checks that expect FAIL correctly fail, revealing the bug — the same asymmetric-pass pattern already seen for `BlendState` (Task 305/308) and `DepthStencilState` (Task 315). Kept `Vulkan_DepthStencilState_StencilMask` registered as a documented known failure. EasyGL ctest: 2076/2078 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 2007/2016 (5 Task-868 confirmations, 3 Task-870 confirmations — `CompareFunction`/`StencilEnable`/`StencilMask` — and `Vulkan_DepthBias`'s usual sub-case; `Vulkan_FillMode_WireFrame` did not recur this run). |
+| 317 | Verify front-face stencil operations                           | ✅      | New `examples/easygl_depthstencilstate_stencil_ops_test.cpp`: 4 columns — 3 isolate one `StencilOperation` slot each (`StencilFail`/`StencilDepthBufferFail`/`StencilPass`, each set to `Increment` while the other two slots are `Decrement` traps), verified via a stamp (`Replace`, buffer=0x05) → an operation draw whose stencil/depth compare outcome routes to exactly one slot → a read-back compare (`Equal`, expects 0x06). A 4th contrast/control column reuses the `StencilPass` setup but deliberately reads back with the WRONG reference (0x99, expects REJECT/BACKGROUND) — **critical for this test's validity**: without it, all 3 op-slot checks expect the same PASS/GREEN outcome, which a fully-bypassed stencil test (as already found on Vulkan, Task 870) would *also* produce, giving zero power to detect the bug. Discovered this exact gap mid-development: an earlier 3-column version coincidentally passed all checks on Vulkan too, for the wrong reason. **EasyGL: all 4 checks pass exactly as predicted**, including the contrast column correctly rejecting. **Vulkan: 3 of 4 pass purely by coincidence (nothing ever gates); the contrast column correctly fails — a fourth, clean reconfirmation of Task 870.** Kept `Vulkan_DepthStencilState_StencilOps` registered as a documented known failure. EasyGL ctest: 2077/2079 (2 pre-existing, unrelated failures unchanged). Vulkan ctest: 2007/2017 (5 Task-868 confirmations, 4 Task-870 confirmations — `CompareFunction`/`StencilEnable`/`StencilMask`/`StencilOps` — and `Vulkan_DepthBias`'s usual sub-case; `Vulkan_FillMode_WireFrame` did not recur this run). |
 | 318 | Verify two-sided stencil operations if API exposes them        | ⬜      | Backface ops                            |
 | 319 | Verify `ReferenceStencil` device state is used by all backends | ⬜      | Already added, needs tests              |
 | 320 | Document depth/stencil support matrix                          | ⬜      | API coverage doc                        |
@@ -687,6 +729,8 @@ All 100 original tasks addressed.
 | 418 | Pixel test: scalar and Vector2 scale overloads produce expected size     | ⬜      | EasyGL                |
 | 419 | Pixel test: source rectangle cropping                                    | ⬜      | EasyGL                |
 | 420 | Pixel test: layer depth affects order when sort mode uses it             | ⬜      | EasyGL                |
+| 664 | Fix Vulkan: multiple `SpriteBatch::Begin()`/`End()` calls per frame — only the last batch renders | ⬜ | Confirmed bug (session 2026-07-02, see `NEXT.md` §5). Root cause not yet isolated — likely `VulkanSpriteBatchBackend` reuses/overwrites a single per-frame vertex/index staging buffer or descriptor set across `Begin`/`End` cycles instead of flushing or double-buffering per batch. Repro: 2+ `Begin()`/`Draw()`/`End()` cycles in one `Draw(GameTime)`, each drawing a distinct-colour quad to a distinct screen region; expect both regions correct, currently only the last one renders. Do not guess-fix; instrument/trace the Vulkan command recording first. |
+| 665 | Fix Vulkan: `SpriteBatch::Begin()`'s `SamplerState` (Filter/AddressU/AddressV) has no effect | ⬜ | `VulkanSpriteBatchBackend` doesn't override `SetSamplerFilter`/`SetSamplerAddressMode` (mirrors the pre-Task-269 EasyGL bug, same root cause, different backend). Fix shape: mirror Task 269's EasyGL fix — store pending filter/address values set via `SetSamplerFilter`/`SetSamplerAddressMode`, apply via the existing per-slot `VkSampler` cache (Task 118, `GetOrCreateTexSamplerDescSet`) at flush time, slot 0. Verify UV is not separately clamped anywhere in the Vulkan sprite draw path (mirrors the second EasyGL bug Task 269 found — check before assuming only the sampler wiring is missing). Add a `Vulkan_TextureAddressMode` pixel-readback test analogous to `EasyGL_TextureAddressMode`. |
 
 ---
 
@@ -828,6 +872,11 @@ All 100 original tasks addressed.
 
 ## Phase 56 — WebGPU backend: infrastructure and CMake setup
 
+> **⛔ Deprioritized as of 2026-07-02.** Tasks in this phase and Phases 57–69 are on hold until
+> Phases 1–55 and the Phase 70–73 backend-perfection wave (SDL_Renderer → EasyGL → Bgfx → Vulkan)
+> are complete — see "Execution order" near the top of this document. Task numbers were moved to
+> 10001+ (from 501–661) to free up numbering space for that wave; no other content changed.
+>
 > WebGPU backend uses **wgpu-native v29** (C API header `webgpu.h` + `wgpu.h`).
 > Installed at `vendor/wgpu-native/`. Shaders are written in **WGSL** (not SPIR-V).
 > Push constants do not exist in WebGPU — replaced by uniform buffers (bind group 0, binding 0).
@@ -838,16 +887,16 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 501 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; find `vendor/wgpu-native` headers + libs; define `CNA_BACKEND_WEBGPU` | ⬜ | Mirror VULKAN block in CMakeLists.txt |
-| 502 | Create `include/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | ⬜ | ~12 nested backend classes |
-| 503 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — stub all methods (throw not-implemented) | ⬜ | Compiles clean, no functionality yet |
-| 504 | SDL3 surface creation: obtain `WGPUSurface` via `SDL_GetProperty(SDL_PROP_WINDOW_WGPU_SURFACE_POINTER)` or `wgpuInstanceCreateSurface` | ⬜ | Prerequisite for all rendering |
-| 505 | `WGPUInstance` + `WGPUAdapter` + `WGPUDevice` + `WGPUQueue` initialization via `wgpuCreateInstance` / `wgpuInstanceRequestAdapter` / `wgpuAdapterRequestDevice` | ⬜ | All synchronous in wgpu-native |
-| 506 | Swap chain: `WGPUSurface` configure + `wgpuSurfaceGetCurrentTexture` + `wgpuTextureCreateView` for backbuffer | ⬜ | Replaces `vkAcquireNextImageKHR` |
-| 507 | Command encoder: `wgpuDeviceCreateCommandEncoder` + `wgpuCommandEncoderFinish` + `wgpuQueueSubmit` per frame | ⬜ | Replaces Vulkan command buffer recording |
-| 508 | Render pass: `wgpuCommandEncoderBeginRenderPass` with color attachment (backbuffer view) + depth attachment | ⬜ | Equivalent to `vkCmdBeginRenderPass` |
-| 509 | `Clear()`: set clear color in `WGPURenderPassColorAttachment.clearValue`; implement depth clear in pass descriptor | ⬜ | |
-| 510 | `Present()`: `wgpuSurfacePresent()` after queue submit | ⬜ | |
+| 10001 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; find `vendor/wgpu-native` headers + libs; define `CNA_BACKEND_WEBGPU` | ⬜ | Mirror VULKAN block in CMakeLists.txt |
+| 10002 | Create `include/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | ⬜ | ~12 nested backend classes |
+| 10003 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — stub all methods (throw not-implemented) | ⬜ | Compiles clean, no functionality yet |
+| 10004 | SDL3 surface creation: obtain `WGPUSurface` via `SDL_GetProperty(SDL_PROP_WINDOW_WGPU_SURFACE_POINTER)` or `wgpuInstanceCreateSurface` | ⬜ | Prerequisite for all rendering |
+| 10005 | `WGPUInstance` + `WGPUAdapter` + `WGPUDevice` + `WGPUQueue` initialization via `wgpuCreateInstance` / `wgpuInstanceRequestAdapter` / `wgpuAdapterRequestDevice` | ⬜ | All synchronous in wgpu-native |
+| 10006 | Swap chain: `WGPUSurface` configure + `wgpuSurfaceGetCurrentTexture` + `wgpuTextureCreateView` for backbuffer | ⬜ | Replaces `vkAcquireNextImageKHR` |
+| 10007 | Command encoder: `wgpuDeviceCreateCommandEncoder` + `wgpuCommandEncoderFinish` + `wgpuQueueSubmit` per frame | ⬜ | Replaces Vulkan command buffer recording |
+| 10008 | Render pass: `wgpuCommandEncoderBeginRenderPass` with color attachment (backbuffer view) + depth attachment | ⬜ | Equivalent to `vkCmdBeginRenderPass` |
+| 10009 | `Clear()`: set clear color in `WGPURenderPassColorAttachment.clearValue`; implement depth clear in pass descriptor | ⬜ | |
+| 10010 | `Present()`: `wgpuSurfacePresent()` after queue submit | ⬜ | |
 
 ---
 
@@ -855,13 +904,13 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 511 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ⬜ | Central UBO for MVP + effect params |
-| 512 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | ⬜ | |
-| 513 | `WGPUBindGroupLayout` for slot 0 binding 0 (uniform buffer) — shared across all 3D pipelines | ⬜ | |
-| 514 | `WGPUBindGroup` creation and per-draw update for MVP matrix | ⬜ | |
-| 515 | `WGPUBindGroupLayout` for slot 1 binding 0 (texture sampler) — for textured pipelines | ⬜ | |
-| 516 | `WGPUSampler` creation mapping `SamplerState` (filter, address mode) → WGPU descriptor | ⬜ | |
-| 517 | `WGPUPipelineLayout` combining UBO bind group layout + texture bind group layout | ⬜ | |
+| 10011 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ⬜ | Central UBO for MVP + effect params |
+| 10012 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | ⬜ | |
+| 10013 | `WGPUBindGroupLayout` for slot 0 binding 0 (uniform buffer) — shared across all 3D pipelines | ⬜ | |
+| 10014 | `WGPUBindGroup` creation and per-draw update for MVP matrix | ⬜ | |
+| 10015 | `WGPUBindGroupLayout` for slot 1 binding 0 (texture sampler) — for textured pipelines | ⬜ | |
+| 10016 | `WGPUSampler` creation mapping `SamplerState` (filter, address mode) → WGPU descriptor | ⬜ | |
+| 10017 | `WGPUPipelineLayout` combining UBO bind group layout + texture bind group layout | ⬜ | |
 
 ---
 
@@ -869,17 +918,17 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 520 | Write `sprite2d.wgsl` — 2D sprite vertex + fragment shader (pos + UV + RGBA tint); embed as C++ string literal | ⬜ | Equivalent to `sprite2d.vert/frag.glsl` |
-| 521 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ⬜ | stride=16 |
-| 522 | Write `textured3d.wgsl` — 3D vertex (float3 pos + float2 UV); texture2D sampler in fragment | ⬜ | stride=20 |
-| 523 | Write `colored_textured3d.wgsl` — float3 + ubyte4 color + float2 UV; multiply tex×color in fragment | ⬜ | stride=24 |
-| 524 | Write `lit_textured3d.wgsl` — float3 pos + float3 normal + float2 UV; Blinn-Phong lighting in fragment | ⬜ | stride=32 |
-| 525 | Write `alpha_test3d.wgsl` — per-pixel alpha discard matching XNA AlphaTestEffect semantics | ⬜ | |
-| 526 | Write `dual_texture3d.wgsl` — two texture samplers, multiply/blend in fragment | ⬜ | |
-| 527 | Write `env_map3d.wgsl` — cube map sampler + reflection vector from normal | ⬜ | |
-| 528 | Write `skinned3d.wgsl` — bone palette as uniform array (max 72 mat4); blend 4 weights+indices | ⬜ | |
-| 529 | Write `instanced3d.wgsl` — per-instance mat4 world transform in second vertex buffer binding | ⬜ | |
-| 530 | Compile-time validation: embed all WGSL as `constexpr const char*` in `webgpu_shaders.hpp`; validate via `wgpuDeviceCreateShaderModule` at startup | ⬜ | Catch WGSL errors early |
+| 10020 | Write `sprite2d.wgsl` — 2D sprite vertex + fragment shader (pos + UV + RGBA tint); embed as C++ string literal | ⬜ | Equivalent to `sprite2d.vert/frag.glsl` |
+| 10021 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ⬜ | stride=16 |
+| 10022 | Write `textured3d.wgsl` — 3D vertex (float3 pos + float2 UV); texture2D sampler in fragment | ⬜ | stride=20 |
+| 10023 | Write `colored_textured3d.wgsl` — float3 + ubyte4 color + float2 UV; multiply tex×color in fragment | ⬜ | stride=24 |
+| 10024 | Write `lit_textured3d.wgsl` — float3 pos + float3 normal + float2 UV; Blinn-Phong lighting in fragment | ⬜ | stride=32 |
+| 10025 | Write `alpha_test3d.wgsl` — per-pixel alpha discard matching XNA AlphaTestEffect semantics | ⬜ | |
+| 10026 | Write `dual_texture3d.wgsl` — two texture samplers, multiply/blend in fragment | ⬜ | |
+| 10027 | Write `env_map3d.wgsl` — cube map sampler + reflection vector from normal | ⬜ | |
+| 10028 | Write `skinned3d.wgsl` — bone palette as uniform array (max 72 mat4); blend 4 weights+indices | ⬜ | |
+| 10029 | Write `instanced3d.wgsl` — per-instance mat4 world transform in second vertex buffer binding | ⬜ | |
+| 10030 | Compile-time validation: embed all WGSL as `constexpr const char*` in `webgpu_shaders.hpp`; validate via `wgpuDeviceCreateShaderModule` at startup | ⬜ | Catch WGSL errors early |
 
 ---
 
@@ -887,19 +936,19 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 535 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | ⬜ | Reusable for all pipelines |
-| 536 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
-| 537 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ⬜ | |
-| 538 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ⬜ | |
-| 539 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | ⬜ | |
-| 540 | `GetOrCreatePipelineAlphaTest3D()` — alpha discard variant | ⬜ | |
-| 541 | `GetOrCreatePipelineDualTex3D()` — two-texture variant | ⬜ | |
-| 542 | `GetOrCreatePipelineEnvMap3D()` — cube map variant | ⬜ | |
-| 543 | `GetOrCreatePipelineSkinned3D()` — bone palette variant | ⬜ | |
-| 544 | `GetOrCreatePipelineInstanced3D()` — per-instance binding variant | ⬜ | |
-| 545 | Depth-stencil: `WGPUDepthStencilState` mapping `DepthFormat` + `CompareFunction` + `StencilOperation` | ⬜ | |
-| 546 | Blend state: `WGPUBlendState` mapping `BlendFunction` + `BlendFactor` (Opaque, AlphaBlend, Additive, NonPremultiplied) | ⬜ | |
-| 547 | Rasterizer: `WGPUPrimitiveState` mapping `CullMode`, `FillMode` (WireFrame via `topology=LineStrip` fallback or unsupported) | ⬜ | |
+| 10035 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | ⬜ | Reusable for all pipelines |
+| 10036 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
+| 10037 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ⬜ | |
+| 10038 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ⬜ | |
+| 10039 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | ⬜ | |
+| 10040 | `GetOrCreatePipelineAlphaTest3D()` — alpha discard variant | ⬜ | |
+| 10041 | `GetOrCreatePipelineDualTex3D()` — two-texture variant | ⬜ | |
+| 10042 | `GetOrCreatePipelineEnvMap3D()` — cube map variant | ⬜ | |
+| 10043 | `GetOrCreatePipelineSkinned3D()` — bone palette variant | ⬜ | |
+| 10044 | `GetOrCreatePipelineInstanced3D()` — per-instance binding variant | ⬜ | |
+| 10045 | Depth-stencil: `WGPUDepthStencilState` mapping `DepthFormat` + `CompareFunction` + `StencilOperation` | ⬜ | |
+| 10046 | Blend state: `WGPUBlendState` mapping `BlendFunction` + `BlendFactor` (Opaque, AlphaBlend, Additive, NonPremultiplied) | ⬜ | |
+| 10047 | Rasterizer: `WGPUPrimitiveState` mapping `CullMode`, `FillMode` (WireFrame via `topology=LineStrip` fallback or unsupported) | ⬜ | |
 
 ---
 
@@ -907,13 +956,13 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 550 | `WebGPUVertexBufferBackend`: create `WGPUBuffer` (vertex, size=capacity×stride) with `COPY_DST` usage | ⬜ | |
-| 551 | `SetData()`: upload via `wgpuQueueWriteBuffer(queue, buffer, 0, data, byteSize)` | ⬜ | Simpler than Vulkan staging |
-| 552 | `SetDataWithOptions()`: `Discard` = reallocate buffer; `NoOverwrite` = `wgpuQueueWriteBuffer` at offset | ⬜ | |
-| 553 | `WebGPUIndexBufferBackend`: 16-bit and 32-bit index buffers via `WGPUIndexFormat` | ⬜ | |
-| 554 | `SetData16()` / `SetData32()`: `wgpuQueueWriteBuffer` | ⬜ | |
-| 555 | Disposed guard in all SetData methods (throw `ObjectDisposedException`) | ⬜ | Match Task 240 pattern |
-| 556 | `SetVertexBuffer(wgpuRenderPassSetVertexBuffer)` + `SetIndexBuffer(wgpuRenderPassSetIndexBuffer)` in draw dispatch | ⬜ | |
+| 10050 | `WebGPUVertexBufferBackend`: create `WGPUBuffer` (vertex, size=capacity×stride) with `COPY_DST` usage | ⬜ | |
+| 10051 | `SetData()`: upload via `wgpuQueueWriteBuffer(queue, buffer, 0, data, byteSize)` | ⬜ | Simpler than Vulkan staging |
+| 10052 | `SetDataWithOptions()`: `Discard` = reallocate buffer; `NoOverwrite` = `wgpuQueueWriteBuffer` at offset | ⬜ | |
+| 10053 | `WebGPUIndexBufferBackend`: 16-bit and 32-bit index buffers via `WGPUIndexFormat` | ⬜ | |
+| 10054 | `SetData16()` / `SetData32()`: `wgpuQueueWriteBuffer` | ⬜ | |
+| 10055 | Disposed guard in all SetData methods (throw `ObjectDisposedException`) | ⬜ | Match Task 240 pattern |
+| 10056 | `SetVertexBuffer(wgpuRenderPassSetVertexBuffer)` + `SetIndexBuffer(wgpuRenderPassSetIndexBuffer)` in draw dispatch | ⬜ | |
 
 ---
 
@@ -921,16 +970,16 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 560 | `WebGPUTextureBackend`: `WGPUTexture` (2D, RGBA8Unorm, COPY_DST + TEXTURE_BINDING) + `WGPUTextureView` | ⬜ | |
-| 561 | `SetData()`: `wgpuQueueWriteTexture()` with `WGPUImageCopyTexture` + `WGPUTextureDataLayout` | ⬜ | |
-| 562 | `GetData()`: `WGPUBuffer` (MAP_READ) + `wgpuCommandEncoderCopyTextureToBuffer` + `wgpuBufferMapAsync` + poll | ⬜ | Async → synchronous via polling |
-| 563 | Mip levels: generate via `wgpuCommandEncoderCopyTextureToTexture` per level or leave as mip=1 (document) | ⬜ | |
-| 564 | `WebGPURenderTargetBackend`: `WGPUTexture` (RENDER_ATTACHMENT + TEXTURE_BINDING) + depth texture | ⬜ | |
-| 565 | `SetRenderTarget(rt)` / `SetRenderTarget(nullptr)`: switch render pass target between RT and swapchain view | ⬜ | |
-| 566 | `GetBackBufferData()`: readback via MAP_READ buffer + `wgpuCommandEncoderCopyTextureToBuffer` | ⬜ | |
-| 567 | `WebGPUTextureCubeBackend`: `WGPUTexture` (dimension=2D, arrayLayerCount=6, CUBE_COMPATIBLE) | ⬜ | |
-| 568 | `WebGPUTexture3DBackend`: `WGPUTexture` (dimension=3D) | ⬜ | |
-| 569 | MSAA: `WGPUTexture` with `sampleCount=4`; resolve in render pass via `resolveTarget` | ⬜ | |
+| 10060 | `WebGPUTextureBackend`: `WGPUTexture` (2D, RGBA8Unorm, COPY_DST + TEXTURE_BINDING) + `WGPUTextureView` | ⬜ | |
+| 10061 | `SetData()`: `wgpuQueueWriteTexture()` with `WGPUImageCopyTexture` + `WGPUTextureDataLayout` | ⬜ | |
+| 10062 | `GetData()`: `WGPUBuffer` (MAP_READ) + `wgpuCommandEncoderCopyTextureToBuffer` + `wgpuBufferMapAsync` + poll | ⬜ | Async → synchronous via polling |
+| 10063 | Mip levels: generate via `wgpuCommandEncoderCopyTextureToTexture` per level or leave as mip=1 (document) | ⬜ | |
+| 10064 | `WebGPURenderTargetBackend`: `WGPUTexture` (RENDER_ATTACHMENT + TEXTURE_BINDING) + depth texture | ⬜ | |
+| 10065 | `SetRenderTarget(rt)` / `SetRenderTarget(nullptr)`: switch render pass target between RT and swapchain view | ⬜ | |
+| 10066 | `GetBackBufferData()`: readback via MAP_READ buffer + `wgpuCommandEncoderCopyTextureToBuffer` | ⬜ | |
+| 10067 | `WebGPUTextureCubeBackend`: `WGPUTexture` (dimension=2D, arrayLayerCount=6, CUBE_COMPATIBLE) | ⬜ | |
+| 10068 | `WebGPUTexture3DBackend`: `WGPUTexture` (dimension=3D) | ⬜ | |
+| 10069 | MSAA: `WGPUTexture` with `sampleCount=4`; resolve in render pass via `resolveTarget` | ⬜ | |
 
 ---
 
@@ -938,11 +987,11 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 575 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | ⬜ | |
-| 576 | Upload sprite quads via `wgpuQueueWriteBuffer` per batch | ⬜ | |
-| 577 | Per-batch draw: set pipeline, bind groups (UBO + texture), vertex buffer, draw | ⬜ | |
-| 578 | Viewport UBO (2 floats: width, height) in sprite UBO slot | ⬜ | Replaces Vulkan sprite push constants |
-| 579 | Sprite sort modes: Immediate, Deferred, Texture, FrontToBack, BackToFront — mirror Vulkan implementation | ⬜ | |
+| 10075 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | ⬜ | |
+| 10076 | Upload sprite quads via `wgpuQueueWriteBuffer` per batch | ⬜ | |
+| 10077 | Per-batch draw: set pipeline, bind groups (UBO + texture), vertex buffer, draw | ⬜ | |
+| 10078 | Viewport UBO (2 floats: width, height) in sprite UBO slot | ⬜ | Replaces Vulkan sprite push constants |
+| 10079 | Sprite sort modes: Immediate, Deferred, Texture, FrontToBack, BackToFront — mirror Vulkan implementation | ⬜ | |
 
 ---
 
@@ -950,13 +999,13 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 585 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ⬜ | |
-| 586 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ⬜ | |
-| 587 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | ⬜ | Mirror Vulkan dispatch logic |
-| 588 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ⬜ | |
-| 589 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ⬜ | |
-| 590 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ⬜ | |
-| 591 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ⬜ | Match Task 110 |
+| 10085 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ⬜ | |
+| 10086 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ⬜ | |
+| 10087 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | ⬜ | Mirror Vulkan dispatch logic |
+| 10088 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ⬜ | |
+| 10089 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ⬜ | |
+| 10090 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ⬜ | |
+| 10091 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ⬜ | Match Task 110 |
 
 ---
 
@@ -964,12 +1013,12 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 595 | `WebGPUEffectBackend`: `BasicEffect` wires to `FillGpuDrawParams` → UBO upload | ⬜ | |
-| 596 | `AlphaTestEffect`: UBO alpha test params (function, reference) | ⬜ | |
-| 597 | `DualTextureEffect`: second texture bind group | ⬜ | |
-| 598 | `EnvironmentMapEffect`: cube map bind group + reflection UBO params | ⬜ | |
-| 599 | `SkinnedEffect`: bone palette as large UBO (72 × mat4 = 4608 bytes) in separate bind group | ⬜ | WebGPU min UBO size: 65536 bytes — fits |
-| 600 | `ShaderEffect` (custom WGSL): `wgpuDeviceCreateShaderModule` from user-provided WGSL source string | ⬜ | NOXNA extension |
+| 10095 | `WebGPUEffectBackend`: `BasicEffect` wires to `FillGpuDrawParams` → UBO upload | ⬜ | |
+| 10096 | `AlphaTestEffect`: UBO alpha test params (function, reference) | ⬜ | |
+| 10097 | `DualTextureEffect`: second texture bind group | ⬜ | |
+| 10098 | `EnvironmentMapEffect`: cube map bind group + reflection UBO params | ⬜ | |
+| 10099 | `SkinnedEffect`: bone palette as large UBO (72 × mat4 = 4608 bytes) in separate bind group | ⬜ | WebGPU min UBO size: 65536 bytes — fits |
+| 10100 | `ShaderEffect` (custom WGSL): `wgpuDeviceCreateShaderModule` from user-provided WGSL source string | ⬜ | NOXNA extension |
 
 ---
 
@@ -977,14 +1026,14 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 605 | `SetDepthTestEnabled()` / `SetDepthWriteEnabled()`: bake into pipeline key | ⬜ | WebGPU requires pipeline rebuild on change |
-| 606 | `SetBlendState()`: map `BlendState` preset → `WGPUBlendState` | ⬜ | |
-| 607 | `SetRasterizerState()`: `CullMode` → `WGPUCullMode`; `FillMode::WireFrame` unsupported (log warning) | ⬜ | WebGPU has no polygon mode |
-| 608 | `SetScissorRectangle()`: `wgpuRenderPassEncoderSetScissorRect` | ⬜ | |
-| 609 | `SetViewport()`: `wgpuRenderPassEncoderSetViewport` | ⬜ | |
-| 610 | `SetSamplerState()`: per-slot `WGPUSampler` cache (filter + address mode key) | ⬜ | |
-| 611 | `SetDepthStencilState()`: stencil ops → `WGPUStencilFaceState` | ⬜ | |
-| 612 | `OcclusionQuery`: `WGPUQuerySet` (type=Occlusion) + `wgpuRenderPassEncoderBeginOcclusionQuery` | ⬜ | |
+| 10105 | `SetDepthTestEnabled()` / `SetDepthWriteEnabled()`: bake into pipeline key | ⬜ | WebGPU requires pipeline rebuild on change |
+| 10106 | `SetBlendState()`: map `BlendState` preset → `WGPUBlendState` | ⬜ | |
+| 10107 | `SetRasterizerState()`: `CullMode` → `WGPUCullMode`; `FillMode::WireFrame` unsupported (log warning) | ⬜ | WebGPU has no polygon mode |
+| 10108 | `SetScissorRectangle()`: `wgpuRenderPassEncoderSetScissorRect` | ⬜ | |
+| 10109 | `SetViewport()`: `wgpuRenderPassEncoderSetViewport` | ⬜ | |
+| 10110 | `SetSamplerState()`: per-slot `WGPUSampler` cache (filter + address mode key) | ⬜ | |
+| 10111 | `SetDepthStencilState()`: stencil ops → `WGPUStencilFaceState` | ⬜ | |
+| 10112 | `OcclusionQuery`: `WGPUQuerySet` (type=Occlusion) + `wgpuRenderPassEncoderBeginOcclusionQuery` | ⬜ | |
 
 ---
 
@@ -992,9 +1041,9 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 615 | MRT render pass: `WGPURenderPassDescriptor` with array of `WGPURenderPassColorAttachment` (up to 4) | ⬜ | |
-| 616 | `GetOrCreateMRTRenderPipeline(colorAttachmentCount)`: pipeline with matching `targetCount` in fragment state | ⬜ | |
-| 617 | `SetRenderTargets(vector<RenderTarget2D*>)`: configure MRT pass descriptor | ⬜ | |
+| 10115 | MRT render pass: `WGPURenderPassDescriptor` with array of `WGPURenderPassColorAttachment` (up to 4) | ⬜ | |
+| 10116 | `GetOrCreateMRTRenderPipeline(colorAttachmentCount)`: pipeline with matching `targetCount` in fragment state | ⬜ | |
+| 10117 | `SetRenderTargets(vector<RenderTarget2D*>)`: configure MRT pass descriptor | ⬜ | |
 
 ---
 
@@ -1002,24 +1051,24 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 620 | `cmake-build-webgpu` directory; `cna_webgpu_test` macro in CMakeLists.txt | ⬜ | Mirror `cna_vulkan_test` |
-| 621 | Smoke test: init device, clear to blue, `GetBackBufferData`, assert pixel | ⬜ | `webgpu_smoke_test.cpp` |
-| 622 | 2D sprite test: `SpriteBatch` draw white 1×1 texture → assert pixel | ⬜ | |
-| 623 | 3D colored quad: stride=16 VPC, red quad, assert center pixel | ⬜ | `webgpu_vertex_format_test.cpp` |
-| 624 | 3D textured quad: stride=20 VPT, green texture, assert center pixel | ⬜ | |
-| 625 | 3D colored+textured: stride=24 VPCT, blue vertex + white tex | ⬜ | |
-| 626 | 3D lit textured: stride=32 VPNT, magenta tex, no lighting | ⬜ | |
-| 627 | `AlphaTestEffect`: draw with alpha < threshold → pixel transparent | ⬜ | |
-| 628 | `DualTextureEffect`: two textures → multiply blend | ⬜ | |
-| 629 | `EnvironmentMapEffect`: emissive color only (envAmount=0) → red pixel | ⬜ | |
-| 630 | `SkinnedEffect`: identity bone palette → same as lit textured | ⬜ | |
-| 631 | Instanced draw: 3 instances at different positions, assert 3 pixels | ⬜ | |
-| 632 | RenderTarget2D: draw red into RT, blit to backbuffer → assert red | ⬜ | |
-| 633 | MSAA 4x: draw red quad with MSAA, resolve, assert pixel | ⬜ | |
-| 634 | OcclusionQuery: draw occluded geometry, assert query result = 0 | ⬜ | |
-| 635 | VertexBuffer dispose guard: assert `ObjectDisposedException` after `Dispose()` | ⬜ | |
-| 636 | Dynamic buffer stress: 12 frames × None/Discard/NoOverwrite | ⬜ | |
-| 637 | WebGPU vertex format mapping table test (mirror Task 248 for WebGPU) | ⬜ | `WGPUVertexFormat` enum |
+| 10120 | `cmake-build-webgpu` directory; `cna_webgpu_test` macro in CMakeLists.txt | ⬜ | Mirror `cna_vulkan_test` |
+| 10121 | Smoke test: init device, clear to blue, `GetBackBufferData`, assert pixel | ⬜ | `webgpu_smoke_test.cpp` |
+| 10122 | 2D sprite test: `SpriteBatch` draw white 1×1 texture → assert pixel | ⬜ | |
+| 10123 | 3D colored quad: stride=16 VPC, red quad, assert center pixel | ⬜ | `webgpu_vertex_format_test.cpp` |
+| 10124 | 3D textured quad: stride=20 VPT, green texture, assert center pixel | ⬜ | |
+| 10125 | 3D colored+textured: stride=24 VPCT, blue vertex + white tex | ⬜ | |
+| 10126 | 3D lit textured: stride=32 VPNT, magenta tex, no lighting | ⬜ | |
+| 10127 | `AlphaTestEffect`: draw with alpha < threshold → pixel transparent | ⬜ | |
+| 10128 | `DualTextureEffect`: two textures → multiply blend | ⬜ | |
+| 10129 | `EnvironmentMapEffect`: emissive color only (envAmount=0) → red pixel | ⬜ | |
+| 10130 | `SkinnedEffect`: identity bone palette → same as lit textured | ⬜ | |
+| 10131 | Instanced draw: 3 instances at different positions, assert 3 pixels | ⬜ | |
+| 10132 | RenderTarget2D: draw red into RT, blit to backbuffer → assert red | ⬜ | |
+| 10133 | MSAA 4x: draw red quad with MSAA, resolve, assert pixel | ⬜ | |
+| 10134 | OcclusionQuery: draw occluded geometry, assert query result = 0 | ⬜ | |
+| 10135 | VertexBuffer dispose guard: assert `ObjectDisposedException` after `Dispose()` | ⬜ | |
+| 10136 | Dynamic buffer stress: 12 frames × None/Discard/NoOverwrite | ⬜ | |
+| 10137 | WebGPU vertex format mapping table test (mirror Task 248 for WebGPU) | ⬜ | `WGPUVertexFormat` enum |
 
 ---
 
@@ -1027,17 +1076,17 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 640 | `SetStringMarkerEXT()`: no-op (WebGPU has no debug labels in wgpu-native C API yet) | ⬜ | Document deviation |
-| 641 | `DebugSimulateContextLoss()`: destroy and recreate device (wgpu-native supports `wgpuDeviceDestroy`) | ⬜ | |
-| 642 | `PresentationInterval` → vsync: `wgpuSurfaceConfigure.presentMode` (Fifo=VSync, Immediate=no VSync, Mailbox=adaptive) | ⬜ | |
-| 643 | `IsFullScreen` via `SDL_SetWindowFullscreen` — same as other backends | ⬜ | |
-| 644 | `BackBufferWidth/Height` changes: reconfigure swap chain via `wgpuSurfaceConfigure` | ⬜ | |
-| 645 | DXT1/DXT3/DXT5 compressed texture upload: `WGPUTextureFormat_BC1RGBAUnorm` etc. | ⬜ | Requires `wgpuAdapterHasFeature(BC_texture_compression)` |
-| 646 | Texture3D: `WGPUTextureDimension_3D` + layered upload | ⬜ | |
-| 647 | TextureCube: `WGPUTexture` arrayLayerCount=6 + `WGPUTextureViewDimension_Cube` | ⬜ | |
-| 648 | RenderTargetCube: `WGPUTexture` cube + per-face `WGPUTextureView` as render attachment | ⬜ | |
-| 649 | `FillMode::WireFrame`: document as unsupported in WebGPU (no polygon mode); add to deviations doc | ⬜ | |
-| 650 | WebGPU vertex format helper: `WGPUVertexFormat WebGPUVertexFormatFromVEF(VertexElementFormat)` (mirror Task 248) | ⬜ | |
+| 10140 | `SetStringMarkerEXT()`: no-op (WebGPU has no debug labels in wgpu-native C API yet) | ⬜ | Document deviation |
+| 10141 | `DebugSimulateContextLoss()`: destroy and recreate device (wgpu-native supports `wgpuDeviceDestroy`) | ⬜ | |
+| 10142 | `PresentationInterval` → vsync: `wgpuSurfaceConfigure.presentMode` (Fifo=VSync, Immediate=no VSync, Mailbox=adaptive) | ⬜ | |
+| 10143 | `IsFullScreen` via `SDL_SetWindowFullscreen` — same as other backends | ⬜ | |
+| 10144 | `BackBufferWidth/Height` changes: reconfigure swap chain via `wgpuSurfaceConfigure` | ⬜ | |
+| 10145 | DXT1/DXT3/DXT5 compressed texture upload: `WGPUTextureFormat_BC1RGBAUnorm` etc. | ⬜ | Requires `wgpuAdapterHasFeature(BC_texture_compression)` |
+| 10146 | Texture3D: `WGPUTextureDimension_3D` + layered upload | ⬜ | |
+| 10147 | TextureCube: `WGPUTexture` arrayLayerCount=6 + `WGPUTextureViewDimension_Cube` | ⬜ | |
+| 10148 | RenderTargetCube: `WGPUTexture` cube + per-face `WGPUTextureView` as render attachment | ⬜ | |
+| 10149 | `FillMode::WireFrame`: document as unsupported in WebGPU (no polygon mode); add to deviations doc | ⬜ | |
+| 10150 | WebGPU vertex format helper: `WGPUVertexFormat WebGPUVertexFormatFromVEF(VertexElementFormat)` (mirror Task 248) | ⬜ | |
 
 ---
 
@@ -1045,10 +1094,394 @@ All 100 original tasks addressed.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 655 | `docs/webgpu-backend.md`: architecture, deviations from Vulkan, WGSL shader map, UBO layout | ⬜ | |
-| 656 | `docs/webgpu-vs-vulkan-deviations.md`: push constants → UBO, no wireframe, async→sync strategy | ⬜ | |
-| 657 | Emscripten target: configure CNA for `emcc` build with `-sUSE_WEBGPU=1`; WebGPU backend routes to browser `navigator.gpu` | ⬜ | True browser WASM target |
-| 658 | Emscripten: SDL3 Emscripten port + WebGPU surface via `emscripten_webgpu_get_device()` | ⬜ | |
-| 659 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | ⬜ | |
-| 660 | Emscripten: run 2D smoke test in headless Chrome via `--headless=new --enable-features=WebGPU` | ⬜ | CI-friendly |
-| 661 | Cross-backend pixel comparison: same scene rendered on EasyGL/Vulkan/Bgfx/WebGPU — assert pixel-level parity | ⬜ | |
+| 10155 | `docs/webgpu-backend.md`: architecture, deviations from Vulkan, WGSL shader map, UBO layout | ⬜ | |
+| 10156 | `docs/webgpu-vs-vulkan-deviations.md`: push constants → UBO, no wireframe, async→sync strategy | ⬜ | |
+| 10157 | Emscripten target: configure CNA for `emcc` build with `-sUSE_WEBGPU=1`; WebGPU backend routes to browser `navigator.gpu` | ⬜ | True browser WASM target |
+| 10158 | Emscripten: SDL3 Emscripten port + WebGPU surface via `emscripten_webgpu_get_device()` | ⬜ | |
+| 10159 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | ⬜ | |
+| 10160 | Emscripten: run 2D smoke test in headless Chrome via `--headless=new --enable-features=WebGPU` | ⬜ | CI-friendly |
+| 10161 | Cross-backend pixel comparison: same scene rendered on EasyGL/Vulkan/Bgfx/WebGPU — assert pixel-level parity | ⬜ | |
+
+---
+
+## Phase 70 — SDL_Renderer: 2D backend verified perfection
+
+> Runs first, per "Execution order" above. SDL_Renderer is 2D-only by design (see file header),
+> so this phase is deliberately smaller than Phases 72–73 — there's no 3D pipeline, blend/depth/
+> raster state matrix, or stock-effect shader breadth to cover. "Perfect" here means: every 2D
+> XNA feature SDL_Renderer is supposed to support is pixel-verified specifically *through*
+> SDL_Renderer (not assumed from EasyGL parity), and every unsupported 3D path throws the
+> correct, specific exception rather than a generic one.
+
+### SpriteBatch on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 666 | Audit all `SpriteBatch::Draw`/`DrawString` overloads specifically through SDL_Renderer (not inherited from EasyGL test assumptions) | ⬜ | Confirm every overload produces correct `SDL_RenderTexture`/`SDL_RenderTextureRotated` calls |
+| 667 | Pixel test: `SpriteSortMode::Deferred` submission order on SDL_Renderer | ⬜ | Mirrors Task 162 for this backend |
+| 668 | Pixel test: `SpriteSortMode::Texture` grouping on SDL_Renderer | ⬜ | Mirrors Task 163 |
+| 669 | Pixel test: `SpriteSortMode::FrontToBack` / `BackToFront` ordering on SDL_Renderer | ⬜ | Mirrors Tasks 164–165 |
+| 670 | Pixel test: `SpriteSortMode::Immediate` per-draw flush on SDL_Renderer | ⬜ | Mirrors Task 161 |
+| 671 | Pixel test: rotation around origin on SDL_Renderer | ⬜ | `SDL_RenderTextureRotated` |
+| 672 | Pixel test: scalar and `Vector2` scale overloads on SDL_Renderer | ⬜ | |
+| 673 | Pixel test: source rectangle cropping on SDL_Renderer | ⬜ | |
+| 674 | Pixel test: `SpriteEffects::FlipHorizontally`/`FlipVertically` on SDL_Renderer | ⬜ | Mirrors Task 167 |
+| 675 | Pixel test: `transformMatrix` in `SpriteBatch::Begin` on SDL_Renderer | ⬜ | Mirrors Task 168 |
+| 676 | Decide and document `SpriteBatch::Begin(effect)` custom-`Effect` behavior on SDL_Renderer | ⬜ | No programmable shader stage exists on SDL_Renderer — either throw `NotSupportedException` or document silent-ignore; must not silently misrender |
+| 677 | Guard tests: `Begin`/`End` sequencing errors throw correctly on SDL_Renderer | ⬜ | Mirrors Task 166 |
+
+### Texture2D on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 678 | Audit `Texture2D::SetData`/`GetData` full-array round-trip on SDL_Renderer | ⬜ | `SDL_UpdateTexture`/`SDL_LockTexture` path |
+| 679 | Pixel test: `SetData` partial-rectangle region on SDL_Renderer | ⬜ | Mirrors Task 169 |
+| 680 | Pixel test: `SetData` `startIndex`/`elementCount` slice on SDL_Renderer | ⬜ | Mirrors Task 170 |
+| 681 | Decide and document `Texture2D` mip-level `SetData`/`GetData` on SDL_Renderer | ⬜ | SDL textures have no native mip chain — single-level-only fallback, or throw for `level>0`; must not silently no-op |
+| 682 | Verify `Texture2D::FromStream` (PNG/JPG/BMP/DDS) round-trip renders correctly when drawn via SDL_Renderer | ⬜ | |
+| 683 | Verify `SaveAsPng`/`SaveAsJpeg` round-trip when the source texture was created/updated through SDL_Renderer | ⬜ | |
+| 684 | Verify NPOT texture upload+sample correctness on SDL_Renderer | ⬜ | 3×5, 7×11 — mirrors Task 268 |
+| 685 | Pixel test: `TextureAddressMode::Clamp` via `SpriteBatch` on SDL_Renderer | ⬜ | |
+| 686 | Decide and document `TextureAddressMode::Wrap` via `SpriteBatch` on SDL_Renderer | ⬜ | SDL's texture sampling has no native wrap mode — emulate via tiled draw calls, or throw `NotSupportedException`; must not silently clamp when Wrap was requested |
+| 687 | Decide and document `TextureAddressMode::Mirror` via `SpriteBatch` on SDL_Renderer | ⬜ | Same decision shape as Task 686 |
+| 688 | Pixel test: `TextureFilter::Point` vs `Linear` via `SDL_ScaleMode` on SDL_Renderer | ⬜ | |
+| 689 | Verify `Texture2D::Dispose` releases the underlying `SDL_Texture` exactly once | ⬜ | No double-free |
+
+### SpriteFont on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 690 | Pixel test: single glyph at known position on SDL_Renderer | ⬜ | Mirrors Task 424 |
+| 691 | Pixel test: multiple glyphs with spacing on SDL_Renderer | ⬜ | Mirrors Task 425 |
+| 692 | Pixel test: newline advances by line spacing on SDL_Renderer | ⬜ | Mirrors Task 426 |
+| 693 | Pixel test: default character fallback on SDL_Renderer | ⬜ | Mirrors Task 427 |
+| 694 | Verify `SpriteEffects` flip + rotation/origin/scale with `DrawString` on SDL_Renderer | ⬜ | Mirrors Tasks 428–429 |
+
+### BlendState on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 695 | Audit `BlendState` → `SDL_BlendMode` mapping for all 4 presets | ⬜ | Opaque/AlphaBlend/Additive/NonPremultiplied |
+| 696 | Pixel test: `BlendState::Opaque` on SDL_Renderer | ⬜ | |
+| 697 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha on SDL_Renderer | ⬜ | |
+| 698 | Pixel test: `BlendState::NonPremultiplied` on SDL_Renderer | ⬜ | |
+| 699 | Pixel test: `BlendState::Additive` saturation behavior on SDL_Renderer | ⬜ | |
+| 700 | Decide and document custom (non-preset) `BlendState` combinations on SDL_Renderer | ⬜ | `SDL_ComposeCustomBlendMode` has a narrower factor set than XNA — document fallback/throw per unsupported combination |
+
+### SamplerState on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 701 | Audit `SamplerState` → `SDL_ScaleMode` + address-mode mapping | ⬜ | |
+| 702 | Verify default sampler state matches FNA's `LinearClamp` on SDL_Renderer | ⬜ | |
+| 703 | Verify per-draw sampler state changes take effect on the next `SpriteBatch::Begin` on SDL_Renderer | ⬜ | |
+
+### RenderTarget2D on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 704 | Audit `RenderTarget2D` construction on SDL_Renderer | ⬜ | `SDL_TEXTUREACCESS_TARGET` |
+| 705 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on SDL_Renderer | ⬜ | |
+| 706 | Verify `RenderTargetUsage::DiscardContents` vs `PreserveContents` on SDL_Renderer | ⬜ | |
+| 707 | Verify `GetBackBufferData` reads correct pixels after `SetRenderTarget(nullptr)` restores the backbuffer on SDL_Renderer | ⬜ | |
+| 708 | Decide and document render-target depth-buffer behavior on SDL_Renderer | ⬜ | SDL_Renderer has no depth-buffer concept — throw, or silently ignore `DepthFormat`, matching the 2D-only design intent |
+| 709 | Verify MRT (`SetRenderTargets` with 2+ bindings) throws clearly on SDL_Renderer | ⬜ | SDL_Renderer supports one active render target at a time — must not silently render to only the first |
+
+### Viewport / PresentationParameters / GraphicsDeviceManager on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 710 | Verify `Viewport` get/set round-trip and `Project`/`Unproject` math on SDL_Renderer | ⬜ | 2D orthographic case |
+| 711 | Verify backbuffer resize through `PresentationParameters` on SDL_Renderer | ⬜ | |
+| 712 | Verify fullscreen toggle on SDL_Renderer | ⬜ | |
+| 713 | Verify `PresentInterval` (vsync) mapping to `SDL_SetRenderVSync` on SDL_Renderer | ⬜ | |
+| 714 | Decide and document `MultiSampleCount` behavior on SDL_Renderer | ⬜ | SDL_Renderer has no MSAA control — accept-and-ignore-with-log, or throw |
+| 715 | Verify `DeviceResetting`/`DeviceReset` events fire correctly on SDL_Renderer backbuffer resize | ⬜ | |
+
+### GraphicsDevice / resource lifecycle on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 716 | Verify `GraphicsDevice::Clear` (all `ClearOptions` combinations) on SDL_Renderer | ⬜ | |
+| 717 | Verify disposed-resource guards throw `ObjectDisposedException` consistently on SDL_Renderer | ⬜ | Texture2D, RenderTarget2D, BlendState, SamplerState, SpriteBatch |
+| 718 | Verify double-`Dispose` is safe for every SDL_Renderer-backed resource type | ⬜ | |
+| 719 | Add leak-check test: create/dispose 80 SDL_Renderer textures/render-targets, verify `GetTrackedResourceCount` returns to baseline | ⬜ | Mirrors Task 219 |
+
+### Systematic "3D throws correctly" sweep on SDL_Renderer
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 720 | Verify `DrawPrimitives`/`DrawIndexedPrimitives`/`DrawInstancedPrimitives` throw the correct exception type+message on SDL_Renderer | ⬜ | Not just "throws something" |
+| 721 | Verify all 5 `DrawUserPrimitives` typed + `VertexDeclaration` overloads throw correctly on SDL_Renderer | ⬜ | |
+| 722 | Verify all 10 `DrawUserIndexedPrimitives` typed + `VertexDeclaration` overloads throw correctly on SDL_Renderer | ⬜ | |
+| 723 | Re-verify `CreateVertexBuffer`/`CreateIndexBuffer`/Dynamic variants throw correctly on SDL_Renderer with Task-261-style rigor | ⬜ | Phase 3 covered this at a lighter pass |
+| 724 | Verify `VertexDeclaration` construction does **not** throw on SDL_Renderer | ⬜ | Pure data description — only the draw call should throw, not declaration/construction |
+| 725 | Decide and document `Texture3D`/`TextureCube` construction on SDL_Renderer | ⬜ | Throw at construction, or allow construction but throw on Draw/sampling — match FNA's behavior model as closely as a 2D-only backend can |
+| 726 | Verify all 5 stock 3D effects' `Apply()`+property setters do **not** throw on SDL_Renderer, but drawing with them does | ⬜ | Matches FNA: effects are backend-agnostic data objects until actually used to draw |
+| 727 | Verify `OcclusionQuery::Begin`/`End` throw correctly on SDL_Renderer | ⬜ | |
+| 728 | Verify `Model::Draw` throws correctly on SDL_Renderer | ⬜ | Requires 3D primitives |
+| 729 | Verify `RasterizerState`/`DepthStencilState` can be constructed and assigned without throwing on SDL_Renderer | ⬜ | Pure data, mirrors Task 724's pattern |
+
+### Compatibility proof
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 730 | Port and run 5 minimal 2D-only FNA/XNA samples specifically targeting SDL_Renderer | ⬜ | Real compatibility proof for the 2D-only backend, not EasyGL |
+| 731 | Document `docs/sdl-renderer-2d-completeness.md`: final per-feature support table + decisions made for Tasks 676/681/686–687/700/708–709/725, with rationale | ⬜ | ✅/⚠️-emulated/❌-throws-by-design per feature |
+
+---
+
+## Phase 71 — EasyGL: final gap closure and perfection gate
+
+> Runs second. Deliberately small: EasyGL is already the implicit default target of most
+> unlabeled tasks across Phases 34–55 (see the coverage-analysis artifact from this session —
+> among 235 pending core tasks, 189 name no backend and default to EasyGL by established
+> convention). This phase covers only what genuinely isn't tracked anywhere else yet.
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 732 | Implement real `SurfaceFormat` GPU forwarding on EasyGL | ⬜ | `CreateTexture`/`CreateTexture3D`/`CreateTextureCube` currently hardcode `GL_RGBA8` regardless of requested format; map Color/Bgr565/Bgra4444/Bgra5551/Rgba1010102/Rg32/Rgba64/Single/Vector2/Vector4/HalfSingle/HalfVector2/HalfVector4/HdrBlendable to real GLES 3.2 internal formats; throw clearly for genuinely unsupported ones |
+| 733 | Implement `FillMode::WireFrame` emulation on EasyGL via barycentric-coordinate geometry shader + `fwidth()` edge detection | ⬜ | GLES 3.2 has geometry shaders in core — no native `glPolygonMode`, but this is emulatable, not a hardware wall (corrects the earlier "N/A on GLES" framing) |
+| 734 | Add a non-geometry-shader barycentric fallback for GLES 3.2 drivers with unreliable geometry-shader support | ⬜ | Vertex-attribute barycentrics (requires unwelding shared vertices) as a documented fallback path; note in `docs/easygl_bugs.md` |
+| 735 | Implement `Texture3D` mip-chain generation on EasyGL | ⬜ | `EasyGLTexture3DBackend`'s `mipMap` constructor parameter is currently unused (`bool /*mipMap*/`) — single level always, even though `Texture3D::LevelCount` now correctly reports the requested count (Task 271) |
+| 736 | Verify/implement `TextureCube` mip-chain generation on EasyGL | ⬜ | Confirm whether `EasyGLTextureCubeBackend` has the same unused-`mipMap`-parameter pattern as Task 735 found for Texture3D; fix if so |
+| 737 | Add explicit `TextureAddressMode::Mirror` regression test for the Task 269 SpriteBatch SamplerState fix | ⬜ | Only Wrap vs. Clamp were independently pixel-tested; Mirror is fixed by the same code path but never verified on its own |
+| 738 | Close the remaining EasyGL-scoped ⬜ tasks in Phases 34–55 | ⬜ | Not new work — this is the actual bulk of "EasyGL perfection." See Phases 34, 35, 36, 37, 38 (partial), 39, 40, 41, 42, 43 (partial), 44, 45, 46, 47, 48, 49, 50, 51 (EasyGL row), 52, 53 (EasyGL-relevant rows), 54, 55 (Tasks 493–494 specifically) |
+| 739 | Final EasyGL perfection gate: re-run Tasks 493–494 (full unit + integration suite) after Tasks 732–738 land | ⬜ | Zero unexplained failures; update `docs/xna-4-api-coverage.md` overall EasyGL estimate |
+
+---
+
+## Phase 72 — Bgfx: full 2D+3D pixel-verified parity
+
+> Runs third. Unlike the EasyGL phase above, this one is genuinely large — Bgfx is not the
+> default target of any existing Phase 34–55 task, so the full breadth of pixel-verification
+> work needs an explicit, separate pass. Starts from wiring up the pixel-readback path itself,
+> since no current Bgfx test uses it at all.
+
+### Foundational: unlock pixel testing
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 740 | Wire `GraphicsDevice::GetBackBufferData` into a reusable Bgfx pixel-readback test helper | ⬜ | The async `bgfx::requestScreenShot`+`bgfx::frame()` path exists (Task 117, done) but zero current tests call it — this unblocks every pixel test below |
+| 741 | Add a Bgfx per-texture-level readback path for direct `Texture2D`/`3D`/`Cube` `GetData` verification | ⬜ | Avoids needing a full draw+backbuffer-read cycle just to check an upload round-tripped |
+| 742 | Verify Bgfx `GetBackBufferData` readback reliability under headless CI | ⬜ | The "up to 3 frames" wait in Task 117 may need tuning; add a timeout/retry regression test |
+
+### SamplerState / TextureAddressMode
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 743 | Audit `SamplerState` → `BGFX_SAMPLER_*` flag mapping completeness | ⬜ | |
+| 744 | Pixel test: `TextureAddressMode::Clamp` on Bgfx | ⬜ | Mirrors Task 294 |
+| 745 | Pixel test: `TextureAddressMode::Wrap` on Bgfx | ⬜ | Mirrors Task 295 |
+| 746 | Pixel test: `TextureAddressMode::Mirror` on Bgfx | ⬜ | Mirrors Task 296 |
+| 747 | Pixel test: `TextureFilter::Point` vs `Linear` on Bgfx | ⬜ | Mirrors Task 297 |
+| 748 | Verify mipmap filter modes (`MipPoint`/`MipLinear`/etc.) on Bgfx | ⬜ | Mirrors Task 298 |
+| 749 | Verify anisotropic filtering cap query + fallback on Bgfx | ⬜ | Mirrors Task 299 |
+| 750 | Wire a Task-269-equivalent `SpriteBatch` `SamplerState` fix into Bgfx's `ISpriteBatchBackend` | ⬜ | Currently a no-op, same root cause as the EasyGL bug fixed this session and the Vulkan bug tracked as Task 665 |
+
+### BlendState
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 751 | Audit `BlendState` preset mapping to `BGFX_STATE_BLEND_*` | ⬜ | |
+| 752 | Pixel test: `BlendState::Opaque` on Bgfx | ⬜ | |
+| 753 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha on Bgfx | ⬜ | |
+| 754 | Pixel test: `BlendState::NonPremultiplied` on Bgfx | ⬜ | |
+| 755 | Pixel test: `BlendState::Additive` saturation on Bgfx | ⬜ | |
+| 756 | Verify separate color/alpha blend function + factor combinations on Bgfx | ⬜ | |
+| 757 | Verify `BlendFactor` constant-color blending on Bgfx | ⬜ | |
+
+### DepthStencilState
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 758 | Audit `DepthStencilState` preset mapping to Bgfx depth/stencil flags | ⬜ | |
+| 759 | Pixel test: depth write enabled vs disabled on Bgfx | ⬜ | |
+| 760 | Pixel test: all 8 depth `CompareFunction` values on Bgfx | ⬜ | |
+| 761 | Verify stencil enable/disable + read/write masks on Bgfx | ⬜ | |
+| 762 | Verify front-face stencil ops (Keep/Replace/Increment/Decrement) on Bgfx | ⬜ | |
+| 763 | Verify two-sided stencil ops on Bgfx if exposed | ⬜ | |
+| 764 | Verify `ReferenceStencil` device state reaches Bgfx draw calls | ⬜ | |
+
+### RasterizerState
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 765 | Pixel test: culling disabled / `CullClockwise` / `CullCounterClockwise` on Bgfx | ⬜ | |
+| 766 | Verify `FillMode::WireFrame` on Bgfx | ⬜ | Confirm real polygon wireframe vs. line-primitive substitution |
+| 767 | Verify depth bias and slope-scale depth bias on Bgfx | ⬜ | |
+| 768 | Verify scissor test enable/disable interaction with `ScissorRectangle` on Bgfx | ⬜ | |
+
+### RenderTarget2D / RenderTargetCube
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 769 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on Bgfx | ⬜ | |
+| 770 | Verify `RenderTargetCube` can be sampled as `TextureCube` after unbinding on Bgfx | ⬜ | `EnvironmentMapEffect` path |
+| 771 | Verify `RenderTargetUsage::DiscardContents` vs `PreserveContents` on Bgfx | ⬜ | |
+| 772 | Verify MSAA render target creation + resolve on Bgfx | ⬜ | |
+| 773 | Verify `SetRenderTarget(nullptr)` restores the backbuffer on Bgfx | ⬜ | |
+| 774 | Verify MRT with mixed formats is rejected or handled per XNA constraints on Bgfx | ⬜ | |
+| 775 | Document Bgfx MRT attachment limits | ⬜ | |
+
+### Viewport
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 776 | Verify `Viewport::Project`/`Unproject` math on Bgfx | ⬜ | Confirm no Bgfx-specific NDC/texture-origin convention bug |
+| 777 | Verify viewport reset after backbuffer resize on Bgfx | ⬜ | |
+
+### Effect base + BasicEffect
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 778 | Verify `EffectPass::Apply`/`EffectTechnique` selection reach the Bgfx draw-state setup correctly | ⬜ | |
+| 779 | Pixel test: `BasicEffect` vertex-color-only on Bgfx | ⬜ | |
+| 780 | Pixel test: `BasicEffect` texture-only on Bgfx | ⬜ | |
+| 781 | Pixel test: `BasicEffect` texture × vertex color on Bgfx | ⬜ | |
+| 782 | Pixel test: `BasicEffect` one directional light on Bgfx | ⬜ | |
+| 783 | Pixel test: `BasicEffect` ambient+emissive+specular combination on Bgfx | ⬜ | |
+| 784 | Pixel test: `BasicEffect` fog on Bgfx | ⬜ | |
+
+### AlphaTestEffect (Task 375 already covers the CompareFunction sweep)
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 785 | Verify alpha reference value 0–255 vs 0–1 scaling on Bgfx | ⬜ | |
+| 786 | Verify `AlphaTestEffect` + vertex/diffuse color interaction on Bgfx | ⬜ | |
+| 787 | Verify `AlphaTestEffect` fog behavior on Bgfx | ⬜ | |
+| 788 | Verify `AlphaTestEffect` null-texture behavior on Bgfx | ⬜ | |
+
+### DualTextureEffect
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 789 | Pixel test: two white textures + diffuse color on Bgfx | ⬜ | |
+| 790 | Pixel test: magenta × yellow = red on Bgfx | ⬜ | Mirrors Tasks 133/135 |
+| 791 | Verify first/second texture null behavior on Bgfx | ⬜ | |
+| 792 | Verify `DualTextureEffect` fog behavior on Bgfx | ⬜ | |
+
+### EnvironmentMapEffect
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 793 | Pixel test: `EnvironmentMapAmount=0` (ignores cubemap) on Bgfx | ⬜ | |
+| 794 | Pixel test: `EnvironmentMapAmount=1` with white cubemap on Bgfx | ⬜ | |
+| 795 | Pixel test: `EnvironmentMapSpecular` contribution on Bgfx | ⬜ | |
+| 796 | Verify `FresnelFactor` on Bgfx if implemented | ⬜ | |
+| 797 | Verify eye position affects reflection vector on Bgfx | ⬜ | |
+| 798 | Verify non-identity world/normal-matrix correctness on Bgfx | ⬜ | |
+
+### SkinnedEffect
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 799 | Verify `SetBoneTransforms` accepts the supported bone count + throws for excess on Bgfx | ⬜ | |
+| 800 | Pixel test: identity bone palette (no deformation) on Bgfx | ⬜ | |
+| 801 | Pixel test: single translation bone on Bgfx | ⬜ | |
+| 802 | Pixel test: two-bone 50/50 blend on Bgfx | ⬜ | |
+
+### SpriteBatch (needs Task 740's readback wiring first)
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 803 | Pixel test: `SpriteSortMode` ordering (Deferred/Texture/FrontToBack/BackToFront) on Bgfx | ⬜ | |
+| 804 | Pixel test: rotation around origin on Bgfx | ⬜ | |
+| 805 | Pixel test: scale overloads on Bgfx | ⬜ | |
+| 806 | Pixel test: source rectangle cropping on Bgfx | ⬜ | |
+| 807 | Pixel test: `SpriteEffects` flip on Bgfx | ⬜ | Mirrors Task 167 |
+| 808 | Pixel test: `transformMatrix` in `SpriteBatch::Begin` on Bgfx | ⬜ | Mirrors Task 168 |
+
+### SpriteFont
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 809 | Pixel test: single glyph at known position on Bgfx | ⬜ | |
+| 810 | Pixel test: multiple glyphs with spacing + newline on Bgfx | ⬜ | |
+| 811 | Pixel test: default character fallback on Bgfx | ⬜ | |
+
+### Model
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 812 | Pixel test: model with two meshes and different effects on Bgfx | ⬜ | |
+| 813 | Pixel test: model hierarchy transform propagation on Bgfx | ⬜ | |
+
+### OcclusionQuery (Task 448 already covers sync)
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 814 | Pixel/query test: fully visible quad returns positive pixel count on Bgfx | ⬜ | |
+| 815 | Pixel/query test: fully occluded quad returns zero/lower count on Bgfx | ⬜ | |
+| 816 | Verify disposing an active `OcclusionQuery` is safe or throws correctly on Bgfx | ⬜ | |
+
+### Texture2D / Texture3D / TextureCube depth
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 817 | Verify `Texture2D` `SetData`/`GetData` partial-rectangle + `startIndex`/`elementCount` on Bgfx | ⬜ | Mirrors Tasks 169–170; currently only EasyGL has this depth |
+| 818 | Verify `Texture2D` mip-level `SetData`/`GetData` on Bgfx | ⬜ | Mirrors Task 171 |
+| 819 | Verify `Texture3D` box/`GetData` bounds guards reach correct pixels on Bgfx | ⬜ | Task 271 fixed the C++ guards backend-agnostically; no Bgfx pixel test confirms the GPU side |
+| 820 | Verify `TextureCube` per-face/per-mip `SetData`/`GetData` on Bgfx | ⬜ | Mirrors Task 172 |
+| 821 | Verify NPOT texture upload+sample on Bgfx | ⬜ | Mirrors Task 268; currently code-inspected only for this backend |
+
+### Final Bgfx perfection gate
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 822 | Run the full Bgfx integration suite (Tasks 740–821) end to end; zero unexplained failures or documented, justified skips | ⬜ | |
+| 823 | Update `docs/xna-4-api-coverage.md` §7 stock-effect backend-parity table: move Bgfx from "compiles only" to "pixel-verified" only where proven by Tasks 740–822 | ⬜ | |
+| 824 | Document remaining genuine Bgfx architectural limitations (if any survive) in `docs/graphics-backend-feature-matrix.md` | ⬜ | |
+
+---
+
+## Phase 73 — Vulkan: full 2D+3D pixel-verified parity (gap closure)
+
+> Runs fourth (last of the four backend-focused phases; WebGPU remains parked after this).
+> Vulkan already has substantially more infrastructure than Bgfx — per-slot samplers (Task 118),
+> custom Effect/SPIR-V (119), instancing (111), wireframe (112), MSAA (147), RenderTargetCube
+> (142), Texture3D/Cube backends (143), scissor (329), depth bias (328), and stock-effect SPIR-V
+> shaders for all 5 effects (102–109) — so this phase is sized as gap-closure, not full
+> replication, plus the two SpriteBatch bugs found this session.
+
+| #   | Task | Status | Notes |
+| --- | ---- | ------ | ----- |
+| 664 | *(see Phase 47 above)* Fix Vulkan `SpriteBatch` multi-`Begin`/`End` bug | ⬜ | Cross-referenced here; lives in Phase 47's table |
+| 665 | *(see Phase 47 above)* Fix Vulkan `SpriteBatch` `SamplerState` no-op | ⬜ | Cross-referenced here; lives in Phase 47's table |
+| 825 | Pixel test: `TextureAddressMode::Clamp` on Vulkan | ⬜ | |
+| 826 | Pixel test: `TextureAddressMode::Wrap` on Vulkan | ⬜ | Verifies Task 665's fix once landed |
+| 827 | Pixel test: `TextureAddressMode::Mirror` on Vulkan | ⬜ | |
+| 828 | Pixel test: `TextureFilter::Point` vs `Linear` on Vulkan | ⬜ | |
+| 829 | Verify mipmap filter modes on Vulkan | ⬜ | |
+| 830 | Verify anisotropic filtering cap + fallback on Vulkan | ⬜ | `VkPhysicalDeviceFeatures.samplerAnisotropy` |
+| 831 | Pixel test: `BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` on Vulkan | ⬜ | Consolidated, 4 sub-cases — mirrors Task 189's pattern |
+| 832 | Verify separate color/alpha blend function + factor combinations on Vulkan | ⬜ | |
+| 833 | Verify `BlendFactor` constant-color blending on Vulkan | ⬜ | |
+| 834 | Pixel test: depth write enabled vs disabled on Vulkan | ⬜ | |
+| 835 | Pixel test: all 8 depth `CompareFunction` values on Vulkan | ⬜ | |
+| 836 | Verify stencil enable/disable + read/write masks + front-face ops on Vulkan | ⬜ | |
+| 837 | Verify two-sided stencil ops on Vulkan | ⬜ | `VkStencilOpState` front/back |
+| 838 | Verify `ReferenceStencil` device state reaches Vulkan draw calls | ⬜ | |
+| 839 | Pixel test: culling disabled / `CullClockwise` / `CullCounterClockwise` on Vulkan | ⬜ | |
+| 840 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on Vulkan | ⬜ | Extends Task 148's full-cycle test with an explicit sampling-after-unbind assertion |
+| 841 | Add the pixel-readback confirmation for `RenderTargetUsage::DiscardContents` vs `PreserveContents` on Vulkan | ⬜ | Task 178 implemented the render-pass load-op mapping; no pixel test confirms it yet |
+| 842 | Verify MRT with mixed formats is rejected or handled per XNA constraints on Vulkan | ⬜ | |
+| 843 | Verify `Viewport::Project`/`Unproject` math on Vulkan | ⬜ | Confirm no Vulkan Y-flip/NDC convention bug |
+| 844 | Pixel test: `BasicEffect` vertex-color-only / texture-only / texture×vertex-color / one-light / ambient+emissive+specular on Vulkan | ⬜ | Consolidated, mirrors Task 189; Vulkan currently only has Phase 9–14's combined smoke coverage |
+| 845 | Pixel test: `BasicEffect` fog on Vulkan | ⬜ | EasyGL got this in Task 195; audit Vulkan `GpuDrawParams`/SPIR-V shaders for a fog uniform, add if missing |
+| 846 | Verify alpha reference scaling + vertex/diffuse color interaction + fog + null-texture behavior in `AlphaTestEffect` on Vulkan | ⬜ | |
+| 847 | Verify `DualTextureEffect` null-texture behavior + fog on Vulkan | ⬜ | Blend correctness already covered by Task 135 |
+| 848 | Verify `EnvironmentMapEffect` `FresnelFactor` + eye-position + non-identity world-matrix correctness on Vulkan | ⬜ | Amount/specular already covered by Task 136 |
+| 849 | Verify `SkinnedEffect` bone-count boundary + two-bone-blend pixel correctness on Vulkan | ⬜ | Add explicit pixel assertions beyond the existing shader smoke test |
+| 850 | Pixel test: `SpriteSortMode` ordering (Deferred/Texture/FrontToBack/BackToFront) on Vulkan | ⬜ | |
+| 851 | Pixel test: rotation/scale/source-rectangle-cropping/`SpriteEffects` flip on Vulkan | ⬜ | Consolidated |
+| 852 | Pixel test: single glyph + multi-glyph spacing + newline + default-character-fallback on Vulkan | ⬜ | `SpriteFont` has no dedicated Vulkan pixel test yet |
+| 853 | Pixel test: model with two meshes and hierarchy transform propagation on Vulkan | ⬜ | |
+| 854 | Pixel/query test: visible vs occluded quad pixel counts on Vulkan | ⬜ | Task 447 covers sync correctness; add the actual pixel/query-count assertions |
+| 855 | Verify `Texture2D` `SetData`/`GetData` partial-rectangle + `startIndex`/`elementCount` + mip-level on Vulkan | ⬜ | Currently only EasyGL has this depth (Tasks 169–171) |
+| 856 | Verify `TextureCube` per-face/per-mip `SetData`/`GetData` pixel correctness on Vulkan | ⬜ | Mirrors Task 172 |
+| 857 | Verify NPOT texture upload+sample on Vulkan | ⬜ | Mirrors Task 268; currently code-inspected only |
+| 858 | Verify `Texture3D` box-region `SetData`/`GetData` pixel correctness on Vulkan | ⬜ | Task 271's guards are backend-agnostic C++; no Vulkan pixel test confirms the GPU side |
+| 859 | Run the full Vulkan integration suite (Tasks 664–665, 825–858) end to end; zero unexplained failures or documented, justified skips | ⬜ | |
+| 860 | Update `docs/xna-4-api-coverage.md` §7 stock-effect backend-parity table: move Vulkan rows from "partial" to "pixel-verified" only where proven by Tasks 825–859 | ⬜ | |
+| 861 | Document remaining genuine Vulkan limitations (if any survive) in `docs/graphics-backend-feature-matrix.md` | ⬜ | |

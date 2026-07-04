@@ -638,12 +638,48 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 276: TextureCube mip-level SetData/GetData round-trip, all six faces
+        cna_easygl_test(cna_test_easygl_texturecube_mip
+                        examples/easygl_texturecube_mip_test.cpp)
+        add_test(NAME EasyGL_TextureCube_Mip_RoundTrip
+                 COMMAND cna_test_easygl_texturecube_mip)
+        set_tests_properties(EasyGL_TextureCube_Mip_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 275: TextureCube partial rect + startIndex, all six faces
+        cna_easygl_test(cna_test_easygl_texturecube_partial_rect
+                        examples/easygl_texturecube_partial_rect_test.cpp)
+        add_test(NAME EasyGL_TextureCube_PartialRect_RoundTrip
+                 COMMAND cna_test_easygl_texturecube_partial_rect)
+        set_tests_properties(EasyGL_TextureCube_PartialRect_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 173: Texture3D z-slice SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texture3d_slices
                         examples/easygl_texture3d_slices_test.cpp)
         add_test(NAME EasyGL_Texture3D_Slices_RoundTrip
                  COMMAND cna_test_easygl_texture3d_slices)
         set_tests_properties(EasyGL_Texture3D_Slices_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 273: Texture3D partial box (x/y/z region) SetData/GetData round-trip
+        cna_easygl_test(cna_test_easygl_texture3d_partial_box
+                        examples/easygl_texture3d_partial_box_test.cpp)
+        add_test(NAME EasyGL_Texture3D_PartialBox_RoundTrip
+                 COMMAND cna_test_easygl_texture3d_partial_box)
+        set_tests_properties(EasyGL_Texture3D_PartialBox_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 274: Texture3D partial box (x/y/z region) GetData readback
+        cna_easygl_test(cna_test_easygl_texture3d_partial_box_readback
+                        examples/easygl_texture3d_partial_box_readback_test.cpp)
+        add_test(NAME EasyGL_Texture3D_PartialBox_Readback
+                 COMMAND cna_test_easygl_texture3d_partial_box_readback)
+        set_tests_properties(EasyGL_Texture3D_PartialBox_Readback PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
@@ -1000,6 +1036,187 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 268: non-power-of-two (3x5) texture upload + GPU-sampled pixel-readback
+        cna_easygl_test(cna_test_easygl_npot_texture
+                        examples/easygl_npot_texture_test.cpp)
+        add_test(NAME EasyGL_NpotTexture
+                 COMMAND cna_test_easygl_npot_texture)
+        set_tests_properties(EasyGL_NpotTexture PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 269: SpriteBatch TextureAddressMode (Wrap vs Clamp) edge-sampling pixel-readback
+        cna_easygl_test(cna_test_easygl_texture_address_mode
+                        examples/easygl_texture_address_mode_test.cpp)
+        add_test(NAME EasyGL_TextureAddressMode
+                 COMMAND cna_test_easygl_texture_address_mode)
+        set_tests_properties(EasyGL_TextureAddressMode PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0]
+        cna_easygl_test(cna_test_easygl_sampler_state_effect
+                        examples/easygl_sampler_state_effect_test.cpp)
+        add_test(NAME EasyGL_SamplerState_DualTextureEffect
+                 COMMAND cna_test_easygl_sampler_state_effect)
+        set_tests_properties(EasyGL_SamplerState_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 294: TextureAddressMode::Clamp on a 3D stock effect (DualTextureEffect)
+        cna_easygl_test(cna_test_easygl_texture_address_mode_clamp_effect
+                        examples/easygl_texture_address_mode_clamp_effect_test.cpp)
+        add_test(NAME EasyGL_TextureAddressMode_Clamp_DualTextureEffect
+                 COMMAND cna_test_easygl_texture_address_mode_clamp_effect)
+        set_tests_properties(EasyGL_TextureAddressMode_Clamp_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 296: TextureAddressMode::Mirror on a 3D stock effect (DualTextureEffect)
+        cna_easygl_test(cna_test_easygl_texture_address_mode_mirror_effect
+                        examples/easygl_texture_address_mode_mirror_effect_test.cpp)
+        add_test(NAME EasyGL_TextureAddressMode_Mirror_DualTextureEffect
+                 COMMAND cna_test_easygl_texture_address_mode_mirror_effect)
+        set_tests_properties(EasyGL_TextureAddressMode_Mirror_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 297: TextureFilter::Point vs Linear, magnification and minification
+        cna_easygl_test(cna_test_easygl_texture_filter_point_vs_linear
+                        examples/easygl_texture_filter_point_vs_linear_test.cpp)
+        add_test(NAME EasyGL_TextureFilter_PointVsLinear
+                 COMMAND cna_test_easygl_texture_filter_point_vs_linear)
+        set_tests_properties(EasyGL_TextureFilter_PointVsLinear PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 298: mipmap filter behavior (LinearMipPoint selects the correct mip; Point does not)
+        cna_easygl_test(cna_test_easygl_texture_mip_filter_effect
+                        examples/easygl_texture_mip_filter_effect_test.cpp)
+        add_test(NAME EasyGL_TextureMipFilter_DualTextureEffect
+                 COMMAND cna_test_easygl_texture_mip_filter_effect)
+        set_tests_properties(EasyGL_TextureMipFilter_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 299: anisotropic filtering caps and fallback (extreme MaxAnisotropy must not crash)
+        cna_easygl_test(cna_test_easygl_texture_anisotropic_effect
+                        examples/easygl_texture_anisotropic_effect_test.cpp)
+        add_test(NAME EasyGL_TextureAnisotropic_DualTextureEffect
+                 COMMAND cna_test_easygl_texture_anisotropic_effect)
+        set_tests_properties(EasyGL_TextureAnisotropic_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 303: BlendState::Opaque discards destination + source alpha entirely
+        cna_easygl_test(cna_test_easygl_blendstate_opaque
+                        examples/easygl_blendstate_opaque_test.cpp)
+        add_test(NAME EasyGL_BlendState_Opaque
+                 COMMAND cna_test_easygl_blendstate_opaque)
+        set_tests_properties(EasyGL_BlendState_Opaque PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 304: BlendState::AlphaBlend expects premultiplied source colour
+        cna_easygl_test(cna_test_easygl_blendstate_alphablend
+                        examples/easygl_blendstate_alphablend_test.cpp)
+        add_test(NAME EasyGL_BlendState_AlphaBlend
+                 COMMAND cna_test_easygl_blendstate_alphablend)
+        set_tests_properties(EasyGL_BlendState_AlphaBlend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 305: BlendState::NonPremultiplied expects a raw (non-premultiplied) source colour
+        cna_easygl_test(cna_test_easygl_blendstate_nonpremultiplied
+                        examples/easygl_blendstate_nonpremultiplied_test.cpp)
+        add_test(NAME EasyGL_BlendState_NonPremultiplied
+                 COMMAND cna_test_easygl_blendstate_nonpremultiplied)
+        set_tests_properties(EasyGL_BlendState_NonPremultiplied PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 306: BlendState::Additive saturation + full-destination-add behaviour
+        cna_easygl_test(cna_test_easygl_blendstate_additive
+                        examples/easygl_blendstate_additive_test.cpp)
+        add_test(NAME EasyGL_BlendState_Additive
+                 COMMAND cna_test_easygl_blendstate_additive)
+        set_tests_properties(EasyGL_BlendState_Additive PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 307: ColorBlendFunction/AlphaBlendFunction operate independently
+        cna_easygl_test(cna_test_easygl_blendstate_separate_functions
+                        examples/easygl_blendstate_separate_functions_test.cpp)
+        add_test(NAME EasyGL_BlendState_SeparateFunctions
+                 COMMAND cna_test_easygl_blendstate_separate_functions)
+        set_tests_properties(EasyGL_BlendState_SeparateFunctions PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 308: ColorSourceBlend/ColorDestinationBlend operate independently from Alpha*Blend
+        cna_easygl_test(cna_test_easygl_blendstate_separate_factors
+                        examples/easygl_blendstate_separate_factors_test.cpp)
+        add_test(NAME EasyGL_BlendState_SeparateFactors
+                 COMMAND cna_test_easygl_blendstate_separate_factors)
+        set_tests_properties(EasyGL_BlendState_SeparateFactors PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 309: BlendState.BlendFactor propagates via GraphicsDevice.setBlendStateProperty alone
+        cna_easygl_test(cna_test_easygl_blendstate_blendfactor
+                        examples/easygl_blendstate_blendfactor_test.cpp)
+        add_test(NAME EasyGL_BlendState_BlendFactor
+                 COMMAND cna_test_easygl_blendstate_blendfactor)
+        set_tests_properties(EasyGL_BlendState_BlendFactor PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 313: DepthStencilState.DepthBufferWriteEnable actually gates depth-buffer writes
+        cna_easygl_test(cna_test_easygl_depthstencilstate_write_enable
+                        examples/easygl_depthstencilstate_write_enable_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_WriteEnable
+                 COMMAND cna_test_easygl_depthstencilstate_write_enable)
+        set_tests_properties(EasyGL_DepthStencilState_WriteEnable PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 314: DepthStencilState.DepthBufferFunction (Always/Never/Less/LessEqual/Greater)
+        cna_easygl_test(cna_test_easygl_depthstencilstate_compare_function
+                        examples/easygl_depthstencilstate_compare_function_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_CompareFunction
+                 COMMAND cna_test_easygl_depthstencilstate_compare_function)
+        set_tests_properties(EasyGL_DepthStencilState_CompareFunction PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 315: DepthStencilState.StencilEnable actually gates the stencil test
+        cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_enable
+                        examples/easygl_depthstencilstate_stencil_enable_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_StencilEnable
+                 COMMAND cna_test_easygl_depthstencilstate_stencil_enable)
+        set_tests_properties(EasyGL_DepthStencilState_StencilEnable PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 316: DepthStencilState.StencilMask / StencilWriteMask
+        cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_mask
+                        examples/easygl_depthstencilstate_stencil_mask_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_StencilMask
+                 COMMAND cna_test_easygl_depthstencilstate_stencil_mask)
+        set_tests_properties(EasyGL_DepthStencilState_StencilMask PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 317: DepthStencilState front-face stencil operations (StencilFail/
+        # StencilDepthBufferFail/StencilPass)
+        cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_ops
+                        examples/easygl_depthstencilstate_stencil_ops_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_StencilOps
+                 COMMAND cna_test_easygl_depthstencilstate_stencil_ops)
+        set_tests_properties(EasyGL_DepthStencilState_StencilOps PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1048,12 +1265,204 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 284: Texture2D Color format mapping — linear vs. sRGB decode on Vulkan
+        cna_vulkan_test(cna_test_vulkan_texture_srgb
+                        examples/vulkan_texture_srgb_test.cpp)
+        add_test(NAME Vulkan_Texture2D_ColorFormat_Linear
+                 COMMAND cna_test_vulkan_texture_srgb)
+        set_tests_properties(Vulkan_Texture2D_ColorFormat_Linear PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 135: DualTextureEffect — magenta×yellow→red pixel readback on Vulkan
         cna_vulkan_test(cna_test_vulkan_dual_texture
                         examples/vulkan_dual_texture_test.cpp)
         add_test(NAME Vulkan_DualTextureEffect_Blend
                  COMMAND cna_test_vulkan_dual_texture)
         set_tests_properties(Vulkan_DualTextureEffect_Blend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0] on
+        # Vulkan too — reuses the backend-agnostic EasyGL test source (public XNA API only).
+        cna_vulkan_test(cna_test_vulkan_sampler_state_effect
+                        examples/easygl_sampler_state_effect_test.cpp)
+        add_test(NAME Vulkan_SamplerState_DualTextureEffect
+                 COMMAND cna_test_vulkan_sampler_state_effect)
+        set_tests_properties(Vulkan_SamplerState_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 294: TextureAddressMode::Clamp on a 3D stock effect on Vulkan too (reuses the
+        # backend-agnostic EasyGL test source).
+        cna_vulkan_test(cna_test_vulkan_texture_address_mode_clamp_effect
+                        examples/easygl_texture_address_mode_clamp_effect_test.cpp)
+        add_test(NAME Vulkan_TextureAddressMode_Clamp_DualTextureEffect
+                 COMMAND cna_test_vulkan_texture_address_mode_clamp_effect)
+        set_tests_properties(Vulkan_TextureAddressMode_Clamp_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 296: TextureAddressMode::Mirror on a 3D stock effect on Vulkan too (reuses the
+        # backend-agnostic EasyGL test source).
+        cna_vulkan_test(cna_test_vulkan_texture_address_mode_mirror_effect
+                        examples/easygl_texture_address_mode_mirror_effect_test.cpp)
+        add_test(NAME Vulkan_TextureAddressMode_Mirror_DualTextureEffect
+                 COMMAND cna_test_vulkan_texture_address_mode_mirror_effect)
+        set_tests_properties(Vulkan_TextureAddressMode_Mirror_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 297: TextureFilter::Point vs Linear on Vulkan too (reuses the backend-agnostic
+        # EasyGL test source).
+        cna_vulkan_test(cna_test_vulkan_texture_filter_point_vs_linear
+                        examples/easygl_texture_filter_point_vs_linear_test.cpp)
+        add_test(NAME Vulkan_TextureFilter_PointVsLinear
+                 COMMAND cna_test_vulkan_texture_filter_point_vs_linear)
+        set_tests_properties(Vulkan_TextureFilter_PointVsLinear PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 298: NOT registered on Vulkan. Texture2D::SetData(level>0) is a silent no-op on
+        # Vulkan (UpdatePixelsLevel never overridden — Task 867 finding), which confounds this
+        # test's mip-filter-selection intent (it would fail for the wrong reason). See Task 867.
+
+        # Task 299: anisotropic filtering caps and fallback on Vulkan too (reuses the
+        # backend-agnostic EasyGL test source). This is the one backend where MaxAnisotropy is
+        # actually respected (queried/clamped to the real device cap).
+        cna_vulkan_test(cna_test_vulkan_texture_anisotropic_effect
+                        examples/easygl_texture_anisotropic_effect_test.cpp)
+        add_test(NAME Vulkan_TextureAnisotropic_DualTextureEffect
+                 COMMAND cna_test_vulkan_texture_anisotropic_effect)
+        set_tests_properties(Vulkan_TextureAnisotropic_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 303: BlendState::Opaque on Vulkan too (reuses the backend-agnostic EasyGL source)
+        cna_vulkan_test(cna_test_vulkan_blendstate_opaque
+                        examples/easygl_blendstate_opaque_test.cpp)
+        add_test(NAME Vulkan_BlendState_Opaque
+                 COMMAND cna_test_vulkan_blendstate_opaque)
+        set_tests_properties(Vulkan_BlendState_Opaque PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 304: BlendState::AlphaBlend on Vulkan too (reuses the backend-agnostic EasyGL source)
+        cna_vulkan_test(cna_test_vulkan_blendstate_alphablend
+                        examples/easygl_blendstate_alphablend_test.cpp)
+        add_test(NAME Vulkan_BlendState_AlphaBlend
+                 COMMAND cna_test_vulkan_blendstate_alphablend)
+        set_tests_properties(Vulkan_BlendState_AlphaBlend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 305: BlendState::NonPremultiplied on Vulkan too (reuses the backend-agnostic
+        # EasyGL source). NOTE: a passing result here does NOT mean Task 868 is fixed — see the
+        # test source's file-header comment for why.
+        cna_vulkan_test(cna_test_vulkan_blendstate_nonpremultiplied
+                        examples/easygl_blendstate_nonpremultiplied_test.cpp)
+        add_test(NAME Vulkan_BlendState_NonPremultiplied
+                 COMMAND cna_test_vulkan_blendstate_nonpremultiplied)
+        set_tests_properties(Vulkan_BlendState_NonPremultiplied PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 306: BlendState::Additive on Vulkan too (reuses the backend-agnostic EasyGL source).
+        # NOTE: expected to genuinely re-expose Task 868 here, unlike Task 305's coincidental pass.
+        cna_vulkan_test(cna_test_vulkan_blendstate_additive
+                        examples/easygl_blendstate_additive_test.cpp)
+        add_test(NAME Vulkan_BlendState_Additive
+                 COMMAND cna_test_vulkan_blendstate_additive)
+        set_tests_properties(Vulkan_BlendState_Additive PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 307: ColorBlendFunction/AlphaBlendFunction independence on Vulkan too (reuses the
+        # backend-agnostic EasyGL source). NOTE: expect Check A (Subtract) to fail per Task 868 -
+        # Vulkan always hardcodes VK_BLEND_OP_ADD.
+        cna_vulkan_test(cna_test_vulkan_blendstate_separate_functions
+                        examples/easygl_blendstate_separate_functions_test.cpp)
+        add_test(NAME Vulkan_BlendState_SeparateFunctions
+                 COMMAND cna_test_vulkan_blendstate_separate_functions)
+        set_tests_properties(Vulkan_BlendState_SeparateFunctions PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 308: ColorSourceBlend/ColorDestinationBlend independence on Vulkan too (reuses the
+        # backend-agnostic EasyGL source). NOTE: expect Check A to coincidentally pass and Check B
+        # to fail per Task 868 - Vulkan always hardcodes SourceAlpha/InverseSourceAlpha for colour.
+        cna_vulkan_test(cna_test_vulkan_blendstate_separate_factors
+                        examples/easygl_blendstate_separate_factors_test.cpp)
+        add_test(NAME Vulkan_BlendState_SeparateFactors
+                 COMMAND cna_test_vulkan_blendstate_separate_factors)
+        set_tests_properties(Vulkan_BlendState_SeparateFactors PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 309: BlendState.BlendFactor propagation (reuses the backend-agnostic EasyGL source).
+        # NOTE: expected to FAIL on Vulkan per Task 868 - ApplyBlendState hardcodes a single blend
+        # equation that never selects VK_BLEND_FACTOR_CONSTANT_COLOR, so Blend::BlendFactor is moot
+        # here regardless of the Task 309 propagation fix. Kept registered as a further documented
+        # confirmation of Task 868, not a new bug.
+        cna_vulkan_test(cna_test_vulkan_blendstate_blendfactor
+                        examples/easygl_blendstate_blendfactor_test.cpp)
+        add_test(NAME Vulkan_BlendState_BlendFactor
+                 COMMAND cna_test_vulkan_blendstate_blendfactor)
+        set_tests_properties(Vulkan_BlendState_BlendFactor PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 313: DepthStencilState.DepthBufferWriteEnable on Vulkan (reuses the backend-agnostic
+        # EasyGL source).
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_write_enable
+                        examples/easygl_depthstencilstate_write_enable_test.cpp)
+        add_test(NAME Vulkan_DepthStencilState_WriteEnable
+                 COMMAND cna_test_vulkan_depthstencilstate_write_enable)
+        set_tests_properties(Vulkan_DepthStencilState_WriteEnable PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 314: DepthStencilState.DepthBufferFunction on Vulkan (reuses the backend-agnostic
+        # EasyGL source). NOTE: expected to FAIL some/all checks per Task 870 - Vulkan hardcodes
+        # depthCompareOp per pipeline, ignoring DepthBufferFunction entirely.
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_compare_function
+                        examples/easygl_depthstencilstate_compare_function_test.cpp)
+        add_test(NAME Vulkan_DepthStencilState_CompareFunction
+                 COMMAND cna_test_vulkan_depthstencilstate_compare_function)
+        set_tests_properties(Vulkan_DepthStencilState_CompareFunction PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 315: DepthStencilState.StencilEnable on Vulkan (reuses the backend-agnostic EasyGL
+        # source). NOTE: expected to FAIL Check A per Task 870 - stencil testing is completely
+        # non-functional on Vulkan (stencilTestEnable never set), so no gating ever happens.
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_enable
+                        examples/easygl_depthstencilstate_stencil_enable_test.cpp)
+        add_test(NAME Vulkan_DepthStencilState_StencilEnable
+                 COMMAND cna_test_vulkan_depthstencilstate_stencil_enable)
+        set_tests_properties(Vulkan_DepthStencilState_StencilEnable PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 316: DepthStencilState.StencilMask/StencilWriteMask on Vulkan (reuses the
+        # backend-agnostic EasyGL source). NOTE: expected to partially fail per Task 870 - stencil
+        # testing never gates on Vulkan, so 2 of 4 checks pass only by coincidence.
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_mask
+                        examples/easygl_depthstencilstate_stencil_mask_test.cpp)
+        add_test(NAME Vulkan_DepthStencilState_StencilMask
+                 COMMAND cna_test_vulkan_depthstencilstate_stencil_mask)
+        set_tests_properties(Vulkan_DepthStencilState_StencilMask PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 317: DepthStencilState front-face stencil operations on Vulkan (reuses the
+        # backend-agnostic EasyGL source). NOTE: expected to FAIL all 3 checks per Task 870 -
+        # stencil testing never gates on Vulkan, so no operation ever fires.
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_ops
+                        examples/easygl_depthstencilstate_stencil_ops_test.cpp)
+        add_test(NAME Vulkan_DepthStencilState_StencilOps
+                 COMMAND cna_test_vulkan_depthstencilstate_stencil_ops)
+        set_tests_properties(Vulkan_DepthStencilState_StencilOps PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
@@ -1180,6 +1589,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_VertexFormatMapping
              COMMAND cna_test_bgfx_vertex_format)
     set_tests_properties(Bgfx_VertexFormatMapping PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 278: EnvironmentMapEffect smoke test (no GPU readback available on Bgfx)
+    cna_bgfx_test(cna_test_bgfx_env_map
+                  examples/bgfx_env_map_test.cpp)
+    add_test(NAME Bgfx_EnvironmentMapEffect_Smoke
+             COMMAND cna_test_bgfx_env_map)
+    set_tests_properties(Bgfx_EnvironmentMapEffect_Smoke PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

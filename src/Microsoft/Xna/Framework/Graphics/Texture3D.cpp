@@ -4,11 +4,22 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <stdexcept>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    // Mirrors FNA's Texture.CalculateMipLevels(width, height) — depth does not participate,
+    // matching Texture3D.cs's constructor: LevelCount = mipMap ? CalculateMipLevels(width, height) : 1.
+    static int CalculateMipLevels(int w, int h)
+    {
+        int levels = 1;
+        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        return levels;
+    }
+
     Texture3D::~Texture3D() = default;
 
     Texture3D::Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format)
@@ -17,11 +28,17 @@ namespace Microsoft::Xna::Framework::Graphics
         , height_(height)
         , depth_(depth)
         , format_(format)
-        , levelCount_(1)
+        , levelCount_(mipMap ? CalculateMipLevels(width, height) : 1)
         , backend_(nullptr)
     {
         Texture::ValidateFormat(format);
         backend_ = device.GetBackend().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
+    }
+
+    void Texture3D::Dispose(bool disposing)
+    {
+        backend_.reset();
+        GraphicsResource::Dispose(disposing);
     }
 
     int Texture3D::getWidthProperty() const { return width_; }
@@ -54,21 +71,30 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture3D::SetData(const Color* data, int elementCount)
     {
-        const auto rgba = colorsToRgba(data, 0, elementCount);
-        SetDataPointerEXT(0, 0, 0, width_, height_, 0, depth_,
-                          rgba.data(), static_cast<int>(rgba.size()));
+        SetData(data, 0, elementCount);
     }
 
     void Texture3D::SetData(const Color* data, int startIndex, int elementCount)
     {
-        const auto rgba = colorsToRgba(data, startIndex, elementCount);
-        SetDataPointerEXT(0, 0, 0, width_, height_, 0, depth_,
-                          rgba.data(), static_cast<int>(rgba.size()));
+        // Matches FNA's Texture3D.SetData<T>(T[],int,int), which delegates to the 10-arg
+        // overload covering the full texture at level 0.
+        SetData(0, 0, 0, width_, height_, 0, depth_, data, startIndex, elementCount);
     }
 
     void Texture3D::SetData(int level, int left, int top, int right, int bottom, int front, int back,
                             const Color* data, int startIndex, int elementCount)
     {
+        if (!data)
+            throw std::invalid_argument("Texture3D::SetData: data must not be null");
+        if (elementCount <= 0)
+            throw std::out_of_range("Texture3D::SetData: elementCount must be > 0");
+        if (startIndex < 0)
+            throw std::out_of_range("Texture3D::SetData: startIndex must be >= 0");
+        if (level < 0)
+            throw std::out_of_range("Texture3D::SetData: level must be >= 0");
+        if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
+            throw std::out_of_range("Texture3D::SetData: box position/size is invalid");
+
         const auto rgba = colorsToRgba(data, startIndex, elementCount);
         SetDataPointerEXT(level, left, top, right, bottom, front, back,
                           rgba.data(), static_cast<int>(rgba.size()));
@@ -77,6 +103,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture3D::SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
                                       const void* data, int dataLength)
     {
+        if (!data)
+            throw std::invalid_argument("Texture3D::SetDataPointerEXT: data must not be null");
         if (backend_)
             backend_->SetData(level, left, top, front,
                               right - left, bottom - top, back - front,
@@ -92,25 +120,31 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture3D::GetData(Color* data, int elementCount) const
     {
-        if (!backend_) return;
-        std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);
-        backend_->GetData(0, 0, 0, 0, width_, height_, depth_,
-                          rgba.data(), static_cast<int>(rgba.size()));
-        rgbaToColors(rgba, data, 0, elementCount);
+        GetData(data, 0, elementCount);
     }
 
     void Texture3D::GetData(Color* data, int startIndex, int elementCount) const
     {
-        if (!backend_) return;
-        std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);
-        backend_->GetData(0, 0, 0, 0, width_, height_, depth_,
-                          rgba.data(), static_cast<int>(rgba.size()));
-        rgbaToColors(rgba, data, startIndex, elementCount);
+        // Matches FNA's Texture3D.GetData<T>(T[],int,int), which delegates to the 10-arg
+        // overload covering the full texture at level 0.
+        GetData(0, 0, 0, width_, height_, 0, depth_, data, startIndex, elementCount);
     }
 
     void Texture3D::GetData(int level, int left, int top, int right, int bottom, int front, int back,
                             Color* data, int startIndex, int elementCount) const
     {
+        if (!data)
+            throw std::invalid_argument("Texture3D::GetData: data must not be null");
+        if (elementCount <= 0)
+            throw std::out_of_range("Texture3D::GetData: elementCount must be > 0");
+        if (startIndex < 0)
+            throw std::out_of_range("Texture3D::GetData: startIndex must be >= 0");
+        if (level < 0)
+            throw std::out_of_range("Texture3D::GetData: level must be >= 0");
+        if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
+            throw std::out_of_range("Texture3D::GetData: box position/size is invalid");
+        Texture::ValidateGetDataFormat(format_, 4);
+
         if (!backend_) return;
         std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);
         backend_->GetData(level, left, top, front,

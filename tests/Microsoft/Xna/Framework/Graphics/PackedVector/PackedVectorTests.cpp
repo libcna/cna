@@ -140,6 +140,23 @@ TEST(Bgr565Test, GoldenHalf)
 {
     Bgr565 v(0.5f, 0.5f, 0.5f);
     EXPECT_EQ(v.getPackedValueProperty(), 0x8410u);
+    EXPECT_NEAR(v.ToVector4().X, 0.51612903f, 1e-6f);
+    EXPECT_NEAR(v.ToVector4().Y, 0.50793651f, 1e-6f);
+    EXPECT_NEAR(v.ToVector4().Z, 0.51612903f, 1e-6f);
+}
+
+TEST(Bgr565Test, GoldenGreen)
+{
+    Bgr565 v(0.0f, 1.0f, 0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x07e0u);
+    EXPECT_NEAR(v.ToVector4().Y, 1.0f, 1e-6f);
+}
+
+TEST(Bgr565Test, GoldenBlue)
+{
+    Bgr565 v(0.0f, 0.0f, 1.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x001fu);
+    EXPECT_NEAR(v.ToVector4().Z, 1.0f, 1e-6f);
 }
 
 // =============================================================================
@@ -177,6 +194,39 @@ TEST(Bgra4444Test, EqualityFalse)
     EXPECT_TRUE(a != b);
 }
 
+TEST(Bgra4444Test, GoldenRedOpaque)
+{
+    Bgra4444 v(1.0f, 0.0f, 0.0f, 1.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0xff00u);
+    Vector4 vec = v.ToVector4();
+    EXPECT_NEAR(vec.X, 1.0f, 1e-6f);
+    EXPECT_NEAR(vec.Y, 0.0f, 1e-6f);
+    EXPECT_NEAR(vec.Z, 0.0f, 1e-6f);
+    EXPECT_NEAR(vec.W, 1.0f, 1e-6f);
+}
+
+TEST(Bgra4444Test, GoldenGreenHalfAlpha)
+{
+    Bgra4444 v(0.0f, 1.0f, 0.0f, 0.5f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x80f0u);
+    Vector4 vec = v.ToVector4();
+    EXPECT_NEAR(vec.X, 0.0f, 1e-6f);
+    EXPECT_NEAR(vec.Y, 1.0f, 1e-6f);
+    EXPECT_NEAR(vec.Z, 0.0f, 1e-6f);
+    EXPECT_NEAR(vec.W, 0.533333f, 1e-5f);
+}
+
+TEST(Bgra4444Test, GoldenHalf)
+{
+    Bgra4444 v(0.5f, 0.5f, 0.5f, 0.5f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x8888u);
+    Vector4 vec = v.ToVector4();
+    EXPECT_NEAR(vec.X, 0.533333f, 1e-5f);
+    EXPECT_NEAR(vec.Y, 0.533333f, 1e-5f);
+    EXPECT_NEAR(vec.Z, 0.533333f, 1e-5f);
+    EXPECT_NEAR(vec.W, 0.533333f, 1e-5f);
+}
+
 // =============================================================================
 // Bgra5551
 // =============================================================================
@@ -210,6 +260,39 @@ TEST(Bgra5551Test, EqualityFalse)
 {
     Bgra5551 a(1.0f, 0.0f, 0.0f, 1.0f), b(0.0f, 1.0f, 0.0f, 1.0f);
     EXPECT_TRUE(a != b);
+}
+
+TEST(Bgra5551Test, GoldenRedOpaque)
+{
+    Bgra5551 v(1.0f, 0.0f, 0.0f, 1.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0xfc00u);
+    Vector4 vec = v.ToVector4();
+    EXPECT_NEAR(vec.X, 1.0f, 1e-6f);
+    EXPECT_NEAR(vec.Y, 0.0f, 1e-6f);
+    EXPECT_NEAR(vec.Z, 0.0f, 1e-6f);
+    EXPECT_NEAR(vec.W, 1.0f, 1e-6f);
+}
+
+TEST(Bgra5551Test, GoldenBlueTransparent)
+{
+    Bgra5551 v(0.0f, 0.0f, 1.0f, 0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x001fu);
+    Vector4 vec = v.ToVector4();
+    EXPECT_NEAR(vec.X, 0.0f, 1e-6f);
+    EXPECT_NEAR(vec.Y, 0.0f, 1e-6f);
+    EXPECT_NEAR(vec.Z, 1.0f, 1e-6f);
+    EXPECT_NEAR(vec.W, 0.0f, 1e-6f);
+}
+
+TEST(Bgra5551Test, GoldenHalfOpaque)
+{
+    Bgra5551 v(0.5f, 0.5f, 0.5f, 1.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0xc210u);
+    Vector4 vec = v.ToVector4();
+    EXPECT_NEAR(vec.X, 0.516129f, 1e-5f);
+    EXPECT_NEAR(vec.Y, 0.516129f, 1e-5f);
+    EXPECT_NEAR(vec.Z, 0.516129f, 1e-5f);
+    EXPECT_NEAR(vec.W, 1.0f, 1e-6f);
 }
 
 // =============================================================================

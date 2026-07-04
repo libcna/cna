@@ -75,7 +75,7 @@ namespace Microsoft::Xna::Framework::Graphics
         explicit SpriteBatch(GraphicsDevice& graphicsDevice);
 
         /** @brief Creates an empty sprite batch. */
-        SpriteBatch();
+        NOXNA SpriteBatch();
 
         /** @brief Destructor. */
         NOXNA ~SpriteBatch() override;
@@ -155,7 +155,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param x X coordinate in pixels.
          * @param y Y coordinate in pixels.
          */
-        void Draw(const Texture2D& texture, float x, float y);
+        NOXNA void Draw(const Texture2D& texture, float x, float y);
 
         /**
          * @brief Draws a region of a texture into a destination rectangle with a tint color.
@@ -165,7 +165,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param sourceRectangle      Rectangle that selects the region of the texture to draw.
          * @param color                Tint color; use Color::White for no tint.
          */
-        void Draw(const Texture2D& texture,
+        NOXNA void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   const Rectangle& sourceRectangle,
                   Color color);
@@ -182,7 +182,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param effect               Sprite flipping flags.
          * @param layerDepth           Depth value for sort ordering (0 = front, 1 = back).
          */
-        void Draw(const Texture2D& texture,
+        NOXNA void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   const Rectangle& sourceRectangle,
                   Color color,

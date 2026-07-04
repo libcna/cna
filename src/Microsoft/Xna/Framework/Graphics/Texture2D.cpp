@@ -223,6 +223,18 @@ namespace Microsoft::Xna::Framework::Graphics
         if (elementCount < w * h)
             throw std::out_of_range("Texture2D::SetData: elementCount is less than the number of pixels in the requested region");
 
+        // getMipBuffer(0) lazily re-creates cpuPixels_ as a zero-filled buffer when it has
+        // been freed (context recovery disabled — see MaybeFreeCpuPixels). If the requested
+        // region does not cover the whole level, UpdatePixels below would re-upload that
+        // zero-filled buffer wholesale and silently overwrite already-uploaded GPU content
+        // outside the region with black. Fail loudly instead of corrupting the texture.
+        const bool coversFullLevel = (x == 0 && y == 0 && w == levelW && h == levelH);
+        if (level == 0 && backend_ && !cpuPixels_ && !coversFullLevel)
+            throw std::runtime_error(
+                "Texture2D::SetData: partial update requires CPU-side pixel storage, which was "
+                "freed because context recovery is disabled (see GraphicsDevice::SetContextRecoveryEnabled); "
+                "update the full level via SetData(Color*, int) instead");
+
         std::vector<uint8_t>& buf = getMipBuffer(level);
 
         for (int row = 0; row < h; ++row)
@@ -251,6 +263,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
                 backend_->ShareCpuPixels(cpuPixels_);
             }
+            MaybeFreeCpuPixels();
         }
         else if (backend_)
         {
@@ -273,6 +286,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!data || elementCount <= 0)
             throw std::invalid_argument("data must not be null and elementCount must be > 0");
+        if (startIndex < 0)
+            throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
+        Texture::ValidateGetDataFormat(format_, 4);
         if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
 
@@ -298,8 +314,11 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        if (startIndex < 0)
+            throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
         if (level < 0)
             throw std::out_of_range("Texture2D::GetData: level must be >= 0");
+        Texture::ValidateGetDataFormat(format_, 4);
 
         const std::vector<uint8_t>* buf = getMipBufferConst(level);
         if (!buf)

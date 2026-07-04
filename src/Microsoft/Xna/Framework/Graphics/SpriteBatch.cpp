@@ -94,8 +94,12 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             backend_->SetCustomEffect(customEffect_);
             backend_->SetTransformMatrix(transformMatrix_);
-            if (samplerState)
-                backend_->SetSamplerFilter(static_cast<int>(samplerState->getFilterProperty()));
+            // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
+            // resolved state is always (re-)applied — never left over from a previous Begin().
+            const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
+            backend_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
+            backend_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
+                                            static_cast<int>(effectiveSampler.getAddressVProperty()));
             backend_->Begin();
         }
     }

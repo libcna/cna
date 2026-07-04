@@ -27,3 +27,16 @@ TEST(SurfaceFormatTest, HalfSingleIs16)   { EXPECT_EQ(static_cast<int>(SurfaceFo
 TEST(SurfaceFormatTest, HalfVector2Is17)  { EXPECT_EQ(static_cast<int>(SurfaceFormat::HalfVector2),     17); }
 TEST(SurfaceFormatTest, HalfVector4Is18)  { EXPECT_EQ(static_cast<int>(SurfaceFormat::HalfVector4),     18); }
 TEST(SurfaceFormatTest, HdrBlendableIs19) { EXPECT_EQ(static_cast<int>(SurfaceFormat::HdrBlendable),    19); }
+
+// XNA/FNA "EXT" ordinal values (20-26) — FNA extensions beyond original XNA4, still part of the
+// real FNA enum surface (confirmed against FNA's SurfaceFormat.cs). Task 281 finding: these 7
+// values previously did not exist in CNA at all — the enum instead had 7 CNA-invented "Srgb"
+// variants (ColorSrgb, Bgr565Srgb, Bgra5551Srgb, Bgra4444Srgb, Dxt1Srgb, Dxt3Srgb, Dxt5Srgb) with
+// no FNA equivalent, occupying these same ordinal slots. Fixed to match FNA exactly.
+TEST(SurfaceFormatTest, ColorBgraEXTIs20) { EXPECT_EQ(static_cast<int>(SurfaceFormat::ColorBgraEXT), 20); }
+TEST(SurfaceFormatTest, ColorSrgbEXTIs21) { EXPECT_EQ(static_cast<int>(SurfaceFormat::ColorSrgbEXT), 21); }
+TEST(SurfaceFormatTest, Dxt5SrgbEXTIs22)  { EXPECT_EQ(static_cast<int>(SurfaceFormat::Dxt5SrgbEXT),  22); }
+TEST(SurfaceFormatTest, Bc7EXTIs23)       { EXPECT_EQ(static_cast<int>(SurfaceFormat::Bc7EXT),       23); }
+TEST(SurfaceFormatTest, Bc7SrgbEXTIs24)   { EXPECT_EQ(static_cast<int>(SurfaceFormat::Bc7SrgbEXT),   24); }
+TEST(SurfaceFormatTest, ByteEXTIs25)      { EXPECT_EQ(static_cast<int>(SurfaceFormat::ByteEXT),      25); }
+TEST(SurfaceFormatTest, UShortEXTIs26)    { EXPECT_EQ(static_cast<int>(SurfaceFormat::UShortEXT),    26); }

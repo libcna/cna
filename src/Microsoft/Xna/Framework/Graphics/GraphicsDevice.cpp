@@ -140,6 +140,9 @@ namespace Microsoft::Xna::Framework::Graphics
           graphicsProfile_(graphicsProfile),
           presentationParameters_(presentationParameters),
           isDisposed_(false),
+          blendState_(BlendState::Opaque),
+          depthStencilState_(DepthStencilState::Default),
+          rasterizerState_(RasterizerState::CullCounterClockwise),
           blendFactor_(Color::White)
     {
 #ifdef __ANDROID__
@@ -547,6 +550,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 }
             }
         }
+        applySamplerStatesToBackend();
         backend_->DrawInstancedPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
             currentIndexBuffer_->GetBackend(),
@@ -608,6 +612,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
+        applySamplerStatesToBackend();
         backend_->DrawColoredPrimitives(*tmpVb, world, view, proj, primitiveType, primitiveCount);
     }
 
@@ -626,6 +631,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
 
         // Compute total index count from primitive type (mirrors FNA PrimitiveVerts).
         int indexCount = 0;
@@ -671,6 +678,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
+        applySamplerStatesToBackend();
         backend_->DrawIndexedColoredPrimitives(*tmpVb, *tmpIb, world, view, proj, primitiveType, primitiveCount);
     }
 
@@ -749,6 +757,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
@@ -773,6 +782,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
@@ -799,6 +809,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
@@ -824,6 +835,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
@@ -847,6 +859,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        applySamplerStatesToBackend();
         backend_->DrawPrimitivesEx(*vb, world, view, proj, type, primitiveCount, p);
     }
 
@@ -897,6 +910,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -925,6 +939,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -955,6 +970,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -984,6 +1000,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1015,6 +1032,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1043,6 +1061,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1073,6 +1092,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1102,6 +1122,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToBackend();
           backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
@@ -1129,6 +1150,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        applySamplerStatesToBackend();
         backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
     }
 
@@ -1154,6 +1176,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        applySamplerStatesToBackend();
         backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
     }
 
@@ -1411,6 +1434,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 (int)value.getAlphaDestinationBlendProperty(),
                 (int)value.getColorBlendFunctionProperty(),
                 (int)value.getAlphaBlendFunctionProperty());
+        // FNA applies BlendState.BlendFactor atomically as part of FNA3D_SetBlendState — the
+        // state's own baked-in blend factor becomes the device's current one, the same way
+        // GraphicsDevice.BlendFactor's own setter would.
+        setBlendFactorProperty(value.getBlendFactorProperty());
     }
 
     DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() { return depthStencilState_; }
@@ -1520,6 +1547,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (elementCount < w * h)
             throw std::runtime_error("GetBackBufferData: data array too small for requested region");
+        Texture::ValidateGetDataFormat(presentationParameters_.getBackBufferFormatProperty(), 4);
 
         // Color inherits a vtable pointer, so its first byte is NOT the R component.
         // Use a plain byte buffer for ReadBackbuffer, then unpack each RGBA group

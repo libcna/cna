@@ -190,3 +190,33 @@ TEST(DepthStencilStateTest, SetTwoSidedStencilMode)
     ds.setTwoSidedStencilModeProperty(true);
     EXPECT_TRUE(ds.getTwoSidedStencilModeProperty());
 }
+
+// --- Preset Name (Task 311: FNA sets Name on every preset; CNA previously did not - same gap
+// already found and fixed in SamplerState (Task 291) and BlendState (Task 301); tracked as the
+// DepthStencilState portion of Task 866) ---
+
+TEST(DepthStencilStateTest, DefaultName)
+{
+    EXPECT_EQ(DepthStencilState::Default.getNameProperty(), "DepthStencilState.Default");
+}
+
+TEST(DepthStencilStateTest, DepthReadName)
+{
+    EXPECT_EQ(DepthStencilState::DepthRead.getNameProperty(), "DepthStencilState.DepthRead");
+}
+
+TEST(DepthStencilStateTest, NoneName)
+{
+    EXPECT_EQ(DepthStencilState::None.getNameProperty(), "DepthStencilState.None");
+}
+
+TEST(DepthStencilStateTest, PresetToStringReturnsName)
+{
+    EXPECT_EQ(DepthStencilState::Default.ToString(), "DepthStencilState.Default");
+}
+
+TEST(DepthStencilStateTest, DefaultConstructedNameIsEmpty)
+{
+    DepthStencilState ds;
+    EXPECT_TRUE(ds.getNameProperty().empty());
+}
