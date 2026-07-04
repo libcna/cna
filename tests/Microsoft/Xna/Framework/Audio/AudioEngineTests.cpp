@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
@@ -28,6 +29,7 @@
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
 using Microsoft::Xna::Framework::Audio::AudioEngineTestAccess;
+using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
 using Microsoft::Xna::Framework::Audio::SoundBank;
 using Microsoft::Xna::Framework::Audio::SoundBankTestAccess;
@@ -269,6 +271,131 @@ namespace
 
         AppendPadded(data, "XA8SoundBank", bankNameSize);
         AppendPadded(data, kXA8WaveBankName, 64);
+
+        AppendU8(data, 0);    // flags
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    constexpr const char* kLongWaveBankName = "P9StopLongWaveBank";
+
+    // Same layout as BuildXA8XwbFixtureBytes, but with a full second of audio instead of 200
+    // bytes (~1ms) -- P9-STOP's authored-stop-tail tests need the tail to still be reliably
+    // audible at the moment of the assertion, not racing a near-instant natural finish (same
+    // rationale as CueTests.cpp's BuildLongXwbFixtureBytes/"LongCue" for XA-6).
+    std::vector<uint8_t> BuildP9StopLongXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 44100u * 2u; // 1 second, mono 16-bit @ 44100Hz
+        constexpr uint32_t alignment         = 4;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, kLongWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u)            // format tag: PCM
+            | (1u << 2)       // channels: mono
+            | (44100u << 5)   // sample rate
+            | (2u << 23)      // wBlockAlign: 2 bytes/sample
+            | (1u << 31);     // 16-bit
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        AppendU32(data, 0u); // entry 0: offset=0, deviation=0 (last/only entry)
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(0x00); // 16-bit silence
+
+        return data;
+    }
+
+    // Same layout as BuildXA8XsbFixtureBytes, but referencing kLongWaveBankName and named
+    // "P9StopLongCue".
+    std::vector<uint8_t> BuildP9StopLongXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "P9StopLongCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "P9StopLongSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
 
         AppendU8(data, 0);    // flags
         AppendU16(data, 0);   // categoryIndex
@@ -565,6 +692,47 @@ TEST(AudioEngineTest, RepeatedCategoryOperationsDoNotDuplicateActiveCueRegistryE
     category.SetVolume(0.8f);
 
     EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(engine), 1u);
+}
+
+// P9-STOP-005/009: the old code unregistered a cue from AudioEngine's activeCues immediately on
+// ANY Stop() call, regardless of whether there was still a real release tail playing -- meaning a
+// category-wide operation issued right after an AsAuthored stop could no longer reach a cue whose
+// sound was still audibly playing. A non-immediate stop with a real tail (State::Stopping) must
+// leave the cue registered until it's actually immediate-stopped or disposed.
+TEST(AudioEngineTest, StopAsAuthoredDoesNotUnregisterFromAudioEngineWhileTailStillPlaying)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioEngine engine(XgsFixturePath());
+        WaveBank wb(&engine, WriteFixture("p9stop_long.xwb", BuildP9StopLongXwbFixtureBytes()));
+        SoundBank sb(&engine, WriteFixture("p9stop_long.xsb", BuildP9StopLongXsbFixtureBytes()));
+
+        std::unique_ptr<Cue> cue(sb.GetCue("P9StopLongCue"));
+        cue->Play();
+
+        if (AudioEngineTestAccess::ActiveCueCount(engine) == 0)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not exercise real playback";
+        }
+
+        cue->Stop(AudioStopOptions::AsAuthored);
+
+        EXPECT_TRUE(cue->getIsStoppingProperty());
+        EXPECT_FALSE(cue->getIsStoppedProperty());
+        EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(engine), 1u);
+
+        cue->Stop(AudioStopOptions::Immediate);
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(engine), 0u);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
 }
 
 // ===================== GetTypeName =====================

@@ -933,6 +933,14 @@ TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway
         EXPECT_NE(CueTestAccess::ActiveInstance(*asAuthoredCue, 0), nullptr);
         EXPECT_TRUE(MIX_TrackPlaying(track));
 
+        // P9-STOP-001/002/003: matches real FACT (FACTCue_Stop, FACT.c) -- a non-immediate stop
+        // with a real tail does NOT reach STOPPED synchronously, it's State::Stopping until the
+        // tail actually finishes (see ReconcileState()). The old code set state_=Stopped here
+        // unconditionally, which was inconsistent with active_ still being populated.
+        EXPECT_TRUE(asAuthoredCue->getIsStoppingProperty());
+        EXPECT_FALSE(asAuthoredCue->getIsStoppedProperty());
+        EXPECT_FALSE(asAuthoredCue->getIsPlayingProperty());
+
         // Contrast: Stop(Immediate) on a fresh instance must hard-stop right away -- it destroys
         // the instance (and with it the underlying track) immediately, so there is no track left
         // to query afterward; the absence of an active instance is itself the observable effect.
@@ -945,6 +953,44 @@ TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway
         immediateCue->Stop(AudioStopOptions::Immediate);
 
         EXPECT_EQ(CueTestAccess::ActiveInstance(*immediateCue, 0), nullptr);
+        EXPECT_TRUE(immediateCue->getIsStoppedProperty());
+        EXPECT_FALSE(immediateCue->getIsStoppingProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// P9-STOP-003/004: a State::Stopping cue must reconcile to Stopped on its own once the release
+// tail actually finishes playing, the same way a Playing cue naturally reconciles
+// (P9-LIFECYCLE-001) -- it must not get stuck in Stopping forever.
+TEST(CueTest, StopAsAuthoredTransitionsFromStoppingToStoppedOnceTailFinishes)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
+        cue->Play();
+
+        if (!CueTestAccess::ActiveInstance(*cue, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+
+        cue->Stop(AudioStopOptions::AsAuthored);
+        ASSERT_TRUE(cue->getIsStoppingProperty());
+        ASSERT_FALSE(cue->getIsStoppedProperty());
+
+        // ~1.13ms of mono 16-bit silence at 44100Hz -- long enough to finish well within 50ms.
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_FALSE(cue->getIsStoppingProperty());
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
     }
     catch (...)
     {

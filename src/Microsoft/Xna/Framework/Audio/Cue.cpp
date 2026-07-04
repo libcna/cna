@@ -71,7 +71,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Cue::ReconcileState() const
     {
-        if (isDisposed_ || state_ != State::Playing || active_.empty())
+        // P9-STOP-003/004: State::Stopping (an authored/non-immediate Stop() with a real release
+        // tail still playing -- see StopInternal()) reconciles to Stopped the same way Playing
+        // does, once every active_ instance has actually finished. Deliberately does NOT
+        // unregister from waveBanksUsed_/AudioEngine here even in the Stopping case, for the same
+        // reason P9-LIFECYCLE-001 never did for the Playing case -- see StopInternal()'s comment.
+        if (isDisposed_ || (state_ != State::Playing && state_ != State::Stopping) || active_.empty())
             return;
 
         for (const auto& pi : active_)
@@ -343,11 +348,31 @@ namespace Microsoft::Xna::Framework::Audio
         // there is no tail to let ring out; a non-immediate stop leaves them owned by active_
         // until this Cue is later disposed (matches FNA: the cue doesn't relinquish its native
         // voice until the release genuinely finishes, not the instant Stop(AsAuthored) is called).
-        if (immediate)
+        //
+        // P9-STOP-001/002/003/004: real FACT (FACTCue_Stop, FACT.c) does NOT transition to
+        // FACT_STATE_STOPPED for a non-immediate stop unless there is nothing to release --
+        // "the three ways a Cue might be stopped immediately" are: an explicit immediate request,
+        // being already paused, or `playingSound == NULL` (no wave, nothing to tail off). With a
+        // real tail, FACT instead begins a fade-out/RPC-release and only reaches STOPPED once
+        // that finishes. CNA doesn't parse/model authored fadeOutMS/RPC-release timing (that data
+        // isn't even retained by XactParser -- see plan_audio.md's P9-STOP-010 for the documented
+        // gap), but it DOES know whether there's a real tail to wait for (`active_` non-empty) --
+        // model that with the already-defined but previously-unused State::Stopping, promoted to
+        // Stopped by ReconcileState() once every active_ instance actually finishes playing.
+        const bool hasRealTail = !immediate && !active_.empty();
+        if (hasRealTail)
         {
-            active_.clear();
+            state_ = State::Stopping;
+            // Deliberately do NOT touch waveBanksUsed_/AudioEngine's registry here (P9-STOP-005/
+            // 009): the old code unregistered immediately regardless of `immediate`, which made
+            // WaveBank::IsInUse/AudioEngine's category operations lose track of this cue while it
+            // was still audibly playing its tail. Unregistration now only happens once the cue is
+            // actually immediate-stopped or disposed -- ReconcileState() itself never touches
+            // these registries either (same mutate-during-iteration hazard as P9-LIFECYCLE-001).
+            return;
         }
 
+        active_.clear();
         state_ = State::Stopped;
 
         for (auto* wb : waveBanksUsed_)

@@ -400,6 +400,146 @@ namespace
         static SoundBank bank(&SharedEngine(), VolXsbFixturePath());
         return bank;
     }
+
+    constexpr const char* kP9StopLongWaveBankName = "P9StopCategoryLongWaveBank";
+
+    // Same layout as BuildVolXwbFixtureBytes, but with a full second of audio instead of 200
+    // bytes (~1ms) -- P9-STOP-008's authored-stop-tail check needs the tail to still be reliably
+    // audible at assertion time, not racing a near-instant natural finish under full-suite load
+    // (same rationale as CueTests.cpp's BuildLongXwbFixtureBytes/"LongCue" for XA-6).
+    std::vector<uint8_t> BuildP9StopLongXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 44100u * 2u; // 1 second, mono 16-bit @ 44100Hz
+        constexpr uint32_t alignment         = 4;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, kP9StopLongWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u)            // format tag: PCM
+            | (1u << 2)       // channels: mono
+            | (44100u << 5)   // sample rate
+            | (2u << 23)      // wBlockAlign: 2 bytes/sample
+            | (1u << 31);     // 16-bit
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        AppendU32(data, 0u); // entry 0: offset=0, deviation=0 (last/only entry)
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(0x00); // 16-bit silence
+
+        return data;
+    }
+
+    // Same layout as BuildVolXsbFixtureBytes, but referencing kP9StopLongWaveBankName and named
+    // "P9StopCategoryLongCue".
+    std::vector<uint8_t> BuildP9StopLongXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "P9StopCategoryLongCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "P9StopCategoryLongSoundBank", bankNameSize);
+        AppendPadded(data, kP9StopLongWaveBankName, 64);
+
+        AppendU8(data, 0);    // flags
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    WaveBank& SharedP9StopLongWaveBank()
+    {
+        static WaveBank wb(&SharedEngine(), WriteFixture(
+            "cna_audio_category_test", "p9stop_long.xwb", BuildP9StopLongXwbFixtureBytes()));
+        return wb;
+    }
+
+    SoundBank& SharedP9StopLongBank()
+    {
+        (void)SharedP9StopLongWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&SharedEngine(), WriteFixture(
+            "cna_audio_category_test", "p9stop_long.xsb", BuildP9StopLongXsbFixtureBytes()));
+        return bank;
+    }
 }
 
 // ===================== Name =====================
@@ -466,6 +606,46 @@ TEST(AudioCategoryTest, PauseResumeStopRouteToRealActiveCueInCategory)
     cat.Stop(AudioStopOptions::Immediate);
     EXPECT_TRUE(cue->getIsStoppedProperty());
     EXPECT_FALSE(cue->getIsPlayingProperty());
+}
+
+// P9-STOP-008: AudioCategory::Stop(AsAuthored) must leave a real active cue's release tail
+// playing (State::Stopping), not hard-stop it immediately -- SharedBank()'s wavebank-less
+// "TestCue" above can't exercise this (Cue::active_ stays empty), so this uses a real
+// WaveBank-backed fixture instead, same rationale as CueTests.cpp's
+// StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway. Needs the 1-second "Long"
+// fixture specifically, not SharedVolBank's 200-byte (~1.13ms) "VolCue" -- under full-suite load
+// the short fixture can finish naturally between Play() and the assertion below, which would
+// reconcile State::Stopping straight to Stopped before this test ever observes it (confirmed
+// flaky empirically with the short fixture: ~30-40% failure rate over repeated full-suite runs).
+TEST(AudioCategoryTest, StopAsAuthoredOnCategoryLeavesRealActiveCueStoppingNotStopped)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioCategory cat = SharedEngine().GetCategory("Default");
+        std::unique_ptr<Cue> cue(SharedP9StopLongBank().GetCue("P9StopCategoryLongCue"));
+        cue->Play();
+
+        if (!CueTestAccess::ActiveInstance(*cue, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+
+        cat.Stop(AudioStopOptions::AsAuthored);
+
+        EXPECT_TRUE(cue->getIsStoppingProperty());
+        EXPECT_FALSE(cue->getIsStoppedProperty());
+        EXPECT_NE(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
+
+        cue->Stop(AudioStopOptions::Immediate); // clean up rather than leaking a Stopping cue
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
 }
 
 // P9-CATEGORY-001/002: StopCategoryInternal used to iterate AudioEngine::activeCues directly

@@ -1786,16 +1786,27 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
 
 ## P9-STOP — Stop semantics and authored stop behavior
 
-* [ ] P9-STOP-001 Audit current `Cue::Stop(AudioStopOptions::Immediate)` behavior against XNA/FNA.
-* [ ] P9-STOP-002 Audit current `Cue::Stop(AudioStopOptions::AsAuthored)` behavior against XNA/FNA.
-* [ ] P9-STOP-003 Do not mark a cue as fully inactive while authored stop tails/fades are still active.
-* [ ] P9-STOP-004 Introduce explicit internal tracking for stopping/tail state if needed.
-* [ ] P9-STOP-005 Ensure wave bank and sound bank in-use tracking remains true while authored stop tails are still active.
-* [ ] P9-STOP-006 Add tests for `Stop(Immediate)` state transitions.
-* [ ] P9-STOP-007 Add tests for `Stop(AsAuthored)` state transitions.
-* [ ] P9-STOP-008 Add tests for category stop with authored stop behavior.
-* [ ] P9-STOP-009 Verify that stopping a cue unregisters from `AudioEngine` only when it is actually finished.
-* [ ] P9-STOP-010 Document any remaining deviation from exact XACT authored stop behavior.
+* [x] P9-STOP-001 Audit current `Cue::Stop(AudioStopOptions::Immediate)` behavior against XNA/FNA.
+  *Note:* Already correct, no fix needed: `StopInternal(true)` clears `active_`/hard-stops every instance, sets `state_ = State::Stopped`, and unregisters from `waveBanksUsed_`/`AudioEngine` all synchronously — matches `FACTCue_Stop`'s `dwFlags & FACT_FLAG_STOP_IMMEDIATE` branch (`FACT.c`) exactly, which always reaches `FACT_STATE_STOPPED` synchronously regardless of any authored fade.
+* [x] P9-STOP-002 Audit current `Cue::Stop(AudioStopOptions::AsAuthored)` behavior against XNA/FNA.
+  *Note:* **Found a real bug.** The old code called `pi.instance->Stop(false)` (correctly lets the tail play, matches `XA-6`) but then set `state_ = State::Stopped` and unregistered from `waveBanksUsed_`/`AudioEngine` **unconditionally**, regardless of whether real active instances were still audibly playing. Read `FACTCue_Stop` (`FACT.c`) line-by-line: real FACT does NOT reach `FACT_STATE_STOPPED` for a non-immediate stop unless there's nothing to release (`playingSound == NULL`, paused, or immediate) — with a real tail it begins a fade-out/RPC-release and only reaches `STOPPED` once that finishes. Fixed — see `P9-STOP-003`/`004`.
+* [x] P9-STOP-003 Do not mark a cue as fully inactive while authored stop tails/fades are still active.
+  *Note:* Fixed in `StopInternal()`: a non-immediate stop with non-empty `active_` (`hasRealTail`) now sets `state_ = State::Stopping` instead of `Stopped`, leaving `active_` (and thus `getIsPlayingProperty()`/`getIsStoppedProperty()`) correctly reflecting "still has an audible tail". `ReconcileState()` (already used for natural-completion detection, `P9-LIFECYCLE-001`) now also promotes `Stopping` → `Stopped` once every `active_` instance actually finishes, the same way it does for `Playing`.
+* [x] P9-STOP-004 Introduce explicit internal tracking for stopping/tail state if needed.
+  *Note:* Used the already-defined but previously-unused `Cue::State::Stopping` enum value (it existed in the enum since an earlier phase but nothing ever set it — `IsStoppingIsAlwaysFalse` was a real, accurately-named test until this fix). No new field needed.
+* [x] P9-STOP-005 Ensure wave bank and sound bank in-use tracking remains true while authored stop tails are still active.
+  *Note:* Fixed as a direct consequence of `P9-STOP-003`: `StopInternal()` no longer unregisters from `waveBanksUsed_`/`AudioEngine` when `hasRealTail` is true, so `WaveBank::IsInUse`/`SoundBank::IsInUse`/`AudioEngine`'s category operations all still see the cue as alive (via its now-correctly-`Stopping`, not falsely-`Stopped`, live-queried state) for as long as the tail is actually playing.
+* [x] P9-STOP-006 Add tests for `Stop(Immediate)` state transitions.
+  *Note:* Already covered by pre-existing tests (`IsStoppedTrueAfterStop`, `StopImmediateTransitionsToStopped`, the `StopImmediate` half of `StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway`); extended the latter with explicit `IsStopped`/`IsStopping` assertions post-fix.
+* [x] P9-STOP-007 Add tests for `Stop(AsAuthored)` state transitions.
+  *Note:* Extended `CueTests.cpp::StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway` with `IsStopping`/`IsStopped` assertions; added `StopAsAuthoredTransitionsFromStoppingToStoppedOnceTailFinishes` (the short `Apply3DCue` fixture, ~1.13ms, verifies the natural `Stopping`→`Stopped` reconciliation once the tail actually finishes).
+* [x] P9-STOP-008 Add tests for category stop with authored stop behavior.
+  *Note:* `AudioCategoryTests.cpp::StopAsAuthoredOnCategoryLeavesRealActiveCueStoppingNotStopped` — a real WaveBank-backed cue, `AudioCategory::Stop(AsAuthored)`, verifies the cue is `Stopping` (not `Stopped`) and its instance/track are still alive immediately after. First version used `SharedVolBank`'s 200-byte (~1.13ms) "VolCue" fixture and was itself flaky (~30-40% failure rate over repeated full-suite runs): under full-suite load the tail could finish naturally between `Play()` and the assertion, letting `ReconcileState()` promote `Stopping` straight to `Stopped` before the test observed it. Fixed by adding a dedicated 1-second `SharedP9StopLongBank`/`"P9StopCategoryLongCue"` fixture (mirroring `CueTests.cpp`'s `"LongCue"` pattern) — stress-tested 10+ full-suite runs clean afterward.
+* [x] P9-STOP-009 Verify that stopping a cue unregisters from `AudioEngine` only when it is actually finished.
+  *Note:* `AudioEngineTests.cpp::StopAsAuthoredDoesNotUnregisterFromAudioEngineWhileTailStillPlaying` — a fresh `AudioEngine` + a 1-second-long real fixture (`BuildP9StopLongXwbFixtureBytes`/`BuildP9StopLongXsbFixtureBytes`, mirroring `CueTests.cpp`'s `"LongCue"` pattern so the tail is reliably still audible at assertion time), asserts `ActiveCueCount()==1` immediately after `Stop(AsAuthored)`, then `==0` only after a subsequent `Stop(Immediate)`.
+  All 4 new/extended `P9-STOP-006..009` tests `git stash`-verified to fail against the pre-fix code (the pre-existing `StopAsAuthoredTransitionsToStopped` test, which uses the wavebank-less "Explosion"/`MakeCue()` fixture where `active_` stays empty, correctly passes either way — matches FACT's own `playingSound == NULL` immediate-stop rule). Full suite (2093/2093) green, verified clean under a full ASan+UBSan build.
+* [x] P9-STOP-010 Document any remaining deviation from exact XACT authored stop behavior.
+  *Note:* Documented in `CHECKLIST.md`: `Stop(AsAuthored)`'s release-tail *duration* is however long the underlying wave naturally takes to finish, not the authored `fadeOutMS`/RPC-release timing — `XactParser` doesn't retain per-cue `fadeOutMS`/`instanceLimit`/`maxInstanceBehavior` into `XsbCue` at all (parsed-and-discarded, only needed to locate later header fields). `State::Stopping` gets the *shape* of the behavior right (non-stopped while there's something to hear), but not an authored fade curve — implementing real per-cue fade timing would need parser changes plus a new time-driven update mechanism, out of scope for this pass (matches how `P9-CATEGORY-005/007/008`'s category-level `instanceLimit`/fade were already deferred, `XA-11`).
 
 ## P9-CATEGORY — AudioCategory correctness
 
