@@ -64,7 +64,7 @@ the `default: break;` case).
 | `SDL_EVENT_MOUSE_BUTTON_DOWN` / `_UP` | `SetMouseButtonState` (Left/Right/Middle/XButton1/XButton2), `SetMousePosition`; on DOWN also `Mouse::INTERNAL_onClicked(button-1)` | `Mouse::GetState().LeftButton` etc.; `Mouse::ClickedEXT` fires |
 | `SDL_EVENT_MOUSE_WHEEL` | `AddScrollWheelDelta(wheel.y * 120)` | `Mouse::GetState().ScrollWheelValue` (cumulative, XNA units of 120 per notch) |
 | `SDL_EVENT_KEY_DOWN` / `_UP` | `SetKeyState(key, pressed)` (skipped on key-repeat — state is already set); also drives control-character `TextInput` synthesis (`handle_text_input_key_down/up`) | `Keyboard::GetState().IsKeyDown/Up`; `Keys` resolved via `try_convert_sdl_scancode` (scancode mode) or `try_convert_sdl_key` (default mode) — see §4 |
-| `SDL_EVENT_TEXT_INPUT` | none (bypasses `InputManager`) | `TextInputEXT::INTERNAL_OnTextInput(char)` once per UTF-8 byte of `event.text.text`; suppressed while a synthesized Ctrl+V paste is in flight |
+| `SDL_EVENT_TEXT_INPUT` | none (bypasses `InputManager`) | `event.text.text` (UTF-8) is decoded to UTF-16 code units (`decode_utf8_to_utf16`) and each is dispatched via `TextInputEXT::INTERNAL_OnTextInput(charcs)` — one UTF-16 code unit per call, astral code points as surrogate pairs, matching FNA's `Encoding.UTF8.GetChars`; suppressed while a synthesized Ctrl+V paste is in flight |
 | `SDL_EVENT_TEXT_EDITING` | none | `TextInputEXT::INTERNAL_OnTextEditing(text, start, length)` — empty/null composition maps to `("", 0, 0)` |
 | `SDL_EVENT_FINGER_DOWN` | `SetTouchState(id, Pressed, pixelPos)`; also `TouchPanel::setTouchDeviceExistsProperty(true)` and `TouchPanel::INTERNAL_onTouchEvent(id, Pressed, x, y, 0, 0)` | `TouchPanel::GetState()`; `GestureDetector::OnPressed` |
 | `SDL_EVENT_FINGER_MOTION` | `SetTouchState(id, Moved, pixelPos)`; `TouchPanel::INTERNAL_onTouchEvent(id, Moved, x, y, dx, dy)` | `TouchPanel::GetState()`; `GestureDetector::OnMoved` |
@@ -202,9 +202,11 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
   `SDL_EVENT_TEXT_INPUT`/`_EDITING` (Phase I1, tasks 700–708), including control-character
   synthesis for keys SDL doesn't deliver as `TEXT_INPUT` (Home/End/Back/Tab/Enter/Delete,
   Ctrl+V) and Ctrl+V paste-echo suppression.
-- Known deviation: the `TextInput`/`INTERNAL_OnTextInput` callback is `char`-based, so UTF-8
-  text is forwarded one byte at a time; FNA's C# callback is UTF-16-code-unit-based. A consumer
-  appending bytes to a `std::string` reconstructs the original UTF-8 text correctly either way.
+- The `TextInput`/`INTERNAL_OnTextInput` callback is `charcs` (`char16_t`) — one UTF-16 code unit
+  per call, with astral code points delivered as a high/low surrogate pair, matching FNA's
+  `Action<char>` exactly (task 806). The bridge decodes SDL's UTF-8 to UTF-16 via
+  `decode_utf8_to_utf16`. `TextEditing` remains a UTF-8 `std::string` (FNA's `Action<string,int,int>`
+  maps to `std::string`) — a separate, still-intact deviation.
 
 ---
 

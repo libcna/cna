@@ -31,21 +31,21 @@ namespace
     };
 }
 
-TEST_F(TextInputEXTTest, TextInputDispatchesEachCharToSubscriber)
+TEST_F(TextInputEXTTest, TextInputDispatchesEachCodeUnitToSubscriber)
 {
-    std::string captured;
-    TextInputEXT::TextInput = [&captured](char c) { captured += c; };
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
 
-    TextInputEXT::INTERNAL_OnTextInput('H');
-    TextInputEXT::INTERNAL_OnTextInput('i');
+    TextInputEXT::INTERNAL_OnTextInput(u'H');
+    TextInputEXT::INTERNAL_OnTextInput(u'i');
 
-    EXPECT_EQ(captured, "Hi");
+    EXPECT_EQ(captured, u"Hi");
 }
 
 TEST_F(TextInputEXTTest, TextInputWithoutSubscriberIsSafe)
 {
     TextInputEXT::TextInput = nullptr;
-    EXPECT_NO_THROW(TextInputEXT::INTERNAL_OnTextInput('x'));
+    EXPECT_NO_THROW(TextInputEXT::INTERNAL_OnTextInput(u'x'));
 }
 
 TEST_F(TextInputEXTTest, TextEditingDispatchesTextStartAndLength)

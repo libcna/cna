@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "Microsoft/Xna/Framework/Input/GamePadButtons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDPad.hpp"
@@ -81,19 +82,21 @@ void InputDemo::LoadContent()
     // Text input: collect committed characters and IME composition draft. The window
     // handle is published by GraphicsDevice during initialization, so StartTextInput
     // here targets the real window.
-    TextInputEXT::TextInput = [this](char c)
+    TextInputEXT::TextInput = [this](charcs c)
     {
-        lastTextChar_ = static_cast<unsigned char>(c);
-        switch (static_cast<unsigned char>(c))
+        lastTextChar_ = static_cast<int>(c);
+        switch (c)
         {
         case 8:  // Backspace control char (synthesized from the Back key)
             if (!textBuffer_.empty()) textBuffer_.pop_back();
+            pendingHighSurrogate_ = 0;
             break;
         case 13: // Enter control char clears the line
             textBuffer_.clear();
+            pendingHighSurrogate_ = 0;
             break;
         default:
-            if (textBuffer_.size() < 64) textBuffer_ += c;
+            AppendTextCodeUnit(c);
             break;
         }
     };
@@ -109,6 +112,55 @@ void InputDemo::LoadContent()
 // ---------------------------------------------------------------------------
 // Update
 // ---------------------------------------------------------------------------
+
+void InputDemo::AppendTextCodeUnit(const charcs c)
+{
+    // Combine UTF-16 surrogate pairs into a single code point, then append as UTF-8.
+    std::uint32_t cp;
+    if (c >= 0xD800 && c <= 0xDBFF)
+    {
+        pendingHighSurrogate_ = c; // high surrogate — wait for its low surrogate
+        return;
+    }
+    if (c >= 0xDC00 && c <= 0xDFFF)
+    {
+        if (pendingHighSurrogate_ == 0) return; // unpaired low surrogate — drop defensively
+        cp = 0x10000u
+           + ((static_cast<std::uint32_t>(pendingHighSurrogate_) - 0xD800u) << 10)
+           + (static_cast<std::uint32_t>(c) - 0xDC00u);
+        pendingHighSurrogate_ = 0;
+    }
+    else
+    {
+        pendingHighSurrogate_ = 0;
+        cp = c;
+    }
+
+    if (textBuffer_.size() > 64) return; // keep the demo line bounded
+
+    if (cp < 0x80)
+    {
+        textBuffer_ += static_cast<char>(cp);
+    }
+    else if (cp < 0x800)
+    {
+        textBuffer_ += static_cast<char>(0xC0 | (cp >> 6));
+        textBuffer_ += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+    else if (cp < 0x10000)
+    {
+        textBuffer_ += static_cast<char>(0xE0 | (cp >> 12));
+        textBuffer_ += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        textBuffer_ += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+    else
+    {
+        textBuffer_ += static_cast<char>(0xF0 | (cp >> 18));
+        textBuffer_ += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        textBuffer_ += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        textBuffer_ += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
 
 void InputDemo::Update(GameTime& gameTime)
 {

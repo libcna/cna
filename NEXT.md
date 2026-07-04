@@ -412,8 +412,12 @@ become a task there, not here.
   `cmake-build-bgfx`) — they are gitignored. Reconfiguring/rebuilding them is fine when asked.
 - Do not attempt to unit-test `GraphicsDevice`-dependent construction in `CnaTests` (Section 6) —
   use a separate integration test executable instead.
-- Do not change the `TextInputEXT` char-based callback signature — a deliberate, documented
-  deviation.
+- ~~Do not change the `TextInputEXT` char-based callback signature — a deliberate, documented
+  deviation.~~ **Superseded (Phase I9 task 806, user decision 2026-07-04):** the callback is now
+  `std::function<void(charcs)>` (`char16_t`), one UTF-16 code unit per call, matching FNA's
+  `Action<char>` and CLAUDE.md's `char → charcs` type mapping. The old per-UTF-8-byte `char`
+  signature was the deviation; it was corrected, not frozen. (`TextEditing` stays a UTF-8
+  `std::string` — a separate, still-intact deviation.)
 
 ---
 

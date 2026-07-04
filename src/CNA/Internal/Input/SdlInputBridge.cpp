@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <string>
 #include <array>
@@ -24,6 +25,7 @@ namespace
     using Microsoft::Xna::Framework::Input::ButtonState;
     using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
     using Microsoft::Xna::Framework::Input::Keys;
+    using SharpRuntime::charcs;
 
     constexpr std::size_t MaxSupportedGamePads = 4;
 
@@ -83,6 +85,51 @@ namespace
     // Suppresses the literal 'v' TEXT_INPUT that SDL emits alongside a Ctrl+V paste.
     bool g_textInputSuppress = false;
 
+    // Decodes a NUL-terminated UTF-8 string into UTF-16 code units, invoking `emit` for each.
+    // This mirrors FNA's TEXT_INPUT handling (SDL3_FNAPlatform.cs:1166-1184), which runs SDL's
+    // UTF-8 bytes through Encoding.UTF8.GetChars() and dispatches each resulting C# char (a UTF-16
+    // code unit) to TextInputEXT.OnTextInput. A code point above U+FFFF is emitted as a high/low
+    // surrogate pair. A self-contained decoder is used here rather than sharp-runtime's Encoding
+    // (which is byte/std::string-oriented and has no UTF-16-code-unit output) — this is internal
+    // backend plumbing, the same category as the other file-local SDL translation helpers above.
+    // Malformed sequences are skipped defensively; SDL always delivers well-formed UTF-8.
+    template <typename Emit>
+    void decode_utf8_to_utf16(const char* text, Emit&& emit)
+    {
+        const auto* s = reinterpret_cast<const unsigned char*>(text);
+        while (*s != 0)
+        {
+            const unsigned char b0 = s[0];
+            std::uint32_t cp;
+            int len;
+            if (b0 < 0x80)                 { cp = b0;        len = 1; }
+            else if ((b0 & 0xE0) == 0xC0)  { cp = b0 & 0x1F; len = 2; }
+            else if ((b0 & 0xF0) == 0xE0)  { cp = b0 & 0x0F; len = 3; }
+            else if ((b0 & 0xF8) == 0xF0)  { cp = b0 & 0x07; len = 4; }
+            else                           { ++s; continue; } // invalid lead byte — resync
+
+            int i = 1;
+            for (; i < len; ++i)
+            {
+                if ((s[i] & 0xC0) != 0x80) break; // truncated/invalid continuation
+                cp = (cp << 6) | (s[i] & 0x3F);
+            }
+            if (i != len) { ++s; continue; } // malformed — skip one byte and resync
+            s += len;
+
+            if (cp <= 0xFFFF)
+            {
+                emit(static_cast<charcs>(cp));
+            }
+            else
+            {
+                cp -= 0x10000;
+                emit(static_cast<charcs>(0xD800 + (cp >> 10)));   // high surrogate
+                emit(static_cast<charcs>(0xDC00 + (cp & 0x3FF))); // low surrogate
+            }
+        }
+    }
+
     std::optional<int> text_input_binding_index(const Keys key)
     {
         switch (key)
@@ -112,7 +159,7 @@ namespace
             {
                 g_textInputControlDown[*idx] = true;
             }
-            TextInputEXT::INTERNAL_OnTextInput(kTextInputCharacters[*idx]);
+            TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(kTextInputCharacters[*idx]));
         }
         else if (control_key_held() && key == Keys::V)
         {
@@ -121,7 +168,7 @@ namespace
                 g_textInputControlDown[6] = true;
                 g_textInputSuppress = true;
             }
-            TextInputEXT::INTERNAL_OnTextInput(kTextInputCharacters[6]);
+            TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(kTextInputCharacters[6]));
         }
     }
 
@@ -1172,16 +1219,17 @@ namespace CNA::Internal::Input
                 {
                     break;
                 }
-                // SDL delivers UTF-8 text in event.text.text. CNA's TextInput callback is
-                // char-based (byte-oriented), so forward each UTF-8 byte in order: a consumer
-                // appending them to a std::string reconstructs the original UTF-8 text.
-                // (FNA decodes to UTF-16 because C# strings are UTF-16; CNA uses UTF-8 std::string.)
+                // SDL delivers UTF-8 text in event.text.text. Decode it to UTF-16 code units and
+                // dispatch each, matching FNA exactly (Encoding.UTF8.GetChars ->
+                // TextInputEXT.OnTextInput per char, SDL3_FNAPlatform.cs:1166-1184). CNA's
+                // TextInput callback is charcs (char16_t) — one UTF-16 code unit per call, with
+                // astral code points delivered as a surrogate pair, just like FNA's C# char.
                 if (const char* text = event.text.text)
                 {
-                    for (const char* p = text; *p != '\0'; ++p)
+                    decode_utf8_to_utf16(text, [](const charcs cu)
                     {
-                        Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(*p);
-                    }
+                        Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(cu);
+                    });
                 }
                 break;
             }

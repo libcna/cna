@@ -14,7 +14,7 @@ namespace
 
 namespace Microsoft::Xna::Framework::Input
 {
-    std::function<void(char)>                      TextInputEXT::TextInput   = nullptr;
+    std::function<void(charcs)>                     TextInputEXT::TextInput   = nullptr;
     std::function<void(const std::string&, int, int)> TextInputEXT::TextEditing = nullptr;
     std::uintptr_t                                  TextInputEXT::windowHandle_ = 0;
 
@@ -87,7 +87,7 @@ namespace Microsoft::Xna::Framework::Input
         }
     }
 
-    void TextInputEXT::INTERNAL_OnTextInput(char c)
+    void TextInputEXT::INTERNAL_OnTextInput(charcs c)
     {
         if (TextInput)
             TextInput(c);

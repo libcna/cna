@@ -3,6 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -10,6 +11,7 @@
 
 namespace Microsoft::Xna::Framework::Input
 {
+    using SharpRuntime::charcs;
     /**
      * @brief Provides text input events and on-screen keyboard control.
      *
@@ -23,11 +25,15 @@ namespace Microsoft::Xna::Framework::Input
         TextInputEXT() = delete;
 
         /**
-         * @brief Raised for each printable character produced by the keyboard.
+         * @brief Raised for each UTF-16 code unit produced by the keyboard.
          *
-         * This event supports key repeat and is not raised by non-character keys.
+         * The argument is a single UTF-16 code unit (`charcs` / `char16_t`), matching FNA's
+         * `event Action<char>` (C# `char` is a UTF-16 code unit). A code point above U+FFFF
+         * (e.g. an emoji) is delivered as two calls — a high surrogate then a low surrogate —
+         * exactly as FNA's `Encoding.UTF8.GetChars` decode does. This event supports key repeat
+         * and is not raised by non-character keys.
          */
-        NOXNA static std::function<void(char)> TextInput;
+        NOXNA static std::function<void(charcs)> TextInput;
 
         /**
          * @brief Raised during IME composition with draft text, start offset, and length.
@@ -84,10 +90,10 @@ namespace Microsoft::Xna::Framework::Input
         NOXNA static void SetInputRectangle(const Microsoft::Xna::Framework::Rectangle& rectangle);
 
         /**
-         * @brief Internal: dispatches a text input character to subscribers.
-         * @param c The character that was entered.
+         * @brief Internal: dispatches a text input code unit to subscribers.
+         * @param c The UTF-16 code unit that was entered.
          */
-        NOXNA static void INTERNAL_OnTextInput(char c);
+        NOXNA static void INTERNAL_OnTextInput(charcs c);
 
         /**
          * @brief Internal: dispatches a text editing event to subscribers.
