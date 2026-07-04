@@ -767,6 +767,40 @@ pattern for this kind of manual/visual verification tool in this project. Mirror
 **Files:** new `examples/demo_devices/` directory; whatever root/`examples/CMakeLists.txt`
 wiring registers new demo targets in this project.
 
+**Resolution (2026-07-04):** Implemented exactly as scoped, mirroring `InputDemo`
+(there is no separate `examples/CMakeLists.txt` — demo targets are registered directly
+in the root `CMakeLists.txt`, inside the `if(CNA_BUILD_EXAMPLES)` block; added
+`cna_demo_devices` there as an exact structural copy of the `cna_demo_input` target
+block). `DevicesDemo` constructs one instance each of `Accelerometer`/`Compass`/
+`Gyroscope`/`Motion` as direct members, subscribes `CurrentValueChanged` on all four to
+cache the latest reading and increment a per-sensor event counter, and calls `Start()`
+on all four in the constructor (wrapped in `try`/`catch(const System::Exception&)`,
+since `Compass`/`Motion` always throw `SensorFailedException` — expected, not an error,
+per their own permanent-stub status). Like `InputDemo`, this draws with plain colored
+rectangles only (no `SpriteFont`/Content-pipeline dependency, matching the established
+demo style) — per sensor: a supported/unsupported indicator, a `SensorState`-colored
+indicator, a brief "just fired" event flash, and signed bars for the reading's key
+vector fields (Acceleration/RotationRate/heading/DeviceAcceleration+Gravity). Since
+exact numeric values matter more here than for `InputDemo` (the whole point is letting
+a human verify axis-sign correctness against `docs/devices-hardware-checklist.md`,
+Task P4-13), also updates the window title every 10 frames with precise readings and
+event counts as text — a lighter-weight substitute for `SpriteFont` text rendering.
+`VibrateController` bindings: `D1` (`Start(TimeSpan)`), `D2`/`D3` (`NOXNA` intensity
+overload at 0.3/1.0), `D4`/`D5`/`D6` (`NOXNA` `StartLeftRight`, large-only/small-only/
+both), `Space` (`Stop()`) — edge-triggered (only fires on the keydown transition, via a
+cached previous-frame `KeyboardState`), each with its own event-flash indicator.
+Verified: `cna_demo_devices` builds and links clean (zero warnings) alongside a full
+top-level build (`cmake --build .` with no target argument) with no other target
+regressed; running it headless fails with the exact same
+`SDL_CreateWindow failed: OpenGL support ... not available in current SDL video driver
+(dummy)` error as the pre-existing `cna_demo_input` under the same
+`SDL_VIDEODRIVER=dummy` invocation — confirmed this is this dev container's existing
+no-GPU limitation (same one behind the 64 pre-existing headless `EasyGL_*` test
+failures), not a bug in the new demo. Full `ctest`: still 1995 tests, 97% passing, same
+64 pre-existing failures as baseline — no regressions. Actually running this demo on
+real hardware/a real display is, appropriately, part of `docs/devices-hardware-checklist.md`'s
+job, not something verifiable in this environment.
+
 ---
 
 ## Verification checklist (apply to every source-touching task above)

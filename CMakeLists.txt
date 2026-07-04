@@ -365,6 +365,42 @@ if(CNA_BUILD_EXAMPLES)
             cna_copy_sdl_runtime(cna_demo_input)
         endif()
     endif()
+
+    # ---- Devices (Sensors/VibrateController) demo (works with all backends) --
+    add_executable(cna_demo_devices
+        examples/demo_devices/src/Main.cpp
+        examples/demo_devices/src/DevicesDemo.cpp
+    )
+    target_include_directories(cna_demo_devices PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_devices/src
+    )
+
+    if(EMSCRIPTEN)
+        set_target_properties(cna_demo_devices PROPERTIES SUFFIX ".html")
+        target_link_libraries(cna_demo_devices PRIVATE
+            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+        target_link_options(cna_demo_devices PRIVATE
+            -sALLOW_MEMORY_GROWTH=1
+            -sSTACK_SIZE=1048576
+            -sINITIAL_MEMORY=67108864
+            -sFORCE_FILESYSTEM=1
+        )
+    else()
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_devices PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_devices PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_devices PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_devices PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_devices)
+        endif()
+    endif()
 endif()
 
 # ---- NOXNA settings example (no window needed — pure API test) ---------------
