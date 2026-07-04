@@ -1099,6 +1099,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 299: anisotropic filtering caps and fallback (extreme MaxAnisotropy must not crash)
+        cna_easygl_test(cna_test_easygl_texture_anisotropic_effect
+                        examples/easygl_texture_anisotropic_effect_test.cpp)
+        add_test(NAME EasyGL_TextureAnisotropic_DualTextureEffect
+                 COMMAND cna_test_easygl_texture_anisotropic_effect)
+        set_tests_properties(EasyGL_TextureAnisotropic_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1208,6 +1217,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # Task 298: NOT registered on Vulkan. Texture2D::SetData(level>0) is a silent no-op on
         # Vulkan (UpdatePixelsLevel never overridden — Task 867 finding), which confounds this
         # test's mip-filter-selection intent (it would fail for the wrong reason). See Task 867.
+
+        # Task 299: anisotropic filtering caps and fallback on Vulkan too (reuses the
+        # backend-agnostic EasyGL test source). This is the one backend where MaxAnisotropy is
+        # actually respected (queried/clamped to the real device cap).
+        cna_vulkan_test(cna_test_vulkan_texture_anisotropic_effect
+                        examples/easygl_texture_anisotropic_effect_test.cpp)
+        add_test(NAME Vulkan_TextureAnisotropic_DualTextureEffect
+                 COMMAND cna_test_vulkan_texture_anisotropic_effect)
+        set_tests_properties(Vulkan_TextureAnisotropic_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
         # Task 136: EnvironmentMapEffect — emissive=(1,0,0), envAmount=0 → red pixel on Vulkan
         cna_vulkan_test(cna_test_vulkan_env_map

@@ -12,10 +12,11 @@ minimal API-surface changes.
 - **Main goal:** Full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit tests and
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
-- **Current development phase:** Phases 1–34 are complete. **Phase 35 (SamplerState/texture
-  sampling conformance, `GRAPHICS_TASKS.md` Tasks 291–300) is in progress** — Tasks 291–298 done,
-  Task 299 is next (see §8). **Task 293 found and fixed a severe, project-wide bug** — see §3/§5.
-  **Task 298 found a second severe, project-wide bug (Task 867, not yet fixed)** — see §3/§5.
+- **Current development phase:** Phases 1–35 are now complete. **Phase 36 (BlendState
+  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) is starting** — Task 301 is next (see §8).
+  Phase 35 found and fixed a severe, project-wide bug (Task 293) and found-but-tracked a second one
+  (Task 867, not yet fixed) — see §3/§5, and the new `docs/sampler-state-support.md` for the full
+  Phase 35 writeup.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -39,13 +40,13 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2047/2049 (serial `-j1`) pass. 2 pre-existing,
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2048/2050 (serial `-j1`) pass. 2 pre-existing,
   unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. Some
   tests have each been observed failing once under parallel `-j` execution but passed cleanly both
   in isolation and on a repeat serial full run — treated as parallel-execution flakiness, not a
   regression (none confirmed as a stable failure): `EasyGL_SkinnedBones`,
   `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1984/1987 (serial `-j1`) pass (`Vulkan_RenderTargetUsage`
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1986/1988 (serial `-j1`) pass (`Vulkan_RenderTargetUsage`
   also failed in one full run this session, confirmed passing in isolation — same pre-existing
   order-dependent flakiness as `Vulkan_FillMode_WireFrame`, not a regression). `../sharp-runtime`
   (sibling repo) had a pre-existing, uncommitted local fix for a real `BitConverter.hpp` ambiguity
@@ -127,8 +128,21 @@ build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` conf
   issue. Vulkan additionally hardcodes `VkImageCreateInfo::mipLevels=1`,
   `VkImageViewCreateInfo::levelCount=1`, and never sets sampler `minLod`/`maxLod` (defaulting to 0,
   clamping automatic LOD selection to level 0 regardless of filter) — three more fixes needed
-  together with `UpdatePixelsLevel` for Vulkan `Texture2D` mips to work at all. Tracked as Task 867,
-  not fixed this session (multi-part, backend-touching fix needing its own dedicated pass).
+  together with `UpdatePixelsLevel` for Vulkan `Texture2D` mips to work at all. **Also affects
+  EasyGL differently**: `TextureFilter::Anisotropic` (and every other `*Mip*`-suffixed filter)
+  renders **solid black** on any ordinary single-level `Texture2D` (the common case,
+  e.g. `Texture2D::CreateFromPixels`) — a classic GL mipmap-incomplete-texture symptom, since
+  EasyGL never sets `GL_TEXTURE_MAX_LEVEL` to match a texture's real level count. Vulkan does not
+  share this symptom. Tracked as Task 867, not fixed this session (multi-part, three-backend
+  fix needing its own dedicated pass).
+- **Anisotropic filtering is inconsistent across backends**: Vulkan correctly queries the real
+  device cap and clamps `SamplerState.MaxAnisotropy` to it; EasyGL has zero anisotropy support at
+  all (`TextureFilter::Anisotropic` silently falls back to plain trilinear — the underlying
+  `easy-gl` library has no anisotropy API whatsoever); Bgfx enables the effect via sampler flags
+  but ignores the requested `MaxAnisotropy` level entirely. Not a crash risk (verified: an extreme
+  `MaxAnisotropy=9999` doesn't crash on any backend) — just inconsistent visual fidelity. Task 299
+  finding, not tracked as a fix task (EasyGL's gap would require adding real anisotropy support to
+  the `easy-gl` library itself, out of scope for a CNA-side fix).
 - `Texture3D`/`TextureCube::GetData` is a **total silent no-op on both Vulkan and Bgfx** — neither
   backend overrides the base class's empty default implementation. Calling it leaves the output
   buffer completely untouched, with no error (Task 280 finding, tracked as Task 865).
@@ -159,6 +173,8 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
+| (uncommitted) Task 300 | `docs/sampler-state-support.md` (new) | **Closes Phase 35.** Synthesizes Tasks 291–299's findings into one reference doc: API conformance, the central Task 293 per-slot-binding bug and its 3-backend fix, `TextureAddressMode`/`TextureFilter`/mipmap/anisotropic coverage, and a per-backend support matrix. Links to Tasks 866/867 rather than duplicating them. |
+| (uncommitted) Task 299 | `examples/easygl_texture_anisotropic_effect_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (Task 867 extended) | Audited `TextureFilter::Anisotropic`/`MaxAnisotropy` on all 3 backends: Vulkan correct (real device-cap query + clamp); EasyGL has zero anisotropy support at all (silently falls back to trilinear — underlying `easy-gl` library has no API for it); Bgfx enables the effect but ignores the requested level entirely. New test verifies the task's literal "caps and fallback" ask: `MaxAnisotropy=9999` (far beyond any cap) doesn't crash on either backend. Found an additional severe finding building it: `TextureFilter::Anisotropic` (and every `*Mip*` filter) renders solid black on any ordinary single-level `Texture2D` on EasyGL (GL mipmap-incompleteness) — same root cause as Task 867, scope extended to cover it, not fixed. |
 | (uncommitted) Task 298 | `examples/easygl_texture_mip_filter_effect_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (new Task 867) | EasyGL: verified real mip-level selection works for explicit `Mip*` filters (`LinearMipPoint` correctly samples a high mip level at 8x8px on a 128-texel texture); confirmed `Point`/`Linear` are deliberately non-mip-aware on EasyGL (documented tradeoff, avoids GL-incomplete textures). **Found a severe, separate bug while testing Vulkan**: `Texture2D::SetData(level>0)` is a total silent no-op on Vulkan/Bgfx (`UpdatePixelsLevel` never overridden) — same class as Task 865. Vulkan additionally hardcodes `mipLevels=1`/`levelCount=1`/never sets sampler `minLod`/`maxLod`. Un-registered the confounded Vulkan test rather than leave it misleadingly failing; tracked the full finding as new Task 867 (not fixed — multi-part, needs its own pass). |
 | (uncommitted) Task 297 | `examples/easygl_texture_filter_point_vs_linear_test.cpp` (new), `CMakeLists.txt` | First genuinely new-ground Phase 35 test — no prior test touched `TextureFilter`. New test draws 4 columns in one frame (magnification/minification × Point/Linear) on `DualTextureEffect`, sampling each at a texel boundary; `Point` reads pure, `Linear` reads a ~50/50 blend, in both scales. All 4 checks passed on both backends immediately — no bug found. Documented that magnification/minification share identical sampler math in CNA (flat `TextureFilter`→min+mag pair, no mipmaps), so this task's two scales confirm robustness at scale, not a distinct code path. |
 | `29c4b06` Task 296 | `examples/easygl_texture_address_mode_mirror_effect_test.cpp` (new), `CMakeLists.txt` | New `Mirror` pixel test on `DualTextureEffect`, mirroring Tasks 293/294's pattern. FNA has no `PointMirror` preset, so this builds a custom `SamplerState`. Deliberately sampled at raw `u=1.6` (not `1.25`, where `Mirror` and `Clamp` coincidentally agree) so only a genuinely correct `Mirror` implementation passes. All 3 backends already correctly mapped `Mirror` to their GPU's mirrored-repeat mode — no bug found, pure coverage addition. Registered and passing on both EasyGL and Vulkan. |
@@ -327,23 +343,22 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 299 — verify anisotropic filtering caps and fallback (closes
-   Phase 35's testing scope, only Task 300's doc pass remains after)**
-   - Goal: verify `TextureFilter::Anisotropic` + `SamplerState.MaxAnisotropy` actually affects
-     rendering, and that requesting an anisotropy level beyond the GPU's real cap degrades
-     gracefully (clamped, not a crash/validation error). Recall from this session:
-     `VulkanGraphicsBackend::ApplySamplerState`'s `case 2: // Anisotropic` sets
-     `ci.anisotropyEnable=VK_TRUE` only `if (enableAniso && anisotropySupported_)`, and clamps
-     `ci.maxAnisotropy` to `maxSamplerAnisotropy_` (the real device cap) — check this logic is
-     actually correct/exercised, and check EasyGL/Bgfx's equivalent handling too. A pixel test is
-     harder here than Tasks 293–298 (anisotropic filtering's visible effect is on *oblique-angle*
-     minification, not a simple axis-aligned UV/LOD case) — consider whether a simpler
-     property-level check (does `SamplerStates[0].MaxAnisotropy` reach the backend unmodified aside
-     from the device-cap clamp?) is a more honest, robust scope than attempting a full oblique-quad
-     pixel-difference test.
-   - Files: likely `tests/`/`examples/` (new), possibly touching backend anisotropy-cap query code
-     if a real gap is found (unlikely, given Vulkan's existing clamp logic looks correct on read).
-   - Verification: whatever test is written; run on all backends that claim anisotropic support.
+1. **`GRAPHICS_TASKS.md` Task 301 — audit `BlendState` API and static presets against FNA
+   (opens Phase 36)**
+   - Goal: audit CNA's `BlendState` against FNA's `Graphics/States/BlendState.cs`, mirroring
+     Task 291's `SamplerState` audit exactly (property surface, static presets — `Additive`,
+     `AlphaBlend`, `NonPremultiplied`, `Opaque` — and default-constructor values). **Known,
+     pre-confirmed finding to fix here**: Task 866 already found FNA sets `Name` on every
+     `BlendState` preset (e.g. `"BlendState.Additive"`), matching the exact gap Task 291 fixed for
+     `SamplerState` — this task can close Task 866's `BlendState` portion directly (see Task 866's
+     entry in `GRAPHICS_TASKS.md` for the fix shape: thread a `name` parameter through the private
+     preset constructor). `DepthStencilState`/`RasterizerState` are separate classes/tasks in this
+     phase list — check whether fixing all 3 in Task 301 or spreading them across their own later
+     audit tasks fits this phase's actual task breakdown before deciding scope.
+   - Files: `src/Microsoft/Xna/Framework/Graphics/BlendState.cpp`/`.hpp`,
+     `tests/Microsoft/Xna/Framework/Graphics/BlendStateTests.cpp`.
+   - Verification: unit tests for the 4 presets' property values plus (if fixed here) `Name`
+     matching FNA's exact preset name strings, mirroring Task 291's `SamplerStateTests.cpp` additions.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -406,46 +421,37 @@ Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
-Current status: Phases 1-34 are fully complete. Phase 35 (SamplerState/texture sampling
-conformance, GRAPHICS_TASKS.md Tasks 291-300) is in progress: Tasks 291-298 done, only 299/300
-remain. All three backends are green: EasyGL 2047/2049, Vulkan 1984/1987 (100% in isolation - one
-observed full-run failure, Vulkan_RenderTargetUsage, confirmed pre-existing order-dependent
-flakiness via isolation rerun, not a regression), Bgfx 1977/1977 (100%, not rebuilt this specific
-session but no Bgfx changes made) - only pre-existing, documented failures remain anywhere (see
-NEXT.md §5).
+Current status: Phases 1-35 are now fully complete. Phase 36 (BlendState conformance,
+GRAPHICS_TASKS.md Tasks 301-310) is starting. All three backends are green: EasyGL 2048/2050,
+Vulkan 1986/1988 (Vulkan_RenderTargetUsage/Vulkan_FillMode_WireFrame are pre-existing
+order-dependent flakiness, confirmed via isolation reruns, not regressions), Bgfx 1977/1977
+(100%) - only pre-existing, documented failures remain anywhere (see NEXT.md §5).
 
-Task 293 found and fixed something big, across all 3 backends: GraphicsDevice.SamplerStates was
-being silently ignored by essentially all 3D stock-effect texture draws, for 3 different
-backend-specific reasons (EasyGL: 18 missing applySamplerStatesToBackend() calls; Vulkan:
-GetOrCreateDualTexDescSet hardcoded defaultSampler_ + view-only cache key; Bgfx: samplerFlags_[0]
-reused for texture slot 1). All 3 fixed and verified. Also committed a pre-existing, unrelated
-uncommitted sharp-runtime fix (BitConverter.hpp System::Single ambiguity, commit ec97562) that had
-been blocking any Vulkan build. Tasks 294/295/296 rounded out TextureAddressMode coverage
-(Clamp/Wrap/Mirror); Task 297 covered TextureFilter::Point vs Linear (magnification+minification,
-no bug found, all 4 checks passed cleanly on both backends).
+Phase 35's headline result: Task 293 found and fixed a severe, project-wide bug across all 3
+backends - GraphicsDevice.SamplerStates was being silently ignored by essentially all 3D
+stock-effect texture draws, for 3 different backend-specific reasons (EasyGL: 18 missing
+applySamplerStatesToBackend() calls; Vulkan: GetOrCreateDualTexDescSet hardcoded defaultSampler_ +
+view-only cache key; Bgfx: samplerFlags_[0] reused for texture slot 1). All 3 fixed and verified.
+Also committed a pre-existing, unrelated uncommitted sharp-runtime fix (BitConverter.hpp
+System::Single ambiguity, commit ec97562) that had been blocking any Vulkan build. Tasks 294-297
+rounded out TextureAddressMode (Clamp/Wrap/Mirror) and TextureFilter (Point/Linear) coverage - no
+further bugs found there. Task 298/299 found a SECOND severe, project-wide bug, tracked as new
+Task 867, not yet fixed: Texture2D::SetData(level>0,...) is a total silent no-op on Vulkan and
+Bgfx (same severity class as the already-tracked Task 865, but for the much more commonly used
+Texture2D); Vulkan also hardcodes mipLevels=1/levelCount=1/never sets sampler minLod/maxLod; EasyGL
+separately renders solid black for TextureFilter::Anisotropic/any Mip*-suffixed filter on ordinary
+non-mipmapped textures (GL mipmap-incompleteness, same root cause manifesting differently). Task
+299 also audited anisotropic filtering: Vulkan is correct (real device-cap query+clamp), EasyGL has
+zero anisotropy support at all, Bgfx enables the effect but ignores the requested level. Task 300
+closed the phase with a full synthesis doc, docs/sampler-state-support.md.
 
-Task 298 (mipmap filter behavior) found a SECOND severe, project-wide bug, distinct from Task 293's:
-Texture2D::SetData(level>0,...) is a total silent no-op on Vulkan and Bgfx
-(ITextureBackend::UpdatePixelsLevel has an empty default body, neither backend overrides it) - same
-severity class as the already-tracked Task 865 (Texture3D/TextureCube::GetData no-op), but for the
-much more commonly used Texture2D, and previously undocumented. Vulkan additionally hardcodes
-VkImageCreateInfo::mipLevels=1, VkImageViewCreateInfo::levelCount=1, and never sets sampler
-minLod/maxLod (defaulting to 0, clamping automatic LOD selection to level 0 regardless of filter).
-NOT fixed this session (multi-part fix needing its own dedicated pass) - tracked as new Task 867.
-EasyGL itself was verified correct: real mip-level selection works for explicit Mip* filters
-(LinearMipPoint), while Point/Linear are deliberately non-mip-aware there (documented tradeoff to
-avoid GL-incomplete non-mipmapped textures). The Vulkan variant of Task 298's test was
-un-registered rather than left misleadingly failing for the wrong (data-upload, not filter) reason.
-
-Next task: GRAPHICS_TASKS.md Task 299 - verify anisotropic filtering caps and fallback. This is
-likely the last real testing task in Phase 35 (Task 300 is a documentation pass). Check
-VulkanGraphicsBackend::ApplySamplerState's existing anisotropy-enable/clamp logic
-(case 2: only enables anisotropy if anisotropySupported_, clamps maxAnisotropy to the real device
-cap maxSamplerAnisotropy_) and EasyGL/Bgfx's equivalents first - this looks likely correct already
-from a first read, but verify rather than assume, matching this session's pattern. A pixel test is
-harder here than Tasks 293-298 since anisotropic filtering's visible effect is on oblique-angle
-minification, not a simple axis-aligned UV/LOD case - consider whether a simpler property-level
-check (does SamplerStates[0].MaxAnisotropy reach the backend correctly, clamped only by the device
-cap) is a more honest scope than a full oblique-quad pixel-difference test.
+Next task: GRAPHICS_TASKS.md Task 301 - audit BlendState API and static presets against FNA
+(opens Phase 36). Mirrors Task 291's SamplerState audit exactly. IMPORTANT: Task 866 (tracked,
+not yet fixed) already found that FNA sets Name on every BlendState preset (e.g.
+"BlendState.Additive"), the same gap Task 291 fixed for SamplerState - this task can close Task
+866's BlendState portion directly using the identical fix shape (thread a name parameter through
+the private preset constructor). Check GRAPHICS_TASKS.md's actual Phase 36 task breakdown for
+whether DepthStencilState/RasterizerState's matching Name gaps belong in this same task or their
+own later audit tasks before deciding scope - don't assume, verify against the task list.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
