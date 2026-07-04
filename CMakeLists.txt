@@ -590,6 +590,21 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 10.14: AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT real GPU-skinned
+        # rendering (Phase 10 — Avatar real-rendering NOXNA/EXT extension). Needs
+        # CNA_GamerServices (AvatarRenderer lives there), so it's only built when networking
+        # (and thus GamerServices) is enabled.
+        if(CNA_ENABLE_NET)
+            cna_easygl_test(cna_test_avatar_real_render
+                            examples/avatar_real_render_integration_test.cpp)
+            target_link_libraries(cna_test_avatar_real_render PRIVATE CNA_GamerServices)
+            add_test(NAME EasyGL_AvatarRenderer_RealRender
+                     COMMAND cna_test_avatar_real_render)
+            set_tests_properties(EasyGL_AvatarRenderer_RealRender PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        endif()
+
         # Task 125: DXT1 texture loaded via FromStream, rendered, pixel readback
         cna_easygl_test(cna_test_dxt1_texture
                         examples/dxt1_texture_test.cpp)

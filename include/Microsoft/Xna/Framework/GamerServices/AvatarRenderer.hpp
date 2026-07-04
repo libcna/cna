@@ -1,13 +1,24 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include <memory>
+#include <string>
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRendererState.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/IAvatarAnimation.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/Collections/ObjectModel/ReadOnlyCollection.hpp"
 #include "System/IDisposable.hpp"
+#include "System/TimeSpan.hpp"
 #include <vector>
+
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class GraphicsDevice;
+    class SkinnedEffect;
+    class SkinnedModelEXT;
+}
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -46,6 +57,15 @@ namespace Microsoft::Xna::Framework::GamerServices
          * implementation).
          */
         AvatarRenderer(AvatarDescription* avatarDescription, bool useLoadingEffect);
+
+        /**
+         * @brief Destructor.
+         *
+         * NOXNA: declared (rather than defaulted inline) so that the real-rendering
+         * extension's std::unique_ptr<Graphics::SkinnedEffect> member can be destroyed
+         * where Graphics::SkinnedEffect is a complete type.
+         */
+        NOXNA ~AvatarRenderer();
 
         /** @brief Gets the world transform matrix. */
         [[nodiscard]] Microsoft::Xna::Framework::Matrix getWorldProperty() const;
@@ -127,6 +147,54 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         void Draw(const std::vector<Microsoft::Xna::Framework::Matrix>& bones, AvatarExpression expression);
 
+        /**
+         * @brief Opts this instance into real (non-XNA-spec) GPU-skinned mesh rendering.
+         *
+         * NOXNA — CNA extension. The faithful Draw() overloads above remain permanent no-ops
+         * regardless of this call; only DrawRealEXT() renders real geometry, and only after
+         * this method has been called. Not part of the real XNA 4.0 Avatar API — the real
+         * implementation never renders anything off-Xbox (see the class remarks).
+         *
+         * @param device Graphics device used for the real render path.
+         * @param model  A loaded skinned mesh + skeleton + animation clip set.
+         */
+        NOXNA void EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
+                                           std::shared_ptr<Graphics::SkinnedModelEXT> model);
+
+        /**
+         * @brief Gets whether EnableRealRenderingEXT has been called.
+         *
+         * @note NOXNA — CNA extension.
+         * @return true if real rendering is enabled.
+         */
+        NOXNA [[nodiscard]] bool IsRealRenderingEnabledEXT() const;
+
+        /**
+         * @brief Sets the skin/hair tint used by DrawRealEXT.
+         *
+         * @note NOXNA — CNA extension.
+         * @param appearance The appearance to apply on subsequent DrawRealEXT calls.
+         */
+        NOXNA void SetAppearanceEXT(const AvatarAppearanceEXT& appearance);
+
+        /**
+         * @brief Really renders the avatar's mesh using GPU skinning, using World/View/Projection
+         * as already set via setWorldProperty/setViewProperty/setProjectionProperty.
+         *
+         * NOXNA — CNA extension; not part of the real XNA 4.0 Avatar API (which never renders
+         * anything off-Xbox). Rendering happens through the standard GraphicsDevice/SkinnedEffect
+         * path, so on backends without 3D support this throws whatever error that backend already
+         * raises for any 3D draw call.
+         *
+         * @param animationClipName Name of a clip present in the enabled SkinnedModelEXT's Clips.
+         * @param position          Playback position within the clip.
+         * @param loop              Whether to loop playback at the clip's end.
+         * @throws System::ObjectDisposedException if this instance has been disposed.
+         * @throws System::InvalidOperationException if real rendering has not been enabled.
+         */
+        NOXNA void DrawRealEXT(const std::string& animationClipName,
+                               System::TimeSpan position, bool loop);
+
         /** @brief Releases all resources used by this instance. */
         void Dispose() override;
 
@@ -150,5 +218,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         Microsoft::Xna::Framework::Vector3 lightDirection_;
         Microsoft::Xna::Framework::Vector3 ambientLightColor_;
         bool isDisposed_{false};
+
+        // --- Real-rendering extension state (NOXNA) ---
+        Graphics::GraphicsDevice* realDevice_ = nullptr;
+        std::shared_ptr<Graphics::SkinnedModelEXT> realModel_;
+        std::unique_ptr<Graphics::SkinnedEffect> realEffect_;
+        AvatarAppearanceEXT appearance_;
     };
 }

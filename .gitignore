@@ -10,5 +10,7 @@ cmake-build-easygl/*
 cmake-build-bgfx/*
 cmake-build-windows/*
 cmake-build-android/*
+__pycache__/
+*.pyc
 
 

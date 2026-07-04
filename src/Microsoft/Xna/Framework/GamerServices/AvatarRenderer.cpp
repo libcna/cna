@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -33,6 +41,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         , bindPoseArray_(BoneCount)
     {
     }
+
+    AvatarRenderer::~AvatarRenderer() = default;
 
     Microsoft::Xna::Framework::Matrix AvatarRenderer::getWorldProperty() const { return world_; }
     void AvatarRenderer::setWorldProperty(Microsoft::Xna::Framework::Matrix value) { world_ = value; }
@@ -108,6 +118,70 @@ namespace Microsoft::Xna::Framework::GamerServices
         // Genuinely a no-op once validated, matching the real implementation.
     }
 
+    void AvatarRenderer::EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
+                                                 std::shared_ptr<Graphics::SkinnedModelEXT> model)
+    {
+        realDevice_ = &device;
+        realModel_ = std::move(model);
+        realEffect_ = std::make_unique<Graphics::SkinnedEffect>(device);
+    }
+
+    bool AvatarRenderer::IsRealRenderingEnabledEXT() const
+    {
+        return realModel_ != nullptr;
+    }
+
+    void AvatarRenderer::SetAppearanceEXT(const AvatarAppearanceEXT& appearance)
+    {
+        appearance_ = appearance;
+    }
+
+    void AvatarRenderer::DrawRealEXT(const std::string& animationClipName,
+                                      System::TimeSpan position, bool loop)
+    {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("AvatarRenderer");
+        }
+        if (!IsRealRenderingEnabledEXT())
+        {
+            throw System::InvalidOperationException(
+                "Real rendering has not been enabled; call EnableRealRenderingEXT first.");
+        }
+
+        std::vector<Microsoft::Xna::Framework::Matrix> boneTransforms;
+        realModel_->ComputeBoneTransformsEXT(animationClipName, position, loop, boneTransforms);
+
+        realEffect_->setWorldProperty(world_);
+        realEffect_->setViewProperty(view_);
+        realEffect_->setProjectionProperty(projection_);
+        realEffect_->SetBoneTransforms(boneTransforms);
+        realEffect_->setAmbientLightColorProperty(ambientLightColor_);
+        realEffect_->EnableDefaultLighting();
+        realEffect_->getDirectionalLight0Property().setEnabledProperty(true);
+        realEffect_->getDirectionalLight0Property().setDirectionProperty(lightDirection_);
+        realEffect_->getDirectionalLight0Property().setDiffuseColorProperty(lightColor_);
+
+        for (const auto& part : realModel_->Parts)
+        {
+            const bool isHair = part.Name == "hair";
+            realEffect_->setDiffuseColorProperty(
+                (isHair ? appearance_.getHairColorProperty() : appearance_.getSkinColorProperty()).ToVector3());
+            realEffect_->setTextureProperty(part.Texture);
+            realEffect_->Apply();
+
+            realDevice_->SetVertexBuffer(part.Part->getVertexBufferProperty());
+            realDevice_->SetIndexBuffer(part.Part->getIndexBufferProperty());
+            realDevice_->DrawIndexedPrimitives(
+                Graphics::PrimitiveType::TriangleList,
+                part.Part->getVertexOffsetProperty(),
+                0,
+                part.Part->getNumVerticesProperty(),
+                part.Part->getStartIndexProperty(),
+                part.Part->getPrimitiveCountProperty());
+        }
+    }
+
     void AvatarRenderer::Dispose()
     {
         Dispose(true);
@@ -116,5 +190,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     void AvatarRenderer::Dispose(bool /*disposing*/)
     {
         isDisposed_ = true;
+        realEffect_.reset();
+        realModel_.reset();
+        realDevice_ = nullptr;
     }
 }

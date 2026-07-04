@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
 namespace CNA::Internal::Backends
@@ -145,6 +146,27 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of vertices to upload.
          */
         void SetData(const VertexPositionTexture* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads VertexPositionNormalTextureSkinned vertex data to the GPU buffer.
+         *
+         * NOXNA overload for the GPU-skinned vertex type.
+         *
+         * @param data  Pointer to the source vertex array.
+         * @param count Number of vertices to upload.
+         */
+        NOXNA void SetData(const VertexPositionNormalTextureSkinned* data, int count);
+
+        /**
+         * @brief Uploads a slice of VertexPositionNormalTextureSkinned vertex data to the GPU buffer.
+         *
+         * NOXNA overload for the GPU-skinned vertex type.
+         *
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         */
+        NOXNA void SetData(const VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads raw vertex data with an explicit per-vertex byte stride.

@@ -2,10 +2,12 @@
 #include <gtest/gtest.h>
 
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/TimeSpan.hpp"
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 using Microsoft::Xna::Framework::Matrix;
@@ -173,4 +175,35 @@ TEST(AvatarRendererTest, DrawThrowsAfterDispose) {
     std::vector<Matrix> bones(71);
     AvatarExpression expression;
     EXPECT_THROW(renderer.Draw(bones, expression), System::ObjectDisposedException);
+}
+
+// --- Real-rendering extension (NOXNA) ---
+// EnableRealRenderingEXT itself needs a real GraphicsDevice, which (consistent with every
+// other GPU-resource-touching type in this codebase) is exercised via an examples/ integration
+// test, not a CnaTests unit test. These tests cover the parts reachable without a device.
+
+TEST(AvatarRendererTest, RealRenderingDisabledByDefault) {
+    AvatarRenderer renderer(nullptr);
+    EXPECT_FALSE(renderer.IsRealRenderingEnabledEXT());
+}
+
+TEST(AvatarRendererTest, DrawRealThrowsInvalidOperationWhenNotEnabled) {
+    AvatarRenderer renderer(nullptr);
+    EXPECT_THROW(
+        renderer.DrawRealEXT("Wave", System::TimeSpan::Zero, false),
+        System::InvalidOperationException);
+}
+
+TEST(AvatarRendererTest, DrawRealThrowsAfterDispose) {
+    AvatarRenderer renderer(nullptr);
+    renderer.Dispose();
+    EXPECT_THROW(
+        renderer.DrawRealEXT("Wave", System::TimeSpan::Zero, false),
+        System::ObjectDisposedException);
+}
+
+TEST(AvatarRendererTest, SetAppearanceDoesNotThrowWithoutRealRendering) {
+    AvatarRenderer renderer(nullptr);
+    AvatarAppearanceEXT appearance;
+    EXPECT_NO_THROW(renderer.SetAppearanceEXT(appearance));
 }

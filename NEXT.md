@@ -13,8 +13,12 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
 
 - **Main goal:** full XNA 4.0 API coverage with behavior fidelity to FNA, backed by unit tests
   (plus pixel-readback integration tests for graphics).
-- **Current phase:** Phase 9 (docs/audit) just completed — **`plan_net.md`'s entire Net/
-  GamerServices/Avatar plan is now fully done.** Status of everything:
+- **Current phase:** `plan_net.md`'s entire Net/GamerServices/Avatar plan (Phases 1-9) is done.
+  **Phase 10 — Avatar real-rendering extension (NOXNA/EXT, a new CNA-original initiative outside
+  `plan_net.md`'s original scope) is in progress** — see section 3 for what's done this session
+  and section 8 for what's left (mainly Phase 10b: real MakeHuman/Mixamo asset acquisition, which
+  needs manual GUI/browser steps this environment can't automate).
+- **Prior status (Phases 1-9), for reference:**
   - Phases 1–31 (graphics) and Phase 2 (`GamerServices` core): complete, stable, long-standing.
   - Phase 5 (real ENet networking backend for `Net`): **complete**.
   - Phase 6 (platform-specific `Net` work — Linux/Windows/Web/Android): **complete, committed,
@@ -56,8 +60,14 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
 ## 2. Current status
 
 ### Build
-- **Native Linux** (`cmake-build-debug`, target `CnaTests`): clean, **2146/2146 tests passing**
-  (2077 pre-Avatar + 69 new Avatar tests), stable under `--gtest_shuffle --gtest_repeat`.
+- **Native Linux** (`cmake-build-debug`, target `CnaTests`): clean, **2191/2191 tests passing**
+  (2146 post-Phase-9 + 45 new Phase 10 tests: vertex/model/preset-name/appearance/renderer/
+  animation EXT unit tests), stable under `--gtest_shuffle --gtest_repeat`. Full `ctest` suite
+  (2257 tests incl. all EasyGL integration executables): 2254/2257 pass; the 3 failures
+  (`ENetDiscoveryServiceTest.UnregisterHostStopsAnsweringQueries` — flaky, passes alone;
+  `EasyGL_MRT_TwoAttachments`; `easy-gl-resource-smoke-tests`) are pre-existing, unrelated to
+  Phase 10 (none touch files changed this session — confirmed via `git status`), not
+  investigated further as part of this work.
 - **Windows cross-build** (`cmake-build-windows/`): clean, **2076/2076** under Wine (verified as of
   Task 6.4; not yet re-verified against the new Phase 8 Avatar files — see section 8).
 - **Web/Emscripten cross-build** (`cmake-build-web/`): clean, `CnaTests.js` builds and runs under
@@ -113,6 +123,103 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
 ---
 
 ## 3. Recent changes
+
+- **Not yet committed (this session) — Phase 10a/10c/10d/10e (Avatar real-rendering NOXNA/EXT
+  extension), 10b (asset acquisition) partially done — see below.**
+
+  **Why this exists:** after this session's XNA-API-coverage analysis proved the Avatar port is
+  a byte-exact match of the real (permanently non-rendering, off-Xbox) reference assembly, the
+  user asked for a genuinely new, additive extension that actually renders something real —
+  understanding it can never look like Microsoft's proprietary Xbox Avatar art (that data was
+  always server-streamed, never in the DLL, and the servers are gone). Full design rationale,
+  architecture, and backend support matrix: `docs/avatar-real-rendering-ext.md`. This is a new
+  CNA-original initiative, outside `plan_net.md`'s original scope — tracked as "Phase 10".
+
+  **Key finding that shaped the whole design:** CNA's GPU-skinning pipeline already existed and
+  worked before this session — `Graphics::SkinnedEffect` (real, `MaxBones=72`), real skinning
+  shaders for Vulkan/Bgfx, and a proven end-to-end pixel-readback test on EasyGL
+  (`examples/skinned_effect_integration_test.cpp`). This phase is much more "wire existing engine
+  capability to new content" than "build a 3D engine from scratch."
+
+  **10a — Content pipeline foundation (done, tested):**
+  - `Graphics::VertexPositionNormalTextureSkinned` (NOXNA) — GPU-skinned vertex (position/
+    normal/texcoord/4 blend weights/4 blend indices), matching the proven 52-byte layout from
+    the existing skinned-effect integration test. `VertexBuffer::SetData` overloads added.
+  - `Graphics::SkinnedModelEXT` (NOXNA) — real mesh + skeleton + animation-clip container.
+    Deliberately not built on `Model`/`ModelBone` (those are for *rigid* multi-part model
+    animation, the wrong shape for per-vertex GPU skinning). Owns its bone hierarchy fully
+    independent of the real Xbox 71-bone arrays. `ComputeBoneTransformsEXT` samples clips
+    (Lerp/Slerp interpolation, loop/clamp) and composes bone-hierarchy world transforms exactly
+    like the existing `Model::CopyAbsoluteBoneTransformsTo` convention (`child_local * parent_world`).
+  - New `SkinnedModelTypeReader` in `ContentManager.cpp` — `.skinnedmodel.json` (flat manifest,
+    hand-rolled parser matching the existing `ModelTypeReader`/`SpriteFontTypeReader` style, no
+    new JSON library) + `.skeleton.bin`/`.clip.bin` (fixed binary layouts). Its full round-trip
+    needs a real `GraphicsDevice`, which **no existing gtest in this codebase constructs** (every
+    GPU-resource-touching type here is tested via `examples/` integration tests instead, not
+    `CnaTests`) — covered by the new Task 10.14 integration test instead of a dedicated unit test.
+
+  **10b — Offline MakeHuman/Mixamo asset conversion (script done; real asset acquisition NOT
+  done — needs a human):**
+  - `tools/avatar_asset_pipeline/convert_avatar.py` — assimp-CLI-to-glTF2 + `pygltflib` parsing,
+    emits CNA's schema. Structurally verified against a hand-built synthetic glTF fixture (bone
+    hierarchy/topological ordering, name-based clip retargeting, and exact binary layouts all
+    round-trip correctly) — **not yet run against a real MakeHuman export or real Mixamo clips**,
+    since that requires manual GUI (MakeHuman) and browser (Mixamo.com, Adobe account) steps this
+    headless environment cannot perform. See `tools/avatar_asset_pipeline/README.md` for the
+    manual steps and the full clip-name → Mixamo-source substitution table (31 presets, ~16-20
+    distinct clips, both body meshes reusing the same converted clips since they share MakeHuman's
+    "Mixamo" skeleton preset — verify this assumption once both bodies actually exist).
+  - User's explicit choice: **two body meshes (male + female) from the start**, not a unisex MVP,
+    to match XNA's own `AvatarBodyType` concept.
+
+  **10c — Engine wiring (done, tested):**
+  - `AvatarAnimationPresetToClipNameEXT` (new `AvatarAnimationPresetNamesEXT.hpp/.cpp`) — maps
+    each of the 31 `AvatarAnimationPreset` values to its own enumerator name (the clip lookup key).
+  - `AvatarAppearanceEXT` (new struct) — CNA-invented skin/hair tint; explicitly **not** a
+    reconstruction of the real, undocumented, proprietary 1021-byte `AvatarDescription` format.
+  - `AvatarRenderer::EnableRealRenderingEXT`/`IsRealRenderingEnabledEXT`/`SetAppearanceEXT`/
+    `DrawRealEXT` — opt-in real rendering, fully decoupled from the faithful `Draw()` overloads
+    and 71-bone arrays (untouched, still tested unchanged). `DrawRealEXT` needs the caller to
+    configure `LightColor`/`LightDirection`/`AmbientLightColor` (they default to black, matching
+    the real API's untouched value-type defaults) — a real caller must set these to match their
+    scene, same as the new integration test does.
+  - `AvatarAnimation::SetRealClipNameEXT`/`GetRealClipNameEXT` — defaults to
+    `AvatarAnimationPresetToClipNameEXT(preset)` at construction (the *only* place
+    `animationPreset` is now read — still never touches any faithful zero-bone/zero-length field).
+
+  **10d — Integration test (done, passing):**
+  - `examples/avatar_real_render_integration_test.cpp` — real GPU-skinned rendering through the
+    *entire* `AvatarRenderer::EnableRealRenderingEXT`/`DrawRealEXT` → `SkinnedModelEXT::
+    ComputeBoneTransformsEXT` → `SkinnedEffect` → `GraphicsDevice` pipeline, pixel-readback
+    verified (mirrors `skinned_effect_integration_test.cpp`'s synthetic-fixture approach — no
+    real MakeHuman/Mixamo asset required). Registered in `CMakeLists.txt` as
+    `EasyGL_AvatarRenderer_RealRender`, gated on `CNA_ENABLE_NET` (needs `CNA_GamerServices`).
+  - Vulkan/Bgfx smoke-testing this feature (Task 10.15) **deferred**: no `cmake-build-vulkan`
+    directory exists yet, `glslc` isn't installed in this environment, and it's explicitly
+    best-effort/non-blocking per the approved plan.
+  - SDL_Renderer negative test (Task 10.16): **satisfied by design, not a new test** — any 3D
+    resource creation this extension needs (`VertexBuffer`, `SkinnedEffect`) already throws the
+    pre-existing, tested `"SDL_Renderer does not support 3D: ..."` error transitively; no
+    Avatar-specific guard code was needed.
+
+  **10e — Docs/licensing (done):** `docs/avatar-real-rendering-ext.md` (architecture, explicitly
+  disambiguates this from the *unrelated* `CNA_NOXNA`/`CNA::Graphics` system in `NOXNA.md`, which
+  shares the "NOXNA" name by coincidence only), `THIRD_PARTY_NOTICES.md` (MakeHuman CC0-export
+  exception + Mixamo baked-in-not-redistributed rationale), `AUDIT.md` (new rows for
+  `VertexPositionNormalTextureSkinned`, `SkinnedModelEXT`, and the `AvatarRenderer`/
+  `AvatarAnimation` EXT additions).
+
+  **Files added:** `include/`+`src/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.{hpp,cpp}`,
+  `include/`+`src/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.{hpp,cpp}`,
+  `include/`+`src/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.{hpp,cpp}`,
+  `include/Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp`,
+  `examples/avatar_real_render_integration_test.cpp`, `tools/avatar_asset_pipeline/{convert_avatar.py,README.md}`,
+  `docs/avatar-real-rendering-ext.md`, 6 new/extended test files. **Files modified:**
+  `AvatarRenderer.{hpp,cpp}`, `AvatarAnimation.{hpp,cpp}`, `VertexBuffer.{hpp,cpp}`,
+  `ContentManager.cpp`, `CMakeLists.txt`, `AUDIT.md`, `THIRD_PARTY_NOTICES.md`.
+
+  None of this touches any faithful XNA-spec behavior, `Microsoft::Xna::Framework::Net`, or
+  `sharp-runtime`.
 
 - **Committed & pushed:** Task 6.1 (`9c7ce0b`), Tasks 6.2+6.3 (`ff4c09b`), Task 6.4 (`c697af5`) —
   Windows/Wine, Web/Emscripten, and Android NDK platform verification for `Net`. Full bug-by-bug
@@ -232,14 +339,19 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
 
 ## 4. Current blocker / main problem
 
-**None — `plan_net.md`'s entire Net/GamerServices/Avatar/docs plan is done.** Open decision points:
+**`plan_net.md`'s entire Net/GamerServices/Avatar/docs plan (Phases 1-9) is done.** Phase 10
+(Avatar real-rendering extension) is a new, separate, in-progress initiative. Its real blocker:
 
-1. Whether to commit/push this session's Phase 9 (docs/audit) `cna_net` changes to `feature/net`
-   (see section 8).
-2. Whether to re-verify Windows/Web/Android builds against the Phase 8 Avatar files (low risk —
-   Avatar doesn't touch anything platform-specific — but still not yet actually done).
-3. What to work on next once the above are resolved: nothing from `plan_net.md` remains queued.
-   Ask the user for a new direction rather than assuming one.
+1. **Phase 10b (real MakeHuman export + Mixamo animation downloads) needs a human** — MakeHuman
+   GUI interaction and Mixamo.com's account-gated browser download flow cannot be automated in
+   this headless environment. `tools/avatar_asset_pipeline/convert_avatar.py` is written and
+   structurally verified against a synthetic fixture; it is ready to run as soon as a human
+   completes the manual steps in that tool's `README.md`.
+2. Everything else in Phase 10 (10a, 10c, 10d, 10e) is done and tested against a synthetic
+   fixture, precisely so it doesn't block on (1) — see section 3.
+3. Secondary open decisions: whether to commit this session's Phase 9 *and* Phase 10 changes to
+   `feature/net` (both currently uncommitted); whether to re-verify Windows/Web/Android builds
+   against the Phase 8 Avatar files (still not done, low risk, unrelated to Phase 10).
 
 ---
 
@@ -281,6 +393,7 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
 | XNA public API (Net) | `include/Microsoft/Xna/Framework/Net/` | Complete API surface (5 enums + 18 classes); fully wired to real networking for `SystemLink` — **public shapes here are a fixed point, must not change** |
 | ENet backend (Phase 5, complete; Web-adapted Task 6.3) | `include/CNA/Internal/Net/`, `src/CNA/Internal/Net/` | `ENetHostHandle`, `NetPacketCodec`/`NetDiscoveryProtocol`, `ENetBackend`, `ENetDiscoveryService` (disabled on Emscripten only) |
 | Two-process test harness (Task 6.1) | `tools/net/net_two_process_harness.cpp`, `tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp` | Excluded on Windows, Emscripten, and Android |
+| Avatar real-rendering extension (Phase 10, NOXNA/EXT) | `Graphics::{VertexPositionNormalTextureSkinned,SkinnedModelEXT}`, `GamerServices::{AvatarAppearanceEXT,AvatarAnimationPresetNamesEXT}`, `AvatarRenderer`/`AvatarAnimation` EXT members, `tools/avatar_asset_pipeline/` | Opt-in, additive; faithful XNA Avatar behavior untouched. See `docs/avatar-real-rendering-ext.md` |
 | CNA utilities | `include/CNA/`, `src/CNA/` | NOXNA helpers, logging |
 | sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types; only add new files; no version pin from this repo |
 
@@ -335,6 +448,25 @@ the local FNA source tree (`/rv/data/library/github.com/FNA-XNA/FNA`) — **exce
   throws (`"Collection is read-only."`) — only the `const` overload works. Always bind such
   collections to a `const auto` local, not a plain `auto` one.
 
+### Avatar real-rendering extension (Phase 10, NOXNA/EXT)
+
+- Full design doc: `docs/avatar-real-rendering-ext.md`. Full session narrative: section 3.
+- The GPU-skinning pipeline (`Graphics::SkinnedEffect`, real skinning shaders on Vulkan/Bgfx,
+  proven end-to-end on EasyGL) already existed before Phase 10 — this extension mostly wires
+  existing engine capability to new content, not new rendering infrastructure.
+- New types live in `Microsoft::Xna::Framework::Graphics` (`VertexPositionNormalTextureSkinned`,
+  `SkinnedModelEXT`), not a GamerServices-specific namespace — they're generically useful to any
+  game code building GPU-skinned meshes, not Avatar-specific.
+- `SkinnedModelEXT`'s bone hierarchy is **fully independent** of `AvatarRenderer`'s real 71-bone
+  Xbox arrays — never conflate or try to unify them; `AvatarRenderer::Draw(vector<Matrix>&, ...)`
+  hard-throws unless given exactly 71 entries, so there was never a way to reuse that path anyway.
+- Two unrelated things are both called "NOXNA": this feature's always-on marker macro/`*EXT`
+  convention, and the separate, larger, independently-planned `CNA_NOXNA` CMake option described
+  in `NOXNA.md` (a modern `CNA::Graphics` engine layer). Don't conflate them.
+- `tools/avatar_asset_pipeline/convert_avatar.py` is the offline (non-C++-build) asset converter;
+  structurally verified against a synthetic glTF fixture, not yet run against real MakeHuman/
+  Mixamo output (needs a human to do the GUI/browser steps first — see that tool's README).
+
 ### Key invariants
 
 - **`NOXNA` macro** tags every non-XNA extension in public headers under `Microsoft::Xna::…`.
@@ -374,6 +506,17 @@ cmake-build-debug/CnaTests
 
 # Just Net/GamerServices/Avatar tests
 cmake-build-debug/CnaTests --gtest_filter="*Network*:*Gamer*:*ENet*:*Packet*:*Avatar*"
+
+# Avatar real-rendering EasyGL integration test (Phase 10, Task 10.14)
+cmake --build cmake-build-debug --target cna_test_avatar_real_render -j"$(nproc)"
+SDL_VIDEODRIVER=x11 DISPLAY=:0 cmake-build-debug/cna_test_avatar_real_render
+# or: ctest -R EasyGL_AvatarRenderer_RealRender --output-on-failure (from cmake-build-debug/)
+
+# Phase 10b: once a human has done the MakeHuman/Mixamo manual steps (see
+# tools/avatar_asset_pipeline/README.md), convert real assets:
+pip install pygltflib   # one-time
+python3 tools/avatar_asset_pipeline/convert_avatar.py --body male_body.glb --out content/avatar/male \
+    --clip Wave.glb Wave --clip Clap.glb Clap  # ... one --clip per downloaded Mixamo animation
 
 # Windows cross-build (see mingw-w64.cmake)
 cmake -B cmake-build-windows -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
@@ -422,21 +565,29 @@ with a reduced `-j` and a longer timeout rather than assuming a real compile err
 
 ## 8. Next smallest tasks
 
-1. **Decide (with the user) whether to commit this session's Phase 9 changes to `feature/net`.**
-   Goal: land the Doxygen fixes (6 real gaps across `AvatarAnimation.hpp`, `GamerCollection.hpp`,
-   `Gamer.hpp`, `GamerServicesDispatcher.hpp`, `Guide.hpp`, `NetworkSession.hpp`,
-   `NetworkSessionProperties.hpp`) and the `README.md` rewrite.
-   Verify: native `CnaTests` (2146/2146) before committing.
+1. **Get a human to complete Phase 10b's manual steps** (`tools/avatar_asset_pipeline/README.md`):
+   MakeHuman export (male + female, "Mixamo" skeleton preset) + Mixamo clip downloads per the
+   substitution table, then run `convert_avatar.py`. Nothing else in Phase 10 can produce a
+   *visible* avatar until this happens — the engine/content-pipeline side is done and waiting.
+   Verify: load the converted content through `ContentManager::Load<shared_ptr<SkinnedModelEXT>>`
+   and drive `AvatarRenderer::DrawRealEXT` in a real windowed demo.
 
-2. **Re-verify Windows/Web/Android builds against the Phase 8 Avatar files.**
+2. **Decide (with the user) whether to commit this session's Phase 9 + Phase 10 changes to
+   `feature/net`.** Both are currently uncommitted.
+   Verify: native `CnaTests` (2191/2191) before committing; also run the full `ctest` suite and
+   confirm only the 3 known-unrelated pre-existing failures remain (section 2).
+
+3. **Best-effort: smoke-test the Avatar real-rendering extension on Vulkan/Bgfx** (Task 10.15,
+   non-blocking). Needs a fresh `cmake-build-vulkan` configure + `glslc` installed (currently
+   missing from this environment).
+
+4. **Re-verify Windows/Web/Android builds against the Phase 8 Avatar files.**
    Goal: confirm no cross-platform surprises in the Avatar code (unlikely — pure value-type/logic
    code with no platform-specific branches — but not yet actually run since Task 6.4).
    Verify: `wine cmake-build-windows/CnaTests.exe`, `node cmake-build-web/CnaTests.js`, and the
    Android on-device run all still pass with the `*Avatar*` tests included.
 
-3. **Once tasks 1–2 are resolved, ask the user what's next.**
-   Goal: `plan_net.md` has nothing left queued. Don't assume a new phase or direction — ask.
-   Verify: N/A.
+5. **Once the above are resolved, ask the user what's next.** Verify: N/A.
 
 ---
 
@@ -461,31 +612,48 @@ with a reduced `-j` and a longer timeout rather than assuming a real compile err
 - No trusting `plan_net.md`'s Phase 8 task descriptions' FNA file citations (they don't exist) or
   its behavioral claims about `CreateRandom()` (wrong) — re-decompile the real reference assembly
   if Avatar needs touching again (see section 6).
-- No unilaterally starting new work — `plan_net.md` is fully done (Phases 1-9). Ask the user for a
-  new direction rather than assuming one.
+- No unilaterally starting new work beyond Phase 10 — `plan_net.md` itself is fully done (Phases
+  1-9). Ask the user before starting anything not already covered by Phase 10's own plan.
+- No changing any faithful `AvatarRenderer`/`AvatarAnimation`/`AvatarDescription` behavior to make
+  Phase 10's real-rendering extension "cleaner" — the existing faithful `Draw()`/`State`/
+  `CreateRandom()` behavior must stay exactly as-is; all Phase 10 additions are purely additive
+  `*EXT`/`NOXNA`-tagged members, verified by re-running the pre-existing Avatar tests unchanged.
+- No attempting to reverse-engineer or guess the real, proprietary, undocumented 1021-byte
+  `AvatarDescription` format for `AvatarAppearanceEXT` — that data was never public and isn't in
+  the reference assembly; `AvatarAppearanceEXT` is explicitly a new, CNA-invented data model.
+- No trying to automate Phase 10b's MakeHuman GUI export or Mixamo.com's browser/account-gated
+  download flow from this headless environment — that step genuinely needs a human; the
+  conversion script itself is not blocked (see section 3/8).
+- No conflating this feature's `NOXNA` marker-macro/`*EXT`-suffix usage with the unrelated,
+  separately-planned `CNA_NOXNA` CMake option / `CNA::Graphics` modern-engine layer described in
+  `NOXNA.md` — same word, two unrelated systems (see `docs/avatar-real-rendering-ext.md`).
+- No chasing the 3 pre-existing `ctest` failures noted in section 2
+  (`ENetDiscoveryServiceTest.UnregisterHostStopsAnsweringQueries`, `EasyGL_MRT_TwoAttachments`,
+  `easy-gl-resource-smoke-tests`) as part of Phase 10 — confirmed unrelated to any file this
+  session touched; a separate task if the user wants them investigated.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, in full, before doing anything else. plan_net.md's ENTIRE plan is now
-COMPLETE: Phases 1-31 (graphics), Phase 2/6 (GamerServices/Net, all 4 platforms), Phase 7
-(integration tests, already satisfied by existing coverage), Phase 8 (Avatar), and Phase 9
-(docs/audit) are all done. Phase 9 is COMPLETE AND VERIFIED this session (Doxygen audit + fixes,
-README.md rewrite) but NOT YET COMMITTED - see section 3 for full detail.
+Read NEXT.md first, in full, before doing anything else. plan_net.md's ENTIRE plan (Phases 1-9)
+is COMPLETE. Phase 10 (Avatar real-rendering NOXNA/EXT extension — a new CNA-original initiative,
+not part of plan_net.md) is IN PROGRESS: 10a/10c/10d/10e are done and tested; 10b (real MakeHuman
+export + Mixamo animation downloads) needs a human to complete manual GUI/browser steps this
+environment can't automate — see tools/avatar_asset_pipeline/README.md. NONE of this is committed
+yet (Phase 9 AND Phase 10 changes are both still sitting uncommitted on feature/net).
 
 Before doing anything else:
 1. Run `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"` then `cmake-build-debug/CnaTests`
-   to confirm the native Linux build is still healthy (expect 2146/2146).
-2. Run `git status` in this repo — expect the Phase 9 changes still uncommitted on `feature/net`.
-   Run `cd ../sharp-runtime && git status` — expect a clean tree there (all of this session's
-   sharp-runtime work is committed and pushed), though the other session maintaining that repo may
-   have added new uncommitted work independently by the time you read this.
+   to confirm the native Linux build is still healthy (expect 2191/2191).
+2. Run `git status` in this repo — expect Phase 9 + Phase 10 changes still uncommitted on
+   `feature/net`. Run `cd ../sharp-runtime && git status` — Phase 10 did not touch sharp-runtime
+   at all; expect whatever state the other session maintaining that repo left it in.
 
-Then: ask the user whether to commit this session's cna_net changes, whether to re-verify
-Windows/Web/Android against the Phase 8 Avatar files (still not yet done), and what to work on
-next now that plan_net.md is fully done (section 8; section 9 lists what NOT to assume).
+Then: ask the user whether Phase 10b's manual asset-acquisition steps have been done (if so, wire
+the real content through and verify visually), whether to commit the Phase 9 + Phase 10 changes,
+and what to work on next (section 8; section 9 lists what NOT to assume/do).
 
 Make one small, verified improvement at a time; do not refactor unrelated code. After finishing,
 update NEXT.md to reflect the new state.

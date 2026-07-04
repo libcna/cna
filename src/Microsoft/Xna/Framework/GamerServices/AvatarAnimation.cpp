@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
-    // The real XNA implementation never reads the animationPreset argument: every instance
-    // ends up with 71 zero-valued bone transforms and a zero-length animation, regardless of
-    // which preset was requested. Preserved exactly, not "fixed."
-    AvatarAnimation::AvatarAnimation(AvatarAnimationPreset /*animationPreset*/)
+    // The real XNA implementation never reads the animationPreset argument for any of its
+    // faithful fields: every instance ends up with 71 zero-valued bone transforms and a
+    // zero-length animation, regardless of which preset was requested. Preserved exactly, not
+    // "fixed." animationPreset IS used below, but only to seed the NOXNA realClipName_ field.
+    AvatarAnimation::AvatarAnimation(AvatarAnimationPreset animationPreset)
         : avatarBones_(71)
         , currentPosition_(System::TimeSpan::Zero)
         , length_(System::TimeSpan::Zero)
+        , realClipName_(AvatarAnimationPresetToClipNameEXT(animationPreset))
     {
         Update(System::TimeSpan::Zero, false);
     }
@@ -73,6 +76,16 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     bool AvatarAnimation::getIsDisposedProperty() const { return isDisposed_; }
+
+    void AvatarAnimation::SetRealClipNameEXT(const std::string& clipName)
+    {
+        realClipName_ = clipName;
+    }
+
+    const std::string& AvatarAnimation::GetRealClipNameEXT() const
+    {
+        return realClipName_;
+    }
 
     void AvatarAnimation::Dispose()
     {
