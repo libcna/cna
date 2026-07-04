@@ -426,3 +426,46 @@ cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean
 **Remaining risk:** negligible — a one-line lock addition around a single field read,
 matching the exact locking discipline every other read/write of `subsystemHeld_` already
 uses.
+
+## P7-5: Harden `ScopeExit`
+
+### Resolution
+
+**Files changed:**
+- `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp` — added
+  `#include <utility>` directly (previously relied on a transitive include for
+  `std::move`, not guaranteed by this header's own contract). Made `~ScopeExit()`
+  `noexcept` and wrapped the cleanup callable's invocation in `try { ... } catch (...) {}`
+  so a throwing cleanup callable can never escape the destructor (which would call
+  `std::terminate()`, especially likely since this destructor commonly runs *during*
+  another exception's unwinding).
+- `tests/Microsoft/Devices/Sensors/ScopeExitTests.cpp` (new file) — 4 direct unit tests:
+  cleanup runs on normal scope exit; cleanup runs during exception unwinding (pre-existing
+  Task P6-4 behavior, now directly tested rather than only indirectly via sensor dispatch
+  tests); a throwing cleanup callable is swallowed, not propagated; a throwing cleanup
+  callable is swallowed even while a *different* exception is already unwinding through
+  the guard's scope (the specific `std::terminate()`-risk scenario).
+
+**Regression-proof check (not part of the permanent test suite):** temporarily reverted
+`~ScopeExit()` to the old pre-P7-5 behavior (no `noexcept`, no `try`/`catch`) and re-ran
+`ScopeExitTests.SwallowsExceptionThrownByCleanupCallable` — it aborted the process with
+`terminate called after throwing an instance of 'std::runtime_error'`, confirming the
+exact failure mode the fix prevents. Restored the real fix immediately after confirming
+this; all tests pass again with the fix in place.
+
+**Tests added:** `ScopeExitTests.*` (4 new tests, new file).
+
+**Commands run:**
+```bash
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean, picked up the
+                                                                   # new test file via
+                                                                   # GLOB_RECURSE CONFIGURE_DEPENDS
+./cmake-build-debug/CnaTests --gtest_filter="ScopeExitTests.*:Accelerometer*:Gyroscope*:Compass*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*"
+# 140 tests, 138 passed, 2 skipped (expected)
+```
+
+**Remaining risk:** negligible. `ScopeExit` is a small, now fully-covered, self-contained
+utility; every current call site's cleanup callable is a plain lock+erase+notify sequence
+that does not throw in practice, but the class itself no longer depends on that being
+true.

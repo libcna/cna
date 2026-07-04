@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <mutex>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -25,6 +26,16 @@ namespace Microsoft::Devices::Sensors::Detail
      * CurrentValueChanged/ReadingChanged handler — threw, permanently
      * corrupting dispatchingThreadIds_ and deadlocking any current or
      * future Dispose() call on that instance).
+     *
+     * Task P7-5: the destructor is `noexcept` and swallows any exception
+     * the cleanup callable throws — a scope guard's destructor runs during
+     * stack unwinding as often as not (that is the whole point of this
+     * class), and a second exception escaping a destructor while one is
+     * already propagating calls `std::terminate()`. Every current use of
+     * this class (SdlSensorSubsystem's own dispatch cleanup) is a plain
+     * lock+erase+notify sequence that does not throw in practice, but this
+     * class is a general-purpose utility, not tied to that one call site —
+     * it must be safe on its own terms.
      */
     template <typename F>
     class ScopeExit
@@ -35,9 +46,18 @@ namespace Microsoft::Devices::Sensors::Detail
         {
         }
 
-        ~ScopeExit()
+        ~ScopeExit() noexcept
         {
-            onExit_();
+            try
+            {
+                onExit_();
+            }
+            catch (...)
+            {
+                // Swallowed deliberately — see this class's doc comment:
+                // throwing out of a destructor during unwinding would call
+                // std::terminate().
+            }
         }
 
         ScopeExit(const ScopeExit&) = delete;
