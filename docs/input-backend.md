@@ -246,3 +246,32 @@ the `MouseCursor` stock-cursor singletons all persist for the process lifetime),
 Swap `-DCNA_GRAPHICS_BACKEND=EASYGL` for `VULKAN` or `BGFX` to verify the same input tests on the
 other backends (bgfx adds 4 backend-specific, input-unrelated tests). The full suite is just
 `./cmake-build-input-easygl/CnaTests` with no filter.
+
+---
+
+## 6. Thread safety
+
+**Input is a single-threaded (game-loop-thread) API.** All input state described above —
+`InputManager`'s accumulated `InternalInputState`, `GestureDetector`'s state machine,
+`TouchPanel`'s touch arrays and gesture queue, and the static `Mouse::ClickedEXT` /
+`TextInputEXT` callbacks — is plain process-wide static state with **no locking** (verified:
+there is no `mutex`/`atomic`/`thread` anywhere under `src/CNA/Internal/Input/` or
+`src/Microsoft/Xna/Framework/Input/`). That is deliberate and safe because every access happens on
+one thread:
+
+- **Writes** flow from `Game::PollEvents()` → `SdlInputBridge::ProcessEvent` → `InputManager::Set*`
+  / `TouchPanel::INTERNAL_onTouchEvent`. `PollEvents()` is called from `Game::Tick()`, on the
+  thread that runs the game loop.
+- **Reads** flow from game code calling `Keyboard/Mouse/GamePad/TouchPanel::GetState()` in
+  `Update()`/`Draw()`, which the same loop invokes on that same thread.
+
+This matches XNA/FNA (where `Game.Update`/`Draw` run on the main thread) and is also required by
+SDL itself: `SDL_PollEvent` must be pumped on the thread that initialized video / created the
+window. The function-local-static singletons (`InputManager`'s state, the `MouseCursor` stock
+cursors, `GestureDetector`'s state) rely on C++11's thread-safe static *initialization*, but their
+subsequent mutation is unsynchronized — which is fine under the single-thread contract.
+
+**Consequence for game code:** do not call `Get*State()` (or the `Set*`/`INTERNAL_*` entry points)
+from a background thread while the game loop is pumping events — that is outside the XNA input
+contract and would be an unsynchronized data race. No locking is added because the single-thread
+model makes it unnecessary; adding it would only cost per-frame overhead.
