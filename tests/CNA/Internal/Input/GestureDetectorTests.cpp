@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: MS-PL
+//
+// Timing gestures (Hold / DoubleTap / Flick) are driven by GestureDetector's injectable test
+// clock (task 830: GestureDetector::EnableTestClock + AdvanceTestClockMilliseconds) instead of
+// real std::this_thread::sleep_for, making them deterministic and fast. State is reset between
+// tests via GestureDetector::ResetForTests (task 824) rather than the old neutral-press hack.
+
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/Input/GestureDetector.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
-#include <chrono>
-#include <thread>
-
+using CNA::Internal::Input::GestureDetector;
 using Microsoft::Xna::Framework::Vector2;
 using namespace Microsoft::Xna::Framework::Input::Touch;
 
@@ -23,23 +28,6 @@ namespace
         {
             (void)TouchPanel::ReadGesture();
         }
-    }
-
-    // GestureDetector keeps its state machine in file-static variables with no reset
-    // hook. A neutral press/release cycle (with all gestures disabled) reliably drives
-    // it back to its idle NONE / NO_FINGER resting state between tests, as long as the
-    // test itself has already released every finger it pressed (see class comment).
-    void ResetGestureDetector()
-    {
-        TouchPanel::setEnabledGesturesProperty(GestureType::None);
-        TouchPanel::INTERNAL_onTouchEvent(900001, TouchLocationState::Pressed, 0.0f, 0.0f, 0.0f, 0.0f);
-        TouchPanel::INTERNAL_onTouchEvent(900001, TouchLocationState::Released, 0.0f, 0.0f, 0.0f, 0.0f);
-        DrainGestures();
-    }
-
-    void Sleep(int milliseconds)
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     }
 
     // Presses/moves/releases are expressed as normalized [0,1] coordinates; DisplaySize
@@ -65,12 +53,18 @@ namespace
         {
             TouchPanel::setDisplayWidthProperty(DisplaySize);
             TouchPanel::setDisplayHeightProperty(DisplaySize);
-            ResetGestureDetector();
+            GestureDetector::ResetForTests();
+            TouchPanel::setEnabledGesturesProperty(GestureType::None);
+            DrainGestures();
+            GestureDetector::EnableTestClock();
         }
 
         void TearDown() override
         {
-            ResetGestureDetector();
+            GestureDetector::DisableTestClock();
+            GestureDetector::ResetForTests();
+            TouchPanel::setEnabledGesturesProperty(GestureType::None);
+            DrainGestures();
         }
     };
 }
@@ -118,7 +112,7 @@ TEST_F(GestureDetectorTest, DoubleTapDoesNotFireWhenSecondTapArrivesAfterTimingW
     Press(3, 0.5f, 0.5f);
     Release(3, 0.5f, 0.5f);
 
-    Sleep(350); // DoubleTap's window is 300ms.
+    GestureDetector::AdvanceTestClockMilliseconds(350); // DoubleTap's window is 300ms.
 
     Press(3, 0.5f, 0.5f);
     Release(3, 0.5f, 0.5f);
@@ -140,7 +134,7 @@ TEST_F(GestureDetectorTest, HoldFiresAfterFingerIsHeldForAtLeastOneSecond)
 
     Press(4, 0.5f, 0.5f);
 
-    Sleep(1150); // Threshold is 1s; leave comfortable margin for scheduling jitter.
+    GestureDetector::AdvanceTestClockMilliseconds(1000); // Threshold is >= 1s (deterministic now).
     TouchPanel::Update();
 
     ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
@@ -159,7 +153,7 @@ TEST_F(GestureDetectorTest, HoldDoesNotFireBeforeOneSecondElapses)
 
     Press(5, 0.5f, 0.5f);
 
-    Sleep(200);
+    GestureDetector::AdvanceTestClockMilliseconds(200);
     TouchPanel::Update();
 
     EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
@@ -240,9 +234,9 @@ TEST_F(GestureDetectorTest, FlickFiresWhenReleaseVelocityExceedsMinimumThreshold
     Move(10, 0.5f, 0.0f, 0.5f, 0.0f); // pixel position now (500, 0).
     TouchPanel::Update();            // Baseline: no prior updateTimestamp yet, so no velocity computed.
 
-    Sleep(10);
+    GestureDetector::AdvanceTestClockMilliseconds(10);
 
-    Move(10, 1.0f, 0.0f, 0.5f, 0.0f); // pixel position now (1000, 0): 500px in ~10ms.
+    Move(10, 1.0f, 0.0f, 0.5f, 0.0f); // pixel position now (1000, 0): 500px in exactly 10ms.
     TouchPanel::Update();             // Computes a velocity far above MIN_FLICK_VELOCITY.
 
     Release(10, 1.0f, 0.0f);

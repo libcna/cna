@@ -180,6 +180,14 @@ namespace Microsoft::Xna::Framework::Input::Touch
          */
         NOXNA static void Update();
 
+        /**
+         * @brief Test-only: resets all process-wide touch/gesture state — the touch arrays, the
+         *        gesture queue, the touch-device-exists flag, and enabled gestures — to defaults.
+         * @note NOXNA — a CNA test-support helper, not part of the XNA 4.0 API. Display size /
+         *       orientation are left untouched (tests set those explicitly).
+         */
+        NOXNA static void ResetForTests();
+
     private:
         static intcs displayWidth_;
         static intcs displayHeight_;

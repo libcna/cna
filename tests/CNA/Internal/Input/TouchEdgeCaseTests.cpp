@@ -1,0 +1,212 @@
+// SPDX-License-Identifier: MS-PL
+//
+// Tasks 825-828: touch pipeline edge cases.
+//   825 - TouchPanel::GetState() touches_ vs InputManager fallback (exclusive, no double-report)
+//   826 - multi-touch edges: >MAX_TOUCHES, release-unknown, repeated-down, id-reuse-after-release
+//   827 - TouchPanel::GetCapabilities() before/after touch, after reset, and via fallback
+//   828 - INTERNAL_onTouchEvent coordinate scaling: zero / normal / resized / non-integer display
+
+#include <gtest/gtest.h>
+
+#include <optional>
+
+#include "CNA/Internal/Input/GestureDetector.hpp"
+#include "CNA/Internal/Input/InputManager.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+
+using CNA::Internal::Input::GestureDetector;
+using CNA::Internal::Input::InputManager;
+using Microsoft::Xna::Framework::Vector2;
+using namespace Microsoft::Xna::Framework::Input::Touch;
+
+namespace
+{
+    class TouchEdgeCaseTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override
+        {
+            InputManager::ResetForTests();
+            TouchPanel::ResetForTests();
+            GestureDetector::ResetForTests();
+            GestureDetector::EnableTestClock(); // deterministic gesture timing
+        }
+
+        void TearDown() override
+        {
+            GestureDetector::DisableTestClock();
+            GestureDetector::ResetForTests();
+            TouchPanel::ResetForTests();
+            InputManager::ResetForTests();
+        }
+    };
+}
+
+// --- Task 825: GetState() fallback and exclusivity ---
+
+TEST_F(TouchEdgeCaseTest, GetStateFallsBackToInputManagerWhenTouchesArrayEmpty)
+{
+    // The real (event-driven) path leaves touches_ empty and populates InputManager instead.
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(10, 20));
+
+    const TouchCollection state = TouchPanel::GetState();
+    ASSERT_EQ(state.getCountProperty(), 1);
+    EXPECT_EQ(state[0].getIdProperty(), 1);
+    EXPECT_EQ(state[0].getPositionProperty(), Vector2(10, 20));
+}
+
+TEST_F(TouchEdgeCaseTest, GetStatePrefersTouchesArrayAndDoesNotDoubleReport)
+{
+    // touches_ (SetFinger) and InputManager both hold a touch. GetState is EXCLUSIVE: it returns
+    // touches_ and ignores the InputManager fallback — never the union — so no double-reporting.
+    InputManager::SetTouchState(99, TouchLocationState::Pressed, Vector2(1, 1)); // shadowed
+    TouchPanel::SetFinger(0, 5, Vector2(50, 60));                                // wins
+
+    const TouchCollection state = TouchPanel::GetState();
+    EXPECT_EQ(state.getCountProperty(), 1);   // exactly one, not two
+    EXPECT_EQ(state[0].getIdProperty(), 5);   // the touches_ finger, not id 99
+}
+
+// --- Task 826: multi-touch edge cases ---
+
+TEST_F(TouchEdgeCaseTest, ReleasingAnUnknownFingerIsSafe)
+{
+    InputManager::SetTouchState(42, TouchLocationState::Released, Vector2(5, 5));
+    EXPECT_NO_THROW((void)InputManager::GetTouchState());
+    EXPECT_NO_THROW(TouchPanel::INTERNAL_onTouchEvent(42, TouchLocationState::Released, 0.5f, 0.5f, 0, 0));
+}
+
+TEST_F(TouchEdgeCaseTest, RepeatedFingerDownWithSameIdOverwritesRatherThanDuplicates)
+{
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(10, 10));
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(20, 20));
+
+    const TouchCollection state = InputManager::GetTouchState();
+    ASSERT_EQ(state.getCountProperty(), 1);
+    EXPECT_EQ(state[0].getPositionProperty(), Vector2(20, 20));
+}
+
+TEST_F(TouchEdgeCaseTest, FingerIdReusedAfterReleaseStartsFresh)
+{
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(10, 10));
+    InputManager::SetTouchState(1, TouchLocationState::Released, Vector2(10, 10));
+    (void)InputManager::GetTouchState(); // first read reports the Released touch...
+    (void)InputManager::GetTouchState(); // ...second read flushes it (RemoveAfterSnapshot)
+
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(30, 30));
+    const TouchCollection state = InputManager::GetTouchState();
+    ASSERT_EQ(state.getCountProperty(), 1);
+    EXPECT_EQ(state[0].getPositionProperty(), Vector2(30, 30));
+}
+
+TEST_F(TouchEdgeCaseTest, MoreThanMaxTouchesAreAllReportedByEventDrivenInputManager)
+{
+    // Documented behavior/deviation: the event-driven InputManager touch map is not capped at
+    // MAX_TOUCHES (=8) — that constant only bounds the SetFinger touches_ array. CNA reports every
+    // finger SDL delivers; FNA caps at 8. Kept as-is (which finger to drop would be arbitrary).
+    for (int i = 0; i < 10; ++i)
+        InputManager::SetTouchState(i, TouchLocationState::Pressed, Vector2(static_cast<float>(i), 0));
+
+    EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 10);
+}
+
+// --- Task 827: GetCapabilities() ---
+
+TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsDisconnectedBeforeAnyTouch)
+{
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_FALSE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 0); // 0 when disconnected (task 790)
+}
+
+TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsConnectedOnceTouchDeviceExists)
+{
+    TouchPanel::setTouchDeviceExistsProperty(true);
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+}
+
+TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsConnectedViaInputManagerFallbackWhenFlagUnset)
+{
+    // touchDeviceExists_ stays false, but a live touch in InputManager reports connected.
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(5, 5));
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+}
+
+TEST_F(TouchEdgeCaseTest, GetCapabilitiesReturnsToDisconnectedAfterReset)
+{
+    TouchPanel::setTouchDeviceExistsProperty(true);
+    ASSERT_TRUE(TouchPanel::GetCapabilities().getIsConnectedProperty());
+
+    TouchPanel::ResetForTests();
+    InputManager::ResetForTests();
+
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_FALSE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 0);
+}
+
+// --- Task 828: coordinate scaling in INTERNAL_onTouchEvent ---
+
+namespace
+{
+    // Drives a Tap (press+release at the same spot) and returns its pixel position, or nullopt if
+    // no gesture was produced. Requires the test clock (held time 0 < 1s -> Tap).
+    std::optional<Vector2> TapAt(float normX, float normY)
+    {
+        TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+        TouchPanel::INTERNAL_onTouchEvent(1, TouchLocationState::Pressed, normX, normY, 0, 0);
+        TouchPanel::INTERNAL_onTouchEvent(1, TouchLocationState::Released, normX, normY, 0, 0);
+        if (!TouchPanel::getIsGestureAvailableProperty())
+            return std::nullopt;
+        return TouchPanel::ReadGesture().getPositionProperty();
+    }
+}
+
+TEST_F(TouchEdgeCaseTest, ScalingProducesNoGestureWhenDisplaySizeIsZero)
+{
+    // Guard (task 828): before the display size is published, a touch must NOT collapse to a
+    // bogus (0,0) corner gesture — it is dropped instead.
+    TouchPanel::setDisplayWidthProperty(0);
+    TouchPanel::setDisplayHeightProperty(0);
+    EXPECT_FALSE(TapAt(0.5f, 0.5f).has_value());
+}
+
+TEST_F(TouchEdgeCaseTest, ScalingUsesDisplaySizeForPixelPosition)
+{
+    TouchPanel::setDisplayWidthProperty(1000);
+    TouchPanel::setDisplayHeightProperty(1000);
+
+    const auto pos = TapAt(0.5f, 0.5f);
+    ASSERT_TRUE(pos.has_value());
+    EXPECT_FLOAT_EQ(pos->X, 500.0f);
+    EXPECT_FLOAT_EQ(pos->Y, 500.0f);
+}
+
+TEST_F(TouchEdgeCaseTest, ScalingReflectsResizedDisplay)
+{
+    TouchPanel::setDisplayWidthProperty(500);
+    TouchPanel::setDisplayHeightProperty(400);
+
+    const auto pos = TapAt(0.5f, 0.5f);
+    ASSERT_TRUE(pos.has_value());
+    EXPECT_FLOAT_EQ(pos->X, 250.0f);
+    EXPECT_FLOAT_EQ(pos->Y, 200.0f);
+}
+
+TEST_F(TouchEdgeCaseTest, ScalingRoundsNonIntegerNormalizedCoordinates)
+{
+    TouchPanel::setDisplayWidthProperty(1000);
+    TouchPanel::setDisplayHeightProperty(1000);
+
+    // 0.6667 * 1000 = 666.7 -> round -> 667;  0.3333 * 1000 = 333.3 -> round -> 333.
+    const auto pos = TapAt(0.6667f, 0.3333f);
+    ASSERT_TRUE(pos.has_value());
+    EXPECT_FLOAT_EQ(pos->X, 667.0f);
+    EXPECT_FLOAT_EQ(pos->Y, 333.0f);
+}
