@@ -13,8 +13,10 @@ minimal API-surface changes.
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`).
 - **Current development phase:** Phases 1–35 are now complete. **Phase 36 (BlendState
-  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) is in progress** — Tasks 301–303 done, Task 304
-  is next (see §8). Phase 35 found and fixed a severe, project-wide bug (Task 293) and
+  conformance, `GRAPHICS_TASKS.md` Tasks 301–310) is in progress** — Tasks 301–304 done, Task 305
+  is next (see §8). **Task 304 found a MASSIVE bug: Vulkan's blend state support is almost
+  entirely fake (Task 868, not yet fixed)** — likely to resurface in most remaining Phase 36
+  Vulkan tests, see §3/§5. Phase 35 found and fixed a severe, project-wide bug (Task 293) and
   found-but-tracked a second one (Task 867, not yet fixed) — see §3/§5, and the new
   `docs/sampler-state-support.md` for the full Phase 35 writeup.
 - **Key architectural decisions:**
@@ -40,16 +42,18 @@ All three backend build directories exist and were last rebuilt/verified in this
 build cleanly from a from-scratch `cmake -B ... -DCNA_GRAPHICS_BACKEND=...` configure.
 
 ### Test status (last runs performed this session)
-- **EasyGL (`cmake-build-debug`), full `ctest`:** 2057/2059 (serial `-j1`) pass. 2 pre-existing,
+- **EasyGL (`cmake-build-debug`), full `ctest`:** 2058/2060 (serial `-j1`) pass. 2 pre-existing,
   unrelated failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`. Some
   tests have each been observed failing once under parallel `-j` execution but passed cleanly both
   in isolation and on a repeat serial full run — treated as parallel-execution flakiness, not a
   regression (none confirmed as a stable failure): `EasyGL_SkinnedBones`,
   `EasyGL_TransformMatrix_Translation`.
-- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1995/1997 (serial `-j1`) pass
-  (`Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame` both failed in one full run this session,
-  both confirmed passing in isolation — same pre-existing order-dependent flakiness, not a
-  regression). `../sharp-runtime`
+- **Vulkan (`cmake-build-vulkan`), full `ctest`:** 1996/1998 (serial `-j1`) pass. Only
+  `Vulkan_DepthBias` (pre-existing) and the newly-added, confirmed-real `Vulkan_BlendState_AlphaBlend`
+  (Task 304/868 finding — kept registered as a documented known failure, like `Vulkan_DepthBias`,
+  rather than hidden) failed this run. `Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame`
+  (pre-existing order-dependent flakiness, confirmed via isolation reruns in earlier sessions) did
+  not recur this run. `../sharp-runtime`
   (sibling repo) had a pre-existing, uncommitted local fix for a real `BitConverter.hpp` ambiguity
   bug (`System::Single`, the static-utility class from `Half.hpp`, collided with `BitConverter`'s
   own `using SharpRuntime::Single` for the float alias — any TU including both failed to compile).
@@ -174,7 +178,8 @@ repeated here.
 
 | Commit / Task | Files | Change |
 |---|---|---|
-| (uncommitted) Task 303 | `examples/easygl_blendstate_opaque_test.cpp` (new), `CMakeLists.txt` | Found Task 255's existing `BlendState::Opaque` pixel test only uses a fully-opaque source colour, which can't distinguish `Opaque` from `AlphaBlend` (their math collapses to the same result at alpha=255). New test uses alpha=128 specifically, confirming destination + alpha are both genuinely discarded. Passed on both backends immediately — no bug found, closes a real coverage gap. |
+| (uncommitted) Task 304 | `examples/easygl_blendstate_alphablend_test.cpp` (new), `CMakeLists.txt`, `GRAPHICS_TASKS.md` (new Task 868) | EasyGL passes exactly as predicted (correct premultiplied-alpha semantics). **Found a MASSIVE, confirmed bug on Vulkan**: `ApplyBlendState` ignores every specific blend-factor/function request, hardcoding a single equation (`NonPremultiplied`'s) for anything except exactly `Opaque`. Confirmed on real hardware (`R=64` instead of expected `R=128`, the double-alpha-multiplication signature). Also found a narrower, related gap in Bgfx (alpha factors/blend functions ignored) while cross-checking; EasyGL confirmed fully correct by contrast. Kept the failing Vulkan test registered as a documented known failure rather than hidden. Tracked as Task 868, not fixed — expect it to resurface in most remaining Phase 36 Vulkan tests. |
+| `a17c87f` Task 303 | `examples/easygl_blendstate_opaque_test.cpp` (new), `CMakeLists.txt` | Found Task 255's existing `BlendState::Opaque` pixel test only uses a fully-opaque source colour, which can't distinguish `Opaque` from `AlphaBlend` (their math collapses to the same result at alpha=255). New test uses alpha=128 specifically, confirming destination + alpha are both genuinely discarded. Passed on both backends immediately — no bug found, closes a real coverage gap. |
 | `812dbb7` Task 302 | `GraphicsDevice.cpp`, `GraphicsDeviceDefaultStateTests.cpp` (new) | **Found and fixed a real bug, same shape as Task 292.** `GraphicsDevice.blendState_` was a plain default-constructed `BlendState`, never copied from `BlendState::Opaque` (FNA's actual default) — values coincidentally matched, invisible until Task 301 gave `Opaque` a `Name`. Fixed via the constructor's member-init list. Flagged, not fixed: `depthStencilState_`/`rasterizerState_` are likely the same bug, out of this task's scope. |
 | `2db584a` Task 301 | `BlendState.hpp/.cpp`, `BlendStateTests.cpp` | **Opens Phase 36.** Audited `BlendState` against FNA — property surface, all 4 presets, default values all already matched exactly. Fixed the known Task 866 gap: presets didn't set `Name` (e.g. `"BlendState.Additive"`). Mirrors Task 291's `SamplerState` fix exactly. Closes Task 866's `BlendState` portion; `DepthStencilState`/`RasterizerState` remain open for their own later audit tasks. 6 new tests. EasyGL 2054/2056, Vulkan 1992/1994, both only pre-existing failures. |
 | `1646589` Task 300 | `docs/sampler-state-support.md` (new) | **Closes Phase 35.** Synthesizes Tasks 291–299's findings into one reference doc: API conformance, the central Task 293 per-slot-binding bug and its 3-backend fix, `TextureAddressMode`/`TextureFilter`/mipmap/anisotropic coverage, and a per-backend support matrix. Links to Tasks 866/867 rather than duplicating them. |
@@ -239,6 +244,7 @@ on returned pixel values).
 | Confirmed bug | `SpriteBatch` with multiple `Begin()`/`End()` calls per frame on Vulkan: only the last batch renders. |
 | Confirmed bug, severe, silent failure | `TextureCube::DDSFromStreamEXT` ignores its `stream` argument and always returns a blank 1×1 texture. Tracked as Task 663. |
 | Confirmed bug, severe, silent failure | `Texture3D`/`TextureCube::GetData` is a total no-op on Vulkan and Bgfx (neither overrides the empty base-class default). Tracked as Task 865. |
+| Confirmed bug, MASSIVE, silent failure | **Vulkan's blend state support is almost entirely fake.** `VulkanGraphicsBackend::ApplyBlendState` ignores every specific blend-factor/function parameter, only checking "is this exactly `BlendState.Opaque`?" — any other `BlendState` (`Additive`, `AlphaBlend`, any custom state) gets one hardcoded blend equation baked into every pipeline (which happens to be `NonPremultiplied`'s equation), regardless of what was actually requested. Confirmed on real hardware via `Vulkan_BlendState_AlphaBlend` (Task 304), kept registered as a documented known failure (like `Vulkan_DepthBias`) rather than hidden — expect it to resurface in most remaining Phase 36 Vulkan tests (306–309). Bgfx has a narrower, related gap (colour blend factors correctly mapped; alpha factors and blend functions ignored). EasyGL is fully, correctly implemented (confirmed by contrast). Tracked as Task 868, not fixed — large, multi-pipeline-site change needing its own dedicated task. |
 | Confirmed, architectural | `Texture3D`/`TextureCube` sampling cannot be wired into any shader today — they don't inherit `Texture`, so can't enter `GraphicsDevice.Textures[slot]`; custom `ShaderEffect` has no texture-binding API at all. Tracked as Task 863. |
 | Confirmed bug, pre-existing | `EasyGL_MRT_TwoAttachments`: `SetRenderTargets` with 2 attachments renders correctly to attachment 0 but attachment 1 stays black. Not caused by recent work; needs dedicated investigation. |
 | Confirmed bug, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` (sibling `easy-gl` repo) aborts on an internal assert; unrelated to any file in this repo. |
@@ -348,22 +354,29 @@ There is no known reproducible failing build command right now (see §4).
 In priority order:
 
 1. **`GRAPHICS_TASKS.md` Task 304 — pixel test: `BlendState::AlphaBlend` premultiplied alpha**
-   - Goal: confirm `BlendState::AlphaBlend` (`colorSrc=alphaSrc=One`,
-     `colorDst=alphaDst=InverseSourceAlpha`) implements the blend equation literally — i.e. it
-     expects an **already-premultiplied** source colour and does NOT multiply by alpha itself
-     (that's `NonPremultiplied`'s job, via `SourceAlpha`/`InverseSourceAlpha`, tested in Task 305).
-     Suggested design: feed a correctly-premultiplied 50%-alpha red — `Color(128, 0, 0, 128)`
-     (raw red `255,0,0` at 50% opacity, premultiplied) — over a green background. Expected output:
-     `R ≈ 128*1 + 0*(1-0.5) ≈ 128`, `G ≈ 0*1 + 255*(1-0.5) ≈ 127`. Check both channels land in a
-     tight mid-range band. Critically, verify the result is `R≈128` (not `R≈64`, which is what
-     you'd get if the shader incorrectly re-multiplied an already-premultiplied colour by alpha
-     again, i.e. accidentally implemented `NonPremultiplied`'s equation instead) — that
-     distinguishing check is the actual point of this test, not just "some blend happened."
-   - Files: new `examples/easygl_blendstate_alphablend_test.cpp`, registered on EasyGL and Vulkan.
+1. **`GRAPHICS_TASKS.md` Task 305 — pixel test: `BlendState::NonPremultiplied`**
+   - Goal: confirm `BlendState::NonPremultiplied` (`colorSrc=alphaSrc=SourceAlpha`,
+     `colorDst=alphaDst=InverseSourceAlpha`) blends a RAW (non-premultiplied) source colour
+     correctly — i.e. the shader/pipeline itself multiplies by alpha, unlike `AlphaBlend` which
+     expects the caller to have already done so. Suggested design: raw (non-premultiplied) 50%-alpha
+     red — `Color(255, 0, 0, 128)` — over green. Expected: `R ≈ 255*0.5 + 0*0.5 ≈ 128`,
+     `G ≈ 0*0.5 + 255*0.5 ≈ 128` (numerically similar to Task 304's expected result, since a
+     correctly-premultiplied `AlphaBlend` input and a correctly-scaled `NonPremultiplied` input
+     converge to the same visual output when the maths are done right — the two tasks together
+     prove *which* stage does the multiplication, not just that blending "looks plausible").
+   - **IMPORTANT, found this session (Task 304/868)**: Vulkan's `ApplyBlendState` currently
+     hardcodes color-channel factors of `SourceAlpha`/`InverseSourceAlpha` for **any** non-`Opaque`
+     `BlendState` — which is coincidentally exactly `NonPremultiplied`'s own color-channel values!
+     **This means Task 305's Vulkan pixel test is very likely to PASS even though the underlying
+     bug (Task 868) is still completely unfixed** — it would only be checking RGB output, and the
+     hardcoded equation happens to match `NonPremultiplied`'s color factors by coincidence (its
+     alpha-channel factors don't match, but this test as designed doesn't read back alpha). Do NOT
+     mistake a passing Task 305 Vulkan test for evidence that Task 868 is fixed or that Vulkan's
+     blend state is working in general — it isn't, for any other `BlendState`. Cross-reference
+     against Task 868's tracked description before concluding anything from this test's result.
+   - Files: new `examples/easygl_blendstate_nonpremultiplied_test.cpp`, registered on EasyGL and
+     Vulkan (with the above caveat prominently noted in the test's own file-header comment too).
    - Verification: pixel-readback test on both backends.
-   - Verification: pixel-readback test on both EasyGL and Vulkan.
-   - Verification: unit tests for the 4 presets' property values plus (if fixed here) `Name`
-     matching FNA's exact preset name strings, mirroring Task 291's `SamplerStateTests.cpp` additions.
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -427,42 +440,49 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-35 are fully complete. Phase 36 (BlendState conformance,
-GRAPHICS_TASKS.md Tasks 301-310) is in progress: Tasks 301-303 done. All three backends are green:
-EasyGL 2057/2059, Vulkan 1995/1997 (Vulkan_RenderTargetUsage/Vulkan_FillMode_WireFrame observed
-failing in one full run, both confirmed passing in isolation - pre-existing order-dependent
-flakiness, not regressions), Bgfx 1977/1977 (100%, not rebuilt this specific session) - only
-pre-existing, documented failures remain anywhere (see NEXT.md §5).
+GRAPHICS_TASKS.md Tasks 301-310) is in progress: Tasks 301-304 done. EasyGL is fully green:
+2058/2060 (2 pre-existing failures). Vulkan: 1996/1998 - only Vulkan_DepthBias (pre-existing) and
+the NEW, confirmed-real Vulkan_BlendState_AlphaBlend (Task 304/868, kept registered as a
+documented known failure, not hidden). Bgfx 1977/1977 (100%, not rebuilt this specific session).
 
 Phase 35's headline result (full writeup: docs/sampler-state-support.md): Task 293 found and fixed
 a severe, project-wide bug across all 3 backends - GraphicsDevice.SamplerStates was being silently
-ignored by essentially all 3D stock-effect texture draws. Task 298/299 found a SECOND severe,
-project-wide bug, tracked as new Task 867, not yet fixed: Texture2D::SetData(level>0,...) is a
-total silent no-op on Vulkan/Bgfx, plus related Vulkan mip-allocation and EasyGL
-mipmap-incompleteness findings.
+ignored by essentially all 3D stock-effect texture draws. Task 298/299 found a SECOND severe bug,
+tracked as Task 867, not yet fixed: Texture2D::SetData(level>0,...) is a total silent no-op on
+Vulkan/Bgfx, plus related Vulkan mip-allocation and EasyGL mipmap-incompleteness findings.
 
-Phase 36 so far: Task 301 audited BlendState against FNA - property surface, all 4 presets, and
-default values all already matched exactly. Fixed the known Task 866 gap: presets didn't set Name
-(e.g. "BlendState.Additive"), mirroring Task 291's SamplerState fix exactly. Closes Task 866's
-BlendState portion; DepthStencilState/RasterizerState remain open for their own later audit tasks.
-Task 302 found and fixed a THIRD bug of the same shape as Task 292: GraphicsDevice.blendState_ was
-a plain default-constructed BlendState, never copied from BlendState::Opaque (FNA's actual
-default) - values coincidentally matched, invisible until Task 301 gave Opaque a Name. Fixed via
-the constructor's member-init list (positioned to match declaration order, avoiding -Wreorder).
-Flagged, not fixed: depthStencilState_/rasterizerState_ are very likely the same bug (FNA also
-defaults DepthStencilState=DepthStencilState.Default, RasterizerState=RasterizerState.CullCounterClockwise)
-- out of Task 302's BlendState-only scope, should be checked when their own audit tasks come up.
-Task 303 found the existing BlendState::Opaque pixel test (Task 255) only ever used a fully-opaque
-source colour, which can't distinguish Opaque from AlphaBlend (same result at alpha=255). New test
-uses alpha=128 specifically and confirms destination+alpha are both genuinely discarded - passed on
-both backends immediately, no bug found, closes a real coverage gap.
+Phase 36 so far: Task 301 audited BlendState against FNA (all core values already correct; fixed
+the known Task 866 Name gap, mirroring Task 291). Task 302 found and fixed a THIRD bug of the same
+shape as Task 292: GraphicsDevice.blendState_ was never actually copied from BlendState::Opaque -
+fixed via the constructor's member-init list. Flagged, not fixed: depthStencilState_/
+rasterizerState_ are very likely the same bug, for their own later audit tasks. Task 303 closed a
+real coverage gap (existing Opaque test only used a fully-opaque source, couldn't distinguish
+Opaque from AlphaBlend) - no bug found there.
 
-Next task: GRAPHICS_TASKS.md Task 304 - pixel test: BlendState::AlphaBlend premultiplied alpha.
-Confirm AlphaBlend (colorSrc=alphaSrc=One, colorDst=alphaDst=InverseSourceAlpha) expects an
-ALREADY-premultiplied source colour and does not multiply by alpha itself (that's
-NonPremultiplied's job, Task 305). Suggested design: feed a correctly-premultiplied 50%-alpha red -
-Color(128,0,0,128) - over a green background. Expected: R≈128, G≈127 (mid-range, not R≈64, which
-would mean the shader incorrectly re-multiplied by alpha, accidentally implementing
-NonPremultiplied's equation instead) - that distinguishing check is the actual point of this test.
-Register on both EasyGL and Vulkan.
+Task 304 found something MASSIVE: Vulkan's blend state support is almost entirely fake.
+VulkanGraphicsBackend::ApplyBlendState ignores every specific blend-factor/function parameter,
+only checking "is this exactly Opaque's values?" - ANY other BlendState (Additive, AlphaBlend, any
+custom state) gets ONE hardcoded blend equation baked into every pipeline (which happens to be
+NonPremultiplied's color-channel equation, but Opaque's alpha-channel equation - a hybrid matching
+no single real preset for both channels), regardless of what was actually requested. Confirmed on
+real Vulkan hardware (AMD RADV) via the double-alpha-multiplication signature (R=64 instead of
+expected R=128). Bgfx has a narrower, related gap (color factors correctly mapped per-value; alpha
+factors and blend functions ignored). EasyGL confirmed fully, correctly implemented by contrast
+(glBlendFuncSeparate/glBlendEquationSeparate, complete per-value mapping). NOT fixed - tracked as
+new Task 868, large multi-pipeline-site change needing its own dedicated task. Kept
+Vulkan_BlendState_AlphaBlend registered as a documented known failure (like Vulkan_DepthBias)
+rather than hidden.
+
+Next task: GRAPHICS_TASKS.md Task 305 - pixel test: BlendState::NonPremultiplied.
+CRITICAL CONTEXT carried from Task 304/868: Vulkan's hardcoded blend equation's COLOR-channel
+factors happen to exactly match NonPremultiplied's own color factors (SourceAlpha/
+InverseSourceAlpha) - purely by coincidence. This means Task 305's Vulkan pixel test (if it only
+reads back RGB, matching the established pattern) is VERY LIKELY TO PASS even though Task 868's
+underlying bug is completely unfixed. Do NOT interpret a passing Task 305 Vulkan test as evidence
+Task 868 is resolved - it isn't, for any BlendState other than this one coincidental match. Note
+this prominently in the new test's own file header, and cross-reference Task 868 before drawing
+any conclusion from this test's result. Suggested design: raw (non-premultiplied) 50%-alpha red -
+Color(255,0,0,128) - over green, expecting R≈128, G≈128 (the pipeline itself multiplies by alpha,
+unlike AlphaBlend which expects pre-multiplied input). Register on both EasyGL and Vulkan.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
