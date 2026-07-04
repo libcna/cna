@@ -448,6 +448,68 @@ inconsistent locking found in the audit.
 `include/Microsoft/Devices/Sensors/Gyroscope.hpp`,
 `src/Microsoft/Devices/Sensors/Gyroscope.cpp`.
 
+**Resolution (2026-07-04):** Implemented as scoped, with two deliberate deviations:
+
+1. **No separate `.cpp` file.** `SdlSensorSubsystem<TSensor>` is a class template; every
+   member function is defined inline in the header (standard practice for templates —
+   the alternative, explicit instantiation in a `.cpp` for exactly the two known
+   `TSensor`s, adds a circular-feeling dependency for no real benefit here, since this
+   header is never included by any public CNA header anyway). No
+   `src/Microsoft/Devices/Sensors/SdlSensorSubsystem.cpp` was created.
+2. **Dispatch routing uses the template parameter directly, not a void*/function-pointer
+   trampoline.** The brief suggested "each instance registers itself with the manager
+   via `this` + a static trampoline function pointer matching a
+   `void(*)(void*, ...)` signature." Since `SdlSensorSubsystem<Accelerometer>` and
+   `SdlSensorSubsystem<Gyroscope>` are already distinct *types* (one template
+   instantiation per concrete sensor class — never a single instance shared between
+   the two, exactly as scoped), the event-watch trampoline can call
+   `TSensor::ProcessSensorUpdateEvent()` directly by name, resolved at compile time —
+   no `void*`-erasure or function-pointer indirection needed. Simpler and equally
+   correct.
+
+**Keeping SDL types out of public headers** (the brief's other stated goal) — already
+true before this refactor (`void* g_sensor_`) — is preserved via a small twist:
+`Accelerometer.hpp`/`Gyroscope.hpp` only *forward-declare* `Detail::SdlSensorSubsystem`
+(a one-line `template <typename TSensor> class SdlSensorSubsystem;` inside a nested
+`namespace Detail` block) and declare `static Detail::SdlSensorSubsystem<Accelerometer>&
+GetSubsystem();` — a function *declaration* referencing an incomplete type doesn't need
+the type's definition, so this compiles without `Accelerometer.hpp` ever including
+`SdlSensorSubsystem.hpp` or any SDL header. The actual storage lives in
+`Accelerometer.cpp`/`Gyroscope.cpp` as a function-local static inside `GetSubsystem()`'s
+own definition (which *does* include the full `Detail/SdlSensorSubsystem.hpp`) — the
+same "hide the real type behind an opaque handle" idiom this class already used for
+`void* g_sensor_`, just applied to a whole subsystem object instead of one pointer.
+Similarly, `TSensor::GetSdlSensorType()` returns a plain `int` (not `SDL_SensorType`),
+so the enum type itself never needs to appear in either public header either.
+
+Migrated `instanceCount_`, `sensor_`/`sensorId_`, `eventWatchRegistered_`,
+`startedInstances_`, `mutex_`, and `callbackFinished_` into the shared
+`SdlSensorSubsystem<TSensor>` instance (one per class, reached via each class's own
+`GetSubsystem()`); `state_`/`started_`/`subsystemHeld_`/`dispatchingThreadIds_` remain
+genuine per-instance members on `Accelerometer`/`Gyroscope` themselves (correctly so —
+they're per-object data, not shared/class-level state), now consistently
+lock-protected by the shared subsystem's `mutex_` everywhere they're touched from a
+context that previously might have raced (Audit finding 3's `state_`/`subsystemHeld_`
+inconsistent-locking observations from before this task — `Start()`'s subsystem-init
+check-and-set is still deliberately outside the lock, matching the pre-refactor
+design and Task P4-8's own instance-ownership pairing, which never needed the shared
+lock in the first place since `subsystemHeld_` is per-instance, single-thread-written
+data during normal, non-reentrant `Start()`/`Dispose()` usage).
+
+Verified: `CNA` builds clean for `Accelerometer.cpp` alone first (before touching
+`Gyroscope.cpp`, to isolate any template-instantiation errors to one file at a time),
+then both together; a full top-level build (`cmake --build .`, every target including
+`cna_demo_devices`) also builds clean — confirms nothing outside
+`Microsoft::Devices::Sensors` referenced any of the now-removed private static methods
+(`EnsureSensorSubsystemInitialized()`, `OpenDefaultAccelerometer()`/
+`OpenDefaultGyroscope()`, `RegisterEventWatchIfNeeded()`/`UnregisterEventWatchIfNeeded()`,
+`SensorEventWatch()`), which is expected since they were always private, but worth
+confirming given how much surface area this refactor touched. Full `ctest`: 2001
+tests (unchanged), same 2 pre-existing unrelated `EasyGL`/`easy-gl` failures as the
+Task P5-1/P5-2/P5-3 baseline — every existing `AccelerometerTests`/`GyroscopeTests`/
+`SensorSubsystemOwnershipTests` test (41 total, 2 expected skips) passes unchanged,
+confirming this task's own requirement that behavior stay byte-for-byte identical.
+
 ---
 
 ## Task P5-5 — Document (and, if low-risk, improve) the event-thread model

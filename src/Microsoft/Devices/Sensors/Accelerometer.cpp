@@ -6,208 +6,34 @@
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 
 #include <algorithm>
+#include <mutex>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_sensor.h>
 
 #include "CNA/Platform.hpp"
+#include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Devices::Sensors
 {
-    namespace
+    Detail::SdlSensorSubsystem<Accelerometer>& Accelerometer::GetSubsystem()
     {
-        // Task P5-1: EnsureSensorSubsystemInitialized() (below) always calls
-        // through to a real SDL_InitSubSystem(SDL_INIT_SENSOR) call — correct
-        // for Start(), which pairs it with exactly one SDL_QuitSubSystem()
-        // via subsystemHeld_/Dispose(), but getIsSupportedProperty() only
-        // ever probes; nothing paired its own call with a matching quit,
-        // leaking one subsystem ref-count increment per probe (every
-        // constructor call, and any standalone getIsSupportedProperty()
-        // call) with no corresponding decrement — a real regression Task
-        // P4-8 introduced as a side effect of removing the SDL_WasInit()
-        // guard that used to (accidentally) make repeat calls a no-op. This
-        // guard makes a probe's own init/quit pair balanced 1:1, trusting
-        // SDL's own ref-counting to correctly coexist with whatever a live
-        // Start()'d instance (of this class or Gyroscope) separately holds.
-        class SensorSubsystemProbeGuard
-        {
-        public:
-            SensorSubsystemProbeGuard()
-                : initialized_(SDL_InitSubSystem(SDL_INIT_SENSOR))
-            {
-            }
-
-            ~SensorSubsystemProbeGuard()
-            {
-                if (initialized_)
-                {
-                    SDL_QuitSubSystem(SDL_INIT_SENSOR);
-                }
-            }
-
-            SensorSubsystemProbeGuard(const SensorSubsystemProbeGuard&) = delete;
-            SensorSubsystemProbeGuard& operator=(const SensorSubsystemProbeGuard&) = delete;
-
-            [[nodiscard]] bool IsInitialized() const
-            {
-                return initialized_;
-            }
-
-        private:
-            bool initialized_;
-        };
-    } // namespace
-
-    void* Accelerometer::g_sensor_ = nullptr;
-    std::int64_t Accelerometer::g_sensorId_ = 0;
-    int Accelerometer::instanceCount_ = 0;
-    bool Accelerometer::eventWatchRegistered_ = false;
-    std::vector<Accelerometer*> Accelerometer::startedInstances_;
-    std::mutex Accelerometer::mutex_;
-    std::condition_variable Accelerometer::callbackFinished_;
-
-    bool Accelerometer::EnsureSensorSubsystemInitialized()
-    {
-        // Always call through to SDL — SDL_INIT_SENSOR is ref-counted
-        // internally by SDL itself (see SDL_InitSubSystem()'s own doc
-        // comment), and repeat calls are cheap. Bypassing that via
-        // SDL_WasInit() (as this used to do) let one class's
-        // Dispose()-triggered SDL_QuitSubSystem() undercut SDL's real
-        // ref-count and tear the subsystem down while another class's
-        // instances still expected it alive (Task P4-8). Callers are
-        // responsible for pairing each successful call here with exactly
-        // one SDL_QuitSubSystem() (see subsystemHeld_).
-        return SDL_InitSubSystem(SDL_INIT_SENSOR);
+        // Task P5-4: function-local static, not a class-static member —
+        // keeps SDL_Sensor*/SDL_SensorType and everything else
+        // SdlSensorSubsystem.hpp touches out of Accelerometer.hpp
+        // entirely, same discipline this class already used for its
+        // previous `void* g_sensor_`.
+        static Detail::SdlSensorSubsystem<Accelerometer> subsystem;
+        return subsystem;
     }
 
-    void* Accelerometer::OpenDefaultAccelerometer()
+    int Accelerometer::GetSdlSensorType()
     {
-        int sensorCount = 0;
-        SDL_SensorID* sensors = SDL_GetSensors(&sensorCount);
-
-        if (sensors == nullptr || sensorCount <= 0)
-        {
-            if (sensors != nullptr)
-            {
-                SDL_free(sensors);
-            }
-            return nullptr;
-        }
-
-        SDL_Sensor* openedSensor = nullptr;
-        SDL_SensorID openedSensorId = 0;
-
-        for (int i = 0; i < sensorCount; ++i)
-        {
-            const SDL_SensorID sensorId = sensors[i];
-
-            SDL_Sensor* sensor = SDL_OpenSensor(sensorId);
-            if (!sensor)
-            {
-                continue;
-            }
-
-            if (SDL_GetSensorType(sensor) == SDL_SENSOR_ACCEL)
-            {
-                openedSensor = sensor;
-                openedSensorId = sensorId;
-                break;
-            }
-
-            SDL_CloseSensor(sensor);
-        }
-
-        SDL_free(sensors);
-
-        if (openedSensor != nullptr)
-        {
-            g_sensorId_ = static_cast<std::int64_t>(openedSensorId);
-        }
-
-        return static_cast<void*>(openedSensor);
-    }
-
-    void Accelerometer::RegisterEventWatchIfNeeded()
-    {
-        if (!eventWatchRegistered_)
-        {
-            const SDL_EventFilter eventFilter =
-                reinterpret_cast<SDL_EventFilter>(&Accelerometer::SensorEventWatch);
-            SDL_AddEventWatch(eventFilter, nullptr);
-            eventWatchRegistered_ = true;
-        }
-    }
-
-    void Accelerometer::UnregisterEventWatchIfNeeded()
-    {
-        if (eventWatchRegistered_ && startedInstances_.empty())
-        {
-            const SDL_EventFilter eventFilter =
-                reinterpret_cast<SDL_EventFilter>(&Accelerometer::SensorEventWatch);
-            SDL_RemoveEventWatch(eventFilter, nullptr);
-            eventWatchRegistered_ = false;
-        }
-    }
-
-    bool Accelerometer::SensorEventWatch(void* userdata, void* eventData)
-    {
-        (void)userdata;
-
-        SDL_Event* event = static_cast<SDL_Event*>(eventData);
-
-        if (event == nullptr)
-        {
-            return true;
-        }
-
-        if (event->type != SDL_EVENT_SENSOR_UPDATE)
-        {
-            return true;
-        }
-
-        const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
-
-        const std::thread::id thisThreadId = std::this_thread::get_id();
-
-        std::vector<Accelerometer*> instancesSnapshot;
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            for (Accelerometer* accelerometer : startedInstances_)
-            {
-                if (accelerometer != nullptr)
-                {
-                    accelerometer->dispatchingThreadIds_.push_back(thisThreadId);
-                    instancesSnapshot.push_back(accelerometer);
-                }
-            }
-        }
-
-        for (Accelerometer* accelerometer : instancesSnapshot)
-        {
-            accelerometer->ProcessSensorUpdateEvent(
-                sensorId,
-                event->sensor.data[0],
-                event->sensor.data[1],
-                event->sensor.data[2]
-            );
-
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                auto& ids = accelerometer->dispatchingThreadIds_;
-                const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
-                if (it != ids.end())
-                {
-                    ids.erase(it);
-                }
-            }
-            callbackFinished_.notify_all();
-        }
-
-        return true;
+        return static_cast<int>(SDL_SENSOR_ACCEL);
     }
 
     bool Accelerometer::getIsSupportedProperty()
@@ -221,46 +47,7 @@ namespace Microsoft::Devices::Sensors
             return false;
         }
 
-        const SensorSubsystemProbeGuard subsystemGuard;
-        if (!subsystemGuard.IsInitialized())
-        {
-            return false;
-        }
-
-        int sensorCount = 0;
-        SDL_SensorID* sensors = SDL_GetSensors(&sensorCount);
-
-        if (sensors == nullptr || sensorCount <= 0)
-        {
-            if (sensors != nullptr)
-            {
-                SDL_free(sensors);
-            }
-            return false;
-        }
-
-        bool supported = false;
-
-        for (int i = 0; i < sensorCount; ++i)
-        {
-            SDL_Sensor* sensor = SDL_OpenSensor(sensors[i]);
-            if (!sensor)
-            {
-                continue;
-            }
-
-            if (SDL_GetSensorType(sensor) == SDL_SENSOR_ACCEL)
-            {
-                supported = true;
-                SDL_CloseSensor(sensor);
-                break;
-            }
-
-            SDL_CloseSensor(sensor);
-        }
-
-        SDL_free(sensors);
-        return supported;
+        return Detail::SdlSensorSubsystem<Accelerometer>::ProbeIsSupported();
     }
 
     SensorState Accelerometer::getStateProperty() const
@@ -273,13 +60,15 @@ namespace Microsoft::Devices::Sensors
         : state_(SensorState::NotSupported),
           started_(false)
     {
-        if (instanceCount_ >= MaxSensorCount)
+        auto& subsystem = GetSubsystem();
+
+        if (subsystem.instanceCount_ >= MaxSensorCount)
         {
             throw SensorFailedException(
                 "The limit of 10 simultaneous instances of the Accelerometer class per application has been exceeded.");
         }
 
-        ++instanceCount_;
+        ++subsystem.instanceCount_;
         const bool supported = getIsSupportedProperty();
         state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
         setIsSupportedProperty(supported);
@@ -305,7 +94,7 @@ namespace Microsoft::Devices::Sensors
 
         if (!subsystemHeld_)
         {
-            if (!EnsureSensorSubsystemInitialized())
+            if (!Detail::SdlSensorSubsystem<Accelerometer>::EnsureSubsystemInitialized())
             {
                 state_ = SensorState::NotSupported;
                 throw AccelerometerFailedException(
@@ -315,54 +104,39 @@ namespace Microsoft::Devices::Sensors
             subsystemHeld_ = true;
         }
 
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+
+        if (subsystem.OpenDefaultSensorLocked() == nullptr)
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            if (g_sensor_ == nullptr)
-            {
-                g_sensor_ = OpenDefaultAccelerometer();
-            }
-
-            if (g_sensor_ == nullptr)
-            {
-                state_ = SensorState::NotSupported;
-                throw AccelerometerFailedException(
-                    "Failed to start accelerometer data acquisition. No default sensor found.");
-            }
-
-            started_ = true;
-            state_ = SensorState::Ready;
-
-            if (std::find(startedInstances_.begin(), startedInstances_.end(), this) == startedInstances_.end())
-            {
-                startedInstances_.push_back(this);
-            }
-
-            RegisterEventWatchIfNeeded();
+            state_ = SensorState::NotSupported;
+            throw AccelerometerFailedException(
+                "Failed to start accelerometer data acquisition. No default sensor found.");
         }
+
+        started_ = true;
+        state_ = SensorState::Ready;
+
+        subsystem.RegisterStartedInstanceLocked(this);
+        subsystem.RegisterEventWatchIfNeededLocked();
     }
 
     void Accelerometer::Stop()
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Accelerometer");
 
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+
+        if (started_)
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            if (started_)
-            {
-                auto it = std::find(startedInstances_.begin(), startedInstances_.end(), this);
-                if (it != startedInstances_.end())
-                {
-                    startedInstances_.erase(it);
-                }
-            }
-
-            started_ = false;
-            state_ = SensorState::Disabled;
-
-            UnregisterEventWatchIfNeeded();
+            subsystem.UnregisterStartedInstanceLocked(this);
         }
+
+        started_ = false;
+        state_ = SensorState::Disabled;
+
+        subsystem.UnregisterEventWatchIfNeededLocked();
     }
 
     void Accelerometer::Dispose(bool disposing)
@@ -374,26 +148,21 @@ namespace Microsoft::Devices::Sensors
                 Stop();
             }
 
-            std::unique_lock<std::mutex> lock(mutex_);
+            auto& subsystem = GetSubsystem();
+            std::unique_lock<std::mutex> lock(subsystem.mutex_);
 
             // Stop() (above) already removed this instance from
-            // startedInstances_, so no *new* callback can start targeting
-            // it — but SensorEventWatch() may already be mid-call into this
-            // instance's ProcessSensorUpdateEvent() on another thread. Wait
-            // for that to finish before letting this object's lifetime end,
-            // closing the use-after-free window left open by Task P3-4.
-            // Task P5-2: waits for the count (dispatchingThreadIds_.size())
-            // to reach 0, not for a single bool to clear — see
-            // dispatchingThreadIds_'s own comment for why a bool could
-            // under-count concurrent dispatches.
-            // Task P5-3: ...except for entries belonging to *this* thread —
-            // if a CurrentValueChanged/ReadingChanged handler calls
-            // Dispose() on its own sender reentrantly, this thread's own
-            // dispatch frame is what's still "in flight", and it can only
-            // finish unwinding after this very Dispose() call returns.
-            // Waiting on it would deadlock. Only genuinely *other* threads'
-            // in-flight dispatches are waited for.
-            callbackFinished_.wait(lock, [this]
+            // subsystem.startedInstances_, so no *new* callback can start
+            // targeting it — but the shared event watch may already be
+            // mid-call into this instance's ProcessSensorUpdateEvent() on
+            // another thread. Wait for that to finish before letting this
+            // object's lifetime end, closing the use-after-free window
+            // left open by Task P3-4.
+            // Task P5-2/P5-3: waits until no *other* thread's entry
+            // remains in dispatchingThreadIds_ — a handler reentrantly
+            // disposing its own sender must not wait on itself; only
+            // genuinely other threads' in-flight dispatches are waited for.
+            subsystem.callbackFinished_.wait(lock, [this]
             {
                 const std::thread::id currentThreadId = std::this_thread::get_id();
                 const auto selfCount = std::count(
@@ -401,30 +170,30 @@ namespace Microsoft::Devices::Sensors
                 return dispatchingThreadIds_.size() == static_cast<std::size_t>(selfCount);
             });
 
-            --instanceCount_;
-            if (instanceCount_ < 0)
+            --subsystem.instanceCount_;
+            if (subsystem.instanceCount_ < 0)
             {
-                instanceCount_ = 0;
+                subsystem.instanceCount_ = 0;
             }
 
-            if (instanceCount_ == 0)
+            if (subsystem.instanceCount_ == 0)
             {
-                startedInstances_.clear();
-                UnregisterEventWatchIfNeeded();
+                subsystem.startedInstances_.clear();
+                subsystem.UnregisterEventWatchIfNeededLocked();
 
-                if (g_sensor_ != nullptr)
+                if (subsystem.sensor_ != nullptr)
                 {
-                    SDL_CloseSensor(static_cast<SDL_Sensor*>(g_sensor_));
-                    g_sensor_ = nullptr;
-                    g_sensorId_ = 0;
+                    SDL_CloseSensor(subsystem.sensor_);
+                    subsystem.sensor_ = nullptr;
+                    subsystem.sensorId_ = 0;
                 }
             }
 
-            // Balances this instance's own EnsureSensorSubsystemInitialized()
-            // call from Start() (if any) 1:1, independent of instanceCount_ —
-            // SDL's internal ref-count (not this class) decides whether this
-            // is the last holder across both Accelerometer and Gyroscope
-            // (Task P4-8).
+            // Balances this instance's own EnsureSubsystemInitialized()
+            // call from Start() (if any) 1:1, independent of
+            // instanceCount_ — SDL's internal ref-count (not this class)
+            // decides whether this is the last holder across both
+            // Accelerometer and Gyroscope (Task P4-8).
             if (subsystemHeld_)
             {
                 SDL_QuitSubSystem(SDL_INIT_SENSOR);
@@ -535,12 +304,13 @@ namespace Microsoft::Devices::Sensors
 
         std::int64_t currentSensorId;
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (g_sensor_ == nullptr)
+            auto& subsystem = GetSubsystem();
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            if (subsystem.sensor_ == nullptr)
             {
                 return;
             }
-            currentSensorId = g_sensorId_;
+            currentSensorId = subsystem.sensorId_;
         }
 
         if (sensorId != currentSensorId)
@@ -615,28 +385,29 @@ namespace Microsoft::Devices::Sensors
         }
 
         // Task P5-2/P5-3: participates in the same dispatchingThreadIds_
-        // bookkeeping as the real SensorEventWatch() path, so a handler
-        // that calls Dispose() on this same instance from within a
+        // bookkeeping as the real event-watch path, so a handler that
+        // calls Dispose() on this same instance from within a
         // synthetic-update-triggered callback is recognized identically to
         // the real event path (see Dispose(bool)'s self-dispose check).
         const std::thread::id thisThreadId = std::this_thread::get_id();
+        auto& subsystem = GetSubsystem();
 
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
             dispatchingThreadIds_.push_back(thisThreadId);
         }
 
         DispatchSensorReading(x, y, z);
 
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
             const auto it = std::find(dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), thisThreadId);
             if (it != dispatchingThreadIds_.end())
             {
                 dispatchingThreadIds_.erase(it);
             }
         }
-        callbackFinished_.notify_all();
+        subsystem.callbackFinished_.notify_all();
     }
 
     void Accelerometer::SetStartedForTesting(bool started)

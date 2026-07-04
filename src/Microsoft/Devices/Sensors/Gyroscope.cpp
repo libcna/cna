@@ -3,200 +3,34 @@
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 
 #include <algorithm>
+#include <mutex>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_sensor.h>
 
 #include "CNA/Platform.hpp"
+#include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Devices::Sensors
 {
-    namespace
+    Detail::SdlSensorSubsystem<Gyroscope>& Gyroscope::GetSubsystem()
     {
-        // Task P5-1: mirrors Accelerometer.cpp's identical guard — see that
-        // file's copy for the full root-cause writeup. getIsSupportedProperty()
-        // only ever probes; nothing paired its own EnsureSensorSubsystemInitialized()
-        // call with a matching SDL_QuitSubSystem(), leaking one subsystem
-        // ref-count increment per probe with no corresponding decrement.
-        class SensorSubsystemProbeGuard
-        {
-        public:
-            SensorSubsystemProbeGuard()
-                : initialized_(SDL_InitSubSystem(SDL_INIT_SENSOR))
-            {
-            }
-
-            ~SensorSubsystemProbeGuard()
-            {
-                if (initialized_)
-                {
-                    SDL_QuitSubSystem(SDL_INIT_SENSOR);
-                }
-            }
-
-            SensorSubsystemProbeGuard(const SensorSubsystemProbeGuard&) = delete;
-            SensorSubsystemProbeGuard& operator=(const SensorSubsystemProbeGuard&) = delete;
-
-            [[nodiscard]] bool IsInitialized() const
-            {
-                return initialized_;
-            }
-
-        private:
-            bool initialized_;
-        };
-    } // namespace
-
-    void* Gyroscope::g_sensor_ = nullptr;
-    std::int64_t Gyroscope::g_sensorId_ = 0;
-    int Gyroscope::instanceCount_ = 0;
-    bool Gyroscope::eventWatchRegistered_ = false;
-    std::vector<Gyroscope*> Gyroscope::startedInstances_;
-    std::mutex Gyroscope::mutex_;
-    std::condition_variable Gyroscope::callbackFinished_;
-
-    bool Gyroscope::EnsureSensorSubsystemInitialized()
-    {
-        // Always call through to SDL — SDL_INIT_SENSOR is ref-counted
-        // internally by SDL itself (see SDL_InitSubSystem()'s own doc
-        // comment), and repeat calls are cheap. Bypassing that via
-        // SDL_WasInit() (as this used to do) let one class's
-        // Dispose()-triggered SDL_QuitSubSystem() undercut SDL's real
-        // ref-count and tear the subsystem down while another class's
-        // instances still expected it alive (Task P4-8). Callers are
-        // responsible for pairing each successful call here with exactly
-        // one SDL_QuitSubSystem() (see subsystemHeld_).
-        return SDL_InitSubSystem(SDL_INIT_SENSOR);
+        // Task P5-4: function-local static, not a class-static member —
+        // keeps SDL_Sensor*/SDL_SensorType and everything else
+        // SdlSensorSubsystem.hpp touches out of Gyroscope.hpp entirely,
+        // same discipline this class already used for its previous
+        // `void* g_sensor_`.
+        static Detail::SdlSensorSubsystem<Gyroscope> subsystem;
+        return subsystem;
     }
 
-    void* Gyroscope::OpenDefaultGyroscope()
+    int Gyroscope::GetSdlSensorType()
     {
-        int sensorCount = 0;
-        SDL_SensorID* sensors = SDL_GetSensors(&sensorCount);
-
-        if (sensors == nullptr || sensorCount <= 0)
-        {
-            if (sensors != nullptr)
-            {
-                SDL_free(sensors);
-            }
-            return nullptr;
-        }
-
-        SDL_Sensor* openedSensor = nullptr;
-        SDL_SensorID openedSensorId = 0;
-
-        for (int i = 0; i < sensorCount; ++i)
-        {
-            const SDL_SensorID sensorId = sensors[i];
-
-            SDL_Sensor* sensor = SDL_OpenSensor(sensorId);
-            if (!sensor)
-            {
-                continue;
-            }
-
-            if (SDL_GetSensorType(sensor) == SDL_SENSOR_GYRO)
-            {
-                openedSensor = sensor;
-                openedSensorId = sensorId;
-                break;
-            }
-
-            SDL_CloseSensor(sensor);
-        }
-
-        SDL_free(sensors);
-
-        if (openedSensor != nullptr)
-        {
-            g_sensorId_ = static_cast<std::int64_t>(openedSensorId);
-        }
-
-        return static_cast<void*>(openedSensor);
-    }
-
-    void Gyroscope::RegisterEventWatchIfNeeded()
-    {
-        if (!eventWatchRegistered_)
-        {
-            const SDL_EventFilter eventFilter =
-                reinterpret_cast<SDL_EventFilter>(&Gyroscope::SensorEventWatch);
-            SDL_AddEventWatch(eventFilter, nullptr);
-            eventWatchRegistered_ = true;
-        }
-    }
-
-    void Gyroscope::UnregisterEventWatchIfNeeded()
-    {
-        if (eventWatchRegistered_ && startedInstances_.empty())
-        {
-            const SDL_EventFilter eventFilter =
-                reinterpret_cast<SDL_EventFilter>(&Gyroscope::SensorEventWatch);
-            SDL_RemoveEventWatch(eventFilter, nullptr);
-            eventWatchRegistered_ = false;
-        }
-    }
-
-    bool Gyroscope::SensorEventWatch(void* userdata, void* eventData)
-    {
-        (void)userdata;
-
-        SDL_Event* event = static_cast<SDL_Event*>(eventData);
-
-        if (event == nullptr)
-        {
-            return true;
-        }
-
-        if (event->type != SDL_EVENT_SENSOR_UPDATE)
-        {
-            return true;
-        }
-
-        const std::int64_t sensorId = static_cast<std::int64_t>(event->sensor.which);
-
-        const std::thread::id thisThreadId = std::this_thread::get_id();
-
-        std::vector<Gyroscope*> instancesSnapshot;
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            for (Gyroscope* gyroscope : startedInstances_)
-            {
-                if (gyroscope != nullptr)
-                {
-                    gyroscope->dispatchingThreadIds_.push_back(thisThreadId);
-                    instancesSnapshot.push_back(gyroscope);
-                }
-            }
-        }
-
-        for (Gyroscope* gyroscope : instancesSnapshot)
-        {
-            gyroscope->ProcessSensorUpdateEvent(
-                sensorId,
-                event->sensor.data[0],
-                event->sensor.data[1],
-                event->sensor.data[2]
-            );
-
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                auto& ids = gyroscope->dispatchingThreadIds_;
-                const auto it = std::find(ids.begin(), ids.end(), thisThreadId);
-                if (it != ids.end())
-                {
-                    ids.erase(it);
-                }
-            }
-            callbackFinished_.notify_all();
-        }
-
-        return true;
+        return static_cast<int>(SDL_SENSOR_GYRO);
     }
 
     bool Gyroscope::getIsSupportedProperty()
@@ -210,46 +44,7 @@ namespace Microsoft::Devices::Sensors
             return false;
         }
 
-        const SensorSubsystemProbeGuard subsystemGuard;
-        if (!subsystemGuard.IsInitialized())
-        {
-            return false;
-        }
-
-        int sensorCount = 0;
-        SDL_SensorID* sensors = SDL_GetSensors(&sensorCount);
-
-        if (sensors == nullptr || sensorCount <= 0)
-        {
-            if (sensors != nullptr)
-            {
-                SDL_free(sensors);
-            }
-            return false;
-        }
-
-        bool supported = false;
-
-        for (int i = 0; i < sensorCount; ++i)
-        {
-            SDL_Sensor* sensor = SDL_OpenSensor(sensors[i]);
-            if (!sensor)
-            {
-                continue;
-            }
-
-            if (SDL_GetSensorType(sensor) == SDL_SENSOR_GYRO)
-            {
-                supported = true;
-                SDL_CloseSensor(sensor);
-                break;
-            }
-
-            SDL_CloseSensor(sensor);
-        }
-
-        SDL_free(sensors);
-        return supported;
+        return Detail::SdlSensorSubsystem<Gyroscope>::ProbeIsSupported();
     }
 
     SensorState Gyroscope::getStateProperty() const
@@ -262,13 +57,15 @@ namespace Microsoft::Devices::Sensors
         : state_(SensorState::NotSupported),
           started_(false)
     {
-        if (instanceCount_ >= MaxSensorCount)
+        auto& subsystem = GetSubsystem();
+
+        if (subsystem.instanceCount_ >= MaxSensorCount)
         {
             throw SensorFailedException(
                 "The limit of 10 simultaneous instances of the Gyroscope class per application has been exceeded.");
         }
 
-        ++instanceCount_;
+        ++subsystem.instanceCount_;
         const bool supported = getIsSupportedProperty();
         state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
         setIsSupportedProperty(supported);
@@ -294,7 +91,7 @@ namespace Microsoft::Devices::Sensors
 
         if (!subsystemHeld_)
         {
-            if (!EnsureSensorSubsystemInitialized())
+            if (!Detail::SdlSensorSubsystem<Gyroscope>::EnsureSubsystemInitialized())
             {
                 state_ = SensorState::NotSupported;
                 throw SensorFailedException(
@@ -304,54 +101,39 @@ namespace Microsoft::Devices::Sensors
             subsystemHeld_ = true;
         }
 
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+
+        if (subsystem.OpenDefaultSensorLocked() == nullptr)
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            if (g_sensor_ == nullptr)
-            {
-                g_sensor_ = OpenDefaultGyroscope();
-            }
-
-            if (g_sensor_ == nullptr)
-            {
-                state_ = SensorState::NotSupported;
-                throw SensorFailedException(
-                    "Failed to start gyroscope data acquisition. No default sensor found.");
-            }
-
-            started_ = true;
-            state_ = SensorState::Ready;
-
-            if (std::find(startedInstances_.begin(), startedInstances_.end(), this) == startedInstances_.end())
-            {
-                startedInstances_.push_back(this);
-            }
-
-            RegisterEventWatchIfNeeded();
+            state_ = SensorState::NotSupported;
+            throw SensorFailedException(
+                "Failed to start gyroscope data acquisition. No default sensor found.");
         }
+
+        started_ = true;
+        state_ = SensorState::Ready;
+
+        subsystem.RegisterStartedInstanceLocked(this);
+        subsystem.RegisterEventWatchIfNeededLocked();
     }
 
     void Gyroscope::Stop()
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Gyroscope");
 
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+
+        if (started_)
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            if (started_)
-            {
-                auto it = std::find(startedInstances_.begin(), startedInstances_.end(), this);
-                if (it != startedInstances_.end())
-                {
-                    startedInstances_.erase(it);
-                }
-            }
-
-            started_ = false;
-            state_ = SensorState::Disabled;
-
-            UnregisterEventWatchIfNeeded();
+            subsystem.UnregisterStartedInstanceLocked(this);
         }
+
+        started_ = false;
+        state_ = SensorState::Disabled;
+
+        subsystem.UnregisterEventWatchIfNeededLocked();
     }
 
     void Gyroscope::Dispose(bool disposing)
@@ -363,18 +145,20 @@ namespace Microsoft::Devices::Sensors
                 Stop();
             }
 
-            std::unique_lock<std::mutex> lock(mutex_);
+            auto& subsystem = GetSubsystem();
+            std::unique_lock<std::mutex> lock(subsystem.mutex_);
 
             // Stop() (above) already removed this instance from
-            // startedInstances_, so no *new* callback can start targeting
-            // it — but SensorEventWatch() may already be mid-call into this
-            // instance's ProcessSensorUpdateEvent() on another thread. Wait
-            // for that to finish before letting this object's lifetime end,
-            // closing the use-after-free window left open by Task P3-4.
+            // subsystem.startedInstances_, so no *new* callback can start
+            // targeting it — but the shared event watch may already be
+            // mid-call into this instance's ProcessSensorUpdateEvent() on
+            // another thread. Wait for that to finish before letting this
+            // object's lifetime end, closing the use-after-free window
+            // left open by Task P3-4.
             // Task P5-2/P5-3: waits until no *other* thread's entry
             // remains in dispatchingThreadIds_ — see Accelerometer.cpp's
             // identical wait predicate for the full self-dispose rationale.
-            callbackFinished_.wait(lock, [this]
+            subsystem.callbackFinished_.wait(lock, [this]
             {
                 const std::thread::id currentThreadId = std::this_thread::get_id();
                 const auto selfCount = std::count(
@@ -382,30 +166,30 @@ namespace Microsoft::Devices::Sensors
                 return dispatchingThreadIds_.size() == static_cast<std::size_t>(selfCount);
             });
 
-            --instanceCount_;
-            if (instanceCount_ < 0)
+            --subsystem.instanceCount_;
+            if (subsystem.instanceCount_ < 0)
             {
-                instanceCount_ = 0;
+                subsystem.instanceCount_ = 0;
             }
 
-            if (instanceCount_ == 0)
+            if (subsystem.instanceCount_ == 0)
             {
-                startedInstances_.clear();
-                UnregisterEventWatchIfNeeded();
+                subsystem.startedInstances_.clear();
+                subsystem.UnregisterEventWatchIfNeededLocked();
 
-                if (g_sensor_ != nullptr)
+                if (subsystem.sensor_ != nullptr)
                 {
-                    SDL_CloseSensor(static_cast<SDL_Sensor*>(g_sensor_));
-                    g_sensor_ = nullptr;
-                    g_sensorId_ = 0;
+                    SDL_CloseSensor(subsystem.sensor_);
+                    subsystem.sensor_ = nullptr;
+                    subsystem.sensorId_ = 0;
                 }
             }
 
-            // Balances this instance's own EnsureSensorSubsystemInitialized()
-            // call from Start() (if any) 1:1, independent of instanceCount_ —
-            // SDL's internal ref-count (not this class) decides whether this
-            // is the last holder across both Accelerometer and Gyroscope
-            // (Task P4-8).
+            // Balances this instance's own EnsureSubsystemInitialized()
+            // call from Start() (if any) 1:1, independent of
+            // instanceCount_ — SDL's internal ref-count (not this class)
+            // decides whether this is the last holder across both
+            // Accelerometer and Gyroscope (Task P4-8).
             if (subsystemHeld_)
             {
                 SDL_QuitSubSystem(SDL_INIT_SENSOR);
@@ -472,12 +256,13 @@ namespace Microsoft::Devices::Sensors
 
         std::int64_t currentSensorId;
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (g_sensor_ == nullptr)
+            auto& subsystem = GetSubsystem();
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            if (subsystem.sensor_ == nullptr)
             {
                 return;
             }
-            currentSensorId = g_sensorId_;
+            currentSensorId = subsystem.sensorId_;
         }
 
         if (sensorId != currentSensorId)
@@ -532,26 +317,27 @@ namespace Microsoft::Devices::Sensors
         }
 
         // Task P5-2/P5-3: participates in the same dispatchingThreadIds_
-        // bookkeeping as the real SensorEventWatch() path — see
+        // bookkeeping as the real event-watch path — see
         // Accelerometer.cpp's identical hook for the full rationale.
         const std::thread::id thisThreadId = std::this_thread::get_id();
+        auto& subsystem = GetSubsystem();
 
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
             dispatchingThreadIds_.push_back(thisThreadId);
         }
 
         DispatchSensorReading(x, y, z);
 
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
             const auto it = std::find(dispatchingThreadIds_.begin(), dispatchingThreadIds_.end(), thisThreadId);
             if (it != dispatchingThreadIds_.end())
             {
                 dispatchingThreadIds_.erase(it);
             }
         }
-        callbackFinished_.notify_all();
+        subsystem.callbackFinished_.notify_all();
     }
 
     void Gyroscope::SetStartedForTesting(bool started)

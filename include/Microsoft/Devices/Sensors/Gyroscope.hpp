@@ -2,9 +2,7 @@
 
 #pragma once
 
-#include <condition_variable>
 #include <cstdint>
-#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -15,39 +13,20 @@
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 
+namespace Microsoft::Devices::Sensors::Detail
+{
+    template <typename TSensor>
+    class SdlSensorSubsystem;
+} // namespace Microsoft::Devices::Sensors::Detail
+
 namespace Microsoft::Devices::Sensors
 {
     /** @brief Provides access to the device gyroscope sensor. */
     class Gyroscope final : public SensorBase<GyroscopeReading>
     {
+        friend class Detail::SdlSensorSubsystem<Gyroscope>;
+
     private:
-        static void* g_sensor_;
-        static std::int64_t g_sensorId_;
-        static int instanceCount_;
-        static bool eventWatchRegistered_;
-        static std::vector<Gyroscope*> startedInstances_;
-
-        /**
-         * Guards g_sensor_, g_sensorId_, eventWatchRegistered_,
-         * startedInstances_, and every instance's inFlightCallback_ against
-         * the SDL event-watch callback (SensorEventWatch) potentially
-         * running on a different thread than Start()/Stop()/Dispose(). See
-         * SDL_AddEventWatch()'s own doc comment. Not held across
-         * ProcessSensorUpdateEvent() itself, to avoid holding a lock across
-         * an event-handler callout that might re-enter Start()/Stop().
-         */
-        static std::mutex mutex_;
-
-        /**
-         * Signaled whenever an instance's inFlightCallback_ clears, so
-         * Dispose() can wait for a concurrently-running callback on this
-         * instance to finish before the object's lifetime ends. Shared
-         * across all instances (a broadcast-and-recheck pattern) rather
-         * than per-instance, since at the ≤10-instance cap the extra
-         * spurious wakeups are negligible.
-         */
-        static std::condition_variable callbackFinished_;
-
         static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
 
         SensorState state_;
@@ -57,12 +36,12 @@ namespace Microsoft::Devices::Sensors
          * True once this instance has made its own successful
          * SDL_InitSubSystem(SDL_INIT_SENSOR) call (on its first successful
          * Start()). Paired with exactly one SDL_QuitSubSystem() call from
-         * this same instance's Dispose(), regardless of instanceCount_ or
-         * what any other instance (of this class or Accelerometer) is
-         * doing — SDL's own internal ref-counting aggregates all
-         * instances' balanced init/quit pairs correctly (Task P4-8). Never
-         * re-set once true; a later Start() after Stop() does not call
-         * SDL_InitSubSystem() again.
+         * this same instance's Dispose(), regardless of how many other
+         * instances (of this class or Accelerometer) exist — SDL's own
+         * internal ref-counting aggregates all instances' balanced
+         * init/quit pairs correctly (Task P4-8). Never re-set once true; a
+         * later Start() after Stop() does not call SDL_InitSubSystem()
+         * again.
          */
         bool subsystemHeld_ = false;
 
@@ -70,14 +49,15 @@ namespace Microsoft::Devices::Sensors
          * Thread IDs of calls currently mid-dispatch into this instance's
          * ProcessSensorUpdateEvent()/InjectSyntheticSensorUpdate(), one
          * entry per in-flight call (its size is the in-flight count).
-         * Guarded by mutex_. Dispose() waits until no *other* thread's
-         * entry remains (after first removing the instance from
-         * startedInstances_, so no *new* callback can start) before
-         * letting the object's lifetime end, closing the use-after-free
-         * window left open by Task P3-4.
+         * Guarded by the shared subsystem's mutex_ (Task P5-4). Dispose()
+         * waits until no *other* thread's entry remains (after first
+         * removing the instance from the subsystem's startedInstances_,
+         * so no *new* callback can start) before letting the object's
+         * lifetime end, closing the use-after-free window left open by
+         * Task P3-4.
          *
-         * Task P5-2: was a single bool (inFlightCallback_) until this task
-         * — see Accelerometer.hpp's identical member for the full
+         * Task P5-2: was a single bool (inFlightCallback_) until this
+         * task — see Accelerometer.hpp's identical member for the full
          * rationale (SDL's own documented "may run in a different thread"
          * event-watch warning).
          *
@@ -86,29 +66,44 @@ namespace Microsoft::Devices::Sensors
          * thread is still dispatching to me, I must wait" apart from "the
          * only still-in-flight dispatch(es) are on my own thread" (a
          * handler calling Dispose() on its own sender reentrantly) — the
-         * latter must not wait, since this thread's own dispatch frame can
-         * only finish unwinding after Dispose() itself returns. See
+         * latter must not wait, since this thread's own dispatch frame
+         * can only finish unwinding after Dispose() itself returns. See
          * Dispose(bool)'s wait predicate.
          */
         std::vector<std::thread::id> dispatchingThreadIds_;
 
     private:
-        static bool EnsureSensorSubsystemInitialized();
-        static void* OpenDefaultGyroscope();
+        /**
+         * @brief Returns this class's shared SDL sensor subsystem manager (Task P5-4).
+         *
+         * Defined in Gyroscope.cpp as a function-local static, so SDL
+         * types never need to appear in this header — same discipline
+         * this class already used for its previous `void* g_sensor_`.
+         *
+         * @return Reference to the single, process-lifetime subsystem instance.
+         */
+        static Detail::SdlSensorSubsystem<Gyroscope>& GetSubsystem();
 
-        static void RegisterEventWatchIfNeeded();
-        static void UnregisterEventWatchIfNeeded();
-
-        static bool SensorEventWatch(void* userdata, void* eventData);
+        /**
+         * @brief Returns SDL_SENSOR_GYRO, as a plain int (Task P5-4).
+         *
+         * Kept as an `int`-returning function rather than an
+         * SDL_SensorType-typed constant so this header never needs to
+         * include any SDL header.
+         *
+         * @return SDL_SENSOR_GYRO, cast to int.
+         */
+        static int GetSdlSensorType();
 
         /**
          * Validates the event belongs to this instance's open device
-         * (started_, g_sensor_, sensorId match), then delegates to
-         * DispatchSensorReading() to do the actual conversion+dispatch.
-         * Split out (Task P4-2) so DispatchSensorReading() can be exercised
-         * directly by InjectSyntheticSensorUpdate() below without requiring
-         * a real, opened SDL sensor — which never exists in a headless
-         * test environment.
+         * (started_, the shared subsystem's device/sensorId match), then
+         * delegates to DispatchSensorReading() to do the actual
+         * conversion+dispatch. Split out (Task P4-2) so
+         * DispatchSensorReading() can be exercised directly by
+         * InjectSyntheticSensorUpdate() below without requiring a real,
+         * opened SDL sensor — which never exists in a headless test
+         * environment.
          */
         void ProcessSensorUpdateEvent(
             std::int64_t sensorId,
@@ -195,9 +190,9 @@ namespace Microsoft::Devices::Sensors
 
         /**
          * @brief Test-only hook (Task P4-2): injects a synthetic sensor
-         * update, bypassing the real-hardware-presence checks
-         * (g_sensor_/sensorId matching) that the real SDL event path
-         * enforces, so CurrentValueChanged's dispatch logic can be
+         * update, bypassing the real-hardware-presence checks (shared
+         * subsystem device/sensorId matching) that the real SDL event
+         * path enforces, so CurrentValueChanged's dispatch logic can be
          * exercised without a real, opened SDL gyroscope.
          *
          * Still respects the started/disposed state exactly as the real
