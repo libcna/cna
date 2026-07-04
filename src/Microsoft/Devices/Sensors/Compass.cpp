@@ -72,18 +72,37 @@ namespace Microsoft::Devices::Sensors
 
     void Compass::Dispose(bool disposing)
     {
-        // Task P6-3: ClaimDisposalOnce() closes a race where two threads
-        // calling Dispose() on the same instance concurrently could both
-        // pass the getIsDisposedProperty() check and both decrement
-        // instanceCount_ for what should be a single logical disposal —
-        // see SensorBase::Dispose()'s doc comment for the full rationale.
-        if (!getIsDisposedProperty() && disposing && ClaimDisposalOnce())
+        if (!disposing)
         {
-            if (started_)
-            {
-                Stop();
-            }
+            SensorBase<CompassReading>::Dispose(disposing);
+            return;
+        }
 
+        // Task P6-3/P7-2: ClaimDisposalOnce() closes a race where two
+        // threads calling Dispose() on the same instance concurrently could
+        // both pass the getIsDisposedProperty() check and both decrement
+        // instanceCount_ for what should be a single logical disposal — see
+        // SensorBase::Dispose()'s doc comment for the full rationale. The
+        // loser waits for the winner's cleanup to actually finish (Task
+        // P7-2) instead of proceeding immediately. Currently latent rather
+        // than directly observable here — Start() always throws before
+        // setting started_ true, so the Stop() call below is never actually
+        // reached in practice — but fixed uniformly with
+        // Accelerometer/Gyroscope so the same bug can't resurface if
+        // Compass ever gains a real backend (see
+        // plan_devices_phase7.md's Audit finding B).
+        if (!ClaimDisposalOnce())
+        {
+            WaitForDisposalToComplete();
+            return;
+        }
+
+        if (started_)
+        {
+            Stop();
+        }
+
+        {
             std::lock_guard<std::mutex> lock(instanceCountMutex_);
             --instanceCount_;
             if (instanceCount_ < 0)

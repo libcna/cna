@@ -2,7 +2,9 @@
 #include <gtest/gtest.h>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -267,6 +269,78 @@ TEST(GyroscopeTests, ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCo
 
         t1.join();
         t2.join();
+    }
+
+    std::vector<std::unique_ptr<Gyroscope>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(instances.push_back(std::make_unique<Gyroscope>()));
+    }
+
+    EXPECT_THROW({ const Gyroscope overflow; (void)overflow; }, SensorFailedException);
+}
+
+// Task P7-2: see AccelerometerTests's identical test for the full
+// rationale — a losing Dispose() call must wait for the winner's cleanup to
+// actually finish (via WaitForDisposalToComplete()) rather than racing
+// ahead and flipping disposed_ true while the winner's own Stop() call is
+// still relying on it being false.
+TEST(GyroscopeTests, ConcurrentDisposeLoserWaitsForWinnerCleanupToFinishBeforeStateAppearsDisposed)
+{
+    constexpr int Rounds = 15;
+
+    for (int round = 0; round < Rounds; ++round)
+    {
+        auto instance = std::make_shared<Gyroscope>();
+        instance->SetStartedForTesting(true);
+
+        std::mutex gateMutex;
+        std::condition_variable gateCv;
+        bool winnerPaused = false;
+        bool releaseWinner = false;
+
+        instance->SetDisposalCleanupHookForTesting([&]()
+        {
+            {
+                std::lock_guard<std::mutex> lock(gateMutex);
+                winnerPaused = true;
+            }
+            gateCv.notify_all();
+
+            std::unique_lock<std::mutex> lock(gateMutex);
+            gateCv.wait(lock, [&] { return releaseWinner; });
+        });
+
+        std::thread winnerThread([instance]()
+        {
+            EXPECT_NO_THROW(instance->Dispose());
+        });
+
+        {
+            std::unique_lock<std::mutex> lock(gateMutex);
+            gateCv.wait(lock, [&] { return winnerPaused; });
+        }
+
+        std::atomic<bool> loserReturned{false};
+        std::thread loserThread([instance, &loserReturned]()
+        {
+            EXPECT_NO_THROW(instance->Dispose());
+            loserReturned.store(true);
+        });
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        EXPECT_FALSE(loserReturned.load());
+
+        {
+            std::lock_guard<std::mutex> lock(gateMutex);
+            releaseWinner = true;
+        }
+        gateCv.notify_all();
+
+        winnerThread.join();
+        loserThread.join();
+
+        EXPECT_TRUE(loserReturned.load());
     }
 
     std::vector<std::unique_ptr<Gyroscope>> instances;

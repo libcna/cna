@@ -2,7 +2,9 @@
 #include <gtest/gtest.h>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -325,6 +327,98 @@ TEST(AccelerometerTests, ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstan
 
         t1.join();
         t2.join();
+    }
+
+    std::vector<std::unique_ptr<Accelerometer>> instances;
+    for (int i = 0; i < 10; ++i)
+    {
+        EXPECT_NO_THROW(instances.push_back(std::make_unique<Accelerometer>()));
+    }
+
+    EXPECT_THROW({ const Accelerometer overflow; (void)overflow; }, SensorFailedException);
+}
+
+// Task P7-2: previously, a Dispose() call that lost ClaimDisposalOnce() (the
+// "loser") fell through immediately to the base SensorBase<T>::Dispose(),
+// flipping disposed_ true while the winner's own cleanup (which calls the
+// public Stop(), guarded by the same disposed-state precondition) could
+// still be running — causing the winner's own Stop() call to observe
+// disposed_ == true and throw ObjectDisposedException mid-cleanup, escaping
+// Dispose(bool) with instanceCount_/subsystemHeld_/the open sensor never
+// released. This test deterministically reproduces the interleaving (real
+// thread scheduling alone cannot reliably hit the narrow window between
+// ClaimDisposalOnce() succeeding and Stop() being called) via a NOXNA test
+// hook that pauses the winner right after it claims disposal, until this
+// test confirms a concurrently-racing loser is genuinely blocked — proving
+// the loser actually waits rather than racing ahead. If this regresses, the
+// loser's Dispose() call returns before the winner does, and the final
+// 10-instance check below would fail once instanceCount_ has leaked enough
+// across repeated rounds.
+TEST(AccelerometerTests, ConcurrentDisposeLoserWaitsForWinnerCleanupToFinishBeforeStateAppearsDisposed)
+{
+    constexpr int Rounds = 15;
+
+    for (int round = 0; round < Rounds; ++round)
+    {
+        auto instance = std::make_shared<Accelerometer>();
+        instance->SetStartedForTesting(true);
+
+        std::mutex gateMutex;
+        std::condition_variable gateCv;
+        bool winnerPaused = false;
+        bool releaseWinner = false;
+
+        instance->SetDisposalCleanupHookForTesting([&]()
+        {
+            {
+                std::lock_guard<std::mutex> lock(gateMutex);
+                winnerPaused = true;
+            }
+            gateCv.notify_all();
+
+            std::unique_lock<std::mutex> lock(gateMutex);
+            gateCv.wait(lock, [&] { return releaseWinner; });
+        });
+
+        std::thread winnerThread([instance]()
+        {
+            EXPECT_NO_THROW(instance->Dispose());
+        });
+
+        // Wait until the winner has claimed disposal and is paused inside
+        // its own cleanup, before starting the loser — otherwise both
+        // threads could race for ClaimDisposalOnce() itself, which this
+        // test does not care about (that race is exercised separately by
+        // ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount).
+        {
+            std::unique_lock<std::mutex> lock(gateMutex);
+            gateCv.wait(lock, [&] { return winnerPaused; });
+        }
+
+        std::atomic<bool> loserReturned{false};
+        std::thread loserThread([instance, &loserReturned]()
+        {
+            EXPECT_NO_THROW(instance->Dispose());
+            loserReturned.store(true);
+        });
+
+        // The loser must NOT have returned yet — the winner is still
+        // paused inside cleanup, so disposed_ must still be false, and the
+        // loser must be blocked in WaitForDisposalToComplete().
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        EXPECT_FALSE(loserReturned.load());
+
+        // Release the winner; both threads must now complete cleanly.
+        {
+            std::lock_guard<std::mutex> lock(gateMutex);
+            releaseWinner = true;
+        }
+        gateCv.notify_all();
+
+        winnerThread.join();
+        loserThread.join();
+
+        EXPECT_TRUE(loserReturned.load());
     }
 
     std::vector<std::unique_ptr<Accelerometer>> instances;

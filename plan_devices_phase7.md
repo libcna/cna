@@ -218,3 +218,91 @@ single-class case). `SensorEventWatch()`'s own real-time SDL sensor event delive
 `SDL_InitSubSystem`/`SDL_GetSensors`/`SDL_OpenSensor`/`SDL_CloseSensor`/
 `SDL_QuitSubSystem`), so it correctly does not need the global mutex — confirmed by
 reading its body, not assumed.
+
+## P7-2: Fix concurrent Dispose state ownership
+
+### Resolution
+
+**Files changed:**
+- `include/Microsoft/Devices/Sensors/SensorBase.hpp` — added `#include <condition_variable>`,
+  a `disposalFinishedCv_` member, a new protected `WaitForDisposalToComplete()` (blocks
+  until `disposed_` becomes true), and updated the base `Dispose(bool)` to call
+  `disposalFinishedCv_.notify_all()` after setting `disposed_ = true`. Updated
+  `ClaimDisposalOnce()`'s, `Dispose()`'s (public), and `Dispose(bool)`'s (base) doc
+  comments to describe the new contract: the winner runs cleanup then calls the base
+  `Dispose(bool)`; the loser calls `WaitForDisposalToComplete()` and returns — it must
+  never call the base `Dispose(bool)` itself.
+- `src/Microsoft/Devices/Sensors/Accelerometer.cpp` / `Gyroscope.cpp` / `Compass.cpp` /
+  `Motion.cpp` — restructured `Dispose(bool)` in all four: `disposing == false` now
+  delegates straight to the base `Dispose(bool)` (unaffected — the concurrency race only
+  applies to the `disposing == true`, explicit-`Dispose()` path); `disposing == true`
+  now branches on `ClaimDisposalOnce()` explicitly — the loser calls
+  `WaitForDisposalToComplete()` and returns without touching any shared state; the winner
+  runs the exact same cleanup as before (unchanged), then calls the base `Dispose(bool)`
+  after its own lock scopes have closed (kept the cleanup's `subsystem.mutex_`/global SDL
+  mutex acquisitions in an explicit nested block so the final base-`Dispose()` call — and
+  its `disposalFinishedCv_.notify_all()` — runs unlocked, matching the pre-P7-2
+  lock-duration discipline).
+- `include/Microsoft/Devices/Sensors/Accelerometer.hpp` / `Gyroscope.hpp` +
+  matching `.cpp` — added a NOXNA test-only `disposalTestHook_` member (a
+  `std::function<void()>`, documented as safe to read without a lock because it is only
+  ever written in a test's single-threaded setup phase, before any thread that calls
+  `Dispose()` is spawned) and `SetDisposalCleanupHookForTesting()`, invoked once by
+  `Dispose(bool)` immediately after `ClaimDisposalOnce()` succeeds, before any cleanup
+  runs — lets a test force a controlled pause at that exact point.
+- `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` / `GyroscopeTests.cpp` — added
+  `ConcurrentDisposeLoserWaitsForWinnerCleanupToFinishBeforeStateAppearsDisposed`: starts
+  an instance, uses the new test hook to pause the winner right after it claims disposal,
+  confirms a concurrently-racing loser is genuinely still blocked (has not returned) while
+  the winner is paused, then releases the winner and confirms both complete cleanly, over
+  15 rounds, followed by the existing 10-instance-cap sanity check.
+
+**Compass/Motion:** applied the identical `ClaimDisposalOnce()`/`WaitForDisposalToComplete()`
+restructuring for consistency (per the audit's finding B), but did not add an equivalent
+delayed-cleanup hook/test for these two — their `Start()` always throws before ever
+setting `started_ = true`, so their `Dispose(bool)`'s `if (started_) { Stop(); }` branch
+is dead code today; the race was latent, not observable, and their existing
+`ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount` tests (unaffected by
+this change, re-verified passing) already cover the reachable "never-started concurrent
+dispose" path.
+
+**Regression-proof check (not part of the permanent test suite):** temporarily reverted
+the loser branch back to the old pre-P7-2 behavior (falling through to call the base
+`Dispose(bool)` immediately instead of waiting) and re-ran the new
+`ConcurrentDisposeLoserWaitsForWinnerCleanupToFinishBeforeStateAppearsDisposed` test — it
+failed exactly as predicted: the winner's own `Dispose()` call threw
+`System::ObjectDisposedException` (from its own internal `Stop()` call observing
+`disposed_ == true`), the loser returned immediately instead of waiting, and
+`instanceCount_` leaked enough that the trailing 10-instance-cap check itself threw
+`SensorFailedException` early. Restored the real fix immediately after confirming this;
+all tests pass again with the fix in place.
+
+**Tests added:**
+`ConcurrentDisposeLoserWaitsForWinnerCleanupToFinishBeforeStateAppearsDisposed`
+(Accelerometer, Gyroscope).
+
+**Commands run:**
+```bash
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"        # clean
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"   # clean
+./cmake-build-debug/CnaTests --gtest_filter="Accelerometer*:Gyroscope*:Compass*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*"
+# 134 tests, 132 passed, 2 skipped (expected)
+
+cd cmake-build-debug
+for i in $(seq 1 40); do
+  ./CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*" || echo "run $i FAILED"
+done
+# 40/40 clean
+
+cd .. && ctest --output-on-failure
+# 2037/2039 passed; same 2 pre-existing EasyGL failures as every prior verification.
+```
+
+**Remaining risk:** low for Accelerometer/Gyroscope (directly tested, including a
+regression-proof failure/fix cycle). Lower confidence but acceptable for Compass/Motion,
+since the fixed code path (`Stop()` inside cleanup) is currently unreachable there —
+worth revisiting with a dedicated test if Compass/Motion ever gain a real `Start()`
+implementation (see `plan_devices_phase5.md`'s native-backend plan). Assumes the winning
+cleanup path never throws once `ClaimDisposalOnce()` succeeds (documented in
+`WaitForDisposalToComplete()`'s doc comment) — matches this codebase's pre-existing
+assumption elsewhere (e.g. `callbackFinished_`'s own no-timeout wait), not a new risk.

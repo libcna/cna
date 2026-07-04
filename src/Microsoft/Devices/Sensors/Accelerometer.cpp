@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <utility>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_init.h>
@@ -242,33 +243,54 @@ namespace Microsoft::Devices::Sensors
 
     void Accelerometer::Dispose(bool disposing)
     {
-        // Task P6-3: ClaimDisposalOnce() closes a race where two threads
-        // calling Dispose() on the same instance concurrently could both
-        // pass the getIsDisposedProperty() check (disposed_ is only set
-        // true by SensorBase::Dispose() at the very end of this call) and
-        // both run the cleanup below — e.g. both decrementing
-        // instanceCount_ for what should be a single logical disposal.
-        // Only the call that wins ClaimDisposalOnce() proceeds.
-        if (!getIsDisposedProperty() && disposing && ClaimDisposalOnce())
+        if (!disposing)
         {
-            auto& subsystem = GetSubsystem();
+            SensorBase<AccelerometerReading>::Dispose(disposing);
+            return;
+        }
 
-            // Task P6-3: started_ is only ever written under
-            // subsystem.mutex_, but was previously read here directly with
-            // no lock at all. Stop() re-locks subsystem.mutex_ internally
-            // (not a recursive mutex), so the read and the Stop() call
-            // itself cannot share one lock scope.
-            bool wasStarted;
-            {
-                std::lock_guard<std::mutex> lock(subsystem.mutex_);
-                wasStarted = started_;
-            }
+        // Task P6-3/P7-2: ClaimDisposalOnce() closes a race where two
+        // threads calling Dispose() on the same instance concurrently could
+        // both pass the getIsDisposedProperty() check and both run cleanup
+        // below — e.g. both decrementing instanceCount_ for what should be
+        // a single logical disposal. Only the call that wins
+        // ClaimDisposalOnce() runs cleanup; the loser waits for that
+        // cleanup to actually finish (Task P7-2) instead of proceeding
+        // immediately — see WaitForDisposalToComplete()'s doc comment for
+        // why racing ahead here was a real bug (a losing call flipping
+        // disposed_ true via the base Dispose(bool) below, while the
+        // winner's own Stop() call — invoked from the cleanup body below —
+        // was still relying on disposed_ being false).
+        if (!ClaimDisposalOnce())
+        {
+            WaitForDisposalToComplete();
+            return;
+        }
 
-            if (wasStarted)
-            {
-                Stop();
-            }
+        if (disposalTestHook_)
+        {
+            disposalTestHook_();
+        }
 
+        auto& subsystem = GetSubsystem();
+
+        // Task P6-3: started_ is only ever written under
+        // subsystem.mutex_, but was previously read here directly with
+        // no lock at all. Stop() re-locks subsystem.mutex_ internally
+        // (not a recursive mutex), so the read and the Stop() call
+        // itself cannot share one lock scope.
+        bool wasStarted;
+        {
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            wasStarted = started_;
+        }
+
+        if (wasStarted)
+        {
+            Stop();
+        }
+
+        {
             std::unique_lock<std::mutex> lock(subsystem.mutex_);
 
             // Stop() (above) already removed this instance from
@@ -329,6 +351,12 @@ namespace Microsoft::Devices::Sensors
             }
         }
 
+        // Task P7-2: only the winning caller (this point is only reached
+        // after ClaimDisposalOnce() returned true and cleanup above has
+        // fully finished) flips disposed_ to true and wakes any concurrent
+        // loser blocked in WaitForDisposalToComplete(). Runs after the
+        // subsystem.mutex_/global SDL mutex scope above has already
+        // released both locks.
         SensorBase<AccelerometerReading>::Dispose(disposing);
     }
 
@@ -560,6 +588,11 @@ namespace Microsoft::Devices::Sensors
     bool Accelerometer::GetSubsystemHeldForTesting() const
     {
         return subsystemHeld_;
+    }
+
+    void Accelerometer::SetDisposalCleanupHookForTesting(std::function<void()> hook)
+    {
+        disposalTestHook_ = std::move(hook);
     }
 
     GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")

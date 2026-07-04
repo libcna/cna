@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <thread>
 #include <vector>
 
@@ -71,6 +72,13 @@ namespace Microsoft::Devices::Sensors
          * Dispose(bool)'s wait predicate.
          */
         std::vector<std::thread::id> dispatchingThreadIds_;
+
+        /**
+         * Test-only hook (Task P7-2): see Accelerometer.hpp's identical
+         * member for the full rationale and single-threaded-setup safety
+         * argument.
+         */
+        std::function<void()> disposalTestHook_;
 
     private:
         /**
@@ -245,5 +253,13 @@ namespace Microsoft::Devices::Sensors
          * @return True if this instance currently holds the subsystem open.
          */
         NOXNA [[nodiscard]] bool GetSubsystemHeldForTesting() const;
+
+        /**
+         * @brief Test-only hook (Task P7-2): see Accelerometer.hpp's
+         * identical hook for the full rationale.
+         *
+         * @param hook Callback to invoke; pass an empty std::function to clear it.
+         */
+        NOXNA void SetDisposalCleanupHookForTesting(std::function<void()> hook);
     };
 } // namespace Microsoft::Devices::Sensors

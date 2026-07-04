@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <mutex>
 #include <type_traits>
 #include <utility>
@@ -49,6 +50,14 @@ namespace Microsoft::Devices::Sensors
          * deadlock.
          */
         mutable std::mutex mutex_;
+
+        /**
+         * Signaled whenever disposed_ transitions to true (Task P7-2).
+         * Lets a concurrent Dispose() call that lost ClaimDisposalOnce()
+         * wait for the winning call's cleanup to actually finish, instead
+         * of proceeding immediately — see WaitForDisposalToComplete().
+         */
+        std::condition_variable disposalFinishedCv_;
 
     protected:
         /**
@@ -97,8 +106,21 @@ namespace Microsoft::Devices::Sensors
          * must not make the object appear fully disposed before its own
          * cleanup has actually run.
          *
-         * @return True if this call is the first to claim disposal; false
-         * if another call already has (concurrently or previously).
+         * Task P7-2: the caller that receives `false` back (the "loser" of
+         * a concurrent Dispose() race) must not itself call the base
+         * Dispose(bool) below — doing so would flip disposed_ to true while
+         * the winning caller's own cleanup (which may itself call Stop(),
+         * guarded by the same getIsDisposedProperty() precondition) is
+         * still running, causing the winner's own Stop() call to observe
+         * disposed_ == true and throw ObjectDisposedException mid-cleanup —
+         * a real bug found by re-auditing this exact interaction (see
+         * plan_devices_phase7.md's Audit finding B). The loser must instead
+         * call WaitForDisposalToComplete() and then simply return.
+         *
+         * @return True if this call is the first to claim disposal (the
+         * caller must run cleanup, then call the base Dispose(bool)); false
+         * if another call already has, concurrently or previously (the
+         * caller must call WaitForDisposalToComplete() instead).
          */
         bool ClaimDisposalOnce()
         {
@@ -109,6 +131,34 @@ namespace Microsoft::Devices::Sensors
             }
             disposalClaimed_ = true;
             return true;
+        }
+
+        /**
+         * @brief Blocks until the winning concurrent Dispose() caller's
+         * cleanup has actually completed (Task P7-2).
+         *
+         * Only meaningful for a caller that just received `false` from
+         * ClaimDisposalOnce() — i.e. lost a race against another thread
+         * concurrently calling Dispose() on this same instance. Waits for
+         * disposed_ to become true (set by the base Dispose(bool) override,
+         * called only by the winning caller once its own cleanup finishes)
+         * rather than proceeding immediately, so a losing caller's
+         * Dispose(bool) override returns only after the object is *actually*
+         * fully disposed.
+         *
+         * Assumes the winning caller's cleanup path does not throw once it
+         * has claimed disposal — matching this codebase's existing
+         * assumption that Stop()/native-resource cleanup do not throw once
+         * their disposed-state precondition is satisfied. If that
+         * assumption were ever violated, a concurrent loser would wait here
+         * indefinitely; this mirrors the same no-timeout wait convention
+         * already used by Dispose(bool)'s own callbackFinished_ wait in
+         * Accelerometer/Gyroscope.
+         */
+        void WaitForDisposalToComplete()
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            disposalFinishedCv_.wait(lock, [this] { return disposed_; });
         }
 
         /**
@@ -205,12 +255,21 @@ namespace Microsoft::Devices::Sensors
          *
          * @note This mirrors the .NET pattern, but C++ destructor behavior is
          * not identical to .NET finalization.
+         *
+         * @note Task P7-2: derived overrides must call this (the base
+         * implementation) only from the winning side of a ClaimDisposalOnce()
+         * race — i.e. only after that caller's own cleanup has fully run.
+         * This notifies any concurrent loser blocked in
+         * WaitForDisposalToComplete().
          */
         virtual void Dispose(bool disposing)
         {
             (void)disposing;
-            std::lock_guard<std::mutex> lock(mutex_);
-            disposed_ = true;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                disposed_ = true;
+            }
+            disposalFinishedCv_.notify_all();
         }
 
     public:
@@ -342,12 +401,16 @@ namespace Microsoft::Devices::Sensors
          * the call into Dispose(true) below are not a single atomic
          * transaction, so both concurrent callers may reach Dispose(true)
          * without either seeing ObjectDisposedException here. Derived
-         * classes' own cleanup is still safe in that race (Task P6-3):
+         * classes' own cleanup is still safe in that race (Tasks P6-3/P7-2):
          * ClaimDisposalOnce() ensures only one of the two calls actually
          * runs the derived cleanup body (e.g. decrementing a shared
-         * instance counter once, not twice) — the other simply becomes a
-         * no-op Dispose(true) call instead of a clean second-call
-         * exception.
+         * instance counter once, not twice); the losing call blocks in
+         * WaitForDisposalToComplete() until the winner's cleanup has
+         * genuinely finished (Task P7-2 — previously the loser proceeded
+         * immediately and could flip disposed_ to true while the winner's
+         * own cleanup, e.g. its internal Stop() call, was still relying on
+         * disposed_ being false), then returns as a no-op rather than a
+         * clean second-call exception.
          */
         void Dispose() override
         {

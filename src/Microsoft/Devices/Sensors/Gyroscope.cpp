@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <utility>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_init.h>
@@ -194,23 +195,41 @@ namespace Microsoft::Devices::Sensors
 
     void Gyroscope::Dispose(bool disposing)
     {
-        // Task P6-3: see Accelerometer::Dispose(bool)'s identical fix for
-        // the full rationale.
-        if (!getIsDisposedProperty() && disposing && ClaimDisposalOnce())
+        if (!disposing)
         {
-            auto& subsystem = GetSubsystem();
+            SensorBase<GyroscopeReading>::Dispose(disposing);
+            return;
+        }
 
-            bool wasStarted;
-            {
-                std::lock_guard<std::mutex> lock(subsystem.mutex_);
-                wasStarted = started_;
-            }
+        // Task P6-3/P7-2: see Accelerometer::Dispose(bool)'s identical fix
+        // for the full rationale. The loser of a concurrent Dispose() race
+        // waits for the winner's cleanup to actually finish (Task P7-2)
+        // instead of proceeding immediately.
+        if (!ClaimDisposalOnce())
+        {
+            WaitForDisposalToComplete();
+            return;
+        }
 
-            if (wasStarted)
-            {
-                Stop();
-            }
+        if (disposalTestHook_)
+        {
+            disposalTestHook_();
+        }
 
+        auto& subsystem = GetSubsystem();
+
+        bool wasStarted;
+        {
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            wasStarted = started_;
+        }
+
+        if (wasStarted)
+        {
+            Stop();
+        }
+
+        {
             std::unique_lock<std::mutex> lock(subsystem.mutex_);
 
             // Stop() (above) already removed this instance from
@@ -266,6 +285,8 @@ namespace Microsoft::Devices::Sensors
             }
         }
 
+        // Task P7-2: only the winning caller reaches here, after cleanup
+        // above has fully finished and both locks have been released.
         SensorBase<GyroscopeReading>::Dispose(disposing);
     }
 
@@ -422,6 +443,11 @@ namespace Microsoft::Devices::Sensors
     bool Gyroscope::GetSubsystemHeldForTesting() const
     {
         return subsystemHeld_;
+    }
+
+    void Gyroscope::SetDisposalCleanupHookForTesting(std::function<void()> hook)
+    {
+        disposalTestHook_ = std::move(hook);
     }
 
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")

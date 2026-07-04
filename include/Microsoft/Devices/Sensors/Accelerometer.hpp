@@ -6,6 +6,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <thread>
 #include <vector>
 
@@ -80,6 +81,23 @@ namespace Microsoft::Devices::Sensors
          * Dispose(bool)'s wait predicate.
          */
         std::vector<std::thread::id> dispatchingThreadIds_;
+
+        /**
+         * Test-only hook (Task P7-2): if set, invoked once by Dispose(bool)
+         * immediately after this instance wins ClaimDisposalOnce(), before
+         * any cleanup runs. Lets a test force a controlled pause at that
+         * exact point (e.g. block until a second thread's concurrent
+         * Dispose() call has had a chance to run and confirm it correctly
+         * waits, rather than racing ahead) to deterministically reproduce a
+         * specific interleaving that real thread scheduling cannot be
+         * relied on to reproduce. Only ever set before any Dispose() call
+         * begins (in a test's single-threaded setup phase) and never
+         * written again afterward, so reading it here without a lock is
+         * safe: thread creation already establishes the necessary
+         * happens-before relationship between the test's setup and any
+         * thread that goes on to call Dispose().
+         */
+        std::function<void()> disposalTestHook_;
 
     private:
         /**
@@ -258,6 +276,17 @@ namespace Microsoft::Devices::Sensors
          * @return True if this instance currently holds the subsystem open.
          */
         NOXNA [[nodiscard]] bool GetSubsystemHeldForTesting() const;
+
+        /**
+         * @brief Test-only hook (Task P7-2): sets a callback invoked once by
+         * Dispose(bool), immediately after this instance wins
+         * ClaimDisposalOnce(), before any cleanup runs. See
+         * disposalTestHook_'s doc comment for the full rationale and its
+         * single-threaded-setup safety argument.
+         *
+         * @param hook Callback to invoke; pass an empty std::function to clear it.
+         */
+        NOXNA void SetDisposalCleanupHookForTesting(std::function<void()> hook);
 
         /**
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.

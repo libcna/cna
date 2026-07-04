@@ -73,15 +73,26 @@ namespace Microsoft::Devices::Sensors
 
     void Motion::Dispose(bool disposing)
     {
-        // Task P6-3: see Compass::Dispose(bool)'s identical fix for the
-        // full rationale.
-        if (!getIsDisposedProperty() && disposing && ClaimDisposalOnce())
+        if (!disposing)
         {
-            if (started_)
-            {
-                Stop();
-            }
+            SensorBase<MotionReading>::Dispose(disposing);
+            return;
+        }
 
+        // Task P6-3/P7-2: see Compass::Dispose(bool)'s identical fix for
+        // the full rationale.
+        if (!ClaimDisposalOnce())
+        {
+            WaitForDisposalToComplete();
+            return;
+        }
+
+        if (started_)
+        {
+            Stop();
+        }
+
+        {
             std::lock_guard<std::mutex> lock(instanceCountMutex_);
             --instanceCount_;
             if (instanceCount_ < 0)
