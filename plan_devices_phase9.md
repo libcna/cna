@@ -86,3 +86,42 @@ concrete bug").
 
 Each task gets its own `### Resolution` subsection below, plus its own commit where it
 produces a file change.
+
+## P9-2: Reproduce the normal Devices test matrix locally
+
+### Resolution
+
+**Blocker check:** `git submodule update --init --recursive` timed out after 2 minutes
+(likely a slow remote-verification network round-trip in this container, not a real
+problem) — but `git submodule status` immediately confirms all four submodules
+(`third_party/SDL`, `third_party/SDL_image`, `third_party/SDL_mixer`,
+`vendor/googletest`) are already initialized and checked out at their expected commits
+(no `-`/`+` prefix). This repo was never in a fresh-clone state this session — no actual
+blocker.
+
+**Exact commands run, in order, exact results:**
+```bash
+cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+# Configuring done, Generating done — clean, no errors
+
+cmake --build cmake-build-debug --target CNA -j"$(nproc)"
+# Built target CNA — clean
+
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
+# Built target CnaTests — clean
+
+./cmake-build-debug/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+# [==========] 226 tests from 17 test suites ran.
+# [  PASSED  ] 224 tests.
+# [  SKIPPED ] 2 tests: AccelerometerTests.GetCurrentValuePropertyDoesNotThrowWhenSupported,
+#              GyroscopeTests.GetCurrentValuePropertyDoesNotThrowWhenSupported
+```
+
+The 2 skips are expected and correct: both `GTEST_SKIP()` themselves specifically
+*because* this container has no real accelerometer/gyroscope hardware — that is the
+right outcome here, not a failure to investigate.
+
+**No environment blocker found.** Matches Phase 8's final state exactly (226/224/2
+skipped) — no drift, no regression, nothing to fix.
+
+**Remaining risk:** none — pure reproduction, no code touched.
