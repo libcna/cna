@@ -30,11 +30,13 @@ framework/runtime, not a game.
   `CP-18`/`XA-9`). **Fáze 9** — a user-directed "audio correctness hardening" pass, explicitly
   scoped by the user into 11 task groups (`P9-AUDIT`, `P9-LIFECYCLE`, `P9-STOP`, `P9-CATEGORY`,
   `P9-VALIDATION`, `P9-XACT`, `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`, `P9-DOCS`, `P9-BUILD`) with an
-  explicit implementation order — is **in progress**: `P9-LIFECYCLE-001..012` (12 of 15 items in
-  that group) are done as of 2026-07-04, closing a real bug (`Cue` state never naturally
-  reconciled after playback finished — see §5/§6). The rest of Fáze 9 (`P9-LIFECYCLE-013..015`,
-  and every other group) is **still open** — see §4/§5/§8, this is not a "no known open item"
-  branch state right now.
+  explicit implementation order — is **in progress**: all 15 of `P9-LIFECYCLE`'s items are now
+  done as of 2026-07-04 (`001..012` closing a real bug — `Cue` state never naturally reconciled
+  after playback finished; `013..015` an audit of disposed-state behavior that found and fixed a
+  second real bug — `GetVariable()`/`SetVariable()` had no disposed guard at all — see §5/§6).
+  Every other Fáze 9 group (`P9-CATEGORY`, `P9-VALIDATION`, `P9-XACT`, `P9-3D`, `P9-HARDWARE`,
+  `P9-DYNAMIC`, `P9-DOCS`, `P9-BUILD`, plus `P9-AUDIT` itself) is **still open** — see §4/§5/§8,
+  this is not a "no known open item" branch state right now.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is
   parsed by a hand-written `XactParser` and mixed through SDL_mixer. Consequences: 3D HRTF and
@@ -58,23 +60,22 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean (uncommitted changes on top of `b6557a1`, `HEAD` at last commit). EasyGL
+- **Build:** clean (uncommitted changes on top of `9435da9`, `HEAD` at last commit). EasyGL
   backend, `SOUND_ENABLED` on, SDL3_mixer linked. Verified immediately before writing this update;
   also rebuilt `cna_demo_sound`/`cna_demo_2d` (the example targets, `CNA_BUILD_EXAMPLES=ON` by
   default) — no failures.
-- **Tests:** `CnaTests` **2073 / 2073 pass** (2064 at the last handoff snapshot, +9 net new for
-  Fáze 9's `P9-LIFECYCLE-001..012`: 8 new regression tests plus a moved/shared
-  `SoundBankTestAccess.hpp`). No known regressions. Also verified clean under a full
-  ASan+UBSan+LeakSanitizer build (see §7).
+- **Tests:** `CnaTests` **2078 / 2078 pass** (2064 at the last handoff snapshot, +14 net new across
+  Fáze 9's `P9-LIFECYCLE-001..015`: 13 new regression tests plus a moved/shared
+  `SoundBankTestAccess.hpp`). No known regressions.
   Re-run to check for drift: `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
 - **CLI/tools/apps:** none in the framework itself. `cna_demo_sound`/`cna_demo_2d` aren't part of
   `CnaTests` and are easy to forget when just running `--target CnaTests` — see §7 for how to
   rebuild them; both still build clean as of this update.
-- **Fáze 9 (started 2026-07-04, user-directed "audio correctness hardening" pass): `P9-LIFECYCLE-001..012`
-  done (12/15 of that one group; 3 groups deferred: `013..015`), the other 10 task groups untouched.**
-  This is the user's own scoped plan (not a repeat of the Fáze 7/8 "fresh full audit against FNA"
-  pattern) — see `plan_audio.md`'s new "Phase 9" section for the complete task list. Priority bug
-  fixed first, as explicitly directed:
+- **Fáze 9 (started 2026-07-04, user-directed "audio correctness hardening" pass): `P9-LIFECYCLE`
+  is now fully closed (15/15), the other 10 task groups untouched.** This is the user's own scoped
+  plan (not a repeat of the Fáze 7/8 "fresh full audit against FNA" pattern) — see `plan_audio.md`'s
+  new "Phase 9" section for the complete task list. Priority bug fixed first, as explicitly
+  directed:
   - **The bug:** `Cue::IsPlaying`/`IsPaused`/`IsStopped` were a cached `state_` enum that only ever
     changed on an explicit `Play()`/`Pause()`/`Resume()`/`Stop()` call — a cue whose sound finished
     playing on its own (no loop, nobody called `Stop()`) stayed reported as `Playing` **forever**.
@@ -92,18 +93,32 @@ framework/runtime, not a game.
     fire-and-forget list (mirrors FNA's `Update()` → `FACTAudioEngine_DoWork`, which is what
     destroys a `managed` cue once `FACT_STATE_STOPPED` — see `FACT_internal.c` line ~1732), instead
     of only sweeping lazily on that bank's next `PlayCue()` call.
-  - **Found but deliberately not fixed this pass (`P9-LIFECYCLE-013`, documented, not implemented):**
-    real FACT lets `IsPlaying` and `IsPaused` be `true` simultaneously (pausing never clears the
+  - **`P9-LIFECYCLE-013..015` (disposed-state audit):** read `FACTCue_Pause`/`FACTCue_Stop`/
+    `FACTCue_GetVariableIndex` (`FACT.c`) line-by-line against `Cue::Pause()`/`Resume()`/
+    `StopInternal()`/`GetVariable()`/`SetVariable()`. `Pause()`/`Resume()`/`Stop()` already matched
+    FNA exactly for Disposed/Stopped/Playing/Paused (silent no-op on a disposed cue, matching
+    FACT's own `pCue == NULL` check) — no fix needed, just 3 new tests locking that in.
+    `GetVariable()`/`SetVariable()` had a real bug: **no disposed guard at all**, unlike `Play()`/
+    `Apply3D()` in the same class — working only because a disposed cue's `bank_`/`engine_` raw
+    pointers happened to still be valid, not because of any real contract. (Checked what real FNA
+    does: `FACTCue_GetVariableIndex` dereferences `pCue->parentBank` **before** its null check, so
+    calling this on a disposed FNA `Cue` would crash natively — an unintentional FAudio bug, not
+    something worth reproducing.) Fixed: both now throw `ObjectDisposedException` first, matching
+    `Play()`/`Apply3D()`'s own precedent in this class.
+  - **Found but deliberately not fixed (`P9-LIFECYCLE-013`, documented, not implemented):** real
+    FACT lets `IsPlaying` and `IsPaused` be `true` simultaneously (pausing never clears the
     `PLAYING` bit) — CNA's `Cue::State` enum is mutually exclusive by construction. Fixing this
     would ripple into `AudioEngine::PauseCategoryInternal`/`ResumeCategoryInternal` and a number of
     already-passing tests that assume disjoint `IsPlaying`/`IsPaused` — flagged for its own future
     pass, not fixed as a drive-by here.
-  - 8 new tests (natural Playing→Stopped transition, `SoundBank`/`WaveBank` `IsInUse` after natural
-    completion, `AudioEngine::Update()` sweep, `Play()`/`Pause()` no-op guards, duplicate-registry
-    regression) all verified via `git stash` to fail against the pre-fix code (except the
-    duplicate-registry one, which is a defense-in-depth regression guard, not a bug reproduction —
-    see `plan_audio.md`'s `P9-LIFECYCLE-012` note for why). Full detail with FNA/FAudio line
-    citations: `plan_audio.md`'s new "Phase 9" section.
+  - 13 new tests total (natural Playing→Stopped transition, `SoundBank`/`WaveBank` `IsInUse` after
+    natural completion, `AudioEngine::Update()` sweep, `Play()`/`Pause()` no-op guards,
+    duplicate-registry regression, disposed-state `GetVariable`/`SetVariable`/`Pause`/`Resume`/
+    `Stop`) all verified via `git stash` to fail against the pre-fix code where a real bug existed
+    (the duplicate-registry test and the 3 Pause/Resume/Stop-after-Dispose tests are regression
+    guards locking in already-correct behavior, not bug reproductions — see `plan_audio.md`'s
+    `P9-LIFECYCLE-012`/`014` notes for why). Full detail with FNA/FAudio line citations:
+    `plan_audio.md`'s new "Phase 9" section.
 - **Fáze 8 audit (found 2026-07-04, closed the same day): 25/25 resolved.** After the pre-existing
   backlog (below) hit zero, the user asked for a fresh second audit, run with the same
   4-parallel-agent methodology as Fáze 7. All 25 findings (`CP-15`..`CP-23`, `XA-6`..`XA-13`,
@@ -197,12 +212,21 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (this branch, newest first)
 
-- *(uncommitted)* — **Fáze 9 kickoff + `P9-LIFECYCLE-001..012`**: added `plan_audio.md`'s new
-  "Phase 9" section (11 task groups, user-specified verbatim) and closed 12 of `P9-LIFECYCLE`'s 15
-  items — see §2 for the full summary. Files touched: `Cue.hpp`/`.cpp` (`ReconcileState()`, `Play()`/
-  `Pause()` guards), `SoundBank.hpp`/`.cpp` (`SweepFireAndForget()` factored out of
-  `PlayCueInternal`, new `AudioEngine` friend), `AudioEngine.hpp`/`.cpp` (`Update()` now sweeps
-  every registered `SoundBank`, `RegisterCue()` dedup guard, new test-only
+- *(uncommitted)* — **`P9-LIFECYCLE-013..015`**: disposed-state audit for `Cue::Pause()`/
+  `Resume()`/`Stop()`/`GetVariable()`/`SetVariable()` against `FACT.c`. `Pause`/`Resume`/`Stop`
+  already matched FNA (silent no-op when disposed) — locked in with 3 new tests. `GetVariable`/
+  `SetVariable` had no disposed guard at all (unlike `Play()`/`Apply3D()` in the same class) — now
+  throw `ObjectDisposedException` first, matching that same-class precedent instead of the native
+  crash real FNA/FAudio would hit here (`FACTCue_GetVariableIndex` dereferences `pCue->parentBank`
+  before its null check). 5 new tests total, `git stash`-verified (the 2 throw-tests fail against
+  pre-fix code; the 3 no-op-lock tests pass either way, confirming they're not bug reproductions).
+  `P9-LIFECYCLE` group is now fully closed (15/15). See §2/§5/`plan_audio.md`'s Phase 9 section.
+- `9435da9`/`eb7149e`/`5f3e5d0` — **Fáze 9 kickoff + `P9-LIFECYCLE-001..012`**: added
+  `plan_audio.md`'s new "Phase 9" section (11 task groups, user-specified verbatim) and closed 12
+  of `P9-LIFECYCLE`'s 15 items — see §2 for the full summary. Files touched: `Cue.hpp`/`.cpp`
+  (`ReconcileState()`, `Play()`/`Pause()` guards), `SoundBank.hpp`/`.cpp` (`SweepFireAndForget()`
+  factored out of `PlayCueInternal`, new `AudioEngine` friend), `AudioEngine.hpp`/`.cpp`
+  (`Update()` now sweeps every registered `SoundBank`, `RegisterCue()` dedup guard, new test-only
   `ActiveCueCountForTest()`), plus `CueTests.cpp`/`SoundBankTests.cpp`/`WaveBankTests.cpp`/
   `AudioEngineTests.cpp` (8 new tests) and two new shared test-access headers
   (`SoundBankTestAccess.hpp` — extracted from `SoundBankTests.cpp`'s inline struct so
@@ -404,14 +428,14 @@ findings, fixed in an earlier session).
 ## 4. Current blocker / main problem
 
 **No build- or test-breaking blocker.** No failing command, no failing test. The build is clean
-and all 2073 tests pass. `cna_demo_sound`/`cna_demo_2d` also rebuilt clean. Changes are
-**uncommitted** on top of `b6557a1` (`HEAD`) — see §8 for the suggested commit boundary.
+and all 2078 tests pass. `cna_demo_sound`/`cna_demo_2d` also rebuilt clean. Changes are
+**uncommitted** on top of `9435da9` (`HEAD`) — see §8 for the suggested commit boundary.
 
-**Fáze 7, the pre-existing older backlog, and Fáze 8 are fully closed. Fáze 9 (user-directed
-hardening pass, started 2026-07-04) is NOT fully closed — `P9-LIFECYCLE-001..012` are done, but
-`P9-LIFECYCLE-013..015` and every other one of Fáze 9's 10 task groups
+**Fáze 7, the pre-existing older backlog, and Fáze 8 are fully closed. `P9-LIFECYCLE` (all 15
+items) is now also fully closed. Fáze 9 as a whole (user-directed hardening pass, started
+2026-07-04) is still NOT fully closed** — every other one of Fáze 9's 10 task groups
 (`P9-STOP`/`P9-CATEGORY`/`P9-VALIDATION`/`P9-XACT`/`P9-3D`/`P9-HARDWARE`/`P9-DYNAMIC`/`P9-DOCS`/
-`P9-BUILD`, plus `P9-AUDIT` itself) are still open.** This is real, tracked open work — not a
+`P9-BUILD`, plus `P9-AUDIT` itself) are still open. This is real, tracked open work — not a
 "no known open item" state like the prior handoff. See `plan_audio.md`'s "Phase 9" section for
 the full unchecked list, and §8 below for the user-specified implementation order to continue in.
 
@@ -431,6 +455,7 @@ it may just need a retry once that unrelated work lands, or a small compliance p
 |---|---|---|
 | **Fixed 2026-07-04** | `Cue::IsPlaying`/`IsPaused`/`IsStopped` never reconciled after a sound finished playing naturally (no loop, no explicit `Stop()`) — stayed `Playing` forever, keeping `SoundBank`/`WaveBank` `IsInUse` stuck `true` and fire-and-forget cues alive for the full 5-minute safety net | `P9-LIFECYCLE-001..009` |
 | **Fixed 2026-07-04** | `Cue::Play()` didn't reject being called again on an already Playing/Paused/Stopped cue — could spawn duplicate overlapping `SoundEffectInstance`s and duplicate `AudioEngine` registry entries | `P9-LIFECYCLE-010`, `011` |
+| **Fixed 2026-07-04** | `Cue::GetVariable()`/`SetVariable()` had no disposed guard at all (unlike `Play()`/`Apply3D()` in the same class) — now throw `ObjectDisposedException` first | `P9-LIFECYCLE-015` |
 | **Open (Fáze 9)** | Real FACT/FNA lets `IsPlaying` and `IsPaused` be `true` simultaneously (pausing never clears the `PLAYING` bit); CNA's `Cue::State` enum keeps them mutually exclusive — found during the audit above, not yet fixed (would ripple into `AudioEngine::PauseCategoryInternal`/`ResumeCategoryInternal` and existing tests) | `P9-LIFECYCLE-013` |
 | **Fixed 2026-07-04** | `.xwb` entry `nChannels` no longer read with a spurious `+1` — matches raw on-disk value on every entry | `IN-7` |
 | **Fixed 2026-07-04** | COMPLEX sound + RPC/DSP flag: per-track metadata now parsed after the RPC/DSP block, matching FACT's real order | `IN-8` |
@@ -469,10 +494,10 @@ it may just need a retry once that unrelated work lands, or a small compliance p
 All Fáze 0–7 findings (`T-1A`–`T-1H`, `T-2A`–`T-2G`, `T-3A`–`T-3E`, `T-5A`–`T-5O`, `T-4A`, `T-6A`,
 `T-6B`, and all 30 of `CP-1`..`CP-14`/`XA-1`..`XA-5`/`IN-1`..`IN-6`/`MC-1`..`MC-5`) are fixed, and so
 are all 25 of Fáze 8's findings (22 fixed, 3 closed as documented deviations above). **Fáze 9 is
-partial**: `P9-LIFECYCLE-001..012` fixed/tested as above; `P9-LIFECYCLE-013..015` and all of
-`P9-STOP`/`P9-CATEGORY`/`P9-VALIDATION`/`P9-XACT`/`P9-3D`/`P9-HARDWARE`/`P9-DYNAMIC`/`P9-DOCS`/
-`P9-BUILD` remain open — see `plan_audio.md`'s "Phase 9" section for the full checked/unchecked
-list with verification notes.
+partial**: all 15 of `P9-LIFECYCLE` fixed/tested as above; `P9-STOP`/`P9-CATEGORY`/`P9-VALIDATION`/
+`P9-XACT`/`P9-3D`/`P9-HARDWARE`/`P9-DYNAMIC`/`P9-DOCS`/`P9-BUILD` (plus `P9-AUDIT` itself) remain
+open — see `plan_audio.md`'s "Phase 9" section for the full checked/unchecked list with
+verification notes.
 
 ---
 
@@ -583,6 +608,14 @@ Microphone (capture)
   and `IsPaused` are always disjoint here. Fixing this would touch `AudioEngine::
   PauseCategoryInternal`/`ResumeCategoryInternal`'s `IsPlaying`/`IsPaused` checks and a number of
   existing tests — don't fix as a drive-by; it's queued as its own Phase 9 item.
+- **`Cue::GetVariable()`/`SetVariable()` now throw `ObjectDisposedException` first**
+  (`P9-LIFECYCLE-015`, fixed 2026-07-04), matching `Play()`/`Apply3D()`'s own precedent in this
+  class. Don't remove this guard on the theory that `bank_`/`engine_` "still work" post-dispose —
+  that was incidental, not a contract, and real FNA/FAudio would crash natively here anyway
+  (`FACTCue_GetVariableIndex` dereferences `pCue->parentBank` before its null check). `Pause()`/
+  `Resume()`/`Stop()` deliberately do NOT get the same guard — they already matched FNA's real
+  silent-no-op-when-disposed behavior; don't add a throw there, that would be a regression away
+  from FNA.
 - **`Cue::Play`'s variation selection is a weighted lottery** over `weightMin`/`weightMax` for
   wave/sound/compact_wave tables, matching FAudio's `get_active_variation_index` exactly (`XA-3`).
   Interactive-type (3) tables fall back to a uniform pick (documented deviation, `CHECKLIST.md`) —
@@ -697,33 +730,33 @@ grep -n "<symbol>" /rv/data/library/github.com/FNA-XNA/FAudio/src/FACT_internal.
 **Fáze 9 is a real, user-specified, still-open task list — continue it, don't invent a new one.**
 The user gave an explicit implementation order; pick up exactly where it left off:
 
-1. **`P9-LIFECYCLE-013..015`** (deferred from this session, same group): audit `Cue::Pause()`/
-   `Resume()`/`Stop()` and `GetVariable()`/`SetVariable()` across Stopped/Playing/Paused/Disposed
-   states. `013` already has a documented starting point — the `IsPlaying`+`IsPaused` coexistence
-   deviation found this session (§5/§6) — decide whether to fix it or formally document it in
-   `CHECKLIST.md` as accepted (consider asking the user, since fixing it touches
-   `PauseCategoryInternal`/`ResumeCategoryInternal` and existing tests, similar in shape to the
-   Fáze 8 `CP-19`/`CP-18`/`XA-9` "touches shared infrastructure" decisions).
-2. **`P9-CATEGORY-001..004`** next per the user's specified order: fix `AudioCategory` operations
+**`P9-LIFECYCLE` (all 15 items) is now fully closed as of 2026-07-04.** The one thing it left
+behind is a genuine open decision, not a task: the `IsPlaying`+`IsPaused` coexistence deviation
+(§5/§6) — fixing it would touch `PauseCategoryInternal`/`ResumeCategoryInternal` and existing
+tests, similar in shape to the Fáze 8 `CP-19`/`CP-18`/`XA-9` "touches shared infrastructure"
+decisions, so ask the user before implementing rather than picking a side. It is NOT blocking
+anything else in Fáze 9.
+
+1. **`P9-CATEGORY-001..004`** next per the user's specified order: fix `AudioCategory` operations
    to snapshot `activeCues` before iterating (currently iterates `AudioEngine::activeCues` live in
    `PauseCategoryInternal`/`ResumeCategoryInternal`/`StopCategoryInternal`/
    `SetCategoryVolumeInternal` — check whether any of those four can mutate the vector mid-iteration
    before assuming this is purely hypothetical), then regression tests for multi-cue pause/resume/
    stop/volume.
-3. **`P9-VALIDATION-001..013`** (`SoundEffect`/`DynamicSoundEffectInstance` constructor and
+2. **`P9-VALIDATION-001..013`** (`SoundEffect`/`DynamicSoundEffectInstance` constructor and
    post-Dispose argument validation) after that, then **`P9-DOCS-001..007`**, then
    **`P9-BUILD-001..007`** — this is the user's specified order, don't reshuffle it without asking.
-4. **`P9-STOP`, `P9-XACT`, `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`** come last per the user's own
+3. **`P9-STOP`, `P9-XACT`, `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`** come last per the user's own
    ordering — don't jump ahead to these before the groups above are done.
-5. **`P9-AUDIT-001..005`** (the fresh-read audit tasks) were never in the user's explicit
+4. **`P9-AUDIT-001..005`** (the fresh-read audit tasks) were never in the user's explicit
    implementation order and remain unchecked; the per-file reading needed to fix `P9-LIFECYCLE`
    happened ad hoc but the formal audit deliverable (comparison write-up) was never produced —
    pick this up if asked, or fold it into whichever group is being worked when a stale-doc
    inconsistency is found.
 
-**Commit boundary:** everything in this handoff (Phase 9 section + `P9-LIFECYCLE-001..012` fix +
-this `NEXT.md` update) is currently uncommitted on top of `b6557a1` — commit before starting
-`013..015` so the lifecycle fix isn't bundled with unrelated work.
+**Commit boundary:** everything in this handoff (`P9-LIFECYCLE-013..015` fix + this `NEXT.md`
+update) is currently uncommitted on top of `9435da9` — commit before starting `P9-CATEGORY` so
+this fix isn't bundled with unrelated work.
 
 ---
 
@@ -753,27 +786,30 @@ this `NEXT.md` update) is currently uncommitted on top of `b6557a1` — commit b
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, then plan_audio.md if you need file-by-file history. Fáze 7 (30 items) and
-Fáze 8 (25 items) are fully done. Fáze 9 (user-directed hardening pass) is IN PROGRESS:
-P9-LIFECYCLE-001..012 are done (2026-07-04); everything else in Fáze 9 is open -- see §4/§8.
-This is real open work, don't treat this branch as "nothing left to do."
+Read NEXT.md first, then plan_audio.md if you need file-by-file history. Fáze 7 (30 items),
+Fáze 8 (25 items), and now all 15 of P9-LIFECYCLE are fully done (2026-07-04). Fáze 9 as a whole
+is still IN PROGRESS: P9-CATEGORY/P9-VALIDATION/P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC/P9-DOCS/
+P9-BUILD/P9-AUDIT are all still open -- see §4/§8. This is real open work, don't treat this
+branch as "nothing left to do."
 
-1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2073/2073 tests pass) --
+1. Confirm the current build/test state matches NEXT.md §2 (build clean, 2078/2078 tests pass) --
    rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests to check for drift since
    this was last updated. Also rebuild cna_demo_sound/cna_demo_2d if you touch anything on the
    Audio public API surface -- they're not part of CnaTests and easy to forget.
-2. Commit the uncommitted Phase 9 + P9-LIFECYCLE-001..012 work first (see §8's "Commit boundary")
-   if it isn't already committed, so the next group starts from a clean base.
+2. Commit the uncommitted P9-LIFECYCLE-013..015 work first (see §8's "Commit boundary") if it
+   isn't already committed, so the next group starts from a clean base.
 3. Continue Fáze 9 in the order specified in plan_audio.md's "Phase 9" section / this file's §8:
-   P9-LIFECYCLE-013..015 next, then P9-CATEGORY-001..004, then P9-VALIDATION, P9-DOCS, P9-BUILD,
-   then P9-STOP/P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC last. Don't invent a "Fáze 10" full re-audit
-   on your own initiative (see §9) -- Fáze 9's own task list is not exhausted yet.
+   P9-CATEGORY-001..004 next, then P9-VALIDATION, P9-DOCS, P9-BUILD, then
+   P9-STOP/P9-XACT/P9-3D/P9-HARDWARE/P9-DYNAMIC last. Don't invent a "Fáze 10" full re-audit on
+   your own initiative (see §9) -- Fáze 9's own task list is not exhausted yet. The one leftover
+   decision from P9-LIFECYCLE (IsPlaying+IsPaused coexistence, §5/§6) is NOT blocking -- ask the
+   user before implementing it, don't let it stall P9-CATEGORY.
 4. Follow the established git-stash regression-verification pattern (see NEXT.md §7) for any
    behavioral fix -- stash it, confirm the new test fails against the pre-fix code, restore,
    confirm green. Run ASan+LeakSanitizer too if the change touches memory lifetime, ownership, or
-   cross-thread state. For any "implement vs. document" framed decision (e.g. P9-LIFECYCLE-013's
-   IsPlaying+IsPaused coexistence gap), ask the user rather than assuming -- the established
-   pattern is "implement unless it risks destabilizing already-shipped shared infrastructure."
+   cross-thread state. For any "implement vs. document" framed decision, ask the user rather than
+   assuming -- the established pattern is "implement unless it risks destabilizing already-shipped
+   shared infrastructure."
 
 After finishing a task, check its checkbox in plan_audio.md, update NEXT.md (status, recent
 changes, next task), and commit.
