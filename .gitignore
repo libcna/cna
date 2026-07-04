@@ -9,5 +9,8 @@ cmake-build-easygl/*
 .sdl-prebuilt-emscripten/
 cmake-build-bgfx/*
 cmake-build-android/*
+cmake-build-devices-asan/*
+cmake-build-devices-tsan/*
+cmake-build-devices-ubsan/*
 
 

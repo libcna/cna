@@ -160,3 +160,80 @@ cross-compilation fundamentally requires macOS/Xcode to obtain and run its own
 toolchain — not fixable by installing a package in a Linux container. Re-check before
 assuming this is still true in a future session (environments can change, as Android's
 did), but don't expect it to resolve the way Android's did.
+
+## 6. Sanitizer builds (Task P8-4)
+
+**A single green `ctest` run proves neither memory safety nor thread safety.** Section 2
+already covers stress-looping a plain build to surface bugs that only show up under real
+timing pressure (Task P6-1's addendum, Task P7-3). Sanitizers are the complementary
+tool: they catch a real bug on the *first* triggering execution, rather than requiring
+dozens of loop iterations to get lucky. Both are worth using — a stress loop under a
+sanitizer is stronger evidence than either alone.
+
+`CMakePresets.json` has three presets, each verified working in this session
+(`plan_devices_phase8.md` Task P8-4 — configured, built, and run against the full
+Devices-only test suite, not just written and assumed):
+
+```bash
+# AddressSanitizer — catches use-after-free, heap corruption, buffer overflows.
+# Does NOT catch data races; use ThreadSanitizer for that.
+cmake --preset devices-asan
+cmake --build --preset devices-asan
+./cmake-build-devices-asan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+
+# ThreadSanitizer — catches data races. This is the one that actually validates
+# Microsoft::Devices's own locking discipline.
+cmake --preset devices-tsan
+cmake --build --preset devices-tsan
+./cmake-build-devices-tsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+
+# UndefinedBehaviorSanitizer — catches signed overflow, misaligned access,
+# invalid enum values, null-pointer-arithmetic UB, etc.
+cmake --preset devices-ubsan
+cmake --build --preset devices-ubsan
+./cmake-build-devices-ubsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+```
+
+**Actual results as of `plan_devices_phase8.md` (2026-07-04), all three presets
+configured, built, and run against this exact filter** (224 tests, 222 passed, 2
+expected skips — this direct `--gtest_filter` glob form matches a few more suites than
+Section 2's `ctest -R` regex form catches by name; both cover the same
+`Microsoft::Devices` scope, the exact count differs slightly by matching mechanics, not
+by coverage):
+- **ASan:** clean (0 issues) with the Task P8-1 fix in place. Used during Task P8-1 to
+  get a *reliable* answer on a use-after-free that a plain (non-sanitized) run did not
+  reproduce — heap-use-after-free bugs do not reliably crash without instrumentation,
+  since freed small allocations often aren't immediately overwritten; ASan reported a
+  definitive, exact-line `heap-use-after-free` when that fix was temporarily reverted.
+- **TSan:** first run surfaced **two** distinct races, not one. The first was the
+  expected pre-existing `sharp-runtime` finding (see below). The **second was real, and
+  new**: `SensorBaseTests.cpp`'s own `TestSensorBase` fixture incremented a plain
+  `int timeBetweenUpdatesChangedCount` from its `TimeBetweenUpdatesChanged` handler —
+  which fires *outside* `mutex_` by design (never hold the lock while raising an event)
+  — so Task P8-2's own new `ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash` test
+  (the first test in this codebase's history to actually drive concurrent value changes
+  on `TimeBetweenUpdates`) raced on it from multiple threads. This is a test-fixture-only
+  race, not a `Microsoft::Devices` production-code bug, but real and worth fixing
+  properly: changed to `std::atomic<int>`, confirmed clean on the next TSan run. **This
+  is exactly the point of actually running the sanitizer instead of just writing the
+  preset** — a plain, unsanitized run of the same test never showed any symptom.
+  After that fix, the *only* remaining finding (41 reports, all the identical location)
+  is the pre-existing, out-of-scope `sharp-runtime` race:
+  `System::TimeSpan::TimeSpan(const TimeSpan&)` incrementing an unsynchronized global
+  `copy_count` debug/instrumentation counter at `sharp-runtime/src/System/TimeSpan.cpp:55`.
+  This is a `sharp-runtime` issue (a separate repo with its own `CLAUDE.md`/git history —
+  see `NEXT.md`'s "do not fix bugs discovered in sharp-runtime..." rule), not a
+  `Microsoft::Devices` bug. **If a future TSan run reports anything other than this one
+  `TimeSpan.cpp:55` finding, treat it as a real, new bug worth investigating** — don't
+  assume it's "just that same old sharp-runtime thing" without checking the actual
+  file/line, the same mistake this task's first run would have been if the second race
+  had been waved away without reading it.
+- **UBSan:** clean (0 issues).
+
+**Throwaway, non-preset builds used during development** (e.g.
+`/tmp/cmake-build-asan-check`) are equally valid if you'd rather not create a build
+directory inside the repo — pass the same `CMAKE_CXX_FLAGS`/`CMAKE_EXE_LINKER_FLAGS`
+directly to a plain `cmake -S . -B <dir>` invocation instead of using the preset. Either
+way, remember these are Debug, unoptimized-ish (`-O0`/`-O1`), instrumented builds —
+useful for correctness verification, not for measuring performance, and slower to
+build/run than a plain `cmake-build-debug`.

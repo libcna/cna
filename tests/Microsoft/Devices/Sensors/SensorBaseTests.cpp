@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <atomic>
 #include <string>
 #include <thread>
 #include <vector>
@@ -56,6 +57,15 @@ namespace
     public:
         TestSensorBase()
         {
+            // Task P8-4: TimeBetweenUpdatesChanged fires outside SensorBase's
+            // own mutex_ (correctly — see setTimeBetweenUpdatesProperty()'s
+            // doc comment), so this counter can be incremented from more
+            // than one thread concurrently once a test drives concurrent
+            // setters that actually change the value (as
+            // ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash,
+            // below, does) — confirmed as a real (if test-fixture-only, not
+            // production-code) race by a ThreadSanitizer run during Task
+            // P8-4. std::atomic closes it without needing its own mutex.
             TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
             {
                 ++timeBetweenUpdatesChangedCount;
@@ -91,7 +101,7 @@ namespace
             setIsSupportedProperty(value);
         }
 
-        int timeBetweenUpdatesChangedCount = 0;
+        std::atomic<int> timeBetweenUpdatesChangedCount{0};
     };
 } // namespace
 

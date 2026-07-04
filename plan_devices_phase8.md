@@ -414,3 +414,77 @@ cd .. && ctest --output-on-failure
 
 **Remaining risk:** negligible. No behavior change; the added parameter is a
 compile-time-only safety net verified to actually reject the exact misuse it targets.
+
+## P8-4: Sanitizer/stress test documentation and presets
+
+### Resolution
+
+**Files changed:**
+- `CMakePresets.json` — added three new, purely additive configure/build preset pairs:
+  `devices-asan`, `devices-tsan`, `devices-ubsan` (EASYGL backend, `CNA_BUILD_TESTS=ON`,
+  `CMAKE_CXX_FLAGS`/`CMAKE_EXE_LINKER_FLAGS` set to the respective `-fsanitize=...`
+  flags). No existing preset touched, no `CMakeLists.txt` change needed — sanitizer
+  flags are supplied entirely via the standard CMake cache variables.
+- `.gitignore` — added the three new preset-generated build directories, matching the
+  existing per-directory listing convention.
+- `docs/devices-build.md` — new Section 6 documenting all three presets, the exact
+  commands, and the *actual* results of running them (not hypothetical/written-but-
+  untested commands).
+- `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` — see the real finding below;
+  `TestSensorBase::timeBetweenUpdatesChangedCount` changed from a plain `int` to
+  `std::atomic<int>`.
+
+**A real bug found by actually running the sanitizers, not just writing the presets:**
+the first ThreadSanitizer run against the full Devices suite surfaced *two* distinct
+races, not the one expected pre-existing `sharp-runtime` finding. The second was new and
+real: `SensorBaseTests.cpp`'s own `TestSensorBase` test fixture (added in Task P6-5,
+extended in Task P8-2) increments `timeBetweenUpdatesChangedCount` from its
+`TimeBetweenUpdatesChanged` handler, which fires *outside* `SensorBase::mutex_` by
+design (Task P8-2 was careful to never hold the lock while raising the event) — so Task
+P8-2's own new `ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash` test (the first
+test ever to drive concurrent value changes on `TimeBetweenUpdates`, and therefore the
+first to actually fire this event from more than one thread) raced on that plain `int`.
+This is a test-fixture-only bug, not a `Microsoft::Devices` production-code bug — but
+real, and a good demonstration of exactly why this task exists: a plain, unsanitized run
+of the exact same test (already run repeatedly during Task P8-2) never showed any
+symptom at all. Fixed with `std::atomic<int>`; confirmed clean on the next TSan run (the
+only remaining finding is the pre-existing `sharp-runtime` one, unchanged).
+
+**Actual, not hypothetical, sanitizer results** (all three presets configured, built,
+and run against the full Devices-only suite — 224 tests, 222 passed, 2 expected skips):
+- **ASan:** clean. Already used during Task P8-1 to get a reliable answer on a
+  use-after-free a plain run did not reproduce.
+- **TSan:** one real bug found and fixed (above); after that fix, only the pre-existing,
+  out-of-scope `sharp-runtime` `TimeSpan::copy_count` race remains (see Task P8-2's
+  Resolution for that finding's own detail).
+- **UBSan:** clean.
+
+**Tests added:** none — `ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash` already
+existed from Task P8-2; this task fixed a race *within* that test's own fixture, not a
+production code path.
+
+**Commands run:**
+```bash
+cmake --preset devices-asan && cmake --build --preset devices-asan
+cmake --preset devices-tsan && cmake --build --preset devices-tsan
+cmake --preset devices-ubsan && cmake --build --preset devices-ubsan
+# all three configure and build cleanly
+
+FILTER="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+./cmake-build-devices-asan/CnaTests --gtest_filter="$FILTER"    # 224/222, clean
+./cmake-build-devices-tsan/CnaTests --gtest_filter="$FILTER"    # 224/222, 1 pre-existing sharp-runtime race only (after the atomic fix)
+./cmake-build-devices-ubsan/CnaTests --gtest_filter="$FILTER"   # 224/222, clean
+
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"  # plain build, clean
+cd cmake-build-debug && ctest --output-on-failure
+# 2047/2049 passed; the standard 2 pre-existing EasyGL failures.
+```
+(The three preset-generated build directories were deleted after verification to avoid
+leaving large build artifacts in the working tree — they regenerate identically from
+the presets any time they're needed again.)
+
+**Remaining risk:** low. All three sanitizer configurations are now proven working
+(not just written), and the one real bug this task's own verification step surfaced was
+fixed and re-verified. The pre-existing `sharp-runtime` TSan finding is explicitly
+documented so a future session doesn't need to re-discover it, and so a *genuinely new*
+finding isn't mistakenly waved away as "probably that same old thing."

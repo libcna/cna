@@ -16,6 +16,45 @@
         "EASYGL_BUILD_EXAMPLES":   "OFF",
         "EASYGL_BUILD_TESTS":      "OFF"
       }
+    },
+    {
+      "name": "devices-asan",
+      "displayName": "AddressSanitizer (Microsoft::Devices hardening, EASYGL)",
+      "description": "Debug + EASYGL + tests, instrumented with AddressSanitizer. Verified working in plan_devices_phase8.md Task P8-4 — detects use-after-free/heap-corruption bugs (e.g. the Task P8-1 self-destroy-during-callback fix). Does not detect data races; use devices-tsan for that.",
+      "binaryDir": "${sourceDir}/cmake-build-devices-asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":          "Debug",
+        "CNA_GRAPHICS_BACKEND":      "EASYGL",
+        "CNA_BUILD_TESTS":           "ON",
+        "CMAKE_CXX_FLAGS":           "-fsanitize=address -fno-omit-frame-pointer -g -O0",
+        "CMAKE_EXE_LINKER_FLAGS":    "-fsanitize=address"
+      }
+    },
+    {
+      "name": "devices-tsan",
+      "displayName": "ThreadSanitizer (Microsoft::Devices hardening, EASYGL)",
+      "description": "Debug + EASYGL + tests, instrumented with ThreadSanitizer. Verified working in plan_devices_phase8.md Task P8-4 — the tool that actually detects data races (ASan does not). As of Task P8-2, running the Devices-only test suite under this preset reports exactly one pre-existing, unrelated race in sharp-runtime's TimeSpan copy constructor (a debug copy_count counter) — out of scope for Microsoft::Devices work; any *new* race reported here is worth investigating.",
+      "binaryDir": "${sourceDir}/cmake-build-devices-tsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":          "Debug",
+        "CNA_GRAPHICS_BACKEND":      "EASYGL",
+        "CNA_BUILD_TESTS":           "ON",
+        "CMAKE_CXX_FLAGS":           "-fsanitize=thread -fno-omit-frame-pointer -g -O1",
+        "CMAKE_EXE_LINKER_FLAGS":    "-fsanitize=thread"
+      }
+    },
+    {
+      "name": "devices-ubsan",
+      "displayName": "UndefinedBehaviorSanitizer (Microsoft::Devices hardening, EASYGL)",
+      "description": "Debug + EASYGL + tests, instrumented with UndefinedBehaviorSanitizer. Verified working in plan_devices_phase8.md Task P8-4 — the full Devices-only suite reports zero issues under this preset.",
+      "binaryDir": "${sourceDir}/cmake-build-devices-ubsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":          "Debug",
+        "CNA_GRAPHICS_BACKEND":      "EASYGL",
+        "CNA_BUILD_TESTS":           "ON",
+        "CMAKE_CXX_FLAGS":           "-fsanitize=undefined -fno-omit-frame-pointer -g -O1",
+        "CMAKE_EXE_LINKER_FLAGS":    "-fsanitize=undefined"
+      }
     }
   ],
   "buildPresets": [
@@ -24,6 +63,24 @@
       "displayName": "Build house3d_demo for web",
       "configurePreset": "web",
       "targets": ["cna_house3d_demo"]
+    },
+    {
+      "name": "devices-asan",
+      "displayName": "Build CnaTests under AddressSanitizer",
+      "configurePreset": "devices-asan",
+      "targets": ["CnaTests"]
+    },
+    {
+      "name": "devices-tsan",
+      "displayName": "Build CnaTests under ThreadSanitizer",
+      "configurePreset": "devices-tsan",
+      "targets": ["CnaTests"]
+    },
+    {
+      "name": "devices-ubsan",
+      "displayName": "Build CnaTests under UndefinedBehaviorSanitizer",
+      "configurePreset": "devices-ubsan",
+      "targets": ["CnaTests"]
     }
   ]
 }
