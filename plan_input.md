@@ -43,12 +43,19 @@ violations in the internal layer, and very thin test coverage.
 
 | Device | API surface | SDL3 wiring | Behavior fidelity | Tests |
 |--------|-------------|-------------|-------------------|-------|
-| Keyboard | ✅ complete | ✅ key down/up → `KeyboardState` | ✅ complete keycode map + scancode mode (`FNA_KEYBOARD_USE_SCANCODES`); `GetPressedKeys` ascending; real `GetKeyFromScancodeEXT` | ✅ 21 tests | **(Phase I5 complete)** |
+| Keyboard | ✅ complete | ✅ key down/up → `KeyboardState` | ✅ complete FNA-mappable SDL keycode/scancode subset (40 intentionally-unmappable `Keys` documented, task 819) + scancode mode (`FNA_KEYBOARD_USE_SCANCODES`); `GetPressedKeys` ascending; real `GetKeyFromScancodeEXT` | ✅ 21 tests | **(Phase I5 complete)** |
 | Mouse | ✅ complete | ✅ motion/button/wheel → `MouseState` | ✅ `SetPosition` warps with logical→window conversion for scaled/letterboxed windows (a-0001, task 846); relative mode real; `ClickedEXT` fires; dead `INTERNAL_*` fields removed | ✅ 27 tests | **(Phase I4 complete)** |
 | GamePad | ✅ complete | ✅ hotplug + button/axis + rumble + caps + LED/gyro/accel + EXT buttons | ✅ `PacketNumber` increments on raw-state change; `GamePadCapabilities` reworked to properties; `FromButtonArray` renamed/reconciled; `GetHashCode`/`ToString` FNA-faithful | ✅ 58 tests | **(Phase I3 complete)** |
 | Touch | ✅ complete | ✅ fingers → `GetState` + gesture pipeline (`INTERNAL_onTouchEvent`/`Update`/`TouchDeviceExists`) live | ✅ `SetFinger` prev-state fixed; `DisplayWidth/Height` set from backbuffer; `GetState()`'s `InputManager` fallback documented as an intentional deviation from FNA's poll model | ✅ 41 tests | **(Phase I2 complete)** |
 | TextInput | ✅ surface | ✅ SDL3 wired (Start/Stop/SetRect/active) + TEXT_INPUT/EDITING dispatch + control-char synthesis | ✅ events raised; Ctrl+V suppress | ✅ 9 tests | **(Phase I1 complete)** |
 | MouseCursor | ℹ️ MonoGame ext (kept — task 754) | ✅ system + custom cursors (`FromTexture2D`) | ✅ `FromTexture2D`/`Dispose`/`IDisposable` done; SPDX `MS-PL` + `NOXNA class` fixed | ✅ 7 tests | **(Phase I4 complete)** |
+
+> **Note (task 866):** the per-device "Tests" numbers above are **historical per-phase snapshots**
+> (the count when each device's phase completed), **not** the running total — per-device coverage
+> has since grown across Phases I9–I12 (Mouse, GamePad, Keyboard, Touch, TextInput, MouseCursor all
+> gained tests). The **authoritative current input-test count is the 221-test input filter**
+> (`--gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'`),
+> re-verified clean on all three backends — see the final counts in Phase I12 task 876 / `NEXT.md`.
 
 ---
 
@@ -64,7 +71,7 @@ violations in the internal layer, and very thin test coverage.
 | 701 | Wire `SetInputRectangle(Rectangle)` to `SDL_SetTextInputArea`. Replace empty body `TextInputEXT.cpp:33–35` | ✅ | Builds `SDL_Rect` from `rectangle.X/Y/Width/Height`, cursor offset 0 (matches FNA `SetTextInputRectangle`). Null-guarded. |
 | 702 | Wire `IsTextInputActive()`→`SDL_TextInputActive`, `IsScreenKeyboardShown(IntPtr)`→`SDL_ScreenKeyboardShown`. Replace `return false` stubs `TextInputEXT.cpp:10–23` | ✅ | Both query SDL3 via `WindowHandle`; null-guarded → `false` until handle set (Task 703). |
 | 703 | Populate the window handle at window creation and clear it at destruction (mirror FNA `SDL3_FNAPlatform.cs:463–465`); currently never assigned. Use `TextInputEXT::setWindowHandleProperty(handle)` (property as of Task 707) | ✅ | `GraphicsDevice.cpp`: set after `SDL_CreateWindow` (1119); clear in `destroyNativeResources()` if it points at this window. Mouse/TouchPanel handles still unpublished (separate follow-up). |
-| 704 | Handle `SDL_EVENT_TEXT_INPUT` in `SdlInputBridge::ProcessEvent`: UTF-8 decode `event.text.text` → per-char `TextInputEXT::INTERNAL_OnTextInput` (FNA `1162–1184`) | ✅ | Forwards each UTF-8 byte of `event.text.text` (CNA's `char`-based callback → byte-oriented UTF-8; FNA decodes to UTF-16). `textInputSuppress` gating deferred to Task 706. Bridge-level test (`SdlInputBridgeTextInputTest`) drives synthetic events. |
+| 704 | Handle `SDL_EVENT_TEXT_INPUT` in `SdlInputBridge::ProcessEvent`: UTF-8 decode `event.text.text` → per-char `TextInputEXT::INTERNAL_OnTextInput` (FNA `1162–1184`) | ✅ | **(Historical — SUPERSEDED by task 806.)** As of this task, forwarded each UTF-8 byte (`char`-based callback). **Task 806 changed the callback to `charcs`/UTF-16 code unit** (FNA-faithful `Action<char>`); the bridge now decodes UTF-8→UTF-16 via `decode_utf8_to_utf16`. `textInputSuppress` gating deferred to Task 706. Bridge-level test (`SdlInputBridgeTextInputTest`) drives synthetic events. |
 | 705 | Handle `SDL_EVENT_TEXT_EDITING`: decode → `INTERNAL_OnTextEditing(text, start, length)`, including the empty/null composition path (FNA `1186–1204`) | ✅ | Passes UTF-8 `event.edit.text` + `start`/`length`; empty/null composition → empty string with 0/0 (FNA's `null` maps to empty `std::string&`). |
 | 706 | Control-character synthesis on `KEY_DOWN` (incl. repeat): emit `TextInput` for Home/End/Back/Tab/Enter/Delete and Ctrl+V, with a `textInputSuppress` flag to avoid double paste. Port `TextInputBindings`/`TextInputCharacters` (FNA `FNAPlatform.cs:261–280`, `SDL3_FNAPlatform.cs:903–953`). Note: bridge currently drops key repeats entirely (`SdlInputBridge.cpp:570–573`) | ✅ | `kTextInputCharacters[7]` + `text_input_binding_index` helpers; KEY block no longer drops repeats (state set only on first press, text re-emitted on repeat); `g_textInputSuppress` gates the TEXT_INPUT case for Ctrl+V. Verified by `SdlInputBridgeTextInputTest` (8 cases: control chars, repeat re-emit, Ctrl+V paste + suppress lifecycle, plain-V passthrough, editing). |
 | 707 | TextInputEXT CHECKLIST fixes: add `#include "CNA/CNAHelper.hpp"`; `NOXNA`-tag `INTERNAL_OnTextInput`/`INTERNAL_OnTextEditing` (FNA-internal, non-XNA); convert public field `WindowHandle` → `getWindowHandleProperty()`/`setWindowHandleProperty()` | ✅ | Whole class is non-XNA → tagged `NOXNA class` + every public member `NOXNA` + `@note NOXNA` (per `ShaderEffect` precedent). `WindowHandle` → property w/ private `windowHandle_`. 1757/1757 tests pass. |
@@ -344,6 +351,32 @@ behavior.
 
 ---
 
+## Phase I12 — Final touch fidelity and documentation cleanup ✅ COMPLETE (tasks 865–878)
+
+> **Hardening pass** (deeper review). Found and fixed **one real fidelity gap** (868–870: the
+> event-driven touch path dropped `TryGetPreviousLocation`), reconciled stale docs, and hardened
+> test-state cleanup. No new features; event-driven architecture preserved. Verdict: gap fixed,
+> branch still merge-ready.
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 865 | Reconcile stale `TextInputEXT` `char`-based/UTF-8-byte docs. | ✅ | Fixed the stale "Intentional deviation: `TextInput` is `char`-based … per UTF-8 byte" row in `NEXT.md` → now `charcs`/UTF-16 (task 806). Historical task rows 704/708 in `plan_input.md` annotated **"superseded by task 806"** (kept as history). `NEXT.md`'s §9 already carried a struck-through, superseded-by-806 note. Current truth restated: `TextInput` is `charcs`/UTF-16 code unit; `TextEditing` remains a UTF-8 `std::string`. |
+| 866 | Reconcile top per-device test counts with the current input filter. | ✅ | Final input filter is **221**. Updated the top per-device table's stale per-device counts (Mouse, TextInput, etc.) to a note pointing at the authoritative filter count; historical task rows keep their old counts (clearly dated/labelled). |
+| 867 | Soften "complete keycode map" wording for Keyboard. | ✅ | Reworded to "complete **FNA-mappable** SDL keycode/scancode subset; the **40 intentionally-unmappable** `Keys` (IME/browser/media/ChatPad/OEM) are documented" (per the task-819 audit), rather than implying every `Keys` value can be produced by SDL. |
+| 868 | Verify the event-driven `TouchPanel::GetState()` preserves `TryGetPreviousLocation` for Moved/Released. | ✅ | **Confirmed a real gap:** `InputManager::GetTouchState()` built 3-arg `TouchLocation`s (no previous), so `TryGetPreviousLocation()` returned false for every event-driven touch — Moved and Released included. (The `SetFinger`/`touches_` path did carry previous, but that path isn't fed by real SDL input.) |
+| 869 | Extend `InputManager` touch storage to keep previous state/position per touch id. | ✅ | Added `PreviousState`/`PreviousPosition` to `InternalTouchLocationState`. Model: "previous = what the last `GetTouchState()` reported" (advanced at snapshot time), which is the FNA frame-boundary semantic and avoids reporting a previous the game never saw when several SDL events land in one frame. Released's one-snapshot-then-remove behaviour preserved. |
+| 870 | `GetTouchState()` constructs the 5-arg `TouchLocation` when previous is valid. | ✅ | Uses `TouchLocation(id, state, pos, previousState, previousPosition)` when `PreviousState != Invalid`, else the 3-arg (Pressed/new → no previous, matching FNA). Records the just-reported location as previous **before** the Pressed→Moved auto-promotion, so a promoted touch's previous is the Pressed location the game saw. |
+| 871 | Tests proving the event-driven path preserves previous location. | ✅ | `TouchEdgeCaseTests`: `EventDrivenPathPreservesPreviousLocation` (Pressed→no previous; Pressed→Moved→previous Pressed; Moved→Moved→previous Moved; →Released→previous Moved; Released removed after one snapshot) + `HeldTouchAutoPromotesToMovedWithPressedPrevious`. |
+| 872 | `SdlInputBridge` touch test through the public API. | ✅ | `SdlInputBridgeTouchGestureTests`: `FingerEventsExposePreviousLocationThroughTouchPanelGetState` drives `SDL_EVENT_FINGER_DOWN/MOTION/UP` through `ProcessEvent` and checks `TouchPanel::GetState()` — Pressed (no previous) → Moved (previous = pressed location) → Released (previous present). |
+| 873 | Revisit Touch `GetState` coverage wording after 868–872. | ✅ | Previous-location now works on the event-driven path, so `TouchPanel.GetState` is bumped in the coverage split; the remaining documented deviation is only the `GetState()` `touches_`→`InputManager` fallback source (event-driven, not FNA's poll) — still called out honestly, not claimed 100% poll-identical. |
+| 874 | Cleanup/reset coverage for `SdlInputBridge` file-static test state. | ✅ | Added `SdlInputBridge::ResetForTests()` (test-only): clears the text-input suppression + control-down flags, the finger-id→touch-id map, and the scancode-mode override. Documented internal/test-only. Verified state doesn't leak (shuffle+repeat). |
+| 875 | Regression test for Ctrl+V suppression not getting stuck. | ✅ | `SdlInputBridgeTextInputTests`: `CtrlVSuppressionDoesNotStickAcrossKeyUp` proves a suppressed literal `v` doesn't swallow later unrelated `TEXT_INPUT` once Ctrl/V are released. Suppression is gated on the Ctrl+V key-down/up lifecycle (documented). |
+| 876 | Clean full `CnaTests` + input filter on EasyGL/Vulkan/bgfx from initialized submodules. | ✅ | See counts below (task 877 / NEXT.md). |
+| 877 | Update `NEXT.md` final handoff after Phase I12. | ✅ | NEXT.md records the touch fix, the new counts, and that the branch remains merge-ready. |
+| 878 | Stop after this phase unless a test fails. | ✅ | No test failed; stopping. No new features; no graphics/audio/content scope creep. |
+
+---
+
 ## XNA 4.0 Input API coverage — final split (task 838)
 
 > **This is the authoritative coverage assessment** (as of Phase I9). Per the review's rule,
@@ -358,11 +391,11 @@ behavior.
 | Area | Surface | Behavior | Tests | Notes |
 |------|---------|----------|-------|-------|
 | Enums (`Buttons`, `Keys`, `KeyState`, `ButtonState`, `GamePadType`, `GamePadDeadZone`, `GestureType`, `TouchLocationState`) | 100% | 100% | 100% | 1:1 value parity with FNA (task 776 audit). |
-| Keyboard / `KeyboardState` | 100% | 100% | 100% | Ordered `GetPressedKeys`, FNA `GetHashCode`, indexer, complete keycode/scancode maps (I5; 819–821). |
+| Keyboard / `KeyboardState` | 100% | 100% | 100% | Ordered `GetPressedKeys`, FNA `GetHashCode`, indexer; keycode/scancode maps are a faithful 1:1 port of FNA's mappable subset (40 `Keys` with no SDL scancode are intentionally unmapped, documented — I5; 819–821). |
 | Mouse / `MouseState` | 100% | 100% | 100% | Warp/relative-mode/`ClickedEXT` wired (I4); `SetPosition` logical→window conversion for scaled/letterboxed windows implemented (a-0001 / task 846). |
 | GamePad value types + dead-zone math (`GamePadState/Buttons/DPad/ThumbSticks/Triggers`) | 100% | 100% | 100% | Dead-zone/clamp/packing line-for-line FNA; button/axis mapping tested (812/813). |
 | GamePad `GetState` / connection | 100% | 100% | ~95% | Connection + button/axis via InputManager tested; bridge SDL slot-assignment edge cases hardware-gated (811, see §5). |
-| Touch `TouchPanel.GetState` / `TouchCollection` / `TouchLocation` | 100% | ~98% | 100% | Event-driven `GetState` fallback (documented deviation, 825); `>MAX_TOUCHES` uncapped vs FNA's 8 (documented, 826). |
+| Touch `TouchPanel.GetState` / `TouchCollection` / `TouchLocation` | 100% | ~99% | 100% | `TryGetPreviousLocation` now preserved on the event-driven path for Moved/Released (task 868–872). Remaining documented deviations (not gaps): `GetState()` reads `InputManager`'s event-driven snapshot rather than FNA's per-frame `SDL_GetTouchFingers` poll — behaviourally equivalent now, including previous-location; and the event-driven touch map is `>MAX_TOUCHES`-uncapped vs FNA's 8 (826). **Not** claimed 100% poll-identical. |
 | Touch gestures (`GestureDetector`, Tap…Pinch, `GestureSample`) | 100% | 100% | 100% | Byte-faithful FNA port (829); deterministic tests (830). |
 | **XNA 4.0 core — overall** | **100%** | **~99%** | **~99%** | Complete and FNA-faithful; residual gaps are documented platform-dependent items, not missing API. |
 

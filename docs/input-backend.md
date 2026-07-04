@@ -201,8 +201,14 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
   `GestureDetector`).
 - `TouchDeviceExists` only becomes true after the *first* touch event, matching FNA's own
   comment ("Windows only notices a touch screen once it's touched").
-- Known deviation: `TouchPanel::GetState()` falls back to `InputManager`'s event-driven snapshot
-  rather than FNA's per-frame `SetFinger` poll population of `touches_` — see §3.
+- `TouchPanel::GetState()` reports `TouchLocation`s with their previous location preserved for
+  Moved/Released touches, so `TryGetPreviousLocation()` works on the real event-driven path —
+  `InputManager` now stores each touch's previous state/position and advances it per snapshot
+  (tasks 868–872). A new Pressed touch has no previous, matching FNA.
+- Known deviation (behaviourally equivalent, not a gap): `GetState()` reads `InputManager`'s
+  event-driven snapshot rather than FNA's per-frame `SetFinger`/`SDL_GetTouchFingers` poll of
+  `touches_` — see §3. The event-driven touch map is also not capped at `MAX_TOUCHES` (8) the way
+  FNA is.
 - `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and
   `MAX_TOUCHES` when connected, matching FNA's `touchDeviceExists ? 4 : 0` (fixed in task 790;
   task 721 originally noted the pre-fix bug).

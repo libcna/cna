@@ -126,3 +126,43 @@ TEST_F(SdlInputBridgeTouchGestureTest, FingerMotionThroughProcessEventProducesFl
     EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Flick);
     EXPECT_GE(sample.getDeltaProperty().Length(), 100.0f); // MIN_FLICK_VELOCITY (GestureDetector.cpp)
 }
+
+// Task 872: drive SDL_EVENT_FINGER_DOWN/MOTION/UP through the real bridge entry point and verify
+// TouchPanel::GetState()'s previous-location behaviour through the public API (GetState falls back
+// to InputManager's event-driven snapshot, which now carries previous state/position — task 870).
+TEST_F(SdlInputBridgeTouchGestureTest, FingerEventsExposePreviousLocationThroughTouchPanelGetState)
+{
+    // DOWN -> GetState: Pressed, no previous. Capture the reported position.
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 7001, 0.25f, 0.75f));
+    Microsoft::Xna::Framework::Vector2 pressedPos;
+    {
+        const TouchCollection s = TouchPanel::GetState();
+        ASSERT_EQ(s.getCountProperty(), 1);
+        EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Pressed);
+        TouchLocation prev;
+        EXPECT_FALSE(s[0].TryGetPreviousLocation(prev));
+        pressedPos = s[0].getPositionProperty();
+    }
+
+    // MOTION -> GetState: Moved, previous is the pressed location.
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_MOTION, 7001, 0.5f, 0.9f, 0.25f, 0.15f));
+    {
+        const TouchCollection s = TouchPanel::GetState();
+        ASSERT_EQ(s.getCountProperty(), 1);
+        EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Moved);
+        TouchLocation prev;
+        ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+        EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
+        EXPECT_EQ(prev.getPositionProperty(), pressedPos);
+    }
+
+    // UP -> GetState: Released, previous still present; then removed after the snapshot.
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_UP, 7001, 0.5f, 0.9f));
+    {
+        const TouchCollection s = TouchPanel::GetState();
+        ASSERT_EQ(s.getCountProperty(), 1);
+        EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Released);
+        TouchLocation prev;
+        EXPECT_TRUE(s[0].TryGetPreviousLocation(prev));
+    }
+}

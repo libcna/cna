@@ -51,15 +51,14 @@ namespace
         void SetUp() override { Reset(); }
         void TearDown() override { Reset(); }
 
-        // Bridge suppress/control-down flags are file-local statics; clear them by releasing
-        // the keys that set them, and reset the keyboard state these tests touch.
+        // Bridge suppress/control-down flags + finger-id map + scancode override are file-local
+        // statics; SdlInputBridge::ResetForTests() (task 874) clears them centrally. Also reset the
+        // keyboard state these tests touch so control_key_held() etc. start clean.
         static void Reset()
         {
             TextInputEXT::TextInput = nullptr;
             TextInputEXT::TextEditing = nullptr;
-            SdlInputBridge::ProcessEvent(keyEvent(false, SDLK_V));
-            SdlInputBridge::ProcessEvent(keyEvent(false, SDLK_LCTRL));
-            SdlInputBridge::ProcessEvent(keyEvent(false, SDLK_RCTRL));
+            SdlInputBridge::ResetForTests();
             for (const Keys k : {Keys::Back, Keys::Enter, Keys::Tab, Keys::Delete,
                                  Keys::Home, Keys::End, Keys::V,
                                  Keys::LeftControl, Keys::RightControl})
@@ -152,6 +151,29 @@ TEST_F(SdlInputBridgeTextInputTest, CtrlVEmitsPasteCharAndSuppressesLiteralText)
 
     captured.clear();
     SdlInputBridge::ProcessEvent(textInputEvent("x"));
+    EXPECT_EQ(captured, u"x");
+}
+
+TEST_F(SdlInputBridgeTextInputTest, CtrlVSuppressionDoesNotStickWhenCtrlReleasedWithoutVKeyUp)
+{
+    // Task 875: the Ctrl+V paste-echo suppression must not get stuck if the V key-up is missing or
+    // out of order. Suppression is intentionally scoped to the Ctrl+V key lifecycle and clears on
+    // EITHER a V key-up OR a Ctrl key-up (SdlInputBridge.cpp handle_text_input_key_up), so releasing
+    // Ctrl alone re-enables text input — later unrelated TEXT_INPUT is never swallowed indefinitely.
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(keyEvent(true, SDLK_LCTRL));
+    SdlInputBridge::ProcessEvent(keyEvent(true, SDLK_V));   // paste -> suppression on
+    SdlInputBridge::ProcessEvent(textInputEvent("v"));      // literal 'v' echo suppressed
+    ASSERT_EQ(captured.size(), 1u);
+    EXPECT_EQ(captured[0], charcs{22});                     // only the paste control char
+
+    // Release Ctrl WITHOUT ever releasing V. Suppression must clear anyway.
+    SdlInputBridge::ProcessEvent(keyEvent(false, SDLK_LCTRL));
+
+    captured.clear();
+    SdlInputBridge::ProcessEvent(textInputEvent("x"));      // must flow, not be swallowed
     EXPECT_EQ(captured, u"x");
 }
 

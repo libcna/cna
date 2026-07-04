@@ -70,6 +70,10 @@ namespace CNA::Internal::Input
             TouchLocationState State = TouchLocationState::Invalid;
             Microsoft::Xna::Framework::Vector2 Position = Microsoft::Xna::Framework::Vector2();
             bool RemoveAfterSnapshot = false;
+            // Previous-frame location (what the last GetTouchState() reported), so a Moved/Released
+            // touch exposes TryGetPreviousLocation() (task 868–870). Invalid = no previous yet.
+            TouchLocationState PreviousState = TouchLocationState::Invalid;
+            Microsoft::Xna::Framework::Vector2 PreviousPosition = Microsoft::Xna::Framework::Vector2();
         };
 
         struct InternalInputState
@@ -387,7 +391,24 @@ namespace CNA::Internal::Input
             }
 
             auto& touchLocation = touchLocationIterator->second;
-            snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position);
+
+            // Expose the previous-frame location for Moved/Released touches (Pressed/new touches
+            // have no previous, matching FNA). Previous is "what the last GetTouchState reported".
+            if (touchLocation.PreviousState != TouchLocationState::Invalid)
+            {
+                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
+                                      touchLocation.PreviousState, touchLocation.PreviousPosition);
+            }
+            else
+            {
+                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position);
+            }
+
+            // Record the location just reported as "previous" for the next snapshot — done before
+            // the Pressed→Moved promotion below, so a promoted touch's previous is the Pressed
+            // location the game actually saw, not the promoted Moved state.
+            touchLocation.PreviousState    = touchLocation.State;
+            touchLocation.PreviousPosition = touchLocation.Position;
 
             if (touchLocation.RemoveAfterSnapshot)
             {

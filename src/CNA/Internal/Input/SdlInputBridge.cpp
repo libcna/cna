@@ -1121,6 +1121,16 @@ namespace CNA::Internal::Input
         g_scancodeModeTestOverride = std::nullopt;
     }
 
+    void SdlInputBridge::ResetForTests()
+    {
+        g_textInputSuppress = false;
+        for (bool& down : g_textInputControlDown)
+            down = false;
+        get_finger_id_to_touch_id_map().clear();
+        get_next_touch_id() = 1;
+        g_scancodeModeTestOverride = std::nullopt;
+    }
+
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)
     {
         switch (event.type)

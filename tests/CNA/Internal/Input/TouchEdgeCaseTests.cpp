@@ -112,6 +112,76 @@ TEST_F(TouchEdgeCaseTest, MoreThanMaxTouchesAreAllReportedByEventDrivenInputMana
     EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 10);
 }
 
+// --- Tasks 868-871: event-driven path preserves TouchLocation previous-location ---
+
+TEST_F(TouchEdgeCaseTest, EventDrivenPathPreservesPreviousLocation)
+{
+    // Drives the REAL event-driven path (InputManager::SetTouchState + GetTouchState), one event
+    // per snapshot (= one per frame), and checks TryGetPreviousLocation at each transition.
+    const Vector2 a(10, 10), b(20, 20), c(30, 30);
+    TouchLocation prev;
+
+    // Pressed: no previous.
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, a);
+    {
+        const TouchCollection s = InputManager::GetTouchState();
+        ASSERT_EQ(s.getCountProperty(), 1);
+        EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Pressed);
+        EXPECT_FALSE(s[0].TryGetPreviousLocation(prev));
+    }
+
+    // Pressed -> Moved: previous is the Pressed location.
+    InputManager::SetTouchState(1, TouchLocationState::Moved, b);
+    {
+        const TouchCollection s = InputManager::GetTouchState();
+        ASSERT_EQ(s.getCountProperty(), 1);
+        EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Moved);
+        EXPECT_EQ(s[0].getPositionProperty(), b);
+        ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+        EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
+        EXPECT_EQ(prev.getPositionProperty(), a);
+    }
+
+    // Moved -> Moved: previous is the prior Moved location.
+    InputManager::SetTouchState(1, TouchLocationState::Moved, c);
+    {
+        const TouchCollection s = InputManager::GetTouchState();
+        ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+        EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Moved);
+        EXPECT_EQ(prev.getPositionProperty(), b);
+    }
+
+    // Moved -> Released: previous is the prior Moved location; then removed after one snapshot.
+    InputManager::SetTouchState(1, TouchLocationState::Released, c);
+    {
+        const TouchCollection s = InputManager::GetTouchState();
+        ASSERT_EQ(s.getCountProperty(), 1);
+        EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Released);
+        ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+        EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Moved);
+        EXPECT_EQ(prev.getPositionProperty(), c);
+    }
+    EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 0); // Released removed
+}
+
+TEST_F(TouchEdgeCaseTest, HeldTouchAutoPromotesToMovedWithPressedPrevious)
+{
+    // A Pressed touch held across two snapshots (no new SDL event) auto-promotes to Moved on the
+    // second snapshot, with the previous being the Pressed location the game actually saw.
+    const Vector2 a(5, 5);
+    TouchLocation prev;
+
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, a);
+    (void)InputManager::GetTouchState(); // frame 1: Pressed (no previous), promotes to Moved
+
+    const TouchCollection s = InputManager::GetTouchState(); // frame 2: Moved
+    ASSERT_EQ(s.getCountProperty(), 1);
+    EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Moved);
+    ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+    EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(prev.getPositionProperty(), a);
+}
+
 // --- Task 827: GetCapabilities() ---
 
 TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsDisconnectedBeforeAnyTouch)

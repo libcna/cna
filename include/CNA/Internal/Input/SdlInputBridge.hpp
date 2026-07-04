@@ -118,6 +118,14 @@ namespace CNA::Internal::Input
         /** @brief Test-only: reverts scancode mode to the `FNA_KEYBOARD_USE_SCANCODES` env value. */
         static void ClearScancodeModeForTests();
 
+        /**
+         * @brief Test-only: resets `SdlInputBridge`'s process-wide file-static state — the
+         *        text-input suppression + control-down flags, the SDL-finger-id→touch-id map (and
+         *        its counter), and the scancode-mode override — so tests don't leak state into
+         *        one another. Not part of the runtime input path.
+         */
+        static void ResetForTests();
+
         static Microsoft::Xna::Framework::Input::Keys GetKeyFromScancode(
             Microsoft::Xna::Framework::Input::Keys scancode
         );
