@@ -531,6 +531,21 @@ confirming this task's own requirement that behavior stay byte-for-byte identica
 **Files:** `AUDIT.md`, `NOXNA.md`, and (only if the opt-in pump is implemented)
 `Accelerometer.hpp/.cpp`, `Gyroscope.hpp/.cpp`, plus new tests.
 
+**Resolution (2026-07-04):** Documented the thread model in `AUDIT.md` (new
+"Event-thread model" section, right after the per-class table): `CurrentValueChanged`/
+`ReadingChanged` are raised synchronously on whatever thread calls
+`DispatchSensorReading()`, which for the real SDL path is whatever thread SDL invokes
+the event watch on — quoting SDL's own doc warning directly rather than paraphrasing.
+Decided **not** to implement the opt-in main-thread pump: it's a genuinely new feature
+(a buffering queue, a threaded-through opt-in flag, its own ordering/overflow/
+thread-safety test suite) with no concrete evidence of need anywhere in this codebase
+— no test, demo, or reported issue has ever required cross-thread event delivery.
+Building it speculatively contradicts this project's own "don't design for
+hypothetical future requirements" convention (`CLAUDE.md`). Documented the decision and
+reasoning in `AUDIT.md` alongside the thread-model note itself, so a future session
+doesn't have to re-derive why it's absent. `NOXNA.md` unchanged (nothing new added to
+document). No code changes in this task — `AUDIT.md` only.
+
 ---
 
 ## Task P5-6 — Test current-value semantics with synthetic updates

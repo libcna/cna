@@ -386,3 +386,31 @@ deviation.
 (`PhotoCamera`, `CameraButtons`, `CameraCaptureTask`), media/photo pickers
 (`PhotoChooserTask`), radio, phone-call APIs, and `Microsoft.Devices.Environment`
 (device identity/type info) — none of these are sensor or vibration APIs.
+
+**Event-thread model (documented 2026-07-04, `plan_devices_phase5.md` Task P5-5):**
+`Accelerometer`/`Gyroscope`'s `CurrentValueChanged`/`ReadingChanged` are raised
+**synchronously, on whatever thread calls `DispatchSensorReading()`.** For the real
+SDL event path, that is whatever thread SDL itself invokes the registered
+`SDL_AddEventWatch()` callback on — `third_party/SDL/include/SDL3/SDL_events.h`'s own
+doc comment warns *"Be very careful of what you do in the event filter function, as
+it may run in a different thread!"* — **not guaranteed to be the game's main/`Update()`
+thread.** A game subscribing to either event must treat its handler as running on an
+unknown thread: no touching non-thread-safe game state without its own synchronization,
+same as any other cross-thread callback. `Compass`/`Motion` never raise these events at
+all (permanent `NotSupported` stubs), so this only applies to `Accelerometer`/
+`Gyroscope`. `VibrateController` has no comparable event.
+
+**Considered, not implemented: a `NOXNA` main-thread dispatch queue/pump.** The
+originating task asked to evaluate an opt-in queue (e.g. a
+`SetMainThreadDispatchEnabled(bool)` + `PumpMainThreadEvents()` pair games could call
+from `Update()` to replay dispatched readings on the calling thread instead). Decided
+against adding it in this pass: it's a genuinely new feature (a buffering queue, an
+opt-in flag threaded through every dispatch site, its own test suite for ordering/
+overflow/thread-safety-of-the-queue-itself) for a need that has no concrete evidence
+in this codebase — no test, demo, or reported issue has ever needed cross-thread event
+delivery so far, and adding speculative infrastructure for a hypothetical future need
+contradicts this project's own "don't design for hypothetical future requirements"
+convention. If a real game surfaces a concrete need for main-thread dispatch, it should
+be scoped and implemented then, informed by that actual use case, not guessed at now.
+Documented instead (above), so the behavior is at least honestly known rather than
+silently assumed.
