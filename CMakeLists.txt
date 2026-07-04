@@ -1180,6 +1180,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 314: DepthStencilState.DepthBufferFunction (Always/Never/Less/LessEqual/Greater)
+        cna_easygl_test(cna_test_easygl_depthstencilstate_compare_function
+                        examples/easygl_depthstencilstate_compare_function_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_CompareFunction
+                 COMMAND cna_test_easygl_depthstencilstate_compare_function)
+        set_tests_properties(EasyGL_DepthStencilState_CompareFunction PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
     # Vulkan integration tests
@@ -1382,6 +1391,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_DepthStencilState_WriteEnable
                  COMMAND cna_test_vulkan_depthstencilstate_write_enable)
         set_tests_properties(Vulkan_DepthStencilState_WriteEnable PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 314: DepthStencilState.DepthBufferFunction on Vulkan (reuses the backend-agnostic
+        # EasyGL source). NOTE: expected to FAIL some/all checks per Task 870 - Vulkan hardcodes
+        # depthCompareOp per pipeline, ignoring DepthBufferFunction entirely.
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_compare_function
+                        examples/easygl_depthstencilstate_compare_function_test.cpp)
+        add_test(NAME Vulkan_DepthStencilState_CompareFunction
+                 COMMAND cna_test_vulkan_depthstencilstate_compare_function)
+        set_tests_properties(Vulkan_DepthStencilState_CompareFunction PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
