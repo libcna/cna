@@ -13,11 +13,11 @@ namespace Microsoft::Xna::Framework::Audio
     /**
      * @brief Represents a named category of sounds managed by an AudioEngine.
      *
-     * Pause, Resume, and Stop route to every currently active Cue in this category
-     * (see AudioEngine::PauseCategoryInternal / ResumeCategoryInternal /
-     * StopCategoryInternal) and have a real, immediate effect on playback. SetVolume
-     * updates the category's baseline volume used by cues from the next Play() call
-     * onward; it does not retroactively change the volume of sounds already playing.
+     * Pause, Resume, Stop, and SetVolume all route to every currently active Cue in
+     * this category (see AudioEngine::PauseCategoryInternal / ResumeCategoryInternal /
+     * StopCategoryInternal / SetCategoryVolumeInternal) and have a real, immediate
+     * effect on playback -- including SetVolume, which retroactively re-applies to
+     * cues already playing, not just future Play() calls (T-4D).
      */
     struct AudioCategory : public System::IEquatable<AudioCategory>
     {
@@ -31,8 +31,8 @@ namespace Microsoft::Xna::Framework::Audio
         void Resume();
 
         /**
-         * @brief Sets the baseline volume for this category, applied to cues from
-         * their next Play() call onward. Does not affect cues already playing.
+         * @brief Sets the baseline volume for this category, applied both to future
+         * Play() calls and retroactively to every cue in this category already playing.
          *
          * @param volume New volume level.
          */

@@ -1196,9 +1196,10 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   Is3D`, ne skutečné track gains. `git stash` potvrdil kompilační selhání (chybějící pole) ve
   všech souborech sdílejících `SoundEffectInstanceTestAccess.hpp`.
 
-- [ ] **CP-21 — `AudioCategory::SetVolume`'s doc v hlavičce `AudioCategory.hpp` odpovídá starému,
+- [x] **CP-21 — `AudioCategory::SetVolume`'s doc v hlavičce `AudioCategory.hpp` odpovídá starému,
   už opravenému chování (drobný nález, patří spíš do XA — viz XA-10, zmíněno zde pro úplnost, ne
   duplicitně řešeno).**
+  *Pozn.:* vyřešeno spolu s XA-10 (viz jeho `*Pozn.:*` výše).
 
 - [x] **CP-22 — Test-mezera: `SoundEffect`'s move ctor/move-assignment nemá vlastní test.**
   `static_assert` ověřuje jen move-constructibility/assignability; žádný test skutečně nepřesune
@@ -1292,12 +1293,15 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   `SoundBankTests.cpp`'s `SharedEngine()`, na tomto stub chování aktivně stavějí — varianta (a)
   by je musela upravit).
 
-- [ ] **XA-10 — `AudioCategory.hpp`'s Doxygen odporuje skutečnému (správnému) chování `SetVolume`.**
+- [x] **XA-10 — `AudioCategory.hpp`'s Doxygen odporuje skutečnému (správnému) chování `SetVolume`.**
   Doc tvrdí, že `SetVolume` neovlivní už hrající cues — od T-4D opravy to už neplatí (`SetVolume`
   se retroaktivně aplikuje, ověřeno passing testem `SetVolumeReappliesToAlreadyPlayingCueInstance`).
   *CNA:* AudioCategory.hpp:16-20,33-38 (doc); AudioEngine.cpp:224-232 (skutečné chování).
   *Accept:* přepsat oba Doxygen bloky tak, aby odpovídaly skutečnému, správnému chování (stejně
   přesně jako sousední `Pause`/`Resume`/`Stop` doc bloky).
+  *Pozn.:* oba bloky (třídní doc i `SetVolume`'s vlastní) přepsány. Čistě dokumentační, žádná
+  změna chování; existující `SetVolumeReappliesToAlreadyPlayingCueInstance` test dál prochází
+  beze změny.
 
 - [x] **XA-11 — Kategorie `instanceLimit`/`fadeInMS`/`fadeOutMS` se parsují, ale nikde se
   nevynucují ani neaplikují — mezera nezapsaná v CHECKLIST.md.**
