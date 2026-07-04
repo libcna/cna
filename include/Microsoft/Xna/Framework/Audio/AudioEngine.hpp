@@ -12,6 +12,7 @@
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -28,7 +29,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
     public:
         /** @brief XACT content version this engine targets. */
-        static constexpr int ContentVersion = 46;
+        static constexpr SharpRuntime::intcs ContentVersion = 46;
 
         /** @brief Raised when the engine is about to be disposed. */
         System::EventHandler<System::EventArgs> Disposing;

@@ -1299,7 +1299,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* přepsat oba Doxygen bloky tak, aby odpovídaly skutečnému, správnému chování (stejně
   přesně jako sousední `Pause`/`Resume`/`Stop` doc bloky).
 
-- [ ] **XA-11 — Kategorie `instanceLimit`/`fadeInMS`/`fadeOutMS` se parsují, ale nikde se
+- [x] **XA-11 — Kategorie `instanceLimit`/`fadeInMS`/`fadeOutMS` se parsují, ale nikde se
   nevynucují ani neaplikují — mezera nezapsaná v CHECKLIST.md.**
   Toto bylo vědomě odloženo u T-4D (viz jeho `*Pozn.:*`), ale rozhodnutí se nikdy nepropsalo do
   CHECKLIST.md's tabulky odchylek, na rozdíl od každého jiného podobného rozhodnutí (D1-D8).
@@ -1307,13 +1307,16 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   spotřebitel v AudioEngine.cpp/AudioCategory.cpp/Cue.cpp.
   *Accept:* přidat řádek do CHECKLIST.md dokumentující, že fade in/out kategorie a instance-limit
   vynucování jsou mimo rozsah (nebo je implementovat).
+  *Pozn.:* řádek přidán do CHECKLIST.md. Čistě dokumentační, žádná změna kódu.
 
-- [ ] **XA-12 — `AudioEngine::ContentVersion` používá syrový `int` místo `SharpRuntime::intcs`.**
+- [x] **XA-12 — `AudioEngine::ContentVersion` používá syrový `int` místo `SharpRuntime::intcs`.**
   Jediná veřejná integer konstanta v celém Audio clusteru, která nepoužívá projektový alias
   (CLAUDE.md's typová tabulka).
   *CNA:* AudioEngine.hpp:31.
   *Accept:* změnit na `static constexpr SharpRuntime::intcs ContentVersion = 46;`; existující
   `ContentVersionIs46` test beze změny dál projde.
+  *Pozn.:* hotovo přesně dle accept kritéria; `SharpRuntime/SharpRuntimeHelper.hpp` přidán do
+  `AudioEngine.hpp`'s includes. Žádná změna testu potřeba.
 
 - [ ] **XA-13 — Test-mezera: žádný test nekonstruuje `AudioEngine`/`SoundBank`/`WaveBank` proti
   existujícímu, ale poškozenému `.xgs`/`.xsb`/`.xwb` souboru.**
