@@ -7,11 +7,16 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    AccelerometerFailedException::AccelerometerFailedException() : SensorFailedException()
+    AccelerometerFailedException::AccelerometerFailedException() : SensorFailedException("Accelerometer failed.")
     {
     }
 
     AccelerometerFailedException::AccelerometerFailedException(const char* str) : SensorFailedException(str)
+    {
+    }
+
+    AccelerometerFailedException::AccelerometerFailedException(const char* str, SharpRuntime::intcs errorId)
+        : SensorFailedException(str, errorId)
     {
     }
 }

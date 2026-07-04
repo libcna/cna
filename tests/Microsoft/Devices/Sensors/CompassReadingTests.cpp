@@ -1,0 +1,112 @@
+// SPDX-License-Identifier: MS-PL
+#include <gtest/gtest.h>
+#include "Microsoft/Devices/Sensors/CompassReading.hpp"
+#include "System/DateTimeOffset.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+
+using Microsoft::Devices::Sensors::CompassReading;
+using Microsoft::Xna::Framework::Vector3;
+using System::DateTimeOffset;
+
+TEST(CompassReadingTests, DefaultConstructorZeroValues)
+{
+    const CompassReading r;
+    EXPECT_EQ(r.getHeadingAccuracyProperty(), 0.0);
+    EXPECT_EQ(r.getMagneticHeadingProperty(), 0.0);
+    EXPECT_EQ(r.getMagnetometerReadingProperty(), Vector3::Zero);
+    EXPECT_EQ(r.getTimestampProperty(), DateTimeOffset());
+    EXPECT_EQ(r.getTrueHeadingProperty(), 0.0);
+}
+
+TEST(CompassReadingTests, ParameterizedConstructorStoresValues)
+{
+    const DateTimeOffset ts(System::DateTime(1000000LL), System::TimeSpan::Zero);
+    const Vector3 mag(1.0f, 2.0f, 3.0f);
+    const CompassReading r(5.0, 90.0, mag, ts, 95.0);
+    EXPECT_EQ(r.getHeadingAccuracyProperty(), 5.0);
+    EXPECT_EQ(r.getMagneticHeadingProperty(), 90.0);
+    EXPECT_EQ(r.getMagnetometerReadingProperty(), mag);
+    EXPECT_EQ(r.getTimestampProperty(), ts);
+    EXPECT_EQ(r.getTrueHeadingProperty(), 95.0);
+}
+
+// NOTE (Task P3-2): all setXProperty() methods on CompassReading are
+// private + friend Compass as of this task, matching the real WP7 API's
+// `internal set`, so they can no longer be exercised directly from this
+// test file. Field storage/round-trip is still fully covered via
+// ParameterizedConstructorStoresValues() above.
+
+TEST(CompassReadingTests, EqualityOperatorEqualInstances)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const Vector3 mag(1.0f, 0.0f, 0.0f);
+    const CompassReading a(1.0, 2.0, mag, ts, 3.0);
+    const CompassReading b(1.0, 2.0, mag, ts, 3.0);
+    EXPECT_TRUE(a == b);
+}
+
+TEST(CompassReadingTests, EqualityOperatorUnequalHeadingAccuracy)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const Vector3 mag(1.0f, 0.0f, 0.0f);
+    const CompassReading a(1.0, 2.0, mag, ts, 3.0);
+    const CompassReading b(9.0, 2.0, mag, ts, 3.0);
+    EXPECT_FALSE(a == b);
+}
+
+// Task P3-11: EqualityOperatorUnequalHeadingAccuracy above only varies
+// HeadingAccuracy, one of CompassReading's 5 fields. Vary TrueHeading too,
+// independently.
+TEST(CompassReadingTests, EqualityOperatorUnequalTrueHeading)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const Vector3 mag(1.0f, 0.0f, 0.0f);
+    const CompassReading a(1.0, 2.0, mag, ts, 3.0);
+    const CompassReading b(1.0, 2.0, mag, ts, 9.0);
+    EXPECT_FALSE(a == b);
+}
+
+TEST(CompassReadingTests, InequalityOperatorComplementary)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const Vector3 mag(1.0f, 0.0f, 0.0f);
+    const CompassReading a(1.0, 2.0, mag, ts, 3.0);
+    const CompassReading b(1.0, 2.0, mag, ts, 3.0);
+    const CompassReading c(9.0, 2.0, mag, ts, 3.0);
+    EXPECT_FALSE(a != b);
+    EXPECT_TRUE(a != c);
+}
+
+TEST(CompassReadingTests, ToStringFormat)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const CompassReading r(1.0, 2.0, Vector3(3.0f, 4.0f, 5.0f), ts, 6.0);
+    const std::string s = r.ToString();
+    EXPECT_NE(s.find("MagneticHeading:2"), std::string::npos);
+    EXPECT_NE(s.find("TrueHeading:6"), std::string::npos);
+    EXPECT_NE(s.find("HeadingAccuracy:1"), std::string::npos);
+    EXPECT_NE(s.find("MagnetometerReading:"), std::string::npos);
+}
+
+TEST(CompassReadingTests, GetHashCodeConsistency)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const Vector3 mag(1.0f, 2.0f, 3.0f);
+    const CompassReading a(1.0, 2.0, mag, ts, 3.0);
+    const CompassReading b(1.0, 2.0, mag, ts, 3.0);
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(CompassReadingTests, GetHashCodeDifferentForUnequalInstances)
+{
+    const DateTimeOffset ts(System::DateTime(500LL), System::TimeSpan::Zero);
+    const CompassReading a(1.0, 2.0, Vector3(1.0f, 2.0f, 3.0f), ts, 3.0);
+    const CompassReading b(7.0, 8.0, Vector3(4.0f, 5.0f, 6.0f), ts, 9.0);
+    EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(CompassReadingTests, GetTypeName)
+{
+    const CompassReading r;
+    EXPECT_EQ(r.GetTypeName(), "Microsoft.Devices.Sensors.CompassReading");
+}

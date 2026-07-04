@@ -4,7 +4,7 @@
 //
 
 #pragma once
-#include "SensorFailedException.hpp"
+#include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 
 namespace Microsoft::Devices::Sensors
 {
@@ -21,5 +21,13 @@ namespace Microsoft::Devices::Sensors
          * @param str Null-terminated error message string.
          */
         explicit AccelerometerFailedException(const char* str);
+
+        /**
+         * @brief Constructs an AccelerometerFailedException with the given message and platform error code.
+         *
+         * @param str Null-terminated error message string.
+         * @param errorId Platform-specific error code identifying the failure.
+         */
+        AccelerometerFailedException(const char* str, SharpRuntime::intcs errorId);
     };
-};
+} // namespace Microsoft::Devices::Sensors
