@@ -30,6 +30,13 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return Microphone(id, std::move(name));
         }
+
+        // MC-6: CheckBuffer() is private (FNA has it as `internal`); this wrapper is the
+        // sanctioned bridge for tests that exercise it directly, without making it public API.
+        static void CheckBuffer(Microphone& mic)
+        {
+            mic.CheckBuffer();
+        }
     };
 }
 
@@ -267,7 +274,30 @@ TEST(MicrophoneTest, GetDataCountBeyondBufferThrows)
 TEST(MicrophoneTest, CheckBufferDoesNotThrowWithNoSubscribers)
 {
     Microphone mic = MakeMic();
-    EXPECT_NO_THROW(mic.CheckBuffer());
+    EXPECT_NO_THROW(MicrophoneTestAccess::CheckBuffer(mic));
+}
+
+// MC-7: existing coverage only had "no subscriber -> doesn't throw" (short-circuits on
+// BufferReady.Empty(), never actually exercises the `>` comparison) and "real capture, given
+// enough time -> eventually fires" (positive path only, needs the dummy driver and up to 2s of
+// polling). Neither deterministically proves BufferReady stays silent when queued duration is
+// below BufferDuration -- this isolated (never Start()ed) instance always has GetQueuedBytes()==0
+// (captureStream_ is null), so the comparison genuinely runs and must evaluate false.
+TEST(MicrophoneTest, CheckBufferDoesNotRaiseWhenQueuedDurationIsBelowBufferDuration)
+{
+    Microphone mic = MakeMic();
+    int fired = 0;
+    Microphone* sender = nullptr;
+    mic.BufferReady += [&fired, &sender](System::Object* s, const System::EventArgs&)
+    {
+        ++fired;
+        sender = static_cast<Microphone*>(s);
+    };
+
+    MicrophoneTestAccess::CheckBuffer(mic);
+
+    EXPECT_EQ(fired, 0);
+    EXPECT_EQ(sender, nullptr);
 }
 
 TEST(MicrophoneTest, CheckAllBuffersDoesNotThrowWithEmptyList)
@@ -367,7 +397,7 @@ TEST_F(MicrophoneCaptureTest, BufferReadyFiresWhenQueuedDataExceedsBufferDuratio
     for (int attempt = 0; attempt < 40 && fired == 0; ++attempt)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        mic_->CheckBuffer();
+        MicrophoneTestAccess::CheckBuffer(*mic_);
     }
 
     EXPECT_GT(fired, 0);

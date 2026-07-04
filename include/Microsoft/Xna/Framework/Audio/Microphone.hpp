@@ -130,15 +130,19 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Stops capturing audio samples from this device. */
         void Stop();
 
-        /** @brief Checks whether enough data is queued and raises BufferReady when needed. */
-        NOXNA void CheckBuffer();
-
         /** @brief Calls CheckBuffer() on every known microphone (used by FrameworkDispatcher::Update). */
         NOXNA static void CheckAllBuffers();
 
         GetTypeNameHPP()
 
     private:
+        // MC-6: FNA has this as `internal void CheckBuffer()` -- it must not be a public C++ API
+        // method (CLAUDE.md's Visibility Mapping; also T-1H's own accept criterion). The public,
+        // sanctioned bridge for FrameworkDispatcher is the static CheckAllBuffers() above, which
+        // already has private-member access to every instance's CheckBuffer() as a same-class
+        // static method, so it doesn't need CheckBuffer() itself to be public.
+        NOXNA void CheckBuffer();
+
         // Production Microphone instances are constructed directly by getAllProperty() from
         // the enumerated SDL3 capture devices; tests need a way to construct an isolated
         // instance directly, independent of whatever the current machine/driver enumerates.

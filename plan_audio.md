@@ -1487,7 +1487,7 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
 
 #### 8.4 Mic/data/enumy/výjimky
 
-- [ ] **MC-6 — `Microphone::CheckBuffer()` je veřejná, i když nemusí být — zbytečně rozšiřuje API
+- [x] **MC-6 — `Microphone::CheckBuffer()` je veřejná, i když nemusí být — zbytečně rozšiřuje API
   povrch a odporuje vlastnímu T-1H accept kritériu.**
   FNA má `CheckBuffer()` jako `internal` — nejde zavolat mimo assembly. CNA ji má `public`
   (označenou `NOXNA`), přímo proti CLAUDE.md's Visibility Mapping ("C# `internal` ... by se
@@ -1500,8 +1500,11 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* `CheckBuffer()` přesunout do `private` (ponechat `CheckAllBuffers()` veřejnou dle T-1H);
   `MicrophoneTestAccess` rozšířit o tenký static wrapper, aby `MicrophoneTests.cpp`'s přímá volání
   `mic.CheckBuffer()` dál fungovala.
+  *Pozn.:* hotovo přesně dle accept kritéria. `MicrophoneTestAccess::CheckBuffer(mic)` přidán,
+  oba přímé testovací call sites přepsány. Čistě viditelnostní změna — žádný chování se nemění,
+  proto bez `git stash` kroku (samotný úspěšný build je důkaz správné enkapsulace).
 
-- [ ] **MC-7 — Test-mezera: žádný deterministický test, že `BufferReady` mlčí, když queued duration
+- [x] **MC-7 — Test-mezera: žádný deterministický test, že `BufferReady` mlčí, když queued duration
   je pod `BufferDuration`.**
   Existující testy pokrývají jen "no subscriber → nethrowuje" (zkratkuje se na `Empty()` kontrole,
   nikdy nezacvičí samotné `>` porovnání) a "reálný capture, dost času → časem vystřelí" (jen
@@ -1511,6 +1514,12 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Accept:* nový test s izolovaným (nikdy `Start()`-nutým) `Microphone` přes `MicrophoneTestAccess`,
   zaregistrovat počítající lambda na `BufferReady`, zavolat `CheckBuffer()` přímo, ověřit že
   counter zůstane `0`; bonus: ověřit že `sender` argument předaný handleru je sama mic instance.
+  *Pozn.:* přidán `CheckBufferDoesNotRaiseWhenQueuedDurationIsBelowBufferDuration` — izolovaná
+  (nikdy `Start()`-nutá) instance má `GetQueuedBytes()==0` (`captureStream_` je null), takže `>`
+  porovnání skutečně proběhne a musí vyjít false. Bonus (sender identity) nešlo ve stejném testu
+  ověřit smysluplně, protože event nikdy nevystřelí (žádný pozitivní call k porovnání) — test
+  místo toho ověřuje, že `sender` zůstává `nullptr` (lambda se vůbec nezavolala). Čistě testovací
+  doplněk, žádná změna produkčního kódu.
 
 ---
 
