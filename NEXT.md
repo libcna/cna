@@ -12,11 +12,16 @@ XNA/FNA game code can be ported to C++ with minimal API-surface changes.
   to SDL3, CHECKLIST-compliant, and covered by tests. The original plan was `plan_input.md`
   (Phases I1–I7, tasks 700–783); all of it is now complete.
 - **Current development phase: everything currently planned is done again.** Phases I1–I7
-  (700–783) and Phase I8 (790–791, added after the user chose "define new follow-up tasks" over
-  merging/stopping) are all complete. There is no next numbered task — see Section 8.
-- **Pending:** the user plans to have **ChatGPT Plus review this `cna_input` work** next and
-  decide new follow-up tasks from that review, then relay the feedback here. See Section 8 for
-  what to do about this when resuming.
+  (700–783), Phase I8 (790–791), and **Phase I9 (792–840) are all complete and verified on
+  EasyGL/Vulkan/bgfx** (task 840: 1961/1961, 1961/1961, 1965/1965; 214 input tests each). There is
+  no next numbered task — see Section 8.
+- **The ChatGPT Plus review happened** (relayed 2026-07-04) and became **Phase I9** in
+  `plan_input.md` (renamed from the review's "Phase I8" to avoid colliding with 790–791). All 49
+  tasks are done except **800/801**, which were **deferred by user decision** to the new
+  cross-cutting plan **`plan.md` as task `a-0001`** (`Mouse::SetPosition` inverse logical→window
+  transform — graphics-layer scope). Task **811 is partial** (bridge SDL slot-assignment edge
+  cases are hardware-gated). Real fixes this phase: `GetGUIDEXT` format (816), `TextInput`→
+  `char16_t` (806), touch display-size guard (828), `MouseCursor` singleton disposal (834).
 - **Key architectural decisions:**
   - The authoritative behavioral reference is the FNA source tree at
     `/rv/data/library/github.com/FNA-XNA/FNA/src`.
@@ -359,34 +364,26 @@ already committed (permanent) rather than assuming it will resolve itself.
 
 ## 8. Next smallest tasks
 
-**Pending: external review.** The user said they will next have **ChatGPT Plus review this
-`cna_input` work** and decide what new tasks should be done, then send that feedback back here.
-**If the user returns without mentioning this review, ask whether it happened and whether there's
-feedback/new tasks from it before defaulting to the three options below** — don't just re-ask the
-same open-ended "what next" question as if this plan didn't exist.
+**The ChatGPT Plus review already happened** (2026-07-04) and became **Phase I9 (792–840) in
+`plan_input.md`, now complete** — so don't ask whether the review happened; it did, and it's done.
 
-**There is no next task anywhere in `plan_input.md`.** Phases I1–I8 (700–791) are all done —
-Phase I8 was the follow-up phase the user asked for after Phases I1–I7 first completed, and it's
-now done too. This is the same decision point as before Phase I8 existed, and it's the user's
-call, not a default to pick for them:
+**There is no next task anywhere in `plan_input.md`.** Phases I1–I9 (700–840) are all done and
+verified on all three backends (task 840). This is again the user's call, not a default to pick:
 
-1. **Merge/PR `feature/input` into `master`.** The branch's designated scope is complete, tested
-   on all three configured backends (EasyGL/Vulkan/Bgfx), and documented (`plan_input.md`,
-   `AUDIT.md`, `docs/input-backend.md`, `docs/xna-4-api-coverage.md`). Confirm with the user before
-   merging or pushing to `master` — this is a repo-affecting action.
-2. **Define more new follow-up tasks**, if there's further work wanted. The only known candidate
-   left is graphics-layer, not input-layer, scope (see below) — anything else would be a fresh
-   discovery, not a known deferred gap, so treat it accordingly (verify it's real before adding a
-   task for it).
-3. **Do nothing further and report the branch as complete** if neither of the above applies right
-   now — a valid, honest answer.
+1. **Merge/PR `feature/input` into `master`.** Scope complete, tested on EasyGL/Vulkan/bgfx, and
+   documented (`plan_input.md`, `AUDIT.md`, `docs/input-backend.md`, `docs/xna-4-api-coverage.md`,
+   `docs/platform-input-notes.md`, `docs/demo-input-checklist.md`). Confirm before merging/pushing
+   to `master` — a repo-affecting action.
+2. **Define more new follow-up tasks**, if wanted. The one known deferred item is graphics-layer
+   (`plan.md` `a-0001`, below); anything else is a fresh discovery — verify it's real first.
+3. **Do nothing further and report the branch as complete** — a valid, honest answer.
 
-**Intentionally not a task here:** `Mouse::SetPosition`'s scale-factor deviation (needs an
-`IGraphicsBackend` inverse-transform addition) was routed to `plan_input.md`'s "Known
-limitations / deferred" table with a pointer to `GRAPHICS_TASKS.md`, not added as a numbered task
-in this file — it's graphics-layer scope, and `GRAPHICS_TASKS.md` is a separate, actively
-maintained plan with its own numbering (currently up to Phase 69). If this is wanted, it should
-become a task there, not here.
+**Deferred, not forgotten:** `Mouse::SetPosition`'s letterbox scale-factor deviation (needs an
+`IGraphicsBackend` inverse logical→window transform) is Phase I9 tasks 800/801, **deferred by user
+decision to the new `plan.md` as task `a-0001`** (a cross-cutting/deferred plan using an `a-NNNN`
+id scheme). It's graphics-layer scope; don't add it back to `plan_input.md`. Task **811 is
+partial** — the bridge's SDL slot-assignment edge cases (dup-add / no-free / env-count /
+removed-unknown) need a real `SDL_OpenGamepad` device and aren't headless-testable.
 
 ---
 
@@ -424,15 +421,19 @@ become a task there, not here.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Phases I1-I8 (700-791) are all complete as of this writing — there is no
-next numbered task to pick up.
+Read NEXT.md first. Phases I1-I9 (700-840) are all complete and verified on EasyGL/Vulkan/bgfx
+(task 840) — there is no next numbered task to pick up.
 
-The user said they plan to have ChatGPT Plus review this cna_input work and decide new follow-up
-tasks from it. If the user hasn't mentioned that review yet, ask whether it happened and whether
-there's feedback/new tasks from it, before falling back to Section 8's generic three options
-(merge/PR, define new tasks, or do nothing further).
+The ChatGPT Plus review already happened and became Phase I9 (792-840) in plan_input.md, now
+complete — do NOT ask whether the review happened; it did. One item is deferred by user decision:
+tasks 800/801 (Mouse::SetPosition inverse transform, graphics-layer) live in the new plan.md as
+task a-0001. Task 811 is partial (bridge SDL slot-assignment edge cases are hardware-gated).
 
-If the user gives a new task (from the review or otherwise), treat it like any other: inspect
-only the files it needs, make one small, verified improvement, run the relevant build/test
-command, and update NEXT.md (Sections 2, 3, 5, 8, and this resume prompt) before finishing.
+The decision now is Section 8's three options — merge/PR feature/input into master (confirm before
+pushing), define new follow-up tasks, or report the branch complete. Do NOT merge/push to master
+without explicit confirmation.
+
+If the user gives a new task, treat it like any other: inspect only the files it needs, make one
+small, verified improvement, run the relevant build/test command (cmake-build-input-easygl is the
+kept-current EasyGL dir), and update NEXT.md + plan_input.md before finishing.
 ```
