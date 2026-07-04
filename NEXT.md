@@ -1,169 +1,179 @@
-# NEXT.md — CNA Project Handoff
+# NEXT.md — CNA Audio Port Handoff (branch `feature/audio`)
+
+> Covers the **audio** subsystem work on `feature/audio` only
+> (`Microsoft::Xna::Framework::Audio` + `CNA::Internal::Audio`).
+> Full file-by-file history, every fix's exact rationale, and FNA/FAudio line citations:
+> **`plan_audio.md`** (repo root). This file is deliberately a *short* current-state summary, not
+> a duplicate of that log.
+> **Media namespace is explicitly out of scope for this branch.**
 
 ---
 
 ## 1. Project summary
 
-**CNA** is a C++23 reimplementation of the XNA 4.0 programming model (`Microsoft::Xna::Framework`),
-built on SDL3 with a pluggable 3D graphics backend layer. It is a framework/runtime — not a game —
-designed so XNA/FNA game code can be ported to C++ with minimal API-surface changes.
+**CNA** is a C++23 reimplementation of the XNA 4.0 programming model
+(`Microsoft::Xna::Framework`), built on SDL3 with a pluggable graphics backend. It is a
+framework/runtime, not a game.
 
-- **Main goal:** full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit tests and
-  pixel-readback integration tests, verified against the authoritative FNA reference source
-  (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
-  `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
-- **Current development phase:** Phases 1–38 are complete. **Phase 39 (RenderTarget2D and
-  RenderTargetCube completeness, `GRAPHICS_TASKS.md` Tasks 331–340) is open** — Task 331 done,
-  **Task 332 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
-  closed phases have synthesis docs: `docs/sampler-state-support.md` (Phase 35),
-  `docs/depthstencilstate-support.md` (Phase 37), `docs/rasterizerstate-support.md` (Phase 38).
-- **Key architectural decisions:**
-  - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
-    (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
-    `SDL_Renderer` is 2D-only by design (no 3D pipeline at all).
-  - The `sharp-runtime` sibling repo (`../sharp-runtime/`) provides all `System.*` types and
-    primitive type aliases (`bytecs`, `Single`, `String`, …) used on the XNA API surface.
-  - Vertex layout dispatch is **stride-keyed**: EasyGL/Vulkan/Bgfx select their GPU vertex layout
-    from the raw byte stride of the bound buffer, not from `VertexDeclaration` contents. Only
-    strides 16/20/24/32/52 are handled correctly.
-  - `Texture3D` and `TextureCube` inherit `GraphicsResource` directly, **not** `Texture` — unlike
-    FNA, where both inherit `Texture`. Known, documented architectural gap (see §5/§6) with real
-    downstream consequences (texture-in-shader sampling, `EffectParameter` storage).
-  - `GraphicsDevice` stores state objects (`BlendState`/`DepthStencilState`/`RasterizerState`) **by
-    value**, unlike FNA's reference-type aliasing. Deliberate, project-wide, not fixed (Task 869).
+- **This branch's goal:** port and verify `Microsoft::Xna::Framework::Audio` file-by-file against
+  the authoritative FNA source (`/rv/data/library/github.com/FNA-XNA/FNA/src/Audio`), matching XNA
+  behavior exactly, with full test coverage.
+- **Current phase:** the original compliance/bugfix plan (Fáze 0–6), Fáze 7 (30 findings) and
+  Fáze 8 (25 findings) — two prior line-by-line audits against FNA — are fully closed. **Fáze 9**
+  is a separate, user-directed "audio correctness hardening" pass against a fixed, user-specified
+  11-group task list (`plan_audio.md`'s "Phase 9" section). 6 of those 11 groups are fully closed
+  (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`); `P9-XACT` is
+  9/15 done (variation-table variable-driven selection and one-shot RPC volume/pitch wiring are
+  in; DSP/filter wiring and missing-wave/cue fidelity remain); 4 groups remain fully open
+  (`P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`, `P9-AUDIT`) — see §4/§8.
+- **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
+  (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
+  by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
+  choice is the root cause of every documented deviation from FNA (see `CHECKLIST.md` and
+  `docs/xna-4-api-coverage.md`'s Audio section for the full compatibility table and the
+  SDL3_mixer-vs-FAudio/FACT limitations behind it) — no per-source 3D audio graph, no aux-send/
+  reverb bus, only a 2-value stereo gain pair instead of a 4-coefficient crossfeed matrix, a single
+  per-track "cooked callback" slot, etc.
+- `sharp-runtime` (sibling repo `../sharp-runtime`) supplies all `System.*` types and primitive
+  aliases used on the XNA API surface. It is under **separate, active, concurrent development** by
+  another session — if a build ever fails inside `SHARP_RUNTIME/CMakeFiles/...`, check
+  `git status`/`git log -1` there before assuming the audio code broke something.
 
 ---
 
 ## 2. Current status
 
-### Build status
-- **EasyGL** (`cmake-build-debug`) and **Vulkan** (`cmake-build-vulkan`): both configured, build
-  cleanly, rebuilt and verified in the current session.
-- **Bgfx** (`cmake-build-bgfx`): last verified in an earlier session (Task 309); not rebuilt since
-  — none of the more recent sessions' changes touch Bgfx code, but this is unconfirmed for the
-  current tree.
-
-### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 2301/2304 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 2228/2241 pass. 13 pre-existing/documented failures (see §5):
-  5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
-  `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
-  `Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame` (order-dependent flakiness — only one of
-  the two fails per run).
-- **Bgfx:** last confirmed 1985/1985 (100%) as of Task 309; stale, not rerun since.
-- **Caution:** run EasyGL's and Vulkan's full `ctest` suites **sequentially, never concurrently**
-  — concurrent runs previously produced transient GPU/driver-contention false failures. If a
-  single run shows an anomaly beyond the documented list, re-run that test in isolation before
-  treating it as a regression.
-
-### What currently works
-- Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (arbitrary
-  sub-regions, `startIndex`, mip levels on EasyGL), argument validation, `Dispose`.
-- `SurfaceFormat` enum: all 27 values match FNA exactly, including ordinals.
-- `SamplerState`/`BlendState`/`DepthStencilState`/`RasterizerState`: full property surfaces, all
-  static presets (including `Name`), and `GraphicsDevice` defaults all verified against FNA and
-  pixel-tested where applicable (Phases 35–38).
-- `GraphicsDevice.SamplerStates`/`VertexSamplerStates` are honored by all 3D stock-effect draws on
-  all 3 backends (Task 293 fix).
-- `EnvironmentMapEffect` and `SpriteBatch` (all 20 FNA public methods) work on all 3 backends.
-- Vulkan rendering is colorspace-correct (`Texture2D`/swapchain both fixed from sRGB to UNORM).
-- `RenderTarget2D`: constructors, `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`, and
-  now `IsContentLost`/`ContentLost` (Task 331) all match FNA at the property level. Basic
-  render-to-texture round trip pixel-verified on EasyGL and Vulkan.
-
-### What does NOT work yet
-- **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
-  equations / depth-compare ops / no stencil testing at all, regardless of what's requested.
-  Tracked as Task 868/Task 870, confirmed repeatedly via pixel tests, not fixed (large,
-  multi-pipeline-site changes).
-- `GraphicsDevice.ReferenceStencil`'s independent-override behavior has zero backend connection on
-  all 3 backends (Task 872). `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` everywhere
-  (Task 871).
-- `RenderTarget2D`'s `mipMap` parameter is silently ignored (level count always 1; no backend
-  allocates render-target mip storage) — Task 336. `preferredMultiSampleCount` is stored verbatim
-  and never clamped/wired to any backend — Task 337. Both found this session (Task 331), deferred.
-- `Texture3D`/`TextureCube::GetData` is a total silent no-op on Vulkan/Bgfx (Task 865).
-  `TextureCube::DDSFromStreamEXT` is a non-functional stub (Task 663).
-- `Texture2D::SetData(level>0,...)` is a silent no-op on Vulkan/Bgfx; EasyGL's non-mip-aware
-  filters render solid black on mip-incomplete textures (Task 867).
-- `SpriteBatch`'s `SamplerState` is a no-op on Vulkan/Bgfx (EasyGL only). Multiple
-  `SpriteBatch::Begin()`/`End()` per frame on Vulkan: only the last batch renders.
-- `Texture3D` sampling cannot be wired into any shader without an architecture change (Task 863).
+- **Build:** clean. EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked.
+  Verified via both the manual `cmake-build-debug/` directory and the `tests` CMake preset
+  (freshly reconfigured from a deleted build directory). `cna_demo_sound`/`cna_demo_2d` example
+  targets also rebuild clean.
+- **Tests:** `CnaTests` **2102 / 2102 pass**, reliably (stress-tested 5+ consecutive full-suite
+  runs with zero failures since the latest change; the pre-`P9-XACT` baseline of 2093 was verified
+  clean under a full ASan+UBSan build). Re-run to check for drift:
+  `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
+- **CLI/tools/apps:** none in the framework itself — this is a library/framework, not an
+  application. `cna_demo_sound`/`cna_demo_2d` are example programs exercising the Audio API; they
+  aren't part of `--target CnaTests` and are easy to forget to rebuild.
+- **What works (Audio namespace):** `SoundEffect`/`SoundEffectInstance` (real SDL3_mixer playback,
+  move-only instance-tracking Dispose cascade, real low/high/band-pass filters);
+  `DynamicSoundEffectInstance` (real buffer queue via `SDL_AudioStream`); `AudioEngine`/
+  `SoundBank`/`WaveBank`/`Cue` (real hand-written XACT parser, real category volume/pause/resume/
+  stop, real natural-completion and authored-stop-tail state reconciliation, real 3D pan/
+  attenuation); `Microphone` (real SDL3 capture). See `docs/xna-4-api-coverage.md`'s Audio
+  compatibility table for the full implemented/approximate/unsupported breakdown.
+- **What does not work / remains open:** the 5 open Fáze 9 groups (§4/§8) cover XACT RPC/DSP
+  wiring, 3D audio fidelity beyond pan+attenuation, hardware/exception-path edge cases, and
+  `DynamicSoundEffectInstance` buffer-lifecycle test coverage — none of these are known *bugs*,
+  they're unaudited/unfinished hardening work per the user's own Fáze 9 scope.
 
 ---
 
-## 3. Recent changes
+## 3. Recent changes (most recent Fáze 9 groups, newest first)
 
-Most recent first. Full history (including everything before Task 271, and full detail for every
-task below) is in `GRAPHICS_TASKS.md` and `git log`.
+- **`P9-XACT-001..009`** (`8800254`) — two independent fixes to data that was
+  parsed but never used. (1) Interactive (`type==3`) variation tables now select an entry by
+  finding which one's `[varMin, varMax]` contains the bound variable's current value (matching
+  FAudio's `get_active_variation_index`), instead of falling back to a uniform random pick —
+  `XsbVariEntry` gained `varMin`/`varMax` fields the parser used to read and discard. (2) RPC
+  (Runtime Parameter Control) volume/pitch curves are now parsed from the `.xgs` (previously not
+  parsed at all — `rpcOffset`/`rpcCount` weren't even read from the header) and from each `.xsb`
+  sound's RPC code list (previously read only far enough to skip past), and evaluated once at
+  `Cue::Play()` time against the bound variable's current value (**not** continuously
+  re-evaluated while playing, unlike real FACT's per-tick update — documented gap in
+  `CHECKLIST.md`). DSP/filter wiring (`P9-XACT-010..013`) and missing-wave/cue fidelity
+  (`P9-XACT-014/015`) remain open.
+- **`P9-STOP-001..010`** (`bd1c932`/`e4ffb1e`) — fixed a real bug: `Cue::Stop(AsAuthored)` used to
+  mark a cue fully `Stopped` and unregister it from `AudioEngine`/`WaveBank` immediately, even
+  while its release tail was still audibly playing. Now uses a `State::Stopping` transitional
+  state (the enum value already existed, unused) that `ReconcileState()` promotes to `Stopped`
+  once the tail actually finishes — same mechanism already used for natural-completion detection.
+- **`P9-BUILD-001..007`** (`47a58f5`/`1cb2b75`) — added `CMakePresets.json`'s first native desktop
+  preset (`tests`). While verifying "all tests pass from a clean checkout," found and fixed a real
+  data race in 3 DSP-filter tests (the real SDL3_mixer mixing thread racing a test's synchronous
+  filter-processing calls on shared state) — confirmed by a ~15–25% failure rate over repeated
+  runs, fixed by stopping the track before the manual test loop.
+- **`P9-DOCS-001..007`** (`7bec360`/`cdec800`) — synchronized `AUDIT.md`, `docs/xna-4-api-
+  coverage.md`, and `docs/coverage.md` against real current code (several claims predated this
+  branch's work entirely, describing implemented XACT/Microphone/DynamicSoundEffectInstance
+  functionality as unimplemented stubs); added a consolidated Audio compatibility table.
+- **`P9-VALIDATION-001..015`** (`8f439dd`/`2463eed`) — found and fixed the most serious bug of
+  Fáze 9: `offset+count` validated as a plain `int32` addition in `SoundEffect`'s buffer/range
+  constructor and `DynamicSoundEffectInstance::SubmitBuffer`/`SubmitFloatBufferEXT` could overflow
+  and wrap negative, bypassing the bounds check entirely — **confirmed by a real segfault**, not
+  just a failing assertion. Fixed with overflow-safe unsigned arithmetic at all three sites.
+- **`P9-CATEGORY-001..004`** (`9039ec6`/`1733e28`) — found and fixed a real bug: `AudioEngine::
+  StopCategoryInternal` iterated `activeCues` directly while `Cue::Stop()` cascades into
+  `UnregisterCue()`, erasing from that same vector mid-iteration — silently skipped stopping a cue
+  whenever 3+ cues shared a category. Fixed by snapshotting before iterating.
+- **`P9-LIFECYCLE-001..015`** (`5f3e5d0`..`c5f50c9`) — the priority bug for Fáze 9: `Cue::IsPlaying`/
+  `IsPaused`/`IsStopped` never reconciled after natural playback completion, staying `Playing`
+  forever. Fixed with `Cue::ReconcileState()`, a live per-call reconciliation against each active
+  instance's real SDL3_mixer state.
 
-| Commit / Task | Change |
-|---|---|
-| `3fdb6c6` Task 331 | **Opens Phase 39.** Audited `RenderTarget2D` against FNA line-by-line. Fixed a real gap: added missing `IsContentLost`/`ContentLost` (mirroring `RenderTargetCube`). Found and deliberately deferred two gaps to dedicated tasks: `mipMap` ignored (Task 336), `MultiSampleCount` not clamped/wired (Task 337). New pixel-free property test on both backends (15/15 pass each). |
-| `e81d443` Task 330 | **Closes Phase 38.** Confirmed (no bug) `RasterizerState` has no freeze/immutability enforcement, matching FNA. Wrote `docs/rasterizerstate-support.md` synthesizing Phase 38 — found **no new tracked bugs**, only test-coverage gaps. |
-| `4ab72c7` Task 326 | Registered the existing backend-agnostic `FillMode` pixel test for EasyGL too (previously Vulkan-only). No bug found. |
-| `14e58da` Tasks 323–325 | One `CullMode` pixel test (contrast-checked across `None`/`CullClockwiseFace`/`CullCounterClockwiseFace`, 6/6 both backends) satisfies all 3 tasks. Found (not fixed, out of scope) Task 318's quad-naming was backwards. |
-| `b61aee8` Task 322 | Extended `GraphicsDevice`'s default-`RasterizerState` test to the full 6-property surface. No bug. |
-| `c18b0f3` Task 321 | **Opens Phase 38.** Fixed the last portion of Task 866 (preset `Name` gap) — closes Task 866 entirely across all 4 state classes. |
-| `ba6011e` Task 320 | **Closes Phase 37.** `docs/depthstencilstate-support.md` synthesis. |
-| `6652573` Tasks 318–319 | 5th reconfirmation of Task 870 (Vulkan stencil fake). Fixed a `ReferenceStencil`-propagation bug (Task 309-shaped); found a 2nd universal bug — `ReferenceStencil` has zero backend connection anywhere (new Task 872). |
-| `95abf99`/`d86c1f4`/`c1d8e74`/`65d3d21`/`eccbb9e` Tasks 313–317 | Per-property `DepthStencilState` pixel tests; Task 313 discovered Task 870 (Vulkan depth/stencil almost entirely fake), reconfirmed 4 more times; Task 315 found and **fixed** a real bug (`SDL_GL_STENCIL_SIZE` never requested on EasyGL); found Task 871 (`Clear` ignores stencil). |
-| `a1bcf20` Tasks 311–312 | **Opens Phase 37.** Fixed `DepthStencilState`'s preset `Name` gap; fixed `GraphicsDevice`'s default `DepthStencilState`/`RasterizerState` never actually copying their FNA-specified presets. |
-
-Older history (Phases 34–36, Tasks 271–310): see `GRAPHICS_TASKS.md` and
-`docs/sampler-state-support.md`. Headline: Task 293 fixed a severe, project-wide bug (per-slot
-`SamplerState` silently ignored by all 3D draws, all 3 backends); Task 304 found Vulkan's
-`BlendState` support is almost entirely fake (Task 868, not fixed, confirmed 5×).
+Full commit-by-commit detail, FNA/FAudio source citations, and `git stash` verification notes for
+every item above: `plan_audio.md`'s "Phase 9" section.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**There is no build-breaking or test-breaking blocker.** The repository builds and the test suites
-pass at the rates given in §2 on EasyGL and Vulkan (Bgfx unverified this session, last known-good).
+**No build- or test-breaking blocker exists.** The build is clean and all 2102 tests pass
+reliably. This is **not** a "nothing left to do" branch state, though — Fáze 9 (a user-directed,
+already-scoped task list) still has open work:
 
-The most significant *correctness* gap is architectural, not a build/test failure: `Texture3D`/
-`TextureCube` do not inherit `Texture` in CNA (they inherit `GraphicsResource` directly), which
-structurally prevents `Texture3D` from ever being sampled via the normal
-`GraphicsDevice.Textures[slot]` path. No failing command or test is tied to this — it manifests as
-a compile-time impossibility if game code tries `GraphicsDevice.Textures[i] = my3DTexture` the way
-real XNA/FNA code would. See `GRAPHICS_TASKS.md` Task 863.
+- `P9-XACT` (9/15 done) — RPC volume/pitch and interactive-variation selection are wired; still
+  open: DSP/filter parsing+wiring audit (`P9-XACT-010..013`) and missing-wave/cue error-path
+  fidelity (`P9-XACT-014/015`).
+- `P9-3D` — 3D audio fidelity beyond the existing pan+distance-attenuation approximation (Doppler
+  pitch adjustment feasibility, stereo panning model, more test coverage).
+- `P9-HARDWARE` — `NoAudioHardwareException` usage audit, `std::runtime_error` vs XNA-compatible
+  exception behavior, no-audio-device test coverage.
+- `P9-DYNAMIC` — `DynamicSoundEffectInstance` `PendingBufferCount`/`BufferNeeded` test coverage
+  audit (buffer completion while playing/paused, multiple subscribers, subscriber removal
+  mid-callback).
+- `P9-AUDIT` — the original "fresh-read audit" deliverable (a formal per-file comparison write-up)
+  was never produced as its own artifact; the reading needed to fix the other groups happened ad
+  hoc. Optional/lowest priority; was never in the user's explicit implementation order.
 
-The most significant *silent-failure* gaps (compile and run without error, wrong or no data):
-Vulkan's `BlendState`/`DepthStencilState` support (Tasks 868/870), `TextureCube::DDSFromStreamEXT`
-(Task 663), `Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), and `RenderTarget2D`'s
-`mipMap`/`MultiSampleCount` params being accepted but not actually wired to any backend
-(Tasks 336/337, found this session). None have a test that currently fails loudly — they're only
-visible via dedicated pixel tests or direct code reading.
+Two genuine **open decisions** (not tasks) are recorded in `CHECKLIST.md` and require the user's
+input before implementing either way:
+1. `Cue::IsPlaying`/`IsPaused` are mutually exclusive in CNA; real FACT lets both be `true`
+   simultaneously (pausing never clears the `PLAYING` bit). Fixing it would touch
+   `AudioEngine::PauseCategoryInternal`/`ResumeCategoryInternal` and existing tests.
+   (`P9-LIFECYCLE-013`)
+2. `Cue::Stop(AsAuthored)`'s release-tail *duration* is however long the wave naturally takes, not
+   an authored `fadeOutMS`/RPC-release curve — `XactParser` doesn't retain per-cue fade timing at
+   all. Fixing it would need parser changes plus a new time-driven update mechanism. (`P9-STOP-010`)
+
+**Known recurring hazard (not currently active):** this branch's build depends on
+`../sharp-runtime`, under separate, active, concurrent development by another session. A build
+failure inside `SHARP_RUNTIME/CMakeFiles/...` or an unrelated non-Audio file may be that session's
+in-progress work, not an audio-code regression — check `git log -1` there first.
 
 ---
 
 ## 5. Known bugs and limitations
 
-| Status | Issue | Tracking |
+| Status | Issue | Ref |
 |---|---|---|
-| Confirmed, MASSIVE, not fixed | Vulkan's `BlendState` support is almost entirely fake — hardcodes one blend equation regardless of request. Confirmed 5× via pixel tests. EasyGL fully correct. | Task 868 |
-| Confirmed, MASSIVE, not fixed | Vulkan's `DepthStencilState` support is almost entirely fake — `DepthBufferFunction` hardcoded, entire stencil-test parameter set unused. Confirmed 5× via pixel tests. EasyGL fully correct. | Task 870 |
-| Confirmed, universal, not fixed | `GraphicsDevice.ReferenceStencil`'s independent-override has zero backend connection on all 3 backends. | Task 872 |
-| Confirmed, universal, not fixed | `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` on every backend. | Task 871 |
-| Confirmed, not fixed (found Task 331) | `RenderTarget2D`'s `mipMap` is silently ignored — level count always 1; no backend allocates RT mip storage. | Task 336 |
-| Confirmed, not fixed (found Task 331) | `RenderTarget2D`'s `preferredMultiSampleCount` is stored verbatim, never clamped/wired to any backend. | Task 337 |
-| Confirmed, severe, silent failure | `TextureCube::DDSFromStreamEXT` ignores its stream argument, always returns a blank 1×1 texture. | Task 663 |
-| Confirmed, severe, silent failure | `Texture3D`/`TextureCube::GetData` total no-op on Vulkan/Bgfx. | Task 865 |
-| Confirmed, silent failure | `Texture2D::SetData(level>0,...)` no-op on Vulkan/Bgfx; EasyGL renders solid black for mip filters on mip-incomplete textures. | Task 867 |
-| Confirmed, architectural, not fixed | `Texture3D`/`TextureCube` can't be sampled in any shader — don't inherit `Texture`. | Task 863 |
-| Confirmed, architectural, deliberate | `GraphicsDevice` stores state objects by value, unlike FNA's reference-type aliasing. No game code here relies on FNA's behavior. | Task 869 |
-| Confirmed bug | `SpriteBatch` with multiple `Begin()`/`End()` per frame on Vulkan: only the last batch renders. | — |
-| Confirmed, incomplete | `SpriteBatch`'s `SamplerState` (`Begin()`) is a no-op on Vulkan/Bgfx (EasyGL only). | — |
-| Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. Not caused by recent work. | — |
-| Confirmed, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` aborts on an internal assert in the sibling `easy-gl` repo. | — |
-| Confirmed, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. | — |
-| Confirmed, pre-existing, flaky | `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`: order-dependent, only one fails per full-suite run. | — |
-| Suspected, not reproduced | Vulkan/Bgfx likely have the same mip-allocation bug already fixed on EasyGL's `TextureCube` (Task 276), for `Texture3D`/`TextureCube` on both backends. | Task 864 |
-| Needs verification | Whether Bgfx's window actually has a physical stencil buffer (the same class of gap just found/fixed on EasyGL) has not been checked. | — |
-| Incomplete, by design | Stride-keyed vertex layout only supports strides 16/20/24/32/52. Vulkan has no `Tangent`/`Binormal` mapping. `SurfaceFormat` support is Color-only for real GPU formats. `SDL_Renderer` has no 3D at all. Bgfx has no GPU pixel-readback API. | — |
-| Risky assumption | `GraphicsDevice`'s user-primitive scratch buffers never shrink — fine for typical use, but memory stays at the high-water mark for the device's lifetime. | — |
+| **Confirmed, fixed** | `Cue::IsPlaying`/`IsPaused`/`IsStopped` never reconciled after natural completion | `P9-LIFECYCLE-001..009` |
+| **Confirmed, fixed** | `offset+count` int32-overflow → real segfault in `SoundEffect` ctor / `DynamicSoundEffectInstance::SubmitBuffer`/`SubmitFloatBufferEXT` | `P9-VALIDATION-003/010/011` |
+| **Confirmed, fixed** | `AudioEngine::StopCategoryInternal` mutate-during-iteration bug, silently skipped stopping cues | `P9-CATEGORY-001/002` |
+| **Confirmed, fixed** | `Cue::Stop(AsAuthored)` marked a cue fully stopped/unregistered while its tail was still playing | `P9-STOP-002..005` |
+| **Confirmed, fixed** | `SoundEffectInstance`/`DynamicSoundEffectInstance::Resume()` didn't call `Play()` when never-started/disposed (FNA does) | `P9-VALIDATION-010` |
+| **Accepted deviation** | `IsPlaying`/`IsPaused` mutually exclusive, unlike real FACT — decision pending | `CHECKLIST.md`, `P9-LIFECYCLE-013` |
+| **Accepted deviation** | Authored-stop tail duration ≠ real `fadeOutMS` curve (not parsed/retained at all) | `CHECKLIST.md`, `P9-STOP-010` |
+| **Accepted deviation** | RPC volume/pitch curves evaluated once at `Play()` time, not continuously re-evaluated while playing (no per-frame `Cue` update tick exists) | `CHECKLIST.md`, `P9-XACT-005/006/007` |
+| **Accepted deviation** | Stereo hard-pan eliminates the opposite channel instead of crossfeed-blending it | `CHECKLIST.md`, `CP-19` |
+| **Accepted deviation** | No Doppler, no 3D HRTF/elevation — pan + linear distance-attenuation only | `CHECKLIST.md` |
+| **Accepted deviation** | Reverb is a documented no-op (`INTERNAL_applyReverb`) — SDL3_mixer has no aux-send/return bus | `CHECKLIST.md`, `T-4C` |
+| **Accepted deviation** | XACT category `instanceLimit`/`fadeInMS`/`fadeOutMS` parsed but never enforced | `CHECKLIST.md`, `XA-11` |
+| **Accepted deviation** | `AudioEngine`/`SoundBank`/`WaveBank` silently stub instead of throwing on a missing/corrupt file; `NoAudioHardwareException` never thrown | `CHECKLIST.md`, `CP-18`/`XA-9` |
+| **Needs verification** | `SoundEffectInstance` filter coefficient locking follows SDL3_mixer's documented practice but was never stress-tested under real concurrency (no ThreadSanitizer run) | `T-4C` |
+| **Needs verification** | Device-dependent tests only ever run against the SDL `dummy` driver here; real-hardware runs are manual/ad-hoc | — |
+| **Incomplete** | `P9-XACT`/`P9-3D`/`P9-HARDWARE`/`P9-DYNAMIC` — see §4 | `plan_audio.md` |
+
+Full list with FNA/FAudio line citations and verification notes: `plan_audio.md`.
 
 ---
 
@@ -171,193 +181,184 @@ visible via dedicated pixel tests or direct code reading.
 
 ### Main modules
 
-| Layer | Location | Notes |
+| Component | Location | Notes |
 |---|---|---|
-| XNA public API | `include/Microsoft/Xna/Framework/…` | Must match XNA 4.0 / FNA exactly |
-| Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, `IVertexBuffer`, etc. |
-| EasyGL backend | `src/CNA/Internal/Backends/EasyGL/` | Primary; OpenGL ES 3.2 via EasyGL wrapper |
-| Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | `VulkanVertexFormatHelper.hpp` for per-format mapping |
-| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | `BgfxVertexFormatHelper.hpp`; no readback API |
-| CNA utilities | `include/CNA/`, `src/CNA/` | `NOXNA` helpers, logging, math |
-| sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types, primitive aliases |
+| XNA audio API | `include/Microsoft/Xna/Framework/Audio/`, `src/.../Audio/` | Must match XNA 4.0 / FNA exactly |
+| Internal mixer | `CNA/Internal/Audio/AudioMixer.{hpp,cpp}` | SDL3_mixer `MIX_Mixer` singleton, opened lazily on first use |
+| XACT parser | `CNA/Internal/Audio/XactParser.cpp`, `XactTypes.hpp` | Hand-written `.xgs`/`.xsb`/`.xwb` reader — FACT is **not** used |
+| sharp-runtime | `../sharp-runtime/` | `System.*` types, primitive aliases, exception hierarchy |
 
-### Critical invariants (do not break these)
+### Data flow (playback)
 
-- **`NOXNA` macro** tags every non-XNA extension in public headers — required for any new CNA-only
-  public method/constructor/type. Requires `#include "CNA/CNAHelper.hpp"`.
-- **C# properties** → `getXProperty()` / `setXProperty()` — never public fields on the XNA surface.
-- **`static readonly`** (C#) → `static const` member in `.hpp` + definition in `.cpp`.
-- **Type aliases** from `SharpRuntime/SharpRuntimeHelper.hpp` (`bytecs`, `Single`, `String`, …) must
-  be used on XNA API surfaces — never raw `uint8_t`/`float`/`std::string` directly.
-- **Backend selection is compile-time** — no runtime branch between backends in the same binary.
-- **Stride-keyed vertex layout** — only strides 16/20/24/32/52 work correctly for 3D.
-- **Doxygen required** on every public `.hpp` member: full `/** @brief … @param … @return */`.
-- **SPDX header** `// SPDX-License-Identifier: MS-PL` at the top of every `.hpp`/`.cpp`.
-- **`Texture3D`/`TextureCube` inherit `GraphicsResource`, not `Texture`** — a known deviation from
-  FNA (see §5). Do not assume code that works for `Texture2D` "just works" for these two.
-- **`SurfaceFormat` ordinal values are load-bearing** — every backend does
-  `static_cast<int>(format)`. Any enum edit must preserve FNA's exact ordinals (verified 0–26).
-- **`Texture::ValidateFormat` blocks every format except `Color`** at construction time.
-- **`GraphicsDevice::userVertexScratch_`/`userIndexScratch_`** are shared, growable, non-shrinking
-  scratch buffers used by all `DrawUserPrimitives`/`DrawUserIndexedPrimitives` overloads. Never
-  resize down; never reenter mid-write.
-- **No backend's `CreateRenderTarget2D`/`CreateRenderTargetCube` accepts a mip count or a
-  multisample count** — `RenderTarget2D`/`RenderTargetCube`'s `mipMap`/`multiSampleCount`
-  constructor parameters are currently accepted but not wired through (Tasks 336/337/332).
+```
+SoundEffect (loads MIX_Audio; move-only, instance-tracking Dispose cascade)
+  → CreateInstance() returns SoundEffectInstance BY VALUE
+  → Play() creates a MIX_Track, binds the MIX_Audio, plays
+  → INTERNAL_apply{Low,High,Band}PassFilter register a real state-variable filter via a
+    SDL3_mixer per-track callback; reverb is a documented no-op
+DynamicSoundEffectInstance
+  → user submits buffers → SDL_AudioStream → MIX_Track
+  → FrameworkDispatcher::Update() pumps registered instances and raises BufferNeeded
+AudioEngine/SoundBank/WaveBank/Cue
+  → XactParser reads .xgs/.xsb/.xwb → cues map to SoundEffect/SoundEffectInstance via SDL_mixer
+  → Cue::ReconcileState() lazily reconciles Playing→Stopped (natural completion) and
+    Stopping→Stopped (authored-stop tail finishing), queried live on every state getter
+  → AudioCategory operations snapshot activeCues before iterating (mutate-during-iteration-safe)
+  → AudioEngine::Update() sweeps each registered SoundBank's finished fire-and-forget cues
+Microphone (capture)
+  → getAllProperty() enumerates via SDL_GetAudioRecordingDevices; Start()/Stop() manage a real
+    SDL_AudioStream capture stream
+```
 
-### FNA reference
+### Invariants that must stay stable
 
-Authoritative behavioral reference: `/rv/data/library/github.com/FNA-XNA/FNA/src`. When CNA
-intentionally diverges from FNA, document it in the commit/PR description and in `GRAPHICS_TASKS.md`
-— not as a source comment explaining the deviation's rationale.
+- **Backend = SDL3_mixer only.** Do not reintroduce FAudio/FACT.
+- **Exceptions on the XNA surface must be `System::` types**, never raw `std::` exceptions
+  (internal `XactParser` corrupt-data throws are the one sanctioned exception, caught/converted at
+  the `SoundBank`/`WaveBank` constructor boundary).
+- **`Cue::ReconcileState()` only mutates `active_`/`state_`, never `waveBanksUsed_`/`AudioEngine`'s
+  registries** — it runs from `const` state getters that may be called mid-iteration over those
+  other registries elsewhere (e.g. `WaveBank::getIsInUseProperty()`). Actual unregistration only
+  happens from `StopInternal()` (explicit `Stop(Immediate)`/`Dispose()`) or `SoundBank::
+  SweepFireAndForget()`.
+- **All four `AudioEngine` category operations snapshot `activeCues` before iterating** — don't
+  revert to live iteration; `Cue::Stop()` cascades into `UnregisterCue()`, which erases from that
+  same vector.
+- **Never validate a byte-range as `offset + count > buffer.size()` in `intcs` (int32)** — this
+  caused a real segfault. Use the unsigned-arithmetic pattern at all three existing call sites.
+- **`Cue::State::Stopping`** models an authored-stop cue whose real tail is still playing; don't
+  collapse it back into `Stopped` synchronously.
+- **`SoundEffect` is move-only** — a single owner per resource is what makes its instance-tracking
+  Dispose cascade unambiguous. Don't reintroduce copy semantics.
+- **SPDX + Doxygen + `NOXNA` + SharpRuntime aliases** required per `CLAUDE.md`/`CHECKLIST.md`.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# Configure (EasyGL — primary)
-cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+# --- Native desktop test preset (recommended) ---
+cmake --preset tests
+cmake --build --preset tests --target CnaTests -j"$(nproc)"
+SDL_AUDIODRIVER=dummy ./cmake-build-tests/CnaTests
 
-# Configure (Vulkan)
-cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN -DCNA_BUILD_TESTS=ON
+# --- Manual equivalent ---
+cmake -B cmake-build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+      -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
+SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests
 
-# Configure (Bgfx)
-cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX -DCNA_BUILD_TESTS=ON
+# Run only the audio test suites
+SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter='*SoundEffect*:*Dynamic*:*AudioEmitter*:*AudioListener*:*SoundState*:*AudioChannels*:*AudioStopOptions*:*MicrophoneState*:*PlayLimit*:*NoAudio*:*NoMicrophone*:*Audio*:*Cue*:*WaveBank*:*SoundBank*:*XactParser*'
 
-# Build CNA library
-cmake --build cmake-build-debug --target CNA -j$(nproc)
+# Rebuild the example demos too if touching anything on the Audio public API surface
+cmake --build cmake-build-debug --target cna_demo_sound cna_demo_2d -j"$(nproc)"
 
-# Build and run all unit tests (EasyGL)
-cmake --build cmake-build-debug --target CnaTests -j$(nproc)
-./cmake-build-debug/CnaTests
+# One-off ASan+UBSan verification (delete the build dir after use)
+cmake -B cmake-build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+      -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON \
+      -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g" \
+      -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+cmake --build cmake-build-asan --target CnaTests -j"$(nproc)"
+SDL_AUDIODRIVER=dummy ./cmake-build-asan/CnaTests
+rm -rf cmake-build-asan
 
-# Run a specific unit test suite
-./cmake-build-debug/CnaTests --gtest_filter="Texture2DTest.*"
+# git-stash regression-verification pattern used for every fix on this branch:
+#   1. git stash push -- <changed source files>   (keep the new test, revert just the fix)
+#   2. rebuild, run the new test, confirm it FAILS against the pre-fix code
+#   3. git stash pop                                (restore the fix)
+#   4. rebuild, run the full suite, confirm green
 
-# Build Vulkan (single-threaded is more reliable for link stability)
-cmake --build cmake-build-vulkan --target CNA -j1
+# Dependencies: SDL3/SDL3_image/SDL3_mixer are git submodules under third_party/, built into the
+# persistent .sdl-prebuilt/ cache on first configure (-DCNA_USE_SYSTEM_SDL=ON to use system
+# packages instead). googletest is a git submodule under vendor/, always built from source.
+git submodule update --init --recursive   # run once after cloning
 
-# Full ctest run (unit + integration), any backend build dir — run sequentially, not concurrently
-# across backends (see §2)
-cd cmake-build-debug && ctest -j1 --output-on-failure
-cd cmake-build-debug && ctest -R <TestName>          # run one test in isolation (useful for flaky tests)
-
-# Run a specific EasyGL/Vulkan integration/example test directly (needs an X server on :0)
-SDL_VIDEODRIVER=x11 DISPLAY=:0 ./cmake-build-debug/cna_test_easygl_rendertarget2d_properties
+# FNA reference source for any audio file
+ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 ```
-
-There is no known reproducible failing build command right now (see §4).
 
 ---
 
 ## 8. Next smallest tasks
 
-In priority order:
+Fáze 9's own task list (`plan_audio.md`) is the source of truth; the user's explicit implementation
+order is exhausted through `P9-STOP`, and `P9-XACT` is partway done (9/15). The remaining groups
+have no user-specified priority among them — suggested order below is by "smallest
+independently-verifiable slice first":
 
-1. **`GRAPHICS_TASKS.md` Task 332 — audit `RenderTargetCube` constructors and properties against FNA**
-   - Goal: same audit shape as Task 331 (just done), one class over. Read FNA's
-     `RenderTargetCube.cs` line-by-line and check CNA's `RenderTargetCube.hpp/.cpp` against it —
-     constructor overload(s), `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`, and (per
-     the task's own note) faces and mipmaps specifically. **Known lead**: `RenderTargetCube.cpp`'s
-     constructor takes `bool /*mipMap*/` — completely unused (commented out), same bug shape as
-     Task 331's Task-336 finding for `RenderTarget2D`, but not yet confirmed against FNA
-     line-by-line or written up as its own tracked task. `IsContentLost`/`ContentLost` are already
-     present and correct on `RenderTargetCube` — do not re-add them.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/RenderTargetCube.cpp`, `RenderTargetCubeTests.cpp`
-     (check if it exists first).
-   - Verification: unit tests for the constructor and every property; do not assume conformance
-     without reading the FNA source directly.
+1. **Audit DSP/filter parsing and runtime application** (`P9-XACT-010`). Goal: determine what a
+   sound's parsed DSP preset codes (`SOUND_FLAG_HAS_DSP`, currently read-and-discarded in
+   `XactParser.cpp`, same shape as the RPC codes `P9-XACT-005/006` just fixed) would need to wire
+   low/high/band-pass filters into `SoundEffectInstance`'s existing real filter implementation
+   (`INTERNAL_apply{Low,High,Band}PassFilter`, already real via a per-track SDL3_mixer callback).
+   Files: `CNA/Internal/Audio/XactParser.cpp`, `XactTypes.hpp`. Verification: read-only audit, no
+   command — produces a `plan_audio.md` note, same pattern as `P9-XACT-005`.
+2. **Wire parsed filters into `SoundEffectInstance` where feasible** (`P9-XACT-011`), plus keep
+   reverb a documented no-op if infeasible (`P9-XACT-012`) and document exactly what's supported
+   (`P9-XACT-013`). Files: `Cue.cpp`, `SoundEffectInstance.cpp`. Verification:
+   `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter='CueTest.*:SoundEffectInstanceTest.*'`.
+3. **Ensure missing wave/sound/cue-index behavior matches FNA** (`P9-XACT-014/015`). Goal: audit
+   what `Cue::Play()`/`SoundBank::GetCue()` do today for an out-of-range cue index or an
+   unresolvable wave/sound reference against FNA's equivalent error handling; add tests. Files:
+   `Cue.cpp`, `SoundBank.cpp`. Verification:
+   `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter='CueTest.*:SoundBankTest.*'`.
+4. **Audit `NoAudioHardwareException` usage** (`P9-HARDWARE-001`). Goal: confirm it's a type-only
+   stub never thrown (already suspected, see §5) and decide whether that's worth changing. Files:
+   `Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp`, `AudioEngine.cpp`. Verification:
+   read-only audit.
+5. **Audit `DynamicSoundEffectInstance::PendingBufferCount` transitions** (`P9-DYNAMIC-001`). Goal:
+   confirm current behavior across Play/Pause/Resume/Stop/Dispose matches FNA; add any missing
+   tests (`P9-DYNAMIC-002..007`). Files: `DynamicSoundEffectInstance.cpp`,
+   `tests/.../DynamicSoundEffectInstanceTests.cpp`. Verification:
+   `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter='DynamicSoundEffectInstanceTest.*'`.
+6. **Audit `Apply3D` for stereo sources** (`P9-3D-001`/`002`). Goal: confirm/document current
+   stereo panning behavior under `Apply3D` (as distinct from the direct `Pan` property, already
+   covered by `CP-19`). Files: `SoundEffectInstance.cpp`. Verification: read-only audit, or a new
+   test under `SoundEffectInstanceTests.cpp` if a gap is found.
 
-2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
-   - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
-     flag, reuse `Texture2D.cpp`'s DXT decode helpers, 6×`levelCount` `SetData` calls).
-   - Files: `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp`, `TextureCubeTests.cpp`.
-   - Verification: build a real/hand-built DDS cube-map test fixture **first**, then implement
-     against it — do not mark done on "compiles and doesn't throw" alone (see §9).
-
-3. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
-   - Goal: `vkCmdCopyImageToBuffer` + host-visible staging buffer, mirroring the existing upload
-     path's staging-buffer pattern in reverse.
-   - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
-     (`VulkanTexture3DBackend`/`VulkanTextureCubeBackend::GetData`).
-   - Verification: new Vulkan pixel-readback test analogous to the EasyGL ones in
-     `easygl_texture3d_partial_box_readback_test.cpp`.
-
-4. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
-   - Goal: confirm (via a failing test first, matching the Task 276 methodology) that `Texture3D`/
-     `TextureCube` mip levels >0 silently fail on Vulkan and Bgfx, then fix by pre-allocating every
-     mip level at image/texture creation time.
-   - Files: `VulkanGraphicsBackend.cpp` (`VkImageCreateInfo::mipLevels`),
-     `BgfxGraphicsBackend.cpp` (`hasMips` parameter to `bgfx::createTexture3D`/`createTextureCube`).
-   - Verification: new mip round-trip test per backend, mirroring
-     `examples/easygl_texturecube_mip_test.cpp`.
+Each task, once implemented: add/extend tests, verify with the `git stash` pattern (§7) for any
+behavioral fix, run ASan+UBSan if it touches memory lifetime or ownership, update `plan_audio.md`'s
+checkbox + `*Note:*`, then update this file and commit.
 
 ---
 
 ## 9. Do not do yet
 
-- **No architecture change to make `Texture3D`/`TextureCube` inherit `Texture`** (Task 863) without
-  a deliberate, scoped design pass — it touches `EffectParameter`, `TextureCollection`, and every
-  backend's texture-bind code. Not a small patch.
-- **No rushed `TextureCube::DDSFromStreamEXT` implementation** without a real DDS cube-map test
-  fixture built first — a "looks plausible" parser that isn't verified against real data just
-  trades one silent-failure stub for a differently-silent one.
-- **No SpriteBatch Vulkan multi-batch fix** until the root cause is isolated — a wrong fix could
-  silently break single-batch rendering.
-- **No opportunistic fixes** for `EasyGL_MRT_TwoAttachments`, `Vulkan_DepthBias`, or
-  `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` flakiness — each needs its own dedicated
-  root-cause investigation, not a guess bundled into an unrelated task.
-- **No investigation of `easy-gl-resource-smoke-tests`** as part of a CNA task — it lives in the
-  sibling `easy-gl` repo.
-- **No refactor of the stride-keyed vertex layout system** — load-bearing for all 3D tests across
-  all backends; needs its own dedicated phase with full regression testing.
-- **No further changes to the `GraphicsDevice` user-primitive scratch buffers** without re-running
-  the full `DrawUserPrimitives`/`DrawUserIndexedPrimitives` pixel-readback suite.
-- **No API renames or namespace moves** — XNA API names and shapes are frozen by the FNA reference.
-- **No mass Doxygen or NOXNA cleanup passes** — fix tags only on files you're already touching for
-  a real reason.
-- **No opportunistic fix for Task 868 (Vulkan blend state) or Task 870 (Vulkan
-  `DepthBufferFunction`/stencil testing)** bundled into an unrelated task — both are large,
-  multi-pipeline-site changes confirmed across many tests; each needs its own dedicated task and
-  full regression pass.
-- **No opportunistic fix for Task 871/872 (stencil `Clear`/`ReferenceStencil` backend gaps) or
-  Tasks 336/337 (RenderTarget2D mip/multisample gaps)** — verify with a real test first, same
-  discipline as every other tracked bug.
+- **No re-running a fresh full "line-by-line vs FNA" audit.** Fáze 7 and Fáze 8 already did two
+  rounds of that. Fáze 9 is a different, already-scoped hardening pass — don't invent a "Fáze 10".
+- **No implementing either of the two open decisions in §4** (`IsPlaying`/`IsPaused` coexistence;
+  authored-stop fade-curve timing) **without asking the user first** — both would need real
+  feature work or touch already-shipped shared infrastructure.
+- **No Media namespace work** — explicitly out of scope for this branch.
+- **No FAudio/FACT migration** — the backend is SDL3_mixer by design.
+- **No real 3D HRTF, Doppler, or reverb implementation** — SDL3_mixer cannot do it; keep as
+  documented accepted deviations unless the user explicitly asks to revisit the backend choice.
+- **No touching the sibling `../cna` or `../sharp-runtime` checkouts** — separate repos. If a build
+  breaks there, check whether it's the known concurrent-development hazard (§4) first.
+- **No API renames / namespace moves** — XNA names are frozen.
+- **No broad refactors or unrelated cleanup** — every fix on this branch has been a small,
+  targeted change plus its own regression test; keep it that way.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8.
-Do not refactor unrelated code. Make one small, verified improvement.
-Run the relevant build/test command before declaring the task done.
-Update NEXT.md after finishing.
+Read NEXT.md first. Fáze 9 (a user-directed, already-scoped hardening pass) has 6 of 11 task
+groups fully closed (P9-LIFECYCLE, P9-CATEGORY, P9-VALIDATION, P9-DOCS, P9-BUILD, P9-STOP),
+P9-XACT is 9/15 done (variation selection + RPC volume/pitch wired; DSP/filter and missing-
+wave/cue fidelity remain), and 4 groups are fully open (P9-3D, P9-HARDWARE, P9-DYNAMIC,
+P9-AUDIT) -- see §4/§8. No known build/test blocker.
 
-Current status: Phases 1-38 are fully complete. Phase 39 (RenderTarget2D and RenderTargetCube
-completeness, GRAPHICS_TASKS.md Tasks 331-340) is open, Task 331 done, Task 332 next. EasyGL:
-2301/2304 pass (3 documented pre-existing failures). Vulkan: 2228/2241 pass (13 documented
-pre-existing failures). Bgfx: last known-good 1985/1985, not rebuilt this session. Caution: run
-EasyGL's and Vulkan's full ctest suites sequentially, never concurrently (see NEXT.md §2); if a
-single run shows an anomaly beyond the documented list, re-run in isolation before treating it as
-a regression.
-
-Task 331 (just done) audited RenderTarget2D against FNA's RenderTarget2D.cs line-by-line. Fixed a
-real gap: added missing IsContentLost/ContentLost (mirroring RenderTargetCube). Found and
-deliberately deferred two gaps to their own tasks: mipMap is silently ignored (level count always
-1, no backend allocates RT mip storage) - Task 336; preferredMultiSampleCount is stored verbatim,
-never clamped/wired to any backend - Task 337.
-
-Next task: GRAPHICS_TASKS.md Task 332 - audit RenderTargetCube constructors and properties against
-FNA. Same audit shape as Task 331, one class over: read FNA's RenderTargetCube.cs line-by-line,
-check the constructor overload(s), every property, and default values against CNA's current
-RenderTargetCube. Known lead: RenderTargetCube.cpp's constructor takes bool /*mipMap*/ -
-completely unused (commented out) - same bug shape as Task 331's Task-336 finding for
-RenderTarget2D, but not yet confirmed against FNA line-by-line or tracked as its own task.
-IsContentLost/ContentLost are ALREADY correct on RenderTargetCube - do not re-add them. Per the
-task's own note, pay particular attention to faces and mipmaps. Files: RenderTargetCube.hpp/.cpp,
-RenderTargetCubeTests.cpp (check if it exists first).
-Update GRAPHICS_TASKS.md and NEXT.md after finishing.
+1. Confirm current state matches NEXT.md §2 (build clean, 2102/2102 tests pass) -- rebuild and
+   rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests (or the `tests` CMake preset, §7) to
+   check for drift since this was last updated.
+2. Inspect only the files needed for the first §8 task (start with the XACT DSP/filter audit
+   unless the user names something else) -- don't refactor unrelated code.
+3. Make one small, verified improvement: if it's an audit, write the finding into plan_audio.md;
+   if it's a fix, add/extend a test, verify with the git-stash pattern (§7), run the relevant
+   build/test command, and run ASan+UBSan if it touches memory lifetime or ownership.
+4. Update plan_audio.md's checkbox + note, then update this NEXT.md (status, recent changes, next
+   task) to reflect what changed, and commit.
 ```
