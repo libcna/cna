@@ -1072,6 +1072,11 @@ namespace CNA::Internal::Input
                 break;
             }
         case SDL_EVENT_MOUSE_WHEEL:
+            // Only the vertical wheel is surfaced: XNA 4.0's MouseState and this FNA MouseState
+            // expose a single cumulative ScrollWheelValue (vertical) and no horizontal member, so
+            // event.wheel.x is intentionally dropped (task 805 / former task 749 — closed as
+            // won't-implement; adding a horizontal wheel would be a non-XNA NOXNA extension with
+            // no current consumer). FNA multiplies the wheel delta by 120 to match XNA units.
             InputManager::AddScrollWheelDelta(
                 static_cast<int>(event.wheel.y * 120.0f)
             );

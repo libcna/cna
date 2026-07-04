@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
@@ -1140,6 +1141,12 @@ namespace Microsoft::Xna::Framework::Graphics
         Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(
             reinterpret_cast<std::uintptr_t>(window_));
 
+        // Publish the same window to Mouse (mirrors FNA setting Mouse.WindowHandle at window
+        // creation, SDL3_FNAPlatform.cs). Lets SetPosition / relative-mouse-mode target the
+        // real window instead of relying on the SDL_GetMouseFocus() fallback.
+        Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(
+            reinterpret_cast<std::uintptr_t>(window_));
+
         LogWindowDebugState(window_, "after SDL_CreateWindow");
     }
 
@@ -1186,6 +1193,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 == reinterpret_cast<std::uintptr_t>(window_))
             {
                 Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(0);
+            }
+            if (Microsoft::Xna::Framework::Input::Mouse::getWindowHandleProperty()
+                == reinterpret_cast<std::uintptr_t>(window_))
+            {
+                Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(0);
             }
             SDL_DestroyWindow(window_);
         }

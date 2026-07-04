@@ -18,8 +18,17 @@ namespace Microsoft::Xna::Framework::Input
     public:
         Mouse() = delete;
 
-        /** @brief Gets or sets the native window handle used for mouse state queries. */
-        static std::uintptr_t WindowHandle;
+        /**
+         * @brief Gets the native window handle used for mouse state queries.
+         * @return The window handle, or 0 if none has been published.
+         */
+        [[nodiscard]] static std::uintptr_t getWindowHandleProperty();
+
+        /**
+         * @brief Sets the native window handle used for mouse state queries.
+         * @param value The window handle to associate the mouse with.
+         */
+        static void setWindowHandleProperty(std::uintptr_t value);
 
         /**
          * @brief Gets mouse state information including position and button presses.
@@ -62,5 +71,9 @@ namespace Microsoft::Xna::Framework::Input
          * @param button The button index that was clicked.
          */
         NOXNA static void INTERNAL_onClicked(int button);
+
+    private:
+        /** @brief Backing store for the WindowHandle property. */
+        static std::uintptr_t windowHandle_;
     };
 }

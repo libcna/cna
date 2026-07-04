@@ -38,7 +38,7 @@ namespace
         CNA::Internal::Input::InputManager::SetMouseButtonState(
             CNA::Internal::Input::MouseButton::XButton2, ButtonState::Released);
         CNA::Internal::Input::InputManager::SetMouseRelativeMode(false);
-        Mouse::WindowHandle = 0;
+        Mouse::setWindowHandleProperty(0);
         Mouse::ClickedEXT   = nullptr;
     }
 }
@@ -283,7 +283,7 @@ TEST(MouseTest, IsRelativeMouseModeEXTRoundTripsThroughRealWindow)
         GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
     }
 
-    Mouse::WindowHandle = reinterpret_cast<std::uintptr_t>(window);
+    Mouse::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
 
     Mouse::setIsRelativeMouseModeEXTProperty(true);
     EXPECT_TRUE(Mouse::getIsRelativeMouseModeEXTProperty());
@@ -312,7 +312,7 @@ TEST(MouseTest, SetPositionIsNoOpWhenRelativeModeEnabled)
         GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
     }
 
-    Mouse::WindowHandle = reinterpret_cast<std::uintptr_t>(window);
+    Mouse::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
     CNA::Internal::Input::InputManager::SetMousePosition(7, 7);
 
     Mouse::setIsRelativeMouseModeEXTProperty(true);
@@ -326,6 +326,43 @@ TEST(MouseTest, SetPositionIsNoOpWhenRelativeModeEnabled)
     SDL_DestroyWindow(window);
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
     ResetMouseState();
+}
+
+TEST(MouseTest, SetRelativeMouseModeIsSafeNoOpWithNoWindow)
+{
+    // Task 802: with no published handle and no focused window, resolve_mouse_window() returns
+    // null; the setter must no-op (not pass a null window to SDL) and the getter must report false.
+    ResetMouseState();
+
+    EXPECT_NO_THROW(Mouse::setIsRelativeMouseModeEXTProperty(true));
+    EXPECT_FALSE(Mouse::getIsRelativeMouseModeEXTProperty());
+
+    ResetMouseState();
+}
+
+TEST(MouseTest, SetCursorIsSafeNoOpForDisposedCursor)
+{
+    // Task 803: a disposed cursor has a null SDL handle. SetCursor must no-op rather than call
+    // SDL_SetCursor(NULL) (which forces a redraw of the current cursor instead of clearing it).
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+    if (!raw)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
+    }
+
+    MouseCursor cursor(raw, /*owning=*/true);
+    cursor.Dispose();
+    ASSERT_EQ(cursor.GetSDLCursor(), nullptr);
+
+    EXPECT_NO_THROW(Mouse::SetCursor(cursor));
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
 // ===========================================================================

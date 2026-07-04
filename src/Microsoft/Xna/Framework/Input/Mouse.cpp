@@ -18,8 +18,18 @@ namespace
 
 namespace Microsoft::Xna::Framework::Input
 {
-    std::uintptr_t           Mouse::WindowHandle            = 0;
+    std::uintptr_t           Mouse::windowHandle_           = 0;
     std::function<void(int)> Mouse::ClickedEXT              = nullptr;
+
+    std::uintptr_t Mouse::getWindowHandleProperty()
+    {
+        return windowHandle_;
+    }
+
+    void Mouse::setWindowHandleProperty(const std::uintptr_t value)
+    {
+        windowHandle_ = value;
+    }
 
     // Intentional deviation from Mouse.cs: FNA scales GetState()/SetPosition
     // coordinates by a fixed INTERNAL_WindowWidth/Height <-> INTERNAL_BackBufferWidth/
@@ -51,22 +61,45 @@ namespace Microsoft::Xna::Framework::Input
         }
 
         CNA::Internal::Input::InputManager::SetMousePosition(x, y);
-        SDL_WarpMouseInWindow(resolve_mouse_window(WindowHandle), static_cast<float>(x), static_cast<float>(y));
+        SDL_WarpMouseInWindow(resolve_mouse_window(windowHandle_), static_cast<float>(x), static_cast<float>(y));
     }
 
     void Mouse::SetCursor(MouseCursor& cursor)
     {
-        SDL_SetCursor(cursor.GetSDLCursor());
+        // Guard against a disposed or empty cursor (GetSDLCursor() == nullptr): SDL_SetCursor(NULL)
+        // does NOT clear the cursor — it forces a redraw of the *current* cursor — so passing a
+        // disposed cursor through would silently keep the old cursor while looking like it changed.
+        // No-op instead, matching MonoGame's guard against an invalid cursor (it throws on a null
+        // MouseCursor; CNA takes a reference so only the disposed-handle case is reachable here).
+        SDL_Cursor* handle = cursor.GetSDLCursor();
+        if (handle == nullptr)
+        {
+            return;
+        }
+        SDL_SetCursor(handle);
     }
 
     bool Mouse::getIsRelativeMouseModeEXTProperty()
     {
-        return SDL_GetWindowRelativeMouseMode(resolve_mouse_window(WindowHandle));
+        // Safe with no window: SDL's behavior with a null window is undefined, so report false.
+        SDL_Window* window = resolve_mouse_window(windowHandle_);
+        if (window == nullptr)
+        {
+            return false;
+        }
+        return SDL_GetWindowRelativeMouseMode(window);
     }
 
     void Mouse::setIsRelativeMouseModeEXTProperty(const bool value)
     {
-        SDL_SetWindowRelativeMouseMode(resolve_mouse_window(WindowHandle), value);
+        // Safe with no window: no-op rather than passing a null window to SDL. Without a window
+        // there are no motion events to accumulate, so the InputManager mode is left untouched too.
+        SDL_Window* window = resolve_mouse_window(windowHandle_);
+        if (window == nullptr)
+        {
+            return;
+        }
+        SDL_SetWindowRelativeMouseMode(window, value);
         CNA::Internal::Input::InputManager::SetMouseRelativeMode(value);
     }
 
