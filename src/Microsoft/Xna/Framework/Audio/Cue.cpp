@@ -107,10 +107,16 @@ namespace Microsoft::Xna::Framework::Audio
 
     // ── 3D ───────────────────────────────────────────────────────────────────
 
-    void Cue::Apply3D(const AudioListener& /*listener*/, const AudioEmitter& /*emitter*/)
+    void Cue::Apply3D(const AudioListener& listener, const AudioEmitter& emitter)
     {
         if (isDisposed_) throw System::ObjectDisposedException("Cue");
-        // SDL3_mixer has no per-cue 3D audio; would need Apply3D on each instance.
+
+        // SDL3_mixer has no per-cue 3D audio graph (FAudio's FACT3DApply); approximate by
+        // applying the same pan/distance-attenuation SoundEffectInstance::Apply3D already does
+        // (CP-3) to every wave reference currently playing under this cue. Doppler stays
+        // unapplied, matching the accepted deviation documented in CHECKLIST.md.
+        for (auto& pi : active_)
+            if (pi.instance) pi.instance->Apply3D(listener, emitter);
     }
 
     // ── Play ──────────────────────────────────────────────────────────────────

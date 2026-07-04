@@ -112,6 +112,12 @@ namespace Microsoft::Xna::Framework::Audio
 
         const CNA::Internal::Audio::XsbData* GetXsbData() const;
 
+        // Shared by both PlayCue() overloads; listener/emitter are null for the non-3D one, in
+        // which case Apply3D isn't called (T-4B).
+        void PlayCueInternal(const std::string& name,
+                              const AudioListener* listener,
+                              const AudioEmitter* emitter);
+
         // Fire-and-forget cues from PlayCue() — kept alive while playing (FNA has no C#-visible
         // handle for these; FACT tracks cue lifetime natively), swept once IsPlaying goes false
         // on the next PlayCue() call. A long safety-net timeout also force-sweeps a still-playing

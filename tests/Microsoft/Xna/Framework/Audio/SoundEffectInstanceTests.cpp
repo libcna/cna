@@ -16,6 +16,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "SoundEffectInstanceTestAccess.hpp"
 
 #include <SDL3_mixer/SDL_mixer.h>
 
@@ -24,22 +25,8 @@ using Microsoft::Xna::Framework::Audio::AudioEmitter;
 using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
-using Microsoft::Xna::Framework::Audio::SoundState;
-
-namespace Microsoft::Xna::Framework::Audio
-{
-    // Test-only accessor for SoundEffectInstance's protected track_ handle (see
-    // SoundEffectInstance.hpp), used to verify Play() idempotency at the SDL_mixer level.
-    struct SoundEffectInstanceTestAccess
-    {
-        static MIX_Track* GetTrack(const SoundEffectInstance& instance)
-        {
-            return static_cast<MIX_Track*>(instance.track_);
-        }
-    };
-}
-
 using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
+using Microsoft::Xna::Framework::Audio::SoundState;
 
 // All SoundEffectInstance tests need a SoundEffect, whose construction opens the
 // (dummy) audio device. The fixture skips every test if no device is available.

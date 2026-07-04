@@ -315,12 +315,32 @@ Tyto se objevují napříč clusterem a řeší se hromadně:
   *Pozn.:* ostatní accept kritéria splněna a ověřena i na reálném hardwaru (2 skutečné mikrofony
   přes pulseaudio na vývojovém stroji), viz `NEXT.md` §3.
 
-- [ ] **T-4B — 3D pan/attenuace pro SDL_mixer (Apply3D / 3D PlayCue / Cue::Apply3D).**
+- [x] **T-4B — 3D pan/attenuace pro SDL_mixer (Apply3D / 3D PlayCue / Cue::Apply3D).**
   Místo no-opů odvodit pan + distance-attenuaci z geometrie listener/emitter (`Mix_SetPosition`).
   Z `Cue::Apply3D` (`Cue.cpp:79-83`) odstranit disposed-`std::runtime_error` ve prospěch `ObjectDisposedException`.
   Doppler zůstává neaplikovaný (akceptovaná odchylka §2.2).
   *FNA:* SoundBank.cs:248-263, Cue.cs:166-186, SoundEffectInstance.cs:266-298.
   *Accept:* Apply3D/3D-PlayCue na validním vstupu nehází a nekrachuje; volume/pan se mění se vzdáleností/úhlem (test geometrie). (B9, A-Apply3D)
+  *Pozn.:* Hotovo 2026-07-04. `ObjectDisposedException` byl už na místě (žádná zbylá práce na tom
+  bodu). `Cue::Apply3D` teď iteruje `active_` a volá `pi.instance->Apply3D(listener, emitter)` na
+  každý živý `SoundEffectInstance` -- prostě deleguje na už fungující `SoundEffectInstance::Apply3D`
+  (CP-3), žádná nová pan/attenuace matematika. `SoundBank::PlayCue(name, listener, emitter)` byl
+  úplný no-op (jen volal 2-arg přetížení); refaktorováno na sdílený privátní
+  `PlayCueInternal(name, listener*, emitter*)`, který po `cue->Play()` volá `cue->Apply3D(...)`
+  než cue uloží do `fireAndForget_` (odpovídá FNA, kde `FACT3DCalculate` běží před
+  `FACTSoundBank_Play3D` -- synchronní volání ve stejném vlákně, žádný pozorovatelný rozdíl proti
+  "pozicuj až po Play()"). Test geometrie: žádná ze stávajících fixtur (`MakeCue()`,
+  `SharedWeightedVariationBank()`, `SoundBankTests.cpp`'s "Explosion") nemá reálný WaveBank, takže
+  `Cue::active_` zůstává prázdné -- přidány nové WaveBank-backed fixtury do `CueTests.cpp` i
+  `SoundBankTests.cpp` (`Apply3DCue`/`Apply3DWaveBank`), plus sdílený
+  `SoundEffectInstanceTestAccess.hpp` (extrahováno z `SoundEffectInstanceTests.cpp`) a nová
+  `CueTestAccess::ActiveInstance()`/`SoundBankTestAccess::LastFireAndForgetCue()`, aby test mohl
+  přečíst skutečný `MIX_GetTrackGain()` a ověřit, že se gain mění se vzdáleností (SDL3_mixer
+  nemá getter pro stereo pan, takže se ověřuje jen attenuace, ne pan -- stejné omezení, jaké má
+  i CP-3's původní `SoundEffectInstance::Apply3D` pokrytí). Ověřeno `git stash` metodikou (oba
+  nové testy skutečně selžou -- `farGain == nearGain == 1` -- proti no-op kódu, ne jen
+  kompilační chyba tentokrát, protože scaffolding nezávisí na samotné opravě). Ověřeno
+  ASan+LeakSanitizer. Celá sada 2031/2031 zelená.
 
 - [ ] **T-4C — Interní DSP filtry/reverb routing v SoundEffectInstance.**
   Přidat `INTERNAL_applyReverb`/`applyLowPassFilter`/`applyHighPassFilter`/`applyBandPassFilter`

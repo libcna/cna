@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -21,6 +22,15 @@ namespace Microsoft::Xna::Framework::Audio
             for (const auto& pi : cue.active_)
                 if (pi.instance) volumes.push_back(pi.instance->getVolumeProperty());
             return volumes;
+        }
+
+        // Returns the Nth active SoundEffectInstance (nullptr if out of range or unresolved),
+        // e.g. so a test can pair it with SoundEffectInstanceTestAccess::GetTrack() to verify
+        // Apply3D's real SDL_mixer effect (T-4B).
+        static SoundEffectInstance* ActiveInstance(const Cue& cue, std::size_t index)
+        {
+            if (index >= cue.active_.size()) return nullptr;
+            return cue.active_[index].instance.get();
         }
     };
 }

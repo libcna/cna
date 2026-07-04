@@ -116,6 +116,20 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundBank::PlayCue(const std::string& name)
     {
+        PlayCueInternal(name, nullptr, nullptr);
+    }
+
+    void SoundBank::PlayCue(const std::string& name,
+                             const AudioListener& listener,
+                             const AudioEmitter& emitter)
+    {
+        PlayCueInternal(name, &listener, &emitter);
+    }
+
+    void SoundBank::PlayCueInternal(const std::string& name,
+                                     const AudioListener* listener,
+                                     const AudioEmitter* emitter)
+    {
         if (name.empty())
             throw System::ArgumentNullException("name");
         if (isDisposed_)
@@ -141,16 +155,14 @@ namespace Microsoft::Xna::Framework::Audio
 
         std::unique_ptr<Cue> cue(GetCue(name));
         cue->Play();
+        // FNA computes the 3D dsp settings before FACTSoundBank_Play3D, so the cue is already
+        // positioned from its very first output frame -- Apply3D() here runs synchronously,
+        // before this thread's next real audio callback, so there is no observable difference.
+        if (listener && emitter)
+            cue->Apply3D(*listener, *emitter);
         // Keep the Cue alive so its SoundEffectInstances (and their SDL3_mixer
         // tracks) are not destroyed before the sound has had a chance to play.
         fireAndForget_.push_back({std::move(cue), now});
-    }
-
-    void SoundBank::PlayCue(const std::string& name,
-                             const AudioListener& /*listener*/,
-                             const AudioEmitter& /*emitter*/)
-    {
-        PlayCue(name);
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────
