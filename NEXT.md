@@ -122,6 +122,29 @@ verdict.
   directly for the first time (Task P8-5); one small defensive consistency
   fix in `VibrateController`'s destructor, no new gap found in the rest of
   the resource-ownership re-audit (Task P8-6).
+- `plan_devices_phase9.md` (9 tasks, physical verification and release gate)
+  — **closed**, all 9 tasks done. This phase deliberately did **not** hunt
+  for new code-level hardening — it fresh-audited Phase 8's six specific
+  claims against the actual code (Task P9-1, found none had regressed or
+  been overstated), then produced an honest, evidence-based release gate:
+  reproduced the exact test matrix (Task P9-2), re-ran the sanitizer gates
+  and confirmed TSan's only finding is still the single known out-of-scope
+  `sharp-runtime` race (Task P9-3), actually attempted an Android emulator
+  launch and found a real, definitive `/dev/kvm`-missing failure plus no
+  existing APK-packaging integration in this build (Task P9-4), physically
+  confirmed via `/proc/bus/input/devices` that this container has zero
+  sensor/haptic/gamepad hardware and ran the hardware-dependent tests live
+  as evidence (Task P9-5), improved `DevicesDemo`'s window-title diagnostics
+  and confirmed it runs without crashing on a real X11/OpenGL display
+  (though the rendered content itself couldn't be visually captured in this
+  environment's restricted window-introspection tooling, Task P9-6), wrote a
+  precise per-component status table into `AUDIT.md`/`NEXT.md` (Task P9-7),
+  consolidated the Compass/Motion native-backend architecture into
+  `docs/devices-native-backend-design.md` as a design-only document (Task
+  P9-8), and closed with a final acceptance decision (Task P9-9): **Accepted
+  for merge as SDL-backed Devices baseline** — normal tests and sanitizers
+  clean, docs honest, only hardware/native-backend/Android-packaging/iOS-
+  toolchain gaps remain, none of which are code-level issues.
 
 **Important architectural decisions:**
 - Public API names/signatures must match XNA 4.0 (or, for `Microsoft::Devices`,
@@ -692,14 +715,19 @@ All work committed on `feature/devices`, not yet pushed.
 
 ## 4. Current blocker / main problem
 
-**No blocker.** `plan_devices_phase5.md` through `plan_devices_phase8.md` are
-all fully closed — Task P8-8, its final task, re-verified `EASYGL`/`VULKAN`/
-`BGFX`/Android all clean against the complete changeset (no regressions
-found anywhere), including specifically re-running the Task P8-1 self-destroy
-regression tests on `VULKAN`/`BGFX` too, not just the backend they were
-originally found on. See Section 8 for what's next; none of it is a
-blocker, just unstarted or unverifiable in this environment (physical
-hardware, iOS toolchain).
+**No blocker. `Microsoft::Devices` is accepted for merge as an SDL-backed
+baseline** (`plan_devices_phase9.md` Task P9-9, 2026-07-04) —
+`plan_devices_phase4.md` through `plan_devices_phase9.md` are all fully
+closed. Phase 9's own fresh audit (Task P9-1) re-checked Phase 8's six
+specific claims against the actual code and found none had regressed;
+Tasks P9-2/P9-3 reproduced a clean test/sanitizer matrix directly rather
+than assuming it; no code-level race, leak, use-after-free, or reproducible
+failing test exists anywhere in this namespace as of this session. What
+remains is **exclusively** physical-hardware verification, Android APK
+packaging, a real native backend for `Compass`/`Motion`, and iOS
+cross-compilation — all environment/scope gaps, not code defects. See
+Section 8 for the exact next steps and `plan_devices_phase9.md` Task P9-9
+for the full acceptance record.
 
 ---
 
@@ -1079,44 +1107,55 @@ writing.
 
 ## 8. Next smallest tasks
 
-With `plan_devices_phase4.md` through `plan_devices_phase8.md` **all fully
-closed** (Task P8-8, its final task, re-verified `EASYGL`/`VULKAN`/`BGFX`/
-Android all clean against the complete changeset — no regressions found
-anywhere), there is no standing plan file driving further
-`Microsoft::Devices` work and no known outstanding code issue. Pick one of
-these, or ask the user what the next priority actually is — do not invent
-new `Microsoft::Devices` scope without a plan or explicit request.
+With `plan_devices_phase4.md` through `plan_devices_phase9.md` **all fully
+closed** and Phase 9 ending in an explicit **"Accepted for merge as
+SDL-backed Devices baseline"** decision (`plan_devices_phase9.md` Task
+P9-9), there is no standing plan file driving further `Microsoft::Devices`
+work and no known outstanding code issue. Pick one of these, or ask the
+user what the next priority actually is — do not invent new
+`Microsoft::Devices` scope without a plan or explicit request, and do not
+open a "Phase 10" solely to keep re-auditing code that four consecutive
+independent audits (Phases 6, 7, 8, 9) have now found nothing new in.
 
 1. **Physical hardware verification**, if real Android/iOS hardware or a
    rumble-capable gamepad ever becomes available in a session: work through
-   `docs/devices-hardware-checklist.md` using `cna_demo_devices`. Not
-   attemptable in this headless container — don't attempt it here, just
-   note if the environment changes. This is the single biggest remaining
-   gap — everything else in this namespace has been verified by code
-   reading, unit tests, cross-compilation, and (as of Phase 8) sanitizers,
-   never by real hardware.
+   `docs/devices-hardware-checklist.md` using `cna_demo_devices`. Confirmed
+   still not attemptable in this container as of Phase 9 (Task P9-5 —
+   `/proc/bus/input/devices` shows no sensor/haptic/gamepad hardware at
+   all). This is the single biggest remaining gap — everything else in this
+   namespace has been verified by code reading, unit tests,
+   cross-compilation, and sanitizers, never by real hardware.
 
-2. **Native Android/iOS backend for `Compass`/`Motion`**, if ever scoped as
-   its own task — `plan_devices_phase5.md`'s "Future native backend plan"
-   section plus `plan_devices_phase6.md` Task P6-8's `ICompassBackend`/
-   `IMotionBackend` interface sketch have a starting point (Android
-   `SensorManager`/JNI, iOS `CLLocationManager`/`CMDeviceMotion`), not
-   verified against any real platform API. A real scoping/design pass
-   would be needed first, not a direct implementation from that sketch
-   alone.
+2. **Android APK packaging and an emulator/device run**, if this
+   environment ever gets `/dev/kvm` access or a physical device is
+   attached: Task P9-4 found SDL3's vendored `android-project` Gradle
+   template exists and works standalone, but has zero integration with any
+   CNA CMake target — that integration work would need to happen first,
+   then packaging `examples/demo_devices`, then an actual run. The one
+   configured AVD (`Medium_Phone`, x86_64) fails immediately without
+   hardware acceleration in this container.
 
-3. **A sixth independent re-audit of `Microsoft::Devices`**, if a future
-   session has reason to doubt this one — Phase 8's entire premise was that
-   Phase 7's own fixes still had a real gap (a callback destroying its own
-   sensor object mid-dispatch) that didn't survive re-reading the actual
-   dispatch-cleanup code, and that a plain, unsanitized test run couldn't
-   even reliably reproduce (only a throwaway ASan build gave a trustworthy
-   answer); the same discipline should apply to Phase 8's own claims too —
-   including its one deliberately-left-open boundary (Accelerometer's
-   `CurrentValueChanged` self-destroy case), in case a future session finds
-   a way to close it that this one didn't consider.
+3. **Native Android/iOS backend for `Compass`/`Motion`**, if ever scoped as
+   its own implementation task — `docs/devices-native-backend-design.md`
+   (Task P9-8) now consolidates the `IDeviceSensorBackend`/
+   `ICompassBackend`/`IMotionBackend` interface sketch, the Android
+   (`SensorManager`/JNI) and iOS (`CLLocationManager`/`CMDeviceMotion`)
+   field mappings, permission/lifecycle notes, and a migration plan that
+   doesn't disturb the existing SDL implementation — none of it verified
+   against a real platform API, and none of it implemented. A real
+   scoping/design-review pass would still be needed before writing any
+   `.hpp`/`.cpp` against it.
 
-4. **Anything outside `Microsoft::Devices`.** Ask before assuming scope.
+4. **A tenth independent re-audit of `Microsoft::Devices`**, if a future
+   session has concrete reason to doubt this one — only if something
+   specific is suspected, not as a default next step. Phase 9's own premise
+   was exactly this kind of audit against Phase 8, and found zero
+   regressions this time; the same discipline (re-read the real code, don't
+   trust the previous plan doc, verify claims by actually running things)
+   should apply again if a future session has an actual reason to, not on a
+   schedule.
+
+5. **Anything outside `Microsoft::Devices`.** Ask before assuming scope.
 
 ---
 
@@ -1236,10 +1275,15 @@ new `Microsoft::Devices` scope without a plan or explicit request.
 Read NEXT.md first, especially Section 2's layered status (API vs. SDL
 runtime vs. native backend vs. hardware-verified) — do not summarize this
 project's Devices work as simply "complete."
-plan_devices_phase4.md through plan_devices_phase8.md are all fully closed —
-there is no standing Microsoft::Devices plan left to work through. Ask the
-user what to work on next, or pick one of Section 8's items, before
-inventing new scope.
+plan_devices_phase4.md through plan_devices_phase9.md are all fully closed.
+Phase 9 ended with an explicit acceptance decision (plan_devices_phase9.md
+Task P9-9): "Accepted for merge as SDL-backed Devices baseline" — normal
+tests and sanitizers clean, docs honest, only hardware/native-backend/
+Android-packaging/iOS-toolchain gaps remain, none of which are code-level
+issues. There is no standing Microsoft::Devices plan left to work through.
+Ask the user what to work on next, or pick one of Section 8's items, before
+inventing new scope — do not open a "Phase 10" just to keep re-auditing
+code that Phases 6, 7, 8, and 9 in a row have already found nothing new in.
 If given a new task, make one small, verified improvement at a time.
 Run the relevant build/test command from Section 7 / docs/devices-build.md
 after each change — and if the change touches concurrency or object

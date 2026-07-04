@@ -416,3 +416,83 @@ unaffected, as expected.
 
 **Remaining risk:** none — no `.hpp`/`.cpp` file was added or changed; `Compass`/`Motion`
 behavior is byte-for-byte identical to before this task.
+
+## P9-9: Final acceptance decision
+
+### Status: **Accepted for merge as SDL-backed Devices baseline**
+
+This is the first of the three exact statuses this task's brief allows, chosen because
+every one of its stated criteria was actually met this phase, not assumed:
+
+- **Normal tests pass** (Task P9-2): the Devices-only filter is 226 tests, 224 passing,
+  2 expected `GTEST_SKIP()`s on hardware-dependent paths this container has no hardware
+  for — reproduced fresh this phase, not carried over from Phase 8's own count without
+  re-running it. The full `ctest` suite has the same 2 pre-existing, unrelated
+  `EasyGL`/`easy-gl` graphics-backend failures every phase since Phase 5 has seen — no
+  new failure anywhere in `Microsoft::Devices`.
+- **Sanitizer tests pass** (Task P9-3): ASan and UBSan are clean under
+  `devices-asan`/`devices-ubsan`. TSan's only finding is the single, already-known,
+  out-of-scope `sharp-runtime` race in `System::TimeSpan::TimeSpan(const TimeSpan&)`
+  (`TimeSpan.cpp:55`'s unsynchronized `copy_count++` debug counter) — re-confirmed this
+  phase by reading the actual stack trace, not just the summary count, to verify both
+  racing accesses are at that one sharp-runtime line and touch no `Microsoft::Devices`
+  field or lock. Zero new sanitizer findings anywhere in this namespace's own code.
+- **Docs are honest** (Tasks P9-1, P9-5, P9-6, P9-7): `AUDIT.md`/`NEXT.md`'s status
+  table marks every unverified claim as exactly that — "Not verified" for physical
+  hardware, "N/A (stub)" for `Compass`/`Motion`, "Not implemented" for
+  `System.Device.Location` — no cell claims more than what was actually run this
+  session or a specifically-cited prior phase.
+- **Only hardware/native-backend gaps remain** (see the exact list below) — no
+  code-level race, leak, use-after-free, or reproducible failing test was found in this
+  phase's own fresh audit (Task P9-1 re-verified all six of Phase 8's claims and found
+  none of them had regressed or been overstated).
+
+**Exact remaining work** (unchanged in kind from Phase 8, re-confirmed rather than
+newly discovered, so none of it is a reason to withhold merge — it's the honestly
+documented gap between "SDL-backed baseline" and "fully hardware-verified"):
+
+1. **Physical hardware verification** — Android accelerometer/gyroscope/vibration, a
+   real gamepad's rumble motor, and any iOS device are all still **not run**, in any
+   session to date, including this one (Task P9-5). No accelerometer, gyroscope,
+   haptic device, or gamepad/joystick hardware exists in this container
+   (`/proc/bus/input/devices` confirmed this directly this phase). Use
+   `docs/devices-hardware-checklist.md` + `cna_demo_devices` whenever real hardware
+   becomes available.
+2. **Android APK packaging and an actual emulator/device run** — investigated this
+   phase (Task P9-4), not merely assumed absent: no CNA build-system integration exists
+   connecting SDL3's vendored `android-project` Gradle template to any CNA CMake
+   target, and the one configured AVD (`Medium_Phone`, x86_64) fails outright with
+   `/dev/kvm` absent (no hardware acceleration available in this container). The
+   library itself still cross-compiles cleanly for `arm64-v8a` (Task P9-4's re-run of
+   the existing Android CMake toolchain check).
+3. **Native backend implementation for `Compass`/`Motion`** — design-only as of this
+   phase (Task P9-8, `docs/devices-native-backend-design.md`); no `.hpp`/`.cpp` change
+   was made or should be inferred from that document. Both remain permanent, honest
+   `SensorState::NotSupported` stubs until a future phase explicitly scopes and
+   implements a real Android/iOS backend against that design.
+4. **iOS cross-compilation** — still blocked; no Apple toolchain exists in this Linux
+   container, re-confirmed unchanged in every phase from Phase 5 through this one.
+5. **`DevicesDemo`'s on-screen rendering** — confirmed to build and run without
+   crashing on a real X11 display with a real OpenGL ES backend (Task P9-6), but the
+   actual rendered window-title text could not be visually confirmed in this specific
+   display environment (`xdotool`/`xwininfo`/`import` all failed to find or capture the
+   demo's own window). This is a demo/example-code gap, not a library gap.
+
+**Not creating a Phase 10** for the sole purpose of continued iteration: this phase's
+own fresh audit (Task P9-1) found zero code-level regressions, and Tasks P9-2/P9-3
+reproduced clean test/sanitizer results directly rather than by assumption. Per this
+task's own brief, a new phase should only be opened if a future session finds a
+concrete code-level issue (a race, leak, use-after-free, or reproducible failing test)
+— not to keep re-auditing a codebase that has now been independently re-audited by
+Phases 6, 7, 8, and 9 in a row with a shrinking, then zero, list of new findings this
+time. The five items above are legitimate next steps for a *future*, differently-scoped
+effort (hardware access, a native-backend implementation task, Android packaging work),
+not grounds for another hardening phase over the same SDL-backed code.
+
+**Files changed:** none — this section is a decision record, not a code or even a
+documentation-elsewhere change (the referenced docs were already updated by their own
+tasks above).
+
+**Sanity check:** none needed — no file outside this plan was touched by this task.
+
+**Remaining risk:** none — a decision record carries no behavioral risk of its own.
