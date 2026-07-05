@@ -56,7 +56,10 @@ BONE_RADII = {
 }
 
 
-def _add_cylinder_segment(name, head, tail, radius):
+def add_cylinder_segment(name, head, tail, radius):
+    """Adds a cylinder running from world point `head` to `tail` with the given radius,
+    oriented along that axis. Public so generate_hair.py/generate_clothes.py (Task 11.5)
+    can build their own bone-aligned primitives with the same technique as the body."""
     head_v = mathutils.Vector(head)
     tail_v = mathutils.Vector(tail)
     direction = tail_v - head_v
@@ -70,7 +73,9 @@ def _add_cylinder_segment(name, head, tail, radius):
     return obj
 
 
-def _add_joint_sphere(name, location, radius):
+def add_joint_sphere(name, location, radius):
+    """Adds a low-poly UV sphere at `location`. Public for the same reason as
+    add_cylinder_segment() above."""
     bpy.ops.mesh.primitive_uv_sphere_add(
         radius=radius, location=location, segments=8, ring_count=6,
     )
@@ -93,10 +98,10 @@ def build_body(armature_obj):
         radius = BONE_RADII[name]
         if name == "Head":
             center = tuple((mathutils.Vector(head) + mathutils.Vector(tail)) / 2)
-            parts.append(_add_joint_sphere(f"{name}_flesh", center, radius))
+            parts.append(add_joint_sphere(f"{name}_flesh", center, radius))
         else:
-            parts.append(_add_cylinder_segment(f"{name}_flesh", head, tail, radius))
-            parts.append(_add_joint_sphere(f"{name}_joint", head, radius))
+            parts.append(add_cylinder_segment(f"{name}_flesh", head, tail, radius))
+            parts.append(add_joint_sphere(f"{name}_joint", head, radius))
 
     bpy.ops.object.select_all(action="DESELECT")
     for part in parts:

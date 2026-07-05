@@ -26,7 +26,7 @@ bone-retargeting step at all.
 - [x] Task 11.2 — `generate_body.py`: procedural low-poly body, auto-weighted to the skeleton.
 - [x] Task 11.3 — `generate_materials.py`: 5 flat-color placeholder materials, Skin assigned to the body.
 - [x] Task 11.4 — `generate_morphs.py`: `Smile`/`Blink` shape keys on the body mesh.
-- [ ] Task 11.5 — `generate_hair.py` / `generate_clothes.py`
+- [x] Task 11.5 — `generate_hair.py` / `generate_clothes.py`: helmet-like hair cap, Shirt/Pants/Shoes shells.
 - [ ] Task 11.6 — `generate_animations.py`
 - [ ] Task 11.7 — `export_gltf.py` / `generate_avatar.py`
 - [ ] Task 11.8 — `validate_gltf.py`
@@ -163,3 +163,47 @@ per-vertex displacement function, and it handles creating/replacing the shape ke
 Verify: `blender --background --python tools/avatar_builder/generate_morphs.py` runs
 without error and asserts both shape keys exist and each displaces at least one vertex
 by more than a trivial amount.
+
+## Placeholder clothes (`generate_clothes.py`)
+
+Three garments, each its own mesh object parented to the skeleton with automatic
+weights (same technique as the body) and its matching material assigned:
+
+| Garment | Bones covered | Padding over body radius |
+|---|---|---|
+| `CNAAvatarShirt` | `Spine, Spine1, Shoulder.L/R, UpperArm.L/R` | +0.02 m |
+| `CNAAvatarPants` | `Hips, UpperLeg.L/R, LowerLeg.L/R` | +0.02 m |
+| `CNAAvatarShoes` | `Foot.L/R` | +0.015 m |
+
+Each garment is built the same way as the body: one `generate_body.add_cylinder_segment`
++ `generate_body.add_joint_sphere` per covered bone (that bone's own `BONE_RADII` radius
+plus the garment's padding), joined into a single mesh. These are offset shells over the
+existing body shape, not fitted tailoring or cloth simulation — expect visible clipping
+through the body at the sleeve/pant-leg/shoe seams. Known, accepted limitation of this
+first pass, not a bug to chase down yet.
+
+`build_clothes(armature_obj, materials)` is importable the same way as the other
+builders, for reuse by `generate_avatar.py` (Task 11.7).
+
+Verify: `blender --background --python tools/avatar_builder/generate_clothes.py` runs
+without error and asserts each garment has a vertex group for every bone it covers and
+its correct material assigned.
+
+## Placeholder hair (`generate_hair.py`)
+
+`CNAAvatarHair`: a single open-bottomed hemisphere shell (built directly with `bmesh`,
+not `generate_body`'s cylinder/sphere helpers, since it needs half a sphere rather than a
+whole one) sized just outside the head, parented to the skeleton with automatic weights
+— since only the `Head` bone is nearby, this ends up rigidly following the head in
+practice, without needing bone-parenting. Assigned the `Hair` material.
+
+This is a literal helmet shape, not modeled hair strands or hair cards — explicitly
+expected and accepted for this first pass (a later iteration, `plan_net.md` Task 11.14,
+can replace it with real hair geometry).
+
+`build_hair(armature_obj, materials)` is importable the same way as the other builders,
+for reuse by `generate_avatar.py` (Task 11.7).
+
+Verify: `blender --background --python tools/avatar_builder/generate_hair.py` runs
+without error and asserts the hair mesh is non-empty, has a vertex group for `Head`, and
+has the `Hair` material assigned.

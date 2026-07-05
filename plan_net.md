@@ -925,11 +925,25 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   amount; a manual render at `value=1.0` for both showed a visibly different (if crude)
   head shape, confirming the deformation is real, not just non-zero numbers.
 
-- [ ] **Task 11.5** — `tools/avatar_builder/generate_hair.py` + `generate_clothes.py`  
+- [x] **Task 11.5** — `tools/avatar_builder/generate_hair.py` + `generate_clothes.py`  
   Simple placeholder geometry layered over the body (hair as a basic cap/helmet-like shape;
   shirt/pants/shoes as offset shells over the body mesh). Explicitly expected to look crude at
   this stage (per the ChatGPT-sourced analysis this phase was scoped from: "vlasy... budou vypadat
   jako helma" is an accepted, known limitation of a first pass, not a bug to chase down yet).
+  **Done:** `generate_clothes.py` builds `Shirt` (Spine/Spine1/Shoulder.L/R/UpperArm.L/R),
+  `Pants` (Hips/UpperLeg.L/R/LowerLeg.L/R), and `Shoes` (Foot.L/R) as offset shell meshes
+  — cylinder+joint-sphere per covered bone, at `generate_body.BONE_RADII` plus outward
+  padding — each its own object, parented to the skeleton with `ARMATURE_AUTO` weights
+  and its matching material assigned. `generate_hair.py` builds a literal helmet-like
+  cap: a bmesh hemisphere (upper half of a UV sphere, open at the bottom) sized just
+  outside the head, likewise auto-weighted (rigidly follows `Head` in practice, since
+  it's the only nearby bone) with the `Hair` material. Both promote
+  `generate_body.py`'s former `_add_cylinder_segment`/`_add_joint_sphere` helpers to
+  public `add_cylinder_segment`/`add_joint_sphere` for reuse. Verified: both scripts run
+  headless and assert vertex groups/materials are correct; a manual full-avatar render
+  (all of Tasks 11.1-11.5 together) shows a recognizable, if crude, clothed low-poly
+  figure — hair, short-sleeve shirt, pants, and shoes all visually distinct and
+  correctly colored/positioned.
 
 - [ ] **Task 11.6** — `tools/avatar_builder/generate_animations.py`  
   Placeholder animations `Stand0` (idle) and `Wave`, keyframed directly on the Task 11.1 skeleton
