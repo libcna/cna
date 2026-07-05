@@ -1836,6 +1836,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+    # Task 333: RenderTarget2D sampled as Texture2D via SpriteBatch after unbinding (Bgfx)
+    cna_bgfx_test(cna_test_bgfx_render_target_sample
+                  examples/bgfx_render_target_sample_test.cpp)
+    add_test(NAME Bgfx_RenderTarget2D_SampleAfterUnbind
+             COMMAND cna_test_bgfx_render_target_sample)
+    set_tests_properties(Bgfx_RenderTarget2D_SampleAfterUnbind PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
