@@ -2249,7 +2249,35 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
 * [x] P9-DYNAMIC-006 Add tests for multiple subscribers to `BufferNeeded`.
   *Note:* `BufferNeededFiresForEveryIndependentSubscriber` -- two independent lambda subscribers
   both observe every raise (equal, nonzero counts).
-* [ ] P9-DYNAMIC-007 Add tests for subscriber removal during callback.
+* [x] P9-DYNAMIC-007 Add tests for subscriber removal during callback.
+  *Note:* Testing this exposed a **real, serious, cross-cutting bug** well beyond
+  `DynamicSoundEffectInstance`: `System::EventHandler<T>::Raise()` (`sharp-runtime`, shared by
+  every event in the whole framework, not just `BufferNeeded`) iterated its live handler vector
+  directly. A handler that called `Remove()` on itself or another handler from within its own
+  callback (a common "unsubscribe after first fire" pattern) mutated that same vector mid-loop:
+  `erase()` shifts/destroys elements while the range-based for's cached `begin()`/`end()`
+  iterators were still in use, dereferencing an already-destroyed `std::function` --
+  **confirmed via an isolated standalone repro (outside the shared test binary, to avoid risking
+  a process-wide crash) that this escaped as a real, uncaught `std::bad_function_call`**, not a
+  theoretical concern. Presented this finding to the user (touching `sharp-runtime` needs sign-off
+  per `CLAUDE.md`'s "don't touch the sibling repo" rule, and it was under concurrent development
+  by another session at the time); the user asked for it to be fixed. Fixed in `sharp-runtime`
+  (`include/System/EventHandler.hpp`, commit `8342a2c`) by taking a snapshot copy of `handlers_`
+  before iterating in `Raise()`, matching real C# multicast delegate semantics: a handler that
+  `Add()`s/`Remove()`s/`Clear()`s during `Raise()` only affects the *next* `Raise()` call, not the
+  one in progress. Two new `sharp-runtime` tests (self-removal, removal of another not-yet-invoked
+  handler) confirm the fix; that repo's own full suite (9075 tests) stayed green including the
+  other session's concurrent, unrelated, uncommitted `DateTimeOffset.cpp` changes -- committed only
+  the two `EventHandler` files, left the other session's file untouched, did not push (a
+  sibling-repo shared branch under concurrent development). Back in CNA: added
+  `BufferNeededSubscriberCanRemoveItselfDuringCallbackWithoutCrashing`
+  (`DynamicSoundEffectInstanceTests.cpp`) -- a subscriber unsubscribes itself on first fire while
+  another subscriber stays registered; confirms no crash/throw and the other subscriber still
+  fires. CNA's own `CMakeLists.txt` builds `sharp-runtime` from the live sibling checkout
+  (`add_subdirectory(../sharp-runtime SHARP_RUNTIME)`), so the fix took effect on CNA's next
+  rebuild with no vendoring step needed. Full suite 3242/3244 (2 expected hardware skips, plus 1
+  pre-existing unrelated timing self-skip under the slower ASan build), audio subset 335/335 (336
+  under ASan, same 1 self-skip), clean under ASan+UBSan.
 * [ ] P9-DYNAMIC-008 Audit dynamic stream format conversion for mono/stereo and byte/float paths.
 * [ ] P9-DYNAMIC-009 Add tests for invalid buffer sizes and alignment.
   *Note (partial, pre-existing):* `SubmitBufferRangeThrows`/`SubmitFloatBufferRangeThrows`/

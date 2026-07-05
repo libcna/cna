@@ -489,3 +489,32 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresForEveryIndependentSubscri
     EXPECT_GT(firedA, 0);
     EXPECT_EQ(firedA, firedB);
 }
+
+// P9-DYNAMIC-007: a common event pattern is a subscriber that unsubscribes itself the first
+// time it fires ("handle once"). Update()'s starvation loop raises BufferNeeded more than once
+// per call whenever PendingBufferCount is more than 1 short of MINIMUM_BUFFER_CHECK, so this
+// must not crash or corrupt the remaining subscriber's firing (matches System::EventHandler<T>'s
+// snapshot-before-iterating Raise() semantics -- sharp-runtime).
+TEST(DynamicSoundEffectInstanceTest, BufferNeededSubscriberCanRemoveItselfDuringCallbackWithoutCrashing)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    int firedOnce = 0, firedOther = 0;
+    System::EventHandler<System::EventArgs>::Token onceToken = 0;
+    onceToken = d.BufferNeeded.Add(
+        [&](System::Object*, const System::EventArgs&)
+        {
+            ++firedOnce;
+            d.BufferNeeded.Remove(onceToken);
+        });
+    d.BufferNeeded += [&firedOther](System::Object*, const System::EventArgs&) { ++firedOther; };
+
+    EXPECT_NO_THROW(d.Update());
+
+    EXPECT_EQ(firedOnce, 1);
+    EXPECT_GT(firedOther, 0);
+    EXPECT_EQ(d.BufferNeeded.Size(), 1u); // only the still-subscribed "other" handler remains
+}
