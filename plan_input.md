@@ -167,11 +167,13 @@ implemented and event-driven.
   `GamePadTriggers`/`GamePadState`/`MouseState`/`TouchLocation`, plus `Vector2::GetHashCode` (shared
   Framework math, flagged via thumbsticks). Hash tests 152/152 still pass → values unchanged. Re-run:
   **UBSan clean for all in-repo code.**
-  - **Triaged, NOT fixed (cross-repo):** `sharp-runtime/src/System/TimeSpan.cpp:54` — the `TimeSpan`
-    **copy-ctor is invoked on an object with an invalid vptr during static initialization** of a global
-    `DateTimeOffset` (`DateTimeOffset.cpp:94`). This is a **sharp-runtime static-init-order bug**, fires at
-    process startup regardless of tests, and is outside this repo. Owner: sharp-runtime track. It is the
-    sole remaining UBSan diagnostic on the input filter.
+  - **Cross-repo finding — FIXED (sharp-runtime `90ed3ff`, 2026-07-05):** `TimeSpan` copy-ctor was invoked
+    on an invalid-vptr object during static initialization of the global `DateTimeOffset::MinValue/MaxValue/
+    UnixEpoch`, which copied the cross-TU globals `DateTime::Min/Max/UnixEpoch` + `TimeSpan::Zero` — a
+    static-initialization-order fiasco. Fixed by initializing those `DateTimeOffset` constants from
+    self-contained temporaries (constexpr tick constants + fresh `DateTime`/`TimeSpan`), values unchanged;
+    sharp-runtime's own DateTimeOffset/DateTime/TimeSpan suites 274/274 pass. After this, the input filter
+    is **fully UBSan-clean (0 runtime-error lines)**.
   - **Follow-up (Framework track):** `Vector3`/`Vector4`/`Color`/other `GetHashCode` likely share the same
     signed-overflow pattern (not exercised by the input filter) — same one-line unsigned fix.
   - Leak detection was run with `detect_leaks=0` (the `MouseCursor` stock singletons + SDL globals leak by
