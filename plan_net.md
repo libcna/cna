@@ -913,8 +913,17 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   confirmed the skin tone actually renders (not just node-graph plumbing that silently
   no-ops).
 
-- [ ] **Task 11.4** — `tools/avatar_builder/generate_morphs.py`  
+- [x] **Task 11.4** — `tools/avatar_builder/generate_morphs.py`  
   At least two shape keys: `Smile`, `Blink`. Document how additional morphs get added later.
+  **Done:** `generate_morphs.py` adds `Smile`/`Blink` shape keys to the Task 11.2 body
+  mesh via `build_morphs()`. Since the head is a single low-poly UV sphere with no
+  separate eye/mouth geometry (Task 11.2), vertex selection is done by radius-relative
+  latitude ring (the sphere's fixed z/radius ratios) and forward-facing (+Y) position —
+  an explicitly crude, documented placeholder (see `tools/avatar_builder/README.md`'s
+  "Adding more morphs" section), not modeled facial geometry. Verified: headless run
+  asserts both shape keys exist and each displaces at least one vertex by a non-trivial
+  amount; a manual render at `value=1.0` for both showed a visibly different (if crude)
+  head shape, confirming the deformation is real, not just non-zero numbers.
 
 - [ ] **Task 11.5** — `tools/avatar_builder/generate_hair.py` + `generate_clothes.py`  
   Simple placeholder geometry layered over the body (hair as a basic cap/helmet-like shape;

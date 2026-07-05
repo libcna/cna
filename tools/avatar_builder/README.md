@@ -25,7 +25,7 @@ bone-retargeting step at all.
 - [x] Task 11.1 — `generate_skeleton.py`: builds the canonical skeleton below.
 - [x] Task 11.2 — `generate_body.py`: procedural low-poly body, auto-weighted to the skeleton.
 - [x] Task 11.3 — `generate_materials.py`: 5 flat-color placeholder materials, Skin assigned to the body.
-- [ ] Task 11.4 — `generate_morphs.py`
+- [x] Task 11.4 — `generate_morphs.py`: `Smile`/`Blink` shape keys on the body mesh.
 - [ ] Task 11.5 — `generate_hair.py` / `generate_clothes.py`
 - [ ] Task 11.6 — `generate_animations.py`
 - [ ] Task 11.7 — `export_gltf.py` / `generate_avatar.py`
@@ -123,3 +123,43 @@ tinting variety is out of scope until a later iteration (`plan_net.md` Phase 11c
 Verify: `blender --background --python tools/avatar_builder/generate_materials.py` runs
 without error and asserts all 5 materials exist with `Skin` as the body mesh's sole
 material slot.
+
+## Placeholder facial morphs (`generate_morphs.py`)
+
+Two shape keys on `CNAAvatarBody`: `Smile` and `Blink` (plus the implicit `Basis`).
+
+The head (Task 11.2) is a single low-poly UV sphere with no separate eye/mouth
+geometry, so vertex selection can't target "the mouth" or "an eyelid" directly — instead
+it picks vertices by the sphere's own fixed latitude rings (a `segments=8`/`ring_count=6`
+UV sphere always has vertices at `z/radius` in `{0, +-0.5, +-0.866, +-1.0}`, regardless
+of the actual radius) that face forward (`+Y`, matching the skeleton's own forward
+convention — see the canonical-skeleton section above):
+
+- **`Smile`** selects the front-facing vertices of the ring one latitude step below the
+  equator (`z/radius ~= -0.5`) and lifts the ones further from center-line (`|x|` larger)
+  more than the ones near it, approximating a corners-up smile shape.
+- **`Blink`** selects the front-facing vertices of the ring one latitude step above the
+  equator (`z/radius ~= +0.5`) and pulls them down/inward, approximating closing eyelids.
+
+This is an explicitly crude, placeholder approximation of facial motion on an
+unmodeled head — not real facial geometry. A manual render at `value=1.0` for both keys
+shows a visibly different (dented/bulged) head shape, confirming the deformation is
+real, but it will not look like an actual face. Treat this the same way as Task 11.2's
+auto-weights: good enough to prove the mechanism (shape keys exist, drive real vertex
+motion, will export via glTF), not good enough to be final content.
+
+### Adding more morphs later
+
+Once a real modeled head (with actual eyelid/mouth topology) replaces the Task 11.2
+placeholder sphere, do **not** try to adapt this ring-selection approach — write new
+shape keys keyed to the new mesh's actual vertex groups/named vertex selections instead.
+`build_morphs(body_obj)` follows the same `_add_shape_key(body_obj, name, indices,
+displacement_fn)` pattern for any future shape key: pick a vertex index list and a
+per-vertex displacement function, and it handles creating/replacing the shape key block.
+
+`build_morphs(body_obj)` is importable the same way as the other builders, for reuse by
+`generate_avatar.py` (Task 11.7).
+
+Verify: `blender --background --python tools/avatar_builder/generate_morphs.py` runs
+without error and asserts both shape keys exist and each displaces at least one vertex
+by more than a trivial amount.
