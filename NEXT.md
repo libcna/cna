@@ -26,8 +26,12 @@ framework/runtime, not a game.
   `P9-3D` — `P9-XACT`'s own 15-item and `P9-3D`'s own 9-item lists are both now fully done, the
   latter finding and fixing a real distance-attenuation formula bug, implementing real Doppler
   pitch shift, and documenting one newly-found gap: pan ignores listener/emitter `Forward`/`Up`
-  orientation entirely); `P9-HARDWARE` is 2/6 done (the `NoAudioHardwareException` audit + its
-  raw-`std::runtime_error`-vs-XNA-exception-type fix); `P9-DYNAMIC` is **fully closed (9/9)** (the
+  orientation entirely); `P9-HARDWARE` is 4/6 done (the `NoAudioHardwareException` audit + its
+  raw-`std::runtime_error`-vs-XNA-exception-type fix, plus researching real FNA behavior for
+  missing/corrupt `.xgs`/`.xsb`/`.xwb` files and matching it exactly: missing files now throw
+  `System::IO::FileNotFoundException`, an existing-but-corrupt `AudioEngine` settings file now
+  throws `System::InvalidOperationException`, and `SoundBank`/`WaveBank`'s corrupt-content silence
+  is confirmed matching FNA rather than merely accepted); `P9-DYNAMIC` is **fully closed (9/9)** (the
   `PendingBufferCount` audit found and fixed two real bugs, one of which uncovered and fixed a
   serious cross-cutting `System::EventHandler<T>` bug in the sibling `sharp-runtime` repo, plus
   format-conversion and buffer-alignment audits confirming no further bugs); 1 group remains fully
@@ -53,23 +57,25 @@ framework/runtime, not a game.
   Verified via both the manual `cmake-build-debug/` directory and the `tests` CMake preset
   (freshly reconfigured from a deleted build directory). `cna_demo_sound`/`cna_demo_2d` example
   targets also rebuild clean.
-- **Tests:** `CnaTests` whole-suite count is **3256 / 3258 pass** (2 skipped:
+- **Tests:** `CnaTests` whole-suite count is **3258 / 3260 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected) — up from 3250/3252 (`P9-3D-007`'s 6 new tests, pan formula
-  coverage; before that, 3246/3248 was `P9-3D-004/005`'s 4 new tests, real Doppler pitch shift,
-  3243/3245 was `P9-DYNAMIC-009`'s 3 new tests, closing `P9-DYNAMIC`'s full task list, 3242/3244
-  was `P9-DYNAMIC-008`'s 1 new test, 3241/3243 was `P9-DYNAMIC-007`'s 1 new test, 3238/3240 was
-  `P9-3D-003`'s 3 new tests, 3230/3232 was `P9-DYNAMIC-001..006`'s 8 new tests, 3226/3228 was
-  `P9-XACT-014/015`'s 5 new tests, 3212/3214 was `P9-XACT-011`'s 14 new tests, and the earlier
-  jump from 2102 was `develop`'s `feature/net` merge, not this branch's work). One unrelated
-  statistical test (`CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`) failed
-  once in a full run but passed consistently over 5 isolated repeats -- pre-existing randomness
-  in an un-seeded RNG-based test, not a regression. The audio-scoped subset (§7's `--gtest_filter`
-  audio suite list) is **350 / 350 pass** under ASan+UBSan, up from 306.
+  hardware-dependent, expected) — up from 3256/3258 (`P9-HARDWARE-003/004`'s 2 new tests,
+  missing-file-throws coverage for `AudioEngine`/`SoundBank`; before that, 3250/3252 was
+  `P9-3D-007`'s 6 new tests, pan formula coverage; before that, 3246/3248 was `P9-3D-004/005`'s 4
+  new tests, real Doppler pitch shift, 3243/3245 was `P9-DYNAMIC-009`'s 3 new tests, closing
+  `P9-DYNAMIC`'s full task list, 3242/3244 was `P9-DYNAMIC-008`'s 1 new test, 3241/3243 was
+  `P9-DYNAMIC-007`'s 1 new test, 3238/3240 was `P9-3D-003`'s 3 new tests, 3230/3232 was
+  `P9-DYNAMIC-001..006`'s 8 new tests, 3226/3228 was `P9-XACT-014/015`'s 5 new tests, 3212/3214
+  was `P9-XACT-011`'s 14 new tests, and the earlier jump from 2102 was `develop`'s `feature/net`
+  merge, not this branch's work). One unrelated statistical test
+  (`CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`) failed once in a full run
+  but passed consistently over 5 isolated repeats -- pre-existing randomness in an un-seeded
+  RNG-based test, not a regression. The audio-scoped subset (§7's `--gtest_filter` audio suite
+  list) is **352 / 352 pass** under ASan+UBSan, up from 350.
   Also verified clean under a full ASan+UBSan build of the audio suite (`P9-XACT-011` touches the
   shared `FilterState` mixing-thread interaction flagged risky by `P9-BUILD-001..007`;
-  `P9-XACT-014`/`P9-DYNAMIC-001`/`P9-DYNAMIC-007`/`P9-DYNAMIC-009` re-verified after their
-  respective changes).
+  `P9-XACT-014`/`P9-DYNAMIC-001`/`P9-DYNAMIC-007`/`P9-DYNAMIC-009`/`P9-HARDWARE-003/004` re-verified
+  after their respective changes).
   `P9-DYNAMIC-007`'s fix lives in the sibling `../sharp-runtime` repo (`System::EventHandler<T>`,
   commit `8342a2c` there, not pushed) -- see §3.
   Re-run to check for drift: `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
@@ -92,7 +98,40 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (most recent Fáze 9 groups, newest first)
 
-- **`P9-3D-009`** (not yet committed) — `P9-3D`'s last remaining item, now closed (9/9).
+- **`P9-HARDWARE-003/004`** (not yet committed) — resolved the open decision flagged at the end of
+  `P9-3D-009`/in §4 previously. Researched real FNA source before asking the user to choose (they
+  asked "what does FNA actually do?" first): `AudioEngine.cs`/`SoundBank.cs`/non-streaming
+  `WaveBank.cs` all read their file argument via `TitleContainer.ReadToPointer`
+  (`TitleContainer.cs`), which does a `File.Exists` check and throws `FileNotFoundException` on a
+  missing file **before any FACT call**. Corrupt-but-existing content is handled inconsistently in
+  FNA itself: `AudioEngine.cs` explicitly checks `FACTAudioEngine_Initialize`'s return code and
+  throws `InvalidOperationException("Engine initialization failed!")`, but `SoundBank.cs`/
+  `WaveBank.cs` never check their own native creation calls' return codes at all -- no catchable
+  C# exception there. The streaming `WaveBank` ctor never goes through `TitleContainer` (uses
+  native `FAudio_fopen` directly), so even a missing streaming file doesn't throw in FNA.
+  User chose "match FNA exactly": `AudioEngine`/`SoundBank`/non-streaming-`WaveBank` now throw
+  `System::IO::FileNotFoundException` on a missing file; `AudioEngine` additionally throws
+  `System::InvalidOperationException("Engine initialization failed!")` on existing-but-corrupt
+  settings; `SoundBank`/`WaveBank` keep silently stubbing on corrupt-but-existing content (now
+  confirmed matching FNA, not just an accepted shortcut); streaming `WaveBank`'s missing-file
+  behavior is unchanged. Both exception types already existed in sharp-runtime -- no cross-repo
+  work needed. Updated 5 test files: `AudioEngineTests.cpp` (new
+  `ConstructorWithMissingFileThrowsFileNotFound`; `ConstructorWithExistingButCorruptFileStaysInStubState`
+  rewritten to `...ThrowsInvalidOperation`, now a construction-time throw), `SoundBankTests.cpp`
+  (new `ConstructorMissingFileThrowsFileNotFound`; its own corrupt-file test unchanged),
+  `WaveBankTests.cpp` (`IsPreparedFalseWhenFileMissing` rewritten to
+  `ConstructorMissingFileThrowsFileNotFound`; its own corrupt-file test unchanged),
+  `RendererDetailTests.cpp` (its one `AudioEngine` construction no longer points at a
+  deliberately-nonexistent path). `SoundBankTests.cpp`/`WaveBankTests.cpp`'s shared `SharedEngine()`
+  helper -- previously pointing at a deliberately nonexistent `.xgs` to get a cheap "stub" engine --
+  now writes a real, minimal, zero-category/zero-variable-but-parseable `.xgs` fixture instead.
+  `AudioCategoryTests.cpp`/`CueTests.cpp` needed no changes (already used real fixtures).
+  `git stash` confirms all 4 new/changed tests fail against the pre-fix code. Full suite 3258/3260
+  (2 expected skips), audio subset 352/352, clean under ASan+UBSan. `CHECKLIST.md`'s old CP-18/XA-9
+  "silently swallow" row was split into a narrower, still-accurate `NoAudioHardwareException`-
+  renderer-count row and a new row confirming `SoundBank`/`WaveBank`'s corrupt-content silence now
+  matches FNA. Full detail: `plan_audio.md`'s `P9-HARDWARE-003`/`P9-HARDWARE-004` notes.
+- **`P9-3D-009`** (`a8b8ab76`) — `P9-3D`'s last remaining item, now closed (9/9).
   Consolidated summary write-up (new "`Apply3D` / 3D audio fidelity" subsection,
   `docs/xna-4-api-coverage.md`) covering all three of `Apply3D`'s positional effects: distance
   attenuation and Doppler are both **exact** closed-form matches for FAudio's `F3DAudio.c`
@@ -374,11 +413,9 @@ already-scoped task list) still has open work:
 
 - `P9-XACT` — **fully closed (15/15)**, see §3.
 - `P9-3D` — **fully closed (9/9)**, see §3.
-- `P9-HARDWARE` (2/6 done, see §3) — `NoAudioHardwareException` audit and the
-  `std::runtime_error`-vs-XNA-exception-type fix are done; still open: whether missing/corrupt
-  XGS/XSB/XWB constructors should keep silently stubbing or throw (`P9-HARDWARE-003`, a separate,
-  larger decision from the exception-*type* fix already made — see `CHECKLIST.md`'s existing
-  `CP-18`/`XA-9` accepted-deviation entries), any consequent test updates (`-004`), no-audio-device
+- `P9-HARDWARE` (4/6 done, see §3) — `NoAudioHardwareException` audit, the
+  `std::runtime_error`-vs-XNA-exception-type fix, the missing/corrupt-file constructor-behavior
+  decision (now matches FNA exactly), and its test updates are all done; still open: no-audio-device
   test coverage (`-005`, needs a fresh isolated process — `SDL_AUDIODRIVER=dummy` always trivially
   succeeds in this repo's shared test binary), and documentation (`-006`).
 - `P9-DYNAMIC` — **fully closed (9/9)**, see §3.
@@ -441,7 +478,8 @@ ever lacks this commit, that one CNA test will fail (or, pre-fix, could throw
 | **Accepted deviation** | No 3D HRTF/elevation — pan + distance-attenuation + real Doppler only | `CHECKLIST.md` |
 | **Accepted deviation** | Reverb is a documented no-op (`INTERNAL_applyReverb`) — SDL3_mixer has no aux-send/return bus | `CHECKLIST.md`, `T-4C` |
 | **Accepted deviation** | XACT category `instanceLimit`/`fadeInMS`/`fadeOutMS` parsed but never enforced | `CHECKLIST.md`, `XA-11` |
-| **Accepted deviation** | `AudioEngine`/`SoundBank`/`WaveBank` silently stub instead of throwing on a missing/corrupt file (decision pending, `P9-HARDWARE-003`); `AudioEngine::Init()` never queries real hardware, so it can never throw `NoAudioHardwareException` from the constructor the way FNA's does (`SoundEffect`/`DynamicSoundEffectInstance` *can* now, since `P9-HARDWARE-002`) | `CHECKLIST.md`, `CP-18`/`XA-9` |
+| **Confirmed, fixed** | `AudioEngine`/`SoundBank`/non-streaming `WaveBank` silently stubbed instead of throwing on a missing file; `AudioEngine` also silently stubbed on existing-but-corrupt settings. Now match FNA exactly: missing file → `System::IO::FileNotFoundException`; corrupt `AudioEngine` settings → `System::InvalidOperationException`. `SoundBank`/`WaveBank`'s corrupt-*content* silence is unchanged (confirmed matching FNA, not a CNA shortcut) | `P9-HARDWARE-003/004` |
+| **Accepted deviation** | `AudioEngine::Init()` never queries real hardware, so it can never throw `NoAudioHardwareException` from the constructor the way FNA's does (`SoundEffect`/`DynamicSoundEffectInstance` *can*, since `P9-HARDWARE-002`) | `CHECKLIST.md` |
 | **Needs verification** | `SoundEffectInstance` filter coefficient locking follows SDL3_mixer's documented practice but was never stress-tested under real concurrency (no ThreadSanitizer run) | `T-4C` |
 | **Needs verification** | Device-dependent tests only ever run against the SDL `dummy` driver here; real-hardware runs are manual/ad-hoc | — |
 | **Incomplete** | `P9-HARDWARE`/`P9-AUDIT` — see §4 (`P9-XACT`/`P9-DYNAMIC`/`P9-3D` are fully closed) | `plan_audio.md` |
@@ -557,23 +595,17 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 Fáze 9's own task list (`plan_audio.md`) is the source of truth; the user's explicit implementation
 order is exhausted through `P9-STOP`, `P9-XACT` is **fully closed (15/15)**, `P9-DYNAMIC` is
-**fully closed (9/9)**, `P9-3D` is **fully closed (9/9)**, and `P9-HARDWARE` is 2/6 done. The
+**fully closed (9/9)**, `P9-3D` is **fully closed (9/9)**, and `P9-HARDWARE` is 4/6 done. The
 remaining groups have no user-specified priority among them — suggested order below is by
 "smallest independently-verifiable slice first":
 
-1. **Decide missing/corrupt XGS/XSB/XWB constructor behavior** (`P9-HARDWARE-003`). Goal: decide
-   whether `AudioEngine`/`SoundBank`/`WaveBank` should keep silently stubbing on a missing/corrupt
-   file (current behavior, `CHECKLIST.md` `CP-18`/`XA-9`) or throw -- a genuine open decision, not
-   a clear-cut fix like `P9-HARDWARE-002` was, since ~80+ existing tests build on the current
-   `SharedEngine()`-style stub-on-missing-file fixtures (see `CHECKLIST.md`'s existing note on
-   `CP-18`). If changed, `P9-HARDWARE-004` updates the tests that lock in today's stub behavior.
-   Needs the user's input before implementing either way.
-2. **Add no-audio-device test coverage** (`P9-HARDWARE-005`). Goal: a real regression test for
+1. **Add no-audio-device test coverage** (`P9-HARDWARE-005`). Goal: a real regression test for
    `GetMixer()`'s failure path (`P9-HARDWARE-002`) needs a fresh, isolated process with an invalid
    `SDL_AUDIODRIVER` set before anything else calls `GetMixer()` -- this repo's shared `CnaTests`
    binary can't exercise it (the mixer's cache is process-wide and once-ever-initialized). May
    need a small standalone test executable (precedent: `cna_net_two_process_harness`). "Where
    feasible" per the task's own wording -- confirm feasibility first.
+2. **Document backend behavior when audio hardware is unavailable** (`P9-HARDWARE-006`).
 
 Each task, once implemented: add/extend tests, verify with the `git stash` pattern (§7) for any
 behavioral fix, run ASan+UBSan if it touches memory lifetime or ownership, update `plan_audio.md`'s
@@ -610,20 +642,20 @@ P9-XACT, P9-DYNAMIC, P9-3D -- P9-XACT's own 15-item, P9-DYNAMIC's own 9-item, an
 9-item lists are now all fully done; P9-DYNAMIC uncovered/fixed a cross-cutting
 System::EventHandler<T> bug in ../sharp-runtime -- see §3/§4's dependency note; P9-3D found/fixed
 a real distance-attenuation bug, implemented real Doppler pitch shift, and documented a newly
-found pan-orientation gap), P9-HARDWARE is 2/6 done (the NoAudioHardwareException audit + its
-std::runtime_error-vs-XNA-exception-type fix), and 1 group is fully open (P9-AUDIT) -- see §4/§8.
-No known build/test blocker.
+found pan-orientation gap), P9-HARDWARE is 4/6 done (the NoAudioHardwareException audit, its
+std::runtime_error-vs-XNA-exception-type fix, and the missing/corrupt-file constructor-behavior
+decision -- now matches FNA exactly -- plus its test updates), and 1 group is fully open (P9-AUDIT)
+-- see §4/§8. No known build/test blocker.
 
-1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3256/3258 pass, audio-scoped
-   subset 350/350 under ASan+UBSan) -- rebuild and rerun SDL_AUDIODRIVER=dummy
+1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3258/3260 pass, audio-scoped
+   subset 352/352 under ASan+UBSan) -- rebuild and rerun SDL_AUDIODRIVER=dummy
    ./cmake-build-debug/CnaTests (or the `tests` CMake preset, §7) to check for drift since this
    was last updated. If a test involving BufferNeeded/EventHandler fails unexpectedly, check
    whether ../sharp-runtime still has commit 8342a2c (§4's dependency note) before assuming an
    audio regression.
-2. Inspect only the files needed for the first §8 task (P9-HARDWARE-003: missing/corrupt file
-   constructor behavior decision) unless the user names something else -- don't refactor
-   unrelated code. This is a genuine open decision, not a clear-cut fix -- ask the user before
-   implementing either way.
+2. Inspect only the files needed for the first §8 task (P9-HARDWARE-005: no-audio-device test
+   coverage, "where feasible" -- confirm feasibility first) unless the user names something else
+   -- don't refactor unrelated code.
 3. Make one small, verified improvement: if it's an audit, write the finding into plan_audio.md;
    if it's a fix, add/extend a test, verify with the git-stash pattern (§7), run the relevant
    build/test command, and run ASan+UBSan if it touches memory lifetime or ownership.

@@ -11,6 +11,7 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "System/Object.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
@@ -552,18 +553,24 @@ TEST(AudioEngineTest, GetCategoryAfterDisposeThrowsObjectDisposed)
     EXPECT_THROW((void)engine.GetCategory("Default"), System::ObjectDisposedException);
 }
 
-// XA-13: a file that EXISTS but isn't a valid .xgs (bad magic/garbage) must behave the same as
-// a missing one -- construction doesn't throw, GetCategory() on any name then throws
-// InvalidOperationException (matching GetCategoryInvalidNameThrowsInvalidOperation's error), not
-// some other unhandled exception. (XA-9 decided to keep this "silent stub" behavior rather than
-// throw; this locks in that decision explicitly, on the "exists but corrupt" path specifically.)
-TEST(AudioEngineTest, ConstructorWithExistingButCorruptFileStaysInStubState)
+// P9-HARDWARE-003: matches FNA exactly (AudioEngine.cs) -- a missing settingsFile throws
+// FileNotFoundException (from TitleContainer.ReadToPointer) before any FACT call is made.
+TEST(AudioEngineTest, ConstructorWithMissingFileThrowsFileNotFound)
+{
+    const auto missing =
+        (std::filesystem::temp_directory_path() / "cna_audio_engine_test_missing.xgs").string();
+    EXPECT_THROW(AudioEngine engine(missing), System::IO::FileNotFoundException);
+}
+
+// XA-13/P9-HARDWARE-003: a file that EXISTS but isn't a valid .xgs (bad magic/garbage) matches
+// FNA's AudioEngine ctor, which checks FACTAudioEngine_Initialize's return code and throws
+// InvalidOperationException("Engine initialization failed!") (AudioEngine.cs) -- unlike a missing
+// file, this is a construction-time throw, not a lazily-discovered stub state.
+TEST(AudioEngineTest, ConstructorWithExistingButCorruptFileThrowsInvalidOperation)
 {
     const auto corrupt = WriteFixture(
         "corrupt.xgs", {'n', 'o', 't', ' ', 'a', ' ', 's', 'e', 't', 't', 'i', 'n', 'g', 's'});
-    AudioEngine engine(corrupt);
-    EXPECT_FALSE(engine.getIsDisposedProperty());
-    EXPECT_THROW((void)engine.GetCategory("Default"), System::InvalidOperationException);
+    EXPECT_THROW(AudioEngine engine(corrupt), System::InvalidOperationException);
 }
 
 // ===================== GetGlobalVariable =====================

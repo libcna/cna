@@ -7,6 +7,7 @@
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
@@ -47,11 +48,15 @@ namespace Microsoft::Xna::Framework::Audio
         if (filename.empty())
             throw System::ArgumentNullException("filename");
 
+        // FNA's SoundBank ctor reads filename via TitleContainer.ReadToPointer, which throws
+        // FileNotFoundException on a missing file before ever reaching FACT (SoundBank.cs) --
+        // match that here (P9-HARDWARE-003). Corrupt-but-existing content stays a silent stub
+        // below: FNA never checks FACTAudioEngine_CreateSoundBank's return code either.
         std::ifstream f(filename, std::ios::binary | std::ios::ate);
         if (!f.is_open())
         {
-            std::cerr << "[SoundBank] Cannot open XSB: " << filename << "\n";
-            return;
+            throw System::IO::FileNotFoundException(
+                "Could not find file '" + filename + "'.", filename);
         }
         auto sz = f.tellg(); f.seekg(0);
         std::vector<uint8_t> raw(static_cast<std::size_t>(sz));

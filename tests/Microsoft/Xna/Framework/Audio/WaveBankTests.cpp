@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/EventArgs.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "System/Object.hpp"
 
 #include <chrono>
@@ -263,10 +264,49 @@ namespace
         return path;
     }
 
+    // Minimal parseable .xgs: zero categories/variables/rpcs, padded to ParseXgs's 0x50-byte
+    // minimum (XactParser.cpp). AudioEngine's ctor now throws FileNotFoundException on a missing
+    // settings file (P9-HARDWARE-003, matching FNA's TitleContainer.ReadToPointer), so this must
+    // be a real, existing, parseable file rather than a deliberately-nonexistent path -- it still
+    // has no categories/variables, which is all WaveBank needs here.
+    std::vector<uint8_t> BuildMinimalXgsFixtureBytes()
+    {
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // categoryCount
+        AppendU16(data, 0); // variableCount
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 0); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        for (int i = 0; i < 9; ++i) AppendU32(data, 0); // all nine offset fields
+
+        data.resize(0x50, 0); // ParseXgs requires >= 0x50 bytes total
+        return data;
+    }
+
     AudioEngine& SharedEngine()
     {
-        static AudioEngine engine(
-            (std::filesystem::temp_directory_path() / "cna_wavebank_test_nonexistent.xgs").string());
+        static const std::string path = []() -> std::string
+        {
+            auto dir = std::filesystem::temp_directory_path() / "cna_wavebank_test";
+            std::filesystem::create_directories(dir);
+            auto file = dir / "fixture_engine.xgs";
+            const auto bytes = BuildMinimalXgsFixtureBytes();
+            std::ofstream f(file, std::ios::binary);
+            f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            return file.string();
+        }();
+        static AudioEngine engine(path);
         return engine;
     }
 
@@ -566,12 +606,14 @@ TEST(WaveBankTest, StreamingGetSoundEffectRejectsEntryLengthExceedingRealFileSiz
 
 // ===================== IsDisposed / IsPrepared =====================
 
-TEST(WaveBankTest, IsPreparedFalseWhenFileMissing)
+// P9-HARDWARE-003: matches FNA exactly (WaveBank.cs, non-streaming ctor) -- a missing
+// nonStreamingWaveBankFilename throws FileNotFoundException (from TitleContainer.ReadToPointer)
+// before any FACT call is made.
+TEST(WaveBankTest, ConstructorMissingFileThrowsFileNotFound)
 {
     const auto missing =
         (std::filesystem::temp_directory_path() / "cna_wavebank_test_missing.xwb").string();
-    WaveBank wb(&SharedEngine(), missing);
-    EXPECT_FALSE(wb.getIsPreparedProperty());
+    EXPECT_THROW(WaveBank wb(&SharedEngine(), missing), System::IO::FileNotFoundException);
 }
 
 // XA-13: a file that EXISTS but isn't a valid .xwb (bad magic/garbage) must behave the same as

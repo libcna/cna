@@ -7,6 +7,7 @@
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
@@ -73,13 +74,15 @@ namespace Microsoft::Xna::Framework::Audio
 
         xactImpl_ = std::make_unique<XactEngineImpl>();
 
-        // Try to parse the .XGS file
+        // Try to parse the .XGS file. FNA's AudioEngine ctor reads settingsFile via
+        // TitleContainer.ReadToPointer, which does a File.Exists check and throws
+        // FileNotFoundException before ever reaching FACT (TitleContainer.cs) -- match that here
+        // (P9-HARDWARE-003) rather than silently continuing as a stub.
         std::ifstream f(settingsFile, std::ios::binary | std::ios::ate);
         if (!f.is_open())
         {
-            std::cerr << "[AudioEngine] Cannot open XGS: " << settingsFile
-                      << " — running as stub\n";
-            return;
+            throw System::IO::FileNotFoundException(
+                "Could not find file '" + settingsFile + "'.", settingsFile);
         }
 
         auto sz = f.tellg();
@@ -87,6 +90,9 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<uint8_t> data(static_cast<std::size_t>(sz));
         f.read(reinterpret_cast<char*>(data.data()), sz);
 
+        // FNA checks FACTAudioEngine_Initialize's return code and throws
+        // InvalidOperationException("Engine initialization failed!") on a nonzero result
+        // (AudioEngine.cs) -- an existing-but-corrupt settings file hits that same path here.
         try
         {
             xactImpl_->xgs = CNA::Internal::Audio::ParseXgs(data);
@@ -111,6 +117,7 @@ namespace Microsoft::Xna::Framework::Audio
         catch (const std::exception& ex)
         {
             std::cerr << "[AudioEngine] XGS parse error: " << ex.what() << "\n";
+            throw System::InvalidOperationException("Engine initialization failed!");
         }
     }
 

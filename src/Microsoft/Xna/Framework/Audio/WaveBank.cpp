@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 
 #include <algorithm>
 #include <exception>
@@ -147,12 +148,18 @@ namespace Microsoft::Xna::Framework::Audio
 
     void WaveBank::Init(const std::string& filename)
     {
-        // Load entire file into memory
+        // FNA's non-streaming WaveBank ctor reads filename via TitleContainer.ReadToPointer,
+        // which throws FileNotFoundException on a missing file before ever reaching FACT
+        // (WaveBank.cs) -- match that here (P9-HARDWARE-003). Corrupt-but-existing content stays
+        // a silent stub below: FNA never checks FACTAudioEngine_CreateInMemoryWaveBank's return
+        // code either. The streaming ctor (InitStreaming) is unaffected: FNA's streaming path
+        // never goes through TitleContainer at all, it opens the file with the native
+        // FAudio_fopen instead, so a missing streaming file doesn't throw in FNA either.
         std::ifstream f(filename, std::ios::binary | std::ios::ate);
         if (!f.is_open())
         {
-            std::cerr << "[WaveBank] Cannot open XWB: " << filename << "\n";
-            return;
+            throw System::IO::FileNotFoundException(
+                "Could not find file '" + filename + "'.", filename);
         }
         auto sz = f.tellg(); f.seekg(0);
         std::vector<uint8_t> raw(static_cast<std::size_t>(sz));

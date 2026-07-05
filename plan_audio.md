@@ -2254,8 +2254,71 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   actual no-hardware failure path would need a fresh, isolated process (e.g. an invalid
   `SDL_AUDIODRIVER` value set *before* anything else in that process ever calls `GetMixer()`) --
   left to `P9-HARDWARE-005`, which already scopes exactly this.
-* [ ] P9-HARDWARE-003 Decide whether missing/corrupt XGS/XSB/XWB constructors should remain soft stubs or throw XNA/FNA-compatible exceptions.
-* [ ] P9-HARDWARE-004 If constructor behavior changes, update tests that currently lock in silent stub behavior.
+* [x] P9-HARDWARE-003 Decide whether missing/corrupt XGS/XSB/XWB constructors should remain soft stubs or throw XNA/FNA-compatible exceptions.
+  *Note:* Researched real FNA source to ground the decision before asking the user to choose:
+  `AudioEngine.cs`'s ctor reads `settingsFile` via `TitleContainer.ReadToPointer` (`TitleContainer.cs`),
+  which does a `File.Exists` check and throws `FileNotFoundException` on a missing file **before
+  any FACT call**; `SoundBank.cs` and the non-streaming `WaveBank.cs` ctor both do the exact same
+  thing for their own file argument. Corrupt-but-*existing* content is handled inconsistently in
+  FNA itself: `AudioEngine.cs` explicitly checks `FACTAudioEngine_Initialize`'s return code and
+  throws `InvalidOperationException("Engine initialization failed!")` on failure, but
+  `SoundBank.cs`/`WaveBank.cs` never check `FACTAudioEngine_CreateSoundBank`/
+  `CreateInMemoryWaveBank`'s return code at all -- no catchable C# exception there, undefined/
+  native-only behavior. The streaming `WaveBank` ctor never goes through `TitleContainer` at all
+  (uses native `FAudio_fopen` directly), so even a missing streaming file doesn't throw in FNA.
+
+  Decision (user-selected: "match FNA exactly"): `AudioEngine`/`SoundBank`/non-streaming-`WaveBank`
+  constructors now throw `System::IO::FileNotFoundException` on a missing file (matching
+  `TitleContainer.ReadToPointer` exactly); `AudioEngine` additionally throws
+  `System::InvalidOperationException("Engine initialization failed!")` on an existing-but-corrupt
+  settings file (matching FNA's checked `FACTAudioEngine_Initialize` return code); `SoundBank`/
+  `WaveBank` (both ctor forms) keep their existing silent-stub behavior for corrupt-but-existing
+  content, since that's what FNA itself does (unchecked native return code) -- this is no longer a
+  CNA-specific deviation, it's confirmed-matching FNA behavior. Streaming `WaveBank`'s missing-file
+  behavior is unchanged (still silent), also matching FNA.
+
+  Implementation: `AudioEngine::Init()` (`AudioEngine.cpp`), `SoundBank::SoundBank()`
+  (`SoundBank.cpp`), `WaveBank::Init()` (`WaveBank.cpp`, non-streaming path only -- `InitStreaming()`
+  untouched). Both new exception types (`System::IO::FileNotFoundException`,
+  `System::InvalidOperationException`) already existed in sharp-runtime, so no cross-repo work was
+  needed.
+
+  `CHECKLIST.md`'s CP-18/XA-9 row (the old "silently swallow" deviation) was split: the missing-file/
+  corrupt-`AudioEngine`-settings part was removed entirely (fixed, no longer a deviation); a new,
+  narrower row documents that `SoundBank`/`WaveBank`'s corrupt-content silence is confirmed-correct
+  (matches FNA); the pre-existing, unrelated "`AudioEngine` never throws `NoAudioHardwareException`
+  from its own constructor" note (renderer-count check, a different code path than this task) was
+  kept as its own row, unchanged.
+* [x] P9-HARDWARE-004 If constructor behavior changes, update tests that currently lock in silent stub behavior.
+  *Note:* Folded into P9-HARDWARE-003's fix (same pass -- inseparable from the behavior change).
+  Updated across 5 test files:
+  - `AudioEngineTests.cpp`: added `ConstructorWithMissingFileThrowsFileNotFound`; renamed/rewrote
+    `ConstructorWithExistingButCorruptFileStaysInStubState` to
+    `ConstructorWithExistingButCorruptFileThrowsInvalidOperation` (now expects a construction-time
+    throw, not a lazily-discovered stub state).
+  - `SoundBankTests.cpp`: added `ConstructorMissingFileThrowsFileNotFound`; its own
+    `ConstructorWithExistingButCorruptFileStaysInStubState` is unchanged (still correct, now
+    confirmed matching FNA rather than merely accepted as a CNA shortcut). Its `SharedEngine()`
+    helper, which previously pointed at a deliberately nonexistent `.xgs` path to get a "stub"
+    engine cheaply, now writes a real, minimal, zero-category/zero-variable-but-parseable `.xgs`
+    fixture to a temp file instead (construction would otherwise now throw).
+  - `WaveBankTests.cpp`: same `SharedEngine()` fixture-path fix; renamed/rewrote
+    `IsPreparedFalseWhenFileMissing` to `ConstructorMissingFileThrowsFileNotFound`; its own
+    `IsPreparedFalseForExistingButCorruptFile` is unchanged.
+  - `RendererDetailTests.cpp`: `ObtainedFromAudioEngineRendererDetails` previously constructed an
+    `AudioEngine` against a deliberately nonexistent path just to read
+    `getRendererDetailsProperty()`; added a `MinimalXgsFixturePath()` helper (same minimal-zero-count
+    fixture shape) since that test doesn't otherwise need any category/variable content.
+  - `AudioCategoryTests.cpp`/`CueTests.cpp` needed no changes: both already build/write a real,
+    parseable `.xgs` fixture for their own `SharedEngine()`, never relied on the nonexistent-path
+    shortcut.
+
+  Verified via the project's git-stash regression pattern: stashed the 3 production `.cpp` changes,
+  rebuilt, confirmed all 4 new/changed "throws" tests fail against the pre-fix code (missing file:
+  no throw; corrupt `AudioEngine` settings: no throw), unstashed, rebuilt, confirmed green. Full
+  suite: 3260 tests, 3258 passed, 2 pre-existing unrelated skips (`Accelerometer`/`Gyroscope`
+  hardware-dependent tests), 0 failures -- no regressions anywhere else across the ~80 call sites
+  that depend on `SharedEngine()`.
 * [ ] P9-HARDWARE-005 Add tests for no-audio-device behavior using SDL dummy/no-device configuration where feasible.
 * [ ] P9-HARDWARE-006 Document backend behavior when audio hardware is unavailable.
 
