@@ -599,6 +599,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 337: RenderTarget2D MSAA resolve genuinely anti-aliases (not just solid-fill safe)
+        cna_easygl_test(cna_test_easygl_rendertarget2d_msaa
+                        examples/easygl_rendertarget2d_msaa_test.cpp)
+        add_test(NAME EasyGL_RenderTarget2D_MsaaResolve
+                 COMMAND cna_test_easygl_rendertarget2d_msaa)
+        set_tests_properties(EasyGL_RenderTarget2D_MsaaResolve PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 22: BasicEffect property tests
         cna_easygl_test(cna_test_basic_effect
                         examples/basic_effect_test.cpp)

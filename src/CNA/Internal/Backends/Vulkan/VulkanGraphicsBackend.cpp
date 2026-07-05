@@ -4500,10 +4500,11 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     std::unique_ptr<IRenderTargetBackend> VulkanGraphicsBackend::CreateRenderTarget2D(
-        int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/)
+        int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/, int /*multiSampleCount*/)
     {
-        // mipMap not yet implemented on Vulkan (Task 336/877) — accepted and ignored, matching
+        // mipMap not yet implemented on Vulkan (Task 336/878) — accepted and ignored, matching
         // this backend's existing hasDepth-ignored gap for the same reason.
+        // multiSampleCount not yet implemented on Vulkan (Task 337/879) — accepted and ignored.
         return std::make_unique<VulkanRenderTargetBackend>(w, h, hasDepth, preserveContents, this);
     }
 
@@ -4960,9 +4961,10 @@ namespace CNA::Internal::Backends::Vulkan
         return std::make_unique<VulkanTextureCubeBackend>(this, size);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, bool /*mipMap*/)
+    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, bool /*mipMap*/, int /*multiSampleCount*/)
     {
-        // mipMap not yet implemented on Vulkan (Task 336/877) — accepted and ignored.
+        // mipMap not yet implemented on Vulkan (Task 336/878) — accepted and ignored.
+        // multiSampleCount not yet implemented on Vulkan (Task 337/879) — accepted and ignored.
         return std::make_unique<VulkanRenderTargetCubeBackend>(this, size);
     }
 

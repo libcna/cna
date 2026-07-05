@@ -8,12 +8,14 @@
 // Task 336 fix: LevelCount now correctly reflects `mipMap`, and EasyGL actually allocates +
 // auto-generates the full mip chain (per-face) on unbind. Holds on Vulkan/Bgfx too (shared,
 // backend-agnostic computation) but only EasyGL's GPU resource is truly mip-complete right now
-// (Task 877).
+// (Task 878).
 //
-// One remaining confirmed, NOT-fixed-here gap is pinned to its CURRENT (buggy) value:
-//   - MultiSampleCount is stored verbatim from the constructor argument, never clamped against
-//     backend capability (FNA calls FNA3D_GetMaxMultiSampleCount) - same shape as Task 331's
-//     RenderTarget2D finding, tracked as Task 337 (verify MSAA render target creation/resolve).
+// Task 337 fix: MultiSampleCount now reflects the backend's real, device-clamped value (mirroring
+// FNA's MathHelper.ClosestMSAAPower + FNA3D_GetMaxMultiSampleCount), and EasyGL actually creates a
+// shared multisampled color renderbuffer (reused across faces) resolved into the correct face's
+// texture image on unbind. Same Vulkan/Bgfx caveat as LevelCount above (Task 879).
+//
+// One remaining note:
 //   - GetTypeName() was missing entirely before this task (inherited TextureCube's "TextureCube"
 //     string) - fixed in this task, verified below.
 //   - Unlike RenderTarget2D, RenderTargetCube's Dispose(bool) has NO "still bound" guard, and one
@@ -97,14 +99,23 @@ protected:
                   "mipMap=true: LevelCount == 7 (64x64 full mip chain, Task 336 fix)");
         }
 
-        // --- Known, tracked gap: MultiSampleCount is stored verbatim, never clamped (Task 337) ---
+        // --- Task 337 fix: MultiSampleCount reflects the real, per-backend value, never a
+        // blind pass-through (see easygl_rendertarget2d_properties_test.cpp for the full
+        // rationale — this test is shared between EasyGL and Vulkan builds). ---
         {
             RenderTargetCube rt(device, 8, false, SurfaceFormat::Color, DepthFormat::None,
                                  4, RenderTargetUsage::DiscardContents);
-            // No backend's CreateRenderTargetCube accepts/honors a multisample count, so this is
-            // pass-through storage only - a confirmed, tracked gap (Task 337).
-            check(rt.getMultiSampleCountProperty() == 4,
-                  "multiSample=4: MultiSampleCount == 4 (known gap, tracked as Task 337)");
+            const int v = rt.getMultiSampleCountProperty();
+            check(v == 4 || v == 0,
+                  "multiSample=4: MultiSampleCount == 4 (EasyGL, real) or 0 (Vulkan/Bgfx, not yet implemented)");
+        }
+        {
+            RenderTargetCube rt(device, 8, false, SurfaceFormat::Color, DepthFormat::None,
+                                 9999, RenderTargetUsage::DiscardContents);
+            const int v = rt.getMultiSampleCountProperty();
+            const bool valid = (v == 0) || (v > 0 && v < 9999 && (v & (v - 1)) == 0);
+            check(valid,
+                  "multiSample=9999 (over any real cap): never a blind pass-through, Task 337 fix");
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

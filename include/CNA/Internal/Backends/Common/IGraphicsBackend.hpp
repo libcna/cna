@@ -189,6 +189,11 @@ namespace CNA::Internal::Backends
         virtual void UnbindAsRenderTarget() = 0;
         /// Returns the native GL color texture handle; returns 0 on non-GL backends.
         [[nodiscard]] virtual unsigned int GetColorGLHandle() const { return 0; }
+        /// Returns the actual (device-clamped) multisample count this target was created
+        /// with; 0 if none/not supported by this backend. Matches FNA's semantics where
+        /// RenderTarget2D.MultiSampleCount reflects the real clamped value, not the raw
+        /// constructor request (FNA3D_GetMaxMultiSampleCount).
+        [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
     };
 
     /// Backend handle for a cube-map render target.
@@ -207,6 +212,8 @@ namespace CNA::Internal::Backends
         virtual void UnbindAsRenderTarget() = 0;
         /// Returns the underlying GL texture handle so the cube map can be sampled.
         [[nodiscard]] virtual unsigned int GetGLHandle() const { return 0; }
+        /// See IRenderTargetBackend::GetMultiSampleCount.
+        [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
 
         // ITextureCubeBackend — render targets do not support CPU-side SetData; no-op by default.
         void SetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
@@ -401,16 +408,20 @@ namespace CNA::Internal::Backends
         /// backends that do not support render targets. `mipMap` requests a full mip
         /// chain, auto-generated from level 0 when the target is unbound (matching
         /// FNA3D's OPENGL_ResolveTarget behavior) — only EasyGL currently implements this;
-        /// Vulkan/Bgfx accept and ignore it (Task 336/877).
-        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false, bool mipMap = false) { return nullptr; }
+        /// Vulkan/Bgfx accept and ignore it (Task 336/877). `multiSampleCount` requests a
+        /// multisampled color (and depth, if `hasDepth`) attachment, resolved into the
+        /// sampleable texture when the target is unbound (same FNA3D resolve mechanism,
+        /// same caveat: only EasyGL currently implements this — Task 337/878).
+        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.
         virtual void SetRenderTarget2D(IRenderTargetBackend* rt) {}
 
         /// Creates a cube-map render target. Returns nullptr on backends that
-        /// do not support cube map render targets. See CreateRenderTarget2D for `mipMap`.
-        virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false) { return nullptr; }
+        /// do not support cube map render targets. See CreateRenderTarget2D for `mipMap`/
+        /// `multiSampleCount`.
+        virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
         /// Compiles a shader program from GLSL/HLSL source strings.
         /// Returns nullptr on backends that do not support programmable shaders.

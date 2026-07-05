@@ -19,6 +19,23 @@ namespace Microsoft::Xna::Framework::Graphics
         return levels;
     }
 
+    // Mirrors FNA's MathHelper.ClosestMSAAPower: rounds down to the nearest power of two;
+    // 1 is not a valid MSAA sample count and becomes 0 (no multisampling).
+    static int ClosestMSAAPower(int value)
+    {
+        if (value == 1) return 0;
+        if (value <= 0) return 0;
+        unsigned int result = static_cast<unsigned int>(value) - 1;
+        result |= result >> 1;
+        result |= result >> 2;
+        result |= result >> 4;
+        result |= result >> 8;
+        result |= result >> 16;
+        result += 1;
+        if (static_cast<int>(result) == value) return static_cast<int>(result);
+        return static_cast<int>(result >> 1);
+    }
+
     RenderTarget2D::RenderTarget2D(GraphicsDevice& device, int width, int height)
         : RenderTarget2D(device, width, height, false, SurfaceFormat::Color, DepthFormat::None)
     {
@@ -37,12 +54,16 @@ namespace Microsoft::Xna::Framework::Graphics
                     std::shared_ptr<IRenderTargetBackend>(
                         device.GetBackend().CreateRenderTarget2D(
                             width, height, preferredDepthFormat != DepthFormat::None,
-                            usage == RenderTargetUsage::PreserveContents, mipMap)))
+                            usage == RenderTargetUsage::PreserveContents, mipMap,
+                            ClosestMSAAPower(preferredMultiSampleCount))))
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)
     {
         rtBackend_ = static_cast<IRenderTargetBackend*>(GetBackendRaw());
+        // MultiSampleCount reflects the backend's real, device-clamped value (matching FNA's
+        // FNA3D_GetMaxMultiSampleCount), not the raw constructor argument.
+        if (rtBackend_) multiSampleCount_ = rtBackend_->GetMultiSampleCount();
     }
 
     RenderTargetUsage RenderTarget2D::getRenderTargetUsageProperty() const { return usage_; }

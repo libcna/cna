@@ -19,6 +19,22 @@ namespace Microsoft::Xna::Framework::Graphics
         return levels;
     }
 
+    // Mirrors FNA's MathHelper.ClosestMSAAPower (see RenderTarget2D.cpp for the identical helper).
+    static int ClosestMSAAPower(int value)
+    {
+        if (value == 1) return 0;
+        if (value <= 0) return 0;
+        unsigned int result = static_cast<unsigned int>(value) - 1;
+        result |= result >> 1;
+        result |= result >> 2;
+        result |= result >> 4;
+        result |= result >> 8;
+        result |= result >> 16;
+        result += 1;
+        if (static_cast<int>(result) == value) return static_cast<int>(result);
+        return static_cast<int>(result >> 1);
+    }
+
     RenderTargetCube::RenderTargetCube(GraphicsDevice& device, int size,
                                        bool mipMap, SurfaceFormat preferredFormat,
                                        DepthFormat preferredDepthFormat,
@@ -28,7 +44,8 @@ namespace Microsoft::Xna::Framework::Graphics
                       // IRenderTargetCubeBackend : ITextureCubeBackend — pass single backend
                       // to TextureCube so sampling and rendering share the same GPU image.
                       std::unique_ptr<ITextureCubeBackend>(
-                          device.backend_ ? device.backend_->CreateRenderTargetCube(size, mipMap).release()
+                          device.backend_ ? device.backend_->CreateRenderTargetCube(
+                                                 size, mipMap, ClosestMSAAPower(preferredMultiSampleCount)).release()
                                           : nullptr),
                       mipMap ? CalculateMipLevels(size) : 1)
         , size_(size)
@@ -37,6 +54,9 @@ namespace Microsoft::Xna::Framework::Graphics
         , usage_(usage)
     {
         rtCubeBackend_ = static_cast<IRenderTargetCubeBackend*>(GetBackendRaw());
+        // MultiSampleCount reflects the backend's real, device-clamped value (matching FNA's
+        // FNA3D_GetMaxMultiSampleCount), not the raw constructor argument.
+        if (rtCubeBackend_) multiSampleCount_ = rtCubeBackend_->GetMultiSampleCount();
     }
 
     IRenderTargetCubeBackend* RenderTargetCube::GetRenderTargetCubeBackend() const

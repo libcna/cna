@@ -423,8 +423,9 @@ namespace CNA::Internal::Backends::EasyGL
 
     EasyGLRenderTargetBackend::EasyGLRenderTargetBackend(int w, int h, bool hasDepth,
                                                           ::easygl::ResourceRegistry* registry,
-                                                          bool mipMap)
-        : width_(w), height_(h), hasDepth_(hasDepth), mipMap_(mipMap), registry_(registry)
+                                                          bool mipMap, int multiSampleCount)
+        : width_(w), height_(h), hasDepth_(hasDepth), mipMap_(mipMap),
+          multiSampleCount_(multiSampleCount), registry_(registry)
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(w, h) : 1;
         CreateResources();
@@ -476,19 +477,61 @@ namespace CNA::Internal::Backends::EasyGL
                                 ::metagl::TextureParameter::WrapT,
                                 static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
 
+        // Clamp to GL_MAX_SAMPLES so glRenderbufferStorageMultisample never errors, mirroring
+        // EasyGLGraphicsBackend::CreateMsaaBuffers / FNA3D's OPENGL_GetMaxMultiSampleCount.
+        if (multiSampleCount_ > 0)
+        {
+            GLint maxSamples = 0;
+            metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
+            if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
+                multiSampleCount_ = static_cast<int>(maxSamples);
+        }
+
         fbo_.create();
-        // glFramebufferTexture2D operates on the currently bound FBO; bind ours first.
+        // glFramebufferTexture2D/glFramebufferRenderbuffer operate on the currently bound FBO;
+        // bind ours first.
         fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
-        fbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                               ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
-                               ::easygl::TextureTarget::Texture2D,
-                               colorTex_, 0);
+
+        if (multiSampleCount_ > 0)
+        {
+            // Render into a multisampled color renderbuffer (matching FNA3D's
+            // FNA3D_GenColorRenderbuffer); colorTex_ is only ever the single-sample resolve
+            // target, written by UnbindAsRenderTarget()'s blit, never rendered into directly.
+            msaaColorRbo_.create();
+            msaaColorRbo_.bind();
+            msaaColorRbo_.set_storage_multisample(multiSampleCount_,
+                                                   ::metagl::InternalFormat::Rgba8,
+                                                   width_, height_);
+            fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                     ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                     msaaColorRbo_);
+
+            resolveFbo_.create();
+            resolveFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+            resolveFbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                                          ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                          ::easygl::TextureTarget::Texture2D,
+                                          colorTex_, 0);
+            fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        }
+        else
+        {
+            fbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                                   ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                   ::easygl::TextureTarget::Texture2D,
+                                   colorTex_, 0);
+        }
 
         if (hasDepth_)
         {
             depthRbo_.create();
             depthRbo_.bind();
-            depthRbo_.set_storage(::metagl::InternalFormat::DepthComponent24, width_, height_);
+            if (multiSampleCount_ > 0)
+                depthRbo_.set_storage_multisample(multiSampleCount_,
+                                                   ::metagl::InternalFormat::DepthComponent24,
+                                                   width_, height_);
+            else
+                depthRbo_.set_storage(::metagl::InternalFormat::DepthComponent24, width_, height_);
             fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                      ::metagl::FramebufferAttachment::Depth,
                                      depthRbo_);
@@ -504,8 +547,20 @@ namespace CNA::Internal::Backends::EasyGL
 
     void EasyGLRenderTargetBackend::UnbindAsRenderTarget()
     {
-        // Regenerate the mip chain from level 0's just-rendered content, matching FNA3D's
-        // OPENGL_ResolveTarget: "if (target->levelCount > 1) { ...glGenerateMipmap... }".
+        // Resolve the multisampled color renderbuffer into colorTex_ before mips (if any) are
+        // regenerated from it, matching FNA3D's OPENGL_ResolveTarget resolve-then-mipmap order.
+        if (multiSampleCount_ > 0)
+        {
+            fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            ::easygl::Framebuffer::blit(0, 0, width_, height_,
+                                        0, 0, width_, height_,
+                                        ::metagl::ClearBufferBit::Color,
+                                        ::metagl::BlitFilter::Linear);
+        }
+        // Regenerate the mip chain from level 0's just-rendered (and possibly just-resolved)
+        // content, matching FNA3D's OPENGL_ResolveTarget: "if (target->levelCount > 1) { ...
+        // glGenerateMipmap... }".
         if (levelCount_ > 1)
         {
             colorTex_.bind(::easygl::TextureTarget::Texture2D);
@@ -527,8 +582,10 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLRenderTargetBackend::release_gl_handle_only()
     {
         fbo_.reset_handle_no_gl();
+        resolveFbo_.reset_handle_no_gl();
         colorTex_.reset_handle_no_gl();
         depthRbo_.reset_handle_no_gl();
+        msaaColorRbo_.reset_handle_no_gl();
     }
 
     void EasyGLRenderTargetBackend::recreate_gl_resource()
@@ -540,8 +597,9 @@ namespace CNA::Internal::Backends::EasyGL
 
     EasyGLRenderTargetCubeBackend::EasyGLRenderTargetCubeBackend(int size, bool hasDepth,
                                                                     ::easygl::ResourceRegistry* registry,
-                                                                    bool mipMap)
-        : size_(size), hasDepth_(hasDepth), mipMap_(mipMap), registry_(registry)
+                                                                    bool mipMap, int multiSampleCount)
+        : size_(size), hasDepth_(hasDepth), mipMap_(mipMap),
+          multiSampleCount_(multiSampleCount), registry_(registry)
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(size, size) : 1;
         CreateResources();
@@ -594,13 +652,46 @@ namespace CNA::Internal::Backends::EasyGL
                                ::metagl::TextureParameter::WrapT,
                                static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
 
+        // Clamp to GL_MAX_SAMPLES, same as EasyGLRenderTargetBackend.
+        if (multiSampleCount_ > 0)
+        {
+            GLint maxSamples = 0;
+            metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
+            if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
+                multiSampleCount_ = static_cast<int>(maxSamples);
+        }
+
         fbo_.create();
+        fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+
+        if (multiSampleCount_ > 0)
+        {
+            // One shared multisample color renderbuffer, reused across all 6 faces (only one
+            // face is ever rendered into at a time) — matches FNA's RenderTargetCube.cs, which
+            // also allocates a single glColorBuffer regardless of face. resolveFbo_ is
+            // re-attached to whichever face was most recently bound (see BindAsRenderTargetFace)
+            // so UnbindAsRenderTarget's blit resolves into the correct face.
+            msaaColorRbo_.create();
+            msaaColorRbo_.bind();
+            msaaColorRbo_.set_storage_multisample(multiSampleCount_,
+                                                   ::metagl::InternalFormat::Rgba8,
+                                                   size_, size_);
+            fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                     ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                     msaaColorRbo_);
+            resolveFbo_.create();
+        }
 
         if (hasDepth_)
         {
             depthRbo_.create();
             depthRbo_.bind();
-            depthRbo_.set_storage(::metagl::InternalFormat::DepthComponent24, size_, size_);
+            if (multiSampleCount_ > 0)
+                depthRbo_.set_storage_multisample(multiSampleCount_,
+                                                   ::metagl::InternalFormat::DepthComponent24,
+                                                   size_, size_);
+            else
+                depthRbo_.set_storage(::metagl::InternalFormat::DepthComponent24, size_, size_);
             fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
             fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                       ::metagl::FramebufferAttachment::Depth,
@@ -612,19 +703,44 @@ namespace CNA::Internal::Backends::EasyGL
 
     void EasyGLRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
     {
+        lastFace_ = face;
         fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
-        // Attach the requested face (0=+X .. 5=-Z) to the FBO color attachment
         const auto faceTarget = static_cast<::easygl::TextureTarget>(
             static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX) + face);
-        fbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                                ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
-                                faceTarget,
-                                cubeTex_, 0);
+        if (multiSampleCount_ == 0)
+        {
+            // Non-MSAA: fbo_'s color attachment IS cubeTex_ — re-attach the requested face
+            // (0=+X .. 5=-Z) directly, since all faces share this one FBO/texture.
+            fbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                                    ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                    faceTarget,
+                                    cubeTex_, 0);
+        }
+        // MSAA: fbo_'s color attachment is the shared msaaColorRbo_, which is face-agnostic
+        // (a renderbuffer, not a cube texture) — nothing to re-attach on bind; the face only
+        // matters when UnbindAsRenderTarget resolves into cubeTex_'s specific face image.
     }
 
     void EasyGLRenderTargetCubeBackend::UnbindAsRenderTarget()
     {
-        // Regenerate the mip chain for all 6 faces from their just-rendered level-0 content.
+        if (multiSampleCount_ > 0)
+        {
+            const auto faceTarget = static_cast<::easygl::TextureTarget>(
+                static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX) + lastFace_);
+            resolveFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+            resolveFbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                                          ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                          faceTarget,
+                                          cubeTex_, 0);
+            fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            ::easygl::Framebuffer::blit(0, 0, size_, size_,
+                                        0, 0, size_, size_,
+                                        ::metagl::ClearBufferBit::Color,
+                                        ::metagl::BlitFilter::Linear);
+        }
+        // Regenerate the mip chain for all 6 faces from their just-rendered (and possibly
+        // just-resolved) level-0 content.
         if (levelCount_ > 1)
         {
             cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
@@ -657,8 +773,10 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLRenderTargetCubeBackend::release_gl_handle_only()
     {
         fbo_.reset_handle_no_gl();
+        resolveFbo_.reset_handle_no_gl();
         cubeTex_.reset_handle_no_gl();
         depthRbo_.reset_handle_no_gl();
+        msaaColorRbo_.reset_handle_no_gl();
     }
 
     void EasyGLRenderTargetCubeBackend::recreate_gl_resource()
@@ -1397,14 +1515,14 @@ void main()
         return std::make_unique<EasyGLOcclusionQueryBackend>(RegistryPtr());
     }
 
-    std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool /*preserveContents*/, bool mipMap)
+    std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, RegistryPtr(), mipMap);
+        return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, RegistryPtr(), mipMap, multiSampleCount);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size, bool mipMap)
+    std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<EasyGLRenderTargetCubeBackend>(size, true, RegistryPtr(), mipMap);
+        return std::make_unique<EasyGLRenderTargetCubeBackend>(size, true, RegistryPtr(), mipMap, multiSampleCount);
     }
 
     std::unique_ptr<ITexture3DBackend> EasyGLGraphicsBackend::CreateTexture3D(

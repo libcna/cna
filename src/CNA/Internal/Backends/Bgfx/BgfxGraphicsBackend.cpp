@@ -457,9 +457,10 @@ namespace CNA::Internal::Backends::Bgfx
 
     // ---
 
-    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/)
+    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/, int /*multiSampleCount*/)
     {
-        // mipMap not yet implemented on Bgfx (Task 336/877) — accepted and ignored.
+        // mipMap not yet implemented on Bgfx (Task 336/878) — accepted and ignored.
+        // multiSampleCount not yet implemented on Bgfx (Task 337/879) — accepted and ignored.
         return std::make_unique<BgfxRenderTargetBackend>(w, h, hasDepth, preserveContents);
     }
 
@@ -542,9 +543,10 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setViewFrameBuffer(1, BGFX_INVALID_HANDLE);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> BgfxGraphicsBackend::CreateRenderTargetCube(int size, bool /*mipMap*/)
+    std::unique_ptr<IRenderTargetCubeBackend> BgfxGraphicsBackend::CreateRenderTargetCube(int size, bool /*mipMap*/, int /*multiSampleCount*/)
     {
-        // mipMap not yet implemented on Bgfx (Task 336/877) — accepted and ignored.
+        // mipMap not yet implemented on Bgfx (Task 336/878) — accepted and ignored.
+        // multiSampleCount not yet implemented on Bgfx (Task 337/879) — accepted and ignored.
         return std::make_unique<BgfxRenderTargetCubeBackend>(size);
     }
 

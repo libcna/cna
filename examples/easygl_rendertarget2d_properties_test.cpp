@@ -10,14 +10,12 @@
 // CalculateMipLevels), and EasyGL actually allocates + auto-generates the full mip chain on
 // unbind (mirroring FNA3D's OPENGL_ResolveTarget). This assertion holds on Vulkan/Bgfx too — the
 // LevelCount computation is shared, backend-agnostic C++ — but only EasyGL's GPU resource is
-// truly mip-complete right now; Vulkan/Bgfx accept and ignore the `mipMap` flag (Task 877).
+// truly mip-complete right now; Vulkan/Bgfx accept and ignore the `mipMap` flag (Task 878).
 //
-// One remaining confirmed, NOT-fixed-here gap is pinned to its CURRENT (buggy) value with an
-// explanatory comment rather than silently skipped, so Task 337 has a regression marker to update:
-//   - MultiSampleCount is stored verbatim from the constructor argument, never clamped against
-//     backend capability and never wired into actual multisampled RT creation (no backend's
-//     CreateRenderTarget2D even accepts a multisample count) - tracked as Task 337 (verify MSAA
-//     render target creation/resolve).
+// Task 337 fix: MultiSampleCount now reflects the backend's real, device-clamped value (mirroring
+// FNA's MathHelper.ClosestMSAAPower + FNA3D_GetMaxMultiSampleCount), not a raw pass-through, and
+// EasyGL actually creates a multisampled color/depth renderbuffer, resolved into the sampleable
+// texture on unbind. Same Vulkan/Bgfx caveat as LevelCount above (Task 879).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -95,14 +93,29 @@ protected:
                   "Ctor2 mipMap=true: LevelCount == 7 (64x64 full mip chain, Task 336 fix)");
         }
 
-        // --- Known, tracked gap: MultiSampleCount is stored verbatim, never clamped (Task 337) ---
+        // --- Task 337 fix: MultiSampleCount reflects the real, per-backend value, never a
+        // blind pass-through. EasyGL actually implements MSAA-for-RT (clamped to real device
+        // capability); Vulkan/Bgfx don't yet (Task 879) and honestly report 0 rather than
+        // lying about support they don't have — this test is shared between both backends, so
+        // both outcomes are accepted as correct; only an unclamped pass-through (e.g. exactly
+        // 9999) would be a failure. ---
         {
             RenderTarget2D rt(device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None,
                                4, RenderTargetUsage::DiscardContents);
-            // No backend's CreateRenderTarget2D accepts/honors a multisample count, so this is
-            // pass-through storage only - a confirmed, tracked gap (Task 337).
-            check(rt.getMultiSampleCountProperty() == 4,
-                  "Ctor3 multiSample=4: MultiSampleCount == 4 (known gap, tracked as Task 337)");
+            const int v = rt.getMultiSampleCountProperty();
+            check(v == 4 || v == 0,
+                  "Ctor3 multiSample=4: MultiSampleCount == 4 (EasyGL, real) or 0 (Vulkan/Bgfx, not yet implemented)");
+        }
+        {
+            RenderTarget2D rt(device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None,
+                               9999, RenderTargetUsage::DiscardContents);
+            // 9999 is far beyond any real GPU's GL_MAX_SAMPLES - must never come back unchanged
+            // (that would mean a blind pass-through, the pre-Task-337 bug); must be 0 (Vulkan/
+            // Bgfx) or a real, achievable, clamped power-of-two value (EasyGL).
+            const int v = rt.getMultiSampleCountProperty();
+            const bool valid = (v == 0) || (v > 0 && v < 9999 && (v & (v - 1)) == 0);
+            check(valid,
+                  "Ctor3 multiSample=9999 (over any real cap): never a blind pass-through, Task 337 fix");
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
