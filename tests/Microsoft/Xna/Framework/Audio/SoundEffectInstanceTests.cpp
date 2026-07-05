@@ -68,6 +68,13 @@ namespace
         float saved = SoundEffect::getDistanceScaleProperty();
         ~DistanceScaleGuard() { SoundEffect::setDistanceScaleProperty(saved); }
     };
+
+    // Same rationale as DistanceScaleGuard, for SoundEffect::DopplerScale (default 1.0f).
+    struct DopplerScaleGuard
+    {
+        float saved = SoundEffect::getDopplerScaleProperty();
+        ~DopplerScaleGuard() { SoundEffect::setDopplerScaleProperty(saved); }
+    };
 }
 
 TEST_F(SoundEffectInstanceTest, DefaultState)
@@ -364,6 +371,92 @@ TEST_F(SoundEffectInstanceTest, Apply3DAppliesInverseDistanceLawBeyondDistanceSc
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
     EXPECT_NEAR(MIX_GetTrackGain(track), 0.5f, 1e-5f); // 10/20
+}
+
+// P9-3D-005: matches FAudio's F3DAudio.c CalculateDoppler exactly. Listener at origin
+// (stationary), emitter at (10,0,0) moving in +X (directly away from the listener) at half the
+// speed of sound (343.5 default / 2 = 171.75). emitterVelComponent = dot((-10,0,0),(171.75,0,0))
+// / 10 = -171.75; dopplerFactor = 343.5 / (343.5 - (-171.75)) = 343.5/515.25 = 2/3. A receding
+// emitter must pitch the sound *down*.
+TEST_F(SoundEffectInstanceTest, Apply3DAppliesDopplerPitchDownWhenEmitterRecedes)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener; // default position origin, default velocity zero
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({171.75f, 0.0f, 0.0f}); // moving away from the listener
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 2.0f / 3.0f, 1e-4f);
+}
+
+// Same geometry, emitter moving in -X (toward the listener) instead: emitterVelComponent =
+// dot((-10,0,0),(-171.75,0,0))/10 = +171.75; dopplerFactor = 343.5/(343.5-171.75) = 2.0. An
+// approaching emitter must pitch the sound *up*.
+TEST_F(SoundEffectInstanceTest, Apply3DAppliesDopplerPitchUpWhenEmitterApproaches)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({-171.75f, 0.0f, 0.0f}); // moving toward the listener
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 2.0f, 1e-4f);
+}
+
+// A moving *listener* produces the same kind of shift as a moving emitter: listener at origin
+// moving in +X (toward the stationary emitter at (10,0,0)) at half the speed of sound.
+// listenerVelComponent = dot((-10,0,0),(171.75,0,0))/10 = -171.75;
+// dopplerFactor = (343.5-(-171.75))/343.5 = 515.25/343.5 = 1.5.
+TEST_F(SoundEffectInstanceTest, Apply3DAppliesDopplerPitchUpWhenListenerApproaches)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    listener.setVelocityProperty({171.75f, 0.0f, 0.0f}); // moving toward the emitter
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.5f, 1e-4f);
+}
+
+// Matches FNA's UpdatePitch() exactly: `if (!is3D || dopplerScale == 0.0f) doppler = 1.0f;` --
+// setting the global SoundEffect.DopplerScale to 0 disables Doppler entirely, regardless of
+// relative velocity.
+TEST_F(SoundEffectInstanceTest, Apply3DDopplerIsNoOpWhenGlobalDopplerScaleIsZero)
+{
+    REQUIRE_DEVICE();
+    DopplerScaleGuard guard;
+    SoundEffect::setDopplerScaleProperty(0.0f);
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({171.75f, 0.0f, 0.0f}); // would otherwise pitch down
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-5f);
 }
 
 // CP-20: matches FNA's `is3D` latch (SoundEffectInstance.cs) -- once Apply3D has run, it (not

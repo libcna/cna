@@ -146,18 +146,20 @@ All 17 XNA 4.0 PackedVector types are fully implemented:
   `.xwb` (XACT) parser (`CNA::Internal::Audio::XactParser`), mixed through SDL3_mixer. Cue playback,
   variation selection (weighted lottery, matching FAudio), category volume/pause/resume/stop, 3D
   pan/attenuation, natural-completion state reconciliation, and fire-and-forget lifecycle are all
-  real. Not FAudio/FACT — SDL3_mixer is the backend, so 3D HRTF/Doppler and streaming-wavebank
-  offset/packetSize params are documented accepted deviations, not stubs (`CHECKLIST.md`).
+  real, including real Doppler pitch shift (`P9-3D-004/005`). Not FAudio/FACT — SDL3_mixer is the
+  backend, so 3D HRTF/elevation and streaming-wavebank offset/packetSize params are documented
+  accepted deviations, not stubs (`CHECKLIST.md`).
 - `Microphone`: **Implemented.** Real SDL3 capture device enumeration, `Start()`/`Stop()`,
   `GetData()`/`GetQueuedBytes()`, `BufferReady` event.
 - `DynamicSoundEffectInstance`: **Implemented.** Real buffer queue via `SDL_AudioStream`,
   `BufferNeeded` event pumped by `FrameworkDispatcher::Update()`, `PendingBufferCount` tracks real
   stream consumption.
 - `SoundEffect`, `SoundEffectInstance`: **Implemented** (SDL3_mixer backend). Move-only with
-  instance-tracking `Dispose()` cascade; real low/high/band-pass filters; reverb and full 3D
-  HRTF/Doppler remain documented no-ops (SDL3_mixer has no aux-send bus or 3D audio graph).
+  instance-tracking `Dispose()` cascade; real low/high/band-pass filters; real Doppler pitch
+  shift via `Apply3D` (`P9-3D-004/005`); reverb and full 3D HRTF/elevation remain documented
+  no-ops (SDL3_mixer has no aux-send bus or 3D audio graph).
 - **Status:** Implemented, with a small set of accepted deviations documented in `CHECKLIST.md`
-  (stereo hard-pan instead of crossfeed, no reverb/Doppler/HRTF, `instanceLimit`/fade parsed but
+  (stereo hard-pan instead of crossfeed, no reverb/HRTF/elevation, `instanceLimit`/fade parsed but
   not enforced, `IsPlaying`/`IsPaused` mutually exclusive unlike real FACT) — none of these are
   "unimplemented," they are deliberate, reasoned SDL3_mixer-backend trade-offs.
 
@@ -169,9 +171,9 @@ this table exists to answer "is X implemented?" at a glance without reading ever
 
 | Bucket | Behavior |
 |---|---|
-| **Implemented** (matches FNA/XNA 4.0) | `SoundEffect` construction (file/buffer/buffer+range+loop), `Play`/`CreateInstance`, move-only Dispose cascade to every live instance • `SoundEffectInstance` Play/Pause/Resume/Stop/Volume/Pan/Pitch/IsLooped, real low/high/band-pass filters, `Resume()`-plays-if-never-started quirk • `DynamicSoundEffectInstance` SubmitBuffer/SubmitFloatBufferEXT, `BufferNeeded`, real `PendingBufferCount` • `AudioEngine` `.xgs` parsing, categories, global variables, `Update()` lifecycle sweep, Dispose cascade • `SoundBank`/`WaveBank` `.xsb`/`.xwb` parsing (compact + non-compact + ADPCM), `PlayCue`, `GetCue`, real lazy streaming reads • `Cue` playback, natural-completion state reconciliation, weighted-lottery variation selection, category routing • `AudioCategory` Pause/Resume/Stop/SetVolume against real active cues over a mutation-safe snapshot • `Microphone` real SDL3 capture • `AudioListener`/`AudioEmitter`/`RendererDetail`/all enums |
-| **Approximate** (real effect, not bit-exact vs FNA/XAudio2/FACT) | 3D audio is pan + distance-attenuation only, no elevation/HRTF • stereo hard-pan (`Pan`=±1) eliminates the opposite channel instead of crossfeed-blending it (mono is bit-exact) • a bounded loop region truncates the *entire* track at `loopStart+loopLength`, not just later iterations (`MIX_PROP_PLAY_MAX_FRAME_NUMBER` has no per-iteration distinction) • interactive-type (`type==3`) XACT variation tables use a uniform pick instead of a variable-driven one |
-| **Intentionally unsupported** (documented, no plan to implement) | Doppler/velocity-based pitch shift (stored, never applied) • reverb (`INTERNAL_applyReverb` is a no-op — no aux-send/return bus in SDL3_mixer) • `NoAudioHardwareException` never thrown (CNA always reports exactly one renderer) • `AudioEngine`/`SoundBank`/`WaveBank` silently stub instead of throwing on a missing/corrupt file |
+| **Implemented** (matches FNA/XNA 4.0) | `SoundEffect` construction (file/buffer/buffer+range+loop), `Play`/`CreateInstance`, move-only Dispose cascade to every live instance • `SoundEffectInstance` Play/Pause/Resume/Stop/Volume/Pan/Pitch/IsLooped, real low/high/band-pass filters, `Resume()`-plays-if-never-started quirk, real Doppler pitch shift via `Apply3D` (exact `F3DAudio.c` `CalculateDoppler` formula, `P9-3D-004/005`) • `DynamicSoundEffectInstance` SubmitBuffer/SubmitFloatBufferEXT, `BufferNeeded`, real `PendingBufferCount` • `AudioEngine` `.xgs` parsing, categories, global variables, `Update()` lifecycle sweep, Dispose cascade • `SoundBank`/`WaveBank` `.xsb`/`.xwb` parsing (compact + non-compact + ADPCM), `PlayCue`, `GetCue`, real lazy streaming reads • `Cue` playback, natural-completion state reconciliation, weighted-lottery variation selection, category routing • `AudioCategory` Pause/Resume/Stop/SetVolume against real active cues over a mutation-safe snapshot • `Microphone` real SDL3 capture • `AudioListener`/`AudioEmitter`/`RendererDetail`/all enums |
+| **Approximate** (real effect, not bit-exact vs FNA/XAudio2/FACT) | 3D audio pan + distance attenuation, no elevation/HRTF (Doppler is exact, see Implemented) • stereo hard-pan (`Pan`=±1) eliminates the opposite channel instead of crossfeed-blending it (mono is bit-exact) • a bounded loop region truncates the *entire* track at `loopStart+loopLength`, not just later iterations (`MIX_PROP_PLAY_MAX_FRAME_NUMBER` has no per-iteration distinction) • interactive-type (`type==3`) XACT variation tables use a uniform pick instead of a variable-driven one |
+| **Intentionally unsupported** (documented, no plan to implement) | reverb (`INTERNAL_applyReverb` is a no-op — no aux-send/return bus in SDL3_mixer) • true 3D elevation/HRTF (no native 3D audio graph) • `NoAudioHardwareException` never thrown (CNA always reports exactly one renderer) • `AudioEngine`/`SoundBank`/`WaveBank` silently stub instead of throwing on a missing/corrupt file |
 | **Not yet implemented / open decision** | XACT category `instanceLimit`/`fadeInMS`/`fadeOutMS` are parsed but never enforced • `Cue::IsPlaying`/`IsPaused` are mutually exclusive, unlike real FACT (found `P9-LIFECYCLE-013`, decision on whether to fix pending) |
 
 #### SDL3_mixer vs FAudio/FACT backend limitations (`P9-DOCS-006`)
@@ -181,12 +183,14 @@ parsed by a hand-written `CNA::Internal::Audio::XactParser` and played through S
 mixing graph, which is structurally different from FAudio's XAudio2-derived voice graph. Concrete
 consequences, all downstream of this one architectural choice:
 
-- **No `F3DAudio` equivalent.** SDL3_mixer has no positional-audio DSP graph; 3D sound is
-  approximated at the CNA layer (pan + linear distance attenuation), not computed by the backend.
-- **No per-source velocity/Doppler.** `DopplerScale`/`SpeedOfSound`/emitter velocity are stored
-  (API-complete) but have nothing to feed into — no backend hook applies them to pitch.
-  Correspondingly XACT `FACT3DApply`-style dedicated 3D application from `Cue` also is not the
-  same call path — CNA approximates it via `SoundEffectInstance::Apply3D` on every playing wave.
+- **No `F3DAudio` equivalent.** SDL3_mixer has no positional-audio DSP graph; pan and distance
+  attenuation are approximated at the CNA layer, not computed by the backend. Doppler pitch shift
+  is the exception: it's a closed-form formula over `Position`/`Velocity` needing no native 3D
+  audio API at all, so CNA computes it exactly (matching FAudio's `F3DAudio.c`
+  `CalculateDoppler`, `P9-3D-004/005`) and applies it via `MIX_SetTrackFrequencyRatio` (the same
+  primitive already used for the plain `Pitch` property). Correspondingly XACT `FACT3DApply`-style
+  dedicated 3D application from `Cue` also is not the same call path — CNA approximates it via
+  `SoundEffectInstance::Apply3D` on every playing wave.
 - **No aux-send/return bus.** FAudio (like XAudio2) supports a shared reverb submix voice;
   SDL3_mixer has no equivalent routing concept, so reverb has no backend primitive to attach to.
 - **Only one "cooked" (post-mix, pre-output) callback slot per track.** This is why the DSP filter
@@ -398,7 +402,7 @@ Coverage is estimated as the fraction of public XNA 4.0 API surface that is usab
 | `ShaderEffect` (custom GLSL/SPIR-V) | ~80 % | EasyGL GLSL and Vulkan SPIR-V tested; no HLSL path |
 | `PackedVector` (all 17 types) | ~100 % | Full Pack/Unpack with correct rounding; golden-value + edge-case tests |
 | `SpriteFont` / `Model` | ~80 % | Functional for typical use; some edge-case APIs stubs |
-| `SoundEffect / SoundEffectInstance` | ~95 % | SDL3_mixer backend; real filters, instance-tracking cascade; 3D is pan+attenuation only (no HRTF/Doppler, documented) |
+| `SoundEffect / SoundEffectInstance` | ~95 % | SDL3_mixer backend; real filters, instance-tracking cascade; 3D is pan+attenuation+Doppler (no HRTF/elevation, documented) |
 | `MediaPlayer / VideoPlayer` | ~85 % | FFmpeg video; SDL_mixer audio; Album/Artist/Genre stub |
 | `ContentManager` | ~65 % | File-extension readers; no XNB; no ServiceProvider property |
 | `StorageDevice / StorageContainer` | ~90 % | Native filesystem; full XNA API shape |
@@ -407,7 +411,7 @@ Coverage is estimated as the fraction of public XNA 4.0 API surface that is usab
 | `MouseCursor` (MonoGame-inspired, `NOXNA`) | ~100 % of exposed surface | 12 stock cursors, `FromTexture2D`, `IDisposable` singleton-safe dispose; no XNA/FNA equivalent. |
 | `Input::Touch` | ~98 % behavior | Gesture pipeline (Tap…PinchComplete) byte-faithful FNA port, wired end-to-end and tested with a deterministic clock (`feature/input` Phase I2, I9). Documented deviations only: event-driven vs. poll-based `GetState()`, and the uncapped-`>MAX_TOUCHES` map. `GetCapabilities()` disconnected-count bug is **fixed** (task 790). |
 | `GamerServices` | ~5 % | `Guide` stub only |
-| `Audio (XACT)` — AudioEngine/SoundBank/WaveBank/Cue | ~90 % | Real `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; category/lifecycle/3D all real; gaps are documented accepted deviations (no HRTF/Doppler, `instanceLimit`/fade parsed not enforced), not missing implementation |
+| `Audio (XACT)` — AudioEngine/SoundBank/WaveBank/Cue | ~90 % | Real `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; category/lifecycle/3D all real; gaps are documented accepted deviations (no HRTF/elevation, `instanceLimit`/fade parsed not enforced), not missing implementation |
 | `Framework.Net` (NetworkSession, etc.) | 0 % | Xbox Live exclusive; intentionally excluded |
 | **Overall (EasyGL backend, 2D+3D game)** | **~85 %** | Main gaps: GamerServices, XNB content pipeline. (Touch and XACT were main gaps as of this table's original estimate; Touch closed by `feature/input` Phase I2, XACT closed by `feature/audio` — see the `Input::Touch` and Audio rows above.) |
 

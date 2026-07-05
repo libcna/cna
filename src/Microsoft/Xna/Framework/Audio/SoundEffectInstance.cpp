@@ -53,7 +53,11 @@ namespace Microsoft::Xna::Framework::Audio
         // master gain stage), not baked into each track's own gain here -- doing both would
         // double-apply it, and only the mixer-level gain re-applies live to already-playing
         // tracks without this function needing to be called again.
-        void ApplyTrackProperties(MIX_Track* track, float volume, float pan, float pitch)
+        // P9-3D-005: `doppler` is a multiplier applied on top of the pitch-derived ratio, matching
+        // FNA's UpdatePitch() (`(2^INTERNAL_pitch) * doppler`, SoundEffectInstance.cs) -- defaults
+        // to 1.0f (no-op) for every caller except Apply3D.
+        void ApplyTrackProperties(MIX_Track* track, float volume, float pan, float pitch,
+                                   float doppler = 1.0f)
         {
             if (!track) return;
 
@@ -64,10 +68,55 @@ namespace Microsoft::Xna::Framework::Audio
             stereo.right = (pan > 0.0f) ? 1.0f : (1.0f + pan);
             MIX_SetTrackStereo(track, &stereo);
 
-            const float ratio = (pitch < 0.0f)
+            const float ratio = ((pitch < 0.0f)
                 ? (1.0f + pitch * 0.5f)
-                : (1.0f + pitch);
+                : (1.0f + pitch)) * doppler;
             MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
+        }
+
+        // P9-3D-005: matches FAudio's F3DAudio.c CalculateDoppler exactly -- a relative-velocity
+        // frequency-ratio formula computed purely from Position/Velocity (both already exposed on
+        // AudioListener/AudioEmitter), needing no native 3D audio API. Unlike stereo crossfeed
+        // panning (CP-19) or true elevation/HRTF, real Doppler doesn't need anything SDL3_mixer
+        // can't already do (MIX_SetTrackFrequencyRatio already exists for the Pitch property).
+        // `toListener*` is the emitter-to-listener direction vector (FAudio's own naming);
+        // `dopplerScaler` is the per-emitter AudioEmitter.DopplerScale (distinct from the global
+        // SoundEffect.DopplerScale multiplier applied by the caller afterward).
+        float ComputeDopplerFactor(
+            float speedOfSound, float dopplerScaler,
+            float toListenerX, float toListenerY, float toListenerZ, float distance,
+            const Microsoft::Xna::Framework::Vector3& listenerVelocity,
+            const Microsoft::Xna::Framework::Vector3& emitterVelocity)
+        {
+            if (dopplerScaler <= 0.0f) return 1.0f;
+
+            float listenerVelComponent = 0.0f;
+            float emitterVelComponent  = 0.0f;
+            if (distance != 0.0f)
+            {
+                listenerVelComponent = (
+                    toListenerX * listenerVelocity.X +
+                    toListenerY * listenerVelocity.Y +
+                    toListenerZ * listenerVelocity.Z
+                ) / distance;
+                emitterVelComponent = (
+                    toListenerX * emitterVelocity.X +
+                    toListenerY * emitterVelocity.Y +
+                    toListenerZ * emitterVelocity.Z
+                ) / distance;
+            }
+
+            const float scaledSpeedOfSound = speedOfSound / dopplerScaler;
+            listenerVelComponent = std::min(listenerVelComponent, scaledSpeedOfSound);
+            emitterVelComponent  = std::min(emitterVelComponent, scaledSpeedOfSound);
+
+            float dopplerFactor = (speedOfSound - dopplerScaler * listenerVelComponent) /
+                                   (speedOfSound - dopplerScaler * emitterVelComponent);
+            if (std::isnan(dopplerFactor)) dopplerFactor = 1.0f;
+
+            // "Limit the pitch shifting to 2 octaves up and 1 octave down" (F3DAudio.c's own
+            // comment).
+            return std::clamp(dopplerFactor, 0.5f, 4.0f);
         }
 
         void DestroyTrackSafe(void*& trackPtr)
@@ -587,8 +636,9 @@ namespace Microsoft::Xna::Framework::Audio
 
         is3D_ = true; // CP-20: latches setPanProperty() out of writing the real track output
 
-        // SDL3_mixer does not support full 3D spatial audio (Doppler, HRTF, orientation).
-        // This is a simplified linear distance/pan approximation.
+        // SDL3_mixer does not support full 3D spatial audio (HRTF, orientation/cone). Pan and
+        // distance attenuation are simplified linear approximations; Doppler pitch shift
+        // (P9-3D-005) is computed exactly, since it doesn't need any native 3D audio API.
 
         const auto& lp = listener.getPositionProperty();
         const auto& ep = emitter.getPositionProperty();
@@ -615,13 +665,32 @@ namespace Microsoft::Xna::Framework::Audio
             ? std::clamp(dx / distance, -1.0f, 1.0f)
             : 0.0f;
 
+        // P9-3D-005: matches FNA's UpdatePitch() exactly ("doppler = dspSettings.DopplerFactor *
+        // dopplerScale" when the global SoundEffect.DopplerScale is nonzero, else 1.0f/no-op).
+        // dx/dy/dz above are emitter-minus-listener; ComputeDopplerFactor wants the
+        // emitter-to-listener direction (FAudio's own naming), i.e. the negation.
+        const float globalDopplerScale = SoundEffect::getDopplerScaleProperty();
+        const float doppler = (globalDopplerScale != 0.0f)
+            ? ComputeDopplerFactor(
+                  SoundEffect::getSpeedOfSoundProperty(),
+                  emitter.getDopplerScaleProperty(),
+                  -dx, -dy, -dz, distance,
+                  listener.getVelocityProperty(),
+                  emitter.getVelocityProperty()) * globalDopplerScale
+            : 1.0f;
+
 #ifdef SOUND_ENABLED
         // Applied directly to the underlying track, not through setVolumeProperty()/
-        // setPanProperty(): FNA computes a separate 3D output matrix (dspSettings) that combines
-        // multiplicatively with the voice's own Volume at the audio-engine level and never
-        // touches INTERNAL_volume/INTERNAL_pan, so Volume/Pan continue to report exactly what the
-        // caller last set via the setters, unaffected by 3D positioning.
-        ApplyTrackProperties(AsTrack(track_), atten * Volume_, pan, Pitch_);
+        // setPanProperty()/setPitchProperty(): FNA computes a separate 3D output matrix
+        // (dspSettings) that combines multiplicatively with the voice's own Volume/Pitch at the
+        // audio-engine level and never touches INTERNAL_volume/INTERNAL_pan/INTERNAL_pitch, so
+        // Volume/Pan/Pitch continue to report exactly what the caller last set via the setters,
+        // unaffected by 3D positioning. One-shot at this call, like atten/pan above -- not
+        // persisted and reapplied by later setVolumeProperty()/setPitchProperty() calls, matching
+        // how those setters already overwrite the 3D-adjusted track gain/ratio outright (a real
+        // game calls Apply3D() every frame to keep 3D properties fresh, the same assumption
+        // atten/pan already rely on).
+        ApplyTrackProperties(AsTrack(track_), atten * Volume_, pan, Pitch_, doppler);
 #endif
     }
 

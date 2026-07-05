@@ -2094,8 +2094,45 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   the exact wrong values the formula predicts (0.5/0.5/0.333 instead of 1.0/1.0/0.5), confirming
   genuine dependency. Full suite 3241/3243 (2 expected hardware skips), audio subset 335/335,
   clean under ASan+UBSan.
-* [ ] P9-3D-004 Audit doppler behavior against `SoundEffect.DopplerScale` and `SoundEffect.SpeedOfSound`.
-* [ ] P9-3D-005 Implement doppler pitch adjustment if feasible.
+* [x] P9-3D-004 Audit doppler behavior against `SoundEffect.DopplerScale` and `SoundEffect.SpeedOfSound`.
+  *Note:* Read FNA's `UpdatePitch()` (`SoundEffectInstance.cs`: `doppler = (!is3D || dopplerScale
+  == 0) ? 1.0f : dspSettings.DopplerFactor * dopplerScale`, applied as
+  `FAudioSourceVoice_SetFrequencyRatio(handle, 2^INTERNAL_pitch * doppler, 0)`) and FAudio's
+  `F3DAudio.c` `CalculateDoppler` (the function that fills `dspSettings.DopplerFactor` inside
+  `F3DAudioCalculate`, called from `Apply3D`). Confirmed: real Doppler is a closed-form formula
+  over `AudioListener`/`AudioEmitter` `Position`/`Velocity` (both already stored on CNA's classes,
+  just never read for this purpose -- pre-existing accepted deviation
+  "`DopplerScale`/`Velocity` are stored but never applied to pitch"), `AudioEmitter.DopplerScale`
+  (per-emitter scaler used *inside* the formula) and the global `SoundEffect.DopplerScale`
+  (multiplies the *result*, and a value of `0` disables Doppler entirely) plus
+  `SoundEffect.SpeedOfSound`. Formula: project each of listener/emitter velocity onto the
+  emitter-to-listener unit direction (dot product / distance), clamp each to
+  `SpeedOfSound/DopplerScaler`, then `DopplerFactor = (SpeedOfSound - DopplerScaler *
+  listenerVelComponent) / (SpeedOfSound - DopplerScaler * emitterVelComponent)`, NaN-guarded to
+  `1.0f`, clamped to `[0.5, 4.0]` ("2 octaves up, 1 octave down" per FAudio's own comment). Unlike
+  stereo crossfeed panning (`CP-19`) or true elevation/HRTF, this needs **no native 3D audio API**
+  at all -- `MIX_SetTrackFrequencyRatio` (already used for the plain `Pitch` property) is
+  sufficient. Confirmed feasible; implemented in `P9-3D-005`.
+* [x] P9-3D-005 Implement doppler pitch adjustment if feasible.
+  *Note:* Implemented exactly the formula found in `P9-3D-004`'s audit. Added `ComputeDopplerFactor`
+  (`SoundEffectInstance.cpp`, anonymous namespace, matches `F3DAudio.c`'s `CalculateDoppler`
+  byte-for-byte in structure) and gave `ApplyTrackProperties` a `doppler` multiplier parameter
+  (default `1.0f`, so every other caller -- `Play()`, `setPitchProperty()` -- is unaffected).
+  `Apply3D` computes `doppler = (globalDopplerScale != 0) ? ComputeDopplerFactor(...) *
+  globalDopplerScale : 1.0f`, matching FNA's `UpdatePitch()` gate exactly, and passes it through
+  to `ApplyTrackProperties`. One-shot at `Apply3D()` call time, not persisted and reapplied by a
+  later `setPitchProperty()`/`setVolumeProperty()` call -- matches how those setters *already*
+  overwrite the 3D-adjusted gain/pan outright (the same narrowing atten/pan already rely on; a
+  real game calls `Apply3D()` every frame to keep 3D properties fresh). Verified with 4 new tests
+  via real `MIX_GetTrackFrequencyRatio` readback (SDL3_mixer has a getter, like gain but unlike
+  stereo pan): emitter receding at half the speed of sound (dopplerFactor = 2/3, hand-derived from
+  the formula and independently confirmed), emitter approaching (2.0), listener approaching (1.5),
+  and `SoundEffect.DopplerScale = 0` disabling it entirely (ratio stays 1.0 despite a receding
+  emitter that would otherwise shift pitch). Verified via `git stash`: 3 of the 4 new tests fail
+  against the pre-fix code with the exact "no Doppler applied" values (ratio stuck at 1.0) the old
+  code would produce; the fourth (`DopplerScale=0` no-op) necessarily still passes pre-fix too
+  (no Doppler was ever applied), confirming it isn't a false-positive regression check. Full suite
+  3250/3252 (2 expected hardware skips), audio subset 344/344 under ASan+UBSan.
 * [x] P9-3D-006 Add tests for distance attenuation.
   *Note:* Folded into `P9-3D-003`'s own fix: `Apply3DAppliesFullVolumeWithinDistanceScale`/
   `Apply3DAppliesFullVolumeExactlyAtDistanceScaleBoundary`/
@@ -2103,7 +2140,12 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   full-volume-within-scale, exact-boundary, and beyond-scale inverse-law cases via real
   `MIX_GetTrackGain` verification.
 * [ ] P9-3D-007 Add tests for panning left/right based on listener/emitter orientation.
-* [ ] P9-3D-008 Add tests for doppler behavior if implemented.
+* [x] P9-3D-008 Add tests for doppler behavior if implemented.
+  *Note:* Folded into `P9-3D-005`'s own fix: `Apply3DAppliesDopplerPitchDownWhenEmitterRecedes`/
+  `Apply3DAppliesDopplerPitchUpWhenEmitterApproaches`/
+  `Apply3DAppliesDopplerPitchUpWhenListenerApproaches`/`Apply3DDopplerIsNoOpWhenGlobalDopplerScaleIsZero`
+  (`SoundEffectInstanceTests.cpp`) cover receding/approaching emitter, approaching listener, and
+  the global-disable gate, all via real `MIX_GetTrackFrequencyRatio` verification.
 * [ ] P9-3D-009 Document remaining limitations of CNA 3D audio compared to XNA/FNA.
 
 ## P9-HARDWARE — Audio hardware and exception behavior
