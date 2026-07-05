@@ -48,9 +48,15 @@ findings for full detail; not repeated here to keep this file concise).
 
 **Build:** `CNA` and `CnaTests` build cleanly under `EASYGL` (`cmake-build-debug`),
 `VULKAN`, and `BGFX`. Android cross-compiles cleanly (`arm64-v8a`, NDK r30, API 24) —
-**and, new this pass, so does `cna_demo_devices`, packaged into a real APK** (see
-Section 3). iOS: no toolchain in this Linux container, confirmed blocked every phase
-to date, including this one.
+the `CNA` library target, re-verified as recently as the 2026-07-05 micro-cleanup pass
+below. **`cna_demo_devices`'s Android cross-compile is currently blocked** in this
+container: `examples/demo_devices/src/Main.cpp` fails with `'SDL3/SDL_main.h' file not
+found` (an environment/vendoring gap in this container's Android sysroot, unrelated to
+any `Microsoft::Devices` code — `Main.cpp` doesn't touch Sensors at all). It *did*
+successfully build, install, and launch as a real APK once, in the original Phase 9
+session (see Section 3) — that result is historical, not current-session-reproducible
+here; re-verify before relying on it again. iOS: no toolchain in this Linux container,
+confirmed blocked every phase to date, including this one.
 
 **Tests:** Devices-only filter is 273 tests (via `ctest -R`, see Section 7's updated
 filter) — 269 passing, 2 expected `GTEST_SKIP()`s on hardware-dependent paths (this
@@ -70,13 +76,19 @@ paths than before, still the same single unsynchronized debug counter, still not
 (unchanged this pass). `VibrateController` — real, SDL3 haptic-backed (a native Android
 JNI bridge was considered and explicitly rejected — SDL3's own Android haptic backend
 already reaches `Context.VIBRATOR_SERVICE` with full amplitude control, confirmed by
-reading its source). **`Compass`/`Motion` — real on Android**, new this pass:
+reading its source). **`Compass`/`Motion` — real on Android**:
 `Detail::AndroidCompassBackend`/`AndroidMotionBackend`, pure NDK (`<android/sensor.h>`/
-`<android/looper.h>`), no JNI. `examples/demo_devices` (`cna_demo_devices`) now packages
-into a real APK, installed and launched on the `Medium_Phone` emulator this session —
-`/dev/kvm` now exists in this container (absent every prior session) — with the demo's
-real UI rendering confirmed via screenshot and live sensor-event delivery confirmed via
-emulator-injected synthetic values.
+`<android/looper.h>`), no JNI — the `CNA` library itself (including this code) still
+cross-compiles cleanly for Android as of the 2026-07-05 micro-cleanup pass. In the
+original Phase 9 session, `examples/demo_devices` (`cna_demo_devices`) was successfully
+packaged into a real APK, installed, and launched on the `Medium_Phone` emulator — with
+the demo's real UI rendering confirmed via screenshot and live sensor-event delivery
+confirmed via emulator-injected synthetic values. **That emulator run verified the
+software pipeline works end-to-end; it did not verify physical sensor correctness, and
+no physical Android device has ever been used in any session.** As of the two
+subsequent stabilization/cleanup passes, `cna_demo_devices` itself no longer
+cross-compiles for Android in this container (see "Build" above) — re-verify before
+attempting another APK build or emulator run.
 
 **Not working / not implemented:** `Compass.TrueHeading` permanently equals
 `MagneticHeading` — real declination needs `System.Device.Location`, still not
@@ -197,6 +209,76 @@ What changed, by original review goal:
    code, and not introduced by this pass). **No physical Android device was used for any
    part of this verification.**
 
+**Micro-cleanup pass (2026-07-05, no plan file — a follow-up to the stabilization pass
+above, not a new phase):** a second, narrower review of the same Android code found 4
+more concrete, fixable issues plus a doc-drift item. Only `AndroidSensorBridge.hpp/.cpp`
+and its tests were touched; `AndroidCompassBackend`/`AndroidMotionBackend`/`Compass`/
+`Motion` were reviewed but needed no further changes (their existing Start()-failure
+propagation already benefits from the bridge fixes transparently).
+
+Files changed:
+- `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`,
+  `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`,
+  `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp`.
+
+What changed:
+1. **`Start()`/`Stop()` thread safety** — added `Impl::stateMutex_`, guarding the
+   "already started"/"is a worker running" checks and every field `Start()` writes
+   (`worker_`, `callback_`, `timeBetweenUpdates_`, `stopRequested_`/`startOutcome_`
+   reset) against a second concurrent `Start()` or a concurrent `Stop()` reading
+   `worker_` mid-write. Deliberately never held across `Start()`'s bounded
+   condition-variable wait or `Stop()`'s blocking `join()`/non-blocking `detach()` —
+   holding it across either would risk a real deadlock against the already-documented
+   reentrant self-stop case (a `Stop()` call from the worker's own callback thread would
+   block trying to acquire a mutex held by an external `Stop()` sitting inside `join()`,
+   which itself is waiting for that same worker thread to finish). **Still explicitly
+   unsupported, not fixed by this mutex:** two or more distinct *external* (non-worker)
+   threads calling `Stop()` on the same bridge concurrently — this can still race on
+   `join()` itself (documented in both methods' Doxygen comments as the caller's
+   responsibility to serialize, matching `Compass`/`Motion`'s existing
+   single-owner-thread usage).
+2. **Stale looper state reset** — `Impl::Run()` now resets `looper_` to `nullptr` right
+   before returning (after the event queue is disabled/destroyed), since an
+   `ALooper_prepare()`-obtained looper is thread-local and torn down once its owning
+   (worker) thread exits. Keeps the invariant "non-null `looper_` implies a live,
+   running worker" exactly true.
+3. **`ASensorEventQueue_setEventRate()` handled explicitly** — its previously-discarded
+   return value is now checked; a negative result is treated as non-fatal and
+   documented (the sensor is already enabled and will keep delivering at whatever rate
+   the platform was already using), rather than silently ignored.
+4. **`ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()` clamped at both ends** —
+   already floored at 1 microsecond; now also ceils at `INT32_MAX` microseconds. A huge
+   requested interval (e.g. `TimeSpan::MaxValue`) converted to microseconds as a
+   `double` can exceed what `std::int32_t` can represent, and `static_cast`-ing an
+   out-of-range `double` is undefined behavior, not a saturating truncation — this was a
+   real, if obscure, reachable UB path. Two new tests
+   (`MaxValueTimeSpanClampsToInt32Max`, `HugeButNotMaxTimeSpanClampsToInt32Max`) cover it
+   on the host, since it's the pure-function half of `Start()` that doesn't need a real
+   Android sensor queue.
+5. **`NEXT.md` doc drift fixed** — Section 2's "Build"/"Working" text previously implied
+   `cna_demo_devices` still packages into a working APK; it now says plainly that the
+   `CNA` library cross-compiles cleanly but `cna_demo_devices` itself is currently
+   blocked by the `SDL3/SDL_main.h` gap, and that the one successful APK build/emulator
+   run was a historical Phase 9 result, not reproduced in either of the two follow-up
+   passes. No claim of physical Android hardware verification was added or implied —
+   the emulator-vs-hardware distinction from Section 2 is unchanged.
+6. **Tests re-run:** targeted suite (`AndroidSensorBridgeTests`/`CompassTests`/
+   `MotionTests`/`AndroidCompassMathTests`/`AndroidMotionMathTests`, 75 tests including
+   the 2 new clamp tests) — all pass. Full Devices-only filter: 280/280 (2 expected
+   hardware skips). Concurrency-relevant subset looped 40/40 clean. Full project
+   `ctest`: 3268 tests, 3265 passed, 2 expected skips, 1 failure
+   (`CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`, a pre-existing
+   statistically-flaky Audio test outside `Microsoft::Devices`, confirmed to pass
+   reliably in isolation — not a regression from this pass). `devices-asan`: 0 issues.
+   `devices-tsan`: 24 warnings, all the same pre-existing `TimeSpan::copy_count` race,
+   none new. `devices-ubsan`: same 3 pre-existing, out-of-scope `Vector3`/`Matrix`
+   findings, 0 in any reviewed file. Android cross-compile of the `CNA` library
+   re-verified clean, including a `llvm-nm` symbol check confirming the new
+   `std::lock_guard<std::mutex>` code is actually present in the compiled Android
+   object. `cna_demo_devices`'s Android cross-compile remains blocked by the
+   pre-existing `SDL3/SDL_main.h` gap (unchanged by this pass). **No physical Android
+   device was used for any part of this verification.**
+
 ---
 
 ## 4. Current blocker / main problem
@@ -239,6 +321,18 @@ environment or scope changes (see Section 8).
   callback remains explicitly unsupported, matching `Accelerometer`'s existing boundary
   — code-reviewed but never runtime-exercised (its real code path can't execute in this
   container, no Android device available).
+- **Deliberate, documented limitation (micro-cleanup pass, 2026-07-05):**
+  `Detail::AndroidSensorBridge::Start()`/`Stop()` are now guarded by a mutex against a
+  second concurrent `Start()` and against `Start()`/`Stop()` racing on the same
+  `std::thread` handle, but two or more distinct *external* (non-worker) threads calling
+  `Stop()` on the same bridge at the same time is still unsupported — both could pass
+  the "is a worker running" check and attempt to `join()` the same thread concurrently.
+  Deliberately not fully serialized: doing so by holding the mutex across the blocking
+  `join()` call would risk a real deadlock against the already-accepted reentrant
+  self-stop case. Callers needing genuinely concurrent multi-thread `Stop()` must
+  serialize it themselves; `Compass`/`Motion` (and this bridge) are designed for
+  single-owner-thread `Start()`/`Stop()` usage, same as their own `Dispose()` guard above
+  assumes.
 - **New, out-of-scope finding this pass:** `sharp-runtime`'s
   `System::EventHandler<T>::Raise()` iterates its live handler list directly, not a
   snapshot — `Add()`/`Remove()` called reentrantly from within a handler mutate that
