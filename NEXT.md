@@ -66,13 +66,18 @@ everything in section 3; next tasks in section 8.
 ## 2. Current status
 
 ### Build / test
-Last verified this session (native Linux, `cmake-build-debug`): full `CnaTests` —
-**3212/3214** passing, 2 skipped (`AccelerometerTests`/`GyroscopeTests`
-`GetCurrentValuePropertyDoesNotThrowWhenSupported` — documented hardware-dependent skips,
-no accelerometer/gyroscope in this container). `cna_test_avatar_real_render` (Phase 10's
-synthetic integration test) still passes unmodified after the Task 11.11 fixes. Windows/
-Web/Android cross-build numbers below are from an earlier session, not re-verified this
-session (no code in those paths changed since, but treat as "last known good," not
+Last actually run in the session that completed Task 11.12 (native Linux,
+`cmake-build-debug`): full `CnaTests` — **3212/3214** passing, 2 skipped
+(`AccelerometerTests`/`GyroscopeTests` `GetCurrentValuePropertyDoesNotThrowWhenSupported`
+— documented hardware-dependent skips, no accelerometer/gyroscope in this container).
+`cna_test_avatar_real_render` (Phase 10's synthetic integration test) passed unmodified
+after the Task 11.11 fixes. **Tasks 11.13-11.15 (Phase 11c) touched only Python
+(`tools/avatar_builder/`) and docs — no C++ file changed, so this number should still
+hold, but it has not been re-run since Task 11.12 and is not freshly confirmed.**
+Re-running `cmake --build cmake-build-debug --target CnaTests && cmake-build-debug/CnaTests`
+before relying on this number is cheap and recommended if it matters for the next task.
+Windows/Web/Android cross-build numbers below are from an even earlier session, not
+re-verified since (no code in those paths changed, but treat as "last known good," not
 freshly confirmed):
 - **Windows cross-build** (Wine): clean, **2190/2190**.
 - **Web/Emscripten cross-build** (Node): clean, **Net/Gamer/ENet/Packet/Avatar/Skinned filter:
@@ -585,6 +590,15 @@ SDL_VIDEODRIVER=x11 DISPLAY=:0 cmake-build-debug/cna_demo_avatar
 blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out /tmp/male_avatar.glb
 python3 tools/avatar_asset_pipeline/convert_avatar.py --body /tmp/male_avatar.glb --out examples/demo_avatar/Content/avatar/male --embedded-clips
 
+# Validate a .glb export (plain python3, no Blender) — checks bones/animations/shape keys
+python3 tools/avatar_builder/validate_gltf.py /tmp/male_avatar.glb
+
+# Build a custom-proportioned avatar with non-default hair/clothing styles (Tasks 11.13/11.14)
+blender --background --python tools/avatar_builder/generate_avatar.py -- --gender female --head-scale 1.1 --hair-style Ponytail --shirt-style LongSleeve --out /tmp/female_variant.glb
+
+# Export ONE hair/clothing piece as its own standalone attachable .glb (Task 11.14)
+blender --background --python tools/avatar_builder/generate_wardrobe.py -- --piece hair --style Ponytail --out /tmp/hair_ponytail.glb
+
 # Blender — confirmed installed and headless-capable this session
 blender --version   # Blender 4.3.2
 blender --background --python some_script.py
@@ -639,15 +653,38 @@ presets. Full step-by-step detail is preserved in `plan_net.md`'s Phase 11 secti
 (Tasks 11.13-11.15) — not re-narrated here; see section 5 for the short version of what
 was found, and section 3 for this session's own account.
 
-**Only Phase 11d remains for Phase 11 overall, and it is optional/not scheduled:**
+**Only Phase 11d remains for Phase 11 overall, and it is optional/not scheduled.** Phase
+11 itself has no required next task. Concrete, ordered candidates for a next session
+(none of these is "the plan" — confirm with the user before starting any of them):
 
-1. **Task 11.16 (optional, not scheduled) — Revisit MakeHuman or CharMorph/Blender** as
-   a higher-quality body *source*, only if the user explicitly wants to invest in
-   resolving the automation/permission questions from the original attempt (see section
-   3's history) — not assumed, not a default next step. Phase 11 has no other required
-   work; if the user doesn't want Task 11.16, the next task should come from a different
-   phase entirely, or a manual weight-painting pass on the confirmed elbow/sleeve tear
-   (section 5) if the user explicitly wants to prioritize polish now — ask, don't assume.
+1. **Re-verify the full native test suite.** No C++ file has changed since the session
+   that completed Task 11.12; Tasks 11.13-11.15 only touched
+   `tools/avatar_builder/*.py` and docs. This is a cheap, high-value confidence check
+   before trusting the "3212/3214" number in section 2 for any future C++ work.
+   - Files/modules: none (verification only, no code change expected).
+   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && cmake-build-debug/CnaTests`
+     — expect the same 3212/3214 passing, 2 skipped result as last recorded; investigate
+     immediately if it differs.
+
+2. **Task 11.16 (optional, not scheduled, requires fresh explicit user sign-off) —
+   revisit MakeHuman or CharMorph/Blender** as a higher-quality body *source*, only if
+   the user explicitly wants to invest in resolving the automation/permission questions
+   from the original attempt (see section 3's history).
+   - Files/modules: none decided yet — scope depends entirely on what the user
+     authorizes; do not start any download/execution of third-party tooling without a
+     specific, fresh go-ahead for the exact action.
+   - Verify: not applicable until scoped.
+
+3. **Manual weight-painting pass on the confirmed elbow/sleeve tear and zero-weight
+   vertices** (section 5) — only if the user explicitly wants to prioritize visual
+   polish now; this was out of scope for every Phase 11a/b/c task on purpose.
+   - Files/modules: likely `tools/avatar_builder/generate_body.py`/`generate_clothes.py`
+     (vertex group weight adjustments) — exact approach not yet designed.
+   - Verify: pose the clothed avatar through `Wave`/`Clap`'s peak fold frames and render
+     a close-up; the forearm/hand should no longer visibly separate from the sleeve.
+
+If none of these is what the user wants, the next task likely comes from a different
+phase entirely — ask rather than assume.
 
 ---
 
