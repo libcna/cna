@@ -36,6 +36,7 @@ namespace
         bool SupportedResult = true;
         bool StartResult = true;
         bool StopCalled = false;
+        int StartCallCount = 0;
         ReadingCallback CapturedOnReading;
         CalibrationCallback CapturedOnCalibrationNeeded;
 
@@ -46,6 +47,7 @@ namespace
 
         bool Start(const System::TimeSpan&, ReadingCallback onReading, CalibrationCallback onCalibrationNeeded) override
         {
+            ++StartCallCount;
             if (!StartResult)
             {
                 return false;
@@ -377,4 +379,67 @@ TEST(CompassTests, StopCallsBackendStop)
 
     EXPECT_TRUE(fake->StopCalled);
     EXPECT_EQ(c.getStateProperty(), SensorState::Disabled);
+}
+
+// Stabilization pass, Task 1 (repeated Start/Stop safety): calling Start()
+// a second time while already started must not call through to the
+// backend a second time (which, for the real AndroidCompassBackend, would
+// crash by reassigning an already-joinable std::thread) -- it must throw a
+// clear, documented failure instead, matching Accelerometer::Start()'s own
+// "already started" convention.
+TEST(CompassTests, StartTwiceThrowsWithoutCallingBackendAgain)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+
+    c.Start();
+    ASSERT_EQ(fake->StartCallCount, 1);
+
+    EXPECT_THROW(c.Start(), SensorFailedException);
+    EXPECT_EQ(fake->StartCallCount, 1); // Not called again.
+    EXPECT_EQ(c.getStateProperty(), SensorState::Ready); // Unchanged by the failed second Start().
+}
+
+// After Stop(), Start() must succeed again (a restart, not a permanent
+// lockout) and does call through to the backend again.
+TEST(CompassTests, StartAfterStopSucceedsAndCallsBackendAgain)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+
+    c.Start();
+    c.Stop();
+    EXPECT_NO_THROW(c.Start());
+    EXPECT_EQ(fake->StartCallCount, 2);
+}
+
+// Stabilization pass, Task 6 (SetBackendForTesting() contract): the header
+// documents "must be called before Start()" -- confirm this is now
+// enforced, not just documented, and that the original backend is left
+// completely untouched (still the one Stop() reaches) rather than silently
+// swapped out.
+TEST(CompassTests, SetBackendForTestingAfterStartThrowsAndDoesNotReplaceBackend)
+{
+    Compass c;
+    auto firstOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* first = firstOwned.get();
+    c.SetBackendForTesting(std::move(firstOwned));
+    c.Start();
+
+    // std::move(second) transfers ownership into the call before
+    // SetBackendForTesting()'s body even runs, so if it throws (as
+    // expected here), the moved-in unique_ptr is destroyed as the
+    // exception unwinds -- do not dereference the raw pointer afterward.
+    EXPECT_THROW(
+        c.SetBackendForTesting(std::make_unique<FakeCompassBackend>()),
+        SensorFailedException);
+
+    // The original backend must still be the one attached -- proven by
+    // Stop() reaching it, not a silently-swapped-in replacement.
+    c.Stop();
+    EXPECT_TRUE(first->StopCalled);
 }

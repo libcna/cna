@@ -42,6 +42,7 @@ namespace
         bool SupportedResult = true;
         bool StartResult = true;
         bool StopCalled = false;
+        int StartCallCount = 0;
         ReadingCallback CapturedOnReading;
 
         [[nodiscard]] bool IsSupported() override
@@ -51,6 +52,7 @@ namespace
 
         bool Start(const System::TimeSpan&, ReadingCallback onReading) override
         {
+            ++StartCallCount;
             if (!StartResult)
             {
                 return false;
@@ -367,4 +369,57 @@ TEST(MotionTests, DoesNotRequireOtherSensorInstancesToBeConstructed)
     m.SetBackendForTesting(std::make_unique<FakeMotionBackend>());
 
     EXPECT_NO_THROW(m.Start());
+}
+
+// Stabilization pass, Task 1 (repeated Start/Stop safety): see
+// CompassTests.cpp's identical test for the full rationale -- calling
+// Start() a second time while already started must not call through to the
+// backend again, and must throw rather than misreport state.
+TEST(MotionTests, StartTwiceThrowsWithoutCallingBackendAgain)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+
+    m.Start();
+    ASSERT_EQ(fake->StartCallCount, 1);
+
+    EXPECT_THROW(m.Start(), SensorFailedException);
+    EXPECT_EQ(fake->StartCallCount, 1);
+    EXPECT_EQ(m.getStateProperty(), SensorState::Ready);
+}
+
+TEST(MotionTests, StartAfterStopSucceedsAndCallsBackendAgain)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+
+    m.Start();
+    m.Stop();
+    EXPECT_NO_THROW(m.Start());
+    EXPECT_EQ(fake->StartCallCount, 2);
+}
+
+// Stabilization pass, Task 6 (SetBackendForTesting() contract): see
+// CompassTests.cpp's identical test for the full rationale, including why
+// the second (attempted-replacement) backend cannot be inspected after the
+// throwing call -- std::move() transfers ownership into the call before
+// the exception unwinds and destroys it.
+TEST(MotionTests, SetBackendForTestingAfterStartThrowsAndDoesNotReplaceBackend)
+{
+    Motion m;
+    auto firstOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* first = firstOwned.get();
+    m.SetBackendForTesting(std::move(firstOwned));
+    m.Start();
+
+    EXPECT_THROW(
+        m.SetBackendForTesting(std::make_unique<FakeMotionBackend>()),
+        SensorFailedException);
+
+    m.Stop();
+    EXPECT_TRUE(first->StopCalled);
 }

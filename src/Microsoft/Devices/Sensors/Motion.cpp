@@ -70,6 +70,14 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
 
+        // Repeated Start/Stop safety: see Compass::Start()'s identical fix
+        // for the full rationale -- must run before touching backend_ at
+        // all.
+        if (started_)
+        {
+            throw SensorFailedException("Motion is already started.");
+        }
+
         if (backend_ && backend_->IsSupported())
         {
             const bool started = backend_->Start(
@@ -140,6 +148,14 @@ namespace Microsoft::Devices::Sensors
 
     void Motion::SetBackendForTesting(std::unique_ptr<Detail::IMotionBackend> backend)
     {
+        // Enforced, not just documented: see Compass::SetBackendForTesting()'s
+        // identical fix for the full rationale.
+        if (started_)
+        {
+            throw SensorFailedException(
+                "Cannot replace the motion backend while data acquisition is started. Call Stop() first.");
+        }
+
         backend_ = std::move(backend);
         setIsSupportedProperty(backend_ ? backend_->IsSupported() : getIsSupportedProperty());
     }

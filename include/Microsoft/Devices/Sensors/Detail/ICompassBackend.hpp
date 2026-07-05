@@ -46,7 +46,13 @@ namespace Microsoft::Devices::Sensors::Detail
          * Accelerometer/Gyroscope's existing CurrentValueChanged contract.
          * @param onCalibrationNeeded Invoked when the backend detects the
          * compass needs calibration (e.g. an accuracy drop).
-         * @return true if delivery actually started; false if unsupported.
+         * @return true if delivery actually started; false if unsupported
+         * or if delivery could not actually be started (e.g. the platform
+         * sensor queue failed to initialize) — implementations must not
+         * report success optimistically before delivery has genuinely
+         * begun. Calling Start() while already started is implementation-
+         * defined but must never crash or corrupt state; `Compass` itself
+         * guards against calling this twice (see `Compass::Start()`).
          */
         virtual bool Start(
             const System::TimeSpan& timeBetweenUpdates,

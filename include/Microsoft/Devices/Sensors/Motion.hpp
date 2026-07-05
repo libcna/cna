@@ -92,8 +92,15 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Starts data acquisition from the fused motion sensor.
          *
+         * Real on Android (Detail::AndroidMotionBackend); throws on every
+         * other platform, since no other supported platform currently
+         * exposes fused motion sensing to this codebase (SDL3 has no
+         * fused-orientation API anywhere).
+         *
          * @throws ObjectDisposedException If the object was already disposed.
-         * @throws SensorFailedException Always, since no platform currently exposes a compass sensor.
+         * @throws SensorFailedException If data acquisition is already
+         * started (call Stop() first to restart), or if fused motion
+         * sensing is not supported on this platform/device.
          */
         void Start() override;
 
@@ -133,11 +140,15 @@ namespace Microsoft::Devices::Sensors
          * exercised on any host without needing real Android hardware or
          * Detail::AndroidMotionBackend directly.
          *
-         * Must be called before Start(); has no effect on an already-started
-         * instance.
+         * Must be called before Start() — enforced, not just documented:
+         * throws if this instance is currently started, so a caller can
+         * never silently swap out a running backend out from under an
+         * active Start()/Stop() session (which would leave the old
+         * backend's own worker state running unmanaged).
          *
          * @param backend Replacement backend; pass nullptr to restore the
          * platform-default (no-backend/stub) behavior.
+         * @throws SensorFailedException If this instance is currently started.
          */
         NOXNA void SetBackendForTesting(std::unique_ptr<Detail::IMotionBackend> backend);
     };

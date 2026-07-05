@@ -71,6 +71,19 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Compass");
 
+        // Repeated Start/Stop safety: mirrors Accelerometer::Start()'s own
+        // "already started" convention. Must run before touching backend_
+        // at all -- previously, calling Start() twice fell through to
+        // backend_->Start() a second time (undefined/unsafe at the bridge
+        // level) and, on failure, incorrectly reset state_ to NotSupported
+        // and threw a misleading "not supported" exception even though the
+        // sensor was genuinely still running.
+        if (started_)
+        {
+            throw SensorFailedException(
+                "Failed to start compass data acquisition. Data acquisition already started.");
+        }
+
         if (backend_ && backend_->IsSupported())
         {
             const bool started = backend_->Start(
@@ -162,6 +175,17 @@ namespace Microsoft::Devices::Sensors
 
     void Compass::SetBackendForTesting(std::unique_ptr<Detail::ICompassBackend> backend)
     {
+        // Enforced, not just documented (Task: SetBackendForTesting()
+        // contract): swapping backend_ out from under a running Start()/
+        // Stop() session would leave the old backend's own worker state
+        // (e.g. AndroidSensorBridge's background threads) running
+        // unmanaged, orphaned from anything that could still Stop() it.
+        if (started_)
+        {
+            throw SensorFailedException(
+                "Cannot replace the compass backend while data acquisition is started. Call Stop() first.");
+        }
+
         backend_ = std::move(backend);
         setIsSupportedProperty(backend_ ? backend_->IsSupported() : getIsSupportedProperty());
     }

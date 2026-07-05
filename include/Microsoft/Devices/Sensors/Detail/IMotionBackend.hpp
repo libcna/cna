@@ -47,7 +47,13 @@ namespace Microsoft::Devices::Sensors::Detail
          * may call this from a background thread — callers must treat it as
          * running on an unknown thread, same as
          * Accelerometer/Gyroscope's existing CurrentValueChanged contract.
-         * @return true if delivery actually started; false if unsupported.
+         * @return true if delivery actually started; false if unsupported
+         * or if delivery could not actually be started (e.g. the platform
+         * sensor queue failed to initialize) — implementations must not
+         * report success optimistically before delivery has genuinely
+         * begun. Calling Start() while already started is implementation-
+         * defined but must never crash or corrupt state; `Motion` itself
+         * guards against calling this twice (see `Motion::Start()`).
          */
         virtual bool Start(const System::TimeSpan& timeBetweenUpdates, ReadingCallback onReading) = 0;
 
