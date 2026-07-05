@@ -136,7 +136,7 @@ TEST(TouchInputTest, GetCapabilitiesReportsConnectedWhenTouchDeviceExistsFlagIsS
 
     const auto caps = TouchPanel::GetCapabilities();
     EXPECT_TRUE(caps.getIsConnectedProperty());
-    EXPECT_EQ(caps.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4); // DEC-09: XNA/FNA always report 4
 
     TouchPanel::setTouchDeviceExistsProperty(false);
 }
@@ -153,7 +153,7 @@ TEST(TouchInputTest, GetCapabilitiesFallsBackToInputManagerTouchStateWhenFlagIsU
     CNA::Internal::Input::InputManager::SetTouchState(99, TouchLocationState::Pressed, Vector2(1.0f, 1.0f));
     const auto connected = TouchPanel::GetCapabilities();
     EXPECT_TRUE(connected.getIsConnectedProperty());
-    EXPECT_EQ(connected.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+    EXPECT_EQ(connected.getMaximumTouchCountProperty(), 4); // DEC-09: XNA/FNA always report 4
 
     ResetTouchState();
 }

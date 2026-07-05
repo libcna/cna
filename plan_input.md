@@ -1493,7 +1493,7 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** none.
 
 #### INPUT-TOUCH-012 — Decide `MaximumTouchCount` policy (8 vs 4) — resolves doc contradiction
-- **Priority:** P1 · **Status:** TODO · **Area:** Touch/Decision
+- **Priority:** P1 · **Status:** DONE (2026-07-05; DEC-09 — report 4, FNA-verified) · **Area:** Touch/Decision
 - **Files:** `TouchPanel.cpp`, `TouchPanelCapabilities.cpp`, `docs/input-fna-fidelity.md`,
   `docs/input-backend.md`, `docs/xna-4-api-coverage.md`
 - **Problem:** Direct contradiction: fidelity doc says reporting `MAX_TOUCHES (8)` is a **deviation** from
@@ -1514,7 +1514,7 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** none.
 
 #### INPUT-TOUCH-014 — Event-driven path max-touch cap decision
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch/Decision
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-10 — cap GetState at MAX_TOUCHES) · **Area:** Touch/Decision
 - **Files:** `SdlInputBridge.cpp`, `InputManager.cpp`, `TouchPanel.cpp`
 - **Problem:** Event path is uncapped; FNA implicitly 8 (§18). ">max touches all reported" is currently tested
   as allowed.
@@ -2440,12 +2440,16 @@ automated from manual verification, and stamp manual results with exact date/har
   a fresh re-run. (Adding a CTest label so the filter string isn't hand-copied remains INPUT-BUILD-003.)
 
 #### INPUT-DOC-002 — Fix the `MaximumTouchCount` contradiction
-- **Priority:** P1 · **Status:** TODO · **Area:** Docs
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Docs
 - **Files:** `docs/input-fna-fidelity.md`, `docs/input-backend.md`, `docs/xna-4-api-coverage.md`
 - **Work:** After INPUT-TOUCH-012 decides, align all three docs to the same story (8-as-deviation OR 4/FNA).
 - **Acceptance:** No contradiction remains.
 - **Tests:** INPUT-TEST-015.
 - **Deps:** INPUT-TOUCH-012.
+- **Result (2026-07-05):** DEC-09 set the value to 4 (FNA-verified). All three docs updated to one story:
+  `MaximumTouchCount = 4` (fixed XNA-compat value) and `GetState()` caps at `MAX_TOUCHES = 8` (DEC-10). The
+  earlier contradiction (fidelity doc called 8 a deviation; backend/coverage docs claimed 8 "matches FNA")
+  is gone.
 
 #### INPUT-DOC-003 — Remove dangling `plan_input.md` task references or map them
 - **Priority:** P1 · **Status:** TODO · **Area:** Docs
@@ -2735,14 +2739,20 @@ validated — overlong encodings, UTF-16 surrogate code points, and out-of-range
 guarantees valid UTF-8, so this path is defensive/unreachable in practice, but now matches FNA.) →
 INPUT-TEXT-008.
 
-**DEC-09 — `MaximumTouchCount` reported as 8.**
-Current: reports `MAX_TOUCHES=8` when connected. XNA: 4. FNA: **must verify** (docs contradict). Risk:
-apps sizing arrays by capability. Decision: strict-4 / FNA / explicit-CNA-8, aligned across code+docs.
-Tests: capability value. Disposition: **Decide (P1)**. → INPUT-TOUCH-012, INPUT-DOC-002.
+**DEC-09 — `MaximumTouchCount` reported as 8 → 4.**
+Was: reported `MAX_TOUCHES=8` when connected. **FNA verified: reports 4** ("MaximumTouchCount is completely
+bogus; for any touch device, XNA always reports 4", `SDL3_FNAPlatform.cs:2265`). Disposition: **FIXED
+(2026-07-05 — report 4).** `GetCapabilities` now returns `MaximumTouchCount = 4` (0 when disconnected) — a
+fixed XNA-compat value, NOT the tracking cap (that is `MAX_TOUCHES = 8`; see DEC-10). Reconciled the code +
+all three docs, so the 8-vs-4 contradiction (INPUT-DOC-002) is gone; capability tests updated.
+→ INPUT-TOUCH-012, INPUT-DOC-002.
 
-**DEC-10 — Event-driven touch path uncapped.**
-Current: >max touches all reported. FNA: implicit 8. Risk: unbounded touch list. Decision: cap-to-8 or
-document. Tests: >max case. Disposition: **Decide**. → INPUT-TOUCH-014.
+**DEC-10 — Event-driven touch path uncapped → capped at 8.**
+Was: the `InputManager` fallback reported every finger (uncapped). **FNA verified: fixed
+`TouchLocation[MAX_TOUCHES = 8]` array**, so its public state never exceeds 8. Disposition: **FIXED
+(2026-07-05 — cap at 8).** `TouchPanel::GetState()` now caps the public snapshot at `MAX_TOUCHES` (keeping
+the 8 lowest-id touches); the `InputManager` map stays internally unbounded (an implementation detail). The
+`>max` test was rewritten to assert the public cap. → INPUT-TOUCH-014.
 
 **DEC-11 — Sequential CNA touch IDs vs SDL finger IDs.**
 Current: compact counter from 1. FNA: casts SDL finger id. Risk: id values differ from FNA; app assumptions.

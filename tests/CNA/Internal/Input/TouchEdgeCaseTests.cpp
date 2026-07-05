@@ -101,15 +101,16 @@ TEST_F(TouchEdgeCaseTest, FingerIdReusedAfterReleaseStartsFresh)
     EXPECT_EQ(state[0].getPositionProperty(), Vector2(30, 30));
 }
 
-TEST_F(TouchEdgeCaseTest, MoreThanMaxTouchesAreAllReportedByEventDrivenInputManager)
+TEST_F(TouchEdgeCaseTest, MoreThanMaxTouchesAreCappedAtMaxTouchesByTouchPanelGetState)
 {
-    // Documented behavior/deviation: the event-driven InputManager touch map is not capped at
-    // MAX_TOUCHES (=8) — that constant only bounds the SetFinger touches_ array. CNA reports every
-    // finger SDL delivers; FNA caps at 8. Kept as-is (which finger to drop would be arbitrary).
+    // DEC-10: FNA's TouchPanel tracks a fixed TouchLocation[MAX_TOUCHES] array, so its public state
+    // never exceeds MAX_TOUCHES (=8) simultaneous touches. CNA's event-driven InputManager map is
+    // unbounded (an implementation detail), but TouchPanel::GetState() caps the public snapshot at
+    // MAX_TOUCHES to match FNA.
     for (int i = 0; i < 10; ++i)
         InputManager::SetTouchState(i, TouchLocationState::Pressed, Vector2(static_cast<float>(i), 0));
 
-    EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 10);
+    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), TouchPanel::MAX_TOUCHES);
 }
 
 // --- Tasks 868-871: event-driven path preserves TouchLocation previous-location ---
@@ -196,7 +197,7 @@ TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsConnectedOnceTouchDeviceExists)
     TouchPanel::setTouchDeviceExistsProperty(true);
     const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
     EXPECT_TRUE(caps.getIsConnectedProperty());
-    EXPECT_EQ(caps.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4); // DEC-09: XNA/FNA always report 4
 }
 
 TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsConnectedViaInputManagerFallbackWhenFlagUnset)
@@ -205,7 +206,7 @@ TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsConnectedViaInputManagerFallbackWhenF
     InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(5, 5));
     const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
     EXPECT_TRUE(caps.getIsConnectedProperty());
-    EXPECT_EQ(caps.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4); // DEC-09: XNA/FNA always report 4
 }
 
 TEST_F(TouchEdgeCaseTest, GetCapabilitiesHasNoSideEffectOnTouchState)

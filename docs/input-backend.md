@@ -207,11 +207,11 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
   (tasks 868–872). A new Pressed touch has no previous, matching FNA.
 - Known deviation (behaviourally equivalent, not a gap): `GetState()` reads `InputManager`'s
   event-driven snapshot rather than FNA's per-frame `SetFinger`/`SDL_GetTouchFingers` poll of
-  `touches_` — see §3. The event-driven touch map is also not capped at `MAX_TOUCHES` (8) the way
-  FNA is.
-- `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and
-  `MAX_TOUCHES` when connected, matching FNA's `touchDeviceExists ? 4 : 0` (fixed in task 790;
-  task 721 originally noted the pre-fix bug).
+  `touches_` — see §3. The event-driven `InputManager` map is internally unbounded, but
+  `GetState()` caps the public snapshot at `MAX_TOUCHES` (8) to match FNA (DEC-10, 2026-07-05).
+- `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and **4** when
+  connected, matching FNA's `touchDeviceExists ? 4 : 0` (DEC-09, 2026-07-05 — XNA always reports 4;
+  the value is a fixed XNA-compat constant, not the `MAX_TOUCHES` tracking cap).
 
 ### TextInputEXT
 

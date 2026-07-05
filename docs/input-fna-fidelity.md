@@ -136,11 +136,12 @@ from the fake-backend unit tests above.
 **Intentional / documented deviations:**
 - **Touch IDs** are a compact sequential counter (1,2,3,…) rather than FNA's cast SDL finger id. IDs
   are opaque to games. Overflow only after ~2³¹ distinct fingers in one session (theoretical).
-- **`MAX_TOUCHES`:** the event-driven `InputManager` path is **uncapped** (reports every finger SDL
-  delivers) vs FNA's implicit 8. Documented + tested. `GetCapabilities` reports
-  `MaximumTouchCount = MAX_TOUCHES (8)`; **XNA/FNA always report 4** — this is a known reporting
-  deviation kept for now (changing it churns tests and CNA's internal max); revisit if strict parity
-  is required.
+- **`MAX_TOUCHES` / `MaximumTouchCount` (DEC-09 + DEC-10, fixed 2026-07-05):** now matches FNA on both
+  counts. `GetCapabilities` reports `MaximumTouchCount = 4` (FNA: "MaximumTouchCount is completely bogus;
+  for any touch device, XNA always reports 4", `SDL3_FNAPlatform.cs`), `0` when disconnected — this is a
+  fixed XNA-compat value, NOT the tracking cap. `TouchPanel::GetState()` caps the public snapshot at
+  `MAX_TOUCHES (8)`, matching FNA's fixed `TouchLocation[MAX_TOUCHES]` array (the event-driven
+  `InputManager` map is internally unbounded, but the public state never exceeds 8).
 - `TouchPanel::Update()` copies current→previous **before** the gesture update; FNA does gesture
   update first. The two statements touch disjoint state, so the order is functionally inert.
 - `TryGetPreviousLocation` now writes the out-param on **every** path (DEC-12, fixed 2026-07-05): it

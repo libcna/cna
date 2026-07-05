@@ -93,16 +93,21 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     TouchPanelCapabilities TouchPanel::GetCapabilities()
     {
+        // DEC-09: XNA/FNA always report MaximumTouchCount = 4 for any touch device. It is a fixed
+        // XNA-compat value ("completely bogus" per FNA SDL3_FNAPlatform.cs) and does NOT limit the
+        // number of tracked touches — that cap is MAX_TOUCHES (= 8, see GetState). Report 4 to match
+        // FNA; 0 when no touch device is present.
+        constexpr int kXnaReportedMaxTouchCount = 4;
         if (touchDeviceExists_)
         {
-            return TouchPanelCapabilities(true, MAX_TOUCHES);
+            return TouchPanelCapabilities(true, kXnaReportedMaxTouchCount);
         }
 
         // Query touch presence WITHOUT mutating state. GetTouchState() advances previous-location
         // tracking, consumes Released touches, and promotes Pressed->Moved — a capability query
         // must not consume a frame of input, so use the non-mutating HasAnyTouch() peek instead.
         const bool isConnected = CNA::Internal::Input::InputManager::HasAnyTouch();
-        return TouchPanelCapabilities(isConnected, isConnected ? MAX_TOUCHES : 0);
+        return TouchPanelCapabilities(isConnected, isConnected ? kXnaReportedMaxTouchCount : 0);
     }
 
     TouchCollection TouchPanel::GetState()
@@ -130,7 +135,23 @@ namespace Microsoft::Xna::Framework::Input::Touch
         // Fall back to InputManager's event-driven touch snapshot so GetState() still reports
         // real touches. SetFinger/touches_ remain exercised by tests and available for a future
         // poll-based platform path.
-        return CNA::Internal::Input::InputManager::GetTouchState();
+        TouchCollection fallback = CNA::Internal::Input::InputManager::GetTouchState();
+
+        // DEC-10: cap the public snapshot at MAX_TOUCHES to match FNA, whose TouchPanel tracks a fixed
+        // TouchLocation[MAX_TOUCHES] array (SDL3_FNAPlatform iterates 0..MAX_TOUCHES). InputManager's
+        // event-driven map is unbounded, so a device delivering >MAX_TOUCHES fingers would otherwise
+        // over-report here. Keep the lowest-id touches (InputManager already sorts ascending by id).
+        if (fallback.getCountProperty() > MAX_TOUCHES)
+        {
+            std::vector<TouchLocation> capped;
+            capped.reserve(static_cast<std::size_t>(MAX_TOUCHES));
+            for (int i = 0; i < MAX_TOUCHES; ++i)
+            {
+                capped.push_back(fallback[static_cast<std::size_t>(i)]);
+            }
+            return TouchCollection(std::move(capped));
+        }
+        return fallback;
     }
 
     GestureSample TouchPanel::ReadGesture()
