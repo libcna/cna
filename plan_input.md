@@ -2606,7 +2606,7 @@ claim is a manual local run.
 - **Deps:** INPUT-BUILD-003.
 
 #### INPUT-CI-005 — Sanitizer matrix job
-- **Priority:** P1 · **Status:** IMPLEMENTED (2026-07-05; verifying) · **Area:** CI
+- **Priority:** P1 · **Status:** DONE (2026-07-05, verified green) · **Area:** CI
 - **Files:** `.github/workflows/input-ci.yml`
 - **Work:** ASan+UBSan job over the input filter.
 - **Acceptance:** Sanitizer job green.
@@ -2616,8 +2616,9 @@ claim is a manual local run.
   sharing all setup + the SDL cache (SDL is built uninstrumented, so one cache serves both). The ASan+UBSan
   entry configures with `-DCNA_SANITIZE=address,undefined` and runs the canonical filter under Xvfb with
   `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` + `UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1`, so any
-  UB / memory error fails the job. Expected green: INPUT-BUILD-006 verified the input filter UBSan-clean
-  locally, and the cross-TU TimeSpan static-init UB is fixed in sharp-runtime `develop` (which CI clones).
+  UB / memory error fails the job. **Verified GREEN** (run `76922efd`, 2026-07-05): both matrix jobs pass —
+  EasyGL ✓ and ASan+UBSan ✓ — so the input filter is ASan+UBSan-clean in CI under `halt_on_error=1` (no UB
+  regression; the TimeSpan static-init fix in sharp-runtime `develop` and the in-repo hash fixes both hold).
 
 #### INPUT-CI-006 — Shuffle/repeat determinism job
 - **Priority:** P2 · **Status:** TODO · **Area:** CI
