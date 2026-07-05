@@ -22,9 +22,11 @@ milestone is done.** `male_avatar.glb`/`female_avatar.glb` export cleanly, reope
 cleanly in Blender, validate clean via `validate_gltf.py`, and export is deterministic
 to within 1 float32 ULP. A real elbow/sleeve tearing artifact under bending, plus a
 handful of zero-weight/over-4-influence vertices, were confirmed and are still open (not
-fixed) — both documented in `tools/avatar_builder/README.md`. **Phase 11b (Task 11.10+:
-feeding the real `.glb` through CNA's actual C++ content pipeline/`AvatarRenderer`, not
-a synthetic fixture) is next** — see section 8.
+fixed) — both documented in `tools/avatar_builder/README.md`. **Phase 11b has started:
+Task 11.10 (feed the real `.glb`s through `tools/avatar_asset_pipeline/convert_avatar.py`)
+is done** — found and fixed two real bugs (bad part names, single-clip-per-file
+assumption), verified structurally sound output for both genders. **Task 11.11 (wire the
+converted content into a real windowed demo) is next** — see section 8.
 
 **Architectural decisions that matter for future work:**
 - `CNA_GamerServices` and `CNA_Net` are separate CMake static libraries (gated by
@@ -89,7 +91,28 @@ No code changed since the last verified run. Last known-good results:
 
 ## 3. Recent changes
 
-- **Task 11.9 done (this session):** documentation coherence pass on
+- **Task 11.10 done (this session) — Phase 11b started:** ran
+  `tools/avatar_asset_pipeline/convert_avatar.py` against real `male_avatar.glb`/
+  `female_avatar.glb` for the first time (previously only tested against a synthetic
+  fixture). Found and fixed two real bugs, as the plan anticipated:
+  1. Part names in `avatar.skinnedmodel.json` came from the exported mesh's
+     **data-block** name, not its object name — `generate_body.py`/`generate_clothes.py`
+     (Tasks 11.2/11.5) only renamed the Blender object, leaving auto-generated
+     `Cylinder`/`Cylinder.024`-style names to leak through. Fixed at the source: both
+     scripts now also set `obj.data.name`.
+  2. `convert_avatar.py`'s CLI assumed the MakeHuman/Mixamo layout (one body file,
+     separate single-animation clip files); CNA's own pipeline bundles body+skeleton+
+     both clips in one file. Refactored the per-animation logic into a shared
+     `_tracks_from_animation()` helper, added `convert_embedded_clip()` and a new
+     `--embedded-clips` CLI flag (the original `--body`/`--clip` path is unchanged).
+  Verified well beyond "doesn't crash": for both genders, confirmed `skeleton.bin` has
+  valid parent indices and no truncation, every part's vertex/index buffer size divides
+  evenly by its stride, both `.clip.bin` files have consistent track/key counts with no
+  trailing bytes. Cross-checking clip durations (`Stand0` 3.75s, `Wave` 2.5s) against
+  Blender's actual scene fps (24, confirmed via `bpy`) also caught a stale doc bug:
+  `generate_animations.py`'s docstrings claimed "30fps", an assumption from Task 11.6
+  never actually checked. Fixed. `plan_net.md` Task 11.10 checked off.
+- **Task 11.9 done:** documentation coherence pass on
   `tools/avatar_builder/README.md` — not new code. Most content already existed,
   written incrementally across Tasks 11.1-11.8; re-read the whole file top to bottom as
   a newcomer would. Added a new top-of-file "Usage" section (quick start for the
@@ -237,14 +260,16 @@ No code changed since the last verified run. Last known-good results:
 
 ## 4. Current blocker / main problem
 
-**No technical blocker, but a few confirmed cosmetic defects. Phase 11a is complete —
-Tasks 11.1-11.9, the "one male + one female avatar that draws" milestone, are all done.**
-`tools/avatar_builder/` has `generate_skeleton.py`, `generate_body.py`,
-`generate_materials.py`, `generate_morphs.py`, `generate_hair.py`, `generate_clothes.py`,
-`generate_animations.py`, `generate_avatar.py`, `export_gltf.py`, `validate_gltf.py`, and a
-coherent `README.md`. Both `--gender male`/`--gender female` export cleanly, reopen
-cleanly in Blender, and validate clean via `validate_gltf.py`; export is deterministic to
-within 1 float32 ULP.
+**No technical blocker, but a few confirmed cosmetic defects. Phase 11a is complete
+(Tasks 11.1-11.9) and Phase 11b has started (Task 11.10 done).** `tools/avatar_builder/`
+has `generate_skeleton.py`, `generate_body.py`, `generate_materials.py`,
+`generate_morphs.py`, `generate_hair.py`, `generate_clothes.py`, `generate_animations.py`,
+`generate_avatar.py`, `export_gltf.py`, `validate_gltf.py`, and a coherent `README.md`.
+Both `--gender male`/`--gender female` export cleanly, reopen cleanly in Blender, and
+validate clean via `validate_gltf.py`; export is deterministic to within 1 float32 ULP.
+`tools/avatar_asset_pipeline/convert_avatar.py` now runs cleanly against both real
+`.glb`s (`--embedded-clips`), producing structurally-verified `.skeleton.bin`/
+`.clip.bin`/part buffers with no corruption/truncation.
 
 Confirmed, not-fixed defects so far (all documented in `tools/avatar_builder/README.md`,
 none of them blocking, all still reported as "OK" by `validate_gltf.py` since they don't
@@ -253,11 +278,10 @@ make the file invalid): a real elbow/sleeve tear under bending (`Wave`'s peak fo
 shirt (Task 11.7, confirmed by direct per-vertex inspection, silently handled by the glTF
 exporter's own `neutral_bone`/4-joint-trim mechanisms). All are automatic-weights
 consequences to fix together in a future weight-painting pass, explicitly out of scope for
-Phase 11a. The next session's job is to begin Phase 11b, Task 11.10 (feed
-`male_avatar.glb`/`female_avatar.glb` through the existing
-`tools/avatar_asset_pipeline/convert_avatar.py` converter — the first time that converter
-runs against real generated content instead of a synthetic fixture; expect and fix real
-bugs, don't assume it works unchanged).
+Phase 11a/11b. The next session's job is to begin Task 11.11: wire the converted content
+through `ContentManager`/`AvatarRenderer::EnableRealRenderingEXT`/`DrawRealEXT` in a real,
+non-headless windowed demo — the actual visual proof that a real, procedurally-generated
+avatar draws and animates on screen.
 
 ---
 
@@ -278,8 +302,9 @@ bugs, don't assume it works unchanged).
 | Permanent platform limitation (Web) | No LAN broadcast discovery; a browser tab can never host a `NetworkSession`; ephemeral port readback is broken (fixed port used instead). |
 | Confirmed bug (Android, out of scope) | `TitleContainer::OpenStream`'s `SDL_LoadFile` fallback segfaults without a real JNI/Activity context. |
 | Intentional stub (not a bug) | Every faithful `Avatar*` no-op/inert behavior (`Draw()` no-op, `State` always `Unavailable`, `CreateRandom()` not randomizing) — matches the real reference assembly exactly; never "fix" this. |
-| Resolved (Phase 11a) | Real avatar body/skeleton/animation content now exists: `tools/avatar_builder/` procedurally generates and exports `male_avatar.glb`/`female_avatar.glb` (skeleton, body, materials, morphs, hair/clothes, `Stand0`/`Wave` animations). Not yet fed through the actual C++ engine (Phase 11b, Task 11.10+) — still synthetic-fixture-only on the CNA side. |
-| Confirmed bug (automatic weights, not fixed) | The procedural body/clothes rig (Task 11.2/11.5) has a real, confirmed elbow/sleeve tear under bending (posed through `Wave`'s peak fold, Task 11.6) — the forearm/hand visibly separate from the shirt sleeve. A manual weight-painting correction pass is needed and not yet done; out of scope for Phase 11a. |
+| Resolved (Phase 11a) | Real avatar body/skeleton/animation content now exists: `tools/avatar_builder/` procedurally generates and exports `male_avatar.glb`/`female_avatar.glb` (skeleton, body, materials, morphs, hair/clothes, `Stand0`/`Wave` animations). |
+| Resolved (Phase 11b, Task 11.10) | `tools/avatar_asset_pipeline/convert_avatar.py` now converts both real `.glb`s to `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin` cleanly (`--embedded-clips` flag, new). Not yet wired through the actual C++ engine (Task 11.11+) — the converted content itself is verified structurally sound but has never been loaded/rendered by CNA. |
+| Confirmed bug (automatic weights, not fixed) | The procedural body/clothes rig (Task 11.2/11.5) has a real, confirmed elbow/sleeve tear under bending (posed through `Wave`'s peak fold, Task 11.6) — the forearm/hand visibly separate from the shirt sleeve. A manual weight-painting correction pass is needed and not yet done; out of scope for Phase 11a/11b. |
 | Confirmed limitation (automatic weights, not fixed) | 32 of the body mesh's 1086 vertices have zero total bone weight; 24 shirt vertices exceed glTF's 4-joint-influence limit (Task 11.7, confirmed by direct per-vertex inspection). Both are silently handled (a synthetic `neutral_bone` joint; glTF's own trim/renormalize), don't break the export, but are real gaps for the same future weight-painting pass as the elbow tear. |
 | Verified (Phase 11a, was a risky assumption) | Blender's `bpy.ops.export_scene.gltf` does cleanly export a script-built armature + shape keys + per-Action animations in one pass — confirmed by reopening both `male_avatar.glb`/`female_avatar.glb` in Blender and validating with `validate_gltf.py`. Export is deterministic to within 1 float32 ULP across repeated runs. |
 
@@ -388,20 +413,27 @@ keep this file readable; see section 5 for the short version of the confirmed,
 not-yet-fixed defects.
 
 Phase 11b — CNA integration, feeding the real `.glb` through the actual engine instead
-of a synthetic fixture — is next, in plan order:
+of a synthetic fixture — in plan order:
 
-1. **Task 11.10 — Run `tools/avatar_asset_pipeline/convert_avatar.py` against
-   `male_avatar.glb`/`female_avatar.glb`. (next task)**
-   Goal: produce real `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin` content. This is
-   the first time that converter (Phase 10, structurally verified only against a
-   synthetic fixture) runs against real generated content — expect and fix real bugs in
-   the converter, don't assume it works unchanged just because it passed its own tests.
-   Verify: the converter runs to completion against both `.glb` files and produces
-   non-empty, structurally sane output (skeleton bone count/names match
-   `generate_skeleton.BONES`, both `Stand0`/`Wave` clips present).
+1. ~~**Task 11.10 — Run `tools/avatar_asset_pipeline/convert_avatar.py` against
+   `male_avatar.glb`/`female_avatar.glb`.**~~ **Done this session.** Found and fixed two
+   real bugs: (a) part names leaked Blender's auto-generated mesh-data-block names
+   (`Cylinder`/`Cylinder.024`) instead of the intended object names — fixed at the
+   source in `generate_body.py`/`generate_clothes.py` (now also set `obj.data.name`);
+   (b) the CLI assumed one animation per file (MakeHuman/Mixamo layout) — added a
+   `--embedded-clips` flag plus a shared `_tracks_from_animation()` helper so CNA's own
+   single-file body+skeleton+both-clips layout converts too, without touching the
+   original `--body`/`--clip` path. Verified well beyond "doesn't crash": for both
+   genders, `skeleton.bin`'s parent indices are all valid with no truncation, every
+   part's vertex/index buffer size divides evenly by its stride, both `.clip.bin` files
+   have consistent track/key counts with no trailing bytes. Also caught and fixed a
+   stale doc bug this surfaced: `generate_animations.py` claimed "30fps"; Blender's
+   actual default scene fps is 24 (confirmed via `bpy`, cross-checked against the
+   exported clips' own duration fields).
 
 2. **Task 11.11 — Wire the converted content through `ContentManager` and
-   `AvatarRenderer::EnableRealRenderingEXT`/`DrawRealEXT` in a real windowed demo.**
+   `AvatarRenderer::EnableRealRenderingEXT`/`DrawRealEXT` in a real windowed demo. (next
+   task)**
    Goal: the actual visual proof — a real, non-headless demo (not another
    synthetic-fixture integration test) that draws a real, if simple, animated humanoid
    on screen using Phase 10's rendering engine and Phase 11's content.
@@ -442,28 +474,32 @@ of a synthetic fixture — is next, in plan order:
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, in full, before doing anything else. Phase 11a (Tasks 11.1-11.9) is
-fully done — a real male_avatar.glb/female_avatar.glb exists, exports cleanly, and
-validates clean, but has never been fed through CNA's own C++ code. Start Phase 11b, Task
-11.10: run tools/avatar_asset_pipeline/convert_avatar.py (built in Phase 10, structurally
-verified only against a synthetic fixture until now) against the real
-male_avatar.glb/female_avatar.glb this session's Blender pipeline produces. This is the
-converter's first real input — expect and fix real bugs in convert_avatar.py itself, do
-not assume it works unchanged just because it passed its own synthetic-fixture tests.
+Read NEXT.md first, in full, before doing anything else. Phase 11a+Task 11.10 are done —
+real male_avatar.glb/female_avatar.glb exist, export cleanly, validate clean, and convert
+cleanly via convert_avatar.py --embedded-clips to structurally-verified
+.skinnedmodel.json/.skeleton.bin/.clip.bin content (see section 3's Task 11.10 entry for
+exactly what was checked). None of that content has ever been loaded or rendered by CNA's
+actual C++ engine, though.
+
+Start Task 11.11: wire the converted content through ContentManager and
+AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT in a REAL windowed demo — not another
+synthetic-fixture integration test (Phase 10 already has one of those;
+examples/avatar_real_render_integration_test.cpp). The actual goal is seeing a real,
+procedurally-generated, animated humanoid draw on an actual X11/OpenGL window. Expect real
+bugs in this handoff too — the content pipeline (Task 11.10) and the rendering engine
+(Phase 10) have never been connected to each other with real data before, only
+independently to synthetic fixtures.
+
 Do not "fix" the confirmed elbow/sleeve tear or the zero-weight/over-4-influence vertices
 (section 5) as part of this task — those are known, out-of-scope content-quality issues
-for a later weight-painting pass, not converter bugs. Do not refactor unrelated code. Do
-not re-attempt MakeHuman or CharMorph automation. Make one small, verified improvement
-(Task 11.10 from plan_net.md's Phase 11b), run the verification command for that task,
-and update NEXT.md after finishing.
+for a later weight-painting pass, not something Task 11.11 needs to solve. Do not refactor
+unrelated code. Do not re-attempt MakeHuman or CharMorph automation. Make one small,
+verified improvement (Task 11.11 from plan_net.md's Phase 11b), run the verification
+command for that task, and update NEXT.md after finishing.
 
 Build: cmake --build cmake-build-debug --target CnaTests
 Test:  cmake-build-debug/CnaTests
 Blender: blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out /tmp/male_avatar.glb
 Validate: python3 tools/avatar_builder/validate_gltf.py /tmp/male_avatar.glb
-Convert (starting point only — convert_avatar.py's --body/--clip CLI was designed around
-a separate body glb + per-clip glbs from the MakeHuman/Mixamo workflow; our single
-male_avatar.glb bundles body+skeleton+both clips together, so the exact invocation likely
-needs adapting, not just copy-pasting):
-  python3 tools/avatar_asset_pipeline/convert_avatar.py --body /tmp/male_avatar.glb --out /tmp/male_content
+Convert: python3 tools/avatar_asset_pipeline/convert_avatar.py --body /tmp/male_avatar.glb --out /tmp/male_content --embedded-clips
 ```

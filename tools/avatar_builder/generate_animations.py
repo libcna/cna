@@ -69,7 +69,9 @@ def _keyframe_location(armature_obj, bone_name, frame, location_xyz):
 
 def build_stand0(armature_obj):
     """A subtle idle: Hips bob slightly and Spine1 rocks a couple of degrees, looping
-    seamlessly over 3 seconds at 30fps (frame 1 and frame 90 are identical rest poses)."""
+    seamlessly over 90 frames (frame 1 and frame 90 are identical rest poses) — 3.75s at
+    Blender's default scene fps (24), confirmed via the exported clip's own duration
+    field, not assumed."""
     _reset_pose(armature_obj)
     action = _create_action(armature_obj, "Stand0")
 
@@ -86,8 +88,9 @@ def build_stand0(armature_obj):
 
 def build_wave(armature_obj):
     """Raises the right arm (Shoulder.R/UpperArm.R chain) and oscillates the forearm
-    (LowerArm.R) side to side a few times, then lowers back to rest. 2 seconds at 30fps.
-    Rotation axes were picked empirically (see README.md) to lift the arm up/forward and
+    (LowerArm.R) side to side a few times, then lowers back to rest. 60 frames — 2.5s at
+    Blender's default scene fps (24). Rotation axes were picked empirically (see
+    README.md) to lift the arm up/forward and
     swing the forearm side to side given this skeleton's bone roll — not derived from a
     generic formula, since Blender's automatic bone roll for a horizontal bone isn't the
     same for every axis convention."""

@@ -9,10 +9,39 @@ Offline, one-time asset preparation for `AvatarRenderer`'s real-rendering extens
 glTF fixture (bone hierarchy/topological ordering, name-based animation retargeting, and CNA's
 exact `.skeleton.bin`/`.clip.bin`/`.skinnedmodel.json` binary layout all round-trip correctly).
 
-It has **not** been run against a real MakeHuman export or real Mixamo clips yet — that requires
-manual GUI (MakeHuman) and browser (Mixamo.com, Adobe account) steps outside headless automation.
-Two body meshes (male + female) are planned, per the project's explicit decision to match XNA's
-`AvatarBodyType` concept from the start rather than shipping a unisex placeholder.
+**Now also run successfully against real generated content** (Task 11.10): CNA's own
+procedural Blender pipeline (`tools/avatar_builder/`, Phase 11a) produces
+`male_avatar.glb`/`female_avatar.glb` — real body+skeleton+animations, no MakeHuman/Mixamo
+involved. Converting that output surfaced two real gaps, both fixed:
+
+- `convert_body()`'s per-mesh part names came from the exported mesh **data-block** name,
+  not the object name — `tools/avatar_builder/generate_body.py`/`generate_clothes.py`
+  only renamed the object, leaving Blender's auto-generated `Cylinder`/`Cylinder.024`-style
+  data-block names to leak into `avatar.skinnedmodel.json`'s part list. Fixed at the
+  source (both scripts now rename `obj.data.name` too), not by special-casing names here.
+- The original `--body`/`--clip` CLI assumed the MakeHuman/Mixamo workflow's file layout:
+  one body file, separate per-clip files, each with exactly one animation
+  (`convert_clip` hardcoded `gltf.animations[0]`). CNA's own pipeline bundles
+  body+skeleton+**all** clips in one `.glb` instead. Added `--embedded-clips`: converts
+  every animation already in `--body` itself, using each animation's own `.name` as the
+  clip name (see `convert_embedded_clip()`/`_tracks_from_animation()` — the per-animation
+  conversion logic is now shared between both code paths, not duplicated).
+
+Verified: `python3 convert_avatar.py --body male_avatar.glb --out content/avatar/male
+--embedded-clips` (against a real, freshly-generated `male_avatar.glb`) produces a
+20-bone skeleton (19 real bones + Blender's synthetic `neutral_bone`, expected — see
+`tools/avatar_builder/README.md`), 5 correctly-named parts, and both `Stand0.clip.bin`
+(19 tracks, 3.75s)/`Wave.clip.bin` (19 tracks, 2.5s) — durations confirmed against
+Blender's actual default scene fps (24), not assumed.
+
+It has **not** been run against a real MakeHuman export or real Mixamo clips yet (the
+`--body`/`--clip` path, as opposed to `--embedded-clips`) — that requires manual GUI
+(MakeHuman) and browser (Mixamo.com, Adobe account) steps outside headless automation,
+and per Phase 11's own decision (see `NEXT.md`) is no longer the planned path forward;
+CNA's own procedural pipeline replaces it. Two body meshes (male + female) exist, per the
+project's decision to match XNA's `AvatarBodyType` concept from the start rather than
+shipping a unisex placeholder — see `tools/avatar_builder/generate_avatar.py`'s
+`--gender` flag.
 
 ## Manual steps (to be performed by a human, not automatable here)
 

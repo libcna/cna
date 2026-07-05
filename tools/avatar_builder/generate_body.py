@@ -111,6 +111,7 @@ def build_body(armature_obj):
 
     body_obj = bpy.context.object
     body_obj.name = BODY_NAME
+    body_obj.data.name = BODY_NAME
 
     bpy.ops.object.select_all(action="DESELECT")
     body_obj.select_set(True)

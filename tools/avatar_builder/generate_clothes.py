@@ -76,6 +76,7 @@ def _build_garment(garment_name, bone_names, padding):
 
     obj = bpy.context.object
     obj.name = f"{NAME_PREFIX}{garment_name}"
+    obj.data.name = f"{NAME_PREFIX}{garment_name}"
     return obj
 
 

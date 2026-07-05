@@ -190,17 +190,15 @@ def convert_body(body_path, out_dir):
     return names
 
 
-def convert_clip(clip_path, clip_name, bone_names, out_dir):
-    """Converts one Mixamo animation glTF into a .clip.bin, retargeted by joint *name* onto
+def _tracks_from_animation(gltf, blob, anim, bone_names, clip_label):
+    """Builds (duration, tracks) for one glTF animation, retargeted by joint *name* onto
     the base skeleton's bone indices (bone_names, produced by convert_body) — matching by
-    name rather than index, since the clip file's own node indices have no relationship to
-    the base skeleton file's node indices; only the joint *names* are expected to match
-    (guaranteed by using MakeHuman's "Mixamo" rig preset for the base body, per README.md).
+    name rather than index, since an animation's own node indices have no relationship to
+    the base skeleton's node indices; only the joint *names* are expected to match
+    (guaranteed either by MakeHuman's "Mixamo" rig preset per README.md, or by
+    tools/avatar_builder/generate_skeleton.py's own bone names for CNA's own procedural
+    pipeline, whose clips are embedded in the body file itself — see convert_embedded_clip).
     """
-    gltf, blob = load_gltf(clip_path)
-    if not gltf.animations:
-        sys.exit(f"{clip_path}: no animation found")
-    anim = gltf.animations[0]
     name_to_bone_idx = {name: i for i, name in enumerate(bone_names)}
 
     duration = 0.0
@@ -239,14 +237,40 @@ def convert_clip(clip_path, clip_name, bone_names, out_dir):
         tracks.append((base_bone_idx, keys))
 
     if skipped:
-        print(f"  ({clip_name}: {len(skipped)} joint(s) in the clip had no matching base bone "
+        print(f"  ({clip_label}: {len(skipped)} joint(s) in the clip had no matching base bone "
               f"by name, skipped: {', '.join(skipped[:5])}{'...' if len(skipped) > 5 else ''})")
 
+    return duration, tracks
+
+
+def _write_clip(out_dir, clip_name, duration, tracks):
     out_path = Path(out_dir) / "clips" / f"{clip_name}.clip.bin"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     write_clip_bin(out_path, duration, tracks)
     print(f"Wrote {out_path} ({len(tracks)} tracks, {duration:.2f}s)")
     return out_path.name
+
+
+def convert_clip(clip_path, clip_name, bone_names, out_dir):
+    """Converts one standalone Mixamo animation glTF (its own file, one animation) into a
+    .clip.bin. See _tracks_from_animation for the retargeting-by-name approach."""
+    gltf, blob = load_gltf(clip_path)
+    if not gltf.animations:
+        sys.exit(f"{clip_path}: no animation found")
+    anim = gltf.animations[0]
+    duration, tracks = _tracks_from_animation(gltf, blob, anim, bone_names, clip_name)
+    return _write_clip(out_dir, clip_name, duration, tracks)
+
+
+def convert_embedded_clip(gltf, blob, anim, bone_names, out_dir):
+    """Converts one animation that's already embedded in an already-loaded glTF (as
+    opposed to convert_clip's standalone-file case) into a .clip.bin, using the
+    animation's own `name` as the clip name. This is CNA's own
+    tools/avatar_builder/generate_avatar.py output's shape: body + skeleton + every clip
+    bundled in one .glb, unlike the MakeHuman/Mixamo workflow's separate body-file-plus-
+    per-clip-file layout convert_clip was originally written for."""
+    duration, tracks = _tracks_from_animation(gltf, blob, anim, bone_names, anim.name)
+    return _write_clip(out_dir, anim.name, duration, tracks)
 
 
 def _node_local_matrix(node):
@@ -316,11 +340,19 @@ def _write_json(path, data):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--body", required=True, help="Base MakeHuman body .glb")
+    parser.add_argument("--body", required=True,
+                         help="Base body .glb — a MakeHuman export, or CNA's own "
+                              "tools/avatar_builder/generate_avatar.py output")
     parser.add_argument("--out", required=True, help="Output content directory")
     parser.add_argument("--clip", nargs=2, action="append", default=[],
                          metavar=("GLB", "PRESET_NAME"),
                          help="Mixamo animation .glb + AvatarAnimationPreset name, repeatable")
+    parser.add_argument("--embedded-clips", action="store_true",
+                         help="Also convert every animation already embedded in --body "
+                              "itself, named to match its own AvatarAnimationPreset name "
+                              "(e.g. CNA's own generate_avatar.py output, which bundles "
+                              "body+skeleton+clips in one .glb instead of the MakeHuman/"
+                              "Mixamo workflow's separate per-clip files --clip expects)")
     args = parser.parse_args()
 
     bone_names = convert_body(args.body, args.out)
@@ -329,6 +361,15 @@ def main():
     for clip_glb, preset_name in args.clip:
         clip_file = convert_clip(clip_glb, preset_name, bone_names, args.out)
         clip_entries.append({"name": preset_name, "clip": f"clips/{clip_file}"})
+
+    if args.embedded_clips:
+        gltf, blob = load_gltf(args.body)
+        for anim in gltf.animations:
+            if not anim.name:
+                sys.exit(f"{args.body}: an embedded animation has no name — "
+                         f"can't derive an AvatarAnimationPreset name for it")
+            clip_file = convert_embedded_clip(gltf, blob, anim, bone_names, args.out)
+            clip_entries.append({"name": anim.name, "clip": f"clips/{clip_file}"})
 
     if clip_entries:
         import json

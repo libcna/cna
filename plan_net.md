@@ -1049,11 +1049,38 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
 
 ### 11b — CNA Integration (first real, non-synthetic proof)
 
-- [ ] **Task 11.10** — Feed `male_avatar.glb`/`female_avatar.glb` through the existing
+- [x] **Task 11.10** — Feed `male_avatar.glb`/`female_avatar.glb` through the existing
   `tools/avatar_asset_pipeline/convert_avatar.py` (built in Phase 10, structurally verified only
   against a synthetic fixture until now) to produce real
   `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin` content. This is the first time that converter
   runs against real generated content — expect and fix real bugs, don't assume it works unchanged.
+  **Done — found and fixed two real bugs, exactly as expected:**
+  1. `convert_body()`'s part names came from the exported mesh **data-block** name, not
+     the object name — `generate_body.py`/`generate_clothes.py` (Tasks 11.2/11.5) only
+     renamed the object, leaving Blender's auto-generated `Cylinder`/`Cylinder.024`-style
+     names to leak into `avatar.skinnedmodel.json`. Fixed at the source: both scripts now
+     also set `obj.data.name`.
+  2. `convert_avatar.py`'s CLI assumed the MakeHuman/Mixamo workflow: one body file, a
+     separate file per clip, each with exactly one animation (`convert_clip` hardcoded
+     `gltf.animations[0]`). CNA's own pipeline bundles body+skeleton+**both** clips in one
+     file. Refactored the per-animation conversion logic out into a shared
+     `_tracks_from_animation()` helper, added `convert_embedded_clip()` (converts one
+     already-loaded animation by name) and a new `--embedded-clips` CLI flag — the
+     original `--body`/`--clip` path is unchanged/still works for the documented
+     MakeHuman/Mixamo workflow.
+  **Verified well beyond "runs without crashing":** for both `male_avatar.glb` and
+  `female_avatar.glb`, confirmed `skeleton.bin` has no invalid parent indices (all `-1`
+  or `< bone_count`) and no truncation/trailing bytes; every part's vertex/index buffer
+  size divides evenly by its declared stride (no corruption); both `.clip.bin` files
+  have no truncation and their key counts match; clip durations (`Stand0` 3.75s, `Wave`
+  2.5s) were cross-checked against Blender's actual scene fps (24, via `bpy`), which
+  **also caught and fixed a stale doc claim**: `generate_animations.py`'s own docstrings
+  said "30fps" — an assumption never actually checked at the time (Task 11.6); Blender's
+  default scene fps is 24, not 30. Fixed there; `plan_net.md`/`NEXT.md` only ever stated
+  frame counts (fps-independent), so nothing to fix in either. Skeleton comes out as 20
+  bones (19 real +
+  the already-documented synthetic `neutral_bone`), 5 correctly-named parts, both clips
+  present with 19 tracks each.
 
 - [ ] **Task 11.11** — Wire the converted content through
   `ContentManager::Load<shared_ptr<SkinnedModelEXT>>` and `AvatarRenderer::EnableRealRenderingEXT`/
