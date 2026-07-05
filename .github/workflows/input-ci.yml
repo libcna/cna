@@ -28,6 +28,10 @@ jobs:
   easygl-input:
     name: EasyGL build + input tests (Linux)
     runs-on: ubuntu-24.04
+    # contents:write is only needed by the temporary ci-diag publish step (Actions logs are
+    # auth-gated); drop back to the default read-only token once the diagnostics are removed.
+    permissions:
+      contents: write
     env:
       CC: gcc-14
       CXX: g++-14
