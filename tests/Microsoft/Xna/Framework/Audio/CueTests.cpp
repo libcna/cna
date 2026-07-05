@@ -712,7 +712,18 @@ namespace
         return data;
     }
 
+    // Fade duration authored on "LongCue" below (P9-STOP-010) -- deliberately far shorter than
+    // LongWaveBank's 1-second wave, so reaching Stopped this fast can only be the authored fade
+    // timer elapsing, never the wave naturally finishing. 300ms (not a "round" short value) gives
+    // enough margin for a mid-fade checkpoint to sleep well clear of both endpoints under
+    // scheduling jitter.
+    constexpr uint16_t kLongCueFadeOutMS = 300;
+
     // Same layout as BuildApply3DXsbFixtureBytes, but referencing LongWaveBank and named "LongCue".
+    // Unlike a simple cue, this is a COMPLEX cue (CUE_FLAG_SINGLE_SOUND set) authoring a real
+    // fadeOutMS (P9-STOP-010) -- a simple cue's format has no such field at all (always 0,
+    // matching FAudio's own hardcoded value), so it can never exercise real Stop(AsAuthored)
+    // fade timing.
     std::vector<uint8_t> BuildLongXsbFixtureBytes()
     {
         constexpr uint32_t headerSize   = 74;
@@ -721,8 +732,8 @@ namespace
 
         const uint32_t wavebankNameOffset = baseOffset;
         const uint32_t soundOffset        = wavebankNameOffset + 64;
-        const uint32_t cueSimpleOffset    = soundOffset + 12;
-        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueComplexOffset   = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueComplexOffset + 15;
         const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
         const std::string cueName = "LongCue";
 
@@ -735,8 +746,8 @@ namespace
         for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
         AppendU8(data, 0);   // platform
 
-        AppendU16(data, 1); // cueSimpleCount
-        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 1); // cueComplexCount
         AppendU16(data, 0); // unknown
         AppendU16(data, 0); // cueTotalAlign
         AppendU8(data, 1);  // wavebankCount
@@ -744,8 +755,8 @@ namespace
         AppendU16(data, 0); // cueNameLength
         AppendU16(data, 0); // unknown
 
-        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
-        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, static_cast<int32_t>(cueComplexOffset));
         AppendS32(data, -1); // cueNameOffset (unused by the parser)
         AppendS32(data, 0);  // unknown
         AppendS32(data, -1); // variationOffset
@@ -767,8 +778,15 @@ namespace
         AppendU16(data, 0);   // waveIdx
         AppendU8(data, 0);    // wbIdx
 
-        AppendU8(data, 0);
-        AppendU32(data, soundOffset);
+        // Complex cue "LongCue": single-sound (CUE_FLAG_SINGLE_SOUND), sbCode points directly at
+        // the one real sound above, authoring a real fadeOutMS.
+        AppendU8(data, 0x04); // flags: CUE_FLAG_SINGLE_SOUND
+        AppendU32(data, soundOffset); // sbCode
+        AppendU32(data, 0);   // transitionOffset
+        AppendU8(data, 0xFF); // instanceLimit
+        AppendU16(data, 0);   // fadeInMS
+        AppendU16(data, kLongCueFadeOutMS); // fadeOutMS
+        AppendU8(data, 0);    // maxInstanceBehavior
 
         AppendU32(data, cueNameStrOffset);
         AppendU16(data, 0);
@@ -1515,7 +1533,9 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
 // exits any loop) instead of hard-stopping it -- the old code called active_.clear() right after
 // pi.instance->Stop(immediate) unconditionally, destroying every instance (and thus hard-stopping
 // its track via ~SoundEffectInstance()'s Dispose() cascade) regardless of `immediate`. Contrasted
-// directly against Stop(Immediate), which must still hard-stop right away.
+// directly against Stop(Immediate), which must still hard-stop right away. LongCue authors a real
+// fadeOutMS (P9-STOP-010), which is what makes AsAuthored get a real tail here at all -- see
+// StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate for the no-fade-authored case.
 TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway)
 {
     ::setenv("SDL_AUDIODRIVER", "dummy", 1);
@@ -1571,10 +1591,53 @@ TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway
     }
 }
 
-// P9-STOP-003/004: a State::Stopping cue must reconcile to Stopped on its own once the release
-// tail actually finishes playing, the same way a Playing cue naturally reconciles
-// (P9-LIFECYCLE-001) -- it must not get stuck in Stopping forever.
-TEST(CueTest, StopAsAuthoredTransitionsFromStoppingToStoppedOnceTailFinishes)
+// P9-STOP-010: a State::Stopping cue with a real authored fadeOutMS must reconcile to Stopped
+// once that authored fade *timer* elapses -- driven by real wall-clock time, not by the
+// underlying wave naturally finishing. LongCue's wave is a full second long, far longer than its
+// ~300ms authored fade, so reaching Stopped this fast can only be the timer, never natural
+// completion (the opposite of what this test used to exercise, before P9-STOP-010: FACT actually
+// treats a cue with no authored fade -- like the old Apply3DCue-based version of this test -- as
+// an *immediate* stop, so it never even reaches Stopping at all; see
+// StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate below).
+TEST(CueTest, StopAsAuthoredTransitionsFromStoppingToStoppedOnceFadeTimerElapses)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cue(SharedLongBank().GetCue("LongCue"));
+        cue->Play();
+
+        if (!CueTestAccess::ActiveInstance(*cue, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+
+        cue->Stop(AudioStopOptions::AsAuthored);
+        ASSERT_TRUE(cue->getIsStoppingProperty());
+        ASSERT_FALSE(cue->getIsStoppedProperty());
+
+        // Comfortably past kLongCueFadeOutMS, nowhere near LongWaveBank's real 1-second wave
+        // naturally finishing.
+        std::this_thread::sleep_for(std::chrono::milliseconds(kLongCueFadeOutMS + 150));
+
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_FALSE(cue->getIsStoppingProperty());
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// P9-STOP-010: real FACT (FACTCue_Stop, FACT.c) treats Stop(AsAuthored) as immediate when the cue
+// has no authored fadeOutMS (and no RPC-release timing, which CNA doesn't resolve at all) -- a
+// "simple" cue like Apply3DCue can never carry a fadeOutMS at all (the format has no such field
+// for it), so AsAuthored must behave exactly like Stop(Immediate) for one.
+TEST(CueTest, StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate)
 {
     ::setenv("SDL_AUDIODRIVER", "dummy", 1);
 
@@ -1590,15 +1653,56 @@ TEST(CueTest, StopAsAuthoredTransitionsFromStoppingToStoppedOnceTailFinishes)
         }
 
         cue->Stop(AudioStopOptions::AsAuthored);
-        ASSERT_TRUE(cue->getIsStoppingProperty());
-        ASSERT_FALSE(cue->getIsStoppedProperty());
-
-        // ~1.13ms of mono 16-bit silence at 44100Hz -- long enough to finish well within 50ms.
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
         EXPECT_TRUE(cue->getIsStoppedProperty());
         EXPECT_FALSE(cue->getIsStoppingProperty());
         EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// P9-STOP-010: a real authored fadeOutMS ramps volume down linearly over that duration, matching
+// FACT_INTERNAL_UpdateSound's SOUND_STATE_FADE_OUT handling (FACT_internal.c) -- not an instant
+// volume cut, and not tied to the wave's own natural length. Checked at 80% elapsed (not 50%):
+// LongCue's sound-level volume byte and category 0's volume byte are both 0xFF, which
+// ReadVolByteAsAmplitude (XactParser.cpp) converts to ~1.998 each (XACT volume bytes are a
+// log-centibel scale, not a linear 0-255 -> 0-1 one) -- their product (~3.99) is well above the
+// [0,1] clamp Cue::Play()/ReconcileState() both apply, so anything above ~25% remaining still
+// clamps to a flat 1.0 and wouldn't show a difference at all; 20% remaining (80% elapsed) clamps
+// to ~0.8, comfortably observable, with 60ms of margin against the 300ms deadline.
+TEST(CueTest, StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cue(SharedLongBank().GetCue("LongCue"));
+        cue->Play();
+
+        SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*cue, 0);
+        if (!inst)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        const float startVolume = inst->getVolumeProperty();
+        ASSERT_GT(startVolume, 0.0f);
+
+        cue->Stop(AudioStopOptions::AsAuthored);
+        std::this_thread::sleep_for(std::chrono::milliseconds(kLongCueFadeOutMS * 4 / 5));
+        ASSERT_TRUE(cue->getIsStoppingProperty()); // triggers ReconcileState()'s fade tick
+
+        SoundEffectInstance* stillFading = CueTestAccess::ActiveInstance(*cue, 0);
+        ASSERT_NE(stillFading, nullptr);
+        const float midVolume = stillFading->getVolumeProperty();
+        EXPECT_LT(midVolume, startVolume);
+        EXPECT_GT(midVolume, 0.0f);
+
+        cue->Stop(AudioStopOptions::Immediate); // clean up rather than leaking a Stopping cue
     }
     catch (...)
     {

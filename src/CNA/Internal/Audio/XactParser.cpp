@@ -903,6 +903,8 @@ namespace CNA::Internal::Audio
                 auto it = soundCodeMap.find(sbCode);
                 result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : kInvalidSoundIndex;
                 result.cues[cueIdx].varIndex   = 0;
+                // fadeOutMS stays at its 0 default: a simple cue's format has no such field at
+                // all, matching FAudio's own hardcoded 0 for simple cues (P9-STOP-010).
             }
         }
 
@@ -920,11 +922,12 @@ namespace CNA::Internal::Audio
                 uint32_t transitionOffset = cc.u32();
                 cc.u8();  // instanceLimit
                 cc.u16(); // fadeInMS
-                cc.u16(); // fadeOutMS
+                uint16_t fadeOutMS = cc.u16(); // P9-STOP-010: retained, was discarded
                 cc.u8();  // maxInstanceBehavior
 
                 bool isSingle = (flags & CUE_FLAG_SINGLE_SOUND) != 0;
                 result.cues[cueIdx].isSingleSound = isSingle;
+                result.cues[cueIdx].fadeOutMS = fadeOutMS;
 
                 if (isSingle)
                 {

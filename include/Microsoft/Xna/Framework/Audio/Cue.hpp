@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -144,6 +145,15 @@ namespace Microsoft::Xna::Framework::Audio
         // getIsPlayingProperty()/getIsPausedProperty() can both be true simultaneously, matching
         // FACT's bitmask semantics instead of a single-value enum.
         bool        paused_     = false;
+
+        // P9-STOP-010: real authored fadeOutMS timing for Stop(AsAuthored). Only meaningful
+        // while state_ == State::Stopping and fadeOutMS_ > 0 -- see StopInternal()/
+        // ReconcileState() for how these drive the linear volume ramp and the eventual
+        // Stopping -> Stopped transition, matching FAudio's SOUND_STATE_FADE_OUT handling
+        // (FACT_INTERNAL_UpdateSound, FACT_internal.c) instead of waiting for the underlying
+        // wave to naturally finish.
+        std::chrono::steady_clock::time_point fadeStart_{};
+        uint16_t    fadeOutMS_  = 0;
 
         std::unordered_map<std::string, float> variables_;
 

@@ -5,8 +5,10 @@
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "AudioEngineTestAccess.hpp"
+#include "CueTestAccess.hpp"
 #include "SoundBankTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/EventArgs.hpp"
@@ -32,8 +34,10 @@ using Microsoft::Xna::Framework::Audio::AudioEngine;
 using Microsoft::Xna::Framework::Audio::AudioEngineTestAccess;
 using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
+using Microsoft::Xna::Framework::Audio::CueTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundBank;
 using Microsoft::Xna::Framework::Audio::SoundBankTestAccess;
+using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::WaveBank;
 
 namespace
@@ -351,8 +355,15 @@ namespace
         return data;
     }
 
+    // Fade duration authored on "P9StopLongCue" below (P9-STOP-010) -- far shorter than the
+    // underlying wave's 1 second, so reaching Stopped this fast can only be the authored fade
+    // timer elapsing, never the wave naturally finishing.
+    constexpr uint16_t kP9StopLongCueFadeOutMS = 300;
+
     // Same layout as BuildXA8XsbFixtureBytes, but referencing kLongWaveBankName and named
-    // "P9StopLongCue".
+    // "P9StopLongCue". Unlike a simple cue, this is a COMPLEX cue (CUE_FLAG_SINGLE_SOUND set)
+    // authoring a real fadeOutMS (P9-STOP-010) -- a simple cue's format has no such field at all
+    // (always 0), so it could never exercise real Stop(AsAuthored) fade timing.
     std::vector<uint8_t> BuildP9StopLongXsbFixtureBytes()
     {
         constexpr uint32_t headerSize   = 74;
@@ -361,8 +372,8 @@ namespace
 
         const uint32_t wavebankNameOffset = baseOffset;
         const uint32_t soundOffset        = wavebankNameOffset + 64;
-        const uint32_t cueSimpleOffset    = soundOffset + 12;
-        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueComplexOffset   = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueComplexOffset + 15;
         const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
         const std::string cueName = "P9StopLongCue";
 
@@ -375,8 +386,8 @@ namespace
         for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
         AppendU8(data, 0);   // platform
 
-        AppendU16(data, 1); // cueSimpleCount
-        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 1); // cueComplexCount
         AppendU16(data, 0); // unknown
         AppendU16(data, 0); // cueTotalAlign
         AppendU8(data, 1);  // wavebankCount
@@ -384,8 +395,8 @@ namespace
         AppendU16(data, 0); // cueNameLength
         AppendU16(data, 0); // unknown
 
-        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
-        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, static_cast<int32_t>(cueComplexOffset));
         AppendS32(data, -1); // cueNameOffset (unused by the parser)
         AppendS32(data, 0);  // unknown
         AppendS32(data, -1); // variationOffset
@@ -407,8 +418,15 @@ namespace
         AppendU16(data, 0);   // waveIdx
         AppendU8(data, 0);    // wbIdx
 
-        AppendU8(data, 0);
-        AppendU32(data, soundOffset);
+        // Complex cue "P9StopLongCue": single-sound (CUE_FLAG_SINGLE_SOUND), sbCode points
+        // directly at the one real sound above, authoring a real fadeOutMS.
+        AppendU8(data, 0x04); // flags: CUE_FLAG_SINGLE_SOUND
+        AppendU32(data, soundOffset); // sbCode
+        AppendU32(data, 0);   // transitionOffset
+        AppendU8(data, 0xFF); // instanceLimit
+        AppendU16(data, 0);   // fadeInMS
+        AppendU16(data, kP9StopLongCueFadeOutMS); // fadeOutMS
+        AppendU8(data, 0);    // maxInstanceBehavior
 
         AppendU32(data, cueNameStrOffset);
         AppendU16(data, 0);
@@ -734,6 +752,57 @@ TEST(AudioEngineTest, StopAsAuthoredDoesNotUnregisterFromAudioEngineWhileTailSti
         cue->Stop(AudioStopOptions::Immediate);
         EXPECT_TRUE(cue->getIsStoppedProperty());
         EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(engine), 0u);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// P9-STOP-010: AudioEngine::Update() must progress an in-progress authored fade on its own --
+// not just whenever some other code happens to query a getter on the cue (which would also
+// reconcile it, making a getter-based check unable to prove Update() specifically did the work).
+// CueTestAccess::ActiveInstance() is a raw field read, not a getter, so calling engine.Update()
+// as the *only* thing between Stop(AsAuthored) and reading the instance's volume back proves
+// Update() itself ticked the fade forward, matching real FACT games calling AudioEngine.Update()
+// every frame to keep every active fade progressing.
+TEST(AudioEngineTest, UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQuery)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioEngine engine(XgsFixturePath());
+        WaveBank wb(&engine, WriteFixture("p9stop_long_update.xwb", BuildP9StopLongXwbFixtureBytes()));
+        SoundBank sb(&engine, WriteFixture("p9stop_long_update.xsb", BuildP9StopLongXsbFixtureBytes()));
+
+        std::unique_ptr<Cue> cue(sb.GetCue("P9StopLongCue"));
+        cue->Play();
+
+        SoundEffectInstance* preStop = CueTestAccess::ActiveInstance(*cue, 0);
+        if (!preStop)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        const float startVolume = preStop->getVolumeProperty();
+        ASSERT_GT(startVolume, 0.0f);
+
+        cue->Stop(AudioStopOptions::AsAuthored);
+
+        // 80% elapsed: see CueTests.cpp's StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration
+        // for why this needs to be well past 50% (both the sound's and category 0's volume bytes
+        // are 0xFF, whose log-centibel amplitude conversion exceeds 1.0 individually, so their
+        // product needs the fade multiplier below ~0.25 before the [0,1] clamp stops masking it).
+        std::this_thread::sleep_for(std::chrono::milliseconds(kP9StopLongCueFadeOutMS * 4 / 5));
+        engine.Update(); // the ONLY tick between Stop() and the readback below
+
+        SoundEffectInstance* postUpdate = CueTestAccess::ActiveInstance(*cue, 0);
+        ASSERT_NE(postUpdate, nullptr);
+        EXPECT_LT(postUpdate->getVolumeProperty(), startVolume);
+
+        cue->Stop(AudioStopOptions::Immediate); // clean up rather than leaking a Stopping cue
     }
     catch (...)
     {

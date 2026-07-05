@@ -1981,6 +1981,82 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
 * [x] P9-STOP-010 Document any remaining deviation from exact XACT authored stop behavior.
   *Note:* Documented in `CHECKLIST.md`: `Stop(AsAuthored)`'s release-tail *duration* is however long the underlying wave naturally takes to finish, not the authored `fadeOutMS`/RPC-release timing — `XactParser` doesn't retain per-cue `fadeOutMS`/`instanceLimit`/`maxInstanceBehavior` into `XsbCue` at all (parsed-and-discarded, only needed to locate later header fields). `State::Stopping` gets the *shape* of the behavior right (non-stopped while there's something to hear), but not an authored fade curve — implementing real per-cue fade timing would need parser changes plus a new time-driven update mechanism, out of scope for this pass (matches how `P9-CATEGORY-005/007/008`'s category-level `instanceLimit`/fade were already deferred, `XA-11`).
 
+  **Resolved (post-Fáze-9):** after Fáze 9 closed (all 11 groups) and `P9-LIFECYCLE-013` was
+  resolved, the user chose to implement this one too rather than leave it open. Re-read
+  `FACTCue_Stop`/`FACT_INTERNAL_BeginFadeOut`/`FACT_INTERNAL_UpdateSound` (`FACT.c`/
+  `FACT_internal.c`) to ground the exact fix: `FACTCue_Stop`'s "three ways a cue is stopped
+  immediately" are an explicit immediate request, being already paused, or
+  `(fadeOutMS == 0 && maxRpcReleaseTime == 0)` -- a simple cue's format has no `fadeOutMS` field at
+  all (always 0, `FACT_internal.c`'s parser hardcodes it), so `Stop(AsAuthored)` on one is *always*
+  immediate in real FACT, contrary to CNA's previous "any active cue gets a synthetic tail"
+  behavior. `FACT_INTERNAL_UpdateSound`'s `SOUND_STATE_FADE_OUT` handling is a plain linear volume
+  ramp (`fadeVolume = 1 - elapsed/fadeTarget`) driven by wall-clock time, hard-stopping once
+  elapsed >= fadeTarget, with no dependency on the underlying wave's own remaining length at all.
+
+  Implemented: `XsbCue` (`XactTypes.hpp`) gained a `fadeOutMS` field, now retained by
+  `XactParser.cpp`'s complex-cue parsing (previously read-and-discarded); a simple cue's format
+  has no such field, so it stays at its 0 default, matching FACT exactly. `Cue` (`Cue.hpp`/
+  `Cue.cpp`) gained `fadeStart_`/`fadeOutMS_` members. `StopInternal()` now resolves the cue's
+  authored `fadeOutMS` from the bank's parsed `XsbCue` (mirroring `Play()`'s own `XsbData`
+  resolution) and only takes the `State::Stopping` path when it's nonzero -- otherwise (no
+  authored fade at all, which includes every simple cue) it hard-stops immediately, matching
+  FACT's own condition exactly for the case CNA can resolve. `ReconcileState()` gained a real
+  linear fade-out tick for `State::Stopping` with `fadeOutMS_ > 0`: computes elapsed wall-clock
+  time against `fadeStart_`, ramps each active instance's volume down
+  (`baseVolume * categoryVolume * (1 - elapsed/fadeOutMS_)`, matching `ApplyCategoryVolume`'s
+  existing simplified recombination formula), and hard-stops once elapsed >= `fadeOutMS_` --
+  critically, still never touching `waveBanksUsed_`/`AudioEngine`'s registries from this
+  const-context reconciliation path (the exact same mutate-during-iteration hazard
+  `P9-LIFECYCLE-001` already established a hard rule against; unregistration still only happens
+  via `StopInternal()`'s explicit paths or the fire-and-forget sweep). `AudioEngine::Update()`
+  additionally ticks `ReconcileState()` on every active cue each frame now, so an in-progress fade
+  visibly progresses even if nothing else happens to query the cue in between -- matching FACT's
+  own mixer thread continuously ticking every active fade, and the established "call `Update()`
+  every frame" contract FNA games already follow (real FACT release-RPC timing,
+  `maxRpcReleaseTime`, remains unimplemented -- tied to the pre-existing, separately-accepted "RPC
+  evaluated once, not continuously" deviation, since CNA has no continuous per-tick RPC
+  evaluation to compute or honor it against at all).
+
+  Three existing test fixtures were simple cues (always `fadeOutMS == 0`), so under the new,
+  correct logic they no longer exercise a real tail at all -- converted each to a complex cue
+  (`CUE_FLAG_SINGLE_SOUND`) authoring a real `fadeOutMS` (300ms, chosen for margin against
+  scheduling jitter) instead: `CueTests.cpp`'s `"LongCue"`, `AudioCategoryTests.cpp`'s
+  `"P9StopCategoryLongCue"`, `AudioEngineTests.cpp`'s `"P9StopLongCue"` (each still backed by the
+  same 1-second real wave data, so a fade-driven `Stopped` transition within a few hundred ms can
+  only be the timer, never natural completion). `CueTests.cpp::StopAsAuthoredTransitionsFrom
+  StoppingToStoppedOnceTailFinishes` was renamed/rewritten to
+  `...OnceFadeTimerElapses` using `"LongCue"` instead of the now-immediate-stopping `"Apply3DCue"`.
+  Added `CueTests.cpp::StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate` (locks in the new
+  simple-cue-is-immediate behavior via `"Apply3DCue"`),
+  `CueTests.cpp::StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration`, and
+  `AudioEngineTests.cpp::UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQuery` (proves
+  `Update()` itself ticks the fade, not just whatever getter happens to be called next, by reading
+  the instance's volume via `CueTestAccess::ActiveInstance()` -- a raw field read, not a
+  reconciling getter). The volume-ramp tests needed to sleep to ~80% elapsed, not 50%: `"LongCue"`/
+  `"P9StopLongCue"`'s sound-level volume byte and category 0's volume byte are both `0xFF`, which
+  `ReadVolByteAsAmplitude`'s log-centibel formula converts to ~1.998 each (XACT volume bytes are
+  not linear 0-255 -> 0-1) -- their product (~3.99) stays clamped to a flat `1.0` by
+  `Cue::Play()`/`ReconcileState()`'s existing `[0,1]` clamp until the fade multiplier drops below
+  ~0.25, discovered empirically via a temporary debug trace, not by inspection.
+
+  Verified via `git stash` on the 5 production files (`XactTypes.hpp`, `XactParser.cpp`,
+  `Cue.hpp`, `Cue.cpp`, `AudioEngine.cpp`): 4 of 5 new/rewritten tests fail against the pre-fix
+  code with the exact old (wrong) values; the 5th (`AudioCategoryTests.cpp`'s pre-existing
+  `StopAsAuthoredOnCategoryLeavesRealActiveCueStoppingNotStopped`) correctly passes either way,
+  since its own assertions (immediate post-`Stop()` `IsStopping`/`IsStopped`/`ActiveInstance`
+  checks, no timing) don't happen to distinguish old vs. new logic. Full suite 3263/3265 (2
+  expected skips, unchanged from before -- these were edits/renames of existing tests plus 3 net
+  new ones), audio subset clean under ASan+UBSan. One unrelated, pre-existing flake observed once
+  during a full-suite run and confirmed non-reproducing over 10 isolated repeats plus 3 more clean
+  full-suite runs: `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`
+  (uses the short ~1.13ms `"Apply3DCue"` fixture, unrelated to this fix -- no `Stop()` call at
+  all -- same class of full-suite-load timing sensitivity already documented for `P9-STOP-008`'s
+  fixture history above, not a new regression).
+
+  `CHECKLIST.md`'s corresponding accepted-deviation row was rewritten (not removed): the
+  fadeOutMS/no-fade-is-immediate behavior is now real and correct; RPC-only release timing is
+  still unimplemented, a narrower remaining gap than before.
+
 ## P9-CATEGORY — AudioCategory correctness
 
 * [x] P9-CATEGORY-001 Fix category operations so they iterate over a snapshot of active cues instead of mutating `activeCues` during iteration.

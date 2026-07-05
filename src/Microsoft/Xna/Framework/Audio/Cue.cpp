@@ -128,6 +128,42 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_ || (state_ != State::Playing && state_ != State::Stopping) || active_.empty())
             return;
 
+        // P9-STOP-010: a real authored fadeOutMS is a wall-clock deadline, not something the
+        // underlying wave's own natural length has any bearing on (StopInternal()'s LongWaveBank-
+        // backed regression fixtures deliberately use a 1-second wave with a ~100ms fade to prove
+        // this) -- matches FACT_INTERNAL_UpdateSound's SOUND_STATE_FADE_OUT handling
+        // (FACT_internal.c): linear volume ramp down to 0 over fadeOutMS_, then hard-stop once
+        // elapsed, regardless of whether the wave itself would still have audio left to play.
+        // Same non-negotiable rule as the natural-completion path just above: never touch
+        // waveBanksUsed_/AudioEngine's registries from here (mutate-during-iteration hazard,
+        // P9-LIFECYCLE-001) -- that unregistration only ever happens from StopInternal() (explicit
+        // Stop(Immediate)/Dispose()) or SoundBank's fire-and-forget sweep destroying this Cue.
+        if (state_ == State::Stopping && fadeOutMS_ > 0)
+        {
+            const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - fadeStart_).count();
+
+            auto* self = const_cast<Cue*>(this);
+            if (elapsedMs >= fadeOutMS_)
+            {
+                self->active_.clear();
+                self->state_ = State::Stopped;
+                self->paused_ = false;
+                self->fadeOutMS_ = 0;
+                return;
+            }
+
+            const float fadeMultiplier = 1.0f
+                - static_cast<float>(elapsedMs) / static_cast<float>(fadeOutMS_);
+            const AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+            const float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
+            for (const auto& pi : active_)
+                if (pi.instance)
+                    pi.instance->setVolumeProperty(
+                        std::clamp(pi.baseVolume * catVol * fadeMultiplier, 0.0f, 1.0f));
+            return;
+        }
+
         for (const auto& pi : active_)
             if (pi.instance && pi.instance->getStateProperty() != SoundState::Stopped)
                 return; // at least one wave reference is still playing (or looping)
@@ -467,21 +503,32 @@ namespace Microsoft::Xna::Framework::Audio
         // until this Cue is later disposed (matches FNA: the cue doesn't relinquish its native
         // voice until the release genuinely finishes, not the instant Stop(AsAuthored) is called).
         //
-        // P9-STOP-001/002/003/004: real FACT (FACTCue_Stop, FACT.c) does NOT transition to
+        // P9-STOP-001/002/003/004/010: real FACT (FACTCue_Stop, FACT.c) does NOT transition to
         // FACT_STATE_STOPPED for a non-immediate stop unless there is nothing to release --
         // "the three ways a Cue might be stopped immediately" are: an explicit immediate request,
-        // being already paused, or `playingSound == NULL` (no wave, nothing to tail off). With a
-        // real tail, FACT instead begins a fade-out/RPC-release and only reaches STOPPED once
-        // that finishes. CNA doesn't parse/model authored fadeOutMS/RPC-release timing (that data
-        // isn't even retained by XactParser -- see plan_audio.md's P9-STOP-010 for the documented
-        // gap), but it DOES know whether there's a real tail to wait for (`active_` non-empty) --
-        // model that with the already-defined but previously-unused State::Stopping, promoted to
-        // Stopped by ReconcileState() once every active_ instance actually finishes playing.
-        const bool hasRealTail = !immediate && !active_.empty();
+        // being already paused, or (fadeOutMS == 0 AND no RPC-release time authored). A "simple"
+        // cue's format has no fadeOutMS field at all (always 0, see XactParser.cpp), so
+        // Stop(AsAuthored) on one is *always* immediate in real FACT -- there is nothing to fade.
+        // RPC-release timing remains unimplemented here (tied to the already-accepted "RPC
+        // evaluated once, not continuously" deviation, CHECKLIST.md); only a real, nonzero,
+        // authored fadeOutMS gets a real tail -- everything else (no fade authored, or RPC-only
+        // release) hard-stops right away, matching FACT's own immediate-stop condition exactly
+        // for the cases CNA can resolve.
+        uint16_t fadeOutMS = 0;
+        if (!immediate && !active_.empty() && bank_)
+        {
+            if (const CNA::Internal::Audio::XsbData* xsb = bank_->GetXsbData())
+                if (cueIndex_ < xsb->cues.size())
+                    fadeOutMS = xsb->cues[cueIndex_].fadeOutMS;
+        }
+
+        const bool hasRealTail = !immediate && !active_.empty() && fadeOutMS > 0;
         if (hasRealTail)
         {
             state_ = State::Stopping;
             paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
+            fadeStart_ = std::chrono::steady_clock::now();
+            fadeOutMS_ = fadeOutMS;
             // Deliberately do NOT touch waveBanksUsed_/AudioEngine's registry here (P9-STOP-005/
             // 009): the old code unregistered immediately regardless of `immediate`, which made
             // WaveBank::IsInUse/AudioEngine's category operations lose track of this cue while it
@@ -494,6 +541,7 @@ namespace Microsoft::Xna::Framework::Audio
         active_.clear();
         state_ = State::Stopped;
         paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
+        fadeOutMS_ = 0;
 
         for (auto* wb : waveBanksUsed_)
             if (wb) wb->UnregisterCue(this);

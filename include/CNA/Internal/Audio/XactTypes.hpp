@@ -240,6 +240,13 @@ namespace CNA::Internal::Audio
         uint32_t soundIndex;
         /** @brief Index into XsbData::variations; valid when isSingleSound is false. */
         uint32_t varIndex;
+        /**
+         * @brief Authored release fade duration in milliseconds (P9-STOP-010), 0 if none.
+         *
+         * Only present on a COMPLEX cue record; a "simple" cue's format has no such field at all
+         * (matches FAudio's FACT_internal.c, which hardcodes 0 for simple cues).
+         */
+        uint16_t fadeOutMS = 0;
     };
 
     /** @brief Parsed contents of a .XSB sound bank file. */

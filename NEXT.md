@@ -56,9 +56,11 @@ framework/runtime, not a game.
   Verified via both the manual `cmake-build-debug/` directory and the `tests` CMake preset
   (freshly reconfigured from a deleted build directory). `cna_demo_sound`/`cna_demo_2d` example
   targets also rebuild clean.
-- **Tests:** `CnaTests` whole-suite count is **3260 / 3262 pass** (2 skipped:
+- **Tests:** `CnaTests` whole-suite count is **3263 / 3265 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected) — up from 3259/3261 (`P9-AUDIT-002`'s 1 new test,
+  hardware-dependent, expected) — up from 3260/3262 (`P9-STOP-010`'s resolution: real authored
+  `fadeOutMS` timing for `Cue::Stop(AsAuthored)`, net +3 tests plus 2 renamed/rewritten; before
+  that, 3259/3261 was `P9-AUDIT-002`'s 1 new test,
   `MicrophoneTest.GetDataRejectsOffsetCountIntegerOverflow`, a real regression test for a real bug
   `P9-AUDIT` found: `Microphone::GetData`'s int32 offset+count overflow, same class as
   `P9-VALIDATION-003`, just outside that task's named scope; before that, 3258/3260 was
@@ -71,20 +73,19 @@ framework/runtime, not a game.
   `P9-DYNAMIC-008`'s 1 new test, 3241/3243 was `P9-DYNAMIC-007`'s 1 new test, 3238/3240 was
   `P9-3D-003`'s 3 new tests, 3230/3232 was `P9-DYNAMIC-001..006`'s 8 new tests, 3226/3228 was
   `P9-XACT-014/015`'s 5 new tests, 3212/3214 was `P9-XACT-011`'s 14 new tests, and the earlier
-  jump from 2102 was `develop`'s `feature/net` merge, not this branch's work). One unrelated
-  statistical test (`CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`) failed
-  once in a full run but passed consistently over 5 isolated repeats -- pre-existing randomness
-  in an un-seeded RNG-based test, not a regression. The audio-scoped subset (§7's `--gtest_filter`
-  audio suite list) is **386 / 386 pass** under ASan+UBSan -- up from a previously-reported
-  353/353 that `P9-AUDIT-005` found was silently incomplete: the filter string never actually
-  matched most of `MicrophoneTest`'s ~31 cases (none of its patterns contain "Microphone" as a
-  substring of `MicrophoneTest.<TestName>`), now fixed by adding `*Microphone*` (see §7).
-  Also verified clean under a full ASan+UBSan build of the (corrected) audio suite
-  (`P9-XACT-011` touches the shared `FilterState` mixing-thread interaction flagged risky by
-  `P9-BUILD-001..007`; `P9-XACT-014`/`P9-DYNAMIC-001`/`P9-DYNAMIC-007`/`P9-DYNAMIC-009`/
-  `P9-HARDWARE-003/004`/`P9-HARDWARE-005`/`P9-AUDIT-002` re-verified after their respective
-  changes; `P9-HARDWARE-005`'s spawned child harness process was itself built under the same
-  ASan/UBSan flags).
+  jump from 2102 was `develop`'s `feature/net` merge, not this branch's work). Two unrelated,
+  pre-existing full-suite-load-only flakes observed and confirmed non-reproducing over repeated
+  isolated/full-suite runs, neither a regression: `CueTest.PlayWeightedVariationFavorsHigherWeight
+  EntryStatistically` (un-seeded RNG) and `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAnd
+  DoesNotDuplicateInstances` (the short ~1.13ms `"Apply3DCue"` fixture occasionally racing
+  full-suite scheduling load; doesn't call `Stop()`, unrelated to `P9-STOP-010`). The audio-scoped
+  subset (§7's `--gtest_filter` audio suite list) is **389 / 389 pass** under ASan+UBSan.
+  Also verified clean under a full ASan+UBSan build of the audio suite (`P9-XACT-011` touches the
+  shared `FilterState` mixing-thread interaction flagged risky by `P9-BUILD-001..007`;
+  `P9-XACT-014`/`P9-DYNAMIC-001`/`P9-DYNAMIC-007`/`P9-DYNAMIC-009`/`P9-HARDWARE-003/004`/
+  `P9-HARDWARE-005`/`P9-AUDIT-002`/`P9-STOP-010` re-verified after their respective changes;
+  `P9-HARDWARE-005`'s spawned child harness process was itself built under the same ASan/UBSan
+  flags).
 - **New standalone test executable:** `cna_audio_no_hardware_harness` (from
   `tools/audio/audio_no_hardware_harness.cpp`), spawned as a real independent OS process by
   `tests/CNA/Internal/Audio/AudioMixerTests.cpp` (mirrors the existing
@@ -104,16 +105,71 @@ framework/runtime, not a game.
   stop, real natural-completion and authored-stop-tail state reconciliation, real 3D pan/
   attenuation); `Microphone` (real SDL3 capture). See `docs/xna-4-api-coverage.md`'s Audio
   compatibility table for the full implemented/approximate/unsupported breakdown.
-- **What does not work / remains open:** the 5 open Fáze 9 groups (§4/§8) cover XACT RPC/DSP
-  wiring, 3D audio fidelity beyond pan+attenuation, hardware/exception-path edge cases, and
-  `DynamicSoundEffectInstance` buffer-lifecycle test coverage — none of these are known *bugs*,
-  they're unaudited/unfinished hardening work per the user's own Fáze 9 scope.
+- **What does not work / remains open:** Fáze 9 is fully closed (§1/§4) and both of its two
+  post-closure open decisions have since been resolved (`P9-LIFECYCLE-013`, `P9-STOP-010` — see
+  §3). What's left is exactly the documented, deliberate `CHECKLIST.md` accepted deviations (no
+  reverb, no true 3D HRTF/elevation, stereo hard-pan instead of crossfeed, RPC curves evaluated
+  once not continuously, RPC-only release timing unimplemented, etc.) plus the untested-deviation
+  items `P9-AUDIT-004` catalogued (§5) — none of these are known *bugs*.
 
 ---
 
 ## 3. Recent changes (newest first; Fáze 9 itself closed at `P9-AUDIT-001..005` below)
 
-- **`P9-LIFECYCLE-013` (resolved, post-Fáze-9)** (not yet committed) — the first of the two open
+- **`P9-STOP-010` (resolved, post-Fáze-9)** (not yet committed) — the second of the two open
+  decisions left after Fáze 9 closed; the user chose to implement this one too rather than leave
+  it open. Real FACT (`FACTCue_Stop`/`FACT_INTERNAL_BeginFadeOut`/`FACT_INTERNAL_UpdateSound`,
+  `FACT.c`/`FACT_internal.c`) treats a `Stop(AsAuthored)` as *immediate* whenever the cue has no
+  authored `fadeOutMS` and no RPC-release timing -- and a "simple" cue's format has no `fadeOutMS`
+  field at all, so `AsAuthored` on one is *always* immediate in real FACT. When there is a real
+  authored `fadeOutMS`, FACT ramps volume down linearly over that exact wall-clock duration, then
+  hard-stops -- with zero dependency on the wave's own remaining length. CNA previously did the
+  opposite of both: any active cue always got a synthetic "wait for the wave to naturally finish"
+  tail, regardless of whether any fade was actually authored.
+
+  Fixed properly: `XsbCue` (`XactTypes.hpp`) gained a `fadeOutMS` field, now retained by
+  `XactParser.cpp`'s complex-cue parsing (previously read-and-discarded); `Cue::StopInternal()`
+  now resolves it and only enters `State::Stopping` when it's nonzero (otherwise hard-stopping
+  immediately, matching FACT exactly for every case CNA can resolve); `ReconcileState()` gained a
+  real linear volume-ramp tick for an in-progress fade, ticked both lazily (every state getter,
+  as before) and now also per-frame via `AudioEngine::Update()` (so a fade visibly progresses even
+  if nothing else happens to query the cue), still never touching `waveBanksUsed_`/`AudioEngine`'s
+  registries from this const-context path (`P9-LIFECYCLE-001`'s hard rule). RPC-only release
+  timing (`maxRpcReleaseTime`) remains unimplemented -- tied to the pre-existing, separately-
+  accepted "RPC evaluated once, not continuously" deviation, a narrower remaining gap than before
+  this fix, not a new one.
+
+  Three existing test fixtures across `CueTests.cpp`/`AudioCategoryTests.cpp`/
+  `AudioEngineTests.cpp` were simple cues (always `fadeOutMS == 0`), so they stopped exercising a
+  real tail under the corrected logic -- converted each to a complex cue authoring a real 300ms
+  `fadeOutMS` instead (`"LongCue"`, `"P9StopCategoryLongCue"`, `"P9StopLongCue"`, all still backed
+  by the same 1-second real wave, so a fade-driven `Stopped` transition within a few hundred ms
+  can only be the timer, never natural completion). Renamed/rewrote
+  `StopAsAuthoredTransitionsFromStoppingToStoppedOnceTailFinishes` to `...OnceFadeTimerElapses`;
+  added `StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate` (locks in the new simple-cue-is-
+  immediate behavior), `StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration`, and
+  `AudioEngineTest.UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQuery` (proves
+  `Update()` itself ticks the fade, via a raw field read rather than a reconciling getter). The
+  volume-ramp checks needed to sleep to ~80% elapsed, not 50%: the fixtures' sound-level and
+  category-0 volume bytes are both `0xFF`, whose log-centibel amplitude conversion exceeds 1.0
+  individually, so their product stays clamped to a flat `1.0` until the fade multiplier drops
+  below ~0.25 -- found via a temporary debug trace after the first version of the test failed
+  unexpectedly, not by inspection.
+
+  `git stash` on the 5 production files confirmed 4 of 5 new/rewritten tests fail against the
+  pre-fix code (the 5th, `AudioCategoryTests.cpp`'s pre-existing
+  `StopAsAuthoredOnCategoryLeavesRealActiveCueStoppingNotStopped`, correctly passes either way --
+  its own assertions don't happen to distinguish old vs. new logic). Full suite 3263/3265 (2
+  expected skips), audio subset 389/389 under ASan+UBSan. One unrelated, pre-existing flake
+  observed once during a full-suite run and confirmed non-reproducing over 10 isolated repeats
+  plus 3 more clean full-suite runs:
+  `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (short
+  `"Apply3DCue"` fixture racing full-suite scheduling load, doesn't call `Stop()`, unrelated).
+  `CHECKLIST.md`'s corresponding accepted-deviation row was rewritten (not removed): fadeOutMS
+  timing is now real and correct; RPC-only release timing remains unimplemented, a narrower gap
+  than before. **With this, zero open decisions remain on this branch** (see §4). Full detail:
+  `plan_audio.md`'s `P9-STOP-010` note (resolved addendum).
+- **`P9-LIFECYCLE-013` (resolved, post-Fáze-9)** (`3df604ba`) — the first of the two open
   decisions left after Fáze 9 closed; the user was asked which to pursue next and chose this one.
   Real FACT (`FACTCue_Pause`, `FACT.c`) only ever sets/clears the `PAUSED` bit, never touching
   `PLAYING` -- so `IsPlaying`+`IsPaused` can both be `true` simultaneously in real XNA/FNA. CNA
@@ -510,19 +566,15 @@ every item above: `plan_audio.md`'s "Phase 9" section.
 user-specified, already-scoped work queued up — the next task needs to come from the user (see
 §8).
 
-One genuine **open decision** (not a task) remains, recorded in `plan_audio.md`, and requires the
-user's input before implementing either way:
-1. `Cue::Stop(AsAuthored)`'s release-tail *duration* is however long the wave naturally takes to
-   finish, not an authored `fadeOutMS`/RPC-release curve — `XactParser` doesn't retain per-cue
-   fade timing at all. Fixing it would need parser changes plus a new time-driven update
-   mechanism. (`P9-STOP-010`)
-
-(Two other open decisions were asked and resolved: real per-track XACT filter `OneOverQ` fidelity
-vs. a fixed-Q narrowing, resolved in favor of real fidelity — see `P9-XACT-011` in §3,
-`INTERNAL_apply{Low,Band,High}PassFilter` now takes a real `oneOverQ` parameter; and
-`Cue::IsPlaying`/`IsPaused` mutual exclusivity, resolved in favor of matching real FACT's
-independent-bit semantics — see `P9-LIFECYCLE-013` in §3, `Cue::Pause()` no longer clears
-`IsPlaying`.)
+**Zero open decisions remain on this branch.** All three that ever came up were asked and
+resolved: real per-track XACT filter `OneOverQ` fidelity vs. a fixed-Q narrowing, resolved in
+favor of real fidelity — see `P9-XACT-011` in §3, `INTERNAL_apply{Low,Band,High}PassFilter` now
+takes a real `oneOverQ` parameter; `Cue::IsPlaying`/`IsPaused` mutual exclusivity, resolved in
+favor of matching real FACT's independent-bit semantics — see `P9-LIFECYCLE-013` in §3,
+`Cue::Pause()` no longer clears `IsPlaying`; and `Cue::Stop(AsAuthored)`'s release-tail timing,
+resolved in favor of real authored `fadeOutMS` timing — see `P9-STOP-010` in §3, a cue with a real
+authored fade now ramps volume down over that exact duration and a cue with none hard-stops
+immediately, matching FACT exactly.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, under separate, active, concurrent development by another session. A build
@@ -557,7 +609,7 @@ ever lacks this commit, that one CNA test will fail (or, pre-fix, could throw
 | **Accepted deviation** | `Apply3D`'s pan ignores listener/emitter `Forward`/`Up` orientation entirely (world-space X displacement only) -- real X3DAudio computes azimuth relative to the listener's actual facing direction; `Forward`/`Up` are stored but never read for panning. Newly found, not previously documented | `CHECKLIST.md`, `P9-3D-009` |
 | **Confirmed, fixed (in `../sharp-runtime`)** | `System::EventHandler<T>::Raise()` iterated its live handler list directly -- a handler removing itself or another handler mid-callback (a common "handle once" pattern) dereferenced an already-destroyed `std::function`, observed as an escaping `std::bad_function_call`. Affects every event in the framework, not just Audio's `BufferNeeded` | `P9-DYNAMIC-007`, sharp-runtime commit `8342a2c` (not pushed) |
 | **Confirmed, fixed** | `Cue::IsPlaying`/`IsPaused` used to be mutually exclusive (`Pause()` cleared `IsPlaying`); real FACT never clears `PLAYING` when pausing, so both can be `true` at once. Fixed by splitting `paused_` into an independent flag layered on top of `State::Playing` | `P9-LIFECYCLE-013` (resolved) |
-| **Accepted deviation** | Authored-stop tail duration ≠ real `fadeOutMS` curve (not parsed/retained at all) | `CHECKLIST.md`, `P9-STOP-010` |
+| **Confirmed, fixed** | Authored-stop tail duration used to be however long the wave naturally took to finish, ignoring the authored `fadeOutMS` entirely. Fixed: `fadeOutMS` is now parsed/retained and drives a real linear volume ramp; a cue with no authored fade (every simple cue) now hard-stops immediately, matching FACT exactly. RPC-only release timing remains unimplemented (tied to the RPC-evaluated-once deviation below) | `P9-STOP-010` (resolved) |
 | **Accepted deviation** | RPC volume/pitch curves evaluated once at `Play()` time, not continuously re-evaluated while playing (no per-frame `Cue` update tick exists) | `CHECKLIST.md`, `P9-XACT-005/006/007` |
 | **Confirmed, implemented** | Per-track XACT low/high/band-pass filter (frequency + Q, real) now wired at `Cue::Play()` time — see §3; still one-shot (no continuous per-tick re-eval) and not RPC-filter-frequency/Q overridable | `CHECKLIST.md`, `P9-XACT-011` |
 | **Accepted deviation** | A parsed per-track filter's type can only ever decode to low-pass or high-pass, never band-pass — replicates a likely-genuine upstream FAudio bit-decode quirk as-is | `CHECKLIST.md`, `P9-XACT-010/011` |
@@ -688,13 +740,14 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 ## 8. Next smallest tasks
 
 **Fáze 9 is fully complete — all 11 of 11 groups closed** (`plan_audio.md`'s "Phase 9" section,
-§4). `Cue::IsPlaying`/`IsPaused` coexistence (one of the two post-Fáze-9 open decisions) has since
-been resolved and fixed (§3, `P9-LIFECYCLE-013`). There is no more user-specified, already-scoped
-work queued up on this branch. Do not invent a "Fáze 10" or start any new audit/hardening pass
-unprompted — ask the user what they want next. Reasonable options to offer if asked: the one
-remaining open decision in §4 (authored-stop fade-curve timing, `P9-STOP-010`); one of the
-untested-deviation items `P9-AUDIT-004` surfaced (§3/§5) if the user wants one turned into real
-fidelity work; or something entirely outside Audio.
+§4), and **both post-Fáze-9 open decisions have since been resolved and fixed**
+(`Cue::IsPlaying`/`IsPaused` coexistence, `P9-LIFECYCLE-013`; `Cue::Stop(AsAuthored)`'s authored
+`fadeOutMS` timing, `P9-STOP-010` — see §3). **Zero open decisions remain, and there is no more
+user-specified, already-scoped work queued up on this branch.** Do not invent a "Fáze 10" or start
+any new audit/hardening pass unprompted — ask the user what they want next. Reasonable options to
+offer if asked: one of the untested-deviation items `P9-AUDIT-004` surfaced (§5) if the user wants
+one turned into real fidelity work (e.g. RPC-only release timing, still unimplemented per
+`P9-STOP-010`'s note); or something entirely outside Audio.
 
 ---
 
@@ -702,11 +755,11 @@ fidelity work; or something entirely outside Audio.
 
 - **No re-running a fresh full "line-by-line vs FNA" audit.** Fáze 7 and Fáze 8 already did two
   rounds of that. Fáze 9 is a different, already-scoped hardening pass — don't invent a "Fáze 10".
-- **No implementing the one remaining open decision in §4** (authored-stop fade-curve timing,
-  `P9-STOP-010`) **without asking the user first** — it would need parser changes plus a new
-  time-driven update mechanism. (Two other such decisions were asked and resolved: XACT filter
-  `OneOverQ` fidelity vs. narrowing — see `P9-XACT-011`; and `Cue::IsPlaying`/`IsPaused`
-  coexistence — see `P9-LIFECYCLE-013`.)
+- **No re-litigating a resolved open decision without the user asking first.** All three that ever
+  came up on this branch are resolved: XACT filter `OneOverQ` fidelity vs. narrowing — see
+  `P9-XACT-011`; `Cue::IsPlaying`/`IsPaused` coexistence — see `P9-LIFECYCLE-013`; and
+  `Cue::Stop(AsAuthored)`'s authored `fadeOutMS` timing — see `P9-STOP-010`. If a *new* open
+  decision comes up in future work, flag it and ask before implementing, per the same pattern.
 - **No Media namespace work** — explicitly out of scope for this branch.
 - **No FAudio/FACT migration** — the backend is SDL3_mixer by design.
 - **No real 3D HRTF, Doppler, or reverb implementation** — SDL3_mixer cannot do it; keep as
@@ -727,22 +780,28 @@ all 11 of 11 task groups closed (P9-LIFECYCLE, P9-CATEGORY, P9-VALIDATION, P9-DO
 P9-STOP, P9-XACT 15/15, P9-3D 9/9, P9-HARDWARE 6/6, P9-DYNAMIC 9/9, P9-AUDIT 5/5). P9-AUDIT (the
 last group) ran as four parallel forks plus a synthesis pass, and found one more real bug
 (Microphone::GetData's int32 offset+count overflow, same class as P9-VALIDATION-003, now fixed)
-plus a stale Doppler doc-comment and some internal-backend notes. Post-Fáze-9, the user was asked
-which of the two remaining open decisions to pursue and chose Cue::IsPlaying/IsPaused coexistence
-(P9-LIFECYCLE-013) -- now resolved and fixed: Cue::Pause() no longer clears IsPlaying, matching
-real FACT's independent PLAYING/PAUSED bits. See §3 for full detail on all of the above. No known
-build/test blocker, and no more Fáze 9 work queued up.
+plus a stale Doppler doc-comment and some internal-backend notes. Post-Fáze-9, the user chose to
+resolve both remaining open decisions rather than leave them open: Cue::IsPlaying/IsPaused
+coexistence (P9-LIFECYCLE-013) -- Cue::Pause() no longer clears IsPlaying, matching real FACT's
+independent PLAYING/PAUSED bits; and Cue::Stop(AsAuthored)'s authored fadeOutMS timing
+(P9-STOP-010) -- a cue with a real authored fade now ramps volume down over that exact wall-clock
+duration via a real linear tick (both lazy, on every state getter, and per-frame, via
+AudioEngine::Update()), and a cue with no authored fade (every simple cue) now hard-stops
+immediately, matching FACT exactly. **Zero open decisions remain on this branch.** See §3 for full
+detail on all of the above. No known build/test blocker, and no more Fáze 9 (or post-Fáze-9) work
+queued up.
 
-1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3260/3262 pass, audio-scoped
-   subset 386/386 under ASan+UBSan) -- rebuild and rerun SDL_AUDIODRIVER=dummy
+1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3263/3265 pass, audio-scoped
+   subset 389/389 under ASan+UBSan) -- rebuild and rerun SDL_AUDIODRIVER=dummy
    ./cmake-build-debug/CnaTests (or the `tests` CMake preset, §7) to check for drift since this
    was last updated. If a test involving BufferNeeded/EventHandler fails unexpectedly, check
    whether ../sharp-runtime still has commit 8342a2c (§4's dependency note) before assuming an
    audio regression.
-2. Since Fáze 9 has no more open groups and P9-LIFECYCLE-013 is now resolved, do NOT start a new
-   audit/hardening pass unprompted -- ask the user what they want next (§8 has some reasonable
-   options to offer: the one remaining open decision in §4, one of the untested-deviation items
-   P9-AUDIT-004 surfaced, or something outside Audio entirely).
+2. Since Fáze 9 has no more open groups and zero open decisions remain, do NOT start a new
+   audit/hardening pass unprompted -- ask the user what they want next (§8 has a reasonable
+   option to offer: one of the untested-deviation items P9-AUDIT-004 surfaced, e.g. RPC-only
+   release timing which P9-STOP-010's note flags as still unimplemented; or something outside
+   Audio entirely).
 3. Make one small, verified improvement: if it's an audit, write the finding into plan_audio.md;
    if it's a fix, add/extend a test, verify with the git-stash pattern (§7), run the relevant
    build/test command, and run ASan+UBSan if it touches memory lifetime or ownership.

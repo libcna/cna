@@ -459,8 +459,15 @@ namespace
         return data;
     }
 
+    // Fade duration authored on "P9StopCategoryLongCue" below (P9-STOP-010) -- far shorter than
+    // the underlying wave's 1 second, so reaching Stopped this fast can only be the authored fade
+    // timer elapsing, never the wave naturally finishing.
+    constexpr uint16_t kP9StopCategoryLongCueFadeOutMS = 300;
+
     // Same layout as BuildVolXsbFixtureBytes, but referencing kP9StopLongWaveBankName and named
-    // "P9StopCategoryLongCue".
+    // "P9StopCategoryLongCue". Unlike a simple cue, this is a COMPLEX cue (CUE_FLAG_SINGLE_SOUND
+    // set) authoring a real fadeOutMS (P9-STOP-010) -- a simple cue's format has no such field at
+    // all (always 0), so it could never exercise real Stop(AsAuthored) fade timing.
     std::vector<uint8_t> BuildP9StopLongXsbFixtureBytes()
     {
         constexpr uint32_t headerSize   = 74;
@@ -469,8 +476,8 @@ namespace
 
         const uint32_t wavebankNameOffset = baseOffset;
         const uint32_t soundOffset        = wavebankNameOffset + 64;
-        const uint32_t cueSimpleOffset    = soundOffset + 12;
-        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueComplexOffset   = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueComplexOffset + 15;
         const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
         const std::string cueName = "P9StopCategoryLongCue";
 
@@ -483,8 +490,8 @@ namespace
         for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
         AppendU8(data, 0);   // platform
 
-        AppendU16(data, 1); // cueSimpleCount
-        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 1); // cueComplexCount
         AppendU16(data, 0); // unknown
         AppendU16(data, 0); // cueTotalAlign
         AppendU8(data, 1);  // wavebankCount
@@ -492,8 +499,8 @@ namespace
         AppendU16(data, 0); // cueNameLength
         AppendU16(data, 0); // unknown
 
-        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
-        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, static_cast<int32_t>(cueComplexOffset));
         AppendS32(data, -1); // cueNameOffset (unused by the parser)
         AppendS32(data, 0);  // unknown
         AppendS32(data, -1); // variationOffset
@@ -515,8 +522,15 @@ namespace
         AppendU16(data, 0);   // waveIdx
         AppendU8(data, 0);    // wbIdx
 
-        AppendU8(data, 0);
-        AppendU32(data, soundOffset);
+        // Complex cue "P9StopCategoryLongCue": single-sound (CUE_FLAG_SINGLE_SOUND), sbCode
+        // points directly at the one real sound above, authoring a real fadeOutMS.
+        AppendU8(data, 0x04); // flags: CUE_FLAG_SINGLE_SOUND
+        AppendU32(data, soundOffset); // sbCode
+        AppendU32(data, 0);   // transitionOffset
+        AppendU8(data, 0xFF); // instanceLimit
+        AppendU16(data, 0);   // fadeInMS
+        AppendU16(data, kP9StopCategoryLongCueFadeOutMS); // fadeOutMS
+        AppendU8(data, 0);    // maxInstanceBehavior
 
         AppendU32(data, cueNameStrOffset);
         AppendU16(data, 0);

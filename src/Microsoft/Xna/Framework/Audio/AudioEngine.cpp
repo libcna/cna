@@ -202,9 +202,17 @@ namespace Microsoft::Xna::Framework::Audio
         // P9-LIFECYCLE-008/009: mirrors FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork,
         // which is what actually destroys managed/fire-and-forget cues once FACT_STATE_STOPPED
         // (FACT_internal.c), instead of only sweeping lazily on a bank's next PlayCue() call.
-        // Cue-level Playing/Paused/Stopped reconciliation itself is live and per-call (see
-        // Cue::ReconcileState()), so it needs no help from Update() to stay accurate.
+        // Cue-level Playing/Paused/Stopped reconciliation itself is also live and per-call (see
+        // Cue::ReconcileState()), so a query never sees stale state -- but P9-STOP-010's real
+        // authored-fadeOutMS volume ramp needs an actual per-frame tick to be *audible* as it
+        // progresses, not just correct whenever next queried: without this, a cue nobody happens
+        // to query mid-fade would jump straight from full volume to silent the next time
+        // something did query it, instead of smoothly ramping down in real time. Real FACT's own
+        // mixer thread ticks every active fade continuously; CNA's equivalent tick point is here,
+        // matching the same "call Update() every frame" contract FNA games already follow.
         if (!xactImpl_) return;
+        for (auto* cue : xactImpl_->activeCues)
+            if (cue) cue->ReconcileState();
         for (auto* sb : xactImpl_->soundBanks)
             if (sb) sb->SweepFireAndForget();
     }
