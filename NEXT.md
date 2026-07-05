@@ -194,15 +194,18 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 | Task 333 | Verified `RenderTarget2D` can be sampled as `Texture2D` after unbinding. EasyGL (Task 87) and Vulkan (Task 148) already had passing pixel tests doing exactly this — reconfirmed, no change needed. **Found and confirmed a new, severe, previously-only-suspected Bgfx bug** (Task 179's test had an informal comment guessing at it): `BgfxSpriteBatchBackend::Draw` casts a `RenderTarget2D`'s backend (`BgfxRenderTargetBackend`) to the unrelated `BgfxTextureBackend` type via `static_cast`, reading its `fbo` (framebuffer handle) where `textureHandle` should be — confirmed by direct memory-layout analysis (both are `struct { uint16_t idx; }`, so it compiles and doesn't crash, but samples a framebuffer-pool handle as if it were a texture-pool handle). New `bgfx_render_target_sample_test.cpp` (`Bgfx_RenderTarget2D_SampleAfterUnbind`) confirms no crash (consistent with silent wrong-data sampling, not an error). Tracked as Task 873, not fixed here (needs a scoped Bgfx-only fix plus non-visual verification, since Bgfx has no pixel readback). Rebuilt and fully re-verified Bgfx this session: 3223/3223 (100%), first full run in several sessions. EasyGL: 3311/3314 (unchanged). Vulkan: 3237/3250 (unchanged). |
 | Task 332 | Audited `RenderTargetCube` against FNA's `RenderTargetCube.cs` line-by-line — same shape as Task 331, one class over. Most of it already matched FNA (unlike `RenderTarget2D`, `RenderTargetCube` already had `IsContentLost`/`ContentLost`). **Fixed**: `GetTypeName()` was never overridden, so a `RenderTargetCube` reported itself as `"...TextureCube"` — added the override. **Confirmed the known lead** (`mipMap`/`MultiSampleCount` silently ignored) is the same shape as Tasks 336/337, already covered by those general tasks, not new. **Found and deliberately did NOT fix** (architecture-blocked): tried to add `RenderTarget2D`'s `Dispose(bool)` "still bound" guard, but it doesn't compile — `RenderTargetBinding` only stores `Texture*`, and `RenderTargetCube` doesn't inherit `Texture` (Task 863). Also confirmed `GraphicsDevice::SetRenderTarget(RenderTargetCube*, CubeMapFace)` never records the binding at all, so `GetRenderTargets()` can never see a bound cube face — a direct consequence of Task 863, not a new independent bug. New test `examples/easygl_rendertargetcube_properties_test.cpp` (`EasyGL_RenderTargetCube_Properties`/`Vulkan_RenderTargetCube_Properties`, 15/15 both backends). EasyGL ctest: 3311/3314. Vulkan ctest: 3237/3250 (both: only documented pre-existing failures). |
 | `3fdb6c6` Task 331 | **Opens Phase 39.** Audited `RenderTarget2D` against FNA line-by-line. Fixed a real gap: added missing `IsContentLost`/`ContentLost` (mirroring `RenderTargetCube`). Found and deliberately deferred two gaps to dedicated tasks: `mipMap` ignored (Task 336), `MultiSampleCount` not clamped/wired (Task 337). New pixel-free property test on both backends (15/15 pass each). |
-| `e81d443` Task 330 | **Closes Phase 38.** Confirmed (no bug) `RasterizerState` has no freeze/immutability enforcement, matching FNA. Wrote `docs/rasterizerstate-support.md` synthesizing Phase 38 — found **no new tracked bugs**, only test-coverage gaps. |
-| `4ab72c7` Task 326 | Registered the existing backend-agnostic `FillMode` pixel test for EasyGL too (previously Vulkan-only). No bug found. |
-| `14e58da` Tasks 323–325 | One `CullMode` pixel test (contrast-checked across `None`/`CullClockwiseFace`/`CullCounterClockwiseFace`, 6/6 both backends) satisfies all 3 tasks. Found (not fixed, out of scope) Task 318's quad-naming was backwards. |
-| `b61aee8` Task 322 | Extended `GraphicsDevice`'s default-`RasterizerState` test to the full 6-property surface. No bug. |
-| `c18b0f3` Task 321 | **Opens Phase 38.** Fixed the last portion of Task 866 (preset `Name` gap) — closes Task 866 entirely across all 4 state classes. |
-| `ba6011e` Task 320 | **Closes Phase 37.** `docs/depthstencilstate-support.md` synthesis. |
-| `6652573` Tasks 318–319 | 5th reconfirmation of Task 870 (Vulkan stencil fake). Fixed a `ReferenceStencil`-propagation bug (Task 309-shaped); found a 2nd universal bug — `ReferenceStencil` has zero backend connection anywhere (new Task 872). |
-| `95abf99`/`d86c1f4`/`c1d8e74`/`65d3d21`/`eccbb9e` Tasks 313–317 | Per-property `DepthStencilState` pixel tests; Task 313 discovered Task 870 (Vulkan depth/stencil almost entirely fake), reconfirmed 4 more times; Task 315 found and **fixed** a real bug (`SDL_GL_STENCIL_SIZE` never requested on EasyGL); found Task 871 (`Clear` ignores stencil). |
-| `a1bcf20` Tasks 311–312 | **Opens Phase 37.** Fixed `DepthStencilState`'s preset `Name` gap; fixed `GraphicsDevice`'s default `DepthStencilState`/`RasterizerState` never actually copying their FNA-specified presets. |
+
+Phase 38 (Tasks 321–330, `RasterizerState`): see `docs/rasterizerstate-support.md` and
+`GRAPHICS_TASKS.md`. Headline: no new bugs found — pure test-coverage closure (`CullMode`
+Tasks 323–325, `FillMode` Task 326, `RasterizerState` defaults Task 322, preset `Name` gap
+fix Task 321, closing confirmation Task 330 that `RasterizerState` has no freeze/immutability
+enforcement, matching FNA).
+
+Phase 37 (Tasks 311–320, `DepthStencilState`): see `docs/depthstencilstate-support.md` and
+`GRAPHICS_TASKS.md`. Headline: discovered and reconfirmed 5× that Vulkan's `DepthStencilState`
+support is almost entirely fake (Task 870); fixed a real EasyGL bug (`SDL_GL_STENCIL_SIZE` never
+requested, Task 315); found Task 871 (`Clear` ignores stencil) and Task 872 (`ReferenceStencil`
+has zero backend connection).
 
 Older history (Phases 34–36, Tasks 271–310): see `GRAPHICS_TASKS.md` and
 `docs/sampler-state-support.md`. Headline: Task 293 fixed a severe, project-wide bug (per-slot
@@ -214,7 +217,8 @@ Older history (Phases 34–36, Tasks 271–310): see `GRAPHICS_TASKS.md` and
 ## 4. Current blocker / main problem
 
 **There is no build-breaking or test-breaking blocker.** The repository builds and the test suites
-pass at the rates given in §2 on EasyGL and Vulkan (Bgfx unverified this session, last known-good).
+pass at the rates given in §2 on all 3 backends (EasyGL, Vulkan, Bgfx — all fully rebuilt and
+re-verified this session).
 
 The most significant *correctness* gap is architectural, not a build/test failure: `Texture3D`/
 `TextureCube` do not inherit `Texture` in CNA (they inherit `GraphicsResource` directly), which
