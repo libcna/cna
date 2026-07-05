@@ -1140,14 +1140,35 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   Full regression check: all 3212 non-skipped `CnaTests` still pass, and the existing
   Phase 10 synthetic integration test (`cna_test_avatar_real_render`) still passes
   unmodified — none of these fixes touched any faithful-XNA or previously-tested path.
-  **Not yet done:** only the male body is wired into the demo; Task 11.12 maps both
-  genders. The confirmed elbow/sleeve tear and zero-weight vertices (Task 11.6/11.7,
-  `tools/avatar_builder/README.md`) are unrelated content-quality gaps, untouched here.
+  **At the time this task closed, only the male body was wired into the demo — see
+  Task 11.12 immediately below, done in the same session.** The confirmed elbow/sleeve
+  tear and zero-weight vertices (Task 11.6/11.7, `tools/avatar_builder/README.md`) are
+  unrelated content-quality gaps, untouched here.
 
-- [ ] **Task 11.12** — Map `AvatarBodyType::Male`/`Female` to the two generated bodies at whatever
+- [x] **Task 11.12** — Map `AvatarBodyType::Male`/`Female` to the two generated bodies at whatever
   call-site convention makes sense (document the chosen approach in
   `docs/avatar-real-rendering-ext.md`, since Phase 8's faithful `AvatarDescription` doesn't carry
   real body-type data that could drive this automatically).
+  **Done:** new NOXNA `AvatarBodyTypeToContentNameEXT(AvatarBodyType)`
+  (`include`/`src/.../GamerServices/AvatarBodyTypeNamesEXT.hpp`/`.cpp`, mirroring the
+  existing `AvatarAnimationPresetToClipNameEXT` pattern) maps `Male`/`Female` to
+  `"avatar/male/avatar"`/`"avatar/female/avatar"` — the single, explicit call-site
+  convention; confirmed (by reading `AvatarDescription.cpp`) that
+  `getBodyTypeProperty()` truly never carries usable data (permanently lazy-inits to
+  `Female`, never parsed from `description_`), so deriving the mapping from it was never
+  an option, matching the task's own premise. 4 new unit tests
+  (`tests/.../AvatarBodyTypeNamesEXTTests.cpp`): both values map to the expected,
+  distinct, non-empty names; unrecognized values throw `ArgumentException`.
+  `examples/demo_avatar/`'s `AvatarDemo` now takes an `AvatarBodyType` constructor
+  argument (default `Male`); `Main.cpp` parses a new `--gender male|female` CLI flag and
+  passes it through. Generated and committed real female content into
+  `examples/demo_avatar/Content/avatar/female/` (Task 11.10's converter, unchanged).
+  **Verified beyond "the function returns the right string":** ran
+  `cna_demo_avatar --gender female` on a real X11 window and screenshotted it — renders
+  the distinct, correctly-scaled female body (0.93× overall, the coarse female-scale
+  placeholder from Task 11.7), proving the mapping actually drives real content
+  selection end to end, not just that the string differs. Full regression check: all
+  3216 non-skipped `CnaTests` pass (3212 + 4 new).
 
 ### 11c — Iteration (procedural variety) — deferred, lower priority than 11a/11b
 

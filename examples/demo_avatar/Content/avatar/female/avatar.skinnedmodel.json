@@ -1,0 +1,45 @@
+{
+  "skeleton": "skeleton.bin",
+  "parts": [
+    {
+      "name": "CNAAvatarBody",
+      "vertices": "CNAAvatarBody.verts.bin",
+      "indices": "CNAAvatarBody.idx.bin",
+      "vertexStride": 52
+    },
+    {
+      "name": "CNAAvatarHair",
+      "vertices": "CNAAvatarHair.verts.bin",
+      "indices": "CNAAvatarHair.idx.bin",
+      "vertexStride": 52
+    },
+    {
+      "name": "CNAAvatarPants",
+      "vertices": "CNAAvatarPants.verts.bin",
+      "indices": "CNAAvatarPants.idx.bin",
+      "vertexStride": 52
+    },
+    {
+      "name": "CNAAvatarShirt",
+      "vertices": "CNAAvatarShirt.verts.bin",
+      "indices": "CNAAvatarShirt.idx.bin",
+      "vertexStride": 52
+    },
+    {
+      "name": "CNAAvatarShoes",
+      "vertices": "CNAAvatarShoes.verts.bin",
+      "indices": "CNAAvatarShoes.idx.bin",
+      "vertexStride": 52
+    }
+  ],
+  "animations": [
+    {
+      "name": "Stand0",
+      "clip": "clips/Stand0.clip.bin"
+    },
+    {
+      "name": "Wave",
+      "clip": "clips/Wave.clip.bin"
+    }
+  ]
+}

@@ -1,10 +1,14 @@
 #include "AvatarDemo.hpp"
 
+#include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
+
 #include <cmath>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using Microsoft::Xna::Framework::GamerServices::AvatarAppearanceEXT;
+using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
+using Microsoft::Xna::Framework::GamerServices::AvatarBodyTypeToContentNameEXT;
 using Microsoft::Xna::Framework::GamerServices::AvatarRenderer;
 using Microsoft::Xna::Framework::Input::Keyboard;
 
@@ -17,7 +21,8 @@ namespace
     constexpr float kTargetHeight = 0.9f; // roughly chest height on our ~1.7m-tall avatar
 }
 
-AvatarDemo::AvatarDemo()
+AvatarDemo::AvatarDemo(AvatarBodyType bodyType)
+    : bodyType_(bodyType)
 {
     static constexpr int FPS = 60;
     Game::setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(static_cast<long>(500000L * 20 / FPS)));
@@ -35,13 +40,15 @@ void AvatarDemo::Initialize()
 
 void AvatarDemo::LoadContent()
 {
-    // Resolves to Content/avatar/male/avatar.skinnedmodel.json — real content
-    // produced by tools/avatar_builder/generate_avatar.py + convert_avatar.py
-    // (Tasks 11.1-11.10), not a synthetic fixture. ContentManager's default
+    // AvatarBodyTypeToContentNameEXT (Task 11.12) maps bodyType_ to
+    // "avatar/male/avatar" or "avatar/female/avatar", resolving to
+    // Content/avatar/<gender>/avatar.skinnedmodel.json — real content produced
+    // by tools/avatar_builder/generate_avatar.py + convert_avatar.py (Tasks
+    // 11.1-11.10), not a synthetic fixture. ContentManager's default
     // RootDirectory ("Content") already matches where CMake copies this demo's
     // own Content/ directory next to the built executable.
     auto& content = getContentProperty();
-    model_ = content.Load<std::shared_ptr<SkinnedModelEXT>>("avatar/male/avatar");
+    model_ = content.Load<std::shared_ptr<SkinnedModelEXT>>(AvatarBodyTypeToContentNameEXT(bodyType_));
 
     auto& device = getGraphicsDeviceProperty();
     renderer_ = std::make_unique<AvatarRenderer>(nullptr);

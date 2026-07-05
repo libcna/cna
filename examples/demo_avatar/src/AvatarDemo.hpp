@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
@@ -20,14 +21,20 @@
 // AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT (Phase 10) and the
 // procedurally-generated avatar content (Phase 11a, tools/avatar_builder/ +
 // tools/avatar_asset_pipeline/convert_avatar.py, Task 11.10) actually work
-// together: loads Content/avatar/male/avatar.skinnedmodel.json via
+// together: loads Content/avatar/<gender>/avatar.skinnedmodel.json via
 // ContentManager and draws it, animated, in a real window — not another
 // headless pixel-readback integration test (see
 // examples/avatar_real_render_integration_test.cpp for that).
+//
+// Task 11.12: which body loads is driven by an AvatarBodyType passed to the
+// constructor (see Main.cpp's --gender flag), mapped to a ContentManager
+// asset name via AvatarBodyTypeToContentNameEXT — not by AvatarDescription,
+// whose faithful getBodyTypeProperty() never carries real body-type data.
 class AvatarDemo : public Microsoft::Xna::Framework::Game
 {
 public:
-    AvatarDemo();
+    explicit AvatarDemo(Microsoft::Xna::Framework::GamerServices::AvatarBodyType bodyType =
+                             Microsoft::Xna::Framework::GamerServices::AvatarBodyType::Male);
     ~AvatarDemo() override;
 
     void Initialize() override;
@@ -41,6 +48,7 @@ private:
     using Keys = Microsoft::Xna::Framework::Input::Keys;
     using KbState = Microsoft::Xna::Framework::Input::KeyboardState;
 
+    Microsoft::Xna::Framework::GamerServices::AvatarBodyType bodyType_;
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::SkinnedModelEXT> model_;
     std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarRenderer> renderer_;
 

@@ -97,6 +97,14 @@ existing hand-rolled-JSON-parser convention (no new JSON library dependency) use
   reverse-engineering of the real, proprietary, undocumented 1021-byte `AvatarDescription`
   format (never public, never reconstructible from the reference assembly alone). No clothing
   customization is provided in this phase.
+- `AvatarBodyTypeToContentNameEXT(bodyType)` (Task 11.12) — maps `AvatarBodyType::Male`/
+  `Female` to the ContentManager asset name (`"avatar/male/avatar"` / `"avatar/female/avatar"`)
+  for the matching procedurally-generated body. The **only** place this mapping is made; a
+  caller picks the `AvatarBodyType` by whatever means it already has (a game's own
+  player-selection UI, a CLI flag like `examples/demo_avatar`'s `--gender`, etc.) — it is
+  **not** derived from `AvatarDescription::getBodyTypeProperty()`, which faithfully never
+  carries real body-type data (always lazily defaults to `Female`, matching the real XNA
+  implementation's undocumented, never-populated description format).
 
 ### Backend support
 
@@ -150,11 +158,16 @@ rest pose (which must reduce to identity for every bone, by definition) and a he
 clip bytes — not by static code review. See `tools/avatar_asset_pipeline/convert_avatar.py` and
 `ContentManager.cpp`'s `SkinnedModelTypeReader::Read()` for the fixes themselves.
 
-**Still not done:** only the male body is wired into the demo (`--gender female` content exists
-and converts/validates cleanly, per Task 11.10, but nothing loads it yet — Task 11.12 maps
-`AvatarBodyType::Male`/`Female` to the two generated bodies). The confirmed elbow/sleeve tear and
-zero-weight vertices (`tools/avatar_builder/README.md`) are unrelated content-quality gaps, not
-rendering bugs, and remain unfixed.
+**Task 11.12, done:** both bodies are now wired into the demo — `examples/demo_avatar --gender
+male|female` (default `male`) selects which `AvatarBodyType` to pass to `AvatarDemo`, which maps
+it to a ContentManager asset name via `AvatarBodyTypeToContentNameEXT` (see "GamerServices API
+surface" above) and loads accordingly. Confirmed with a real screenshot of `--gender female`:
+renders the distinct, correctly-scaled female body (0.93× overall, per
+`tools/avatar_builder/generate_avatar.py`'s coarse female-scale placeholder), not just "the
+mapping function returns a different string."
+
+The confirmed elbow/sleeve tear and zero-weight vertices (`tools/avatar_builder/README.md`) are
+unrelated content-quality gaps, not rendering bugs, and remain unfixed.
 
 ## What this explicitly is not
 

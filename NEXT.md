@@ -31,8 +31,11 @@ Getting there found and fixed **three real bugs no static review would have caug
 two in `convert_avatar.py` (a backwards matrix-convention "fix" from Task 11.10, and a
 missing bone-index remap) and — the actual show-stopper — an unspecified-C++-evaluation-
 order bug in `ContentManager.cpp` itself that silently scrambled animation keyframe
-data. Full detail in section 3. **Task 11.12 (map `AvatarBodyType::Male`/`Female` to the
-two generated bodies) is next** — see section 8.
+data. **Task 11.12 (map `AvatarBodyType::Male`/`Female` to the two generated bodies) is
+also done** — a new `AvatarBodyTypeToContentNameEXT` NOXNA helper, `examples/demo_avatar
+--gender male|female`, confirmed with a real screenshot of the distinct female body.
+**Phase 11b (Tasks 11.10-11.12) is now complete.** Full detail in section 3; Phase 11c
+(procedural variety — Tasks 11.13+, lower priority) is next — see section 8.
 
 **Architectural decisions that matter for future work:**
 - `CNA_GamerServices` and `CNA_Net` are separate CMake static libraries (gated by
@@ -101,7 +104,26 @@ freshly confirmed):
 
 ## 3. Recent changes
 
-- **Task 11.11 done (this session):** new `examples/demo_avatar/` (`cna_demo_avatar`,
+- **Task 11.12 done (this session) — Phase 11b complete:** new NOXNA
+  `AvatarBodyTypeToContentNameEXT(AvatarBodyType)`
+  (`include`/`src/.../GamerServices/AvatarBodyTypeNamesEXT.hpp`/`.cpp`, mirroring
+  `AvatarAnimationPresetToClipNameEXT`'s existing pattern) maps `Male`/`Female` to
+  `"avatar/male/avatar"`/`"avatar/female/avatar"` — the single, explicit call-site
+  convention. Confirmed (by reading `AvatarDescription.cpp`) that
+  `getBodyTypeProperty()` really never carries usable data (permanently lazy-inits to
+  `Female`), so deriving this from `AvatarDescription` genuinely wasn't an option, not
+  just an assumption. 4 new unit tests
+  (`tests/.../GamerServices/AvatarBodyTypeNamesEXTTests.cpp`). `examples/demo_avatar`'s
+  `AvatarDemo` now takes an `AvatarBodyType` constructor argument (default `Male`);
+  `Main.cpp` parses a new `--gender male|female` CLI flag. Generated and committed real
+  female content into `examples/demo_avatar/Content/avatar/female/` (Task 11.10's
+  converter, unchanged). **Verified beyond "the function returns the right string":**
+  ran `cna_demo_avatar --gender female` on a real X11 window and screenshotted it —
+  renders the distinct, correctly-scaled female body (0.93× overall), proving the
+  mapping drives real content selection end to end. Full regression: all 3216
+  non-skipped `CnaTests` pass (3212 + 4 new). `plan_net.md` Task 11.12 checked off.
+  **This completes Phase 11b (Tasks 11.10-11.12) in full.**
+- **Task 11.11 done:** new `examples/demo_avatar/` (`cna_demo_avatar`,
   gated like `cna_test_avatar_real_render` on `CNA_ENABLE_NET` + EasyGL/Vulkan) loads
   real Task 11.10 content (`Content/avatar/male/avatar.skinnedmodel.json`, committed
   into the demo's own `Content/`) via `ContentManager`, calls
@@ -313,26 +335,27 @@ freshly confirmed):
 
 ## 4. Current blocker / main problem
 
-**No technical blocker. Phase 11a is complete (Tasks 11.1-11.9) and Phase 11b is well
-underway (Tasks 11.10-11.11 done).** A real, procedurally-generated, animated avatar now
-renders correctly in a real window via `examples/demo_avatar/` — the whole content
-pipeline (Blender generation → glTF export → `convert_avatar.py` → `ContentManager` →
-`AvatarRenderer::DrawRealEXT`) is proven end-to-end for the male body. Three real bugs
-were found and fixed getting there (two in `convert_avatar.py`, one — the actual
-show-stopper — an evaluation-order bug in `ContentManager.cpp` itself); see section 3 for
-the full account, `plan_net.md` Task 11.11 for the exhaustive one.
+**No technical blocker. Phase 11a (Tasks 11.1-11.9) and Phase 11b (Tasks 11.10-11.12) are
+both complete.** A real, procedurally-generated, animated avatar renders correctly in a
+real window via `examples/demo_avatar --gender male|female` — the whole content pipeline
+(Blender generation → glTF export → `convert_avatar.py` → `ContentManager` →
+`AvatarRenderer::DrawRealEXT`) is proven end-to-end for **both** bodies, each confirmed
+with an actual screenshot. Four real bugs were found and fixed getting there (two in
+`convert_avatar.py`, one — the actual show-stopper — an evaluation-order bug in
+`ContentManager.cpp` itself, and none in the Task 11.12 mapping code, which worked first
+try); see section 3 for the full account, `plan_net.md` Tasks 11.11/11.12 for the
+exhaustive one.
 
 Confirmed, not-fixed defects so far (all documented in `tools/avatar_builder/README.md`,
 none of them blocking, all still reported as "OK" by `validate_gltf.py` since they don't
 make the file invalid): a real elbow/sleeve tear under bending (`Wave`'s peak fold, Task
 11.6); 32 zero-bone-weight vertices on the body and 24 over-4-influence vertices on the
 shirt (Task 11.7, confirmed by direct per-vertex inspection, silently handled by the glTF
-exporter's own `neutral_bone`/4-joint-trim mechanisms). All are automatic-weights
+exporter's own `neutral_bone`/4-joint-trim mechanisms). Both automatic-weights
 consequences to fix together in a future weight-painting pass, explicitly out of scope for
-Phase 11a/11b. The next session's job is to begin Task 11.12: map
-`AvatarBodyType::Male`/`Female` to the two generated bodies and document the chosen
-convention (`docs/avatar-real-rendering-ext.md`) — the female content already exists and
-converts/validates cleanly (Task 11.10), it just isn't wired into anything yet.
+Phase 11a/11b/11c. The next session's job is to begin Phase 11c (Task 11.13+ —
+procedural variety, e.g. parametric body variation; lower priority, deferred work) or, if
+the user wants it instead, Phase 11d (untracked/optional future work) — see section 8.
 
 ---
 
@@ -355,7 +378,8 @@ converts/validates cleanly (Task 11.10), it just isn't wired into anything yet.
 | Intentional stub (not a bug) | Every faithful `Avatar*` no-op/inert behavior (`Draw()` no-op, `State` always `Unavailable`, `CreateRandom()` not randomizing) — matches the real reference assembly exactly; never "fix" this. |
 | Resolved (Phase 11a) | Real avatar body/skeleton/animation content now exists: `tools/avatar_builder/` procedurally generates and exports `male_avatar.glb`/`female_avatar.glb` (skeleton, body, materials, morphs, hair/clothes, `Stand0`/`Wave` animations). |
 | Resolved (Phase 11b, Task 11.10) | `tools/avatar_asset_pipeline/convert_avatar.py` now converts both real `.glb`s to `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin` cleanly (`--embedded-clips` flag, new). |
-| Resolved (Phase 11b, Task 11.11) | The converted content is now proven to load and render correctly through the real C++ engine — `examples/demo_avatar/` renders a real, animated, correctly-proportioned humanoid on a real window. Only the male body is wired in; Task 11.12 does the female mapping. |
+| Resolved (Phase 11b, Task 11.11) | The converted content is now proven to load and render correctly through the real C++ engine — `examples/demo_avatar/` renders a real, animated, correctly-proportioned humanoid on a real window. |
+| Resolved (Phase 11b, Task 11.12) | Both `AvatarBodyType::Male`/`Female` are now wired to their generated bodies via `AvatarBodyTypeToContentNameEXT` and `examples/demo_avatar --gender male|female`; both confirmed rendering correctly with real screenshots (female is visibly smaller, 0.93× overall). Phase 11b (Tasks 11.10-11.12) is complete. |
 | Confirmed bug, fixed (Task 11.11) | `ContentManager.cpp`'s `SkinnedModelTypeReader` resolved every manifest-referenced path against the content root instead of the manifest's own directory — content in a subdirectory (e.g. `Content/avatar/male/`) failed to load at all. Fixed: resolve relative to the manifest file's own parent directory. |
 | Confirmed bug, fixed (Task 11.11) | `ContentManager.cpp`'s clip-keyframe reading relied on unspecified C++ function-argument evaluation order across multiple side-effecting `Read<float>()` calls (`Quaternion(Read<float>(), Read<float>(), Read<float>(), Read<float>())`), silently scrambling which bytes landed in which component — confirmed via a raw hex dump (true bytes were identity `(0,0,0,1)`, constructed value came out `(1,0,0,0)`, exactly reversed). Fixed by reading each float into its own named local first, sequentially, before constructing `Vector3`/`Quaternion`. This was the real show-stopper behind Task 11.11's "huge nonsensical close-up" symptom, not the two `convert_avatar.py` bugs below (which were real, but not the root cause). |
 | Confirmed bug, fixed (Task 11.11) | `convert_avatar.py`'s Task 11.10 "fix" (transposing `bind_pose_local` from glTF column-major to CNA row-major) was itself backwards — the two are byte-identical for the same transform. Also found: `inverseBindMatrices`/vertex `JOINTS_0` indices needed the same topological bone-order remap as Task 11.10's part-vertex fix. `bind_pose_local` is now derived directly from `inverse_bind_global` via matrix inversion (correct by construction). |
@@ -479,50 +503,38 @@ Phase 11 section and `tools/avatar_builder/README.md` itself — not re-narrated
 keep this file readable; see section 5 for the short version of the confirmed,
 not-yet-fixed defects.
 
-Phase 11b — CNA integration, feeding the real `.glb` through the actual engine instead
-of a synthetic fixture — in plan order:
+**Phase 11b (Tasks 11.10-11.12) is done in full** — `convert_avatar.py` converts both
+real `.glb`s cleanly, `examples/demo_avatar` renders both bodies correctly through the
+real engine on a real window, and `AvatarBodyTypeToContentNameEXT` maps
+`AvatarBodyType::Male`/`Female` to them. Four real bugs were found and fixed along the
+way (three in Task 11.11, none in Task 11.12's own mapping code). Full step-by-step
+detail is preserved in `plan_net.md`'s Phase 11 section (Tasks 11.10-11.12) — not
+re-narrated here; see section 5 for the short version of what was found, and section 3
+for this session's own account.
 
-1. ~~**Task 11.10 — Run `tools/avatar_asset_pipeline/convert_avatar.py` against
-   `male_avatar.glb`/`female_avatar.glb`.**~~ **Done.** Found and fixed two
-   real bugs: (a) part names leaked Blender's auto-generated mesh-data-block names
-   (`Cylinder`/`Cylinder.024`) instead of the intended object names — fixed at the
-   source in `generate_body.py`/`generate_clothes.py` (now also set `obj.data.name`);
-   (b) the CLI assumed one animation per file (MakeHuman/Mixamo layout) — added a
-   `--embedded-clips` flag plus a shared `_tracks_from_animation()` helper so CNA's own
-   single-file body+skeleton+both-clips layout converts too, without touching the
-   original `--body`/`--clip` path. Verified well beyond "doesn't crash": for both
-   genders, `skeleton.bin`'s parent indices are all valid with no truncation, every
-   part's vertex/index buffer size divides evenly by its stride, both `.clip.bin` files
-   have consistent track/key counts with no trailing bytes. Also caught and fixed a
-   stale doc bug this surfaced: `generate_animations.py` claimed "30fps"; Blender's
-   actual default scene fps is 24 (confirmed via `bpy`, cross-checked against the
-   exported clips' own duration fields).
+Phase 11c (procedural variety, deferred/lower priority than 11a/11b) and 11d (future,
+optional, not started) are next, in plan order:
 
-2. ~~**Task 11.11 — Wire the converted content through `ContentManager` and
-   `AvatarRenderer::EnableRealRenderingEXT`/`DrawRealEXT` in a real windowed demo.**~~
-   **Done this session.** New `examples/demo_avatar/` (`cna_demo_avatar`) loads real
-   content via `ContentManager`, calls `EnableRealRenderingEXT`/`SetAppearanceEXT`, and
-   `DrawRealEXT("Stand0"/"Wave", ...)` every frame. **Verified with actual screenshots**
-   on a real X11 window: a complete, correctly-proportioned, animated humanoid renders;
-   `Wave` visibly bends the arm. Found and fixed three real bugs getting there — two in
-   `convert_avatar.py` (a backwards matrix-transpose "fix" from Task 11.10, and a missing
-   bone-index remap for `inverseBindMatrices`/`JOINTS_0`) and, the actual show-stopper, an
-   unspecified-C++-evaluation-order bug in `ContentManager.cpp`'s clip-keyframe reading
-   that silently scrambled quaternion/vector components (confirmed via a raw hex dump).
-   All three verified by exact math (rest-pose bone transforms are now bit-for-bit
-   identity, confirmed both in C++ and independent Python replication), not "looks
-   right." Full regression check: all 3212 non-skipped `CnaTests` pass, the Phase 10
-   synthetic integration test still passes unmodified. See `plan_net.md` Task 11.11 for
-   the exhaustive blow-by-blow.
+1. **Task 11.13 — Parametric body variation (height, shoulder width, head size) as
+   script parameters.**
+   Goal: conceptually echo `AvatarDescription`'s customization intent, without
+   attempting to reconstruct its real, undocumented byte format.
+   Files: likely new parameters on `tools/avatar_builder/generate_body.py`/
+   `generate_avatar.py`, not a new script.
+   Verify: run the generator with varied parameters, confirm the exported body's
+   proportions actually change (not just that the script accepts new arguments).
 
-3. **Task 11.12 — Map `AvatarBodyType::Male`/`Female` to the two generated bodies. (next
-   task)**
-   Goal: pick and document a call-site convention (Phase 8's faithful
-   `AvatarDescription` doesn't carry real body-type data to drive this automatically) in
-   `docs/avatar-real-rendering-ext.md`. Female content already exists and
-   converts/validates cleanly (Task 11.10) — it just isn't wired into
-   `examples/demo_avatar/` or anywhere else yet.
-   Verify: the chosen mapping is documented and exercised by at least one test/demo path.
+2. **Task 11.14 — Additional hair styles / clothing variants as separate attachable
+   GLB pieces**, rather than baked into the base body.
+
+3. **Task 11.15 — Additional animation presets beyond `Stand0`/`Wave`**, working toward
+   covering more of the 31 `AvatarAnimationPreset` values with self-authored placeholder
+   motion.
+
+4. **Task 11.16 (optional, not scheduled) — Revisit MakeHuman or CharMorph/Blender** as
+   a higher-quality body *source*, only if the user explicitly wants to invest in
+   resolving the automation/permission questions from the original attempt (see section
+   3's history) — not assumed, not a default next step.
 
 ---
 
@@ -540,9 +552,9 @@ of a synthetic fixture — in plan order:
 - No touching the real Xbox 71-bone `AvatarRenderer::ParentBones` arrays (Phase 8) to try to
   "unify" them with Phase 11's new skeleton — they are deliberately separate, unrelated systems.
 - No skipping straight to polish (hair quality, clothing fit, facial detail, the confirmed
-  elbow/sleeve tear) — Phase 11b's end-to-end proof (Tasks 11.10-11.11) is done, but
-  improving content quality is still lower priority than finishing Task 11.12 (both
-  genders wired) first.
+  elbow/sleeve tear) — Phase 11b's end-to-end proof (Tasks 11.10-11.12, both genders) is
+  fully done, but a manual weight-painting pass is still explicitly out of scope for
+  Phase 11a/b/c; don't start it without the user asking.
 - No opening or executing anything in `/rv/tmp/charmorph_work/` (leftover from the abandoned
   CharMorph attempt, outside this repo) — not needed for Phase 11.
 - No broad refactors, unrelated cleanup, or API changes without checking compatibility.
@@ -552,33 +564,31 @@ of a synthetic fixture — in plan order:
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, in full, before doing anything else. Phase 11a+Tasks 11.10-11.11 are
-done — a real, procedurally-generated, animated avatar renders correctly through the real
-C++ engine in examples/demo_avatar/ (cna_demo_avatar), for the male body only. Getting
-there found and fixed three real bugs (two in convert_avatar.py, one — the actual
-show-stopper — an unspecified-C++-evaluation-order bug in ContentManager.cpp itself that
-silently scrambled animation keyframe data); see section 3's Task 11.11 entry for what was
-found and how it was verified (exact math, not "looks right" — rest-pose bone transforms
-are bit-for-bit identity).
+Read NEXT.md first, in full, before doing anything else. Phase 11a and Phase 11b (Tasks
+11.10-11.12) are both fully done — a real, procedurally-generated, animated avatar
+renders correctly through the real C++ engine for BOTH male and female bodies
+(examples/demo_avatar --gender male|female), each confirmed with a real screenshot.
+AvatarBodyTypeToContentNameEXT (Task 11.12) is the mapping; getting Task 11.11 working
+found and fixed three real bugs (see section 3/5) — none of that needs redoing.
 
-Start Task 11.12: map AvatarBodyType::Male/Female to the two generated bodies. Female
-content already exists and converts/validates cleanly (Task 11.10) but isn't wired into
-examples/demo_avatar/ or anywhere else. Pick a call-site convention (Phase 8's faithful
-AvatarDescription doesn't carry real body-type data to drive this automatically) and
-document it in docs/avatar-real-rendering-ext.md. A reasonable approach: extend
-AvatarDemo (or a small variant) to load whichever body a AvatarBodyType/--gender-style
-argument selects, proving the mapping actually works, not just that it's documented.
+Phase 11c (procedural variety, lower priority, deferred) is next: start Task 11.13
+(parametric body variation — height, shoulder width, head size — as script parameters on
+tools/avatar_builder/generate_body.py/generate_avatar.py, echoing AvatarDescription's
+customization intent without trying to reconstruct its real undocumented byte format).
+If the user would rather work on something else in Phase 11c/11d (Tasks 11.14-11.16) or a
+different phase entirely, confirm with them before assuming Task 11.13 is what's wanted —
+section 8 lists the full menu.
 
 Do not "fix" the confirmed elbow/sleeve tear or the zero-weight/over-4-influence vertices
-(section 5) as part of this task — those are known, out-of-scope content-quality issues
-for a later weight-painting pass. Do not refactor unrelated code. Do not re-attempt
-MakeHuman or CharMorph automation. Make one small, verified improvement (Task 11.12 from
-plan_net.md's Phase 11b), run the verification command for that task, and update NEXT.md
-after finishing.
+(section 5) as part of whatever task you pick — those are known, out-of-scope
+content-quality issues for a later weight-painting pass, not something Phase 11c/11d
+tasks need to solve incidentally. Do not refactor unrelated code. Do not re-attempt
+MakeHuman or CharMorph automation without explicit fresh sign-off (Task 11.16). Make one
+small, verified improvement, run the verification command for that task, and update
+NEXT.md after finishing.
 
 Build: cmake --build cmake-build-debug --target CnaTests
 Test:  cmake-build-debug/CnaTests
-Blender: blender --background --python tools/avatar_builder/generate_avatar.py -- --gender female --out /tmp/female_avatar.glb
-Convert: python3 tools/avatar_asset_pipeline/convert_avatar.py --body /tmp/female_avatar.glb --out examples/demo_avatar/Content/avatar/female --embedded-clips
-Run demo: cmake --build cmake-build-debug --target cna_demo_avatar && SDL_VIDEODRIVER=x11 DISPLAY=:0 cmake-build-debug/cna_demo_avatar
+Blender: blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out /tmp/male_avatar.glb
+Run demo (either gender): cmake --build cmake-build-debug --target cna_demo_avatar && SDL_VIDEODRIVER=x11 DISPLAY=:0 cmake-build-debug/cna_demo_avatar --gender female
 ```
