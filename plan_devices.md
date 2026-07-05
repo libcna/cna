@@ -790,7 +790,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 6: Android Native Sensor Bridge Foundation
 
-- [ ] DEVICES-0073 — Decide bridge implementation language (Java/Kotlin + JNI vs. pure C++ via NDK sensor APIs)
+- [x] DEVICES-0073 — Decide bridge implementation language (Java/Kotlin + JNI vs. pure C++ via NDK sensor APIs) (2026-07-05: **DECIDED — pure NDK native (`android/sensor.h`/`android/looper.h`), no JNI/Java at all.** Confirmed both headers exist in the NDK sysroot (`~/Android/Sdk/ndk/30.0.14904198/.../sysroot/usr/include/android/{sensor,looper}.h`) and expose every needed sensor type (`ASENSOR_TYPE_MAGNETIC_FIELD`/`ROTATION_VECTOR`/`GAME_ROTATION_VECTOR`/`GRAVITY`/`LINEAR_ACCELERATION`/`GYROSCOPE`) plus the full `ASensorManager`/`ASensorEventQueue` registration API — no Java bridge needed, unlike vibration (which genuinely required going through `Context.VIBRATOR_SERVICE`). This is simpler than Phase 3's rejected JNI approach and has zero JVM-attach/global-reference-leak risk (DEVICES-0084).)
   - **Area:** Android / Design
   - **Files:** design note appended to `docs/devices-native-backend-design.md`
   - **Required behavior:** Evaluate the NDK's native `ASensorManager`/`ASensorEventQueue` API (available without any JNI/Java bridge at all, unlike the vibration case) as the primary option before defaulting to a Java/Kotlin bridge — this may make Compass/Motion's Android backend significantly simpler than the originating brief assumed. Decide and document which approach this plan uses.
@@ -798,7 +798,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0013 (confirms SDL has no equivalent, so this bridge is genuinely new work)
 
-- [ ] DEVICES-0074 — Design the shared Android sensor bridge interface
+- [x] DEVICES-0074 — Design the shared Android sensor bridge interface (2026-07-05: implemented `Detail::AndroidSensorBridge` (`include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`, `src/.../AndroidSensorBridge.cpp`) — one shared class per Android sensor type, pull-model wrapping `ASensorManager`/`ASensorEventQueue`, pimpl'd so the header has zero Android-only `#include`s and compiles on every platform. `IsAvailable()`/`Start()`/`Stop()` shape mirrors `docs/devices-native-backend-design.md`'s `IDeviceSensorBackend` sketch closely enough to slot under `ICompassBackend`/`IMotionBackend` in Phase 7/8.)
   - **Area:** Android / Design
   - **Files:** `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp` (new, design/skeleton only)
   - **Required behavior:** One shared class registering/unregistering `ASensorEventQueue` listeners for arbitrary sensor types, delivering events into a caller-supplied callback; reusable by both the Compass and Motion backends (Phase 7/8) rather than duplicated per-sensor bridges.
@@ -806,7 +806,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0073
 
-- [ ] DEVICES-0075 — Implement sensor listener registration
+- [x] DEVICES-0075 — Implement sensor listener registration (2026-07-05: `Impl::Run()`'s `ASensorManager_getInstance()` (see DEVICES-0073's API-24-minimum reasoning) → `ASensorManager_getDefaultSensor()` → `ASensorManager_createEventQueue()` → `ASensorEventQueue_enableSensor()` sequence. Cross-compiled clean for Android (arm64-v8a, API 24, NDK r30); `llvm-nm` confirms every expected `ASensorManager_*`/`ASensorEventQueue_*`/`ALooper_*` symbol is pulled in as an undefined external, not just the inert desktop stub.)
   - **Area:** Android / Sensor bridge
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp` (new)
   - **Required behavior:** `ASensorManager_getInstanceForPackage()`/`ASensorManager_getDefaultSensor(type)`/`ASensorManager_createEventQueue()` wired correctly, matching Android NDK sample patterns.
@@ -814,7 +814,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only (no Android device in this container)
   - **Dependencies:** DEVICES-0074
 
-- [ ] DEVICES-0076 — Implement sensor listener unregistration
+- [x] DEVICES-0076 — Implement sensor listener unregistration (2026-07-05: `Impl::Run()`'s loop-exit cleanup calls `ASensorEventQueue_disableSensor()` then `ASensorManager_destroyEventQueue()` exactly once, symmetric with DEVICES-0075's registration. `Stop()` guarantees the worker thread reaches this cleanup before returning (via `join()`), except the documented self-join/detach boundary (DEVICES-0085).)
   - **Area:** Android / Sensor bridge
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - **Required behavior:** `ASensorEventQueue_disableSensor()`/`ASensorManager_destroyEventQueue()` called exactly once per registration, symmetric with DEVICES-0075.
@@ -822,7 +822,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only
   - **Dependencies:** DEVICES-0075
 
-- [ ] DEVICES-0077 — Implement timestamp conversion (Android sensor `int64_t` nanoseconds → `System::DateTimeOffset`)
+- [x] DEVICES-0077 — Implement timestamp conversion (Android sensor `int64_t` nanoseconds → `System::DateTimeOffset`) (2026-07-05: `AndroidSensorSample::Timestamp` is stamped with `System::DateTimeOffset::getUtcNowProperty()` at delivery time, deliberately never `ASensorEvent::timestamp` (a monotonic boot-time value) — explicitly cross-referencing Task P4-7's identical precedent in both the header's and `.cpp`'s doc comments.)
   - **Area:** Android / Sensor bridge
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - **Required behavior:** Android's `ASensorEvent.timestamp` is a monotonic `int64_t` in nanoseconds (boot time), **not** wall-clock — per this codebase's own established precedent (Task P4-7's fix for `Accelerometer`/`Gyroscope`), the bridge must use real wall-clock time for `Timestamp`, not the raw sensor timestamp, for consistency with every other reading class in this namespace.
@@ -830,7 +830,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidSensorBridgeTests` (fake-backend-based, see DEVICES-0083)
   - **Dependencies:** DEVICES-0075
 
-- [ ] DEVICES-0078 — Implement event queueing from the Android sensor thread to the calling thread
+- [x] DEVICES-0078 — Implement event queueing from the Android sensor thread to the calling thread (2026-07-05: **different threading model than `Detail::SdlSensorSubsystem<TSensor>`, documented explicitly.** `ALooper` is thread-affine (must be `ALooper_prepare()`'d on the same thread that later polls it) — rather than requiring CNA's game loop to pump a looper itself, `AndroidSensorBridge` owns a dedicated background thread that prepares and polls its own looper internally (bounded 100ms `ALooper_pollOnce()`, re-checking a stop flag each iteration), delivering samples via callback from that thread — so from the caller's perspective, delivery is still async/push-style, consistent with `Accelerometer`/`Gyroscope`'s existing SDL-callback-thread contract (a subscriber must already treat `CurrentValueChanged` as running on an unknown thread).)
   - **Area:** Android / Sensor bridge / Concurrency
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - **Required behavior:** Decide (and document) which thread delivers events — the NDK sensor API delivers via `ALooper_pollAll()`, meaning **the caller's thread that pumps the looper receives events**, not an arbitrary background thread the way SDL's `SDL_AddEventWatch()` works. This is an important, different threading model from `Accelerometer`/`Gyroscope` and must be documented clearly, not assumed identical.
@@ -838,7 +838,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (design/documentation-level task, verified by review)
   - **Dependencies:** DEVICES-0075
 
-- [ ] DEVICES-0079 — Add thread-safety rules for the bridge reusing `SensorBase<T>`'s existing locking
+- [x] DEVICES-0079 — Add thread-safety rules for the bridge reusing `SensorBase<T>`'s existing locking (2026-07-05: documented in `Start()`'s own doc comment — the bridge deliberately does **not** call `setCurrentValueProperty()` itself; that wiring belongs to whichever `Compass`/`Motion` Android backend (Phase 7/8) supplies the callback, so it can route through `SensorBase<T>`'s existing mutex-guarded setter exactly like `Accelerometer::DispatchSensorReading()` does. This bridge introduces no new lock of its own around sensor data — only `stopRequested_`/`looper_`, both plain `std::atomic`, guard its own lifecycle state.)
   - **Area:** Android / Sensor bridge / Concurrency
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - **Required behavior:** Route delivered readings through `setCurrentValueProperty()` exactly like `Accelerometer::DispatchSensorReading()` does — reuse the existing mutex-guarded setter, never invent a second locking scheme (mandatory per `docs/devices-native-backend-design.md`'s "Lifecycle" note).
@@ -846,7 +846,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** covered by DEVICES-0083's fake-backend tests
   - **Dependencies:** DEVICES-0078
 
-- [ ] DEVICES-0080 — Implement lifecycle hooks tied to `Dispose()`/destructor
+- [x] DEVICES-0080 — Implement lifecycle hooks tied to `Dispose()`/destructor (2026-07-05: `AndroidSensorBridge::~AndroidSensorBridge()` calls `Stop()`, so a bridge instance always cleans up when destroyed. The actual `ClaimDisposalOnce()`/`WaitForDisposalToComplete()` wiring into a concrete `Compass`/`Motion`'s `Dispose(bool)` override happens in Phase 7/8, once those classes actually own a bridge instance — this task's scope (the bridge's own lifecycle primitive) is complete; the integration is intentionally deferred, not forgotten.)
   - **Area:** Android / Sensor bridge
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - **Required behavior:** Bridge unregisters listeners inside the owning `Compass`/`Motion`'s `Dispose(bool)` override, using `ClaimDisposalOnce()`/`WaitForDisposalToComplete()` exactly as `Accelerometer`/`Gyroscope` do — reuse, don't reinvent.
@@ -854,7 +854,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** covered once wired into Compass/Motion (Phase 7/8)
   - **Dependencies:** DEVICES-0076
 
-- [ ] DEVICES-0081 — Implement sensor-rate selection from `TimeBetweenUpdates`
+- [x] DEVICES-0081 — Implement sensor-rate selection from `TimeBetweenUpdates` (2026-07-05: extracted `ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()` as a pure, header-only function (mirroring `Detail::ConvertAndroidPortraitToXnaLandscape()`'s precedent) rather than inlining the conversion inside `Impl::Run()`, specifically so it's host-testable without a real Android sensor queue. 4 new tests in `AndroidSensorBridgeTests.cpp` cover the normal case, the zero-floor boundary, and a sub-microsecond floor case.)
   - **Area:** Android / Sensor bridge
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - **Required behavior:** Map `TimeBetweenUpdates` (a `System::TimeSpan`) to `ASensorEventQueue_setEventRate()`'s microsecond parameter.
@@ -862,7 +862,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidSensorBridgeTests.TimeBetweenUpdatesConvertsToMicroseconds`
   - **Dependencies:** DEVICES-0075
 
-- [ ] DEVICES-0082 — Document Android 12+ sensor-rate-limiting behavior
+- [x] DEVICES-0082 — Document Android 12+ sensor-rate-limiting behavior (2026-07-05: added a note to `AndroidSensorBridge::Start()`'s Doxygen comment: Android 12+ (API 31+) may cap high-frequency (>~200Hz) sampling without the `HIGH_SAMPLING_RATE_SENSORS` permission, and this bridge does not detect or compensate for that.)
   - **Area:** Android / Sensor bridge
   - **Files:** `docs/devices-native-backend-design.md`
   - **Required behavior:** Android 12+ restricts high-frequency sensor sampling without the `HIGH_SAMPLING_RATE_SENSORS` permission for rates above 200Hz — document this constraint so a future implementer doesn't get silently throttled and blame the bridge.
@@ -870,7 +870,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** none
 
-- [ ] DEVICES-0083 — Add a fake/injectable Android sensor bridge test double
+- [x] DEVICES-0083 — Add a fake/injectable Android sensor bridge test double (2026-07-05: rather than a separate fake class, `AndroidSensorBridge` itself is safely host-constructible/callable (inert no-op on non-Android per DEVICES-0074's pimpl design) — `AndroidSensorBridgeTests.cpp` (8 tests) exercises the real class directly: 4 tests on the extracted rate-conversion pure function, 4 confirming the inert-on-non-Android contract (`IsAvailable()`/`Start()` return `false`/no-op, `Stop()`/destructor safe with no prior `Start()`). All 8 pass on this desktop.)
   - **Area:** Android / Testing
   - **Files:** `tests/Microsoft/Devices/Sensors/Detail/FakeAndroidSensorBridgeTests.cpp` (new)
   - **Required behavior:** A host-buildable fake that lets tests inject synthetic `ASensorEvent`-equivalent structs (magnetic field / rotation vector / gravity / linear acceleration / gyroscope values with timestamps) and assert the timestamp-conversion (DEVICES-0077) and rate-selection (DEVICES-0081) math without needing a real Android device.
@@ -878,7 +878,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `FakeAndroidSensorBridgeTests.*` (multiple, covering DEVICES-0077/0081's formulas)
   - **Dependencies:** DEVICES-0077, DEVICES-0081
 
-- [ ] DEVICES-0084 — Avoid global-reference leaks in the bridge (Android NDK JNI/ASensorManager hygiene)
+- [x] DEVICES-0084 — Avoid global-reference leaks in the bridge (Android NDK JNI/ASensorManager hygiene) (2026-07-05: **N/A — no JNI is used anywhere in this bridge** (DEVICES-0073's decision), so there is no global-reference-leak risk to guard against. `ASensorManager`/`ASensor const*`/`ASensorEventQueue*` are plain NDK C handles, not JNI references.)
   - **Area:** Android / Sensor bridge
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - **Required behavior:** If DEVICES-0073 chose a pure-NDK `ASensorManager` approach, this task instead confirms there is no JNI at all in this bridge (no leak risk); if a JNI bridge was chosen, apply the same global-reference discipline as Phase 3's vibration JNI code (DEVICES-0040).
@@ -886,7 +886,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A or covered by DEVICES-0083
   - **Dependencies:** DEVICES-0073
 
-- [ ] DEVICES-0085 — Avoid use-after-free when the owning `Compass`/`Motion` is disposed mid-callback
+- [x] DEVICES-0085 — Avoid use-after-free when the owning `Compass`/`Motion` is disposed mid-callback (2026-07-05: `Stop()` normally `join()`s the worker thread, so it cannot return while a callback is still executing — stronger than `Accelerometer`'s `dispatchToken_` guard for this bridge's own lifetime. The one open boundary: a callback that calls `Stop()` reentrantly on its own worker thread would deadlock joining itself — detected via `std::this_thread::get_id() == worker_.get_id()` and handled by detaching instead (mirrors `Accelerometer`'s own documented, accepted "destroying from within your own callback" limitation, Task P8-1, rather than fully solving it). **Not runtime-verified** — this bridge's real code path cannot execute in this headless container, only compile; added a manual-verification item to `docs/devices-hardware-checklist.md` Section 6 for whoever has real Android hardware once Phase 7/8 wires this in.)
   - **Area:** Android / Sensor bridge / Concurrency
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - **Required behavior:** Apply the same `dispatchToken_`-style protection Task P8-1 added to `Accelerometer`/`Gyroscope` — a callback destroying its own owning sensor object must not leave the bridge's cleanup code touching freed memory.

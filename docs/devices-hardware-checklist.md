@@ -234,6 +234,29 @@ exercised, only reasoned about from SDL3's API documentation.
    re-evaluated per-call (not cached from the first probe), since gamepads can connect
    and disconnect at any time during a running game.
 
+## 6. `Detail::AndroidSensorBridge` lifecycle safety (`plan_devices.md` Task DEVICES-0085)
+
+**Code under test:** `AndroidSensorBridge::Stop()`'s self-join-detects-and-detaches
+logic (`src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`) — confirmed by
+code review and a successful Android NDK cross-compile (`llvm-nm` symbol check) in this
+session, but **never actually run**: this bridge's real (`#ifdef __ANDROID__`) code path
+cannot execute in this headless container at all, only compile.
+
+**Why this needs real hardware:** the claim under test is that stopping/disposing the
+owning `Compass`/`Motion` instance from within its own `CurrentValueChanged` handler
+(running on the bridge's dedicated worker thread) does not deadlock — `Stop()` detects
+`std::this_thread::get_id() == worker_.get_id()` and detaches instead of joining. This
+logic has been reasoned about and cross-compiled, but its actual runtime behavior (does
+the detached thread really exit `Run()`'s loop cleanly afterward? does any Android
+sensor-subsystem resource leak?) has never been observed on a real device.
+
+**Steps (once Compass/Motion's Android backend, Phase 7/8, is wired to this bridge):**
+1. On a real Android device, construct a `Compass`/`Motion` instance, `Start()` it, and
+   subscribe a `CurrentValueChanged` handler that calls `Dispose()` on the same instance.
+2. Confirm the process does not hang or deadlock when a sensor reading arrives.
+3. Confirm no crash/use-after-free on subsequent readings (there should be none, since
+   the instance is disposed) or on process exit.
+
 ---
 
 ## Reporting results
