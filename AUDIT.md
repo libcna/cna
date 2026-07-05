@@ -1604,6 +1604,36 @@ be scoped and implemented then, informed by that actual use case, not guessed at
 Documented instead (above), so the behavior is at least honestly known rather than
 silently assumed.
 
+**Phase 0 audit addendum (2026-07-05, `plan_devices.md` Tasks DEVICES-0001–0015):** a
+fresh, from-scratch re-audit (not a re-statement of Phase 9's claims) found no
+regressions or drift in any of the above — every API matrix, file inventory, and
+`NOXNA` inventory still matches this section exactly. Two new, concrete findings:
+
+1. **`Detail::AndroidVibrationBackend`/a custom JNI vibration bridge is not needed.**
+   Reading `third_party/SDL/src/haptic/android/SDL_syshaptic.c` and its Java
+   counterpart (`SDLControllerManager.java`'s `SDLHapticHandler`/
+   `SDLHapticHandler_API26`/`SDLHapticHandler_API31`) directly confirms SDL3's Android
+   haptic backend already queries `Context.VIBRATOR_SERVICE` (the phone's own built-in
+   vibrator, not just connected-controller vibrators) and already implements amplitude
+   control via `VibrationEffect.createOneShot()` (API 26+) / `VibratorManager` (API
+   31+), including the exact `intensity == 0.0f → stop()` and `intensity*255` clamped
+   to `[1,255]` mapping `VibrateController.cpp`'s own `NOXNA` intensity extension uses.
+   `plan_devices.md`'s Phase 3 (native Android vibration backend) is expected to be
+   skipped once its own gating task (DEVICES-0031) formally closes on this evidence —
+   recorded here so this isn't lost if that task is deferred.
+2. **A minor, harmless test-coverage gap:** `Accelerometer`/`Gyroscope`'s `NOXNA`
+   `UnregisterStartedInstanceForTesting()` hook has zero call sites in either
+   `AccelerometerTests.cpp` or `GyroscopeTests.cpp` — every other test-only hook has
+   at least one. Not removed (may be reserved for a not-yet-written test); flagged for
+   whoever next touches that test file.
+
+Also worth noting: `/dev/kvm` now exists and is openable in this container (confirmed
+via a direct `open()` call, not just `ls`), where every session since
+`plan_devices_phase4.md` found it absent — the sole blocker for this repo's one
+configured Android AVD (`Medium_Phone`). Re-verify at the time `plan_devices.md`'s
+Phase 9 actually attempts the emulator; environments can and do change between
+sessions, as this one just did.
+
 ---
 
 ## `Microsoft::Xna::Framework::Net`

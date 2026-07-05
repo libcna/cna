@@ -266,7 +266,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0001
 
-- [ ] DEVICES-0009 — Inventory every `NOXNA`-tagged member in the Devices namespace
+- [x] DEVICES-0009 — Inventory every `NOXNA`-tagged member in the Devices namespace (2026-07-05: grepped `include/Microsoft/Devices` fresh. 30 explicitly-tagged members: `VibrateController`'s 4 extensions (`Start(TimeSpan,intensity)`, `getIsSupportedProperty()`, `getDeviceNameProperty()`, `StartLeftRight()`); `Accelerometer`'s 8 test-only hooks; `Gyroscope`'s identical 8 test-only hooks + its `NOXNA getStateProperty()` (9); `Compass`/`Motion`'s `getStateProperty()` (1 each); 7 explicit `NOXNA GetTypeName()` overrides on the reading/event-args/calibration classes. Confirmed `Accelerometer::getStateProperty()` is correctly **not** `NOXNA`-tagged — it is the one real WP7 `State` member. **New observation, not a bug to fix here:** `Accelerometer`/`Gyroscope`/`Compass`/`Motion`'s `GetTypeName()` overrides come from the shared `GetTypeNameHPP()` macro (`sharp-runtime`'s `System/Object.hpp`), which does not itself emit a textual `NOXNA` tag — meaning these 4 declarations satisfy `CHECKLIST.md`'s `GetTypeName()`-must-be-`NOXNA` rule only in spirit, not literally in source text. This is a project-wide macro-convention question well beyond `Microsoft::Devices`, not something to fix from this plan.)
   - **Area:** Audit
   - **Files:** all headers under `include/Microsoft/Devices/**` (read-only)
   - **Required behavior:** Grep for `NOXNA` across the namespace; produce a flat list of every tagged member with a one-line justification for each (already mostly documented in-source; this task just aggregates it).
@@ -274,7 +274,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** none
 
-- [ ] DEVICES-0010 — Inventory every test-only (`*ForTesting`/`InjectSynthetic*`) hook
+- [x] DEVICES-0010 — Inventory every test-only (`*ForTesting`/`InjectSynthetic*`) hook (2026-07-05: counted call sites for all 8 hooks in both `AccelerometerTests.cpp` and `GyroscopeTests.cpp`. **Finding: `UnregisterStartedInstanceForTesting()` has zero call sites in either test file**, on both `Accelerometer` and `Gyroscope` — every other hook has ≥1. Flagged, not removed, per this task's own acceptance criteria ("may be intentionally reserved for a future test") — most likely reserved for a not-yet-written test of the specific "instance removed from `startedInstances_` before being disposed" interleaving that `RegisterStartedInstanceForTesting`'s own doc comment describes setting up for. No action taken; a future task could add the missing test or drop the hook, but that decision is out of scope for this audit-only task.)
   - **Area:** Audit
   - **Files:** `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (read-only)
   - **Required behavior:** List all 7 test-only hooks (`InjectSyntheticSensorUpdate`, `SetStartedForTesting`, `SetSupportedForTesting`, `GetSubsystemHeldForTesting`, `SetDisposalCleanupHookForTesting`, `RegisterStartedInstanceForTesting`, `UnregisterStartedInstanceForTesting`, `DispatchToInstancesForTesting` — 8 total), confirm each is exercised by at least one test in `AccelerometerTests.cpp`.
@@ -282,7 +282,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (verifies existing tests)
   - **Dependencies:** DEVICES-0001
 
-- [ ] DEVICES-0011 — Inventory `Microsoft::Devices` build integration
+- [x] DEVICES-0011 — Inventory `Microsoft::Devices` build integration (2026-07-05: confirmed `CNA_SOURCES`/`CNA_TEST_SOURCES` are collected via `file(GLOB_RECURSE ... CONFIGURE_DEPENDS)` — Devices sources/tests need no manual per-file registration, low risk of silent exclusion. **Confirmed the suspected gap from this plan's Current Repository Findings is real:** `cna_demo_devices` (`CMakeLists.txt:430`) sits inside the umbrella `if(CNA_BUILD_EXAMPLES)` block (line 278) with no `NOT EMSCRIPTEN AND NOT ANDROID` guard of its own, unlike `cna_demo_xact` (guarded, `NOT EMSCRIPTEN AND NOT ANDROID`, closed at the matching `endif()` before `cna_demo_devices`'s block starts). Confirmed via exact line numbers this session, feeding directly into Phase 9's DEVICES-0120/0121.)
   - **Area:** Audit / Build
   - **Files:** `CMakeLists.txt` (read-only)
   - **Required behavior:** Confirm which targets compile Devices sources (`CNA`, `CnaTests`, `cna_demo_devices`) and under what platform guards; specifically confirm/deny whether `cna_demo_devices` is actually excluded for `ANDROID`/`EMSCRIPTEN` (Current Repository Findings above suspects it is not, unlike `cna_demo_xact`).
@@ -290,7 +290,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** none
 
-- [ ] DEVICES-0012 — Inventory Devices-related docs for staleness
+- [x] DEVICES-0012 — Inventory Devices-related docs for staleness (2026-07-05: spot-checked one claim per doc. `docs/devices-build.md`'s NDK path (`~/Android/Sdk/ndk/30.0.14904198`) still exists. `docs/devices-hardware-checklist.md`'s `Medium_Phone` AVD still exists. `sharp-runtime/src/System/TimeSpan.cpp:55`'s `copy_count++` in the copy constructor still exists exactly as described (the one accepted, out-of-scope TSan finding). **Major environment-change finding, re-verify before trusting any prior "blocked" claim: `/dev/kvm` now EXISTS and is openable read-write in this container** (`ls -la /dev/kvm` → `crw-rw----+ 1 root kvm`, confirmed actually openable via a direct `os.open()` test, not just a stat check) — every prior phase since Phase 4 (P9-4 most recently) found this device node absent, which was the sole documented blocker for the x86_64 `Medium_Phone` AVD. **This directly changes Phase 9's starting assumption** — DEVICES-0126 must re-attempt the emulator launch for real rather than assuming the old failure still holds. Both docs otherwise still accurate as of this session.)
   - **Area:** Audit / Docs
   - **Files:** `docs/devices-build.md`, `docs/devices-hardware-checklist.md`, `docs/devices-native-backend-design.md`, `docs/location-future-plan.md` (read-only)
   - **Required behavior:** Confirm each doc's claims still match the current code (e.g. test counts, sanitizer results, Android NDK path) by spot-re-running one representative command from each doc.
@@ -298,7 +298,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** none
 
-- [ ] DEVICES-0013 — Confirm SDL3 has no compass/magnetometer API on any platform (re-verify, don't just trust prior phases)
+- [x] DEVICES-0013 — Confirm SDL3 has no compass/magnetometer API on any platform (re-verify, don't just trust prior phases) (2026-07-05: grepped `third_party/SDL/include/SDL3/SDL_sensor.h`'s `SDL_SensorType` enum fresh — 8 values total: `INVALID`/`UNKNOWN`/`ACCEL`/`GYRO`/`ACCEL_L`/`GYRO_L`/`ACCEL_R`/`GYRO_R` (the last 4 are Joy-Con-specific accel/gyro, not a new sensor kind). No magnetometer/compass value exists. Confirmed unchanged from every prior phase's finding.)
   - **Area:** Audit
   - **Files:** `third_party/SDL/include/SDL3/SDL_sensor.h` (read-only)
   - **Required behavior:** Grep `SDL_SensorType` enum for any magnetometer/compass-like value; confirm none exists (only accel/gyro types).
@@ -306,7 +306,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** none
 
-- [ ] DEVICES-0014 — Confirm SDL3's Android haptic backend claim (gating fact for Phase 2)
+- [x] DEVICES-0014 — Confirm SDL3's Android haptic backend claim (gating fact for Phase 2) (2026-07-05: read `third_party/SDL/src/haptic/android/SDL_syshaptic.c` (JNI trampoline: `Android_JNI_PollHapticDevices()`/`Android_JNI_HapticRun()`/`Android_JNI_HapticStop()`) and the actual Java implementation, `third_party/SDL/android-project/app/src/main/java/org/libsdl/app/SDLControllerManager.java`. **Decisive, definitive confirmation — `VibrateController.cpp`'s own comment is correct and then some:** `SDLHapticHandler.pollHapticDevices()` (line ~703) explicitly queries `Context.VIBRATOR_SERVICE` (the phone's own built-in `Vibrator`, via `hasVibrator()`) as its own device, separate from any connected-controller `InputDevice.getVibratorManager()` device — both are real, both already wired. `SDLHapticHandler_API26.run()` (line ~634) already does **exactly** what this plan's Phase 3 (DEVICES-0038–0047) set out to build from scratch: `intensity == 0.0f` → calls `stop()` rather than sending zero amplitude (resolves DEVICES-0030/0043's open question); `Math.round(intensity * 255)` clamped to `[1,255]`; `VibrationEffect.createOneShot(length, vibeValue)` wrapped in try/catch, falling back to `vib.vibrate(length)` (`DEFAULT_AMPLITUDE`) if anything fails. `SDLHapticHandler_API31` layers `VibratorManager`/multi-vibrator support on top for API 31+. **This resolves Phase 2's DEVICES-0031 gate: a native Android vibration backend (Phase 3) would be redundant, duplicate work — SDL3 already implements the phone-vibrator path with amplitude control end to end.** Recorded here in full since DEVICES-0031 formally closes this in Phase 2, but the evidence is conclusive now, not deferred.)
   - **Area:** Audit
   - **Files:** `third_party/SDL/src/haptic/android/SDL_syshaptic.c`, `third_party/SDL/src/core/android/SDL_android.c` (read-only)
   - **Required behavior:** Read the actual Android haptic backend source to confirm/deny `VibrateController.cpp`'s own comment claim: that `SDL_INIT_HAPTIC` on Android registers the phone's real vibrator (via `Context.VIBRATOR_SERVICE`/`Vibrator`) as an `SDL_Haptic` device automatically, with amplitude control, with no CNA-side JNI code.
@@ -314,7 +314,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** none
 
-- [ ] DEVICES-0015 — Write Phase 0 findings into `AUDIT.md`
+- [x] DEVICES-0015 — Write Phase 0 findings into `AUDIT.md` (2026-07-05: appended an additive-only "Phase 0 audit addendum" note after the existing `Microsoft::Devices::Sensors` section, covering the SDL-Android-haptic finding (DEVICES-0014), the orphaned test hook (DEVICES-0010), and the `/dev/kvm` environment change (DEVICES-0012). No existing history rewritten or deleted. **Phase 0 (DEVICES-0001–0015) is now fully closed.**)
   - **Area:** Docs
   - **Files:** `AUDIT.md`
   - **Required behavior:** Append a dated note under the existing `Microsoft::Devices::Sensors` section (do not rewrite the existing table) referencing this plan's Phase 0 tasks and any deltas found (e.g. if DEVICES-0011 found the Android demo-build guard gap).
