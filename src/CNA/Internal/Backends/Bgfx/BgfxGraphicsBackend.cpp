@@ -457,8 +457,9 @@ namespace CNA::Internal::Backends::Bgfx
 
     // ---
 
-    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents)
+    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/)
     {
+        // mipMap not yet implemented on Bgfx (Task 336/877) — accepted and ignored.
         return std::make_unique<BgfxRenderTargetBackend>(w, h, hasDepth, preserveContents);
     }
 
@@ -541,8 +542,9 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setViewFrameBuffer(1, BGFX_INVALID_HANDLE);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> BgfxGraphicsBackend::CreateRenderTargetCube(int size)
+    std::unique_ptr<IRenderTargetCubeBackend> BgfxGraphicsBackend::CreateRenderTargetCube(int size, bool /*mipMap*/)
     {
+        // mipMap not yet implemented on Bgfx (Task 336/877) — accepted and ignored.
         return std::make_unique<BgfxRenderTargetCubeBackend>(size);
     }
 

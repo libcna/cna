@@ -398,16 +398,19 @@ namespace CNA::Internal::Backends
         virtual std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) { return nullptr; }
 
         /// Creates an off-screen FBO-backed render target. Returns nullptr on
-        /// backends that do not support render targets.
-        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false) { return nullptr; }
+        /// backends that do not support render targets. `mipMap` requests a full mip
+        /// chain, auto-generated from level 0 when the target is unbound (matching
+        /// FNA3D's OPENGL_ResolveTarget behavior) — only EasyGL currently implements this;
+        /// Vulkan/Bgfx accept and ignore it (Task 336/877).
+        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false, bool mipMap = false) { return nullptr; }
 
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.
         virtual void SetRenderTarget2D(IRenderTargetBackend* rt) {}
 
         /// Creates a cube-map render target. Returns nullptr on backends that
-        /// do not support cube map render targets.
-        virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) { return nullptr; }
+        /// do not support cube map render targets. See CreateRenderTarget2D for `mipMap`.
+        virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false) { return nullptr; }
 
         /// Compiles a shader program from GLSL/HLSL source strings.
         /// Returns nullptr on backends that do not support programmable shaders.

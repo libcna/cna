@@ -590,6 +590,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 336: RenderTarget2D mip chain is genuinely GL-complete after auto-generation on unbind
+        cna_easygl_test(cna_test_easygl_rendertarget2d_mip
+                        examples/easygl_rendertarget2d_mip_test.cpp)
+        add_test(NAME EasyGL_RenderTarget2D_MipComplete
+                 COMMAND cna_test_easygl_rendertarget2d_mip)
+        set_tests_properties(EasyGL_RenderTarget2D_MipComplete PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 22: BasicEffect property tests
         cna_easygl_test(cna_test_basic_effect
                         examples/basic_effect_test.cpp)

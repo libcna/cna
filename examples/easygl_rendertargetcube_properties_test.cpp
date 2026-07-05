@@ -5,11 +5,12 @@
 // its public constructor and asserts every property getter against the values FNA
 // documents/computes.
 //
-// Confirmed, NOT-fixed-here gaps are pinned to their CURRENT (buggy) values with an explanatory
-// comment rather than silently skipped:
-//   - LevelCount is always 1 regardless of `mipMap` (no backend's CreateRenderTargetCube accepts
-//     a mip count or allocates RT mip storage) - same shape as Task 331's RenderTarget2D finding,
-//     tracked as Task 336 (verify render target mipmap support).
+// Task 336 fix: LevelCount now correctly reflects `mipMap`, and EasyGL actually allocates +
+// auto-generates the full mip chain (per-face) on unbind. Holds on Vulkan/Bgfx too (shared,
+// backend-agnostic computation) but only EasyGL's GPU resource is truly mip-complete right now
+// (Task 877).
+//
+// One remaining confirmed, NOT-fixed-here gap is pinned to its CURRENT (buggy) value:
 //   - MultiSampleCount is stored verbatim from the constructor argument, never clamped against
 //     backend capability (FNA calls FNA3D_GetMaxMultiSampleCount) - same shape as Task 331's
 //     RenderTarget2D finding, tracked as Task 337 (verify MSAA render target creation/resolve).
@@ -88,14 +89,12 @@ protected:
                   "DepthStencilFormat == Depth16");
         }
 
-        // --- Known, tracked gap: mipMap=true does not grow LevelCount (Task 336) ---
+        // --- Task 336 fix: mipMap=true correctly grows LevelCount ---
         {
             RenderTargetCube rt(device, 64, true, SurfaceFormat::Color, DepthFormat::None);
-            // FNA would report LevelCount == 7 for a 64x64 full mip chain (TextureCube's
-            // mip-aware backend path is never invoked for render targets). Pinned here rather
-            // than silently skipped - tracked as Task 336.
-            check(rt.getLevelCountProperty() == 1,
-                  "mipMap=true: LevelCount == 1 (known gap, tracked as Task 336)");
+            // Matches FNA: LevelCount == 7 for a 64x64 full mip chain.
+            check(rt.getLevelCountProperty() == 7,
+                  "mipMap=true: LevelCount == 7 (64x64 full mip chain, Task 336 fix)");
         }
 
         // --- Known, tracked gap: MultiSampleCount is stored verbatim, never clamped (Task 337) ---

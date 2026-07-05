@@ -40,7 +40,8 @@ namespace CNA::Internal::Backends::EasyGL
     class EasyGLRenderTargetBackend : public IRenderTargetBackend, public ::easygl::RecoverableResource
     {
     public:
-        EasyGLRenderTargetBackend(int w, int h, bool hasDepth, ::easygl::ResourceRegistry* registry);
+        EasyGLRenderTargetBackend(int w, int h, bool hasDepth, ::easygl::ResourceRegistry* registry,
+                                   bool mipMap = false);
         ~EasyGLRenderTargetBackend() override;
 
         int GetWidth()  const override { return width_; }
@@ -62,9 +63,11 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Framebuffer  fbo_;
         ::easygl::Texture      colorTex_;
         ::easygl::Renderbuffer depthRbo_;
-        int  width_    = 0;
-        int  height_   = 0;
-        bool hasDepth_ = false;
+        int  width_      = 0;
+        int  height_     = 0;
+        bool hasDepth_   = false;
+        bool mipMap_     = false;
+        int  levelCount_ = 1;
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
@@ -73,7 +76,8 @@ namespace CNA::Internal::Backends::EasyGL
                                            public ::easygl::RecoverableResource
     {
     public:
-        EasyGLRenderTargetCubeBackend(int size, bool hasDepth, ::easygl::ResourceRegistry* registry);
+        EasyGLRenderTargetCubeBackend(int size, bool hasDepth, ::easygl::ResourceRegistry* registry,
+                                       bool mipMap = false);
         ~EasyGLRenderTargetCubeBackend() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
@@ -95,8 +99,10 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Texture      cubeTex_;
         ::easygl::Framebuffer  fbo_;
         ::easygl::Renderbuffer depthRbo_;
-        int  size_     = 0;
-        bool hasDepth_ = false;
+        int  size_       = 0;
+        bool hasDepth_   = false;
+        bool mipMap_     = false;
+        int  levelCount_ = 1;
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
@@ -405,6 +411,13 @@ namespace CNA::Internal::Backends::EasyGL
         // Height of the currently bound render target; 0 = default framebuffer.
         int currentRtHeight_ = 0;
 
+        // Tracks the currently-bound single RenderTarget2D/RenderTargetCube backend (nullptr
+        // when unbound, in MRT mode, or targeting the default framebuffer) so that switching
+        // away from it can trigger UnbindAsRenderTarget()'s mip regeneration (Task 336) — the
+        // interface method is never invoked automatically by anything else.
+        IRenderTargetBackend*     currentRt2D_   = nullptr;
+        IRenderTargetCubeBackend* currentRtCube_ = nullptr;
+
         // FillMode::WireFrame emulation (OpenGL ES has no glPolygonMode):
         // when active, triangle draws are re-expanded into GL_LINES.
         bool wireframe_ = false;
@@ -459,13 +472,14 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
-        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false) override;
-        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false, bool mipMap = false) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false) override;
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;

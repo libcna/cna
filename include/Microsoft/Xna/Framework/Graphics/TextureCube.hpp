@@ -131,13 +131,15 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Constructs a TextureCube from a pre-built backend (used by RenderTargetCube).
          *
-         * @param device  The owning device.
-         * @param size    Width and height of each cube face in texels.
-         * @param format  Surface format.
-         * @param backend Owning pointer to the pre-built GPU backend.
+         * @param device     The owning device.
+         * @param size       Width and height of each cube face in texels.
+         * @param format     Surface format.
+         * @param backend    Owning pointer to the pre-built GPU backend.
+         * @param levelCount Number of mip levels the backend actually allocated (1 if none).
          */
         NOXNA TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
-                          std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend);
+                          std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend,
+                          int levelCount = 1);
 
         /** @brief Returns the raw backend pointer (used by RenderTargetCube to retrieve the RT handle). */
         NOXNA [[nodiscard]] CNA::Internal::Backends::ITextureCubeBackend* GetBackendRaw() const { return backend_.get(); }

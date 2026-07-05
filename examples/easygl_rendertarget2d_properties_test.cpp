@@ -6,11 +6,14 @@
 // documents/computes, plus the newly-added IsContentLost/ContentLost (Task 331 found these were
 // missing entirely - RenderTargetCube already had them, RenderTarget2D did not).
 //
-// Two confirmed, NOT-fixed-here gaps are pinned to their CURRENT (buggy) values with an
-// explanatory comment rather than silently skipped, so Tasks 336/337 have a regression marker to
-// update when they land:
-//   - LevelCount is always 1 regardless of `mipMap` (backend never allocates RT mip storage) -
-//     tracked as Task 336 (verify render target mipmap support).
+// Task 336 fix: LevelCount now correctly reflects `mipMap` (mirroring Texture2D/TextureCube's own
+// CalculateMipLevels), and EasyGL actually allocates + auto-generates the full mip chain on
+// unbind (mirroring FNA3D's OPENGL_ResolveTarget). This assertion holds on Vulkan/Bgfx too — the
+// LevelCount computation is shared, backend-agnostic C++ — but only EasyGL's GPU resource is
+// truly mip-complete right now; Vulkan/Bgfx accept and ignore the `mipMap` flag (Task 877).
+//
+// One remaining confirmed, NOT-fixed-here gap is pinned to its CURRENT (buggy) value with an
+// explanatory comment rather than silently skipped, so Task 337 has a regression marker to update:
 //   - MultiSampleCount is stored verbatim from the constructor argument, never clamped against
 //     backend capability and never wired into actual multisampled RT creation (no backend's
 //     CreateRenderTarget2D even accepts a multisample count) - tracked as Task 337 (verify MSAA
@@ -84,14 +87,12 @@ protected:
                   "Ctor3: DepthStencilFormat == Depth16");
         }
 
-        // --- Known, tracked gap: mipMap=true does not grow LevelCount (Task 336) ---
+        // --- Task 336 fix: mipMap=true correctly grows LevelCount ---
         {
             RenderTarget2D rt(device, 64, 64, true, SurfaceFormat::Color, DepthFormat::None);
-            // FNA would report LevelCount == 7 for a 64x64 full mip chain. CNA's backends never
-            // allocate render-target mip storage, so LevelCount is always 1 today - this is a
-            // confirmed, tracked gap (Task 336), pinned here rather than silently skipped.
-            check(rt.getLevelCountProperty() == 1,
-                  "Ctor2 mipMap=true: LevelCount == 1 (known gap, tracked as Task 336)");
+            // Matches FNA: LevelCount == 7 for a 64x64 full mip chain.
+            check(rt.getLevelCountProperty() == 7,
+                  "Ctor2 mipMap=true: LevelCount == 7 (64x64 full mip chain, Task 336 fix)");
         }
 
         // --- Known, tracked gap: MultiSampleCount is stored verbatim, never clamped (Task 337) ---

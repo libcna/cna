@@ -413,10 +413,20 @@ namespace CNA::Internal::Backends::EasyGL
 
     // --- EasyGLRenderTargetBackend ---
 
-    EasyGLRenderTargetBackend::EasyGLRenderTargetBackend(int w, int h, bool hasDepth,
-                                                          ::easygl::ResourceRegistry* registry)
-        : width_(w), height_(h), hasDepth_(hasDepth), registry_(registry)
+    // Mirrors Texture2D.cpp's/TextureCube.cpp's CalculateMipLevels.
+    static int CalculateRenderTargetMipLevels(int w, int h)
     {
+        int levels = 1;
+        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        return levels;
+    }
+
+    EasyGLRenderTargetBackend::EasyGLRenderTargetBackend(int w, int h, bool hasDepth,
+                                                          ::easygl::ResourceRegistry* registry,
+                                                          bool mipMap)
+        : width_(w), height_(h), hasDepth_(hasDepth), mipMap_(mipMap), registry_(registry)
+    {
+        levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(w, h) : 1;
         CreateResources();
         if (registry_) registry_->add(this);
     }
@@ -432,12 +442,25 @@ namespace CNA::Internal::Backends::EasyGL
         // The 6-parameter set_image_2d overload does not call glBindTexture first;
         // bind the texture explicitly so glTexImage2D targets our handle.
         colorTex_.bind(::easygl::TextureTarget::Texture2D);
-        colorTex_.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
-                               ::metagl::InternalFormat::Rgba8,
-                               width_, height_,
-                               ::metagl::PixelFormat::Rgba,
-                               ::metagl::PixelType::UnsignedByte,
-                               nullptr);
+        // Pre-allocate GPU storage for every mip level (not just level 0): the mip chain is
+        // regenerated from level 0 via generate_mipmap() when the target is unbound (see
+        // UnbindAsRenderTarget), mirroring FNA3D's OPENGL_ResolveTarget behavior — without this
+        // loop, levels 1+ would have no defined image and glGenerateMipmap's writes would target
+        // GL-incomplete storage (Task 336 finding, same root cause as Task 276's TextureCube fix).
+        {
+            int levelW = width_, levelH = height_;
+            for (int level = 0; level < levelCount_; ++level)
+            {
+                colorTex_.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                       ::metagl::InternalFormat::Rgba8,
+                                       levelW, levelH,
+                                       ::metagl::PixelFormat::Rgba,
+                                       ::metagl::PixelType::UnsignedByte,
+                                       nullptr);
+                levelW = std::max(1, levelW / 2);
+                levelH = std::max(1, levelH / 2);
+            }
+        }
         // Default GL min-filter is NEAREST_MIPMAP_LINEAR; since the RT has no mipmaps
         // it would be texture-incomplete when sampled.  Use LINEAR (no mipmaps).
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
@@ -481,6 +504,13 @@ namespace CNA::Internal::Backends::EasyGL
 
     void EasyGLRenderTargetBackend::UnbindAsRenderTarget()
     {
+        // Regenerate the mip chain from level 0's just-rendered content, matching FNA3D's
+        // OPENGL_ResolveTarget: "if (target->levelCount > 1) { ...glGenerateMipmap... }".
+        if (levelCount_ > 1)
+        {
+            colorTex_.bind(::easygl::TextureTarget::Texture2D);
+            colorTex_.generate_mipmap(::easygl::TextureTarget::Texture2D);
+        }
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
     }
 
@@ -509,9 +539,11 @@ namespace CNA::Internal::Backends::EasyGL
     // --- EasyGLRenderTargetCubeBackend ---
 
     EasyGLRenderTargetCubeBackend::EasyGLRenderTargetCubeBackend(int size, bool hasDepth,
-                                                                    ::easygl::ResourceRegistry* registry)
-        : size_(size), hasDepth_(hasDepth), registry_(registry)
+                                                                    ::easygl::ResourceRegistry* registry,
+                                                                    bool mipMap)
+        : size_(size), hasDepth_(hasDepth), mipMap_(mipMap), registry_(registry)
     {
+        levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(size, size) : 1;
         CreateResources();
         if (registry_) registry_->add(this);
     }
@@ -525,7 +557,8 @@ namespace CNA::Internal::Backends::EasyGL
     {
         cubeTex_.create();
         cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
-        // Allocate storage for all 6 faces
+        // Allocate storage for all 6 faces, all mip levels (see EasyGLRenderTargetBackend's
+        // CreateResources for why — same Task 336 finding, applied to cube render targets).
         static const ::easygl::TextureTarget kFaceTargets[6] = {
             ::easygl::TextureTarget::TextureCubeMapPositiveX,
             ::easygl::TextureTarget::TextureCubeMapNegativeX,
@@ -536,12 +569,17 @@ namespace CNA::Internal::Backends::EasyGL
         };
         for (auto faceTarget : kFaceTargets)
         {
-            cubeTex_.set_image_2d(faceTarget, 0,
-                                   ::metagl::InternalFormat::Rgba8,
-                                   size_, size_,
-                                   ::metagl::PixelFormat::Rgba,
-                                   ::metagl::PixelType::UnsignedByte,
-                                   nullptr);
+            int levelSize = size_;
+            for (int level = 0; level < levelCount_; ++level)
+            {
+                cubeTex_.set_image_2d(faceTarget, level,
+                                       ::metagl::InternalFormat::Rgba8,
+                                       levelSize, levelSize,
+                                       ::metagl::PixelFormat::Rgba,
+                                       ::metagl::PixelType::UnsignedByte,
+                                       nullptr);
+                levelSize = std::max(1, levelSize / 2);
+            }
         }
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::metagl::TextureParameter::MinFilter,
@@ -586,6 +624,12 @@ namespace CNA::Internal::Backends::EasyGL
 
     void EasyGLRenderTargetCubeBackend::UnbindAsRenderTarget()
     {
+        // Regenerate the mip chain for all 6 faces from their just-rendered level-0 content.
+        if (levelCount_ > 1)
+        {
+            cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
+            cubeTex_.generate_mipmap(::easygl::TextureTarget::TextureCubeMap);
+        }
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
     }
 
@@ -1353,14 +1397,14 @@ void main()
         return std::make_unique<EasyGLOcclusionQueryBackend>(RegistryPtr());
     }
 
-    std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool /*preserveContents*/)
+    std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool /*preserveContents*/, bool mipMap)
     {
-        return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, RegistryPtr());
+        return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, RegistryPtr(), mipMap);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size)
+    std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size, bool mipMap)
     {
-        return std::make_unique<EasyGLRenderTargetCubeBackend>(size, true, RegistryPtr());
+        return std::make_unique<EasyGLRenderTargetCubeBackend>(size, true, RegistryPtr(), mipMap);
     }
 
     std::unique_ptr<ITexture3DBackend> EasyGLGraphicsBackend::CreateTexture3D(
@@ -1386,6 +1430,12 @@ void main()
     void EasyGLGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         mrtFboReady_ = false;
+        // Regenerate mips (if requested) for whatever single RT/cube-face was previously
+        // active, before switching away from it — see UnbindAsRenderTarget's Task 336 comment.
+        if (currentRt2D_ && currentRt2D_ != rt) currentRt2D_->UnbindAsRenderTarget();
+        if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
+        currentRtCube_ = nullptr;
+        currentRt2D_   = rt;
         if (rt)
         {
             currentRtHeight_ = rt->GetHeight();
@@ -1396,6 +1446,18 @@ void main()
             currentRtHeight_ = 0;
             BindDefaultFramebuffer();
         }
+    }
+
+    void EasyGLGraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
+    {
+        if (!rt) { SetRenderTarget2D(nullptr); return; }
+        mrtFboReady_ = false;
+        if (currentRt2D_) currentRt2D_->UnbindAsRenderTarget();
+        if (currentRtCube_ && currentRtCube_ != rt) currentRtCube_->UnbindAsRenderTarget();
+        currentRt2D_   = nullptr;
+        currentRtCube_ = rt;
+        currentRtHeight_ = rt->GetSize();
+        rt->BindAsRenderTargetFace(face);
     }
 
     void EasyGLGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
@@ -1410,6 +1472,16 @@ void main()
             SetRenderTarget2D(rts[0]);
             return;
         }
+
+        // MRT: unbind whatever single RT/cube-face was previously active (mip regen if needed).
+        // MRT + per-target mipmaps is not supported (Task 336) — MRT targets never get tracked
+        // as currentRt2D_/currentRtCube_, so switching away from MRT mode cannot regenerate
+        // their mips; this is an accepted, documented gap, not a silent correctness issue for
+        // the common single-RT case this fix targets.
+        if (currentRt2D_)   currentRt2D_->UnbindAsRenderTarget();
+        if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
+        currentRt2D_   = nullptr;
+        currentRtCube_ = nullptr;
 
         // MRT: build a combined FBO with one color attachment per render target.
         if (!mrtFboReady_)

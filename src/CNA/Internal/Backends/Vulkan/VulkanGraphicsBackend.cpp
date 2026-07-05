@@ -4500,8 +4500,10 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     std::unique_ptr<IRenderTargetBackend> VulkanGraphicsBackend::CreateRenderTarget2D(
-        int w, int h, bool hasDepth, bool preserveContents)
+        int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/)
     {
+        // mipMap not yet implemented on Vulkan (Task 336/877) — accepted and ignored, matching
+        // this backend's existing hasDepth-ignored gap for the same reason.
         return std::make_unique<VulkanRenderTargetBackend>(w, h, hasDepth, preserveContents, this);
     }
 
@@ -4958,8 +4960,9 @@ namespace CNA::Internal::Backends::Vulkan
         return std::make_unique<VulkanTextureCubeBackend>(this, size);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size)
+    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, bool /*mipMap*/)
     {
+        // mipMap not yet implemented on Vulkan (Task 336/877) — accepted and ignored.
         return std::make_unique<VulkanRenderTargetCubeBackend>(this, size);
     }
 

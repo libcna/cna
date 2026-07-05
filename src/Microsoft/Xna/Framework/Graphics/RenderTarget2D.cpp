@@ -5,9 +5,19 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/InvalidOperationException.hpp"
 
+#include <algorithm>
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     using CNA::Internal::Backends::IRenderTargetBackend;
+
+    // Mirrors Texture2D.cpp's/TextureCube.cpp's CalculateMipLevels.
+    static int CalculateMipLevels(int w, int h)
+    {
+        int levels = 1;
+        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        return levels;
+    }
 
     RenderTarget2D::RenderTarget2D(GraphicsDevice& device, int width, int height)
         : RenderTarget2D(device, width, height, false, SurfaceFormat::Color, DepthFormat::None)
@@ -22,11 +32,12 @@ namespace Microsoft::Xna::Framework::Graphics
                                    DepthFormat preferredDepthFormat,
                                    int preferredMultiSampleCount,
                                    RenderTargetUsage usage)
-        : Texture2D(device, width, height, preferredFormat, mipMap ? 1 : 1,
+        : Texture2D(device, width, height, preferredFormat,
+                    mipMap ? CalculateMipLevels(width, height) : 1,
                     std::shared_ptr<IRenderTargetBackend>(
                         device.GetBackend().CreateRenderTarget2D(
                             width, height, preferredDepthFormat != DepthFormat::None,
-                            usage == RenderTargetUsage::PreserveContents)))
+                            usage == RenderTargetUsage::PreserveContents, mipMap)))
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)

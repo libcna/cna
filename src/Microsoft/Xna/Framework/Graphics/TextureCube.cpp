@@ -39,11 +39,12 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
-                             std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend)
+                             std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend,
+                             int levelCount)
         : GraphicsResource(&device)
         , size_(size)
         , format_(format)
-        , levelCount_(1)
+        , levelCount_(levelCount)
         , backend_(std::move(backend))
     {
     }

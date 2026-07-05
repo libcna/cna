@@ -470,7 +470,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         std::unique_ptr<ITextureBackend>         CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend>     CreateSpriteBatch() override;
-        std::unique_ptr<IRenderTargetBackend>    CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false) override;
+        std::unique_ptr<IRenderTargetBackend>    CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false, bool mipMap = false) override;
         void                                     SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
         // ---- Graphics state: IMPLEMENTED ----
@@ -494,7 +494,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DBackend>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
-        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false) override;
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
 
         // ---- Extended 3D draws (textured + lit) ----

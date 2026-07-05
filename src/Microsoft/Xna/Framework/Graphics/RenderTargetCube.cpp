@@ -3,13 +3,24 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
+#include <algorithm>
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     using CNA::Internal::Backends::IRenderTargetCubeBackend;
     using CNA::Internal::Backends::ITextureCubeBackend;
 
+    // Mirrors TextureCube.cpp's CalculateMipLevels(size,size) — cube faces are square.
+    static int CalculateMipLevels(int size)
+    {
+        int levels = 1;
+        int s = size;
+        while (s > 1) { s = std::max(1, s / 2); ++levels; }
+        return levels;
+    }
+
     RenderTargetCube::RenderTargetCube(GraphicsDevice& device, int size,
-                                       bool /*mipMap*/, SurfaceFormat preferredFormat,
+                                       bool mipMap, SurfaceFormat preferredFormat,
                                        DepthFormat preferredDepthFormat,
                                        int preferredMultiSampleCount,
                                        RenderTargetUsage usage)
@@ -17,8 +28,9 @@ namespace Microsoft::Xna::Framework::Graphics
                       // IRenderTargetCubeBackend : ITextureCubeBackend — pass single backend
                       // to TextureCube so sampling and rendering share the same GPU image.
                       std::unique_ptr<ITextureCubeBackend>(
-                          device.backend_ ? device.backend_->CreateRenderTargetCube(size).release()
-                                          : nullptr))
+                          device.backend_ ? device.backend_->CreateRenderTargetCube(size, mipMap).release()
+                                          : nullptr),
+                      mipMap ? CalculateMipLevels(size) : 1)
         , size_(size)
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)
