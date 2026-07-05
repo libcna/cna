@@ -7,6 +7,9 @@
 #include <android/sensor.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 #endif
 
@@ -29,6 +32,31 @@ namespace Microsoft::Devices::Sensors::Detail
         std::atomic<bool> stopRequested_{false};
         SampleCallback callback_;
         System::TimeSpan timeBetweenUpdates_;
+
+        // Startup handshake (Task: async startup reporting): Run() signals
+        // one of these exactly once, early in its own execution, so
+        // Start() can block (briefly, bounded) until real success/failure
+        // is known, instead of optimistically returning true the instant
+        // the worker thread is merely spawned.
+        enum class StartOutcome
+        {
+            Pending,
+            Success,
+            Failure,
+        };
+
+        std::mutex startMutex_;
+        std::condition_variable startCv_;
+        StartOutcome startOutcome_ = StartOutcome::Pending;
+
+        void SignalStartOutcome(StartOutcome outcome)
+        {
+            {
+                std::lock_guard<std::mutex> lock(startMutex_);
+                startOutcome_ = outcome;
+            }
+            startCv_.notify_all();
+        }
 
         // ASensorManager_getInstanceForPackage() (the non-deprecated
         // replacement) requires API 26+; this project's minimum target is
@@ -66,6 +94,12 @@ namespace Microsoft::Devices::Sensors::Detail
             return sensor_ != nullptr;
         }
 
+        // Runs entirely on the dedicated worker thread. Takes a shared_ptr
+        // to itself (captured by the thread's lambda, see Start() below) so
+        // this object stays alive for this method's entire duration, even
+        // if the owning AndroidSensorBridge (and everything above it) is
+        // destroyed first — see Stop()'s doc comment for the full
+        // rationale and its accepted, documented remaining boundary.
         void Run()
         {
             // ALooper is thread-affine: must be prepared on the same
@@ -78,13 +112,28 @@ namespace Microsoft::Devices::Sensors::Detail
             queue_ = ASensorManager_createEventQueue(manager_, looper, 0, nullptr, nullptr);
             if (queue_ == nullptr)
             {
+                SignalStartOutcome(StartOutcome::Failure);
                 return;
             }
 
-            ASensorEventQueue_enableSensor(queue_, sensor_);
+            // Task: async startup reporting must also cover a failed
+            // enable, not just a failed queue creation -- ASensorEventQueue_
+            // enableSensor() returning negative means the sensor was never
+            // actually enabled, so no samples will ever arrive; previously
+            // this return value was silently discarded and Start() still
+            // reported success.
+            if (ASensorEventQueue_enableSensor(queue_, sensor_) < 0)
+            {
+                ASensorManager_destroyEventQueue(manager_, queue_);
+                queue_ = nullptr;
+                SignalStartOutcome(StartOutcome::Failure);
+                return;
+            }
 
             ASensorEventQueue_setEventRate(
                 queue_, sensor_, ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(timeBetweenUpdates_));
+
+            SignalStartOutcome(StartOutcome::Success);
 
             // 100ms bounded wait: re-checks stopRequested_ promptly even if
             // ALooper_wake() is missed due to the benign startup race on
@@ -95,7 +144,20 @@ namespace Microsoft::Devices::Sensors::Detail
                 ALooper_pollOnce(100, nullptr, nullptr, nullptr);
 
                 ASensorEvent event;
-                while (ASensorEventQueue_getEvents(queue_, &event, 1) > 0)
+                // Re-checks stopRequested_ before every callback invocation,
+                // not just once per outer iteration: a callback can
+                // reentrantly call Stop() (e.g. the owning Compass/Motion
+                // instance disposing itself from inside its own
+                // CurrentValueChanged handler) -- once that happens, no
+                // further callback_() call is safe, since callback_ itself
+                // may have captured a pointer to an object whose *owner* is
+                // being torn down as part of that same reentrant call (see
+                // Stop()'s doc comment on the accepted remaining boundary).
+                // Without this check, a second already-queued event could
+                // still trigger callback_() again with a now-invalid
+                // captured pointer even though Stop() had already run.
+                while (!stopRequested_.load(std::memory_order_acquire)
+                       && ASensorEventQueue_getEvents(queue_, &event, 1) > 0)
                 {
                     AndroidSensorSample sample;
                     sample.ValueCount = 16;
@@ -116,7 +178,20 @@ namespace Microsoft::Devices::Sensors::Detail
 
                     if (callback_)
                     {
-                        callback_(sample);
+                        // Task: callback exception policy. An exception
+                        // escaping a std::thread's entry point calls
+                        // std::terminate() and crashes the whole process --
+                        // strictly worse than swallowing it. Mirrors
+                        // Detail::SdlSensorSubsystem<TSensor>::
+                        // DispatchToInstances()'s identical policy (Task
+                        // P8-5) for the SDL-backed sensors.
+                        try
+                        {
+                            callback_(sample);
+                        }
+                        catch (...)
+                        {
+                        }
                     }
                 }
             }
@@ -136,7 +211,7 @@ namespace Microsoft::Devices::Sensors::Detail
 #endif
 
     AndroidSensorBridge::AndroidSensorBridge(int androidSensorType)
-        : impl_(std::make_unique<Impl>(androidSensorType))
+        : impl_(std::make_shared<Impl>(androidSensorType))
     {
     }
 
@@ -157,6 +232,17 @@ namespace Microsoft::Devices::Sensors::Detail
     bool AndroidSensorBridge::Start(const System::TimeSpan& timeBetweenUpdates, SampleCallback callback)
     {
 #ifdef __ANDROID__
+        // Task: repeated Start/Stop safety. Assigning a new std::thread
+        // over an already-joinable one calls std::terminate() (the C++
+        // standard requires it) -- this must never happen. Calling Start()
+        // while already started is a documented failure: return false
+        // immediately, without touching the running worker at all. Callers
+        // that want a restart must call Stop() first.
+        if (impl_->worker_.joinable())
+        {
+            return false;
+        }
+
         if (!impl_->Probe())
         {
             return false;
@@ -165,7 +251,37 @@ namespace Microsoft::Devices::Sensors::Detail
         impl_->timeBetweenUpdates_ = timeBetweenUpdates;
         impl_->callback_ = std::move(callback);
         impl_->stopRequested_.store(false, std::memory_order_release);
-        impl_->worker_ = std::thread([this]() { impl_->Run(); });
+        impl_->startOutcome_ = Impl::StartOutcome::Pending;
+
+        // Captures impl_ (a shared_ptr copy), not this -- see Impl::Run()'s
+        // own doc comment and the shared_ptr<Impl> member's doc comment for
+        // the full use-after-free rationale this closes.
+        std::shared_ptr<Impl> implForThread = impl_;
+        impl_->worker_ = std::thread([implForThread]() { implForThread->Run(); });
+
+        // Task: async startup reporting. Blocks until Run() has genuinely
+        // succeeded or failed to create/enable the sensor queue -- never
+        // indefinitely: ASensorManager_createEventQueue()/
+        // ASensorEventQueue_enableSensor() are expected to complete in
+        // microseconds under normal conditions, so a generous bounded
+        // timeout here is a safety net against a truly wedged platform
+        // call, not a normal-path wait.
+        std::unique_lock<std::mutex> lock(impl_->startMutex_);
+        const bool signaled = impl_->startCv_.wait_for(
+            lock, std::chrono::seconds(5),
+            [this]() { return impl_->startOutcome_ != Impl::StartOutcome::Pending; });
+        lock.unlock();
+
+        if (!signaled || impl_->startOutcome_ != Impl::StartOutcome::Success)
+        {
+            // Timed out, or Run() reported failure: stop and join so we
+            // never leak a half-started or permanently-wedged worker
+            // thread, and report the failure honestly rather than the
+            // stale "true" this method used to return unconditionally.
+            Stop();
+            return false;
+        }
+
         return true;
 #else
         (void)timeBetweenUpdates;
@@ -190,13 +306,23 @@ namespace Microsoft::Devices::Sensors::Detail
             {
                 // Reentrant call from within this bridge's own callback, on
                 // its own worker thread (e.g. a Compass/Motion instance
-                // disposing itself from inside its own CurrentValueChanged
+                // stopping itself from inside its own CurrentValueChanged
                 // handler). Joining our own thread would throw
                 // std::system_error (resource_deadlock_would_occur) —
                 // detach instead and let Run() finish exiting on its own.
-                // Mirrors Accelerometer's own documented, accepted
-                // "destroying from within your own callback" boundary
-                // rather than fully solving it here.
+                // Impl itself stays alive via the worker thread's own
+                // shared_ptr<Impl> copy (captured in Start()'s lambda),
+                // independent of this AndroidSensorBridge wrapper's
+                // lifetime -- so Run()'s own `this` (Impl*) never dangles
+                // even if this wrapper (and impl_, this object's own
+                // shared_ptr reference) is destroyed immediately after this
+                // call returns. This does NOT extend the lifetime of
+                // whatever object owns *this bridge* (e.g.
+                // AndroidCompassBackend) -- destroying that from within
+                // this same callback remains an accepted, unsupported
+                // boundary, identical in spirit to Accelerometer's own
+                // documented "destroying from within your own callback"
+                // limitation.
                 impl_->worker_.detach();
             }
             else

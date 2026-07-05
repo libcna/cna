@@ -67,3 +67,19 @@ TEST(AndroidSensorBridgeTests, DestructorWithoutStartDoesNotCrash)
 {
     EXPECT_NO_THROW({ AndroidSensorBridge bridge(1); });
 }
+
+// Stabilization pass, Task 1 (repeated Start/Stop safety): on this
+// (non-Android) host, Start() always returns false regardless of prior
+// calls, so this cannot exercise the real fix (reassigning an
+// already-joinable std::thread would only be reachable on Android, where
+// Start() can actually succeed) -- but it locks in the API contract that
+// calling Start() twice in a row is always safe to attempt, on every
+// platform, and never crashes. The real Android code path was verified
+// separately via a cross-compile + llvm-nm symbol check (not runtime-
+// exercised -- no Android device in this environment).
+TEST(AndroidSensorBridgeTests, StartTwiceInARowNeverCrashesOnNonAndroidPlatform)
+{
+    AndroidSensorBridge bridge(1);
+    EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
+    EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
+}

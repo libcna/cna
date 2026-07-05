@@ -127,6 +127,22 @@ namespace Microsoft::Devices::Sensors::Detail
         /**
          * @brief Starts delivering samples on a dedicated background thread.
          *
+         * Calling this while already started (a prior Start() succeeded and
+         * Stop() has not been called since) is a **documented failure, not
+         * a silent restart or an overwrite of the running worker thread** —
+         * matching Accelerometer::Start()'s own "already started" exception
+         * convention (translated to this class's bool-return contract,
+         * since this is CNA-internal plumbing, not an XNA-facing API that
+         * throws). Returns false immediately without touching the running
+         * worker. Callers that want a restart must call Stop() first.
+         *
+         * The return value reflects **real, confirmed delivery having
+         * started** — this method blocks (briefly, bounded, never
+         * indefinitely) until the worker thread has either successfully
+         * created and enabled its `ASensorEventQueue` or failed to do so,
+         * so a caller never sees a false "true" while the platform sensor
+         * queue silently failed to initialize.
+         *
          * @param timeBetweenUpdates Requested sample interval, mapped to
          * ASensorEventQueue_setEventRate()'s microsecond parameter. Applied
          * once at Start() time — changing it later has no effect until the
@@ -137,14 +153,21 @@ namespace Microsoft::Devices::Sensors::Detail
          * silently be capped by the OS to a slower effective rate than
          * requested; this bridge does not detect or compensate for that.
          * @param callback Invoked once per sample, on this bridge's own
-         * background thread — never the calling thread. Must not throw;
-         * an exception escaping this callback is not handled here (unlike
+         * background thread — never the calling thread. May throw: any
+         * exception escaping this callback is caught and silently
+         * discarded here (mirrors
          * Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()'s
-         * documented per-instance exception-swallowing policy) — wiring
-         * that same policy in is the responsibility of whichever
-         * Compass/Motion backend (Phase 7/8) supplies this callback.
-         * @return true if sensor delivery actually started; false if this
-         * sensor type is unavailable on this device.
+         * identical per-instance exception-swallowing policy, Task P8-5) —
+         * an exception left to escape a `std::thread`'s entry point would
+         * otherwise call `std::terminate()` and crash the whole process,
+         * which is strictly worse than swallowing it. A game's own
+         * `CurrentValueChanged`/`Calibrate` handler should not rely on an
+         * exception it throws propagating anywhere — it never will, same
+         * as the SDL-backed sensors.
+         * @return true if sensor delivery genuinely started (the platform
+         * sensor queue was created and enabled); false if this sensor type
+         * is unavailable, if delivery could not actually be started, or if
+         * this bridge was already started.
          */
         bool Start(const System::TimeSpan& timeBetweenUpdates, SampleCallback callback);
 
@@ -158,11 +181,33 @@ namespace Microsoft::Devices::Sensors::Detail
          * still leaves (detaches rather than joins in that one case,
          * mirroring Accelerometer's own documented "destroying from within
          * your own callback" limitation rather than fully solving it).
+         *
+         * @note This bridge's internal worker state (the `Impl` this class
+         * privately owns) is kept alive by the worker thread itself for as
+         * long as that thread is still running, independent of this
+         * `AndroidSensorBridge` wrapper's own lifetime — so destroying (not
+         * just Stop()-ping) this object from within its own callback does
+         * not use-after-free the worker's own state. It does **not**
+         * extend the lifetime of whatever object *owns* this bridge (e.g.
+         * `AndroidCompassBackend`, or the `Compass`/`Motion` instance above
+         * it) — destroying one of *those* from within this bridge's own
+         * callback remains an accepted, unsupported boundary, identical in
+         * spirit to Accelerometer's own documented "destroying from within
+         * your own callback" limitation.
          */
         void Stop();
 
     private:
         struct Impl;
-        std::unique_ptr<Impl> impl_;
+
+        /**
+         * shared_ptr, not unique_ptr: the worker thread's own lambda
+         * captures a copy of this pointer (not `this`), so Impl's lifetime
+         * extends for as long as the worker thread is still running, even
+         * if this AndroidSensorBridge wrapper is destroyed first (e.g. a
+         * reentrant Stop()/destroy from within the bridge's own callback,
+         * on its own worker thread) — see Stop()'s own doc comment.
+         */
+        std::shared_ptr<Impl> impl_;
     };
 } // namespace Microsoft::Devices::Sensors::Detail
