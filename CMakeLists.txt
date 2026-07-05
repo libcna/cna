@@ -535,6 +535,43 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         endif()
     endif()
 
+    # Task 11.11 (Phase 11b): real windowed proof that AvatarRenderer's real-rendering
+    # extension (Phase 10) draws Phase 11a's procedurally-generated, non-synthetic avatar
+    # content (tools/avatar_builder/ + tools/avatar_asset_pipeline/convert_avatar.py,
+    # Task 11.10). Needs CNA_GamerServices (AvatarRenderer lives there, same gating as
+    # cna_test_avatar_real_render below), already inside this EASYGL/VULKAN-only scope.
+    # Emscripten isn't wired up for this demo yet (deferred, no immediate need).
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_avatar
+            examples/demo_avatar/src/Main.cpp
+            examples/demo_avatar/src/AvatarDemo.cpp
+        )
+        target_include_directories(cna_demo_avatar PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/src
+        )
+        target_link_libraries(cna_demo_avatar PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_avatar PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_avatar PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_avatar PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_avatar POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_avatar>/Content"
+            COMMENT "Copying Content next to cna_demo_avatar executable")
+        if(WIN32)
+            set_target_properties(cna_demo_avatar PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_avatar)
+        endif()
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")

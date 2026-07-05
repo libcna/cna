@@ -43,6 +43,33 @@ project's decision to match XNA's `AvatarBodyType` concept from the start rather
 shipping a unisex placeholder — see `tools/avatar_builder/generate_avatar.py`'s
 `--gender` flag.
 
+**Now also proven end-to-end through the real C++ engine** (Task 11.11,
+`examples/demo_avatar/`): the converted content loads via `ContentManager` and renders,
+animated, in a real window (see `docs/avatar-real-rendering-ext.md`'s "Real content
+integration" section for full detail). Getting there found and fixed two more real bugs
+in `convert_body()` itself, on top of the two above:
+
+- `build_node_hierarchy()`'s topological bone reordering (needed for
+  `ComputeBoneTransformsEXT`'s `parent[i] < i` assumption) left `inverseBindMatrices`
+  and every vertex's `JOINTS_0` indices in glTF's original `skin.joints` order — both
+  needed remapping to the new order (`joint_index_remap`), or bones were skinned with
+  the wrong bind pose/vertex weights.
+- `bind_pose_local`'s conversion from glTF's column-major matrix convention to CNA's
+  row-major one was backwards: they're actually byte-identical for the same transform
+  (transposing the matrix and swapping major order are inverse operations that cancel
+  out), so the correct fix was to stop transposing, not to transpose consistently.
+  `bind_pose_local` is now derived directly from `inverse_bind_global` via matrix
+  inversion (correct by construction — see `_invert4x4`/`_mat_mul_rowmajor`) rather than
+  independently from each joint's own TRS, removing an entire class of independent-
+  derivation-disagrees-with-itself risk.
+
+A third bug turned out to be in the C++ engine itself, not this pipeline:
+`ContentManager.cpp`'s `SkinnedModelTypeReader` had a path-resolution bug (paths
+resolved against the content root instead of the manifest's own directory) and a real
+evaluation-order bug reading keyframe data (relying on unspecified C++ argument
+evaluation order across multiple side-effecting reads) — see
+`docs/avatar-real-rendering-ext.md` for detail; nothing to change here for either.
+
 ## Manual steps (to be performed by a human, not automatable here)
 
 1. Install MakeHuman (https://www.makehumancommunity.org/).

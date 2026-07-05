@@ -657,6 +657,11 @@ namespace Microsoft::Xna::Framework::Content
 
                 const std::string json = ReadTextFile(path);
                 const std::string root = cm.getRootDirectoryProperty();
+                // Every path the manifest references (skeleton/vertices/indices/texture/clip) is
+                // relative to the manifest's own directory, not the content root — so a bundle
+                // like Content/avatar/male/ is self-contained and relocatable without rewriting
+                // any of its internal paths.
+                const fs::path manifestDir = fs::path(path).parent_path();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
 
                 auto model = std::make_shared<Graphics::SkinnedModelEXT>();
@@ -669,7 +674,7 @@ namespace Microsoft::Xna::Framework::Content
                         "SkinnedModel descriptor missing 'skeleton' field: " + path);
                 }
 
-                const auto skelBytes = ReadBinaryFile((fs::path(root) / skeletonRel).string());
+                const auto skelBytes = ReadBinaryFile((manifestDir / skeletonRel).string());
                 BinReaderEXT skelReader{skelBytes};
                 const int boneCount = skelReader.Read<std::int32_t>();
                 model->BoneCount = boneCount;
@@ -701,8 +706,8 @@ namespace Microsoft::Xna::Framework::Content
                     if (vertFile.empty() || idxFile.empty()) { continue; }
                     if (stride <= 0) { continue; }
 
-                    const auto vertBytes = ReadBinaryFile((fs::path(root) / vertFile).string());
-                    const auto idxBytes  = ReadBinaryFile((fs::path(root) / idxFile).string());
+                    const auto vertBytes = ReadBinaryFile((manifestDir / vertFile).string());
+                    const auto idxBytes  = ReadBinaryFile((manifestDir / idxFile).string());
 
                     const int numVertices = static_cast<int>(vertBytes.size()) / stride;
                     const int numIndices  = static_cast<int>(idxBytes.size())
@@ -721,7 +726,11 @@ namespace Microsoft::Xna::Framework::Content
                     Graphics::Texture2D texture;
                     if (!texFile.empty())
                     {
-                        texture = cm.Load<Graphics::Texture2D>(texFile);
+                        // cm.Load<T>() always resolves its argument relative to the content
+                        // root, not the manifest's directory — re-express texFile (manifest-
+                        // relative, like every other path here) as root-relative first.
+                        const std::string texRootRelative = fs::relative(manifestDir / texFile, root).string();
+                        texture = cm.Load<Graphics::Texture2D>(texRootRelative);
                     }
 
                     model->AddPartEXT(name, std::move(vb), std::move(ib), std::move(part),
@@ -735,7 +744,7 @@ namespace Microsoft::Xna::Framework::Content
                     const std::string clipFile = ExtractJsonStringField(ag, "clip");
                     if (name.empty() || clipFile.empty()) { continue; }
 
-                    const auto clipBytes = ReadBinaryFile((fs::path(root) / clipFile).string());
+                    const auto clipBytes = ReadBinaryFile((manifestDir / clipFile).string());
                     BinReaderEXT clipReader{clipBytes};
 
                     Graphics::AnimationClipEXT clip;
@@ -752,12 +761,31 @@ namespace Microsoft::Xna::Framework::Content
                         {
                             Graphics::KeyframeEXT key;
                             key.Time = System::TimeSpan::FromSeconds(clipReader.Read<double>());
-                            key.Translation = Vector3(clipReader.Read<float>(), clipReader.Read<float>(),
-                                                       clipReader.Read<float>());
-                            key.Rotation = Quaternion(clipReader.Read<float>(), clipReader.Read<float>(),
-                                                       clipReader.Read<float>(), clipReader.Read<float>());
-                            key.Scale = Vector3(clipReader.Read<float>(), clipReader.Read<float>(),
-                                                clipReader.Read<float>());
+                            // C++ does not guarantee left-to-right evaluation order for a single
+                            // function call's arguments — reading each float into its own named
+                            // local first (separate statements, strictly sequential) before
+                            // constructing Vector3/Quaternion is required here, not stylistic:
+                            // Vector3(clipReader.Read<float>(), clipReader.Read<float>(), ...)
+                            // previously let the compiler evaluate those Read<float>() calls (each
+                            // with the side effect of advancing clipReader's position) in whatever
+                            // order it liked, silently scrambling which bytes landed in which
+                            // component. Confirmed via a real rendering bug (Task 11.11): a
+                            // Spine bone keyframe's rotation bytes for (x,y,z,w) = (0,0,0,1) (identity)
+                            // were read back as (1,0,0,0) — exactly the reversed order a right-to-left
+                            // evaluation would produce.
+                            const float tx = clipReader.Read<float>();
+                            const float ty = clipReader.Read<float>();
+                            const float tz = clipReader.Read<float>();
+                            key.Translation = Vector3(tx, ty, tz);
+                            const float qx = clipReader.Read<float>();
+                            const float qy = clipReader.Read<float>();
+                            const float qz = clipReader.Read<float>();
+                            const float qw = clipReader.Read<float>();
+                            key.Rotation = Quaternion(qx, qy, qz, qw);
+                            const float sx = clipReader.Read<float>();
+                            const float sy = clipReader.Read<float>();
+                            const float sz = clipReader.Read<float>();
+                            key.Scale = Vector3(sx, sy, sz);
                             track.Keys.push_back(key);
                         }
                         clip.Tracks.push_back(std::move(track));

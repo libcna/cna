@@ -150,16 +150,52 @@ def convert_body(body_path, out_dir):
     names, parent_indices, node_to_bone = build_node_hierarchy(gltf, skin)
     bone_count = len(names)
 
+    # build_node_hierarchy reorders bones into topological (BFS) order, which generally
+    # differs from skin.joints' own declared order. inverseBindMatrices and every vertex's
+    # JOINTS_0 indices are given in that *original* skin.joints order, though — remap both
+    # to the new order, or bones end up skinned by the wrong bind pose/vertex entirely.
+    # A second real bug found the same way as the bind_pose_local transpose above: caught
+    # by actually rendering real content (Task 11.11), not by static review.
+    joint_index_remap = [node_to_bone[node_idx] for node_idx in skin.joints]
+
     inverse_bind = read_accessor(gltf, blob, skin.inverseBindMatrices)
-    # glTF stores matrices column-major; CNA's Matrix(m11..m44) constructor is row-major —
-    # transpose on write.
-    inverse_bind_global = [_transpose4x4(m) for m in inverse_bind]
+    # glTF's column-major storage for a column-vector transform (v'=Av) and XNA/CNA's
+    # row-major storage for the *same* transform expressed in row-vector form
+    # (v'=v*(A^T)) are byte-for-byte IDENTICAL — transposing the matrix and swapping
+    # major order are inverse operations that cancel out. So this is a straight copy,
+    # NOT a transpose.
+    # Confirmed empirically (Task 11.11): an earlier version of this code DID transpose
+    # here, which corrupted every bind-pose-local matrix, moving translation from row 4
+    # (M41/M42/M43, where CNA's Matrix/BinReaderEXT::ReadMatrix expects it) into
+    # column 4 — rendering a real avatar as a huge, nonsensical close-up instead of a
+    # recognizable standing figure. A forced-identity-bones diagnostic render (bypassing
+    # this code path entirely) proved the camera/mesh/shader path was already correct,
+    # isolating the bug to exactly this matrix convention question.
+    # Reordered via joint_index_remap for the same reason as above (topological reorder).
+    inverse_bind_global = [None] * bone_count
+    for original_idx, m in enumerate(inverse_bind):
+        inverse_bind_global[joint_index_remap[original_idx]] = m
     # Bind-pose *local* transform isn't directly given by glTF's skin data (glTF only gives
-    # the inverse bind *global* matrix); derive it from each joint node's own local TRS, which
-    # is what MakeHuman/Mixamo actually author into the node hierarchy. bone_to_node inverts
-    # node_to_bone so bind_pose_local[i] lines up with bone index i, not node index.
-    bone_to_node = {bone_idx: node_idx for node_idx, bone_idx in node_to_bone.items()}
-    bind_pose_local = [_node_local_matrix(gltf.nodes[bone_to_node[i]]) for i in range(bone_count)]
+    # the inverse bind *global* matrix) — derive it purely from inverse_bind_global (already
+    # remapped/verified-correct above) via matrix inversion, rather than hand-deriving it a
+    # second, independent way from each joint node's own TRS. An earlier version did the
+    # latter (see _node_local_matrix, now removed) via hand-rolled quaternion-to-matrix math;
+    # it produced a non-identity result even at the exact rest pose (confirmed by dumping
+    # ComputeBoneTransformsEXT's own output — every bone should reduce to identity there,
+    # by definition, since bind pose composed with its own inverse must cancel out), meaning
+    # that independent derivation didn't actually agree with inverse_bind_global's convention
+    # somewhere. Deriving bind_pose_local FROM inverse_bind_global instead sidesteps needing
+    # to find that exact bug: it's correct by construction, since
+    # bind_pose_global[i] * inverse(bind_pose_global[i]) is trivially identity, matching
+    # ComputeBoneTransformsEXT's own worldTransforms[i] * InverseBindPoseGlobal[i] formula.
+    bind_pose_global = [_invert4x4(m) for m in inverse_bind_global]
+    bind_pose_local = []
+    for i in range(bone_count):
+        parent = parent_indices[i]
+        if parent < 0:
+            bind_pose_local.append(bind_pose_global[i])
+        else:
+            bind_pose_local.append(_mat_mul_rowmajor(bind_pose_global[i], _invert4x4(bind_pose_global[parent])))
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -171,7 +207,7 @@ def convert_body(body_path, out_dir):
             part_name = mesh.name or f"part{mesh_i}_{prim_i}"
             verts_path = out_dir / f"{part_name}.verts.bin"
             idx_path = out_dir / f"{part_name}.idx.bin"
-            _write_skinned_vertex_buffer(gltf, blob, prim, verts_path)
+            _write_skinned_vertex_buffer(gltf, blob, prim, verts_path, joint_index_remap)
             _write_index_buffer(gltf, blob, prim, idx_path)
             parts.append({
                 "name": part_name,
@@ -273,43 +309,43 @@ def convert_embedded_clip(gltf, blob, anim, bone_names, out_dir):
     return _write_clip(out_dir, anim.name, duration, tracks)
 
 
-def _node_local_matrix(node):
-    if node.matrix:
-        return tuple(node.matrix)
-    # glTF TRS -> 4x4 column-major, matching inverseBindMatrices' own convention.
-    tx, ty, tz = node.translation or (0, 0, 0)
-    qx, qy, qz, qw = node.rotation or (0, 0, 0, 1)
-    sx, sy, sz = node.scale or (1, 1, 1)
-    # Standard quaternion-to-matrix (column-major, matches glTF).
-    xx, yy, zz = qx * qx, qy * qy, qz * qz
-    xy, xz, yz = qx * qy, qx * qz, qy * qz
-    wx, wy, wz = qw * qx, qw * qy, qw * qz
-    r = (
-        1 - 2 * (yy + zz), 2 * (xy + wz), 2 * (xz - wy), 0,
-        2 * (xy - wz), 1 - 2 * (xx + zz), 2 * (yz + wx), 0,
-        2 * (xz + wy), 2 * (yz - wx), 1 - 2 * (xx + yy), 0,
-        0, 0, 0, 1,
-    )
-    scale = (sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, 0, 0, 0, 1)
-    m = _mat_mul(scale, r)
-    m = list(m)
-    m[12], m[13], m[14] = tx, ty, tz
-    return tuple(m)
-
-
-def _mat_mul(a, b):
+def _mat_mul_rowmajor(a, b):
+    """4x4 matrix multiply; a, b, and the result are all flat 16-tuples with the same
+    indexing convention (m[i*4+j] = row i, col j) — result = a @ b in the usual sense.
+    Convention-agnostic: works correctly whether that indexing is "really" row-major or
+    column-major, as long as every matrix passed through this file uses the same one
+    (see the note in convert_body about glTF/CNA's byte layout being interchangeable)."""
     result = [0.0] * 16
-    for row in range(4):
-        for col in range(4):
-            result[col * 4 + row] = sum(a[k * 4 + row] * b[col * 4 + k] for k in range(4))
+    for i in range(4):
+        for j in range(4):
+            result[i * 4 + j] = sum(a[i * 4 + k] * b[k * 4 + j] for k in range(4))
     return tuple(result)
 
 
-def _transpose4x4(m):
-    return tuple(m[r + c * 4] for r in range(4) for c in range(4))
+def _invert4x4(m):
+    """General 4x4 matrix inverse via Gauss-Jordan elimination (no numpy dependency —
+    pygltflib is this script's only requirement). m is a flat 16-tuple, m[i*4+j] = row i
+    col j; the result uses the same convention. Raises ValueError if m is singular."""
+    aug = [list(m[r * 4:r * 4 + 4]) + [1.0 if c == r else 0.0 for c in range(4)] for r in range(4)]
+    for col in range(4):
+        pivot_row = max(range(col, 4), key=lambda r: abs(aug[r][col]))
+        if abs(aug[pivot_row][col]) < 1e-9:
+            raise ValueError("matrix is singular, cannot invert")
+        aug[col], aug[pivot_row] = aug[pivot_row], aug[col]
+        pivot = aug[col][col]
+        aug[col] = [x / pivot for x in aug[col]]
+        for r in range(4):
+            if r != col:
+                factor = aug[r][col]
+                aug[r] = [x - factor * y for x, y in zip(aug[r], aug[col])]
+    return tuple(aug[r][4 + c] for r in range(4) for c in range(4))
 
 
-def _write_skinned_vertex_buffer(gltf, blob, prim, out_path):
+def _write_skinned_vertex_buffer(gltf, blob, prim, out_path, joint_index_remap):
+    """joint_index_remap[original skin.joints index] -> bone index in skeleton.bin's
+    topological order (see build_node_hierarchy) — every vertex's raw JOINTS_0 value is
+    an index into skin.joints, not already a skeleton.bin bone index, so it must be
+    remapped the same way inverse_bind_global is in convert_body."""
     positions = read_accessor(gltf, blob, prim.attributes.POSITION)
     normals = (read_accessor(gltf, blob, prim.attributes.NORMAL)
                if prim.attributes.NORMAL is not None else [(0, 0, 1)] * len(positions))
@@ -322,7 +358,8 @@ def _write_skinned_vertex_buffer(gltf, blob, prim, out_path):
 
     with open(out_path, "wb") as f:
         for pos, nrm, uv, w, j in zip(positions, normals, uvs, weights, joints):
-            f.write(struct.pack("<3f3f2f4f4B", *pos, *nrm, *uv, *w, *[int(x) for x in j]))
+            remapped_j = [joint_index_remap[int(x)] for x in j]
+            f.write(struct.pack("<3f3f2f4f4B", *pos, *nrm, *uv, *w, *remapped_j))
 
 
 def _write_index_buffer(gltf, blob, prim, out_path):

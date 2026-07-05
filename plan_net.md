@@ -1082,11 +1082,67 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   the already-documented synthetic `neutral_bone`), 5 correctly-named parts, both clips
   present with 19 tracks each.
 
-- [ ] **Task 11.11** — Wire the converted content through
+- [x] **Task 11.11** — Wire the converted content through
   `ContentManager::Load<shared_ptr<SkinnedModelEXT>>` and `AvatarRenderer::EnableRealRenderingEXT`/
   `DrawRealEXT` in a real, non-headless windowed demo (not another synthetic-fixture integration
   test) — the actual visual proof that Phase 10's engine work and Phase 11's content now draw a
   real, if simple, animated humanoid on screen.
+  **Done — and this is where the real bugs the plan anticipated actually turned up.**
+  New `examples/demo_avatar/` (`cna_demo_avatar`, gated like the existing integration test
+  on `CNA_ENABLE_NET` + EasyGL/Vulkan): loads `Content/avatar/male/avatar.skinnedmodel.json`
+  (real Task 11.10 content, committed into the demo's own `Content/`), calls
+  `EnableRealRenderingEXT`/`SetAppearanceEXT`, and calls `DrawRealEXT("Stand0"/"Wave", ...)`
+  every frame (Space toggles clips, arrow keys orbit the camera). **Verified on a real
+  X11/OpenGL window** (screenshots taken via `import`/`xwininfo`, not just "it compiled"):
+  a complete, correctly-proportioned, animated T-pose humanoid renders; toggling to `Wave`
+  visibly bends the arm.
+  Getting a recognizable figure on screen (not a giant, nonsensical close-up) took three
+  rounds of real bug-hunting, none of them findable by re-reading code — each one only
+  showed up once real camera matrices / a real multi-bone skeleton / real file-sourced
+  quaternions were involved, none of which the Phase 10 synthetic fixture (identity
+  view/projection, one hand-built bone, `Quaternion::Identity` constructed directly in
+  C++) ever exercised:
+  1. `ContentManager.cpp`'s `SkinnedModelTypeReader` resolved every manifest path
+     (`skeleton`/`vertices`/`indices`/`texture`/`clip`) against the content root instead
+     of the manifest's own directory — content in a subdirectory (`Content/avatar/male/`)
+     failed to load at all. Fixed: resolve relative to `fs::path(path).parent_path()`.
+  2. `convert_avatar.py`'s bind-pose-local-to-CNA-row-major "fix" from Task 11.10 was
+     itself backwards — glTF's column-major storage and CNA's row-major storage for the
+     *same* transform are byte-identical (transposing the matrix and swapping major order
+     are inverse operations that cancel out), so transposing was the bug, not the missing
+     step. Also found: `inverseBindMatrices`/vertex `JOINTS_0` indices needed remapping to
+     `build_node_hierarchy`'s topological bone order, same as Task 11.10's part-vertex fix.
+     `bind_pose_local` is now derived directly from `inverse_bind_global` via a small
+     dependency-free 4x4 matrix inverse (`_invert4x4`) — correct by construction, not by
+     independently re-deriving the same bind pose two different ways and hoping they agree.
+     Diagnosed via a forced-identity-bones render (isolating camera/mesh/shader as already
+     correct) then dumping `ComputeBoneTransformsEXT`'s own output at exact rest pose,
+     which must reduce to identity for every bone by definition.
+  3. **The real show-stopper, found last:** even after both fixes above, real animated
+     bones still came out wrong. Root cause was in `ContentManager.cpp` itself, not the
+     converter: `key.Rotation = Quaternion(clipReader.Read<float>(), clipReader.Read<float>(),
+     clipReader.Read<float>(), clipReader.Read<float>())` relies on left-to-right
+     evaluation of the four `Read<float>()` calls — which C++ does **not** guarantee for a
+     single function call's arguments. The compiler evaluated them in a different order,
+     silently scrambling which bytes landed in which quaternion component (confirmed via a
+     raw hex dump of the clip file: true bytes were `(x,y,z,w)=(0,0,0,1)` identity; the
+     constructed `Quaternion` came out `(1,0,0,0)` — exactly the reversed order). Fixed by
+     reading each float into its own named local first, as strictly sequential statements,
+     before constructing `Vector3`/`Quaternion`. Same pattern existed for `Translation`
+     and `Scale` too (only invisible for `Translation` because Spine's `tx`/`tz` were both
+     coincidentally `0.0`, so the outer-pair swap a reversal would cause was undetectable
+     there); all three fixed together.
+  All three verified by an exact mathematical check, not just "looks right": at rest pose,
+  `ComputeBoneTransformsEXT`'s output for every one of the 20 bones is now bit-for-bit
+  identity (`worldTransforms[i] * InverseBindPoseGlobal[i] == I`, as it must be by
+  definition), confirmed both via a standalone C++ diagnostic and by Python-side
+  replication of the exact same formula against the actual written binary files.
+  Full regression check: all 3212 non-skipped `CnaTests` still pass, and the existing
+  Phase 10 synthetic integration test (`cna_test_avatar_real_render`) still passes
+  unmodified — none of these fixes touched any faithful-XNA or previously-tested path.
+  **Not yet done:** only the male body is wired into the demo; Task 11.12 maps both
+  genders. The confirmed elbow/sleeve tear and zero-weight vertices (Task 11.6/11.7,
+  `tools/avatar_builder/README.md`) are unrelated content-quality gaps, untouched here.
 
 - [ ] **Task 11.12** — Map `AvatarBodyType::Male`/`Female` to the two generated bodies at whatever
   call-site convention makes sense (document the chosen approach in
