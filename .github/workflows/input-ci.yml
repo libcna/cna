@@ -1,10 +1,15 @@
-# INPUT-CI-001 — first CI for the Input track.
+# INPUT-CI-001 / INPUT-CI-005 — CI for the Input track.
 #
-# Builds CNA with the EasyGL backend and runs the input test suite headless. The input tests are
-# backend-agnostic, so this one job gives full input coverage; other backends + a sanitizer job are
-# added later (INPUT-CI-002 / INPUT-CI-005). All sibling repos (sharp-runtime, easy-gl, meta-gl) are
-# public, so they clone over HTTPS with no token/secret. third_party/enet is committed to this repo;
-# SDL / SDL_image / SDL_mixer / googletest come in as submodules.
+# Builds CNA with the EasyGL backend and runs the input test suite headless, as a matrix:
+#   - EasyGL          : plain build + input tests.
+#   - ASan+UBSan      : same, built with -DCNA_SANITIZE=address,undefined; any UB / memory error fails
+#                       the job (UBSAN/ASAN halt_on_error=1). Leak detection is off (the MouseCursor stock
+#                       singletons + SDL globals leak by design at process exit).
+# The input tests are backend-agnostic, so this gives full input coverage; other backends are a later
+# matrix expansion (INPUT-CI-002). All sibling repos (sharp-runtime, easy-gl, meta-gl) are public, so
+# they clone over HTTPS with no token/secret. third_party/enet is committed to this repo; SDL /
+# SDL_image / SDL_mixer / googletest come in as submodules. The prebuilt SDL is cached (it is built
+# uninstrumented, so both matrix entries share one cache).
 name: input-ci
 
 on:
@@ -25,9 +30,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  easygl-input:
-    name: EasyGL build + input tests (Linux)
+  input-tests:
+    name: ${{ matrix.name }} (Linux)
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: EasyGL
+            sanitize: ""
+            asan_options: ""
+            ubsan_options: ""
+          - name: ASan+UBSan
+            sanitize: "address,undefined"
+            asan_options: "detect_leaks=0:halt_on_error=1"
+            ubsan_options: "print_stacktrace=1:halt_on_error=1"
     env:
       CC: gcc-14
       CXX: g++-14
@@ -72,7 +89,8 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCNA_GRAPHICS_BACKEND=EASYGL \
-            -DCNA_BUILD_TESTS=ON
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_SANITIZE=${{ matrix.sanitize }}
 
       - name: Build CnaTests
         run: cmake --build build --target CnaTests
@@ -80,10 +98,13 @@ jobs:
       # A virtual X server (Xvfb) provides real windows/cursors headlessly. The SDL "dummy" video
       # driver is NOT enough: it reports video as available but has null system cursors, so the
       # MouseCursor tests fail rather than skip. Xvfb + SDL x11 makes them pass (real virtual video).
+      # For the ASan+UBSan entry, halt_on_error=1 turns any UB / memory error into a job failure.
       - name: Run input tests (canonical filter, headless via Xvfb, shuffled)
         env:
           SDL_VIDEODRIVER: x11
           SDL_AUDIODRIVER: dummy
+          ASAN_OPTIONS: ${{ matrix.asan_options }}
+          UBSAN_OPTIONS: ${{ matrix.ubsan_options }}
         run: |
           xvfb-run -a ./build/CnaTests \
             --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*' \
