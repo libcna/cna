@@ -1350,7 +1350,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** full `ctest`
   - **Dependencies:** DEVICES-0140
 
-- [ ] DEVICES-0142 — Write the final, dated compatibility report
+- [x] DEVICES-0142 — Write the final, dated compatibility report (2026-07-05: rewrote `AUDIT.md`'s "Final precise status table" (`plan_devices_phase9.md` Task P9-7's table) in full — every component's API/runtime/sanitizer/Android-compile/physical-hardware status updated, `Compass`/`Motion` now show real Android backends instead of permanent stubs, added a `Detail::AndroidSensorBridge` row, kept the same layered-status discipline (no flat "complete" claim). Rewrote `NEXT.md` comprehensively (all 10 sections) to reflect the full, closed 143-task plan — build/test status, recent changes, architecture notes, useful commands (including the new Android APK build sequence), next-smallest-tasks, and a refreshed resume prompt.)
   - **Area:** Docs
   - **Files:** `AUDIT.md`, `NEXT.md`
   - **Required behavior:** Replace `plan_devices_phase9.md` Task P9-7's status table with an updated one reflecting this plan's actual outcome (Compass/Motion real on Android or still stub if Phase 7/8 didn't fully land; Android APK packaged or still blocked; hardware verification results from DEVICES-0130).
@@ -1358,7 +1358,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0140, DEVICES-0141
 
-- [ ] DEVICES-0143 — Close this plan file
+- [x] DEVICES-0143 — Close this plan file (2026-07-05: every task above (DEVICES-0001–0142) is checked, with an explicit deferred/reason note wherever work was intentionally not done (Phase 2/3's 20 tasks deferred per DEVICES-0031's decision; DEVICES-0130 deferred, no physical hardware; DEVICES-0139 confirmed no code change needed). Following this project's own established convention (`plan_devices_phase2.md` through `plan_devices_phase9.md` all remain in the repo, unmodified, as permanent historical records rather than being deleted) — this file is left in place as the full historical record of this effort, not renamed or removed. **This plan (143 tasks, Phases 0-10) is now fully closed.**)
   - **Area:** Process
   - **Files:** `plan_devices.md` (this file)
   - **Required behavior:** Once every task above is either done or explicitly deferred with a reason (hardware unavailable, DEVICES-0031 concluded "not needed", etc.), mark this plan closed per this project's own convention (`plan_devices.md` → `plan_devices_phase2.md`-style rename is NOT this plan's convention this time, since `plan_devices.md` itself was previously retired after Phase 1 — follow whatever the maintainer prefers at closing time: archive, delete, or leave as historical record).

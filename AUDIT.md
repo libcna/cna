@@ -1504,32 +1504,40 @@ direct MSDN enum page found). Four real gaps were found this pass —
 below still record what each gap was and how it was resolved. Everything
 else in the table was confirmed to match the documented API exactly.
 
-### Final precise status table (`plan_devices_phase9.md` Task P9-7, 2026-07-04)
+### Final precise status table (`plan_devices.md` Phase 10, Task DEVICES-0142, 2026-07-05)
 
-The per-class table below (`Status` column, ✅) tracks XNA/WP7 **API completeness**
-only. It does not by itself say whether a class's *runtime* is real or stubbed, whether
-its concurrency has been sanitizer-verified, whether it cross-compiles for Android, or
-whether it has ever run on real hardware — those are four separate, independent
-questions, deliberately kept separate here rather than folded into one "done" verdict
-per this phase's own explicit instruction. Read every cell below as of what was actually
-run in a session, not as a general claim.
+**Supersedes `plan_devices_phase9.md` Task P9-7's table below** — `plan_devices.md`
+(143 tasks, Phases 0-10, all closed) gave `Compass`/`Motion` real Android backends and
+a working Android APK build/install/launch, both "not implemented"/"not available" as of
+Phase 9. The per-class table below (`Status` column, ✅) tracks XNA/WP7 **API
+completeness** only. It does not by itself say whether a class's *runtime* is real or
+stubbed, whether its concurrency has been sanitizer-verified, whether it cross-compiles
+for Android, or whether it has ever run on real hardware — those are four separate,
+independent questions, deliberately kept separate here rather than folded into one
+"done" verdict, continuing this table's own established convention. Read every cell
+below as of what was actually run in a session, not as a general claim.
 
 | Component | API surface | SDL/native runtime | Concurrency (sanitizers) | Android compile | Physical hardware |
 |---|---|---|---|---|---|
-| `Accelerometer` | Complete, matches documented WP7 SDK (`plan_devices_phase2.md` Task P2-2, 2026-07-02) | **Real**, SDL3-backed (`SDL_SENSOR_ACCEL`); dispatch/lifetime/concurrency hardened across Phases 5-8 | ASan/TSan/UBSan **clean** as of `plan_devices_phase9.md` Task P9-3 (one confirmed-unrelated pre-existing `sharp-runtime` TSan finding, not this class) | **Passes** (NDK r30, arm64-v8a, API 24; re-confirmed Task P9-4, `ninja: no work to do` — no source change since Task P8-8) | **Not verified** — no physical Android device or working emulator in this container (Task P9-4/P9-5); Android axis-remap sign convention specifically has never been checked against real tilt direction |
-| `Gyroscope` | Complete, matches documented WP7 SDK (no `Calibrate`/`State` on the real API, `getStateProperty()` correctly `NOXNA`-tagged) | **Real**, SDL3-backed (`SDL_SENSOR_GYRO`); identical implementation/hardening to `Accelerometer` | Same as `Accelerometer` — **clean** | **Passes**, same verification as `Accelerometer` | **Not verified**, same reasons as `Accelerometer` |
-| `Compass` | Complete API shell, matches documented WP7 SDK (`getStateProperty()` correctly `NOXNA`-tagged — real API has no `State`) | **Permanent `SensorState::NotSupported` stub** — SDL3 exposes no magnetometer API on any platform; this is a documented design boundary, not a temporary gap | N/A for dispatch (no real dispatch path exists); `instanceCount_`/`Dispose()` locking is sanitizer-clean | Passes (stub code compiles identically everywhere) | N/A — permanently `NotSupported` by design, nothing to verify until a native backend exists |
-| `Motion` | Complete API shell, same pattern as `Compass` (depends on `Compass`) | **Permanent `SensorState::NotSupported` stub**, same reason as `Compass` | Same as `Compass` | Passes, same as `Compass` | N/A, same as `Compass` |
-| `VibrateController` | Complete, matches WP7 instance API (Task P2-14) plus documented `NOXNA` extensions (intensity, `StartLeftRight`, `IsSupported`/`DeviceName` probes) | **Real**, SDL3 haptic-backed; RAII lifecycle (Task P5-11), ID-based gamepad exclusion (Task P4-10), confirmed to match `GraphicsDevice`'s own SDL lifecycle convention (Task P6-6) | Clean (no VibrateController-specific race ever found; re-verified under ASan Task P8-6/P9-3) | Passes (part of the same `CNA` library cross-compile) | **Not verified on a real phone motor or real gamepad** (Task P9-5) — the *software* guarantees (duration cap throws, silent no-op when unsupported) ARE verified live on this desktop, which has neither haptic hardware nor a connected gamepad |
-| `SensorBase<T>` | Complete API surface (`CurrentValue`/`IsDataValid`/`TimeBetweenUpdates`/`Dispose`/`CurrentValueChanged`) | N/A (abstract base, no device of its own) | **Every field now consistently mutex-guarded** — `TimeBetweenUpdates` was the last unguarded one, closed Task P8-2; `ClaimDisposalOnce()`/`WaitForDisposalToComplete()` close double-dispose/premature-disposed-state races (Tasks P6-3/P7-2); TSan-clean as of Task P8-4/P9-3 | N/A (header-only template, compiles wherever a concrete sensor does) | N/A (no device) |
-| `System.Device.Location` (GPS) | **Not implemented.** Explicitly out of `Microsoft.Devices.Sensors` scope by project decision, not an oversight | N/A | N/A | N/A | N/A — future plan only, see `docs/location-future-plan.md` |
+| `Accelerometer` | Complete, matches documented WP7 SDK (`plan_devices_phase2.md` Task P2-2) | **Real**, SDL3-backed (`SDL_SENSOR_ACCEL`); dispatch/lifetime/concurrency hardened across Phases 5-8; m/s²→g conversion re-confirmed correct (`plan_devices.md` Task DEVICES-0063) | ASan/TSan/UBSan **clean** (Task DEVICES-0140, 2026-07-05 — one confirmed-unrelated pre-existing `sharp-runtime` TSan finding, not this class) | **Passes** (NDK r30, arm64-v8a, API 24) | **App-level real-device run: not yet done.** The Android emulator now works (`/dev/kvm`, Task DEVICES-0126) and `cna_demo_devices` ran live on it — `Accelerometer`'s `DrawEventFlash()` was observed responding to injected emulator sensor values — but Android axis-remap sign convention has never been checked against a real physical tilt on real hardware |
+| `Gyroscope` | Complete, matches documented WP7 SDK (no `Calibrate`/`State` on the real API) | **Real**, SDL3-backed (`SDL_SENSOR_GYRO`); identical implementation/hardening to `Accelerometer`; rad/s unit re-confirmed correct, no conversion needed (Task DEVICES-0064) | Same as `Accelerometer` — **clean** | **Passes**, same verification as `Accelerometer` | Same emulator-only status as `Accelerometer` |
+| `Compass` | Complete API shell, matches documented WP7 SDK | **Real on Android** (`Detail::AndroidCompassBackend`, NDK-native, no JNI — Phase 7): `TYPE_ROTATION_VECTOR` for `MagneticHeading`, `TYPE_MAGNETIC_FIELD` for `MagnetometerReading`/accuracy/`Calibrate`. Honest `NotSupported` stub on every other platform (SDL3 has no magnetometer API anywhere) | Azimuth/accuracy math unit-tested for self-consistency (11 tests); base-class locking unaffected, still sanitizer-clean | **Passes**, `llvm-nm`-confirmed real `ASensorManager`/math symbols compiled in, not just the stub | **Emulator: app installed/launched/rendered** (screenshot-confirmed), but this emulator's virtual sensor set has no confirmed rotation-vector sensor to inject through — Compass's own Android path was not separately exercised via synthetic values. **Real device: never tried.** `TrueHeading` permanently limited to equal `MagneticHeading` (no `System.Device.Location`) |
+| `Motion` | Complete API shell, does **not** require constructing `Accelerometer`/`Compass`/`Gyroscope` (corrected a misleading doc comment, Task DEVICES-0114) | **Real on Android** (`Detail::AndroidMotionBackend`, Phase 8): `TYPE_ROTATION_VECTOR`/`TYPE_GAME_ROTATION_VECTOR` fallback for `Attitude`, `TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION`/`TYPE_GYROSCOPE` for the rest (g-force conversion bug found and fixed for the first two, Task DEVICES-0108/0109). Honest `NotSupported` stub elsewhere. `Calibrate` never raised by any backend | Yaw/pitch/roll extraction derived and round-trip-verified against CNA's own tested `Quaternion`/`Matrix` math (9 tests) | **Passes**, `llvm-nm`-confirmed | Same emulator-only status as `Compass` — coordinate-remap for `Gravity`/`DeviceAcceleration`/`DeviceRotationRate`/`Attitude` is an explicit, documented open question (Task DEVICES-0111), not resolved either way |
+| `VibrateController` | Complete, matches WP7 instance API plus documented `NOXNA` extensions | **Real**, SDL3 haptic-backed (unchanged this plan — Task DEVICES-0031 decided a native Android bridge is unnecessary: SDL3's own Android haptic backend already reaches `Context.VIBRATOR_SERVICE` with full amplitude control) | Clean; 2 new tests (singleton-across-usage, full unsupported-contract), 40/40 loop clean | Passes (part of the same `CNA` library cross-compile) | **Not verified on a real phone motor or real gamepad.** Software guarantees verified live on this desktop and on the emulator (no haptic hardware in either) |
+| `SensorBase<T>` | Complete API surface | N/A (abstract base) | Every field mutex-guarded; 2 new direct base-level tests closed a coverage gap (Task DEVICES-0052/0053); one **new, out-of-scope finding**: `sharp-runtime`'s `EventHandler<T>::Raise()` iterates its live handler list directly, not a snapshot (Task DEVICES-0057) — not currently reachable by any production code path in this namespace, not fixed here | N/A | N/A |
+| `Detail::AndroidSensorBridge` | N/A (CNA-internal, not XNA-facing) | **Real** (Phase 6): shared NDK `ASensorManager`/`ASensorEventQueue`/`ALooper` wrapper backing both `Compass` and `Motion`'s Android paths | Inert-on-non-Android path ASan/UBSan-clean; the real `#ifdef __ANDROID__` code cannot execute in this container, only compile | Passes, `llvm-nm`-confirmed | Dispose-mid-callback self-join/detach boundary code-reviewed and cross-compiled, **never runtime-exercised** (real code path can't run here) |
+| `System.Device.Location` (GPS) | **Not implemented.** Explicitly out of scope by project decision | N/A | N/A | N/A | N/A — future plan only, see `docs/location-future-plan.md` |
 
-**What "done" would need to mean and does not yet mean for this namespace:** API-complete
-and SDL-runtime-hardened for `Accelerometer`/`Gyroscope`/`VibrateController` — yes, as of
-this table. Physically verified on real Android/iOS hardware or a real haptic
-motor/gamepad — no, not in any session to date. A native (non-SDL) backend for
-`Compass`/`Motion` — not implemented, design sketched only (see
-`docs/devices-native-backend-design.md`, Task P9-8).
+**What "done" now means for this namespace, precisely:** API-complete and
+SDL-runtime-hardened for `Accelerometer`/`Gyroscope`/`VibrateController` — yes, unchanged
+from Phase 9. **`Compass`/`Motion` now have real, cross-compile-verified, Android-launched
+native backends** — new as of this plan. **Physically verified on real Android/iOS
+hardware or a real haptic motor/gamepad — still no**, in any session to date, for any
+component; the emulator (new this session) closes the "does the software pipeline work"
+question, explicitly not the "is it physically correct" one (see
+`docs/devices-hardware-checklist.md` §9). iOS: still no Apple toolchain, confirmed fresh
+this session (Task DEVICES-0131) — no iOS code exists for `Compass`/`Motion` beyond the
+unchanged design sketch in `docs/devices-native-backend-design.md`.
 
 | Class / Enum | Status | Notes |
 |---|---|---|
