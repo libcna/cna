@@ -2029,8 +2029,46 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
 
 ## P9-3D — 3D audio fidelity
 
-* [ ] P9-3D-001 Audit `Apply3D` behavior against FNA for mono and stereo sources.
-* [ ] P9-3D-002 Fix or document stereo panning behavior. Avoid hard stereo pan if FNA uses crossfeed or another model.
+* [x] P9-3D-001 Audit `Apply3D` behavior against FNA for mono and stereo sources.
+  *Note:* Read `Apply3D`/`SetPanMatrixCoefficients` (`SoundEffectInstance.cs`) line-by-line
+  against `SoundEffectInstance::Apply3D`/`ApplyTrackProperties` (`SoundEffectInstance.cpp`). Key
+  finding: FNA's `Apply3D` does **not** use `SetPanMatrixCoefficients` at all -- that method is
+  only ever called from the direct `Pan` property setter (guarded by `if (is3D) return;`, so it's
+  skipped entirely once `Apply3D` has run) and from `InitDSPSettings`'s initial setup. `Apply3D`
+  instead computes its output matrix via the native `F3DAudioCalculate` (X3DAudio) call against
+  real emitter/listener geometry -- a completely different, source-channel-count-aware code path
+  from the Pan property's simplified formula. CNA's `Apply3D` uses `ApplyTrackProperties` --
+  **the exact same formula the direct `Pan` property setter also uses** (`Play()`'s own call at
+  line ~326) -- with zero source-channel-count awareness anywhere in `Apply3D` (confirmed via
+  grep: no `channels`/`SrcChannelCount` reference exists in the method at all). This means CNA's
+  `Apply3D` treats a stereo source *identically* to a mono source, always, unlike FNA where
+  `Apply3D`'s X3DAudio computation is a fundamentally different (and channel-count-aware) code
+  path from the Pan setter's simplified matrix. For **mono** sources specifically, the two
+  formulas independently verified bit-identical to FNA's `SetPanMatrixCoefficients` mono branch
+  (already established by `CP-19`'s note) -- so `Apply3D`'s approximation for a mono source
+  happens to coincide with what the Pan-setter path would also produce, even though FNA reaches
+  a mono answer via a structurally different route (X3DAudio vs the simplified formula) that
+  happens to agree for the 1-channel case. For **stereo** sources, this is the *exact same root
+  limitation* `CP-19` already found and the user already discussed for the Pan property (SDL3_mixer's
+  `MIX_StereoGains` API is a plain per-channel gain pair, not a 4-coefficient crossfeed matrix) --
+  `Apply3D` just reaches the identical formula through a different call site. Test fixture note:
+  `SoundEffectInstanceTest`'s shared fixture (`SoundEffectInstanceTests.cpp`) already constructs
+  a **stereo** `SoundEffect`, so every existing `Apply3D*` test already exercises the stereo-source
+  case structurally -- none independently verify the exact resulting gain values, since
+  SDL3_mixer has no `MIX_StereoGains` getter (same pre-existing limitation noted for `CP-3`/`T-4B`).
+  Distance attenuation's formula shape (CNA: `1/(1+distance/distScale)`) vs FNA's default X3DAudio
+  linear distance curve is a *separate* deviation, out of this task's scope -- see `P9-3D-003`.
+* [x] P9-3D-002 Fix or document stereo panning behavior. Avoid hard stereo pan if FNA uses crossfeed or another model.
+  *Note:* No new fix -- this is the same accepted deviation as `CP-19`, which the user already
+  discussed and declined to implement (a real crossfeed mix would need to share SDL3_mixer's
+  single per-track "cooked callback" slot with the already-shipped `T-4C` DSP filter, a real
+  regression risk to already-tested filter code). `CHECKLIST.md` gained a explicit cross-reference
+  extending `CP-19`'s existing row to name `Apply3D` alongside the `Pan` property, since the
+  `P9-3D-001` audit confirmed both paths hit the exact same formula, not just the same *kind* of
+  limitation. No new test added: every existing `Apply3D` test already runs against a stereo
+  source (see `P9-3D-001`'s note), and there is no SDL3_mixer API to independently verify the
+  resulting per-channel gain values, so a new test would only re-assert "does not throw" --
+  already covered by `Apply3DSingleListener`/`Apply3DDoesNotModifyVolumeOrPanProperties`.
 * [ ] P9-3D-003 Audit distance attenuation behavior against `SoundEffect.DistanceScale`.
 * [ ] P9-3D-004 Audit doppler behavior against `SoundEffect.DopplerScale` and `SoundEffect.SpeedOfSound`.
 * [ ] P9-3D-005 Implement doppler pitch adjustment if feasible.
