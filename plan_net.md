@@ -884,13 +884,22 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   Verified: `blender --background --python tools/avatar_builder/generate_skeleton.py`
   runs clean and asserts every bone name/parent against the documented table.
 
-- [ ] **Task 11.2** — `tools/avatar_builder/generate_body.py`  
+- [x] **Task 11.2** — `tools/avatar_builder/generate_body.py`  
   Procedural stylized low-poly humanoid mesh (head/torso/arms/legs from primitive-derived shapes,
   e.g. scaled cubes/capsules/UV-spheres, subdivided/shaped as needed). Parent to the Task 11.1
   armature with automatic weights (`bpy.ops.object.parent_set(type='ARMATURE_AUTO')`) as the
   starting point — expect and document that automatic weights need manual correction passes for
   elbows/knees/shoulders before this looks acceptable in motion; do not claim "done" until a
   visual check confirms no gross bending artifacts on the Task 11.6 test animations.
+  **Done:** `generate_body.py` builds one cylinder+joint-sphere "flesh" primitive per bone
+  (from Task 11.1's own `BONES` head/tail positions), joins them into a single
+  `CNAAvatarBody` mesh, and parents it to the skeleton with
+  `parent_set(type='ARMATURE_AUTO')`. Verified headless: all 19 bones get a non-empty
+  vertex group (1086 vertices). A manual `BLENDER_WORKBENCH` render (T-pose, plus a
+  pose-mode elbow/knee bend test) confirmed reasonable proportions and no mesh tearing
+  at the bend — **but this is not the plan's full bend-artifact check**, which needs
+  Task 11.6's real test animations; automatic weights will very likely still need manual
+  correction once those exist.
 
 - [ ] **Task 11.3** — `tools/avatar_builder/generate_materials.py`  
   Minimal PBR materials: skin, hair, shirt, pants, shoes, each a simple base-color parameter (no

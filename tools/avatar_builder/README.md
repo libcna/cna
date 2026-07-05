@@ -23,7 +23,7 @@ bone-retargeting step at all.
 ## Status
 
 - [x] Task 11.1 — `generate_skeleton.py`: builds the canonical skeleton below.
-- [ ] Task 11.2 — `generate_body.py`
+- [x] Task 11.2 — `generate_body.py`: procedural low-poly body, auto-weighted to the skeleton.
 - [ ] Task 11.3 — `generate_materials.py`
 - [ ] Task 11.4 — `generate_morphs.py`
 - [ ] Task 11.5 — `generate_hair.py` / `generate_clothes.py`
@@ -79,3 +79,27 @@ re-deriving the bone list.
 
 Verify: `blender --background --python tools/avatar_builder/generate_skeleton.py` runs
 without error and asserts every bone name/parent matches this table.
+
+## Procedural body (`generate_body.py`)
+
+Builds one primitive "flesh" shape per bone in the table above — a cylinder along the
+bone's own head→tail axis, plus a small joint sphere at its head end (the `Head` bone
+gets a single sphere instead, centered on its head/tail midpoint) — then joins every
+part into a single `CNAAvatarBody` mesh and parents it to the skeleton with
+`bpy.ops.object.parent_set(type='ARMATURE_AUTO')`. Building geometry straight from the
+bone list guarantees every deforming bone has nearby mesh, so automatic weights produce
+a non-empty vertex group for all 19 bones without hand-authoring anything.
+
+`build_body(armature_obj)` is importable the same way as `generate_skeleton.build_skeleton()`,
+for reuse by `generate_avatar.py` (Task 11.7).
+
+**Automatic weights are a starting point, not a finished result.** A manual
+`BLENDER_WORKBENCH` render (T-pose) plus an ad hoc pose-mode elbow/knee bend test showed
+reasonable proportions and no mesh tearing at the bend, but that is **not** the plan's
+required "no gross bending artifacts" check — that check needs Task 11.6's real test
+animations (`Stand0`/`Wave`) and is deferred until they exist. Expect a manual
+weight-painting correction pass to still be needed at elbows/knees/shoulders once those
+animations play.
+
+Verify: `blender --background --python tools/avatar_builder/generate_body.py` runs
+without error and asserts a non-empty vertex group exists for every bone name in `BONES`.
