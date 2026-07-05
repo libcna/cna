@@ -1878,7 +1878,53 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   *Note:* `CueTests.cpp`'s shared `fixture.xgs` (`BuildXgsFixtureBytes`) gained two RPC curves bound to the existing "Volume" variable -- VOLUME: `[0,1] -> [-2000,0]` centibels, PITCH: `[0,1] -> [-600,+600]` cents -- plus a new `fixture_rpc.xsb` (`BuildRpcXsbFixtureBytes`, `SharedRpcBank()`) with two real-WaveBank-backed simple cues ("VolumeRpcCue"/"PitchRpcCue"), each bound to exactly one curve so the two parameters test in isolation. `CueTest.PlayScalesVolumeByRpcCurveEvaluatedAtCurrentVariableValue` sets the variable to each curve extreme and checks the resulting `SoundEffectInstance::getVolumeProperty()` ratio is ~10x (the curve's 20dB range) -- checked as a ratio, not an absolute value, so the test doesn't depend on the unrelated volume-byte-to-amplitude conversion's exact output. Also added `XactParserTest.SoundLevelRpcCodeIsRetained` (parser-level) and extended the two pre-existing IN-6/IN-8 RPC-skip regression fixtures (which encoded the RPC blob as a bare skip-length blob, not FAudio's real `count:u8 + codes` structure) to also assert the code is now retained on `XsbSound::rpcCodes`.
 * [x] P9-XACT-009 Add tests for XACT variable-to-pitch RPC behavior.
   *Note:* `CueTest.PlayShiftsPitchByRpcCurveEvaluatedAtCurrentVariableValue` checks all 3 points of the curve's range (var=0.0/0.5/1.0 -> pitch -0.5/0.0/+0.5) against "PitchRpcCue". `CueTest.PlaySoundWithNoRpcCodesIsUnaffectedByEngineRpcCurves` guards against a regression where a sound with an empty `rpcCodes` list could pick up unrelated curves from elsewhere in the engine's XGS data (asserts `SharedLongBank()`'s "LongCue", which has no RPC codes, plays at exactly pitch 0.0 despite `fixture.xgs`'s curves existing). All new/modified tests verified via `git stash`: the parser-level tests fail to *compile* against pre-fix code (no `rpcCodes` member), confirming genuine dependency on the fix. Full suite: 2102/2102 passing (up from 2099), stress-tested 5 consecutive clean runs.
-* [ ] P9-XACT-010 Audit DSP/filter parsing and runtime application.
+* [x] P9-XACT-010 Audit DSP/filter parsing and runtime application.
+  *Note:* Read-only audit against `FACT_internal.c` (FAudio) since FNA's C# layer doesn't parse
+  XACT content at all -- that's native FACT's job, so FAudio is the only available byte-level
+  reference for this part of the format. Two genuinely distinct XACT concepts were being conflated
+  under the task name "DSP/filter": (1) **Sound-level `SOUND_FLAG_HAS_DSP`/`dspCodes`** --
+  `FACTSoundBank_Prepare` parses `dspCodeCount:u8` + that many `u32` codes (indices into the XGS
+  DSP preset table), but grepping all of FAudio's `src`/`include` shows those code *values* are
+  never read back anywhere -- the only runtime use is `if (sound->dspCodeCount > 0)` as a bare
+  boolean, to additionally route the wave's voice to `parentEngine->reverbVoice` (an aux-send bus)
+  alongside the master voice (`FACT_internal.c`, wave-prepare path). So sound-level "DSP" in real
+  FACT is a **reverb-send enable flag**, not a filter selector; the DSP preset table's actual
+  contents (reverb parameters, `FAudioFXReverbParameters`) are engine-level, not per-sound.
+  CNA's existing skip code (`XactParser.cpp`'s `SOUND_FLAG_HAS_DSP` branch) already consumes
+  exactly the right bytes (length:u16 unused + count:u8 + count*4 skipped) -- byte-layout is
+  correct, and since SDL3_mixer has no aux-send/return bus, there is nothing more to wire here;
+  this confirms the reverb no-op (P9-XACT-012) should stay as-is. (2) **Per-track filter data** is
+  a completely separate field: for `SOUND_FLAG_COMPLEX` sounds, each track's metadata
+  (`FACTSoundBank_Prepare`'s track loop) has `volume:volbyte`, `code:u32`, then -- only when
+  `contentVersion != FACT_CONTENT_VERSION_3_0 (43)` -- `filterData:u16` + `frequency:u16`; for
+  that legacy version FAudio hard-sets `track->filter = 0xFF` (disabled) and skips both fields.
+  CNA only targets contentVersion 46 (both `ParseXgs`/`ParseXsb` warn-not-error otherwise), so that
+  branch is dead code for any content CNA will ever load -- not a real gap. CNA's parser already
+  reads-and-discards the right bytes here too (`XactParser.cpp`'s complex-track loop:
+  `sc.u16(); // filterData` + `sc.u16(); // frequency`). Bit layout of `filterData` (FACT_internal.c):
+  bit0 = has-filter, `track->filter = (filterData >> 1) & 0x02` for type, `qfactor = (filterData
+  >> 8) & 0xFF`. Note the type mask is suspicious: `FAudioFilterType` has 3 values (LowPass=0/
+  BandPass=1/HighPass=2, needing 2 bits) but `(x>>1)&0x02` only ever yields 0 or 2, so BandPass (1)
+  appears structurally unreachable via this exact math -- looks like a genuine upstream FAudio
+  quirk (their own code has an unrelated "Huh...?" comment two lines below), not something for CNA
+  to independently "fix": if P9-XACT-011 wires this, replicate FAudio's exact bit math for
+  behavioral parity and flag the oddity in a comment rather than correcting it. Runtime application
+  (`FACTSoundBank_Prepare`'s per-tick track-update path) builds `FAudioFilterParameters{ Type,
+  Frequency, OneOverQ }` every engine tick, with `Frequency`/`OneOverQ` overridable by a live
+  filter RPC if bound, else falling back to the track's parsed base values -- this is a continuous
+  per-tick system, the same kind of continuity gap P9-XACT-005's note already identified for RPC
+  volume/pitch (CNA has no per-frame `Cue` update tick; `AudioEngine::Update()` only sweeps
+  fire-and-forget cues). Feasibility check against CNA's existing filter primitives:
+  `SoundEffectInstance::INTERNAL_apply{Low,High,Band}PassFilter(float)` (real SDL3_mixer per-track
+  state-variable filters) take only a cutoff/center frequency, matching FNA's own *public*
+  `ApplyLowPassFilter`/etc. (`SoundEffectInstance.cs`) which likewise hardcode `OneOverQ = 1.0f` --
+  so the single-float signature is not a gap versus FNA's public surface. The XACT-internal track
+  filter's real `qfactor` byte has no home in that signature though; wiring true fidelity would
+  need a NOXNA-tagged internal-only `OneOverQ` parameter added to the `INTERNAL_apply*Filter`
+  methods, or an accepted one-shot-at-Play()-time narrowing (frequency only, fixed Q=1.0)
+  consistent with the RPC volume/pitch narrowing already accepted in P9-XACT-006/007. No code
+  changed by this task (read-only audit, per its own task description) -- findings hand off
+  directly to P9-XACT-011/012/013.
 * [ ] P9-XACT-011 Wire parsed low-pass/high-pass/band-pass filters to `SoundEffectInstance` where feasible.
 * [ ] P9-XACT-012 Keep reverb as documented no-op only if faithful implementation is not feasible with current backend.
 * [ ] P9-XACT-013 Document exact XACT DSP features supported and unsupported.

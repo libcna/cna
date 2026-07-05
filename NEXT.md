@@ -23,9 +23,9 @@ framework/runtime, not a game.
   is a separate, user-directed "audio correctness hardening" pass against a fixed, user-specified
   11-group task list (`plan_audio.md`'s "Phase 9" section). 6 of those 11 groups are fully closed
   (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`); `P9-XACT` is
-  9/15 done (variation-table variable-driven selection and one-shot RPC volume/pitch wiring are
-  in; DSP/filter wiring and missing-wave/cue fidelity remain); 4 groups remain fully open
-  (`P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`, `P9-AUDIT`) — see §4/§8.
+  10/15 done (variation-table variable-driven selection, one-shot RPC volume/pitch wiring, and the
+  DSP/filter parsing audit are in; wiring the filters and missing-wave/cue fidelity remain); 4
+  groups remain fully open (`P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`, `P9-AUDIT`) — see §4/§8.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -47,10 +47,13 @@ framework/runtime, not a game.
   Verified via both the manual `cmake-build-debug/` directory and the `tests` CMake preset
   (freshly reconfigured from a deleted build directory). `cna_demo_sound`/`cna_demo_2d` example
   targets also rebuild clean.
-- **Tests:** `CnaTests` **2102 / 2102 pass**, reliably (stress-tested 5+ consecutive full-suite
-  runs with zero failures since the latest change; the pre-`P9-XACT` baseline of 2093 was verified
-  clean under a full ASan+UBSan build). Re-run to check for drift:
-  `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
+- **Tests:** `CnaTests` whole-suite count grew to **3212 / 3214 pass** (2 skipped:
+  `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
+  hardware-dependent, expected) — up from the 2102 this file previously tracked because
+  `develop`'s `feature/net` merge (see git log, not this branch's work) added a large Net test
+  suite to the same binary; not an audio regression. The audio-scoped subset (§7's `--gtest_filter`
+  audio suite list) is **306 / 306 pass**, unchanged in shape since the last `P9-XACT` update.
+  Re-run to check for drift: `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests`.
 - **CLI/tools/apps:** none in the framework itself — this is a library/framework, not an
   application. `cna_demo_sound`/`cna_demo_2d` are example programs exercising the Audio API; they
   aren't part of `--target CnaTests` and are easy to forget to rebuild.
@@ -70,6 +73,19 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (most recent Fáze 9 groups, newest first)
 
+- **`P9-XACT-010`** (read-only audit, not yet committed) — audited XACT "DSP/filter" data against
+  `FAudio`'s `FACT_internal.c` (the only available byte-level reference, since FNA's C# layer never
+  parses XACT content itself). Two distinct concepts were conflated under the task name: (1)
+  sound-level `SOUND_FLAG_HAS_DSP`/`dspCodes` is actually a **reverb-send enable flag** in real
+  FACT — the DSP preset code *values* are parsed but never read back anywhere in FAudio either,
+  only used as `dspCodeCount > 0` to route the wave to an aux reverb bus SDL3_mixer doesn't have —
+  confirming the reverb no-op (`P9-XACT-012`) should stay as-is; (2) the real low/high/band-pass
+  filter data is a **separate** per-track field (`filterData:u16` + `frequency:u16`) that CNA's
+  parser already reads-and-discards correctly. Found a likely-genuine upstream FAudio bit-decode
+  quirk (`(filterData>>1)&0x02` structurally can't select `BandPass`) to replicate as-is, not "fix,"
+  if wired. Full citations and the `INTERNAL_apply*Filter` feasibility analysis (frequency-only
+  signature matches FNA's own public API; the real per-track `qfactor`/`OneOverQ` has no home in it
+  yet) are in `plan_audio.md`'s `P9-XACT-010` note. No source changed — audit only.
 - **`P9-XACT-001..009`** (`8800254`) — two independent fixes to data that was
   parsed but never used. (1) Interactive (`type==3`) variation tables now select an entry by
   finding which one's `[varMin, varMax]` contains the bound variable's current value (matching
@@ -117,13 +133,13 @@ every item above: `plan_audio.md`'s "Phase 9" section.
 
 ## 4. Current blocker / main problem
 
-**No build- or test-breaking blocker exists.** The build is clean and all 2102 tests pass
-reliably. This is **not** a "nothing left to do" branch state, though — Fáze 9 (a user-directed,
+**No build- or test-breaking blocker exists.** The build is clean and all tests pass reliably
+(§2). This is **not** a "nothing left to do" branch state, though — Fáze 9 (a user-directed,
 already-scoped task list) still has open work:
 
-- `P9-XACT` (9/15 done) — RPC volume/pitch and interactive-variation selection are wired; still
-  open: DSP/filter parsing+wiring audit (`P9-XACT-010..013`) and missing-wave/cue error-path
-  fidelity (`P9-XACT-014/015`).
+- `P9-XACT` (10/15 done) — RPC volume/pitch, interactive-variation selection, and the DSP/filter
+  audit are done; still open: actually wiring the per-track filters (`P9-XACT-011..013`) and
+  missing-wave/cue error-path fidelity (`P9-XACT-014/015`).
 - `P9-3D` — 3D audio fidelity beyond the existing pan+distance-attenuation approximation (Doppler
   pitch adjustment feasibility, stereo panning model, more test coverage).
 - `P9-HARDWARE` — `NoAudioHardwareException` usage audit, `std::runtime_error` vs XNA-compatible
@@ -144,6 +160,13 @@ input before implementing either way:
 2. `Cue::Stop(AsAuthored)`'s release-tail *duration* is however long the wave naturally takes, not
    an authored `fadeOutMS`/RPC-release curve — `XactParser` doesn't retain per-cue fade timing at
    all. Fixing it would need parser changes plus a new time-driven update mechanism. (`P9-STOP-010`)
+3. The real XACT per-track filter carries a `qfactor`/`OneOverQ` byte that
+   `SoundEffectInstance::INTERNAL_apply{Low,High,Band}PassFilter` has no parameter for today (its
+   single-float signature matches FNA's own *public* API, which hardcodes `OneOverQ = 1.0f` — see
+   `P9-XACT-010`'s note in `plan_audio.md`). Wiring real XACT-driven filters (`P9-XACT-011`) needs
+   a decision: add a NOXNA-tagged internal-only `OneOverQ` parameter to those methods for fidelity,
+   or accept a documented narrowing (frequency only, fixed Q=1.0) the same way RPC volume/pitch
+   were narrowed to one-shot-at-`Play()` in `P9-XACT-006/007`.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, under separate, active, concurrent development by another session. A build
@@ -283,36 +306,35 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 ## 8. Next smallest tasks
 
 Fáze 9's own task list (`plan_audio.md`) is the source of truth; the user's explicit implementation
-order is exhausted through `P9-STOP`, and `P9-XACT` is partway done (9/15). The remaining groups
+order is exhausted through `P9-STOP`, and `P9-XACT` is partway done (10/15). The remaining groups
 have no user-specified priority among them — suggested order below is by "smallest
 independently-verifiable slice first":
 
-1. **Audit DSP/filter parsing and runtime application** (`P9-XACT-010`). Goal: determine what a
-   sound's parsed DSP preset codes (`SOUND_FLAG_HAS_DSP`, currently read-and-discarded in
-   `XactParser.cpp`, same shape as the RPC codes `P9-XACT-005/006` just fixed) would need to wire
-   low/high/band-pass filters into `SoundEffectInstance`'s existing real filter implementation
-   (`INTERNAL_apply{Low,High,Band}PassFilter`, already real via a per-track SDL3_mixer callback).
-   Files: `CNA/Internal/Audio/XactParser.cpp`, `XactTypes.hpp`. Verification: read-only audit, no
-   command — produces a `plan_audio.md` note, same pattern as `P9-XACT-005`.
-2. **Wire parsed filters into `SoundEffectInstance` where feasible** (`P9-XACT-011`), plus keep
-   reverb a documented no-op if infeasible (`P9-XACT-012`) and document exactly what's supported
-   (`P9-XACT-013`). Files: `Cue.cpp`, `SoundEffectInstance.cpp`. Verification:
-   `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter='CueTest.*:SoundEffectInstanceTest.*'`.
-3. **Ensure missing wave/sound/cue-index behavior matches FNA** (`P9-XACT-014/015`). Goal: audit
+1. **Wire parsed filters into `SoundEffectInstance` where feasible** (`P9-XACT-011`), plus keep
+   reverb a documented no-op (`P9-XACT-012` — the `P9-XACT-010` audit already confirmed SDL3_mixer
+   has no aux-send/return bus equivalent to real FACT's sound-level `SOUND_FLAG_HAS_DSP` reverb
+   route, so this is a "confirm and close," not new work) and document exactly what's supported
+   (`P9-XACT-013`). Needs the user's call on the open decision in §4 item 3 first (add a NOXNA
+   `OneOverQ` param to `INTERNAL_apply*Filter`, or accept frequency-only/fixed-Q=1.0 like the RPC
+   narrowing). Files: `Cue.cpp`, `SoundEffectInstance.{hpp,cpp}`, `XactParser.cpp`/`XactTypes.hpp`
+   (to retain the per-track `filterData`/`frequency` bytes currently discarded, per
+   `plan_audio.md`'s `P9-XACT-010` note). Verification:
+   `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter='CueTest.*:SoundEffectInstanceTest.*:XactParserTest.*'`.
+2. **Ensure missing wave/sound/cue-index behavior matches FNA** (`P9-XACT-014/015`). Goal: audit
    what `Cue::Play()`/`SoundBank::GetCue()` do today for an out-of-range cue index or an
    unresolvable wave/sound reference against FNA's equivalent error handling; add tests. Files:
    `Cue.cpp`, `SoundBank.cpp`. Verification:
    `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter='CueTest.*:SoundBankTest.*'`.
-4. **Audit `NoAudioHardwareException` usage** (`P9-HARDWARE-001`). Goal: confirm it's a type-only
+3. **Audit `NoAudioHardwareException` usage** (`P9-HARDWARE-001`). Goal: confirm it's a type-only
    stub never thrown (already suspected, see §5) and decide whether that's worth changing. Files:
    `Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp`, `AudioEngine.cpp`. Verification:
    read-only audit.
-5. **Audit `DynamicSoundEffectInstance::PendingBufferCount` transitions** (`P9-DYNAMIC-001`). Goal:
+4. **Audit `DynamicSoundEffectInstance::PendingBufferCount` transitions** (`P9-DYNAMIC-001`). Goal:
    confirm current behavior across Play/Pause/Resume/Stop/Dispose matches FNA; add any missing
    tests (`P9-DYNAMIC-002..007`). Files: `DynamicSoundEffectInstance.cpp`,
    `tests/.../DynamicSoundEffectInstanceTests.cpp`. Verification:
    `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter='DynamicSoundEffectInstanceTest.*'`.
-6. **Audit `Apply3D` for stereo sources** (`P9-3D-001`/`002`). Goal: confirm/document current
+5. **Audit `Apply3D` for stereo sources** (`P9-3D-001`/`002`). Goal: confirm/document current
    stereo panning behavior under `Apply3D` (as distinct from the direct `Pan` property, already
    covered by `CP-19`). Files: `SoundEffectInstance.cpp`. Verification: read-only audit, or a new
    test under `SoundEffectInstanceTests.cpp` if a gap is found.
@@ -327,9 +349,10 @@ checkbox + `*Note:*`, then update this file and commit.
 
 - **No re-running a fresh full "line-by-line vs FNA" audit.** Fáze 7 and Fáze 8 already did two
   rounds of that. Fáze 9 is a different, already-scoped hardening pass — don't invent a "Fáze 10".
-- **No implementing either of the two open decisions in §4** (`IsPlaying`/`IsPaused` coexistence;
-  authored-stop fade-curve timing) **without asking the user first** — both would need real
-  feature work or touch already-shipped shared infrastructure.
+- **No implementing any of the three open decisions in §4** (`IsPlaying`/`IsPaused` coexistence;
+  authored-stop fade-curve timing; XACT filter `OneOverQ` fidelity vs. narrowing)
+  **without asking the user first** — each would need real feature work or touch already-shipped
+  shared infrastructure/public signatures.
 - **No Media namespace work** — explicitly out of scope for this branch.
 - **No FAudio/FACT migration** — the backend is SDL3_mixer by design.
 - **No real 3D HRTF, Doppler, or reverb implementation** — SDL3_mixer cannot do it; keep as
@@ -347,15 +370,17 @@ checkbox + `*Note:*`, then update this file and commit.
 ```
 Read NEXT.md first. Fáze 9 (a user-directed, already-scoped hardening pass) has 6 of 11 task
 groups fully closed (P9-LIFECYCLE, P9-CATEGORY, P9-VALIDATION, P9-DOCS, P9-BUILD, P9-STOP),
-P9-XACT is 9/15 done (variation selection + RPC volume/pitch wired; DSP/filter and missing-
-wave/cue fidelity remain), and 4 groups are fully open (P9-3D, P9-HARDWARE, P9-DYNAMIC,
-P9-AUDIT) -- see §4/§8. No known build/test blocker.
+P9-XACT is 10/15 done (variation selection + RPC volume/pitch + the DSP/filter audit are done;
+wiring the filters and missing-wave/cue fidelity remain), and 4 groups are fully open (P9-3D,
+P9-HARDWARE, P9-DYNAMIC, P9-AUDIT) -- see §4/§8. No known build/test blocker.
 
-1. Confirm current state matches NEXT.md §2 (build clean, 2102/2102 tests pass) -- rebuild and
-   rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests (or the `tests` CMake preset, §7) to
-   check for drift since this was last updated.
-2. Inspect only the files needed for the first §8 task (start with the XACT DSP/filter audit
-   unless the user names something else) -- don't refactor unrelated code.
+1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3212/3214 pass, audio-scoped
+   subset 306/306) -- rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests (or the
+   `tests` CMake preset, §7) to check for drift since this was last updated.
+2. Inspect only the files needed for the first §8 task (P9-XACT-011: wiring the real per-track
+   XACT filter data into SoundEffectInstance) unless the user names something else -- don't
+   refactor unrelated code. This needs the user's answer to §4's open decision #3 (OneOverQ
+   fidelity vs. narrowing) before implementing -- ask first if not already answered.
 3. Make one small, verified improvement: if it's an audit, write the finding into plan_audio.md;
    if it's a fix, add/extend a test, verify with the git-stash pattern (§7), run the relevant
    build/test command, and run ASan+UBSan if it touches memory lifetime or ownership.
