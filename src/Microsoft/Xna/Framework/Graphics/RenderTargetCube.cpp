@@ -32,6 +32,12 @@ namespace Microsoft::Xna::Framework::Graphics
         return rtCubeBackend_;
     }
 
+    const std::string& RenderTargetCube::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.RenderTargetCube";
+        return name;
+    }
+
     int RenderTargetCube::getWidthProperty() const  { return size_; }
     int RenderTargetCube::getHeightProperty() const { return size_; }
     int RenderTargetCube::getLevelCountProperty() const { return TextureCube::getLevelCountProperty(); }

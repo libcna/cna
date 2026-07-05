@@ -37,6 +37,12 @@ namespace Microsoft::Xna::Framework::Graphics
                          int preferredMultiSampleCount = 0,
                          RenderTargetUsage usage = RenderTargetUsage::DiscardContents);
 
+        /** @brief Destructor. */
+        NOXNA ~RenderTargetCube() override = default;
+
+        /** @brief Returns the fully qualified .NET type name. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+
         // IRenderTarget
         /** @brief Returns the width of each cube face in pixels. */
         [[nodiscard]] int getWidthProperty() const override;

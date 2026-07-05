@@ -13,8 +13,8 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–38 are complete. **Phase 39 (RenderTarget2D and
-  RenderTargetCube completeness, `GRAPHICS_TASKS.md` Tasks 331–340) is open** — Task 331 done,
-  **Task 332 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
+  RenderTargetCube completeness, `GRAPHICS_TASKS.md` Tasks 331–340) is open** — Tasks 331–332 done,
+  **Task 333 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
   closed phases have synthesis docs: `docs/sampler-state-support.md` (Phase 35),
   `docs/depthstencilstate-support.md` (Phase 37), `docs/rasterizerstate-support.md` (Phase 38).
 - **Key architectural decisions:**
@@ -44,13 +44,15 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   current tree.
 
 ### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 2301/2304 pass. 3 pre-existing/documented failures (see §5):
+- **EasyGL, full `ctest -j1`:** 3311/3314 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 2228/2241 pass. 13 pre-existing/documented failures (see §5):
+  (Total test count grew from the previously-recorded 2304 to 3314 — this session's full run is the
+  first re-count since several other phases/branches merged in; no regression, same 3 failures.)
+- **Vulkan, full `ctest -j1`:** 3237/3250 pass. 13 pre-existing/documented failures (see §5):
   5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
   `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
-  `Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame` (order-dependent flakiness — only one of
-  the two fails per run).
+  `Vulkan_FillMode_WireFrame` (order-dependent flakiness — only one of `Vulkan_RenderTargetUsage`/
+  `Vulkan_FillMode_WireFrame` fails per run; this run it was `Vulkan_FillMode_WireFrame`).
 - **Bgfx:** last confirmed 1985/1985 (100%) as of Task 309; stale, not rerun since.
 - **Caution:** run EasyGL's and Vulkan's full `ctest` suites **sequentially, never concurrently**
   — concurrent runs previously produced transient GPU/driver-contention false failures. If a
@@ -71,6 +73,9 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - `RenderTarget2D`: constructors, `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`, and
   now `IsContentLost`/`ContentLost` (Task 331) all match FNA at the property level. Basic
   render-to-texture round trip pixel-verified on EasyGL and Vulkan.
+- `RenderTargetCube`: constructor, `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`/
+  `IsContentLost`/`ContentLost` all match FNA at the property level; `GetTypeName()` now correctly
+  reports `"...RenderTargetCube"` instead of the inherited `"...TextureCube"` (Task 332).
 
 ### What does NOT work yet
 - **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
@@ -100,6 +105,7 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 
 | Commit / Task | Change |
 |---|---|
+| Task 332 | Audited `RenderTargetCube` against FNA's `RenderTargetCube.cs` line-by-line — same shape as Task 331, one class over. Most of it already matched FNA (unlike `RenderTarget2D`, `RenderTargetCube` already had `IsContentLost`/`ContentLost`). **Fixed**: `GetTypeName()` was never overridden, so a `RenderTargetCube` reported itself as `"...TextureCube"` — added the override. **Confirmed the known lead** (`mipMap`/`MultiSampleCount` silently ignored) is the same shape as Tasks 336/337, already covered by those general tasks, not new. **Found and deliberately did NOT fix** (architecture-blocked): tried to add `RenderTarget2D`'s `Dispose(bool)` "still bound" guard, but it doesn't compile — `RenderTargetBinding` only stores `Texture*`, and `RenderTargetCube` doesn't inherit `Texture` (Task 863). Also confirmed `GraphicsDevice::SetRenderTarget(RenderTargetCube*, CubeMapFace)` never records the binding at all, so `GetRenderTargets()` can never see a bound cube face — a direct consequence of Task 863, not a new independent bug. New test `examples/easygl_rendertargetcube_properties_test.cpp` (`EasyGL_RenderTargetCube_Properties`/`Vulkan_RenderTargetCube_Properties`, 15/15 both backends). EasyGL ctest: 3311/3314. Vulkan ctest: 3237/3250 (both: only documented pre-existing failures). |
 | `3fdb6c6` Task 331 | **Opens Phase 39.** Audited `RenderTarget2D` against FNA line-by-line. Fixed a real gap: added missing `IsContentLost`/`ContentLost` (mirroring `RenderTargetCube`). Found and deliberately deferred two gaps to dedicated tasks: `mipMap` ignored (Task 336), `MultiSampleCount` not clamped/wired (Task 337). New pixel-free property test on both backends (15/15 pass each). |
 | `e81d443` Task 330 | **Closes Phase 38.** Confirmed (no bug) `RasterizerState` has no freeze/immutability enforcement, matching FNA. Wrote `docs/rasterizerstate-support.md` synthesizing Phase 38 — found **no new tracked bugs**, only test-coverage gaps. |
 | `4ab72c7` Task 326 | Registered the existing backend-agnostic `FillMode` pixel test for EasyGL too (previously Vulkan-only). No bug found. |
@@ -255,20 +261,18 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 332 — audit `RenderTargetCube` constructors and properties against FNA**
-   - Goal: same audit shape as Task 331 (just done), one class over. Read FNA's
-     `RenderTargetCube.cs` line-by-line and check CNA's `RenderTargetCube.hpp/.cpp` against it —
-     constructor overload(s), `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`, and (per
-     the task's own note) faces and mipmaps specifically. **Known lead**: `RenderTargetCube.cpp`'s
-     constructor takes `bool /*mipMap*/` — completely unused (commented out), same bug shape as
-     Task 331's Task-336 finding for `RenderTarget2D`, but not yet confirmed against FNA
-     line-by-line or written up as its own tracked task. `IsContentLost`/`ContentLost` are already
-     present and correct on `RenderTargetCube` — do not re-add them.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/RenderTargetCube.cpp`, `RenderTargetCubeTests.cpp`
-     (check if it exists first).
-   - Verification: unit tests for the constructor and every property; do not assume conformance
-     without reading the FNA source directly.
+1. **`GRAPHICS_TASKS.md` Task 333 — verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding**
+   - Goal: on each backend (EasyGL/Vulkan/Bgfx), render to a `RenderTarget2D`, unbind it
+     (`SetRenderTarget(nullptr)` or `SetRenderTargets({})`), then bind it to
+     `GraphicsDevice.Textures[slot]` and sample it in a draw (e.g. via `SpriteBatch` or a stock
+     effect), and pixel-verify the sampled content matches what was rendered. This exercises the
+     read-after-write path that real game code relies on (render-to-texture then use as input).
+   - Files: likely a new `examples/*_rendertarget2d_sample_after_unbind_test.cpp`-style
+     integration test; check `GraphicsDevice::SetRenderTarget`/`Textures` binding code in
+     `GraphicsDevice.cpp` first for any existing gaps before writing the test.
+   - Verification: new pixel-readback test registered for EasyGL and Vulkan at minimum (Bgfx has
+     no pixel-readback API — see NEXT.md §5 — so Bgfx coverage may need to be a compile-only
+     smoke test or explicitly marked as unverifiable there).
 
 2. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
@@ -337,27 +341,30 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-38 are fully complete. Phase 39 (RenderTarget2D and RenderTargetCube
-completeness, GRAPHICS_TASKS.md Tasks 331-340) is open, Task 331 done, Task 332 next. EasyGL:
-2301/2304 pass (3 documented pre-existing failures). Vulkan: 2228/2241 pass (13 documented
+completeness, GRAPHICS_TASKS.md Tasks 331-340) is open, Tasks 331-332 done, Task 333 next. EasyGL:
+3311/3314 pass (3 documented pre-existing failures). Vulkan: 3237/3250 pass (13 documented
 pre-existing failures). Bgfx: last known-good 1985/1985, not rebuilt this session. Caution: run
 EasyGL's and Vulkan's full ctest suites sequentially, never concurrently (see NEXT.md §2); if a
 single run shows an anomaly beyond the documented list, re-run in isolation before treating it as
 a regression.
 
-Task 331 (just done) audited RenderTarget2D against FNA's RenderTarget2D.cs line-by-line. Fixed a
-real gap: added missing IsContentLost/ContentLost (mirroring RenderTargetCube). Found and
-deliberately deferred two gaps to their own tasks: mipMap is silently ignored (level count always
-1, no backend allocates RT mip storage) - Task 336; preferredMultiSampleCount is stored verbatim,
-never clamped/wired to any backend - Task 337.
+Task 332 (just done) audited RenderTargetCube against FNA's RenderTargetCube.cs line-by-line.
+Most of it already matched FNA (unlike RenderTarget2D, RenderTargetCube already had
+IsContentLost/ContentLost before this task). Fixed a real gap: GetTypeName() was never overridden,
+so a RenderTargetCube reported itself as "...TextureCube" (inherited) - added the override.
+Confirmed the known mipMap/MultiSampleCount lead is the same shape as the already-tracked Tasks
+336/337 (not a new task). Found, but could NOT fix (architecture-blocked): RenderTarget2D's
+Dispose(bool) "still bound" guard cannot be ported to RenderTargetCube - RenderTargetBinding only
+stores Texture*, and RenderTargetCube doesn't inherit Texture (Task 863's gap), so the comparison
+doesn't even compile. Also confirmed GraphicsDevice::SetRenderTarget(RenderTargetCube*,
+CubeMapFace) never records the binding in currentRenderTargets_ at all - a direct consequence of
+Task 863, not a new independent bug. Do not attempt this without a scoped Task 863 design pass.
 
-Next task: GRAPHICS_TASKS.md Task 332 - audit RenderTargetCube constructors and properties against
-FNA. Same audit shape as Task 331, one class over: read FNA's RenderTargetCube.cs line-by-line,
-check the constructor overload(s), every property, and default values against CNA's current
-RenderTargetCube. Known lead: RenderTargetCube.cpp's constructor takes bool /*mipMap*/ -
-completely unused (commented out) - same bug shape as Task 331's Task-336 finding for
-RenderTarget2D, but not yet confirmed against FNA line-by-line or tracked as its own task.
-IsContentLost/ContentLost are ALREADY correct on RenderTargetCube - do not re-add them. Per the
-task's own note, pay particular attention to faces and mipmaps. Files: RenderTargetCube.hpp/.cpp,
-RenderTargetCubeTests.cpp (check if it exists first).
+Next task: GRAPHICS_TASKS.md Task 333 - verify RenderTarget2D can be sampled as Texture2D after
+unbinding (EasyGL/Vulkan/Bgfx). Render to a RenderTarget2D, unbind it, then sample it via
+GraphicsDevice.Textures[slot] in a draw call, and pixel-verify the content round-trips correctly.
+Check GraphicsDevice.cpp's SetRenderTarget/Textures binding code first for any existing gaps
+before writing the test. Bgfx has no pixel-readback API (NEXT.md §5) - Bgfx coverage may need a
+compile-only smoke test or an explicit note that it's unverifiable there.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
