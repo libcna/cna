@@ -2115,15 +2115,80 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
 
 ## P9-DYNAMIC — DynamicSoundEffectInstance correctness
 
-* [ ] P9-DYNAMIC-001 Audit `PendingBufferCount` transitions across Play, Pause, Resume, Stop, and Dispose.
-* [ ] P9-DYNAMIC-002 Add tests for buffer completion while playing.
-* [ ] P9-DYNAMIC-003 Add tests for buffer completion while paused.
-* [ ] P9-DYNAMIC-004 Add tests for Stop clearing or preserving buffers according to XNA/FNA behavior.
-* [ ] P9-DYNAMIC-005 Add tests for `BufferNeeded` event ordering.
-* [ ] P9-DYNAMIC-006 Add tests for multiple subscribers to `BufferNeeded`.
+* [x] P9-DYNAMIC-001 Audit `PendingBufferCount` transitions across Play, Pause, Resume, Stop, and Dispose.
+  *Note:* Compared CNA's `DynamicSoundEffectInstance.cpp`/`SoundEffectInstance.cpp` line-by-line
+  against FNA's `DynamicSoundEffectInstance.cs`/`SoundEffectInstance.cs`. `PendingBufferCount ==
+  queuedBuffers_.size() + submittedChunkSizes_.size()` is the direct architectural analogue of
+  FNA's `queuedBuffers.Count` (staged-but-not-yet-pushed chunks + pushed-but-not-yet-consumed
+  chunks, vs. FNA's single list serving both roles since FAudio's discrete buffer-queue model
+  doesn't need CNA's continuous-`SDL_AudioStream` staging split). Found and fixed **two real
+  bugs**:
+  (1) `DynamicSoundEffectInstance::Play()` only called `Update()` from its "Stopped, start fresh
+  playback" branch, *after* already returning early for the Paused/Playing cases -- but FNA's
+  `Play()` calls `Update()` **unconditionally**, before dispatching on state at all ("Wait! What
+  if we need moar buffers?" comment, `DynamicSoundEffectInstance.cs`). This only differs in one
+  real scenario -- calling `Play()` redundantly while *already Playing* -- where FNA pumps
+  `Update()` (submits freshly queued data, fires `BufferNeeded` if starved) and CNA silently
+  skipped it entirely. (On the Stopped-from-fresh and Paused-resuming paths, `Update()` is
+  provably a no-op either way, since its own guard requires `State == Playing`, which isn't true
+  yet at the moment `Play()` calls it in either FNA or CNA -- so moving the call doesn't change
+  those paths.) Fixed by moving the `Update()` call to run unconditionally at the top of `Play()`,
+  matching FNA's exact structure. No dedicated regression test: proving this specific divergence
+  deterministically would need either instrumenting `Update()`'s call count (more invasive than
+  warranted for a call-ordering nicety with no observable `PendingBufferCount`-*value* effect) or
+  a real elapsed-time buffer-consumption window between two `Play()` calls (the same
+  timing-flakiness the project has already guarded against elsewhere, e.g. the "long wavebank"
+  1-second-buffer fixture and `P9-BUILD-001..007`'s real DSP-filter data race). Low risk, verified
+  via the existing suite staying green (see below).
+  (2) A more serious, cleanly-testable bug: `DynamicSoundEffectInstance::Stop()` (the no-arg
+  override) duplicated `Stop(bool immediate)`'s clearing logic directly, instead of delegating
+  through it the way the base `SoundEffectInstance::Stop()` does (`{ Stop(true); }`, matching
+  FNA's identical one-liner) -- so it **skipped** `Stop(bool)`'s existing "no active track yet ->
+  no-op" guard. Calling the no-arg `Stop()` *directly* (not via `Stop(bool)`) on a never-played (or
+  already-stopped) instance with staged buffers would still clear `PendingBufferCount` to 0 in
+  CNA, where FNA's identical call (`Stop()` -> `Stop(true)` -> `handle == IntPtr.Zero` -> return)
+  leaves it untouched. Fixed by renaming the unconditional-clearing logic to a private
+  `StopInternal()` (called only from `Stop(bool immediate)`'s already-guarded immediate branch)
+  and making the no-arg `Stop()` simply `{ Stop(true); }`, matching the base class and FNA exactly.
+  `Dispose()`'s existing `Stop()` call is unaffected in the *normal* (already-played) case, and
+  correctly becomes a real no-op for a never-played instance's staged buffers (matches FNA; no
+  memory-leak concern for CNA either way, since `queuedBuffers_`/`submittedChunkSizes_` are RAII
+  containers that free themselves on destruction regardless of whether `ClearBuffers()` ran).
+  Verified via `git stash`: `StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers` fails
+  (asserts `PendingBufferCount == 1` after a direct `Stop()` call, gets `0`) against the pre-fix
+  code, confirming genuine dependency.
+* [x] P9-DYNAMIC-002 Add tests for buffer completion while playing.
+  *Note:* `SubmitBufferWhilePlayingIncrementsPendingBufferCount` (immediate +1, whether staged or
+  handed straight to the stream) and `PendingBufferCountResetsToZeroAfterStopWhilePlaying`
+  (real Stop() after Play() clears everything). The "not yet actually consumed" side was already
+  covered pre-existing (`BufferNeededDoesNotFireWhenStreamHasEnoughData`, CP-4).
+* [x] P9-DYNAMIC-003 Add tests for buffer completion while paused.
+  *Note:* `PendingBufferCountUnaffectedAcrossPause` -- submits a buffer while Playing, pauses,
+  and confirms the count is unchanged both immediately after `Pause()` and after `Resume()`
+  (matches FNA: `Pause()`/`Resume()` never touch `queuedBuffers`, and `Update()` is itself gated
+  on `State == Playing` so it can't spuriously decrement while paused).
+* [x] P9-DYNAMIC-004 Add tests for Stop clearing or preserving buffers according to XNA/FNA behavior.
+  *Note:* Three tests, each covering a distinct case found during the `P9-DYNAMIC-001` audit:
+  `StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers` (the guarded no-op case, the actual
+  regression test for the bug fixed above), `PendingBufferCountResetsToZeroAfterStopWhilePlaying`
+  (real clear after real playback), `PendingBufferCountResetsToZeroAfterDisposeWhilePlaying`
+  (`Dispose()`'s own `Stop()` call also clears once playback has actually started).
+* [x] P9-DYNAMIC-005 Add tests for `BufferNeeded` event ordering.
+  *Note:* `BufferNeededFiresExactlyTheStarvedCount` -- matches FNA's exact starvation loop
+  (`for (i = MINIMUM_BUFFER_CHECK - PendingBufferCount; i > 0 && BufferNeeded != null; i -= 1)`)
+  by asserting the *exact* raise count (2, given `tryStartHeadless`'s 1 pre-submitted buffer and
+  `MINIMUM_BUFFER_CHECK == 3`), not just "fired at least once" like the pre-existing
+  `BufferNeededFiresWhenStarved`.
+* [x] P9-DYNAMIC-006 Add tests for multiple subscribers to `BufferNeeded`.
+  *Note:* `BufferNeededFiresForEveryIndependentSubscriber` -- two independent lambda subscribers
+  both observe every raise (equal, nonzero counts).
 * [ ] P9-DYNAMIC-007 Add tests for subscriber removal during callback.
 * [ ] P9-DYNAMIC-008 Audit dynamic stream format conversion for mono/stereo and byte/float paths.
 * [ ] P9-DYNAMIC-009 Add tests for invalid buffer sizes and alignment.
+  *Note (partial, pre-existing):* `SubmitBufferRangeThrows`/`SubmitFloatBufferRangeThrows`/
+  `SubmitBufferRangeIntegerOverflowThrows` already cover invalid offset/count ranges; a dedicated
+  audit of non-block-aligned byte counts (e.g. an odd byte count for 16-bit stereo) hasn't been
+  done and is left open.
 
 ## P9-DOCS — Documentation synchronization
 

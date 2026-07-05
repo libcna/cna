@@ -104,6 +104,37 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferQueuesWhileStopped)
     EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
 }
 
+// P9-DYNAMIC-001: multiple SubmitBuffer calls while stopped must each add to
+// PendingBufferCount, not just report 1 regardless of count.
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountAccumulatesAcrossMultipleSubmits)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<unsigned char> pcm(64, 0);
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 3);
+}
+
+// P9-DYNAMIC-001: matches FNA's Stop()/Stop(bool) guard (`handle == IntPtr.Zero -> return`,
+// SoundEffectInstance.cs) -- calling the no-arg Stop() directly (not via Stop(bool)) on an
+// instance that was never played must be a safe no-op, not clear staged buffers. Previously
+// DynamicSoundEffectInstance::Stop() duplicated StopInternal()'s unconditional buffer-clearing
+// logic instead of delegating through Stop(bool)'s existing guard, so calling it directly here
+// used to drop PendingBufferCount to 0.
+TEST(DynamicSoundEffectInstanceTest, StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<unsigned char> pcm(64, 0);
+    d.SubmitBuffer(pcm);
+    ASSERT_EQ(d.getPendingBufferCountProperty(), 1);
+
+    d.Stop();
+
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+    EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
+}
+
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferRangeThrows)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -280,6 +311,27 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresWhenStarved)
     EXPECT_GT(fired, 0);
 }
 
+// P9-DYNAMIC-001/005: matches FNA's exact starvation loop (`for (i = MINIMUM_BUFFER_CHECK -
+// PendingBufferCount; i > 0 && BufferNeeded != null; i -= 1) BufferNeeded(...)`, DynamicSoundEffectInstance.cs)
+// -- Update() must raise BufferNeeded exactly (MINIMUM_BUFFER_CHECK - PendingBufferCount) times,
+// not merely "at least once". tryStartHeadless() submits exactly 1 buffer before Play(), so
+// immediately after (before any real consumption could have happened), PendingBufferCount == 1
+// and MINIMUM_BUFFER_CHECK(3) - 1 == 2 raises are expected.
+TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresExactlyTheStarvedCount)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    ASSERT_EQ(d.getPendingBufferCountProperty(), 1);
+
+    int fired = 0;
+    d.BufferNeeded += [&fired](System::Object*, const System::EventArgs&) { ++fired; };
+    d.Update();
+    EXPECT_EQ(fired, 2); // MINIMUM_BUFFER_CHECK(3) - PendingBufferCount(1)
+}
+
 // CP-4: a buffer must remain "pending" until the stream reports it was actually consumed, not
 // the instant it's handed off to SDL. Pre-load 3 buffers (MINIMUM_BUFFER_CHECK,
 // DynamicSoundEffectInstance.cpp) before playing, then Update() immediately -- nothing has had
@@ -338,4 +390,102 @@ TEST(DynamicSoundEffectInstanceTest, PauseViaBaseRefResolvesToOverride)
 
     base.Resume();
     EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
+}
+
+// P9-DYNAMIC-001: Pause() must not touch PendingBufferCount at all (matches FNA's Pause(), which
+// only stops the voice -- no buffer bookkeeping). Submits a buffer while already playing (past
+// the initial buffer submitted by tryStartHeadless), pauses immediately after, and confirms the
+// count is exactly what it was right before pausing.
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountUnaffectedAcrossPause)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    std::vector<unsigned char> pcm(4 * 256, 0);
+    d.SubmitBuffer(pcm);
+    const SharpRuntime::intcs beforePause = d.getPendingBufferCountProperty();
+
+    d.Pause();
+    EXPECT_EQ(d.getStateProperty(), SoundState::Paused);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), beforePause);
+
+    d.Resume();
+    EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), beforePause);
+}
+
+// P9-DYNAMIC-001: a real (immediate) Stop() after playback has actually started must clear all
+// pending buffers, matching FNA's Stop(true) -> ClearBuffers() -- distinct from
+// StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers above, which covers the guarded
+// never-played case.
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterStopWhilePlaying)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    ASSERT_GT(d.getPendingBufferCountProperty(), 0);
+
+    d.Stop();
+
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+    EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
+}
+
+// P9-DYNAMIC-001: Dispose() must also clear pending buffers once playback has actually started
+// (via its own Stop() call), matching FNA's Dispose(bool) -> Stop(true) -> ClearBuffers().
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterDisposeWhilePlaying)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    ASSERT_GT(d.getPendingBufferCountProperty(), 0);
+
+    d.Dispose();
+
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+}
+
+// P9-DYNAMIC-001: SubmitBuffer while Playing must still increment PendingBufferCount immediately
+// (the buffer counts as pending the instant it's accepted, whether staged or handed straight to
+// the stream -- matches FNA, where a buffer stays in queuedBuffers.Count either way).
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhilePlayingIncrementsPendingBufferCount)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    const SharpRuntime::intcs before = d.getPendingBufferCountProperty();
+
+    std::vector<unsigned char> pcm(4 * 256, 0);
+    d.SubmitBuffer(pcm);
+
+    EXPECT_EQ(d.getPendingBufferCountProperty(), before + 1);
+}
+
+// P9-DYNAMIC-001: BufferNeeded must fire once per every subscriber, not just the first --
+// multiple independent subscribers (e.g. separate systems both tracking buffer starvation) must
+// each observe every raise.
+TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresForEveryIndependentSubscriber)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    int firedA = 0, firedB = 0;
+    d.BufferNeeded += [&firedA](System::Object*, const System::EventArgs&) { ++firedA; };
+    d.BufferNeeded += [&firedB](System::Object*, const System::EventArgs&) { ++firedB; };
+
+    d.Update();
+
+    EXPECT_GT(firedA, 0);
+    EXPECT_EQ(firedA, firedB);
 }

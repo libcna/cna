@@ -183,5 +183,6 @@ namespace Microsoft::Xna::Framework::Audio
         void EnsureStream();
         void DestroyStream();
         void SubmitQueuedToStream();
+        void StopInternal();
     };
 }

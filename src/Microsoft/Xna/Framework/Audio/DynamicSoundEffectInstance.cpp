@@ -118,6 +118,15 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         }
 
+        // P9-DYNAMIC-001: matches FNA's DynamicSoundEffectInstance.Play() ("Wait! What if we
+        // need moar buffers?"), which unconditionally calls Update() before dispatching on
+        // State -- a no-op here on a fresh/Stopped/Paused instance (Update() itself no-ops
+        // unless already Playing), but a real, observable pump (submits freshly queued data,
+        // fires BufferNeeded if starved) when Play() is called redundantly while already
+        // Playing. Previously only called from the Stopped branch below, silently skipping this
+        // pump for the "already playing" case.
+        Update();
+
         SoundState current = getStateProperty();
 
         if (current == SoundState::Paused)
@@ -140,7 +149,6 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
         // Stopped — set up fresh playback.
-        Update(); // request initial buffers before starting
 
 #ifdef SOUND_ENABLED
         EnsureStream();
@@ -211,10 +219,21 @@ namespace Microsoft::Xna::Framework::Audio
         {
             throw System::InvalidOperationException();
         }
-        Stop();
+        StopInternal();
     }
 
     void DynamicSoundEffectInstance::Stop()
+    {
+        // P9-DYNAMIC-001: matches the base SoundEffectInstance::Stop() (and FNA's, which is
+        // exactly `Stop(true)`) -- delegates through Stop(bool)'s own guard rather than
+        // duplicating StopInternal()'s work unconditionally. Previously this override skipped
+        // that guard entirely, so calling the no-arg Stop() directly (not via Stop(bool)) on a
+        // never-played (or already-stopped) instance would still clear any staged buffers and
+        // reset state, unlike FNA, which no-ops in that case (handle == IntPtr.Zero).
+        Stop(true);
+    }
+
+    void DynamicSoundEffectInstance::StopInternal()
     {
 #ifdef SOUND_ENABLED
         MIX_Track* track = AsTrackD(dynamicTrack_);
