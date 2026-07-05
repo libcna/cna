@@ -225,6 +225,15 @@ target_link_libraries(CNA
 #        SDL3_ttf::SDL3_ttf
 )
 
+if(ANDROID)
+    # Detail::AndroidSensorBridge (Microsoft::Devices::Sensors) calls the NDK's
+    # ASensorManager_*/ASensorEventQueue_*/ALooper_* API directly (no JNI) --
+    # those symbols live in libandroid.so, not libc/libc++. PUBLIC so any
+    # executable linking CNA (e.g. cna_demo_devices) picks up the transitive
+    # dependency automatically (plan_devices.md Task DEVICES-0121).
+    target_link_libraries(CNA PUBLIC android)
+endif()
+
 if(CNA_FFMPEG_AVAILABLE)
     target_link_libraries(CNA PRIVATE
         ${LIBAVCODEC_LIBRARIES}

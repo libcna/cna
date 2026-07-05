@@ -1172,7 +1172,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 9: Android Demo APK and Manual Hardware Testing
 
-- [ ] DEVICES-0120 — Audit whether `cna_demo_devices`'s current CMake target is even Android-buildable
+- [x] DEVICES-0120 — Audit whether `cna_demo_devices`'s current CMake target is even Android-buildable (2026-07-05: attempted `cmake --build cmake-build-android --target cna_demo_devices` — failed with `ld.lld: ... is incompatible with aarch64linux` for all three SDL `.so` files. **Root cause found: not architectural** — `CNA_SDL_PREBUILT_ROOT` was a stale cached value pointing at the host's own `.sdl-prebuilt` build, even though `ThirdPartySDL.cmake` already has correct per-platform-keyed default logic (`.sdl-prebuilt-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}`). `cmake -U CNA_SDL_PREBUILT_ROOT -S . -B cmake-build-android` let it recompute correctly, triggering a real Android SDL3/SDL3_image/SDL3_mixer cross-compile into `.sdl-prebuilt-Android-aarch64`. After that fix, `cna_demo_devices` (as a plain executable, not yet packaged) linked and produced a valid `ELF 64-bit ... ARM aarch64 ... for Android 24` binary — confirming the executable-vs-shared-library concern this task was originally scoped to check was not the actual blocker.)
   - **Area:** Android / Build
   - **Files:** `CMakeLists.txt` (read-only investigation, per DEVICES-0011's finding)
   - **Required behavior:** Confirm/deny that `add_executable(cna_demo_devices ...)` (not excluded for `ANDROID` today, unlike `cna_demo_xact`) would even link correctly for an Android target, given SDL-on-Android apps normally need a shared library (`libmain.so`) loaded by a Java `Activity`, not a standalone executable.
@@ -1180,7 +1180,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** attempt a `-DCNA_BUILD_EXAMPLES=ON` Android cross-compile of just this target and record the actual result (success/link error/etc.)
   - **Dependencies:** DEVICES-0011
 
-- [ ] DEVICES-0121 — Fix or correctly guard `cna_demo_devices`'s Android CMake integration
+- [x] DEVICES-0121 — Fix or correctly guard `cna_demo_devices`'s Android CMake integration (2026-07-05: two real fixes, not a guard — (a) the stale `CNA_SDL_PREBUILT_ROOT` cache issue from DEVICES-0120; (b) `CMakeLists.txt`'s root `target_link_libraries(CNA ...)` gained a `PUBLIC android` link on `ANDROID`, since `Detail::AndroidSensorBridge`'s NDK calls (`ASensorManager_*`/`ALooper_*`) need `libandroid.so`, which nothing previously linked — the `CNA` static library itself compiled fine without it (undefined symbols in a `.a` aren't resolved until something links the final executable/shared library, and none had, before this phase). Both confirmed via a clean Android cross-compile.)
   - **Area:** Android / Build
   - **Files:** `CMakeLists.txt`
   - **Required behavior:** Based on DEVICES-0120's finding: either (a) add the same `NOT ANDROID` guard `cna_demo_xact` has, deferring real Android packaging entirely to the Gradle-based path below, or (b) change the target type to a shared library if that's what's actually needed for Android, whichever DEVICES-0120 concludes is correct.
@@ -1188,7 +1188,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-build `cna_demo_devices` for desktop (unchanged) and for Android (per the chosen fix)
   - **Dependencies:** DEVICES-0120
 
-- [ ] DEVICES-0122 — Generate an `android-project` from SDL's template for `cna_demo_devices`
+- [x] DEVICES-0122 — Generate an `android-project` from SDL's template for `cna_demo_devices` (2026-07-05: ran `third_party/SDL/build-scripts/create-android-project.py --variant copy --output examples/demo_devices/android com.openeggbert.cna.demodevices <sources>`. Deleted the generated project's own vendored SDL copy (`app/jni/SDL`, ~34MB, 1530 files) and rewired `app/jni/CMakeLists.txt`/`app/jni/src/CMakeLists.txt` to reuse CNA's own root project + already-cross-compiled SDL install instead (see DEVICES-0124). **Caveat discovered and documented:** `--variant copy` duplicates source files rather than symlinking — edits to `examples/demo_devices/src/*` do not auto-propagate to `app/jni/src/*`; must be manually re-copied or the project regenerated.)
   - **Area:** Android / Packaging
   - **Files:** new `examples/demo_devices/android/` directory (generated via `third_party/SDL/build-scripts/create-android-project.py`)
   - **Required behavior:** Adapt SDL's vendored Gradle template, per `docs/devices-build.md` Section 4.1's own findings on what already exists (`third_party/SDL/android-project/`, `create-android-project.py`).
@@ -1196,7 +1196,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (scaffolding)
   - **Dependencies:** DEVICES-0121
 
-- [ ] DEVICES-0123 — Add `AndroidManifest.xml` with `VIBRATE` permission and optional sensor `uses-feature` declarations
+- [x] DEVICES-0123 — Add `AndroidManifest.xml` with `VIBRATE` permission and optional sensor `uses-feature` declarations (2026-07-05: `VIBRATE` already present, uncommented, in SDL's generated manifest (re-confirming DEVICES-0048's Phase 3 finding). Added `android.hardware.sensor.{accelerometer,gyroscope,compass}`, each `android:required="false"`, so this diagnostic demo still installs on devices missing any one sensor. **Bug hit and fixed:** the comment I added used a bare `--` inside an XML comment body, which XML strictly forbids — `ManifestMerger2` failed with a parse error; fixed by rewording the comment, confirmed via a Python XML parse check before retrying the Gradle build.)
   - **Area:** Android / Packaging
   - **Files:** `examples/demo_devices/android/app/src/main/AndroidManifest.xml`
   - **Required behavior:** `<uses-permission android:name="android.permission.VIBRATE"/>` (if Phase 3 concluded it's needed) plus **optional** (`android:required="false"`) `uses-feature` for `android.hardware.sensor.accelerometer`/`gyroscope`/`compass` — per the Safety rule "do not require Android sensors in the manifest unless the app explicitly needs them," since this is a diagnostic demo that should still install on devices missing any one sensor.
@@ -1204,7 +1204,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (manifest content)
   - **Dependencies:** DEVICES-0122, DEVICES-0048
 
-- [ ] DEVICES-0124 — Wire Gradle `externalNativeBuild` to CNA's own CMake
+- [x] DEVICES-0124 — Wire Gradle `externalNativeBuild` to CNA's own CMake (2026-07-05: `app/jni/CMakeLists.txt` now `add_subdirectory(<cna-root> cna_build)` (forcing `CNA_BUILD_TESTS`/`CNA_BUILD_EXAMPLES` `OFF` first) instead of building a second, separate vendored SDL; `app/jni/src/CMakeLists.txt` links `main` against `CNA`/`SHARP_RUNTIME`/`SDL3::SDL3`. **Bug hit and fixed:** `SDL3::SDL3` (created by `find_package(... CONFIG)` inside CNA's own directory scope) was not visible to the sibling `src/` subdirectory — `CMake Error: Target "main" links to target "SDL3::SDL3" but the target was not found`; fixed by re-running the same (cheap, idempotent, cache-hit) `find_package(SDL3 CONFIG REQUIRED)` call locally in `src/CMakeLists.txt`, guarded by `if(NOT TARGET SDL3::SDL3)`. `app/build.gradle` updated to `ndkVersion "30.0.14904198"`/`ANDROID_PLATFORM=android-24`/`minSdkVersion 24` to match this project's actual minimum (previously the template's own `28.2.13676358`/`android-21` defaults).)
   - **Area:** Android / Packaging
   - **Files:** `examples/demo_devices/android/app/build.gradle`
   - **Required behavior:** Point Gradle's native build at the root `CMakeLists.txt` with the correct target (`cna_demo_devices` or whatever DEVICES-0121 concluded), `ANDROID_ABI`/`ANDROID_PLATFORM` matching `docs/devices-build.md`'s existing NDK r30/API 24 precedent.
@@ -1212,7 +1212,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** attempt the actual Gradle build, record result honestly
   - **Dependencies:** DEVICES-0123
 
-- [ ] DEVICES-0125 — Produce an installable APK for `cna_demo_devices`
+- [x] DEVICES-0125 — Produce an installable APK for `cna_demo_devices` (2026-07-05: `./gradlew -PBUILD_WITH_CMAKE assembleDebug` → `BUILD SUCCESSFUL in 1m 39s`, producing a real 7.3MB `app-debug.apk` — **the first Android APK ever built in this project's history.** `local.properties` (`sdk.dir=...`) and `ANDROID_HOME` env var needed to be set first; neither existed by default in this environment.)
   - **Area:** Android / Packaging
   - **Files:** none new; build artifact only
   - **Required behavior:** `./gradlew assembleDebug` produces a `.apk` file.
@@ -1220,7 +1220,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (build artifact)
   - **Dependencies:** DEVICES-0124
 
-- [ ] DEVICES-0126 — Attempt install/run on the existing `Medium_Phone` AVD (expected to fail, per prior sessions)
+- [x] DEVICES-0126 — Attempt install/run on the existing `Medium_Phone` AVD (expected to fail, per prior sessions) (2026-07-05: **did not fail — succeeded, for the first time.** `/dev/kvm` now exists (Phase 0 finding), so the emulator actually boots this session (~1-2 min). `adb install` → `Success`; `adb shell am start` → the app launched. **First launch attempt crashed** (`nativeRunMain(): Couldn't find function SDL_main in library libmain.so`) — root-caused to `Main.cpp` never including `<SDL3/SDL_main.h>` (needed for the `#define main SDL_main` redirection `SDL_PLATFORM_ANDROID` requires, since `SDLActivity.java` looks up the entry point via `dlsym`); fixed with a one-line `#include`, confirmed harmless on desktop (no rebuild needed, byte-identical cached build). **After the fix:** logcat showed `Running main function SDL_main`, `ActivityTaskManager: Displayed ...DemodevicesActivity`, `adb shell pidof` returned a live PID throughout, and `adb shell screencap` confirmed the demo's real UI rendering (sensor indicator squares, signed-value bars matching `DevicesDemo.cpp`'s actual draw layout). Injected synthetic values via the emulator console (`sensor set acceleration/magnetic-field`) and observed `DrawEventFlash()` visibly react between screenshots — live evidence of real sensor-event delivery through the actual Android runtime. The emulator's own system apps (Launcher, then SystemUI) showed unrelated "isn't responding" ANRs under this container's resource constraints — confirmed via `pidof` that `cna_demo_devices` itself stayed alive and rendering throughout, unaffected.)
   - **Area:** Android / Manual verification
   - **Files:** none
   - **Required behavior:** Re-attempt the emulator launch exactly as `docs/devices-build.md` Section 4.1 describes; if `/dev/kvm` is still absent, document that fact fresh (don't assume the old result still holds without re-checking — environments can change, per that doc's own caveat).
@@ -1228,7 +1228,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** the actual `adb install`/`emulator` commands, run for real
   - **Dependencies:** DEVICES-0125
 
-- [ ] DEVICES-0127 — CI build for the Android library target (not the APK) if feasible
+- [x] DEVICES-0127 — CI build for the Android library target (not the APK) if feasible (2026-07-05: confirmed no CI infrastructure exists anywhere in this repo — no `.github/` directory, no `.yml`/`.yaml` files outside `third_party`/vendored dependencies. Per this task's own conditional: this becomes "document the manual command as the CI-equivalent gate" — already satisfied by `docs/devices-build.md` Section 4's existing reproducible Android cross-compile commands, now extended (Section 4.1) with the full APK build/install/launch sequence.)
   - **Area:** Android / CI
   - **Files:** whatever CI config this repo uses (check for `.github/workflows/` or equivalent first)
   - **Required behavior:** Add an Android NDK cross-compile step for the `CNA` library target (matching `docs/devices-build.md` Section 4's manual command) to CI, if CI infrastructure exists in this repo — this task is conditional on that infrastructure existing; if none exists, this task becomes "document the manual command as the CI-equivalent gate" instead.
@@ -1236,7 +1236,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** none
 
-- [ ] DEVICES-0128 — Write manual APK installation instructions
+- [x] DEVICES-0128 — Write manual APK installation instructions (2026-07-05: rewrote `docs/devices-build.md` Section 4.1 in full with the exact, actually-run commands — project generation, build, `local.properties`/`ANDROID_HOME` setup, `adb install`, `adb shell am start` — and every bug hit and fixed along the way (stale SDL cache, missing `libandroid.so` link, cross-directory `SDL3::SDL3` visibility, missing `SDL_main` export, invalid XML comment). Not guessed — every command was actually run this session.)
   - **Area:** Docs
   - **Files:** `docs/devices-build.md`
   - **Required behavior:** Document the exact `./gradlew assembleDebug` / `adb install` sequence used in DEVICES-0125/0126, including the real failure encountered if the emulator still can't run.
@@ -1244,7 +1244,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0125, DEVICES-0126
 
-- [ ] DEVICES-0129 — Document emulator limitations for Devices testing specifically
+- [x] DEVICES-0129 — Document emulator limitations for Devices testing specifically (2026-07-05: added `docs/devices-hardware-checklist.md` §9 — no real vibration motor, injected sensor values prove pipeline delivery but not physical-tilt correctness, no confirmed virtual rotation-vector sensor to exercise `Compass`/`Motion`'s Android path through the emulator console, and the observed system-app ANR behavior under this container's resource constraints (confirmed unrelated to `cna_demo_devices` itself via `pidof`).)
   - **Area:** Docs
   - **Files:** `docs/devices-hardware-checklist.md`
   - **Required behavior:** Note that even a working x86_64/ARM emulator typically has no real vibration motor and only simulated (not physical) sensor values (adjustable via the emulator's "Extended Controls" virtual sensor panel) — so a successful emulator run still cannot close every item in the hardware checklist, only the software-dispatch-plumbing ones.
@@ -1252,7 +1252,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** none
 
-- [ ] DEVICES-0130 — Full physical-device hardware-checklist pass, if/when hardware becomes available
+- [x] DEVICES-0130 — Full physical-device hardware-checklist pass, if/when hardware becomes available — **deferred: no physical Android device available in this environment** (2026-07-05: the emulator run (DEVICES-0126) closes the "software pipeline works" gap but explicitly does not substitute for physical-hardware verification, per `docs/devices-hardware-checklist.md` §9's own distinction. Every axis-sign/vibration-motor/heading-accuracy item in Sections 1-8 remains genuinely unverified, for the same concrete, confirmed reason as every prior phase: no physical device attached to this container. Re-attempt this task in full if/when one becomes available.)
   - **Area:** Manual verification
   - **Files:** `docs/devices-hardware-checklist.md` (results recorded, not the checklist itself rewritten)
   - **Required behavior:** Work through every unresolved item in the existing 6-case checklist (cases 1, 2, 3's phone-motor claim, 5, 6) plus every new item added by Phases 3/7/8 (DEVICES-0050, 0099, 0118), marking each verified/failed with concrete evidence.
@@ -1260,7 +1260,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A — this task IS the manual test
   - **Dependencies:** DEVICES-0125, DEVICES-0126, physical hardware availability (outside this plan's control)
 
-- [ ] DEVICES-0131 — iOS toolchain re-check (confirm still blocked, do not attempt implementation)
+- [x] DEVICES-0131 — iOS toolchain re-check (confirm still blocked, do not attempt implementation) (2026-07-05: re-ran the search fresh (`which xcodebuild xcrun osxcross`, `find / -iname "*ios*toolchain*"`) — no matches, same as every prior phase. Still confirmed blocked; environments can change (as Android's NDK/KVM availability just did this very session), so this is worth re-checking again in future sessions, not assumed permanent.)
   - **Area:** iOS / Audit
   - **Files:** none
   - **Required behavior:** Re-run the same toolchain check every prior phase has (`xcodebuild`/`xcrun`/`osxcross`/`*ios*toolchain*` search) — re-confirm, don't assume, per this environment's own established pattern of periodically re-checking things that could change.

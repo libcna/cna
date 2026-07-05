@@ -81,6 +81,18 @@ emulator, no APK packaging, no toolchain) — not vague unavailability. This che
 stays the authoritative source for whoever eventually has the missing hardware/toolchain
 available.
 
+**Update (2026-07-05, `plan_devices.md` Phase 9, Tasks DEVICES-0122-0126): the "no working
+emulator"/"no APK packaging" blockers above are resolved** — `/dev/kvm` now exists in this
+container (absent every session above), and a real Gradle/CMake Android app integration
+now exists (`examples/demo_devices/android/`, see `docs/devices-build.md` Section 4.1).
+The `Medium_Phone` AVD boots, `cna_demo_devices` installs, launches, and renders its real
+UI (screenshot-confirmed), and responds to synthetic sensor values injected via the
+emulator console. **This closes the "the software pipeline works end-to-end" gap, not
+the "physically verified" one** — every item below this line is about *real* hardware,
+which an emulator's virtual sensors are explicitly not a substitute for (Section 8 below
+has the emulator's own specific limitations). Case 6 (iOS) is unaffected — still blocked,
+no Apple toolchain exists in this Linux container (re-confirmed this session).
+
 ---
 
 ## 1. Accelerometer axis sign/orientation
@@ -342,6 +354,40 @@ If any step reveals a wrong sign/axis, the fix belongs in `ConvertRotationVector
 (or `AndroidMotionBackend`'s vector handling for `Gravity`/`DeviceAcceleration`/
 `DeviceRotationRate`) — never in downstream game code — and a new round-trip/self-consistency
 test case should be added for whatever convention turns out correct.
+
+---
+
+## 9. Emulator limitations for Devices testing (`plan_devices.md` Task DEVICES-0129)
+
+An Android emulator (confirmed working this session, `docs/devices-build.md` Section 4.1)
+closes the "does the software pipeline work at all" question, but is **not a substitute**
+for any item above that asks "does this feel/read correct on a real device":
+
+- **No real vibration motor.** `Medium_Phone` (and Android emulators generally) have no
+  physical haptic actuator — `VibrateController::Start()` can be confirmed to run without
+  crashing on an emulator, but Section 3/4's "does it actually buzz" steps are
+  meaningless there and must use a real device.
+- **Virtual, not physical, sensor motion.** The emulator's console (`sensor set
+  acceleration <x>:<y>:<z>`, `sensor set magnetic-field <x>:<y>:<z>`, etc. — confirmed
+  working this session) lets a script inject arbitrary values instantly, which is useful
+  for confirming the C++ dispatch pipeline delivers *whatever value is injected*
+  end-to-end (confirmed working this session via `DevicesDemo`'s `DrawEventFlash()`
+  indicator responding to injected values), but proves nothing about whether a real
+  physical tilt/rotation produces the *correct* value — Sections 1/2/7/8's axis-sign
+  questions still require a real device.
+- **No virtual rotation-vector/game-rotation-vector sensor found in this session's
+  emulator console command set** — `Detail::AndroidSensorBridge`'s `Compass`/`Motion`
+  path (`ASENSOR_TYPE_ROTATION_VECTOR` etc.) was not exercised via emulator-injected
+  values this session, only confirmed to launch/compile/link correctly. Whether the
+  `Medium_Phone` system image's virtual sensor HAL exposes this sensor type at all is
+  unconfirmed — investigate further before assuming an emulator can close Section 7/8's
+  gaps even partially.
+- **The emulator's own system apps can become unresponsive under this container's
+  resource constraints** (observed this session: "Pixel Launcher isn't responding",
+  then "System UI isn't responding" ANR dialogs, likely from `-gpu swiftshader_indirect`
+  software rendering under load) — confirmed to be an emulator/environment issue, not a
+  `cna_demo_devices` bug: the demo's own process stayed alive and kept rendering
+  correctly throughout (`adb shell pidof`), unaffected by the system-level ANRs.
 
 ---
 
