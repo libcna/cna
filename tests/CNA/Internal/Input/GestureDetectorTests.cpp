@@ -291,3 +291,78 @@ TEST_F(GestureDetectorTest, PinchAndPinchCompleteFireForTwoFingerGesture)
     Release(21, 0.6f, 0.5f);
     DrainGestures();
 }
+
+TEST_F(GestureDetectorTest, DragCompleteFiresWhenAFreeDragEndsWithRelease)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::FreeDrag | GestureType::DragComplete);
+
+    Press(30, 0.5f, 0.5f);
+    Move(30, 0.6f, 0.6f, 0.1f, 0.1f); // pixel delta (100, 100): starts a FreeDrag.
+    DrainGestures();                  // discard the FreeDrag sample; isolate the release.
+
+    Release(30, 0.6f, 0.6f);
+
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::DragComplete);
+    EXPECT_EQ(sample.getFingerIdEXTProperty(), 30);
+    EXPECT_EQ(sample.getFingerId2EXTProperty(), TouchPanel::NO_FINGER);
+    // XNA/FNA DragComplete carries no position or delta.
+    EXPECT_FLOAT_EQ(sample.getPositionProperty().X, 0.0f);
+    EXPECT_FLOAT_EQ(sample.getPositionProperty().Y, 0.0f);
+    EXPECT_FLOAT_EQ(sample.getDeltaProperty().X, 0.0f);
+    EXPECT_FLOAT_EQ(sample.getDeltaProperty().Y, 0.0f);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, DragCompleteFiresAfterAHorizontalDragAndCarriesReleaseFingerId)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::HorizontalDrag | GestureType::DragComplete);
+
+    Press(31, 0.5f, 0.5f);
+    Move(31, 0.6f, 0.5f, 0.1f, 0.0f); // pixel delta (100, 0): starts a HorizontalDrag.
+    DrainGestures();
+
+    Release(31, 0.6f, 0.5f);
+
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::DragComplete);
+    EXPECT_EQ(sample.getFingerIdEXTProperty(), 31);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, DragCompleteDoesNotFireWhenFingerIsReleasedWithoutDragging)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::FreeDrag | GestureType::DragComplete);
+
+    Press(32, 0.5f, 0.5f);
+    Release(32, 0.5f, 0.5f); // never crossed MOVE_THRESHOLD, so no drag ever started.
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, DragCompleteDoesNotFireWhenMovementStaysBelowMoveThreshold)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::FreeDrag | GestureType::DragComplete);
+
+    Press(33, 0.5f, 0.5f);
+    Move(33, 0.51f, 0.51f, 0.01f, 0.01f); // pixel delta (10, 10): below MOVE_THRESHOLD (35).
+    Release(33, 0.51f, 0.51f);
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, DragCompleteDoesNotFireWhenTheGestureIsNotEnabled)
+{
+    // FreeDrag is enabled so a drag actually starts, but DragComplete is filtered out.
+    TouchPanel::setEnabledGesturesProperty(GestureType::FreeDrag);
+
+    Press(34, 0.5f, 0.5f);
+    Move(34, 0.6f, 0.6f, 0.1f, 0.1f); // starts (and emits) a FreeDrag.
+    DrainGestures();
+
+    Release(34, 0.6f, 0.6f);
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}

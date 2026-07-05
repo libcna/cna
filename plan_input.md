@@ -1559,8 +1559,9 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 Verified facts (`GestureDetector.cpp`): states `NONE/HOLDING/HELD/JUST_TAPPED/DRAGGING_{FREE,H,V}/PINCHING`;
 constants `MOVE_THRESHOLD=35`, `MIN_FLICK_VELOCITY=100.0f`; DoubleTap window `≤300ms` AND dist `≤35`;
 Tap `hold<1s`; Hold `≥1s`; Flick `dist>35 && velocity≥100`; velocity EMA `v += (inst-v)*0.45`, inst=`d/(0.001+dt)`.
-Injectable test clock (epoch+1h baseline). **DragComplete is implemented in the detector but has ZERO test
-coverage.** Gesture-interruption-by-second-finger and mid-drag cancellation are untested.
+Injectable test clock (epoch+1h baseline). DragComplete is implemented in the detector; **it now has 5
+dedicated tests (INPUT-GESTURE-007, done 2026-07-05)** — previously it had ZERO coverage.
+Gesture-interruption-by-second-finger and mid-drag cancellation are still untested (INPUT-GESTURE-011/012).
 
 #### INPUT-GESTURE-001 — Tap
 - **Priority:** P3 · **Status:** TODO · **Area:** Gesture
@@ -1610,15 +1611,20 @@ coverage.** Gesture-interruption-by-second-finger and mid-drag cancellation are 
 - **Tests:** existing VerticalDrag case.
 - **Deps:** none.
 
-#### INPUT-GESTURE-007 — DragComplete (MISSING coverage)
-- **Priority:** P1 · **Status:** TODO · **Area:** Gesture
+#### INPUT-GESTURE-007 — DragComplete (was MISSING coverage)
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`, `tests/.../GestureDetectorTests.cpp`
-- **Problem:** DragComplete is implemented but has **no test** (grep-confirmed zero references).
+- **Problem:** DragComplete is implemented but had **no test** (grep-confirmed zero references).
 - **Work:** Add tests: drag then release emits DragComplete; only when a drag was in progress; correct
   position/delta; enabled-gesture filtering.
 - **Acceptance:** DragComplete covered for positive + negative (no drag → no DragComplete).
 - **Tests:** new `GestureDetectorTest.DragComplete*`.
 - **Deps:** none.
+- **Result (2026-07-05):** Added 5 `GestureDetectorTest.DragComplete*` cases — FreeDrag→release (asserts
+  type, release fingerId, zero position/delta), HorizontalDrag→release (fingerId), release-without-drag
+  (none), sub-`MOVE_THRESHOLD` move (none), and gesture-not-enabled filter (none). Gesture suite 24→29;
+  input filter 259→264 on EasyGL; order-independent under `--gtest_shuffle --gtest_repeat=3`; no
+  regressions. No detector code changed (behavior was already correct).
 
 #### INPUT-GESTURE-008 — Flick (positive + insufficient-movement negative)
 - **Priority:** P3 · **Status:** TODO · **Area:** Gesture
@@ -2145,9 +2151,9 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 ## 15. Tests plan
 
 Baseline (this checkout, EasyGL, 2026-07-05): full `CnaTests` **3248 passed / 2 skipped**; input filter
-**259 passed / 33 suites**; order-independent under shuffle×3. No `DISABLED_` input tests; `GTEST_SKIP`
-only as headless environment fallback. **No public-API-only compile test exists.** Gaps below become
-concrete backlog items.
+**259 → 264 passed** after INPUT-GESTURE-007 added 5 DragComplete tests; order-independent under shuffle×3.
+No `DISABLED_` input tests; `GTEST_SKIP` only as headless environment fallback. **No public-API-only
+compile test exists.** Gaps below become concrete backlog items.
 
 #### INPUT-TEST-001 — Add missing enum-value test suites
 - **Priority:** P1 · **Status:** TODO · **Area:** Test
@@ -2158,12 +2164,12 @@ concrete backlog items.
 - **Tests:** the new suites.
 - **Deps:** INPUT-API-001..005,020,021.
 
-#### INPUT-TEST-002 — DragComplete gesture tests (currently zero)
-- **Priority:** P1 · **Status:** TODO · **Area:** Test/Gesture
+#### INPUT-TEST-002 — DragComplete gesture tests (was zero)
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test/Gesture
 - **Files:** `tests/.../GestureDetectorTests.cpp`
 - **Work:** Positive/negative DragComplete cases.
 - **Acceptance:** DragComplete covered.
-- **Tests:** new cases.
+- **Tests:** 5 new `GestureDetectorTest.DragComplete*` cases (see INPUT-GESTURE-007 result).
 - **Deps:** INPUT-GESTURE-007.
 
 #### INPUT-TEST-003 — Gesture interruption/cancellation tests
