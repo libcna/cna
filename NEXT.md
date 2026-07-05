@@ -13,21 +13,30 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–39 are complete. **Phase 40 (Viewport, DisplayMode, and
-  adapter behavior, `GRAPHICS_TASKS.md` Tasks 341–350) is open** — Tasks 341–347 are all now done,
-  **Task 348 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
+  adapter behavior, `GRAPHICS_TASKS.md` Tasks 341–350) is open** — Tasks 341–348 are all now done,
+  **Task 349 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
   closed phases have synthesis docs: `docs/depthstencilstate-support.md` (Phase 37),
   `docs/rasterizerstate-support.md` (Phase 38), `docs/rendertarget-support.md` (Phase 39).
   **Phase 40 connects directly to Task 880** (found in Phase 39): `Viewport` has zero GPU backend
   wiring on all 3 backends — Tasks 341–344 were all pure math/unit tests against the `Viewport`
-  class in isolation (no `GraphicsDevice` involved), so none of them touched it; the
-  viewport-reset-after-resize task (Task 349) will likely re-surface this same gap from a
-  different angle; worth cross-referencing rather than re-diagnosing from scratch. Task 345
-  audited `GraphicsAdapter` against FNA (fixed 4 real bugs, most notably a dangling-reference bug
-  in the old `DefaultAdapter` static field) and opened a finding closed by Task 347 (added FNA's
-  missing `this[SurfaceFormat]` indexer to `DisplayModeCollection`). Task 346 (skipped one round,
-  then picked up) verified `GraphicsAdapter`'s existing headless-CI fallback chain is structurally
-  complete, fixed one small leak, and added a genuine (non-mocked) regression test for the
-  "SDL video subsystem not initialized" enumeration-failure path.
+  class in isolation (no `GraphicsDevice` involved), so none of them touched it. **Task 348**
+  traced the real window-resize chain end-to-end and confirmed a related, deliberate CNA
+  divergence from FNA: `PresentationParameters.BackBufferWidth`/`Height` do NOT follow a real
+  window resize (only `Viewport` does, via `PresentationMode::FixedHeightDynamicWidth`'s
+  fixed-height/dynamic-width scaling) — this is intentional (an existing source comment explains
+  why matching FNA's behavior here would corrupt CNA's virtual-resolution feature), not a bug.
+  Task 348 also opened **Task 882**: `PresentationMode`'s other 4 values (`Letterbox`/`Overscan`/
+  `Stretch`/`NativeBackBuffer`) aren't distinctly implemented on EasyGL, and Vulkan/Bgfx don't
+  implement virtual-resolution scaling at all — tracked, not fixed (needs its own dedicated,
+  multi-backend investigation). The still-untouched viewport-reset-after-resize task (Task 349,
+  next) will likely re-surface Task 880's GPU-wiring gap from a different angle; worth
+  cross-referencing rather than re-diagnosing from scratch. Task 345 audited `GraphicsAdapter`
+  against FNA (fixed 4 real bugs, most notably a dangling-reference bug in the old `DefaultAdapter`
+  static field) and opened a finding closed by Task 347 (added FNA's missing `this[SurfaceFormat]`
+  indexer to `DisplayModeCollection`). Task 346 (skipped one round, then picked up) verified
+  `GraphicsAdapter`'s existing headless-CI fallback chain is structurally complete, fixed one
+  small leak, and added a genuine (non-mocked) regression test for the "SDL video subsystem not
+  initialized" enumeration-failure path.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -50,21 +59,21 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
   (`cmake-build-bgfx`): all 3 configured, build cleanly, rebuilt and fully re-verified this
-  session (Task 346's fix touches `GraphicsAdapter.cpp`, so all 3 backends needed a full rebuild +
-  regression pass).
+  session (Task 348 only adds a new EasyGL-only test + an inert `CMakeLists.txt` change — no
+  shared production code touched — but all 3 backends were still reconfigured/rebuilt/tested per
+  the project's standing regression discipline).
 
 ### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 3351/3354 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3274/3288 pass. 13 documented failures (see §5) + 1 reconfirmed
-  order-dependent flake (alternates between `Vulkan_RenderTargetUsage` and
-  `Vulkan_FillMode_WireFrame` depending on run — this run it was `Vulkan_FillMode_WireFrame`):
-  5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
+- **EasyGL, full `ctest -j1`:** 3351/3355 pass. 3 pre-existing/documented failures (see §5):
+  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`
+  + 1 reconfirmed-flaky, unrelated `CueTest` failure.
+- **Vulkan, full `ctest -j1`:** 3274/3288 pass. 13 documented failures (see §5) + 1 reconfirmed-flaky,
+  unrelated `CueTest` failure (no order-dependent `Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame`
+  flake this run): 5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
   `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
   `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876 — genuine confirmed bug, supposed to fail
   until fixed).
-- **Bgfx, full `ctest -j1`:** 3258/3259 pass — 1 reconfirmed-flaky, unrelated `CueTest` failure
-  (passes in isolation).
+- **Bgfx, full `ctest -j1`:** 3259/3259 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently**
   — concurrent runs previously produced transient GPU/driver-contention false failures. If a
   single run shows an anomaly beyond the documented list, re-run that test in isolation before
@@ -168,6 +177,7 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 
 | Commit / Task | Change |
 |---|---|
+| Task 348 | Opened Phase 40's third sub-area. Traced the real window-resize chain end-to-end: `SDL_EVENT_WINDOW_RESIZED` → `Game`'s event loop → `GameWindow::updateFromSDL()` → `GameWindow.ClientSizeChanged` → `GraphicsDeviceManager::INTERNAL_OnClientSizeChanged` → `GraphicsDevice::UpdateViewportFromWindow()`. **Confirmed a real, deliberate FNA divergence, correctly not "fixed"**: FNA's `INTERNAL_OnClientSizeChanged` forwards the new window size into `PresentationParameters.BackBufferWidth`/`Height` (full device Reset on every resize); CNA's doesn't, by design (an existing accurate comment explains why — would corrupt `FixedHeightDynamicWidth`'s virtual-resolution scaling). **Genuine discovery while verifying the new test's discriminating power**: `Viewport` tracking doesn't actually depend on the `ClientSizeChanged` event at all — `GraphicsDevice::Present()` unconditionally refreshes it every frame, a stronger guarantee than FNA's — so the event chain itself needed its own separately-discriminating check. **Closed a real test-coverage gap**: Task 227's existing test only covers the GDM-API-driven resize path; new `examples/easygl_real_window_resize_test.cpp` (`EasyGL_RealWindowResize`) calls `SDL_SetWindowSize()` directly on the live window and verifies 4 things: Viewport height pinned, Viewport width changes, `BackBufferWidth`/`Height` unchanged (regression marker), and `ClientSizeChanged` fires. EasyGL-only (matches Task 227's precedent — Vulkan/Bgfx have no virtual-resolution scaling to pin). **New findings deferred to Task 882**: `PresentationMode::Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer` aren't distinctly implemented on EasyGL (only `FixedHeightDynamicWidth` has real logic); Vulkan/Bgfx implement no virtual-resolution scaling at all. Full 3-backend rebuild + regression (new EasyGL-only test, inert `CMakeLists.txt` change): EasyGL 3351/3355 (3 pre-existing + 1 reconfirmed-flaky `CueTest`). Vulkan 3274/3288 (13 pre-existing + 1 reconfirmed-flaky `CueTest`, no order-dependent flake this run). Bgfx 3259/3259 (100%). |
 | Task 346 | Verified the headless-CI fallback chain already present in `GraphicsAdapter.cpp` is structurally complete: `AdaptersChanged()` falls back to a synthetic 800×480 "Default Display" adapter when `SDL_GetDisplays()` fails; `queryDisplayModes()`/`queryCurrentDisplayMode()` fall back similarly for a display that enumerates but whose modes/current-mode queries fail (including the all-null-pointers edge case, already correctly handled). **Fixed one real small bug**: the no-displays branch never called `SDL_free(displays)` before returning — a latent leak when SDL returns a non-null array with `count<=0` — fixed with an unconditional (documented-safe-on-null) `SDL_free(displays)`. **Added a genuine, non-fabricated regression test**: confirmed via a standalone probe that `SDL_GetDisplays()` reliably fails with "Video subsystem has not been initialized" whenever `SDL_INIT_VIDEO` isn't initialized — the real headless-CI scenario, not a mocked one. New `HeadlessFallback_NoVideoSubsystemProducesSingleSyntheticAdapter` test: skips if something else left video initialized (every other SDL-touching test in this project balances its own init/quit calls, so this reliably holds), otherwise calls `AdaptersChanged()` directly and verifies the synthetic adapter's exact values, then restores a real enumeration afterward. Verified it exercises the real path both standalone and interleaved with `GameWindowTests.cpp`. Full 3-backend rebuild + regression: EasyGL 3351/3354 (3 pre-existing, unchanged). Vulkan 3274/3288 (13 pre-existing + 1 reconfirmed order-dependent flake — `Vulkan_FillMode_WireFrame` this run). Bgfx 3258/3259 (1 reconfirmed-flaky `CueTest`). |
 | Task 347 | Closes the finding from Task 345's `GraphicsAdapter` audit. Compared `DisplayModeCollection` against FNA's `Graphics/DisplayModeCollection.cs` line-by-line: enumeration (`begin()`/`end()`) and integer indexing (`operator[](int)`, out-of-range throwing) already matched and were fully tested. **Fixed the real gap**: added FNA's missing `this[SurfaceFormat]` indexer as a second `operator[](SurfaceFormat)` overload (C++ overloads `operator[]` by parameter type — coexists cleanly with the int overload). Also `NOXNA`-wrapped `getCountProperty()`/integer `operator[]`, which don't exist in FNA's API at all (a `CLAUDE.md` violation on their own, matching `begin()`/`end()`'s existing correct treatment — `NOXNA` is a no-op marker, zero behavior change). New tests: `IndexBySurfaceFormatReturnsOnlyMatchingModesInOriginalOrder`, `IndexBySurfaceFormatReturnsEmptyWhenNoModeMatches`, `IndexBySurfaceFormatOnEmptyCollectionReturnsEmpty`. Verified discriminating power by temporarily making the new indexer return every mode unconditionally and confirming the 2 filter-correctness tests fail, before reverting. Full 3-backend rebuild + regression (header-only addition, widely included): EasyGL 3349/3353 (3 pre-existing + 1 reconfirmed-flaky `CueTest`). Vulkan 3274/3287 (13 pre-existing, unchanged, no flakes this run). Bgfx 3258/3258 (100%). |
 | Task 345 | Audited `GraphicsAdapter` against FNA's `GraphicsAdapter.cs` + `SDL3_FNAPlatform.cs`. Fixed 4 real bugs: (1) `AdaptersChanged()` swapped `DeviceName`/`Description` — FNA gives them different values (`DeviceName`=synthetic `\\.\DISPLAYn`, `Description`=real display name). (2) `queryDisplayModes()` didn't dedupe modes differing only by refresh rate and iterated forward instead of FNA's reverse order — fixed to match exactly. (3) **Most severe**: `static GraphicsAdapter& DefaultAdapter` was a raw reference bound once at static-init time; since `AdaptersChanged()` destroys and recreates every adapter, any later call (an intended, FNA-documented usage) left it — and 2 production call sites in `GraphicsDeviceManager.cpp` — dangling. Removed the field entirely (FNA's own `DefaultAdapter` is a property, always re-evaluated) and repointed both call sites at the existing, always-fresh `getDefaultAdapterProperty()`. (4) Stale Doxygen comments on `getDeviceIdProperty()`/`getVendorIdProperty()` claimed "not implemented" but both are real (Linux PCI sysfs query) — corrected. Documented (not reverted) an intentional deviation: FNA throws `NotImplementedException` for `DeviceId`/`Revision`/`SubSystemId`/`VendorId`; CNA provides real values for the first two. Removed a dead `friend class GraphicsAdapterFactory` (class doesn't exist). Closed a real test-coverage gap — zero `GraphicsAdapter` tests existed despite a stale comment claiming otherwise — with new `GraphicsAdapterTests.cpp` (23 tests). Verified discriminating power for both the swap and dedup fixes by reverting each and confirming the corresponding test fails. **New finding deferred to Task 347**: FNA's `DisplayModeCollection` has a `this[SurfaceFormat]` indexer CNA lacks entirely, while CNA's extra `Count`/integer-`operator[]` (not in FNA) aren't `NOXNA`-wrapped. Full 3-backend rebuild + regression (touches shared `GraphicsDeviceManager.cpp`): EasyGL 3347/3350 (3 pre-existing, unchanged). Vulkan 3269/3284 (13 pre-existing + 2 reconfirmed-flaky `CueTest`; one `Vulkan_DepthBias` 0/4 anomaly reconfirmed as the normal 3/4 pattern in isolation). Bgfx 3254/3255 (1 reconfirmed-flaky `CueTest`). |
@@ -248,6 +258,7 @@ visible via dedicated pixel tests or direct code reading.
 | Confirmed, incomplete | `SpriteBatch`'s `SamplerState` (`Begin()`) is a no-op on Vulkan/Bgfx (EasyGL only). | — |
 | Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. Not caused by recent work. | Task 145 |
 | Confirmed, minor, not fixed | `SetRenderTargets`'s simultaneous-target cap doesn't match FNA's real `MAX_RENDERTARGET_BINDINGS=4` (EasyGL/Bgfx cap at 8, Vulkan uncapped at the CNA level). No test exercises >2 targets. | Task 881 |
+| Confirmed, incomplete (found Task 348) | `PresentationMode::Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer` aren't distinctly implemented in `EasyGLGraphicsBackend::getLogicalSize()` — only `FixedHeightDynamicWidth` has real logic; every other mode silently behaves the same, contradicting each one's documented behavior. Vulkan/Bgfx implement no virtual-resolution/presentation-mode scaling at all in `GetViewportSize()` (always raw physical window size); Vulkan's `SetVirtualResolution()` instead triggers `RecreateSwapchain()`, a materially different mechanism needing its own investigation. | Task 882 |
 | Confirmed, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` aborts on an internal assert in the sibling `easy-gl` repo. | — |
 | Confirmed, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. | — |
 | Confirmed, pre-existing, flaky | `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`: order-dependent, only one fails per full-suite run. | — |
@@ -346,28 +357,29 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 348 — verify backbuffer size follows window size when appropriate**
-   - Goal: opens Phase 40's third sub-area (Viewport: Tasks 341–344 closed; adapter/DisplayMode:
-     Tasks 345–347 closed). CNA's `GraphicsDeviceManager` already wires
-     `GameWindow.ClientSizeChanged` to `INTERNAL_OnClientSizeChanged`, which directly calls
-     `graphicsDevice_->UpdateViewportFromWindow()` (immediate). **A real mechanism difference
-     already spotted while scoping this task, not yet investigated**: FNA's own
-     `INTERNAL_OnClientSizeChanged` (`GraphicsDeviceManager.cs`) does NOT immediately mutate
-     anything — it captures the new size into `resizedBackBufferWidth`/`Height` fields (via
-     `FNAPlatform.ScaleForWindow`) and sets a `useResizedBackBuffer=true` flag, deferring the
-     actual `PresentationParameters.BackBufferWidth`/`Height` update to a later point (likely
-     `ApplyChanges()`/device-reset time) — NOT applying it unconditionally on every resize event.
-     CNA's immediate-apply approach may be a legitimate simplification, or may diverge from FNA in
-     cases where a game explicitly sets `PreferredBackBufferWidth`/`Height` and expects the
-     backbuffer to NOT silently follow the window until `ApplyChanges()` is called. Needs a
-     line-by-line comparison of `INTERNAL_OnClientSizeChanged` and whatever consumes
-     `useResizedBackBuffer`/`resizedBackBufferWidth` in FNA's `GraphicsDeviceManager.cs` before
-     deciding whether this is a bug worth fixing or an acceptable, documentable simplification.
-   - Files: `src/Microsoft/Xna/Framework/GraphicsDeviceManager.cpp`
-     (`INTERNAL_OnClientSizeChanged`), FNA's `GraphicsDeviceManager.cs`.
-   - Verification: check for existing backbuffer-resize test coverage first (there's already an
-     `EasyGL_BackbufferResize` test per NEXT.md §2's "what currently works" — read it before
-     assuming a gap exists) before writing new tests.
+1. **`GRAPHICS_TASKS.md` Task 349 — verify viewport reset after backbuffer resize (EasyGL/Vulkan)**
+   - Goal: closes Phase 40 (the last remaining task besides Task 350's docs-only closer). Task 348
+     confirmed the real window-resize chain (`SDL_EVENT_WINDOW_RESIZED` → `Game`'s event loop →
+     `GameWindow::updateFromSDL()` → `ClientSizeChanged` → `INTERNAL_OnClientSizeChanged` →
+     `UpdateViewportFromWindow()`) and — separately — that `GraphicsDevice::Present()`
+     unconditionally refreshes `Viewport` every frame regardless of that event chain. Task 349
+     should verify this holds specifically for the **backbuffer resize** case (i.e. an explicit
+     `GraphicsDeviceManager.ApplyChanges()`-driven resize, Task 227's own tested path) — does
+     `Viewport` reset to the *new* backbuffer's full size correctly on both EasyGL and Vulkan,
+     matching FNA's real behavior of resetting `Viewport`/`ScissorRectangle` to `(0,0,newW,newH)`?
+     This is the same reset behavior Task 338 already implemented for `SetRenderTarget`-driven
+     resizes (`GraphicsDevice::ResetViewportAndScissorForRenderTarget`) — check whether backbuffer
+     resize (not render-target switching) goes through the same reset path or a separate one, and
+     whether `ScissorRectangle` (not just `Viewport`) is included.
+   - **Directly connects to Task 880**: `Viewport` has zero real GPU wiring on any backend — a
+     "reset" of a property with no GPU effect is only half the story. Cross-reference
+     `docs/rendertarget-support.md` §9 rather than re-diagnosing from scratch.
+   - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp` (`UpdateViewportFromWindow`,
+     `SetPresentationParameters`, `applyToExistingBackend` equivalents),
+     `examples/easygl_backbuffer_resize_test.cpp` (Task 227, existing coverage to extend, not
+     duplicate), `examples/easygl_real_window_resize_test.cpp` (Task 348, new this session).
+   - Verification: check whether `ScissorRectangle` resets alongside `Viewport` on backbuffer
+     resize (Task 227's test doesn't check this); extend to Vulkan if EasyGL-only today.
 
 2. **`GRAPHICS_TASKS.md` Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`**
    - Goal: found this session (Task 339) — FNA's real MRT limit is 4 simultaneous targets
@@ -599,55 +611,59 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-39 are FULLY COMPLETE. Phase 40 (Viewport, DisplayMode, and adapter
-behavior, GRAPHICS_TASKS.md Tasks 341-350) is open, Tasks 341-347 are ALL DONE, Task 348 next.
-EasyGL: 3351/3354 pass (3 documented pre-existing failures). Vulkan: 3274/3288 pass (13 documented
-failures + 1 reconfirmed order-dependent Vulkan_FillMode_WireFrame/Vulkan_RenderTargetUsage
-flake). Bgfx: 3258/3259 pass (1 reconfirmed-flaky unrelated CueTest). Caution: run all 3 backends'
-full ctest suites sequentially, never concurrently (see NEXT.md §2); if a single run shows an
-anomaly beyond the documented list, re-run in isolation before treating it as a regression.
+behavior, GRAPHICS_TASKS.md Tasks 341-350) is open, Tasks 341-348 are ALL DONE, Task 349 next
+(the last remaining task besides Task 350's docs-only closer). EasyGL: 3351/3355 pass (3
+documented pre-existing failures + 1 reconfirmed-flaky unrelated CueTest). Vulkan: 3274/3288 pass
+(13 documented failures + 1 reconfirmed-flaky unrelated CueTest, no order-dependent flake this
+run). Bgfx: 3259/3259 pass (100%, no flakes this run). Caution: run all 3 backends' full ctest
+suites sequentially, never concurrently (see NEXT.md §2); if a single run shows an anomaly beyond
+the documented list, re-run in isolation before treating it as a regression.
 
-Tasks 341-344 (Viewport sub-area of Phase 40) are fully closed - see GRAPHICS_TASKS.md for detail.
+Tasks 341-344 (Viewport sub-area) and 345-347 (adapter/DisplayMode sub-area) of Phase 40 are fully
+closed - see GRAPHICS_TASKS.md for detail.
 
-Task 345 audited GraphicsAdapter against FNA line-by-line and fixed 4 real bugs, most notably a
-dangling-reference bug in the old static GraphicsAdapter& DefaultAdapter field (removed entirely,
-replaced by the existing always-fresh getDefaultAdapterProperty() everywhere). Opened a finding
-closed by Task 347: FNA's DisplayModeCollection has a this[SurfaceFormat] indexer CNA was missing
-entirely, while CNA added an un-NOXNA'd Count/integer-operator[] pair not in FNA's API at all -
-fixed by adding the indexer as a second operator[](SurfaceFormat) overload and NOXNA-wrapping the
-2 CNA-only members.
+Task 348 (just done) traced the real window-resize chain end-to-end: SDL_EVENT_WINDOW_RESIZED ->
+Game's event loop -> GameWindow::updateFromSDL() -> GameWindow.ClientSizeChanged ->
+GraphicsDeviceManager::INTERNAL_OnClientSizeChanged -> GraphicsDevice::UpdateViewportFromWindow().
+CONFIRMED a real, deliberate FNA divergence, correctly NOT fixed: FNA forwards the new window size
+into PresentationParameters.BackBufferWidth/Height on every resize (full device Reset); CNA
+doesn't, by design (an existing accurate source comment explains why - would corrupt
+FixedHeightDynamicWidth's virtual-resolution scaling). GENUINE DISCOVERY made while verifying the
+new test's discriminating power (temporarily disabling the ClientSizeChanged subscription, then
+separately breaking GameWindow::OnClientSizeChanged()'s Raise() call): Viewport tracking does NOT
+actually depend on the ClientSizeChanged event at all - GraphicsDevice::Present() unconditionally
+refreshes it every frame, a STRONGER guarantee than FNA's - so the event chain itself needed its
+own, separately-discriminating check (added as check 4 in the new test). Closed a real
+test-coverage gap: Task 227's easygl_backbuffer_resize_test.cpp only exercises the GDM-API-driven
+resize path; new examples/easygl_real_window_resize_test.cpp (EasyGL_RealWindowResize) calls
+SDL_SetWindowSize() directly on the live window and checks 4 things: Viewport height pinned,
+Viewport width changes, BackBufferWidth/Height unchanged (regression marker), ClientSizeChanged
+fires. EasyGL-only (Vulkan/Bgfx have no virtual-resolution scaling to pin). NEW FINDINGS DEFERRED
+TO TASK 882: PresentationMode::Letterbox/Overscan/Stretch/NativeBackBuffer aren't distinctly
+implemented on EasyGL (only FixedHeightDynamicWidth has real logic); Vulkan/Bgfx implement no
+virtual-resolution scaling at all in GetViewportSize() (always raw physical window size); Vulkan's
+SetVirtualResolution() instead triggers RecreateSwapchain(), a materially different mechanism
+needing its own investigation. No production code changed this task (new test + CMakeLists.txt
+registration only).
 
-Task 346 (picked up after being skipped one round) verified GraphicsAdapter's existing
-headless-CI fallback chain (AdaptersChanged()'s no-displays branch,
-queryDisplayModes()/queryCurrentDisplayMode()'s per-display fallbacks) is structurally complete.
-Fixed one real small bug: the no-displays branch never called SDL_free(displays) before its early
-return - a latent leak when SDL returns a non-null array with count<=0. Added a genuine,
-non-fabricated regression test (HeadlessFallback_NoVideoSubsystemProducesSingleSyntheticAdapter):
-confirmed via a standalone probe that SDL_GetDisplays() reliably fails with "Video subsystem has
-not been initialized" whenever SDL_INIT_VIDEO isn't initialized - the real headless-CI scenario,
-not a mocked one. Test skips if something else left video initialized, otherwise calls
-AdaptersChanged() directly and verifies the synthetic adapter's exact values, then restores a real
-enumeration afterward. Verified it exercises the real path both standalone and interleaved with
-GameWindowTests.cpp.
+Tasks 341-348 (Viewport + adapter/DisplayMode + backbuffer-resize sub-areas of Phase 40) are now
+ALL closed.
 
-Tasks 341-347 (Viewport + adapter/DisplayMode sub-areas of Phase 40) are now ALL closed.
-
-Next task: GRAPHICS_TASKS.md Task 348 - verify backbuffer size follows window size when
-appropriate. Opens Phase 40's third sub-area. CNA's GraphicsDeviceManager wires
-GameWindow.ClientSizeChanged to INTERNAL_OnClientSizeChanged, which directly and immediately calls
-graphicsDevice_->UpdateViewportFromWindow(). A REAL MECHANISM DIFFERENCE ALREADY SPOTTED, not yet
-investigated: FNA's own INTERNAL_OnClientSizeChanged (GraphicsDeviceManager.cs) does NOT
-immediately mutate anything on resize - it captures the new size into
-resizedBackBufferWidth/Height (via FNAPlatform.ScaleForWindow) and sets a useResizedBackBuffer=true
-flag, deferring the actual PresentationParameters.BackBufferWidth/Height update to a later point
-(likely ApplyChanges()/device-reset time), NOT applying it unconditionally on every resize event.
-CNA's immediate-apply approach may be a legitimate simplification or may diverge from FNA when a
-game explicitly sets PreferredBackBufferWidth/Height and expects the backbuffer to NOT silently
-follow the window until ApplyChanges() is called. Needs a line-by-line comparison of
-INTERNAL_OnClientSizeChanged and whatever consumes useResizedBackBuffer/resizedBackBufferWidth in
-FNA's GraphicsDeviceManager.cs before deciding whether this is a bug worth fixing or an acceptable,
-documentable simplification. Files: src/Microsoft/Xna/Framework/GraphicsDeviceManager.cpp
-(INTERNAL_OnClientSizeChanged), FNA's GraphicsDeviceManager.cs. Check existing coverage first -
-there's already an EasyGL_BackbufferResize test (examples/easygl_backbuffer_resize_test.cpp) -
-read it before assuming a gap exists.
+Next task: GRAPHICS_TASKS.md Task 349 - verify viewport reset after backbuffer resize
+(EasyGL/Vulkan). Closes Phase 40 except for Task 350's docs-only closer. Task 348 confirmed the
+real window-resize chain and that GraphicsDevice::Present() unconditionally refreshes Viewport
+every frame regardless of the ClientSizeChanged event. Task 349 should verify this holds
+specifically for the BACKBUFFER RESIZE case (an explicit GraphicsDeviceManager.ApplyChanges()-
+driven resize, Task 227's own tested path) - does Viewport reset to the new backbuffer's full size
+correctly on both EasyGL and Vulkan, matching FNA's real behavior of resetting
+Viewport/ScissorRectangle to (0,0,newW,newH)? This is the same reset behavior Task 338 already
+implemented for SetRenderTarget-driven resizes (GraphicsDevice::ResetViewportAndScissorForRenderTarget)
+- check whether backbuffer resize goes through the same reset path or a separate one, and whether
+ScissorRectangle (not just Viewport) is included - Task 227's existing test doesn't check
+ScissorRectangle at all. DIRECTLY CONNECTS TO TASK 880 (Viewport has zero real GPU wiring on any
+backend) - cross-reference docs/rendertarget-support.md §9 rather than re-diagnosing from scratch.
+Files: src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp (UpdateViewportFromWindow,
+SetPresentationParameters), examples/easygl_backbuffer_resize_test.cpp (Task 227, extend don't
+duplicate), examples/easygl_real_window_resize_test.cpp (Task 348, new this session).
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```

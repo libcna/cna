@@ -1053,6 +1053,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 60
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        cna_easygl_test(cna_test_easygl_real_window_resize
+                        examples/easygl_real_window_resize_test.cpp)
+        add_test(NAME EasyGL_RealWindowResize
+                 COMMAND cna_test_easygl_real_window_resize)
+        set_tests_properties(EasyGL_RealWindowResize PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_depth_format
                         examples/easygl_depth_format_test.cpp)
         add_test(NAME EasyGL_DepthFormat
