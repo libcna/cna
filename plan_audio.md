@@ -2319,8 +2319,56 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   suite: 3260 tests, 3258 passed, 2 pre-existing unrelated skips (`Accelerometer`/`Gyroscope`
   hardware-dependent tests), 0 failures -- no regressions anywhere else across the ~80 call sites
   that depend on `SharedEngine()`.
-* [ ] P9-HARDWARE-005 Add tests for no-audio-device behavior using SDL dummy/no-device configuration where feasible.
-* [ ] P9-HARDWARE-006 Document backend behavior when audio hardware is unavailable.
+* [x] P9-HARDWARE-005 Add tests for no-audio-device behavior using SDL dummy/no-device configuration where feasible.
+  *Note:* Confirmed feasible. Traced the real failure mechanics before writing anything: SDL only
+  reads the `SDL_AUDIODRIVER` env var/hint the *first* time `SDL_Init(SDL_INIT_AUDIO)` runs in a
+  process (`third_party/SDL/src/audio/SDL_audio.c`'s driver-selection loop -- an unrecognized
+  driver name makes `initialized`/`tried_to_init` both stay `false`, so `SDL_Init` returns `false`
+  with no fallback to another driver). `MIX_Init()` itself (`third_party/SDL_mixer/src/
+  SDL_mixer.c`) never touches the audio subsystem at all (just SSE/NEON checks + a mutex +
+  decoder init) -- it's `MIX_CreateMixerDevice()` that actually calls `SDL_Init(SDL_INIT_AUDIO)`,
+  and propagates its failure straight through. So `AudioMixer::GetMixer()` (`AudioMixer.cpp`)
+  reliably throws given an invalid `SDL_AUDIODRIVER` set before *anything* else in that process
+  touches audio -- exactly the fresh-process precondition `P9-HARDWARE-002`'s verification caveat
+  already anticipated.
+
+  Implemented via the same "spawn a real second OS process" pattern already established by
+  `tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp` (Task 6.1) for an analogous "needs a fresh
+  process" problem. New standalone (non-GTest) executable
+  `tools/audio/audio_no_hardware_harness.cpp`: forces `SDL_AUDIODRIVER` to a nonexistent driver
+  name via `setenv`/`_putenv_s` as the very first thing in `main()`, then calls
+  `SoundEffect::getMasterVolumeProperty()` (a static getter that calls `GetMixerOrThrowXna()` as
+  its first action, needing no file/buffer/instance setup at all -- one of the `P9-HARDWARE-002`
+  entry points). Exit 0 if `NoAudioHardwareException` was thrown, 1 if nothing was thrown
+  (hardware unexpectedly available, or a real regression), 2 if the wrong exception type surfaced.
+  `tests/CNA/Internal/Audio/AudioMixerTests.cpp` (previously just a "no tests possible" comment,
+  `IN-12`) now spawns this harness via `posix_spawn`/`waitpid` (mirroring
+  `TwoProcessLoopbackTest.cpp`'s spawn helpers) and asserts exit code 0. `CMakeLists.txt` wires the
+  harness the same way as `cna_net_two_process_harness`: built whenever `CNA_BUILD_TESTS` is on,
+  `CnaTests` depends on it and gets its real built path baked in via
+  `CNA_AUDIO_NO_HARDWARE_HARNESS_PATH`; `AudioMixerTests.cpp` itself is excluded from the
+  `CNA_TEST_SOURCES` glob on `WIN32`/`EMSCRIPTEN`/`ANDROID`, same reasons and same platforms as
+  `TwoProcessLoopbackTest.cpp` (no real process spawning in a single Node.js/Wasm module; the
+  harness's build-machine-absolute baked-in path is meaningless on-device on Android).
+
+  Verified the test is not vacuously green: temporarily pointed the harness at the real `"dummy"`
+  driver instead of the nonexistent one, rebuilt, and confirmed it then exits 1 ("no exception
+  thrown") -- i.e. the test genuinely distinguishes the hardware-present and hardware-absent
+  cases, not just always-passing. Restored the nonexistent-driver name afterward. Full suite
+  3259/3261 (2 expected skips, up from 3258/3260 -- this one new test), audio subset 353/353 under
+  ASan+UBSan (up from 352), including the spawned child process's own ASan/UBSan instrumentation
+  (the harness binary itself was built under the same sanitizer flags). No production code
+  changed -- `GetMixer()`/`GetMixerOrThrowXna()` were already correct since `P9-HARDWARE-002`; this
+  closes a pure test-coverage gap.
+* [x] P9-HARDWARE-006 Document backend behavior when audio hardware is unavailable.
+  *Note:* Folded into `P9-HARDWARE-005`'s pass: `tools/audio/audio_no_hardware_harness.cpp`'s own
+  header comment and `tests/CNA/Internal/Audio/AudioMixerTests.cpp`'s header comment both document
+  the exact mechanics of when/why `GetMixer()` throws `NoAudioHardwareException` and why it needs
+  a fresh process to test, in one place, for future readers of either file. No further separate
+  documentation artifact was needed: `docs/xna-4-api-coverage.md`'s Audio compatibility table
+  already documents the `NoAudioHardwareException` behavior itself (updated during
+  `P9-HARDWARE-003/004`), and `plan_audio.md`'s `P9-HARDWARE-002` note already documents the
+  conversion wiring at every XNA-facing entry point.
 
 ## P9-DYNAMIC — DynamicSoundEffectInstance correctness
 
