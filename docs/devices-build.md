@@ -313,3 +313,22 @@ directly to a plain `cmake -S . -B <dir>` invocation instead of using the preset
 way, remember these are Debug, unoptimized-ish (`-O0`/`-O1`), instrumented builds —
 useful for correctness verification, not for measuring performance, and slower to
 build/run than a plain `cmake-build-debug`.
+
+## 7. Decided against: a native Android vibration backend (`plan_devices.md` Task DEVICES-0031, 2026-07-05)
+
+Do not build a JNI/`Vibrator`/`VibrationEffect` bridge for `VibrateController` on
+Android, and do not build an `IDeviceVibrationBackend` abstraction seam to select one
+in. Both were considered and explicitly rejected: reading SDL3's own Android haptic
+backend (`third_party/SDL/src/haptic/android/SDL_syshaptic.c` and its Java counterpart,
+`third_party/SDL/android-project/app/src/main/java/org/libsdl/app/SDLControllerManager.java`'s
+`SDLHapticHandler`/`SDLHapticHandler_API26`/`SDLHapticHandler_API31`) confirms it already
+queries `Context.VIBRATOR_SERVICE` (the phone's own built-in vibrator, separate from any
+connected-controller vibrator) and already implements amplitude control end to end via
+`VibrationEffect.createOneShot()`/`VibratorManager` — including the exact
+`intensity == 0.0f → stop()` and `intensity * 255` clamped to `[1,255]` mapping a custom
+bridge would have had to reinvent. SDL's own Android manifest template
+(`third_party/SDL/android-project/app/src/main/AndroidManifest.xml`) already declares
+`android.permission.VIBRATE`, uncommented. Building a second (native) backend behind an
+abstraction seam that would only ever have one real implementation would be pure
+speculative abstraction — see `plan_devices.md`'s Task DEVICES-0031 for the full
+evidence trail before reconsidering this.

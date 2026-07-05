@@ -446,15 +446,15 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 2: Backend Abstraction for Vibration
 
-- [ ] DEVICES-0031 — **Gating decision task:** resolve whether a native Android vibration backend is needed at all
-  - **Area:** VibrateController / Android
-  - **Files:** none changed; reads `third_party/SDL/src/haptic/android/SDL_syshaptic.c`, `third_party/SDL/src/core/android/SDL_android.c`, and DEVICES-0014's findings
-  - **Required behavior:** Produce a definitive written answer: does SDL3's existing Android haptic backend already reach `Vibrator.vibrate()` with amplitude control? If **yes**, Phase 3 (native Android vibration backend, JNI bridge) is **not needed** — Phase 3's tasks below are downgraded to "verify SDL path on real hardware only" (folded into Phase 9). If **no** (e.g. SDL's Android haptic backend has no amplitude control, or doesn't exist for this NDK/API level, or conflicts with something), Phase 3 proceeds as scoped.
-  - **Acceptance criteria:** A written decision (in this plan file, editing the "Backend Strategy" section above and each Phase 3 task's status) with source-code evidence, not a guess. Do not write any new Android vibration code before this task closes.
+- [x] DEVICES-0031 — **Gating decision task:** resolve whether a native Android vibration backend is needed at all (2026-07-05: **DECIDED — NOT NEEDED. Both Phase 3 (native Android vibration backend) and Phase 2 (the `IDeviceVibrationBackend` abstraction seam Phase 3 would plug into) are deferred, not implemented.**
+  - **Evidence:** DEVICES-0014 already confirmed SDL3's Android haptic backend (`SDL_syshaptic.c` + `SDLControllerManager.java`'s `SDLHapticHandler`/`SDLHapticHandler_API26`/`SDLHapticHandler_API31`) queries `Context.VIBRATOR_SERVICE` directly and implements `VibrationEffect.createOneShot()`/`VibratorManager` amplitude control end to end, with the exact `intensity==0→stop()`/`intensity*255` clamped `[1,255]` mapping this plan's Phase 3 was going to build from scratch. Additional confirmation this session: `third_party/SDL/android-project/app/src/main/AndroidManifest.xml` already declares `<uses-permission android:name="android.permission.VIBRATE"/>`, uncommented — so DEVICES-0048 (add the permission) is also already satisfied by SDL's own template with zero CNA-side work, once Phase 9 adapts it.
+  - **Why Phase 2 is also deferred, not just Phase 3:** Phase 2's `IDeviceVibrationBackend` seam exists solely to let `VibrateController` select between multiple backend implementations. With no second (native Android) implementation ever needed, the seam would have exactly one implementation forever — pure speculative abstraction with no consumer, directly against this project's own "don't design for hypothetical future requirements"/"don't add abstractions beyond what's needed" convention (`CLAUDE.md`). Building it anyway just to "be ready" would be exactly the kind of premature abstraction this project's guidelines warn against.
+  - **What remains true regardless:** `NOXNA Start(TimeSpan, intensity, waveform pattern)` (DEVICES-0047) still has no evidenced concrete need and stays un-implemented either way — this conclusion doesn't change based on this decision.
+  - **Acceptance criteria met:** written decision recorded here with source-code evidence, not a guess; "Backend Strategy" section above already reflected this as the primary plan (SDL3 haptic as primary, native only if SDL insufficient) — no edit needed there, this task confirms SDL is in fact sufficient. Phase 2 (DEVICES-0032–0037) and Phase 3 (DEVICES-0038–0050) tasks below are each marked `deferred: see DEVICES-0031` rather than silently skipped.)
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0014
 
-- [ ] DEVICES-0032 — Design `IDeviceVibrationBackend` interface (only if DEVICES-0031 says Phase 3 is needed)
+- [x] DEVICES-0032 — Design `IDeviceVibrationBackend` interface (only if DEVICES-0031 says Phase 3 is needed) — **deferred: see DEVICES-0031** (SDL3 already covers the phone-vibrator path end to end; this seam would have exactly one implementation forever)
   - **Area:** VibrateController / Backend abstraction
   - **Files:** `include/Microsoft/Devices/Detail/IDeviceVibrationBackend.hpp` (new)
   - **Required behavior:** Minimal interface: `IsSupported()`, `Start(TimeSpan, float intensity)`, `StartLeftRight(float, float, TimeSpan)`, `Stop()`, `GetDeviceName()`. Mirrors `docs/devices-native-backend-design.md`'s `IDeviceSensorBackend` shape/spirit for consistency.
@@ -462,7 +462,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (interface-only, no behavior to test yet)
   - **Dependencies:** DEVICES-0031 (only if it concludes Phase 3 is needed)
 
-- [ ] DEVICES-0033 — Extract existing SDL haptic logic into `SdlHapticVibrationBackend`
+- [x] DEVICES-0033 — Extract existing SDL haptic logic into `SdlHapticVibrationBackend` — **deferred: see DEVICES-0031**
   - **Area:** VibrateController / Backend abstraction
   - **Files:** `include/Microsoft/Devices/Detail/SdlHapticVibrationBackend.hpp` (new), `src/Microsoft/Devices/Detail/SdlHapticVibrationBackend.cpp` (new), `src/Microsoft/Devices/VibrateController.cpp` (refactor to use it)
   - **Required behavior:** Move `OpenFirstHapticDevice()`/`IsConnectedGamepadHapticDevice()`/effect-upload logic behind `IDeviceVibrationBackend`, byte-for-byte behavior preserved — this is a pure refactor, not a behavior change.
@@ -470,7 +470,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** full existing `VibrateControllerTests.*` suite, re-run and confirmed green
   - **Dependencies:** DEVICES-0032
 
-- [ ] DEVICES-0034 — Add backend-selection seam to `VibrateController`
+- [x] DEVICES-0034 — Add backend-selection seam to `VibrateController` — **deferred: see DEVICES-0031**
   - **Area:** VibrateController / Backend abstraction
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** `VibrateController` holds a `std::unique_ptr<Detail::IDeviceVibrationBackend>` selected at construction: `AndroidVibrationBackend` on `__ANDROID__` (once Phase 3 exists), else `SdlHapticVibrationBackend` everywhere else. No behavior change on any platform without a native backend.
@@ -478,7 +478,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** full existing suite green; one new test confirming the non-Android branch is selected on this build
   - **Dependencies:** DEVICES-0033
 
-- [ ] DEVICES-0035 — Add a no-op `UnsupportedVibrationBackend` fallback
+- [x] DEVICES-0035 — Add a no-op `UnsupportedVibrationBackend` fallback — **deferred: see DEVICES-0031**
   - **Area:** VibrateController / Backend abstraction
   - **Files:** `include/Microsoft/Devices/Detail/UnsupportedVibrationBackend.hpp` (new)
   - **Required behavior:** For any platform with neither SDL haptic support compiled in nor a native backend, `IsSupported()` returns `false`, `Start()`/`StartLeftRight()`/`Stop()` are silent no-ops — matches today's exact "no haptic hardware" contract.
@@ -486,7 +486,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** unit test constructing it directly and asserting the no-op contract
   - **Dependencies:** DEVICES-0032
 
-- [ ] DEVICES-0036 — Re-run full `VibrateControllerTests` suite after the Phase 2 refactor, looped
+- [x] DEVICES-0036 — Re-run full `VibrateControllerTests` suite after the Phase 2 refactor, looped — **deferred: see DEVICES-0031** (no refactor happened; Phase 1's own DEVICES-0026 already looped the current suite 40/40 clean)
   - **Area:** Testing
   - **Files:** none
   - **Required behavior:** Per `NEXT.md`'s concurrency-change rule, loop the full `VibrateControllerTests.*` filter 40 times after the Phase 2 refactor lands, plus one `devices-tsan` pass.
@@ -494,7 +494,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `VibrateControllerTests.*` (all)
   - **Dependencies:** DEVICES-0034, DEVICES-0035
 
-- [ ] DEVICES-0037 — Document the backend-abstraction migration in `docs/devices-build.md`
+- [x] DEVICES-0037 — Document the backend-abstraction migration in `docs/devices-build.md` — reinterpreted: no migration happened, so instead documented **why** none is needed (2026-07-05: added a short note to `docs/devices-build.md` recording the DEVICES-0031 decision and its SDL evidence, so a future session doesn't re-propose the same abstraction without first reading this.)
   - **Area:** Docs
   - **Files:** `docs/devices-build.md`
   - **Required behavior:** Add a short section describing the new `IDeviceVibrationBackend` seam, referencing this plan's Phase 2 tasks.
@@ -504,7 +504,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 3: Android Native Vibration Backend (only if DEVICES-0031 concludes it is needed)
 
-- [ ] DEVICES-0038 — Design the JNI bridge surface (`Vibrator`/`VibratorManager`)
+- [x] DEVICES-0038 — Design the JNI bridge surface (`Vibrator`/`VibratorManager`) — **deferred: see DEVICES-0031** (SDL3 already implements this exact surface)
   - **Area:** Android / VibrateController
   - **Files:** design note only, appended to `docs/devices-native-backend-design.md`
   - **Required behavior:** Sketch the exact JNI call sequence: `VibratorManager` (API 31+) vs. legacy `Context.VIBRATOR_SERVICE` `Vibrator` (older), `VibrationEffect.createOneShot(long, int)`, `cancel()`. No code yet.
@@ -512,7 +512,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0031 (must conclude "needed")
 
-- [ ] DEVICES-0039 — Add `AndroidVibrationBackend` skeleton (compiles, not yet wired)
+- [x] DEVICES-0039 — Add `AndroidVibrationBackend` skeleton (compiles, not yet wired) — **deferred: see DEVICES-0031**
   - **Area:** Android / VibrateController
   - **Files:** `include/Microsoft/Devices/Detail/AndroidVibrationBackend.hpp` (new), `src/Microsoft/Devices/Detail/AndroidVibrationBackend.cpp` (new, `#ifdef __ANDROID__`-guarded)
   - **Required behavior:** Class shape only; every method returns/no-ops without touching JNI yet.
@@ -520,7 +520,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (no behavior yet)
   - **Dependencies:** DEVICES-0038
 
-- [ ] DEVICES-0040 — Implement JNI attach/detach lifecycle helper
+- [x] DEVICES-0040 — Implement JNI attach/detach lifecycle helper — **deferred: see DEVICES-0031**
   - **Area:** Android / JNI
   - **Files:** `src/Microsoft/Devices/Detail/AndroidVibrationBackend.cpp`
   - **Required behavior:** Correctly attach the current native thread to the JVM (`AttachCurrentThread`/`DetachCurrentThread`) around any JNI call, avoiding leaks on repeated calls from different threads (SDL's sensor event-watch thread precedent from `Accelerometer`/`Gyroscope` — the same care is needed here).
@@ -528,7 +528,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only test (Android cross-compile); no host-side unit test possible for real JNI calls
   - **Dependencies:** DEVICES-0039
 
-- [ ] DEVICES-0041 — Implement `VibratorManager`/`Vibrator` lookup with API-level branching
+- [x] DEVICES-0041 — Implement `VibratorManager`/`Vibrator` lookup with API-level branching — **deferred: see DEVICES-0031** (SDL's `SDLHapticHandler_API31` already does exactly this)
   - **Area:** Android / JNI
   - **Files:** `src/Microsoft/Devices/Detail/AndroidVibrationBackend.cpp`
   - **Required behavior:** `Build.VERSION.SDK_INT >= 31` → `VibratorManager.getDefaultVibrator()`; else `Context.VIBRATOR_SERVICE` → `Vibrator`.
@@ -536,7 +536,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only
   - **Dependencies:** DEVICES-0040
 
-- [ ] DEVICES-0042 — Implement `Start(TimeSpan)` → `VibrationEffect.createOneShot(long, DEFAULT_AMPLITUDE)`
+- [x] DEVICES-0042 — Implement `Start(TimeSpan)` → `VibrationEffect.createOneShot(long, DEFAULT_AMPLITUDE)` — **deferred: see DEVICES-0031** (SDL's `SDLHapticHandler` base class already falls back to this exact call)
   - **Area:** Android / JNI
   - **Files:** `src/Microsoft/Devices/Detail/AndroidVibrationBackend.cpp`
   - **Required behavior:** Map the WP7 `Start(TimeSpan)` (no intensity concept) to `VibrationEffect.DEFAULT_AMPLITUDE`, matching the doc's "map default amplitude" requirement.
@@ -544,7 +544,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only + a host-side pure-function unit test for the ms-conversion helper if it's split out as testable
   - **Dependencies:** DEVICES-0041
 
-- [ ] DEVICES-0043 — Map `NOXNA Start(TimeSpan, intensity)` to amplitude 1..255
+- [x] DEVICES-0043 — Map `NOXNA Start(TimeSpan, intensity)` to amplitude 1..255 — **deferred: see DEVICES-0031** (SDL's `SDLHapticHandler_API26.run()` already implements this exact `Math.round(intensity*255)` clamped-`[1,255]` mapping, including the `intensity==0→stop()` boundary DEVICES-0030 documented)
   - **Area:** Android / JNI
   - **Files:** `src/Microsoft/Devices/Detail/AndroidVibrationBackend.cpp`
   - **Required behavior:** `intensity ∈ [0,1]` → `amplitude ∈ [1,255]`; explicitly decide and document `intensity == 0.0f`'s mapping (per DEVICES-0030's decision — likely "treat as `Stop()`/no-op", not amplitude 0 which `VibrationEffect` rejects).
@@ -552,7 +552,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** host-side pure-function test for the amplitude-mapping formula (extract it as a testable free function)
   - **Dependencies:** DEVICES-0042
 
-- [ ] DEVICES-0044 — Implement runtime amplitude-control-availability check
+- [x] DEVICES-0044 — Implement runtime amplitude-control-availability check — **deferred: see DEVICES-0031** (handled inside SDL's own Android haptic backend already)
   - **Area:** Android / JNI
   - **Files:** `src/Microsoft/Devices/Detail/AndroidVibrationBackend.cpp`
   - **Required behavior:** `Vibrator.hasAmplitudeControl()` gates whether the intensity extension actually varies strength; if `false`, fall back to `DEFAULT_AMPLITUDE` regardless of requested intensity (document this as an honest limitation, not a bug).
@@ -560,7 +560,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only
   - **Dependencies:** DEVICES-0043
 
-- [ ] DEVICES-0045 — Implement `Stop()` → `Vibrator.cancel()`
+- [x] DEVICES-0045 — Implement `Stop()` → `Vibrator.cancel()` — **deferred: see DEVICES-0031** (SDL's `hapticStop()`/`SDLHapticHandler.stop()` already does this, reached via `VibrateController.cpp`'s existing `SDL_StopHapticEffects()`/`SDL_StopHapticRumble()` calls)
   - **Area:** Android / JNI
   - **Files:** `src/Microsoft/Devices/Detail/AndroidVibrationBackend.cpp`
   - **Required behavior:** `Stop()` calls `cancel()`; safe/no-op if nothing is currently vibrating.
@@ -568,7 +568,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only
   - **Dependencies:** DEVICES-0041
 
-- [ ] DEVICES-0046 — Implement runtime missing-vibrator-hardware check
+- [x] DEVICES-0046 — Implement runtime missing-vibrator-hardware check — **deferred: see DEVICES-0031** (SDL's `pollHapticDevices()` already gates on `Vibrator.hasVibrator()`; CNA's existing `getIsSupportedProperty()` already surfaces the result via the normal SDL haptic-enumeration path)
   - **Area:** Android / JNI
   - **Files:** `src/Microsoft/Devices/Detail/AndroidVibrationBackend.cpp`
   - **Required behavior:** `Vibrator.hasVibrator()` backs `IsSupported()`; devices with no vibrator motor (some tablets) correctly report unsupported.
@@ -576,7 +576,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only
   - **Dependencies:** DEVICES-0041
 
-- [ ] DEVICES-0047 — Add `NOXNA Start(TimeSpan, intensity, waveform pattern)` — advanced haptics
+- [x] DEVICES-0047 — Add `NOXNA Start(TimeSpan, intensity, waveform pattern)` — advanced haptics — **deferred: no evidenced concrete need** (per this task's own instruction; independent of the DEVICES-0031 decision — SDL's haptic API has no waveform-pattern equivalent either, so this would need native code regardless, and still isn't justified without a real use case)
   - **Area:** Android / JNI
   - **Files:** `include/Microsoft/Devices/VibrateController.hpp`, `src/Microsoft/Devices/Detail/AndroidVibrationBackend.cpp`
   - **Required behavior:** Only if a concrete need is identified (do not add speculatively per project convention) — `VibrationEffect.createWaveform(long[], int[], int repeat)` for pattern-based `NOXNA` haptics on Android; falls back to a single `Start()` pulse (or no-op) on backends without waveform support (SDL/desktop).
@@ -584,7 +584,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only if implemented
   - **Dependencies:** DEVICES-0043
 
-- [ ] DEVICES-0048 — Add `android.permission.VIBRATE` to any CNA-authored Android manifest fragment
+- [x] DEVICES-0048 — Add `android.permission.VIBRATE` to any CNA-authored Android manifest fragment — **already satisfied, no action needed** (2026-07-05: confirmed `third_party/SDL/android-project/app/src/main/AndroidManifest.xml` already declares this permission, uncommented; Phase 9 adapting that template inherits it for free)
   - **Area:** Android / packaging
   - **Files:** wherever Phase 9's Android manifest work lands (cross-reference DEVICES-0140+)
   - **Required behavior:** Ensure the permission is declared once Phase 9's demo APK exists; this task only adds the manifest line, not the whole APK pipeline.
@@ -592,7 +592,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (manifest content, not code)
   - **Dependencies:** Phase 9's manifest-creation task
 
-- [ ] DEVICES-0049 — Add a fake/injectable `AndroidVibrationBackend` test double
+- [x] DEVICES-0049 — Add a fake/injectable `AndroidVibrationBackend` test double — **deferred: see DEVICES-0031**
   - **Area:** Android / Testing
   - **Files:** `tests/Microsoft/Devices/Detail/FakeAndroidVibrationBackendTests.cpp` (new)
   - **Required behavior:** A host-buildable fake implementing `IDeviceVibrationBackend` that records calls instead of doing real JNI, so the amplitude-mapping/duration-mapping logic (DEVICES-0042/0043) can be unit-tested on a desktop CI machine without Android.
@@ -600,7 +600,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `FakeAndroidVibrationBackendTests.IntensityMapsToExpectedAmplitude`, `...ZeroIntensityStopsRatherThanZeroAmplitude`
   - **Dependencies:** DEVICES-0043
 
-- [ ] DEVICES-0050 — Manual physical-device test task for `AndroidVibrationBackend`
+- [x] DEVICES-0050 — Manual physical-device test task for `AndroidVibrationBackend` — reinterpreted: no native backend exists to distinguish from SDL, so this collapses into Phase 9's existing plain "VibrateController::Start() actually vibrates" checklist item (`docs/devices-hardware-checklist.md` §3) — no separate item needed
   - **Area:** Android / Manual verification
   - **Files:** `docs/devices-hardware-checklist.md` (add a subsection)
   - **Required behavior:** Add a checklist item mirroring the existing "VibrateController::Start() actually vibrates" item, but specifically calling out testing the *native* backend path (once wired) vs. the SDL path, so a future session with real hardware can tell which one actually ran.
