@@ -11,11 +11,50 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <utility>
 #endif
 
 namespace Microsoft::Devices::Sensors::Detail
 {
 #ifdef __ANDROID__
+    namespace
+    {
+        // Minimal RAII scope-exit guard, local to this translation unit —
+        // mirrors Detail::ScopeExit's established pattern in
+        // SdlSensorSubsystem.hpp for the identical reason (a cleanup step
+        // that must run on *every* exit from a function, including exit
+        // paths added later, must not depend on every future author
+        // remembering to repeat it manually). Defined locally here rather
+        // than reusing that header's version to avoid pulling SDL3 headers
+        // into this deliberately SDL-free, NDK-only file.
+        template <typename F>
+        class RunExitGuard
+        {
+        public:
+            explicit RunExitGuard(F onExit)
+                : onExit_(std::move(onExit))
+            {
+            }
+
+            ~RunExitGuard()
+            {
+                onExit_();
+            }
+
+            RunExitGuard(const RunExitGuard&) = delete;
+            RunExitGuard& operator=(const RunExitGuard&) = delete;
+
+        private:
+            F onExit_;
+        };
+
+        template <typename F>
+        RunExitGuard<F> MakeRunExitGuard(F onExit)
+        {
+            return RunExitGuard<F>(std::move(onExit));
+        }
+    } // namespace
+
     struct AndroidSensorBridge::Impl
     {
         explicit Impl(int sensorType)
@@ -132,6 +171,23 @@ namespace Microsoft::Devices::Sensors::Detail
             ALooper* looper = ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
             looper_.store(looper, std::memory_order_release);
 
+            // Task: fix looper cleanup on all Run() exit paths. Guarantees
+            // looper_ is reset to nullptr no matter which exit path out of
+            // this function is taken -- previously only the normal
+            // end-of-loop path did this; the two early-failure returns
+            // below (and any later-added early return) forgot it, leaving
+            // looper_ pointing at a looper that the NDK tears down the
+            // moment this thread exits (thread-local, see the comment this
+            // used to carry at the bottom of this function). This guard's
+            // destructor runs at the very end of Run(), immediately after
+            // whichever `return` statement is hit -- always before this
+            // worker thread's OS-level teardown actually destroys the
+            // looper, and always after this function's own last use of
+            // `queue_`/`sensor_`, so Stop() (reading looper_ from another
+            // thread) can never observe a stale, already-destroyed pointer.
+            auto looperCleanup = MakeRunExitGuard(
+                [this]() { looper_.store(nullptr, std::memory_order_release); });
+
             queue_ = ASensorManager_createEventQueue(manager_, looper, 0, nullptr, nullptr);
             if (queue_ == nullptr)
             {
@@ -239,16 +295,10 @@ namespace Microsoft::Devices::Sensors::Detail
             ASensorManager_destroyEventQueue(manager_, queue_);
             queue_ = nullptr;
 
-            // Task: reset stale Android looper state. A looper obtained via
-            // ALooper_prepare() is thread-local and torn down by the NDK
-            // once this (its owning) thread exits -- once Run() returns and
-            // this worker thread terminates, `looper` above is no longer a
-            // valid pointer. Resetting looper_ to nullptr here keeps the
-            // invariant "a non-null looper_ implies a live, currently-
-            // running worker" exactly true, so nothing downstream (a future
-            // diagnostic, or a defensive read added later) can observe a
-            // dangling ALooper* through this field.
-            looper_.store(nullptr, std::memory_order_release);
+            // looperCleanup's destructor (running here, at the normal end
+            // of this function) resets looper_ to nullptr -- see its own
+            // declaration above for the full rationale covering every exit
+            // path, not just this one.
         }
     };
 #else
