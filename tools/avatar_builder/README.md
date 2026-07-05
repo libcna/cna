@@ -45,6 +45,23 @@ blender --background --python tools/avatar_builder/generate_avatar.py -- --gende
 See "Parametric body variation" near the end of this file for how the three parameters
 work and what they do (and don't) affect.
 
+**Want different hair/clothing?** (Task 11.14) `--hair-style`/`--shirt-style`/
+`--pants-style` pick a variant, baked into the same combined export:
+
+```
+blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --hair-style Ponytail --shirt-style LongSleeve --pants-style Shorts --out /tmp/male_variant.glb
+```
+
+To export a single hair/clothing variant on its own, as a standalone attachable `.glb`
+(not merged into a full avatar), use `generate_wardrobe.py` instead:
+
+```
+blender --background --python tools/avatar_builder/generate_wardrobe.py -- --piece hair --style Ponytail --out /tmp/hair_ponytail.glb
+```
+
+See "Wardrobe pieces" near the end of this file for what "attachable" does (and doesn't
+yet) mean.
+
 ## Why procedural, not MakeHuman/Mixamo
 
 The prior session tried MakeHuman (GUI) and CharMorph/Blender (external repo) and hit
@@ -69,12 +86,13 @@ bone-retargeting step at all.
 - [x] Task 11.8 — `validate_gltf.py`: plain-python3 pygltflib sanity check, fails loudly on gaps.
 - [x] Task 11.9 — this file: usage instructions, design rationale, per-script status/placeholder notes.
 - [x] Task 11.13 — parametric body variation (`height_scale`/`shoulder_width_scale`/`head_scale`), see below.
+- [x] Task 11.14 — additional hair styles / clothing variants, plus `generate_wardrobe.py` for standalone attachable pieces, see below.
 
 **Phase 11a ("one male + one female avatar that draws") is functionally complete as of
 Task 11.9. Phase 11b (real C++ engine integration) is complete as of Task 11.12** — see
-`docs/avatar-real-rendering-ext.md`. Phase 11c (procedural variety) is underway; Task
-11.13 is done, Tasks 11.14/11.15 (more hair/clothes/animation variety) are not started —
-see `plan_net.md`.
+`docs/avatar-real-rendering-ext.md`. Phase 11c (procedural variety) is underway; Tasks
+11.13/11.14 are done, Task 11.15 (more animation variety) is not started — see
+`plan_net.md`.
 
 Full task detail: `plan_net.md` Phase 11 ("Procedural Avatar Asset Generator").
 
@@ -214,47 +232,64 @@ by more than a trivial amount.
 
 ## Placeholder clothes (`generate_clothes.py`)
 
-Three garments, each its own mesh object parented to the skeleton with automatic
-weights (same technique as the body) and its matching material assigned:
+Three garment *slots*, each its own mesh object parented to the skeleton with automatic
+weights (same technique as the body) and its matching material assigned. Since Task
+11.14, each slot can be built from one of several named *styles* (`GARMENT_STYLES`); the
+mesh object is always named after its slot (`CNAAvatarShirt`/`Pants`/`Shoes`), never its
+style — the style only changes which bones the shell covers:
 
-| Garment | Bones covered | Padding over body radius |
-|---|---|---|
-| `CNAAvatarShirt` | `Spine, Spine1, Shoulder.L/R, UpperArm.L/R` | +0.02 m |
-| `CNAAvatarPants` | `Hips, UpperLeg.L/R, LowerLeg.L/R` | +0.02 m |
-| `CNAAvatarShoes` | `Foot.L/R` | +0.015 m |
+| Slot | Style (`DEFAULT_STYLES`) | Bones covered | Padding over body radius |
+|---|---|---|---|
+| `CNAAvatarShirt` | `TShirt` (default) | `Spine, Spine1, Shoulder.L/R, UpperArm.L/R` | +0.02 m |
+| `CNAAvatarShirt` | `LongSleeve` | above + `LowerArm.L/R` (sleeve reaches the wrist) | +0.02 m |
+| `CNAAvatarPants` | `Pants` (default) | `Hips, UpperLeg.L/R, LowerLeg.L/R` | +0.02 m |
+| `CNAAvatarPants` | `Shorts` | `Hips, UpperLeg.L/R` only (bare lower leg) | +0.02 m |
+| `CNAAvatarShoes` | `Shoes` (only style) | `Foot.L/R` | +0.015 m |
 
 Each garment is built the same way as the body: one `generate_body.add_cylinder_segment`
 + `generate_body.add_joint_sphere` per covered bone (that bone's own `BONE_RADII` radius
 plus the garment's padding), joined into a single mesh. These are offset shells over the
 existing body shape, not fitted tailoring or cloth simulation — expect visible clipping
 through the body at the sleeve/pant-leg/shoe seams. Known, accepted limitation of this
-first pass, not a bug to chase down yet.
+iteration, not a bug to chase down yet.
 
-`build_clothes(armature_obj, materials)` is importable the same way as the other
-builders, for reuse by `generate_avatar.py` (Task 11.7).
+`build_clothes(armature_obj, materials, styles=None)` is importable the same way as the
+other builders, for reuse by `generate_avatar.py` (Task 11.7) and `generate_wardrobe.py`
+(Task 11.14); `styles={"Shirt": "LongSleeve"}`-style overrides pick a non-default style
+per slot, defaulting to `DEFAULT_STYLES` (== this script's pre-Task-11.14 behavior)
+otherwise.
 
 Verify: `blender --background --python tools/avatar_builder/generate_clothes.py` runs
 without error and asserts each garment has a vertex group for every bone it covers and
-its correct material assigned.
+its correct material assigned (default styles only — the standalone run doesn't sweep
+every style; see "Wardrobe pieces" below for how the non-default styles were verified).
 
 ## Placeholder hair (`generate_hair.py`)
 
-`CNAAvatarHair`: a single open-bottomed hemisphere shell (built directly with `bmesh`,
-not `generate_body`'s cylinder/sphere helpers, since it needs half a sphere rather than a
-whole one) sized just outside the head, parented to the skeleton with automatic weights
-— since only the `Head` bone is nearby, this ends up rigidly following the head in
-practice, without needing bone-parenting. Assigned the `Hair` material.
+`CNAAvatarHair`, selectable between two styles (`HAIRSTYLES`, Task 11.14):
 
-This is a literal helmet shape, not modeled hair strands or hair cards — explicitly
-expected and accepted for this first pass (a later iteration, `plan_net.md` Task 11.14,
-can replace it with real hair geometry).
+- **`Cap`** (default) — a single open-bottomed hemisphere shell (built directly with
+  `bmesh`, not `generate_body`'s cylinder/sphere helpers, since it needs half a sphere
+  rather than a whole one) sized just outside the head.
+- **`Ponytail`** — the same cap, plus a tapered cone "tail" hanging off the back of the
+  head (built with `bmesh.ops.create_cone`, transformed to droop down and backward),
+  joined into the same single mesh/object rather than a separate part.
 
-`build_hair(armature_obj, materials)` is importable the same way as the other builders,
-for reuse by `generate_avatar.py` (Task 11.7).
+Both are parented to the skeleton with automatic weights — since only the `Head` bone is
+nearby, this ends up rigidly following the head in practice, without needing
+bone-parenting. Assigned the `Hair` material.
+
+This is still a literal, crude shape, not modeled hair strands or hair cards —
+explicitly expected and accepted for this iteration (a later iteration can replace either
+style with real hair geometry).
+
+`build_hair(armature_obj, materials, style="Cap")` is importable the same way as the
+other builders, for reuse by `generate_avatar.py` (Task 11.7) and `generate_wardrobe.py`
+(Task 11.14).
 
 Verify: `blender --background --python tools/avatar_builder/generate_hair.py` runs
-without error and asserts the hair mesh is non-empty, has a vertex group for `Head`, and
-has the `Hair` material assigned.
+without error and asserts the (default `Cap`) hair mesh is non-empty, has a vertex group
+for `Head`, and has the `Hair` material assigned.
 
 ## Placeholder animations (`generate_animations.py`)
 
@@ -316,6 +351,11 @@ blender --background --python tools/avatar_builder/generate_avatar.py -- --gende
 `GENDER_PRESETS` entry as the starting point for three scale parameters
 (`height_scale`/`shoulder_width_scale`/`head_scale`); `--height-scale`/
 `--shoulder-width-scale`/`--head-scale` override any of them individually.
+
+**Hair/clothing style is also selectable** (Task 11.14): `--hair-style`
+(`generate_hair.HAIRSTYLES`) and `--shirt-style`/`--pants-style`
+(`generate_clothes.GARMENT_STYLES["Shirt"|"Pants"]`) each default to this script's
+pre-Task-11.14 style, so an unqualified `--gender male|female` run is unaffected.
 
 `export_gltf.py`'s `export_avatar(output_path, objects)` selects exactly `objects` and
 calls Blender's glTF2 exporter (`export_format="GLB"`, `use_selection=True`,
@@ -406,6 +446,75 @@ a custom-parameter export still validates cleanly (`validate_gltf.py`), still co
 cleanly (`convert_avatar.py --embedded-clips`), and its rest-pose bone transforms are
 still bit-for-bit identity (the same exact-math check from Task 11.11), at non-unit
 scale factors.
+
+## Wardrobe pieces (`generate_wardrobe.py`, Task 11.14)
+
+`generate_avatar.py` always bakes hair + all three clothing slots into one combined
+avatar `.glb`. `generate_wardrobe.py` instead builds and exports exactly ONE hair style
+or ONE clothing variant, on its own, as a standalone `.glb` — just that piece's mesh plus
+a copy of the `CNAAvatarSkeleton` armature at rest pose (needed for its own vertex-group
+skinning data), independent of any specific full-avatar export:
+
+```
+blender --background --python tools/avatar_builder/generate_wardrobe.py -- --piece hair --style Ponytail --out /tmp/hair_ponytail.glb
+blender --background --python tools/avatar_builder/generate_wardrobe.py -- --piece shirt --style LongSleeve --out /tmp/shirt_longsleeve.glb
+blender --background --python tools/avatar_builder/generate_wardrobe.py -- --piece pants --style Shorts --out /tmp/pants_shorts.glb
+```
+
+`--gender`/`--height-scale`/`--shoulder-width-scale`/`--head-scale` work the same as
+`generate_avatar.py` (Task 11.13) — a wardrobe piece is built against the same
+proportioned skeleton a matching body would use, so it fits.
+
+**"Attachable" today means "convertible independently," not "loadable alongside a body
+at runtime yet."** `tools/avatar_asset_pipeline/convert_avatar.py` (Phase 10, unmodified
+by this task) already converts any GLB with one skin and one-or-more meshes into a
+`.skinnedmodel.json` with one part per mesh — nothing in it assumes a "body" mesh must be
+present. Verified directly: converting a standalone `hair_ponytail.glb` produces a clean
+`avatar.skinnedmodel.json` (19 bones, 1 part: `CNAAvatarHair`) with no code changes.
+`Microsoft::Xna::Framework::GamerServices::AvatarRenderer`/`Graphics::SkinnedModelEXT`,
+however, currently load and draw exactly **one** model at a time (`realModel_`, a single
+`shared_ptr`) — there is no engine-side API yet to load a second `SkinnedModelEXT` and
+render it using a first model's already-computed bone transforms. Actually attaching a
+separately-converted wardrobe piece onto a running avatar at draw time is real, future
+engine work (closer in spirit to Task 11.16's deferred scope than to this task), not part
+of Task 11.14 — this script's job is to prove the *content* is genuinely modular and
+already flows through the existing, unmodified content pipeline, not to wire up runtime
+attachment.
+
+**A real nuance found while verifying this:** an independently-converted piece's own
+`skeleton.bin` is not guaranteed byte-identical to a body's `skeleton.bin` built with the
+same proportions — each file's exporter adds its own synthetic `neutral_bone` joint only
+if *that* mesh happens to have zero-weight vertices (e.g. the `LongSleeve` shirt triggered
+one in testing, the `Ponytail` hair did not), so two independently-converted pieces meant
+for the same avatar can end up with different total bone counts. Both still agree on the
+first 19 real bones (the canonical skeleton, same rest pose, same order), so this is not
+a correctness bug — just a real detail any future runtime-attachment work will need to
+account for (e.g. ignore each piece's own trailing synthetic joint and rely only on the
+shared 19-bone prefix), noted here rather than glossed over.
+
+**Verified beyond "the script runs":**
+- Rendered `Ponytail` from the side: a clearly distinct tapered tail drooping down the
+  back of the head, vs. `Cap`'s plain dome — not just a different vertex count.
+- Rendered `LongSleeve` vs. `TShirt` and `Shorts` vs. `Pants` on a full-body avatar:
+  the sleeve visibly extends to the wrist, and the pant leg visibly stops above the knee
+  (bare lower leg exposed), each independently of the other slot's default.
+- Every touched script's own standalone run (`generate_hair.py`, `generate_clothes.py`,
+  `generate_avatar.py` with no style flags) still produces the exact same vertex counts
+  as before Task 11.14 (25 hair, 348/290/116 Shirt/Pants/Shoes, 6-object export) —
+  confirming full backward compatibility.
+- Reopened each of the three example wardrobe-piece exports in a fresh Blender session:
+  each is exactly one real mesh object (`CNAAvatar<Slot>`, plus the same cosmetic
+  `Icosphere`/`neutral_bone` widget already documented under Task 11.7 when a piece has
+  its own zero-weight vertices) parented to one 19-bone `CNAAvatarSkeleton` armature.
+- Converted a standalone piece export with the real, unmodified
+  `tools/avatar_asset_pipeline/convert_avatar.py` and confirmed a clean
+  `avatar.skinnedmodel.json` + `skeleton.bin` + vertex/index buffers, with no converter
+  changes required.
+
+Verify: `blender --background --python tools/avatar_builder/generate_wardrobe.py --
+--piece hair --style Ponytail --out /tmp/hair_ponytail.glb` produces a non-empty file;
+`python3 tools/avatar_asset_pipeline/convert_avatar.py --body /tmp/hair_ponytail.glb --out /tmp/hair_ponytail_content`
+converts it cleanly with the unmodified converter.
 
 ## Validating an export (`validate_gltf.py`)
 

@@ -17,6 +17,12 @@ geometry-generation time (via generate_skeleton.build_bones()), not the coarse, 
 whole-armature post-scale this script used before Task 11.13 — conceptually echoing
 AvatarDescription's customization intent (height, build) without attempting to
 reconstruct its real, undocumented byte format.
+
+Task 11.14: `--hair-style`/`--shirt-style`/`--pants-style` select a variant from
+generate_hair.HAIRSTYLES / generate_clothes.GARMENT_STYLES, baked into this same combined
+export (defaults reproduce this script's pre-Task-11.14 output exactly). To export a
+single hair/clothing variant on its own, as a standalone attachable `.glb` instead, use
+generate_wardrobe.py.
 """
 
 import argparse
@@ -47,14 +53,19 @@ GENDER_PRESETS = {
 }
 
 
-def build_avatar(gender, height_scale=None, shoulder_width_scale=None, head_scale=None):
+def build_avatar(gender, height_scale=None, shoulder_width_scale=None, head_scale=None,
+                  hair_style="Cap", garment_styles=None):
     """Builds one full avatar (skeleton, body, materials, morphs, clothes, hair,
     animations) in a clean scene and returns (armature_obj, [armature_obj, body_obj,
     hair_obj, *garment_objs]) — the object list export_gltf.export_avatar() expects.
 
     `gender` selects a GENDER_PRESETS entry as the starting point for the three scale
     parameters; passing height_scale/shoulder_width_scale/head_scale explicitly
-    overrides that preset's corresponding value (Task 11.13)."""
+    overrides that preset's corresponding value (Task 11.13).
+
+    `hair_style` selects a generate_hair.HAIRSTYLES entry and `garment_styles`
+    optionally overrides generate_clothes.DEFAULT_STYLES per slot (Task 11.14) — both
+    default to this script's pre-Task-11.14 behavior."""
     preset = GENDER_PRESETS[gender]
     if height_scale is None:
         height_scale = preset["height_scale"]
@@ -72,8 +83,10 @@ def build_avatar(gender, height_scale=None, shoulder_width_scale=None, head_scal
     materials = generate_materials.build_materials()
     generate_materials.assign_body_material(body_obj, materials)
     generate_morphs.build_morphs(body_obj, bones=bones, head_scale=head_scale)
-    garments = generate_clothes.build_clothes(armature_obj, materials, bones=bones, height_scale=height_scale)
-    hair_obj = generate_hair.build_hair(armature_obj, materials, bones=bones, head_scale=head_scale)
+    garments = generate_clothes.build_clothes(
+        armature_obj, materials, bones=bones, height_scale=height_scale, styles=garment_styles)
+    hair_obj = generate_hair.build_hair(
+        armature_obj, materials, bones=bones, head_scale=head_scale, style=hair_style)
     generate_animations.build_animations(armature_obj)
 
     objects = [armature_obj, body_obj, hair_obj, *garments.values()]
@@ -91,6 +104,14 @@ def _parse_args(argv):
                          help="Override --gender's preset shoulder-width scale (Task 11.13).")
     parser.add_argument("--head-scale", type=float, default=None,
                          help="Override --gender's preset head scale (Task 11.13).")
+    parser.add_argument("--hair-style", choices=sorted(generate_hair.HAIRSTYLES), default="Cap",
+                         help="Hair style variant (Task 11.14).")
+    parser.add_argument("--shirt-style", choices=sorted(generate_clothes.GARMENT_STYLES["Shirt"]),
+                         default=generate_clothes.DEFAULT_STYLES["Shirt"],
+                         help="Shirt style variant (Task 11.14).")
+    parser.add_argument("--pants-style", choices=sorted(generate_clothes.GARMENT_STYLES["Pants"]),
+                         default=generate_clothes.DEFAULT_STYLES["Pants"],
+                         help="Pants style variant (Task 11.14).")
     return parser.parse_args(argv)
 
 
@@ -99,7 +120,9 @@ if __name__ == "__main__":
     args = _parse_args(argv)
 
     armature_obj, objects = build_avatar(
-        args.gender, args.height_scale, args.shoulder_width_scale, args.head_scale)
+        args.gender, args.height_scale, args.shoulder_width_scale, args.head_scale,
+        hair_style=args.hair_style,
+        garment_styles={"Shirt": args.shirt_style, "Pants": args.pants_style})
     output_path = export_gltf.export_avatar(args.out, objects)
 
     print(f"Built and exported '{args.gender}' avatar ({len(objects)} objects: "

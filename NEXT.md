@@ -25,13 +25,17 @@ there found and fixed four real bugs along the way (three in Phase 11b's Task 11
 none in Task 11.12) — see `plan_net.md`'s Phase 11 section for the full history, not
 re-narrated here.
 
-**Phase 11c (procedural variety, lower priority/deferred) is underway: Task 11.13
-(parametric body variation) is done.** Three independent script parameters —
-`height_scale`, `shoulder_width_scale`, `head_scale` — now drive real proportion
-differences at geometry-generation time (replacing the old coarse whole-armature
-post-scale hack), verified with renders showing each parameter changing exactly the
-intended part of the body. Tasks 11.14/11.15 (more hair/clothes/animation variety) are
-not started. A real elbow/sleeve tearing artifact under bending, plus a handful of
+**Phase 11c (procedural variety, lower priority/deferred) is underway: Tasks 11.13
+(parametric body variation) and 11.14 (hair/clothing variants + standalone attachable
+pieces) are done.** Three independent script parameters — `height_scale`,
+`shoulder_width_scale`, `head_scale` — drive real proportion differences at
+geometry-generation time (Task 11.13). Two hair styles and two styles each for the
+Shirt/Pants garment slots now exist, selectable per-avatar or exportable as their own
+standalone `.glb` via the new `generate_wardrobe.py` (Task 11.14) — proven to convert
+cleanly through the existing, unmodified `convert_avatar.py`, though the C++ engine has
+no runtime support yet to actually attach a separately-loaded piece onto a running
+avatar (real, deferred future work, not this task). Task 11.15 (more animation variety)
+is not started. A real elbow/sleeve tearing artifact under bending, plus a handful of
 zero-weight/over-4-influence vertices, remain confirmed-but-not-fixed (documented in
 `tools/avatar_builder/README.md`) — out of scope for 11a/11b/11c. Full detail on
 everything in section 3; next tasks in section 8.
@@ -104,7 +108,42 @@ freshly confirmed):
 
 ## 3. Recent changes
 
-- **Task 11.13 done (this session) — Phase 11c underway:** replaced the old,
+- **Task 11.14 done (this session):** two new hair styles/clothing-slot variants and a
+  new standalone-piece exporter. `generate_hair.HAIRSTYLES` now offers `Cap` (the
+  original Task 11.5 helmet shape, still the default) and a new `Ponytail` (same cap plus
+  a tapered `bmesh`-cone tail drooping down the back of the head); `build_hair()` gained
+  a `style=` parameter. `generate_clothes.GARMENT_STYLES` now offers two styles each for
+  the `Shirt` (`TShirt`/`LongSleeve`) and `Pants` (`Pants`/`Shorts`) slots (`Shoes` keeps
+  its one style); `build_clothes()` gained a `styles=` parameter, defaulting to
+  `DEFAULT_STYLES` which reproduces the exact pre-Task-11.14 bone lists — the built
+  object is always named after its *slot*, never its style. `generate_avatar.py` gained
+  `--hair-style`/`--shirt-style`/`--pants-style` CLI flags (all defaulting to prior
+  behavior). New `generate_wardrobe.py` builds and exports exactly ONE hair style or
+  clothing variant as its own standalone `.glb` (armature + that one piece only) — the
+  "separate attachable GLB piece" the task asks for. **No changes were needed to
+  `tools/avatar_asset_pipeline/convert_avatar.py` or any C++ code**: the converter
+  already accepts any GLB with one skin and N meshes (no "body must be present"
+  assumption), confirmed by converting a standalone `hair_ponytail.glb` and getting a
+  clean `avatar.skinnedmodel.json` (19 bones, 1 part) with the unmodified script;
+  `AvatarRenderer`/`SkinnedModelEXT` load/draw exactly one model today, so actually
+  attaching a separately-loaded piece onto a running avatar at draw time is real, future
+  engine work, explicitly out of scope here. **Verified well beyond "the script accepts
+  a style argument":** rendered `Ponytail` from the side (a clearly distinct drooping
+  tail vs. `Cap`'s plain dome) and rendered `LongSleeve`/`Shorts` on a full-body avatar
+  (sleeve visibly reaches the wrist; pant leg visibly stops above the knee). Reopened
+  three example wardrobe-piece exports in a fresh Blender session each: one real mesh
+  object parented to one 19-bone `CNAAvatarSkeleton` (plus the same cosmetic
+  `neutral_bone`/`Icosphere` widget already documented under Task 11.7, when that piece
+  has its own zero-weight vertices). Confirmed every touched script's own standalone run
+  still produces the exact pre-Task-11.14 vertex counts (25 hair, 348/290/116
+  Shirt/Pants/Shoes, 6-object combined export) — full backward compatibility. Found and
+  documented one real nuance: two independently-converted pieces for the same avatar can
+  get different total bone counts in their own `skeleton.bin` (each exporter's synthetic
+  `neutral_bone` joint depends on that mesh's own zero-weight vertices), though both
+  always agree on the shared 19-bone canonical prefix. `plan_net.md` Task 11.14 checked
+  off; `tools/avatar_builder/README.md` updated with a new "Wardrobe pieces" section and
+  refreshed hair/clothes/CLI text.
+- **Task 11.13 done — Phase 11c underway:** replaced the old,
   coarse `if gender == "female": armature_obj.scale = (0.93,)*3` post-build hack with
   three independent, real geometry-generation-time parameters:
   `height_scale` (uniform, all bone positions), `shoulder_width_scale` (X-axis only, arm
@@ -367,17 +406,21 @@ freshly confirmed):
 ## 4. Current blocker / main problem
 
 **No technical blocker. Phase 11a (Tasks 11.1-11.9) and Phase 11b (Tasks 11.10-11.12) are
-both complete; Phase 11c is underway with Task 11.13 also done.** A real,
+both complete; Phase 11c is underway with Tasks 11.13/11.14 also done.** A real,
 procedurally-generated, animated avatar renders correctly in a real window via
 `examples/demo_avatar --gender male|female` — the whole content pipeline (Blender
 generation → glTF export → `convert_avatar.py` → `ContentManager` →
 `AvatarRenderer::DrawRealEXT`) is proven end-to-end for **both** bodies, each confirmed
 with an actual screenshot. Task 11.13 replaced the old coarse whole-armature female scale
 with three independent, real proportion parameters (`height_scale`,
-`shoulder_width_scale`, `head_scale`) applied at geometry-generation time, verified with
-4 rendered parameter combinations plus a re-run of the Task 11.11 exact-math rest-pose
-check at non-unit scale. See section 3 for the full account, `plan_net.md` Tasks
-11.11-11.13 for the exhaustive one.
+`shoulder_width_scale`, `head_scale`) applied at geometry-generation time. Task 11.14
+added a second hair style (`Ponytail`) and a second style each for the Shirt/Pants slots
+(`LongSleeve`/`Shorts`), plus `generate_wardrobe.py` to export any one piece as its own
+standalone, attachable `.glb` — proven to convert cleanly through the existing,
+unmodified `convert_avatar.py`, though runtime attachment of a separately-loaded piece
+onto a running avatar needs new C++ engine support that doesn't exist yet (out of scope
+for this task). See section 3 for the full account, `plan_net.md` Tasks 11.11-11.14 for
+the exhaustive one.
 
 Confirmed, not-fixed defects so far (all documented in `tools/avatar_builder/README.md`,
 none of them blocking, all still reported as "OK" by `validate_gltf.py` since they don't
@@ -386,9 +429,9 @@ make the file invalid): a real elbow/sleeve tear under bending (`Wave`'s peak fo
 shirt (Task 11.7, confirmed by direct per-vertex inspection, silently handled by the glTF
 exporter's own `neutral_bone`/4-joint-trim mechanisms). Both automatic-weights
 consequences to fix together in a future weight-painting pass, explicitly out of scope for
-Phase 11a/11b/11c. The next session's job is to continue Phase 11c (Task 11.14+ — more
-hair/clothing/animation variety; lower priority, deferred work) or, if the user wants it
-instead, Phase 11d (untracked/optional future work) — see section 8.
+Phase 11a/11b/11c. The next session's job is to continue Phase 11c (Task 11.15 — more
+animation variety; lower priority, deferred work) or, if the user wants it instead, Phase
+11d (untracked/optional future work) — see section 8.
 
 ---
 
@@ -414,6 +457,7 @@ instead, Phase 11d (untracked/optional future work) — see section 8.
 | Resolved (Phase 11b, Task 11.11) | The converted content is now proven to load and render correctly through the real C++ engine — `examples/demo_avatar/` renders a real, animated, correctly-proportioned humanoid on a real window. |
 | Resolved (Phase 11b, Task 11.12) | Both `AvatarBodyType::Male`/`Female` are now wired to their generated bodies via `AvatarBodyTypeToContentNameEXT` and `examples/demo_avatar --gender male|female`; both confirmed rendering correctly with real screenshots (female is visibly smaller, 0.93× overall). Phase 11b (Tasks 11.10-11.12) is complete. |
 | Resolved (Phase 11c, Task 11.13) | Real, independent `height_scale`/`shoulder_width_scale`/`head_scale` parameters now drive proportion differences at geometry-generation time (`generate_skeleton.build_bones()` and every downstream consumer), replacing the old coarse whole-armature post-scale hack. `GENDER_PRESETS` supplies defaults per `--gender`; new CLI flags override any of the three individually. Verified with 4 rendered parameter combinations plus a re-run of the Task 11.11 exact-math rest-pose identity check at non-unit scale. |
+| Resolved (Phase 11c, Task 11.14) | A second hair style (`Ponytail`) and a second style each for the Shirt/Pants garment slots (`LongSleeve`/`Shorts`) now exist (`generate_hair.HAIRSTYLES`/`generate_clothes.GARMENT_STYLES`), selectable per full-avatar build or exportable alone via new `generate_wardrobe.py` as a standalone, attachable `.glb` (armature + one piece). Verified: converts cleanly through the unmodified `convert_avatar.py`; renders confirm each new style is visibly, independently distinct from its default. No C++ engine changes made or needed — runtime attachment of a separately-loaded piece is real, deferred future work (`AvatarRenderer`/`SkinnedModelEXT` load/draw exactly one model today). |
 | Confirmed bug, fixed (Task 11.11) | `ContentManager.cpp`'s `SkinnedModelTypeReader` resolved every manifest-referenced path against the content root instead of the manifest's own directory — content in a subdirectory (e.g. `Content/avatar/male/`) failed to load at all. Fixed: resolve relative to the manifest file's own parent directory. |
 | Confirmed bug, fixed (Task 11.11) | `ContentManager.cpp`'s clip-keyframe reading relied on unspecified C++ function-argument evaluation order across multiple side-effecting `Read<float>()` calls (`Quaternion(Read<float>(), Read<float>(), Read<float>(), Read<float>())`), silently scrambling which bytes landed in which component — confirmed via a raw hex dump (true bytes were identity `(0,0,0,1)`, constructed value came out `(1,0,0,0)`, exactly reversed). Fixed by reading each float into its own named local first, sequentially, before constructing `Vector3`/`Quaternion`. This was the real show-stopper behind Task 11.11's "huge nonsensical close-up" symptom, not the two `convert_avatar.py` bugs below (which were real, but not the root cause). |
 | Confirmed bug, fixed (Task 11.11) | `convert_avatar.py`'s Task 11.10 "fix" (transposing `bind_pose_local` from glTF column-major to CNA row-major) was itself backwards — the two are byte-identical for the same transform. Also found: `inverseBindMatrices`/vertex `JOINTS_0` indices needed the same topological bone-order remap as Task 11.10's part-vertex fix. `bind_pose_local` is now derived directly from `inverse_bind_global` via matrix inversion (correct by construction). |
@@ -546,17 +590,14 @@ detail is preserved in `plan_net.md`'s Phase 11 section (Tasks 11.10-11.12) — 
 re-narrated here; see section 5 for the short version of what was found, and section 3
 for this session's own account.
 
-Phase 11c (procedural variety, deferred/lower priority than 11a/11b; Task 11.13 ~~done~~)
-and 11d (future, optional, not started) are next, in plan order:
+Phase 11c (procedural variety, deferred/lower priority than 11a/11b; Tasks 11.13/11.14
+~~done~~) and 11d (future, optional, not started) are next, in plan order:
 
-1. **Task 11.14 (next task) — Additional hair styles / clothing variants as separate
-   attachable GLB pieces**, rather than baked into the base body.
+1. **Task 11.15 (next task) — Additional animation presets beyond `Stand0`/`Wave`**,
+   working toward covering more of the 31 `AvatarAnimationPreset` values with
+   self-authored placeholder motion.
 
-2. **Task 11.15 — Additional animation presets beyond `Stand0`/`Wave`**, working toward
-   covering more of the 31 `AvatarAnimationPreset` values with self-authored placeholder
-   motion.
-
-3. **Task 11.16 (optional, not scheduled) — Revisit MakeHuman or CharMorph/Blender** as
+2. **Task 11.16 (optional, not scheduled) — Revisit MakeHuman or CharMorph/Blender** as
    a higher-quality body *source*, only if the user explicitly wants to invest in
    resolving the automation/permission questions from the original attempt (see section
    3's history) — not assumed, not a default next step.
@@ -597,16 +638,20 @@ AvatarBodyTypeToContentNameEXT (Task 11.12) is the mapping; getting Task 11.11 w
 found and fixed three real bugs (see section 3/5) — none of that needs redoing.
 
 Phase 11c (procedural variety, lower priority, deferred) is underway: Task 11.13
-(parametric body variation) is done — height_scale/shoulder_width_scale/head_scale are
-now real, independent script parameters applied at geometry-generation time, replacing
-the old coarse whole-armature female scale, verified with 4 rendered parameter
-combinations and a re-run of the Task 11.11 exact-math rest-pose check at non-unit scale.
+(parametric body variation) and Task 11.14 (hair/clothing variants + standalone
+attachable pieces) are both done — height_scale/shoulder_width_scale/head_scale are real,
+independent script parameters (Task 11.13); a second hair style (Ponytail) and a second
+style each for Shirt/Pants (LongSleeve/Shorts) exist and generate_wardrobe.py exports any
+one piece as its own standalone .glb, proven to convert cleanly through the unmodified
+convert_avatar.py (Task 11.14) — runtime attachment of a separate piece onto a running
+avatar needs new C++ engine support that doesn't exist yet, explicitly out of scope for
+that task.
 
-Start Task 11.14 next (additional hair styles / clothing variants as separate attachable
-GLB pieces, rather than baked into the base body). If the user would rather work on
-something else in Phase 11c/11d (Tasks 11.15-11.16) or a different phase entirely,
-confirm with them before assuming Task 11.14 is what's wanted — section 8 lists the full
-menu.
+Start Task 11.15 next (additional animation presets beyond Stand0/Wave, working toward
+covering more of the 31 AvatarAnimationPreset values with self-authored placeholder
+motion). If the user would rather work on something else in Phase 11c/11d (Task 11.16)
+or a different phase entirely, confirm with them before assuming Task 11.15 is what's
+wanted — section 8 lists the full menu.
 
 Do not "fix" the confirmed elbow/sleeve tear or the zero-weight/over-4-influence vertices
 (section 5) as part of whatever task you pick — those are known, out-of-scope

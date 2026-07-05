@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""Builds CNA's placeholder hair — a simple helmet-like cap covering the upper half of
-the Task 11.2 head sphere. No strand geometry, no card-based hair cards, just a single
-open-bottomed hemisphere shell slightly larger than the head, parented to the skeleton
-with automatic weights (which, being close only to the `Head` bone, ends up rigidly
-following it in practice).
+"""Builds CNA's placeholder hair, selectable between two styles (Task 11.14):
 
-Explicitly expected to look like a helmet, not hair — a known, accepted limitation of
-this first pass (see plan_net.md Phase 11's own framing of this exact caveat), not a bug
-to chase down yet. A later iteration (plan_net.md Phase 11c/Task 11.14) can replace this
-with actual hair-strand geometry or hair cards.
+- `Cap` — a simple helmet-like cap covering the upper half of the Task 11.2 head sphere.
+  No strand geometry, no card-based hair cards, just a single open-bottomed hemisphere
+  shell slightly larger than the head.
+- `Ponytail` — the same cap, plus a tapered cone "tail" hanging off the back of the head,
+  drooping down and backward — a simple, obviously-distinct silhouette from `Cap`.
+
+Both are a single mesh object parented to the skeleton with automatic weights (which,
+being close only to the `Head` bone, ends up rigidly following it in practice).
+
+Explicitly expected to still look crude, not like real hair strands — a known, accepted
+limitation of this iteration (see plan_net.md Phase 11's own framing of this exact
+caveat), not a bug to chase down yet. A later iteration can replace either style with
+actual hair-strand geometry or hair cards.
 
 Offline, one-time content-authoring tool — not part of the C++ build, never run by CNA
 at runtime. Run headless via Blender:
@@ -17,7 +22,8 @@ at runtime. Run headless via Blender:
 
 `generate_avatar.py` (Task 11.7) will import build_hair() from this module and call it
 in the same Blender process as the skeleton/body/material builders, rather than
-re-deriving the hair mesh.
+re-deriving the hair mesh. `generate_wardrobe.py` (Task 11.14) can also export any one
+hair style on its own, as a standalone attachable `.glb`.
 """
 
 import sys
@@ -69,25 +75,64 @@ def _build_cap_mesh(radius):
     return mesh
 
 
-def build_hair(armature_obj, materials, bones=None, head_scale=1.0):
-    """Builds the placeholder hair cap mesh object, parents it to `armature_obj` with
-    automatic (heat-map) vertex weights, and assigns the `Hair` material from
-    `materials` (as returned by generate_materials.build_materials()). Returns the hair
-    mesh object. Safe to call repeatedly in the same Blender session — removes any
-    pre-existing hair object first.
+def _build_ponytail_mesh(radius):
+    """Returns a new mesh: the same open-bottomed cap hemisphere as `_build_cap_mesh()`,
+    plus a tapered cone "tail" hanging off the back of the head (-Y, matching the
+    skeleton's own +Y-forward convention), drooping down and backward — a simple,
+    obviously-distinct silhouette from the plain `Cap` style, built entirely with bmesh
+    ops so it stays a single mesh/object like `Cap` (no join step needed)."""
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=6, radius=radius)
+    lower_verts = [v for v in bm.verts if v.co.z < -1e-4]
+    bmesh.ops.delete(bm, geom=lower_verts, context="VERTS")
+
+    droop_direction = mathutils.Vector((0.0, -0.5, -0.85)).normalized()
+    rotation = mathutils.Vector((0.0, 0.0, 1.0)).rotation_difference(droop_direction).to_matrix().to_4x4()
+    translation = mathutils.Matrix.Translation((0.0, -radius * 0.75, radius * 0.15))
+    bmesh.ops.create_cone(
+        bm, cap_ends=True, segments=10,
+        radius1=radius * 0.35, radius2=radius * 0.08, depth=radius * 2.0,
+        matrix=translation @ rotation,
+    )
+
+    mesh = bpy.data.meshes.new(HAIR_NAME)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
+# Style name -> mesh-builder function (radius -> bpy.types.Mesh). "Cap" is the original
+# Task 11.5 style and every build_hair() call site's default, so nothing that doesn't
+# ask for "Ponytail" changes behavior (Task 11.14).
+HAIRSTYLES = {
+    "Cap": _build_cap_mesh,
+    "Ponytail": _build_ponytail_mesh,
+}
+
+
+def build_hair(armature_obj, materials, bones=None, head_scale=1.0, style="Cap"):
+    """Builds the placeholder hair mesh object for the given `style` (a HAIRSTYLES key),
+    parents it to `armature_obj` with automatic (heat-map) vertex weights, and assigns
+    the `Hair` material from `materials` (as returned by
+    generate_materials.build_materials()). Returns the hair mesh object. Safe to call
+    repeatedly in the same Blender session — removes any pre-existing hair object first.
 
     `bones` optionally overrides the canonical `generate_skeleton.BONES` table (Task
     11.13) — must be the same bone list passed to `generate_skeleton.build_skeleton()`.
-    `head_scale` scales the cap to match the (possibly independently-scaled) head."""
+    `head_scale` scales the style's geometry to match the (possibly
+    independently-scaled) head. `style` selects a HAIRSTYLES entry (Task 11.14);
+    defaults to `"Cap"`, matching every call site's behavior before Task 11.14."""
     if bones is None:
         bones = generate_skeleton.BONES
+    if style not in HAIRSTYLES:
+        raise ValueError(f"unknown hair style {style!r}; choices: {sorted(HAIRSTYLES)}")
     head_center, hair_radius = _head_center_and_radius(bones, head_scale)
 
     existing = bpy.data.objects.get(HAIR_NAME)
     if existing is not None:
         bpy.data.meshes.remove(existing.data, do_unlink=True)
 
-    mesh = _build_cap_mesh(hair_radius)
+    mesh = HAIRSTYLES[style](hair_radius)
     obj = bpy.data.objects.new(HAIR_NAME, mesh)
     bpy.context.collection.objects.link(obj)
     obj.location = head_center
