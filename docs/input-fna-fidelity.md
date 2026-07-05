@@ -171,8 +171,11 @@ type + interruption is partial (task 906).
   `= nullptr` clears. (Were single `std::function`s; the second-subscriber-lost gap is closed.)
 - **`TextEditing` string is UTF-8** (`std::string`) vs FNA's decoded UTF-16 string; `start`/`length`
   index bytes vs UTF-16 units. Documented.
-- **Malformed UTF-8 is skipped** rather than emitting U+FFFD (FNA's replacement fallback).
-  Unreachable via SDL (which guarantees well-formed UTF-8 in text events).
+- **Malformed UTF-8 emits U+FFFD (DEC-08, fixed 2026-07-05):** `decode_utf8_to_utf16` now substitutes
+  U+FFFD for an invalid lead byte, an ill-formed sequence (one per maximal subpart, resyncing to the next
+  valid text), an overlong encoding, a UTF-16 surrogate code point, or an out-of-range code point —
+  matching FNA's `Encoding.UTF8` replacement fallback. (Was silently skipped; unreachable via SDL, which
+  guarantees well-formed UTF-8, but now FNA-faithful.)
 - Empty composition emits `("", 0, 0)` vs FNA's `(null, 0, 0)` (`std::string` cannot be null).
 
 ---

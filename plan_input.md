@@ -1873,7 +1873,7 @@ repeat gate and a suppress flag for the literal 'v' after Ctrl+V.
 - **Deps:** none.
 
 #### INPUT-TEXT-008 — Malformed UTF-8 handling (skipped vs U+FFFD)
-- **Priority:** P2 · **Status:** TODO · **Area:** Text/Bridge/Decision
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-08 — match FNA, U+FFFD) · **Area:** Text/Bridge/Decision
 - **Files:** `SdlInputBridge.cpp`, `docs/input-fna-fidelity.md`
 - **Problem:** CNA skips malformed bytes; FNA emits replacement U+FFFD (§18).
 - **Work:** Decide skip vs replacement; if keeping skip, add explicit malformed-input test + document.
@@ -2727,8 +2727,13 @@ multibyte. Decision: accept + document, or convert. Tests: multibyte editing. Di
 (documented)**. → INPUT-TEXT-016.
 
 **DEC-08 — Malformed UTF-8 skipped vs U+FFFD.**
-Current: skip malformed bytes. FNA: emit replacement U+FFFD. Risk: dropped vs replaced char. Decision:
-skip (document) OR match FNA replacement. Tests: malformed input. Disposition: **Decide**. → INPUT-TEXT-008.
+Was: CNA silently dropped malformed bytes. FNA: **emits U+FFFD — verified** (decodes via `Encoding.UTF8`,
+`SDL3_FNAPlatform.cs:1172`; its default replacement fallback substitutes U+FFFD, not throw). Disposition:
+**FIXED (2026-07-05 — match FNA).** `decode_utf8_to_utf16` now emits U+FFFD for an invalid lead byte, an
+ill-formed sequence (one U+FFFD per maximal subpart, resyncing to the next valid text), and — newly
+validated — overlong encodings, UTF-16 surrogate code points, and out-of-range code points. 5 tests. (SDL
+guarantees valid UTF-8, so this path is defensive/unreachable in practice, but now matches FNA.) →
+INPUT-TEXT-008.
 
 **DEC-09 — `MaximumTouchCount` reported as 8.**
 Current: reports `MAX_TOUCHES=8` when connected. XNA: 4. FNA: **must verify** (docs contradict). Risk:

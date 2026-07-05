@@ -123,11 +123,19 @@ namespace
             const unsigned char b0 = s[0];
             std::uint32_t cp;
             int len;
-            if (b0 < 0x80)                 { cp = b0;        len = 1; }
-            else if ((b0 & 0xE0) == 0xC0)  { cp = b0 & 0x1F; len = 2; }
-            else if ((b0 & 0xF0) == 0xE0)  { cp = b0 & 0x0F; len = 3; }
-            else if ((b0 & 0xF8) == 0xF0)  { cp = b0 & 0x07; len = 4; }
-            else                           { ++s; continue; } // invalid lead byte — resync
+            std::uint32_t minCp; // smallest code point legally encodable in `len` bytes (overlong guard)
+            if (b0 < 0x80)                 { cp = b0;        len = 1; minCp = 0x0; }
+            else if ((b0 & 0xE0) == 0xC0)  { cp = b0 & 0x1F; len = 2; minCp = 0x80; }
+            else if ((b0 & 0xF0) == 0xE0)  { cp = b0 & 0x0F; len = 3; minCp = 0x800; }
+            else if ((b0 & 0xF8) == 0xF0)  { cp = b0 & 0x07; len = 4; minCp = 0x10000; }
+            else
+            {
+                // Invalid lead byte. FNA decodes via Encoding.UTF8, which substitutes U+FFFD for
+                // malformed input rather than dropping it (DEC-08) — match that.
+                emit(static_cast<charcs>(0xFFFD));
+                ++s;
+                continue;
+            }
 
             int i = 1;
             for (; i < len; ++i)
@@ -135,8 +143,22 @@ namespace
                 if ((s[i] & 0xC0) != 0x80) break; // truncated/invalid continuation
                 cp = (cp << 6) | (s[i] & 0x3F);
             }
-            if (i != len) { ++s; continue; } // malformed — skip one byte and resync
+            if (i != len)
+            {
+                // Ill-formed sequence: one U+FFFD for its maximal subpart, then resync at s[i].
+                emit(static_cast<charcs>(0xFFFD));
+                s += i;
+                continue;
+            }
             s += len;
+
+            // Reject overlong encodings, UTF-16 surrogate code points, and out-of-range code points;
+            // Encoding.UTF8 treats all of these as invalid and substitutes U+FFFD.
+            if (cp < minCp || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF)
+            {
+                emit(static_cast<charcs>(0xFFFD));
+                continue;
+            }
 
             if (cp <= 0xFFFF)
             {

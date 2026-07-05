@@ -92,6 +92,55 @@ TEST_F(SdlInputBridgeTextInputTest, TextInputEventDecodesTwoByteUtf8ToSingleCode
     EXPECT_EQ(captured[0], charcs{0x00E9});
 }
 
+// DEC-08: malformed UTF-8 is replaced with U+FFFD (matching FNA's Encoding.UTF8), not dropped.
+// (These byte sequences cannot actually come from SDL, which emits valid UTF-8, but the decoder is
+// defensive and must match FNA.) String literals are split so a hex escape does not eat the next
+// character (e.g. "\xFF" "b", since 'b' is a hex digit).
+TEST_F(SdlInputBridgeTextInputTest, InvalidLeadByteBecomesReplacementCharAndPreservesSurroundingText)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("a\xFF" "b")); // 0xFF is not a valid UTF-8 lead byte
+    EXPECT_EQ(captured, u"a\uFFFDb");
+}
+
+TEST_F(SdlInputBridgeTextInputTest, TruncatedMultiByteSequenceBecomesReplacementChar)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("x\xC3")); // 0xC3 starts a 2-byte seq with no continuation
+    EXPECT_EQ(captured, u"x\uFFFD");
+}
+
+TEST_F(SdlInputBridgeTextInputTest, BadContinuationEmitsReplacementCharThenResyncsToValidText)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("\xE0" "A")); // 0xE0 expects 2 continuations; 'A' is not one
+    EXPECT_EQ(captured, u"\uFFFDA");
+}
+
+TEST_F(SdlInputBridgeTextInputTest, OverlongEncodingBecomesReplacementChar)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("\xC0\x80")); // overlong encoding of U+0000
+    EXPECT_EQ(captured, u"\uFFFD");
+}
+
+TEST_F(SdlInputBridgeTextInputTest, SurrogateCodePointEncodedInUtf8BecomesReplacementChar)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("\xED\xA0\x80")); // U+D800 (a lone surrogate) via UTF-8
+    EXPECT_EQ(captured, u"\uFFFD");
+}
+
 TEST_F(SdlInputBridgeTextInputTest, ControlKeysSynthesizeTextInputCharacters)
 {
     struct Case { SDL_Keycode key; charcs expected; };
