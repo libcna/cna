@@ -967,12 +967,46 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   needed before this is presentable, and is explicitly still open (not part of Task
   11.6's scope; see `tools/avatar_builder/README.md`).
 
-- [ ] **Task 11.7** — `tools/avatar_builder/export_gltf.py` + `tools/avatar_builder/generate_avatar.py`  
+- [x] **Task 11.7** — `tools/avatar_builder/export_gltf.py` + `tools/avatar_builder/generate_avatar.py`  
   Orchestrates Tasks 11.1–11.6 and exports via `bpy.ops.export_scene.gltf(...)`. Driven headless:
   `blender --background --python generate_avatar.py -- --gender male --out assets/avatar/generated/male_avatar.glb`
   (and again with `--gender female`, same skeleton/rig, adjusted body proportions/scale). Output
   must be deterministic (same inputs → byte-identical or near-identical output) and must reopen
   cleanly in Blender.
+  **Done:** `export_gltf.py`'s `export_avatar(output_path, objects)` selects exactly the
+  given objects and calls `bpy.ops.export_scene.gltf(..., export_format="GLB",
+  use_selection=True, export_animation_mode="ACTIONS", export_animations=True,
+  export_morph=True, export_skins=True, export_yup=True)`. `generate_avatar.py`'s
+  `build_avatar(gender)` clears the scene, calls every Task 11.1–11.6 `build_*()` in
+  order, and for `--gender female` applies a coarse overall `armature_obj.scale = (0.93,
+  0.93, 0.93)` — explicitly *not* real proportion differentiation (shoulder/hip
+  width, head size), which stays deferred to Task 11.13. CLI args (`--gender`, `--out`)
+  are parsed from `sys.argv` after Blender's own `--`.
+  **Verified beyond the plan's own bar:** ran both `--gender male` and `--gender female`
+  headless (`/tmp/male_avatar.glb`, `/tmp/female_avatar.glb`); both reopen cleanly via
+  `bpy.ops.import_scene.gltf` with correct objects/parenting/actions/shape keys; female's
+  exported skeleton node scale is exactly `(0.93, 0.93, 0.93)` and reimports with the Head
+  bone at the correspondingly scaled world height. **Determinism:** ran male export
+  twice — the JSON chunk is byte-identical; the binary buffer differs in 4735/104936
+  float32s, every one by exactly 1 ULP (`1.1920929e-07` = `2^-23`) — Blender-internal
+  floating-point rounding noise (almost certainly the automatic-weight solver), not a
+  real difference. Satisfies the plan's explicit "byte-identical **or near-identical**"
+  allowance.
+  **Confirmed, not-fixed findings (same spirit as Task 11.6's elbow tear):** the exporter
+  warns `Mesh Cylinder is not valid` (the body mesh's underlying data-block, still named
+  from its `primitive_cylinder_add` origin — cosmetic naming only, unrelated to the
+  warning) and `There are more than 4 joint vertex influences` (24 vertices on
+  `CNAAvatarShirt`, confirmed by direct inspection — glTF's 4-joint limit trims/
+  renormalizes these, a standard, expected consequence of automatic weights, not a bug).
+  32 of `CNAAvatarBody`'s 1086 vertices have **zero** total bone weight (also confirmed
+  by direct inspection); Blender's exporter silently covers this by adding a synthetic
+  `neutral_bone` joint to the skin to receive them. On reimport, Blender additionally
+  creates a cosmetic `Icosphere` bone-shape-widget object to visualize that bone (it has
+  no natural head/tail extent) — this widget is **not** in the exported file itself (not
+  in `g.meshes`/`g.nodes`), purely an artifact of Blender's own importer UI, irrelevant to
+  any other glTF consumer (including CNA's own runtime). None of this blocks the file
+  from being valid/usable; documented as known gaps to close alongside the elbow-tear
+  weight-painting pass, not before.
 
 - [ ] **Task 11.8** — `tools/avatar_builder/validate_gltf.py`  
   Sanity-check each exported GLB using `pygltflib` (already a project dependency from Phase 10):

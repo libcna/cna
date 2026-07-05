@@ -28,7 +28,7 @@ bone-retargeting step at all.
 - [x] Task 11.4 — `generate_morphs.py`: `Smile`/`Blink` shape keys on the body mesh.
 - [x] Task 11.5 — `generate_hair.py` / `generate_clothes.py`: helmet-like hair cap, Shirt/Pants/Shoes shells.
 - [x] Task 11.6 — `generate_animations.py`: `Stand0`/`Wave` Actions; confirmed real elbow/sleeve tearing under bend.
-- [ ] Task 11.7 — `export_gltf.py` / `generate_avatar.py`
+- [x] Task 11.7 — `export_gltf.py` / `generate_avatar.py`: exports male_avatar.glb/female_avatar.glb, reopens cleanly.
 - [ ] Task 11.8 — `validate_gltf.py`
 
 Full task detail: `plan_net.md` Phase 11 ("Procedural Avatar Asset Generator").
@@ -247,3 +247,64 @@ correction pass at the elbows (and likely knees/shoulders too, untested at compa
 fold angles) is needed before this rig is presentable in motion. Out of scope for Tasks
 11.1–11.8's "functional, not polished" pipeline milestone — revisit when polish work is
 prioritized (`plan_net.md` Phase 11c).
+
+## Orchestration and export (`generate_avatar.py` + `export_gltf.py`)
+
+`generate_avatar.py`'s `build_avatar(gender)` clears the scene and calls every Task
+11.1–11.6 `build_*()` function in order (skeleton, body, materials, morphs, clothes,
+hair, animations), returning `(armature_obj, objects)` where `objects` is the armature
+plus its mesh children (`export_gltf.export_avatar()`'s expected input). Run headless:
+
+```
+blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out assets/avatar/generated/male_avatar.glb
+blender --background --python tools/avatar_builder/generate_avatar.py -- --gender female --out assets/avatar/generated/female_avatar.glb
+```
+
+(Arguments go after Blender's own `--` so Blender doesn't try to parse them itself.)
+
+**Female is the identical male rig, scaled.** `--gender female` applies a single overall
+`armature_obj.scale = (0.93, 0.93, 0.93)` after building — a coarse placeholder, *not*
+real proportion differentiation (shoulder/hip width ratio, head size, etc.). Real
+parametric variation is deliberately deferred to `plan_net.md` Task 11.13 rather than
+attempted here; don't read the current female output as more than "the same body,
+smaller."
+
+`export_gltf.py`'s `export_avatar(output_path, objects)` selects exactly `objects` and
+calls Blender's glTF2 exporter (`export_format="GLB"`, `use_selection=True`,
+`export_animation_mode="ACTIONS"` so `Stand0`/`Wave` export as two separate glTF
+animations rather than merged, plus `export_morph`/`export_skins`/`export_yup=True`).
+
+**Verified beyond "runs without error":**
+- Both `--gender male` and `--gender female` reopen cleanly in Blender
+  (`bpy.ops.import_scene.gltf`) with the correct 6 objects, correct armature parenting,
+  both actions, and the `Smile`/`Blink` shape keys all present. Female's skeleton node
+  scale round-trips as exactly `(0.93, 0.93, 0.93)`.
+- **Determinism:** running the male export twice produces byte-identical JSON and a
+  binary buffer that differs in ~4.5% of float32 values, every one by exactly 1 ULP
+  (`2^-23`) — Blender-internal floating-point rounding noise, not a real difference.
+  Satisfies the plan's explicit "byte-identical **or near-identical**" bar.
+
+**Confirmed, not-fixed findings** (same spirit as the elbow-tear check above — direct
+inspection, not guessing):
+- The exporter warns `Mesh Cylinder is not valid` — the body mesh's underlying
+  data-block still carries its `primitive_cylinder_add`-era name; cosmetic naming
+  leftover, unrelated to the warning's actual cause.
+- 24 vertices on `CNAAvatarShirt` have more than 4 bone influences (glTF's hard limit is
+  4; the exporter trims/renormalizes them) — an expected consequence of automatic
+  weights on overlapping garment geometry, confirmed by direct per-vertex inspection.
+- 32 of `CNAAvatarBody`'s 1086 vertices have **zero** total bone weight (also confirmed
+  by direct inspection). Blender's exporter covers this by adding a synthetic
+  `neutral_bone` joint to the skin. Reopening in Blender additionally creates a cosmetic
+  `Icosphere` bone-shape widget to visualize that bone (it has no natural head/tail) —
+  that widget is **not** in the exported file itself (absent from its own node/mesh
+  list), purely an artifact of Blender's own importer UI.
+
+None of the above breaks the file or blocks Task 11.7's own bar (deterministic-enough,
+reopens cleanly) — they're additional real gaps worth closing in the same future
+weight-painting pass as the elbow tear, not before.
+
+`build_avatar(gender)`/`export_avatar(output_path, objects)` are the final pieces
+`generate_avatar.py`'s own `__main__` block calls; nothing else needs to import them.
+
+Verify: `blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out /tmp/male_avatar.glb`
+produces a non-empty file that reopens cleanly in Blender.
