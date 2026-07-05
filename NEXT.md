@@ -23,8 +23,9 @@ framework/runtime, not a game.
   is a separate, user-directed "audio correctness hardening" pass against a fixed, user-specified
   11-group task list (`plan_audio.md`'s "Phase 9" section). 7 of those 11 groups are fully closed
   (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`, `P9-XACT` —
-  `P9-XACT` is now **15/15**, its full task list closed); 4 groups remain fully open (`P9-3D`,
-  `P9-HARDWARE`, `P9-DYNAMIC`, `P9-AUDIT`) — see §4/§8.
+  `P9-XACT` is **15/15**, its full task list closed); `P9-HARDWARE` is now 2/6 done (the
+  `NoAudioHardwareException` audit + its raw-`std::runtime_error`-vs-XNA-exception-type fix); 3
+  groups remain fully open (`P9-3D`, `P9-DYNAMIC`, `P9-AUDIT`) — see §4/§8.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -75,7 +76,27 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (most recent Fáze 9 groups, newest first)
 
-- **`P9-XACT-014/015`** (not yet committed) — `P9-XACT`'s last remaining group, now closed
+- **`P9-HARDWARE-001/002`** (not yet committed) — audited `NoAudioHardwareException` usage
+  (confirmed the pre-existing suspicion: type-only stub, never thrown) and found a real bug:
+  `AudioMixer.cpp`'s `GetMixer()` throws a raw `std::runtime_error` -- never caught anywhere --
+  on the exact "no audio hardware" failure FNA's `SoundEffect.Device()` throws
+  `NoAudioHardwareException` from, directly violating `CLAUDE.md`'s "no raw `std::` exceptions on
+  the XNA surface" rule. Fixed with a small `GetMixerOrThrowXna()` conversion helper wired into
+  every entry point that can be the *first* `GetMixer()` call for the whole process:
+  `SoundEffect`'s two audio-loading constructors, `SoundEffect::FromStream()`,
+  `SoundEffect::get/setMasterVolumeProperty()` (static properties FNA's own `MasterVolume`
+  routes through the identical throw site), and `DynamicSoundEffectInstance::Play()` (its
+  constructor, unlike FNA's, never touches the mixer at all). `SoundEffect::Play()`'s own
+  `GetMixer()` call is deliberately left unwrapped -- provably unreachable as a first-failure
+  site. No new automated test: the shared test binary's process-wide `GetMixer()` cache makes the
+  actual failure path untestable without a fresh, isolated process (`SDL_AUDIODRIVER=dummy`
+  always trivially succeeds) -- deferred to `P9-HARDWARE-005`, which already scopes this
+  ("where feasible"). Manually verified: full suite 3230/3232 (unchanged, no regressions), audio
+  subset 324/324, clean under ASan+UBSan. `AudioEngine::Init()` never querying real hardware at
+  all (so it can never throw from the constructor the way FNA's does) is a separate, larger
+  design question left to `P9-HARDWARE-003`. Full detail: `plan_audio.md`'s `P9-HARDWARE-001/002`
+  notes.
+- **`P9-XACT-014/015`** (`b718a8d1`) — `P9-XACT`'s last remaining group, now closed
   (15/15). Audited `SoundBank::GetCue`/`Cue::Play()` against FNA's `SoundBank.cs`/FAudio's
   `FACT_internal.c`. Invalid-cue-*name* handling already matched FNA exactly (pre-existing).
   Found and fixed a **real bug** in the different case the task targets: an internal
@@ -182,8 +203,13 @@ already-scoped task list) still has open work:
 - `P9-XACT` — **fully closed (15/15)**, see §3.
 - `P9-3D` — 3D audio fidelity beyond the existing pan+distance-attenuation approximation (Doppler
   pitch adjustment feasibility, stereo panning model, more test coverage).
-- `P9-HARDWARE` — `NoAudioHardwareException` usage audit, `std::runtime_error` vs XNA-compatible
-  exception behavior, no-audio-device test coverage.
+- `P9-HARDWARE` (2/6 done, see §3) — `NoAudioHardwareException` audit and the
+  `std::runtime_error`-vs-XNA-exception-type fix are done; still open: whether missing/corrupt
+  XGS/XSB/XWB constructors should keep silently stubbing or throw (`P9-HARDWARE-003`, a separate,
+  larger decision from the exception-*type* fix already made — see `CHECKLIST.md`'s existing
+  `CP-18`/`XA-9` accepted-deviation entries), any consequent test updates (`-004`), no-audio-device
+  test coverage (`-005`, needs a fresh isolated process — `SDL_AUDIODRIVER=dummy` always trivially
+  succeeds in this repo's shared test binary), and documentation (`-006`).
 - `P9-DYNAMIC` — `DynamicSoundEffectInstance` `PendingBufferCount`/`BufferNeeded` test coverage
   audit (buffer completion while playing/paused, multiple subscribers, subscriber removal
   mid-callback).
@@ -222,6 +248,7 @@ in-progress work, not an audio-code regression — check `git log -1` there firs
 | **Confirmed, fixed** | `Cue::Stop(AsAuthored)` marked a cue fully stopped/unregistered while its tail was still playing | `P9-STOP-002..005` |
 | **Confirmed, fixed** | `SoundEffectInstance`/`DynamicSoundEffectInstance::Resume()` didn't call `Play()` when never-started/disposed (FNA does) | `P9-VALIDATION-010` |
 | **Confirmed, fixed** | An unresolvable cue/variation-entry sound code (corrupt/malformed data) silently aliased onto sound index 0 and played the wrong sound, instead of resolving to "no sound found" | `P9-XACT-014` |
+| **Confirmed, fixed** | `GetMixer()`'s no-audio-hardware failure threw a raw `std::runtime_error`, never `NoAudioHardwareException`, through public XNA entry points (`SoundEffect` ctors/`FromStream`/`MasterVolumeProperty`, `DynamicSoundEffectInstance::Play()`) | `P9-HARDWARE-002` |
 | **Accepted deviation** | `IsPlaying`/`IsPaused` mutually exclusive, unlike real FACT — decision pending | `CHECKLIST.md`, `P9-LIFECYCLE-013` |
 | **Accepted deviation** | Authored-stop tail duration ≠ real `fadeOutMS` curve (not parsed/retained at all) | `CHECKLIST.md`, `P9-STOP-010` |
 | **Accepted deviation** | RPC volume/pitch curves evaluated once at `Play()` time, not continuously re-evaluated while playing (no per-frame `Cue` update tick exists) | `CHECKLIST.md`, `P9-XACT-005/006/007` |
@@ -231,7 +258,7 @@ in-progress work, not an audio-code regression — check `git log -1` there firs
 | **Accepted deviation** | No Doppler, no 3D HRTF/elevation — pan + linear distance-attenuation only | `CHECKLIST.md` |
 | **Accepted deviation** | Reverb is a documented no-op (`INTERNAL_applyReverb`) — SDL3_mixer has no aux-send/return bus | `CHECKLIST.md`, `T-4C` |
 | **Accepted deviation** | XACT category `instanceLimit`/`fadeInMS`/`fadeOutMS` parsed but never enforced | `CHECKLIST.md`, `XA-11` |
-| **Accepted deviation** | `AudioEngine`/`SoundBank`/`WaveBank` silently stub instead of throwing on a missing/corrupt file; `NoAudioHardwareException` never thrown | `CHECKLIST.md`, `CP-18`/`XA-9` |
+| **Accepted deviation** | `AudioEngine`/`SoundBank`/`WaveBank` silently stub instead of throwing on a missing/corrupt file (decision pending, `P9-HARDWARE-003`); `AudioEngine::Init()` never queries real hardware, so it can never throw `NoAudioHardwareException` from the constructor the way FNA's does (`SoundEffect`/`DynamicSoundEffectInstance` *can* now, since `P9-HARDWARE-002`) | `CHECKLIST.md`, `CP-18`/`XA-9` |
 | **Needs verification** | `SoundEffectInstance` filter coefficient locking follows SDL3_mixer's documented practice but was never stress-tested under real concurrency (no ThreadSanitizer run) | `T-4C` |
 | **Needs verification** | Device-dependent tests only ever run against the SDL `dummy` driver here; real-hardware runs are manual/ad-hoc | — |
 | **Incomplete** | `P9-3D`/`P9-HARDWARE`/`P9-DYNAMIC` — see §4 (`P9-XACT` is fully closed) | `plan_audio.md` |
@@ -346,23 +373,32 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 ## 8. Next smallest tasks
 
 Fáze 9's own task list (`plan_audio.md`) is the source of truth; the user's explicit implementation
-order is exhausted through `P9-STOP`, and `P9-XACT` is now **fully closed (15/15)**. The remaining
-groups have no user-specified priority among them — suggested order below is by "smallest
-independently-verifiable slice first":
+order is exhausted through `P9-STOP`, `P9-XACT` is **fully closed (15/15)**, and `P9-HARDWARE` is
+2/6 done. The remaining groups have no user-specified priority among them — suggested order below
+is by "smallest independently-verifiable slice first":
 
-1. **Audit `NoAudioHardwareException` usage** (`P9-HARDWARE-001`). Goal: confirm it's a type-only
-   stub never thrown (already suspected, see §5) and decide whether that's worth changing. Files:
-   `Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp`, `AudioEngine.cpp`. Verification:
-   read-only audit.
-2. **Audit `DynamicSoundEffectInstance::PendingBufferCount` transitions** (`P9-DYNAMIC-001`). Goal:
+1. **Audit `DynamicSoundEffectInstance::PendingBufferCount` transitions** (`P9-DYNAMIC-001`). Goal:
    confirm current behavior across Play/Pause/Resume/Stop/Dispose matches FNA; add any missing
    tests (`P9-DYNAMIC-002..007`). Files: `DynamicSoundEffectInstance.cpp`,
    `tests/.../DynamicSoundEffectInstanceTests.cpp`. Verification:
    `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter='DynamicSoundEffectInstanceTest.*'`.
-3. **Audit `Apply3D` for stereo sources** (`P9-3D-001`/`002`). Goal: confirm/document current
+2. **Audit `Apply3D` for stereo sources** (`P9-3D-001`/`002`). Goal: confirm/document current
    stereo panning behavior under `Apply3D` (as distinct from the direct `Pan` property, already
    covered by `CP-19`). Files: `SoundEffectInstance.cpp`. Verification: read-only audit, or a new
    test under `SoundEffectInstanceTests.cpp` if a gap is found.
+3. **Decide missing/corrupt XGS/XSB/XWB constructor behavior** (`P9-HARDWARE-003`). Goal: decide
+   whether `AudioEngine`/`SoundBank`/`WaveBank` should keep silently stubbing on a missing/corrupt
+   file (current behavior, `CHECKLIST.md` `CP-18`/`XA-9`) or throw -- a genuine open decision, not
+   a clear-cut fix like `P9-HARDWARE-002` was, since ~80+ existing tests build on the current
+   `SharedEngine()`-style stub-on-missing-file fixtures (see `CHECKLIST.md`'s existing note on
+   `CP-18`). If changed, `P9-HARDWARE-004` updates the tests that lock in today's stub behavior.
+   Needs the user's input before implementing either way.
+4. **Add no-audio-device test coverage** (`P9-HARDWARE-005`). Goal: a real regression test for
+   `GetMixer()`'s failure path (`P9-HARDWARE-002`) needs a fresh, isolated process with an invalid
+   `SDL_AUDIODRIVER` set before anything else calls `GetMixer()` -- this repo's shared `CnaTests`
+   binary can't exercise it (the mixer's cache is process-wide and once-ever-initialized). May
+   need a small standalone test executable (precedent: `cna_net_two_process_harness`). "Where
+   feasible" per the task's own wording -- confirm feasibility first.
 
 Each task, once implemented: add/extend tests, verify with the `git stash` pattern (§7) for any
 behavioral fix, run ASan+UBSan if it touches memory lifetime or ownership, update `plan_audio.md`'s
@@ -395,14 +431,17 @@ checkbox + `*Note:*`, then update this file and commit.
 ```
 Read NEXT.md first. Fáze 9 (a user-directed, already-scoped hardening pass) has 7 of 11 task
 groups fully closed (P9-LIFECYCLE, P9-CATEGORY, P9-VALIDATION, P9-DOCS, P9-BUILD, P9-STOP,
-P9-XACT -- P9-XACT's own 15-item list is now fully done), and 4 groups are fully open (P9-3D,
-P9-HARDWARE, P9-DYNAMIC, P9-AUDIT) -- see §4/§8. No known build/test blocker.
+P9-XACT -- P9-XACT's own 15-item list is now fully done), P9-HARDWARE is 2/6 done (the
+NoAudioHardwareException audit + its std::runtime_error-vs-XNA-exception-type fix), and 3 groups
+are fully open (P9-3D, P9-DYNAMIC, P9-AUDIT) -- see §4/§8. No known build/test blocker.
 
 1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3230/3232 pass, audio-scoped
    subset 324/324) -- rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests (or the
    `tests` CMake preset, §7) to check for drift since this was last updated.
-2. Inspect only the files needed for the first §8 task (P9-HARDWARE-001: NoAudioHardwareException
-   usage audit) unless the user names something else -- don't refactor unrelated code.
+2. Inspect only the files needed for the first §8 task (P9-DYNAMIC-001: PendingBufferCount
+   transitions audit) unless the user names something else -- don't refactor unrelated code.
+   P9-HARDWARE-003 (missing/corrupt file constructor behavior) is a genuine open decision, not a
+   clear-cut fix -- ask the user before implementing either way if it comes up.
 3. Make one small, verified improvement: if it's an audit, write the finding into plan_audio.md;
    if it's a fix, add/extend a test, verify with the git-stash pattern (§7), run the relevant
    build/test command, and run ASan+UBSan if it touches memory lifetime or ownership.

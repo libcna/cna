@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
+#include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -22,6 +23,23 @@ namespace Microsoft::Xna::Framework::Audio
     {
         MIX_Track*        AsTrackD(void* p) { return static_cast<MIX_Track*>(p); }
         SDL_AudioStream*  AsStream(void* p) { return static_cast<SDL_AudioStream*>(p); }
+
+        // P9-HARDWARE-002: see SoundEffect.cpp's identically-named/documented helper --
+        // DynamicSoundEffectInstance's constructor never touches the mixer (unlike FNA's, which
+        // eagerly calls SoundEffect.Device()), so Play() here is this class's own first-possible
+        // GetMixer() failure point, needing the same std::runtime_error -> NoAudioHardwareException
+        // conversion.
+        MIX_Mixer* GetMixerOrThrowXna()
+        {
+            try
+            {
+                return CNA::Internal::Audio::GetMixer();
+            }
+            catch (const std::exception& ex)
+            {
+                throw NoAudioHardwareException(ex.what());
+            }
+        }
     }
 #endif
 
@@ -127,7 +145,7 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
         EnsureStream();
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_Mixer* mixer = GetMixerOrThrowXna();
 
         // Destroy previous track if any.
         MIX_Track* track = AsTrackD(dynamicTrack_);

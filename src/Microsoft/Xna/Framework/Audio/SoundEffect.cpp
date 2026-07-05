@@ -7,6 +7,7 @@
 #include <istream>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -63,6 +64,25 @@ namespace Microsoft::Xna::Framework::Audio
         {
             MIX_DestroyTrack(track);
         }
+
+        // P9-HARDWARE-002: CNA::Internal::Audio::GetMixer() throws a raw std::runtime_error on
+        // its first-ever call if no audio hardware/device is available -- the internal layer
+        // stays exception-type-agnostic re: the XNA surface (matches the established
+        // XactParser-throws-std/SoundBank-catches-and-converts pattern, CHECKLIST.md). This
+        // converts that failure into NoAudioHardwareException at the XNA-facing entry points
+        // that can be the very first GetMixer() call in the process, matching FNA's
+        // SoundEffect.Device() throwing the identical exception from the identical failure.
+        MIX_Mixer* GetMixerOrThrowXna()
+        {
+            try
+            {
+                return CNA::Internal::Audio::GetMixer();
+            }
+            catch (const std::exception& ex)
+            {
+                throw NoAudioHardwareException(ex.what());
+            }
+        }
     }
 #endif
 
@@ -84,7 +104,7 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
 #ifdef SOUND_ENABLED
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_Mixer* mixer = GetMixerOrThrowXna();
 
         MIX_Audio* raw = MIX_LoadAudio(mixer, assetName.c_str(), true);
         if (!raw)
@@ -155,7 +175,7 @@ namespace Microsoft::Xna::Framework::Audio
         spec.channels = static_cast<int>(channels);
         spec.freq     = sampleRate;
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_Mixer* mixer = GetMixerOrThrowXna();
 
         MIX_Audio* raw = MIX_LoadRawAudio(
             mixer,
@@ -228,7 +248,7 @@ namespace Microsoft::Xna::Framework::Audio
         // CP-16: query the real SDL3_mixer master gain (matches FNA, which likewise always
         // queries the live FAudio master voice rather than a cached value) so this reflects
         // MIX_SetMixerGain's actual current value, not a value that could drift from it.
-        return MIX_GetMixerGain(CNA::Internal::Audio::GetMixer());
+        return MIX_GetMixerGain(GetMixerOrThrowXna());
 #else
         return MasterVolume_;
 #endif
@@ -241,7 +261,7 @@ namespace Microsoft::Xna::Framework::Audio
         // already-playing ones) at mix time -- unlike the old per-track-baked-in approach, this
         // needs no per-instance re-application. FNA passes the value straight through, without
         // clamping; MIX_SetMixerGain does the same (only rejects negative values as an error).
-        MIX_SetMixerGain(CNA::Internal::Audio::GetMixer(), v);
+        MIX_SetMixerGain(GetMixerOrThrowXna(), v);
 #else
         MasterVolume_ = v;
 #endif
@@ -516,7 +536,7 @@ namespace Microsoft::Xna::Framework::Audio
             );
         }
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_Mixer* mixer = GetMixerOrThrowXna();
         MIX_Audio* raw   = MIX_LoadAudio_IO(mixer, io, true, true); // predecode=true, closeio=true
         if (!raw)
         {

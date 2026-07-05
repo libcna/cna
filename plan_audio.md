@@ -2041,8 +2041,73 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
 
 ## P9-HARDWARE — Audio hardware and exception behavior
 
-* [ ] P9-HARDWARE-001 Audit `NoAudioHardwareException` usage across the audio backend.
-* [ ] P9-HARDWARE-002 Replace raw `std::runtime_error` backend initialization failures with XNA-compatible exception behavior where appropriate.
+* [x] P9-HARDWARE-001 Audit `NoAudioHardwareException` usage across the audio backend.
+  *Note:* Confirmed the suspicion in `CHECKLIST.md`/`NEXT.md`: `NoAudioHardwareException.hpp` is a
+  type-only stub, never thrown anywhere in CNA's production code (grepped all of
+  `src/Microsoft/Xna/Framework/Audio/*.cpp`). Compared against FNA's two throw sites
+  (`AudioEngine.cs` ctor: `FACTAudioEngine_GetRendererCount() == 0` -> throw; `SoundEffect.cs`'s
+  lazy `Device()` singleton: `FAudioContext.Create()` failing -> throw). Two distinct findings:
+  (1) `AudioEngine::Init()` (`AudioEngine.cpp`) unconditionally pushes exactly one
+  `RendererDetail("SDL3_mixer", "SDL3_mixer")` regardless of whether real audio hardware exists --
+  it never queries anything, so the FNA-equivalent check can structurally never fail from this
+  path. (2) A **real, concrete bug**, not just a missing feature: CNA's actual "no hardware"
+  detection already exists, just in the wrong place with the wrong exception type --
+  `AudioMixer.cpp`'s `GetMixer()` (the lazy `MIX_Init()`/`MIX_CreateMixerDevice()` singleton,
+  called from `SoundEffect`/`SoundEffectInstance`/`DynamicSoundEffectInstance`, structurally the
+  same lazy-singleton shape as FNA's `SoundEffect.Device()`) throws a raw `std::runtime_error` when
+  `MIX_CreateMixerDevice` fails -- **on the exact code path FNA throws `NoAudioHardwareException`
+  from**, and in direct violation of `CLAUDE.md`'s "Exceptions on the XNA surface must be
+  `System::` types, never raw `std::` exceptions" rule (the raw exception is completely uncaught,
+  so it would propagate straight through `SoundEffect`'s constructor / `SoundEffectInstance::Play()`
+  / `DynamicSoundEffectInstance`'s constructor -- all public XNA API entry points -- to user code,
+  not just an internal detail). `SDL_AUDIODRIVER=dummy` (this repo's only test environment) always
+  succeeds trivially, so this path has never actually fired in the test suite -- consistent with
+  `NEXT.md`'s existing "device-dependent tests only ever run against the dummy driver" caveat.
+  Handoff to `P9-HARDWARE-002`: convert `GetMixer()`'s failure exceptions to
+  `NoAudioHardwareException` at the XNA-facing call sites (matching the established
+  `XactParser`-throws-`std::`/`SoundBank`-`WaveBank`-catches-and-converts-at-the-boundary pattern
+  already used elsewhere, per `CHECKLIST.md`) -- `AudioEngine::Init()` reporting a real renderer
+  count (making the `AudioEngine`-constructor-time check possible at all) is a separate, larger
+  design question left to `P9-HARDWARE-003`'s "decide" wording, since it changes when the mixer
+  device gets opened (currently fully lazy, first real `SoundEffect`/track creation) and could
+  affect every existing `AudioEngine`-constructing test's resource-acquisition timing.
+* [x] P9-HARDWARE-002 Replace raw `std::runtime_error` backend initialization failures with XNA-compatible exception behavior where appropriate.
+  *Note:* Fixed exactly the gap `P9-HARDWARE-001` found. `CNA::Internal::Audio::GetMixer()`
+  (`AudioMixer.cpp`) still throws `std::runtime_error` -- kept exception-type-agnostic, matching
+  this codebase's established internal-throws-`std::`/XNA-boundary-catches-and-converts pattern
+  (`CHECKLIST.md`, same shape as `XactParser`'s corrupt-data throws being caught at `SoundBank`/
+  `WaveBank`'s constructor boundary). Added a small `GetMixerOrThrowXna()` helper (duplicated once
+  each in `SoundEffect.cpp`'s and `DynamicSoundEffectInstance.cpp`'s own anonymous namespaces --
+  not shared via a header, since only these two files have a genuine "first GetMixer() call in the
+  process" entry point; every `SoundEffectInstance.cpp` call site is provably unreachable as a
+  first failure, since any `SoundEffectInstance` derives from an already-successfully-constructed
+  `SoundEffect`) that catches `GetMixer()`'s `std::exception` and rethrows
+  `NoAudioHardwareException(ex.what())`. Wired into every entry point that can genuinely be the
+  first `GetMixer()` call for the whole process: `SoundEffect`'s two audio-loading constructors
+  (`assetName`-based, buffer-based), `SoundEffect::FromStream()`, `SoundEffect::getMasterVolumeProperty
+  ()`/`setMasterVolumeProperty()` (static properties a game could touch before ever constructing a
+  `SoundEffect` -- FNA's own `MasterVolume` property also routes through `Device()`, the identical
+  throw site), and `DynamicSoundEffectInstance::Play()` (its own first-possible failure point,
+  since CNA's constructor -- unlike FNA's, which eagerly calls `SoundEffect.Device()` -- doesn't
+  touch the mixer at all; that eager-vs-lazy acquisition-timing difference is a separate, larger
+  design question left undisturbed here). `SoundEffect::Play(float,float,float)`'s own `GetMixer()`
+  call is deliberately left unwrapped: it's unreachable as a first-failure site (a `SoundEffect`
+  object can only exist post-construction, which already forced a successful `GetMixer()` call),
+  so wrapping it would validate a scenario that can't happen (`CLAUDE.md`).
+  **Verification caveat:** no new automated regression test accompanies this fix. `GetMixer()`'s
+  `g_mixer` is a process-wide, once-ever-initialized cache; under this repo's only test
+  environment (`SDL_AUDIODRIVER=dummy`) it always succeeds trivially, and once any earlier test in
+  the shared `CnaTests` binary succeeds even once, every later test (including a hypothetical new
+  one) sees the already-cached mixer and can never exercise the failure branch again -- the same
+  process-isolation constraint `P9-HARDWARE-005`'s own task wording ("where feasible") already
+  anticipates. `NoAudioHardwareException` the *type* itself (ctors, hierarchy, catchability) is
+  already fully tested (`AudioExceptionsTests.cpp`, pre-existing); what's untested is specifically
+  this new conversion wiring. Manually verified instead: full build + whole suite (3230/3232, 2
+  expected skips) and the audio-scoped subset (324/324) both clean, including under a full
+  ASan+UBSan build, confirming no regression from the refactor. A real regression test for the
+  actual no-hardware failure path would need a fresh, isolated process (e.g. an invalid
+  `SDL_AUDIODRIVER` value set *before* anything else in that process ever calls `GetMixer()`) --
+  left to `P9-HARDWARE-005`, which already scopes exactly this.
 * [ ] P9-HARDWARE-003 Decide whether missing/corrupt XGS/XSB/XWB constructors should remain soft stubs or throw XNA/FNA-compatible exceptions.
 * [ ] P9-HARDWARE-004 If constructor behavior changes, update tests that currently lock in silent stub behavior.
 * [ ] P9-HARDWARE-005 Add tests for no-audio-device behavior using SDL dummy/no-device configuration where feasible.
