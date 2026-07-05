@@ -340,6 +340,22 @@ namespace Microsoft::Devices
         bool openedTemporary = false;
         SDL_Haptic* device = AcquireHapticDeviceForProbe(openedTemporary);
 
+        // Deliberately NOT also calling SDL_InitHapticRumble() here to
+        // confirm the device can actually initialize simple rumble, even
+        // though that would make this property more precise (a device
+        // that opens but can't init rumble currently still reports
+        // "supported"). Considered and rejected: SDL_InitHapticRumble()
+        // is not a read-only query -- per third_party/SDL/src/haptic/
+        // SDL_haptic.c, it calls SDL_CreateHapticEffect(), which uploads a
+        // real effect onto the physical device/driver. SDL_CloseHaptic()
+        // implicitly invalidates that upload afterward (Task P8-6's own
+        // finding), so it wouldn't leak, but there is no way to confirm
+        // from this container -- no haptic hardware is available here,
+        // ever (see NEXT.md) -- whether effect *creation* itself causes
+        // any visible/physical actuation on real force-feedback drivers,
+        // as opposed to merely allocating an effect slot. Left unchanged
+        // rather than risk an unverifiable physical side effect from a
+        // property getter a caller would reasonably expect to be inert.
         const bool supported = device != nullptr;
 
         if (openedTemporary && device != nullptr)
