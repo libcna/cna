@@ -581,6 +581,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 335: RenderTarget2D depth buffer is real and functional (not just a stored property)
+        cna_easygl_test(cna_test_easygl_rendertarget2d_depth
+                        examples/rendertarget2d_depth_test.cpp)
+        add_test(NAME EasyGL_RenderTarget2D_DepthBuffer
+                 COMMAND cna_test_easygl_rendertarget2d_depth)
+        set_tests_properties(EasyGL_RenderTarget2D_DepthBuffer PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 22: BasicEffect property tests
         cna_easygl_test(cna_test_basic_effect
                         examples/basic_effect_test.cpp)
@@ -1716,6 +1725,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_RenderTarget2D_FullCycle
                  COMMAND cna_test_vulkan_rt2d)
         set_tests_properties(Vulkan_RenderTarget2D_FullCycle PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 335: RenderTarget2D depth buffer is real and functional (not just a stored property)
+        cna_vulkan_test(cna_test_vulkan_rendertarget2d_depth
+                        examples/rendertarget2d_depth_test.cpp)
+        add_test(NAME Vulkan_RenderTarget2D_DepthBuffer
+                 COMMAND cna_test_vulkan_rendertarget2d_depth)
+        set_tests_properties(Vulkan_RenderTarget2D_DepthBuffer PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
