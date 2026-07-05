@@ -2554,7 +2554,7 @@ automated from manual verification, and stamp manual results with exact date/har
 claim is a manual local run.
 
 #### INPUT-CI-001 — Bootstrap CI with submodule + sibling checkout
-- **Priority:** P0 · **Status:** IMPLEMENTED (2026-07-05; first GitHub run needs observation) · **Area:** CI
+- **Priority:** P0 · **Status:** DONE (2026-07-05, verified green) · **Area:** CI
 - **Files:** `.github/workflows/input-ci.yml`
 - **Problem:** No automated build/test exists.
 - **Work:** CI job: checkout, `git submodule update --init --recursive`, clone/point siblings sharp-runtime &
@@ -2572,10 +2572,14 @@ claim is a manual local run.
   with no extra fetch; YAML validated; found that the SDL `dummy` driver makes 3 `MouseCursor` tests FAIL
   (null cursors) and switched to **Xvfb** (real virtual video → the same 280 that pass on a real display).
   Also implicitly covers part of INPUT-CI-004 (canonical filter in CI), INPUT-CI-006 (shuffle), and adds
-  the SDL cache. **Honest caveat:** this environment has no `gh` CLI / GitHub token, so the actual green
-  run **cannot be observed from here** — the first push needs a look at the Actions tab; iterate on any
-  runner-specific failure (apt availability / hosted-runner quirks). Backend matrix (INPUT-CI-002) and the
-  sanitizer job (INPUT-CI-005) remain TODO.
+  the SDL cache. **Verified GREEN** on GitHub Actions (run `a4267bb8`, 2026-07-05): Configure ✓, Build
+  `CnaTests` ✓, Run input tests (Xvfb, shuffle×3) ✓. Runs were observed via the public GitHub API (no `gh`
+  CLI/token available); Actions logs are auth-gated (403), so failures were surfaced by a temporary
+  `if:failure()` step that pushed CMake logs to a throwaway `ci-diag` branch fetched over SSH. **One real
+  fix needed:** the first runs failed at SDL3's X11 configure — missing `libxtst-dev` (SDL_X11_XTEST); added
+  it and the run went green. Diagnostic scaffolding (`ci-diag` step, `contents:write`, verbose tee) has been
+  removed and the `ci-diag` branch deleted. Backend matrix (INPUT-CI-002) and the sanitizer job
+  (INPUT-CI-005) remain TODO.
 
 #### INPUT-CI-002 — Backend matrix (EasyGL, Vulkan, bgfx, SDL_RENDERER)
 - **Priority:** P1 · **Status:** TODO · **Area:** CI
