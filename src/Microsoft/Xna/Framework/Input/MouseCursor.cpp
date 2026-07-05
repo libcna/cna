@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
 
+#include <SDL3/SDL.h>
+
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -8,9 +10,9 @@
 
 namespace Microsoft::Xna::Framework::Input
 {
-    MouseCursor MouseCursor::MakeSystem(SDL_SystemCursor id)
+    MouseCursor MouseCursor::MakeSystem(int systemCursorId)
     {
-        SDL_Cursor* c = SDL_CreateSystemCursor(id);
+        SDL_Cursor* c = SDL_CreateSystemCursor(static_cast<SDL_SystemCursor>(systemCursorId));
         MouseCursor cursor(c, /*owning=*/true);
         cursor.isSystemSingleton_ = true; // process-lifetime shared cursor — never disposed
         return cursor;
