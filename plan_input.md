@@ -901,7 +901,7 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Deps:** none.
 
 #### INPUT-MOUSE-007 — External SDL relative-mode desync (suspected)
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-14 — accept, getter is live; cache is internal) · **Area:** Mouse
 - **Files:** `Mouse.cpp`, `InputManager.cpp`, `docs/input-fna-fidelity.md`
 - **Problem:** Cache can desync only if SDL relative mode is toggled outside CNA API (§18).
 - **Work:** Decide: read live vs keep cache + document unreachable-via-API. Add test if live-read chosen.
@@ -2775,9 +2775,13 @@ disjoint state and the order is unobservable. Documented + pinned by
 `TouchEdgeCaseTest.UpdatePropagatesTouchesToPreviousForSlotPathContinuity`. → INPUT-TOUCH-023.
 
 **DEC-14 — Relative mouse cache desync.**
-Current: relative-mode flag cached in InputManager. FNA: live-read. Risk: desync only if SDL toggled outside
-CNA API (`suspected`, unreachable via CNA API). Decision: accept + document OR read live. Tests: round-trip.
-Disposition: **Accept (documented)**. → INPUT-MOUSE-007.
+Clarified on inspection: the **public getter already reads SDL live** (`SDL_GetWindowRelativeMouseMode`) —
+matching FNA — so there is no cache at the API boundary. The only cache is the SDL-agnostic `InputManager`'s
+`RelativeMode` flag (gates relative-delta accumulation/draining), written by the CNA setter, which updates
+SDL **and** `InputManager` together. Disposition: **ACCEPTED (2026-07-05).** Cannot diverge through CNA's
+API; would only desync if a caller toggled SDL relative mode *directly*, bypassing the CNA setter (out of
+contract). Having `InputManager` read SDL would break the input-layer/SDL boundary. The live round-trip and
+the setter→`InputManager` delta sync are both tested. → INPUT-MOUSE-007.
 
 **DEC-15 — No focus-loss / window-destroy input clearing.**
 Current: none. FNA: **also none — verified** (FNA is event-driven/accumulating like CNA — `Keyboard.keys`

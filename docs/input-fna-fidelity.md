@@ -61,10 +61,15 @@ not exactly identical.
 - **`ClickedEXT` is multicast (DEC-06, fixed 2026-07-05):** now a `System::MulticastAction<int>` matching
   FNA's `public static Action<int>` — `+=` adds subscribers, `=` replaces, `= nullptr` clears. (Was a
   single `std::function`; the second-subscriber-lost gap is closed.)
-- **Relative-mode cache:** `InputManager` caches the relative-mode flag (set only via
-  `Mouse::setIsRelativeMouseModeEXTProperty`) rather than reading SDL live each `GetState` like FNA.
-  Cannot diverge through CNA's own API; would only desync if SDL relative mode were toggled
-  externally (TODO: reconcile on focus-loss or read live).
+- **Relative-mode cache (DEC-14, accepted 2026-07-05):** the public
+  `Mouse::getIsRelativeMouseModeEXTProperty()` reads SDL **live** (`SDL_GetWindowRelativeMouseMode`),
+  matching FNA — there is no cache at the API boundary. Separately, the SDL-agnostic `InputManager` keeps
+  its own `RelativeMode` flag to gate relative-delta accumulation/draining in `GetMouseState`; because
+  `InputManager` must not depend on SDL, that flag is written by `Mouse::setIsRelativeMouseModeEXTProperty`
+  (which updates SDL **and** `InputManager` together) rather than read from SDL. It cannot diverge through
+  CNA's own API; it would only desync if a caller toggled SDL relative mode *directly*, bypassing the CNA
+  setter — which is out of contract. Accepted as-is (having `InputManager` read SDL would break the
+  input-layer/SDL boundary). The live round-trip and the delta behaviour are both tested.
 
 ---
 

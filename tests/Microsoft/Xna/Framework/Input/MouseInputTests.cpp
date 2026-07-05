@@ -343,6 +343,39 @@ TEST(MouseTest, IsRelativeMouseModeEXTRoundTripsThroughRealWindow)
     ResetMouseState();
 }
 
+// DEC-14: the public setter keeps InputManager's relative-mode flag in sync with SDL, so there is no
+// cache desync reachable through CNA's own API — after setIsRelativeMouseModeEXTProperty(true), GetState
+// reports accumulated relative deltas.
+TEST(MouseTest, SetIsRelativeMouseModeEXTSyncsInputManagerDeltaHandling)
+{
+    ResetMouseState();
+
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+    SDL_Window* window = SDL_CreateWindow("MouseInputTests", 64, 64, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+    Mouse::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
+
+    Mouse::setIsRelativeMouseModeEXTProperty(true); // also enables InputManager's relative mode
+    CNA::Internal::Input::InputManager::AddMouseRelativeDelta(5.0f, 6.0f);
+
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getXProperty(), 5);
+    EXPECT_EQ(state.getYProperty(), 6);
+
+    Mouse::setIsRelativeMouseModeEXTProperty(false);
+    Mouse::setWindowHandleProperty(0);
+    SDL_DestroyWindow(window);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    ResetMouseState();
+}
+
 TEST(MouseTest, SetPositionIsNoOpWhenRelativeModeEnabled)
 {
     ResetMouseState();
