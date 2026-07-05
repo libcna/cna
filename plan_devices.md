@@ -202,7 +202,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 0: Repository Audit and Compatibility Matrix
 
-- [ ] DEVICES-0001 — Re-confirm namespace-wide file inventory is current
+- [x] DEVICES-0001 — Re-confirm namespace-wide file inventory is current (2026-07-05: re-ran the inventory; 56 files, identical to this plan's "Current Repository Findings" set; confirmed via `git diff --stat` between the commit that introduced this plan and HEAD touching none of the four Devices directories)
   - **Area:** Audit
   - **Files:** none changed; read `include/Microsoft/Devices/**`, `src/Microsoft/Devices/**`, `tests/Microsoft/Devices/**`, `examples/demo_devices/**`
   - **Required behavior:** Produce a plain file list (already captured in "Current Repository Findings" above) confirming no file was added/removed/renamed since `plan_devices_phase9.md` closed.
