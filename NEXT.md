@@ -12,12 +12,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
-- **Current development phase:** Phases 1–38 are complete. **Phase 39 (RenderTarget2D and
-  RenderTargetCube completeness, `GRAPHICS_TASKS.md` Tasks 331–340) is open** — Tasks 331–339 done,
-  **Task 340 is next (the last task in Phase 39!)** (see §8). Full phase history is in
-  `GRAPHICS_TASKS.md`; the most recent closed phases have synthesis docs:
-  `docs/sampler-state-support.md` (Phase 35), `docs/depthstencilstate-support.md` (Phase 37),
-  `docs/rasterizerstate-support.md` (Phase 38).
+- **Current development phase:** Phases 1–39 are complete. **Phase 40 (Viewport, DisplayMode, and
+  adapter behavior, `GRAPHICS_TASKS.md` Tasks 341–350) is open** — **Task 341 is next** (see §8).
+  Full phase history is in `GRAPHICS_TASKS.md`; the most recent closed phases have synthesis docs:
+  `docs/depthstencilstate-support.md` (Phase 37), `docs/rasterizerstate-support.md` (Phase 38),
+  `docs/rendertarget-support.md` (Phase 39). **Phase 40 connects directly to Task 880** (found in
+  Phase 39): `Viewport` has zero GPU backend wiring on all 3 backends — Phase 40's own audit
+  (Task 341) and viewport-reset-after-resize task (Task 349) will likely re-surface this same gap
+  from a different angle; worth cross-referencing rather than re-diagnosing from scratch.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -157,6 +159,7 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 
 | Commit / Task | Change |
 |---|---|
+| Task 340 | **Closes Phase 39.** Wrote `docs/rendertarget-support.md`, a full Phase 39 synthesis (mirroring `docs/rasterizerstate-support.md`'s Phase 38 closer) covering Tasks 331–340: 2 real EasyGL fixes shipped (Task 336 mip support, Task 337 MSAA support), 1 shared-code fix (Task 338's Viewport/ScissorRectangle reset on RT switch), and the per-backend MRT limits table (EasyGL/Bgfx cap at 8, Vulkan uncapped at the CNA level, none matching FNA's real 4-target limit — Task 881). Docs-only task, no code changed, no regression risk. Phase 40 (Viewport, DisplayMode, adapter behavior, Tasks 341–350) is already planned in `GRAPHICS_TASKS.md` and opens next — directly relevant to Task 880 (Viewport has zero GPU wiring). |
 | Task 339 | Audit-only closure (no code changed, mirrors Task 330's precedent) — read FNA's actual `SetRenderTargets` source and confirmed it does **zero explicit validation** of format/size/count mismatches between MRT targets; it computes dimensions from `renderTargets[0]` only and delegates everything to the native driver. "Reject invalid combinations" simply isn't an XNA-level behavior. Confirmed CNA's own 3 backends behave the same way (no CNA-level validation, delegate to GL/Vulkan/bgfx) — consistent with FNA, not a divergence. **Found one real, minor, new divergence**: FNA's actual MRT cap is `MAX_RENDERTARGET_BINDINGS=4` (implicit, via a fixed-size array that would throw past 4); CNA's EasyGL/Bgfx silently cap at 8 (no throw), Vulkan has no CNA-level cap at all. Tracked as new **Task 881**, not fixed (no test exercises >2 targets, low priority). Correctly did NOT touch the already-tracked, off-limits `EasyGL_MRT_TwoAttachments` (Task 145) bug — even the basic same-size 2-target MRT case is already known-broken on EasyGL, which blocks any *meaningful* deeper mismatched-format verification; re-diagnosing it here would violate the project's own "each needs its own dedicated investigation" rule. No new test — nothing in FNA to assert against, and the one concrete regression-worthy angle (Task 881's cap divergence) has no existing >2-target test infrastructure to extend. No regression risk, no code changed. |
 | Task 338 | Verified `SetRenderTarget(nullptr)`/`SetRenderTargets({})` return to the backbuffer — the core routing was already extensively proven by dozens of existing tests. **Found and fixed a real gap while auditing FNA's actual `SetRenderTargets` source**: FNA *always* resets `Viewport`/`ScissorRectangle` to `(0,0,newWidth,newHeight)` on every render-target switch (new target's size when binding, backbuffer's when unbinding) — confirmed CNA's `SetRenderTarget`/`SetRenderTargets` never touched either property at all. Added `GraphicsDevice::ResetViewportAndScissorForRenderTarget`, wired into all 3 `SetRenderTarget*`/`SetRenderTargets` overloads, matching FNA's exact placement. New `examples/rendertarget_viewport_scissor_reset_test.cpp` (EasyGL + Vulkan) proves both the property values AND a real GPU-level effect (a stale scissor rect from before an RT switch no longer incorrectly clips draws afterward). **Found and deliberately deferred a separate, much bigger gap discovered along the way**: `GraphicsDevice.Viewport` has **zero GPU wiring on any of the 3 backends** — every backend hardcodes its actual viewport to the full target size, ignoring `Viewport` entirely; a sub-region viewport currently has no effect anywhere. Tracked as new **Task 880**, not fixed here (unrelated in scope to render-target switching specifically, needs its own dedicated 3-backend task). Full regression, all 3 backends: EasyGL ctest 3316/3319 (3 pre-existing, unchanged). Vulkan ctest 3238/3253 (13 pre-existing + 1 reconfirmed-flaky unrelated `CueTest`). Bgfx ctest 3223/3224 (1 reconfirmed-flaky unrelated `CueTest`). |
 | Task 337 | Confirmed and **actually fixed** MSAA render target support on EasyGL, reusing Task 336's exact resolve-on-unbind mechanism and fix shape. Following FNA's real mechanism (`ClosestMSAAPower` + `FNA3D_GetMaxMultiSampleCount` clamp, then a real multisampled renderbuffer resolved via `glBlitFramebuffer` when the target is unbound — the same `OPENGL_ResolveTarget` function Task 336 already touched for mips). Added `ClosestMSAAPower` to `RenderTarget2D.cpp`/`RenderTargetCube.cpp`; threaded `multiSampleCount` through `IGraphicsBackend::CreateRenderTarget2D`/`CreateRenderTargetCube` (all 3 backends); added `GetMultiSampleCount()` to both render-target backend interfaces so the XNA layer queries the backend's REAL clamped value post-construction, rather than reporting the raw request. **EasyGL**: creates a real multisampled color (+depth) renderbuffer, resolves it into the sampleable texture on unbind (same call site as Task 336's mip regen, correctly ordered — resolve then mip-regenerate). RenderTargetCube reuses one shared multisample renderbuffer across all 6 faces (matching FNA's single `glColorBuffer`), tracking the last-bound face for the resolve. **Rigorously pixel-verified with a genuine anti-aliasing proof** (not just solid-fill plumbing, which even a non-MSAA target passes trivially): new `easygl_rendertarget2d_msaa_test.cpp` renders a diagonal-edged triangle into `MultiSampleCount=0` and `=8` RTs, and confirms the `0` case is purely binary (hard aliased edge) while the `8` case has genuinely intermediate (partially-covered) pixel values. Updated Task 331/332's property tests: unlike `LevelCount` (backend-agnostic), `MultiSampleCount` is legitimately backend/device-capability-dependent even in real FNA, so the tests now accept either EasyGL's real clamped value or Vulkan/Bgfx's honest `0`, while still catching a blind pass-through (literal `9999`) as a failure on any backend. Also fixed a documentation typo from the Task 336 session (several comments said "Task 877" instead of "Task 878" for the Vulkan/Bgfx mip gap). **Vulkan/Bgfx**: accept-and-ignore `multiSampleCount`, report `0` — tracked as new **Task 879**. Full 3-backend rebuild + regression: EasyGL 3315/3318 (3 pre-existing, unchanged). Vulkan 3239/3252 (13 pre-existing, unchanged). Bgfx 3224/3224 (100%). |
@@ -328,20 +331,24 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 340 — document MRT limits for each backend (the last task in Phase 39!)**
-   - Goal: write up each backend's actual max-simultaneous-color-attachments limit in
-     `docs/graphics-backend-feature-matrix.md` (or wherever this project's per-backend limits are
-     documented) — most of the research is already done from Task 339: EasyGL/Bgfx cap at 8
-     (hardcoded, silently truncates beyond that — no error), Vulkan has no CNA-level cap (relies
-     on the raw `VkPhysicalDeviceLimits::maxColorAttachments`), and none of the 3 match FNA's real
-     `MAX_RENDERTARGET_BINDINGS=4` (tracked separately as Task 881). This task is the natural
-     capstone for Phase 39 — closing it completes the whole `RenderTarget2D`/`RenderTargetCube`
-     phase (Tasks 331–340).
-   - Files: `docs/*.md` (whichever doc already tracks per-backend capability tables — check
-     `docs/graphics-backend-feature-matrix.md` first), `GRAPHICS_TASKS.md`.
-   - Verification: none needed beyond the documentation itself — Task 339 already established
-     the facts; write a synthesis doc for Phase 39 overall (mirroring `docs/rasterizerstate-support.md`
-     for Phase 38), since this is Phase 39's last task.
+1. **`GRAPHICS_TASKS.md` Task 341 — audit `Viewport` API against FNA (opens Phase 40)**
+   - Goal: read FNA's `Viewport.cs` line-by-line and audit CNA's `Viewport` struct/class against
+     it — property surface, `Project`/`Unproject` methods (the task's own hint), constructors,
+     `Bounds`/`AspectRatio`/`TitleSafeArea`. This is the natural first task of the newly-opened
+     Phase 40 (Viewport, DisplayMode, and adapter behavior).
+   - **Directly connects to Task 880** (found in Phase 39): `GraphicsDevice.Viewport` has zero GPU
+     backend wiring on all 3 backends — every backend hardcodes its actual viewport to the full
+     render-target/window size. Task 341's own audit is about the math/property API surface
+     (`Project`/`Unproject` correctness), not the GPU-wiring gap specifically — but Tasks 344/349
+     later in this same phase ("verify viewport min/max depth behavior", "verify viewport reset
+     after backbuffer resize") will very likely re-surface Task 880's gap from a different angle.
+     Cross-reference `docs/rendertarget-support.md` §9 rather than re-diagnosing from scratch when
+     that happens.
+   - Files: `include/Microsoft/Xna/Framework/Graphics/Viewport.hpp`,
+     `src/Microsoft/Xna/Framework/Graphics/Viewport.cpp`, FNA's `Graphics/Viewport.cs`.
+   - Verification: unit tests for `Project`/`Unproject` with known matrices (mirrors Tasks
+     342/343's own goals — check if one well-designed test satisfies multiple planned tasks,
+     matching this project's own established precedent, e.g. Task 323's `CullMode` test).
 
 2. **`GRAPHICS_TASKS.md` Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`**
    - Goal: found this session (Task 339) — FNA's real MRT limit is 4 simultaneous targets
@@ -572,38 +579,33 @@ Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
-Current status: Phases 1-38 are fully complete. Phase 39 (RenderTarget2D and RenderTargetCube
-completeness, GRAPHICS_TASKS.md Tasks 331-340) is open, Tasks 331-339 done, Task 340 next (the
-LAST task in Phase 39). EasyGL: 3316/3319 pass (3 documented pre-existing failures, unchanged -
-Task 339 was audit-only, no code changed). Vulkan: 3238/3253 pass (13 documented failures + 1
-reconfirmed-flaky unrelated CueTest, unchanged). Bgfx: 3223/3224 pass (1 reconfirmed-flaky
-unrelated CueTest, unchanged). Caution: run all 3 backends' full ctest suites sequentially, never
-concurrently (see NEXT.md §2); if a single run shows an anomaly beyond the documented list, re-run
-in isolation before treating it as a regression.
+Current status: Phases 1-39 are FULLY COMPLETE. Phase 40 (Viewport, DisplayMode, and adapter
+behavior, GRAPHICS_TASKS.md Tasks 341-350) is open, Task 341 next. EasyGL: 3316/3319 pass (3
+documented pre-existing failures). Vulkan: 3238/3253 pass (13 documented failures + 1
+reconfirmed-flaky unrelated CueTest). Bgfx: 3223/3224 pass (1 reconfirmed-flaky unrelated CueTest).
+No code changed since these were last measured (Tasks 339/340 were both docs-only). Caution: run
+all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2); if a single
+run shows an anomaly beyond the documented list, re-run in isolation before treating it as a
+regression.
 
-Task 339 (just done) was an audit-only closure (no code changed, mirrors Task 330's precedent).
-Read FNA's actual SetRenderTargets source and confirmed it does ZERO explicit validation of
-format/size/count mismatches between MRT targets - it computes dimensions from renderTargets[0]
-only and delegates everything to the native driver. "Reject invalid combinations" simply isn't an
-XNA-level behavior to replicate. Confirmed CNA's own 3 backends behave the same way (no CNA-level
-validation, delegate to GL/Vulkan/bgfx) - consistent with FNA, not a divergence. Found one real,
-minor, new divergence: FNA's actual MRT cap is MAX_RENDERTARGET_BINDINGS=4 (implicit, via a
-fixed-size array that would throw past 4); CNA's EasyGL/Bgfx silently cap at 8 (no throw), Vulkan
-has no CNA-level cap at all. Tracked as new Task 881, not fixed (no test exercises >2 targets, low
-priority). Correctly did NOT touch the already-tracked, off-limits EasyGL_MRT_TwoAttachments
-(Task 145) bug - even the basic same-size 2-target MRT case is already known-broken on EasyGL,
-which blocks any meaningful deeper mismatched-format verification. No new test - nothing in FNA to
-assert against, and the one concrete regression-worthy angle (Task 881's cap divergence) has no
-existing >2-target test infrastructure to extend.
+Task 340 (just done) CLOSED PHASE 39. Wrote docs/rendertarget-support.md, a full Phase 39 synthesis
+(mirroring docs/rasterizerstate-support.md's Phase 38 closer) covering Tasks 331-340: 2 real EasyGL
+fixes shipped (Task 336 mip support, Task 337 MSAA support - both Vulkan/Bgfx tracked as Tasks
+878/879), 1 shared-code fix (Task 338's Viewport/ScissorRectangle reset on RT switch, though
+Viewport's own GPU effect remains unimplemented per Task 880), and the per-backend MRT limits
+table (EasyGL/Bgfx cap at 8, Vulkan uncapped at the CNA level, none matching FNA's real 4-target
+limit - Task 881). Docs-only, no code changed. This completes Tasks 331-340 in full.
 
-Next task: GRAPHICS_TASKS.md Task 340 - document MRT limits for each backend (the LAST task in
-Phase 39!). Write up each backend's actual max-simultaneous-color-attachments limit - most of the
-research is already done from Task 339: EasyGL/Bgfx cap at 8 (hardcoded, silently truncates beyond
-that), Vulkan has no CNA-level cap (relies on the raw VkPhysicalDeviceLimits::maxColorAttachments),
-and none of the 3 match FNA's real MAX_RENDERTARGET_BINDINGS=4 (tracked separately as Task 881).
-Write a synthesis doc for Phase 39 overall (mirroring docs/rasterizerstate-support.md for Phase
-38), since closing this completes Tasks 331-340 and the whole RenderTarget2D/RenderTargetCube
-phase. Files: docs/*.md (check docs/graphics-backend-feature-matrix.md first), GRAPHICS_TASKS.md.
-Update GRAPHICS_TASKS.md and NEXT.md after finishing. Also consider what Phase 40 (or whatever
-comes next) should be, since Phase 39 will be fully closed.
+Next task: GRAPHICS_TASKS.md Task 341 - audit Viewport API against FNA (opens Phase 40). Read
+FNA's Viewport.cs line-by-line and audit CNA's Viewport struct/class against it - property
+surface, Project/Unproject methods (the task's own hint), constructors, Bounds/AspectRatio/
+TitleSafeArea. This DIRECTLY CONNECTS to Task 880 (found in Phase 39): GraphicsDevice.Viewport has
+zero GPU backend wiring on all 3 backends. Task 341's own scope is the math/property API surface,
+not the GPU-wiring gap specifically, but Tasks 344/349 later in this same phase ("verify viewport
+min/max depth behavior", "verify viewport reset after backbuffer resize") will very likely
+re-surface Task 880's gap from a different angle - cross-reference docs/rendertarget-support.md §9
+rather than re-diagnosing from scratch when that happens. Files:
+include/Microsoft/Xna/Framework/Graphics/Viewport.hpp,
+src/Microsoft/Xna/Framework/Graphics/Viewport.cpp, FNA's Graphics/Viewport.cs.
+Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
