@@ -874,6 +874,217 @@ namespace
         return data;
     }
 
+    // Same layout as BuildLongXsbFixtureBytes, but the simple cue's sound code deliberately
+    // points past the sound table instead of at the one real sound -- simulates corrupt/
+    // malformed content where a cue's sound reference can't resolve. Regression fixture for
+    // P9-XACT-014 (the parser used to silently alias an unresolvable code onto sound index 0).
+    std::vector<uint8_t> BuildUnresolvableSoundXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t bogusSoundCode     = soundOffset + 1000; // matches no real sound
+        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "UnresolvableSoundCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "UnresolvableSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
+
+        // The one real sound in the bank -- if the bug were present, the cue below would
+        // silently resolve to this sound instead of nothing.
+        AppendU8(data, 0);    // flags
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+
+        AppendU8(data, 0);
+        AppendU32(data, bogusSoundCode);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    // Same layout as BuildLongXsbFixtureBytes, but the wave bank *name* the one real sound
+    // references ("GhostWaveBank") is never actually registered with the AudioEngine (no
+    // matching WaveBank object exists) -- simulates a SoundBank prepared/played before its
+    // dependent WaveBank has been loaded, or one that failed to load entirely. Regression
+    // fixture for P9-XACT-014/015.
+    std::vector<uint8_t> BuildMissingWaveBankXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "MissingWaveBankCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "MissingWaveBankSoundBank", bankNameSize);
+        AppendPadded(data, "GhostWaveBank", 64); // never registered with SharedEngine()
+
+        AppendU8(data, 0);    // flags
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx (index 0 -> "GhostWaveBank")
+
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    // Same layout as BuildLongXsbFixtureBytes, but the one real sound's waveIdx is out of range
+    // for LongWaveBank (which has exactly 1 entry, index 0) -- simulates a corrupt/malformed
+    // wave reference within an otherwise-valid, registered wave bank. Regression fixture for
+    // P9-XACT-014/015.
+    std::vector<uint8_t> BuildMissingWaveIndexXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "MissingWaveIndexCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "MissingWaveIndexSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
+
+        AppendU8(data, 0);    // flags
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 999); // waveIdx -- out of range, LongWaveBank has exactly 1 entry
+        AppendU8(data, 0);    // wbIdx
+
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
     WaveBank& SharedLongWaveBank()
     {
         static WaveBank wb(&SharedEngine(), WriteFixture(
@@ -1003,6 +1214,31 @@ namespace
         (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
         static SoundBank bank(&SharedEngine(), WriteFixture(
             "cna_cue_test", "filter.xsb", BuildFilterXsbFixtureBytes()));
+        return bank;
+    }
+
+    SoundBank& SharedUnresolvableSoundBank()
+    {
+        (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&SharedEngine(), WriteFixture(
+            "cna_cue_test", "unresolvable.xsb", BuildUnresolvableSoundXsbFixtureBytes()));
+        return bank;
+    }
+
+    // Deliberately does NOT depend on SharedLongWaveBank() (or any WaveBank) -- the whole point
+    // is that "GhostWaveBank" is never registered with SharedEngine().
+    SoundBank& SharedMissingWaveBankBank()
+    {
+        static SoundBank bank(&SharedEngine(), WriteFixture(
+            "cna_cue_test", "missing_wavebank.xsb", BuildMissingWaveBankXsbFixtureBytes()));
+        return bank;
+    }
+
+    SoundBank& SharedMissingWaveIndexBank()
+    {
+        (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&SharedEngine(), WriteFixture(
+            "cna_cue_test", "missing_waveindex.xsb", BuildMissingWaveIndexXsbFixtureBytes()));
         return bank;
     }
 
@@ -1717,4 +1953,45 @@ TEST(CueTest, PlaySoundWithNoFilterDataHasNoActiveFilter)
     int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
     SoundEffectInstanceTestAccess::GetFilterState(*inst, kind, frequency, oneOverQ);
     EXPECT_EQ(kind, 0); // FilterState::Kind::None
+}
+
+// P9-XACT-014: end-to-end regression for the fix that stopped an unresolvable sound code from
+// silently aliasing onto sound index 0. "UnresolvableSoundCue" (BuildUnresolvableSoundXsbFixtureBytes)
+// is a valid, name-resolvable cue -- GetCue() must succeed -- but its sound code doesn't match
+// the bank's one real sound. Play() must reach the same "no sound found" branch a genuinely
+// empty sound table takes (state becomes Playing, no SoundEffectInstance spawned), not silently
+// play the unrelated real sound that happens to be sound index 0 in this bank.
+TEST(CueTest, PlayWithUnresolvableSoundCodeSpawnsNoInstance)
+{
+    auto cue = std::unique_ptr<Cue>(SharedUnresolvableSoundBank().GetCue("UnresolvableSoundCue"));
+    cue->Play();
+
+    EXPECT_TRUE(cue->getIsPlayingProperty());
+    EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
+}
+
+// P9-XACT-015: a sound referencing a wave bank name that isn't registered with the AudioEngine
+// (e.g. loaded before its dependent WaveBank, or a WaveBank that failed to load) must not crash
+// -- Cue::Play()'s FindWaveBank()==nullptr guard already handles this; this pins the behavior
+// down with a test. Matches the "no sound found" shape: cue transitions to Playing, no instance
+// spawned for the unresolvable wave.
+TEST(CueTest, PlayWithUnregisteredWaveBankSpawnsNoInstance)
+{
+    auto cue = std::unique_ptr<Cue>(SharedMissingWaveBankBank().GetCue("MissingWaveBankCue"));
+    cue->Play();
+
+    EXPECT_TRUE(cue->getIsPlayingProperty());
+    EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
+}
+
+// P9-XACT-015: a sound's waveIdx that's out of range for its (real, registered) wave bank must
+// not crash -- WaveBank::GetSoundEffect()'s bounds check already returns nullptr for this; this
+// pins the behavior down with a test.
+TEST(CueTest, PlayWithOutOfRangeWaveIndexSpawnsNoInstance)
+{
+    auto cue = std::unique_ptr<Cue>(SharedMissingWaveIndexBank().GetCue("MissingWaveIndexCue"));
+    cue->Play();
+
+    EXPECT_TRUE(cue->getIsPlayingProperty());
+    EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
 }

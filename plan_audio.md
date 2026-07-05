@@ -1981,8 +1981,51 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   and continuous per-tick re-evaluation are the two remaining unsupported pieces) and one covering
   the upstream FAudio band-pass-unreachable bit-decode quirk (replicated as-is, not corrected).
   Sound-level DSP/reverb's no-op status was already documented pre-existingly and is unchanged.
-* [ ] P9-XACT-014 Ensure missing wave, missing sound, and invalid cue index behavior matches XNA/FNA as closely as possible.
-* [ ] P9-XACT-015 Add tests for missing wave/cue behavior.
+* [x] P9-XACT-014 Ensure missing wave, missing sound, and invalid cue index behavior matches XNA/FNA as closely as possible.
+  *Note:* Audited `SoundBank::GetCue`/`Cue::Play()` against FNA's `SoundBank.cs` and FAudio's
+  `FACT_internal.c`/`FACT.c`. **Invalid cue *name*** already matched FNA exactly pre-existing
+  (`FACTSoundBank_GetCueIndex` returning `FACTINDEX_INVALID` -> FNA's `InvalidOperationException
+  ("Invalid cue name!")` == CNA's `SoundBank::GetCue`/`PlayCue` throwing the same, already tested
+  by `GetCueInvalidNameThrowsInvalidOperation`/`PlayCueInvalidNameThrowsInvalidOperation`). Found
+  and fixed a **real bug** in the different, unaudited case the task's own wording targets --
+  *internal* unresolvable references within an otherwise name-valid cue (which never happens with
+  real XACT-tool-built content, only corrupt/malformed data, since FNA/FACT has no C# equivalent
+  to cite -- native FACT just does raw pointer arithmetic on sound codes as absolute file offsets,
+  so there's no "lookup" step to fail the way CNA's `soundCodeMap` translation layer has one).
+  `XactParser.cpp`'s 5 sound-code-to-index resolution sites (`ParseXsb`'s simple-cue loop,
+  complex-cue single-sound branch, complex-cue variation-table fallback, and the SOUND/INTERACTIVE
+  variation-entry branches) all fell back to `soundIndex = 0` whenever a cue/entry's sound code
+  didn't match any parsed sound -- **silently aliasing an unresolvable reference onto whichever
+  sound happens to be first in the bank and playing it**, instead of resolving to "no sound found"
+  (the behavior `Cue::Play()` already has, and already gets right, for a `soundIndex` that's
+  genuinely out of range against an empty/undersized `sounds` array). Fixed with a new
+  `kInvalidSoundIndex = 0xFFFFFFFFu` sentinel used at all 5 sites instead of `0` -- relies entirely
+  on `Cue::Play()`'s pre-existing `soundIndex < xsb->sounds.size()` bounds checks to treat it as
+  unresolvable, so no consumer-side code needed changing. Confirmed via `git stash` that a real
+  `SoundEffectInstance` (a non-null pointer) actually gets spawned playing the wrong sound
+  pre-fix, not just a failed assertion -- this was a genuine "wrong audio plays" defect, not a
+  theoretical one. **Missing/unregistered wave bank** and **out-of-range wave index within a real
+  wave bank** were both already correct pre-existing (`Cue::Play()`'s `FindWaveBank()==nullptr`
+  guard; `WaveBank::GetSoundEffect`'s `waveIndex >= entries.size()` bounds check) but had zero test
+  coverage -- see `P9-XACT-015`.
+* [x] P9-XACT-015 Add tests for missing wave/cue behavior.
+  *Note:* `XactParserTest.SimpleCueWithUnresolvableSoundCodeDoesNotAliasToSoundZero` (parser-level,
+  asserts `soundIndex >= sounds.size()` rather than pinning the exact sentinel value, so the test
+  stays valid even if the sentinel's concrete value ever changes). Three new end-to-end
+  `CueTest`s, each with its own minimal real-`WaveBank`-backed fixture: `PlayWithUnresolvableSoundCodeSpawnsNoInstance`
+  (`BuildUnresolvableSoundXsbFixtureBytes`, a cue whose sound code doesn't match the bank's one
+  real sound), `PlayWithUnregisteredWaveBankSpawnsNoInstance` (`BuildMissingWaveBankXsbFixtureBytes`,
+  a sound referencing a wave bank name -- "GhostWaveBank" -- deliberately never registered with
+  `SharedEngine()`), `PlayWithOutOfRangeWaveIndexSpawnsNoInstance` (`BuildMissingWaveIndexXsbFixtureBytes`,
+  a sound's `waveIdx=999` against `LongWaveBank`'s real single entry). All three assert
+  `getIsPlayingProperty()` is still true (matches FACT's "silent, not stopped/errored" semantics)
+  and `CueTestAccess::ActiveInstance(*cue, 0) == nullptr`. Verified via `git stash` (`XactParser.cpp`
+  only, the two already-correct wave-bank/wave-index paths needed no source change): the
+  unresolvable-sound-code test fails to compile isn't the mechanism here -- it fails a real
+  assertion (`ActiveInstance` returns a genuine non-null instance pre-fix), stronger proof than a
+  compile-time dependency. Full suite: 3230/3232 passing (2 expected hardware-skip), up from
+  3228/3230; audio-scoped subset 324/324, up from 322. Verified clean under a full ASan+UBSan
+  build of the audio suite.
 
 ## P9-3D — 3D audio fidelity
 

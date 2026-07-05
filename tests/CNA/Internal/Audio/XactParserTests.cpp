@@ -1327,6 +1327,88 @@ TEST(XactParserTest, DspBlockIsSkippedByCodeCountNotByLengthField)
     EXPECT_EQ(xsb.sounds[1].waves[0].waveIndex, 99u);
 }
 
+// P9-XACT-014: a simple cue's sound code that doesn't match any parsed sound (corrupt/malformed
+// data -- a real XACT-tool-built file's codes always resolve, since they're generated from the
+// very same sound table) used to silently fall back to soundIndex 0, aliasing onto whichever
+// sound happens to be first in the bank instead of resolving to nothing. `soundIndex` must come
+// out of range (>= sounds.size()) so Cue::Play()'s existing bounds check treats it as
+// unresolvable, matching the already-established "no sound found -> plays silently" behavior
+// (BuildXsbFixtureBytes's own comment) instead of substituting the wrong sound.
+TEST(XactParserTest, SimpleCueWithUnresolvableSoundCodeDoesNotAliasToSoundZero)
+{
+    constexpr uint32_t headerSize   = 74;
+    constexpr uint32_t bankNameSize = 64;
+    constexpr uint32_t soundOffset  = headerSize + bankNameSize; // 138
+    constexpr uint32_t soundSize    = 12; // simple (non-complex) sound, no RPC/DSP block
+    const uint32_t cueSimpleOffset  = soundOffset + 2 * soundSize;
+    // Deliberately bogus: past both sound entries, matches no real soundCodes[i] value.
+    const uint32_t bogusSoundCode   = soundOffset + 2 * soundSize + 1000;
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'S', 'D', 'B', 'K' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU16(data, 46); // contentVersion
+    AppendU16(data, 0);  // toolVersion
+    AppendU16(data, 0);  // CRC
+    for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+    AppendU8(data, 0);   // platform
+
+    AppendU16(data, 1); // cueSimpleCount
+    AppendU16(data, 0); // cueComplexCount
+    AppendU16(data, 0); // unknown
+    AppendU16(data, 0); // cueTotalAlign
+    AppendU8(data, 0);  // wavebankCount
+    AppendU16(data, 2); // soundCount
+    AppendU16(data, 0); // cueNameLength
+    AppendU16(data, 0); // unknown
+
+    AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+    AppendS32(data, -1); // cueComplexOffset
+    AppendS32(data, -1); // cueNameOffset
+    AppendS32(data, 0);  // unknown
+    AppendS32(data, -1); // variationOffset
+    AppendS32(data, 0);  // transitionOffset
+    AppendS32(data, -1); // wavebankNameOffset
+    AppendS32(data, 0);  // cueHashOffset
+    AppendS32(data, -1); // cueNameIndexOffset (unused, totalCues would need it, but we read the
+                         // cue struct directly, not by name)
+    AppendS32(data, static_cast<int32_t>(soundOffset));
+
+    AppendPadded(data, "TestSoundBank", bankNameSize);
+
+    // Sound 0: distinctive wave reference (so a test could tell if a cue wrongly resolved here).
+    AppendU8(data, 0x00);  // flags
+    AppendU16(data, 0);    // categoryIndex
+    AppendU8(data, 0xFF);  // volume byte
+    AppendS16(data, 0);    // pitchCents
+    AppendU8(data, 0);     // priority
+    AppendU16(data, 0);    // soundLength (skipped)
+    AppendU16(data, 77);   // waveIdx
+    AppendU8(data, 3);     // wbIdx
+
+    // Sound 1: another distinctive wave reference.
+    AppendU8(data, 0x00);
+    AppendU16(data, 0);
+    AppendU8(data, 0xFF);
+    AppendS16(data, 0);
+    AppendU8(data, 0);
+    AppendU16(data, 0);
+    AppendU16(data, 88);
+    AppendU8(data, 4);
+
+    // Simple cue: flags + bogus sound code.
+    AppendU8(data, 0);
+    AppendU32(data, bogusSoundCode);
+
+    const XsbData xsb = ParseXsb(data);
+
+    ASSERT_EQ(xsb.sounds.size(), 2u);
+    ASSERT_EQ(xsb.cues.size(), 1u);
+    EXPECT_TRUE(xsb.cues[0].isSingleSound);
+    EXPECT_GE(xsb.cues[0].soundIndex, xsb.sounds.size())
+        << "unresolvable sound code must not alias onto sound 0 (or any real sound)";
+}
+
 TEST(XactParserTest, VariationTypeInteractiveParsesSixteenByteEntry)
 {
     const XsbData xsb = ParseXsb(BuildXsbWithVariationOfType(3));

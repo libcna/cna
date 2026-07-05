@@ -112,6 +112,16 @@ namespace CNA::Internal::Audio
     static constexpr uint8_t  SOUND_FLAG_HAS_DSP       = 0x10;
     static constexpr uint8_t  CUE_FLAG_SINGLE_SOUND    = 0x04;
 
+    // P9-XACT-014: sentinel for "this cue/variation-entry's sound code didn't resolve to any
+    // parsed sound" (a corrupt/malformed .xsb -- every code a real XACT-tool-built file emits
+    // always resolves, since `soundCodeMap` is built from the exact same file's sound entries).
+    // Deliberately NOT 0 -- falling back to 0 would silently alias an unresolvable reference onto
+    // whatever sound happens to be first in the bank and play it, instead of playing nothing.
+    // `XsbCue`/`XsbVariEntry`'s `soundIndex` bounds checks in Cue.cpp (`< xsb->sounds.size()`)
+    // already treat any out-of-range value as "no sound" -- this sentinel just relies on that
+    // same path instead of adding a new one.
+    static constexpr uint32_t kInvalidSoundIndex = 0xFFFFFFFFu;
+
     static constexpr uint8_t  FACTEVENT_STOP                        = 0;
     static constexpr uint8_t  FACTEVENT_PLAYWAVE                    = 1;
     static constexpr uint8_t  FACTEVENT_PLAYWAVETRACKVARIATION      = 3;
@@ -883,7 +893,7 @@ namespace CNA::Internal::Audio
 
                 result.cues[cueIdx].isSingleSound = true;
                 auto it = soundCodeMap.find(sbCode);
-                result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : 0;
+                result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : kInvalidSoundIndex;
                 result.cues[cueIdx].varIndex   = 0;
             }
         }
@@ -911,7 +921,7 @@ namespace CNA::Internal::Audio
                 if (isSingle)
                 {
                     auto it = soundCodeMap.find(sbCode);
-                    result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : 0;
+                    result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : kInvalidSoundIndex;
                     result.cues[cueIdx].varIndex   = 0;
                 }
                 else
@@ -960,7 +970,7 @@ namespace CNA::Internal::Audio
                                 entry.weightMin     = vc.u8();
                                 entry.weightMax     = vc.u8();
                                 auto sit = soundCodeMap.find(code);
-                                entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : 0;
+                                entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : kInvalidSoundIndex;
                             }
                             else if (var.type == 3) // INTERACTIVE
                             {
@@ -972,7 +982,7 @@ namespace CNA::Internal::Audio
                                 // which has no XNA-public equivalent on Cue -- read and discarded.
                                 vc.u32(); // linger
                                 auto sit = soundCodeMap.find(code);
-                                entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : 0;
+                                entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : kInvalidSoundIndex;
                             }
                             else
                             {
@@ -997,7 +1007,7 @@ namespace CNA::Internal::Audio
                         // Fallback: treat as single sound
                         result.cues[cueIdx].isSingleSound = true;
                         auto it = soundCodeMap.find(sbCode);
-                        result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : 0;
+                        result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : kInvalidSoundIndex;
                     }
                 }
             }
