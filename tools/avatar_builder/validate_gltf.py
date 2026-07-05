@@ -12,7 +12,8 @@ miss, rather than silently accepting a hollow/broken export:
      docstring for why plain `python3` can import it). Extra joints beyond those 19
      (e.g. the `neutral_bone` Blender's exporter adds for zero-weight vertices — see
      README.md) are allowed and reported, not treated as a failure.
-  3. Both the `Stand0` and `Wave` animations are present (Task 11.6).
+  3. `Stand0`/`Wave` (Task 11.6) and `Stand1`/`Clap`/`Celebrate` (Task 11.15) animations
+     are all present.
   4. Both the `Smile` and `Blink` shape keys (glTF morph targets) are present on some
      mesh (Task 11.4) — checked via that mesh's `extras["targetNames"]`, which is where
      Blender's glTF exporter records shape-key names for a mesh's morph targets.
@@ -37,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_skeleton  # noqa: E402  (bpy-free: see that module's docstring)
 
 REQUIRED_BONE_NAMES = {name for name, *_rest in generate_skeleton.BONES}
-REQUIRED_ANIMATIONS = {"Stand0", "Wave"}
+REQUIRED_ANIMATIONS = {"Stand0", "Wave", "Stand1", "Clap", "Celebrate"}
 REQUIRED_SHAPE_KEYS = {"Smile", "Blink"}
 
 
@@ -96,7 +97,7 @@ def _check_shape_keys(gltf):
 CHECKS = (
     ("non-empty mesh", _check_nonempty_mesh),
     ("skin/joint names", _check_skin_joints),
-    ("Stand0/Wave animations", _check_animations),
+    ("Stand0/Stand1/Wave/Clap/Celebrate animations", _check_animations),
     ("Smile/Blink shape keys", _check_shape_keys),
 )
 

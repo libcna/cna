@@ -87,12 +87,13 @@ bone-retargeting step at all.
 - [x] Task 11.9 — this file: usage instructions, design rationale, per-script status/placeholder notes.
 - [x] Task 11.13 — parametric body variation (`height_scale`/`shoulder_width_scale`/`head_scale`), see below.
 - [x] Task 11.14 — additional hair styles / clothing variants, plus `generate_wardrobe.py` for standalone attachable pieces, see below.
+- [x] Task 11.15 — additional animation presets (`Stand1`/`Clap`/`Celebrate`), see below.
 
 **Phase 11a ("one male + one female avatar that draws") is functionally complete as of
-Task 11.9. Phase 11b (real C++ engine integration) is complete as of Task 11.12** — see
-`docs/avatar-real-rendering-ext.md`. Phase 11c (procedural variety) is underway; Tasks
-11.13/11.14 are done, Task 11.15 (more animation variety) is not started — see
-`plan_net.md`.
+Task 11.9. Phase 11b (real C++ engine integration) is complete as of Task 11.12. Phase
+11c (procedural variety) is complete as of Task 11.15** — see
+`docs/avatar-real-rendering-ext.md` and `plan_net.md` for full detail. Phase 11d
+(Task 11.16, optional/future, not scheduled) is all that remains.
 
 Full task detail: `plan_net.md` Phase 11 ("Procedural Avatar Asset Generator").
 
@@ -293,25 +294,75 @@ for `Head`, and has the `Hair` material assigned.
 
 ## Placeholder animations (`generate_animations.py`)
 
-Two Blender Actions on `CNAAvatarSkeleton`, named to match `AvatarAnimationPreset`
-exactly (see `AvatarAnimationPresetToClipNameEXT`):
+Five Blender Actions on `CNAAvatarSkeleton`, named to match `AvatarAnimationPreset`
+exactly (see `AvatarAnimationPresetToClipNameEXT`). Task 11.6 authored the first two;
+Task 11.15 added the other three, working toward covering more of
+`AvatarAnimationPreset`'s 31 values (5/31 is still a small fraction — this remains
+placeholder motion, not a claim of full coverage):
 
 - **`Stand0`** (idle, 90 frames, loops — frame 1 and frame 90 are identical): a subtle
   `Hips` bob (+-0.01 m) and `Spine1` rock (+-2 deg).
+- **`Stand1`** (a second idle, 100 frames, loops): deliberately shaped differently from
+  `Stand0` so the two are never confusable — a slow side-to-side weight shift (`Hips`
+  sways in X, not `Stand0`'s up/down Z bob) with a counter-rotating torso twist
+  (`Spine1` rotates around its own local Y — its length axis, a genuine twist for this
+  vertical bone — not `Stand0`'s local-X front/back rock).
 - **`Wave`** (60 frames, plays once): `UpperArm.R` rotates to raise the arm, then
   `LowerArm.R` folds the elbow back and forth a few times before both return to rest.
+- **`Clap`** (48 frames, plays once): both arms raise together to roughly chest height,
+  then both forearms oscillate their fold angle four times in sync — a crude, symmetric
+  approximation of clapping (arms coming up in front of the body and pulsing together),
+  not a literal hands-meet-at-center gesture; this cylinder-and-bone rig has no IK to aim
+  the hands at each other.
+- **`Celebrate`** (60 frames, plays once): both arms raise together to the same angle
+  Wave already uses for `UpperArm.R` (see the gotcha below for why a bigger, untested
+  angle was tried first and rejected) and hold, while `Hips` bounces up twice — a
+  triumphant "arms up" pose with a little pump to it.
 
-Both are simple keyframed bone rotations — no motion capture, no external clip source —
-authored directly against the Task 11.1 bone names, so there is no retargeting step.
+All five are simple keyframed bone rotations — no motion capture, no external clip
+source — authored directly against the Task 11.1 bone names, so there is no retargeting
+step.
 
-**A real gotcha, worth knowing before adding a third animation:** the first `Wave`
-attempt keyframed `LowerArm.R`'s rotation on its local Y axis, which is the bone's own
-head-to-tail length axis — rotating a round cylinder around its own length axis is an
-invisible twist. This produced a "working" action (nonzero frame range, no errors) that
-did *nothing visible* when rendered. Caught only by actually rendering it and comparing
-frames. Local X (or Z, depending on the bone's orientation/roll) is what visibly bends a
-limb — verify any new bone-rotation animation by rendering it, not just by checking that
-keyframes exist.
+**A real gotcha, worth knowing before adding a third animation (Task 11.6):** the first
+`Wave` attempt keyframed `LowerArm.R`'s rotation on its local Y axis, which is the
+bone's own head-to-tail length axis — rotating a round cylinder around its own length
+axis is an invisible twist. This produced a "working" action (nonzero frame range, no
+errors) that did *nothing visible* when rendered. Caught only by actually rendering it
+and comparing frames. Local X (or Z, depending on the bone's orientation/roll) is what
+visibly bends a limb — verify any new bone-rotation animation by rendering it, not just
+by checking that keyframes exist.
+
+**A second, sneakier gotcha (Task 11.15), worth knowing before mirroring any single-arm
+gesture onto both arms:** `Wave`'s `UpperArm.R`/`LowerArm.R` convention does not mirror
+onto `UpperArm.L`/`LowerArm.L` with a single consistent rule, and testing bone-by-bone
+in isolation gives a *wrong* answer for one of the two joints. `UpperArm.L/R`'s "raise
+the arm" axis (local Z) needs an **opposite-signed** angle between `.L` and `.R` for the
+same physical motion, confirmed whether tested alone or combined with a forearm fold.
+`LowerArm.L/R`'s "fold the elbow" axis (local X) tests as opposite-signed too **if posed
+alone** (matching upper arm at T-pose rest) — but once the matching upper arm is
+*actually raised* (the real context this rig is ever posed in), both sides need the
+**same** sign instead. Why: a child bone's local rotation composes with its parent's
+*current* world transform, not its rest transform, so an isolated single-bone test
+silently assumes the parent is still at rest — which stops being true the moment the
+arm is actually raised, and the same local angle then swings a different way in world
+space. `Celebrate`'s first attempt also used an untested, much bigger raise angle
+(150°) on the theory that "bigger raise = more dramatic overhead pose" — rendered from a
+camera angle that made it look plausible at first glance, but a clearer camera position
+(elevated, angled down at the figure) revealed it didn't read as an overhead raise at
+all. Reusing `Wave`'s own already-verified 80° raise magnitude for both arms fixed it.
+**The general lesson, stated once so it doesn't need re-learning:** verify a new pose
+empirically, in the *actual combined pose* a call site uses (both joints posed together,
+a full render from more than one camera angle) — not bone-by-bone in isolation, and not
+from a single camera angle that happens to look plausible. Don't assume any of this
+generalizes to bones this script hasn't yet mirrored (`UpperLeg`/`LowerLeg`, etc.)
+without the same empirical check. `_raise_upper_arm`/`_fold_lower_arm` in
+`generate_animations.py` encapsulate the verified conventions so future animations reuse
+them instead of re-deriving signs from scratch.
+
+**Consistent with the known elbow/sleeve tear** (see "Bend-artifact check" below):
+posing the clothed avatar through `Clap`'s peak fold shows the same forearm/hand
+separating from the shirt sleeve that `Wave` already showed — the same automatic-weights
+limitation, not a new or worse issue introduced by this task.
 
 `build_animations(armature_obj)` is importable the same way as the other builders, for
 reuse by `generate_avatar.py` (Task 11.7).
@@ -327,9 +378,10 @@ separate from the shirt sleeve (and slightly from each other) at both fold extre
 tested. This is the automatic-weights limitation Task 11.2 always expected, now
 *confirmed* rather than assumed. **Still open, not fixed:** a manual weight-painting
 correction pass at the elbows (and likely knees/shoulders too, untested at comparable
-fold angles) is needed before this rig is presentable in motion. Out of scope for Tasks
-11.1–11.8's "functional, not polished" pipeline milestone — revisit when polish work is
-prioritized (`plan_net.md` Phase 11c).
+fold angles) is needed before this rig is presentable in motion. Out of scope for
+Phase 11a/11b/11c's "functional, not polished" pipeline milestones (confirmed still
+present under `Clap`'s peak fold too, Task 11.15) — revisit when polish work is
+prioritized.
 
 ## Orchestration and export (`generate_avatar.py` + `export_gltf.py`)
 
@@ -532,7 +584,7 @@ hollow/broken export:
 2. Some skin's joints cover all 19 canonical bone names from `generate_skeleton.BONES`
    (imported directly, not duplicated — see below). Extra joints (e.g. `neutral_bone`)
    are reported as informational, not treated as a failure.
-3. Both `Stand0` and `Wave` animations are present.
+3. All five animations are present: `Stand0`/`Wave` (Task 11.6), `Stand1`/`Clap`/`Celebrate` (Task 11.15).
 4. Both `Smile` and `Blink` appear in some mesh's `extras["targetNames"]` (where
    Blender's glTF exporter records shape-key/morph-target names).
 

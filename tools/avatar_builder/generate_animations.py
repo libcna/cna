@@ -1,16 +1,40 @@
 #!/usr/bin/env python3
-"""Builds CNA's two placeholder avatar animations — `Stand0` (idle) and `Wave` — as
-Blender Actions keyframed directly on the Task 11.1 `CNAAvatarSkeleton` bones. Simple
-bone rotations only: no motion capture, no external clip source. Because this script
-shares the Task 11.1 bone names by construction (it poses `generate_skeleton.BONES`
-directly), there is no retargeting step — every keyframe just names a bone from that
-list.
+"""Builds CNA's placeholder avatar animations as Blender Actions keyframed directly on
+the Task 11.1 `CNAAvatarSkeleton` bones. Simple bone rotations only: no motion capture,
+no external clip source. Because this script shares the Task 11.1 bone names by
+construction (it poses `generate_skeleton.BONES` directly), there is no retargeting
+step — every keyframe just names a bone from that list.
+
+Task 11.6 authored `Stand0` (idle) and `Wave`. Task 11.15 adds three more, working
+toward covering more of `AvatarAnimationPreset`'s 31 values (still a small fraction —
+these remain placeholder motion, not a claim of full coverage): `Stand1` (a second,
+differently-shaped idle), `Clap`, and `Celebrate`.
 
 Action names must match `AvatarAnimationPreset` enumerator names exactly (see
 `AvatarAnimationPresetToClipNameEXT` in
 include/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.hpp) since
 that is the lookup key `AvatarRenderer::DrawRealEXT` uses against a loaded
-`SkinnedModelEXT`'s clips — `Stand0` and `Wave` already are exact matches.
+`SkinnedModelEXT`'s clips — `Stand0`/`Stand1`/`Wave`/`Clap`/`Celebrate` already are exact
+matches.
+
+**A real, non-obvious empirical finding from Task 11.15 (verified by rendering, not
+derived analytically — see `_raise_upper_arm`/`_fold_lower_arm` below):** mirroring an
+arm gesture from the `.R` bones (as Task 11.6 authored for `Wave`) onto the matching
+`.L` bones is NOT just "reuse the same signed angle" for every bone, and worse, testing
+each joint *in isolation* gives a wrong answer for one of the two joints involved.
+`UpperArm.L/R`'s "raise the arm up and back" axis (local Z) needs an **opposite-signed**
+angle between `.L` and `.R` for the same physical motion (`UpperArm.R` raise = `Z(-A)`,
+`UpperArm.L` raise = `Z(+A)`), confirmed consistently whether tested alone or combined
+with a forearm fold. `LowerArm.L/R`'s "fold the elbow" axis (local X) tests as
+opposite-signed too **if posed alone** (T-pose otherwise) — but once the matching
+`UpperArm` is actually raised (the real context this rig is posed in), both sides need
+the **same** sign instead. The reason: a child bone's local rotation composes with its
+parent's *current* world transform, not its rest transform, so the same local angle can
+swing a different way in world space once the parent has already rotated — an isolated
+single-bone test silently assumes the parent is still at rest, which does not hold once
+an arm is actually raised. Always re-verify empirically in the actual combined pose a
+new call site uses, not bone-by-bone in isolation, and don't assume this pattern
+generalizes to bones this script hasn't yet mirrored (`UpperLeg`/`LowerLeg`, etc.).
 
 Offline, one-time content-authoring tool — not part of the C++ build, never run by CNA
 at runtime. Run headless via Blender:
@@ -67,6 +91,37 @@ def _keyframe_location(armature_obj, bone_name, frame, location_xyz):
     pb.keyframe_insert(data_path="location", frame=frame)
 
 
+def _raise_upper_arm(armature_obj, side, frame, angle_rad):
+    """Keyframes UpperArm.<side>'s local-Z rotation to swing the arm up/back from its
+    T-pose rest, the same axis Task 11.6's Wave uses for UpperArm.R. Empirically
+    confirmed (Task 11.15, not derived analytically): `.L` needs the OPPOSITE sign from
+    `.R` for the same physical raise, since the two bones' local frames mirror rather
+    than match — `side="R"` keyframes `Z(-angle_rad)`, `side="L"` keyframes
+    `Z(+angle_rad)`. Pass a positive `angle_rad` for both sides; the sign flip is
+    internal."""
+    signed = -angle_rad if side == "R" else angle_rad
+    _keyframe_euler(armature_obj, f"UpperArm.{side}", frame, (0.0, 0.0, signed))
+
+
+def _fold_lower_arm(armature_obj, side, frame, angle_rad):
+    """Keyframes LowerArm.<side>'s local-X rotation to fold the elbow, the same axis
+    Task 11.6's Wave uses for LowerArm.R. Empirically confirmed (Task 11.15): unlike
+    _raise_upper_arm's Z axis, this one does NOT mirror between `.L` and `.R` — both
+    sides need the SAME sign for the hand to fold up toward the head the same physical
+    way. This was actually verified twice, with two different results: posing each
+    side's LowerArm alone (T-pose otherwise) at the same angle showed the hand swinging
+    in opposite absolute directions, suggesting a mirrored sign — but posing each side's
+    LowerArm at that same angle *with its own UpperArm already raised* (the actual
+    context this function is used in) showed both sides needing the SAME sign instead.
+    The plain-T-pose probe doesn't predict the answer because a child bone's local
+    rotation composes with its parent's CURRENT (already-rotated) world transform, not
+    its rest transform — the same local angle produces a different world-space swing
+    once the parent has moved. Always re-verify empirically in the actual pose a new
+    call site uses, not in isolation. `side="R"` and `side="L"` both keyframe
+    `X(+angle_rad)`."""
+    _keyframe_euler(armature_obj, f"LowerArm.{side}", frame, (angle_rad, 0.0, 0.0))
+
+
 def build_stand0(armature_obj):
     """A subtle idle: Hips bob slightly and Spine1 rocks a couple of degrees, looping
     seamlessly over 90 frames (frame 1 and frame 90 are identical rest poses) — 3.75s at
@@ -117,15 +172,90 @@ def build_wave(armature_obj):
     return action
 
 
+def build_stand1(armature_obj):
+    """A second idle, shaped differently from Stand0 on purpose so the two are never
+    confusable: a slow side-to-side weight shift (Hips sways in X, not Stand0's
+    up/down Z bob) with a counter-rotating torso twist (Spine1 rotates around its own
+    local Y — its length axis, a genuine twist for this vertical bone — not Stand0's
+    local-X front/back rock). Loops seamlessly over 100 frames (frame 1 and frame 100
+    are identical rest poses)."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "Stand1")
+
+    sway = 0.02  # meters
+    for frame, x in ((1, 0.0), (25, sway), (50, 0.0), (75, -sway), (100, 0.0)):
+        _keyframe_location(armature_obj, "Hips", frame, (x, 0.0, 0.0))
+
+    twist = math.radians(3.0)
+    for frame, angle in ((1, 0.0), (25, -twist), (50, 0.0), (75, twist), (100, 0.0)):
+        _keyframe_euler(armature_obj, "Spine1", frame, (0.0, angle, 0.0))
+
+    return action
+
+
+def build_clap(armature_obj):
+    """Both arms raise together to roughly chest height (UpperArm.L/R, via
+    _raise_upper_arm) and hold, while both forearms (LowerArm.L/R, via
+    _fold_lower_arm) oscillate their fold angle four times in sync — a crude, symmetric
+    approximation of clapping (arms coming up in front of the body and pulsing
+    together), not a literal hands-meet-at-center gesture; this cylinder-and-bone rig
+    has no IK to aim the hands at each other. 48 frames, plays once and returns to
+    rest."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "Clap")
+
+    raise_angle = math.radians(70.0)
+    for frame, angle in ((1, 0.0), (8, raise_angle), (40, raise_angle), (48, 0.0)):
+        _raise_upper_arm(armature_obj, "R", frame, angle)
+        _raise_upper_arm(armature_obj, "L", frame, angle)
+
+    fold_low, fold_high = math.radians(20.0), math.radians(80.0)
+    clap_beats = (
+        (1, 0.0), (8, fold_low),
+        (14, fold_high), (20, fold_low), (26, fold_high), (32, fold_low), (38, fold_high),
+        (40, fold_low), (48, 0.0),
+    )
+    for frame, angle in clap_beats:
+        _fold_lower_arm(armature_obj, "R", frame, angle)
+        _fold_lower_arm(armature_obj, "L", frame, angle)
+
+    return action
+
+
+def build_celebrate(armature_obj):
+    """Both arms raise together (UpperArm.L/R, via _raise_upper_arm, reusing Wave's own
+    empirically-verified 80° raise magnitude rather than an untested new angle — a
+    bigger angle was tried first and rendered wrong, see README.md) and hold, while Hips
+    bounces up twice (a bigger, faster echo of Stand0's own idle bob) — a triumphant
+    "arms up" pose with a little pump to it. 60 frames, plays once and returns to
+    rest."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "Celebrate")
+
+    raise_angle = math.radians(80.0)
+    for frame, angle in ((1, 0.0), (15, raise_angle), (45, raise_angle), (60, 0.0)):
+        _raise_upper_arm(armature_obj, "R", frame, angle)
+        _raise_upper_arm(armature_obj, "L", frame, angle)
+
+    bounce = 0.03  # meters
+    for frame, z in ((15, 0.0), (22, bounce), (30, 0.0), (37, bounce), (45, 0.0)):
+        _keyframe_location(armature_obj, "Hips", frame, (0.0, 0.0, z))
+
+    return action
+
+
 def build_animations(armature_obj):
-    """Builds both Stand0 and Wave actions and returns a {name: action} dict. Safe to
-    call repeatedly in the same Blender session — replaces existing actions of the same
-    name rather than stacking duplicates. Leaves `armature_obj.animation_data.action`
-    set to whichever was built last; callers that need a specific one active should set
-    it explicitly."""
+    """Builds Stand0/Stand1/Wave/Clap/Celebrate actions and returns a {name: action}
+    dict. Safe to call repeatedly in the same Blender session — replaces existing
+    actions of the same name rather than stacking duplicates. Leaves
+    `armature_obj.animation_data.action` set to whichever was built last; callers that
+    need a specific one active should set it explicitly."""
     return {
         "Stand0": build_stand0(armature_obj),
+        "Stand1": build_stand1(armature_obj),
         "Wave": build_wave(armature_obj),
+        "Clap": build_clap(armature_obj),
+        "Celebrate": build_celebrate(armature_obj),
     }
 
 
@@ -138,8 +268,8 @@ if __name__ == "__main__":
         frame_start, frame_end = action.frame_range
         print(f"  {name}: frame_range = ({frame_start:.1f}, {frame_end:.1f})")
 
-    assert {"Stand0", "Wave"}.issubset(actions), "missing required actions"
+    assert {"Stand0", "Stand1", "Wave", "Clap", "Celebrate"}.issubset(actions), "missing required actions"
     for name, action in actions.items():
         frame_start, frame_end = action.frame_range
         assert frame_end > frame_start, f"{name} has a zero/negative frame range"
-    print("OK: Stand0 and Wave actions exist with a nonzero frame range.")
+    print("OK: Stand0/Stand1/Wave/Clap/Celebrate actions exist with a nonzero frame range.")
