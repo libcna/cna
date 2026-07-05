@@ -132,6 +132,71 @@ second `plan_devices.md`; Phases through P9's detail is in the original
 `plan_devices.md`/`plan_devices_phase2-9.md` files. This section intentionally does not
 restate that history.
 
+**Stabilization pass (2026-07-05, no plan file — a targeted correctness review, not a
+new phase):** a focused review flagged 7 concrete concerns in the just-landed Android
+`Compass`/`Motion` code; all 7 were confirmed real and fixed. Scope was deliberately
+narrow — no new features, no new plan file.
+
+Files changed (2 commits):
+- `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`,
+  `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`,
+  `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` — thread safety,
+  async-start reporting, use-after-free hardening, explicit callback exception policy.
+- `include/Microsoft/Devices/Sensors/Compass.hpp`,
+  `include/Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp`,
+  `src/Microsoft/Devices/Sensors/Compass.cpp`,
+  `include/Microsoft/Devices/Sensors/Motion.hpp`,
+  `include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp`,
+  `src/Microsoft/Devices/Sensors/Motion.cpp`,
+  `tests/Microsoft/Devices/Sensors/CompassTests.cpp`,
+  `tests/Microsoft/Devices/Sensors/MotionTests.cpp` — repeated-`Start()` guard,
+  `SetBackendForTesting()` enforcement, doc-drift fixes.
+
+What changed, by original review goal:
+1. **Repeated Start/Stop safety** — `AndroidSensorBridge::Start()` previously reassigned
+   an already-joinable `std::thread` on a second call (`std::terminate()`). Now returns
+   `false` immediately (no-op) if already running. `Compass::Start()`/`Motion::Start()`
+   now throw `SensorFailedException` immediately if already started, before touching
+   `backend_` — matching `Accelerometer::Start()`'s existing convention.
+2. **Async startup reporting** — `Start()` previously returned `true` right after
+   spawning the worker thread, without confirming `ASensorEventQueue` creation or
+   `ASensorEventQueue_enableSensor()` (return value previously discarded) actually
+   succeeded. Now a condition-variable handshake (bounded to 5s) blocks `Start()` until
+   the worker signals real `Success`/`Failure`; `Stop()` is called to clean up on
+   failure/timeout.
+3. **Reentrant Stop/dispose** — `impl_` changed `unique_ptr` → `shared_ptr`, with the
+   worker thread capturing its own copy, so `Impl`'s lifetime now survives the owning
+   `AndroidSensorBridge`'s destruction for as long as `Run()` is still executing; the
+   inner event loop rechecks `stopRequested_` before every callback. **Explicitly still
+   unsupported, by design:** destroying (not just `Stop()`-ing) the *outer owning*
+   object (e.g. `Compass` itself) from inside its own callback — matches the existing,
+   accepted `Accelerometer` boundary, not newly introduced here.
+4. **Callback exception policy, made explicit** — `callback_()` is now wrapped in
+   `try { } catch (...) { }`, matching `SdlSensorSubsystem::DispatchToInstances()`'s
+   existing Task P8-5 policy, so a throwing `CurrentValueChanged`/`Calibrate` handler
+   cannot `std::terminate()` the process from the worker thread.
+5. **Doc drift fixed** — `Compass.hpp`/`Motion.hpp` no longer claim `Start()` "Always"
+   throws or that no platform supports these sensors; both now state Android is real,
+   every other platform still throws, matching Section 2 above.
+6. **`SetBackendForTesting()` contract enforced**, not just documented — both now throw
+   `SensorFailedException` if called while `started_`, instead of silently swapping a
+   running backend's state out from under an active session.
+7. **Tests re-run:** `CompassTests`/`MotionTests`/`AndroidSensorBridgeTests` plus
+   `Accelerometer`/`Gyroscope`/`VibrateController` (73 tests) — all pass; the
+   concurrency-relevant subset looped 40/40 clean; full Devices-only filter 280/280 (2
+   expected hardware skips); full project `ctest` 3266 tests, 3264 passed, 2 expected
+   skips, 0 regressions. `devices-asan`: 0 issues. `devices-tsan`: 25 warnings, every one
+   individually confirmed (via its own `Location is global ...` line) to be the same
+   pre-existing `sharp-runtime` `TimeSpan::copy_count` race, none new. `devices-ubsan`: 3
+   pre-existing findings, all in `Vector3::GetHashCode()`/`Matrix::GetHashCode()` (signed
+   integer overflow), unrelated to any file touched this pass — 0 findings in the
+   reviewed files. Android cross-compile of the `CNA` library target re-verified clean;
+   `cna_demo_devices` itself currently fails to cross-compile for Android in this
+   container on an unrelated, pre-existing gap (`SDL3/SDL_main.h` not found for the
+   Android sysroot — an environment/vendoring issue in `Main.cpp`, not `Microsoft::Devices`
+   code, and not introduced by this pass). **No physical Android device was used for any
+   part of this verification.**
+
 ---
 
 ## 4. Current blocker / main problem
@@ -165,9 +230,15 @@ environment or scope changes (see Section 8).
   `Accelerometer` specifically from within its own `CurrentValueChanged` handler is
   unsafe (the legacy `ReadingChanged` event check touches `this` again afterward).
   `Gyroscope` has no second event and is fully safe. `Detail::AndroidSensorBridge`'s own
-  analogous boundary (a callback calling `Stop()` reentrantly on its own worker thread)
-  is handled via detach-instead-of-join, code-reviewed but never runtime-exercised (its
-  real code path can't execute in this container).
+  analogous boundary — a callback reentrantly calling `Stop()`/triggering destruction of
+  the *outer owning* object (`Compass`/`Motion`) from its own worker thread — was
+  hardened in the 2026-07-05 stabilization pass: `Impl` is now `shared_ptr`-owned with
+  the worker thread holding its own copy, so `Impl` itself can no longer be
+  use-after-freed by a reentrant `Stop()`/destruction of the `AndroidSensorBridge`
+  wrapper. Destroying the *outer* object (`Compass`/`Motion`) from inside its own
+  callback remains explicitly unsupported, matching `Accelerometer`'s existing boundary
+  — code-reviewed but never runtime-exercised (its real code path can't execute in this
+  container, no Android device available).
 - **New, out-of-scope finding this pass:** `sharp-runtime`'s
   `System::EventHandler<T>::Raise()` iterates its live handler list directly, not a
   snapshot — `Add()`/`Remove()` called reentrantly from within a handler mutate that
