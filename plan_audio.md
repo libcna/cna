@@ -2303,7 +2303,27 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   `SampleDurationRoundTrip` test only exercised Stereo; added
   `SampleDurationRoundTripMono` to independently exercise the channel-count divisor for Mono.
   Full suite 3243/3245 (2 expected hardware skips), up from 3242/3244.
-* [ ] P9-DYNAMIC-009 Add tests for invalid buffer sizes and alignment.
+* [x] P9-DYNAMIC-009 Add tests for invalid buffer sizes and alignment.
+  *Note:* Read FAudio's buffer submission path (`FACT_internal.c`/`FAudio.c`'s
+  `FAudioSourceVoice_SubmitSourceBuffer`) via FNA's `SubmitBuffer`: FNA has **no block-alignment
+  validation at all** -- `FAudioBuffer.PlayLength = AudioBytes / channels / bytesPerSample` is a
+  plain integer division that silently truncates for a non-frame-aligned byte count (e.g. an odd
+  byte count for 16-bit stereo, not a multiple of the 4-byte frame size); it never throws or
+  rejects the submission. CNA's `SubmitBuffer`/`SubmitFloatBufferEXT` already match this exactly
+  (no alignment check anywhere), and since CNA's architecture tracks pending data purely in raw
+  bytes (`queuedBuffers_`/`submittedChunkSizes_`, matching `SDL_PutAudioStreamData`/
+  `SDL_GetAudioStreamQueued`'s own byte-oriented API) rather than FAudio's discrete per-buffer
+  frame counts, alignment doesn't enter into any of CNA's own bookkeeping at all -- there was
+  no real risk of a alignment-specific bug to find here architecturally, only test coverage to
+  add. Added 3 tests: a non-frame-aligned byte count (63 bytes, not a multiple of the 2ch*2byte=4
+  frame size) via `SubmitBuffer` while stopped and while actually playing (device-dependent,
+  exercises the real `SDL3_mixer`/`SDL_AudioStream` path end-to-end, confirmed clean under
+  ASan+UBSan), and a sample count not divisible by channel count (3 samples for Stereo) via
+  `SubmitFloatBufferEXT`. All three confirm the same-as-FNA no-op-validation behavior: no throw,
+  no crash, `PendingBufferCount` increments by exactly 1 regardless of alignment (a whole buffer
+  is a whole buffer, whether or not its byte count happens to align to a frame boundary). This
+  closes `P9-DYNAMIC`'s full 9-item task list. Full suite 3246/3248 (2 expected hardware skips),
+  audio subset 339/340 under ASan (1 pre-existing, unrelated timing self-skip).
   *Note (partial, pre-existing):* `SubmitBufferRangeThrows`/`SubmitFloatBufferRangeThrows`/
   `SubmitBufferRangeIntegerOverflowThrows` already cover invalid offset/count ranges; a dedicated
   audit of non-block-aligned byte counts (e.g. an odd byte count for 16-bit stereo) hasn't been

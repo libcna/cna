@@ -176,6 +176,47 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferRangeIntegerOverflowThrows)
     EXPECT_THROW(d.SubmitBuffer(pcm, hugeOffset, hugeCount), System::ArgumentOutOfRangeException);
 }
 
+// P9-DYNAMIC-009: matches FNA's SubmitBuffer exactly -- there is no block-alignment validation
+// at all (FAudio's FACTSoundBank_Prepare-adjacent buffer submission just stores whatever byte
+// count is given; FAudioBuffer.PlayLength = AudioBytes / channels / bytesPerSample truncates via
+// plain integer division for a non-frame-aligned count, it never throws). A 16-bit stereo frame
+// is 4 bytes; 63 is deliberately not a multiple of that.
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferWithNonFrameAlignedByteCountDoesNotThrowWhileStopped)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<unsigned char> pcm(63, 0); // not a multiple of 4 (2ch * 2 bytes/sample)
+    EXPECT_NO_THROW(d.SubmitBuffer(pcm));
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1); // a whole buffer either way, alignment-agnostic
+}
+
+// P9-DYNAMIC-009: same as above, but for SubmitFloatBufferEXT, where `count` is a *sample* count
+// (not bytes) -- 3 float samples for a Stereo instance isn't a whole number of stereo frames
+// (3/2 = 1.5), mirroring the byte-count case above at the sample level. Still no validation in
+// FNA or CNA.
+TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferWithSampleCountNotDivisibleByChannelCountDoesNotThrow)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<float> buf(3, 0.0f); // 3 samples, not a whole number of stereo frames
+    EXPECT_NO_THROW(d.SubmitFloatBufferEXT(buf));
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+}
+
+// P9-DYNAMIC-009: a non-frame-aligned submission while actually playing must not crash or wedge
+// subsequent buffer bookkeeping (Update()'s byte-based consumption tracking is alignment-agnostic
+// by construction -- it compares total submitted bytes against SDL_GetAudioStreamQueued(), never
+// frame counts -- but this exercises the real SDL3_mixer/SDL_AudioStream path end-to-end).
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferWithNonFrameAlignedByteCountWhilePlayingDoesNotThrow)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::vector<unsigned char> misaligned(63, 0);
+    EXPECT_NO_THROW(d.SubmitBuffer(misaligned));
+    EXPECT_NO_THROW(d.Update());
+}
+
 // P9-VALIDATION-011: without this, a caller that keeps submitting after Dispose() would grow
 // queuedBuffers_ unboundedly (the buffers can never be consumed once dynamicTrack_ is gone).
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferAfterDisposeThrowsObjectDisposed)
