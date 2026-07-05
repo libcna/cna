@@ -24,7 +24,7 @@ bone-retargeting step at all.
 
 - [x] Task 11.1 — `generate_skeleton.py`: builds the canonical skeleton below.
 - [x] Task 11.2 — `generate_body.py`: procedural low-poly body, auto-weighted to the skeleton.
-- [ ] Task 11.3 — `generate_materials.py`
+- [x] Task 11.3 — `generate_materials.py`: 5 flat-color placeholder materials, Skin assigned to the body.
 - [ ] Task 11.4 — `generate_morphs.py`
 - [ ] Task 11.5 — `generate_hair.py` / `generate_clothes.py`
 - [ ] Task 11.6 — `generate_animations.py`
@@ -103,3 +103,23 @@ animations play.
 
 Verify: `blender --background --python tools/avatar_builder/generate_body.py` runs
 without error and asserts a non-empty vertex group exists for every bone name in `BONES`.
+
+## Placeholder materials (`generate_materials.py`)
+
+Five flat-color Principled BSDF materials, no texture maps: `CNAAvatarSkin`,
+`CNAAvatarHair`, `CNAAvatarShirt`, `CNAAvatarPants`, `CNAAvatarShoes` (see
+`MATERIAL_COLORS` for the exact RGBA values). Only `CNAAvatarSkin` is assigned anywhere
+right now — as the sole material slot on the Task 11.2 body mesh, via
+`assign_body_material()`. `Hair`/`Shirt`/`Pants`/`Shoes` exist in `bpy.data.materials`
+for `generate_hair.py`/`generate_clothes.py` (Task 11.5) to assign once that geometry
+exists; there is nothing to assign them to yet.
+
+`build_materials()`/`assign_body_material(body_obj, materials)` are importable the same
+way as the skeleton/body builders, for reuse by `generate_avatar.py` (Task 11.7).
+
+These are explicitly placeholder flat colors, not final art — texture painting or
+tinting variety is out of scope until a later iteration (`plan_net.md` Phase 11c).
+
+Verify: `blender --background --python tools/avatar_builder/generate_materials.py` runs
+without error and asserts all 5 materials exist with `Skin` as the body mesh's sole
+material slot.

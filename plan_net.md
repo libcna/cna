@@ -901,9 +901,17 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   Task 11.6's real test animations; automatic weights will very likely still need manual
   correction once those exist.
 
-- [ ] **Task 11.3** — `tools/avatar_builder/generate_materials.py`  
+- [x] **Task 11.3** — `tools/avatar_builder/generate_materials.py`  
   Minimal PBR materials: skin, hair, shirt, pants, shoes, each a simple base-color parameter (no
   texture painting at this stage).
+  **Done:** `generate_materials.py` creates 5 flat-color Principled BSDF materials
+  (`CNAAvatarSkin/Hair/Shirt/Pants/Shoes`) via `build_materials()` and assigns `Skin` to
+  the Task 11.2 body mesh via `assign_body_material()`. `Hair`/`Shirt`/`Pants`/`Shoes`
+  are created but not yet assigned anywhere — no hair/clothing geometry exists until
+  Task 11.5. Verified: headless run confirms all 5 materials exist and `Skin` is the
+  body mesh's sole material slot; a manual `BLENDER_WORKBENCH` material-preview render
+  confirmed the skin tone actually renders (not just node-graph plumbing that silently
+  no-ops).
 
 - [ ] **Task 11.4** — `tools/avatar_builder/generate_morphs.py`  
   At least two shape keys: `Smile`, `Blink`. Document how additional morphs get added later.
