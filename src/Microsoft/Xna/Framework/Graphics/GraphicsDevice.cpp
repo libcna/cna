@@ -1354,10 +1354,10 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        viewport_.x = 0;
-        viewport_.y = 0;
-        viewport_.minDepth = 0.0f;
-        viewport_.maxDepth = 1.0f;
+        viewport_.setXProperty(0);
+        viewport_.setYProperty(0);
+        viewport_.setMinDepthProperty(0.0f);
+        viewport_.setMaxDepthProperty(1.0f);
         viewport_.setWidthProperty(width);
         viewport_.setHeightProperty(height);
     }

@@ -28,12 +28,12 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 static bool vpEq(const Viewport& a, const Viewport& b)
 {
-    return a.x == b.x &&
-           a.y == b.y &&
+    return a.getXProperty() == b.getXProperty() &&
+           a.getYProperty() == b.getYProperty() &&
            a.getWidthProperty()  == b.getWidthProperty() &&
            a.getHeightProperty() == b.getHeightProperty() &&
-           std::abs(a.minDepth - b.minDepth) < 1e-5f &&
-           std::abs(a.maxDepth - b.maxDepth) < 1e-5f;
+           std::abs(a.getMinDepthProperty() - b.getMinDepthProperty()) < 1e-5f &&
+           std::abs(a.getMaxDepthProperty() - b.getMaxDepthProperty()) < 1e-5f;
 }
 
 class ViewportStateTest : public Game
@@ -63,13 +63,13 @@ protected:
         check(initial.getWidthProperty()  == pp.getBackBufferWidthProperty() &&
               initial.getHeightProperty() == pp.getBackBufferHeightProperty(),
               "Initial viewport matches PresentationParameters backbuffer size");
-        check(initial.x == 0 && initial.y == 0,
+        check(initial.getXProperty() == 0 && initial.getYProperty() == 0,
               "Initial viewport origin is (0,0)");
 
         // ── 2. setViewportProperty round-trip ─────────────────────────────
         Viewport custom(50, 30, 320, 240);
-        custom.minDepth = 0.1f;
-        custom.maxDepth = 0.9f;
+        custom.setMinDepthProperty(0.1f);
+        custom.setMaxDepthProperty(0.9f);
         device.setViewportProperty(custom);
         check(vpEq(device.getViewportProperty(), custom),
               "setViewportProperty()/getViewportProperty() round-trip");
@@ -108,12 +108,12 @@ protected:
 
         // ── 7. minDepth / maxDepth survive set/get ────────────────────────
         Viewport depthVp(0, 0, 200, 150);
-        depthVp.minDepth = 0.25f;
-        depthVp.maxDepth = 0.75f;
+        depthVp.setMinDepthProperty(0.25f);
+        depthVp.setMaxDepthProperty(0.75f);
         device.setViewportProperty(depthVp);
         const Viewport got = device.getViewportProperty();
-        check(std::abs(got.minDepth - 0.25f) < 1e-5f &&
-              std::abs(got.maxDepth - 0.75f) < 1e-5f,
+        check(std::abs(got.getMinDepthProperty() - 0.25f) < 1e-5f &&
+              std::abs(got.getMaxDepthProperty() - 0.75f) < 1e-5f,
               "minDepth=0.25 / maxDepth=0.75 survive setViewportProperty/getViewportProperty");
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

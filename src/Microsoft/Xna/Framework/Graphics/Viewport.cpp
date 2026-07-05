@@ -9,22 +9,26 @@ namespace Microsoft::Xna::Framework::Graphics
     using Microsoft::Xna::Framework::Rectangle;
     using Microsoft::Xna::Framework::Vector3;
 
-    IMPL_PROP(int, Height, getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
-    IMPL_PROP(int, Width,  getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
+    IMPL_PROP(int, Height,     getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
+    IMPL_PROP(float, MaxDepth, getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
+    IMPL_PROP(float, MinDepth, getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
+    IMPL_PROP(int, Width,      getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
+    IMPL_PROP(int, Y,         getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
+    IMPL_PROP(int, X,         getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
 
     Viewport::Viewport()
-        : x(0), y(0), Height_(0), Width_(0), minDepth(0.0f), maxDepth(1.0f)
+        : Height_(0), MaxDepth_(1.0f), MinDepth_(0.0f), Width_(0), Y_(0), X_(0)
     {
     }
 
     Viewport::Viewport(int x_, int y_, int width, int height)
-        : x(x_), y(y_), Height_(height), Width_(width), minDepth(0.0f), maxDepth(1.0f)
+        : Height_(height), MaxDepth_(1.0f), MinDepth_(0.0f), Width_(width), Y_(y_), X_(x_)
     {
     }
 
     Viewport::Viewport(const Rectangle& bounds)
-        : x(bounds.X), y(bounds.Y), Height_(bounds.Height), Width_(bounds.Width),
-          minDepth(0.0f), maxDepth(1.0f)
+        : Height_(bounds.Height), MaxDepth_(1.0f), MinDepth_(0.0f), Width_(bounds.Width),
+          Y_(bounds.Y), X_(bounds.X)
     {
     }
 
@@ -37,13 +41,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Rectangle Viewport::getBoundsProperty() const
     {
-        return Rectangle(x, y, Width_, Height_);
+        return Rectangle(X_, Y_, Width_, Height_);
     }
 
     void Viewport::setBoundsProperty(const Rectangle& value)
     {
-        x       = value.X;
-        y       = value.Y;
+        X_      = value.X;
+        Y_      = value.Y;
         Width_  = value.Width;
         Height_ = value.Height;
     }
@@ -70,9 +74,9 @@ namespace Microsoft::Xna::Framework::Graphics
             vector.Z /= a;
         }
 
-        vector.X = ((vector.X + 1.0f) * 0.5f) * static_cast<float>(Width_)  + static_cast<float>(x);
-        vector.Y = ((-vector.Y + 1.0f) * 0.5f) * static_cast<float>(Height_) + static_cast<float>(y);
-        vector.Z = vector.Z * (maxDepth - minDepth) + minDepth;
+        vector.X = ((vector.X + 1.0f) * 0.5f) * static_cast<float>(Width_)  + static_cast<float>(X_);
+        vector.Y = ((-vector.Y + 1.0f) * 0.5f) * static_cast<float>(Height_) + static_cast<float>(Y_);
+        vector.Z = vector.Z * (MaxDepth_ - MinDepth_) + MinDepth_;
         return vector;
     }
 
@@ -83,9 +87,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const Matrix matrix = Matrix::Invert(world * view * projection);
 
-        source.X = ((source.X - static_cast<float>(x)) / static_cast<float>(Width_))  * 2.0f - 1.0f;
-        source.Y = -(((source.Y - static_cast<float>(y)) / static_cast<float>(Height_)) * 2.0f - 1.0f);
-        source.Z = (source.Z - minDepth) / (maxDepth - minDepth);
+        source.X = ((source.X - static_cast<float>(X_)) / static_cast<float>(Width_))  * 2.0f - 1.0f;
+        source.Y = -(((source.Y - static_cast<float>(Y_)) / static_cast<float>(Height_)) * 2.0f - 1.0f);
+        source.Z = (source.Z - MinDepth_) / (MaxDepth_ - MinDepth_);
 
         Vector3 vector = Vector3::Transform(source, matrix);
 
@@ -103,11 +107,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::string Viewport::ToString() const
     {
-        return "{X:" + std::to_string(x) +
-               " Y:" + std::to_string(y) +
+        return "{X:" + std::to_string(X_) +
+               " Y:" + std::to_string(Y_) +
                " Width:" + std::to_string(Width_) +
                " Height:" + std::to_string(Height_) +
-               " MinDepth:" + std::to_string(minDepth) +
-               " MaxDepth:" + std::to_string(maxDepth) + "}";
+               " MinDepth:" + std::to_string(MinDepth_) +
+               " MaxDepth:" + std::to_string(MaxDepth_) + "}";
     }
 }

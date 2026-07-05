@@ -18,35 +18,55 @@ static constexpr float kEps = 1e-4f;
 TEST(ViewportTest, DefaultConstructorZeroFields)
 {
     Viewport vp;
-    EXPECT_EQ(vp.x, 0);
-    EXPECT_EQ(vp.y, 0);
+    EXPECT_EQ(vp.getXProperty(), 0);
+    EXPECT_EQ(vp.getYProperty(), 0);
     EXPECT_EQ(vp.getWidthProperty(), 0);
     EXPECT_EQ(vp.getHeightProperty(), 0);
-    EXPECT_FLOAT_EQ(vp.minDepth, 0.0f);
-    EXPECT_FLOAT_EQ(vp.maxDepth, 1.0f);
+    EXPECT_FLOAT_EQ(vp.getMinDepthProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(vp.getMaxDepthProperty(), 1.0f);
 }
 
 TEST(ViewportTest, XYWidthHeightConstructor)
 {
     Viewport vp(10, 20, 800, 600);
-    EXPECT_EQ(vp.x, 10);
-    EXPECT_EQ(vp.y, 20);
+    EXPECT_EQ(vp.getXProperty(), 10);
+    EXPECT_EQ(vp.getYProperty(), 20);
     EXPECT_EQ(vp.getWidthProperty(), 800);
     EXPECT_EQ(vp.getHeightProperty(), 600);
-    EXPECT_FLOAT_EQ(vp.minDepth, 0.0f);
-    EXPECT_FLOAT_EQ(vp.maxDepth, 1.0f);
+    EXPECT_FLOAT_EQ(vp.getMinDepthProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(vp.getMaxDepthProperty(), 1.0f);
 }
 
 TEST(ViewportTest, RectangleConstructor)
 {
     Rectangle r(5, 15, 1024, 768);
     Viewport vp(r);
-    EXPECT_EQ(vp.x, 5);
-    EXPECT_EQ(vp.y, 15);
+    EXPECT_EQ(vp.getXProperty(), 5);
+    EXPECT_EQ(vp.getYProperty(), 15);
     EXPECT_EQ(vp.getWidthProperty(), 1024);
     EXPECT_EQ(vp.getHeightProperty(), 768);
-    EXPECT_FLOAT_EQ(vp.minDepth, 0.0f);
-    EXPECT_FLOAT_EQ(vp.maxDepth, 1.0f);
+    EXPECT_FLOAT_EQ(vp.getMinDepthProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(vp.getMaxDepthProperty(), 1.0f);
+}
+
+// --- X / Y / Width / Height / MinDepth / MaxDepth setters ---
+
+TEST(ViewportTest, SettersUpdateEachFieldIndependently)
+{
+    Viewport vp;
+    vp.setXProperty(42);
+    vp.setYProperty(24);
+    vp.setWidthProperty(1920);
+    vp.setHeightProperty(1080);
+    vp.setMinDepthProperty(0.2f);
+    vp.setMaxDepthProperty(0.8f);
+
+    EXPECT_EQ(vp.getXProperty(), 42);
+    EXPECT_EQ(vp.getYProperty(), 24);
+    EXPECT_EQ(vp.getWidthProperty(), 1920);
+    EXPECT_EQ(vp.getHeightProperty(), 1080);
+    EXPECT_FLOAT_EQ(vp.getMinDepthProperty(), 0.2f);
+    EXPECT_FLOAT_EQ(vp.getMaxDepthProperty(), 0.8f);
 }
 
 // --- AspectRatio ---
@@ -86,8 +106,8 @@ TEST(ViewportTest, SetBoundsUpdatesAllFields)
     Viewport vp(0, 0, 100, 100);
     Rectangle r(10, 20, 320, 240);
     vp.setBoundsProperty(r);
-    EXPECT_EQ(vp.x, 10);
-    EXPECT_EQ(vp.y, 20);
+    EXPECT_EQ(vp.getXProperty(), 10);
+    EXPECT_EQ(vp.getYProperty(), 20);
     EXPECT_EQ(vp.getWidthProperty(), 320);
     EXPECT_EQ(vp.getHeightProperty(), 240);
 }

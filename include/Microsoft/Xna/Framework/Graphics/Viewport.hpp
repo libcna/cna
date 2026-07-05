@@ -13,20 +13,19 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     private:
         int Height_;
+        float MaxDepth_;
+        float MinDepth_;
         int Width_;
+        int Y_;
+        int X_;
 
     public:
-        /** @brief X coordinate of the upper-left corner of the viewport in pixels. */
-        int x;
-        /** @brief Y coordinate of the upper-left corner of the viewport in pixels. */
-        int y;
-        /** @brief Lower limit of the depth range of the viewport. */
-        float minDepth;
-        /** @brief Upper limit of the depth range of the viewport. */
-        float maxDepth;
-
-        DEF_PROP(int, Height, getter1, setter1, member0, static0, constret1, ref1, constmet1)
-        DEF_PROP(int, Width,  getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        DEF_PROP(int, Height,   getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        DEF_PROP(float, MaxDepth, getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        DEF_PROP(float, MinDepth, getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        DEF_PROP(int, Width,    getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        DEF_PROP(int, Y,        getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        DEF_PROP(int, X,        getter1, setter1, member0, static0, constret1, ref1, constmet1)
 
         /** @brief Constructs an empty viewport with all fields set to zero. */
         Viewport();
