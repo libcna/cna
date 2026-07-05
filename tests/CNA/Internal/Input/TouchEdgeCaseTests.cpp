@@ -69,6 +69,32 @@ TEST_F(TouchEdgeCaseTest, GetStatePrefersTouchesArrayAndDoesNotDoubleReport)
     EXPECT_EQ(state[0].getIdProperty(), 5);   // the touches_ finger, not id 99
 }
 
+// DEC-13: TouchPanel::Update() copies touches_ -> previousTouches_ (reversed vs FNA's gesture-first
+// order, but inert because GestureDetector::OnUpdate touches neither array). This pins the slot-path
+// continuity the copy provides: SetFinger reads previousTouches_, so after Update() a moving finger sees
+// its prior pressed location. If Update() failed to copy, the second SetFinger would see Invalid and
+// produce a fresh Pressed instead of a Moved-with-previous.
+TEST_F(TouchEdgeCaseTest, UpdatePropagatesTouchesToPreviousForSlotPathContinuity)
+{
+    // Frame 1: finger down at slot 0 (previousTouches_[0] is Invalid, so this is a Pressed).
+    TouchPanel::SetFinger(0, 5, Vector2(10, 20));
+    ASSERT_EQ(TouchPanel::GetState()[0].getStateProperty(), TouchLocationState::Pressed);
+
+    // Update() copies touches_ -> previousTouches_.
+    TouchPanel::Update();
+
+    // Frame 2: same finger moves; SetFinger reads previousTouches_ (Pressed@(10,20)) to build a Moved.
+    TouchPanel::SetFinger(0, 5, Vector2(30, 40));
+
+    const TouchCollection s = TouchPanel::GetState();
+    ASSERT_EQ(s.getCountProperty(), 1);
+    EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Moved);
+    TouchLocation prev;
+    ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+    EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(prev.getPositionProperty(), Vector2(10, 20));
+}
+
 // --- Task 826: multi-touch edge cases ---
 
 TEST_F(TouchEdgeCaseTest, ReleasingAnUnknownFingerIsSafe)

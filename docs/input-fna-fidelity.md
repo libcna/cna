@@ -142,8 +142,11 @@ from the fake-backend unit tests above.
   fixed XNA-compat value, NOT the tracking cap. `TouchPanel::GetState()` caps the public snapshot at
   `MAX_TOUCHES (8)`, matching FNA's fixed `TouchLocation[MAX_TOUCHES]` array (the event-driven
   `InputManager` map is internally unbounded, but the public state never exceeds 8).
-- `TouchPanel::Update()` copies current→previous **before** the gesture update; FNA does gesture
-  update first. The two statements touch disjoint state, so the order is functionally inert.
+- `TouchPanel::Update()` copies current→previous **before** the gesture update; FNA does gesture update
+  first (`TouchPanel.cs:219`). **Confirmed inert (DEC-13, 2026-07-05):** `GestureDetector::OnUpdate()`
+  operates only on the gesture detector's own state and never reads or writes `touches_`/`previousTouches_`,
+  so the two statements touch disjoint state and the ordering is unobservable. Pinned by
+  `TouchEdgeCaseTest.UpdatePropagatesTouchesToPreviousForSlotPathContinuity`.
 - `TryGetPreviousLocation` now writes the out-param on **every** path (DEC-12, fixed 2026-07-05): it
   assigns `TouchLocation(Id, prevState, prevPosition)` and returns `prevState != Invalid`, matching FNA
   exactly (on the `false` path the out-param is the Invalid previous location, not left untouched).

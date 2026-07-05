@@ -1588,7 +1588,7 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** none.
 
 #### INPUT-TOUCH-023 — `TouchPanel.Update()` copy-order deviation
-- **Priority:** P3 · **Status:** TODO · **Area:** Touch
+- **Priority:** P3 · **Status:** DONE (2026-07-05; DEC-13 — confirmed inert) · **Area:** Touch
 - **Files:** `TouchPanel.cpp`
 - **Problem:** Copies current→previous before gesture update (FNA order reversed; documented inert, §18).
 - **Work:** Confirm inert; document; guard with a test if any observable difference exists.
@@ -2768,8 +2768,11 @@ location (`id_`, `Invalid`, `prevPosition_`). Dedicated false-path test added (t
 already covers the true path). → INPUT-TOUCH-009.
 
 **DEC-13 — `TouchPanel.Update()` copies current→previous before gesture update.**
-Current: copy-then-update. FNA: reversed order (documented inert). Risk: none if inert. Decision: confirm
-inert. Tests: ordering. Disposition: **Accept (confirm)**. → INPUT-TOUCH-023.
+CNA: copy-then-`OnUpdate`. FNA: `OnUpdate()` then copy (`TouchPanel.cs:219`) — reversed. Disposition:
+**ACCEPTED (2026-07-05) — confirmed inert.** `GestureDetector::OnUpdate()` reads/writes only the gesture
+detector's own state and never `touches_`/`previousTouches_` (grep-verified), so the two statements touch
+disjoint state and the order is unobservable. Documented + pinned by
+`TouchEdgeCaseTest.UpdatePropagatesTouchesToPreviousForSlotPathContinuity`. → INPUT-TOUCH-023.
 
 **DEC-14 — Relative mouse cache desync.**
 Current: relative-mode flag cached in InputManager. FNA: live-read. Risk: desync only if SDL toggled outside
