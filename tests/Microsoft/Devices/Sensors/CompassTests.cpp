@@ -66,6 +66,18 @@ TEST(CompassTests, StopAfterDisposeThrows)
     EXPECT_THROW(c.Stop(), System::ObjectDisposedException);
 }
 
+// Task DEVICES-0056: no test anywhere asserted Start()-after-Dispose()
+// throws ObjectDisposedException specifically — Start()'s own disposed-check
+// (Compass.cpp, top of Start()) runs before the always-throws-
+// SensorFailedException stub body, but that ordering wasn't confirmed by a
+// test; a regression could silently swap the exception type.
+TEST(CompassTests, StartAfterDisposeThrows)
+{
+    Compass c;
+    c.Dispose();
+    EXPECT_THROW(c.Start(), System::ObjectDisposedException);
+}
+
 TEST(CompassTests, EleventhSimultaneousInstanceThrows)
 {
     std::vector<std::unique_ptr<Compass>> instances;

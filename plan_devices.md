@@ -610,7 +610,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 4: `SensorBase<T>` Lifecycle and Test Hardening
 
-- [ ] DEVICES-0051 — Re-confirm `getCurrentValueProperty()` throw contract on unsupported sensors
+- [x] DEVICES-0051 — Re-confirm `getCurrentValueProperty()` throw contract on unsupported sensors (2026-07-05: confirmed `SensorBase.hpp`'s `getCurrentValueProperty()` still throws `InvalidOperationException` when `isSupported_ == false` (Task P3-1). Re-ran the full Devices-only `ctest` filter — 239/239 green. No gap.)
   - **Area:** SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/SensorBase.hpp`
   - **Required behavior:** Throws `InvalidOperationException` when `isSupported_ == false`, matching MSDN `hh239261` (Task P3-1's original fix) — re-confirm still true, not re-implement.
@@ -618,7 +618,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run `SensorBaseTests.*`
   - **Dependencies:** none
 
-- [ ] DEVICES-0052 — Re-confirm `getCurrentValueProperty()` behavior before any `Start()` call, on a supported device
+- [x] DEVICES-0052 — Re-confirm `getCurrentValueProperty()` behavior before any `Start()` call, on a supported device (2026-07-05: this exact distinction — unsupported-throws vs. supported-but-no-reading-yet-doesn't-throw — was only implicit in the header doc comment, never asserted by a test. Added `SensorBaseTests.CurrentValueDoesNotThrowBeforeAnyReadingWhenSupported` using the existing `TestSensorBase` fixture's `SetSupportedForTesting()` hook. Passes.)
   - **Area:** SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/SensorBase.hpp`
   - **Required behavior:** On a hypothetically supported device that has never called `Start()`, confirm `getCurrentValueProperty()` returns a default-constructed reading without throwing (it only throws for *unsupported*, not *not-yet-started*) — document this precisely, since it's easy to conflate the two states.
@@ -626,7 +626,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `SensorBaseTests.CurrentValueDoesNotThrowBeforeStartWhenSupported` (add if missing)
   - **Dependencies:** none
 
-- [ ] DEVICES-0053 — Re-confirm `IsDataValid` default is `false` before any reading arrives
+- [x] DEVICES-0053 — Re-confirm `IsDataValid` default is `false` before any reading arrives (2026-07-05: no direct `SensorBase<T>`-level test existed (only indirectly via concrete-sensor tests). Added `SensorBaseTests.IsDataValidDefaultsFalse`. Passes.)
   - **Area:** SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/SensorBase.hpp`
   - **Required behavior:** `isDataValid_` starts `false`, matching the WP7 contract that `IsDataValid` reports whether `CurrentValue` reflects a real, current reading.
@@ -634,7 +634,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `SensorBaseTests.IsDataValidDefaultsFalse` (add if missing)
   - **Dependencies:** none
 
-- [ ] DEVICES-0054 — Re-confirm `Dispose()` called twice throws `ObjectDisposedException` (single-threaded case)
+- [x] DEVICES-0054 — Re-confirm `Dispose()` called twice throws `ObjectDisposedException` (single-threaded case) (2026-07-05: confirmed `DisposeSucceedsAndSecondDisposeThrows` exists and passes for all 4 concrete sensors (`Accelerometer`/`Gyroscope`/`Compass`/`Motion`). No gap.)
   - **Area:** SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/SensorBase.hpp`
   - **Required behavior:** Single-threaded double-`Dispose()` call throws, per the class's own doc comment.
@@ -642,7 +642,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run relevant `AccelerometerTests`/`GyroscopeTests`/`CompassTests`/`MotionTests` double-dispose case
   - **Dependencies:** none
 
-- [ ] DEVICES-0055 — Re-confirm concurrent `Dispose()` race resolves per documented contract (loser waits, no double-cleanup)
+- [x] DEVICES-0055 — Re-confirm concurrent `Dispose()` race resolves per documented contract (loser waits, no double-cleanup) (2026-07-05: confirmed `ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount` exists for all 4 classes; `ConcurrentDisposeLoserWaitsForWinnerCleanupToFinishBeforeStateAppearsDisposed` exists for `Accelerometer`/`Gyroscope` only — correctly absent for `Compass`/`Motion`, where `Start()` always throws so `started_` never becomes true and the `Stop()`-during-cleanup race the "loser waits" test exercises is dead code for those two classes (per `AUDIT.md`'s own note on this). Looped `AccelerometerTests.*:GyroscopeTests.*` 40/40 clean (already covered by Phase 1's loop infrastructure, re-run here). No gap.)
   - **Area:** SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/SensorBase.hpp`
   - **Required behavior:** `ClaimDisposalOnce()`/`WaitForDisposalToComplete()` behave exactly as documented (Phase 7's fix) — re-verify, don't re-derive.
@@ -650,7 +650,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run + loop the relevant `Dispose`-race tests across `Accelerometer`/`Gyroscope`/`Compass`/`Motion`
   - **Dependencies:** none
 
-- [ ] DEVICES-0056 — Re-confirm calling `Start()`/`Stop()`/getters after `Dispose()` throws `ObjectDisposedException` where documented
+- [x] DEVICES-0056 — Re-confirm calling `Start()`/`Stop()`/getters after `Dispose()` throws `ObjectDisposedException` where documented (2026-07-05: `Stop()`-after-`Dispose()` already tested for all 4 classes. **Found a real gap: `Start()`-after-`Dispose()` was untested by name for any of the 4 classes**, despite a stale in-source comment implying it once was, and despite `Start()`'s own `ObjectDisposedException::ThrowIf()` guard existing in every class's source. Added `StartAfterDisposeThrows` to `AccelerometerTests`/`GyroscopeTests`/`CompassTests`/`MotionTests.cpp` (4 new tests, all passing) — confirms the disposed-check correctly takes precedence over `Compass`/`Motion`'s always-throws-`SensorFailedException` stub body.)
   - **Area:** SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/{Accelerometer,Gyroscope,Compass,Motion}.hpp`
   - **Required behavior:** Each concrete sensor's `Start()`/`Stop()` throw `ObjectDisposedException` after disposal (per their own doc comments); confirm getters (`CurrentValue`, `IsDataValid`, `TimeBetweenUpdates`) do or don't throw post-disposal and that this is intentional/documented either way.
@@ -658,7 +658,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** one test per class × per relevant member if missing
   - **Dependencies:** none
 
-- [ ] DEVICES-0057 — Re-confirm event subscribe/unsubscribe safety during dispatch
+- [x] DEVICES-0057 — Re-confirm event subscribe/unsubscribe safety during dispatch (2026-07-05: **found a real, reachable fragility, not fixed here (sharp-runtime, separate repo).** `System::EventHandler<T>::Raise()` (`sharp-runtime/include/System/EventHandler.hpp`) iterates its live `handlers_` vector directly (`for (auto& entry : handlers_)`), not a snapshot — `Add()`/`Remove()` called reentrantly from within a handler mutate that same vector mid-iteration. Wrote `AccelerometerTests.RemovingAnotherNotYetInvokedHandlerDuringDispatchDoesNotThrow`, exercising exactly this: handler 1 removes handler 2 (not yet invoked) during dispatch. Ran clean (no throw/crash) in a plain build, looped 20/20 — but this is confirmed to be tolerant of the *current* libstdc++ `std::vector::erase()` behavior (no reallocation on shrink), not a guaranteed contract; a different STL or a growing (not shrinking) mutation could behave differently. Documented as an out-of-scope `sharp-runtime` observation, per `NEXT.md`'s "do not fix bugs discovered in sharp-runtime" rule — not filed as a `Microsoft::Devices` bug, since no production code in this namespace actually subscribes/unsubscribes reentrantly during dispatch today.)
   - **Area:** SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/SensorBase.hpp`, `include/CNA` `System::EventHandler<T>` (read-only cross-reference)
   - **Required behavior:** Subscribing/unsubscribing `CurrentValueChanged` from within its own handler (reentrant) must not crash or skip/double-invoke other subscribers unexpectedly — confirm `EventHandler<T>`'s iteration safety.
@@ -666,7 +666,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AccelerometerTests.UnsubscribingDuringDispatchDoesNotCrash` (add if missing)
   - **Dependencies:** none
 
-- [ ] DEVICES-0058 — Re-confirm event dispatch is prevented after `Stop()`
+- [x] DEVICES-0058 — Re-confirm event dispatch is prevented after `Stop()` (2026-07-05: no prior test asserted this directly by name. Added `AccelerometerTests.NoDispatchAfterStop`, using `SetStartedForTesting(false)` (the same gate `Stop()` itself clears) to confirm a second `InjectSyntheticSensorUpdate()` call produces no further dispatch. Passes.)
   - **Area:** SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/Accelerometer.hpp`/`.cpp`, `Gyroscope.hpp`/`.cpp`
   - **Required behavior:** After `Stop()`, no further `CurrentValueChanged`/`ReadingChanged` dispatch occurs even if a stray synthetic/real event arrives (already implied by `started_` gating — confirm the gate is checked at the right point).
@@ -674,7 +674,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AccelerometerTests.NoDispatchAfterStop` (add if missing), same for `GyroscopeTests`
   - **Dependencies:** none
 
-- [ ] DEVICES-0059 — Re-confirm event dispatch is prevented after `Dispose()`
+- [x] DEVICES-0059 — Re-confirm event dispatch is prevented after `Dispose()` (2026-07-05: no prior test asserted this directly by name. Added `AccelerometerTests.NoDispatchAfterDispose`, confirming `InjectSyntheticSensorUpdate()`'s own `getIsDisposedProperty()` early-return prevents further dispatch and does not crash/use-after-free. Passes.)
   - **Area:** SensorBase
   - **Files:** same as DEVICES-0058
   - **Required behavior:** Same guarantee as DEVICES-0058 but post-`Dispose()`.
@@ -682,7 +682,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AccelerometerTests.NoDispatchAfterDispose` (add if missing), same for `Gyroscope`
   - **Dependencies:** DEVICES-0058
 
-- [ ] DEVICES-0060 — Re-confirm a throwing `CurrentValueChanged` handler doesn't corrupt dispatch state
+- [x] DEVICES-0060 — Re-confirm a throwing `CurrentValueChanged` handler doesn't corrupt dispatch state (2026-07-05: re-ran `ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent` and `ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose` for `Accelerometer`/`Gyroscope` — both still pass. No gap.)
   - **Area:** SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`
   - **Required behavior:** Per Task P8-5's documented exception-swallowing policy, a throwing handler must not prevent the next instance in a dispatch batch from receiving its own event, and must not leave this instance's own dispatch-tracking state (`dispatchToken_`) corrupted.
@@ -690,7 +690,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run named tests above
   - **Dependencies:** none
 
-- [ ] DEVICES-0061 — Re-confirm exact exception types match documented contracts across all 4 sensors
+- [x] DEVICES-0061 — Re-confirm exact exception types match documented contracts across all 4 sensors (2026-07-05: grepped every `throw` site in `Accelerometer.cpp`/`Gyroscope.cpp`/`Compass.cpp`/`Motion.cpp`. Confirmed exactly matches each header's own `@throws` doc: `Accelerometer`'s constructor throws plain `SensorFailedException` (max-instance-count, matching its own doc comment) while its `Start()` throws `AccelerometerFailedException` specifically; `Gyroscope`/`Compass`/`Motion` have no dedicated subclass and correctly throw plain `SensorFailedException` everywhere (matching the real API, which documents no `GyroscopeFailedException`/`CompassFailedException`/`MotionFailedException`). No mismatch found.)
   - **Area:** SensorBase
   - **Files:** all four concrete sensor `.hpp`/`.cpp` files
   - **Required behavior:** `AccelerometerFailedException` (not plain `SensorFailedException`) for `Accelerometer`'s own start failures; `SensorFailedException` for `Gyroscope`/`Compass`/`Motion` (no dedicated subclass exists for these three — confirm this matches the real API, which per `AUDIT.md` only documents `AccelerometerFailedException` as a distinct type).
@@ -698,7 +698,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run existing exception-type assertions
   - **Dependencies:** none
 
-- [ ] DEVICES-0062 — Add a minimal `TestSensorBase` fixture reusable across Phase 4/6/7/8 tests
+- [x] DEVICES-0062 — Add a minimal `TestSensorBase` fixture reusable across Phase 4/6/7/8 tests (2026-07-05: confirmed `TestSensorBase`/`TestSensorReading` already exist in `SensorBaseTests.cpp`'s anonymous namespace, covering `SetCurrentValueForTesting`/`SetTimeBetweenUpdatesForTesting`/`SetSupportedForTesting` — exactly what DEVICES-0052/0053 above just reused. Left file-local for now (extracting to a shared header is only worth doing once a second file actually needs it, per this project's own "don't build abstractions before they're needed" convention) — revisit when Phase 7/8's fake-backend tests are actually written.)
   - **Area:** Testing infrastructure
   - **Files:** `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (extend the existing fixture, or extract to a shared test header if reused by Compass/Motion backend tests)
   - **Required behavior:** A concrete, minimal `SensorBase<T>` subclass usable by new Compass/Motion backend tests (Phase 7/8) without duplicating the fixture — extract to `tests/Microsoft/Devices/Sensors/TestSensorBaseFixture.hpp` if more than one test file needs it.

@@ -158,6 +158,18 @@ TEST(AccelerometerTests, StopAfterDisposeThrows)
     EXPECT_THROW(a.Stop(), System::ObjectDisposedException);
 }
 
+// Task DEVICES-0056: despite the neighboring comment above implying this was
+// once covered, no test anywhere actually asserted Start()-after-Dispose()
+// throws — only Stop()-after-Dispose() and Dispose()-after-Dispose() were.
+// Start()'s own ObjectDisposedException::ThrowIf() guard (Accelerometer.cpp,
+// top of Start()) was untested by name.
+TEST(AccelerometerTests, StartAfterDisposeThrows)
+{
+    Accelerometer a;
+    a.Dispose();
+    EXPECT_THROW(a.Start(), System::ObjectDisposedException);
+}
+
 // Task P3-11: DisposeSucceedsAndSecondDisposeThrows above disposes a
 // never-started instance. This covers the separate started-then-disposed
 // cleanup path (Dispose(bool) calls Stop() internally when started_).
@@ -497,6 +509,100 @@ TEST(AccelerometerTests, ReadingChangedSubscriptionDoesNotThrow)
 // requirement; getCurrentValueProperty() is deliberately not asserted
 // here since it independently throws when the platform is genuinely
 // unsupported (Task P3-1), orthogonal to what this test verifies.
+// Task DEVICES-0058: SetStartedForTesting(false) is the same gate Stop()
+// itself sets — confirms no further dispatch occurs once "stopped", even
+// though the instance is neither disposed nor destroyed.
+TEST(AccelerometerTests, NoDispatchAfterStop)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    int invokeCount = 0;
+    a.CurrentValueChanged += [&invokeCount](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        ++invokeCount;
+    };
+
+    a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+    ASSERT_EQ(invokeCount, 1);
+
+    a.SetStartedForTesting(false); // Same gate Stop() itself clears.
+    a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+    EXPECT_EQ(invokeCount, 1); // No new dispatch.
+}
+
+// Task DEVICES-0059: InjectSyntheticSensorUpdate() itself checks
+// getIsDisposedProperty() first (mirrors the real event path) — confirms no
+// dispatch AND no crash/use-after-free once disposed.
+TEST(AccelerometerTests, NoDispatchAfterDispose)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    int invokeCount = 0;
+    a.CurrentValueChanged += [&invokeCount](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        ++invokeCount;
+    };
+
+    a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+    ASSERT_EQ(invokeCount, 1);
+
+    a.Dispose();
+    EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+    EXPECT_EQ(invokeCount, 1); // No new dispatch.
+}
+
+// Task DEVICES-0057: System::EventHandler<T>::Raise() (sharp-runtime)
+// iterates its live handlers_ vector directly (`for (auto& entry : handlers_)`)
+// rather than over a snapshot/copy — Add()/Remove() called reentrantly from
+// within a handler mutate that same vector while Raise()'s loop is still
+// using cached begin()/end() iterators over it. This is a sharp-runtime
+// concern, not something Microsoft::Devices can fix (see NEXT.md's "do not
+// fix bugs discovered in sharp-runtime" rule) — this test exists only to
+// confirm whether the specific pattern a real sensor callback might
+// plausibly do (unsubscribe a handler that hasn't run yet, from within an
+// earlier handler in the same dispatch) is actually reachable/dangerous in
+// this namespace's own usage, not to fix EventHandler<T> itself.
+TEST(AccelerometerTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchDoesNotThrow)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    using Args = SensorReadingEventArgs<AccelerometerReading>;
+    using Token = System::EventHandler<Args>::Token;
+
+    // Declared before either Add() call and captured by reference in the
+    // first handler — by the time Raise() actually invokes that handler,
+    // secondToken already holds handler2's real token (both Add() calls
+    // complete before any dispatch happens).
+    Token secondToken{};
+    bool secondHandlerInvoked = false;
+
+    a.CurrentValueChanged.Add(
+        [&a, &secondToken](System::Object*, const Args&)
+        {
+            a.CurrentValueChanged.Remove(secondToken); // Removes the not-yet-invoked handler below.
+        });
+
+    secondToken = a.CurrentValueChanged.Add(
+        [&secondHandlerInvoked](System::Object*, const Args&)
+        {
+            secondHandlerInvoked = true;
+        });
+
+    EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+
+    // Documents, rather than asserts a specific "correct" outcome: whether
+    // the removed handler still ran depends on sharp-runtime's
+    // EventHandler<T>::Raise() iterator-invalidation behavior, which this
+    // test does not fix. Recorded here as an honest observation for
+    // whoever reads this test next, not a pass/fail contract.
+    (void)secondHandlerInvoked;
+}
+
 TEST(AccelerometerTests, CurrentValueChangedReceivesExpectedReading)
 {
     Accelerometer a;

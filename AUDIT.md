@@ -1634,6 +1634,24 @@ configured Android AVD (`Medium_Phone`). Re-verify at the time `plan_devices.md`
 Phase 9 actually attempts the emulator; environments can and do change between
 sessions, as this one just did.
 
+**Phase 4 audit addendum (2026-07-05, `plan_devices.md` Tasks DEVICES-0051–0062):**
+re-verified `SensorBase<T>`'s lifecycle/dispatch contracts directly; found and closed
+two real, small test-coverage gaps (`Start()`-after-`Dispose()` was untested by name
+for all 4 concrete sensors despite a stale in-source comment implying otherwise; no
+direct `SensorBase<T>`-level test existed for `IsDataValid`'s default or
+`getCurrentValueProperty()`'s not-yet-started-but-supported case). One new,
+**not fixed here** finding: `sharp-runtime`'s `System::EventHandler<T>::Raise()`
+(`sharp-runtime/include/System/EventHandler.hpp`) iterates its live `handlers_`
+vector directly rather than over a snapshot, so `Add()`/`Remove()` called reentrantly
+from within a handler mutate the same vector `Raise()`'s loop is still iterating —
+confirmed via a new `AccelerometerTests.RemovingAnotherNotYetInvokedHandlerDuringDispatchDoesNotThrow`
+test that this specific pattern (an earlier handler removing a not-yet-invoked later
+one) does not currently crash, but this is observed tolerance of the current
+libstdc++ `std::vector::erase()` behavior, not a guaranteed contract — a
+`sharp-runtime` concern, out of this repo's scope to fix (same rule as the existing
+`TimeSpan` copy-constructor race, above), not currently reachable by any production
+code path in this namespace.
+
 ---
 
 ## `Microsoft::Xna::Framework::Net`

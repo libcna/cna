@@ -105,6 +105,32 @@ namespace
     };
 } // namespace
 
+// Task DEVICES-0053: IsDataValid must start false — no reading has ever
+// arrived yet. This was previously only ever exercised indirectly through a
+// concrete sensor's own tests, never asserted at the SensorBase<T> level
+// directly.
+TEST(SensorBaseTests, IsDataValidDefaultsFalse)
+{
+    const TestSensorBase sensor;
+    EXPECT_FALSE(sensor.getIsDataValidProperty());
+}
+
+// Task DEVICES-0052: getCurrentValueProperty() throwing InvalidOperationException
+// is gated on isSupported_ alone — a *supported* sensor that has simply never
+// had a reading delivered yet (no Start() call, or Start() succeeded but no
+// event has arrived) must NOT throw; it returns a default-constructed reading.
+// This distinction (unsupported vs. not-yet-started) was previously only
+// implicit in the header's own doc comment, never asserted by a test.
+TEST(SensorBaseTests, CurrentValueDoesNotThrowBeforeAnyReadingWhenSupported)
+{
+    TestSensorBase sensor;
+    sensor.SetSupportedForTesting(true);
+
+    TestSensorReading value;
+    EXPECT_NO_THROW(value = sensor.getCurrentValueProperty());
+    EXPECT_EQ(value.getValue(), 0);
+}
+
 TEST(SensorBaseTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
 {
     const TestSensorBase sensor;

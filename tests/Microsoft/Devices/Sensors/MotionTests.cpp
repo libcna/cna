@@ -66,6 +66,18 @@ TEST(MotionTests, StopAfterDisposeThrows)
     EXPECT_THROW(m.Stop(), System::ObjectDisposedException);
 }
 
+// Task DEVICES-0056: no test anywhere asserted Start()-after-Dispose()
+// throws ObjectDisposedException specifically — Start()'s own disposed-check
+// (Motion.cpp, top of Start()) runs before the always-throws-
+// SensorFailedException stub body, but that ordering wasn't confirmed by a
+// test; a regression could silently swap the exception type.
+TEST(MotionTests, StartAfterDisposeThrows)
+{
+    Motion m;
+    m.Dispose();
+    EXPECT_THROW(m.Start(), System::ObjectDisposedException);
+}
+
 TEST(MotionTests, EleventhSimultaneousInstanceThrows)
 {
     std::vector<std::unique_ptr<Motion>> instances;

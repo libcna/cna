@@ -144,6 +144,15 @@ TEST(GyroscopeTests, StopAfterDisposeThrows)
     EXPECT_THROW(g.Stop(), System::ObjectDisposedException);
 }
 
+// Task DEVICES-0056: no test anywhere asserted Start()-after-Dispose() throws
+// — only Stop()-after-Dispose() and Dispose()-after-Dispose() were.
+TEST(GyroscopeTests, StartAfterDisposeThrows)
+{
+    Gyroscope g;
+    g.Dispose();
+    EXPECT_THROW(g.Start(), System::ObjectDisposedException);
+}
+
 TEST(GyroscopeTests, EleventhSimultaneousInstanceThrows)
 {
     std::vector<std::unique_ptr<Gyroscope>> instances;
