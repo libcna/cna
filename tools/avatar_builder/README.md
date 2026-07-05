@@ -1,12 +1,38 @@
 # Procedural avatar asset generator (Phase 11)
 
-Offline, one-time content-authoring pipeline for `AvatarRenderer`'s real-rendering
-extension (see `docs/avatar-real-rendering-ext.md`). Not part of the C++ build; never
-run by CNA at runtime. Each script runs headless via system-installed Blender:
+Offline, one-time content-authoring pipeline that generates the body/skeleton/animation
+content behind `AvatarRenderer`'s real-rendering extension (see
+`docs/avatar-real-rendering-ext.md`). Not part of the C++ build; never run by CNA at
+runtime — its only output is `.glb` files consumed later by the existing content
+pipeline (`tools/avatar_asset_pipeline/`, Phase 10).
+
+## Usage
+
+**Just want a working avatar?** Run the top-level driver, which calls every other
+script in this directory in order and produces one `.glb`:
 
 ```
-blender --background --python tools/avatar_builder/generate_skeleton.py
+blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out assets/avatar/generated/male_avatar.glb
+blender --background --python tools/avatar_builder/generate_avatar.py -- --gender female --out assets/avatar/generated/female_avatar.glb
+python3 tools/avatar_builder/validate_gltf.py assets/avatar/generated/male_avatar.glb
 ```
+
+(`--` separates this script's own arguments from Blender's — everything after it goes
+to `argparse`, not Blender's CLI parser.)
+
+**Working on one stage only?** Every `generate_*.py` script other than
+`generate_avatar.py` itself can also run standalone via `blender --background --python
+tools/avatar_builder/generate_<stage>.py` — each one builds only its own prerequisites
+(e.g. `generate_body.py` builds the skeleton first, then the body) and runs its own
+`assert`-based self-check, printing `OK: ...` on success. Use this when iterating on a
+single stage instead of re-running the whole pipeline. Each per-script section below has
+its own standalone-run command under "Verify:".
+
+**`validate_gltf.py` is the one script here that is *not* run through Blender** — it's
+plain `python3` (via `pygltflib`), meant to run against an already-exported `.glb`
+(`python3 tools/avatar_builder/validate_gltf.py path/to/avatar.glb`). Every other script
+needs Blender's own Python (`bpy`) and must be invoked with `blender --background
+--python ...`, not plain `python3`.
 
 ## Why procedural, not MakeHuman/Mixamo
 
@@ -30,6 +56,11 @@ bone-retargeting step at all.
 - [x] Task 11.6 — `generate_animations.py`: `Stand0`/`Wave` Actions; confirmed real elbow/sleeve tearing under bend.
 - [x] Task 11.7 — `export_gltf.py` / `generate_avatar.py`: exports male_avatar.glb/female_avatar.glb, reopens cleanly.
 - [x] Task 11.8 — `validate_gltf.py`: plain-python3 pygltflib sanity check, fails loudly on gaps.
+- [x] Task 11.9 — this file: usage instructions, design rationale, per-script status/placeholder notes.
+
+**Phase 11a ("one male + one female avatar that draws") is functionally complete as of
+Task 11.9.** Phase 11b (feeding the real `.glb` through CNA's actual C++ content
+pipeline/`AvatarRenderer`, not a synthetic fixture) is next — see `plan_net.md`.
 
 Full task detail: `plan_net.md` Phase 11 ("Procedural Avatar Asset Generator").
 
@@ -93,13 +124,15 @@ a non-empty vertex group for all 19 bones without hand-authoring anything.
 `build_body(armature_obj)` is importable the same way as `generate_skeleton.build_skeleton()`,
 for reuse by `generate_avatar.py` (Task 11.7).
 
-**Automatic weights are a starting point, not a finished result.** A manual
-`BLENDER_WORKBENCH` render (T-pose) plus an ad hoc pose-mode elbow/knee bend test showed
-reasonable proportions and no mesh tearing at the bend, but that is **not** the plan's
-required "no gross bending artifacts" check — that check needs Task 11.6's real test
-animations (`Stand0`/`Wave`) and is deferred until they exist. Expect a manual
-weight-painting correction pass to still be needed at elbows/knees/shoulders once those
-animations play.
+**Automatic weights are a starting point, not a finished result.** An early manual
+`BLENDER_WORKBENCH` render (T-pose) plus an ad hoc pose-mode elbow/knee bend test — on
+the body alone, no clothes, no real animation — showed reasonable proportions and no
+mesh tearing at the bend. That was **not** the plan's required "no gross bending
+artifacts" check, though: the real check needed the actual `Stand0`/`Wave` animations
+and the clothed avatar, and was done later, once Task 11.6 existed (see the "Bend-artifact
+check" subsection under Placeholder animations, below) — it found a real tear at the
+elbow/sleeve that this early body-only test didn't catch. A manual weight-painting
+correction pass is still needed and not yet done.
 
 Verify: `blender --background --python tools/avatar_builder/generate_body.py` runs
 without error and asserts a non-empty vertex group exists for every bone name in `BONES`.
@@ -108,11 +141,12 @@ without error and asserts a non-empty vertex group exists for every bone name in
 
 Five flat-color Principled BSDF materials, no texture maps: `CNAAvatarSkin`,
 `CNAAvatarHair`, `CNAAvatarShirt`, `CNAAvatarPants`, `CNAAvatarShoes` (see
-`MATERIAL_COLORS` for the exact RGBA values). Only `CNAAvatarSkin` is assigned anywhere
-right now — as the sole material slot on the Task 11.2 body mesh, via
-`assign_body_material()`. `Hair`/`Shirt`/`Pants`/`Shoes` exist in `bpy.data.materials`
-for `generate_hair.py`/`generate_clothes.py` (Task 11.5) to assign once that geometry
-exists; there is nothing to assign them to yet.
+`MATERIAL_COLORS` for the exact RGBA values). `build_materials()` only *creates* all
+five and `assign_body_material()` only assigns `Skin` to the body mesh — the other four
+are assigned to their matching garment/hair mesh by `generate_clothes.py`/
+`generate_hair.py` (Task 11.5) instead, once that geometry exists (this script alone,
+run standalone, has nothing to assign them to yet, since it doesn't build clothes/hair
+itself).
 
 `build_materials()`/`assign_body_material(body_obj, materials)` are importable the same
 way as the skeleton/body builders, for reuse by `generate_avatar.py` (Task 11.7).
