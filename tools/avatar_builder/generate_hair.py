@@ -41,11 +41,18 @@ HAIR_NAME = "CNAAvatarHair"
 # head surface rather than z-fighting with it.
 HAIR_PADDING = 0.015
 
-_HEAD_HEAD, _HEAD_TAIL = next(
-    (head, tail) for name, _parent, head, tail, _connected in generate_skeleton.BONES if name == "Head"
-)
-HEAD_CENTER = mathutils.Vector(_HEAD_HEAD).lerp(mathutils.Vector(_HEAD_TAIL), 0.5)
-HAIR_RADIUS = generate_body.BONE_RADII["Head"] + HAIR_PADDING
+
+def _head_center_and_radius(bones, head_scale):
+    """Head sphere placement, mirrored from generate_body.py's Head handling: center is
+    the midpoint of the Head bone's head/tail (from `bones`, Task 11.13's optionally-
+    scaled bone list), radius from BONE_RADII["Head"] * head_scale (independent of
+    height_scale — see generate_body.build_body()'s docstring for why)."""
+    head_head, head_tail = next(
+        (head, tail) for name, _parent, head, tail, _connected in bones if name == "Head"
+    )
+    center = mathutils.Vector(head_head).lerp(mathutils.Vector(head_tail), 0.5)
+    radius = generate_body.BONE_RADII["Head"] * head_scale + HAIR_PADDING
+    return center, radius
 
 
 def _build_cap_mesh(radius):
@@ -62,20 +69,28 @@ def _build_cap_mesh(radius):
     return mesh
 
 
-def build_hair(armature_obj, materials):
+def build_hair(armature_obj, materials, bones=None, head_scale=1.0):
     """Builds the placeholder hair cap mesh object, parents it to `armature_obj` with
     automatic (heat-map) vertex weights, and assigns the `Hair` material from
     `materials` (as returned by generate_materials.build_materials()). Returns the hair
     mesh object. Safe to call repeatedly in the same Blender session — removes any
-    pre-existing hair object first."""
+    pre-existing hair object first.
+
+    `bones` optionally overrides the canonical `generate_skeleton.BONES` table (Task
+    11.13) — must be the same bone list passed to `generate_skeleton.build_skeleton()`.
+    `head_scale` scales the cap to match the (possibly independently-scaled) head."""
+    if bones is None:
+        bones = generate_skeleton.BONES
+    head_center, hair_radius = _head_center_and_radius(bones, head_scale)
+
     existing = bpy.data.objects.get(HAIR_NAME)
     if existing is not None:
         bpy.data.meshes.remove(existing.data, do_unlink=True)
 
-    mesh = _build_cap_mesh(HAIR_RADIUS)
+    mesh = _build_cap_mesh(hair_radius)
     obj = bpy.data.objects.new(HAIR_NAME, mesh)
     bpy.context.collection.objects.link(obj)
-    obj.location = HEAD_CENTER
+    obj.location = head_center
 
     obj.data.materials.clear()
     obj.data.materials.append(materials["Hair"])

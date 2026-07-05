@@ -54,15 +54,58 @@ BONES = [
     ("Foot.R",       "LowerLeg.R",   (-0.10, 0.0, 0.10), (-0.10, 0.15, 0.02), True),
 ]
 
+# Task 11.13: bones whose X coordinate (offset from the spine's own centerline, x=0)
+# moves under shoulder_width_scale in build_bones() below — the whole arm chain, so
+# widening/narrowing the shoulders moves the entire arm outward/inward as a unit rather
+# than just disconnecting the shoulder joint from the rest of the arm.
+_ARM_CHAIN_BONE_NAMES = {
+    "Shoulder.L", "Shoulder.R", "UpperArm.L", "UpperArm.R",
+    "LowerArm.L", "LowerArm.R", "Hand.L", "Hand.R",
+}
 
-def build_skeleton():
+
+def build_bones(height_scale=1.0, shoulder_width_scale=1.0):
+    """Returns a new BONES-shaped list (same names/parents/connected flags — only
+    positions differ) with `height_scale` applied uniformly to every bone's head/tail
+    (x, y, z), giving a proportionally taller/shorter body, and `shoulder_width_scale`
+    applied *additionally* to the X coordinate of the arm chain only (see
+    `_ARM_CHAIN_BONE_NAMES`), independently widening/narrowing the shoulders/arm span
+    without affecting overall height. Task 11.13 — echoes `AvatarDescription`'s
+    customization intent (height, build) without attempting to reconstruct its real,
+    undocumented byte format. `build_skeleton()`/`generate_body.build_body()`/etc. all
+    default to the unscaled canonical `BONES` table when called with no bone list, so
+    this is purely additive — nothing that doesn't ask for custom proportions is
+    affected.
+    """
+    def scale_point(name, point):
+        x, y, z = point
+        x *= height_scale
+        y *= height_scale
+        z *= height_scale
+        if name in _ARM_CHAIN_BONE_NAMES:
+            x *= shoulder_width_scale
+        return (x, y, z)
+
+    return [
+        (name, parent, scale_point(name, head), scale_point(name, tail), connected)
+        for name, parent, head, tail, connected in BONES
+    ]
+
+
+def build_skeleton(bones=None):
     """Creates the CNAAvatarSkeleton armature object in the current Blender scene
     and returns it. Removes any pre-existing object of the same name first, so this
-    is safe to call repeatedly in the same Blender session (e.g. from generate_avatar.py)."""
+    is safe to call repeatedly in the same Blender session (e.g. from generate_avatar.py).
+
+    `bones` optionally overrides the canonical `BONES` table (e.g. with
+    `build_bones(...)`'s output, Task 11.13) — defaults to `BONES` unscaled."""
     try:
         import bpy
     except ImportError:
         sys.exit("This script must be run inside Blender: blender --background --python generate_skeleton.py")
+
+    if bones is None:
+        bones = BONES
 
     existing = bpy.data.objects.get(ARMATURE_NAME)
     if existing is not None:
@@ -76,12 +119,12 @@ def build_skeleton():
     bpy.ops.object.mode_set(mode="EDIT")
 
     edit_bones = armature_data.edit_bones
-    for name, _parent, head, tail, _connected in BONES:
+    for name, _parent, head, tail, _connected in bones:
         eb = edit_bones.new(name)
         eb.head = head
         eb.tail = tail
 
-    for name, parent, _head, _tail, connected in BONES:
+    for name, parent, _head, _tail, connected in bones:
         if parent is None:
             continue
         eb = edit_bones[name]

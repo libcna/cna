@@ -9,11 +9,14 @@ Blender itself doesn't try to parse them):
     blender --background --python generate_avatar.py -- --gender male --out /tmp/male_avatar.glb
     blender --background --python generate_avatar.py -- --gender female --out /tmp/female_avatar.glb
 
-Female uses the identical skeleton/rig and geometry-generation code as male, scaled down
-by FEMALE_SCALE as a whole — a coarse, explicitly placeholder stand-in for real
-proportion differentiation (different shoulder/hip width ratios, height, etc.), which is
-deliberately deferred to a later, lower-priority iteration (plan_net.md Task 11.13,
-"Parametric body variation") rather than attempted here.
+Task 11.13: `--gender` selects a GENDER_PRESETS entry (height/shoulder-width/head-size
+scale), and `--height-scale`/`--shoulder-width-scale`/`--head-scale` override any of the
+three individually — e.g. `--gender female --head-scale 1.1` starts from the female
+preset but with a bigger head. These are real, independent parameters applied at
+geometry-generation time (via generate_skeleton.build_bones()), not the coarse, uniform,
+whole-armature post-scale this script used before Task 11.13 — conceptually echoing
+AvatarDescription's customization intent (height, build) without attempting to
+reconstruct its real, undocumented byte format.
 """
 
 import argparse
@@ -35,30 +38,43 @@ import generate_hair  # noqa: E402
 import generate_animations  # noqa: E402
 import export_gltf  # noqa: E402
 
-# Coarse overall scale for the female variant. Not real proportion differentiation
-# (shoulder/hip width ratio, head size, etc.) — see this module's docstring.
-FEMALE_SCALE = 0.93
+# Coarse starting points, not measured/researched proportions — a placeholder female
+# silhouette (shorter, narrower shoulders, very slightly smaller head) distinct from a
+# unisex default, overridable per-parameter via the CLI below.
+GENDER_PRESETS = {
+    "male": {"height_scale": 1.0, "shoulder_width_scale": 1.0, "head_scale": 1.0},
+    "female": {"height_scale": 0.93, "shoulder_width_scale": 0.85, "head_scale": 0.97},
+}
 
 
-def build_avatar(gender):
+def build_avatar(gender, height_scale=None, shoulder_width_scale=None, head_scale=None):
     """Builds one full avatar (skeleton, body, materials, morphs, clothes, hair,
     animations) in a clean scene and returns (armature_obj, [armature_obj, body_obj,
     hair_obj, *garment_objs]) — the object list export_gltf.export_avatar() expects.
-    `gender` is "male" or "female"."""
+
+    `gender` selects a GENDER_PRESETS entry as the starting point for the three scale
+    parameters; passing height_scale/shoulder_width_scale/head_scale explicitly
+    overrides that preset's corresponding value (Task 11.13)."""
+    preset = GENDER_PRESETS[gender]
+    if height_scale is None:
+        height_scale = preset["height_scale"]
+    if shoulder_width_scale is None:
+        shoulder_width_scale = preset["shoulder_width_scale"]
+    if head_scale is None:
+        head_scale = preset["head_scale"]
+
     for obj in list(bpy.data.objects):
         bpy.data.objects.remove(obj, do_unlink=True)
 
-    armature_obj = generate_skeleton.build_skeleton()
-    body_obj = generate_body.build_body(armature_obj)
+    bones = generate_skeleton.build_bones(height_scale=height_scale, shoulder_width_scale=shoulder_width_scale)
+    armature_obj = generate_skeleton.build_skeleton(bones)
+    body_obj = generate_body.build_body(armature_obj, bones=bones, height_scale=height_scale, head_scale=head_scale)
     materials = generate_materials.build_materials()
     generate_materials.assign_body_material(body_obj, materials)
-    generate_morphs.build_morphs(body_obj)
-    garments = generate_clothes.build_clothes(armature_obj, materials)
-    hair_obj = generate_hair.build_hair(armature_obj, materials)
+    generate_morphs.build_morphs(body_obj, bones=bones, head_scale=head_scale)
+    garments = generate_clothes.build_clothes(armature_obj, materials, bones=bones, height_scale=height_scale)
+    hair_obj = generate_hair.build_hair(armature_obj, materials, bones=bones, head_scale=head_scale)
     generate_animations.build_animations(armature_obj)
-
-    if gender == "female":
-        armature_obj.scale = (FEMALE_SCALE, FEMALE_SCALE, FEMALE_SCALE)
 
     objects = [armature_obj, body_obj, hair_obj, *garments.values()]
     return armature_obj, objects
@@ -66,8 +82,15 @@ def build_avatar(gender):
 
 def _parse_args(argv):
     parser = argparse.ArgumentParser(description="Build and export a CNA procedural avatar.")
-    parser.add_argument("--gender", choices=["male", "female"], default="male")
+    parser.add_argument("--gender", choices=["male", "female"], default="male",
+                         help="Selects a GENDER_PRESETS starting point for the scale parameters below.")
     parser.add_argument("--out", required=True, help="Output .glb path.")
+    parser.add_argument("--height-scale", type=float, default=None,
+                         help="Override --gender's preset height scale (Task 11.13).")
+    parser.add_argument("--shoulder-width-scale", type=float, default=None,
+                         help="Override --gender's preset shoulder-width scale (Task 11.13).")
+    parser.add_argument("--head-scale", type=float, default=None,
+                         help="Override --gender's preset head scale (Task 11.13).")
     return parser.parse_args(argv)
 
 
@@ -75,7 +98,8 @@ if __name__ == "__main__":
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     args = _parse_args(argv)
 
-    armature_obj, objects = build_avatar(args.gender)
+    armature_obj, objects = build_avatar(
+        args.gender, args.height_scale, args.shoulder_width_scale, args.head_scale)
     output_path = export_gltf.export_avatar(args.out, objects)
 
     print(f"Built and exported '{args.gender}' avatar ({len(objects)} objects: "

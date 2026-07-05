@@ -84,18 +84,31 @@ def add_joint_sphere(name, location, radius):
     return obj
 
 
-def build_body(armature_obj):
+def build_body(armature_obj, bones=None, height_scale=1.0, head_scale=1.0):
     """Builds the procedural low-poly body mesh, joins every part into a single mesh
     object, and parents it to `armature_obj` with automatic (heat-map) vertex weights.
     Returns the body mesh object. Safe to call repeatedly in the same Blender session
-    (e.g. from generate_avatar.py) — removes any pre-existing body object first."""
+    (e.g. from generate_avatar.py) — removes any pre-existing body object first.
+
+    `bones` optionally overrides the canonical `generate_skeleton.BONES` table (e.g.
+    with `generate_skeleton.build_bones(...)`'s output, Task 11.13) — must be the SAME
+    bone list passed to `generate_skeleton.build_skeleton()`, so the body's geometry
+    lines up with the actual armature. `height_scale` scales every non-Head bone's
+    flesh radius to match (Task 11.13's height parameter, applied here since bone
+    *positions* already carry it via `bones`, but radius does not scale automatically).
+    `head_scale` scales the Head bone's own radius independently of height (Task 11.13's
+    head-size parameter — deliberately decoupled from height_scale, e.g. for a
+    disproportionately large/small "chibi"-style head)."""
+    if bones is None:
+        bones = generate_skeleton.BONES
+
     existing = bpy.data.objects.get(BODY_NAME)
     if existing is not None:
         bpy.data.meshes.remove(existing.data, do_unlink=True)
 
     parts = []
-    for name, _parent, head, tail, _connected in generate_skeleton.BONES:
-        radius = BONE_RADII[name]
+    for name, _parent, head, tail, _connected in bones:
+        radius = BONE_RADII[name] * (head_scale if name == "Head" else height_scale)
         if name == "Head":
             center = tuple((mathutils.Vector(head) + mathutils.Vector(tail)) / 2)
             parts.append(add_joint_sphere(f"{name}_flesh", center, radius))

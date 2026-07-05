@@ -4,7 +4,7 @@ body mesh (`CNAAvatarBody`).
 
 The current body has no separate eye/mouth geometry (Task 11.2's head is a single
 low-poly UV sphere), so vertex selection for each morph is done purely by world-space
-position relative to the head sphere's own center/radius (see `HEAD_CENTER`/`HEAD_RADIUS`
+position relative to the head sphere's own center/radius (see `_head_center_and_radius()`
 below, kept in sync with generate_body.py's Head placement) — a "mouth band" and an "eye
 band" picked by height (Z) and how far forward (+Y) a vertex is. This is a crude,
 explicitly placeholder approximation, not a modeled face; see the "Adding more morphs"
@@ -35,13 +35,16 @@ import generate_skeleton  # noqa: E402  (bpy path setup must happen first)
 import generate_body  # noqa: E402
 import generate_materials  # noqa: E402
 
-# Head sphere placement, mirrored from generate_body.py's Head handling (center is the
-# midpoint of the Head bone's head/tail, radius from BONE_RADII["Head"]).
-_HEAD_HEAD, _HEAD_TAIL = next(
-    (head, tail) for name, _parent, head, tail, _connected in generate_skeleton.BONES if name == "Head"
-)
-HEAD_CENTER = mathutils.Vector(_HEAD_HEAD).lerp(mathutils.Vector(_HEAD_TAIL), 0.5)
-HEAD_RADIUS = generate_body.BONE_RADII["Head"]
+def _head_center_and_radius(bones, head_scale):
+    """Head sphere placement, mirrored from generate_body.py's Head handling: center is
+    the midpoint of the Head bone's head/tail (from `bones`, Task 11.13's optionally-
+    scaled bone list), radius from BONE_RADII["Head"] * head_scale."""
+    head_head, head_tail = next(
+        (head, tail) for name, _parent, head, tail, _connected in bones if name == "Head"
+    )
+    center = mathutils.Vector(head_head).lerp(mathutils.Vector(head_tail), 0.5)
+    radius = generate_body.BONE_RADII["Head"] * head_scale
+    return center, radius
 
 
 def _select_by_world_position(body_obj, predicate):
@@ -54,10 +57,10 @@ def _ensure_basis(body_obj):
         body_obj.shape_key_add(name="Basis", from_mix=False)
 
 
-def _add_shape_key(body_obj, name, indices, displacement_fn):
+def _add_shape_key(body_obj, name, indices, displacement_fn, head_center):
     """Adds (or replaces) a shape key called `name`, applying displacement_fn(local_offset)
     -> Vector to every vertex in `indices`, where local_offset is that vertex's rest
-    position relative to HEAD_CENTER (in world axes)."""
+    position relative to `head_center` (in world axes)."""
     existing = body_obj.data.shape_keys.key_blocks.get(name) if body_obj.data.shape_keys else None
     if existing is not None:
         body_obj.shape_key_remove(existing)
@@ -67,51 +70,62 @@ def _add_shape_key(body_obj, name, indices, displacement_fn):
     matrix_inv = matrix.inverted()
     for i in indices:
         world_co = matrix @ key.data[i].co
-        offset = world_co - HEAD_CENTER
+        offset = world_co - head_center
         key.data[i].co = matrix_inv @ (world_co + displacement_fn(offset))
     return key
 
 
-def build_morphs(body_obj):
+def build_morphs(body_obj, bones=None, head_scale=1.0):
     """Adds `Smile` and `Blink` shape keys to `body_obj` (in addition to the implicit
     `Basis`). Safe to call repeatedly in the same Blender session — replaces existing
-    shape keys of the same name rather than stacking duplicates."""
+    shape keys of the same name rather than stacking duplicates.
+
+    `bones` optionally overrides the canonical `generate_skeleton.BONES` table (Task
+    11.13) — must be the same bone list passed to `generate_skeleton.build_skeleton()`.
+    `head_scale` must match whatever `generate_body.build_body()`/`generate_hair.build_hair()`
+    were called with, so the ring-selection logic below targets the actual head sphere
+    (it's ratio-based, not absolute, so it adapts automatically as long as this radius
+    is correct)."""
+    if bones is None:
+        bones = generate_skeleton.BONES
+    head_center, head_radius = _head_center_and_radius(bones, head_scale)
+
     _ensure_basis(body_obj)
 
     # The head is a UV sphere (generate_body.py, segments=8/ring_count=6), so its
     # vertices sit on a fixed set of latitude rings at z/radius in {0, +-0.5, +-0.866,
     # +-1.0} regardless of the actual radius. Select by ratio (with tolerance), not an
-    # absolute z range, so this keeps working if HEAD_RADIUS ever changes.
+    # absolute z range, so this keeps working regardless of head_scale.
     def _at_latitude_ratio(offset, ratio, tolerance=0.15):
-        return abs((offset.z / HEAD_RADIUS) - ratio) < tolerance
+        return abs((offset.z / head_radius) - ratio) < tolerance
 
     # Mouth band: the front-facing vertices of the first ring below the equator.
     mouth_indices = _select_by_world_position(
         body_obj,
-        lambda co: (co - HEAD_CENTER).y > HEAD_RADIUS * 0.3
-        and _at_latitude_ratio(co - HEAD_CENTER, -0.5),
+        lambda co: (co - head_center).y > head_radius * 0.3
+        and _at_latitude_ratio(co - head_center, -0.5),
     )
 
     def _smile_displacement(offset):
         # Corners (large |x|) lift and pull back further than the center, approximating
         # the corners-up shape of a smile on this single-sphere head.
-        lift = HEAD_RADIUS * 0.25 * (abs(offset.x) / HEAD_RADIUS)
-        return mathutils.Vector((0.0, -HEAD_RADIUS * 0.10, lift))
+        lift = head_radius * 0.25 * (abs(offset.x) / head_radius)
+        return mathutils.Vector((0.0, -head_radius * 0.10, lift))
 
-    smile = _add_shape_key(body_obj, "Smile", mouth_indices, _smile_displacement)
+    smile = _add_shape_key(body_obj, "Smile", mouth_indices, _smile_displacement, head_center)
 
     # Eye band: the front-facing vertices of the first ring above the equator.
     eye_indices = _select_by_world_position(
         body_obj,
-        lambda co: (co - HEAD_CENTER).y > HEAD_RADIUS * 0.3
-        and _at_latitude_ratio(co - HEAD_CENTER, 0.5),
+        lambda co: (co - head_center).y > head_radius * 0.3
+        and _at_latitude_ratio(co - head_center, 0.5),
     )
 
     def _blink_displacement(_offset):
         # Flattens the eye band downward/inward, approximating closed eyelids.
-        return mathutils.Vector((0.0, -HEAD_RADIUS * 0.08, -HEAD_RADIUS * 0.30))
+        return mathutils.Vector((0.0, -head_radius * 0.08, -head_radius * 0.30))
 
-    blink = _add_shape_key(body_obj, "Blink", eye_indices, _blink_displacement)
+    blink = _add_shape_key(body_obj, "Blink", eye_indices, _blink_displacement, head_center)
 
     return {"Smile": smile, "Blink": blink}
 

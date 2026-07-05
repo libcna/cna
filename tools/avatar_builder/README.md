@@ -34,6 +34,17 @@ plain `python3` (via `pygltflib`), meant to run against an already-exported `.gl
 needs Blender's own Python (`bpy`) and must be invoked with `blender --background
 --python ...`, not plain `python3`.
 
+**Want a custom body shape?** (Task 11.13) `--gender` picks a `GENDER_PRESETS` starting
+point; `--height-scale`/`--shoulder-width-scale`/`--head-scale` override any of its three
+values individually:
+
+```
+blender --background --python tools/avatar_builder/generate_avatar.py -- --gender female --head-scale 1.1 --out /tmp/female_bighead.glb
+```
+
+See "Parametric body variation" near the end of this file for how the three parameters
+work and what they do (and don't) affect.
+
 ## Why procedural, not MakeHuman/Mixamo
 
 The prior session tried MakeHuman (GUI) and CharMorph/Blender (external repo) and hit
@@ -57,10 +68,13 @@ bone-retargeting step at all.
 - [x] Task 11.7 — `export_gltf.py` / `generate_avatar.py`: exports male_avatar.glb/female_avatar.glb, reopens cleanly.
 - [x] Task 11.8 — `validate_gltf.py`: plain-python3 pygltflib sanity check, fails loudly on gaps.
 - [x] Task 11.9 — this file: usage instructions, design rationale, per-script status/placeholder notes.
+- [x] Task 11.13 — parametric body variation (`height_scale`/`shoulder_width_scale`/`head_scale`), see below.
 
 **Phase 11a ("one male + one female avatar that draws") is functionally complete as of
-Task 11.9.** Phase 11b (feeding the real `.glb` through CNA's actual C++ content
-pipeline/`AvatarRenderer`, not a synthetic fixture) is next — see `plan_net.md`.
+Task 11.9. Phase 11b (real C++ engine integration) is complete as of Task 11.12** — see
+`docs/avatar-real-rendering-ext.md`. Phase 11c (procedural variety) is underway; Task
+11.13 is done, Tasks 11.14/11.15 (more hair/clothes/animation variety) are not started —
+see `plan_net.md`.
 
 Full task detail: `plan_net.md` Phase 11 ("Procedural Avatar Asset Generator").
 
@@ -284,10 +298,11 @@ prioritized (`plan_net.md` Phase 11c).
 
 ## Orchestration and export (`generate_avatar.py` + `export_gltf.py`)
 
-`generate_avatar.py`'s `build_avatar(gender)` clears the scene and calls every Task
-11.1–11.6 `build_*()` function in order (skeleton, body, materials, morphs, clothes,
-hair, animations), returning `(armature_obj, objects)` where `objects` is the armature
-plus its mesh children (`export_gltf.export_avatar()`'s expected input). Run headless:
+`generate_avatar.py`'s `build_avatar(gender, height_scale=None, shoulder_width_scale=None,
+head_scale=None)` clears the scene and calls every Task 11.1–11.6 `build_*()` function in
+order (skeleton, body, materials, morphs, clothes, hair, animations), returning
+`(armature_obj, objects)` where `objects` is the armature plus its mesh children
+(`export_gltf.export_avatar()`'s expected input). Run headless:
 
 ```
 blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out assets/avatar/generated/male_avatar.glb
@@ -296,12 +311,11 @@ blender --background --python tools/avatar_builder/generate_avatar.py -- --gende
 
 (Arguments go after Blender's own `--` so Blender doesn't try to parse them itself.)
 
-**Female is the identical male rig, scaled.** `--gender female` applies a single overall
-`armature_obj.scale = (0.93, 0.93, 0.93)` after building — a coarse placeholder, *not*
-real proportion differentiation (shoulder/hip width ratio, head size, etc.). Real
-parametric variation is deliberately deferred to `plan_net.md` Task 11.13 rather than
-attempted here; don't read the current female output as more than "the same body,
-smaller."
+**Female is a real, independently-shaped variant, not a uniform scale of the male rig**
+(Task 11.13 — see "Parametric body variation" below for how). `--gender` selects a
+`GENDER_PRESETS` entry as the starting point for three scale parameters
+(`height_scale`/`shoulder_width_scale`/`head_scale`); `--height-scale`/
+`--shoulder-width-scale`/`--head-scale` override any of them individually.
 
 `export_gltf.py`'s `export_avatar(output_path, objects)` selects exactly `objects` and
 calls Blender's glTF2 exporter (`export_format="GLB"`, `use_selection=True`,
@@ -311,8 +325,10 @@ animations rather than merged, plus `export_morph`/`export_skins`/`export_yup=Tr
 **Verified beyond "runs without error":**
 - Both `--gender male` and `--gender female` reopen cleanly in Blender
   (`bpy.ops.import_scene.gltf`) with the correct 6 objects, correct armature parenting,
-  both actions, and the `Smile`/`Blink` shape keys all present. Female's skeleton node
-  scale round-trips as exactly `(0.93, 0.93, 0.93)`.
+  both actions, and the `Smile`/`Blink` shape keys all present. Since Task 11.13, the
+  proportion differences are baked directly into bone *positions* at generation time —
+  the exported skeleton node itself has no scale transform at all (`None`, i.e.
+  identity), unlike the pre-11.13 female preset's `(0.93, 0.93, 0.93)` object-level scale.
 - **Determinism:** running the male export twice produces byte-identical JSON and a
   binary buffer that differs in ~4.5% of float32 values, every one by exactly 1 ULP
   (`2^-23`) — Blender-internal floating-point rounding noise, not a real difference.
@@ -342,6 +358,54 @@ weight-painting pass as the elbow tear, not before.
 
 Verify: `blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out /tmp/male_avatar.glb`
 produces a non-empty file that reopens cleanly in Blender.
+
+## Parametric body variation (Task 11.13)
+
+Three independent scale parameters, threaded through every `build_*()` function that
+needs them (`generate_skeleton.build_bones()`, then `generate_body.build_body()`,
+`generate_clothes.build_clothes()`, `generate_hair.build_hair()`,
+`generate_morphs.build_morphs()` — each accepts an optional `bones=` list and, where
+relevant, `height_scale=`/`head_scale=`):
+
+- **`height_scale`** — applied uniformly to every bone's (x, y, z) position in
+  `generate_skeleton.build_bones()`, giving a proportionally taller/shorter body. Also
+  scales every non-Head bone's flesh/garment radius to match (`generate_body.py`/
+  `generate_clothes.py`), so a shorter body isn't left disproportionately thick.
+- **`shoulder_width_scale`** — applied *additionally*, only to the X coordinate of the
+  arm chain (`Shoulder`/`UpperArm`/`LowerArm`/`Hand`, both `.L`/`.R`), independently
+  widening or narrowing the shoulders/arm span without touching height. Everything else
+  (torso, legs, head) is unaffected.
+- **`head_scale`** — scales only the Head bone's own flesh/hair-cap radius
+  (`generate_body.py`/`generate_hair.py`/`generate_morphs.py`), independently of
+  `height_scale` — e.g. a stylized disproportionately large or small "chibi" head at any
+  body height. Doesn't touch skeleton bone positions at all.
+
+`generate_avatar.py`'s `GENDER_PRESETS` gives `--gender male`/`female` a starting point
+for all three (female: `height_scale=0.93, shoulder_width_scale=0.85, head_scale=0.97`
+— a coarse, explicitly placeholder silhouette, not measured/researched proportions);
+`--height-scale`/`--shoulder-width-scale`/`--head-scale` override any of the preset's
+values individually, e.g. `--gender female --head-scale 1.1`.
+
+This conceptually echoes `AvatarDescription`'s customization intent (height, build)
+without attempting to reconstruct its real, undocumented byte format — these three
+parameters are a **CNA-original**, independent parameterization, not a decode of any
+real Xbox Avatar data.
+
+Every other script's own standalone `blender --background --python
+generate_<stage>.py` run is unaffected — all new parameters default to `bones=None`
+(the canonical, unscaled `generate_skeleton.BONES`) and `height_scale=head_scale=1.0`,
+so nothing changes unless `generate_avatar.py` (or a caller) explicitly asks for a
+custom body.
+
+Verify: rendered (not just built) four combinations — default male, default female
+preset, an extreme `height_scale=1.0, shoulder_width_scale=0.6, head_scale=1.6` ("big
+head, narrow shoulders"), and `height_scale=1.2, shoulder_width_scale=1.3, head_scale=1.0`
+("tall and wide") — confirming each parameter visibly and independently changes the
+right part of the body, not just that the script accepts new arguments. Also confirmed:
+a custom-parameter export still validates cleanly (`validate_gltf.py`), still converts
+cleanly (`convert_avatar.py --embedded-clips`), and its rest-pose bone transforms are
+still bit-for-bit identity (the same exact-math check from Task 11.11), at non-unit
+scale factors.
 
 ## Validating an export (`validate_gltf.py`)
 

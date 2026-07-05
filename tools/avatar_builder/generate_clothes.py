@@ -35,8 +35,6 @@ import generate_skeleton  # noqa: E402  (bpy path setup must happen first)
 import generate_body  # noqa: E402
 import generate_materials  # noqa: E402
 
-BONES_BY_NAME = {name: (head, tail) for name, _parent, head, tail, _connected in generate_skeleton.BONES}
-
 # Garment name -> (bones it covers, outward padding in meters added to that bone's
 # generate_body.BONE_RADII radius, material part name from generate_materials.py).
 GARMENTS = {
@@ -60,11 +58,11 @@ GARMENTS = {
 NAME_PREFIX = "CNAAvatar"
 
 
-def _build_garment(garment_name, bone_names, padding):
+def _build_garment(garment_name, bone_names, padding, bones_by_name, height_scale):
     parts = []
     for bone_name in bone_names:
-        head, tail = BONES_BY_NAME[bone_name]
-        radius = generate_body.BONE_RADII[bone_name] + padding
+        head, tail = bones_by_name[bone_name]
+        radius = generate_body.BONE_RADII[bone_name] * height_scale + padding
         parts.append(generate_body.add_cylinder_segment(f"{garment_name}_{bone_name}_shell", head, tail, radius))
         parts.append(generate_body.add_joint_sphere(f"{garment_name}_{bone_name}_joint", head, radius))
 
@@ -80,19 +78,28 @@ def _build_garment(garment_name, bone_names, padding):
     return obj
 
 
-def build_clothes(armature_obj, materials):
+def build_clothes(armature_obj, materials, bones=None, height_scale=1.0):
     """Builds Shirt/Pants/Shoes mesh objects, each parented to `armature_obj` with
     automatic (heat-map) vertex weights and assigned its matching material from
     `materials` (as returned by generate_materials.build_materials()). Returns a
     {garment_name: mesh_object} dict. Safe to call repeatedly in the same Blender
-    session — removes any pre-existing garment objects of the same name first."""
+    session — removes any pre-existing garment objects of the same name first.
+
+    `bones` optionally overrides the canonical `generate_skeleton.BONES` table (Task
+    11.13) — must be the same bone list passed to `generate_skeleton.build_skeleton()`.
+    `height_scale` scales each garment's underlying body radius to match (the fixed
+    padding on top is left unscaled, same absolute clearance regardless of body size)."""
+    if bones is None:
+        bones = generate_skeleton.BONES
+    bones_by_name = {name: (head, tail) for name, _parent, head, tail, _connected in bones}
+
     garment_objs = {}
     for garment_name, (bone_names, padding, material_part) in GARMENTS.items():
         existing = bpy.data.objects.get(f"{NAME_PREFIX}{garment_name}")
         if existing is not None:
             bpy.data.meshes.remove(existing.data, do_unlink=True)
 
-        obj = _build_garment(garment_name, bone_names, padding)
+        obj = _build_garment(garment_name, bone_names, padding, bones_by_name, height_scale)
 
         obj.data.materials.clear()
         obj.data.materials.append(materials[material_part])
