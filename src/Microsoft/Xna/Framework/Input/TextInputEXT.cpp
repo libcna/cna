@@ -14,8 +14,8 @@ namespace
 
 namespace Microsoft::Xna::Framework::Input
 {
-    std::function<void(charcs)>                     TextInputEXT::TextInput   = nullptr;
-    std::function<void(const std::string&, int, int)> TextInputEXT::TextEditing = nullptr;
+    System::MulticastAction<charcs>                       TextInputEXT::TextInput;
+    System::MulticastAction<const std::string&, int, int> TextInputEXT::TextEditing;
     std::uintptr_t                                  TextInputEXT::windowHandle_ = 0;
 
     std::uintptr_t TextInputEXT::getWindowHandleProperty()

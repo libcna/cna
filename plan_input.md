@@ -959,7 +959,7 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Deps:** none.
 
 #### INPUT-MOUSE-014 — `ClickedEXT` single vs multicast decision
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse/EXT
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-06 — multicast) · **Area:** Mouse/EXT
 - **Files:** `Mouse.hpp`, `docs/input-fna-fidelity.md`
 - **Problem:** Single `std::function` vs FNA multicast `Action<int>` (§18). Overwriting subscribers silently.
 - **Work:** Decide keep-single (document) vs move to `System::EventHandler`/multicast. Implement one.
@@ -1931,7 +1931,7 @@ repeat gate and a suppress flag for the literal 'v' after Ctrl+V.
 - **Deps:** none.
 
 #### INPUT-TEXT-015 — Callback single vs multicast decision
-- **Priority:** P2 · **Status:** TODO · **Area:** Text/EXT/Decision
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-06 — multicast) · **Area:** Text/EXT/Decision
 - **Files:** `TextInputEXT.hpp`, `docs/input-fna-fidelity.md`
 - **Problem:** Single-subscriber `std::function` vs FNA multicast (§18); a second subscriber overwrites.
 - **Work:** Decide keep-single (document) vs `System::EventHandler`/multicast. Implement chosen.
@@ -2711,10 +2711,15 @@ Current: `buttons ^ packetNumber*31`. FNA: reflection-based default. Risk: diffe
 (not observable via contract). Decision: accept. Tests: hash consistency. Disposition: **Accept**.
 → INPUT-API-011.
 
-**DEC-06 — EXT callbacks single-subscriber (`Mouse.ClickedEXT`, `TextInputEXT.TextInput/TextEditing`).**
-Current: single `std::function`; a second subscriber overwrites. FNA: multicast `Action`/events. Risk:
-silent subscriber loss. Decision: keep-single (document) OR move to `System::EventHandler`. Tests:
-multi-subscriber. Disposition: **Decide**. → INPUT-MOUSE-014, INPUT-TEXT-015.
+**DEC-06 — EXT callbacks single-subscriber → multicast.**
+Was: single `std::function` (a 2nd subscriber silently overwrote the 1st). FNA: **multicast — verified**:
+`TextInput`/`TextEditing` are `event Action<...>`, `ClickedEXT` is a `public static Action<int>` field.
+sharp-runtime's `System::Action`/`ActionT` are single `std::function` aliases, and `EventHandler<T>` has the
+wrong signature (`Object* sender, const T&`) for FNA's `Action<char>`. Disposition: **FIXED (2026-07-05 —
+multicast, user-chosen).** Added `System::MulticastAction<Args...>` to sharp-runtime (`b877f1c`; keeps FNA's
+exact `void(Args...)` signature; `+=` add / `=` replace / `= nullptr` clear / snapshot-invoke). Rewired all
+three EXT callbacks; existing single-subscriber sites compile unchanged; 4 CNA + 7 sharp-runtime
+multi-subscriber tests. → INPUT-MOUSE-014, INPUT-TEXT-015.
 
 **DEC-07 — `TextEditing` string is UTF-8 (byte-indexed).**
 Current: `std::string` UTF-8, byte start/length. FNA: UTF-16 indexing. Risk: index semantics differ for

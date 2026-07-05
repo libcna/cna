@@ -59,7 +59,7 @@ namespace
 namespace Microsoft::Xna::Framework::Input
 {
     std::uintptr_t           Mouse::windowHandle_           = 0;
-    std::function<void(int)> Mouse::ClickedEXT              = nullptr;
+    System::MulticastAction<int> Mouse::ClickedEXT;
 
     std::uintptr_t Mouse::getWindowHandleProperty()
     {

@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "CNA/CNAHelper.hpp"
+#include "System/MulticastAction.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -49,8 +50,10 @@ namespace Microsoft::Xna::Framework::Input
          */
         NOXNA static void SetCursor(MouseCursor& cursor);
 
-        /** @brief FNA extension: fires when a mouse button is clicked. */
-        NOXNA static std::function<void(int)> ClickedEXT;
+        /** @brief FNA extension: fires when a mouse button is clicked. Multicast (matches FNA's
+         *         `public static Action<int> ClickedEXT`): use `+=` to add subscribers, `=` to set a
+         *         single handler or `= nullptr` to clear. */
+        NOXNA static System::MulticastAction<int> ClickedEXT;
 
         /**
          * @brief FNA extension: gets whether mouse motion is reported as relative delta

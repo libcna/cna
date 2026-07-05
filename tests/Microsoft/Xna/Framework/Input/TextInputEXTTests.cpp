@@ -48,6 +48,36 @@ TEST_F(TextInputEXTTest, TextInputWithoutSubscriberIsSafe)
     EXPECT_NO_THROW(TextInputEXT::INTERNAL_OnTextInput(u'x'));
 }
 
+// DEC-06: TextInput/TextEditing are multicast System::MulticastAction (match FNA's event Action<...>).
+TEST_F(TextInputEXTTest, TextInputIsMulticastAndDeliversToEverySubscriber)
+{
+    TextInputEXT::TextInput = nullptr;
+    std::u16string a;
+    std::u16string b;
+    TextInputEXT::TextInput += [&a](charcs c) { a += c; };
+    TextInputEXT::TextInput += [&b](charcs c) { b += c; };
+
+    TextInputEXT::INTERNAL_OnTextInput(u'X');
+    TextInputEXT::INTERNAL_OnTextInput(u'Y');
+
+    EXPECT_EQ(a, u"XY");
+    EXPECT_EQ(b, u"XY");
+}
+
+TEST_F(TextInputEXTTest, TextEditingIsMulticastAndDeliversToEverySubscriber)
+{
+    TextInputEXT::TextEditing = nullptr;
+    int calls1 = 0;
+    int calls2 = 0;
+    TextInputEXT::TextEditing += [&calls1](const std::string&, int, int) { ++calls1; };
+    TextInputEXT::TextEditing += [&calls2](const std::string&, int, int) { ++calls2; };
+
+    TextInputEXT::INTERNAL_OnTextEditing("draft", 0, 5);
+
+    EXPECT_EQ(calls1, 1);
+    EXPECT_EQ(calls2, 1);
+}
+
 TEST_F(TextInputEXTTest, TextEditingDispatchesTextStartAndLength)
 {
     std::string text;

@@ -4,6 +4,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/MulticastAction.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -32,15 +33,21 @@ namespace Microsoft::Xna::Framework::Input
          * (e.g. an emoji) is delivered as two calls — a high surrogate then a low surrogate —
          * exactly as FNA's `Encoding.UTF8.GetChars` decode does. This event supports key repeat
          * and is not raised by non-character keys.
+         *
+         * Multicast (matches FNA's `event Action<char>`): use `+=` to add subscribers, `=` to set a
+         * single handler or `= nullptr` to clear.
          */
-        NOXNA static std::function<void(charcs)> TextInput;
+        NOXNA static System::MulticastAction<charcs> TextInput;
 
         /**
          * @brief Raised during IME composition with draft text, start offset, and length.
          *
          * Allows displaying draft text before it has been committed as input.
+         *
+         * Multicast (matches FNA's `event Action<string, int, int>`): use `+=` to add subscribers,
+         * `=` to set a single handler or `= nullptr` to clear.
          */
-        NOXNA static std::function<void(const std::string&, int, int)> TextEditing;
+        NOXNA static System::MulticastAction<const std::string&, int, int> TextEditing;
 
         /**
          * @brief Returns the native window handle used by the text input APIs.

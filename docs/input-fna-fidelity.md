@@ -58,8 +58,9 @@ not exactly identical.
 - **Logical→window scaling:** CNA converts logical→window at `SetPosition` time via the graphics
   backend (`TransformLogicalToWindow` / `SDL_RenderCoordinatesToWindow`); FNA scales at `GetState`
   read time. Equivalent for the common case (see `plan.md` a-0001).
-- **`ClickedEXT` is a single `std::function`** (single-subscriber; assignment replaces) vs FNA's
-  multicast `Action<int>`. Low impact (games attach one handler); a second subscriber would be lost.
+- **`ClickedEXT` is multicast (DEC-06, fixed 2026-07-05):** now a `System::MulticastAction<int>` matching
+  FNA's `public static Action<int>` — `+=` adds subscribers, `=` replaces, `= nullptr` clears. (Was a
+  single `std::function`; the second-subscriber-lost gap is closed.)
 - **Relative-mode cache:** `InputManager` caches the relative-mode flag (set only via
   `Mouse::setIsRelativeMouseModeEXTProperty`) rather than reading SDL live each `GetState` like FNA.
   Cannot diverge through CNA's own API; would only desync if SDL relative mode were toggled
@@ -165,8 +166,9 @@ type + interruption is partial (task 906).
 | `TextInput` code-unit type | `charcs`/UTF-16 code unit, matching FNA's `Action<char>` (Phase I9 task 806). |
 
 **Intentional / documented deviations:**
-- **Single-subscriber callbacks:** `TextInput`/`TextEditing` are single `std::function`s vs FNA's
-  multicast `Action` events (assignment replaces; a second subscriber is lost). Low impact.
+- **Multicast callbacks (DEC-06, fixed 2026-07-05):** `TextInput`/`TextEditing` are now
+  `System::MulticastAction<...>` matching FNA's `event Action<...>` — `+=` adds subscribers, `=` replaces,
+  `= nullptr` clears. (Were single `std::function`s; the second-subscriber-lost gap is closed.)
 - **`TextEditing` string is UTF-8** (`std::string`) vs FNA's decoded UTF-16 string; `start`/`length`
   index bytes vs UTF-16 units. Documented.
 - **Malformed UTF-8 is skipped** rather than emitting U+FFFD (FNA's replacement fallback).

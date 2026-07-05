@@ -237,6 +237,44 @@ TEST(MouseTest, InternalOnClickedFiresClickedEXTWithButtonIndex)
     ResetMouseState();
 }
 
+// DEC-06: ClickedEXT is a multicast System::MulticastAction<int> (matches FNA's Action<int>).
+TEST(MouseTest, ClickedEXTIsMulticastAndInvokesAllSubscribersInOrder)
+{
+    ResetMouseState();
+    Mouse::ClickedEXT = nullptr;
+
+    std::vector<int> order;
+    Mouse::ClickedEXT += [&order](int) { order.push_back(1); };
+    Mouse::ClickedEXT += [&order](const int button) { order.push_back(100 + button); };
+
+    Mouse::INTERNAL_onClicked(3);
+
+    ASSERT_EQ(order.size(), 2u) << "both subscribers must fire (multicast, matching FNA)";
+    EXPECT_EQ(order[0], 1);
+    EXPECT_EQ(order[1], 103);
+
+    ResetMouseState();
+}
+
+// DEC-06: `=` replaces the whole invocation list (C# `field = handler;`), while `+=` adds.
+TEST(MouseTest, ClickedEXTAssignmentReplacesAllSubscribers)
+{
+    ResetMouseState();
+    Mouse::ClickedEXT = nullptr;
+
+    int viaAdded = 0;
+    int viaAssigned = 0;
+    Mouse::ClickedEXT += [&viaAdded](int) { ++viaAdded; };
+    Mouse::ClickedEXT = [&viaAssigned](int) { ++viaAssigned; }; // replaces the += subscriber above
+
+    Mouse::INTERNAL_onClicked(0);
+
+    EXPECT_EQ(viaAdded, 0) << "assignment must replace, not append";
+    EXPECT_EQ(viaAssigned, 1);
+
+    ResetMouseState();
+}
+
 TEST(MouseTest, InternalOnClickedIsSafeWithNoSubscriber)
 {
     ResetMouseState();
