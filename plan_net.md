@@ -1008,11 +1008,27 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   from being valid/usable; documented as known gaps to close alongside the elbow-tear
   weight-painting pass, not before.
 
-- [ ] **Task 11.8** — `tools/avatar_builder/validate_gltf.py`  
+- [x] **Task 11.8** — `tools/avatar_builder/validate_gltf.py`  
   Sanity-check each exported GLB using `pygltflib` (already a project dependency from Phase 10):
   non-empty mesh, skin/joints present with the expected bone count/names from Task 11.1, both
   `Stand0`/`Wave` animations present, both `Smile`/`Blink` shape keys present. Fail loudly, don't
   silently accept a hollow/broken export.
+  **Done:** `validate_gltf.py` is plain `python3` (no Blender needed) — runs 4 checks via
+  `pygltflib` against a `.glb`: non-empty mesh, skin joints covering all 19 canonical
+  bone names (extra joints like `neutral_bone` are reported, not failed), `Stand0`/`Wave`
+  animations present, `Smile`/`Blink` present in some mesh's `extras["targetNames"]`.
+  Required a small prerequisite fix: `generate_skeleton.py` unconditionally imported
+  `bpy` at module level, which would `sys.exit()` immediately under plain `python3` —
+  moved that import inside `build_skeleton()` (lazy) so `BONES`/`ARMATURE_NAME` (pure
+  data, no bpy dependency) can be imported standalone; `validate_gltf.py` uses this
+  rather than duplicating the bone-name list.
+  **Verified beyond "runs and prints OK":** confirmed `validate` actually fails loudly,
+  not just on the happy path — ran it against a nonexistent path, a garbage (non-glTF)
+  file, a copy of the real export with the `Wave` animation stripped, and a copy with
+  `Blink` removed from `targetNames`; each produced a distinct, correct `FAIL:` message
+  and exit code 1. Ran clean against both real `male_avatar.glb`/`female_avatar.glb`
+  (19/19 bones, both animations, both shape keys; `neutral_bone` correctly reported as
+  informational, not a failure).
 
 - [ ] **Task 11.9** — `tools/avatar_builder/README.md`  
   Usage instructions, the canonical skeleton bone list, design rationale (why procedural, why no

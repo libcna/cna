@@ -29,7 +29,7 @@ bone-retargeting step at all.
 - [x] Task 11.5 — `generate_hair.py` / `generate_clothes.py`: helmet-like hair cap, Shirt/Pants/Shoes shells.
 - [x] Task 11.6 — `generate_animations.py`: `Stand0`/`Wave` Actions; confirmed real elbow/sleeve tearing under bend.
 - [x] Task 11.7 — `export_gltf.py` / `generate_avatar.py`: exports male_avatar.glb/female_avatar.glb, reopens cleanly.
-- [ ] Task 11.8 — `validate_gltf.py`
+- [x] Task 11.8 — `validate_gltf.py`: plain-python3 pygltflib sanity check, fails loudly on gaps.
 
 Full task detail: `plan_net.md` Phase 11 ("Procedural Avatar Asset Generator").
 
@@ -308,3 +308,38 @@ weight-painting pass as the elbow tear, not before.
 
 Verify: `blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out /tmp/male_avatar.glb`
 produces a non-empty file that reopens cleanly in Blender.
+
+## Validating an export (`validate_gltf.py`)
+
+Plain `python3` — no Blender needed for this one:
+
+```
+python3 tools/avatar_builder/validate_gltf.py /tmp/male_avatar.glb
+```
+
+Runs 4 checks via `pygltflib` and fails loudly (nonzero exit, a `FAIL: <specific
+reason>` message) on the first one that doesn't hold, rather than silently accepting a
+hollow/broken export:
+
+1. At least one mesh has a non-empty `POSITION` accessor.
+2. Some skin's joints cover all 19 canonical bone names from `generate_skeleton.BONES`
+   (imported directly, not duplicated — see below). Extra joints (e.g. `neutral_bone`)
+   are reported as informational, not treated as a failure.
+3. Both `Stand0` and `Wave` animations are present.
+4. Both `Smile` and `Blink` appear in some mesh's `extras["targetNames"]` (where
+   Blender's glTF exporter records shape-key/morph-target names).
+
+**A real prerequisite fix, not just this script:** `generate_skeleton.py` used to
+unconditionally `import bpy` at module level, which meant even importing it (just to
+read `BONES`) would immediately `sys.exit()` under plain `python3`. Moved that import
+inside `build_skeleton()` (lazy) — `BONES`/`ARMATURE_NAME` are pure data with no bpy
+dependency, so `validate_gltf.py` (and anything else needing the canonical bone list
+outside Blender) can import them directly instead of duplicating the list. Every other
+script in this pipeline still requires bpy at its own module level, unchanged — this
+fix is scoped to `generate_skeleton.py` only, since it's the one module whose data
+(not just its build function) other tools need.
+
+Verified beyond "runs and prints OK": ran it against a nonexistent path, a garbage
+(non-glTF) file, a copy of a real export with `Wave` stripped, and a copy with `Blink`
+removed from `targetNames` — each produced a distinct, correct `FAIL:` message and exit
+code 1. Both real `male_avatar.glb`/`female_avatar.glb` pass clean.

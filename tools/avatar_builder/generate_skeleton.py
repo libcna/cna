@@ -16,15 +16,13 @@ at runtime. Run headless via Blender:
 
 Other Phase 11 scripts import build_skeleton()/BONES from this module (run inside the
 same Blender process via generate_avatar.py, Task 11.7) rather than re-deriving the
-bone list.
+bone list. BONES/ARMATURE_NAME are plain data with no bpy dependency, so
+validate_gltf.py (Task 11.8) can `import generate_skeleton` from ordinary `python3`
+(outside Blender) to check exported joint names against this same source of truth —
+only build_skeleton() itself needs to run inside Blender.
 """
 
 import sys
-
-try:
-    import bpy
-except ImportError:
-    sys.exit("This script must be run inside Blender: blender --background --python generate_skeleton.py")
 
 ARMATURE_NAME = "CNAAvatarSkeleton"
 
@@ -61,6 +59,11 @@ def build_skeleton():
     """Creates the CNAAvatarSkeleton armature object in the current Blender scene
     and returns it. Removes any pre-existing object of the same name first, so this
     is safe to call repeatedly in the same Blender session (e.g. from generate_avatar.py)."""
+    try:
+        import bpy
+    except ImportError:
+        sys.exit("This script must be run inside Blender: blender --background --python generate_skeleton.py")
+
     existing = bpy.data.objects.get(ARMATURE_NAME)
     if existing is not None:
         bpy.data.armatures.remove(existing.data, do_unlink=True)
