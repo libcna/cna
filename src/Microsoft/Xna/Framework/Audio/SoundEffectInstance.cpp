@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <utility>
 
 #include "System/ArgumentNullException.hpp"
@@ -446,7 +447,7 @@ namespace Microsoft::Xna::Framework::Audio
         // comment in SoundEffectInstance.hpp for why this matches FNA's own dead-code status).
     }
 
-    void SoundEffectInstance::INTERNAL_applyLowPassFilter(float cutoff)
+    void SoundEffectInstance::INTERNAL_applyLowPassFilter(float cutoff, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
         if (!track_) return; // matches FNA's `handle == IntPtr.Zero` guard
@@ -456,16 +457,16 @@ namespace Microsoft::Xna::Framework::Audio
         MIX_LockMixer(mixer);
         filterState_->kind      = FilterState::Kind::LowPass;
         filterState_->frequency = cutoff;
-        filterState_->oneOverQ  = 1.0f; // matches FNA: hardcoded, not exposed as a parameter
+        filterState_->oneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
         MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
 #else
-        (void)cutoff;
+        (void)cutoff; (void)oneOverQ;
 #endif
     }
 
-    void SoundEffectInstance::INTERNAL_applyHighPassFilter(float cutoff)
+    void SoundEffectInstance::INTERNAL_applyHighPassFilter(float cutoff, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
         if (!track_) return;
@@ -475,16 +476,16 @@ namespace Microsoft::Xna::Framework::Audio
         MIX_LockMixer(mixer);
         filterState_->kind      = FilterState::Kind::HighPass;
         filterState_->frequency = cutoff;
-        filterState_->oneOverQ  = 1.0f;
+        filterState_->oneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
         MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
 #else
-        (void)cutoff;
+        (void)cutoff; (void)oneOverQ;
 #endif
     }
 
-    void SoundEffectInstance::INTERNAL_applyBandPassFilter(float center)
+    void SoundEffectInstance::INTERNAL_applyBandPassFilter(float center, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
         if (!track_) return;
@@ -494,12 +495,58 @@ namespace Microsoft::Xna::Framework::Audio
         MIX_LockMixer(mixer);
         filterState_->kind      = FilterState::Kind::BandPass;
         filterState_->frequency = center;
-        filterState_->oneOverQ  = 1.0f;
+        filterState_->oneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
         MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
 #else
-        (void)center;
+        (void)center; (void)oneOverQ;
+#endif
+    }
+
+    float SoundEffectInstance::INTERNAL_calculateFilterCutoff(float frequencyHz, float sampleRate)
+    {
+        // Matches FAudio's FACT_INTERNAL_CalculateFilterFrequency (FACT_internal.c) exactly: the
+        // min() guards against the formula behaving badly as the cutoff approaches the sample
+        // rate (their comment credits @Woflox).
+        if (sampleRate <= 0.0f) return 0.0f;
+        return 2.0f * std::sin(
+            std::numbers::pi_v<float> * std::min(frequencyHz / sampleRate, 0.5f));
+    }
+
+    float SoundEffectInstance::INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw)
+    {
+        // Matches FAudio's inline `1.0f / (track->qfactor / 3.0f)` at the SOUND_FLAG_COMPLEX
+        // track-init site (FACT_internal.c), clamped to at most 1.0f (their own comment: "the
+        // 0.67 Q Factor causes problems ... just clamp it for now"). qfactorRaw == 0 would
+        // divide by zero -- FAudio never emits that from real XACT tool output, but guard it here
+        // by falling back to the same default as "no filter" (OneOverQ = 1.0f).
+        if (qfactorRaw == 0) return 1.0f;
+        return std::min(3.0f / static_cast<float>(qfactorRaw), 1.0f);
+    }
+
+    void SoundEffectInstance::INTERNAL_applyXactTrackFilter(
+        uint8_t filterType, float frequencyHz, uint8_t qfactorRaw)
+    {
+#ifdef SOUND_ENABLED
+        if (!track_) return;
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        SDL_AudioSpec spec{};
+        if (!MIX_GetMixerFormat(mixer, &spec) || spec.freq <= 0) return;
+
+        const float cutoff   = INTERNAL_calculateFilterCutoff(frequencyHz, static_cast<float>(spec.freq));
+        const float oneOverQ = INTERNAL_calculateFilterOneOverQ(qfactorRaw);
+
+        switch (filterType)
+        {
+            case 0: INTERNAL_applyLowPassFilter(cutoff, oneOverQ); break;
+            case 1: INTERNAL_applyBandPassFilter(cutoff, oneOverQ); break;
+            case 2: INTERNAL_applyHighPassFilter(cutoff, oneOverQ); break;
+            default: break; // Not reachable via XactParser.cpp's bit-decode; defensive only.
+        }
+#else
+        (void)filterType; (void)frequencyHz; (void)qfactorRaw;
 #endif
     }
 
@@ -509,6 +556,25 @@ namespace Microsoft::Xna::Framework::Audio
         if (filterState_) ProcessFilterState(*filterState_, pcm, channels, samples);
 #else
         (void)pcm; (void)channels; (void)samples;
+#endif
+    }
+
+    void SoundEffectInstance::INTERNAL_getFilterStateForTest(
+        int& kind, float& frequency, float& oneOverQ) const
+    {
+#ifdef SOUND_ENABLED
+        if (!filterState_)
+        {
+            kind = static_cast<int>(FilterState::Kind::None);
+            frequency = 0.0f;
+            oneOverQ  = 1.0f;
+            return;
+        }
+        kind      = static_cast<int>(filterState_->kind);
+        frequency = filterState_->frequency;
+        oneOverQ  = filterState_->oneOverQ;
+#else
+        kind = 0; frequency = 0.0f; oneOverQ = 1.0f;
 #endif
     }
 

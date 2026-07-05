@@ -155,6 +155,22 @@ namespace CNA::Internal::Audio
         uint8_t  loopCount;
         /** @brief Per-track amplitude, already combined with the sound's own volume. */
         float    volume;
+        /**
+         * @brief This track's filter type: 0=low-pass, 1=band-pass, 2=high-pass (matches
+         * FAudioFilterType); 0xFF = no filter on this track. Only ever populated for complex
+         * sounds (see XactParser.cpp's per-track metadata parsing); simple sounds never carry
+         * filter data in the format at all. FAudio's own bit-decode of the source filterData
+         * field structurally never produces 1 (band-pass) -- replicated as-is, see P9-XACT-010.
+         */
+        uint8_t  filterType = 0xFF;
+        /** @brief Desired filter cutoff frequency in Hz, as authored. Valid only when filterType != 0xFF. */
+        uint16_t filterFrequencyHz = 0;
+        /**
+         * @brief Raw XACT Q-factor byte (0..255). Converted to FAudioFilterParameters::OneOverQ
+         * via min(3.0f / qfactor, 1.0f) at apply time (FACT_internal.c). Valid only when
+         * filterType != 0xFF.
+         */
+        uint8_t  filterQFactorRaw = 0;
     };
 
     /** @brief One sound entry parsed from a .XSB sound bank file. */

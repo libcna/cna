@@ -14,6 +14,7 @@ namespace Microsoft::Xna::Framework::Audio
     class AudioEmitter;
     class AudioListener;
     class SoundEffect;
+    class Cue;
 
     // T-4C: DSP filter state (kind/coefficients/recursive state), fully defined only in
     // SoundEffectInstance.cpp where SDL3_mixer's callback-registration types are available.
@@ -26,6 +27,9 @@ namespace Microsoft::Xna::Framework::Audio
     class SoundEffectInstance : public System::Object, public System::IDisposable
     {
         friend class SoundEffect;
+        // Cue::Play() wires real per-track XACT filter data into INTERNAL_applyXactTrackFilter
+        // (P9-XACT-011) -- see that method's declaration below.
+        NOXNA friend class Cue;
         // Tests need read access to the underlying MIX_Track handle to verify Play() idempotency
         // (that a repeated call while already playing doesn't restart the track).
         NOXNA friend struct SoundEffectInstanceTestAccess;
@@ -87,16 +91,44 @@ namespace Microsoft::Xna::Framework::Audio
         // FAudioFilterParameters::Frequency exactly, since these methods just forward it. No-op
         // if the track hasn't been created yet (matches FNA's `handle == IntPtr.Zero` guard);
         // not sticky across Stop(true)/replay, again matching FNA (the filter lives on the
-        // voice/track, not the instance).
-        void INTERNAL_applyLowPassFilter(float cutoff);
-        void INTERNAL_applyHighPassFilter(float cutoff);
-        void INTERNAL_applyBandPassFilter(float center);
+        // voice/track, not the instance). `oneOverQ` defaults to 1.0f, matching every call site
+        // in FNA's own (dead-code, never-called) SoundEffectInstance.cs equivalents -- P9-XACT-011
+        // adds real per-track Q fidelity for XACT-driven playback via
+        // INTERNAL_applyXactTrackFilter below, without changing this default for any other caller.
+        void INTERNAL_applyLowPassFilter(float cutoff, float oneOverQ = 1.0f);
+        void INTERNAL_applyHighPassFilter(float cutoff, float oneOverQ = 1.0f);
+        void INTERNAL_applyBandPassFilter(float center, float oneOverQ = 1.0f);
+
+        // P9-XACT-011: real entry point for a Cue-driven per-track XACT filter (parsed by
+        // XactParser.cpp into XsbWaveRef::filterType/filterFrequencyHz/filterQFactorRaw).
+        // `filterType` matches FAudioFilterType (0=low-pass, 1=band-pass, 2=high-pass);
+        // `frequencyHz` is the raw authored Hz value, converted to SDL3_mixer's expected
+        // normalized cutoff via the real device sample rate (INTERNAL_calculateFilterCutoff);
+        // `qfactorRaw` is the raw XACT Q-factor byte, converted via
+        // INTERNAL_calculateFilterOneOverQ. No-op for an unrecognized filterType (defensive only
+        // -- XactParser.cpp's bit-decode never actually produces one). Not continuously
+        // re-evaluated while playing (no per-frame Cue update tick exists, same one-shot-at-
+        // Play() narrowing as P9-XACT-006/007's RPC volume/pitch -- see CHECKLIST.md).
+        NOXNA void INTERNAL_applyXactTrackFilter(uint8_t filterType, float frequencyHz, uint8_t qfactorRaw);
+
+        // Pure conversion helpers (P9-XACT-011), split out of INTERNAL_applyXactTrackFilter so
+        // they're independently unit-testable without a real SDL3_mixer device driving the
+        // sample rate. Both match FAudio's exact formulas (FACT_internal.c,
+        // FACT_INTERNAL_CalculateFilterFrequency and the inline `1.0f / (qfactor / 3.0f)` at the
+        // SOUND_FLAG_COMPLEX track-init site).
+        NOXNA static float INTERNAL_calculateFilterCutoff(float frequencyHz, float sampleRate);
+        NOXNA static float INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw);
 
         // Test-only hook (SoundEffectInstanceTestAccess): runs this instance's filter state
         // through the exact same math the real SDL3_mixer callback uses, but synchronously and
         // directly -- the real callback only fires asynchronously from the mixing thread, which
         // would make a test either flaky or need a real-time wait. No-op if no filter is active.
         void ProcessFilterSamplesForTest(float* pcm, int channels, int samples);
+
+        // Test-only hook (SoundEffectInstanceTestAccess, P9-XACT-011): reads back the active
+        // filter's kind (FilterState::Kind cast to int; 0 = none)/frequency/oneOverQ without
+        // exposing FilterState's definition outside SoundEffectInstance.cpp.
+        void INTERNAL_getFilterStateForTest(int& kind, float& frequency, float& oneOverQ) const;
 
         /**
          * @brief Constructs a SoundEffectInstance bound to the given sound effect.

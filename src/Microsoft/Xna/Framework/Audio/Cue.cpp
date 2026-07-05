@@ -399,6 +399,17 @@ namespace Microsoft::Xna::Framework::Audio
             inst->setIsLoopedProperty(waveRef.loopCount > 0);
             inst->Play();
 
+            // P9-XACT-011: wire the track's real parsed XACT filter (if any) into the real
+            // SDL3_mixer filter callback. One-shot at Play() time, not continuously
+            // re-evaluated -- same narrowing as the RPC volume/pitch wiring above (CHECKLIST.md).
+            if (waveRef.filterType != 0xFF)
+            {
+                inst->INTERNAL_applyXactTrackFilter(
+                    waveRef.filterType,
+                    static_cast<float>(waveRef.filterFrequencyHz),
+                    waveRef.filterQFactorRaw);
+            }
+
             active_.push_back({std::move(inst), waveRef.volume});
 
             if (std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())

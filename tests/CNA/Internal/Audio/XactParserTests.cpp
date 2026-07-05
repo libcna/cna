@@ -532,8 +532,10 @@ namespace
 
     // Minimal .xsb with zero cues/wavebanks and one complex sound whose single track's event
     // list is exactly `events` (each pre-encoded via the Build*EventBytes helpers above).
-    // Regression fixture for T-2E.
-    std::vector<uint8_t> BuildXsbWithComplexTrack(const std::vector<std::vector<uint8_t>>& events)
+    // Regression fixture for T-2E. `filterData`/`frequency` default to 0 (no filter, matching
+    // every pre-existing caller); P9-XACT-011's retention test passes real values.
+    std::vector<uint8_t> BuildXsbWithComplexTrack(const std::vector<std::vector<uint8_t>>& events,
+                                                   uint16_t filterData = 0, uint16_t frequency = 0)
     {
         constexpr uint32_t headerSize     = 74;
         constexpr uint32_t bankNameSize   = 64;
@@ -587,8 +589,8 @@ namespace
         AppendU8(data, 1);
         AppendU8(data, 0xFF);
         AppendU32(data, trackEventsOffset);
-        AppendU16(data, 0); // filterData
-        AppendU16(data, 0); // frequency
+        AppendU16(data, filterData);
+        AppendU16(data, frequency);
 
         // Track event array: eventCount followed by each event's raw bytes
         AppendU8(data, static_cast<uint8_t>(events.size()));
@@ -1268,6 +1270,51 @@ TEST(XactParserTest, ComplexTrackWithOnlyPlayWaveEventStillResolves)
     EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 2);
     EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 99u);
     EXPECT_EQ(xsb.sounds[0].waves[0].loopCount, 1);
+}
+
+// P9-XACT-010/011: a complex track's filterData/frequency used to be read-and-discarded. This
+// covers the has-filter bit (bit0), FAudio's own filter-type bit-decode ((filterData>>1)&0x02,
+// which structurally only ever yields 0/low-pass or 2/high-pass -- see plan_audio.md's
+// P9-XACT-010 note), the qfactor byte (upper byte of filterData), and the separate frequency u16.
+// filterData = 0x0605: qfactor=0x06, bit0=1 (has filter), bits (>>1)&0x02 == 2 (high-pass).
+TEST(XactParserTest, ComplexTrackFilterDataIsRetained)
+{
+    const XsbData xsb = ParseXsb(
+        BuildXsbWithComplexTrack({ BuildPlayWaveEventBytes(1, 0, 0) }, 0x0605, 8000));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    const auto& wave = xsb.sounds[0].waves[0];
+    EXPECT_EQ(wave.filterType, 2);
+    EXPECT_EQ(wave.filterFrequencyHz, 8000u);
+    EXPECT_EQ(wave.filterQFactorRaw, 6);
+}
+
+// filterData's bit0 clear means "no filter" regardless of whatever happens to be in the qfactor/
+// type bits or the frequency field -- filterType must come out as the 0xFF sentinel.
+TEST(XactParserTest, ComplexTrackWithFilterBitClearHasNoFilterSentinel)
+{
+    const XsbData xsb = ParseXsb(
+        BuildXsbWithComplexTrack({ BuildPlayWaveEventBytes(1, 0, 0) }, 0x0604, 8000));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].filterType, 0xFF);
+}
+
+// Low-pass case: bit0=1, bits (>>1)&0x02 == 0 -- filterData = 0x0301 (qfactor=3, bit0 set, bit2
+// clear).
+TEST(XactParserTest, ComplexTrackFilterDataDecodesLowPassType)
+{
+    const XsbData xsb = ParseXsb(
+        BuildXsbWithComplexTrack({ BuildPlayWaveEventBytes(1, 0, 0) }, 0x0301, 4000));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    const auto& wave = xsb.sounds[0].waves[0];
+    EXPECT_EQ(wave.filterType, 0);
+    EXPECT_EQ(wave.filterFrequencyHz, 4000u);
+    EXPECT_EQ(wave.filterQFactorRaw, 3);
 }
 
 TEST(XactParserTest, DspBlockIsSkippedByCodeCountNotByLengthField)

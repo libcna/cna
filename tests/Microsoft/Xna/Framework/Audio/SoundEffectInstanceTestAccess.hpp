@@ -48,22 +48,42 @@ namespace Microsoft::Xna::Framework::Audio
         {
             instance.INTERNAL_applyReverb(rvGain);
         }
-        static void ApplyLowPassFilter(SoundEffectInstance& instance, float cutoff)
+        static void ApplyLowPassFilter(SoundEffectInstance& instance, float cutoff, float oneOverQ = 1.0f)
         {
-            instance.INTERNAL_applyLowPassFilter(cutoff);
+            instance.INTERNAL_applyLowPassFilter(cutoff, oneOverQ);
         }
-        static void ApplyHighPassFilter(SoundEffectInstance& instance, float cutoff)
+        static void ApplyHighPassFilter(SoundEffectInstance& instance, float cutoff, float oneOverQ = 1.0f)
         {
-            instance.INTERNAL_applyHighPassFilter(cutoff);
+            instance.INTERNAL_applyHighPassFilter(cutoff, oneOverQ);
         }
-        static void ApplyBandPassFilter(SoundEffectInstance& instance, float center)
+        static void ApplyBandPassFilter(SoundEffectInstance& instance, float center, float oneOverQ = 1.0f)
         {
-            instance.INTERNAL_applyBandPassFilter(center);
+            instance.INTERNAL_applyBandPassFilter(center, oneOverQ);
         }
         static void ProcessFilterSamples(SoundEffectInstance& instance, float* pcm,
                                           int channels, int samples)
         {
             instance.ProcessFilterSamplesForTest(pcm, channels, samples);
+        }
+
+        // P9-XACT-011 wrappers.
+        static void ApplyXactTrackFilter(SoundEffectInstance& instance, uint8_t filterType,
+                                          float frequencyHz, uint8_t qfactorRaw)
+        {
+            instance.INTERNAL_applyXactTrackFilter(filterType, frequencyHz, qfactorRaw);
+        }
+        static float CalculateFilterCutoff(float frequencyHz, float sampleRate)
+        {
+            return SoundEffectInstance::INTERNAL_calculateFilterCutoff(frequencyHz, sampleRate);
+        }
+        static float CalculateFilterOneOverQ(uint8_t qfactorRaw)
+        {
+            return SoundEffectInstance::INTERNAL_calculateFilterOneOverQ(qfactorRaw);
+        }
+        static void GetFilterState(const SoundEffectInstance& instance, int& kind,
+                                    float& frequency, float& oneOverQ)
+        {
+            instance.INTERNAL_getFilterStateForTest(kind, frequency, oneOverQ);
         }
     };
 }

@@ -778,6 +778,102 @@ namespace
         return data;
     }
 
+    // .xsb with one simple cue ("FilterCue") pointing at a COMPLEX sound with a single track
+    // (referencing LongWaveBank, so a real SoundEffectInstance/track gets spawned) whose
+    // filterData/frequency encode a real high-pass filter (bit0=1 has-filter, (filterData>>1)&
+    // 0x02==2 high-pass per FAudio's own bit-decode, qfactor=6, frequency=8000Hz). Regression
+    // fixture for P9-XACT-011.
+    std::vector<uint8_t> BuildFilterXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        // flags+cat+vol+pitch+prio+len(9) + trackCount(1) + track-meta vol+code+filterData+freq(9)
+        constexpr uint32_t soundPrefixSize = 9 + 1 + 9;
+        constexpr uint32_t eventSize       = 16; // one PlayWave event, see BuildPlayWaveEventBytes
+        constexpr uint32_t soundSize       = soundPrefixSize + 1 /*eventCount*/ + eventSize;
+        const uint32_t trackEventsOffset  = soundOffset + soundPrefixSize;
+        const uint32_t cueSimpleOffset    = soundOffset + soundSize;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "FilterCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "FilterSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
+
+        // Sound: COMPLEX, one track.
+        AppendU8(data, 0x01); // SOUND_FLAG_COMPLEX
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU8(data, 1);    // trackCount
+
+        // Track metadata: volume byte, code (absolute offset to event array), filterData,
+        // frequency. filterData = 0x0605: qfactor=6 (upper byte), bit0=1 (has filter),
+        // (filterData>>1)&0x02==2 (high-pass, FAudio's own bit-decode -- P9-XACT-010).
+        AppendU8(data, 0xFF); // track volume raw byte
+        AppendU32(data, trackEventsOffset);
+        AppendU16(data, 0x0605); // filterData
+        AppendU16(data, 8000);   // frequency (Hz)
+
+        // Track event array: one PlayWave event referencing LongWaveBank entry 0.
+        AppendU8(data, 1); // eventCount
+        AppendU32(data, 1u); // evtInfo: type=FACTEVENT_PLAYWAVE (1), timestamp=0
+        AppendU16(data, 0);  // randomOffset
+        AppendU8(data, 0xFF); // separator
+        AppendU8(data, 0);   // flags
+        AppendU16(data, 0);  // waveIdx
+        AppendU8(data, 0);   // wbIdx
+        AppendU8(data, 0);   // loopCount
+        AppendU16(data, 0);  // position
+        AppendU16(data, 0);  // angle
+
+        // Simple cue.
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
     WaveBank& SharedLongWaveBank()
     {
         static WaveBank wb(&SharedEngine(), WriteFixture(
@@ -899,6 +995,14 @@ namespace
         (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
         static SoundBank bank(&SharedEngine(), WriteFixture(
             "cna_cue_test", "rpc.xsb", BuildRpcXsbFixtureBytes()));
+        return bank;
+    }
+
+    SoundBank& SharedFilterBank()
+    {
+        (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&SharedEngine(), WriteFixture(
+            "cna_cue_test", "filter.xsb", BuildFilterXsbFixtureBytes()));
         return bank;
     }
 
@@ -1581,4 +1685,36 @@ TEST(CueTest, PlaySoundWithNoRpcCodesIsUnaffectedByEngineRpcCurves)
     auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
     ASSERT_NE(inst, nullptr);
     EXPECT_FLOAT_EQ(inst->getPitchProperty(), 0.0f);
+}
+
+// P9-XACT-011: end-to-end wiring test -- "FilterCue" (BuildFilterXsbFixtureBytes) is a real
+// WaveBank-backed complex sound whose single track carries real parsed high-pass filter data
+// (type=2, frequency=8000Hz, qfactor=6 -> oneOverQ=0.5). Play() must reach all the way from
+// XactParser's retained XsbWaveRef fields through Cue::Play()'s new
+// INTERNAL_applyXactTrackFilter() call into the spawned SoundEffectInstance's real filter state.
+TEST(CueTest, PlayWiresRealXactTrackFilterIntoSpawnedInstance)
+{
+    auto cue = std::unique_ptr<Cue>(SharedFilterBank().GetCue("FilterCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(*inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 2); // FilterState::Kind::HighPass
+    EXPECT_NEAR(oneOverQ, 0.5f, 1e-6f); // qfactor=6 -> min(3/6,1)
+    EXPECT_GT(frequency, 0.0f);
+}
+
+// A cue with no filter data at all ("LongCue") must not spuriously end up with an active filter.
+TEST(CueTest, PlaySoundWithNoFilterDataHasNoActiveFilter)
+{
+    auto cue = std::unique_ptr<Cue>(SharedLongBank().GetCue("LongCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(*inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 0); // FilterState::Kind::None
 }

@@ -1925,9 +1925,62 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   consistent with the RPC volume/pitch narrowing already accepted in P9-XACT-006/007. No code
   changed by this task (read-only audit, per its own task description) -- findings hand off
   directly to P9-XACT-011/012/013.
-* [ ] P9-XACT-011 Wire parsed low-pass/high-pass/band-pass filters to `SoundEffectInstance` where feasible.
-* [ ] P9-XACT-012 Keep reverb as documented no-op only if faithful implementation is not feasible with current backend.
-* [ ] P9-XACT-013 Document exact XACT DSP features supported and unsupported.
+* [x] P9-XACT-011 Wire parsed low-pass/high-pass/band-pass filters to `SoundEffectInstance` where feasible.
+  *Note:* Implements the wiring the `P9-XACT-010` audit scoped out. `XsbWaveRef` (`XactTypes.hpp`)
+  gained `filterType`/`filterFrequencyHz`/`filterQFactorRaw` (default `filterType=0xFF`, matching
+  FAudio's own "no filter" sentinel); `XactParser.cpp`'s complex-track loop now retains the
+  `filterData`/`frequency` bytes it used to discard, replicating FAudio's exact bit-decode
+  (`(filterData>>1)&0x02` for type, `(filterData>>8)&0xFF` for qfactor) rather than "fixing" its
+  band-pass-unreachable quirk. `SoundEffectInstance::INTERNAL_apply{Low,High,Band}PassFilter`
+  (`SoundEffectInstance.{hpp,cpp}`) gained an `oneOverQ` parameter defaulted to `1.0f` (every
+  existing caller, including FNA's own dead-code equivalents, is unaffected). Two pure,
+  independently-unit-tested static helpers do the FAudio-exact conversions: `INTERNAL_
+  calculateFilterCutoff(frequencyHz, sampleRate)` (`2*sin(pi*min(f/sr,0.5))`, matching
+  `FACT_INTERNAL_CalculateFilterFrequency`) and `INTERNAL_calculateFilterOneOverQ(qfactorRaw)`
+  (`min(3/qfactor,1)`, matching FAudio's inline track-init formula, with a divide-by-zero guard
+  FAudio itself doesn't need since real XACT tool output never emits `qfactor==0`). The new
+  `INTERNAL_applyXactTrackFilter(filterType, frequencyHz, qfactorRaw)` (NOXNA, `friend class Cue`)
+  is the real entry point: queries the live SDL3_mixer device sample rate via
+  `MIX_GetMixerFormat`, converts, and dispatches to the matching apply method. `Cue::Play()`
+  (`Cue.cpp`) calls it once per spawned `SoundEffectInstance` whenever `waveRef.filterType != 0xFF`
+  , right after `Play()` — same one-shot-at-`Play()`-time narrowing already accepted for RPC
+  volume/pitch (`P9-XACT-006/007`), not a continuous per-tick re-evaluation (no `Cue` update tick
+  exists). RPC `parameter` 3/4 (filter frequency/Q) remain unevaluated (`CHECKLIST.md`). Per the
+  user's explicit decision (asked before implementing, since this touches a private-API signature):
+  added the internal-only `oneOverQ` parameter for real Q fidelity rather than narrowing to a fixed
+  `Q=1.0`. Tests: `XactParserTest.ComplexTrackFilterDataIsRetained`/
+  `ComplexTrackWithFilterBitClearHasNoFilterSentinel`/`ComplexTrackFilterDataDecodesLowPassType`
+  (parser retention + bit-decode, including the has-filter-bit-clear sentinel case);
+  `SoundEffectInstanceFilterMathTest.CalculateFilterCutoffMatchesFAudioFormula`/
+  `CalculateFilterCutoffClampsAtNyquist`/`CalculateFilterOneOverQMatchesFAudioFormula`/
+  `CalculateFilterOneOverQGuardsDivideByZero` (pure math, no device needed);
+  `SoundEffectInstanceTest.ApplyXactTrackFilterDispatches{HighPass,LowPass,BandPass}*`/
+  `ApplyXactTrackFilterIgnoresUnrecognizedType`/`ApplyXactTrackFilterBeforePlayIsNoOp` (dispatch +
+  guards, via a new `INTERNAL_getFilterStateForTest` readback added alongside the existing
+  `ProcessFilterSamplesForTest` test-only hook); `CueTest.PlayWiresRealXactTrackFilterIntoSpawnedInstance`/
+  `PlaySoundWithNoFilterDataHasNoActiveFilter` (end-to-end, via a new real-WaveBank-backed
+  `BuildFilterXsbFixtureBytes`/`SharedFilterBank()` complex-sound fixture, `CueTests.cpp`).
+  Verified via `git stash` (stashing all 5 production-code files, keeping the 3 test files):
+  confirms a genuine compile-time dependency (every new test references a symbol that doesn't
+  exist pre-fix) rather than assertion failures — same category of proof as `P9-XACT-008/009`'s
+  parser-level tests. Full suite: 3226/3228 passing (2 expected hardware-skip), up from 3212/3214
+  before this task (whole-suite count includes an unrelated `feature/net` merge, see `NEXT.md`
+  §2); audio-scoped subset 320/320 (up from 306). Also verified clean under a full ASan+UBSan
+  build of just the audio suite (no new lifetime/ownership beyond the pre-existing `filterState_`
+  `unique_ptr`, but the shared `FilterState` mixing-thread interaction was flagged risky before,
+  `P9-BUILD-001..007`).
+* [x] P9-XACT-012 Keep reverb as documented no-op only if faithful implementation is not feasible with current backend.
+  *Note:* Confirmed, not changed: `P9-XACT-010`'s audit found sound-level `SOUND_FLAG_HAS_DSP` is
+  FACT's reverb-send-enable flag (routes a wave's voice to an aux-send bus alongside the master
+  voice), and SDL3_mixer has no aux-send/return bus concept at all — so there is nothing to wire.
+  `INTERNAL_applyReverb` stays exactly as it was (a documented no-op matching FNA's own dead-code
+  status for the equivalent C# method).
+* [x] P9-XACT-013 Document exact XACT DSP features supported and unsupported.
+  *Note:* `CHECKLIST.md` gained two new accepted-deviation rows: one covering the new real
+  per-track filter wiring (frequency + Q both real; RPC-driven live filter-frequency/Q override
+  and continuous per-tick re-evaluation are the two remaining unsupported pieces) and one covering
+  the upstream FAudio band-pass-unreachable bit-decode quirk (replicated as-is, not corrected).
+  Sound-level DSP/reverb's no-op status was already documented pre-existingly and is unchanged.
 * [ ] P9-XACT-014 Ensure missing wave, missing sound, and invalid cue index behavior matches XNA/FNA as closely as possible.
 * [ ] P9-XACT-015 Add tests for missing wave/cue behavior.
 

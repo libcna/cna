@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <memory>
+#include <numbers>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -429,6 +432,116 @@ TEST_F(SoundEffectInstanceTest, BandPassFilterFirstSampleMatchesStateVariableFil
     SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
     EXPECT_NEAR(pcm[0], 1.0f, 1e-6f); // F * x = 0.5 * 2.0
     EXPECT_NEAR(pcm[1], 1.0f, 1e-6f);
+}
+
+// ===================== XACT track filter wiring (P9-XACT-011) =====================
+
+// Matches FAudio's FACT_INTERNAL_CalculateFilterFrequency exactly: 2*sin(pi*min(f/sr, 0.5)).
+TEST(SoundEffectInstanceFilterMathTest, CalculateFilterCutoffMatchesFAudioFormula)
+{
+    const float expected = 2.0f * std::sin(
+        std::numbers::pi_v<float> * std::min(8000.0f / 44100.0f, 0.5f));
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterCutoff(8000.0f, 44100.0f),
+                expected, 1e-6f);
+}
+
+// FAudio clamps the cutoff formula's argument to at most 0.5 ("behaves badly as the filter
+// frequency gets too high as a fraction of the sample rate") -- a desired frequency at or above
+// the Nyquist rate must not exceed the clamp's result.
+TEST(SoundEffectInstanceFilterMathTest, CalculateFilterCutoffClampsAtNyquist)
+{
+    const float atNyquist  = SoundEffectInstanceTestAccess::CalculateFilterCutoff(22050.0f, 44100.0f);
+    const float pastNyquist = SoundEffectInstanceTestAccess::CalculateFilterCutoff(44100.0f, 44100.0f);
+    EXPECT_NEAR(atNyquist, 2.0f, 1e-6f);   // 2*sin(pi*0.5) == 2
+    EXPECT_NEAR(pastNyquist, 2.0f, 1e-6f); // clamped to the same value, not sin(pi*1.0)==0
+}
+
+// Matches FAudio's inline `1.0f / (qfactor / 3.0f)` clamped to at most 1.0f
+// (FACT_internal.c, SOUND_FLAG_COMPLEX track-init site).
+TEST(SoundEffectInstanceFilterMathTest, CalculateFilterOneOverQMatchesFAudioFormula)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterOneOverQ(6), 0.5f, 1e-6f);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterOneOverQ(3), 1.0f, 1e-6f); // 3/3==1, unclamped
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterOneOverQ(1), 1.0f, 1e-6f); // 3/1==3, clamped to 1
+}
+
+// qfactorRaw == 0 would divide by zero in FAudio's own formula; CNA defends against it by
+// falling back to the "no filter"/unity default instead (real XACT tool output never emits 0).
+TEST(SoundEffectInstanceFilterMathTest, CalculateFilterOneOverQGuardsDivideByZero)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterOneOverQ(0), 1.0f, 1e-6f);
+}
+
+// INTERNAL_applyXactTrackFilter dispatches filterType 0/1/2 to the matching Low/Band/HighPass
+// method and threads the converted oneOverQ through -- verified via the test-only filter-state
+// getter rather than the recursive math (already pinned down above for the plain float-cutoff
+// entry points).
+TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterDispatchesHighPassWithConvertedOneOverQ)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/2, 8000.0f, /*qfactorRaw=*/6);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 2); // FilterState::Kind::HighPass
+    EXPECT_NEAR(oneOverQ, 0.5f, 1e-6f);
+    EXPECT_GT(frequency, 0.0f);
+}
+
+TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterDispatchesLowPassType)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/0, 4000.0f, /*qfactorRaw=*/3);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 1); // FilterState::Kind::LowPass
+    EXPECT_NEAR(oneOverQ, 1.0f, 1e-6f);
+}
+
+TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterDispatchesBandPassType)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/1, 4000.0f, /*qfactorRaw=*/6);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 3); // FilterState::Kind::BandPass
+    EXPECT_NEAR(oneOverQ, 0.5f, 1e-6f);
+}
+
+// An unrecognized filterType (not reachable via XactParser.cpp's real bit-decode, but the method
+// takes a raw uint8_t) must leave the instance without an active filter, matching the defensive
+// default: case-less values fall through and do nothing.
+TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterIgnoresUnrecognizedType)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/0xAB, 4000.0f, 3);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 0); // FilterState::Kind::None
+}
+
+// Matches every other INTERNAL_apply*Filter's `handle == IntPtr.Zero` guard -- no track means no
+// filter state gets created at all.
+TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterBeforePlayIsNoOp)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, 2, 8000.0f, 6);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 0); // FilterState::Kind::None
 }
 
 // A constant (DC) signal repeatedly fed through the low-pass filter must converge to unity gain

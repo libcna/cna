@@ -802,16 +802,33 @@ namespace CNA::Internal::Audio
 
                 if (flags & SOUND_FLAG_COMPLEX)
                 {
-                    struct TrackMeta { float vol; uint32_t code; };
+                    struct TrackMeta
+                    {
+                        float    vol;
+                        uint32_t code;
+                        uint8_t  filterType;
+                        uint16_t frequency;
+                        uint8_t  qfactor;
+                    };
                     std::vector<TrackMeta> tracks(trackCount);
 
                     for (uint8_t t = 0; t < trackCount; ++t)
                     {
                         tracks[t].vol  = ReadVolByteAsAmplitude(sc);
                         tracks[t].code = sc.u32();
-                        // filter data (2 bytes) + frequency (2 bytes)
-                        sc.u16(); // filterData
-                        sc.u16(); // frequency
+
+                        // filterData (2 bytes) + frequency (2 bytes) (P9-XACT-010/011). Bit
+                        // layout (FACT_internal.c, FACTSoundBank_Prepare): bit0 = has-filter;
+                        // when set, filter type is (filterData>>1)&0x02 -- FAudio's own math,
+                        // which structurally only ever yields 0 (low-pass) or 2 (high-pass);
+                        // band-pass (1) is never reachable this way. qfactor occupies the upper
+                        // byte regardless of the has-filter bit. Replicated exactly, not "fixed."
+                        const uint16_t filterData = sc.u16();
+                        tracks[t].qfactor    = static_cast<uint8_t>((filterData >> 8) & 0xFF);
+                        tracks[t].filterType = (filterData & 0x0001)
+                            ? static_cast<uint8_t>((filterData >> 1) & 0x02)
+                            : 0xFF;
+                        tracks[t].frequency  = sc.u16();
                     }
 
                     // Parse track events (they're at absolute offsets)
@@ -821,6 +838,9 @@ namespace CNA::Internal::Audio
                         XsbWaveRef wr = ParseFirstPlayWave(sc, tracks[t].code, tracks[t].vol);
                         // Combine track vol with sound vol
                         wr.volume *= sound.volume;
+                        wr.filterType        = tracks[t].filterType;
+                        wr.filterFrequencyHz = tracks[t].frequency;
+                        wr.filterQFactorRaw  = tracks[t].qfactor;
                         sound.waves.push_back(wr);
                     }
                 }
