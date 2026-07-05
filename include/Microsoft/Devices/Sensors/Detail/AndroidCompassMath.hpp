@@ -55,11 +55,17 @@ namespace Microsoft::Devices::Sensors::Detail
      */
     [[nodiscard]] inline double ConvertRotationVectorToMagneticHeadingDegrees(float x, float y, float z, float w)
     {
+        // M_PI is a POSIX/BSD <cmath> extension, not standard C++ -- not
+        // guaranteed to be defined on every toolchain/standard-library
+        // combination this project targets, so a local constant is used
+        // instead of relying on it.
+        constexpr double Pi = 3.141592653589793238462643383279502884;
+
         const double r01 = 2.0 * (static_cast<double>(x) * y - static_cast<double>(z) * w);
         const double r11 = 1.0 - 2.0 * (static_cast<double>(x) * x + static_cast<double>(z) * z);
 
         const double azimuthRadians = std::atan2(r01, r11);
-        double degrees = azimuthRadians * (180.0 / M_PI);
+        double degrees = azimuthRadians * (180.0 / Pi);
         degrees = std::fmod(degrees + 360.0, 360.0);
         return degrees;
     }

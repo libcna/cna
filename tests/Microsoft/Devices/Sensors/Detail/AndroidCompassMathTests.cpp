@@ -12,6 +12,11 @@ using Microsoft::Devices::Sensors::Detail::ShouldRaiseCalibrateForAccuracyStatus
 namespace
 {
     constexpr double Tolerance = 1e-3;
+
+    // M_PI is a POSIX/BSD <cmath> extension, not standard C++ -- not
+    // guaranteed to be defined on every toolchain/standard-library
+    // combination this project targets (Task: replace non-standard M_PI).
+    constexpr double Pi = 3.141592653589793238462643383279502884;
 }
 
 // Task DEVICES-0090: identity quaternion (no rotation) must produce azimuth
@@ -31,7 +36,7 @@ TEST(AndroidCompassMathTests, IdentityQuaternionProducesZeroHeading)
 // comment and docs/devices-hardware-checklist.md).
 TEST(AndroidCompassMathTests, NinetyDegreeYawProducesConsistentNonZeroHeading)
 {
-    const float half = static_cast<float>(M_PI / 4.0);
+    const float half = static_cast<float>(Pi / 4.0);
     const double heading = ConvertRotationVectorToMagneticHeadingDegrees(0.0f, 0.0f, std::sin(half), std::cos(half));
     EXPECT_NEAR(heading, 270.0, Tolerance);
 }
@@ -41,8 +46,8 @@ TEST(AndroidCompassMathTests, NinetyDegreeYawProducesConsistentNonZeroHeading)
 // the formula responds monotonically to yaw, not just correctly at 0.
 TEST(AndroidCompassMathTests, OneEightyDegreeYawDiffersFromNinetyDegreeYaw)
 {
-    const float ninety = static_cast<float>(M_PI / 4.0);
-    const float oneEighty = static_cast<float>(M_PI / 2.0);
+    const float ninety = static_cast<float>(Pi / 4.0);
+    const float oneEighty = static_cast<float>(Pi / 2.0);
 
     const double headingAtNinety =
         ConvertRotationVectorToMagneticHeadingDegrees(0.0f, 0.0f, std::sin(ninety), std::cos(ninety));
