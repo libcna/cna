@@ -627,8 +627,8 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
   this guard — the freeze enumerates the surface directly.
 
 #### INPUT-API-032 — Enforce `EXT`/`NOXNA` tagging on every non-XNA member
-- **Priority:** P1 · **Status:** TODO · **Area:** API/Guardrail
-- **Files:** all Input headers
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** API/Guardrail
+- **Files:** `GamePadState.hpp`, `Touch/GestureSample.hpp`, `docs/input-public-api-frozen.md`
 - **Problem:** EXT/NOXNA tagging is mostly present but not enforced; a new non-XNA member could slip in
   untagged.
 - **Work:** Audit every member against FNA/XNA; ensure non-XNA members carry `EXT` suffix and/or `NOXNA`;
@@ -636,6 +636,19 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Acceptance:** Every non-XNA member is tagged; audit table recorded.
 - **Tests:** grep-based lint (optional).
 - **Deps:** §5 matrices.
+- **Result (2026-07-05):** Scanned every public Input member for tag status (a Python pass over all 26
+  headers listing untagged public members) and verified each untagged member against the FNA reference.
+  Every untagged public member is genuine XNA/FNA (`Mouse.WindowHandle`, `TouchPanel.WindowHandle`,
+  `TouchCollection.FindById`, the `getItem` indexer, the `= default` caps ctor, the `ref`/`&&` renderings
+  of single XNA ctors, and the `private` FNA-`internal` dead-zone ctors). **Two defects found and fixed:**
+  `GamePadState()` and `GestureSample()` explicit default constructors were untagged while their 9
+  value-struct siblings carry `NOXNA` — FNA declares no public parameterless ctor for either (C# structs'
+  parameterless ctor is implicit), so both are now `NOXNA`; all 11 explicit value-struct default ctors are
+  now uniformly tagged. Documented the full tagging convention + the audit result in
+  `docs/input-public-api-frozen.md` (its per-member STRICT/EXT/NOXNA table is the recorded audit). A
+  standalone grep lint was considered but "non-XNA" is not mechanically detectable without FNA knowledge;
+  instead the compile guards INPUT-API-030 (hygiene) + INPUT-API-031 (signature freeze) + INPUT-API-034
+  (enum values) keep the surface honest. Build clean; input filter 289/289.
 
 #### INPUT-API-033 — Guard against internal SDL types in public signatures
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** API/Guardrail

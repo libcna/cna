@@ -35,6 +35,38 @@ The pure **enums** (`Keys`, `Buttons`, `ButtonState`, `KeyState`, `GamePadType`,
 `TouchLocationState`, `GestureType`) are value-frozen separately and exhaustively by INPUT-KBD-001 /
 INPUT-TEST-001 under the enum-ABI guardrail **INPUT-API-034**; they are not repeated here.
 
+## EXT / NOXNA tagging convention (INPUT-API-032)
+
+Every member with **no XNA 4.0 equivalent** is tagged so it cannot be mistaken for stock XNA:
+
+- A **non-XNA enum value** carries the `EXT` **name suffix** (e.g. `Buttons::Misc1EXT`). Enum members
+  do not take the `NOXNA` macro.
+- A **non-XNA non-enum member** carries the `NOXNA` marker. If it is an FNA-compatible extension it
+  **also** carries the `EXT` name suffix (e.g. `NOXNA static ... GetGUIDEXT(...)`). A CNA-only
+  convenience carries `NOXNA` alone.
+- An **entire non-XNA class** (`MouseCursor`, `TextInputEXT`) is marked `NOXNA` at the class; its
+  individual members inherit that and need no per-member marker.
+- An **explicitly-declared default constructor of a value struct is `NOXNA`.** C# structs have an
+  *implicit* parameterless constructor, so FNA declares none; CNA's explicit `Type()` is a C++
+  addition with no FNA counterpart. (The `= default` on `GamePadCapabilities` is the implicit-
+  equivalent and stays untagged.)
+- A **`ref`/`&&` overload that is the C++ rendering of one XNA member** (e.g. the two
+  `TouchCollection` vector constructors together map FNA's single `TouchCollection(TouchLocation[])`)
+  is treated as that XNA member, not as separate non-XNA API.
+- **`private` members that map FNA `internal`** (e.g. the dead-zone-applying `GamePadThumbSticks` /
+  `GamePadTriggers` constructors) are not public API and take no tag.
+
+### Audit result (2026-07-05)
+
+Every public Input member was scanned; each untagged public member was verified to be genuine XNA/FNA
+API (`Mouse.WindowHandle`, `TouchPanel.WindowHandle`, `TouchCollection.FindById`, the indexer
+`getItem`, etc. are all public in FNA). **Two defects were found and fixed:** `GamePadState()` and
+`GestureSample()` default constructors were untagged while their 9 value-struct siblings were `NOXNA`;
+both are now `NOXNA`, so all 11 explicit value-struct default constructors are uniformly tagged. This
+member-by-member table (STRICT / EXT / NOXNA per member) is the recorded audit; the compile guards
+INPUT-API-030 (header hygiene) and INPUT-API-031 (signature freeze) keep it honest, and the enum-value
+guard INPUT-API-034 covers the enum layer.
+
 ---
 
 ## GamePad cluster (`Microsoft::Xna::Framework::Input`)
@@ -63,7 +95,7 @@ INPUT-TEST-001 under the enum-ABI guardrail **INPUT-API-034**; they are not repe
 - `const GamePadDPad& getDPadProperty() const;` — STRICT
 - `const GamePadThumbSticks& getThumbSticksProperty() const;` — STRICT
 - `const GamePadTriggers& getTriggersProperty() const;` — STRICT
-- `GamePadState();` — STRICT
+- `GamePadState();` — NOXNA
 - `GamePadState(const GamePadThumbSticks&, const GamePadTriggers&, const GamePadButtons&, const GamePadDPad&);` — STRICT
 - `GamePadState(const Vector2&, const Vector2&, float, float, std::initializer_list<Buttons>);` — STRICT
 - `bool IsButtonDown(Buttons) const;` — STRICT
@@ -251,6 +283,6 @@ INPUT-TEST-001 under the enum-ABI guardrail **INPUT-API-034**; they are not repe
 - `System::TimeSpan getTimestampProperty() const;` — STRICT
 - `const Vector2& getPositionProperty() const;` / `getPosition2Property` / `getDeltaProperty` / `getDelta2Property` — STRICT
 - `int getFingerIdEXTProperty() const;` / `int getFingerId2EXTProperty() const;` — EXT
-- `GestureSample();` — STRICT
+- `GestureSample();` — NOXNA
 - `GestureSample(GestureType, System::TimeSpan, Vector2, Vector2, Vector2, Vector2);` — STRICT
 - `GestureSample(GestureType, System::TimeSpan, Vector2, Vector2, Vector2, Vector2, int, int);` — EXT
