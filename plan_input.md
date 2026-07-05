@@ -56,9 +56,11 @@ implemented and event-driven.
 ### 2.3 Confidence levels
 
 - Type-level API completeness: **High** (enumerated directly from headers).
-- Member-level XNA numeric/behavior parity: **Medium** — enum values for `Keys`/`KeyState` are unit-tested;
-  `Buttons`/`GamePadType`/`GamePadDeadZone`/`TouchLocationState`/`GestureType` numeric values are **not**
-  asserted by dedicated tests (only used inline).
+- Member-level XNA numeric/behavior parity: **High for enum ABI** — as of 2026-07-05 all 8 public Input
+  enums are exhaustively value-pinned against FNA (`Keys` 160/160, `Buttons` 31/31, `GamePadType` 10/10,
+  `GamePadDeadZone` 3/3, `ButtonState` 2/2, `KeyState` 2/2, `TouchLocationState` 4/4, `GestureType` 11/11;
+  INPUT-KBD-001 + INPUT-TEST-001, guarded by INPUT-API-034). **Medium** remains only for struct/method
+  behavioral parity not yet captured by the formal member matrix (INPUT-API-027).
 - Internal bridge behavior: **High** for what is unit-tested via the fake backend and synthetic events;
   **Low** for real-hardware actuation (rumble, sensors, LED, hotplug, real GUID) — none is headless-verifiable.
 - Docs accuracy: **Low** — multiple mutually-contradictory test counts, a stale verification log, a
@@ -634,13 +636,21 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
   in the NOXNA `MouseCursor` (no SDL definition/header reaches consumers). Guardrail satisfied.
 
 #### INPUT-API-034 — Prevent accidental public-API drift on enums (values are ABI)
-- **Priority:** P2 · **Status:** TODO · **Area:** API/Guardrail
+- **Priority:** P2 · **Status:** DONE (2026-07-05) · **Area:** API/Guardrail
 - **Files:** `Keys.hpp, Buttons.hpp, GestureType.hpp, GamePadType.hpp, GamePadDeadZone.hpp, ButtonState.hpp, KeyState.hpp, TouchLocationState.hpp`
 - **Work:** The enum-value tests (INPUT-API-001..005,013,020,021) collectively pin every value; ensure they
   fail on any renumbering.
 - **Acceptance:** Renumbering any enum value fails a test.
 - **Tests:** the enum value tests.
 - **Deps:** those tasks.
+- **Result (2026-07-05):** Verified that **all 8 public Input enums are now exhaustively pinned** —
+  every enumerator is asserted against a hardcoded literal, so renumbering any value fails a test and
+  removing any member is a compile error (the tests reference members by name). Member-count vs
+  assertion-count confirmed exhaustive for each: `Buttons` 31/31 (INPUT-TEST-001, FNA-cross-checked),
+  `GamePadType` 10/10, `GamePadDeadZone` 3/3, `ButtonState` 2/2, `KeyState` 2/2, `TouchLocationState`
+  4/4, `GestureType` 11/11, and `Keys` 160/160 (INPUT-KBD-001, this session — the last remaining leg,
+  INPUT-API-013). No dedicated new test needed: the guardrail is realized by the union of the eight
+  exhaustive value suites, all currently green (incl. under ASan+UBSan).
 
 ---
 
@@ -653,13 +663,21 @@ env-gated (`FNA_KEYBOARD_USE_SCANCODES=="1"`, cached); key repeats keep the key 
 FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verification", mirrors FNA).
 
 #### INPUT-KBD-001 — Full `Keys` numeric parity vs FNA
-- **Priority:** P1 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Keyboard
 - **Files:** `Keys.hpp`, `tests/.../KeyboardInputTests.cpp`
 - **Problem:** Existing value test may cover a subset.
 - **Work:** Assert every `Keys` member equals its FNA/Windows-VK value.
 - **Acceptance:** All members pinned; diff vs FNA `Keys.cs` empty.
 - **Tests:** `KeysValuesMatchXNANumericConstants` (extended).
 - **Deps:** INPUT-API-013.
+- **Result (2026-07-05):** Mechanically diffed CNA `Keys.hpp` against the FNA reference
+  `src/Input/Keys.cs` (hex-normalized): **160 members, byte-identical — no value drift, no member
+  missing on either side.** Replaced the 10-key spot-check `KeysValuesMatchXNANumericConstants` with
+  an exhaustive 160-entry parity table (every member referenced by name with its hardcoded literal
+  value), plus a `static_assert` size anchor (==160) and a distinct-value check (no two `Keys` share
+  a numeric value). Passes locally and clean under ASan+UBSan. Since the table pins by name, removing
+  a member is now a compile error and renumbering one fails the `EXPECT_EQ`. This also completes the
+  `Keys` (INPUT-API-013) leg required by the enum-ABI guardrail INPUT-API-034.
 
 #### INPUT-KBD-002 — `Keyboard.GetState()` returns accumulated pressed set
 - **Priority:** P2 · **Status:** TODO · **Area:** Keyboard
