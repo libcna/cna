@@ -119,7 +119,9 @@ implemented and event-driven.
 - **Priority:** P2 · **Status:** TODO · **Area:** Build
 - **Files:** `CMakeLists.txt` (test registration), `docs/input-build-and-test.md`
 - **Problem:** Input tests are only selectable via a long, drift-prone `--gtest_filter`; the docs print
-  three different filter strings. There is no CTest label or dedicated target.
+  three different filter strings. There is no CTest label or dedicated target. Concrete proof of the drift
+  risk (2026-07-05): the new `ButtonStateTests`/`KeyStateTests`/`ButtonsTests` (INPUT-TEST-001) silently
+  fall outside the current tokens — the interim filter must add `*ButtonState*:*KeyState*:*Buttons*`.
 - **Work:** Add a CTest label (e.g. `LABELS input`) via `gtest_discover_tests` properties or a wrapper,
   or a canonical documented filter constant in one place.
 - **Acceptance:** `ctest -L input` (or one documented command) runs exactly the input tests; docs point to it.
@@ -291,8 +293,8 @@ is "the type's matrix section is filled and every row has a test or an explicit 
 
 Legend for current per-type test status (from the test audit): COVERED / PARTIAL / NONE.
 
-#### INPUT-API-001 — Matrix: `ButtonState` (enum, XNA) — current PARTIAL
-- **Priority:** P2 · **Status:** TODO · **Area:** API/Enum
+#### INPUT-API-001 — Matrix: `ButtonState` (enum, XNA) — value test DONE
+- **Priority:** P2 · **Status:** DONE (value test, 2026-07-05; INPUT-TEST-001) · **Area:** API/Enum
 - **Files:** `include/.../Input/ButtonState.hpp`
 - **Problem:** Values `Released=0,Pressed=1` are implicit and only used inline; no dedicated numeric test.
 - **Work:** Assert numeric values and underlying type vs FNA; add to matrix.
@@ -300,16 +302,16 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** new `ButtonStateTests`.
 - **Deps:** none.
 
-#### INPUT-API-002 — Matrix: `KeyState` (enum, XNA) — PARTIAL
-- **Priority:** P2 · **Status:** TODO · **Area:** API/Enum
+#### INPUT-API-002 — Matrix: `KeyState` (enum, XNA) — value test DONE
+- **Priority:** P2 · **Status:** DONE (value test, 2026-07-05; INPUT-TEST-001) · **Area:** API/Enum
 - **Files:** `KeyState.hpp`; existing `KeyboardStateTest.KeyStateValuesMatchXNAConstants`
 - **Work:** Confirm `Up=0,Down=1`; ensure a standalone test (not only via KeyboardState).
 - **Acceptance:** Matrix row filled; value test present.
 - **Tests:** extend/keep `KeyStateValuesMatchXNAConstants`.
 - **Deps:** none.
 
-#### INPUT-API-003 — Matrix: `Buttons` (flags enum, XNA+EXT) — PARTIAL
-- **Priority:** P1 · **Status:** TODO · **Area:** API/Enum
+#### INPUT-API-003 — Matrix: `Buttons` (flags enum, XNA+EXT) — value+operator test DONE
+- **Priority:** P1 · **Status:** DONE (value+operator test, 2026-07-05; INPUT-TEST-001) · **Area:** API/Enum
 - **Files:** `Buttons.hpp`
 - **Problem:** All 25 core bits + 6 EXT bits are explicit hex; mapping is tested but numeric values are not
   pinned by a dedicated test, and EXT bits must be distinguished from XNA bits.
@@ -319,16 +321,16 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** new `ButtonsTests`.
 - **Deps:** none.
 
-#### INPUT-API-004 — Matrix: `GamePadType` (enum, XNA) — PARTIAL
-- **Priority:** P2 · **Status:** TODO · **Area:** API/Enum
+#### INPUT-API-004 — Matrix: `GamePadType` (enum, XNA) — value test DONE
+- **Priority:** P2 · **Status:** DONE (value test, 2026-07-05; INPUT-TEST-001) · **Area:** API/Enum
 - **Files:** `GamePadType.hpp`
 - **Work:** Pin sequential values 0..9 (`Unknown..BigButtonPad`) vs FNA.
 - **Acceptance:** Value test present.
 - **Tests:** new `GamePadTypeTests`.
 - **Deps:** none.
 
-#### INPUT-API-005 — Matrix: `GamePadDeadZone` (enum, XNA) — PARTIAL
-- **Priority:** P2 · **Status:** TODO · **Area:** API/Enum
+#### INPUT-API-005 — Matrix: `GamePadDeadZone` (enum, XNA) — value test DONE
+- **Priority:** P2 · **Status:** DONE (value test, 2026-07-05; INPUT-TEST-001) · **Area:** API/Enum
 - **Files:** `GamePadDeadZone.hpp`
 - **Work:** Pin `None=0,IndependentAxes=1,Circular=2`.
 - **Acceptance:** Value test present.
@@ -457,16 +459,16 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** existing `TextInputEXTTest`.
 - **Deps:** none.
 
-#### INPUT-API-020 — Matrix: `TouchLocationState` (enum, XNA) — PARTIAL
-- **Priority:** P2 · **Status:** TODO · **Area:** API/Enum
+#### INPUT-API-020 — Matrix: `TouchLocationState` (enum, XNA) — value test DONE
+- **Priority:** P2 · **Status:** DONE (value test, 2026-07-05; INPUT-TEST-001) · **Area:** API/Enum
 - **Files:** `Touch/TouchLocationState.hpp`
 - **Work:** Pin `Invalid=0,Released=1,Pressed=2,Moved=3` vs FNA.
 - **Acceptance:** Value test present.
 - **Tests:** new `TouchLocationStateTests`.
 - **Deps:** none.
 
-#### INPUT-API-021 — Matrix: `GestureType` (flags enum, XNA) — PARTIAL
-- **Priority:** P2 · **Status:** TODO · **Area:** API/Enum
+#### INPUT-API-021 — Matrix: `GestureType` (flags enum, XNA) — value+operator test DONE
+- **Priority:** P2 · **Status:** DONE (value+operator test, 2026-07-05; INPUT-TEST-001) · **Area:** API/Enum
 - **Files:** `Touch/GestureType.hpp`
 - **Work:** Pin all power-of-two values (`None=0 … PinchComplete=512`) and operator behavior vs FNA.
 - **Acceptance:** Value+flag test present.
@@ -2163,20 +2165,29 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 
 ## 15. Tests plan
 
-Baseline (this checkout, EasyGL, 2026-07-05): full `CnaTests` **3248 passed / 2 skipped**; input filter
-**259 → 268 passed** after INPUT-GESTURE-007/011/012 added 9 gesture tests (DragComplete +
-interruption/cancellation); order-independent under shuffle×3. No `DISABLED_` input tests; `GTEST_SKIP`
-only as headless environment fallback. **No public-API-only compile test exists.** Gaps below become
-concrete backlog items.
+Baseline (this checkout, EasyGL, 2026-07-05): full `CnaTests` **3267 passed / 2 skipped** (was 3248;
++19 this session — 9 gesture + 10 enum-value tests). Input filter **259 → 273** with the existing tokens,
+**278** with the enum tokens added (INPUT-GESTURE-007/011/012 + INPUT-TEST-001); order-independent under
+shuffle×3. No `DISABLED_` input tests; `GTEST_SKIP` only as headless environment fallback. **No
+public-API-only compile test exists.** Gaps below become concrete backlog items.
 
 #### INPUT-TEST-001 — Add missing enum-value test suites
-- **Priority:** P1 · **Status:** TODO · **Area:** Test
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test
 - **Files:** new `ButtonStateTests, ButtonsTests, GamePadTypeTests, GamePadDeadZoneTests, KeyStateTests, TouchLocationStateTests, GestureTypeTests`
 - **Problem:** These enums are only used inline; no dedicated numeric/flag assertions.
 - **Work:** One value/flag test per enum (see §5 tasks).
 - **Acceptance:** Every enum value pinned.
 - **Tests:** the new suites.
 - **Deps:** INPUT-API-001..005,020,021.
+- **Result (2026-07-05):** Added 7 test files / 10 cases. Every value cross-checked against the FNA
+  reference (`Buttons.cs`, `GestureType.cs`, `GamePadType.cs`, `GamePadDeadZone.cs`,
+  `TouchLocationState.cs`, `ButtonState.cs`, `KeyState.cs`) — **all byte-identical**, including the 6
+  FNA-extension `Buttons` bits. Also covers the `Buttons`/`GestureType` flag operators (`| & ~ |= &=`).
+  Satisfies the value-test acceptance of INPUT-API-001/002/003/004/005/020/021 (matrix-row population
+  remains under INPUT-API-027) and backs the enum-ABI guardrail INPUT-API-034. Full suite 3248→3267;
+  order-independent under shuffle×3. **Filter gap found:** `ButtonStateTests`/`KeyStateTests`/`ButtonsTests`
+  fall outside the current input-filter tokens (they run in the full suite; the convenience filter needs
+  `*ButtonState*:*KeyState*:*Buttons*` — folded into INPUT-BUILD-003).
 
 #### INPUT-TEST-002 — DragComplete gesture tests (was zero)
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test/Gesture
