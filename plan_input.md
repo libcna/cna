@@ -2554,14 +2554,28 @@ automated from manual verification, and stamp manual results with exact date/har
 claim is a manual local run.
 
 #### INPUT-CI-001 — Bootstrap CI with submodule + sibling checkout
-- **Priority:** P0 · **Status:** TODO · **Area:** CI
-- **Files:** new `.github/workflows/input.yml` (or chosen CI)
+- **Priority:** P0 · **Status:** IMPLEMENTED (2026-07-05; first GitHub run needs observation) · **Area:** CI
+- **Files:** `.github/workflows/input-ci.yml`
 - **Problem:** No automated build/test exists.
 - **Work:** CI job: checkout, `git submodule update --init --recursive`, clone/point siblings sharp-runtime &
   easy-gl, configure, build `CnaTests`, run input filter.
 - **Acceptance:** CI green on push for at least EasyGL.
 - **Tests:** input filter in CI.
 - **Deps:** INPUT-BUILD-001.
+- **Result (2026-07-05):** Added `.github/workflows/input-ci.yml` — job `easygl-input` on `ubuntu-24.04`:
+  checkout + recursive submodules; clone the **public** siblings `sharp-runtime`/`easy-gl`/`meta-gl`
+  (develop, HTTPS, **no token needed**); apt deps (`g++-14`, FFmpeg dev, SDL X11/Wayland/GL/audio dev,
+  `xvfb`); cache the prebuilt SDL keyed on the SDL submodule SHA; configure EasyGL + tests; build
+  `CnaTests`; run the **canonical input filter under Xvfb** (`--gtest_shuffle --gtest_repeat=3`).
+  Pre-flight de-risking done locally: build recipe = the session-proven EasyGL config; siblings confirmed
+  public via the GitHub API; `third_party/enet` confirmed **committed** (not a submodule), so NET builds
+  with no extra fetch; YAML validated; found that the SDL `dummy` driver makes 3 `MouseCursor` tests FAIL
+  (null cursors) and switched to **Xvfb** (real virtual video → the same 280 that pass on a real display).
+  Also implicitly covers part of INPUT-CI-004 (canonical filter in CI), INPUT-CI-006 (shuffle), and adds
+  the SDL cache. **Honest caveat:** this environment has no `gh` CLI / GitHub token, so the actual green
+  run **cannot be observed from here** — the first push needs a look at the Actions tab; iterate on any
+  runner-specific failure (apt availability / hosted-runner quirks). Backend matrix (INPUT-CI-002) and the
+  sanitizer job (INPUT-CI-005) remain TODO.
 
 #### INPUT-CI-002 — Backend matrix (EasyGL, Vulkan, bgfx, SDL_RENDERER)
 - **Priority:** P1 · **Status:** TODO · **Area:** CI

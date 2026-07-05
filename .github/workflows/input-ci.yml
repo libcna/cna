@@ -1,0 +1,90 @@
+# INPUT-CI-001 — first CI for the Input track.
+#
+# Builds CNA with the EasyGL backend and runs the input test suite headless. The input tests are
+# backend-agnostic, so this one job gives full input coverage; other backends + a sanitizer job are
+# added later (INPUT-CI-002 / INPUT-CI-005). All sibling repos (sharp-runtime, easy-gl, meta-gl) are
+# public, so they clone over HTTPS with no token/secret. third_party/enet is committed to this repo;
+# SDL / SDL_image / SDL_mixer / googletest come in as submodules.
+name: input-ci
+
+on:
+  push:
+    branches: [feature/input, develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: input-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  easygl-input:
+    name: EasyGL build + input tests (Linux)
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - name: Checkout cna (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone sibling repos (public, no token needed)
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build pkg-config xvfb \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+
+      - name: Record SDL submodule commit (for the cache key)
+        id: sdlsha
+        run: echo "sha=$(git -C third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache prebuilt SDL (built once from the submodule, reused across runs)
+        uses: actions/cache@v4
+        with:
+          path: .sdl-prebuilt-Linux-x86_64
+          key: sdl-${{ runner.os }}-${{ steps.sdlsha.outputs.sha }}
+
+      - name: Configure (EasyGL, tests)
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCNA_GRAPHICS_BACKEND=EASYGL \
+            -DCNA_BUILD_TESTS=ON
+
+      - name: Build CnaTests
+        run: cmake --build build --target CnaTests
+
+      # A virtual X server (Xvfb) provides real windows/cursors headlessly. The SDL "dummy" video
+      # driver is NOT enough: it reports video as available but has null system cursors, so the
+      # MouseCursor tests fail rather than skip. Xvfb + SDL x11 makes them pass (real virtual video).
+      - name: Run input tests (canonical filter, headless via Xvfb, shuffled)
+        env:
+          SDL_VIDEODRIVER: x11
+          SDL_AUDIODRIVER: dummy
+        run: |
+          xvfb-run -a ./build/CnaTests \
+            --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*' \
+            --gtest_shuffle --gtest_repeat=3
