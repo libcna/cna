@@ -2166,7 +2166,24 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   `Apply3DAppliesDopplerPitchUpWhenListenerApproaches`/`Apply3DDopplerIsNoOpWhenGlobalDopplerScaleIsZero`
   (`SoundEffectInstanceTests.cpp`) cover receding/approaching emitter, approaching listener, and
   the global-disable gate, all via real `MIX_GetTrackFrequencyRatio` verification.
-* [ ] P9-3D-009 Document remaining limitations of CNA 3D audio compared to XNA/FNA.
+* [x] P9-3D-009 Document remaining limitations of CNA 3D audio compared to XNA/FNA.
+  *Note:* `P9-3D`'s last remaining item, now closed (9/9). Wrote a consolidated summary (new
+  "`Apply3D` / 3D audio fidelity" subsection, `docs/xna-4-api-coverage.md`) covering all three of
+  `Apply3D`'s positional effects now that `P9-3D-001..008` have landed: distance attenuation and
+  Doppler are both **exact** closed-form matches for FAudio's `F3DAudio.c` formulas
+  (`ComputeDistanceAttenuation`/`CalculateDoppler`); pan is the one remaining **approximate**
+  piece. While writing this up, found one genuinely new, previously-undocumented gap: `Apply3D`'s
+  pan is computed purely from world-space X displacement (`(emitter.X-listener.X)/distance`),
+  **ignoring the listener's/emitter's `Forward`/`Up` orientation entirely** -- real X3DAudio
+  computes azimuth relative to the listener's actual facing direction (`OrientFront`/`OrientTop`),
+  so turning the listener around changes which side an emitter pans to in real XNA/FNA; CNA always
+  pans as if the listener faces a fixed world axis. `Forward`/`Up` are stored (API-complete) on
+  both `AudioListener`/`AudioEmitter` but were never read for panning purposes (distinct from
+  `Velocity`, which *is* now read, for Doppler, since `P9-3D-005`). Added a new `CHECKLIST.md` row
+  for this finding. Read-only audit + documentation -- no source or test changes; the underlying
+  approximation itself is not being "fixed" here (would need a real azimuth calculation relative
+  to listener orientation, a nontrivial addition parked as a candidate for future 3D-audio work
+  rather than folded into this consolidation task). This closes `P9-3D`'s full 9-item task list.
 
 ## P9-HARDWARE — Audio hardware and exception behavior
 

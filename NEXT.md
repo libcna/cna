@@ -21,17 +21,17 @@ framework/runtime, not a game.
 - **Current phase:** the original compliance/bugfix plan (Fáze 0–6), Fáze 7 (30 findings) and
   Fáze 8 (25 findings) — two prior line-by-line audits against FNA — are fully closed. **Fáze 9**
   is a separate, user-directed "audio correctness hardening" pass against a fixed, user-specified
-  11-group task list (`plan_audio.md`'s "Phase 9" section). 7 of those 11 groups are fully closed
-  (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`, `P9-XACT` —
-  `P9-XACT` is **15/15**, its full task list closed); `P9-HARDWARE` is 2/6 done (the
-  `NoAudioHardwareException` audit + its raw-`std::runtime_error`-vs-XNA-exception-type fix);
-  `P9-DYNAMIC` is now **fully closed (9/9)** (the `PendingBufferCount` audit found and fixed two
-  real bugs, one of which uncovered and fixed a serious cross-cutting `System::EventHandler<T>`
-  bug in the sibling `sharp-runtime` repo, plus format-conversion and buffer-alignment audits
-  confirming no further bugs); `P9-3D` is now 7/9 done (the `Apply3D` stereo-source audit, a real
-  distance-attenuation formula bug found/fixed/tested, real Doppler pitch shift implemented, and
-  pan test coverage added via an extracted, directly-testable pure function); 1 group remains
-  fully open (`P9-AUDIT`) — see §4/§8.
+  11-group task list (`plan_audio.md`'s "Phase 9" section). 8 of those 11 groups are fully closed
+  (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`, `P9-XACT`,
+  `P9-3D` — `P9-XACT`'s own 15-item and `P9-3D`'s own 9-item lists are both now fully done, the
+  latter finding and fixing a real distance-attenuation formula bug, implementing real Doppler
+  pitch shift, and documenting one newly-found gap: pan ignores listener/emitter `Forward`/`Up`
+  orientation entirely); `P9-HARDWARE` is 2/6 done (the `NoAudioHardwareException` audit + its
+  raw-`std::runtime_error`-vs-XNA-exception-type fix); `P9-DYNAMIC` is **fully closed (9/9)** (the
+  `PendingBufferCount` audit found and fixed two real bugs, one of which uncovered and fixed a
+  serious cross-cutting `System::EventHandler<T>` bug in the sibling `sharp-runtime` repo, plus
+  format-conversion and buffer-alignment audits confirming no further bugs); 1 group remains fully
+  open (`P9-AUDIT`) — see §4/§8.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -92,7 +92,21 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (most recent Fáze 9 groups, newest first)
 
-- **`P9-3D-007`** (not yet committed) — added panning test coverage. `P9-3D-001`'s audit already
+- **`P9-3D-009`** (not yet committed) — `P9-3D`'s last remaining item, now closed (9/9).
+  Consolidated summary write-up (new "`Apply3D` / 3D audio fidelity" subsection,
+  `docs/xna-4-api-coverage.md`) covering all three of `Apply3D`'s positional effects: distance
+  attenuation and Doppler are both **exact** closed-form matches for FAudio's `F3DAudio.c`
+  formulas; pan is the one remaining **approximate** piece. While writing this up, found one
+  genuinely new gap not previously documented: `Apply3D`'s pan is computed purely from
+  world-space X displacement, **ignoring the listener's/emitter's `Forward`/`Up` orientation
+  entirely** -- real X3DAudio computes azimuth relative to the listener's actual facing
+  direction, so turning the listener around changes which side an emitter pans to in real
+  XNA/FNA; CNA always pans as if the listener faces a fixed world axis. `Forward`/`Up` are
+  stored (API-complete) but never read for panning (distinct from `Velocity`, now read for
+  Doppler since `P9-3D-005`). Added a new `CHECKLIST.md` row for this finding. Read-only audit +
+  documentation only -- no source/test changes, no build/test re-verification needed. Full
+  detail: `plan_audio.md`'s `P9-3D-009` note.
+- **`P9-3D-007`** (`567266a4`) — added panning test coverage. `P9-3D-001`'s audit already
   established SDL3_mixer has no `MIX_GetTrackStereo` getter, so `Apply3D`'s pan *result* can't be
   read back off the track (unlike gain/frequency-ratio, used for `P9-3D-003`/`P9-3D-005`).
   Extracted the pan formula (`dx/distance`, clamped) out of `Apply3D` into a new
@@ -359,11 +373,7 @@ every item above: `plan_audio.md`'s "Phase 9" section.
 already-scoped task list) still has open work:
 
 - `P9-XACT` — **fully closed (15/15)**, see §3.
-- `P9-3D` (7/9 done, see §3) — the `Apply3D` stereo-source audit (confirmed: same accepted `CP-19`
-  deviation as the `Pan` property), the distance-attenuation formula audit + fix + tests
-  (`-003`/`-006`), the Doppler audit + real implementation + tests (`-004`/`-005`, folding in
-  `-008`'s Doppler test coverage), and additional panning test coverage (`-007`) are done; still
-  open: a consolidated limitations write-up (`-009`).
+- `P9-3D` — **fully closed (9/9)**, see §3.
 - `P9-HARDWARE` (2/6 done, see §3) — `NoAudioHardwareException` audit and the
   `std::runtime_error`-vs-XNA-exception-type fix are done; still open: whether missing/corrupt
   XGS/XSB/XWB constructors should keep silently stubbing or throw (`P9-HARDWARE-003`, a separate,
@@ -420,6 +430,7 @@ ever lacks this commit, that one CNA test will fail (or, pre-fix, could throw
 | **Confirmed, fixed** | `DynamicSoundEffectInstance::Stop()` (no-arg) cleared `PendingBufferCount` even on a never-played instance, skipping `Stop(bool)`'s "no active track -> no-op" guard (FNA's `Stop()` is exactly `Stop(true)`, inheriting the guard) | `P9-DYNAMIC-001` |
 | **Confirmed, fixed** | `Apply3D`'s distance attenuation fell off continuously from distance 0 (`1/(1+distance/scale)`), already at half volume exactly at `distance == DistanceScale`, instead of FAudio's real formula: full volume within `DistanceScale`, inverse-distance falloff only beyond it | `P9-3D-003` |
 | **Confirmed, implemented** | Real Doppler pitch shift via `Apply3D` (closed-form formula matching FAudio's `CalculateDoppler` exactly) -- previously `DopplerScale`/`Velocity` were stored but never applied to pitch at all | `P9-3D-004/005` |
+| **Accepted deviation** | `Apply3D`'s pan ignores listener/emitter `Forward`/`Up` orientation entirely (world-space X displacement only) -- real X3DAudio computes azimuth relative to the listener's actual facing direction; `Forward`/`Up` are stored but never read for panning. Newly found, not previously documented | `CHECKLIST.md`, `P9-3D-009` |
 | **Confirmed, fixed (in `../sharp-runtime`)** | `System::EventHandler<T>::Raise()` iterated its live handler list directly -- a handler removing itself or another handler mid-callback (a common "handle once" pattern) dereferenced an already-destroyed `std::function`, observed as an escaping `std::bad_function_call`. Affects every event in the framework, not just Audio's `BufferNeeded` | `P9-DYNAMIC-007`, sharp-runtime commit `8342a2c` (not pushed) |
 | **Accepted deviation** | `IsPlaying`/`IsPaused` mutually exclusive, unlike real FACT — decision pending | `CHECKLIST.md`, `P9-LIFECYCLE-013` |
 | **Accepted deviation** | Authored-stop tail duration ≠ real `fadeOutMS` curve (not parsed/retained at all) | `CHECKLIST.md`, `P9-STOP-010` |
@@ -433,7 +444,7 @@ ever lacks this commit, that one CNA test will fail (or, pre-fix, could throw
 | **Accepted deviation** | `AudioEngine`/`SoundBank`/`WaveBank` silently stub instead of throwing on a missing/corrupt file (decision pending, `P9-HARDWARE-003`); `AudioEngine::Init()` never queries real hardware, so it can never throw `NoAudioHardwareException` from the constructor the way FNA's does (`SoundEffect`/`DynamicSoundEffectInstance` *can* now, since `P9-HARDWARE-002`) | `CHECKLIST.md`, `CP-18`/`XA-9` |
 | **Needs verification** | `SoundEffectInstance` filter coefficient locking follows SDL3_mixer's documented practice but was never stress-tested under real concurrency (no ThreadSanitizer run) | `T-4C` |
 | **Needs verification** | Device-dependent tests only ever run against the SDL `dummy` driver here; real-hardware runs are manual/ad-hoc | — |
-| **Incomplete** | `P9-3D`/`P9-HARDWARE` — see §4 (`P9-XACT`/`P9-DYNAMIC` are fully closed) | `plan_audio.md` |
+| **Incomplete** | `P9-HARDWARE`/`P9-AUDIT` — see §4 (`P9-XACT`/`P9-DYNAMIC`/`P9-3D` are fully closed) | `plan_audio.md` |
 
 Full list with FNA/FAudio line citations and verification notes: `plan_audio.md`.
 
@@ -546,22 +557,18 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 Fáze 9's own task list (`plan_audio.md`) is the source of truth; the user's explicit implementation
 order is exhausted through `P9-STOP`, `P9-XACT` is **fully closed (15/15)**, `P9-DYNAMIC` is
-**fully closed (9/9)**, `P9-HARDWARE` is 2/6 done, and `P9-3D` is 7/9 done. The remaining groups
-have no user-specified priority among them — suggested order below is by "smallest
-independently-verifiable slice first":
+**fully closed (9/9)**, `P9-3D` is **fully closed (9/9)**, and `P9-HARDWARE` is 2/6 done. The
+remaining groups have no user-specified priority among them — suggested order below is by
+"smallest independently-verifiable slice first":
 
-1. **Document remaining 3D audio limitations** (`P9-3D-009`). Goal: a consolidated write-up of
-   what's real (pan, distance attenuation, Doppler) vs. accepted-deviation (elevation/HRTF,
-   stereo crossfeed) for `Apply3D`, now that `P9-3D-001..008` have landed. Files: `CHECKLIST.md`,
-   `docs/xna-4-api-coverage.md` (already partially updated during `P9-3D-004/005`).
-2. **Decide missing/corrupt XGS/XSB/XWB constructor behavior** (`P9-HARDWARE-003`). Goal: decide
+1. **Decide missing/corrupt XGS/XSB/XWB constructor behavior** (`P9-HARDWARE-003`). Goal: decide
    whether `AudioEngine`/`SoundBank`/`WaveBank` should keep silently stubbing on a missing/corrupt
    file (current behavior, `CHECKLIST.md` `CP-18`/`XA-9`) or throw -- a genuine open decision, not
    a clear-cut fix like `P9-HARDWARE-002` was, since ~80+ existing tests build on the current
    `SharedEngine()`-style stub-on-missing-file fixtures (see `CHECKLIST.md`'s existing note on
    `CP-18`). If changed, `P9-HARDWARE-004` updates the tests that lock in today's stub behavior.
    Needs the user's input before implementing either way.
-3. **Add no-audio-device test coverage** (`P9-HARDWARE-005`). Goal: a real regression test for
+2. **Add no-audio-device test coverage** (`P9-HARDWARE-005`). Goal: a real regression test for
    `GetMixer()`'s failure path (`P9-HARDWARE-002`) needs a fresh, isolated process with an invalid
    `SDL_AUDIODRIVER` set before anything else calls `GetMixer()` -- this repo's shared `CnaTests`
    binary can't exercise it (the mixer's cache is process-wide and once-ever-initialized). May
@@ -597,16 +604,15 @@ checkbox + `*Note:*`, then update this file and commit.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Fáze 9 (a user-directed, already-scoped hardening pass) has 8 of 11 task
+Read NEXT.md first. Fáze 9 (a user-directed, already-scoped hardening pass) has 9 of 11 task
 groups fully closed (P9-LIFECYCLE, P9-CATEGORY, P9-VALIDATION, P9-DOCS, P9-BUILD, P9-STOP,
-P9-XACT, P9-DYNAMIC -- P9-XACT's own 15-item and P9-DYNAMIC's own 9-item lists are now both fully
-done, the latter having uncovered/fixed a cross-cutting System::EventHandler<T> bug in
-../sharp-runtime -- see §3/§4's dependency note), P9-HARDWARE is 2/6 done (the
-NoAudioHardwareException audit + its std::runtime_error-vs-XNA-exception-type fix), P9-3D is 7/9
-done (the Apply3D stereo-source audit, a real distance-attenuation formula bug found/fixed/
-tested, real Doppler pitch shift implemented, and pan test coverage added via an extracted
-directly-testable pure function), and 1 group is fully open (P9-AUDIT) -- see §4/§8. No known
-build/test blocker.
+P9-XACT, P9-DYNAMIC, P9-3D -- P9-XACT's own 15-item, P9-DYNAMIC's own 9-item, and P9-3D's own
+9-item lists are now all fully done; P9-DYNAMIC uncovered/fixed a cross-cutting
+System::EventHandler<T> bug in ../sharp-runtime -- see §3/§4's dependency note; P9-3D found/fixed
+a real distance-attenuation bug, implemented real Doppler pitch shift, and documented a newly
+found pan-orientation gap), P9-HARDWARE is 2/6 done (the NoAudioHardwareException audit + its
+std::runtime_error-vs-XNA-exception-type fix), and 1 group is fully open (P9-AUDIT) -- see §4/§8.
+No known build/test blocker.
 
 1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3256/3258 pass, audio-scoped
    subset 350/350 under ASan+UBSan) -- rebuild and rerun SDL_AUDIODRIVER=dummy
@@ -614,10 +620,10 @@ build/test blocker.
    was last updated. If a test involving BufferNeeded/EventHandler fails unexpectedly, check
    whether ../sharp-runtime still has commit 8342a2c (§4's dependency note) before assuming an
    audio regression.
-2. Inspect only the files needed for the first §8 task (P9-3D-009: consolidated 3D audio
-   limitations write-up) unless the user names something else -- don't refactor unrelated code.
-   P9-HARDWARE-003 (missing/corrupt file constructor behavior) is a genuine open decision, not a
-   clear-cut fix -- ask the user before implementing either way if it comes up.
+2. Inspect only the files needed for the first §8 task (P9-HARDWARE-003: missing/corrupt file
+   constructor behavior decision) unless the user names something else -- don't refactor
+   unrelated code. This is a genuine open decision, not a clear-cut fix -- ask the user before
+   implementing either way.
 3. Make one small, verified improvement: if it's an audit, write the finding into plan_audio.md;
    if it's a fix, add/extend a test, verify with the git-stash pattern (§7), run the relevant
    build/test command, and run ASan+UBSan if it touches memory lifetime or ownership.

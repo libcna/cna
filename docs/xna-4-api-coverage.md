@@ -172,9 +172,30 @@ this table exists to answer "is X implemented?" at a glance without reading ever
 | Bucket | Behavior |
 |---|---|
 | **Implemented** (matches FNA/XNA 4.0) | `SoundEffect` construction (file/buffer/buffer+range+loop), `Play`/`CreateInstance`, move-only Dispose cascade to every live instance • `SoundEffectInstance` Play/Pause/Resume/Stop/Volume/Pan/Pitch/IsLooped, real low/high/band-pass filters, `Resume()`-plays-if-never-started quirk, real Doppler pitch shift via `Apply3D` (exact `F3DAudio.c` `CalculateDoppler` formula, `P9-3D-004/005`) • `DynamicSoundEffectInstance` SubmitBuffer/SubmitFloatBufferEXT, `BufferNeeded`, real `PendingBufferCount` • `AudioEngine` `.xgs` parsing, categories, global variables, `Update()` lifecycle sweep, Dispose cascade • `SoundBank`/`WaveBank` `.xsb`/`.xwb` parsing (compact + non-compact + ADPCM), `PlayCue`, `GetCue`, real lazy streaming reads • `Cue` playback, natural-completion state reconciliation, weighted-lottery variation selection, category routing • `AudioCategory` Pause/Resume/Stop/SetVolume against real active cues over a mutation-safe snapshot • `Microphone` real SDL3 capture • `AudioListener`/`AudioEmitter`/`RendererDetail`/all enums |
-| **Approximate** (real effect, not bit-exact vs FNA/XAudio2/FACT) | 3D audio pan + distance attenuation, no elevation/HRTF (Doppler is exact, see Implemented) • stereo hard-pan (`Pan`=±1) eliminates the opposite channel instead of crossfeed-blending it (mono is bit-exact) • a bounded loop region truncates the *entire* track at `loopStart+loopLength`, not just later iterations (`MIX_PROP_PLAY_MAX_FRAME_NUMBER` has no per-iteration distinction) • interactive-type (`type==3`) XACT variation tables use a uniform pick instead of a variable-driven one |
+| **Approximate** (real effect, not bit-exact vs FNA/XAudio2/FACT) | `Apply3D` pan is a world-space-X-only linear approximation, ignoring listener/emitter `Forward`/`Up` orientation entirely (Doppler and distance attenuation are exact closed-form formulas, see Implemented — pan is the only remaining approximate piece, `P9-3D-009`) • stereo hard-pan (`Pan`=±1) eliminates the opposite channel entirely instead of crossfeed-blending it (mono is bit-exact) • a bounded loop region truncates the *entire* track at `loopStart+loopLength`, not just later iterations (`MIX_PROP_PLAY_MAX_FRAME_NUMBER` has no per-iteration distinction) • interactive-type (`type==3`) XACT variation tables use a uniform pick instead of a variable-driven one |
 | **Intentionally unsupported** (documented, no plan to implement) | reverb (`INTERNAL_applyReverb` is a no-op — no aux-send/return bus in SDL3_mixer) • true 3D elevation/HRTF (no native 3D audio graph) • `NoAudioHardwareException` never thrown (CNA always reports exactly one renderer) • `AudioEngine`/`SoundBank`/`WaveBank` silently stub instead of throwing on a missing/corrupt file |
 | **Not yet implemented / open decision** | XACT category `instanceLimit`/`fadeInMS`/`fadeOutMS` are parsed but never enforced • `Cue::IsPlaying`/`IsPaused` are mutually exclusive, unlike real FACT (found `P9-LIFECYCLE-013`, decision on whether to fix pending) |
+
+#### `Apply3D` / 3D audio fidelity — consolidated summary (`P9-3D-001..009`)
+
+Fáze 9's `P9-3D` group (`plan_audio.md`) audited every piece of `Apply3D` against FNA/FAudio one
+at a time; this is the consolidated result now that all nine items have landed. Per-property
+breakdown:
+
+| Property | Fidelity | Notes |
+|---|---|---|
+| Distance attenuation | **Exact** | Matches FAudio's `F3DAudio.c` `ComputeDistanceAttenuation` no-custom-curve formula precisely: full volume within `SoundEffect.DistanceScale`, inverse-distance falloff (`gain = DistanceScale/distance`) only strictly beyond it (`P9-3D-003`). |
+| Doppler pitch shift | **Exact** | Matches FAudio's `F3DAudio.c` `CalculateDoppler` precisely: relative-velocity projection onto the emitter-to-listener axis, `SpeedOfSound`/`DopplerScale` clamping, NaN guard, `[0.5, 4.0]` output clamp (`P9-3D-004/005`). Needed no native 3D audio API — pure math over `Position`/`Velocity`, applied via the same `MIX_SetTrackFrequencyRatio` the plain `Pitch` property already uses. |
+| Pan | **Approximate** | Linear world-space `(emitter.X - listener.X) / distance`, clamped to `[-1,1]`. Two known gaps vs. real X3DAudio: (1) **ignores listener/emitter `Forward`/`Up` orientation entirely** — real X3DAudio computes azimuth relative to the listener's actual facing direction, so turning the listener around changes which side an emitter pans to in real XNA/FNA; CNA always pans as if the listener faces a fixed world axis, since `Forward`/`Up` are stored (API-complete on `AudioListener`/`AudioEmitter`) but never read for panning (found during this audit, `P9-3D-009`). (2) Stereo sources hard-pan (eliminate the opposite channel) instead of crossfeed-blending, the same `SoundEffectInstance::Pan`-property limitation `CP-19`/`P9-3D-001` already found (mono sources are bit-exact either way). |
+| Elevation / true HRTF | **Not supported** | SDL3_mixer has no positional-audio DSP graph or head-related transfer function; no plan to implement (would need a different backend entirely). |
+| Reverb (aux-send routing) | **Not supported** | Confirmed by the `P9-XACT-010` audit to be FACT's sound-level `SOUND_FLAG_HAS_DSP` reverb-send-enable flag, not something `Apply3D` itself touches; SDL3_mixer has no aux-send/return bus for it to route to. |
+
+**Bottom line:** of `Apply3D`'s three positional effects (pan, distance attenuation, Doppler),
+two are now bit-exact matches for real XNA/FNA's math, and the third (pan) is a deliberate,
+narrowly-scoped linear approximation with two specific, named gaps (orientation-agnostic,
+stereo-hard-pan) rather than a vague "not fully implemented." Elevation/HRTF and reverb aux-send
+remain out of scope, since both would require a fundamentally different audio backend than
+SDL3_mixer.
 
 #### SDL3_mixer vs FAudio/FACT backend limitations (`P9-DOCS-006`)
 
