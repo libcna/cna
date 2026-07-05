@@ -53,15 +53,20 @@ cmake --build cmake-build-input-easygl --target CnaTests
 # Run everything:
 ./cmake-build-input-easygl/CnaTests
 
-# Run only input tests (canonical input filter):
-./cmake-build-input-easygl/CnaTests \
-  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*'
-
-# Prove order-independence (Phase I13/I14 task 891) — repeat + shuffle (same canonical filter):
-./cmake-build-input-easygl/CnaTests \
-  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*' \
-  --gtest_shuffle --gtest_repeat=5
+# Run ONLY the input tests — the canonical way (INPUT-BUILD-003).
+# `ctest -L input` runs the CnaInputTests entry, which invokes the single-source-of-truth filter
+# (CNA_INPUT_TEST_FILTER in CMakeLists.txt) shuffled x3 for order-independence. This is what CI runs.
+ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 ```
+
+> Do **not** hand-copy a `--gtest_filter` string to select the input subset — it drifts (a new suite
+> whose name matches none of the tokens is silently skipped). The one authoritative token list lives in
+> `CMakeLists.txt` as `CNA_INPUT_TEST_FILTER`; `ctest -L input` is the stable command. If you must invoke
+> the binary directly (e.g. to pass extra gtest flags), read the current filter from that variable.
+
+> **Headless note:** the `MouseCursor` tests need real cursors, which the SDL `dummy` video driver
+> cannot create. In CI they run under `xvfb-run` with `SDL_VIDEODRIVER=x11`; do the same locally on a
+> headless box (`xvfb-run -a ctest --test-dir <build> -L input`).
 
 ## Test counts (authoritative baseline)
 

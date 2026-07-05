@@ -118,7 +118,7 @@ implemented and event-driven.
   and real-hardware verification (INPUT-GAMEPAD-035). Fresh-clone repro (INPUT-BUILD-001) still pending.
 
 #### INPUT-BUILD-003 — Split an `InputTests` filter/label so input is runnable without a fragile string
-- **Priority:** P2 · **Status:** TODO · **Area:** Build
+- **Priority:** P2 · **Status:** DONE (2026-07-05) · **Area:** Build
 - **Files:** `CMakeLists.txt` (test registration), `docs/input-build-and-test.md`
 - **Problem:** Input tests are only selectable via a long, drift-prone `--gtest_filter`; the docs print
   three different filter strings. There is no CTest label or dedicated target. Concrete proof of the drift
@@ -129,6 +129,18 @@ implemented and event-driven.
 - **Acceptance:** `ctest -L input` (or one documented command) runs exactly the input tests; docs point to it.
 - **Tests:** the labeled subset equals the intended input set.
 - **Deps:** none.
+- **Result (2026-07-05):** Added a **single source of truth** for the input selector in `CMakeLists.txt`
+  — `CNA_INPUT_TEST_FILTER` (the canonical token list, incl. the previously-drifted
+  `ButtonState`/`KeyState`/`Buttons` and `PublicApiInput`) — and registered `add_test(NAME CnaInputTests
+  COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=3)` with
+  `set_tests_properties(... LABELS input ENVIRONMENT SDL_AUDIODRIVER=dummy)`. `ctest -L input` now selects
+  exactly one entry that runs the input subset shuffled×3 (verified locally: `ctest -N -L input` → 1 test;
+  running it executes the full input set — only the MouseCursor tests fail under the local SDL dummy
+  driver, which is the known headless limitation, green under CI Xvfb). CI switched from the inline
+  `--gtest_filter` string to `xvfb-run -a ctest --test-dir build -L input --output-on-failure`. Purged the
+  duplicated/drifted filter strings from the docs: `docs/input-build-and-test.md` and `docs/input-backend.md`
+  (the latter still had the **old 7-token** filter — concrete drift) and the `NEXT.md` handoff now all
+  point to `ctest -L input`, with the note that the token list lives only in `CMakeLists.txt`.
 
 #### INPUT-BUILD-004 — Pin the SDL submodule to an explicit tag
 - **Priority:** P1 · **Status:** TODO · **Area:** Build

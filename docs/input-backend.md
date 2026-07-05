@@ -238,21 +238,17 @@ git submodule update --init --recursive   # first time only (see README)
 cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-input-easygl --target CnaTests -j"$(nproc)"
 
-./cmake-build-input-easygl/CnaTests \
-  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'
+# Canonical input-test selector (INPUT-BUILD-003): runs the single-source-of-truth filter
+# (CNA_INPUT_TEST_FILTER in CMakeLists.txt), shuffled x3 for order-independence.
+ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 ```
 
-This filter is a subset of the input tests; the **canonical input filter and current authoritative
-counts** (input filter 280, full suite 3269/2 skipped, 2026-07-05 baseline) live in
-`docs/input-build-and-test.md` (§Test counts). To shake out
-order-dependence in the process-wide static input state (`InputManager`, `GestureDetector`, and
-the `MouseCursor` stock-cursor singletons all persist for the process lifetime), add:
-
-```bash
-./cmake-build-input-easygl/CnaTests \
-  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*' \
-  --gtest_shuffle --gtest_repeat=10
-```
+`ctest -L input` is the one authoritative way to run the input subset; the token list lives only in
+`CMakeLists.txt` (`CNA_INPUT_TEST_FILTER`) and the **authoritative counts** live in
+`docs/input-build-and-test.md` (§Test counts). Order-dependence in the process-wide static input state
+(`InputManager`, `GestureDetector`, and the `MouseCursor` stock-cursor singletons all persist for the
+process lifetime) is shaken out by the baked-in `--gtest_shuffle --gtest_repeat=3`; bump the repeat via
+a direct binary invocation with the same filter variable if you want more iterations.
 
 Swap `-DCNA_GRAPHICS_BACKEND=EASYGL` for `VULKAN` or `BGFX` to verify the same input tests on the
 other backends (bgfx adds 4 backend-specific, input-unrelated tests). The full suite is just

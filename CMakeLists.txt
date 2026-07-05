@@ -1943,6 +1943,23 @@ if(CNA_BUILD_TESTS)
     include(GoogleTest)
     gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)
 
+    # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
+    # The input subset used to be selected by a long --gtest_filter string copy-pasted across the docs
+    # and CI, which silently drifted whenever a new suite name fell outside its tokens (e.g. the
+    # ButtonState/KeyState/Buttons suites from INPUT-TEST-001). Keep the token list HERE only; docs and
+    # CI select the subset via `ctest -L input` (see docs/input-build-and-test.md). When you add an input
+    # test suite whose name matches none of these tokens, extend this one string.
+    set(CNA_INPUT_TEST_FILTER
+        "*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*")
+    add_test(NAME CnaInputTests
+             COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=3)
+    # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
+    # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
+    # driver has null cursors).
+    set_tests_properties(CnaInputTests PROPERTIES
+        LABELS input
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+
     if(MINGW)
         # Statically link MinGW runtime into the test binary too, so it can
         # run outside CLion without libgcc_s_seh-1.dll / libstdc++-6.dll.

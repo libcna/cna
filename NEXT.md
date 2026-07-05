@@ -145,12 +145,10 @@ cmake --build cmake-build-input-easygl --target CnaTests
 # Run everything:
 ./cmake-build-input-easygl/CnaTests
 
-# Input-only filter (canonical — see docs/input-build-and-test.md §Test counts):
-./cmake-build-input-easygl/CnaTests \
-  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*'
-
-# Order-independence (must stay green):
-./cmake-build-input-easygl/CnaTests --gtest_filter='<input filter above>' --gtest_shuffle --gtest_repeat=5
+# Input-only tests, canonical way (INPUT-BUILD-003) — runs the single-source-of-truth filter
+# (CNA_INPUT_TEST_FILTER in CMakeLists.txt) shuffled x3; this is what CI runs. Order-independence
+# is therefore covered by the same command.
+ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 
 # Focused device-level gamepad tests:
 ./cmake-build-input-easygl/CnaTests --gtest_filter='FakeGamepad*:FakeGamepadEnvCount*:FakeGamepadGuidFormat*:SdlGamepadSubsystemInit*'

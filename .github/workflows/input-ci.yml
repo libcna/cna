@@ -113,13 +113,13 @@ jobs:
       # A virtual X server (Xvfb) provides real windows/cursors headlessly (the SDL "dummy" driver has
       # null cursors, which fails the MouseCursor tests). For the ASan+UBSan entry, halt_on_error=1 turns
       # any UB / memory error into a job failure.
-      - name: Run input tests (canonical filter, headless via Xvfb, shuffled)
+      # Selects the input subset via the `input` CTest label (INPUT-BUILD-003) — the canonical filter
+      # lives in exactly one place, CMakeLists.txt (CNA_INPUT_TEST_FILTER); the CnaInputTests entry runs
+      # it shuffled x3 for order-independence.
+      - name: Run input tests (ctest -L input, headless via Xvfb, shuffled)
         env:
           SDL_VIDEODRIVER: x11
           SDL_AUDIODRIVER: dummy
           ASAN_OPTIONS: ${{ matrix.asan_options }}
           UBSAN_OPTIONS: ${{ matrix.ubsan_options }}
-        run: |
-          xvfb-run -a ./build/CnaTests \
-            --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*' \
-            --gtest_shuffle --gtest_repeat=3
+        run: xvfb-run -a ctest --test-dir build -L input --output-on-failure
