@@ -601,14 +601,30 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 ## 6. Public API guardrails
 
 #### INPUT-API-031 — Freeze the strict XNA 4.0 Input surface (golden signature list)
-- **Priority:** P1 · **Status:** TODO · **Area:** API/Guardrail
-- **Files:** new `docs/input-public-api-frozen.md` or a generated snapshot
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** API/Guardrail
+- **Files:** `docs/input-public-api-frozen.md` (golden snapshot),
+  `tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp` (enforcement)
 - **Problem:** Nothing prevents silent removal/rename of a public XNA member.
 - **Work:** Snapshot the public signatures (from INPUT-API-027) as a golden file; add a test/check that
   fails on drift.
 - **Acceptance:** Removing a public XNA member fails the check.
 - **Tests:** signature-diff check.
 - **Deps:** INPUT-API-027.
+- **Result (2026-07-05):** Enforced the freeze **in code** rather than as a fragile text diff. Added
+  `PublicApiInputSignatureFreezeTests.cpp` — a translation unit that pins the EXACT signature of every
+  public member (~250 entries across all 26 public Input types) via fully-spelled function-/member-
+  pointer `static_cast`s and `std::is_constructible_v`/special-member traits. Removing or renaming a
+  member fails to compile (address-of has no target); a signature/return-type/param change fails the
+  `static_cast`; a constructor change fails the trait. Hidden-friend `operator==`/`!=` are frozen via an
+  ADL `a==b` expression. Strict-XNA + EXT + stable NOXNA-convenience members are all covered; the
+  internal `INTERNAL_*` / `*ForTests` hooks and private members are deliberately excluded (documented).
+  The human-readable golden list lives in `docs/input-public-api-frozen.md`; the two are kept in
+  lock-step. **Negative-verified:** corrupting one entry (SetVibration `bool`→`void`) fails compilation
+  as designed; reverted. Compiles clean on EasyGL and under ASan+UBSan; input filter 289/289 (order-
+  independent, shuffle×2; the 3 MouseCursor failures are the known dummy-driver limitation). Like
+  INPUT-API-030 it includes only public headers, so it is also a second SDL-containment/standalone
+  check. The mechanical header-generated matrix (INPUT-API-027) remains open but is not required for
+  this guard — the freeze enumerates the surface directly.
 
 #### INPUT-API-032 — Enforce `EXT`/`NOXNA` tagging on every non-XNA member
 - **Priority:** P1 · **Status:** TODO · **Area:** API/Guardrail
