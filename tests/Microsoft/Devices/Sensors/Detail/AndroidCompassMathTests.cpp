@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: MS-PL
+#include <gtest/gtest.h>
+#include <cmath>
+
+#include "Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp"
+
+using Microsoft::Devices::Sensors::Detail::AndroidSensorAccuracyStatus;
+using Microsoft::Devices::Sensors::Detail::ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees;
+using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToMagneticHeadingDegrees;
+using Microsoft::Devices::Sensors::Detail::ShouldRaiseCalibrateForAccuracyStatus;
+
+namespace
+{
+    constexpr double Tolerance = 1e-3;
+}
+
+// Task DEVICES-0090: identity quaternion (no rotation) must produce azimuth
+// 0 -- this is the one case simple enough to assert an absolute value for
+// without independent hardware verification (any correctly-implemented
+// quaternion-to-azimuth formula agrees on the "no rotation" base case).
+TEST(AndroidCompassMathTests, IdentityQuaternionProducesZeroHeading)
+{
+    const double heading = ConvertRotationVectorToMagneticHeadingDegrees(0.0f, 0.0f, 0.0f, 1.0f);
+    EXPECT_NEAR(heading, 0.0, Tolerance);
+}
+
+// A 90-degree yaw rotation around the sensor's Z axis: quaternion
+// (0, 0, sin(45deg), cos(45deg)). Asserts the formula's own self-consistent
+// output for this input, not an independently-verified real-world value
+// (never checked against real hardware -- see this header's own doc
+// comment and docs/devices-hardware-checklist.md).
+TEST(AndroidCompassMathTests, NinetyDegreeYawProducesConsistentNonZeroHeading)
+{
+    const float half = static_cast<float>(M_PI / 4.0);
+    const double heading = ConvertRotationVectorToMagneticHeadingDegrees(0.0f, 0.0f, std::sin(half), std::cos(half));
+    EXPECT_NEAR(heading, 270.0, Tolerance);
+}
+
+// Rotating further in the same direction (180 degrees) must land on a
+// different, still-consistent heading than the 90-degree case -- confirms
+// the formula responds monotonically to yaw, not just correctly at 0.
+TEST(AndroidCompassMathTests, OneEightyDegreeYawDiffersFromNinetyDegreeYaw)
+{
+    const float ninety = static_cast<float>(M_PI / 4.0);
+    const float oneEighty = static_cast<float>(M_PI / 2.0);
+
+    const double headingAtNinety =
+        ConvertRotationVectorToMagneticHeadingDegrees(0.0f, 0.0f, std::sin(ninety), std::cos(ninety));
+    const double headingAtOneEighty =
+        ConvertRotationVectorToMagneticHeadingDegrees(0.0f, 0.0f, std::sin(oneEighty), std::cos(oneEighty));
+
+    EXPECT_NE(headingAtNinety, headingAtOneEighty);
+}
+
+TEST(AndroidCompassMathTests, HeadingIsAlwaysInZeroToThreeSixtyRange)
+{
+    const double heading = ConvertRotationVectorToMagneticHeadingDegrees(0.1f, 0.2f, 0.3f, 0.9f);
+    EXPECT_GE(heading, 0.0);
+    EXPECT_LT(heading, 360.0);
+}
+
+TEST(AndroidCompassMathTests, HighAccuracyStatusMapsToSmallestDegreeValue)
+{
+    EXPECT_EQ(ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(AndroidSensorAccuracyStatus::High), 5.0);
+}
+
+TEST(AndroidCompassMathTests, MediumAccuracyStatusMapsToFifteenDegrees)
+{
+    EXPECT_EQ(ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(AndroidSensorAccuracyStatus::Medium), 15.0);
+}
+
+TEST(AndroidCompassMathTests, LowAccuracyStatusMapsToFortyFiveDegrees)
+{
+    EXPECT_EQ(ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(AndroidSensorAccuracyStatus::Low), 45.0);
+}
+
+TEST(AndroidCompassMathTests, UnreliableAccuracyStatusMapsToOneEightyDegrees)
+{
+    EXPECT_EQ(ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(AndroidSensorAccuracyStatus::Unreliable), 180.0);
+}
+
+TEST(AndroidCompassMathTests, NoContactAccuracyStatusMapsToOneEightyDegrees)
+{
+    EXPECT_EQ(ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(AndroidSensorAccuracyStatus::NoContact), 180.0);
+}
+
+TEST(AndroidCompassMathTests, UnreliableAndNoContactRaiseCalibrate)
+{
+    EXPECT_TRUE(ShouldRaiseCalibrateForAccuracyStatus(AndroidSensorAccuracyStatus::Unreliable));
+    EXPECT_TRUE(ShouldRaiseCalibrateForAccuracyStatus(AndroidSensorAccuracyStatus::NoContact));
+}
+
+TEST(AndroidCompassMathTests, LowMediumHighDoNotRaiseCalibrate)
+{
+    EXPECT_FALSE(ShouldRaiseCalibrateForAccuracyStatus(AndroidSensorAccuracyStatus::Low));
+    EXPECT_FALSE(ShouldRaiseCalibrateForAccuracyStatus(AndroidSensorAccuracyStatus::Medium));
+    EXPECT_FALSE(ShouldRaiseCalibrateForAccuracyStatus(AndroidSensorAccuracyStatus::High));
+}

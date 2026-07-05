@@ -7,9 +7,12 @@
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/Compass.hpp"
 #include "Microsoft/Devices/Sensors/CompassReading.hpp"
+#include "Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -19,6 +22,45 @@ using Microsoft::Devices::Sensors::CompassReading;
 using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
+using Microsoft::Xna::Framework::Vector3;
+
+namespace
+{
+    // Task DEVICES-0096: a fake ICompassBackend (not Detail::AndroidCompassBackend,
+    // which is #ifdef __ANDROID__-only and cannot compile on this host) —
+    // lets these tests exercise Compass::Start()/CurrentValueChanged/Calibrate's
+    // delegation to *any* backend without needing real Android hardware.
+    class FakeCompassBackend final : public Microsoft::Devices::Sensors::Detail::ICompassBackend
+    {
+    public:
+        bool SupportedResult = true;
+        bool StartResult = true;
+        bool StopCalled = false;
+        ReadingCallback CapturedOnReading;
+        CalibrationCallback CapturedOnCalibrationNeeded;
+
+        [[nodiscard]] bool IsSupported() override
+        {
+            return SupportedResult;
+        }
+
+        bool Start(const System::TimeSpan&, ReadingCallback onReading, CalibrationCallback onCalibrationNeeded) override
+        {
+            if (!StartResult)
+            {
+                return false;
+            }
+            CapturedOnReading = std::move(onReading);
+            CapturedOnCalibrationNeeded = std::move(onCalibrationNeeded);
+            return true;
+        }
+
+        void Stop() override
+        {
+            StopCalled = true;
+        }
+    };
+} // namespace
 
 TEST(CompassTests, GetIsSupportedPropertyDoesNotCrash)
 {
@@ -204,10 +246,13 @@ TEST(CompassTests, GetTypeName)
     EXPECT_EQ(c.GetTypeName(), "Microsoft.Devices.Sensors.Compass");
 }
 
-// Task P3-6: CurrentValueChanged subscription. Compass is a permanent
-// NotSupported stub, so the event can never actually fire in this or any
-// other environment until SDL3 gains magnetometer support; this only
-// confirms subscribing doesn't crash.
+// Task P3-6: CurrentValueChanged subscription. On this (non-Android)
+// platform Compass is still a permanent NotSupported stub — SDL3 never
+// gains magnetometer support, and no backend is selected here — so the
+// event can't fire in this environment; this only confirms subscribing
+// doesn't crash. See WithInjectedSupportedBackendStartSucceeds below for
+// the case where a backend genuinely delivers readings (via a fake, since
+// Android's real Detail::AndroidCompassBackend can't run on this host).
 TEST(CompassTests, CurrentValueChangedSubscriptionDoesNotThrow)
 {
     Compass c;
@@ -221,9 +266,11 @@ TEST(CompassTests, CurrentValueChangedSubscriptionDoesNotThrow)
     EXPECT_THROW(c.Start(), SensorFailedException);
 }
 
-// Task P3-8: Calibrate subscription. Same permanent-stub limitation as
-// above — Compass.Calibrate is never raised by this implementation, so
-// this only confirms subscribing doesn't crash.
+// Task P3-8: Calibrate subscription. Same stub limitation on this platform
+// as above — no backend is selected here, so Calibrate can't fire; this
+// only confirms subscribing doesn't crash. See
+// CalibrateFiresFromBackendCalibrationCallback below for the
+// backend-delivers-a-real-calibration-event case.
 TEST(CompassTests, CalibrateSubscriptionDoesNotThrow)
 {
     Compass c;
@@ -235,4 +282,99 @@ TEST(CompassTests, CalibrateSubscriptionDoesNotThrow)
     (void)invoked;
 
     EXPECT_THROW(c.Start(), SensorFailedException);
+}
+
+// Task DEVICES-0096: with a supported fake backend injected, Start() must
+// actually succeed (not throw) and transition to Ready — proving the
+// delegation path itself works, independent of whether a real Android
+// device is available.
+TEST(CompassTests, WithInjectedSupportedBackendStartSucceeds)
+{
+    Compass c;
+    c.SetBackendForTesting(std::make_unique<FakeCompassBackend>());
+
+    EXPECT_NO_THROW(c.Start());
+    EXPECT_EQ(c.getStateProperty(), SensorState::Ready);
+}
+
+// A backend reporting IsSupported() == false must still result in the
+// existing SensorFailedException contract — supported-backend and
+// no-backend cases must be indistinguishable from the caller's perspective.
+TEST(CompassTests, WithInjectedUnsupportedBackendStartStillThrows)
+{
+    Compass c;
+    auto fake = std::make_unique<FakeCompassBackend>();
+    fake->SupportedResult = false;
+    c.SetBackendForTesting(std::move(fake));
+
+    EXPECT_THROW(c.Start(), SensorFailedException);
+    EXPECT_EQ(c.getStateProperty(), SensorState::NotSupported);
+}
+
+// Confirms CurrentValueChanged actually fires with the backend's own
+// reading data once Start() has wired the callback through — proves the
+// C++ delegation plumbing (Compass::Start() -> ICompassBackend::Start() ->
+// setCurrentValueProperty()) end to end, without needing real hardware.
+TEST(CompassTests, CurrentValueChangedFiresFromBackendReading)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    bool invoked = false;
+    CompassReading received;
+    c.CurrentValueChanged += [&invoked, &received](
+        System::Object*, const SensorReadingEventArgs<CompassReading>& args)
+    {
+        invoked = true;
+        received = args.getSensorReadingProperty();
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading synthetic(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+    fake->CapturedOnReading(synthetic);
+
+    ASSERT_TRUE(invoked);
+    EXPECT_EQ(received.getMagneticHeadingProperty(), 42.0);
+    EXPECT_TRUE(c.getIsDataValidProperty());
+    EXPECT_EQ(c.getCurrentValueProperty().getMagneticHeadingProperty(), 42.0);
+}
+
+// Confirms Calibrate actually fires when the backend invokes its
+// calibration-needed callback — proves the second delegation path
+// (ICompassBackend's CalibrationCallback -> Compass::Calibrate.Raise()).
+TEST(CompassTests, CalibrateFiresFromBackendCalibrationCallback)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    bool invoked = false;
+    c.Calibrate += [&invoked](System::Object*, const CalibrationEventArgs&) { invoked = true; };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnCalibrationNeeded));
+    fake->CapturedOnCalibrationNeeded();
+
+    EXPECT_TRUE(invoked);
+}
+
+// Confirms Stop() actually calls through to the backend's own Stop(), not
+// just flipping Compass's own started_/state_ bookkeeping.
+TEST(CompassTests, StopCallsBackendStop)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    c.Stop();
+
+    EXPECT_TRUE(fake->StopCalled);
+    EXPECT_EQ(c.getStateProperty(), SensorState::Disabled);
 }

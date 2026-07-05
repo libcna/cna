@@ -257,6 +257,47 @@ sensor-subsystem resource leak?) has never been observed on a real device.
 3. Confirm no crash/use-after-free on subsequent readings (there should be none, since
    the instance is disposed) or on process exit.
 
+## 7. `Compass` real Android backend (`plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
+
+**Code under test:** `Detail::AndroidCompassBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`)
+and `Detail::ConvertRotationVectorToMagneticHeadingDegrees()`
+(`include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`) — confirmed by code
+review, unit tests of the pure azimuth/accuracy math (self-consistency only), and a
+successful Android NDK cross-compile (`llvm-nm` symbol check). **Never actually run**:
+same reason as Section 6 — no Android device/emulator in this container.
+
+**Why this needs real hardware:** the azimuth formula is derived from first-principles
+quaternion algebra reproducing Android's own documented world-frame axis convention, but
+this project's own history (`Detail::ConvertAndroidPortraitToXnaLandscape()`'s multi-phase
+axis-sign saga for `Accelerometer`/`Gyroscope`) shows this exact kind of math is easy to
+get subtly wrong in a way unit tests against self-derived expected values cannot catch —
+only comparing against a real device's own compass app can.
+
+**Steps:**
+1. On a real Android device with a magnetometer, run a game/demo using `Compass`, holding
+   the device flat and facing a known direction (compare against the device's own,
+   already-calibrated compass app).
+2. Confirm `Compass.CurrentValue.MagneticHeading` roughly matches the reference compass
+   app's reading (within a reasonable tolerance — exact hardware calibration will differ).
+3. Rotate the device slowly through a full 360°; confirm `MagneticHeading` increases (or
+   decreases — confirm which direction this implementation actually produces, and note it
+   here) monotonically and wraps correctly at the 0°/360° boundary, matching Section 1's
+   "internal consistency" bar for the Android accelerometer/gyroscope remap.
+4. Perform the classic figure-8 calibration gesture with the device in a low-magnetic-accuracy
+   state (e.g., near a magnet or metal object); confirm `Compass.Calibrate` fires.
+5. Confirm `Compass.CurrentValue.MagnetometerReading` reports plausible raw µT values (Earth's
+   field is roughly 25-65 µT per `ASENSOR_MAGNETIC_FIELD_EARTH_MIN`/`_MAX`) — a reading wildly
+   outside this range without a nearby magnet suggests the raw-vector wiring itself is wrong,
+   not just the heading math.
+6. Confirm `Compass.CurrentValue.TrueHeading` currently equals `MagneticHeading` exactly (the
+   documented, honest limitation — not yet computing real declination) — this is expected,
+   not a bug, until `System.Device.Location` exists.
+
+If step 2 or 3 reveals a wrong sign/zero-point, the fix belongs in
+`ConvertRotationVectorToMagneticHeadingDegrees()` — never in downstream game code — and a
+new self-consistency test case should be added for whatever convention turns out correct,
+matching Section 1's own reporting convention.
+
 ---
 
 ## Reporting results

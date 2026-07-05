@@ -46,6 +46,21 @@ namespace Microsoft::Devices::Sensors::Detail
         /** @brief Number of valid entries in Values (e.g. 3 for a vector sensor, up to 5 for a rotation vector with accuracy). */
         int ValueCount = 0;
 
+        /**
+         * @brief Accuracy status, for sensor types that report one via `ASensorVector::status` (e.g. magnetic field, accelerometer, gyroscope).
+         *
+         * Numerically matches the NDK's `ASENSOR_STATUS_*` constants. This
+         * is a distinct field, not part of Values — `ASensorVector::status`
+         * occupies the same union memory as `Values[3]` would for a 4-float
+         * interpretation (it is a byte-sized field packed after the 3
+         * vector floats, not a 4th float), so it cannot be read correctly
+         * through `Values` alone. Meaningless (left at its default, 0) for
+         * sensor types that don't report a `ASensorVector`-shaped event
+         * (e.g. rotation vector, which uses the plain `data[]` float form
+         * instead).
+         */
+        int Status = 0;
+
         /** @brief Wall-clock time this sample was delivered. */
         System::DateTimeOffset Timestamp;
     };

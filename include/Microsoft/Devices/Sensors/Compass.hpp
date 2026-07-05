@@ -2,12 +2,14 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 
 #include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/CompassReading.hpp"
+#include "Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp"
 #include "Microsoft/Devices/Sensors/SensorBase.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
@@ -18,9 +20,14 @@ namespace Microsoft::Devices::Sensors
     /**
      * @brief Provides access to the device compass sensor.
      *
-     * @note SDL3 exposes no magnetometer/compass API on any supported platform.
-     * getIsSupportedProperty() always returns false, and Start() always fails
-     * with SensorFailedException.
+     * @note SDL3 exposes no magnetometer/compass API on any supported
+     * platform, so this class has no SDL-backed implementation. On
+     * Android, a native backend (Detail::AndroidCompassBackend, Task
+     * DEVICES-0086-0100) provides real heading/magnetometer data using the
+     * NDK's rotation-vector and magnetic-field sensors directly — no SDL
+     * involvement. On every other platform, getIsSupportedProperty()
+     * always returns false, and Start() always fails with
+     * SensorFailedException, exactly as before.
      */
     class Compass final : public SensorBase<CompassReading>
     {
@@ -34,6 +41,15 @@ namespace Microsoft::Devices::Sensors
 
         SensorState state_;
         bool started_;
+
+        /**
+         * @brief Native backend, selected at construction time by a
+         * compile-time platform switch (docs/devices-native-backend-design.md's
+         * migration plan). Null on any platform without one — Start()/Stop()
+         * fall back to the permanent NotSupported stub in that case,
+         * unchanged from before this backend existed.
+         */
+        std::unique_ptr<Detail::ICompassBackend> backend_;
 
     public:
         /**
@@ -105,5 +121,20 @@ namespace Microsoft::Devices::Sensors
          * @brief Event raised when the compass detects that it requires calibration.
          */
         System::EventHandler<CalibrationEventArgs> Calibrate;
+
+        /**
+         * @brief Test-only hook (Task DEVICES-0096): replaces the real,
+         * platform-selected backend with a caller-supplied one (typically a
+         * test fake), so Start()/CurrentValueChanged/Calibrate delegation
+         * can be exercised on any host without needing real Android
+         * hardware or Detail::AndroidCompassBackend directly.
+         *
+         * Must be called before Start(); has no effect on an already-started
+         * instance.
+         *
+         * @param backend Replacement backend; pass nullptr to restore the
+         * platform-default (no-backend/stub) behavior.
+         */
+        NOXNA void SetBackendForTesting(std::unique_ptr<Detail::ICompassBackend> backend);
     };
 } // namespace Microsoft::Devices::Sensors

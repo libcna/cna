@@ -103,6 +103,11 @@ namespace Microsoft::Devices::Sensors::Detail
                     {
                         sample.Values[i] = event.data[i];
                     }
+                    // event.vector.status occupies the same union memory as
+                    // Values[3] would (see AndroidSensorSample::Status's own
+                    // doc comment) -- read through the correctly-typed
+                    // .vector union member, not reinterpreted from Values.
+                    sample.Status = event.vector.status;
                     // Wall-clock time of delivery, deliberately NOT
                     // event.timestamp (a monotonic boot-time nanosecond
                     // value) — see AndroidSensorSample::Timestamp's own

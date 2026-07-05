@@ -2,6 +2,7 @@
 
 #include "Microsoft/Devices/Sensors/Compass.hpp"
 
+#include "Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Devices::Sensors
@@ -11,8 +12,17 @@ namespace Microsoft::Devices::Sensors
 
     bool Compass::getIsSupportedProperty()
     {
+#if defined(__ANDROID__)
+        // Stateless probe, independent of any Compass instance (matching
+        // the real WP7 API's static IsSupported contract) — cheap, does
+        // not hold any resource open (Detail::AndroidSensorBridge::
+        // IsAvailable()'s own discipline).
+        Detail::AndroidCompassBackend probe;
+        return probe.IsSupported();
+#else
         // SDL3 exposes no magnetometer/compass API on any supported platform.
         return false;
+#endif
     }
 
     SensorState Compass::getStateProperty() const
@@ -40,7 +50,11 @@ namespace Microsoft::Devices::Sensors
             ++instanceCount_;
         }
 
-        const bool supported = getIsSupportedProperty();
+#if defined(__ANDROID__)
+        backend_ = std::make_unique<Detail::AndroidCompassBackend>();
+#endif
+
+        const bool supported = backend_ ? backend_->IsSupported() : getIsSupportedProperty();
         state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
         setIsSupportedProperty(supported);
     }
@@ -57,6 +71,32 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Compass");
 
+        if (backend_ && backend_->IsSupported())
+        {
+            const bool started = backend_->Start(
+                getTimeBetweenUpdatesProperty(),
+                [this](const CompassReading& reading)
+                {
+                    setIsDataValidProperty(true);
+                    setCurrentValueProperty(reading);
+                },
+                [this]()
+                {
+                    if (!Calibrate.Empty())
+                    {
+                        CalibrationEventArgs args;
+                        Calibrate.Raise(static_cast<System::Object*>(this), args);
+                    }
+                });
+
+            if (started)
+            {
+                started_ = true;
+                state_ = SensorState::Ready;
+                return;
+            }
+        }
+
         state_ = SensorState::NotSupported;
         throw SensorFailedException(
             "Failed to start compass data acquisition. The compass sensor is not supported on this platform.");
@@ -65,6 +105,11 @@ namespace Microsoft::Devices::Sensors
     void Compass::Stop()
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Compass");
+
+        if (backend_)
+        {
+            backend_->Stop();
+        }
 
         started_ = false;
         state_ = SensorState::Disabled;
@@ -84,13 +129,14 @@ namespace Microsoft::Devices::Sensors
         // instanceCount_ for what should be a single logical disposal — see
         // SensorBase::Dispose()'s doc comment for the full rationale. The
         // loser waits for the winner's cleanup to actually finish (Task
-        // P7-2) instead of proceeding immediately. Currently latent rather
-        // than directly observable here — Start() always throws before
-        // setting started_ true, so the Stop() call below is never actually
-        // reached in practice — but fixed uniformly with
-        // Accelerometer/Gyroscope so the same bug can't resurface if
-        // Compass ever gains a real backend (see
-        // plan_devices_phase7.md's Audit finding B).
+        // P7-2) instead of proceeding immediately. Was latent when this was
+        // first written (Start() always threw before setting started_ true,
+        // so the Stop() call below was never actually reached) — fixed
+        // uniformly with Accelerometer/Gyroscope anyway, anticipating a real
+        // backend (plan_devices_phase7.md's Audit finding B). That
+        // anticipated backend now exists (Task DEVICES-0095): on Android,
+        // Start() can genuinely succeed and set started_ true, so this path
+        // is real, not just defensive, on that platform.
         if (!ClaimDisposalOnce())
         {
             WaitForDisposalToComplete();
@@ -112,6 +158,12 @@ namespace Microsoft::Devices::Sensors
         }
 
         SensorBase<CompassReading>::Dispose(disposing);
+    }
+
+    void Compass::SetBackendForTesting(std::unique_ptr<Detail::ICompassBackend> backend)
+    {
+        backend_ = std::move(backend);
+        setIsSupportedProperty(backend_ ? backend_->IsSupported() : getIsSupportedProperty());
     }
 
     GetTypeNameCPP(Compass, "Microsoft.Devices.Sensors.Compass")

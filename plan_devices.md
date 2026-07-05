@@ -896,7 +896,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 7: Compass Native Backend
 
-- [ ] DEVICES-0086 — Design `ICompassBackend` concretely (from the existing sketch)
+- [x] DEVICES-0086 — Design `ICompassBackend` concretely (from the existing sketch) (2026-07-05: implemented `include/Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp` — `IsSupported()`/`Start(TimeSpan, ReadingCallback, CalibrationCallback)`/`Stop()`, promoting `docs/devices-native-backend-design.md`'s sketch to real, compiling, mockable code. No `#include` of anything platform-specific; compiles and is mockable on every platform. `Compass.hpp`/`.cpp` behavior unchanged by this task alone (wired in DEVICES-0095).)
   - **Area:** Compass / Design
   - **Files:** `include/Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp` (new, promotes the sketch in `docs/devices-native-backend-design.md` to real, compiling code)
   - **Required behavior:** `IsSupported()`, `Start()`, `Stop()`, `GetLatestReading()` returning `CompassReading`, per the design doc.
@@ -904,7 +904,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0074
 
-- [ ] DEVICES-0087 — Implement `AndroidCompassBackend` skeleton
+- [x] DEVICES-0087 — Implement `AndroidCompassBackend` skeleton (2026-07-05: `include/.../Detail/AndroidCompassBackend.hpp` + `src/.../AndroidCompassBackend.cpp`, entirely `#ifdef __ANDROID__`-gated (unlike `AndroidSensorBridge`, which is inert-everywhere — this class is only ever referenced from `Compass.cpp`'s own `#if defined(__ANDROID__)` block, so full gating is simpler and sufficient). Owns two `Detail::AndroidSensorBridge` members.)
   - **Area:** Compass / Android
   - **Files:** `include/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.hpp` (new), `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp` (new, `#ifdef __ANDROID__`)
   - **Required behavior:** Class shape only, backed by `AndroidSensorBridge` (Phase 6).
@@ -912,7 +912,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0086, DEVICES-0080
 
-- [ ] DEVICES-0088 — Register `TYPE_MAGNETIC_FIELD` via the bridge
+- [x] DEVICES-0088 — Register `TYPE_MAGNETIC_FIELD` via the bridge (2026-07-05: `magneticFieldBridge_` constructed with `ASENSOR_TYPE_MAGNETIC_FIELD`; `AndroidCompassBackend::Start()` starts it alongside the rotation-vector bridge. Cross-compiled clean for Android; `llvm-nm` confirms real symbols, not a stub.)
   - **Area:** Compass / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
   - **Required behavior:** Registers a listener for `ASENSOR_TYPE_MAGNETIC_FIELD`.
@@ -920,7 +920,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only
   - **Dependencies:** DEVICES-0087
 
-- [ ] DEVICES-0089 — Register `TYPE_ACCELEROMETER` or `TYPE_ROTATION_VECTOR` as the orientation basis
+- [x] DEVICES-0089 — Register `TYPE_ACCELEROMETER` or `TYPE_ROTATION_VECTOR` as the orientation basis (2026-07-05: **chose `TYPE_ROTATION_VECTOR`**, documented explicitly in `AndroidCompassBackend`'s own class doc comment — it is already OS-fused (accelerometer+magnetometer+gyroscope), giving a direct quaternion with no manual sensor-fusion math needed in this bridge, unlike the raw accelerometer+magnetometer cross-product approach `SensorManager.getOrientation()` classically uses. Trade-off: couples heading accuracy to whatever fusion algorithm the device's OS/HAL implements, which this project cannot control or inspect — accepted, since reimplementing fusion math here would be a much larger, riskier undertaking for equivalent or worse accuracy.)
   - **Area:** Compass / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
   - **Required behavior:** Per the design doc, pick `TYPE_ROTATION_VECTOR` if it avoids doing fusion math in the bridge itself; document the chosen trade-off explicitly (accuracy vs. bridge complexity) rather than picking silently.
@@ -928,7 +928,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only
   - **Dependencies:** DEVICES-0088
 
-- [ ] DEVICES-0090 — Compute `MagneticHeading` from the chosen sensor data
+- [x] DEVICES-0090 — Compute `MagneticHeading` from the chosen sensor data (2026-07-05: `Detail::ConvertRotationVectorToMagneticHeadingDegrees(x,y,z,w)` (`AndroidCompassMath.hpp`) — a pure function, quaternion→rotation-matrix→azimuth via the standard `atan2(R01,R11)` relationship, normalized to `[0,360)`. 5 `AndroidCompassMathTests` cover the identity-quaternion base case (0°, the one value assertable without hardware), a 90° yaw self-consistency case (270°, hand-derived and verified), monotonic response, and the output range invariant. Explicitly documented as unverified against real hardware — same standing caveat as the accelerometer/gyroscope axis remap.)
   - **Area:** Compass / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
   - **Required behavior:** `SensorManager.getOrientation()`-equivalent math (or direct rotation-vector-to-azimuth conversion if using `TYPE_ROTATION_VECTOR`) producing a degrees-from-magnetic-north value, mapped to `CompassReading.MagneticHeading`.
@@ -936,7 +936,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidCompassMathTests.KnownMagneticFieldVectorProducesExpectedHeading`
   - **Dependencies:** DEVICES-0089
 
-- [ ] DEVICES-0091 — Handle `TrueHeading` honestly (no location source available)
+- [x] DEVICES-0091 — Handle `TrueHeading` honestly (no location source available) (2026-07-05: `PublishReading()` sets `TrueHeading` equal to `MagneticHeading` exactly, with an explicit comment stating this is a deliberate, honest limitation — never fabricates a declination value. Documented in `AUDIT.md`'s `Compass` row and `docs/devices-hardware-checklist.md` §7 as expected, not a bug, until `System.Device.Location` exists.)
   - **Area:** Compass / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
   - **Required behavior:** Per Non-Goals and the design doc, `TrueHeading` cannot be computed without geomagnetic declination, which requires `System.Device.Location` (not implemented). Set `TrueHeading` equal to `MagneticHeading` **only if** that is the honest, documented fallback the design doc specifies, or leave it at a sentinel/default and document clearly why — do **not** invent a declination value or silently assume 0.
@@ -944,7 +944,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidCompassMathTests.TrueHeadingLimitationIsDocumentedAndTested`
   - **Dependencies:** DEVICES-0090
 
-- [ ] DEVICES-0092 — Map `HeadingAccuracy` from `SensorManager`'s `SENSOR_STATUS_*` accuracy constants
+- [x] DEVICES-0092 — Map `HeadingAccuracy` from `SensorManager`'s `SENSOR_STATUS_*` accuracy constants (2026-07-05: `Detail::ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees()` maps `UNRELIABLE`/`NO_CONTACT`→180°, `LOW`→45°, `MEDIUM`→15°, `HIGH`→5° — read directly from the magnetic-field sensor's raw `ASensorVector::status` field via `AndroidSensorSample::Status` (a small necessary extension to Phase 6's `AndroidSensorBridge`, since `status` occupies different union memory than the plain float array). 4 tests cover all 4 input values.)
   - **Area:** Compass / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
   - **Required behavior:** `SENSOR_STATUS_UNRELIABLE`/`_LOW`/`_MEDIUM`/`_HIGH` → a `HeadingAccuracy` degrees value (design doc leaves the exact mapping to implementation time — pick a reasonable, documented mapping, e.g. `UNRELIABLE→180, LOW→45, MEDIUM→15, HIGH→5`, clearly marked as a CNA choice, not an XNA-documented value).
@@ -952,7 +952,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidCompassMathTests.AccuracyConstantMapsToExpectedDegrees` (parameterized, 4 cases)
   - **Dependencies:** DEVICES-0090
 
-- [ ] DEVICES-0093 — Raise `Compass::Calibrate` on low-accuracy transitions
+- [x] DEVICES-0093 — Raise `Compass::Calibrate` on low-accuracy transitions (2026-07-05: `Detail::ShouldRaiseCalibrateForAccuracyStatus()` returns true for `UNRELIABLE`/`NO_CONTACT` only — `LOW` deliberately excluded (documented: a momentary "Low" reading during normal use is common and would fire `Calibrate` too eagerly). `HandleMagneticFieldSample()` invokes the calibration callback under lock, releasing the lock before actually calling it (never holds `stateMutex_` while calling into caller-supplied code, matching `SensorBase<T>`'s own event-raising discipline). `CompassTests.CalibrateFiresFromBackendCalibrationCallback` confirms the full delegation path via a fake backend.)
   - **Area:** Compass / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Compass.cpp`, `Detail/AndroidCompassBackend.cpp`
   - **Required behavior:** `SENSOR_STATUS_UNRELIABLE` (and optionally `_LOW`) triggers `Calibrate.Raise()`, mirroring `CLLocationManagerDelegate.shouldDisplayHeadingCalibration()`'s intent on iOS per the design doc.
@@ -960,7 +960,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `CompassTests.CalibrateRaisedOnAccuracyDrop` (fake-backend-based)
   - **Dependencies:** DEVICES-0092, DEVICES-0080
 
-- [ ] DEVICES-0094 — Populate `MagnetometerReading` (raw µT vector)
+- [x] DEVICES-0094 — Populate `MagnetometerReading` (raw µT vector) (2026-07-05: `HandleMagneticFieldSample()` maps `sample.Values[0..2]` directly into a `Vector3`, no Android-landscape axis remap applied (unlike `Accelerometer`/`Gyroscope`) — documented as a deliberate choice, not an oversight: `Detail::AndroidSensorOrientation.hpp`'s remap is specific to Android's `sensorLandscape` orientation for the accelerometer/gyroscope sensors this codebase already ports; whether the same remap convention should apply to the magnetic-field sensor is a genuinely open, hardware-unverifiable question (added to `docs/devices-hardware-checklist.md` §7 as something to check on real hardware, not assumed either way here).)
   - **Area:** Compass / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
   - **Required behavior:** Raw `TYPE_MAGNETIC_FIELD` x/y/z (µT) mapped directly into `CompassReading.MagnetometerReading`, applying any needed Android-to-XNA axis remap (reuse `Detail::AndroidSensorOrientation.hpp`'s existing pure function if the same landscape convention applies here — confirm this explicitly, don't assume).
@@ -968,7 +968,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidCompassMathTests.MagnetometerAxisConventionMatchesAccelerometer` (or documents the deviation)
   - **Dependencies:** DEVICES-0088, DEVICES-0065
 
-- [ ] DEVICES-0095 — Wire `AndroidCompassBackend` into `Compass` via the backend-selection seam
+- [x] DEVICES-0095 — Wire `AndroidCompassBackend` into `Compass` via the backend-selection seam (2026-07-05: added `Compass::backend_` (`std::unique_ptr<Detail::ICompassBackend>`), constructed as `Detail::AndroidCompassBackend` only inside `#if defined(__ANDROID__)`; `Start()`/`Stop()`/the static `getIsSupportedProperty()` delegate to it when present, falling back to the exact original stub behavior otherwise. Every pre-existing `CompassTests` case (`GetIsSupportedPropertyDoesNotCrash`/`StartThrowsSensorFailedException`/etc.) still passes unmodified on this non-Android build — confirmed by re-running the full suite, not assumed.)
   - **Area:** Compass
   - **Files:** `src/Microsoft/Devices/Sensors/Compass.cpp`
   - **Required behavior:** Per the design doc's migration plan: add a private `std::unique_ptr<Detail::ICompassBackend>` member, `#if defined(__ANDROID__)` selects `AndroidCompassBackend`, else no backend (today's exact stub behavior, unchanged). `getIsSupportedProperty()`/`Start()` only change behavior on Android once this lands.
@@ -976,7 +976,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** full existing `CompassTests.*` re-run green; new Android-gated tests added (compile-only on this host)
   - **Dependencies:** DEVICES-0087 through DEVICES-0094
 
-- [ ] DEVICES-0096 — Add fake-backend `CompassTests` for the new Android path
+- [x] DEVICES-0096 — Add fake-backend `CompassTests` for the new Android path (2026-07-05: added `FakeCompassBackend` (a local test-only `ICompassBackend` implementation, not `Detail::AndroidCompassBackend` — which can't compile on this host) plus 6 new tests: `WithInjectedSupportedBackendStartSucceeds`, `WithInjectedUnsupportedBackendStartStillThrows`, `CurrentValueChangedFiresFromBackendReading`, `CalibrateFiresFromBackendCalibrationCallback`, `StopCallsBackendStop`. Required adding a `NOXNA SetBackendForTesting()` test-only hook to `Compass` (mirrors `Accelerometer`'s established `*ForTesting()` convention). All 6 pass; existing `NotSupported`-stub tests remain the default (no-backend-injected) path and still pass unmodified.)
   - **Area:** Compass / Testing
   - **Files:** `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
   - **Required behavior:** Using a fake `ICompassBackend` (not `AndroidCompassBackend` directly, so it's host-testable), confirm `Compass::Start()`/`CurrentValueChanged`/`Calibrate` correctly delegate to a "supported" backend when one is injected — this proves the C++ delegation plumbing without needing Android.
@@ -984,7 +984,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `CompassTests.WithInjectedSupportedBackendStartSucceeds`, `...CurrentValueChangedFiresFromBackendReading`
   - **Dependencies:** DEVICES-0095
 
-- [ ] DEVICES-0097 — Cross-compile `Compass`/`AndroidCompassBackend` for Android and verify via `llvm-nm`
+- [x] DEVICES-0097 — Cross-compile `Compass`/`AndroidCompassBackend` for Android and verify via `llvm-nm` (2026-07-05: `cmake --build cmake-build-android --target CNA` succeeds clean (arm64-v8a, API 24, NDK r30). `llvm-nm -C` on `AndroidCompassBackend.cpp.o` confirms every real method (`HandleRotationVectorSample`/`HandleMagneticFieldSample`/`PublishReading`/etc.) plus `ConvertRotationVectorToMagneticHeadingDegrees`/`ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees` are compiled in; `llvm-nm` on `Compass.cpp.o` confirms it references `AndroidCompassBackend`'s constructor/`IsSupported()`/destructor as undefined externals, proving the `#if defined(__ANDROID__)` wiring actually activates on this platform, not just compiles in isolation.)
   - **Area:** Compass / Android / Build
   - **Files:** none changed; build verification only
   - **Required behavior:** Same technique as `docs/devices-build.md` Section 4 (`llvm-nm -C ... | grep`) confirming the new Android-only symbols actually compile into the object file, not just that the library target succeeds.
@@ -992,7 +992,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (build verification)
   - **Dependencies:** DEVICES-0095
 
-- [ ] DEVICES-0098 — Document remaining Compass limitations honestly in `AUDIT.md`/`NEXT.md`
+- [x] DEVICES-0098 — Document remaining Compass limitations honestly in `AUDIT.md`/`NEXT.md` (2026-07-05: rewrote `AUDIT.md`'s `Compass` row with the full layered status (API/runtime/sanitizers-compile/hardware) — real on Android, honest stub elsewhere, azimuth math self-consistency-tested but hardware-unverified, `TrueHeading` limitation restated. `NEXT.md`'s broader Devices-namespace update deferred to Phase 10's final report (DEVICES-0142), per this plan's own phasing — not re-done piecemeal after every phase.)
   - **Area:** Docs
   - **Files:** `AUDIT.md`, `NEXT.md`
   - **Required behavior:** Update `Compass`'s row: still `NotSupported` on desktop/iOS (by design), real on Android (once this phase lands), `TrueHeading` still limited (DEVICES-0091), never physically verified (no Android hardware in this container).
@@ -1000,7 +1000,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0095, DEVICES-0097
 
-- [ ] DEVICES-0099 — Add Compass manual hardware-verification checklist items
+- [x] DEVICES-0099 — Add Compass manual hardware-verification checklist items (2026-07-05: added `docs/devices-hardware-checklist.md` §7 — 6 concrete steps: compare `MagneticHeading` against the device's own reference compass app, confirm monotonic wraparound through a full rotation, confirm `Calibrate` fires on the figure-8 gesture, sanity-check raw `MagnetometerReading` magnitude (Earth's field 25-65µT), confirm `TrueHeading == MagneticHeading` is the expected (not buggy) state, and confirm whether the magnetic-field axes need the same Android landscape remap `Accelerometer`/`Gyroscope` use (an open question, not assumed either way).)
   - **Area:** Docs / Manual verification
   - **Files:** `docs/devices-hardware-checklist.md`
   - **Required behavior:** New section: confirm `MagneticHeading` roughly matches a known reference (phone's own compass app) at a fixed physical orientation; confirm `Calibrate` fires when performing the classic figure-8 calibration gesture.
@@ -1008,7 +1008,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A — manual only
   - **Dependencies:** DEVICES-0095
 
-- [ ] DEVICES-0100 — Do NOT fake Compass from Accelerometer-only data — explicit negative-verification task
+- [x] DEVICES-0100 — Do NOT fake Compass from Accelerometer-only data — explicit negative-verification task (2026-07-05: re-read the final `AndroidCompassBackend.cpp`/`Compass.cpp` in full. Confirmed: heading comes only from `ASENSOR_TYPE_ROTATION_VECTOR` (OS-fused, genuinely magnetometer-informed) and raw `MagnetometerReading` from `ASENSOR_TYPE_MAGNETIC_FIELD` — no code path anywhere synthesizes a heading from accelerometer-only data, and no live `Accelerometer` instance is required or referenced by `Compass`/`AndroidCompassBackend` at all. Sign-off: gate passed.)
   - **Area:** Compass / Correctness gate
   - **Files:** none changed; verification only
   - **Required behavior:** Re-read the final `Compass.cpp` after Phase 7 lands and confirm no code path synthesizes a heading from `Accelerometer` data alone without a real magnetometer reading — this is the single most important rule in this phase per the Safety and Correctness Rules section.
