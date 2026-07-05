@@ -2582,12 +2582,20 @@ claim is a manual local run.
   (INPUT-CI-005) remain TODO.
 
 #### INPUT-CI-002 — Backend matrix (EasyGL, Vulkan, bgfx, SDL_RENDERER)
-- **Priority:** P1 · **Status:** TODO · **Area:** CI
-- **Files:** CI workflow
+- **Priority:** P1 · **Status:** DONE (2026-07-05, verified green) · **Area:** CI
+- **Files:** `.github/workflows/input-ci.yml`
 - **Work:** Matrix build+test per backend; input filter must pass on each.
 - **Acceptance:** All backends green in CI.
 - **Tests:** input filter × backend.
 - **Deps:** INPUT-CI-001, INPUT-BUILD-002.
+- **Result (2026-07-05):** Expanded the `strategy.matrix` to 5 entries — `EASYGL`, `SDL_RENDERER`, `VULKAN`,
+  `BGFX`, and the `EASYGL` ASan+UBSan build — each running the canonical input filter under Xvfb.
+  Parameterized `-DCNA_GRAPHICS_BACKEND` per entry; added `libvulkan-dev` (`find_package(Vulkan)`); bgfx is
+  FetchContent'd from `bkaradzic/bgfx.cmake` at configure time (`BGFX_BUILD_TOOLS/EXAMPLES/TESTS=OFF`).
+  **Verified GREEN** (run `a53e6e8e`, 2026-07-05): all five jobs pass on the first attempt — confirming the
+  input tests are backend-agnostic in CI, matching the local INPUT-BUILD-002 result (280 each). Temporary
+  per-entry `ci-diag` diagnostics + `contents:write` were used during bring-up and then removed (no failures
+  occurred, so no diag branches were created).
 
 #### INPUT-CI-003 — Submodule validation & SDL pin check
 - **Priority:** P1 · **Status:** TODO · **Area:** CI

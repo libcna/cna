@@ -7,9 +7,6 @@
 # All sibling repos (sharp-runtime, easy-gl, meta-gl) are public and clone over HTTPS with no token.
 # third_party/enet is committed here; SDL/SDL_image/SDL_mixer/googletest are submodules; bgfx is
 # FetchContent'd at configure time. The prebuilt SDL is cached (built uninstrumented, shared by all).
-#
-# NOTE: the `Publish diagnostics on failure` step + contents:write are TEMPORARY (Actions logs are
-# auth-gated); remove them once every backend is confirmed green.
 name: input-ci
 
 on:
@@ -33,39 +30,32 @@ jobs:
   input-tests:
     name: ${{ matrix.name }} (Linux)
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: EasyGL
             backend: EASYGL
-            slug: easygl
             sanitize: ""
             asan_options: ""
             ubsan_options: ""
           - name: ASan+UBSan
             backend: EASYGL
-            slug: asan
             sanitize: "address,undefined"
             asan_options: "detect_leaks=0:halt_on_error=1"
             ubsan_options: "print_stacktrace=1:halt_on_error=1"
           - name: SDL_RENDERER
             backend: SDL_RENDERER
-            slug: sdlrenderer
             sanitize: ""
             asan_options: ""
             ubsan_options: ""
           - name: Vulkan
             backend: VULKAN
-            slug: vulkan
             sanitize: ""
             asan_options: ""
             ubsan_options: ""
           - name: bgfx
             backend: BGFX
-            slug: bgfx
             sanitize: ""
             asan_options: ""
             ubsan_options: ""
@@ -112,14 +102,13 @@ jobs:
 
       - name: Configure
         run: |
-          set -o pipefail
           cmake -S . -B build -G Ninja \
             -DCNA_GRAPHICS_BACKEND=${{ matrix.backend }} \
             -DCNA_BUILD_TESTS=ON \
-            -DCNA_SANITIZE=${{ matrix.sanitize }} 2>&1 | tee /tmp/configure.log
+            -DCNA_SANITIZE=${{ matrix.sanitize }}
 
       - name: Build CnaTests
-        run: cmake --build build --target CnaTests 2>&1 | tee /tmp/build.log
+        run: cmake --build build --target CnaTests
 
       # A virtual X server (Xvfb) provides real windows/cursors headlessly (the SDL "dummy" driver has
       # null cursors, which fails the MouseCursor tests). For the ASan+UBSan entry, halt_on_error=1 turns
@@ -134,20 +123,3 @@ jobs:
           xvfb-run -a ./build/CnaTests \
             --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*' \
             --gtest_shuffle --gtest_repeat=3
-
-      # TEMPORARY diagnostic (remove once all backends are green): publish configure/build/CMake logs to a
-      # per-entry ci-diag-<slug> branch (fetchable over SSH), since Actions logs are auth-gated.
-      - name: Publish diagnostics on failure
-        if: failure()
-        run: |
-          mkdir -p ci-diag
-          cp /tmp/configure.log ci-diag/ 2>/dev/null || true
-          cp /tmp/build.log ci-diag/ 2>/dev/null || true
-          cp build/CMakeCache.txt ci-diag/ 2>/dev/null || true
-          find build -name 'CMakeError.log' -exec cp {} ci-diag/ \; 2>/dev/null || true
-          git config user.name ci-bot
-          git config user.email ci-bot@openeggbert.local
-          git checkout -b "ci-diag-${{ matrix.slug }}"
-          git add -f ci-diag
-          git commit -q -m "ci-diag ${{ matrix.slug }} [skip ci]"
-          git push -f origin "ci-diag-${{ matrix.slug }}"
