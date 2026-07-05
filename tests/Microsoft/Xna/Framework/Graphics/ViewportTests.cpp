@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <cmath>
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
@@ -268,6 +269,76 @@ TEST(ViewportTest, ProjectUnprojectRoundTripWithNonIdentityViewAndProjectionMatr
     EXPECT_NEAR(back.X, original.X, kEps);
     EXPECT_NEAR(back.Y, original.Y, kEps);
     EXPECT_NEAR(back.Z, original.Z, kEps);
+}
+
+// --- MinDepth / MaxDepth edge cases (Task 344) ---
+//
+// FNA's Viewport.cs applies zero validation or clamping to MinDepth/MaxDepth: the setters are
+// plain field assignments, and Project/Unproject use them in unguarded arithmetic
+// (`vector.Z * (MaxDepth - MinDepth) + MinDepth` / `(source.Z - MinDepth) / (MaxDepth -
+// MinDepth)`). CNA's setters are the same unguarded DEF_PROP pass-through (Task 341), so it must
+// reproduce FNA's exact edge-case behavior — not "helpfully" clamp or reject out-of-order values,
+// which would be a deviation from FNA, not a fix.
+
+TEST(ViewportTest, ProjectWithMinDepthGreaterThanMaxDepthProducesInvertedZWithoutThrowing)
+{
+    // MinDepth=1, MaxDepth=0 (reversed from the usual 0..1) is never rejected by FNA — Project's
+    // linear remap just runs with those values as given, producing an inverted-but-consistent
+    // range: pre-remap Z=0 maps to MinDepth (1.0), pre-remap Z=1 maps to MaxDepth (0.0). A
+    // "protective" implementation that swapped or clamped Min/Max would instead produce the
+    // opposite (0.0 then 1.0) — this test is discriminating against exactly that kind of deviation.
+    Viewport vp(0, 0, 800, 600);
+    vp.setMinDepthProperty(1.0f);
+    vp.setMaxDepthProperty(0.0f);
+    Matrix id = Matrix::getIdentityProperty();
+
+    Vector3 nearResult = vp.Project(Vector3(0.0f, 0.0f, 0.0f), id, id, id);
+    EXPECT_NEAR(nearResult.X, 400.0f, kEps);
+    EXPECT_NEAR(nearResult.Y, 300.0f, kEps);
+    EXPECT_NEAR(nearResult.Z, 1.0f, kEps);
+
+    Vector3 farResult = vp.Project(Vector3(0.0f, 0.0f, 1.0f), id, id, id);
+    EXPECT_NEAR(farResult.Z, 0.0f, kEps);
+}
+
+TEST(ViewportTest, ProjectUnprojectRoundTripWithInvertedMinMaxDepth)
+{
+    // The Project/Unproject remap formulas are exact linear inverses of each other regardless of
+    // whether MinDepth < MaxDepth or MinDepth > MaxDepth — confirming CNA doesn't special-case or
+    // reorder them anywhere in the round trip.
+    Viewport vp(0, 0, 800, 600);
+    vp.setMinDepthProperty(1.0f);
+    vp.setMaxDepthProperty(0.0f);
+    Matrix id = Matrix::getIdentityProperty();
+
+    Vector3 original(0.25f, -0.6f, 0.4f);
+    Vector3 screen = vp.Project(original, id, id, id);
+    Vector3 back   = vp.Unproject(screen, id, id, id);
+    EXPECT_NEAR(back.X, original.X, kEps);
+    EXPECT_NEAR(back.Y, original.Y, kEps);
+    EXPECT_NEAR(back.Z, original.Z, kEps);
+}
+
+TEST(ViewportTest, UnprojectWithEqualMinMaxDepthProducesNonFiniteResult)
+{
+    // MinDepth == MaxDepth makes Unproject's `(source.Z - MinDepth) / (MaxDepth - MinDepth)`
+    // divide by exactly zero. FNA has no guard against this (it's an inherited, unguarded C#
+    // division), so CNA must not add one either: dividing by a genuine zero must propagate
+    // IEEE-754 NaN/Infinity out through the whole computation rather than being clamped to a
+    // finite fallback. With identity matrices, `M31`/`M32`/`M34` are all exactly 0.0, so even a
+    // well-defined non-finite Z (e.g. +-Infinity from a nonzero numerator) collapses every
+    // component to NaN by the time it's multiplied through (`0 * Infinity == NaN` under
+    // IEEE-754) - so ALL THREE components come back NaN regardless of the exact screen Z passed
+    // in, whether it exactly equals MinDepth (a literal 0/0) or not (a nonzero/0).
+    Viewport vp(0, 0, 800, 600);
+    vp.setMinDepthProperty(0.5f);
+    vp.setMaxDepthProperty(0.5f);
+    Matrix id = Matrix::getIdentityProperty();
+
+    Vector3 result = vp.Unproject(Vector3(400.0f, 300.0f, 0.5f), id, id, id);
+    EXPECT_TRUE(std::isnan(result.X));
+    EXPECT_TRUE(std::isnan(result.Y));
+    EXPECT_TRUE(std::isnan(result.Z));
 }
 
 // --- ToString ---

@@ -13,17 +13,16 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–39 are complete. **Phase 40 (Viewport, DisplayMode, and
-  adapter behavior, `GRAPHICS_TASKS.md` Tasks 341–350) is open** — Tasks 341–343 are done, **Task
-  344 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent closed
+  adapter behavior, `GRAPHICS_TASKS.md` Tasks 341–350) is open** — Tasks 341–344 are done, **Task
+  345 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent closed
   phases have synthesis docs: `docs/depthstencilstate-support.md` (Phase 37),
   `docs/rasterizerstate-support.md` (Phase 38), `docs/rendertarget-support.md` (Phase 39).
   **Phase 40 connects directly to Task 880** (found in Phase 39): `Viewport` has zero GPU backend
-  wiring on all 3 backends — Task 341's own audit confirmed `Project`/`Unproject` math is correct
-  but did not touch GPU wiring; Tasks 342/343 were pure math/unit tests against the `Viewport`
-  class in isolation (no `GraphicsDevice` involved), so they didn't touch it either; the
-  min/max-depth-edge-cases task (Task 344, next) and viewport-reset-after-resize task (Task 349)
-  will likely re-surface this same gap from a different angle; worth cross-referencing rather than
-  re-diagnosing from scratch.
+  wiring on all 3 backends — Tasks 341–344 were all pure math/unit tests against the `Viewport`
+  class in isolation (no `GraphicsDevice` involved), so none of them touched it; the
+  viewport-reset-after-resize task (Task 349) will likely re-surface this same gap from a
+  different angle; worth cross-referencing rather than re-diagnosing from scratch. Task 345 opens
+  the phase's second sub-area: auditing `GraphicsAdapter` against FNA.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -46,22 +45,23 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
   (`cmake-build-bgfx`): all 3 configured, build cleanly, rebuilt and fully re-verified this
-  session (Tasks 342/343 only touch `tests/.../ViewportTests.cpp` — no production code — but all
+  session (Task 344 only touches `tests/.../ViewportTests.cpp` — no production code — but all
   3 `CnaTests` targets were still rebuilt and run per the project's standing regression discipline).
 
 ### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 3321/3324 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3242/3258 pass. 13 documented failures (see §5) + 1 reconfirmed-flaky,
-  unrelated `CueTest` failure + 1 reconfirmed order-dependent flake (alternates between
-  `Vulkan_RenderTargetUsage` and `Vulkan_FillMode_WireFrame` depending on run — this run it was
-  `Vulkan_RenderTargetUsage`, confirmed failing even in isolation, a genuine GPU/driver-state
-  flake not a test-ordering artifact) + 1 one-off `DynamicSoundEffectInstanceTest` timing flake
-  (confirmed passing cleanly in isolation, unrelated to any Viewport work): 5× `Vulkan_BlendState_*`
-  (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870), `Vulkan_GraphicsDevice_ReferenceStencil`
-  (Task 872), `Vulkan_DepthBias` (one sub-case), `Vulkan_RenderTargetCube_SampleAfterUnbind`
-  (Task 876 — genuine confirmed bug, supposed to fail until fixed).
-- **Bgfx, full `ctest -j1`:** 3229/3229 pass — 100%, no flakes this run.
+- **EasyGL, full `ctest -j1`:** 3323/3327 pass. 3 pre-existing/documented failures (see §5):
+  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`
+  + 1 reconfirmed-flaky, unrelated `CueTest` failure (a different specific Cue statistical test
+  this run, confirmed passing cleanly in isolation).
+- **Vulkan, full `ctest -j1`:** 3247/3261 pass. 13 documented failures (see §5) + 1 reconfirmed
+  order-dependent flake (alternates between `Vulkan_RenderTargetUsage` and
+  `Vulkan_FillMode_WireFrame` depending on run — this run it was `Vulkan_FillMode_WireFrame`):
+  5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
+  `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
+  `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876 — genuine confirmed bug, supposed to fail
+  until fixed).
+- **Bgfx, full `ctest -j1`:** 3231/3232 pass — 1 reconfirmed-flaky, unrelated `CueTest` failure
+  (passes in isolation).
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently**
   — concurrent runs previously produced transient GPU/driver-contention false failures. If a
   single run shows an anomaly beyond the documented list, re-run that test in isolation before
@@ -165,6 +165,7 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 
 | Commit / Task | Change |
 |---|---|
+| Task 344 | Confirmed by reading FNA's `Viewport.cs` (Task 341's audit) that `MinDepth`/`MaxDepth` setters have zero validation/clamping, and `Project`/`Unproject` use them in unguarded arithmetic. Added 3 new `ViewportTests.cpp` tests: `ProjectWithMinDepthGreaterThanMaxDepthProducesInvertedZWithoutThrowing`, `ProjectUnprojectRoundTripWithInvertedMinMaxDepth` (MinDepth=1,MaxDepth=0 — confirms no reordering/clamping), and `UnprojectWithEqualMinMaxDepthProducesNonFiniteResult` (MinDepth==MaxDepth — confirms genuine IEEE-754 NaN propagation via `std::isnan`, not a guarded fallback). **Verified genuine discriminating power**: temporarily added a "protective" min/max swap to `Project` and a divide-by-zero guard to `Unproject` (the exact kind of FNA-deviating fix a well-intentioned future change might introduce) and confirmed all 3 new tests fail, before reverting both back to the committed Task 341 state. Test-file-only change: EasyGL ctest 3323/3327 (3 pre-existing + 1 reconfirmed-flaky `CueTest`, confirmed passing in isolation). Vulkan ctest 3247/3261 (13 pre-existing + 1 reconfirmed order-dependent flake — `Vulkan_FillMode_WireFrame` this run). Bgfx ctest 3231/3232 (1 reconfirmed-flaky `CueTest`). |
 | Tasks 342-343 | Task 341's audit found every pre-existing `Project`/`Unproject` test used identity matrices only, so the perspective-divide branch (`if (!MathHelper::WithinEpsilon(a, 1.0f))`) in both methods was never actually exercised. Added 4 new `ViewportTests.cpp` tests using a real `Matrix::CreatePerspectiveFieldOfView` + `Matrix::CreateLookAt`: `ProjectWithNonIdentityPerspectiveMatrix`/`ProjectWithNonIdentityViewAndProjectionMatrices` (Task 342, hand-derived expected values from FNA's own formulas), `UnprojectRecoversOriginalPointThroughNonIdentityPerspectiveMatrix`/`ProjectUnprojectRoundTripWithNonIdentityViewAndProjectionMatrices` (Task 343). **Verified genuine discriminating power**: temporarily forced each method's own perspective-divide condition to `false` in turn and confirmed exactly the tests that depend on that method's divide branch fail (Project's 2 fail when Project's divide is disabled; Unproject's 2 fail when Unproject's divide is disabled, independently) before reverting both back to the committed Task 341 state. Test-file-only change (no production code touched): EasyGL ctest 3321/3324 (3 pre-existing, unchanged). Vulkan ctest 3242/3258 (13 pre-existing + 1 reconfirmed-flaky `CueTest` + 1 reconfirmed order-dependent `Vulkan_RenderTargetUsage` flake + 1 one-off `DynamicSoundEffectInstanceTest` timing flake, confirmed passing in isolation). Bgfx ctest 3229/3229 (100%). |
 | Task 341 | **Opens Phase 40.** Audited `Viewport` against FNA's `Graphics/Viewport.cs` line-by-line: `Project`/`Unproject` math, `AspectRatio`, `Bounds`, `TitleSafeArea`, `ToString()` all already matched FNA exactly — no math bug. **Fixed a real CLAUDE.md convention violation**: `X`/`Y`/`MinDepth`/`MaxDepth` were public raw fields with no getter/setter, while `Height`/`Width` in the same class correctly used `getXProperty()`/`setXProperty()` — converted all 4 to the same `DEF_PROP`-backed pattern (private `X_`/`Y_`/`MinDepth_`/`MaxDepth_`, member order now matches FNA's C# order: Height, MaxDepth, MinDepth, Width, Y, X). Updated the only 3 call sites touching the raw fields (`GraphicsDevice::UpdateViewportFromWindow()`, `ViewportTests.cpp`, `easygl_viewport_state_test.cpp`) and added a new `SettersUpdateEachFieldIndependently` test (previously only constructors were tested, never the setters). Full 3-backend rebuild + regression (header change touches everything including `Viewport.hpp`): EasyGL 3316/3320 (3 pre-existing + 1 reconfirmed-flaky `CueTest`). Vulkan 3239/3254 (13 pre-existing + 2 reconfirmed-flaky `CueTest`). Bgfx 3224/3225 (1 reconfirmed-flaky `CueTest`). |
 | Task 340 | **Closes Phase 39.** Wrote `docs/rendertarget-support.md`, a full Phase 39 synthesis (mirroring `docs/rasterizerstate-support.md`'s Phase 38 closer) covering Tasks 331–340: 2 real EasyGL fixes shipped (Task 336 mip support, Task 337 MSAA support), 1 shared-code fix (Task 338's Viewport/ScissorRectangle reset on RT switch), and the per-backend MRT limits table (EasyGL/Bgfx cap at 8, Vulkan uncapped at the CNA level, none matching FNA's real 4-target limit — Task 881). Docs-only task, no code changed, no regression risk. Phase 40 (Viewport, DisplayMode, adapter behavior, Tasks 341–350) is already planned in `GRAPHICS_TASKS.md` and opens next — directly relevant to Task 880 (Viewport has zero GPU wiring). |
@@ -339,20 +340,29 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 344 — verify viewport min/max depth behavior (edge cases)**
-   - Goal: confirmed by reading FNA's `Viewport.cs` (during Task 341's audit) that `MinDepth`/
-     `MaxDepth` setters have **zero validation or clamping** in FNA — any float is accepted
-     verbatim, including `MinDepth > MaxDepth` (inverts the Z scale in `Project`, doesn't throw)
-     and `MinDepth == MaxDepth` (divides by zero in `Unproject`'s `(source.Z-MinDepth)/(MaxDepth-
-     MinDepth)`, producing `Infinity`/`NaN` — inherited XNA footgun, not a bug to fix). CNA's
-     setters (post-Task-341 `DEF_PROP`-backed `X_`/`Y_`/`MinDepth_`/`MaxDepth_`) already have the
-     same zero-validation behavior by construction. This task is about **writing tests that
-     confirm CNA matches this FNA edge-case behavior**, not adding validation that isn't in FNA.
-   - Files: `tests/Microsoft/Xna/Framework/Graphics/ViewportTests.cpp`.
-   - Verification: a test asserting `MinDepth > MaxDepth` doesn't throw and produces the
-     mathematically-inverted (not clamped) `Project` Z result; a test confirming
-     `MinDepth == MaxDepth` produces `Infinity`/`NaN` in `Unproject` (matching FNA's own
-     unguarded division) rather than silently clamping or throwing.
+1. **`GRAPHICS_TASKS.md` Task 345 — audit `GraphicsAdapter` API against FNA**
+   - Goal: read FNA's `Graphics/GraphicsAdapter.cs` line-by-line and audit CNA's
+     `GraphicsAdapter.hpp`/`.cpp` against it — `CurrentDisplayMode`, `SupportedDisplayModes`,
+     `Description`, `DeviceId`/`Revision`/`SubSystemId`/`VendorId`, `IsDefaultAdapter`,
+     `IsWideScreen`, `MonitorHandle`, `UseNullDevice`/`UseReferenceDevice`, static
+     `DefaultAdapter`/`Adapters`, `IsProfileSupported`, `QueryRenderTargetFormat`/
+     `QueryBackBufferFormat`, `AdaptersChanged`. This opens Phase 40's second sub-area (the first,
+     Viewport, closed with Tasks 341–344).
+   - **One discrepancy already spotted while scoping this task, not yet investigated**: FNA's
+     `DeviceId`/`Revision`/`SubSystemId`/`VendorId` all unconditionally `throw new
+     NotImplementedException()` — but CNA's header already has real `vendorId_`/`deviceId_` fields
+     populated via a `queryPciIds()` static helper, i.e. `getDeviceIdProperty()`/
+     `getVendorIdProperty()` appear to be **actually implemented**, not stubbed to throw. Worth
+     checking during the audit whether this is a deliberate, documented `NOXNA`-style improvement
+     (acceptable per CHECKLIST.md's known-deviations table if noted) or an unintentional behavior
+     divergence from FNA that should throw `std::runtime_error`/similar instead, per CLAUDE.md's
+     "Exception behavior where practical" rule.
+   - Files: `include/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp`,
+     `src/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.cpp`, FNA's
+     `Graphics/GraphicsAdapter.cs`, `Graphics/DisplayMode.cs`, `Graphics/DisplayModeCollection.cs`.
+   - Verification: check existing `GraphicsAdapter`/`DisplayMode` test coverage first (Task 347
+     already covers `DisplayModeCollection` enumeration specifically) before deciding what new
+     tests this task needs — avoid duplicating Task 347's planned work.
 
 2. **`GRAPHICS_TASKS.md` Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`**
    - Goal: found this session (Task 339) — FNA's real MRT limit is 4 simultaneous targets
@@ -584,47 +594,56 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-39 are FULLY COMPLETE. Phase 40 (Viewport, DisplayMode, and adapter
-behavior, GRAPHICS_TASKS.md Tasks 341-350) is open, Tasks 341-343 done, Task 344 next. EasyGL:
-3321/3324 pass (3 documented pre-existing failures). Vulkan: 3242/3258 pass (13 documented
-failures + 1 reconfirmed-flaky unrelated CueTest + 1 reconfirmed order-dependent
-Vulkan_RenderTargetUsage/Vulkan_FillMode_WireFrame flake + 1 one-off DynamicSoundEffectInstanceTest
-timing flake, confirmed passing in isolation). Bgfx: 3229/3229 pass (100%, no flakes this run).
-Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
-if a single run shows an anomaly beyond the documented list, re-run in isolation before treating it
-as a regression.
+behavior, GRAPHICS_TASKS.md Tasks 341-350) is open, Tasks 341-344 done, Task 345 next. EasyGL:
+3323/3327 pass (3 documented pre-existing failures + 1 reconfirmed-flaky unrelated CueTest,
+confirmed passing in isolation). Vulkan: 3247/3261 pass (13 documented failures + 1 reconfirmed
+order-dependent Vulkan_RenderTargetUsage/Vulkan_FillMode_WireFrame flake). Bgfx: 3231/3232 pass
+(1 reconfirmed-flaky unrelated CueTest). Caution: run all 3 backends' full ctest suites
+sequentially, never concurrently (see NEXT.md §2); if a single run shows an anomaly beyond the
+documented list, re-run in isolation before treating it as a regression.
 
 Task 341 OPENED PHASE 40. Audited Viewport against FNA's Graphics/Viewport.cs line-by-line:
 Project/Unproject math, AspectRatio, Bounds, TitleSafeArea, ToString() all already matched FNA
 exactly - no math bug found. Fixed a real CLAUDE.md convention violation: X/Y/MinDepth/MaxDepth
 were public raw fields with no getter/setter, while Height/Width in the same class correctly used
-getXProperty()/setXProperty() - converted all 4 to the same DEF_PROP-backed pattern (private
-X_/Y_/MinDepth_/MaxDepth_, member order now matches FNA's C# order: Height, MaxDepth, MinDepth,
-Width, Y, X). Updated the only 3 call sites touching the raw fields (GraphicsDevice::
-UpdateViewportFromWindow(), ViewportTests.cpp, easygl_viewport_state_test.cpp) and added a new
-SettersUpdateEachFieldIndependently test.
+getXProperty()/setXProperty() - converted all 4 to the same DEF_PROP-backed pattern.
 
-Tasks 342-343 (just done) found every pre-existing Project/Unproject test used IDENTITY matrices
-only, so the perspective-divide branch (!WithinEpsilon(a, 1.0f)) in both methods was never actually
-exercised. Added 4 new ViewportTests.cpp tests using a real Matrix::CreatePerspectiveFieldOfView +
-Matrix::CreateLookAt, with expected values hand-derived from FNA's own formulas:
-ProjectWithNonIdentityPerspectiveMatrix/ProjectWithNonIdentityViewAndProjectionMatrices (Task 342),
-UnprojectRecoversOriginalPointThroughNonIdentityPerspectiveMatrix/
-ProjectUnprojectRoundTripWithNonIdentityViewAndProjectionMatrices (Task 343). Verified genuine
+Tasks 342-343 found every pre-existing Project/Unproject test used IDENTITY matrices only, so the
+perspective-divide branch (!WithinEpsilon(a, 1.0f)) in both methods was never actually exercised.
+Added 4 new ViewportTests.cpp tests using a real Matrix::CreatePerspectiveFieldOfView +
+Matrix::CreateLookAt, with expected values hand-derived from FNA's own formulas. Verified genuine
 discriminating power by temporarily forcing each method's own perspective-divide condition to
-false in turn and confirming exactly the dependent tests fail, independently for Project vs
-Unproject, before reverting both. Test-file-only change, no production code touched.
+false in turn and confirming exactly the dependent tests fail, before reverting both.
 
-Next task: GRAPHICS_TASKS.md Task 344 - verify viewport min/max depth behavior (edge cases). FNA's
-Viewport.cs has ZERO validation/clamping on MinDepth/MaxDepth setters (confirmed during Task 341's
-audit) - any float is accepted, including MinDepth > MaxDepth (inverts the Z scale in Project,
-doesn't throw) and MinDepth == MaxDepth (divides by zero in Unproject, producing Infinity/NaN - an
-inherited XNA footgun, not a bug). CNA's setters already have the same zero-validation behavior by
-construction (post-Task-341 DEF_PROP pass-through). This task is about writing tests that CONFIRM
-CNA matches this FNA edge-case behavior, not adding validation that isn't in FNA. Files:
-tests/Microsoft/Xna/Framework/Graphics/ViewportTests.cpp. Does not touch Task 880 (Viewport has
-zero GPU backend wiring) - that's pure GraphicsDevice-level GPU wiring, unrelated to these
-Viewport-class-only unit tests - but Task 349 later in this phase will likely re-surface it;
-cross-reference docs/rendertarget-support.md §9 rather than re-diagnosing from scratch when that
-happens.
+Task 344 (just done) confirmed by reading FNA's Viewport.cs that MinDepth/MaxDepth setters have
+ZERO validation/clamping, and Project/Unproject use them in unguarded arithmetic. Added 3 new
+ViewportTests.cpp tests: ProjectWithMinDepthGreaterThanMaxDepthProducesInvertedZWithoutThrowing,
+ProjectUnprojectRoundTripWithInvertedMinMaxDepth (MinDepth=1,MaxDepth=0 - confirms no
+reordering/clamping), and UnprojectWithEqualMinMaxDepthProducesNonFiniteResult (MinDepth==MaxDepth
+- confirms genuine IEEE-754 NaN propagation via std::isnan). Verified genuine discriminating power:
+temporarily added a "protective" min/max swap to Project and a divide-by-zero guard to Unproject
+(the exact kind of FNA-deviating fix a well-intentioned future change might introduce) and
+confirmed all 3 new tests fail, before reverting both back to the committed Task 341 state.
+Test-file-only change, no production code touched. This closes out the Viewport sub-area of
+Phase 40 (Tasks 341-344); Task 349 (viewport reset after backbuffer resize) is the only remaining
+Viewport-adjacent task in this phase, deferred until its own turn.
+
+Next task: GRAPHICS_TASKS.md Task 345 - audit GraphicsAdapter API against FNA. Read FNA's
+Graphics/GraphicsAdapter.cs line-by-line and audit CNA's GraphicsAdapter.hpp/.cpp against it -
+CurrentDisplayMode, SupportedDisplayModes, Description, DeviceId/Revision/SubSystemId/VendorId,
+IsDefaultAdapter, IsWideScreen, MonitorHandle, UseNullDevice/UseReferenceDevice, static
+DefaultAdapter/Adapters, IsProfileSupported, QueryRenderTargetFormat/QueryBackBufferFormat,
+AdaptersChanged. This opens Phase 40's second sub-area (Viewport, Tasks 341-344, is now closed).
+ONE DISCREPANCY ALREADY SPOTTED, not yet investigated: FNA's DeviceId/Revision/SubSystemId/VendorId
+all unconditionally throw NotImplementedException, but CNA's header already has real
+vendorId_/deviceId_ fields populated via a queryPciIds() static helper - getDeviceIdProperty()/
+getVendorIdProperty() appear to be actually implemented, not stubbed to throw. Check whether this
+is a deliberate NOXNA-documented improvement or an unintentional divergence that should throw
+instead, per CLAUDE.md's exception-behavior rule. Files:
+include/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp,
+src/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.cpp, FNA's Graphics/GraphicsAdapter.cs,
+Graphics/DisplayMode.cs, Graphics/DisplayModeCollection.cs. Check existing test coverage first
+(Task 347 already covers DisplayModeCollection enumeration specifically) before deciding what new
+tests this task needs - avoid duplicating Task 347's planned work.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```
