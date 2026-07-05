@@ -269,6 +269,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (displays == nullptr || count <= 0)
         {
+            // SDL_free is a documented no-op on nullptr; guards the (unlikely but possible) case
+            // where SDL returns a non-null array with count<=0.
+            SDL_free(displays);
+
             adapters_.push_back(std::unique_ptr<GraphicsAdapter>(
                 new GraphicsAdapter(
                     0,

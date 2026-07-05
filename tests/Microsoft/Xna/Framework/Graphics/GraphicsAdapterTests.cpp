@@ -284,6 +284,58 @@ TEST(GraphicsAdapterTest, QueryBackBufferFormatSubstitutesNonColorFormat)
     EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
 }
 
+// --- Headless fallback (Task 346) ---
+//
+// GraphicsAdapter::AdaptersChanged() falls back to a single synthetic 800x480 "Default Display"
+// adapter when SDL_GetDisplays() fails. This is a genuinely reachable, not fabricated, scenario:
+// confirmed via a standalone probe that SDL_GetDisplays() returns nullptr/count=0 with error
+// "Video subsystem has not been initialized" whenever SDL_INIT_VIDEO hasn't been initialized yet
+// - exactly the case a headless CI runner with no display server hits. Every other test in this
+// file that needs SDL video explicitly balances SDL_InitSubSystem/SDL_QuitSubSystem within itself
+// (see the RealDisplay_* tests above), so by gtest's sequential execution the video subsystem's
+// refcount should reliably be 0 by the time this test runs, regardless of test order - if it
+// isn't (something else left it initialized), this test skips rather than producing a misleading
+// pass/fail. GraphicsAdapter::adapters_ is a process-wide cache, so this test restores a real
+// enumeration afterward (deliberately without a matching SDL_QuitSubSystem) so later tests in
+// this binary aren't left with the single synthetic adapter.
+
+TEST(GraphicsAdapterTest, HeadlessFallback_NoVideoSubsystemProducesSingleSyntheticAdapter)
+{
+    if (SDL_WasInit(SDL_INIT_VIDEO) != 0)
+    {
+        GTEST_SKIP() << "SDL video subsystem is already initialized by something else in this "
+                         "process - can't reliably exercise the enumeration-unavailable path.";
+    }
+
+    GraphicsAdapter::AdaptersChanged();
+
+    const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+    ASSERT_EQ(adapters.size(), 1u);
+    GraphicsAdapter& fallback = *adapters[0];
+
+    EXPECT_EQ(fallback.getDeviceNameProperty(), "\\\\.\\DISPLAY1");
+    EXPECT_EQ(fallback.getDescriptionProperty(), "Default Display");
+    EXPECT_TRUE(fallback.getIsDefaultAdapterProperty());
+
+    const DisplayModeCollection& modes = fallback.getSupportedDisplayModesProperty();
+    ASSERT_EQ(modes.getCountProperty(), 1);
+    EXPECT_EQ(modes[0].getWidthProperty(), 800);
+    EXPECT_EQ(modes[0].getHeightProperty(), 480);
+    EXPECT_EQ(modes[0].getFormatProperty(), SurfaceFormat::Color);
+
+    const DisplayMode current = fallback.getCurrentDisplayModeProperty();
+    EXPECT_EQ(current.getWidthProperty(), 800);
+    EXPECT_EQ(current.getHeightProperty(), 480);
+
+    EXPECT_NO_THROW({ (void)fallback.getMonitorHandleProperty(); });
+    EXPECT_NO_THROW({ (void)fallback.getIsWideScreenProperty(); });
+
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GraphicsAdapter::AdaptersChanged();
+    }
+}
+
 // --- GetTypeName ---
 
 TEST(GraphicsAdapterTest, GetTypeNameReturnsExpectedString)
