@@ -238,11 +238,16 @@ void DevicesDemo::UpdateWindowTitle()
     // which doesn't distinguish "started but no reading has arrived yet"
     // from "the last reading is/isn't trustworthy"), the VibrateController
     // NOXNA device name diagnostic (getDeviceNameProperty(), previously
-    // queried nowhere in this demo), and an explicit Compass/Motion
-    // "not supported by SDL backend" note — this demo deliberately has no
-    // SpriteFont/Content dependency (see this class's own header comment),
-    // so the window title remains its one text-output channel for all of
-    // this, not a crash or silent blank reading.
+    // queried nowhere in this demo), and a Compass/Motion support note —
+    // this demo deliberately has no SpriteFont/Content dependency (see this
+    // class's own header comment), so the window title remains its one
+    // text-output channel for all of this, not a crash or silent blank
+    // reading. Task DEVICES-0137: the Compass/Motion note is now dynamic,
+    // not a hardcoded "not supported by SDL backend" claim — both are real,
+    // Detail::AndroidCompassBackend/AndroidMotionBackend-backed on Android
+    // (this demo's constructor already calls compass_.Start()/motion_.Start(),
+    // see the try/catch there), still an honest SDL3-has-no-magnetometer
+    // stub everywhere else.
     std::ostringstream title;
     title.setf(std::ios::fixed);
     title.precision(2);
@@ -252,7 +257,8 @@ void DevicesDemo::UpdateWindowTitle()
           << " valid=" << (accelerometer_.getIsDataValidProperty() ? "Y" : "N")
           << " | Gyro(" << rot.X << "," << rot.Y << "," << rot.Z << ") #" << gyroEventCount_
           << " valid=" << (gyroscope_.getIsDataValidProperty() ? "Y" : "N")
-          << " | Compass/Motion: not supported by SDL backend"
+          << " | Compass " << (Compass::getIsSupportedProperty() ? "supported" : "unsupported")
+          << " | Motion " << (Motion::getIsSupportedProperty() ? "supported" : "unsupported")
           << " | Vibrate " << (vibrateController_->getIsSupportedProperty() ? "supported" : "unsupported")
           << " (" << vibrateController_->getDeviceNameProperty() << ")";
 
@@ -377,8 +383,10 @@ void DevicesDemo::DrawCompassSection(int ox, int oy)
     DrawStateIndicator(ox + 30, oy, compass_.getStateProperty());
     DrawEventFlash(ox + 60, oy, compassFramesSinceEvent_);
 
-    // Permanent NotSupported stub today (see Compass.hpp) — always draws at 0,
-    // demonstrating the code path faithfully rather than being an oversight.
+    // Task DEVICES-0137: real on Android (Detail::AndroidCompassBackend) —
+    // draws whatever compass_ actually reports there; still an honest
+    // NotSupported stub everywhere else (see Compass.hpp), so these bars
+    // draw at 0 on non-Android platforms, faithfully, not as an oversight.
     DrawUnsignedBar(ox, oy + 34, 360, 18, latestCompassReading_.getMagneticHeadingProperty(), 360.0f);
     DrawUnsignedBar(ox, oy + 56, 360, 18, latestCompassReading_.getTrueHeadingProperty(), 360.0f);
 }
@@ -402,8 +410,11 @@ void DevicesDemo::DrawMotionSection(int ox, int oy)
     DrawStateIndicator(ox + 30, oy, motion_.getStateProperty());
     DrawEventFlash(ox + 60, oy, motionFramesSinceEvent_);
 
-    // Permanent NotSupported stub today (see Motion.hpp, depends on Compass) —
-    // DeviceAcceleration/Gravity always draw at 0 for the same reason as Compass.
+    // Task DEVICES-0137: real on Android (Detail::AndroidMotionBackend, which
+    // does not depend on a live Compass instance — see Motion.hpp's updated
+    // comment) — draws whatever motion_ actually reports there; still an
+    // honest NotSupported stub everywhere else, so DeviceAcceleration/Gravity
+    // draw at 0 on non-Android platforms, faithfully, not as an oversight.
     const Vector3& deviceAccel = latestMotionReading_.getDeviceAccelerationProperty();
     const Vector3& gravity     = latestMotionReading_.getGravityProperty();
     constexpr float MaxG = 2.0f;

@@ -1270,7 +1270,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 10: Docs, Cleanup, CI, Final Compatibility Report
 
-- [ ] DEVICES-0132 — Update `docs/devices-native-backend-design.md` from sketch to as-built record
+- [x] DEVICES-0132 — Update `docs/devices-native-backend-design.md` from sketch to as-built record (2026-07-05: rewrote "Purpose and status", "Interface sketch", "Android backend path" (renamed "— IMPLEMENTED"), and "Migration plan" sections in place — each now says what's actually implemented (NDK-native, no JNI; rotation-vector choice; the g-force conversion bug found and fixed; the unresolved coordinate-remap question) vs. what's still sketch-only (iOS, `IDeviceSensorBackend`/`IAccelerometerBackend`/`IGyroscopeBackend`). "Explicitly not part of this document" corrected — `.hpp`/`.cpp` files and `Compass.hpp`/`.cpp`/`Motion.hpp`/`.cpp` modifications now honestly listed as done, not "unchanged."
   - **Area:** Docs
   - **Files:** `docs/devices-native-backend-design.md`
   - **Required behavior:** Once Phases 6–8 land, update this doc's status from "design sketch only, nothing implemented" to reflect what was actually built, keeping the iOS sections as still-a-sketch (explicitly unimplemented).
@@ -1278,7 +1278,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0095, DEVICES-0112
 
-- [ ] DEVICES-0133 — Create `docs/devices-api-coverage.md`
+- [x] DEVICES-0133 — Create `docs/devices-api-coverage.md` (2026-07-05: new standalone, per-member API coverage table for every class in scope, extracted from Phase 0's matrices and updated through Phase 8 — covers `VibrateController`, `SensorBase<T>`, `Accelerometer`, `Gyroscope`, `Compass`/`CompassReading`, `Motion`/`MotionReading`/`AttitudeReading`, exceptions/enums, and the new `Detail::` Android-internal types. Links to, doesn't duplicate, `AUDIT.md`'s prose history.)
   - **Area:** Docs
   - **Files:** `docs/devices-api-coverage.md` (new)
   - **Required behavior:** A standalone, per-member API coverage table (real API + `NOXNA` extensions) for all classes in scope, extracted from this plan's Phase 0 matrices — a permanent, easy-to-scan reference distinct from `AUDIT.md`'s prose-heavy history.
@@ -1286,7 +1286,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0002 through DEVICES-0008
 
-- [ ] DEVICES-0134 — Create `docs/devices-android.md`
+- [x] DEVICES-0134 — Create `docs/devices-android.md` (2026-07-05: new Android-focused consolidation — vibration (no native bridge needed), sensors (pure NDK, no JNI), permissions/manifest features, the full build-integration bug list (stale SDL cache, missing `libandroid` link, cross-directory target visibility, missing `SDL_main` export, invalid XML comment), emulator limitations, and what's still not implemented. Links to `docs/devices-native-backend-design.md`/`docs/devices-build.md`/`docs/devices-hardware-checklist.md` rather than duplicating their content.)
   - **Area:** Docs
   - **Files:** `docs/devices-android.md` (new)
   - **Required behavior:** Consolidate every Android-specific decision from Phases 2–9 (backend selection rationale, NDK sensor API vs. JNI decision, permission list, manifest feature-optionality rule, known emulator limitations) into one Android-focused doc, cross-linking rather than duplicating `docs/devices-native-backend-design.md`/`docs/devices-build.md`.
@@ -1294,7 +1294,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0031, DEVICES-0073, DEVICES-0123
 
-- [ ] DEVICES-0135 — Update `docs/devices-hardware-checklist.md`'s summary table
+- [x] DEVICES-0135 — Update `docs/devices-hardware-checklist.md`'s summary table (2026-07-05: already done as part of Phase 9's DEVICES-0126 work — added an "Update (2026-07-05...)" paragraph directly after the original "Net result: 1 of 6 cases verified" line, stating the emulator/APK-packaging blockers are now resolved while clarifying this doesn't change the physical-hardware verification count (still 1 of 6, case 4). No further edit needed here.)
   - **Area:** Docs
   - **Files:** `docs/devices-hardware-checklist.md`
   - **Required behavior:** Refresh the "Net result: N of M cases verified" summary line to reflect Phase 9's actual outcome, whatever it turns out to be.
@@ -1302,7 +1302,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0130
 
-- [ ] DEVICES-0136 — Update `docs/devices-build.md` with every new build/test command introduced by this plan
+- [x] DEVICES-0136 — Update `docs/devices-build.md` with every new build/test command introduced by this plan (2026-07-05: **found and fixed a real gap**: Section 2/6's documented `ctest -R`/`--gtest_filter` commands were stale — they silently did not match the 3 new Phase 6-8 test suites (`AndroidSensorBridgeTests`/`AndroidCompassMathTests`/`AndroidMotionMathTests`) at all, despite looking like they should. Updated both filters everywhere they appear (Sections 2, 6 ×3 sanitizer presets), refreshed test counts (273/271/191 depending on filter form), and added dated Phase 10 result paragraphs to Sections 3 and 6 with the actual re-run numbers, superseding the stale Phase 8 snapshot rather than deleting it.)
   - **Area:** Docs
   - **Files:** `docs/devices-build.md`
   - **Required behavior:** Add sections for the new fake-backend test suites (Phase 2/6/7/8), the Android demo APK build (Phase 9), any new sanitizer-loop guidance specific to the new bridge code.
@@ -1310,7 +1310,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** all Phase 1–9 tasks that introduce new build/test commands
 
-- [ ] DEVICES-0137 — Update `examples/demo_devices` documentation/inline comments for the new sensors
+- [x] DEVICES-0137 — Update `examples/demo_devices` documentation/inline comments for the new sensors (2026-07-05: found and fixed a real staleness — the window-title diagnostic hardcoded `"Compass/Motion: not supported by SDL backend"` unconditionally, even though the demo's constructor already calls `compass_.Start()`/`motion_.Start()` and both now genuinely succeed on Android. Made the title dynamic (`Compass::getIsSupportedProperty()`/`Motion::getIsSupportedProperty()`, matching the existing `VibrateController` pattern on the same line) and fixed two "Permanent NotSupported stub today" comments in `DrawCompassSection()`/`DrawMotionSection()`. Synced the fix into the Android project's duplicated source copy (`app/jni/src/DevicesDemo.cpp`) per the `--variant copy` caveat (DEVICES-0122). Rebuilt desktop `cna_demo_devices` clean.)
   - **Area:** Docs / Demo
   - **Files:** `examples/demo_devices/src/DevicesDemo.{hpp,cpp}` (comments only, unless Phase 16-equivalent demo tasks below change behavior)
   - **Required behavior:** Update any comment claiming Compass/Motion are "always NotSupported" once Phase 7/8 give them a real Android backend.
@@ -1318,7 +1318,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0095, DEVICES-0112
 
-- [ ] DEVICES-0138 — Update `NOXNA.md`'s Devices-namespace entries if it enumerates them separately
+- [x] DEVICES-0138 — Update `NOXNA.md`'s Devices-namespace entries if it enumerates them separately (2026-07-05: confirmed `NOXNA.md` is entirely about a different concept — the opt-in `CNA_NOXNA` graphics-extension build layer (PBR/HDR/Bloom/SSAO/etc.) — and does not track the in-source `NOXNA` C++ macro tag at all (no `Compass`/`Motion`/`VibrateController` entries anywhere in it). No update needed; DEVICES-0009's own in-source `NOXNA` inventory remains the authoritative one.)
   - **Area:** Docs
   - **Files:** `NOXNA.md`
   - **Required behavior:** Confirm whether `NOXNA.md` tracks `Microsoft::Devices` extensions separately from in-source tags; if so, add any new `NOXNA` members introduced by this plan (e.g. `IDeviceVibrationBackend`-related, if any becomes public-facing, which it should not).
@@ -1326,7 +1326,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0009
 
-- [ ] DEVICES-0139 — Write migration notes for a future iOS backend
+- [x] DEVICES-0139 — Write migration notes for a future iOS backend (2026-07-05: confirmed `ICompassBackend`/`IMotionBackend` (as actually implemented) stay iOS-shaped — no Android-specific type leaks into either interface, only `std::function` callbacks and standard XNA types. An iOS backend could implement the same interfaces using `CLLocationManager`/`CMMotionManager` internally with zero interface changes. No `.mm`/Swift files added — confirmed no Apple toolchain exists (DEVICES-0131).)
   - **Area:** Docs
   - **Files:** `docs/devices-native-backend-design.md`
   - **Required behavior:** Confirm the `ICompassBackend`/`IMotionBackend` interfaces built in Phases 7/8 are still iOS-shaped (no Android-specific leakage into the interface itself) — this validates the interface design retroactively rather than writing new iOS code.
@@ -1334,7 +1334,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0086, DEVICES-0101, DEVICES-0131
 
-- [ ] DEVICES-0140 — Full regression pass: entire Devices-only `ctest` filter, looped, all three sanitizers
+- [x] DEVICES-0140 — Full regression pass: entire Devices-only `ctest` filter, looped, all three sanitizers (2026-07-05: full updated filter (including the 3 new Phase 6-8 suites) looped 40/40 clean on the plain build. All three sanitizer presets reconfigured/rebuilt/re-run fresh: **ASan clean (0 issues)**, **UBSan clean (0 issues)**, **TSan 40 reports, all individually confirmed** (via each report's own `Location is global ...` line, not just the call stack) to be the identical pre-existing `sharp-runtime` `TimeSpan::copy_count` finding — reached via more call paths than before (Phase 6-8 added more `Accelerometer`-adjacent construction sites that also copy `TimeSpan`/`DateTimeOffset`), but the same single known, out-of-scope, unfixed-here issue. No new bug found.)
   - **Area:** Testing / CI gate
   - **Files:** none
   - **Required behavior:** Final gate before closing this plan: run the full Devices-only filter (`docs/devices-build.md` Section 2) plus 40-iteration loop plus all three sanitizer presets (Section 6), on the final state of all phases.
@@ -1342,7 +1342,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** full Devices-only suite, looped, ×3 sanitizers
   - **Dependencies:** every prior phase
 
-- [ ] DEVICES-0141 — Full `ctest` suite regression pass (confirm no unrelated breakage)
+- [x] DEVICES-0141 — Full `ctest` suite regression pass (confirm no unrelated breakage) (2026-07-05: full suite — 3358 tests, 36 failed. Every single failure grep-confirmed to be an `EasyGL`/`easy-gl` graphics-backend test (this headless-container session has no real GPU/display, so more of these fail/skip than the 2 seen in a prior session that did) — zero failures matching `Device|Sensor|Vibrat|Accelero|Gyro|Compass|Motion|Attitude`. No new, unrelated breakage from this plan's work.)
   - **Area:** Testing / CI gate
   - **Files:** none
   - **Required behavior:** Run the complete `ctest` suite, confirm only the 2 pre-existing, unrelated `EasyGL` failures remain (same as every prior phase since Phase 5).

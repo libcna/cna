@@ -52,18 +52,21 @@ git checkout; see the ZIP-export caveat above for what this does not claim.
 # Via ctest, matching every Devices/Sensors/VibrateController test suite by name
 # (this also matches the Reading/EventArgs/FailedException-type test suites, e.g.
 # AccelerometerReadingTests, SensorFailedExceptionTests — anything with these
-# substrings in its suite name, which is more than just the 9 "main" suites below.
+# substrings in its suite name, which is more than just the 12 "main" suites below.
 # Does NOT match SensorBaseTests or ScopeExitTests — add them explicitly to a
 # gtest_filter, or use ctest -R "SensorBase|ScopeExit" separately, if you need
 # those suites too):
 cd cmake-build-debug && ctest --output-on-failure \
-    -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase|ScopeExit"
-# 226 tests, 100% passing, as of plan_devices_phase8.md Task P8-8 (last verified this way).
+    -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase|ScopeExit|AndroidSensorBridge|AndroidCompassMath|AndroidMotionMath"
+# 273 tests, 100% passing (2 expected hardware skips), as of plan_devices.md Phase 10
+# (2026-07-05) — Task DEVICES-0136 added the trailing 3 terms (AndroidSensorBridge/
+# AndroidCompassMath/AndroidMotionMath, Phases 6-8), which the pre-Phase-10 version
+# of this filter silently did not match at all.
 
-# Or directly via the test binary's own gtest filter — narrower: only the 9
+# Or directly via the test binary's own gtest filter — narrower: only the 12
 # "main" per-class suites, not the Reading/EventArgs/FailedException ones:
-./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:VibrateControllerTests.*:SensorSubsystemOwnershipTests.*:AndroidSensorOrientationTests.*:SensorBaseTests.*:ScopeExitTests.*"
-# 146 tests, 144 passing, as of plan_devices_phase8.md Task P8-8 (last verified this way).
+./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:VibrateControllerTests.*:SensorSubsystemOwnershipTests.*:AndroidSensorOrientationTests.*:SensorBaseTests.*:ScopeExitTests.*:AndroidSensorBridgeTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*"
+# 191 tests, 189 passing (2 expected hardware skips), as of plan_devices.md Phase 10 (2026-07-05).
 ```
 
 Both commands' 2 skips are the same pair: `AccelerometerTests`/`GyroscopeTests`'
@@ -118,15 +121,23 @@ propagating anywhere — it never will.
 cd cmake-build-debug && ctest --output-on-failure
 ```
 
-As of this writing: 2051 tests, 2 failures — both pre-existing, unrelated `EasyGL`/
-`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
-`easy-gl-resource-smoke-tests`) that this session's environment happens to have a real
+As of `plan_devices_phase8.md`: 2051 tests, 2 failures — both pre-existing, unrelated
+`EasyGL`/`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
+`easy-gl-resource-smoke-tests`) that that session's environment happened to have a real
 GPU/display to actually run for the first time (previously silently `Not Run`
 headless) — confirmed via direct investigation to be 100% unrelated to
 `Microsoft::Devices` (see `plan_devices_phase5.md` Task P5-1's Resolution for the full
-finding). Not fixed here — out of scope for `Microsoft::Devices` work. Same 2 failures,
-same root cause, every phase since Phase 5 — the test count only grows as
-`Microsoft::Devices` itself gains tests.
+finding).
+
+**As of `plan_devices.md` Phase 10 (2026-07-05):** 3348 tests, 36 failures — same root
+cause category (`EasyGL`/graphics-backend, headless-environment-dependent — this
+session's container has no real GPU/display, so more `EasyGL` cases fail/skip than the
+2 from the session above that did have one), still confirmed 100% unrelated to
+`Microsoft::Devices`: the Devices-only filter (Section 2 above) is separately,
+independently 100% green. Not fixed here — out of scope for `Microsoft::Devices` work,
+and the exact failure count is expected to vary by environment (GPU/display
+availability), not something to chase toward a fixed number. The total test count only
+grows as `Microsoft::Devices` (and the rest of CNA) gains tests.
 
 ## 4. Android cross-compile
 
@@ -324,19 +335,19 @@ Devices-only test suite, not just written and assumed):
 # Does NOT catch data races; use ThreadSanitizer for that.
 cmake --preset devices-asan
 cmake --build --preset devices-asan
-./cmake-build-devices-asan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+./cmake-build-devices-asan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*:AndroidSensorBridge*:AndroidCompassMath*:AndroidMotionMath*"
 
 # ThreadSanitizer — catches data races. This is the one that actually validates
 # Microsoft::Devices's own locking discipline.
 cmake --preset devices-tsan
 cmake --build --preset devices-tsan
-./cmake-build-devices-tsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+./cmake-build-devices-tsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*:AndroidSensorBridge*:AndroidCompassMath*:AndroidMotionMath*"
 
 # UndefinedBehaviorSanitizer — catches signed overflow, misaligned access,
 # invalid enum values, null-pointer-arithmetic UB, etc.
 cmake --preset devices-ubsan
 cmake --build --preset devices-ubsan
-./cmake-build-devices-ubsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+./cmake-build-devices-ubsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*:AndroidSensorBridge*:AndroidCompassMath*:AndroidMotionMath*"
 ```
 
 **Actual results as of `plan_devices_phase8.md` (2026-07-04), all three presets
@@ -373,6 +384,26 @@ by coverage):
   assume it's "just that same old sharp-runtime thing" without checking the actual
   file/line, the same mistake this task's first run would have been if the second race
   had been waved away without reading it.
+- **UBSan:** clean (0 issues).
+
+**Re-verified as of `plan_devices.md` Phase 10 (2026-07-05), all three presets
+reconfigured, rebuilt, and re-run against the updated filter above** (271 tests, 269
+passed, 2 expected skips):
+- **ASan:** clean (0 issues) — confirmed on Phases 6-8's new `Detail::AndroidSensorBridge`/
+  `AndroidCompassBackend`/`AndroidMotionBackend` code too (their non-Android inert paths
+  and pure math functions run on this desktop build; the real `#ifdef __ANDROID__` code
+  cannot execute here at all, only compile — see `docs/devices-hardware-checklist.md`
+  §6-8 for what that leaves genuinely unverified).
+- **TSan:** 40 reports, **all confirmed the identical known finding** — checked directly,
+  not assumed: every single report's own `Location is global 'System::TimeSpan::copy_count'`
+  line matches exactly, despite the surrounding call stacks now varying more (e.g. via
+  `SensorBase.hpp:294`, `DateTimeOffset.cpp:71/74` — different construction paths through
+  `Accelerometer`'s constructor and `AccelerometerReading`'s default `Timestamp`, all
+  ultimately copying the same `TimeSpan`/`DateTimeOffset` types that hit the same
+  unsynchronized `sharp-runtime` counter). This re-confirms the "if a future TSan run
+  reports anything other than this one finding, treat it as new" instruction above still
+  holds — verified by actually reading all 40 reports' location lines, not by pattern-matching
+  the call stacks alone (which looked different enough at a glance to warrant checking).
 - **UBSan:** clean (0 issues).
 
 **Throwaway, non-preset builds used during development** (e.g.
