@@ -1290,9 +1290,9 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Tests:** existing `GamePadInputTest` packet case.
 - **Deps:** none.
 
-#### INPUT-GAMEPAD-028 — PacketNumber NOT bumped by within-dead-zone wobble (task 916)
-- **Priority:** P1 · **Status:** TODO · **Area:** GamePad
-- **Files:** `InputManager.cpp`, `tests/.../GamePad*Tests.cpp`
+#### INPUT-GAMEPAD-028 — PacketNumber behavior on within-dead-zone wobble (task 916)
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** GamePad
+- **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
 - **Problem:** Deviation §18: per-field packet can bump on raw wobble even when visible XNA state is
   unchanged; currently `not asserted`.
 - **Work:** Either make packet reflect visible (deadzoned) state, or add a test documenting current raw-bump
@@ -1300,6 +1300,15 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Acceptance:** Behavior asserted by a test; decision recorded.
 - **Tests:** new within-deadzone wobble test (via fake backend events).
 - **Deps:** INPUT-GAMEPAD-030.
+- **Result (2026-07-05):** **Decision: ACCEPT the raw-change bump** (no code change) — see DEC-04. Rationale:
+  FNA leaves `PacketNumber` hardcoded to 0 (`GamePadState.cs:124`; SDL has no packet counter), so CNA's
+  synthesized incrementing PacketNumber is a NOXNA enhancement, and bumping on any raw axis change
+  (dead-zone-independent) matches XInput's `dwPacketNumber`. Pinned with
+  `GamePadInputTest.PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZonedStateStaysAtRest`: two
+  sub-dead-zone X values (0.05→0.15) leave the default-dead-zoned thumbstick at 0.0 both times, yet
+  PacketNumber bumps (and `GetState(None)` confirms the raw value changed to 0.15). Used the direct
+  `InputManager` axis API (like the sibling packet test), so INPUT-GAMEPAD-030 was not required. GamePad
+  suite 73→74; input filter 273→274; order-independent.
 
 #### INPUT-GAMEPAD-029 — Button/trigger threshold behavior (`IsButtonDown`)
 - **Priority:** P3 · **Status:** TODO · **Area:** GamePad
@@ -2643,9 +2652,13 @@ Current: parsed then `min(n,4)`. FNA: honors the value. Risk: minor. Decision: a
 Tests: env-count. Disposition: **Accept**. → INPUT-GAMEPAD-002.
 
 **DEC-04 — PacketNumber per-field / within-dead-zone wobble.**
-Current: bumps on any raw field change, incl. within-deadzone wobble; `not asserted`. XNA/FNA: bumps when
-state changes. Risk: packet churn without visible change. Decision: reflect visible state OR document raw
-behavior. Tests: wobble test. Disposition: **Decide**. → INPUT-GAMEPAD-028.
+Current: CNA synthesizes PacketNumber and bumps it on any raw field change (connect/button/axis), incl. a
+within-dead-zone axis wobble. **FNA leaves `PacketNumber` hardcoded to 0** (`GamePadState.cs:124`; its SDL
+backend never sets it — SDL has no packet counter). XInput's `dwPacketNumber` bumps on raw state change,
+dead-zone-independent. So CNA's behavior is a NOXNA enhancement over FNA that matches XInput. Risk: an app
+diffing PacketNumbers may re-read on sub-dead-zone jitter — a harmless no-op, same as on real XInput. Tests:
+`PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZonedStateStaysAtRest`. Disposition: **ACCEPTED
+(2026-07-05, INPUT-GAMEPAD-028)** — keep the raw-change bump; pinned by test; not a bug. → INPUT-GAMEPAD-028.
 
 **DEC-05 — `GamePadState.GetHashCode` partial-field formula.**
 Current: `buttons ^ packetNumber*31`. FNA: reflection-based default. Risk: different hash distribution
