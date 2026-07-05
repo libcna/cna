@@ -2311,13 +2311,25 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
 - **Deps:** none.
 
 #### INPUT-TEST-009 — Fuzz event sequences (bridge robustness)
-- **Priority:** P2 · **Status:** TODO · **Area:** Test
-- **Files:** new fuzz harness
+- **Priority:** P2 · **Status:** DONE (2026-07-05) · **Area:** Test
+- **Files:** `tests/CNA/Internal/Input/SdlInputBridgeFuzzTests.cpp` (new)
 - **Work:** Feed randomized (seeded, index-derived — no `Math.random`) `SDL_Event` streams through
   `ProcessEvent`; assert no crash / invariant violations.
 - **Acceptance:** No crash under fuzz; invariants hold.
 - **Tests:** new fuzz test (deterministic seeds).
 - **Deps:** none.
+- **Result (2026-07-05):** Added `SdlInputBridgeFuzzTests.cpp` — a deterministic LCG (seed
+  `0x00C0FFEE`, no wall clock / no `std::random_device`) drives 5000 well-typed but edge-case
+  `SDL_Event`s through the real `SdlInputBridge::ProcessEvent`: KEY_DOWN/UP (random keycode +
+  scancode + repeat), MOUSE_MOTION/BUTTON_DOWN/UP (incl. unmapped buttons 6-7)/WHEEL, TEXT_INPUT
+  (valid / multi-byte / astral / malformed `\xFF` / truncated `x\xC3` / empty), FINGER_DOWN/MOTION/
+  UP/CANCELED (small reused id pool to stress the slot maps), and TEXT_EDITING. After every event it
+  asserts `ProcessEvent` did not throw and that all four public snapshots (`Keyboard`/`Mouse`/
+  `TouchPanel`/`GamePad`) stay readable, periodically pumps `TouchPanel::Update()` and drains
+  `ReadGesture()`. Gamepad *device* events are intentionally excluded (they drive the real SDL
+  gamepad subsystem — covered separately by the injectable fake backend). Passes locally and is
+  **clean under ASan+UBSan** (no memory error / UB over the whole `ProcessEvent` switch), so under
+  the sanitizer CI job it doubles as a memory-error/UB net on edge-case field values.
 
 #### INPUT-TEST-010 — Shuffled/repeat determinism (gate)
 - **Priority:** P1 · **Status:** TODO · **Area:** Test
