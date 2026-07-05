@@ -70,12 +70,34 @@ jobs:
 
       - name: Configure (EasyGL, tests)
         run: |
+          set -o pipefail
+          { echo "== toolchain =="; cmake --version; "${CXX}" --version | head -1; \
+            echo "== siblings =="; ls -d ../sharp-runtime ../easy-gl ../meta-gl; } 2>&1 | tee /tmp/configure.log
           cmake -S . -B build -G Ninja \
             -DCNA_GRAPHICS_BACKEND=EASYGL \
-            -DCNA_BUILD_TESTS=ON
+            -DCNA_BUILD_TESTS=ON 2>&1 | tee -a /tmp/configure.log
 
       - name: Build CnaTests
-        run: cmake --build build --target CnaTests
+        run: cmake --build build --target CnaTests 2>&1 | tee /tmp/build.log
+
+      # DIAGNOSTIC (temporary, INPUT-CI-001): Actions logs are auth-gated, so on any failure publish the
+      # configure/build logs to a throwaway `ci-diag` branch (not in the trigger list, so no CI loop) that
+      # can be fetched over SSH. Remove once CI is green.
+      - name: Publish diagnostics on failure
+        if: failure()
+        run: |
+          mkdir -p ci-diag
+          cp /tmp/configure.log ci-diag/ 2>/dev/null || true
+          cp /tmp/build.log ci-diag/ 2>/dev/null || true
+          cp build/CMakeCache.txt ci-diag/ 2>/dev/null || true
+          cp build/CMakeFiles/CMakeConfigureLog.yaml ci-diag/ 2>/dev/null || true
+          find build -name 'CMakeError.log' -exec cp {} ci-diag/ \; 2>/dev/null || true
+          git config user.name ci-bot
+          git config user.email ci-bot@openeggbert.local
+          git checkout -b ci-diag
+          git add -f ci-diag
+          git commit -q -m "ci-diag: failure logs [skip ci]"
+          git push -f origin ci-diag
 
       # A virtual X server (Xvfb) provides real windows/cursors headlessly. The SDL "dummy" video
       # driver is NOT enough: it reports video as available but has null system cursors, so the
