@@ -595,7 +595,8 @@ TEST(AudioCategoryTest, PauseResumeStopRouteToRealActiveCueInCategory)
 
     cat.Pause();
     EXPECT_TRUE(cue->getIsPausedProperty());
-    EXPECT_FALSE(cue->getIsPlayingProperty());
+    // P9-LIFECYCLE-013: matches real FACT -- pausing never clears IsPlaying.
+    EXPECT_TRUE(cue->getIsPlayingProperty());
 
     cat.Resume();
     EXPECT_TRUE(cue->getIsPlayingProperty());
@@ -695,6 +696,10 @@ TEST(AudioCategoryTest, PauseAndResumeAffectAllActiveCuesInCategory)
     EXPECT_TRUE(cueA->getIsPausedProperty());
     EXPECT_TRUE(cueB->getIsPausedProperty());
     EXPECT_TRUE(cueC->getIsPausedProperty());
+    // P9-LIFECYCLE-013: matches real FACT -- pausing never clears IsPlaying.
+    EXPECT_TRUE(cueA->getIsPlayingProperty());
+    EXPECT_TRUE(cueB->getIsPlayingProperty());
+    EXPECT_TRUE(cueC->getIsPlayingProperty());
 
     cat.Resume();
     EXPECT_TRUE(cueA->getIsPlayingProperty());

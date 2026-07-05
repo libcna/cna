@@ -108,7 +108,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool Cue::getIsCreatedProperty()   const { return !isDisposed_ && state_ == State::Created;   }
     bool Cue::getIsDisposedProperty()  const { return isDisposed_; }
-    bool Cue::getIsPausedProperty()    const { ReconcileState(); return !isDisposed_ && state_ == State::Paused;    }
+    // P9-LIFECYCLE-013: matches real FACT (FACTCue_Pause never clears PLAYING) -- IsPaused and
+    // IsPlaying can both be true at once, since paused_ is an independent flag on top of Playing.
+    bool Cue::getIsPausedProperty()    const { ReconcileState(); return !isDisposed_ && state_ == State::Playing && paused_; }
     bool Cue::getIsPlayingProperty()   const { ReconcileState(); return !isDisposed_ && state_ == State::Playing;   }
     bool Cue::getIsPreparedProperty()  const { return !isDisposed_ && state_ == State::Prepared;  }
     bool Cue::getIsPreparingProperty() const { return !isDisposed_ && state_ == State::Preparing; }
@@ -133,6 +135,7 @@ namespace Microsoft::Xna::Framework::Audio
         auto* self = const_cast<Cue*>(this);
         self->active_.clear();
         self->state_ = State::Stopped;
+        self->paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
     }
 
     // ── Variables ─────────────────────────────────────────────────────────────
@@ -206,14 +209,14 @@ namespace Microsoft::Xna::Framework::Audio
         // P9-LIFECYCLE-010/011: FACTCue_Play (FACT.c) silently rejects a cue whose state already
         // has PLAYING, STOPPING, or STOPPED set -- FNA's Cue.Play() discards the return value, so
         // from the C# caller's perspective this is just a no-op, not an exception. A Cue models
-        // exactly one playthrough, not a restartable voice. PAUSED is included here too: real
-        // FACT keeps the PLAYING bit set while paused (pausing never clears it), so a paused cue
-        // is rejected as well. Reconciling first ensures a cue that finished naturally (but whose
-        // state_ is still the stale Playing value from before the next query) is correctly
-        // treated as already-stopped rather than being resurrected by a stray Play() call.
+        // exactly one playthrough, not a restartable voice. A paused cue is rejected too: real
+        // FACT keeps the PLAYING bit set while paused (pausing never clears it, P9-LIFECYCLE-013),
+        // so it's already covered by the State::Playing check below without a separate paused_
+        // check. Reconciling first ensures a cue that finished naturally (but whose state_ is
+        // still the stale Playing value from before the next query) is correctly treated as
+        // already-stopped rather than being resurrected by a stray Play() call.
         ReconcileState();
-        if (state_ == State::Playing || state_ == State::Paused ||
-            state_ == State::Stopping || state_ == State::Stopped)
+        if (state_ == State::Playing || state_ == State::Stopping || state_ == State::Stopped)
             return;
 
         // Resolve waves to play
@@ -429,19 +432,19 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (isDisposed_) return;
         ReconcileState(); // a naturally-finished cue must not be resurrected into Paused
-        if (state_ != State::Playing) return;
+        if (state_ != State::Playing || paused_) return; // P9-LIFECYCLE-013: idempotent, like FACTCue_Pause
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Pause();
-        state_ = State::Paused;
+        paused_ = true;
     }
 
     void Cue::Resume()
     {
         if (isDisposed_) return;
-        if (state_ != State::Paused) return;
+        if (state_ != State::Playing || !paused_) return;
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Resume();
-        state_ = State::Playing;
+        paused_ = false;
     }
 
     void Cue::Stop(AudioStopOptions options)
@@ -478,6 +481,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (hasRealTail)
         {
             state_ = State::Stopping;
+            paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
             // Deliberately do NOT touch waveBanksUsed_/AudioEngine's registry here (P9-STOP-005/
             // 009): the old code unregistered immediately regardless of `immediate`, which made
             // WaveBank::IsInUse/AudioEngine's category operations lose track of this cue while it
@@ -489,6 +493,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         active_.clear();
         state_ = State::Stopped;
+        paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
 
         for (auto* wb : waveBanksUsed_)
             if (wb) wb->UnregisterCue(this);

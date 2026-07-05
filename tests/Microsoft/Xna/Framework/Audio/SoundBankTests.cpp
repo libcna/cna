@@ -674,7 +674,8 @@ TEST(SoundBankTest, PausedFireAndForgetCueSurvivesSweepAndCanStillBeResumed)
     ASSERT_NE(cue, nullptr);
     cue->Pause();
     ASSERT_TRUE(cue->getIsPausedProperty());
-    ASSERT_FALSE(cue->getIsPlayingProperty());
+    // P9-LIFECYCLE-013: matches real FACT -- pausing never clears IsPlaying.
+    ASSERT_TRUE(cue->getIsPlayingProperty());
 
     bank.PlayCue("Explosion"); // triggers the sweep again
     EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 2u); // paused entry must have survived

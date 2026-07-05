@@ -1906,6 +1906,52 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   *Note:* Added `AudioEngine::ActiveCueCountForTest()` (NOXNA, test-only) + `AudioEngineTestAccess.hpp`, since `XactEngineImpl` is only defined in `AudioEngine.cpp` and can't be reached by a friend test struct the way `SoundBank::fireAndForget_` can. Test `AudioEngineTests.cpp::RepeatedCategoryOperationsDoNotDuplicateActiveCueRegistryEntries` calls `AudioCategory::Pause/Resume/SetVolume` repeatedly and verifies `ActiveCueCount==1`. Honesty note: `AudioCategory` operations never call `RegisterCue` (only methods on already-registered cues), so this test would also pass against the older code — it's a regression guard for the future, not a reproduction of a real bug (unlike P9-LIFECYCLE-010/011, where `git stash` genuinely showed a failure).
 * [x] P9-LIFECYCLE-013 Audit `Cue::Pause()`, `Cue::Resume()`, and `Cue::Stop()` behavior when called in Stopped, Playing, Paused, and Disposed states.
   *Note:* Read `FACTCue_Pause`/`FACTCue_Stop` (`FACT.c`) line-by-line against CNA's `Pause()`/`Resume()`/`StopInternal()`. Findings, per state: **Disposed** — CNA's `if (isDisposed_) return;` guard on all three matches FACT's own `if (pCue == NULL) return <error>;` (FNA's disposed `Cue.handle` is `IntPtr.Zero`), i.e. a silent no-op in both — no bug, locked in by 3 new tests (see `P9-LIFECYCLE-014`). **Stopped** — calling `Stop()` again is an idempotent no-op in both (FACT short-circuits on the `STOPPED` bit; CNA re-runs the same steps against already-empty state with no observable effect) — a micro-inefficiency in CNA, not a bug, not worth changing. **Playing/Paused** — `Pause()`/`Resume()`'s guard conditions (`state_ != State::Playing` / `!= State::Paused`) produce the same net effect as FACT's bit-flag checks for every case exercised by existing tests. One real, deliberately-deferred deviation found: real FACT never clears `FACT_STATE_PLAYING` when pausing, so `IsPlaying`+`IsPaused` can both be `true` in XNA/FNA; CNA's mutually-exclusive `State` enum can't represent that. Fixing it would ripple into `AudioEngine::PauseCategoryInternal`/`ResumeCategoryInternal` and existing tests that assume disjoint `IsPlaying`/`IsPaused` — flagged, not fixed, since it weighs the same as the Fáze 8 `CP-19`/`CP-18`/`XA-9` "touches shared infrastructure" decisions (ask the user before implementing).
+
+  **Resolved (post-Fáze-9):** after Fáze 9 closed (all 11 groups, `P9-AUDIT-001..005`), the user
+  was asked which of the two remaining open decisions to pursue next and chose this one. Re-read
+  `FACTCue_Pause`/`FACTCue_Play`/`FACTCue_Stop` (`FACT.c`) and `FACTAudioEngine_Pause` to ground
+  the exact fix: `FACTCue_Pause` only ever sets/clears the `PAUSED` bit
+  (`pCue->state |= FACT_STATE_PAUSED` / `&= ~FACT_STATE_PAUSED`), never touching `PLAYING`;
+  `FACTCue_Stop`'s immediate path clears `PLAYING`/`STOPPING`/`PAUSED` together when reaching
+  `STOPPED`; `FACTAudioEngine_Pause` iterates every cue with a `playingSound` and unconditionally
+  calls `FACTCue_Pause` on each (no "already paused" guard at the engine level -- the idempotency
+  lives inside `FACTCue_Pause` itself, which only refuses when `STOPPING`/`STOPPED`).
+
+  Implemented by splitting `Cue::State::Paused` (a separate, mutually-exclusive enum value) into
+  an independent `bool paused_` flag layered on top of `State::Playing` (`Cue.hpp`/`Cue.cpp`):
+  `getIsPlayingProperty()` is unchanged (`state_ == State::Playing`, regardless of `paused_`);
+  `getIsPausedProperty()` becomes `state_ == State::Playing && paused_`; `Pause()`/`Resume()` now
+  guard on `paused_` directly (and `Pause()` is idempotent -- a no-op if already `paused_`, matching
+  `FACTCue_Pause`'s own set-not-toggle semantics) instead of transitioning `state_` to/from a
+  separate value; `paused_` is reset to `false` for hygiene wherever `state_` leaves `Playing`
+  (`StopInternal()`'s both branches, `ReconcileState()`'s natural-completion path) even though
+  `getIsPausedProperty()`'s `state_ == State::Playing` guard already makes this unobservable --
+  belt-and-suspenders against a future change accidentally reading `paused_` without that guard.
+  The unused `State::Pausing` enum value (declared but never assigned/read anywhere) was removed
+  in the same pass. `AudioEngine::PauseCategoryInternal`/`ResumeCategoryInternal` needed **no
+  changes**: `PauseCategoryInternal`'s `getIsPlayingProperty()` filter now also matches
+  already-paused cues (previously it didn't, since `IsPlaying` used to go false on pause), but
+  re-invoking the now-idempotent `Pause()` on them is harmless and actually more faithful to real
+  FACT's own unconditional-call behavior; `ResumeCategoryInternal`'s `getIsPausedProperty()` filter
+  behaves identically before/after by construction. `WaveBank.cpp`/`SoundBank.cpp`'s
+  `IsInUse`-style checks (`cue->getIsPlayingProperty() || cue->getIsPausedProperty()`) were
+  already written as an OR, so they tolerated non-exclusive states correctly with no change needed
+  either.
+
+  Updated 5 existing tests that asserted the old (wrong) mutual exclusivity to assert the new
+  (correct) coexistence instead: `CueTests.cpp`'s `IsPausedTrueAfterPause`/`PlayWhilePausedIsANoOp`,
+  `SoundBankTests.cpp`'s `PausedFireAndForgetCueSurvivesSweepAndCanStillBeResumed`,
+  `AudioCategoryTests.cpp`'s `PauseResumeStopRouteToRealActiveCueInCategory` (added the
+  `IsPlaying`-stays-true assertion) and `PauseAndResumeAffectAllActiveCuesInCategory` (added the
+  same, for all three cues in the multi-cue case). Verified via `git stash` on `Cue.hpp`/`Cue.cpp`:
+  all 5 updated assertions fail against the pre-fix code with the exact old (wrong) values. Full
+  suite 3260/3262 (2 expected skips, unchanged count -- these were edits to existing tests, not
+  new ones), audio subset 386/386 under ASan+UBSan (a state-machine change, verified for lifetime/
+  ownership issues even though no new allocation pattern was introduced).
+
+  `CHECKLIST.md`'s corresponding "mutually exclusive" accepted-deviation row was removed entirely
+  (no longer a deviation -- fixed). `Cue::Stop(AsAuthored)`'s authored-fade-curve-timing decision
+  (the other open item) remains open, unrelated to this fix.
 * [x] P9-LIFECYCLE-014 Align disposed-state behavior for `Cue` methods with XNA/FNA and add tests.
   *Note:* `Pause()`/`Resume()`/`Stop()` needed no change (already correct, see `P9-LIFECYCLE-013`'s note) — added `PauseAfterDisposeIsANoOp`/`ResumeAfterDisposeIsANoOp`/`StopAfterDisposeIsANoOp` to `CueTests.cpp` to lock the existing correct behavior in. `GetVariable()`/`SetVariable()` needed a real fix — see `P9-LIFECYCLE-015`.
 * [x] P9-LIFECYCLE-015 Ensure `Cue::GetVariable()` and `Cue::SetVariable()` handle disposed cues consistently with XNA/FNA.

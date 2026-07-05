@@ -1295,13 +1295,16 @@ TEST(CueTest, IsPlayingTrueAfterPlay)
     EXPECT_TRUE(cue->getIsPlayingProperty());
 }
 
+// P9-LIFECYCLE-013: matches real FACT (FACTCue_Pause never clears FACT_STATE_PLAYING) --
+// IsPlaying stays true while paused; IsPaused is an independent flag layered on top of it, not a
+// separate mutually-exclusive state.
 TEST(CueTest, IsPausedTrueAfterPause)
 {
     auto cue = MakeCue();
     cue->Play();
     cue->Pause();
     EXPECT_TRUE(cue->getIsPausedProperty());
-    EXPECT_FALSE(cue->getIsPlayingProperty());
+    EXPECT_TRUE(cue->getIsPlayingProperty());
 }
 
 TEST(CueTest, IsStoppedTrueAfterStop)
@@ -1424,7 +1427,7 @@ TEST(CueTest, PlayWhilePausedIsANoOp)
     cue->Pause();
     cue->Play();
     EXPECT_TRUE(cue->getIsPausedProperty());
-    EXPECT_FALSE(cue->getIsPlayingProperty());
+    EXPECT_TRUE(cue->getIsPlayingProperty());
 }
 
 TEST(CueTest, PlayAfterStopIsANoOp)

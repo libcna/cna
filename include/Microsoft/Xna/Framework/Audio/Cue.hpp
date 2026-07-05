@@ -128,7 +128,7 @@ namespace Microsoft::Xna::Framework::Audio
         friend class AudioEngine;
         Cue(std::string name, SoundBank* bank, uint16_t cueIndex);
 
-        enum class State { Created, Preparing, Prepared, Playing, Pausing, Paused, Stopping, Stopped };
+        enum class State { Created, Preparing, Prepared, Playing, Stopping, Stopped };
 
         std::string name_;
         SoundBank*  bank_;
@@ -136,6 +136,14 @@ namespace Microsoft::Xna::Framework::Audio
         uint16_t    categoryIdx_= 0xFFFF;
         State       state_      = State::Created;
         bool        isDisposed_ = false;
+
+        // P9-LIFECYCLE-013: real FACT (FACTCue_Pause, FACT.c) only ever sets/clears the PAUSED
+        // bit -- it never touches PLAYING, so a cue can be IsPlaying==true and IsPaused==true at
+        // the same time in real XNA/FNA. Modeled as an independent flag layered on top of
+        // State::Playing (rather than a separate mutually-exclusive State::Paused value) so
+        // getIsPlayingProperty()/getIsPausedProperty() can both be true simultaneously, matching
+        // FACT's bitmask semantics instead of a single-value enum.
+        bool        paused_     = false;
 
         std::unordered_map<std::string, float> variables_;
 
