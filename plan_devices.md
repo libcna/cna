@@ -210,7 +210,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A (audit-only task)
   - **Dependencies:** none
 
-- [ ] DEVICES-0002 — Build a fresh `VibrateController` API matrix vs. WP7 `Microsoft.Devices.VibrateController`
+- [x] DEVICES-0002 — Build a fresh `VibrateController` API matrix vs. WP7 `Microsoft.Devices.VibrateController` (2026-07-05: re-read `include/Microsoft/Devices/VibrateController.hpp` fresh; confirmed `getDefaultProperty()` (never-null singleton), `Start(const TimeSpan&)`, `Stop()` match the real WP7 shape exactly. `NOXNA` extensions confirmed correctly tagged: `Start(TimeSpan, float intensity)`, `getIsSupportedProperty()`, `getDeviceNameProperty()`, `StartLeftRight(float, float, TimeSpan)`. No drift from `AUDIT.md`'s existing `VibrateController` row)
   - **Area:** Audit / Compatibility matrix
   - **Files:** `include/Microsoft/Devices/VibrateController.hpp` (read-only); output into `AUDIT.md`'s existing Devices table row, no new file
   - **Required behavior:** Line-by-line confirm `getDefaultProperty()`, `Start(TimeSpan)`, `Stop()` match the documented WP7 shape; list all 4 `NOXNA` extensions explicitly as non-XNA.
@@ -218,7 +218,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0001
 
-- [ ] DEVICES-0003 — Build a fresh `SensorBase<TSensorReading>` API matrix
+- [x] DEVICES-0003 — Build a fresh `SensorBase<TSensorReading>` API matrix (2026-07-05: re-read `SensorBase.hpp` fresh; confirmed `CurrentValue`/`IsDataValid`/`TimeBetweenUpdates`/`CurrentValueChanged`/`Start()`/`Stop()`/`Dispose()` shape; confirmed the base class has no `IsSupported`/`State` member — both are per-subclass statics/properties only, matching MSDN `hh239261`)
   - **Area:** Audit / Compatibility matrix
   - **Files:** `include/Microsoft/Devices/Sensors/SensorBase.hpp` (read-only)
   - **Required behavior:** Confirm `CurrentValue`/`IsDataValid`/`State`(absence)/`TimeBetweenUpdates`/`CurrentValueChanged`/`Start()`/`Stop()`/`Dispose()` shape against MSDN `hh239261`-family pages; explicitly note the base class has no `IsSupported`/`State` (those are per-subclass).
@@ -226,7 +226,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0001
 
-- [ ] DEVICES-0004 — Build a fresh `Accelerometer` API matrix
+- [x] DEVICES-0004 — Build a fresh `Accelerometer` API matrix (2026-07-05: re-read `Accelerometer.hpp` fresh; confirmed ctor, static `getIsSupportedProperty()`, `CurrentValue`/`CurrentValueChanged` (inherited), legacy `ReadingChanged` all present and real-shaped; `getStateProperty()` confirmed `NOXNA`. Unit-conversion question (SDL reports m/s², WP7 `Acceleration` is documented in g) is real and NOT resolved by this matrix task — explicitly deferred to Phase 5's DEVICES-0063, not silently assumed correct here)
   - **Area:** Audit / Compatibility matrix
   - **Files:** `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (read-only)
   - **Required behavior:** Confirm ctor, static `IsSupported`, `CurrentValue`, `CurrentValueChanged`, legacy `ReadingChanged`, units (m/s² SDL raw → g XNA), timestamp semantics, lifecycle against documented shape; list every `NOXNA` test-only hook as non-API.
@@ -234,7 +234,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0001
 
-- [ ] DEVICES-0005 — Build a fresh `Gyroscope` API matrix
+- [x] DEVICES-0005 — Build a fresh `Gyroscope` API matrix (2026-07-05: re-read `Gyroscope.hpp` fresh; confirmed same shape as `Accelerometer` minus the legacy event (correctly absent — real `Gyroscope` never had one); `getStateProperty()` confirmed `NOXNA`. Unit question (rad/s) deferred to DEVICES-0064, same reasoning as DEVICES-0004)
   - **Area:** Audit / Compatibility matrix
   - **Files:** `include/Microsoft/Devices/Sensors/Gyroscope.hpp` (read-only)
   - **Required behavior:** Same as DEVICES-0004 but for `Gyroscope`; confirm no legacy event exists (correct, matches real API) and `State` is `NOXNA`.
@@ -242,7 +242,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0001
 
-- [ ] DEVICES-0006 — Build a fresh `Compass`/`CompassReading`/`CalibrationEventArgs` API matrix
+- [x] DEVICES-0006 — Build a fresh `Compass`/`CompassReading`/`CalibrationEventArgs` API matrix (2026-07-05: re-read all three headers fresh; confirmed ctor, static `getIsSupportedProperty()`, `Calibrate`, `CompassReading`'s `HeadingAccuracy`/`MagneticHeading`/`MagnetometerReading`/`TrueHeading`/`Timestamp` (all private-setter + `friend class Compass`, matching real `internal set`); confirmed `Start()` unconditionally throws `SensorFailedException` — an honest, documented stub, not a compatibility gap)
   - **Area:** Audit / Compatibility matrix
   - **Files:** `include/Microsoft/Devices/Sensors/{Compass,CompassReading,CalibrationEventArgs}.hpp` (read-only)
   - **Required behavior:** Confirm ctor, static `IsSupported`, `CurrentValue`, `CurrentValueChanged`, `Calibrate`, `MagneticHeading`/`TrueHeading`/`HeadingAccuracy`/`MagnetometerReading` shape; confirm stub semantics (`Start()` always throws) are the honest, documented state, not a compatibility gap.
@@ -250,7 +250,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0001
 
-- [ ] DEVICES-0007 — Build a fresh `Motion`/`MotionReading`/`AttitudeReading` API matrix
+- [x] DEVICES-0007 — Build a fresh `Motion`/`MotionReading`/`AttitudeReading` API matrix (2026-07-05: re-read all three headers fresh; confirmed ctor, static `getIsSupportedProperty()`, `Calibrate` (shared naming/shape with `Compass`), `MotionReading`'s `Attitude`/`DeviceAcceleration`/`DeviceRotationRate`/`Gravity`/`Timestamp`, `AttitudeReading`'s `Pitch`/`Roll`/`Yaw`/`Quaternion`/`RotationMatrix`/`Timestamp` — all private-setter + `friend class Motion`. Same honest-stub note as DEVICES-0006 applies)
   - **Area:** Audit / Compatibility matrix
   - **Files:** `include/Microsoft/Devices/Sensors/{Motion,MotionReading,AttitudeReading}.hpp` (read-only)
   - **Required behavior:** Confirm ctor, static `IsSupported`, `CurrentValue`, `CurrentValueChanged`, `Calibrate` (shared with Compass by design), `Attitude`/`DeviceAcceleration`/`DeviceRotationRate`/`Gravity`, and `AttitudeReading`'s `Pitch`/`Roll`/`Yaw`/`Quaternion`/`RotationMatrix` shape against documented members.
@@ -258,7 +258,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0001
 
-- [ ] DEVICES-0008 — Build a fresh exceptions/enums API matrix (`SensorFailedException`, `AccelerometerFailedException`, `SensorState`, `ISensorReading`, `SensorReadingEventArgs<T>`, `AccelerometerReadingEventArgs`)
+- [x] DEVICES-0008 — Build a fresh exceptions/enums API matrix (`SensorFailedException`, `AccelerometerFailedException`, `SensorState`, `ISensorReading`, `SensorReadingEventArgs<T>`, `AccelerometerReadingEventArgs`) (2026-07-05: re-read all six headers fresh; confirmed `SensorFailedException`'s 3 ctors + `getErrorIdProperty()`, `AccelerometerFailedException`'s matching 3-ctor mirror, `SensorState`'s 6 values (`NotSupported`/`Ready`/`Initializing`/`NoData`/`NoPermissions`/`Disabled`), `ISensorReading`'s single pure-virtual `getTimestampProperty()`. `SensorState`'s enum values remain medium-confidence — no direct MSDN enum page was ever found, only a MonoGame cross-check — flagged again here as a standing, accepted risk, not silently upgraded to high confidence)
   - **Area:** Audit / Compatibility matrix
   - **Files:** all six headers (read-only)
   - **Required behavior:** Confirm each type's members/ctors against documented shape; explicitly flag `SensorState`'s medium-confidence status (no direct MSDN enum page found, only MonoGame cross-check) as a standing, accepted risk, not a bug to silently "fix" by inventing values.
