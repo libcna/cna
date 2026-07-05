@@ -32,7 +32,11 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the adapter description string. */
         [[nodiscard]] const std::string& getDescriptionProperty() const;
 
-        /** @brief Returns the device identifier. Not implemented for the SDL backend. */
+        /**
+         * @brief Returns the PCI device identifier of the primary GPU.
+         *
+         * Queried via sysfs on Linux; returns 0 on other platforms or when the query fails.
+         */
         [[nodiscard]] SharpRuntime::intcs getDeviceIdProperty() const;
 
         /** @brief Returns the device or display name. */
@@ -51,10 +55,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the native monitor handle for this adapter. */
         [[nodiscard]] IntPtr getMonitorHandleProperty() const;
 
-        /** @brief Returns the adapter revision number. Not implemented for the SDL backend. */
+        /** @brief Returns the adapter revision number. Always 0; not queryable via SDL. */
         [[nodiscard]] SharpRuntime::intcs getRevisionProperty() const;
 
-        /** @brief Returns the subsystem identifier. Not implemented for the SDL backend. */
+        /** @brief Returns the subsystem identifier. Always 0; not queryable via SDL. */
         [[nodiscard]] SharpRuntime::intcs getSubSystemIdProperty() const;
 
         /** @brief Returns true if a null device should be used instead of hardware. */
@@ -75,14 +79,21 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void setUseReferenceDeviceProperty(bool value);
 
-        /** @brief Returns the vendor identifier. Not implemented for the SDL backend. */
+        /**
+         * @brief Returns the PCI vendor identifier of the primary GPU.
+         *
+         * Queried via sysfs on Linux; returns 0 on other platforms or when the query fails.
+         */
         [[nodiscard]] SharpRuntime::intcs getVendorIdProperty() const;
 
-        /** @brief Returns the default graphics adapter (adapter index 0). */
+        /**
+         * @brief Returns the default graphics adapter (adapter index 0).
+         *
+         * Re-evaluated on every call, matching FNA's `DefaultAdapter` property — the returned
+         * reference must not be cached across a call to AdaptersChanged(), which destroys and
+         * recreates every GraphicsAdapter instance.
+         */
         [[nodiscard]] static GraphicsAdapter& getDefaultAdapterProperty();
-
-        /** @brief The default graphics adapter (XNA-style static accessor). */
-        static GraphicsAdapter& DefaultAdapter;
 
         /** @brief Returns the list of all available graphics adapters. */
         [[nodiscard]] static const std::vector<std::unique_ptr<GraphicsAdapter>>& getAdaptersProperty();
@@ -145,8 +156,6 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
-        friend class GraphicsAdapterFactory;
-
         GraphicsAdapter(SharpRuntime::intcs displayIndex, DisplayModeCollection modes, std::string name,
                         std::string description,
                         SharpRuntime::intcs vendorId = 0, SharpRuntime::intcs deviceId = 0);

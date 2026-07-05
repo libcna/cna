@@ -13,16 +13,19 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–39 are complete. **Phase 40 (Viewport, DisplayMode, and
-  adapter behavior, `GRAPHICS_TASKS.md` Tasks 341–350) is open** — Tasks 341–344 are done, **Task
-  345 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent closed
+  adapter behavior, `GRAPHICS_TASKS.md` Tasks 341–350) is open** — Tasks 341–345 are done, **Task
+  346 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent closed
   phases have synthesis docs: `docs/depthstencilstate-support.md` (Phase 37),
   `docs/rasterizerstate-support.md` (Phase 38), `docs/rendertarget-support.md` (Phase 39).
   **Phase 40 connects directly to Task 880** (found in Phase 39): `Viewport` has zero GPU backend
   wiring on all 3 backends — Tasks 341–344 were all pure math/unit tests against the `Viewport`
   class in isolation (no `GraphicsDevice` involved), so none of them touched it; the
   viewport-reset-after-resize task (Task 349) will likely re-surface this same gap from a
-  different angle; worth cross-referencing rather than re-diagnosing from scratch. Task 345 opens
-  the phase's second sub-area: auditing `GraphicsAdapter` against FNA.
+  different angle; worth cross-referencing rather than re-diagnosing from scratch. Task 345
+  audited `GraphicsAdapter` against FNA (fixed 4 real bugs, most notably a dangling-reference bug
+  in the old `DefaultAdapter` static field) and opened a **new finding for Task 347**: FNA's
+  `DisplayModeCollection` has a `this[SurfaceFormat]` indexer CNA is missing entirely, while CNA
+  adds an un-`NOXNA`'d `Count`/integer-`operator[]` pair that doesn't exist in FNA at all.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -45,22 +48,20 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
   (`cmake-build-bgfx`): all 3 configured, build cleanly, rebuilt and fully re-verified this
-  session (Task 344 only touches `tests/.../ViewportTests.cpp` — no production code — but all
-  3 `CnaTests` targets were still rebuilt and run per the project's standing regression discipline).
+  session (Task 345's fix touches shared `GraphicsDeviceManager.cpp`, so all 3 backends needed a
+  full rebuild + regression pass).
 
 ### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 3323/3327 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`
-  + 1 reconfirmed-flaky, unrelated `CueTest` failure (a different specific Cue statistical test
-  this run, confirmed passing cleanly in isolation).
-- **Vulkan, full `ctest -j1`:** 3247/3261 pass. 13 documented failures (see §5) + 1 reconfirmed
-  order-dependent flake (alternates between `Vulkan_RenderTargetUsage` and
-  `Vulkan_FillMode_WireFrame` depending on run — this run it was `Vulkan_FillMode_WireFrame`):
-  5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
-  `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
-  `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876 — genuine confirmed bug, supposed to fail
-  until fixed).
-- **Bgfx, full `ctest -j1`:** 3231/3232 pass — 1 reconfirmed-flaky, unrelated `CueTest` failure
+- **EasyGL, full `ctest -j1`:** 3347/3350 pass. 3 pre-existing/documented failures (see §5):
+  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
+- **Vulkan, full `ctest -j1`:** 3269/3284 pass. 13 documented failures (see §5) + 2 reconfirmed-flaky,
+  unrelated `CueTest` failures: 5× `Vulkan_BlendState_*` (Task 868), 5×
+  `Vulkan_DepthStencilState_*` (Task 870), `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872),
+  `Vulkan_DepthBias` (one sub-case — showed 0/4 during the full run instead of the usual 3/4;
+  re-run in isolation immediately reconfirmed the normal 3/4 pattern, a transient GPU-state
+  anomaly from the long full-suite run, not a regression), `Vulkan_RenderTargetCube_SampleAfterUnbind`
+  (Task 876 — genuine confirmed bug, supposed to fail until fixed).
+- **Bgfx, full `ctest -j1`:** 3254/3255 pass — 1 reconfirmed-flaky, unrelated `CueTest` failure
   (passes in isolation).
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently**
   — concurrent runs previously produced transient GPU/driver-contention false failures. If a
@@ -165,6 +166,7 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 
 | Commit / Task | Change |
 |---|---|
+| Task 345 | Audited `GraphicsAdapter` against FNA's `GraphicsAdapter.cs` + `SDL3_FNAPlatform.cs`. Fixed 4 real bugs: (1) `AdaptersChanged()` swapped `DeviceName`/`Description` — FNA gives them different values (`DeviceName`=synthetic `\\.\DISPLAYn`, `Description`=real display name). (2) `queryDisplayModes()` didn't dedupe modes differing only by refresh rate and iterated forward instead of FNA's reverse order — fixed to match exactly. (3) **Most severe**: `static GraphicsAdapter& DefaultAdapter` was a raw reference bound once at static-init time; since `AdaptersChanged()` destroys and recreates every adapter, any later call (an intended, FNA-documented usage) left it — and 2 production call sites in `GraphicsDeviceManager.cpp` — dangling. Removed the field entirely (FNA's own `DefaultAdapter` is a property, always re-evaluated) and repointed both call sites at the existing, always-fresh `getDefaultAdapterProperty()`. (4) Stale Doxygen comments on `getDeviceIdProperty()`/`getVendorIdProperty()` claimed "not implemented" but both are real (Linux PCI sysfs query) — corrected. Documented (not reverted) an intentional deviation: FNA throws `NotImplementedException` for `DeviceId`/`Revision`/`SubSystemId`/`VendorId`; CNA provides real values for the first two. Removed a dead `friend class GraphicsAdapterFactory` (class doesn't exist). Closed a real test-coverage gap — zero `GraphicsAdapter` tests existed despite a stale comment claiming otherwise — with new `GraphicsAdapterTests.cpp` (23 tests). Verified discriminating power for both the swap and dedup fixes by reverting each and confirming the corresponding test fails. **New finding deferred to Task 347**: FNA's `DisplayModeCollection` has a `this[SurfaceFormat]` indexer CNA lacks entirely, while CNA's extra `Count`/integer-`operator[]` (not in FNA) aren't `NOXNA`-wrapped. Full 3-backend rebuild + regression (touches shared `GraphicsDeviceManager.cpp`): EasyGL 3347/3350 (3 pre-existing, unchanged). Vulkan 3269/3284 (13 pre-existing + 2 reconfirmed-flaky `CueTest`; one `Vulkan_DepthBias` 0/4 anomaly reconfirmed as the normal 3/4 pattern in isolation). Bgfx 3254/3255 (1 reconfirmed-flaky `CueTest`). |
 | Task 344 | Confirmed by reading FNA's `Viewport.cs` (Task 341's audit) that `MinDepth`/`MaxDepth` setters have zero validation/clamping, and `Project`/`Unproject` use them in unguarded arithmetic. Added 3 new `ViewportTests.cpp` tests: `ProjectWithMinDepthGreaterThanMaxDepthProducesInvertedZWithoutThrowing`, `ProjectUnprojectRoundTripWithInvertedMinMaxDepth` (MinDepth=1,MaxDepth=0 — confirms no reordering/clamping), and `UnprojectWithEqualMinMaxDepthProducesNonFiniteResult` (MinDepth==MaxDepth — confirms genuine IEEE-754 NaN propagation via `std::isnan`, not a guarded fallback). **Verified genuine discriminating power**: temporarily added a "protective" min/max swap to `Project` and a divide-by-zero guard to `Unproject` (the exact kind of FNA-deviating fix a well-intentioned future change might introduce) and confirmed all 3 new tests fail, before reverting both back to the committed Task 341 state. Test-file-only change: EasyGL ctest 3323/3327 (3 pre-existing + 1 reconfirmed-flaky `CueTest`, confirmed passing in isolation). Vulkan ctest 3247/3261 (13 pre-existing + 1 reconfirmed order-dependent flake — `Vulkan_FillMode_WireFrame` this run). Bgfx ctest 3231/3232 (1 reconfirmed-flaky `CueTest`). |
 | Tasks 342-343 | Task 341's audit found every pre-existing `Project`/`Unproject` test used identity matrices only, so the perspective-divide branch (`if (!MathHelper::WithinEpsilon(a, 1.0f))`) in both methods was never actually exercised. Added 4 new `ViewportTests.cpp` tests using a real `Matrix::CreatePerspectiveFieldOfView` + `Matrix::CreateLookAt`: `ProjectWithNonIdentityPerspectiveMatrix`/`ProjectWithNonIdentityViewAndProjectionMatrices` (Task 342, hand-derived expected values from FNA's own formulas), `UnprojectRecoversOriginalPointThroughNonIdentityPerspectiveMatrix`/`ProjectUnprojectRoundTripWithNonIdentityViewAndProjectionMatrices` (Task 343). **Verified genuine discriminating power**: temporarily forced each method's own perspective-divide condition to `false` in turn and confirmed exactly the tests that depend on that method's divide branch fail (Project's 2 fail when Project's divide is disabled; Unproject's 2 fail when Unproject's divide is disabled, independently) before reverting both back to the committed Task 341 state. Test-file-only change (no production code touched): EasyGL ctest 3321/3324 (3 pre-existing, unchanged). Vulkan ctest 3242/3258 (13 pre-existing + 1 reconfirmed-flaky `CueTest` + 1 reconfirmed order-dependent `Vulkan_RenderTargetUsage` flake + 1 one-off `DynamicSoundEffectInstanceTest` timing flake, confirmed passing in isolation). Bgfx ctest 3229/3229 (100%). |
 | Task 341 | **Opens Phase 40.** Audited `Viewport` against FNA's `Graphics/Viewport.cs` line-by-line: `Project`/`Unproject` math, `AspectRatio`, `Bounds`, `TitleSafeArea`, `ToString()` all already matched FNA exactly — no math bug. **Fixed a real CLAUDE.md convention violation**: `X`/`Y`/`MinDepth`/`MaxDepth` were public raw fields with no getter/setter, while `Height`/`Width` in the same class correctly used `getXProperty()`/`setXProperty()` — converted all 4 to the same `DEF_PROP`-backed pattern (private `X_`/`Y_`/`MinDepth_`/`MaxDepth_`, member order now matches FNA's C# order: Height, MaxDepth, MinDepth, Width, Y, X). Updated the only 3 call sites touching the raw fields (`GraphicsDevice::UpdateViewportFromWindow()`, `ViewportTests.cpp`, `easygl_viewport_state_test.cpp`) and added a new `SettersUpdateEachFieldIndependently` test (previously only constructors were tested, never the setters). Full 3-backend rebuild + regression (header change touches everything including `Viewport.hpp`): EasyGL 3316/3320 (3 pre-existing + 1 reconfirmed-flaky `CueTest`). Vulkan 3239/3254 (13 pre-existing + 2 reconfirmed-flaky `CueTest`). Bgfx 3224/3225 (1 reconfirmed-flaky `CueTest`). |
@@ -245,6 +247,7 @@ visible via dedicated pixel tests or direct code reading.
 | Confirmed, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` aborts on an internal assert in the sibling `easy-gl` repo. | — |
 | Confirmed, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. | — |
 | Confirmed, pre-existing, flaky | `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`: order-dependent, only one fails per full-suite run. | — |
+| Confirmed, not fixed (found Task 345) | `DisplayModeCollection` is missing FNA's `this[SurfaceFormat]` format-filtering indexer entirely, while adding a `Count` property and integer `operator[]` that don't exist in FNA's API and aren't `NOXNA`-wrapped. | Task 347 |
 | Suspected, not reproduced | Vulkan/Bgfx likely have the same mip-allocation bug already fixed on EasyGL's `TextureCube` (Task 276), for `Texture3D`/`TextureCube` on both backends. | Task 864 |
 | Needs verification | Whether Bgfx's window actually has a physical stencil buffer (the same class of gap just found/fixed on EasyGL) has not been checked. | — |
 | Incomplete, by design | Stride-keyed vertex layout only supports strides 16/20/24/32/52. Vulkan has no `Tangent`/`Binormal` mapping. `SurfaceFormat` support is Color-only for real GPU formats. `SDL_Renderer` has no 3D at all. Bgfx has no GPU pixel-readback API. | — |
@@ -340,29 +343,26 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 345 — audit `GraphicsAdapter` API against FNA**
-   - Goal: read FNA's `Graphics/GraphicsAdapter.cs` line-by-line and audit CNA's
-     `GraphicsAdapter.hpp`/`.cpp` against it — `CurrentDisplayMode`, `SupportedDisplayModes`,
-     `Description`, `DeviceId`/`Revision`/`SubSystemId`/`VendorId`, `IsDefaultAdapter`,
-     `IsWideScreen`, `MonitorHandle`, `UseNullDevice`/`UseReferenceDevice`, static
-     `DefaultAdapter`/`Adapters`, `IsProfileSupported`, `QueryRenderTargetFormat`/
-     `QueryBackBufferFormat`, `AdaptersChanged`. This opens Phase 40's second sub-area (the first,
-     Viewport, closed with Tasks 341–344).
-   - **One discrepancy already spotted while scoping this task, not yet investigated**: FNA's
-     `DeviceId`/`Revision`/`SubSystemId`/`VendorId` all unconditionally `throw new
-     NotImplementedException()` — but CNA's header already has real `vendorId_`/`deviceId_` fields
-     populated via a `queryPciIds()` static helper, i.e. `getDeviceIdProperty()`/
-     `getVendorIdProperty()` appear to be **actually implemented**, not stubbed to throw. Worth
-     checking during the audit whether this is a deliberate, documented `NOXNA`-style improvement
-     (acceptable per CHECKLIST.md's known-deviations table if noted) or an unintentional behavior
-     divergence from FNA that should throw `std::runtime_error`/similar instead, per CLAUDE.md's
-     "Exception behavior where practical" rule.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.cpp`, FNA's
-     `Graphics/GraphicsAdapter.cs`, `Graphics/DisplayMode.cs`, `Graphics/DisplayModeCollection.cs`.
-   - Verification: check existing `GraphicsAdapter`/`DisplayMode` test coverage first (Task 347
-     already covers `DisplayModeCollection` enumeration specifically) before deciding what new
-     tests this task needs — avoid duplicating Task 347's planned work.
+1. **`GRAPHICS_TASKS.md` Task 346 — add safe fallback for systems where display mode enumeration fails (headless CI)**
+   - Goal: Task 345's audit found CNA's `GraphicsAdapter` already has *some* headless-safe
+     fallback logic: `AdaptersChanged()` falls back to a single synthetic 800×480 "Default
+     Display"-style adapter when `SDL_GetDisplays()` returns null/0, and
+     `queryDisplayModes()`/`queryCurrentDisplayMode()` fall back similarly when
+     `SDL_GetFullscreenDisplayModes()`/`SDL_GetCurrentDisplayMode()` fail for a display that DOES
+     enumerate. This task should verify that fallback chain is actually complete and add a
+     regression test that deliberately exercises it (e.g. by tearing down the SDL video subsystem
+     mid-run, or via a headless CI environment with no display server) rather than assuming it
+     works because it happens to compile.
+   - Files: `src/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.cpp` (`AdaptersChanged`,
+     `queryDisplayModes`, `queryCurrentDisplayMode`),
+     `tests/Microsoft/Xna/Framework/Graphics/GraphicsAdapterTests.cpp` (new tests added this
+     session already use `GTEST_SKIP()` when SDL video init fails — Task 346's new test should
+     specifically target the "video available but enumeration still fails" path, which is
+     different from "video unavailable").
+   - Verification: a test that forces `SDL_GetDisplays`/`SDL_GetFullscreenDisplayModes` to report
+     no data (may require a fake/mock SDL layer or a documented manual-verification note if that's
+     not practical) and confirms `GraphicsAdapter` still returns a usable, non-crashing adapter
+     with at least one `DisplayMode`.
 
 2. **`GRAPHICS_TASKS.md` Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`**
    - Goal: found this session (Task 339) — FNA's real MRT limit is 4 simultaneous targets
@@ -594,56 +594,51 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-39 are FULLY COMPLETE. Phase 40 (Viewport, DisplayMode, and adapter
-behavior, GRAPHICS_TASKS.md Tasks 341-350) is open, Tasks 341-344 done, Task 345 next. EasyGL:
-3323/3327 pass (3 documented pre-existing failures + 1 reconfirmed-flaky unrelated CueTest,
-confirmed passing in isolation). Vulkan: 3247/3261 pass (13 documented failures + 1 reconfirmed
-order-dependent Vulkan_RenderTargetUsage/Vulkan_FillMode_WireFrame flake). Bgfx: 3231/3232 pass
-(1 reconfirmed-flaky unrelated CueTest). Caution: run all 3 backends' full ctest suites
-sequentially, never concurrently (see NEXT.md §2); if a single run shows an anomaly beyond the
-documented list, re-run in isolation before treating it as a regression.
+behavior, GRAPHICS_TASKS.md Tasks 341-350) is open, Tasks 341-345 done, Task 346 next. EasyGL:
+3347/3350 pass (3 documented pre-existing failures). Vulkan: 3269/3284 pass (13 documented
+failures + 2 reconfirmed-flaky unrelated CueTest; one Vulkan_DepthBias 0/4 anomaly during the full
+run reconfirmed as the normal 3/4 pattern in isolation - transient, not a regression). Bgfx:
+3254/3255 pass (1 reconfirmed-flaky unrelated CueTest). Caution: run all 3 backends' full ctest
+suites sequentially, never concurrently (see NEXT.md §2); if a single run shows an anomaly beyond
+the documented list, re-run in isolation before treating it as a regression.
 
-Task 341 OPENED PHASE 40. Audited Viewport against FNA's Graphics/Viewport.cs line-by-line:
-Project/Unproject math, AspectRatio, Bounds, TitleSafeArea, ToString() all already matched FNA
-exactly - no math bug found. Fixed a real CLAUDE.md convention violation: X/Y/MinDepth/MaxDepth
-were public raw fields with no getter/setter, while Height/Width in the same class correctly used
-getXProperty()/setXProperty() - converted all 4 to the same DEF_PROP-backed pattern.
+Tasks 341-344 (Viewport sub-area of Phase 40) are fully closed - see GRAPHICS_TASKS.md for detail.
 
-Tasks 342-343 found every pre-existing Project/Unproject test used IDENTITY matrices only, so the
-perspective-divide branch (!WithinEpsilon(a, 1.0f)) in both methods was never actually exercised.
-Added 4 new ViewportTests.cpp tests using a real Matrix::CreatePerspectiveFieldOfView +
-Matrix::CreateLookAt, with expected values hand-derived from FNA's own formulas. Verified genuine
-discriminating power by temporarily forcing each method's own perspective-divide condition to
-false in turn and confirming exactly the dependent tests fail, before reverting both.
+Task 345 (just done) audited GraphicsAdapter against FNA's GraphicsAdapter.cs + SDL3_FNAPlatform.cs
+line-by-line. Fixed 4 real bugs: (1) AdaptersChanged() swapped DeviceName/Description - FNA gives
+them different values (DeviceName=synthetic "\\.\DISPLAYn", Description=real display name). (2)
+queryDisplayModes() didn't dedupe modes differing only by refresh rate and iterated forward instead
+of FNA's reverse order - fixed to match exactly. (3) MOST SEVERE: static GraphicsAdapter&
+DefaultAdapter was a raw reference bound once at static-init time; since AdaptersChanged() destroys
+and recreates every adapter, any later call (an intended, FNA-documented usage) left it - and 2
+production call sites in GraphicsDeviceManager.cpp - dangling. Removed the field entirely (FNA's
+own DefaultAdapter is a property, always re-evaluated) and repointed both call sites at the
+existing, always-fresh getDefaultAdapterProperty(). (4) Stale Doxygen comments on
+getDeviceIdProperty()/getVendorIdProperty() claimed "not implemented" but both are real (Linux PCI
+sysfs query) - corrected. Documented (not reverted) an intentional deviation: FNA throws
+NotImplementedException for DeviceId/Revision/SubSystemId/VendorId; CNA provides real values for
+the first two - kept as a deliberate improvement. Removed a dead friend class
+GraphicsAdapterFactory (doesn't exist anywhere). Closed a real test-coverage gap - zero
+GraphicsAdapter tests existed despite a stale comment claiming otherwise - with new
+GraphicsAdapterTests.cpp (23 tests, using the lightweight SDL_InitSubSystem(SDL_INIT_VIDEO) +
+GTEST_SKIP() pattern from GameWindowTests.cpp). Verified discriminating power for the swap and
+dedup fixes by reverting each and confirming the corresponding test fails. NEW FINDING DEFERRED TO
+TASK 347: FNA's DisplayModeCollection has a this[SurfaceFormat] indexer CNA lacks entirely, while
+CNA's extra Count/integer-operator[] (not in FNA) aren't NOXNA-wrapped - not touched here to keep
+this task scoped to GraphicsAdapter itself.
 
-Task 344 (just done) confirmed by reading FNA's Viewport.cs that MinDepth/MaxDepth setters have
-ZERO validation/clamping, and Project/Unproject use them in unguarded arithmetic. Added 3 new
-ViewportTests.cpp tests: ProjectWithMinDepthGreaterThanMaxDepthProducesInvertedZWithoutThrowing,
-ProjectUnprojectRoundTripWithInvertedMinMaxDepth (MinDepth=1,MaxDepth=0 - confirms no
-reordering/clamping), and UnprojectWithEqualMinMaxDepthProducesNonFiniteResult (MinDepth==MaxDepth
-- confirms genuine IEEE-754 NaN propagation via std::isnan). Verified genuine discriminating power:
-temporarily added a "protective" min/max swap to Project and a divide-by-zero guard to Unproject
-(the exact kind of FNA-deviating fix a well-intentioned future change might introduce) and
-confirmed all 3 new tests fail, before reverting both back to the committed Task 341 state.
-Test-file-only change, no production code touched. This closes out the Viewport sub-area of
-Phase 40 (Tasks 341-344); Task 349 (viewport reset after backbuffer resize) is the only remaining
-Viewport-adjacent task in this phase, deferred until its own turn.
-
-Next task: GRAPHICS_TASKS.md Task 345 - audit GraphicsAdapter API against FNA. Read FNA's
-Graphics/GraphicsAdapter.cs line-by-line and audit CNA's GraphicsAdapter.hpp/.cpp against it -
-CurrentDisplayMode, SupportedDisplayModes, Description, DeviceId/Revision/SubSystemId/VendorId,
-IsDefaultAdapter, IsWideScreen, MonitorHandle, UseNullDevice/UseReferenceDevice, static
-DefaultAdapter/Adapters, IsProfileSupported, QueryRenderTargetFormat/QueryBackBufferFormat,
-AdaptersChanged. This opens Phase 40's second sub-area (Viewport, Tasks 341-344, is now closed).
-ONE DISCREPANCY ALREADY SPOTTED, not yet investigated: FNA's DeviceId/Revision/SubSystemId/VendorId
-all unconditionally throw NotImplementedException, but CNA's header already has real
-vendorId_/deviceId_ fields populated via a queryPciIds() static helper - getDeviceIdProperty()/
-getVendorIdProperty() appear to be actually implemented, not stubbed to throw. Check whether this
-is a deliberate NOXNA-documented improvement or an unintentional divergence that should throw
-instead, per CLAUDE.md's exception-behavior rule. Files:
-include/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp,
-src/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.cpp, FNA's Graphics/GraphicsAdapter.cs,
-Graphics/DisplayMode.cs, Graphics/DisplayModeCollection.cs. Check existing test coverage first
-(Task 347 already covers DisplayModeCollection enumeration specifically) before deciding what new
-tests this task needs - avoid duplicating Task 347's planned work.
+Next task: GRAPHICS_TASKS.md Task 346 - add safe fallback for systems where display mode
+enumeration fails (headless CI). Task 345 found CNA's GraphicsAdapter already has SOME
+headless-safe fallback logic: AdaptersChanged() falls back to a single synthetic 800x480 "Default
+Display"-style adapter when SDL_GetDisplays() returns null/0, and
+queryDisplayModes()/queryCurrentDisplayMode() fall back similarly when
+SDL_GetFullscreenDisplayModes()/SDL_GetCurrentDisplayMode() fail for a display that DOES enumerate.
+This task should verify that fallback chain is actually complete and add a regression test that
+deliberately exercises it, rather than assuming it works because it happens to compile - this
+session's new GraphicsAdapterTests.cpp tests already use GTEST_SKIP() when SDL video init fails
+outright, which is a DIFFERENT path from "video available but enumeration still fails" - Task 346
+should specifically target the latter. Files:
+src/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.cpp (AdaptersChanged, queryDisplayModes,
+queryCurrentDisplayMode), tests/Microsoft/Xna/Framework/Graphics/GraphicsAdapterTests.cpp.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```

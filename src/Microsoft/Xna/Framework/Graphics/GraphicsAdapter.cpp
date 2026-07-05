@@ -74,8 +74,6 @@ namespace Microsoft::Xna::Framework::Graphics
         return *adapters[0];
     }
 
-    GraphicsAdapter& GraphicsAdapter::DefaultAdapter = GraphicsAdapter::getDefaultAdapterProperty();
-
     GraphicsAdapter::GraphicsAdapter(
         SharpRuntime::intcs displayIndex,
         DisplayModeCollection modes,
@@ -275,7 +273,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 new GraphicsAdapter(
                     0,
                     DisplayModeCollection({DisplayMode(800, 480, SurfaceFormat::Color)}),
-                    "Default Display",
+                    "\\\\.\\DISPLAY1",
                     "Default Display",
                     vendorId, deviceId
                 )
@@ -285,14 +283,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
         for (int i = 0; i < count; ++i)
         {
-            const std::string name = getDisplayName(displays[i], i);
+            // Matches FNA's SDL3_FNAPlatform.GetGraphicsAdapters(): DeviceName is a synthetic
+            // Windows-style path (not the real display name — real XNA convention, kept even on
+            // non-Windows platforms), while Description is the actual display name.
+            const std::string deviceName = "\\\\.\\DISPLAY" + std::to_string(i + 1);
+            const std::string description = getDisplayName(displays[i], i);
             // All displays share the same GPU — pass PCI IDs to every adapter.
             adapters_.push_back(std::unique_ptr<GraphicsAdapter>(
                 new GraphicsAdapter(
                     i,
                     DisplayModeCollection(queryDisplayModes(i)),
-                    name,
-                    name,
+                    deviceName,
+                    description,
                     vendorId, deviceId
                 )
             ));
@@ -322,9 +324,26 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_DisplayMode** modes = SDL_GetFullscreenDisplayModes(displayId, &count);
         if (modes != nullptr && count > 0)
         {
-            for (int i = 0; i < count; ++i)
+            // Matches FNA's SDL3_FNAPlatform.GetGraphicsAdapters(): iterate in reverse and skip
+            // width/height duplicates caused by multiple refresh rates at the same resolution.
+            for (int i = count - 1; i >= 0; --i)
             {
-                if (modes[i] != nullptr)
+                if (modes[i] == nullptr)
+                {
+                    continue;
+                }
+
+                bool dupe = false;
+                for (const DisplayMode& existing : result)
+                {
+                    if (modes[i]->w == existing.getWidthProperty() && modes[i]->h == existing.getHeightProperty())
+                    {
+                        dupe = true;
+                        break;
+                    }
+                }
+
+                if (!dupe)
                 {
                     result.emplace_back(modes[i]->w, modes[i]->h, SurfaceFormat::Color);
                 }

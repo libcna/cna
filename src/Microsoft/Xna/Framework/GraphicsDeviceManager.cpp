@@ -275,7 +275,7 @@ namespace Microsoft::Xna::Framework
         }
 
         GraphicsDeviceInformation gdi;
-        gdi.setAdapterProperty(&Graphics::GraphicsAdapter::DefaultAdapter);
+        gdi.setAdapterProperty(&Graphics::GraphicsAdapter::getDefaultAdapterProperty());
         Graphics::PresentationParameters parameters;
         if (game_ != nullptr)
         {
@@ -413,7 +413,7 @@ namespace Microsoft::Xna::Framework
         (void)anySuitableDevice;
 
         GraphicsDeviceInformation gdi;
-        gdi.setAdapterProperty(&Graphics::GraphicsAdapter::DefaultAdapter);
+        gdi.setAdapterProperty(&Graphics::GraphicsAdapter::getDefaultAdapterProperty());
         gdi.setPresentationParametersProperty(Graphics::PresentationParameters());
         INTERNAL_CreateGraphicsDeviceInformation(gdi);
         return gdi;
