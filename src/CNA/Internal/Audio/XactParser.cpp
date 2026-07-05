@@ -275,7 +275,13 @@ namespace CNA::Internal::Audio
         Ctx ctx{data.data(), data.data() + data.size(), data.data()};
 
         uint32_t magic = ctx.u32();
-        // Accept LE "XGSF" or BE "FSGX"
+        // P9-AUDIT-003: accepting the BE "FSGX" magic is cosmetic only -- every other multi-byte
+        // field below is read via Ctx::u16()/u32()/f32(), a raw memcpy with no byte-swap logic
+        // anywhere in this file. A genuinely BE-authored (e.g. Xbox 360-built) file would pass
+        // this check and then silently misparse every subsequent field, not throw. ParseXwb's own
+        // magic check only accepts the LE form, so this "BE support" isn't even applied uniformly
+        // across the three parsers. Not fixed here: real byte-swap support is new feature work
+        // outside this audit's scope, not a one-line correction.
         if (magic != 0x46534758u && magic != 0x58475346u)
             throw std::runtime_error("XGS: invalid magic");
 
@@ -674,6 +680,8 @@ namespace CNA::Internal::Audio
         Ctx ctx{data.data(), data.data() + data.size(), data.data()};
 
         uint32_t magic = ctx.u32();
+        // P9-AUDIT-003: BE magic acceptance here is cosmetic only, same as ParseXgs above --
+        // see that function's comment.
         if (magic != 0x4B424453u && magic != 0x5344424Bu)
             throw std::runtime_error("XSB: invalid magic (expected SDBK)");
 

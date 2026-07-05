@@ -1745,11 +1745,138 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
 
 ## P9-AUDIT — Fresh implementation audit
 
-* [ ] P9-AUDIT-001 Re-read all public audio headers under `include/Microsoft/Xna/Framework/Audio` and compare the exposed API against XNA 4.0 / FNA Audio.
-* [ ] P9-AUDIT-002 Re-read all implementations under `src/Microsoft/Xna/Framework/Audio` and identify behavior that is stubbed, approximate, or inconsistent with XNA/FNA.
-* [ ] P9-AUDIT-003 Re-read internal audio backend files under `include/CNA/Internal/Audio` and `src/CNA/Internal/Audio` and document backend assumptions and limitations.
-* [ ] P9-AUDIT-004 Re-read all audio tests and identify which known deviations are locked in by tests.
-* [ ] P9-AUDIT-005 Update `plan_audio.md` with a concise "current known deviations" subsection based on actual code, not stale documentation.
+* [x] P9-AUDIT-001 Re-read all public audio headers under `include/Microsoft/Xna/Framework/Audio` and compare the exposed API against XNA 4.0 / FNA Audio.
+  *Note:* Ran as a dedicated fork, comparing every header's class names/method signatures/
+  properties/enums/exceptions against the matching FNA `.cs` file. Found **one issue, stale
+  documentation (not a code bug)**: `SoundEffect.hpp`'s `getDopplerScaleProperty()`/
+  `getSpeedOfSoundProperty()` Doxygen comments still read *"SDL3_mixer does not implement
+  Doppler; this value is stored but not applied"* -- stale since `P9-3D-004/005` (this session)
+  implemented real Doppler pitch shift in `Apply3D`, which reads both properties.
+  `getDistanceScaleProperty()`'s comment was already accurate. Fixed both comments to describe
+  the real closed-form pitch-shift implementation instead. Everything else checked clean: all 4
+  enums, all 3 exception classes' constructor overloads/base classes, `RendererDetail`'s full
+  property/Equals/GetHashCode/ToString/operator coverage, `AudioListener`/`AudioEmitter` (their
+  RH/LH Z-axis negation in FNA is invisible to the public API since the getter negation cancels
+  the setter negation -- CNA storing raw values directly is behaviorally equivalent, not a
+  deviation), and every public member of `SoundEffect`/`SoundEffectInstance`/
+  `DynamicSoundEffectInstance`/`AudioEngine`/`SoundBank`/`WaveBank`/`Cue`/`AudioCategory`/
+  `Microphone` -- no missing XNA members, no un-wrapped non-XNA extras. Documentation-only fix,
+  no test impact.
+* [x] P9-AUDIT-002 Re-read all implementations under `src/Microsoft/Xna/Framework/Audio` and identify behavior that is stubbed, approximate, or inconsistent with XNA/FNA.
+  *Note:* Ran as a dedicated fork, reading all 12 `.cpp` files against their matching FNA `.cs`
+  and `CHECKLIST.md`'s existing rows. **Found one real, previously-undocumented, exploitable bug:**
+  `Microphone::GetData(buffer, offset, count)` (`Microphone.cpp:138`, pre-fix) computed
+  `offset + count > buffer.size()` as a plain `intcs` (int32) addition -- the exact same
+  overflow class `P9-VALIDATION-003` already fixed in `SoundEffect`'s buffer/range constructor and
+  `DynamicSoundEffectInstance::SubmitBuffer`/`SubmitFloatBufferEXT`, just missed in `Microphone.cpp`
+  since that task's stated scope never named it. Confirmed exploitable: with a 10-byte buffer,
+  `offset=10` (valid, passes the separate offset check), `count=INT32_MAX`, the sum overflows to a
+  negative value, the count check's second half evaluates false, and execution falls through to
+  `SDL_GetAudioStreamData(captureStream_, buffer.data() + 10, 2147483647)` -- a real out-of-bounds
+  write, not just a wrongly-accepted call. FNA's own `Microphone.cs:159` has the identical-looking
+  `(offset + count) > buffer.Length`, but C#'s array bounds checking is what saves it there (the
+  same reason `P9-VALIDATION-003`'s own comment gives for why `SoundEffect`'s C++ port needed the
+  fix); this is "match C#'s exception *type*/*shape* exactly, but the arithmetic must be
+  overflow-safe in C++," not an intentional deviation.
+
+  Fixed with the exact `P9-VALIDATION-003` pattern: `off`/`cnt` computed as `std::size_t` after
+  the existing separate `offset`/`count` sign checks, compared via
+  `cnt > buffer.size() - off` (safe since `off <= buffer.size()` is already guaranteed by the
+  earlier offset check) instead of a raw signed sum. Exception type/messages (`ArgumentException`
+  on `"offset"`/`"count"`) unchanged -- matches FNA's own two-throw structure exactly (confirmed
+  against `Microphone.cs:149-162`). Added `MicrophoneTest.GetDataRejectsOffsetCountIntegerOverflow`
+  (buffer size 10, `offset=10`, `count=INT32_MAX`); `git stash` on `Microphone.cpp` alone confirmed
+  it fails against the pre-fix code (`EXPECT_THROW` sees nothing thrown). Full suite 3260/3262 (2
+  expected skips), audio subset 386/386 under ASan+UBSan (see `P9-AUDIT-005`'s note on the
+  `gtest_filter` string this required fixing to actually include `MicrophoneTest`).
+
+  **Also checked, no new issue (round-trip-transparent, not a bug):** `AudioEmitter.cpp`/
+  `AudioListener.cpp` store `Position`/`Forward`/`Up`/`Velocity` directly with no Z-axis flip,
+  whereas FNA negates Z on both the getter and setter of its internal X3DAudio structs (RH↔LH
+  conversion) -- since FNA's own negation cancels out on any get-after-set round trip, this is
+  invisible from the public C# API, and `Apply3D`'s distance/pan/Doppler formulas were already
+  verified bit-exact against FAudio (`P9-3D-003/004/005/007`) operating consistently in CNA's own
+  unflipped coordinate space, so this doesn't affect those results either. Everything else in the
+  12 files was already deeply covered by this session's own `P9-LIFECYCLE`/`P9-CATEGORY`/
+  `P9-VALIDATION`/`P9-XACT`/`P9-3D`/`P9-DYNAMIC`/`P9-HARDWARE` groups -- no further new gaps in a
+  fresh skim.
+* [x] P9-AUDIT-003 Re-read internal audio backend files under `include/CNA/Internal/Audio` and `src/CNA/Internal/Audio` and document backend assumptions and limitations.
+  *Note:* Ran as a dedicated fork over `AudioMixer.{hpp,cpp}`/`XactParser.cpp`/`XactTypes.hpp`
+  (1038 lines). Found three previously-undocumented internal assumptions, all now recorded as
+  source comments (this layer is CNA-internal with no 1:1 FNA mapping, per `CLAUDE.md`'s
+  "Internal vs XNA Layer" table, so these don't belong in `CHECKLIST.md`'s FNA-deviation table --
+  documented in-source + here instead):
+  1. **`ParseXgs`/`ParseXsb`'s big-endian magic acceptance is cosmetic, not functional**
+     (`XactParser.cpp:277-286`, `:676-680`). Both accept the BE encoding of their 4-byte magic
+     (implying intended Xbox 360-authored-content support), but every other multi-byte field is
+     read via `Ctx::u16()/u32()/f32()` -- a raw `memcpy` with zero byte-swap logic anywhere in the
+     file. A genuinely BE-authored file would pass the magic check and then silently misparse
+     every subsequent field, not throw. `ParseXwb`'s own magic check only accepts the LE form, so
+     the "BE support" isn't even applied uniformly across the three parsers. Not fixed: real
+     byte-swap support is new feature work, out of this audit's read-and-document scope.
+  2. **`AudioMixer::DestroyMixer()` is dead code** (`AudioMixer.hpp:13-18`) -- nothing in `src/`/
+     `include/` calls it; the `MIX_Init()`/`MIX_Quit()` refcount and SDL audio device are never
+     explicitly torn down during normal program lifetime, only reclaimed by the OS at process
+     exit. Not dangerous today, but flagged for whoever eventually wires real shutdown (e.g. into
+     `Game`'s dispose path).
+  3. **`g_mixer`'s lazy-init check-then-create sequence has no mutex** (`AudioMixer.cpp:10-14`).
+     Every caller in this codebase runs single-threaded today, so this is an untested-in-practice,
+     lower-confidence finding -- flagged as an assumed-but-unstated main-thread-only contract, not
+     a confirmed reachable race.
+
+  No new integer-overflow/truncation issues found beyond what's already fixed and documented (the
+  compact-XWB-entry overflow-safe bounds check already has its own comment and throws correctly;
+  the non-compact-entry check lives at a different layer, `WaveBank.cpp`, with no gap either). No
+  TODO/FIXME/assert landmines found.
+* [x] P9-AUDIT-004 Re-read all audio tests and identify which known deviations are locked in by tests.
+  *Note:* Ran as a dedicated fork over `CHECKLIST.md`'s ~20 "Audio:" accepted-deviation rows,
+  cross-referenced against `tests/Microsoft/Xna/Framework/Audio/` and `tests/CNA/Internal/Audio/`.
+  **Locked in by a specific passing test** (would need to change if the deviation were ever
+  fixed): `GetHashCode` using `std::hash` (`AudioCategoryTest.GetHashCodeConsistentForSameName`);
+  `SoundEffect` move-only (`SoundEffectTests.cpp`'s `static_assert`s); `SoundBank`/`WaveBank`
+  corrupt-but-existing-file silent stub (`ConstructorWithExistingButCorruptFileStaysInStubState`/
+  `IsPreparedFalseForExistingButCorruptFile`); the filter-type-can-only-decode-to-low/high-pass
+  quirk, on the **parser** side (`XactParserTests.cpp`) -- `SoundEffectInstanceTests.cpp`'s
+  `ApplyXactTrackFilterDispatchesBandPassType` separately exercises the *dispatcher's* generic
+  support for that enum value with a hand-crafted input, not a contradiction, just a different
+  (parser-unreachable-in-practice) code path.
+
+  **No test coverage at all** (silent-regression risk -- listed so a future session can prioritize
+  which deviation to lock in next if any of these ever get real fidelity work): 3D elevation/HRTF
+  absence; `Apply3D`'s pan ignoring `Forward`/`Up` orientation; streaming `WaveBank`'s unused
+  `offset`/`packetSize` params (existing test passes a value but never compares two different
+  values); `INTERNAL_applyReverb`'s no-op (existing test only checks it doesn't throw); the
+  loop-region-truncates-the-entire-track quirk (existing tests only check `LoopStart`/
+  `LoopLength` are parsed/stored, not the actual truncated-playback behavior); stereo hard-pan vs
+  crossfeed (already documented as unverifiable without a stereo-pan readback API, `CP-19`); XACT
+  category `instanceLimit`/`fadeInMS`/`fadeOutMS` parsed-but-unenforced; `AudioEngine` never
+  throwing `NoAudioHardwareException` from its own constructor (only the exception *type* is
+  tested); `Cue::IsPlaying`/`IsPaused` mutual exclusivity; RPC volume/pitch evaluated once not
+  continuously. No test/documentation contradictions found (every locked-in test's asserted
+  behavior matches its `CHECKLIST.md` row's description).
+* [x] P9-AUDIT-005 Update `plan_audio.md` with a concise "current known deviations" subsection based on actual code, not stale documentation.
+  *Note:* Synthesis of the four forks above. Net result: `CHECKLIST.md`'s "Known acceptable C++
+  deviations" table was confirmed **accurate against current code**, with exactly one stale item
+  (the Doppler doc-comment, `P9-AUDIT-001`, now fixed) and one real bug (`Microphone::GetData`'s
+  overflow, `P9-AUDIT-002`, now fixed) found across the whole Audio namespace -- a good outcome
+  for a codebase that already went through two prior line-by-line audits (Fáze 7/8) plus seven
+  targeted Fáze 9 hardening groups. No separate "current known deviations" list is duplicated
+  here: `CHECKLIST.md` already *is* that list and needed no additions (only the internal-backend
+  notes from `P9-AUDIT-003`, which aren't FNA-deviations, were recorded as source comments
+  instead -- see that item). `P9-AUDIT-004`'s test-lock/no-coverage breakdown above **is** the
+  requested deviation-to-test cross-reference.
+
+  One more finding, incidental to writing this note: `NEXT.md`'s own documented "audio subset"
+  `--gtest_filter` string (used throughout this session's ASan/UBSan verification passes) does not
+  actually match most of `MicrophoneTest`'s cases -- none of its patterns
+  (`*SoundEffect*`/`*Dynamic*`/`*AudioEmitter*`/etc.) contain "Microphone" as a substring of
+  `MicrophoneTest.<TestName>`, so only the handful of `MicrophoneTest` cases whose own *test name*
+  happens to contain a matching substring (e.g. `...UnderDummyAudioDriver`) were ever actually
+  running under that filter. Fixed by adding `*Microphone*` to the filter string in `NEXT.md` §7;
+  the corrected audio subset count is 386 (up from the previously-reported 353, which silently
+  never ran most of `MicrophoneTest`'s ~31 cases, including the just-added
+  `GetDataRejectsOffsetCountIntegerOverflow`). Confirmed via `--gtest_list_tests` before and after.
+  No production code implicated -- pure test-tooling gap.
 
 ## P9-LIFECYCLE — Cue and playback lifecycle correctness
 

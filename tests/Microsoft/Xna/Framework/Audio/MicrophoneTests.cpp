@@ -269,6 +269,22 @@ TEST(MicrophoneTest, GetDataCountBeyondBufferThrows)
     EXPECT_THROW(mic.GetData(buffer, 0, 11), System::ArgumentException);
 }
 
+// P9-AUDIT-002: offset+count must be checked without computing the (possibly overflowing) sum
+// directly -- the same int32-overflow class P9-VALIDATION-003 already fixed in SoundEffect's
+// buffer/range ctor and DynamicSoundEffectInstance::SubmitBuffer/SubmitFloatBufferEXT, just
+// missed here since this file wasn't in that task's named scope. A small, in-bounds offset plus
+// a huge count overflows int32 when naively summed, wrapping to a small/negative value that
+// silently passes a naive "offset + count > buffer.size()" check while still handing an
+// enormous count to SDL_GetAudioStreamData(buffer.data() + offset, count) -- a real
+// out-of-bounds write, not just a rejected call.
+TEST(MicrophoneTest, GetDataRejectsOffsetCountIntegerOverflow)
+{
+    Microphone mic = MakeMic();
+    std::vector<SharpRuntime::bytecs> buffer(10);
+    constexpr SharpRuntime::intcs hugeCount = 2147483647; // INT32_MAX; offset(10)+count overflows int32
+    EXPECT_THROW(mic.GetData(buffer, 10, hugeCount), System::ArgumentException);
+}
+
 // ===================== CheckBuffer / CheckAllBuffers =====================
 
 TEST(MicrophoneTest, CheckBufferDoesNotThrowWithNoSubscribers)

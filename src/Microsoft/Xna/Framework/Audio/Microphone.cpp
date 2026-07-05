@@ -135,7 +135,15 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ArgumentException("offset");
         }
 
-        if (count <= 0 || offset + count > static_cast<SharpRuntime::intcs>(buffer.size()))
+        // P9-AUDIT-002: offset+count must never be computed as a plain intcs addition -- the same
+        // int32-overflow class P9-VALIDATION-003 already fixed in SoundEffect's buffer/range ctor
+        // and DynamicSoundEffectInstance::SubmitBuffer/SubmitFloatBufferEXT, just missed here
+        // since this file wasn't in that task's named scope. FNA gets away without this check
+        // (Microphone.cs: `(offset + count) > buffer.Length`) because C#'s array bounds checking
+        // is the real safety net there; C++ has none, so this has to be exact.
+        const auto off = static_cast<std::size_t>(offset);
+        const auto cnt = static_cast<std::size_t>(count);
+        if (count <= 0 || cnt > buffer.size() - off)
         {
             throw System::ArgumentException("count");
         }
