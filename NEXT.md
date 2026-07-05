@@ -13,8 +13,8 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–38 are complete. **Phase 39 (RenderTarget2D and
-  RenderTargetCube completeness, `GRAPHICS_TASKS.md` Tasks 331–340) is open** — Tasks 331–337 done,
-  **Task 338 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
+  RenderTargetCube completeness, `GRAPHICS_TASKS.md` Tasks 331–340) is open** — Tasks 331–338 done,
+  **Task 339 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
   closed phases have synthesis docs: `docs/sampler-state-support.md` (Phase 35),
   `docs/depthstencilstate-support.md` (Phase 37), `docs/rasterizerstate-support.md` (Phase 38).
 - **Key architectural decisions:**
@@ -39,18 +39,20 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
   (`cmake-build-bgfx`): all 3 configured, build cleanly, rebuilt and fully re-verified this
-  session (Task 337, like Task 336, touched the shared `IGraphicsBackend` interface, so all 3
-  backends needed a full rebuild + regression pass).
+  session (Task 338's fix lives in shared `GraphicsDevice.cpp`, so all 3 backends needed a full
+  rebuild + regression pass).
 
 ### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 3315/3318 pass. 3 pre-existing/documented failures (see §5):
+- **EasyGL, full `ctest -j1`:** 3316/3319 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3239/3252 pass. 13 documented failures (see §5): 5×
-  `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
-  `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
-  `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876 — genuine confirmed bug, supposed to
-  fail until fixed).
-- **Bgfx, full `ctest -j1`:** 3224/3224 (100%) pass.
+- **Vulkan, full `ctest -j1`:** 3238/3253 pass. 13 documented failures (see §5) + 1 reconfirmed-flaky,
+  unrelated `CueTest` failure (passes in isolation): 5× `Vulkan_BlendState_*` (Task 868), 5×
+  `Vulkan_DepthStencilState_*` (Task 870), `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872),
+  `Vulkan_DepthBias` (one sub-case), `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876 —
+  genuine confirmed bug, supposed to fail until fixed), `Vulkan_RenderTargetUsage` (the known
+  order-dependent flake — this run it was this one, not `Vulkan_FillMode_WireFrame`).
+- **Bgfx, full `ctest -j1`:** 3223/3224 pass — 1 reconfirmed-flaky, unrelated `CueTest` failure
+  (passes in isolation).
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently**
   — concurrent runs previously produced transient GPU/driver-contention false failures. If a
   single run shows an anomaly beyond the documented list, re-run that test in isolation before
@@ -89,6 +91,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   created and resolved via `glBlitFramebuffer` on unbind, pixel-verified with a genuine
   differential anti-aliasing proof (Task 337). Vulkan/Bgfx honestly report `MultiSampleCount=0`
   (not yet implemented, Task 879) rather than a fake pass-through.
+- `SetRenderTarget`/`SetRenderTargets` correctly reset `Viewport`/`ScissorRectangle` to the newly
+  bound target's size (or the backbuffer's, when unbinding), matching FNA exactly, on all 3
+  backends (shared `GraphicsDevice.cpp` code) — `ScissorRectangle`'s reset has a real,
+  pixel-verified GPU effect (Task 338); `Viewport`'s GPU effect is still a no-op everywhere
+  (Task 880, see below).
 
 ### What does NOT work yet
 - **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
@@ -101,6 +108,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - `RenderTarget2D`/`RenderTargetCube`'s `mipMap` still doesn't produce real GPU mips on Vulkan/Bgfx
   (fixed on EasyGL, Task 336; Vulkan/Bgfx tracked as Task 878). Same shape for MSAA (fixed on
   EasyGL, Task 337; Vulkan/Bgfx honestly report `MultiSampleCount=0`, tracked as Task 879).
+- `GraphicsDevice.Viewport` has **zero GPU backend wiring on all 3 backends** — every backend
+  hardcodes its actual viewport call to the full render-target/window size regardless of what
+  `Viewport` is set to (confirmed via code reading, found while doing Task 338). A sub-region
+  viewport (split-screen, atlas-subrect rendering) currently has no effect anywhere. Tracked as
+  Task 880, not fixed.
 - `Texture3D`/`TextureCube::GetData` is a total silent no-op on Vulkan/Bgfx (Task 865).
   `TextureCube::DDSFromStreamEXT` is a non-functional stub (Task 663).
 - `Texture2D::SetData(level>0,...)` is a silent no-op on Vulkan/Bgfx; EasyGL's non-mip-aware
@@ -137,6 +149,7 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 
 | Commit / Task | Change |
 |---|---|
+| Task 338 | Verified `SetRenderTarget(nullptr)`/`SetRenderTargets({})` return to the backbuffer — the core routing was already extensively proven by dozens of existing tests. **Found and fixed a real gap while auditing FNA's actual `SetRenderTargets` source**: FNA *always* resets `Viewport`/`ScissorRectangle` to `(0,0,newWidth,newHeight)` on every render-target switch (new target's size when binding, backbuffer's when unbinding) — confirmed CNA's `SetRenderTarget`/`SetRenderTargets` never touched either property at all. Added `GraphicsDevice::ResetViewportAndScissorForRenderTarget`, wired into all 3 `SetRenderTarget*`/`SetRenderTargets` overloads, matching FNA's exact placement. New `examples/rendertarget_viewport_scissor_reset_test.cpp` (EasyGL + Vulkan) proves both the property values AND a real GPU-level effect (a stale scissor rect from before an RT switch no longer incorrectly clips draws afterward). **Found and deliberately deferred a separate, much bigger gap discovered along the way**: `GraphicsDevice.Viewport` has **zero GPU wiring on any of the 3 backends** — every backend hardcodes its actual viewport to the full target size, ignoring `Viewport` entirely; a sub-region viewport currently has no effect anywhere. Tracked as new **Task 880**, not fixed here (unrelated in scope to render-target switching specifically, needs its own dedicated 3-backend task). Full regression, all 3 backends: EasyGL ctest 3316/3319 (3 pre-existing, unchanged). Vulkan ctest 3238/3253 (13 pre-existing + 1 reconfirmed-flaky unrelated `CueTest`). Bgfx ctest 3223/3224 (1 reconfirmed-flaky unrelated `CueTest`). |
 | Task 337 | Confirmed and **actually fixed** MSAA render target support on EasyGL, reusing Task 336's exact resolve-on-unbind mechanism and fix shape. Following FNA's real mechanism (`ClosestMSAAPower` + `FNA3D_GetMaxMultiSampleCount` clamp, then a real multisampled renderbuffer resolved via `glBlitFramebuffer` when the target is unbound — the same `OPENGL_ResolveTarget` function Task 336 already touched for mips). Added `ClosestMSAAPower` to `RenderTarget2D.cpp`/`RenderTargetCube.cpp`; threaded `multiSampleCount` through `IGraphicsBackend::CreateRenderTarget2D`/`CreateRenderTargetCube` (all 3 backends); added `GetMultiSampleCount()` to both render-target backend interfaces so the XNA layer queries the backend's REAL clamped value post-construction, rather than reporting the raw request. **EasyGL**: creates a real multisampled color (+depth) renderbuffer, resolves it into the sampleable texture on unbind (same call site as Task 336's mip regen, correctly ordered — resolve then mip-regenerate). RenderTargetCube reuses one shared multisample renderbuffer across all 6 faces (matching FNA's single `glColorBuffer`), tracking the last-bound face for the resolve. **Rigorously pixel-verified with a genuine anti-aliasing proof** (not just solid-fill plumbing, which even a non-MSAA target passes trivially): new `easygl_rendertarget2d_msaa_test.cpp` renders a diagonal-edged triangle into `MultiSampleCount=0` and `=8` RTs, and confirms the `0` case is purely binary (hard aliased edge) while the `8` case has genuinely intermediate (partially-covered) pixel values. Updated Task 331/332's property tests: unlike `LevelCount` (backend-agnostic), `MultiSampleCount` is legitimately backend/device-capability-dependent even in real FNA, so the tests now accept either EasyGL's real clamped value or Vulkan/Bgfx's honest `0`, while still catching a blind pass-through (literal `9999`) as a failure on any backend. Also fixed a documentation typo from the Task 336 session (several comments said "Task 877" instead of "Task 878" for the Vulkan/Bgfx mip gap). **Vulkan/Bgfx**: accept-and-ignore `multiSampleCount`, report `0` — tracked as new **Task 879**. Full 3-backend rebuild + regression: EasyGL 3315/3318 (3 pre-existing, unchanged). Vulkan 3239/3252 (13 pre-existing, unchanged). Bgfx 3224/3224 (100%). |
 | Task 336 | Confirmed and **actually fixed** render target mipmap support on EasyGL, following FNA3D's real native-source mechanism (`OPENGL_ResolveTarget`: mips auto-regenerate from level 0 via `glGenerateMipmap` when a mipmapped RT stops being the active target). Threaded `mipMap` through `IGraphicsBackend::CreateRenderTarget2D`/`CreateRenderTargetCube` (all 3 backends' signatures updated); `RenderTarget2D.cpp`/`RenderTargetCube.cpp` now compute real `LevelCount` (matching `Texture2D`/`TextureCube`'s own pattern, previously a `mipMap ? 1 : 1` no-op). **EasyGL**: pre-allocates every mip level's GPU storage at RT construction; discovered `IRenderTargetBackend`/`IRenderTargetCubeBackend::UnbindAsRenderTarget()` were **completely dead code** (never called anywhere) — added `currentRt2D_`/`currentRtCube_` tracking to `EasyGLGraphicsBackend` so switching away from a bound RT/cube-face now actually calls it, which regenerates mips when needed. Pixel-verified with a new mip-completeness probe (`TextureFilter::Anisotropic` renders solid black on GL-incomplete mip chains — reused Task 867/299's established diagnostic signature); verified the test genuinely discriminates by temporarily forcing a failure case. Updated Task 331/332's property tests' pinned "known gap" assertions to the new correct values (`LevelCount==7`). **Vulkan/Bgfx**: accept-and-ignore `mipMap` (no functional change) — tracked as new **Task 878**, matching the project's existing Task 867 precedent (property correct everywhere, GPU support lags per-backend). Full 3-backend rebuild + regression pass (interface change touched all 3): EasyGL 3312/3317 (3 pre-existing + 2 reconfirmed-flaky unrelated `CueTest` failures). Vulkan 3239/3252 (13 pre-existing, unchanged). Bgfx 3224/3224 (100%). |
 | Task 335 | Verified depth buffer creation for render targets is functional, not just a stored property. New backend-agnostic test `examples/rendertarget2d_depth_test.cpp` (`EasyGL_RenderTarget2D_DepthBuffer`/`Vulkan_RenderTarget2D_DepthBuffer`): draws a near GREEN quad then a far RED quad into a `RenderTarget2D` with `DepthFormat::Depth24Stencil8` and `DepthStencilState::Default`, then samples the RT back via `SpriteBatch` (the already-proven sampling-after-unbind path). **PASSES on both EasyGL and Vulkan** — depth testing genuinely works inside render targets, not just the backbuffer. **3 real, scoped format-fidelity gaps found** (not fixed here, tracked as new **Task 877**): EasyGL's `EasyGLRenderTargetBackend`/`EasyGLRenderTargetCubeBackend` both hardcode `DepthComponent24` — a `Depth24Stencil8` request silently gets zero stencil bits; Vulkan's `VulkanRenderTargetBackend` drops its `hasDepth` parameter entirely — every RT gets a depth buffer regardless of request, using the device-global depth format rather than the requested one; Bgfx (code-reading + Task 179's existing smoke coverage only) is the most correct of the three — respects `hasDepth`, uses `D24S8` (has stencil) — but still doesn't differentiate exact `DepthFormat` values. EasyGL ctest: 3313/3316 (3 pre-existing/documented, unchanged). Vulkan ctest: 3239/3252 (13 documented, unchanged, new test passes). |
@@ -192,6 +205,7 @@ visible via dedicated pixel tests or direct code reading.
 | Confirmed, universal, not fixed | `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` on every backend. | Task 871 |
 | Fixed on EasyGL, not fixed on Vulkan/Bgfx | `RenderTarget2D`/`RenderTargetCube`'s `mipMap` produces a real, pixel-verified mip chain on EasyGL (Task 336); Vulkan/Bgfx report the correct `LevelCount` but don't yet allocate/generate real GPU mips. | Task 878 |
 | Fixed on EasyGL, not fixed on Vulkan/Bgfx | `RenderTarget2D`/`RenderTargetCube`'s MSAA produces a real, pixel-verified anti-aliased resolve on EasyGL (Task 337); Vulkan/Bgfx honestly report `MultiSampleCount=0` (not a fake pass-through) rather than implementing real multisample attachments. | Task 879 |
+| Confirmed, universal, not fixed | `GraphicsDevice.Viewport` is decorative — no backend actually applies it to the GPU; every backend hardcodes the full render-target/window size instead. `SetRenderTarget`'s new reset-to-target-size behavior (Task 338) is correct at the property level but has no GPU-visible effect until this lands. | Task 880 |
 | Confirmed, not fixed (found Task 331) | `RenderTarget2D`'s `preferredMultiSampleCount` is stored verbatim, never clamped/wired to any backend. | Task 337 |
 | Confirmed, severe, silent failure | `TextureCube::DDSFromStreamEXT` ignores its stream argument, always returns a blank 1×1 texture. | Task 663 |
 | Confirmed, severe, silent failure | `Texture3D`/`TextureCube::GetData` total no-op on Vulkan/Bgfx. | Task 865 |
@@ -304,19 +318,36 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 338 — verify setting `nullptr` render target returns to backbuffer**
-   - Goal: confirm `GraphicsDevice.SetRenderTarget(nullptr)` (and the `SetRenderTargets({})`
-     equivalent) genuinely restores drawing to the actual backbuffer/window surface — not just
-     that `GetBackBufferData` happens to read something plausible. Check both a fresh
-     never-bound-a-target case and the more interesting case of unbinding after a real RT was
-     bound (does the backbuffer's prior content survive untouched? does viewport/scissor state
-     reset correctly?).
-   - Files: `GraphicsDevice.cpp` (`SetRenderTarget`/`SetRenderTargets`), each backend's
-     `SetRenderTarget2D(nullptr)`/`BindDefaultFramebuffer` path.
-   - Verification: new pixel-readback test per backend (EasyGL/Vulkan at minimum) proving a value
-     drawn to the backbuffer before binding an RT is still there, unmodified, after unbinding.
+1. **`GRAPHICS_TASKS.md` Task 339 — verify multiple render targets with mixed formats reject invalid combinations**
+   - Goal: check what happens when `SetRenderTargets` is called with targets of mismatched
+     `SurfaceFormat`/size/`MultiSampleCount` — does CNA match XNA/FNA's constraints (same
+     dimensions required across all bound targets; format-mixing rules), and does it either work
+     correctly or reject invalid combinations with the right exception, on each backend?
+   - Files: `GraphicsDevice.cpp` (`SetRenderTargets`), each backend's MRT path
+     (`EasyGLGraphicsBackend::SetRenderTargets`, Vulkan/Bgfx equivalents).
+   - Verification: new test(s) covering both a valid mixed-format MRT setup (if XNA allows it) and
+     an invalid one (mismatched dimensions), checking the actual behavior against FNA's source.
 
-2. **`GRAPHICS_TASKS.md` Task 878 — implement `RenderTarget2D`/`RenderTargetCube` mip support on Vulkan and Bgfx**
+2. **`GRAPHICS_TASKS.md` Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends**
+   - Goal: found this session (Task 338) — `GraphicsDevice.setViewportProperty()` has zero backend
+     wiring; every backend hardcodes its actual viewport to the full render-target/window size,
+     ignoring `Viewport` entirely. A sub-region viewport (split-screen, atlas-subrect rendering)
+     currently has no effect anywhere.
+   - Fix shape: add `virtual void SetViewport(int x, int y, int w, int h, float minDepth, float
+     maxDepth) {}` to `IGraphicsBackend`, call it from `GraphicsDevice::setViewportProperty()`
+     (mirroring `setScissorRectangleProperty()`'s existing pattern exactly). EasyGL needs a real
+     `glViewport(x,y,w,h)` (+ `glDepthRangef` for `MinDepth`/`MaxDepth`) instead of the hardcoded
+     full-size call; Vulkan needs the `VkViewport` dynamic state set per-draw (audit existing
+     backbuffer-resize viewport machinery first); Bgfx needs `bgfx::setViewRect`-adjacent state.
+   - Files: `IGraphicsBackend.hpp`, `GraphicsDevice.cpp` (`setViewportProperty`),
+     `EasyGLGraphicsBackend.cpp` (all the hardcoded `set_viewport(0,0,...)` call sites),
+     `VulkanGraphicsBackend.cpp`, `BgfxGraphicsBackend.cpp`.
+   - Verification: new sub-region-viewport pixel test — bind a viewport smaller than the full
+     target, draw a full-screen quad, confirm pixels outside the viewport rect stay
+     background-colored (this would almost certainly FAIL on all 3 backends today, confirming
+     the gap precisely before fixing it).
+
+3. **`GRAPHICS_TASKS.md` Task 878 — implement `RenderTarget2D`/`RenderTargetCube` mip support on Vulkan and Bgfx**
    - Goal: found in Task 336 — EasyGL now has a real, pixel-verified mip chain for render targets
      (pre-allocated storage + auto-`glGenerateMipmap`-on-unbind); Vulkan/Bgfx accept-and-ignore the
      `mipMap` parameter. `LevelCount` is already correct everywhere (shared C++ computation) —
@@ -332,7 +363,7 @@ In priority order:
    - Verification: port `easygl_rendertarget2d_mip_test.cpp`'s `TextureFilter::Anisotropic`
      black/blue methodology to Vulkan.
 
-3. **`GRAPHICS_TASKS.md` Task 879 — implement `RenderTarget2D`/`RenderTargetCube` MSAA support on Vulkan and Bgfx**
+4. **`GRAPHICS_TASKS.md` Task 879 — implement `RenderTarget2D`/`RenderTargetCube` MSAA support on Vulkan and Bgfx**
    - Goal: found this session (Task 337) — EasyGL now has real MSAA-for-RT (multisampled
      renderbuffer + `glBlitFramebuffer` resolve-on-unbind, pixel-verified via a genuine
      anti-aliasing differential test); Vulkan/Bgfx accept-and-ignore `multiSampleCount` and
@@ -351,7 +382,7 @@ In priority order:
    - Verification: port `easygl_rendertarget2d_msaa_test.cpp`'s diagonal-edge differential
      anti-aliasing methodology to Vulkan.
 
-4. **`GRAPHICS_TASKS.md` Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil attachments**
+6. **`GRAPHICS_TASKS.md` Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil attachments**
    - Goal: found this session (Task 335) — all 3 backends allocate a render target's depth/stencil
      attachment with a hardcoded/coarse choice instead of the actual requested `DepthFormat`:
      EasyGL always uses `DepthComponent24` (no stencil bits, ever); Vulkan ignores `hasDepth`
@@ -366,7 +397,7 @@ In priority order:
      gates a stencil-enabled draw inside a render target (currently would fail — no stencil bits
      exist there today).
 
-5. **`GRAPHICS_TASKS.md` Task 875 — fix Vulkan: `Clear()` alone never records a render pass for a bound RT**
+7. **`GRAPHICS_TASKS.md` Task 875 — fix Vulkan: `Clear()` alone never records a render pass for a bound RT**
    - Goal: `VulkanGraphicsBackend::Clear()` only records a global clear-colour scalar and never
      registers the currently-bound RT in `RecordCommandBuffer`'s `usedRTs` list — only an actual
      draw call does. A `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` pattern with
@@ -380,7 +411,7 @@ In priority order:
    - Verification: port `easygl_rt_roundtrip_test.cpp` (Task 180, EasyGL-only, Clear-only pattern)
      to Vulkan as a new regression test.
 
-6. **`GRAPHICS_TASKS.md` Task 876 — investigate why `RenderTargetCube` sampled via `EnvironmentMapEffect` renders black on Vulkan**
+8. **`GRAPHICS_TASKS.md` Task 876 — investigate why `RenderTargetCube` sampled via `EnvironmentMapEffect` renders black on Vulkan**
    - Goal: even with a real `SpriteBatch` draw into each of a `RenderTargetCube`'s 6 faces (working
      around Task 875), sampling it back via `EnvironmentMapEffect` renders black instead of the
      actual rendered colour (found this session, Task 334, see NEXT.md §5). The sampling path
@@ -399,7 +430,7 @@ In priority order:
      `EnvironmentMapEffect`, before attempting a fix. See `examples/vulkan_rendertargetcube_sample_test.cpp`
      for the existing failing repro.
 
-7. **`GRAPHICS_TASKS.md` Tasks 873/874 — fix Bgfx's wrong-handle-type casts for `RenderTarget2D`/`RenderTargetCube` sampling**
+9. **`GRAPHICS_TASKS.md` Tasks 873/874 — fix Bgfx's wrong-handle-type casts for `RenderTarget2D`/`RenderTargetCube` sampling**
    - Goal: `BgfxSpriteBatchBackend::Draw` and `BgfxGraphicsBackend`'s `envMapping` branch each cast
      any `ITextureBackend`/`ITextureCubeBackend` to the plain-texture concrete type via
      `static_cast`, but `RenderTarget2D`/`RenderTargetCube`'s backends are unrelated sibling
@@ -418,14 +449,14 @@ In priority order:
      framebuffer handle, after the fix). See `examples/bgfx_render_target_sample_test.cpp`/
      `bgfx_render_target_cube_sample_test.cpp` for the existing doesn't-crash smoke tests to extend.
 
-8. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
+10. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
      flag, reuse `Texture2D.cpp`'s DXT decode helpers, 6×`levelCount` `SetData` calls).
    - Files: `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp`, `TextureCubeTests.cpp`.
    - Verification: build a real/hand-built DDS cube-map test fixture **first**, then implement
      against it — do not mark done on "compiles and doesn't throw" alone (see §9).
 
-9. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+11. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
    - Goal: `vkCmdCopyImageToBuffer` + host-visible staging buffer, mirroring the existing upload
      path's staging-buffer pattern in reverse.
    - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
@@ -433,7 +464,7 @@ In priority order:
    - Verification: new Vulkan pixel-readback test analogous to the EasyGL ones in
      `easygl_texture3d_partial_box_readback_test.cpp`.
 
-10. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
+12. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
    - Goal: confirm (via a failing test first, matching the Task 276 methodology) that `Texture3D`/
      `TextureCube` mip levels >0 silently fail on Vulkan and Bgfx, then fix by pre-allocating every
      mip level at image/texture creation time.
@@ -492,6 +523,12 @@ In priority order:
   unrelated task — verify with a dedicated stencil-in-RT pixel test first, same discipline as
   every other tracked bug; the core depth-test functionality already works (Task 335), so this is
   specifically about exact format fidelity, not a functional blocker.
+- **No rushed fix for Task 880 (Viewport has zero GPU wiring)** — this is a large, pre-existing,
+  three-backend-wide gap unrelated specifically to render-target switching (found while doing
+  Task 338, but the gap predates it and affects Viewport everywhere, not just after
+  SetRenderTarget); write the sub-region-viewport pixel test FIRST (it should fail on all 3
+  backends today) before attempting any backend wiring, same discipline as every other tracked
+  multi-backend gap.
 
 ---
 
@@ -504,44 +541,39 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-38 are fully complete. Phase 39 (RenderTarget2D and RenderTargetCube
-completeness, GRAPHICS_TASKS.md Tasks 331-340) is open, Tasks 331-337 done, Task 338 next. EasyGL:
-3315/3318 pass (3 documented pre-existing failures). Vulkan: 3239/3252 pass (13 documented
-failures, including the intentionally-failing Vulkan_RenderTargetCube_SampleAfterUnbind for Task
-876). Bgfx: 3224/3224 pass (100%). Caution: run all 3 backends' full ctest suites sequentially,
-never concurrently (see NEXT.md §2); if a single run shows an anomaly beyond the documented list,
-re-run in isolation before treating it as a regression.
+completeness, GRAPHICS_TASKS.md Tasks 331-340) is open, Tasks 331-338 done, Task 339 next. EasyGL:
+3316/3319 pass (3 documented pre-existing failures). Vulkan: 3238/3253 pass (13 documented failures
++ 1 reconfirmed-flaky unrelated CueTest). Bgfx: 3223/3224 pass (1 reconfirmed-flaky unrelated
+CueTest). Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see
+NEXT.md §2); if a single run shows an anomaly beyond the documented list, re-run in isolation
+before treating it as a regression.
 
-Task 337 (just done) confirmed AND ACTUALLY FIXED MSAA render target support on EasyGL, reusing
-Task 336's exact resolve-on-unbind mechanism (same OPENGL_ResolveTarget function, same
-UnbindAsRenderTarget() call site, correctly ordered: MSAA resolve first, then mip regen). Added
-ClosestMSAAPower (mirrors FNA's MathHelper.ClosestMSAAPower exactly) to RenderTarget2D.cpp/
-RenderTargetCube.cpp. Threaded multiSampleCount through IGraphicsBackend::CreateRenderTarget2D/
-CreateRenderTargetCube (all 3 backends' signatures updated). Added GetMultiSampleCount() to
-IRenderTargetBackend/IRenderTargetCubeBackend so the XNA layer queries the backend's REAL,
-device-capability-clamped value post-construction (glGetIntegerv(GL_MAX_SAMPLES,...) on EasyGL)
-instead of reporting the raw constructor argument. Key design point: unlike LevelCount (Task 336,
-made backend-agnostic since mip count is input-deterministic), MultiSampleCount is legitimately
-backend/device-capability-dependent even in real FNA - so Vulkan/Bgfx honestly reporting
-MultiSampleCount=0 (not implemented) is the CORRECT per-backend design, not a shortcut. EasyGL:
-creates a real multisampled color(+depth) renderbuffer, resolves via glBlitFramebuffer into the
-sampleable texture on unbind; RenderTargetCube reuses one shared multisample renderbuffer across
-all 6 faces (matching FNA's single glColorBuffer) with last-bound-face tracking for the resolve.
-Pixel-verified with a genuine anti-aliasing DIFFERENTIAL proof (not solid-fill plumbing, which
-even non-MSAA passes trivially): new easygl_rendertarget2d_msaa_test.cpp renders a diagonal-edged
-triangle into MultiSampleCount=0 and =8 RTs - confirms 0 is purely binary (hard aliased edge) while
-8 has genuinely intermediate (blended) pixel values. Updated Task 331/332's property tests to
-accept either EasyGL's real clamped value or Vulkan/Bgfx's honest 0, while still catching a blind
-pass-through (literal 9999) as a failure on any backend. Also fixed a Task-336-session typo (several
-comments said "Task 877" instead of "Task 878" for the Vulkan/Bgfx mip gap). Vulkan/Bgfx:
-accept-and-ignore multiSampleCount - tracked as new Task 879. Full 3-backend rebuild + regression,
-no regressions.
+Task 338 (just done) verified SetRenderTarget(nullptr)/SetRenderTargets({}) return to the
+backbuffer - the core routing was already extensively proven by dozens of existing tests, nothing
+new needed there. Found and fixed a real gap while auditing FNA's ACTUAL SetRenderTargets source
+(GraphicsDevice.cs): FNA always resets Viewport/ScissorRectangle to (0,0,newWidth,newHeight) on
+every render-target switch (new target's size when binding, backbuffer's when unbinding) - CNA's
+SetRenderTarget/SetRenderTargets never touched either property at all (confirmed by code reading).
+Added GraphicsDevice::ResetViewportAndScissorForRenderTarget, wired into all 3
+SetRenderTarget*/SetRenderTargets overloads, matching FNA's exact placement (before any
+DiscardContents-triggered Clear). New examples/rendertarget_viewport_scissor_reset_test.cpp
+(EasyGL + Vulkan) proves both the property values AND a real GPU-level effect: sets
+ScissorTestEnable=true with a right-half scissor rect, binds+unbinds a small RenderTarget2D,
+confirms the property resets correctly at each step, then proves a subsequent full-screen draw is
+no longer incorrectly clipped by the stale scissor rect. Found and deliberately deferred a much
+bigger, separate gap discovered along the way: GraphicsDevice.Viewport has ZERO GPU wiring on any
+of the 3 backends - every backend hardcodes its actual viewport call to the full render-target/
+window size regardless of what Viewport is set to (confirmed via grep - no SetViewport-shaped
+method exists on IGraphicsBackend at all). A sub-region viewport currently has zero effect
+anywhere. Tracked as new Task 880, not fixed here (unrelated in scope to render-target switching
+specifically - the gap predates and is broader than this task). Full 3-backend rebuild +
+regression, no real regressions (only pre-existing/flaky failures reconfirmed).
 
-Next task: GRAPHICS_TASKS.md Task 338 - verify setting nullptr render target returns to backbuffer.
-Confirm GraphicsDevice.SetRenderTarget(nullptr) (and SetRenderTargets({})) genuinely restores
-drawing to the actual backbuffer - not just that GetBackBufferData happens to read something
-plausible. Check both a fresh never-bound-a-target case and the more interesting case of unbinding
-after a real RT was bound (does prior backbuffer content survive untouched? does viewport/scissor
-state reset correctly?). Files: GraphicsDevice.cpp (SetRenderTarget/SetRenderTargets), each
-backend's SetRenderTarget2D(nullptr)/BindDefaultFramebuffer path.
+Next task: GRAPHICS_TASKS.md Task 339 - verify multiple render targets with mixed formats reject
+invalid combinations. Check what happens when SetRenderTargets is called with targets of
+mismatched SurfaceFormat/size/MultiSampleCount - does CNA match XNA/FNA's constraints (same
+dimensions required across all bound targets; format-mixing rules), and does it either work
+correctly or reject invalid combinations with the right exception, on each backend? Files:
+GraphicsDevice.cpp (SetRenderTargets), each backend's MRT path.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```

@@ -1600,6 +1600,12 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void GraphicsDevice::ResetViewportAndScissorForRenderTarget(int width, int height)
+    {
+        setViewportProperty(Viewport(0, 0, width, height));
+        setScissorRectangleProperty(Rectangle(0, 0, width, height));
+    }
+
     void GraphicsDevice::SetRenderTarget(RenderTarget2D* renderTarget)
     {
         if (renderTarget && renderTarget->getIsDisposedProperty())
@@ -1612,6 +1618,15 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderTarget != nullptr)
             currentRenderTargets_.push_back(RenderTargetBinding(
                 static_cast<Texture*>(renderTarget)));
+
+        // Matches FNA: Viewport/ScissorRectangle always reset to the new render target's size
+        // (or the backbuffer's, when unbinding) — never left at whatever was set before.
+        if (renderTarget != nullptr)
+            ResetViewportAndScissorForRenderTarget(renderTarget->getWidthProperty(),
+                                                    renderTarget->getHeightProperty());
+        else
+            ResetViewportAndScissorForRenderTarget(presentationParameters_.getBackBufferWidthProperty(),
+                                                    presentationParameters_.getBackBufferHeightProperty());
 
         if (renderTarget &&
             renderTarget->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
@@ -1632,18 +1647,29 @@ namespace Microsoft::Xna::Framework::Graphics
 
         currentRenderTargets_.clear();
         renderTargetBound_ = (renderTarget != nullptr);
+
+        if (renderTarget != nullptr)
+            ResetViewportAndScissorForRenderTarget(renderTarget->getWidthProperty(),
+                                                    renderTarget->getHeightProperty());
+        else
+            ResetViewportAndScissorForRenderTarget(presentationParameters_.getBackBufferWidthProperty(),
+                                                    presentationParameters_.getBackBufferHeightProperty());
     }
 
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
     {
         currentRenderTargets_ = renderTargets;
         renderTargetBound_ = !renderTargets.empty();
-        if (!backend_) return;
         if (renderTargets.empty())
         {
+            // Matches FNA: reset to the backbuffer's size when unbinding.
+            ResetViewportAndScissorForRenderTarget(presentationParameters_.getBackBufferWidthProperty(),
+                                                    presentationParameters_.getBackBufferHeightProperty());
+            if (!backend_) return;
             backend_->SetRenderTargets(nullptr, 0);
             return;
         }
+        if (!backend_) return;
         std::vector<CNA::Internal::Backends::IRenderTargetBackend*> backends;
         backends.reserve(renderTargets.size());
         for (const auto& binding : renderTargets)
@@ -1654,6 +1680,9 @@ namespace Microsoft::Xna::Framework::Graphics
         backend_->SetRenderTargets(backends.data(), static_cast<int>(backends.size()));
 
         auto* first = dynamic_cast<RenderTarget2D*>(renderTargets[0].getRenderTargetProperty());
+        // Matches FNA: Viewport/ScissorRectangle reset to the FIRST bound target's size.
+        if (first)
+            ResetViewportAndScissorForRenderTarget(first->getWidthProperty(), first->getHeightProperty());
         if (first &&
             first->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {

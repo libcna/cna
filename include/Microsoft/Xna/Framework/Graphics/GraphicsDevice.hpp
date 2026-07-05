@@ -782,6 +782,19 @@ namespace Microsoft::Xna::Framework::Graphics
         void applyPresentationParametersToWindow();
         void applySamplerStatesToBackend();
 
+        /**
+         * @brief Resets Viewport and ScissorRectangle to (0, 0, width, height).
+         *
+         * Matches FNA's GraphicsDevice.SetRenderTargets: every call to
+         * SetRenderTarget/SetRenderTargets resets Viewport/ScissorRectangle to the new
+         * render target's dimensions (or the backbuffer's, when unbinding) — a game's
+         * previously-set Viewport/ScissorRectangle never survives a render target switch.
+         *
+         * @param width  New viewport/scissor width in pixels.
+         * @param height New viewport/scissor height in pixels.
+         */
+        void ResetViewportAndScissorForRenderTarget(int width, int height);
+
         friend class Texture2D;
         friend class RenderTargetCube;
         friend class ShaderEffect;

@@ -608,6 +608,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 338: SetRenderTarget(nullptr) resets Viewport/ScissorRectangle to the backbuffer
+        cna_easygl_test(cna_test_easygl_rendertarget_viewport_scissor_reset
+                        examples/rendertarget_viewport_scissor_reset_test.cpp)
+        add_test(NAME EasyGL_RenderTarget_ViewportScissorReset
+                 COMMAND cna_test_easygl_rendertarget_viewport_scissor_reset)
+        set_tests_properties(EasyGL_RenderTarget_ViewportScissorReset PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 22: BasicEffect property tests
         cna_easygl_test(cna_test_basic_effect
                         examples/basic_effect_test.cpp)
@@ -1812,6 +1821,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ScissorTest
                  COMMAND cna_test_vulkan_scissor)
         set_tests_properties(Vulkan_ScissorTest PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 338: SetRenderTarget(nullptr) resets Viewport/ScissorRectangle to the backbuffer
+        cna_vulkan_test(cna_test_vulkan_rendertarget_viewport_scissor_reset
+                        examples/rendertarget_viewport_scissor_reset_test.cpp)
+        add_test(NAME Vulkan_RenderTarget_ViewportScissorReset
+                 COMMAND cna_test_vulkan_rendertarget_viewport_scissor_reset)
+        set_tests_properties(Vulkan_RenderTarget_ViewportScissorReset PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
