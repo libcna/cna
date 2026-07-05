@@ -279,6 +279,60 @@ What changed:
    pre-existing `SDL3/SDL_main.h` gap (unchanged by this pass). **No physical Android
    device was used for any part of this verification.**
 
+**Tiny final correctness patch (2026-07-05, no plan file — a small follow-up, not a new
+phase):** three small, unrelated correctness items found while re-reading the Android
+Devices code once more.
+
+Files changed:
+- `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
+- `include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`
+- `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp`
+- `src/Microsoft/Devices/VibrateController.cpp` (comment only, behavior unchanged)
+
+What changed:
+1. **`Impl::Run()` looper cleanup on all exit paths** — the two early-failure
+   `return`s (queue-creation failure, enable failure) previously left `looper_`
+   pointing at a thread-local `ALooper*` that the NDK tears down once the worker
+   thread exits, while only the normal end-of-loop path reset it to `nullptr`. Fixed
+   with a small local RAII guard (`RunExitGuard`/`MakeRunExitGuard`, file-local,
+   mirrors `Detail::ScopeExit`'s existing pattern in `SdlSensorSubsystem.hpp` without
+   pulling SDL headers into this deliberately SDL-free file) installed right after
+   `looper_` is first stored — its destructor resets `looper_` to `nullptr` on
+   *every* exit from `Run()`, including any early return added later, so this can't
+   be forgotten again. Confirmed via `llvm-nm` that the guard's symbols are present
+   in the compiled Android object.
+2. **`M_PI` replaced** in `AndroidCompassMath.hpp` (a local `constexpr double Pi`,
+   since `M_PI` is a POSIX/BSD `<cmath>` extension, not standard C++) and in
+   `AndroidCompassMathTests.cpp` (a test-local `constexpr double Pi` alongside the
+   existing `Tolerance` constant). Behavior unchanged — same value, same call sites.
+3. **`VibrateController::getIsSupportedProperty()` — considered, left unchanged.**
+   Tightening it to also confirm `SDL_InitHapticRumble()` succeeds was considered,
+   but rejected: per `third_party/SDL/src/haptic/SDL_haptic.c`,
+   `SDL_InitHapticRumble()` is not a read-only query — it calls
+   `SDL_CreateHapticEffect()`, uploading a real effect onto the physical
+   device/driver. `SDL_CloseHaptic()` would invalidate that upload again
+   afterward (no leak, per this file's own Task P8-6 finding), but there is no way
+   to confirm from this container — no haptic hardware is available here, ever —
+   whether effect *creation itself* causes any visible/physical actuation on real
+   force-feedback drivers. Left unchanged and documented inline at the call site
+   rather than risk an unverifiable physical side effect from a property getter a
+   caller would reasonably expect to be inert. `getDeviceNameProperty()` untouched.
+4. **Tests re-run:** targeted suite (`AndroidSensorBridgeTests`/`AndroidCompassMathTests`/
+   `VibrateControllerTests`, 53 tests) plus the full Devices-only filter (280/280, 2
+   expected hardware skips) — all pass. Concurrency-relevant subset looped 40/40
+   clean. Full project `ctest`: 3268/3268 (3266 passed, 2 expected skips — the
+   previously-flaky, unrelated `CueTest` passed this run). `devices-asan`: 0 issues.
+   `devices-tsan`: 26 warnings, all the same pre-existing `TimeSpan::copy_count`
+   race, none new. `devices-ubsan`: same 3 pre-existing, out-of-scope
+   `Vector3`/`Matrix` findings, 0 in any reviewed file. Android cross-compile of the
+   `CNA` library re-verified clean, including an `llvm-nm` check confirming the new
+   `RunExitGuard` code is present in the compiled object. `cna_demo_devices`'s
+   Android cross-compile remains blocked by the same pre-existing `SDL3/SDL_main.h`
+   gap (unchanged). **No physical Android device was used for any part of this
+   verification.** Submodules were initialized in this environment
+   (`third_party/SDL`/`SDL_image`/`SDL_mixer`/`vendor/googletest` all present), so
+   every test/build claim above reflects an actual run, not a ZIP-export skip.
+
 ---
 
 ## 4. Current blocker / main problem
