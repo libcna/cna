@@ -58,6 +58,18 @@ protected:
 
 #define REQUIRE_DEVICE() do { if (!haveDevice()) GTEST_SKIP() << "no audio device"; } while (0)
 
+namespace
+{
+    // SoundEffect::DistanceScale is a shared static -- save/restore it around any test that
+    // changes it, so a failing assertion (or any early return) can't leak a new value into
+    // unrelated tests that assume the default (1.0f).
+    struct DistanceScaleGuard
+    {
+        float saved = SoundEffect::getDistanceScaleProperty();
+        ~DistanceScaleGuard() { SoundEffect::setDistanceScaleProperty(saved); }
+    };
+}
+
 TEST_F(SoundEffectInstanceTest, DefaultState)
 {
     REQUIRE_DEVICE();
@@ -285,6 +297,73 @@ TEST_F(SoundEffectInstanceTest, Apply3DDoesNotModifyVolumeOrPanProperties)
 
     EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.42f);
     EXPECT_FLOAT_EQ(inst.getPanProperty(), -0.75f);
+}
+
+// P9-3D-003: matches FAudio's F3DAudio.c ComputeDistanceAttenuation's no-custom-curve branch --
+// full volume (no attenuation at all) for any distance strictly within DistanceScale
+// (CurveDistanceScaler). Verified via the real MIX_Track gain (MIX_GetTrackGain has a getter,
+// unlike stereo pan -- see CP-19/P9-3D-001's note on why that one can't be verified this way).
+TEST_F(SoundEffectInstanceTest, Apply3DAppliesFullVolumeWithinDistanceScale)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener; // default position: origin
+    AudioEmitter emitter;
+    emitter.setPositionProperty({5.0f, 0.0f, 0.0f}); // half of DistanceScale -- still "close"
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 1.0f, 1e-5f);
+}
+
+// P9-3D-003: the exact boundary case that distinguishes the fixed formula from the old one --
+// real XNA/FNA is still at full volume exactly at distance == DistanceScale (X3DAudio's curve
+// only starts falling off strictly beyond it); the old `1/(1+x)` formula was already at half
+// volume here.
+TEST_F(SoundEffectInstanceTest, Apply3DAppliesFullVolumeExactlyAtDistanceScaleBoundary)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f}); // exactly == DistanceScale
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 1.0f, 1e-5f);
+}
+
+// P9-3D-003: beyond DistanceScale, attenuation follows the inverse-distance law
+// (gain = DistanceScale / distance), not a continued linear-ish falloff.
+TEST_F(SoundEffectInstanceTest, Apply3DAppliesInverseDistanceLawBeyondDistanceScale)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // 2x DistanceScale
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.5f, 1e-5f); // 10/20
 }
 
 // CP-20: matches FNA's `is3D` latch (SoundEffectInstance.cs) -- once Apply3D has run, it (not

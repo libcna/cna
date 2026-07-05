@@ -598,9 +598,18 @@ namespace Microsoft::Xna::Framework::Audio
         const float dz = ep.Z - lp.Z;
         const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
 
+        // P9-3D-003: matches FAudio's F3DAudio.c ComputeDistanceAttenuation's no-custom-curve
+        // branch exactly ("the default (if emitter is NULL) volume curve is a *computed*
+        // inverse law"): full volume (no attenuation at all) for any distance within
+        // CurveDistanceScaler (XNA's DistanceScale), inverse-distance falloff only beyond it --
+        // NOT a continuous falloff starting at distance 0. The previous `1/(1+x)` formula
+        // attenuated far too aggressively close to the listener (e.g. already at half volume
+        // exactly at distance == DistanceScale, where real XNA/FNA is still at full volume).
         const float distScale = SoundEffect::getDistanceScaleProperty();
-        const float atten = std::clamp(
-            1.0f / (1.0f + distance / (distScale > 0.0f ? distScale : 1.0f)), 0.0f, 1.0f);
+        const float normalizedDistance = distance / (distScale > 0.0f ? distScale : 1.0f);
+        const float atten = (normalizedDistance >= 1.0f)
+            ? std::clamp(1.0f / normalizedDistance, 0.0f, 1.0f)
+            : 1.0f;
 
         const float pan = (distance > 0.0f)
             ? std::clamp(dx / distance, -1.0f, 1.0f)

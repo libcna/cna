@@ -2069,10 +2069,39 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   source (see `P9-3D-001`'s note), and there is no SDL3_mixer API to independently verify the
   resulting per-channel gain values, so a new test would only re-assert "does not throw" --
   already covered by `Apply3DSingleListener`/`Apply3DDoesNotModifyVolumeOrPanProperties`.
-* [ ] P9-3D-003 Audit distance attenuation behavior against `SoundEffect.DistanceScale`.
+* [x] P9-3D-003 Audit distance attenuation behavior against `SoundEffect.DistanceScale`.
+  *Note:* Read FAudio's `F3DAudio.c` `ComputeDistanceAttenuation` (the function `F3DAudioCalculate`
+  uses when an emitter has no custom `pVolumeCurve`, which is the case for every XNA/FNA
+  `AudioEmitter` -- FNA's `SoundEffectInstance.Apply3D` never sets one). Found a **real, confirmed
+  bug**: the no-custom-curve branch is `res = 1.0f; if (normalizedDistance >= 1.0f) res /=
+  normalizedDistance;` where `normalizedDistance = distance / CurveDistanceScaler` -- i.e. **full
+  volume, zero attenuation, for any distance within `DistanceScale`**, with inverse-distance
+  falloff (`gain = DistanceScale / distance`) only strictly beyond it. CNA's `Apply3D`
+  (`SoundEffectInstance.cpp`) instead used `atten = clamp(1/(1+distance/distScale), 0, 1)` --
+  a continuously-falling-off-from-zero formula with no "safe radius" at all: already at **half
+  volume exactly at `distance == DistanceScale`**, where real XNA/FNA is still at full volume, and
+  attenuating even for emitters very close to the listener where real XNA/FNA has zero rolloff.
+  This is a substantial, easily-audible, easily-reproducible defect (every 3D-positioned sound in
+  any game using `Apply3D` would have played measurably quieter than real XNA at every distance,
+  including well within the emitter's intended "full volume" radius), not a cosmetic
+  approximation gap like `CP-19`'s stereo-pan crossfeed limitation. Fixed by replacing the formula
+  with FAudio's exact one: `normalizedDistance = distance / distScale; atten = (normalizedDistance
+  >= 1) ? clamp(1/normalizedDistance, 0, 1) : 1.0f`. Verified via `MIX_GetTrackGain` (SDL3_mixer
+  *does* have a gain getter, unlike the stereo-pan case `P9-3D-001` found had none) with 3 new
+  tests at distance = 0.5x/1.0x/2.0x `DistanceScale`, added a `DistanceScaleGuard` RAII helper
+  (`SoundEffectInstanceTests.cpp`) to save/restore the shared static `SoundEffect.DistanceScale`
+  around them. Verified via `git stash`: all 3 new tests fail against the pre-fix formula with
+  the exact wrong values the formula predicts (0.5/0.5/0.333 instead of 1.0/1.0/0.5), confirming
+  genuine dependency. Full suite 3241/3243 (2 expected hardware skips), audio subset 335/335,
+  clean under ASan+UBSan.
 * [ ] P9-3D-004 Audit doppler behavior against `SoundEffect.DopplerScale` and `SoundEffect.SpeedOfSound`.
 * [ ] P9-3D-005 Implement doppler pitch adjustment if feasible.
-* [ ] P9-3D-006 Add tests for distance attenuation.
+* [x] P9-3D-006 Add tests for distance attenuation.
+  *Note:* Folded into `P9-3D-003`'s own fix: `Apply3DAppliesFullVolumeWithinDistanceScale`/
+  `Apply3DAppliesFullVolumeExactlyAtDistanceScaleBoundary`/
+  `Apply3DAppliesInverseDistanceLawBeyondDistanceScale` (`SoundEffectInstanceTests.cpp`) cover the
+  full-volume-within-scale, exact-boundary, and beyond-scale inverse-law cases via real
+  `MIX_GetTrackGain` verification.
 * [ ] P9-3D-007 Add tests for panning left/right based on listener/emitter orientation.
 * [ ] P9-3D-008 Add tests for doppler behavior if implemented.
 * [ ] P9-3D-009 Document remaining limitations of CNA 3D audio compared to XNA/FNA.
