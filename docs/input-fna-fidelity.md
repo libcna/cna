@@ -34,11 +34,16 @@ not exactly identical.
 | Focus-loss keyboard reset | **Neither FNA nor CNA clears keys on focus loss** (DEC-15: match FNA, accepted). See "SDL bridge" below for the event-driven consequence. |
 
 **Intentional deviations:**
-- Unmapped keycodes (`'é'`, `SDLK_UNKNOWN`) are **dropped** rather than pushed as `Keys::None`
-  (FNA can leave `Keys.None` marked pressed). CNA's behavior is cleaner and is tested.
-- `SDLK_AC_BACK` → `Keys::Escape` (Android back button) — a CNA-only convenience not in FNA.
-- Text-synthesis on key-down gates on SDL's `repeat` flag rather than FNA's tracked-membership; only
-  observable on abnormal redundant events.
+- **DEC-16 (accepted):** unmapped keycodes (`'é'`, `SDLK_UNKNOWN`) are **dropped** rather than pushed as
+  `Keys::None`. FNA's `ToXNAKey` returns `Keys.None` and then does `Keyboard.keys.Add(Keys.None)`
+  (`SDL3_FNAPlatform.cs:905-908`), leaving a meaningless "None" key marked pressed; CNA's drop is cleaner.
+  Tested (`UnmappedKeycodeIsDroppedNotMarkedNone`).
+- **DEC-17 (accepted):** `SDLK_AC_BACK` → `Keys::Escape` (Android/browser Back button) — a CNA-only
+  convenience not in FNA, so "back" acts as cancel/exit on those platforms. Tested
+  (`AndroidBackButtonMapsToEscape`).
+- **DEC-19 (accepted — matches FNA):** text-synthesis on key-down re-emits control chars gated on SDL's
+  `repeat` flag — **the same gate FNA uses** (`else if (evt.key.repeat)`, `SDL3_FNAPlatform.cs:923`), so
+  this is not a deviation. Tested (`KeyRepeatReemitsControlCharacter`).
 
 ---
 
@@ -55,6 +60,9 @@ not exactly identical.
 - **Wheel:** fixed in Phase I13/I14 to truncate the SDL float to a whole notch before scaling, so
   `ScrollWheelValue` stays a clean multiple of 120 exactly like XNA. (Previously multiply-then-cast
   leaked sub-notch precision-wheel motion.)
+- **DEC-18 (accepted):** SDL's horizontal wheel (`wheel.x`) is **ignored** — XNA/FNA `MouseState` exposes
+  only the vertical `ScrollWheelValue`, so there is no property to route horizontal scroll to. Tested
+  (`HorizontalWheelIsIgnored`).
 - **Logical→window scaling:** CNA converts logical→window at `SetPosition` time via the graphics
   backend (`TransformLogicalToWindow` / `SDL_RenderCoordinatesToWindow`); FNA scales at `GetState`
   read time. Equivalent for the common case (see `plan.md` a-0001).
@@ -107,7 +115,10 @@ not exactly identical.
   connect/button/coarse-axis; a raw axis wobble entirely within the dead-zone can still bump it.
 - `GamePadState::GetHashCode()` hashes `buttons ^ packetNumber*31` (consistent for equal states) vs
   FNA's reflection-based `ValueType.GetHashCode()`. Deliberate; other sub-structs match FNA.
-- `GetGUID`/`GetCapabilities` are computed **live** each call rather than cached at connect.
+- **DEC-20 (accepted):** `GetGUID`/`GetCapabilities` are computed **live** each call rather than cached at
+  connect like FNA. Same values for a connected controller (a timing/impl detail, not a behavioral gap);
+  `GetCapabilities` also deliberately avoids the zero-magnitude rumble probe FNA's cache path implies
+  (would cancel active vibration — INPUT-GAMEPAD-012).
 
 **Fake-SDL unit coverage (Phase I15 — no real hardware):** an internal injectable seam
 (`ISdlGamepadBackend`, production = real SDL) lets a `FakeSdlGamepadBackend` drive the real

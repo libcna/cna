@@ -704,7 +704,7 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** none.
 
 #### INPUT-KBD-007 — `Keys.None` handling
-- **Priority:** P2 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-16) · **Area:** Keyboard
 - **Files:** `SdlInputBridge.cpp`, `KeyboardState.cpp`
 - **Problem:** Unmapped keycodes dropped; scancode `UNKNOWN→Keys::None`. Confirm `None` is never reported
   as pressed via the keycode path.
@@ -758,7 +758,7 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** none.
 
 #### INPUT-KBD-013 — Unmapped SDL key behavior (dropped, not None)
-- **Priority:** P2 · **Status:** TODO · **Area:** Keyboard/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-16) · **Area:** Keyboard/Bridge
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Confirm/keep the "unmapped keycode dropped" behavior; record as §18 deviation with rationale.
 - **Acceptance:** Test asserts drop; deviation documented.
@@ -798,7 +798,7 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** none.
 
 #### INPUT-KBD-018 — Android back key mapping (`SDLK_AC_BACK→Escape`)
-- **Priority:** P2 · **Status:** TODO · **Area:** Keyboard/Platform
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-17) · **Area:** Keyboard/Platform
 - **Files:** `SdlInputBridge.cpp`, `docs/platform-input-notes.md`
 - **Problem:** CNA-only mapping with no FNA equivalent (§18).
 - **Work:** Keep behind a documented rationale; test synthetic `AC_BACK`→`Escape`.
@@ -934,7 +934,7 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Deps:** none.
 
 #### INPUT-MOUSE-011 — Horizontal wheel policy (dropped)
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-18) · **Area:** Mouse/Bridge
 - **Files:** `SdlInputBridge.cpp:1249–1258`
 - **Problem:** `wheel.x` dropped (NOXNA); XNA has no horizontal wheel. Decision documented but re-affirm (§18).
 - **Work:** Keep dropped; document that XNA lacks horizontal wheel; add explicit "x ignored" test.
@@ -1196,7 +1196,7 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Deps:** none.
 
 #### INPUT-GAMEPAD-016 — `GetGUIDEXT` + format
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad/EXT
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-20 — live, same values) · **Area:** GamePad/EXT
 - **Files:** `SdlInputBridge.cpp:961–1001`
 - **Work:** Verify "xinput" when vendor==product==0; else 8-char little-endian hex; Valve overrides
   (PS4/PS5/Xbox); disconnected → empty.
@@ -1890,7 +1890,7 @@ repeat gate and a suppress flag for the literal 'v' after Ctrl+V.
 - **Deps:** none.
 
 #### INPUT-TEXT-010 — Repeat gate for synthesized text
-- **Priority:** P2 · **Status:** TODO · **Area:** Text/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-19 — matches FNA) · **Area:** Text/Bridge
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify key repeat re-emits control text (documented deviation: gates on SDL repeat flag vs FNA
   tracked-membership, §18).
@@ -2795,26 +2795,33 @@ pinned by `SdlInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchin
 INPUT-BRIDGE-014, INPUT-BRIDGE-109.
 
 **DEC-16 — Unmapped keyboard key dropped (not `Keys::None`).**
-Current: keycode path drops unmapped keys; scancode `UNKNOWN→None`. FNA: can mark `Keys.None`. Risk:
-minor. Decision: accept + document the keycode/scancode difference. Tests: unmapped drop. Disposition:
-**Accept**. → INPUT-KBD-007, INPUT-KBD-013.
+Current: keycode path drops unmapped keys; scancode `UNKNOWN→None`. **FNA verified: FNA marks `Keys.None`
+pressed** — `ToXNAKey` returns `Keys.None` and FNA then does `Keyboard.keys.Add(Keys.None)`
+(`SDL3_FNAPlatform.cs:905-908`); CNA's drop is cleaner (no meaningless "None" key). Tested
+(`UnmappedKeycodeIsDroppedNotMarkedNone`). Disposition: **ACCEPTED (2026-07-05)**.
+→ INPUT-KBD-007, INPUT-KBD-013.
 
 **DEC-17 — Android back key `SDLK_AC_BACK → Keys::Escape`.**
-Current: mapped. FNA: no equivalent. Risk: platform-specific behavior. Decision: accept as CNA behavior +
-document. Tests: synthetic AC_BACK. Disposition: **Accept**. → INPUT-KBD-018.
+Current: mapped to `Keys::Escape`. **FNA verified: no `AC_BACK` mapping** — CNA-only convenience so "back"
+acts as cancel/exit on Android/browser. Tested (`AndroidBackButtonMapsToEscape`). Disposition: **ACCEPTED
+(2026-07-05)**. → INPUT-KBD-018.
 
 **DEC-18 — Mouse horizontal wheel dropped.**
-Current: `wheel.x` ignored. XNA: no horizontal wheel. FNA: NOXNA territory. Risk: none for XNA parity.
-Decision: accept + document. Tests: x-ignored. Disposition: **Accept**. → INPUT-MOUSE-011.
+Current: `wheel.x` ignored. **FNA/XNA verified: `MouseState` exposes only the vertical `ScrollWheelValue`**
+(no horizontal-wheel property), so dropping `wheel.x` is correct. Tested (`HorizontalWheelIsIgnored`).
+Disposition: **ACCEPTED (2026-07-05)**. → INPUT-MOUSE-011.
 
 **DEC-19 — Text synthesis gates on SDL repeat flag.**
-Current: gates on SDL `repeat`. FNA: tracked-membership. Risk: edge-case repeat timing. Decision: accept +
-document. Tests: key-repeat. Disposition: **Accept**. → INPUT-TEXT-010.
+Current: gates the control-char re-emit on SDL's `repeat` flag. **FNA verified: FNA does the same**
+(`else if (evt.key.repeat)`, `SDL3_FNAPlatform.cs:923`) — the earlier "tracked-membership" framing was
+wrong, so this is **not a deviation; CNA matches FNA.** Tested (`KeyRepeatReemitsControlCharacter`).
+Disposition: **ACCEPTED (2026-07-05) — matches FNA**. → INPUT-TEXT-010.
 
 **DEC-20 — `GetGUID`/`GetCapabilities` computed live vs FNA cached-at-connect.**
 Current: live queries; caps use non-mutating property reads (to avoid a rumble-cancelling probe). FNA:
-cached at connect. Risk: minor perf / timing. Decision: accept + document. Tests: GUID/caps, no-rumble.
-Disposition: **Accept**. → INPUT-GAMEPAD-012, INPUT-GAMEPAD-016.
+cached at connect. Same values for a connected controller (timing/impl detail, not a behavioral gap).
+Tested (existing GUID/caps + no-rumble cases). Disposition: **ACCEPTED (2026-07-05)**.
+→ INPUT-GAMEPAD-012, INPUT-GAMEPAD-016.
 
 **DEC-21 — `MouseCursor` (and transitively `Mouse`) public header leaks SDL types.**
 Current: `MouseCursor.hpp` includes `<SDL3/SDL.h>`, exposes `SDL_Cursor*`/`SDL_SystemCursor`; whole class is

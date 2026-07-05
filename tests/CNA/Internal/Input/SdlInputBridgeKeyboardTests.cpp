@@ -124,11 +124,21 @@ TEST_F(SdlInputBridgeKeyboardTest, KeycodeMapCoversLettersDigitsNumpadOemModifie
 
 TEST_F(SdlInputBridgeKeyboardTest, UnmappedKeycodeIsDroppedNotMarkedNone)
 {
-    // '\xE9' (é) and SDLK_UNKNOWN have no XNA mapping; the bridge drops the event rather than
-    // marking Keys::None pressed (matching FNA's ToXNAKey miss-handling).
+    // DEC-16: SDLK_UNKNOWN (and any unmapped keycode) is dropped rather than marked Keys::None pressed.
+    // This is an intentional deviation from FNA, whose ToXNAKey returns Keys.None for an unmapped key and
+    // then Keyboard.keys.Add(Keys.None) (SDL3_FNAPlatform.cs:905-908) — polluting the pressed set with a
+    // meaningless "None" key. CNA drops instead, so IsKeyDown(None) stays false.
     SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_UNKNOWN));
     EXPECT_FALSE(Keyboard::GetState().IsKeyDown(Keys::None));
     EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 0u);
+}
+
+// DEC-17: SDLK_AC_BACK (the Android/browser Back button) maps to Keys::Escape. This is a CNA-only
+// convenience (FNA has no AC_BACK mapping) so "back" acts as cancel/exit on those platforms.
+TEST_F(SdlInputBridgeKeyboardTest, AndroidBackButtonMapsToEscape)
+{
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_AC_BACK));
+    EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::Escape));
 }
 
 // --- Task 820: scancode map (scancode mode) via synthetic KEY_DOWN events ---

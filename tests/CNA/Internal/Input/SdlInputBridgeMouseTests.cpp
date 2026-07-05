@@ -108,6 +108,22 @@ TEST(SdlInputBridgeMouseWheelTest, ZeroDeltaLeavesValueUnchanged)
     EXPECT_EQ(wheelDelta(0.0f), 0);
 }
 
+// DEC-18: XNA/FNA MouseState has only a vertical ScrollWheelValue, so SDL's horizontal wheel.x is
+// intentionally ignored (there is no XNA horizontal-wheel property to route it to).
+TEST(SdlInputBridgeMouseWheelTest, HorizontalWheelIsIgnored)
+{
+    const int before = Mouse::GetState().getScrollWheelValueProperty();
+
+    SDL_Event e{};
+    e.type = SDL_EVENT_MOUSE_WHEEL;
+    e.wheel.x = 5.0f; // horizontal scroll — no XNA equivalent
+    e.wheel.y = 0.0f;
+    e.wheel.windowID = 0;
+    SdlInputBridge::ProcessEvent(e);
+
+    EXPECT_EQ(Mouse::GetState().getScrollWheelValueProperty(), before);
+}
+
 TEST(SdlInputBridgeMouseWheelTest, FractionalSubNotchIsTruncatedBeforeScaling)
 {
     // The crux of the FNA-fidelity fix: the SDL float is cast to int BEFORE multiplying by 120,
