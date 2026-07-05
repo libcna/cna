@@ -2,10 +2,12 @@
 
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
+using Microsoft::Xna::Framework::MathHelper;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector3;
@@ -188,6 +190,81 @@ TEST(ViewportTest, ProjectUnprojectRoundTrip)
     Vector3 original(0.5f, -0.3f, 0.7f);
     Vector3 screen  = vp.Project(original, id, id, id);
     Vector3 back    = vp.Unproject(screen, id, id, id);
+    EXPECT_NEAR(back.X, original.X, kEps);
+    EXPECT_NEAR(back.Y, original.Y, kEps);
+    EXPECT_NEAR(back.Z, original.Z, kEps);
+}
+
+// --- Project / Unproject with non-identity (perspective + look-at) matrices ---
+//
+// The tests above only ever pass identity world/view/projection matrices, so the
+// perspective-divide branch in Project/Unproject (`if (!WithinEpsilon(a, 1.0f))`) is never
+// actually exercised — with identity matrices, `a` is always exactly 1.0, and the divide is
+// always skipped. The expected values below are hand-derived from FNA's own formulas (confirmed
+// line-by-line identical to CNA's in Task 341) using a real Matrix::CreatePerspectiveFieldOfView
+// projection, so `a` is genuinely != 1.0 here. This is deliberately discriminating: if the divide
+// were skipped (a plausible regression), Project would instead return (800, 0, ~4.04) for
+// kOffAxisPoint below — nowhere near the expected (480, 240, ~0.808) — so the test fails loudly
+// rather than coincidentally passing.
+//
+// Derivation for kProjection = CreatePerspectiveFieldOfView(PiOver2, 1.0, 1.0, 100.0):
+//   xScale = yScale = 1/tan(PiOver2/2) = 1, M33 = 100/(1-100) = -100/99, M34 = -1,
+//   M43 = (1*100)/(1-100) = -100/99, M44 = 0.
+// For source (1,1,-5) with identity view/world: a = -5*M34 = 5; before divide,
+//   vector = (1, 1, -5*M33+M43) = (1, 1, 400/99); after divide by a=5: (0.2, 0.2, 80/99).
+// Screen-mapped into an 800x600 viewport: X=((0.2+1)*0.5)*800=480, Y=((-0.2+1)*0.5)*600=240,
+//   Z=80/99 (MinDepth=0, MaxDepth=1).
+
+static const Matrix kProjection = Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver2, 1.0f, 1.0f, 100.0f);
+static const Vector3 kOffAxisPoint(1.0f, 1.0f, -5.0f);
+static constexpr float kExpectedScreenX = 480.0f;
+static constexpr float kExpectedScreenY = 240.0f;
+static constexpr float kExpectedScreenZ = 80.0f / 99.0f;
+
+TEST(ViewportTest, ProjectWithNonIdentityPerspectiveMatrix)
+{
+    Viewport vp(0, 0, 800, 600);
+    Matrix id = Matrix::getIdentityProperty();
+    Vector3 result = vp.Project(kOffAxisPoint, kProjection, id, id);
+    EXPECT_NEAR(result.X, kExpectedScreenX, kEps);
+    EXPECT_NEAR(result.Y, kExpectedScreenY, kEps);
+    EXPECT_NEAR(result.Z, kExpectedScreenZ, kEps);
+}
+
+TEST(ViewportTest, ProjectWithNonIdentityViewAndProjectionMatrices)
+{
+    // A camera at (0,0,5) looking at the world origin sees that origin at view-space (0,0,-5) —
+    // the same z used by kOffAxisPoint above, just on-axis (x=y=0), so the expected screen
+    // position collapses to the viewport's exact center (400, 300) rather than (480, 240), while
+    // still sharing the same non-trivial Z (80/99) computed via the same perspective divide.
+    Viewport vp(0, 0, 800, 600);
+    Matrix world = Matrix::getIdentityProperty();
+    Matrix view = Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 5.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f));
+    Vector3 result = vp.Project(Vector3(0.0f, 0.0f, 0.0f), kProjection, view, world);
+    EXPECT_NEAR(result.X, 400.0f, kEps);
+    EXPECT_NEAR(result.Y, 300.0f, kEps);
+    EXPECT_NEAR(result.Z, kExpectedScreenZ, kEps);
+}
+
+TEST(ViewportTest, UnprojectRecoversOriginalPointThroughNonIdentityPerspectiveMatrix)
+{
+    Viewport vp(0, 0, 800, 600);
+    Matrix id = Matrix::getIdentityProperty();
+    Vector3 screen(kExpectedScreenX, kExpectedScreenY, kExpectedScreenZ);
+    Vector3 result = vp.Unproject(screen, kProjection, id, id);
+    EXPECT_NEAR(result.X, kOffAxisPoint.X, kEps);
+    EXPECT_NEAR(result.Y, kOffAxisPoint.Y, kEps);
+    EXPECT_NEAR(result.Z, kOffAxisPoint.Z, kEps);
+}
+
+TEST(ViewportTest, ProjectUnprojectRoundTripWithNonIdentityViewAndProjectionMatrices)
+{
+    Viewport vp(0, 0, 800, 600);
+    Matrix world = Matrix::getIdentityProperty();
+    Matrix view = Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 5.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f));
+    Vector3 original(0.5f, -0.3f, -2.0f);
+    Vector3 screen = vp.Project(original, kProjection, view, world);
+    Vector3 back   = vp.Unproject(screen, kProjection, view, world);
     EXPECT_NEAR(back.X, original.X, kEps);
     EXPECT_NEAR(back.Y, original.Y, kEps);
     EXPECT_NEAR(back.Z, original.Z, kEps);
