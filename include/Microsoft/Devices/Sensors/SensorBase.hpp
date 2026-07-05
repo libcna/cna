@@ -369,6 +369,15 @@ namespace Microsoft::Devices::Sensors
          * real WP7 `TimeSpan` property is a value type in C# anyway, so
          * this is a more faithful match, not a breaking API change.
          *
+         * @note Task DEVICES-0066: this value is stored and observable only
+         * — no derived sensor class currently enforces it as an actual
+         * dispatch-rate throttle. `Accelerometer`/`Gyroscope` dispatch every
+         * SDL sensor event they receive regardless of this value; SDL's own
+         * event rate is not adjusted based on it either. This is an honest,
+         * accepted deviation from a strict reading of the WP7 contract, not
+         * a bug — implementing real throttling is a larger, separately-
+         * scoped feature if a concrete need for it is ever found.
+         *
          * @return Time between updates.
          */
         [[nodiscard]] System::TimeSpan getTimeBetweenUpdatesProperty() const

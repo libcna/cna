@@ -708,7 +708,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 5: Accelerometer and Gyroscope Verification
 
-- [ ] DEVICES-0063 — Confirm SDL-to-XNA unit conversion for `Accelerometer` (m/s² vs. g)
+- [x] DEVICES-0063 — Confirm SDL-to-XNA unit conversion for `Accelerometer` (m/s² vs. g) (2026-07-05: **confirmed already correct, no bug.** `Accelerometer.cpp::DispatchSensorReading()` (line 484) defines `constexpr float StandardGravity = 9.80665f;` and divides every raw SDL axis by it (`x / StandardGravity`, etc.) before constructing the `Vector3` — the resulting g-force value is exactly what `AccelerometerTests.CurrentValueChangedReceivesExpectedReading` already asserts (`expectedAcceleration(rawX / StandardGravity, ...)`), and that test passes. The Phase 0 concern about this being an unflagged risk is resolved: it was already implemented correctly.)
   - **Area:** Accelerometer
   - **Files:** `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
   - **Required behavior:** SDL3 `SDL_SENSOR_ACCEL` reports m/s²; WP7 `AccelerometerReading.Acceleration` is documented in g (1g ≈ 9.80665 m/s²). Confirm `DispatchSensorReading()` performs this conversion (divide by standard gravity) — this is a real, previously-unflagged gap risk worth explicitly re-checking, not assuming Phase 2's original port got it right.
@@ -716,7 +716,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AccelerometerTests.SdlMetersPerSecondSquaredConvertsToGForce` (add if missing)
   - **Dependencies:** none
 
-- [ ] DEVICES-0064 — Confirm SDL-to-XNA unit conversion for `Gyroscope` (rad/s)
+- [x] DEVICES-0064 — Confirm SDL-to-XNA unit conversion for `Gyroscope` (rad/s) (2026-07-05: **confirmed already correct, no bug.** `third_party/SDL/include/SDL3/SDL_sensor.h` explicitly documents "The gyroscope returns the current rate of rotation in radians per second." WP7's real `GyroscopeReading.RotationRate` is documented in the same unit (radians/second) — `Gyroscope.cpp::DispatchSensorReading()` correctly passes the raw SDL values straight through with no conversion, unlike `Accelerometer`'s g-force division, because none is needed here. Added a direct doc-comment/test note rather than a new conversion, since one would be wrong.)
   - **Area:** Gyroscope
   - **Files:** `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
   - **Required behavior:** SDL3 `SDL_SENSOR_GYRO` reports rad/s; confirm WP7 `GyroscopeReading.RotationRate` is documented in the same unit (rad/s) — if so, confirm no unwanted conversion is applied; if WP7 actually expects degrees/s, this is a real bug.
@@ -724,7 +724,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `GyroscopeTests.UnitsMatchDocumentedConvention` (add if missing)
   - **Dependencies:** none
 
-- [ ] DEVICES-0065 — Re-confirm Android landscape axis-remap sign convention against its own doc comment
+- [x] DEVICES-0065 — Re-confirm Android landscape axis-remap sign convention against its own doc comment (2026-07-05: re-ran, not just read, `AndroidSensorOrientationTests.*` — 9/9 green, unchanged from prior phases. `ConvertAndroidPortraitToXnaLandscape()`'s sign math still matches its own doc comment. No code change needed.)
   - **Area:** Accelerometer / Gyroscope / Android
   - **Files:** `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`
   - **Required behavior:** `ConvertAndroidPortraitToXnaLandscape()`'s `Rotation90`/`Rotation270` sign math matches its own doc comment exactly (already unit-tested; this task is a fresh read-through, not a rewrite).
@@ -732,7 +732,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run `AndroidSensorOrientationTests.*`
   - **Dependencies:** none
 
-- [ ] DEVICES-0066 — Re-confirm `TimeBetweenUpdates` throttling behavior (or documented absence thereof)
+- [x] DEVICES-0066 — Re-confirm `TimeBetweenUpdates` throttling behavior (or documented absence thereof) (2026-07-05: grepped `Accelerometer.cpp`/`Gyroscope.cpp`/`Detail/SdlSensorSubsystem.hpp` for any reference to `timeBetweenUpdates_`/`TimeBetweenUpdates` — zero hits. **Confirmed: purely a stored/observable value, no dispatch-rate enforcement exists anywhere.** Added an explicit `@note` to `SensorBase.hpp`'s `getTimeBetweenUpdatesProperty()` documenting this as an accepted, honest deviation rather than leaving it ambiguous. Not implementing throttling itself — no concrete need identified, and it would be a larger, separately-scoped feature per this task's own instruction.)
   - **Area:** Accelerometer / Gyroscope / SensorBase
   - **Files:** `include/Microsoft/Devices/Sensors/SensorBase.hpp`, `src/Microsoft/Devices/Sensors/{Accelerometer,Gyroscope}.cpp`
   - **Required behavior:** Determine and document whether `TimeBetweenUpdates` actually throttles dispatch frequency today, or is purely a stored/observable value with no enforcement (SDL's own event rate may not respect it) — this is a real compatibility question worth resolving explicitly rather than leaving implicit.
@@ -740,7 +740,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A for the audit; a follow-up task if throttling is added
   - **Dependencies:** none
 
-- [ ] DEVICES-0067 — Re-confirm timestamp is always real wall-clock time, never SDL monotonic ticks
+- [x] DEVICES-0067 — Re-confirm timestamp is always real wall-clock time, never SDL monotonic ticks (2026-07-05: confirmed both `Accelerometer.cpp`/`Gyroscope.cpp`'s `DispatchSensorReading()` still call `System::DateTimeOffset::getUtcNowProperty()` for `Timestamp` (Task P4-7), not `SDL_GetTicksNS()`. No regression.)
   - **Area:** Accelerometer / Gyroscope
   - **Files:** `src/Microsoft/Devices/Sensors/{Accelerometer,Gyroscope}.cpp`
   - **Required behavior:** Per Task P4-7's fix, `Timestamp` uses `System::DateTimeOffset::getUtcNowProperty()`, not `SDL_GetTicksNS()`.
@@ -748,7 +748,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run relevant `AccelerometerReadingTests`/`GyroscopeReadingTests` timestamp assertions
   - **Dependencies:** none
 
-- [ ] DEVICES-0068 — Re-confirm legacy `ReadingChanged` compatibility on `Accelerometer` only
+- [x] DEVICES-0068 — Re-confirm legacy `ReadingChanged` compatibility on `Accelerometer` only (2026-07-05: confirmed `Accelerometer::ReadingChanged` still exists and is raised alongside `CurrentValueChanged`; confirmed `Gyroscope` still correctly has no equivalent member. No regression.)
   - **Area:** Accelerometer
   - **Files:** `include/Microsoft/Devices/Sensors/Accelerometer.hpp`
   - **Required behavior:** `ReadingChanged` (WP7 7.0 legacy) is raised alongside `CurrentValueChanged` (WP7 7.1) from `ProcessSensorUpdateEvent()`/`DispatchSensorReading()`; confirm `Gyroscope` correctly has no equivalent (matches real API).
@@ -756,7 +756,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run `AccelerometerTests.*ReadingChanged*`
   - **Dependencies:** none
 
-- [ ] DEVICES-0069 — Re-confirm unsupported-backend behavior on desktop for both classes
+- [x] DEVICES-0069 — Re-confirm unsupported-backend behavior on desktop for both classes (2026-07-05: re-ran, not just read, the full Devices-only `ctest` filter (239/239, 2 expected skips) which includes `GetIsSupportedPropertyDoesNotCrash`/`StartOnUnsupportedPlatformThrows`/`GetCurrentValuePropertyThrowsWhenUnsupported` for both classes. No regression.)
   - **Area:** Accelerometer / Gyroscope
   - **Files:** `src/Microsoft/Devices/Sensors/{Accelerometer,Gyroscope}.cpp`
   - **Required behavior:** On this hardware-less container, `getIsSupportedProperty()` is `false`, `Start()` throws the appropriate `*FailedException`, `getCurrentValueProperty()` throws `InvalidOperationException`.
@@ -764,7 +764,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run named tests
   - **Dependencies:** none
 
-- [ ] DEVICES-0070 — Loop the full `Accelerometer`/`Gyroscope` concurrency suite (40+ iterations) as a Phase 5 gate
+- [x] DEVICES-0070 — Loop the full `Accelerometer`/`Gyroscope` concurrency suite (40+ iterations) as a Phase 5 gate (2026-07-05: looped `AccelerometerTests.*:GyroscopeTests.*:SensorBaseTests.*` 40/40 clean after DEVICES-0066's `SensorBase.hpp` doc-comment-only change (header-only template, recompiled into every translation unit but no functional change). No regressions.)
   - **Area:** Testing
   - **Files:** none
   - **Required behavior:** Since Phase 5 tasks read (and, for DEVICES-0063, may modify) `Accelerometer.cpp`/`Gyroscope.cpp`, re-run the full concurrency stress loop per `docs/devices-build.md` Section 2 before declaring Phase 5 done.
@@ -772,7 +772,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AccelerometerTests.*:GyroscopeTests.*` looped 40×
   - **Dependencies:** DEVICES-0063, DEVICES-0064 (only if either produced a code change)
 
-- [ ] DEVICES-0071 — Update `docs/devices-hardware-checklist.md` with any new unit-conversion verification steps
+- [x] DEVICES-0071 — Update `docs/devices-hardware-checklist.md` with any new unit-conversion verification steps (2026-07-05: no-op — DEVICES-0063/0064 found both conversions already correct with no code change, so no new manual-verification step is warranted beyond what Section 1/2 of the checklist already covers.)
   - **Area:** Docs
   - **Files:** `docs/devices-hardware-checklist.md`
   - **Required behavior:** If DEVICES-0063/0064 found a real conversion gap and fixed it, add a manual-verification step confirming the g-force/rad-per-second values "feel right" on real hardware (magnitude sanity, not just sign).
@@ -780,7 +780,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0063, DEVICES-0064
 
-- [ ] DEVICES-0072 — Desktop SDL accelerometer/gyroscope behavior when real hardware IS present
+- [x] DEVICES-0072 — Desktop SDL accelerometer/gyroscope behavior when real hardware IS present (2026-07-05: confirmed via code read that the non-Android path (`#else` branch in both `DispatchSensorReading()` functions) reports raw SDL axes directly with no landscape remap — this is intentional (the remap is Android-`sensorLandscape`-specific; desktop has no equivalent orientation concept) and already documented in each function's own `#ifdef __ANDROID__` comment block. No gap; no hardware in this container to exercise it against.)
   - **Area:** Accelerometer / Gyroscope / Desktop
   - **Files:** none changed; investigation only
   - **Required behavior:** Document what happens if this code runs on a desktop Linux/Windows/macOS machine that does have a physical accelerometer (e.g. a laptop with one) — confirm the non-Android code path (no landscape remap) reports raw SDL axes directly, and that this is the intended, documented behavior (not a gap).
