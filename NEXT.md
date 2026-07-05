@@ -30,11 +30,12 @@
 
 ## 2. Current status
 
-- **Input branch build:** clean on **EasyGL** in this checkout (Debian 13, g++ 14.2, CMake 3.31.6,
-  Ninja 1.12.1). **Vulkan/bgfx not re-built on this branch** — input is backend-agnostic and unchanged
-  across backends, but a 3-backend pass has not been run since branching (see §4/§8 task 1).
-- **Input tests (EasyGL, last run):** full `CnaTests` **2234 / 2234 pass**; input filter **257 / 257**;
-  order-independent under `--gtest_shuffle --gtest_repeat=5`; device-level fake-gamepad **20 / 20**.
+- **Input branch build:** clean on **all 4 backends** in this checkout (Debian 13). 3-backend gap CLOSED
+  on 2026-07-05 (plan task INPUT-BUILD-002): EasyGL, Vulkan, bgfx, and SDL_RENDERER each build `CnaTests`
+  clean and pass the input filter, order-independent under shuffle — input is confirmed backend-agnostic.
+- **Input tests (last run, 2026-07-05):** full `CnaTests` **3248 pass / 2 skipped** (EasyGL; the 2 skips
+  are Devices sensor tests, not input); input filter **259 / 259** on every backend; order-independent
+  under `--gtest_shuffle --gtest_repeat=3`. (Earlier 2234/257 counts were stale — pre-Phase-I15.)
 - **Available artifacts:** the `CNA` library; the `CnaTests` GoogleTest binary; examples under
   `examples/` (`demo_input`, `input_smoke`, and many graphics `easygl_*`/`vulkan_*`/`bgfx_*` samples).
   Backend chosen at configure time via `-DCNA_GRAPHICS_BACKEND=`.
@@ -65,11 +66,12 @@
 
 ## 4. Current blocker / main problem
 
-**The input branch has no hard blocker** — it builds and every test passes on EasyGL; no failing
-command or test. Open input-track items are only: (a) uncommitted startup-init change *(committing
-now)*; (b) a **`needs verification`** gap — only EasyGL was built on this branch, Vulkan/bgfx not
-re-run since branching (suspected impact: none; input adds no backend-specific code); (c) a human
-merge-vs-continue decision.
+**The input branch has no hard blocker** — it builds and every test passes on **all 4 backends**; no
+failing command or test. The former **`needs verification`** 3-backend gap is now CLOSED (2026-07-05,
+plan task INPUT-BUILD-002: EasyGL/Vulkan/bgfx/SDL_RENDERER all green, input filter 259/259, shuffle-stable).
+Remaining open input-track items: (a) a human merge-vs-continue decision; (b) the larger `plan_input.md`
+backlog (265 tasks) — next up are sanitizer run (INPUT-BUILD-006), fresh-clone repro (INPUT-BUILD-001),
+DragComplete tests (INPUT-GESTURE-007), and the open design decisions (DEC-04/09/15/21).
 
 **The repo's most severe open problem is on the Graphics track (`develop`), NOT input** — recorded so
 it is not forgotten:
@@ -159,10 +161,10 @@ is a verification gap, not a failure. Graphics bugs (§4) reproduce via the pixe
 
 ## 8. Next smallest tasks (input track, ordered)
 
-1. **3-backend verification of this branch.**
-   - Goal: confirm Vulkan + bgfx still build and pass the input filter after I13/I14/I15 + startup init.
-   - Files: none (build only); a failure would most likely be in `SdlGamepadBackend.*` / `SdlInputBridge.cpp`.
-   - Verify: clean configure+build+run for `-DCNA_GRAPHICS_BACKEND=VULKAN` and `BGFX`; input filter green.
+1. ~~**3-backend verification of this branch.**~~ **DONE 2026-07-05 (INPUT-BUILD-002).** Vulkan, bgfx, and
+   SDL_RENDERER all build `CnaTests` clean and pass the input filter 259/259, shuffle-stable → all 4
+   backends green; input confirmed backend-agnostic. See `plan_input.md` INPUT-BUILD-002 for the recorded
+   result. The authoritative task backlog is now `plan_input.md` (this NEXT list is a short pointer).
 2. **Assert `PacketNumber` does not bump on a within-dead-zone axis wobble (or test the documented gap).**
    - Goal: close the `not asserted` note in task 916.
    - Files: `tests/Microsoft/Xna/Framework/Input/GamePad*Tests.cpp` (+ `FakeSdlGamepadBackend` if via events).

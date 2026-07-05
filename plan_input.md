@@ -78,8 +78,10 @@ implemented and event-driven.
   `GyroscopeTests.GetCurrentValuePropertyDoesNotThrowWhenSupported` — Devices track, sensor-gated).
 - **Input filter** (the NEXT.md filter) → **259 passed across 33 suites**.
 - **Order independence:** input filter under `--gtest_shuffle --gtest_repeat=3` → **259/259 each iteration**.
-- **NOT run this session:** Vulkan and bgfx builds/tests; SDL_RENDERER build; any sanitizer build;
-  any real-hardware verification. These are open gaps, not confirmed-good.
+- **Also run (2026-07-05, INPUT-BUILD-002):** Vulkan, bgfx, and SDL_RENDERER each built `CnaTests` clean
+  and passed the input filter **259/259**, order-independent under shuffle×3 → **all 4 backends green**.
+- **Still NOT run this session:** any sanitizer build; any real-hardware verification; a true fresh-clone
+  build. These remain open gaps, not confirmed-good.
 
 > **Doc reconciliation:** every existing doc's headline counts (NEXT: 2234/257; manual-verification:
 > 1964/217; input-backend: 165) are **stale**. The current true numbers are **3248 full / 259 input**.
@@ -98,7 +100,7 @@ implemented and event-driven.
 - **Deps:** none.
 
 #### INPUT-BUILD-002 — 3-backend build+test matrix (Vulkan, bgfx, SDL_RENDERER)
-- **Priority:** P0 · **Status:** TODO · **Area:** Build
+- **Priority:** P0 · **Status:** DONE (2026-07-05) · **Area:** Build
 - **Files:** build only; likely-suspect code `SdlGamepadBackend.*`, `SdlInputBridge.cpp`
 - **Problem:** Only EasyGL was built/tested on this branch; input is backend-agnostic but this is unproven
   post I13/I14/I15.
@@ -107,6 +109,11 @@ implemented and event-driven.
 - **Acceptance:** Each backend builds; input filter green on each; counts recorded with date/backend/OS.
 - **Tests:** input filter per backend, plus `--gtest_shuffle --gtest_repeat=5`.
 - **Deps:** INPUT-BUILD-001.
+- **Result (2026-07-05, Debian 13):** Fresh build dirs `cmake-build-input-{vulkan,bgfx,sdlrenderer}`.
+  All three configured + built `CnaTests` clean (0 build errors) and passed the input filter **259/259**,
+  order-independent under `--gtest_shuffle --gtest_repeat=3` (0 failures). Combined with EasyGL (259) →
+  **all 4 backends green**; input confirmed backend-agnostic. Still open: sanitizer build (INPUT-BUILD-006)
+  and real-hardware verification (INPUT-GAMEPAD-035). Fresh-clone repro (INPUT-BUILD-001) still pending.
 
 #### INPUT-BUILD-003 — Split an `InputTests` filter/label so input is runnable without a fragile string
 - **Priority:** P2 · **Status:** TODO · **Area:** Build
@@ -2302,12 +2309,14 @@ concrete backlog items.
 - **Deps:** §5 matrices.
 
 #### INPUT-TEST-020 — Per-backend input parity
-- **Priority:** P2 · **Status:** TODO · **Area:** Test/Build
+- **Priority:** P2 · **Status:** DONE (2026-07-05) · **Area:** Test/Build
 - **Files:** all input tests
 - **Work:** Confirm identical input results across EasyGL/Vulkan/bgfx/SDL_RENDERER (input is backend-agnostic).
 - **Acceptance:** Same counts/results per backend.
 - **Tests:** input filter per backend.
 - **Deps:** INPUT-BUILD-002.
+- **Result (2026-07-05):** Identical input-filter result **259/259** on all four backends (EasyGL, Vulkan,
+  bgfx, SDL_RENDERER). Parity confirmed. Re-run whenever input code changes.
 
 ---
 
@@ -2661,11 +2670,11 @@ API matrix) are split into individually-acceptable tasks.
 
 - Behavior is **not** claimed correct merely because a doc says so; docs were cross-checked and several
   contradictions recorded (§2.3, §18, INPUT-DOC-001/002/003).
-- Test results reported here were **actually run in this checkout** on 2026-07-05, EasyGL backend:
-  full `CnaTests` **3248 passed / 2 skipped**; input filter **259 passed**; order-independent under
-  `--gtest_shuffle --gtest_repeat=3`.
-- **Not run this session** (open gaps, tracked as tasks): Vulkan/bgfx/SDL_RENDERER builds, any sanitizer
-  build, any real-hardware verification. No build/test command **failed** this session.
+- Test results reported here were **actually run in this checkout** on 2026-07-05: full `CnaTests`
+  **3248 passed / 2 skipped** (EasyGL); input filter **259 passed** on **all four backends** (EasyGL,
+  Vulkan, bgfx, SDL_RENDERER — INPUT-BUILD-002); order-independent under `--gtest_shuffle --gtest_repeat=3`.
+- **Not run this session** (open gaps, tracked as tasks): any sanitizer build, any real-hardware
+  verification, a true fresh-clone build. No build/test command **failed** this session.
 - **No reproducibility blocker was found** in this warm checkout, but a true fresh-clone build was not
   attempted — INPUT-BUILD-001/INPUT-CI-001 exist to prove it. The checkout builds and tests pass as recorded.
 
