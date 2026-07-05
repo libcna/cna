@@ -31,7 +31,7 @@ not exactly identical.
 | `GetPressedKeys()` ordering, `GetHashCode`, `this[Keys]` | Matches FNA (ascending numeric order; 8×32-bit XOR hash). |
 | Repeated key-down while already down | State de-dupes (`unordered_set`) — matches FNA. |
 | Key-up without prior key-down | No-op — matches FNA. |
-| Focus-loss keyboard reset | **Neither FNA nor CNA clears keys on focus loss.** See "SDL bridge" below for the event-driven consequence. |
+| Focus-loss keyboard reset | **Neither FNA nor CNA clears keys on focus loss** (DEC-15: match FNA, accepted). See "SDL bridge" below for the event-driven consequence. |
 
 **Intentional deviations:**
 - Unmapped keycodes (`'é'`, `SDLK_UNKNOWN`) are **dropped** rather than pushed as `Keys::None`
@@ -181,11 +181,17 @@ type + interruption is partial (task 906).
   events are ignored (task 949). Unmapped keys/buttons/axes are dropped without side effects.
 - Window handles are derived defensively (`SDL_GetWindowFromID` → `SDL_GetMouseFocus()` fallback);
   `nullptr` windows are handled everywhere (task 950).
-- **Focus loss (task 951):** neither FNA nor CNA clears input state on `WINDOW_FOCUS_LOST`. FNA is
-  safe anyway because it re-polls each frame; CNA, being event-driven and accumulating, **can** leave
-  a key/button stuck if its up-event is delivered to another window. This matches FNA's *behavior*
-  but not its *consequence*. A runtime `ClearTransientState()` on focus loss would be an improvement
-  **beyond** FNA and is left as an open decision rather than silently diverging from the reference.
+- **Focus loss (task 951 / DEC-15) — DECISION: match FNA, no clear (accepted 2026-07-05).** On
+  `SDL_EVENT_WINDOW_FOCUS_LOST` neither FNA nor CNA clears accumulated input state. FNA is **also
+  event-driven and accumulating** — its `Keyboard.keys` list is mutated by KEY_DOWN/KEY_UP
+  (`SDL3_FNAPlatform.cs:905-940`), and on focus loss it *only* sets `game.IsActive = false`
+  (`SDL3_FNAPlatform.cs:1026-1035`); it never clears keys. So FNA has the **identical** stuck-key edge
+  case (a held key whose up-event is delivered to another window) — not merely the same behavior with a
+  different consequence. CNA therefore matches FNA in both behavior and consequence, which is the correct
+  call under the FNA-fidelity principle. A beyond-FNA `ClearTransientState()` on focus loss was considered
+  and **rejected** (it would silently diverge from the reference); the XNA-standard mitigation is for the
+  game to gate input on `Game.IsActive`. Pinned by
+  `SdlInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchingFna`.
 - **Coordinate consistency (task 952):** mouse and the `InputManager` touch snapshot both use
   renderer-logical space and are consistent. The **gesture** path feeds `GestureDetector` in a
   display-size pixel basis, which can differ from renderer-logical space when logical size ≠

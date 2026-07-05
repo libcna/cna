@@ -58,6 +58,24 @@ namespace
     }
 }
 
+// DEC-15 / INPUT-KBD-020 / INPUT-BRIDGE-109: CNA matches FNA — a window focus-loss does NOT clear
+// accumulated input state. FNA is event-driven too (its Keyboard.keys list is mutated by KEY_DOWN/KEY_UP)
+// and on SDL_EVENT_WINDOW_FOCUS_LOST it only sets game.IsActive = false (SDL3_FNAPlatform.cs:1026-1035);
+// it never clears keys. So a held key survives a focus-loss event, identical to FNA. This pins that
+// decision (a beyond-FNA transient clear was considered and rejected); games gate input on Game.IsActive.
+TEST_F(SdlInputBridgeKeyboardTest, WindowFocusLostDoesNotClearHeldKeysMatchingFna)
+{
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_A));
+    ASSERT_TRUE(Keyboard::GetState().IsKeyDown(Keys::A));
+
+    SDL_Event focusLost{};
+    focusLost.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+    SdlInputBridge::ProcessEvent(focusLost);
+
+    EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::A))
+        << "focus loss must not clear accumulated key state (matches FNA)";
+}
+
 // --- Task 820: keycode map (default mode) via synthetic KEY_DOWN events ---
 
 TEST_F(SdlInputBridgeKeyboardTest, KeycodeMapCoversLettersDigitsNumpadOemModifiersFunctionAndMediaKeys)

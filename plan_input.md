@@ -816,7 +816,7 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** none.
 
 #### INPUT-KBD-020 — Focus lost / gained key behavior (decision)
-- **Priority:** P1 · **Status:** TODO · **Area:** Keyboard/Bridge
+- **Priority:** P1 · **Status:** DONE (2026-07-05; DEC-15 accepted — match FNA) · **Area:** Keyboard/Bridge
 - **Files:** `SdlInputBridge.cpp`, `InputManager.cpp`, `Game.cpp`
 - **Problem:** No key-clearing on `WINDOW_FOCUS_LOST` (matches FNA, but event-driven CNA can leave a key
   stuck). Decision open (§18).
@@ -2025,7 +2025,7 @@ No focus-loss clearing.
 - **Deps:** none.
 
 #### INPUT-BRIDGE-109 — Focus-loss / window-destruction clearing (decision)
-- **Priority:** P1 · **Status:** TODO · **Area:** InputManager/Bridge/Decision
+- **Priority:** P1 · **Status:** DONE (2026-07-05; DEC-15 accepted — match FNA, no `ClearTransientState`) · **Area:** InputManager/Bridge/Decision
 - **Files:** `InputManager.cpp`, `SdlInputBridge.cpp`, `Game.cpp`
 - **Problem:** No transient-state clear on focus loss or window destruction (§18); event-driven CNA can leave
   a stuck key/button.
@@ -2178,7 +2178,11 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 - **Deps:** none.
 
 #### INPUT-BRIDGE-014 — Window focus / lifecycle event handling (decision)
-- **Priority:** P1 · **Status:** TODO · **Area:** Bridge/Decision
+- **Priority:** P1 · **Status:** DONE (2026-07-05; DEC-15 — input clearing decided) · **Area:** Bridge/Decision
+- **Note (2026-07-05):** The *input-clearing* question is resolved by DEC-15 (match FNA: the bridge keeps
+  ignoring `WINDOW_FOCUS_LOST` for input purposes; pinned by a test). Separately, FNA also sets
+  `game.IsActive` on focus-gained/lost — that `Game.IsActive` plumbing is a **Game/windowing-layer** concern
+  (not input state), so it is out of scope here and left as a Game-track follow-up.
 - **Files:** `SdlInputBridge.cpp` (add cases), `InputManager.cpp`
 - **Problem:** `WINDOW_FOCUS_LOST`/`FOCUS_GAINED`/window-destroy are not handled; relates to stuck-input.
 - **Work:** Decide whether to handle these (transient clear) per §18; implement chosen path.
@@ -2749,9 +2753,15 @@ CNA API (`suspected`, unreachable via CNA API). Decision: accept + document OR r
 Disposition: **Accept (documented)**. → INPUT-MOUSE-007.
 
 **DEC-15 — No focus-loss / window-destroy input clearing.**
-Current: none. FNA: also none. Risk: event-driven CNA can leave a stuck key/button after focus loss.
-Decision: match-FNA (document + test) OR add beyond-FNA transient clear. Tests: focus-loss. Disposition:
-**Decide (P1)**. → INPUT-KBD-020, INPUT-BRIDGE-014, INPUT-BRIDGE-109.
+Current: none. FNA: **also none — verified** (FNA is event-driven/accumulating like CNA — `Keyboard.keys`
+mutated by KEY_DOWN/KEY_UP, `SDL3_FNAPlatform.cs:905-940` — and on `WINDOW_FOCUS_LOST` it only sets
+`game.IsActive=false`, `:1026-1035`, never clearing keys), so FNA has the **identical** stuck-key edge case.
+Risk: a held key/button can stick if its up-event is delivered to another window. Disposition: **ACCEPTED
+(2026-07-05) — match FNA (no clear).** A beyond-FNA `ClearTransientState()` was considered and rejected
+(would silently diverge from the reference); the XNA-standard mitigation is `Game.IsActive`. Also corrected
+a doc error that claimed FNA re-polls each frame (it does not). Documented in `docs/input-fna-fidelity.md`;
+pinned by `SdlInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchingFna`. → INPUT-KBD-020,
+INPUT-BRIDGE-014, INPUT-BRIDGE-109.
 
 **DEC-16 — Unmapped keyboard key dropped (not `Keys::None`).**
 Current: keycode path drops unmapped keys; scancode `UNKNOWN→None`. FNA: can mark `Keys.None`. Risk:
