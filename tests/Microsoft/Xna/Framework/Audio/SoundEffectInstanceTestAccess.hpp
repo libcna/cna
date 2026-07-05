@@ -85,5 +85,11 @@ namespace Microsoft::Xna::Framework::Audio
         {
             instance.INTERNAL_getFilterStateForTest(kind, frequency, oneOverQ);
         }
+
+        // P9-3D-007 wrapper.
+        static float CalculatePan(float dx, float distance)
+        {
+            return SoundEffectInstance::INTERNAL_calculatePan(dx, distance);
+        }
     };
 }

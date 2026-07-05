@@ -644,6 +644,54 @@ TEST(SoundEffectInstanceFilterMathTest, CalculateFilterOneOverQGuardsDivideByZer
     EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterOneOverQ(0), 1.0f, 1e-6f);
 }
 
+// P9-3D-007: Apply3D's pan formula, unit-tested directly since SDL3_mixer has no
+// MIX_GetTrackStereo getter to verify the applied result through (P9-3D-001's finding).
+// `dx` is listener-to-emitter X displacement (emitter.X - listener.X); an emitter directly to
+// the right of the listener (positive dx, distance == dx) must pan fully right (+1.0).
+TEST(SoundEffectInstanceFilterMathTest, CalculatePanIsFullyRightWhenEmitterDirectlyToTheRight)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(10.0f, 10.0f), 1.0f, 1e-6f);
+}
+
+// An emitter directly to the left (negative dx) must pan fully left (-1.0).
+TEST(SoundEffectInstanceFilterMathTest, CalculatePanIsFullyLeftWhenEmitterDirectlyToTheLeft)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(-10.0f, 10.0f), -1.0f, 1e-6f);
+}
+
+// An emitter directly in front of or behind the listener (dx == 0, all displacement on Z) must
+// pan dead center -- this linear approximation only accounts for the X axis (no front/back
+// distinction, a documented limitation of the pan-only-no-elevation approach, CHECKLIST.md).
+TEST(SoundEffectInstanceFilterMathTest, CalculatePanIsCenteredWhenEmitterDirectlyAheadOrBehind)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(0.0f, 10.0f), 0.0f, 1e-6f);
+}
+
+// An emitter at a diagonal must produce a partial (non-extreme) pan value proportional to the X
+// component of its direction -- e.g. at 45 degrees (dx == dz, distance == dx*sqrt(2)), pan ==
+// 1/sqrt(2) =~ 0.7071.
+TEST(SoundEffectInstanceFilterMathTest, CalculatePanIsPartialAtADiagonal)
+{
+    const float dx = 10.0f;
+    const float distance = dx * std::sqrt(2.0f); // dx and dz equal magnitude
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(dx, distance), 1.0f / std::sqrt(2.0f), 1e-4f);
+}
+
+// Same position (distance == 0) has no meaningful direction -- must center rather than divide by
+// zero.
+TEST(SoundEffectInstanceFilterMathTest, CalculatePanIsCenteredAtZeroDistance)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(0.0f, 0.0f), 0.0f, 1e-6f);
+}
+
+// The formula clamps to [-1,1] even if dx somehow exceeded distance (shouldn't happen
+// geometrically, but matches the Pan property's own valid range defensively).
+TEST(SoundEffectInstanceFilterMathTest, CalculatePanClampsToValidRange)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(20.0f, 10.0f), 1.0f, 1e-6f);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(-20.0f, 10.0f), -1.0f, 1e-6f);
+}
+
 // INTERNAL_applyXactTrackFilter dispatches filterType 0/1/2 to the matching Low/Band/HighPass
 // method and threads the converted oneOverQ through -- verified via the test-only filter-state
 // getter rather than the recursive math (already pinned down above for the plain float-cutoff

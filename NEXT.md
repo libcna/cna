@@ -28,10 +28,10 @@ framework/runtime, not a game.
   `P9-DYNAMIC` is now **fully closed (9/9)** (the `PendingBufferCount` audit found and fixed two
   real bugs, one of which uncovered and fixed a serious cross-cutting `System::EventHandler<T>`
   bug in the sibling `sharp-runtime` repo, plus format-conversion and buffer-alignment audits
-  confirming no further bugs); `P9-3D` is now 6/9 done (the `Apply3D` stereo-source audit, a real
-  distance-attenuation formula bug found/fixed/tested, and **real Doppler pitch shift
-  implemented** -- a closed-form formula needing no native 3D audio API, unlike elevation/HRTF);
-  1 group remains fully open (`P9-AUDIT`) — see §4/§8.
+  confirming no further bugs); `P9-3D` is now 7/9 done (the `Apply3D` stereo-source audit, a real
+  distance-attenuation formula bug found/fixed/tested, real Doppler pitch shift implemented, and
+  pan test coverage added via an extracted, directly-testable pure function); 1 group remains
+  fully open (`P9-AUDIT`) — see §4/§8.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -53,16 +53,19 @@ framework/runtime, not a game.
   Verified via both the manual `cmake-build-debug/` directory and the `tests` CMake preset
   (freshly reconfigured from a deleted build directory). `cna_demo_sound`/`cna_demo_2d` example
   targets also rebuild clean.
-- **Tests:** `CnaTests` whole-suite count is **3250 / 3252 pass** (2 skipped:
+- **Tests:** `CnaTests` whole-suite count is **3256 / 3258 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected) — up from 3246/3248 (`P9-3D-004/005`'s 4 new tests, real Doppler
-  pitch shift; before that, 3243/3245 was `P9-DYNAMIC-009`'s 3 new tests, closing `P9-DYNAMIC`'s
-  full task list, 3242/3244 was `P9-DYNAMIC-008`'s 1 new test, 3241/3243 was `P9-DYNAMIC-007`'s
-  1 new test, 3238/3240 was `P9-3D-003`'s 3 new tests, 3230/3232 was `P9-DYNAMIC-001..006`'s 8 new
-  tests, 3226/3228 was `P9-XACT-014/015`'s 5 new tests, 3212/3214 was `P9-XACT-011`'s 14 new
-  tests, and the earlier jump from 2102 was `develop`'s `feature/net` merge, not this branch's
-  work). The audio-scoped subset (§7's `--gtest_filter` audio suite list) is **344 / 344 pass**
-  under ASan+UBSan, up from 306.
+  hardware-dependent, expected) — up from 3250/3252 (`P9-3D-007`'s 6 new tests, pan formula
+  coverage; before that, 3246/3248 was `P9-3D-004/005`'s 4 new tests, real Doppler pitch shift,
+  3243/3245 was `P9-DYNAMIC-009`'s 3 new tests, closing `P9-DYNAMIC`'s full task list, 3242/3244
+  was `P9-DYNAMIC-008`'s 1 new test, 3241/3243 was `P9-DYNAMIC-007`'s 1 new test, 3238/3240 was
+  `P9-3D-003`'s 3 new tests, 3230/3232 was `P9-DYNAMIC-001..006`'s 8 new tests, 3226/3228 was
+  `P9-XACT-014/015`'s 5 new tests, 3212/3214 was `P9-XACT-011`'s 14 new tests, and the earlier
+  jump from 2102 was `develop`'s `feature/net` merge, not this branch's work). One unrelated
+  statistical test (`CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`) failed
+  once in a full run but passed consistently over 5 isolated repeats -- pre-existing randomness
+  in an un-seeded RNG-based test, not a regression. The audio-scoped subset (§7's `--gtest_filter`
+  audio suite list) is **350 / 350 pass** under ASan+UBSan, up from 306.
   Also verified clean under a full ASan+UBSan build of the audio suite (`P9-XACT-011` touches the
   shared `FilterState` mixing-thread interaction flagged risky by `P9-BUILD-001..007`;
   `P9-XACT-014`/`P9-DYNAMIC-001`/`P9-DYNAMIC-007`/`P9-DYNAMIC-009` re-verified after their
@@ -89,7 +92,22 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (most recent Fáze 9 groups, newest first)
 
-- **`P9-3D-004/005`** (not yet committed) — audited Doppler against FNA's `UpdatePitch()`
+- **`P9-3D-007`** (not yet committed) — added panning test coverage. `P9-3D-001`'s audit already
+  established SDL3_mixer has no `MIX_GetTrackStereo` getter, so `Apply3D`'s pan *result* can't be
+  read back off the track (unlike gain/frequency-ratio, used for `P9-3D-003`/`P9-3D-005`).
+  Extracted the pan formula (`dx/distance`, clamped) out of `Apply3D` into a new
+  `SoundEffectInstance::INTERNAL_calculatePan` private static method (matching the
+  `INTERNAL_calculateFilterCutoff` precedent from `P9-XACT-011`), exposed via
+  `SoundEffectInstanceTestAccess::CalculatePan` for direct unit testing -- a pure refactor, no
+  behavior change (all pre-existing `Apply3D*` tests pass unchanged). 6 new tests: emitter
+  directly right/left/ahead-or-behind (this linear approximation only accounts for the X axis --
+  documented, not a bug), a 45-degree diagonal, same position (avoids divide-by-zero), and
+  out-of-geometric-range clamping. `git stash` confirms the test file fails to *compile*
+  pre-refactor (no `CalculatePan` exists yet). Full suite 3256/3258 (2 expected hardware skips,
+  plus one unrelated un-seeded-RNG statistical test flake, confirmed non-reproducing over 5
+  isolated repeats), audio subset 350/350 under ASan+UBSan. Full detail: `plan_audio.md`'s
+  `P9-3D-007` note.
+- **`P9-3D-004/005`** (`ac9e92a9`) — audited Doppler against FNA's `UpdatePitch()`
   (`SoundEffectInstance.cs`) and FAudio's `F3DAudio.c` `CalculateDoppler`. Confirmed real Doppler
   is a **closed-form formula over `Position`/`Velocity`** (both already stored on
   `AudioListener`/`AudioEmitter`, just never read for this purpose -- the previous accepted
@@ -341,11 +359,11 @@ every item above: `plan_audio.md`'s "Phase 9" section.
 already-scoped task list) still has open work:
 
 - `P9-XACT` — **fully closed (15/15)**, see §3.
-- `P9-3D` (6/9 done, see §3) — the `Apply3D` stereo-source audit (confirmed: same accepted `CP-19`
+- `P9-3D` (7/9 done, see §3) — the `Apply3D` stereo-source audit (confirmed: same accepted `CP-19`
   deviation as the `Pan` property), the distance-attenuation formula audit + fix + tests
-  (`-003`/`-006`), and the Doppler audit + real implementation + tests (`-004`/`-005`, folding in
-  `-008`'s Doppler test coverage) are done; still open: panning tests beyond what already exists
-  (`-007`), and a consolidated limitations write-up (`-009`).
+  (`-003`/`-006`), the Doppler audit + real implementation + tests (`-004`/`-005`, folding in
+  `-008`'s Doppler test coverage), and additional panning test coverage (`-007`) are done; still
+  open: a consolidated limitations write-up (`-009`).
 - `P9-HARDWARE` (2/6 done, see §3) — `NoAudioHardwareException` audit and the
   `std::runtime_error`-vs-XNA-exception-type fix are done; still open: whether missing/corrupt
   XGS/XSB/XWB constructors should keep silently stubbing or throw (`P9-HARDWARE-003`, a separate,
@@ -528,29 +546,22 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 Fáze 9's own task list (`plan_audio.md`) is the source of truth; the user's explicit implementation
 order is exhausted through `P9-STOP`, `P9-XACT` is **fully closed (15/15)**, `P9-DYNAMIC` is
-**fully closed (9/9)**, `P9-HARDWARE` is 2/6 done, and `P9-3D` is 6/9 done. The remaining groups
+**fully closed (9/9)**, `P9-HARDWARE` is 2/6 done, and `P9-3D` is 7/9 done. The remaining groups
 have no user-specified priority among them — suggested order below is by "smallest
 independently-verifiable slice first":
 
-1. **Add panning tests beyond what already exists** (`P9-3D-007`). Goal: `Apply3D`'s pan
-   approximation (`dx/distance`, clamped) has coverage for distance attenuation and Doppler now,
-   but no dedicated test independently verifying pan itself (e.g. emitter directly left/right/
-   behind the listener) via `MIX_GetTrackStereo`... except SDL3_mixer has no stereo-gain getter
-   (`P9-3D-001`'s note) -- may need to verify indirectly (e.g. via `ProcessFilterSamplesForTest`-
-   style synchronous sample processing, or accept this stays undertested for the same reason
-   `CP-19`/`P9-3D-001` already found). Files: `SoundEffectInstanceTests.cpp`.
-2. **Document remaining 3D audio limitations** (`P9-3D-009`). Goal: a consolidated write-up of
+1. **Document remaining 3D audio limitations** (`P9-3D-009`). Goal: a consolidated write-up of
    what's real (pan, distance attenuation, Doppler) vs. accepted-deviation (elevation/HRTF,
    stereo crossfeed) for `Apply3D`, now that `P9-3D-001..008` have landed. Files: `CHECKLIST.md`,
    `docs/xna-4-api-coverage.md` (already partially updated during `P9-3D-004/005`).
-3. **Decide missing/corrupt XGS/XSB/XWB constructor behavior** (`P9-HARDWARE-003`). Goal: decide
+2. **Decide missing/corrupt XGS/XSB/XWB constructor behavior** (`P9-HARDWARE-003`). Goal: decide
    whether `AudioEngine`/`SoundBank`/`WaveBank` should keep silently stubbing on a missing/corrupt
    file (current behavior, `CHECKLIST.md` `CP-18`/`XA-9`) or throw -- a genuine open decision, not
    a clear-cut fix like `P9-HARDWARE-002` was, since ~80+ existing tests build on the current
    `SharedEngine()`-style stub-on-missing-file fixtures (see `CHECKLIST.md`'s existing note on
    `CP-18`). If changed, `P9-HARDWARE-004` updates the tests that lock in today's stub behavior.
    Needs the user's input before implementing either way.
-4. **Add no-audio-device test coverage** (`P9-HARDWARE-005`). Goal: a real regression test for
+3. **Add no-audio-device test coverage** (`P9-HARDWARE-005`). Goal: a real regression test for
    `GetMixer()`'s failure path (`P9-HARDWARE-002`) needs a fresh, isolated process with an invalid
    `SDL_AUDIODRIVER` set before anything else calls `GetMixer()` -- this repo's shared `CnaTests`
    binary can't exercise it (the mixer's cache is process-wide and once-ever-initialized). May
@@ -591,19 +602,20 @@ groups fully closed (P9-LIFECYCLE, P9-CATEGORY, P9-VALIDATION, P9-DOCS, P9-BUILD
 P9-XACT, P9-DYNAMIC -- P9-XACT's own 15-item and P9-DYNAMIC's own 9-item lists are now both fully
 done, the latter having uncovered/fixed a cross-cutting System::EventHandler<T> bug in
 ../sharp-runtime -- see §3/§4's dependency note), P9-HARDWARE is 2/6 done (the
-NoAudioHardwareException audit + its std::runtime_error-vs-XNA-exception-type fix), P9-3D is 6/9
+NoAudioHardwareException audit + its std::runtime_error-vs-XNA-exception-type fix), P9-3D is 7/9
 done (the Apply3D stereo-source audit, a real distance-attenuation formula bug found/fixed/
-tested, and real Doppler pitch shift implemented -- a closed-form formula needing no native 3D
-audio API), and 1 group is fully open (P9-AUDIT) -- see §4/§8. No known build/test blocker.
+tested, real Doppler pitch shift implemented, and pan test coverage added via an extracted
+directly-testable pure function), and 1 group is fully open (P9-AUDIT) -- see §4/§8. No known
+build/test blocker.
 
-1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3250/3252 pass, audio-scoped
-   subset 344/344 under ASan+UBSan) -- rebuild and rerun SDL_AUDIODRIVER=dummy
+1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3256/3258 pass, audio-scoped
+   subset 350/350 under ASan+UBSan) -- rebuild and rerun SDL_AUDIODRIVER=dummy
    ./cmake-build-debug/CnaTests (or the `tests` CMake preset, §7) to check for drift since this
    was last updated. If a test involving BufferNeeded/EventHandler fails unexpectedly, check
    whether ../sharp-runtime still has commit 8342a2c (§4's dependency note) before assuming an
    audio regression.
-2. Inspect only the files needed for the first §8 task (P9-3D-007: additional panning test
-   coverage) unless the user names something else -- don't refactor unrelated code.
+2. Inspect only the files needed for the first §8 task (P9-3D-009: consolidated 3D audio
+   limitations write-up) unless the user names something else -- don't refactor unrelated code.
    P9-HARDWARE-003 (missing/corrupt file constructor behavior) is a genuine open decision, not a
    clear-cut fix -- ask the user before implementing either way if it comes up.
 3. Make one small, verified improvement: if it's an audit, write the finding into plan_audio.md;

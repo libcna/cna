@@ -2139,7 +2139,27 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   `Apply3DAppliesInverseDistanceLawBeyondDistanceScale` (`SoundEffectInstanceTests.cpp`) cover the
   full-volume-within-scale, exact-boundary, and beyond-scale inverse-law cases via real
   `MIX_GetTrackGain` verification.
-* [ ] P9-3D-007 Add tests for panning left/right based on listener/emitter orientation.
+* [x] P9-3D-007 Add tests for panning left/right based on listener/emitter orientation.
+  *Note:* `P9-3D-001`'s audit already established SDL3_mixer has no `MIX_GetTrackStereo` getter,
+  so the *result* `Apply3D` sends to the track can't be verified by reading it back (unlike gain
+  and frequency-ratio, which do have getters and were used for `P9-3D-003`/`P9-3D-005`). Instead,
+  extracted the pan formula (`dx/distance`, clamped to `[-1,1]`) out of `Apply3D` into a new
+  `SoundEffectInstance::INTERNAL_calculatePan(dx, distance)` private static method (matching the
+  `INTERNAL_calculateFilterCutoff`/`INTERNAL_calculateFilterOneOverQ` precedent from
+  `P9-XACT-011`), exposed via `SoundEffectInstanceTestAccess::CalculatePan` for direct unit
+  testing without needing any `MIX_*` readback at all. `Apply3D` now calls this method instead of
+  inlining the formula -- a pure refactor, no behavior change (confirmed: all pre-existing
+  `Apply3D*` tests still pass unchanged). Added 6 new tests: emitter directly right (+1.0)/left
+  (-1.0)/ahead-or-behind (0.0, since this linear approximation only accounts for the X axis --
+  a documented limitation, not a bug), a 45-degree diagonal (1/√2 ≈ 0.7071), same position
+  (0.0, avoids divide-by-zero), and clamping when `dx` would exceed `distance` (defensive,
+  shouldn't happen geometrically). Verified via `git stash`: the test file fails to *compile*
+  against the pre-refactor code (no `CalculatePan`/`INTERNAL_calculatePan` exist yet), confirming
+  genuine dependency -- same proof pattern as `P9-XACT-008/009`'s parser-level tests. Full suite
+  3256/3258 (2 expected hardware skips; one unrelated statistical test,
+  `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`, failed once in a full run
+  but passed consistently over 5 isolated repeats -- pre-existing randomness, not a regression),
+  audio subset 350/350 under ASan+UBSan.
 * [x] P9-3D-008 Add tests for doppler behavior if implemented.
   *Note:* Folded into `P9-3D-005`'s own fix: `Apply3DAppliesDopplerPitchDownWhenEmitterRecedes`/
   `Apply3DAppliesDopplerPitchUpWhenEmitterApproaches`/

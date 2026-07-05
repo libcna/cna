@@ -574,6 +574,15 @@ namespace Microsoft::Xna::Framework::Audio
         return std::min(3.0f / static_cast<float>(qfactorRaw), 1.0f);
     }
 
+    float SoundEffectInstance::INTERNAL_calculatePan(float dx, float distance)
+    {
+        // A simplified linear pan approximation (SDL3_mixer has no true angular panning/HRTF):
+        // only the listener-to-emitter X displacement matters, normalized by distance and
+        // clamped to the Pan property's own [-1,1] range. `distance == 0` (same position) has no
+        // meaningful direction, so it centers (0.0f) rather than dividing by zero.
+        return (distance > 0.0f) ? std::clamp(dx / distance, -1.0f, 1.0f) : 0.0f;
+    }
+
     void SoundEffectInstance::INTERNAL_applyXactTrackFilter(
         uint8_t filterType, float frequencyHz, uint8_t qfactorRaw)
     {
@@ -661,9 +670,7 @@ namespace Microsoft::Xna::Framework::Audio
             ? std::clamp(1.0f / normalizedDistance, 0.0f, 1.0f)
             : 1.0f;
 
-        const float pan = (distance > 0.0f)
-            ? std::clamp(dx / distance, -1.0f, 1.0f)
-            : 0.0f;
+        const float pan = INTERNAL_calculatePan(dx, distance);
 
         // P9-3D-005: matches FNA's UpdatePitch() exactly ("doppler = dspSettings.DopplerFactor *
         // dopplerScale" when the global SoundEffect.DopplerScale is nonzero, else 1.0f/no-op).

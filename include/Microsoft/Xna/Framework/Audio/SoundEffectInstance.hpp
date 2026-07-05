@@ -119,6 +119,13 @@ namespace Microsoft::Xna::Framework::Audio
         NOXNA static float INTERNAL_calculateFilterCutoff(float frequencyHz, float sampleRate);
         NOXNA static float INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw);
 
+        // P9-3D-007: `Apply3D`'s pan approximation (listener-to-emitter X displacement over
+        // distance, clamped to [-1,1]), split out so it's independently unit-testable --
+        // SDL3_mixer has no `MIX_GetTrackStereo` getter (unlike gain/frequency-ratio), so the
+        // *result* of `Apply3D`'s pan computation can't be verified by reading the track back;
+        // this pure function can be tested directly instead.
+        NOXNA static float INTERNAL_calculatePan(float dx, float distance);
+
         // Test-only hook (SoundEffectInstanceTestAccess): runs this instance's filter state
         // through the exact same math the real SDL3_mixer callback uses, but synchronously and
         // directly -- the real callback only fires asynchronously from the mixing thread, which
