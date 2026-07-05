@@ -27,7 +27,7 @@ bone-retargeting step at all.
 - [x] Task 11.3 — `generate_materials.py`: 5 flat-color placeholder materials, Skin assigned to the body.
 - [x] Task 11.4 — `generate_morphs.py`: `Smile`/`Blink` shape keys on the body mesh.
 - [x] Task 11.5 — `generate_hair.py` / `generate_clothes.py`: helmet-like hair cap, Shirt/Pants/Shoes shells.
-- [ ] Task 11.6 — `generate_animations.py`
+- [x] Task 11.6 — `generate_animations.py`: `Stand0`/`Wave` Actions; confirmed real elbow/sleeve tearing under bend.
 - [ ] Task 11.7 — `export_gltf.py` / `generate_avatar.py`
 - [ ] Task 11.8 — `validate_gltf.py`
 
@@ -207,3 +207,43 @@ for reuse by `generate_avatar.py` (Task 11.7).
 Verify: `blender --background --python tools/avatar_builder/generate_hair.py` runs
 without error and asserts the hair mesh is non-empty, has a vertex group for `Head`, and
 has the `Hair` material assigned.
+
+## Placeholder animations (`generate_animations.py`)
+
+Two Blender Actions on `CNAAvatarSkeleton`, named to match `AvatarAnimationPreset`
+exactly (see `AvatarAnimationPresetToClipNameEXT`):
+
+- **`Stand0`** (idle, 90 frames, loops — frame 1 and frame 90 are identical): a subtle
+  `Hips` bob (+-0.01 m) and `Spine1` rock (+-2 deg).
+- **`Wave`** (60 frames, plays once): `UpperArm.R` rotates to raise the arm, then
+  `LowerArm.R` folds the elbow back and forth a few times before both return to rest.
+
+Both are simple keyframed bone rotations — no motion capture, no external clip source —
+authored directly against the Task 11.1 bone names, so there is no retargeting step.
+
+**A real gotcha, worth knowing before adding a third animation:** the first `Wave`
+attempt keyframed `LowerArm.R`'s rotation on its local Y axis, which is the bone's own
+head-to-tail length axis — rotating a round cylinder around its own length axis is an
+invisible twist. This produced a "working" action (nonzero frame range, no errors) that
+did *nothing visible* when rendered. Caught only by actually rendering it and comparing
+frames. Local X (or Z, depending on the bone's orientation/roll) is what visibly bends a
+limb — verify any new bone-rotation animation by rendering it, not just by checking that
+keyframes exist.
+
+`build_animations(armature_obj)` is importable the same way as the other builders, for
+reuse by `generate_avatar.py` (Task 11.7).
+
+Verify: `blender --background --python tools/avatar_builder/generate_animations.py` runs
+without error and asserts both actions exist with a nonzero frame range.
+
+### Bend-artifact check (deferred from Task 11.2, done here)
+
+Posing the full clothed avatar through `Wave`'s peak elbow-fold frames and rendering a
+close-up confirms a **real, visible tear** at the elbow/wrist: the forearm and hand
+separate from the shirt sleeve (and slightly from each other) at both fold extremes
+tested. This is the automatic-weights limitation Task 11.2 always expected, now
+*confirmed* rather than assumed. **Still open, not fixed:** a manual weight-painting
+correction pass at the elbows (and likely knees/shoulders too, untested at comparable
+fold angles) is needed before this rig is presentable in motion. Out of scope for Tasks
+11.1–11.8's "functional, not polished" pipeline milestone — revisit when polish work is
+prioritized (`plan_net.md` Phase 11c).

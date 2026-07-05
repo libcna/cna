@@ -945,10 +945,27 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   figure — hair, short-sleeve shirt, pants, and shoes all visually distinct and
   correctly colored/positioned.
 
-- [ ] **Task 11.6** — `tools/avatar_builder/generate_animations.py`  
+- [x] **Task 11.6** — `tools/avatar_builder/generate_animations.py`  
   Placeholder animations `Stand0` (idle) and `Wave`, keyframed directly on the Task 11.1 skeleton
   (simple bone rotations — no motion capture, no external clip source). Because this script and
   Task 11.1 share the same bone names by construction, there is no retargeting step.
+  **Done:** `generate_animations.py` builds `Stand0` (subtle `Hips` bob + `Spine1` rock,
+  looping over 90 frames) and `Wave` (right-arm raise via `UpperArm.R` + an elbow-fold
+  oscillation via `LowerArm.R`, 60 frames) as Blender Actions on `CNAAvatarSkeleton` via
+  `build_animations()`. First attempt keyframed `LowerArm.R`'s local Y axis for the
+  oscillation, which turned out to be an invisible twist on a round cylinder (caught by
+  rendering it and seeing no silhouette change); switched to local X, which visibly
+  folds the elbow. Verified: headless run asserts both actions exist with a nonzero
+  frame range; a manual render sequence confirmed the raise and fold are visually real,
+  not just numeric.
+  **Also completed the bend-artifact visual check deferred since Task 11.2:** posed the
+  clothed avatar through `Wave`'s peak fold frames and rendered a close-up of the
+  elbow/wrist — confirms a real, visible tear (the forearm/hand separate from the
+  sleeve and from each other at the fold) at both fold extremes. This is the expected
+  automatic-weights limitation, not a surprise, but is now a *confirmed* fact rather
+  than an assumption — a manual weight-painting correction pass at elbows/shoulders is
+  needed before this is presentable, and is explicitly still open (not part of Task
+  11.6's scope; see `tools/avatar_builder/README.md`).
 
 - [ ] **Task 11.7** — `tools/avatar_builder/export_gltf.py` + `tools/avatar_builder/generate_avatar.py`  
   Orchestrates Tasks 11.1–11.6 and exports via `bpy.ops.export_scene.gltf(...)`. Driven headless:
