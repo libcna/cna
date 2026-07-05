@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <limits>
+
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp"
 #include "System/TimeSpan.hpp"
 
@@ -33,6 +36,30 @@ TEST(AndroidSensorBridgeTests, ZeroTimeBetweenUpdatesFloorsToOneMicrosecond)
 TEST(AndroidSensorBridgeTests, SubMicrosecondIntervalFloorsToOneMicrosecond)
 {
     EXPECT_EQ(ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(TimeSpan::FromMilliseconds(0.0001)), 1);
+}
+
+// Micro-cleanup pass, Task 4: a requested interval converted to
+// microseconds as a double can exceed what std::int32_t can represent
+// (e.g. TimeSpan::MaxValue is on the order of 10^17 milliseconds) --
+// static_cast-ing an out-of-range double to std::int32_t is undefined
+// behavior, not a saturating truncation, so this must clamp explicitly
+// rather than rely on the cast itself.
+TEST(AndroidSensorBridgeTests, MaxValueTimeSpanClampsToInt32Max)
+{
+    EXPECT_EQ(
+        ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(TimeSpan::MaxValue),
+        std::numeric_limits<std::int32_t>::max());
+}
+
+TEST(AndroidSensorBridgeTests, HugeButNotMaxTimeSpanClampsToInt32Max)
+{
+    // 10^12 milliseconds (roughly 31,700 years) is comfortably beyond
+    // INT32_MAX microseconds (~35.8 minutes) but far short of
+    // TimeSpan::MaxValue -- checks the clamp triggers well before the
+    // representable limit of TimeSpan itself, not only at the extreme end.
+    EXPECT_EQ(
+        ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(TimeSpan::FromMilliseconds(1e12)),
+        std::numeric_limits<std::int32_t>::max());
 }
 
 // Task DEVICES-0074/0084: on this desktop (non-Android) build, every

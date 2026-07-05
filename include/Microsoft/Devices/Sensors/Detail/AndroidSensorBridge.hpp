@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 
 #include "System/DateTimeOffset.hpp"
@@ -19,16 +20,29 @@ namespace Microsoft::Devices::Sensors::Detail
      * without needing a real Android sensor queue. Floors at 1 microsecond
      * — a non-positive or sub-microsecond requested interval is clamped up
      * rather than passed through as 0 or negative, which the NDK does not
-     * document a defined meaning for.
+     * document a defined meaning for. Ceils at `INT32_MAX` — a huge
+     * requested interval (e.g. `TimeSpan::MaxValue`) converted to
+     * microseconds as a `double` can exceed what `std::int32_t` can
+     * represent, and `static_cast`-ing an out-of-range `double` to
+     * `std::int32_t` is undefined behavior, not just a saturating
+     * truncation.
      *
      * @param timeBetweenUpdates Requested update interval.
-     * @return Equivalent microsecond value, at least 1.
+     * @return Equivalent microsecond value, clamped to `[1, INT32_MAX]`.
      */
     [[nodiscard]] inline std::int32_t ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(
         const System::TimeSpan& timeBetweenUpdates)
     {
         const double requestedMicroseconds = timeBetweenUpdates.getTotalMillisecondsProperty() * 1000.0;
-        return requestedMicroseconds > 1.0 ? static_cast<std::int32_t>(requestedMicroseconds) : 1;
+        if (requestedMicroseconds <= 1.0)
+        {
+            return 1;
+        }
+        if (requestedMicroseconds >= static_cast<double>(std::numeric_limits<std::int32_t>::max()))
+        {
+            return std::numeric_limits<std::int32_t>::max();
+        }
+        return static_cast<std::int32_t>(requestedMicroseconds);
     }
 
     /**
@@ -168,6 +182,22 @@ namespace Microsoft::Devices::Sensors::Detail
          * sensor queue was created and enabled); false if this sensor type
          * is unavailable, if delivery could not actually be started, or if
          * this bridge was already started.
+         *
+         * @note Thread safety: the "already started" check, the worker
+         * thread's setup (callback/interval fields, spawning the thread
+         * itself), and Stop()'s matching "is a worker currently running"
+         * check are all guarded by one internal mutex, so two threads
+         * calling Start() concurrently (or one calling Start() while
+         * another calls Stop()) cannot corrupt this bridge's internal
+         * `std::thread` handle. That mutex is never held across this
+         * method's own bounded wait for the worker's startup handshake, so
+         * it cannot deadlock against Stop(). What remains unsupported: two
+         * or more *external* (non-worker) threads calling Stop()
+         * concurrently on the same bridge — see Stop()'s own note. Callers
+         * that need genuinely concurrent Start()/Stop() from multiple
+         * threads must serialize those calls themselves (this bridge is
+         * designed for the single-owner-thread usage `Compass`/`Motion`
+         * already give it).
          */
         bool Start(const System::TimeSpan& timeBetweenUpdates, SampleCallback callback);
 
@@ -181,6 +211,22 @@ namespace Microsoft::Devices::Sensors::Detail
          * still leaves (detaches rather than joins in that one case,
          * mirroring Accelerometer's own documented "destroying from within
          * your own callback" limitation rather than fully solving it).
+         *
+         * @note Thread safety: the initial "is a worker running" check and
+         * the stop signal (setting the stop flag, waking the looper) are
+         * guarded by the same internal mutex Start() uses, which is
+         * released again before this method's own blocking `join()` (or the
+         * reentrant case's non-blocking `detach()`) — never held across
+         * either, so a reentrant self-stop from the worker's own callback
+         * cannot deadlock against it. **Still unsupported, not fixed by
+         * that mutex:** calling Stop() concurrently from two or more
+         * distinct *external* (non-worker) threads on the same bridge at
+         * the same time. Only one caller may safely be "the" thread that
+         * stops a given bridge at a time; concurrent external callers must
+         * be serialized by the caller (matching Start()'s own note, and
+         * `Compass`/`Motion`'s existing single-owner-thread usage — neither
+         * class itself serializes concurrent `Stop()`/`Dispose()` calls
+         * below its own `SensorBase<T>`-level disposal guard).
          *
          * @note This bridge's internal worker state (the `Impl` this class
          * privately owns) is kept alive by the worker thread itself for as
