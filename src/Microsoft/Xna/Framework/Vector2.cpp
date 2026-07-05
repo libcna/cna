@@ -103,7 +103,11 @@ namespace Microsoft::Xna::Framework
     }
 
     bool Vector2::Equals(const Vector2& other) const { return X == other.X && Y == other.Y; }
-    int Vector2::GetHashCode() const { return FloatHash(X) + FloatHash(Y); }
+    int Vector2::GetHashCode() const
+    {
+        // Unsigned wraparound avoids signed-overflow UB (UBSan, INPUT-BUILD-006); result unchanged.
+        return static_cast<int>(static_cast<unsigned>(FloatHash(X)) + static_cast<unsigned>(FloatHash(Y)));
+    }
     float Vector2::Length() const { return std::sqrt((X * X) + (Y * Y)); }
     float Vector2::LengthSquared() const { return (X * X) + (Y * Y); }
 

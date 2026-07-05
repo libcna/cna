@@ -28,6 +28,17 @@ if(CNA_ENABLE_NET)
     cna_configure_vendored_enet()
 endif()
 
+# Optional sanitizers (INPUT-BUILD-006 / INPUT-CI-005). Empty = off. Comma-separated clang/gcc
+# sanitizer list, e.g. -DCNA_SANITIZE=address,undefined. Applied from here on, so CNA, sharp-runtime,
+# and the tests are instrumented; the vendored SDL/ENet builds above stay uninstrumented (ASan/UBSan
+# tolerate mixing). For diagnostics/CI only — never ship a sanitized build.
+set(CNA_SANITIZE "" CACHE STRING "Comma-separated sanitizers to enable (e.g. address,undefined); empty disables")
+if(CNA_SANITIZE)
+    message(STATUS "CNA: sanitizers enabled: ${CNA_SANITIZE}")
+    add_compile_options(-fsanitize=${CNA_SANITIZE} -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=${CNA_SANITIZE})
+endif()
+
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime/CMakeLists.txt")
     message(FATAL_ERROR

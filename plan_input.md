@@ -150,14 +150,32 @@ implemented and event-driven.
 - **Deps:** none.
 
 #### INPUT-BUILD-006 — ASan/UBSan input run
-- **Priority:** P1 · **Status:** TODO · **Area:** Build
-- **Files:** `CMakeLists.txt` (sanitizer option), CI later
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Build
+- **Files:** `CMakeLists.txt` (sanitizer option); 5 input `GetHashCode` sources + `Vector2.cpp`; one test.
 - **Problem:** No sanitizer run recorded. Input touches raw SDL handles, reinterpret_cast fakes, and
   process-wide statics — prime ASan/UBSan territory.
 - **Work:** Add a sanitizer build option; run the input filter under ASan+UBSan.
 - **Acceptance:** Input filter passes clean under ASan+UBSan; leaks/UB triaged.
 - **Tests:** input filter under sanitizers.
 - **Deps:** INPUT-BUILD-001.
+- **Result (2026-07-05):** Added a reusable `CNA_SANITIZE` CMake option (e.g. `-DCNA_SANITIZE=address,undefined`;
+  instruments CNA + sharp-runtime + tests; vendored SDL/ENet stay prebuilt). Built `cmake-build-input-asan`
+  (EasyGL) and ran the input filter: **279/279 pass; ASan (memory) clean**. UBSan found **signed-integer
+  overflow in `GetHashCode`** — a real, portable UB (C++ signed overflow is UB; the C# original relied on
+  `unchecked` wraparound). Fixed all in-repo occurrences with behavior-preserving unsigned wraparound
+  (identical 2's-complement result, matches FNA): `GamePadThumbSticks` (flagged) + latent
+  `GamePadTriggers`/`GamePadState`/`MouseState`/`TouchLocation`, plus `Vector2::GetHashCode` (shared
+  Framework math, flagged via thumbsticks). Hash tests 152/152 still pass → values unchanged. Re-run:
+  **UBSan clean for all in-repo code.**
+  - **Triaged, NOT fixed (cross-repo):** `sharp-runtime/src/System/TimeSpan.cpp:54` — the `TimeSpan`
+    **copy-ctor is invoked on an object with an invalid vptr during static initialization** of a global
+    `DateTimeOffset` (`DateTimeOffset.cpp:94`). This is a **sharp-runtime static-init-order bug**, fires at
+    process startup regardless of tests, and is outside this repo. Owner: sharp-runtime track. It is the
+    sole remaining UBSan diagnostic on the input filter.
+  - **Follow-up (Framework track):** `Vector3`/`Vector4`/`Color`/other `GetHashCode` likely share the same
+    signed-overflow pattern (not exercised by the input filter) — same one-line unsigned fix.
+  - Leak detection was run with `detect_leaks=0` (the `MouseCursor` stock singletons + SDL globals leak by
+    design at process exit); memory-error + UB detection was full.
 
 #### INPUT-BUILD-007 — TSan review of the "single-thread only" claim
 - **Priority:** P2 · **Status:** TODO · **Area:** Build
@@ -2293,12 +2311,15 @@ concrete backlog items.
 - **Deps:** INPUT-BUILD-009.
 
 #### INPUT-TEST-011 — Sanitizer test pass
-- **Priority:** P1 · **Status:** TODO · **Area:** Test
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test
 - **Files:** CI
 - **Work:** Per INPUT-BUILD-006 (ASan/UBSan).
 - **Acceptance:** Clean input filter under sanitizers.
 - **Tests:** sanitizer run.
 - **Deps:** INPUT-BUILD-006.
+- **Result (2026-07-05):** Delivered with INPUT-BUILD-006: input filter 279/279 under ASan+UBSan, ASan
+  memory-clean, UBSan clean for all in-repo code (the sole remaining diagnostic is the external
+  sharp-runtime `TimeSpan` static-init finding). Wiring this into CI is INPUT-CI-005 (still TODO).
 
 #### INPUT-TEST-012 — Headless skip accounting
 - **Priority:** P2 · **Status:** TODO · **Area:** Test

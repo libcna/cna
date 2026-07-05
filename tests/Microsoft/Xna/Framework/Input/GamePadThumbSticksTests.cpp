@@ -56,8 +56,9 @@ TEST(GamePadThumbSticksTest, GetHashCodeMatchesLeftPlus37TimesRightFormula)
 {
     const GamePadThumbSticks sticks(Vector2(0.1f, 0.2f), Vector2(0.3f, 0.4f));
 
-    const int expected = sticks.getLeftProperty().GetHashCode() +
-                          37 * sticks.getRightProperty().GetHashCode();
+    const int expected = static_cast<int>(
+        static_cast<unsigned>(sticks.getLeftProperty().GetHashCode()) +
+        37u * static_cast<unsigned>(sticks.getRightProperty().GetHashCode()));
     EXPECT_EQ(sticks.GetHashCode(), expected);
 }
 

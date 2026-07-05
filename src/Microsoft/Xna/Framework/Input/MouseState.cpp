@@ -53,7 +53,10 @@ namespace Microsoft::Xna::Framework::Input
 
     int MouseState::GetHashCode() const
     {
-        return x_ ^ (y_ * 31) ^ (scrollWheelValue_ * 17);
+        // Unsigned wraparound avoids signed-overflow UB in the *31 / *17 terms (INPUT-BUILD-006).
+        return static_cast<int>(static_cast<unsigned>(x_)
+                                ^ (static_cast<unsigned>(y_) * 31u)
+                                ^ (static_cast<unsigned>(scrollWheelValue_) * 17u));
     }
 
     std::string MouseState::ToString() const

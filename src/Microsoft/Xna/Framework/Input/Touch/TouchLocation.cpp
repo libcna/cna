@@ -59,7 +59,9 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     int TouchLocation::GetHashCode() const
     {
-        return id_ + position_.GetHashCode();
+        // Unsigned wraparound avoids signed-overflow UB (INPUT-BUILD-006); result is unchanged.
+        return static_cast<int>(static_cast<unsigned>(id_)
+                                + static_cast<unsigned>(position_.GetHashCode()));
     }
 
     std::string TouchLocation::ToString() const

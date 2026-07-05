@@ -49,7 +49,9 @@ namespace Microsoft::Xna::Framework::Input
 
     int GamePadTriggers::GetHashCode() const
     {
-        return System::Single::GetHashCode(left_) + System::Single::GetHashCode(right_);
+        // Unsigned wraparound avoids signed-overflow UB (INPUT-BUILD-006); result is unchanged.
+        return static_cast<int>(static_cast<unsigned>(System::Single::GetHashCode(left_))
+                                + static_cast<unsigned>(System::Single::GetHashCode(right_)));
     }
 
     bool operator==(const GamePadTriggers& left, const GamePadTriggers& right)
