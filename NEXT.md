@@ -13,8 +13,8 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–38 are complete. **Phase 39 (RenderTarget2D and
-  RenderTargetCube completeness, `GRAPHICS_TASKS.md` Tasks 331–340) is open** — Tasks 331–333 done,
-  **Task 334 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
+  RenderTargetCube completeness, `GRAPHICS_TASKS.md` Tasks 331–340) is open** — Tasks 331–334 done,
+  **Task 335 is next** (see §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent
   closed phases have synthesis docs: `docs/sampler-state-support.md` (Phase 35),
   `docs/depthstencilstate-support.md` (Phase 37), `docs/rasterizerstate-support.md` (Phase 38).
 - **Key architectural decisions:**
@@ -43,17 +43,20 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   3223/3223 (100%) pass.
 
 ### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 3311/3314 pass. 3 pre-existing/documented failures (see §5):
+- **EasyGL, full `ctest -j1`:** 3312/3315 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-  (Total test count grew from the previously-recorded 2304 to 3314 — this session's full run is the
-  first re-count since several other phases/branches merged in; no regression, same 3 failures.)
-- **Vulkan, full `ctest -j1`:** 3237/3250 pass. 13 pre-existing/documented failures (see §5):
-  5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
-  `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
-  `Vulkan_FillMode_WireFrame` (order-dependent flakiness — only one of `Vulkan_RenderTargetUsage`/
-  `Vulkan_FillMode_WireFrame` fails per run; this run it was `Vulkan_FillMode_WireFrame`).
-- **Bgfx, full `ctest -j1`:** 3223/3223 (100%) pass — rebuilt and re-verified this session
-  (Task 333), including the new `Bgfx_RenderTarget2D_SampleAfterUnbind` test.
+- **Vulkan, full `ctest -j1`:** 3237/3251 pass. 14 documented failures (see §5): the same 13
+  pre-existing ones (5× `Vulkan_BlendState_*` Task 868, 5× `Vulkan_DepthStencilState_*` Task 870,
+  `Vulkan_GraphicsDevice_ReferenceStencil` Task 872, `Vulkan_DepthBias` one sub-case,
+  `Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame` order-dependent flakiness — only one of
+  the two fails per run), **plus one new, correctly-failing test**: `Vulkan_RenderTargetCube_SampleAfterUnbind`
+  (Task 334/876 — a genuine confirmed bug, not a false pass; the test is *supposed* to fail until
+  Task 876 is fixed).
+- **Bgfx, full `ctest -j1`:** 3224/3224 (100%) pass — rebuilt and re-verified this session
+  (Tasks 333–334), including the new `Bgfx_RenderTarget2D_SampleAfterUnbind` and
+  `Bgfx_RenderTargetCube_SampleAfterUnbind` smoke tests (both pass — Bgfx's Tasks 873/874 bugs are
+  silent-wrong-data, not crashes, so they don't fail these smoke tests; they're unverifiable
+  pixel-wise since Bgfx has no GPU readback).
 - **Caution:** run EasyGL's and Vulkan's full `ctest` suites **sequentially, never concurrently**
   — concurrent runs previously produced transient GPU/driver-contention false failures. If a
   single run shows an anomaly beyond the documented list, re-run that test in isolation before
@@ -76,6 +79,8 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - `RenderTargetCube`: constructor, `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`/
   `IsContentLost`/`ContentLost` all match FNA at the property level; `GetTypeName()` now correctly
   reports `"...RenderTargetCube"` instead of the inherited `"...TextureCube"` (Task 332).
+  Sampling a `RenderTargetCube` back out via `EnvironmentMapEffect` after unbinding is
+  pixel-verified working on **EasyGL only** (Task 334) — see below for Vulkan/Bgfx gaps.
 
 ### What does NOT work yet
 - **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
@@ -98,7 +103,15 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - On Bgfx, `SpriteBatch::Draw`ing a `RenderTarget2D` as a texture reads the wrong handle type
   (`BgfxRenderTargetBackend::fbo` instead of `::colorTex`, via an invalid `static_cast` to the
   unrelated `BgfxTextureBackend` type) — confirmed by layout analysis, doesn't crash but samples
-  wrong/garbage data (Task 873, found this session).
+  wrong/garbage data (Task 873).
+- Same bug shape on Bgfx for `RenderTargetCube` sampled via `EnvironmentMapEffect` — reads
+  `BgfxRenderTargetCubeBackend::fbo` instead of `::cubeTex` (Task 874, found this session).
+- On Vulkan, `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` with **no draw call**
+  in between never gets a render pass recorded — the RT's image stays `VK_IMAGE_LAYOUT_UNDEFINED`
+  forever (Task 875, found this session).
+- On Vulkan, sampling a `RenderTargetCube` via `EnvironmentMapEffect` after unbinding renders
+  black instead of its actual rendered content, even with a real draw call into each face —
+  root cause not yet isolated (Task 876, found this session).
 
 ---
 
@@ -109,6 +122,7 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 
 | Commit / Task | Change |
 |---|---|
+| Task 334 | Verified `RenderTargetCube` can be sampled as `TextureCube` after unbinding, via `EnvironmentMapEffect` — no existing test covered this at all (Task 142's `vulkan_rtcube_test.cpp` renders into all 6 faces but never samples the cube back out). Wrote new tests on all 3 backends. **EasyGL: PASSES**, exact blue match, architecturally sound (virtual `BindGL()` dispatch, no unsafe cast). **Vulkan: FAILS, two distinct real bugs found**: (1) a `Clear()`-only version of the test showed every cube face stuck at `VK_IMAGE_LAYOUT_UNDEFINED` — `VulkanGraphicsBackend::Clear()` only sets a global clear-colour scalar and never registers the bound RT as "used" (only an actual draw call does) — tracked as **Task 875**. (2) After switching to a real `SpriteBatch` draw per face (working around #1), the test still renders black instead of blue — root cause not isolated (candidates: `SpriteBatch`-into-cube-face correctness was never itself pixel-verified before now, or `EnvironmentMapEffect`'s descriptor-set caching) — tracked as **Task 876**. A render-pass-compatibility validation warning also appears but is a confirmed red herring (present in Task 142's own already-passing test too). **Bgfx: same unsafe-cast bug shape as Task 873**, confirmed by layout analysis (`static_cast<BgfxTextureCubeBackend&>` on a `BgfxRenderTargetCubeBackend` reads `fbo` where `handle` should be) — tracked as **Task 874**, doesn't crash (new smoke test confirms), can't be pixel-verified. EasyGL ctest: 3312/3315 (unchanged, 3 documented). Vulkan ctest: 3237/3251 (13 documented + 1 new correctly-failing test). Bgfx ctest: 3224/3224 (100%). |
 | Task 333 | Verified `RenderTarget2D` can be sampled as `Texture2D` after unbinding. EasyGL (Task 87) and Vulkan (Task 148) already had passing pixel tests doing exactly this — reconfirmed, no change needed. **Found and confirmed a new, severe, previously-only-suspected Bgfx bug** (Task 179's test had an informal comment guessing at it): `BgfxSpriteBatchBackend::Draw` casts a `RenderTarget2D`'s backend (`BgfxRenderTargetBackend`) to the unrelated `BgfxTextureBackend` type via `static_cast`, reading its `fbo` (framebuffer handle) where `textureHandle` should be — confirmed by direct memory-layout analysis (both are `struct { uint16_t idx; }`, so it compiles and doesn't crash, but samples a framebuffer-pool handle as if it were a texture-pool handle). New `bgfx_render_target_sample_test.cpp` (`Bgfx_RenderTarget2D_SampleAfterUnbind`) confirms no crash (consistent with silent wrong-data sampling, not an error). Tracked as Task 873, not fixed here (needs a scoped Bgfx-only fix plus non-visual verification, since Bgfx has no pixel readback). Rebuilt and fully re-verified Bgfx this session: 3223/3223 (100%), first full run in several sessions. EasyGL: 3311/3314 (unchanged). Vulkan: 3237/3250 (unchanged). |
 | Task 332 | Audited `RenderTargetCube` against FNA's `RenderTargetCube.cs` line-by-line — same shape as Task 331, one class over. Most of it already matched FNA (unlike `RenderTarget2D`, `RenderTargetCube` already had `IsContentLost`/`ContentLost`). **Fixed**: `GetTypeName()` was never overridden, so a `RenderTargetCube` reported itself as `"...TextureCube"` — added the override. **Confirmed the known lead** (`mipMap`/`MultiSampleCount` silently ignored) is the same shape as Tasks 336/337, already covered by those general tasks, not new. **Found and deliberately did NOT fix** (architecture-blocked): tried to add `RenderTarget2D`'s `Dispose(bool)` "still bound" guard, but it doesn't compile — `RenderTargetBinding` only stores `Texture*`, and `RenderTargetCube` doesn't inherit `Texture` (Task 863). Also confirmed `GraphicsDevice::SetRenderTarget(RenderTargetCube*, CubeMapFace)` never records the binding at all, so `GetRenderTargets()` can never see a bound cube face — a direct consequence of Task 863, not a new independent bug. New test `examples/easygl_rendertargetcube_properties_test.cpp` (`EasyGL_RenderTargetCube_Properties`/`Vulkan_RenderTargetCube_Properties`, 15/15 both backends). EasyGL ctest: 3311/3314. Vulkan ctest: 3237/3250 (both: only documented pre-existing failures). |
 | `3fdb6c6` Task 331 | **Opens Phase 39.** Audited `RenderTarget2D` against FNA line-by-line. Fixed a real gap: added missing `IsContentLost`/`ContentLost` (mirroring `RenderTargetCube`). Found and deliberately deferred two gaps to dedicated tasks: `mipMap` ignored (Task 336), `MultiSampleCount` not clamped/wired (Task 337). New pixel-free property test on both backends (15/15 pass each). |
@@ -165,6 +179,9 @@ visible via dedicated pixel tests or direct code reading.
 | Confirmed, silent failure | `Texture2D::SetData(level>0,...)` no-op on Vulkan/Bgfx; EasyGL renders solid black for mip filters on mip-incomplete textures. | Task 867 |
 | Confirmed, architectural, not fixed | `Texture3D`/`TextureCube` can't be sampled in any shader — don't inherit `Texture`. | Task 863 |
 | Confirmed, severe, silent failure, not fixed | Bgfx: `SpriteBatch::Draw`ing a `RenderTarget2D` reads a framebuffer handle where a texture handle is expected (`static_cast` to an unrelated backend type) — samples wrong data, doesn't crash, can't be pixel-verified (no Bgfx GPU readback). | Task 873 |
+| Confirmed, severe, silent failure, not fixed | Bgfx: same bug shape as Task 873 for `RenderTargetCube` sampled via `EnvironmentMapEffect` — reads `BgfxRenderTargetCubeBackend::fbo` where `cubeTex` should be. | Task 874 |
+| Confirmed, real, not fixed | Vulkan: `SetRenderTarget`+`Clear()` with no draw call in between never records a render pass — target's image stays `VK_IMAGE_LAYOUT_UNDEFINED` forever. | Task 875 |
+| Confirmed, real, not fixed, root cause not isolated | Vulkan: sampling a `RenderTargetCube` via `EnvironmentMapEffect` after unbinding renders black instead of actual content, even with a real draw call per face. | Task 876 |
 | Confirmed, architectural, deliberate | `GraphicsDevice` stores state objects by value, unlike FNA's reference-type aliasing. No game code here relies on FNA's behavior. | Task 869 |
 | Confirmed bug | `SpriteBatch` with multiple `Begin()`/`End()` per frame on Vulkan: only the last batch renders. | — |
 | Confirmed, incomplete | `SpriteBatch`'s `SamplerState` (`Begin()`) is a no-op on Vulkan/Bgfx (EasyGL only). | — |
@@ -267,48 +284,79 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 334 — verify `RenderTargetCube` can be sampled as `TextureCube` after unbinding**
-   - Goal: same shape as Task 333 (just done), one class over. Render into a face of a
-     `RenderTargetCube` (`SetRenderTarget(rt, face)`), unbind it, then sample the whole cube via
-     `EnvironmentMapEffect` (per the task's own hint) and pixel-verify the result on EasyGL and
-     Vulkan. Unlike `RenderTarget2D`, `RenderTargetCube` doesn't hit the `Texture*`-only
-     `RenderTargetBinding` restriction here — it inherits `TextureCube` directly, so this sampling
-     path should work in principle; the point of this task is to actually prove it does.
-   - Files: check for an existing EasyGL/Vulkan cube-render-to-texture example first
-     (`easygl_env_map_test.cpp`/`vulkan_env_map_test.cpp` sample a static cube map — see if any
-     existing test already renders INTO a `RenderTargetCube` face and then samples it back out);
-     likely needs a new `examples/*_rendertargetcube_sample_after_unbind_test.cpp`.
-   - Verification: new pixel-readback test on EasyGL and Vulkan. Bgfx: given Task 333 just found a
-     confirmed handle-cast bug (Task 873) affecting `RenderTarget2D` sampling via `SpriteBatch` on
-     Bgfx, check whether the same or an analogous bug affects `RenderTargetCube` sampling via
-     `EnvironmentMapEffect`'s cube-texture binding path before assuming Bgfx coverage is out of
-     scope here.
+1. **`GRAPHICS_TASKS.md` Task 335 — verify depth buffer creation for render targets**
+   - Goal: confirm `RenderTarget2D`/`RenderTargetCube`'s `DepthStencilFormat` actually results in a
+     real, usable depth (and stencil, where applicable) buffer on each backend — e.g. draw two
+     overlapping quads at different depths into a render target with `DepthFormat::Depth24Stencil8`
+     and pixel-verify the nearer one wins, mirroring how depth tests are already pixel-verified for
+     the backbuffer (Phase 37).
+   - Files: likely a new `examples/*_rendertarget_depth_test.cpp`-style integration test per
+     backend; check `EasyGLRenderTargetBackend`/`VulkanRenderTargetBackend`/
+     `BgfxRenderTargetBackend`'s constructors for how (or whether) `hasDepth`/`DepthFormat` is
+     actually wired to a real depth attachment.
+   - Verification: new pixel-readback test on EasyGL and Vulkan (Bgfx: same GPU-readback
+     limitation as always — smoke-test bind/draw/unbind without crashing).
 
-2. **`GRAPHICS_TASKS.md` Task 873 — fix Bgfx's wrong-handle-type cast when sampling a `RenderTarget2D`**
-   - Goal: `BgfxSpriteBatchBackend::Draw` (`BgfxGraphicsBackend.cpp`) casts any `ITextureBackend` to
-     `BgfxTextureBackend` via `static_cast`, but a `RenderTarget2D`'s backend is a
-     `BgfxRenderTargetBackend` (unrelated sibling class) — this reads `fbo` (framebuffer handle)
-     where `textureHandle` should be, silently sampling the wrong data (confirmed this session,
-     found while doing Task 333, see NEXT.md §5).
-   - Fix shape: add a virtual accessor to `ITextureBackend` (or a Bgfx-specific extension point)
-     for "the `bgfx::TextureHandle` to sample", implemented by `BgfxTextureBackend` (return
-     `textureHandle`) and `BgfxRenderTargetBackend` (return `colorTex`); use it in
-     `BgfxSpriteBatchBackend::Draw` instead of the blind `static_cast`.
+2. **`GRAPHICS_TASKS.md` Task 875 — fix Vulkan: `Clear()` alone never records a render pass for a bound RT**
+   - Goal: `VulkanGraphicsBackend::Clear()` only records a global clear-colour scalar and never
+     registers the currently-bound RT in `RecordCommandBuffer`'s `usedRTs` list — only an actual
+     draw call does. A `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` pattern with
+     no draw call silently never gets a render pass recorded; the RT's image stays
+     `VK_IMAGE_LAYOUT_UNDEFINED` forever (found this session, Task 334, see NEXT.md §5).
+   - Fix shape: either mark the currently-bound RT as "used" at `Clear()` time too (not just at
+     draw time), or record a minimal begin+clear+end render pass for Clear-only RTs during
+     `RecordCommandBuffer`.
+   - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
+     (`Clear()`, `RecordCommandBuffer()`'s `usedRTs` construction).
+   - Verification: port `easygl_rt_roundtrip_test.cpp` (Task 180, EasyGL-only, Clear-only pattern)
+     to Vulkan as a new regression test.
+
+3. **`GRAPHICS_TASKS.md` Task 876 — investigate why `RenderTargetCube` sampled via `EnvironmentMapEffect` renders black on Vulkan**
+   - Goal: even with a real `SpriteBatch` draw into each of a `RenderTargetCube`'s 6 faces (working
+     around Task 875), sampling it back via `EnvironmentMapEffect` renders black instead of the
+     actual rendered colour (found this session, Task 334, see NEXT.md §5). The sampling path
+     itself (`dynamic_cast<IVulkanCubeSamplable*>` + `GetVkCubeImageView()`) is architecturally
+     sound — something in the data chain is wrong.
+   - Two unisolated candidates: (a) `SpriteBatch`-into-cube-face pixel correctness was never
+     itself verified before this session (Task 142 only checks the backbuffer isn't corrupted,
+     not that the faces got the right colour); (b) `GetOrCreateEnvMapDescSet`'s per-frame
+     descriptor-set cache/write could be stale or wrong specifically for a `RenderTargetCube`'s
+     `cubeView_`.
+   - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
+     (`GetOrCreateEnvMapDescSet`, the `needsEnvMap` draw-recording branch,
+     `VulkanRenderTargetCubeBackend`).
+   - Verification: first isolate which half is broken — e.g. add a temporary Vulkan-side debug
+     readback of the RT cube face content immediately after Phase 1's draw, independent of
+     `EnvironmentMapEffect`, before attempting a fix. See `examples/vulkan_rendertargetcube_sample_test.cpp`
+     for the existing failing repro.
+
+4. **`GRAPHICS_TASKS.md` Tasks 873/874 — fix Bgfx's wrong-handle-type casts for `RenderTarget2D`/`RenderTargetCube` sampling**
+   - Goal: `BgfxSpriteBatchBackend::Draw` and `BgfxGraphicsBackend`'s `envMapping` branch each cast
+     any `ITextureBackend`/`ITextureCubeBackend` to the plain-texture concrete type via
+     `static_cast`, but `RenderTarget2D`/`RenderTargetCube`'s backends are unrelated sibling
+     classes (`BgfxRenderTargetBackend`/`BgfxRenderTargetCubeBackend`) — this reads the framebuffer
+     handle (`fbo`) where the texture handle (`textureHandle`/`handle`) should be, silently
+     sampling the wrong data (confirmed Task 333/334, see NEXT.md §5). Worth fixing both together
+     in one pass since the fix shape is identical.
+   - Fix shape: add a virtual accessor to `ITextureBackend`/`ITextureCubeBackend` for "the
+     `bgfx::TextureHandle` to sample", implemented by the plain-texture backends (return their own
+     handle) and the render-target backends (return their colour texture handle — `colorTex`/
+     `cubeTex`); use it instead of the blind `static_cast`s.
    - Files: `include/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp`,
      `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`.
-   - Verification: no pixel readback available on Bgfx — verify structurally instead (e.g. assert
-     the extracted handle's `.idx` equals `BgfxRenderTargetBackend::colorTex.idx`, not `fbo.idx`,
-     after the fix). See `examples/bgfx_render_target_sample_test.cpp` for the existing
-     doesn't-crash smoke test to extend.
+   - Verification: no pixel readback available on Bgfx — verify structurally instead (assert the
+     extracted handle's `.idx` equals the render-target backend's colour-texture handle, not its
+     framebuffer handle, after the fix). See `examples/bgfx_render_target_sample_test.cpp`/
+     `bgfx_render_target_cube_sample_test.cpp` for the existing doesn't-crash smoke tests to extend.
 
-3. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
+5. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
      flag, reuse `Texture2D.cpp`'s DXT decode helpers, 6×`levelCount` `SetData` calls).
    - Files: `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp`, `TextureCubeTests.cpp`.
    - Verification: build a real/hand-built DDS cube-map test fixture **first**, then implement
      against it — do not mark done on "compiles and doesn't throw" alone (see §9).
 
-4. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+6. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
    - Goal: `vkCmdCopyImageToBuffer` + host-visible staging buffer, mirroring the existing upload
      path's staging-buffer pattern in reverse.
    - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
@@ -316,7 +364,7 @@ In priority order:
    - Verification: new Vulkan pixel-readback test analogous to the EasyGL ones in
      `easygl_texture3d_partial_box_readback_test.cpp`.
 
-5. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
+7. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
    - Goal: confirm (via a failing test first, matching the Task 276 methodology) that `Texture3D`/
      `TextureCube` mip levels >0 silently fail on Vulkan and Bgfx, then fix by pre-allocating every
      mip level at image/texture creation time.
@@ -356,9 +404,14 @@ In priority order:
 - **No opportunistic fix for Task 871/872 (stencil `Clear`/`ReferenceStencil` backend gaps) or
   Tasks 336/337 (RenderTarget2D mip/multisample gaps)** — verify with a real test first, same
   discipline as every other tracked bug.
-- **No rushed fix for Task 873 (Bgfx `RenderTarget2D`-sampling handle-cast bug)** bundled into an
-  unrelated task — fix it with its own dedicated task, and verify the fix structurally (extracted
-  handle equals `colorTex`, not `fbo`) since no pixel readback exists on Bgfx to confirm visually.
+- **No rushed fix for Task 873/874 (Bgfx handle-cast bugs)** bundled into an unrelated task — fix
+  with their own dedicated task, and verify structurally (extracted handle equals the colour
+  texture handle, not the framebuffer handle) since no pixel readback exists on Bgfx to confirm
+  visually.
+- **No fix for Task 875 (Vulkan Clear-only RT gap) or Task 876 (Vulkan RenderTargetCube-via-
+  EnvironmentMapEffect renders black)** without isolating the root cause first (Task 876
+  especially — two unisolated candidates, see §8) — a guessed fix risks masking the real bug
+  instead of fixing it.
 
 ---
 
@@ -371,32 +424,34 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-38 are fully complete. Phase 39 (RenderTarget2D and RenderTargetCube
-completeness, GRAPHICS_TASKS.md Tasks 331-340) is open, Tasks 331-333 done, Task 334 next. EasyGL:
-3311/3314 pass (3 documented pre-existing failures). Vulkan: 3237/3250 pass (13 documented
-pre-existing failures). Bgfx: 3223/3223 pass (100%, rebuilt and fully re-verified this session).
-Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
-if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
-it as a regression.
+completeness, GRAPHICS_TASKS.md Tasks 331-340) is open, Tasks 331-334 done, Task 335 next. EasyGL:
+3312/3315 pass (3 documented pre-existing failures). Vulkan: 3237/3251 pass (13 pre-existing +
+1 new correctly-failing test, Task 876). Bgfx: 3224/3224 pass (100%). Caution: run all 3 backends'
+full ctest suites sequentially, never concurrently (see NEXT.md §2); if a single run shows an
+anomaly beyond the documented list, re-run in isolation before treating it as a regression.
 
-Task 333 (just done) verified RenderTarget2D can be sampled as Texture2D after unbinding. EasyGL
-(Task 87) and Vulkan (Task 148) already had passing pixel tests doing exactly this - reconfirmed,
-no change needed. Found and confirmed a new, severe Bgfx bug while doing this (Task 179's test
-already informally suspected it): BgfxSpriteBatchBackend::Draw casts a RenderTarget2D's backend
-(BgfxRenderTargetBackend) to the unrelated BgfxTextureBackend type via static_cast, reading its fbo
-(framebuffer handle) where textureHandle should be - confirmed by direct memory-layout analysis
-(both are struct { uint16_t idx; }, so it compiles/doesn't crash, but samples a framebuffer-pool
-handle as a texture-pool handle). New bgfx_render_target_sample_test.cpp confirms no crash
-(consistent with silent wrong-data sampling). Tracked as Task 873, NOT fixed here - needs its own
-scoped Bgfx-only fix plus non-visual verification (Bgfx has no pixel readback). Rebuilt and fully
-verified Bgfx this session for the first time in several sessions: 3223/3223 (100%).
+Task 334 (just done) verified RenderTargetCube can be sampled as TextureCube after unbinding via
+EnvironmentMapEffect, on all 3 backends. No existing test covered this (Task 142's
+vulkan_rtcube_test.cpp renders into cube faces but never samples back). Results: EasyGL PASSES
+(architecturally sound, virtual BindGL() dispatch, exact pixel match). Vulkan FAILS with TWO
+distinct real bugs: (1) Task 875 - Clear()-only into a bound RT (no draw call) never gets a render
+pass recorded on Vulkan, image stays VK_IMAGE_LAYOUT_UNDEFINED forever (VulkanGraphicsBackend::Clear()
+only sets a global clear-colour scalar, doesn't register the RT as "used"). (2) Task 876 - even
+after switching to a real SpriteBatch draw per face (workaround for #1), sampling the RT cube back
+via EnvironmentMapEffect renders black instead of the actual content - root cause NOT isolated
+(candidates: SpriteBatch-into-cube-face correctness itself was never verified before, or
+GetOrCreateEnvMapDescSet's per-frame descriptor cache). A render-pass-compatibility validation
+warning also appears but is a confirmed red herring (present in Task 142's own already-passing
+test too, reconfirmed by rerunning it unmodified). Bgfx: same unsafe-cast bug shape as Task 873,
+confirmed by layout analysis - tracked as Task 874, doesn't crash (new smoke test confirms), can't
+be pixel-verified. New tests: easygl_rendertargetcube_sample_test.cpp,
+vulkan_rendertargetcube_sample_test.cpp (correctly fails - this is expected until Task 876 lands),
+bgfx_render_target_cube_sample_test.cpp.
 
-Next task: GRAPHICS_TASKS.md Task 334 - verify RenderTargetCube can be sampled as TextureCube
-after unbinding (EnvironmentMapEffect). Same shape as Task 333, one class over: render into a
-RenderTargetCube face, unbind it, sample the cube via EnvironmentMapEffect, pixel-verify on EasyGL
-and Vulkan. Unlike RenderTarget2D, RenderTargetCube inherits TextureCube directly (no Texture*-only
-RenderTargetBinding restriction blocks this path) - the point is to prove the sampling path
-actually works end-to-end. Given Task 333 just found a real Bgfx handle-cast bug for RenderTarget2D
-sampling (Task 873), check whether an analogous bug affects RenderTargetCube via
-EnvironmentMapEffect's cube-texture binding before assuming Bgfx is out of scope.
+Next task: GRAPHICS_TASKS.md Task 335 - verify depth buffer creation for render targets. Confirm
+RenderTarget2D/RenderTargetCube's DepthStencilFormat actually produces a real, usable depth (and
+stencil where applicable) buffer on each backend - e.g. draw two overlapping quads at different
+depths into a render target and pixel-verify the nearer one wins. Check each backend's RT
+constructor for how (or whether) hasDepth/DepthFormat is wired to a real depth attachment first.
 Update GRAPHICS_TASKS.md and NEXT.md after finishing.
 ```

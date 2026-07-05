@@ -695,6 +695,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
+        cna_easygl_test(cna_test_easygl_rendertargetcube_sample
+                        examples/easygl_rendertargetcube_sample_test.cpp)
+        add_test(NAME EasyGL_RenderTargetCube_SampleAfterUnbind
+                 COMMAND cna_test_easygl_rendertargetcube_sample)
+        set_tests_properties(EasyGL_RenderTargetCube_SampleAfterUnbind PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 144: Model.Draw — 2-bone model, BasicEffect VertexColor, red quad, pixel readback
         cna_easygl_test(cna_test_easygl_model_draw
                         examples/easygl_model_draw_test.cpp)
@@ -1692,6 +1701,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
+        cna_vulkan_test(cna_test_vulkan_rendertargetcube_sample
+                        examples/vulkan_rendertargetcube_sample_test.cpp)
+        add_test(NAME Vulkan_RenderTargetCube_SampleAfterUnbind
+                 COMMAND cna_test_vulkan_rendertargetcube_sample)
+        set_tests_properties(Vulkan_RenderTargetCube_SampleAfterUnbind PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 148: RenderTarget2D full cycle — red quad into RT, blit to backbuffer
         cna_vulkan_test(cna_test_vulkan_rt2d
                         examples/vulkan_rt2d_test.cpp)
@@ -1842,6 +1860,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_RenderTarget2D_SampleAfterUnbind
              COMMAND cna_test_bgfx_render_target_sample)
     set_tests_properties(Bgfx_RenderTarget2D_SampleAfterUnbind PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding (Bgfx)
+    cna_bgfx_test(cna_test_bgfx_render_target_cube_sample
+                  examples/bgfx_render_target_cube_sample_test.cpp)
+    add_test(NAME Bgfx_RenderTargetCube_SampleAfterUnbind
+             COMMAND cna_test_bgfx_render_target_cube_sample)
+    set_tests_properties(Bgfx_RenderTargetCube_SampleAfterUnbind PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
