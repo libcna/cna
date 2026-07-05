@@ -324,7 +324,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 1: `VibrateController` Correctness and Tests
 
-- [ ] DEVICES-0016 — Re-verify `getDefaultProperty()` singleton behavior under repeated calls
+- [x] DEVICES-0016 — Re-verify `getDefaultProperty()` singleton behavior under repeated calls (2026-07-05: existing `GetDefaultPropertyReturnsSameInstance` only compared 2 bare calls. Added `GetDefaultPropertyReturnsSameInstanceAcrossUsage`, asserting identity holds across a real `Start()`/`StartLeftRight()`/`Stop()` sequence. 31/31 `VibrateControllerTests` green.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`, `tests/Microsoft/Devices/VibrateControllerTests.cpp`
   - **Required behavior:** Confirm two calls to `getDefaultProperty()` return the identical pointer; never null.
@@ -332,7 +332,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `VibrateControllerTests.DefaultReturnsSameInstance` (add if missing)
   - **Dependencies:** none
 
-- [ ] DEVICES-0017 — Re-verify duration validation boundaries
+- [x] DEVICES-0017 — Re-verify duration validation boundaries (2026-07-05: confirmed all 4 boundary cases already exist and pass — `StartWithZeroDurationDoesNotThrow`, `StartWithExactlyMaxDurationDoesNotThrow`, `StartWithNegativeDurationThrows`, `StartWithOverlongDurationThrows`. No gap; no change needed.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** `Start(TimeSpan)` throws `ArgumentOutOfRangeException` for duration < 0 and > 5s; boundary values (`Zero`, `FromSeconds(5)`) do not throw.
@@ -340,7 +340,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** confirm `StartWithNegativeDurationThrows`/`StartWithOverlongDurationThrows` exist and add the two missing exact-boundary (non-throwing) cases if absent.
   - **Dependencies:** none
 
-- [ ] DEVICES-0018 — Re-verify zero-duration `Start()` behavior
+- [x] DEVICES-0018 — Re-verify zero-duration `Start()` behavior (2026-07-05: confirmed `StartWithZeroDurationDoesNotThrow` exists and passes. Code read confirms `TimeSpan::Zero` is **not** special-cased in `Start()` — it is passed straight through to `SDL_PlayHapticRumble(device, intensity, 0)`; SDL's own exact semantics for a zero-millisecond rumble (immediate no-op vs. some minimum duration) were not independently verified against SDL3 rumble-effect source, and are left as an honest open point for hardware verification, not assumed either way.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** `Start(TimeSpan::Zero)` does not throw and does not crash regardless of hardware presence; document whether it produces an audible/felt effect or is effectively a no-op (SDL rumble with 0 duration).
@@ -348,7 +348,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `VibrateControllerTests.StartWithZeroDurationDoesNotThrow`
   - **Dependencies:** none
 
-- [ ] DEVICES-0019 — Re-verify repeated `Start()` calls stop the prior effect first
+- [x] DEVICES-0019 — Re-verify repeated `Start()` calls stop the prior effect first (2026-07-05: confirmed `Start()`/`Start(duration,intensity)` call `DestroyLeftRightEffectIfAny()` before playing their own rumble (`VibrateController.cpp` line 320). The exact `StartLeftRight()`-then-`Start()` direction is already covered by `StartLeftRightThenStartThenStopDoesNotThrow`. No gap; no change needed.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** Calling `Start()` while a previous `Start()`/`StartLeftRight()` effect is still running replaces it (confirmed behavior per `plan_devices_phase3.md` Task P3-5) rather than running both simultaneously.
@@ -356,7 +356,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `VibrateControllerTests.StartLeftRightThenStartStopsLeftRightEffect` (add if missing)
   - **Dependencies:** none
 
-- [ ] DEVICES-0020 — Re-verify `Stop()` before any `Start()` is a safe no-op
+- [x] DEVICES-0020 — Re-verify `Stop()` before any `Start()` is a safe no-op (2026-07-05: confirmed `StopBeforeAnyStartDoesNotThrow` exists and passes; `Stop()`'s own body correctly guards on `g_haptic != nullptr` before touching anything. No gap.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** Calling `Stop()` on a fresh process (no prior `Start()`) does not crash or throw.
@@ -364,7 +364,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** confirm existing coverage in `VibrateControllerTests.cpp`; add if missing.
   - **Dependencies:** none
 
-- [ ] DEVICES-0021 — Re-verify `Stop()` after a failed/absent haptic device is a safe no-op
+- [x] DEVICES-0021 — Re-verify `Stop()` after a failed/absent haptic device is a safe no-op (2026-07-05: re-ran, not just read, the full `VibrateControllerTests` suite in this hardware-less container — 31/31 green, including the new `UnsupportedEnvironmentFullContract` (DEVICES-0028) which asserts this exact sequence explicitly in one place.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** On a machine with no haptic hardware (this container), `Start()` then `Stop()` never crash.
@@ -372,7 +372,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** re-run, do not just read, `VibrateControllerTests.*`
   - **Dependencies:** none
 
-- [ ] DEVICES-0022 — Re-verify destructor/shutdown resets `g_leftRightEffectId`
+- [x] DEVICES-0022 — Re-verify destructor/shutdown resets `g_leftRightEffectId` (2026-07-05: confirmed `~VibrateController()` (lines 256-282) still resets `g_leftRightEffectId = -1` per Task P8-6. No regression; no change needed.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** Per `plan_devices_phase8.md` Task P8-6, confirm `~VibrateController()` resets `g_leftRightEffectId` to `-1` after closing `g_haptic` (a one-line defensive fix already applied) — Phase 1 here only needs to re-confirm it is still present, not re-apply it.
@@ -380,7 +380,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A unless a regression is found (then add a targeted test)
   - **Dependencies:** none
 
-- [ ] DEVICES-0023 — Re-verify gamepad-rumble exclusion still holds
+- [x] DEVICES-0023 — Re-verify gamepad-rumble exclusion still holds (2026-07-05: confirmed `IsConnectedGamepadHapticDevice()` still correlates by `SDL_OpenHapticFromJoystick()`/`SDL_GetHapticID()` (ID-based, not name-based), matching Task P4-10's description exactly. No hardware to exercise it against; unchanged.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** `IsConnectedGamepadHapticDevice()`'s ID-correlation (`SDL_OpenHapticFromJoystick()`) still excludes any haptic device that is also a connected joystick, so `VibrateController` never competes with `GamePad::SetVibration()`.
@@ -388,7 +388,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** existing coverage; add a fake/mock joystick-ID test if the current suite only reasons about it indirectly.
   - **Dependencies:** none
 
-- [ ] DEVICES-0024 — Re-verify SDL haptic device enumeration handles `SDL_GetHaptics()` returning `NULL`/0
+- [x] DEVICES-0024 — Re-verify SDL haptic device enumeration handles `SDL_GetHaptics()` returning `NULL`/0 (2026-07-05: confirmed `OpenFirstHapticDevice()` (lines 175-207) guards `haptics == nullptr || hapticCount <= 0` and never calls `SDL_free(nullptr)`. No gap.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** `OpenFirstHapticDevice()` must not crash or leak when `SDL_GetHaptics()` returns `nullptr` or `hapticCount <= 0` (already handled per the code read in Phase 0 — confirm, don't re-implement).
@@ -396,7 +396,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A unless a gap is found
   - **Dependencies:** none
 
-- [ ] DEVICES-0025 — Re-verify haptic subsystem ownership/ref-counting
+- [x] DEVICES-0025 — Re-verify haptic subsystem ownership/ref-counting (2026-07-05: confirmed exactly one `g_subsystemHeld`-gated `SDL_InitSubSystem(SDL_INIT_HAPTIC)` call (`EnsureHapticSubsystemInitialized()`) paired with exactly one `SDL_QuitSubSystem()` in the destructor; no double-init/double-quit path across `Start()`/`StartLeftRight()`/destructor. No gap.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** Exactly one `SDL_InitSubSystem(SDL_INIT_HAPTIC)`/`SDL_QuitSubSystem()` pair per process lifetime (singleton), matching `GraphicsDevice`'s established convention (Task P6-6).
@@ -404,7 +404,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A unless a gap is found
   - **Dependencies:** none
 
-- [ ] DEVICES-0026 — Add explicit mutex-contention test for concurrent `Start()`/`Stop()`/`StartLeftRight()`
+- [x] DEVICES-0026 — Add explicit mutex-contention test for concurrent `Start()`/`Stop()`/`StartLeftRight()` (2026-07-05: `ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadlock` already exists (8 threads × 20 iterations, all 5 public methods exercised). Looped the full `VibrateControllerTests.*` filter 40/40 times — all clean, no failures. `devices-tsan` re-run deferred to Phase 10's final gate (DEVICES-0140) rather than repeated per-task; no new concurrency code was added this task, only a new single-threaded contract test.)
   - **Area:** VibrateController
   - **Files:** `tests/Microsoft/Devices/VibrateControllerTests.cpp`
   - **Required behavior:** Confirm the single mutex (Task P4-9) serializes all public methods correctly under concurrent calls from multiple threads (no crash/UB), looped per `NEXT.md`'s "loop 20-60+ iterations" rule since this touches concurrency.
@@ -412,7 +412,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `VibrateControllerTests.ConcurrentStartStopStartLeftRightDoesNotCrash`
   - **Dependencies:** none
 
-- [ ] DEVICES-0027 — `getIsSupportedProperty()` false-positive audit
+- [x] DEVICES-0027 — `getIsSupportedProperty()` false-positive audit (2026-07-05: code inspection (no `VibrateController`-specific test hook exists, and none is added — per the task's own allowance) confirms `AcquireHapticDeviceForProbe()`'s `openedTemporary` tracking is correct: `getIsSupportedProperty()`/`getDeviceNameProperty()` both close any temporarily-opened device before returning (lines 345-348, 370-373). `getIsSupportedProperty()` can only return `true` when a real, non-gamepad haptic device was genuinely opened. No gap.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** Confirm `getIsSupportedProperty()` only returns `true` when a real, non-gamepad haptic device is genuinely probeable (opens then immediately closes, per `AcquireHapticDeviceForProbe()`) — not merely because `SDL_INIT_HAPTIC` succeeded.
@@ -420,7 +420,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `VibrateControllerTests.GetIsSupportedPropertyDoesNotHoldDeviceOpen` (add if missing)
   - **Dependencies:** none
 
-- [ ] DEVICES-0028 — Add unsupported/no-device-environment regression test explicitly labeled as such
+- [x] DEVICES-0028 — Add unsupported/no-device-environment regression test explicitly labeled as such (2026-07-05: added `VibrateControllerTests.UnsupportedEnvironmentFullContract`, asserting `IsSupported`/`DeviceName`/`Start`/`Start(duration,intensity)`/`StartLeftRight`/`Stop`'s full no-hardware contract together in one place, with a `GTEST_SKIP()` guard if this container ever does have real haptic hardware. Cross-referenced from `docs/devices-hardware-checklist.md` via this plan.)
   - **Area:** VibrateController
   - **Files:** `tests/Microsoft/Devices/VibrateControllerTests.cpp`
   - **Required behavior:** One test explicitly documents (in its name/body comment) that this container has zero haptic hardware and asserts the full unsupported-path contract (`IsSupported == false`, `DeviceName == ""`, `Start()`/`Stop()`/`StartLeftRight()` are silent no-ops) in one place, for a future hardware session to compare against.
@@ -428,7 +428,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `VibrateControllerTests.UnsupportedEnvironmentFullContract`
   - **Dependencies:** DEVICES-0027
 
-- [ ] DEVICES-0029 — Investigate a fake/mock haptic backend seam for deterministic amplitude/waveform tests
+- [x] DEVICES-0029 — Investigate a fake/mock haptic backend seam for deterministic amplitude/waveform tests (2026-07-05: recommendation is **proceed, but as Phase 2's own `IDeviceVibrationBackend` work (DEVICES-0032–0037), not a small ad-hoc seam added here** — building a one-off mockable function pointer now and then replacing it with the real backend-abstraction interface in Phase 2 would be double work / a throwaway abstraction, against this project's own "don't build abstractions you'll immediately replace" convention. No code added by this task.)
   - **Area:** VibrateController
   - **Files:** `src/Microsoft/Devices/VibrateController.cpp` (read-only investigation)
   - **Required behavior:** Determine whether a mockable seam is feasible without a large refactor (e.g. an injectable function-pointer for `SDL_PlayHapticRumble`) — this is an investigation task, not an implementation mandate; only proceed to implement in a follow-up task if the seam is small and low-risk.
@@ -436,7 +436,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** none
 
-- [ ] DEVICES-0030 — Document `Start(TimeSpan, intensity)` intensity=0.0f behavior explicitly
+- [x] DEVICES-0030 — Document `Start(TimeSpan, intensity)` intensity=0.0f behavior explicitly (2026-07-05: confirmed via code read that `intensity=0.0f` is **not** special-cased into an implicit `Stop()` — it still uploads/plays a zero-strength SDL rumble effect for the full requested duration. Documented this precisely in `VibrateController.hpp`'s `Start(TimeSpan, intensity)` Doxygen comment. `StartWithIntensityZeroDoesNotThrow` already covers no-crash; behavior is now also explicitly documented, closing the acceptance criteria.)
   - **Area:** VibrateController
   - **Files:** `include/Microsoft/Devices/VibrateController.hpp`, `src/Microsoft/Devices/VibrateController.cpp`
   - **Required behavior:** Confirm and document whether `intensity = 0.0f` behaves as a true no-op (equivalent to not calling `Start()` at all) or actually uploads a zero-strength effect; this matters for the Android-vibration-mapping notes in Phase 2/3.

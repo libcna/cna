@@ -32,6 +32,23 @@ TEST(VibrateControllerTests, GetDefaultPropertyReturnsSameInstance)
     EXPECT_EQ(VibrateController::getDefaultProperty(), VibrateController::getDefaultProperty());
 }
 
+// Task DEVICES-0016: the two-call check above doesn't confirm identity holds
+// across a real Start()/Stop()/StartLeftRight() sequence in between — this
+// class's constructor is only ever run once (function-local static), but the
+// singleton pointer itself must never change no matter what's been called on
+// it.
+TEST(VibrateControllerTests, GetDefaultPropertyReturnsSameInstanceAcrossUsage)
+{
+    VibrateController* first = VibrateController::getDefaultProperty();
+
+    first->Start(TimeSpan::FromMilliseconds(10));
+    first->StartLeftRight(0.5f, 0.5f, TimeSpan::FromMilliseconds(10));
+    first->Stop();
+
+    EXPECT_EQ(VibrateController::getDefaultProperty(), first);
+    EXPECT_EQ(VibrateController::getDefaultProperty(), first);
+}
+
 TEST(VibrateControllerTests, StopBeforeAnyStartDoesNotThrow)
 {
     EXPECT_NO_THROW(VibrateController::getDefaultProperty()->Stop());
@@ -316,4 +333,30 @@ TEST(VibrateControllerTests, RepeatedStartStopSequencesDoNotDegrade)
         EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(1)));
         EXPECT_NO_THROW(controller->Stop());
     }
+}
+
+// Task DEVICES-0028: every prior test above touches one facet of the
+// no-haptic-hardware contract independently (IsSupported, DeviceName, no
+// crash on Start/Stop/StartLeftRight). This test asserts the whole contract
+// together, in one place, as living documentation for whoever next compares
+// this container's behavior against a real-hardware run (see
+// docs/devices-hardware-checklist.md).
+TEST(VibrateControllerTests, UnsupportedEnvironmentFullContract)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    const bool supported = controller->getIsSupportedProperty();
+    const std::string name = controller->getDeviceNameProperty();
+
+    if (supported)
+    {
+        GTEST_SKIP() << "This environment has real haptic hardware; "
+                         "the no-hardware contract this test asserts does not apply here.";
+    }
+
+    EXPECT_TRUE(name.empty());
+    EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(50)));
+    EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(50), 0.5f));
+    EXPECT_NO_THROW(controller->StartLeftRight(0.5f, 0.5f, TimeSpan::FromMilliseconds(50)));
+    EXPECT_NO_THROW(controller->Stop());
 }

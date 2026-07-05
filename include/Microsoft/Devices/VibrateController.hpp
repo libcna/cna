@@ -72,6 +72,12 @@ namespace Microsoft::Devices
          * If the current platform or device exposes no haptic/vibration
          * capability, this call is a silent no-op.
          * @param intensity Rumble strength, clamped to [0.0f, 1.0f].
+         * Note: intensity 0.0f is not special-cased into an implicit Stop()
+         * — it still uploads and plays a zero-strength SDL rumble effect for
+         * the full duration. In practice this is inert (zero strength has no
+         * physical effect), but it is not equivalent to skipping the call
+         * entirely; call Stop() directly if that distinction matters to a
+         * caller (Task DEVICES-0030).
          *
          * @throws System::ArgumentOutOfRangeException If duration is
          * negative or greater than 5 seconds.
