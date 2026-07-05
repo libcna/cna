@@ -2278,7 +2278,31 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   rebuild with no vendoring step needed. Full suite 3242/3244 (2 expected hardware skips, plus 1
   pre-existing unrelated timing self-skip under the slower ASan build), audio subset 335/335 (336
   under ASan, same 1 self-skip), clean under ASan+UBSan.
-* [ ] P9-DYNAMIC-008 Audit dynamic stream format conversion for mono/stereo and byte/float paths.
+* [x] P9-DYNAMIC-008 Audit dynamic stream format conversion for mono/stereo and byte/float paths.
+  *Note:* Compared `EnsureStream()`/`SubmitBuffer`/`SubmitFloatBufferEXT`
+  (`DynamicSoundEffectInstance.cpp`) against FNA's `FAudioWaveFormatEx` derivation and
+  `SubmitBuffer`/`SubmitFloatBufferEXT` (`DynamicSoundEffectInstance.cs`). No new bug found --
+  confirmed correct on every point checked: (1) `AudioChannels` enum values (`Mono=1`,
+  `Stereo=2`) match XNA/FNA exactly, and `EnsureStream()`'s `spec.channels =
+  static_cast<int>(channels_)` derives the same channel count FNA's `format.nChannels = (ushort)
+  channels` does. (2) Format-tag switching: CNA's `!isFloat_ && state != Stopped` guard in
+  `SubmitFloatBufferEXT` is logically identical to FNA's `state != Stopped && format.wFormatTag ==
+  1` (int-format-while-playing) guard -- already-float re-submission while playing is correctly
+  allowed in both. (3) Byte-vs-sample-count units match exactly: `SubmitBuffer`'s `count` is a
+  byte count in both (matches 1:1); `SubmitFloatBufferEXT`'s `count` is a *sample* count in both,
+  multiplied by `sizeof(float)` for the byte allocation. (4) `GetSampleDuration`/
+  `GetSampleSizeInBytes`'s channel-count divide/multiply matches FNA's formula exactly (`SoundEffect.cpp`,
+  already bit-for-bit identical, including the "always assumes 16-bit PCM even in float mode"
+  quirk already covered by `GetSampleDurationIgnoresFloatFormatMatchingFNA`). (5) One confirmed
+  **shared quirk, not a CNA-specific bug**: neither FNA's `SubmitBuffer` (byte/int) nor CNA's has
+  any guard against being called while the instance is already in float mode and Playing -- raw
+  int bytes would get silently pushed into an already-float-format stream/voice in both
+  implementations. Matching FNA's equal permissiveness here is correct per `CLAUDE.md` ("match
+  XNA/FNA behavior over personal C++ preference") -- adding a guard FNA itself lacks would be a
+  new deviation, not a fix. Found one minor test-coverage gap (not a bug): the existing
+  `SampleDurationRoundTrip` test only exercised Stereo; added
+  `SampleDurationRoundTripMono` to independently exercise the channel-count divisor for Mono.
+  Full suite 3243/3245 (2 expected hardware skips), up from 3242/3244.
 * [ ] P9-DYNAMIC-009 Add tests for invalid buffer sizes and alignment.
   *Note (partial, pre-existing):* `SubmitBufferRangeThrows`/`SubmitFloatBufferRangeThrows`/
   `SubmitBufferRangeIntegerOverflowThrows` already cover invalid offset/count ranges; a dedicated

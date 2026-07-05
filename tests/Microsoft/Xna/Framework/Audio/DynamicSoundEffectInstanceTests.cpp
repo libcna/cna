@@ -81,6 +81,19 @@ TEST(DynamicSoundEffectInstanceTest, SampleDurationRoundTrip)
     EXPECT_NEAR(d.GetSampleDuration(176400).getTotalSecondsProperty(), 1.0, 1e-9);
 }
 
+// P9-DYNAMIC-008: the stereo round trip above doesn't independently exercise the channel-count
+// divisor/multiplier -- mono halves the byte count for the same duration (matches FNA's
+// SoundEffect.GetSampleDuration/GetSampleSizeInBytes, which both divide/multiply by
+// (int) AudioChannels directly).
+TEST(DynamicSoundEffectInstanceTest, SampleDurationRoundTripMono)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Mono);
+    // 1 second of 16-bit mono @ 44100 Hz = 44100 * 1ch * 2bytes = 88200 bytes.
+    const int bytes = d.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0));
+    EXPECT_EQ(bytes, 88200);
+    EXPECT_NEAR(d.GetSampleDuration(88200).getTotalSecondsProperty(), 1.0, 1e-9);
+}
+
 TEST(DynamicSoundEffectInstanceTest, GetSampleDurationIgnoresFloatFormatMatchingFNA)
 {
     // FNA's GetSampleSizeInBytes/GetSampleDuration always delegate to SoundEffect's versions,

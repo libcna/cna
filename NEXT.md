@@ -25,9 +25,10 @@ framework/runtime, not a game.
   (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`, `P9-XACT` —
   `P9-XACT` is **15/15**, its full task list closed); `P9-HARDWARE` is 2/6 done (the
   `NoAudioHardwareException` audit + its raw-`std::runtime_error`-vs-XNA-exception-type fix);
-  `P9-DYNAMIC` is 7/9 done (the `PendingBufferCount` audit found and fixed two real bugs, plus
-  6 test-coverage items -- one of which uncovered and fixed a serious cross-cutting
-  `System::EventHandler<T>` bug in the sibling `sharp-runtime` repo); `P9-3D` is now 4/9 done (the
+  `P9-DYNAMIC` is 8/9 done (the `PendingBufferCount` audit found and fixed two real bugs, 6
+  test-coverage items -- one of which uncovered and fixed a serious cross-cutting
+  `System::EventHandler<T>` bug in the sibling `sharp-runtime` repo -- and a format-conversion
+  audit confirming no bugs); `P9-3D` is now 4/9 done (the
   `Apply3D` stereo-source audit, plus a real distance-attenuation formula bug found, fixed, and
   tested); 1 group remains fully open
   (`P9-AUDIT`) — see §4/§8.
@@ -52,15 +53,15 @@ framework/runtime, not a game.
   Verified via both the manual `cmake-build-debug/` directory and the `tests` CMake preset
   (freshly reconfigured from a deleted build directory). `cna_demo_sound`/`cna_demo_2d` example
   targets also rebuild clean.
-- **Tests:** `CnaTests` whole-suite count is **3242 / 3244 pass** (2 skipped:
+- **Tests:** `CnaTests` whole-suite count is **3243 / 3245 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected) — up from 3241/3243 (`P9-DYNAMIC-007`'s 1 new test; before that,
-  3238/3240 was `P9-3D-003`'s 3 new tests, 3230/3232 was `P9-DYNAMIC-001..006`'s 8 new tests,
-  3226/3228 was `P9-XACT-014/015`'s 5 new tests, 3212/3214 was `P9-XACT-011`'s 14 new tests, and
-  the earlier jump from 2102 was `develop`'s `feature/net` merge, not this branch's work). The
-  audio-scoped subset (§7's `--gtest_filter` audio suite list) is **335 / 335 pass**, up from 306
-  (336 under ASan, with one pre-existing, unrelated timing-dependent test self-skipping under the
-  slower instrumented build).
+  hardware-dependent, expected) — up from 3242/3244 (`P9-DYNAMIC-008`'s 1 new test, a Mono
+  counterpart to the existing Stereo `SampleDurationRoundTrip`; before that, 3241/3243 was
+  `P9-DYNAMIC-007`'s 1 new test, 3238/3240 was `P9-3D-003`'s 3 new tests, 3230/3232 was
+  `P9-DYNAMIC-001..006`'s 8 new tests, 3226/3228 was `P9-XACT-014/015`'s 5 new tests, 3212/3214
+  was `P9-XACT-011`'s 14 new tests, and the earlier jump from 2102 was `develop`'s `feature/net`
+  merge, not this branch's work). The audio-scoped subset (§7's `--gtest_filter` audio suite list)
+  is **336 / 336 pass**, up from 306.
   Also verified clean under a full ASan+UBSan build of the audio suite (`P9-XACT-011` touches the
   shared `FilterState` mixing-thread interaction flagged risky by `P9-BUILD-001..007`;
   `P9-XACT-014`/`P9-DYNAMIC-001`/`P9-DYNAMIC-007` re-verified after their respective fixes).
@@ -86,7 +87,20 @@ framework/runtime, not a game.
 
 ## 3. Recent changes (most recent Fáze 9 groups, newest first)
 
-- **`P9-DYNAMIC-007`** (not yet committed in CNA; sharp-runtime fix committed there as `8342a2c`,
+- **`P9-DYNAMIC-008`** (not yet committed) — audited dynamic stream format conversion
+  (`EnsureStream()`/`SubmitBuffer`/`SubmitFloatBufferEXT`) against FNA's `FAudioWaveFormatEx`
+  derivation. **No new bug found** -- confirmed correct on every point checked: `AudioChannels`
+  enum values, format-tag switching guards, byte-vs-sample-count units in both submit overloads,
+  and the channel-count divide/multiply in `GetSampleDuration`/`GetSampleSizeInBytes` (already
+  bit-for-bit identical to FNA's formula). One confirmed **shared quirk, not a CNA-specific bug**:
+  neither FNA's nor CNA's `SubmitBuffer` (byte/int) guards against being called while the instance
+  is already in float mode and playing -- matching FNA's equal permissiveness here is correct per
+  `CLAUDE.md` ("match XNA/FNA behavior"), not something to newly guard against. Found one minor
+  test-coverage gap (not a bug): the existing `SampleDurationRoundTrip` only exercised Stereo;
+  added `SampleDurationRoundTripMono` to independently exercise the channel-count divisor. Full
+  suite 3243/3245 (2 expected skips), audio subset 336/336. Full detail: `plan_audio.md`'s
+  `P9-DYNAMIC-008` note.
+- **`P9-DYNAMIC-007`** (`87675e75`; sharp-runtime fix committed there as `8342a2c`,
   not pushed) — writing a test for "subscriber removes itself during `BufferNeeded`'s callback"
   (a common "handle once" event pattern) uncovered a **real, serious, cross-cutting bug** well
   beyond Audio: `System::EventHandler<T>::Raise()` (`../sharp-runtime`, shared by every event in
@@ -299,12 +313,11 @@ already-scoped task list) still has open work:
   `CP-18`/`XA-9` accepted-deviation entries), any consequent test updates (`-004`), no-audio-device
   test coverage (`-005`, needs a fresh isolated process — `SDL_AUDIODRIVER=dummy` always trivially
   succeeds in this repo's shared test binary), and documentation (`-006`).
-- `P9-DYNAMIC` (7/9 done, see §3) — the `PendingBufferCount` audit (and its two real bug fixes),
-  6 test-coverage items, and subscriber-removal-during-callback coverage (`-007`, which uncovered
-  and fixed a cross-cutting `System::EventHandler<T>` bug in `sharp-runtime`) are done; still
-  open: a dedicated audit of dynamic stream format conversion for mono/stereo and byte/float paths
-  (`-008`), and invalid buffer size/alignment coverage beyond the already-existing
-  offset/count-range tests (`-009`).
+- `P9-DYNAMIC` (8/9 done, see §3) — the `PendingBufferCount` audit (and its two real bug fixes),
+  6 test-coverage items, subscriber-removal-during-callback coverage (`-007`, which uncovered and
+  fixed a cross-cutting `System::EventHandler<T>` bug in `sharp-runtime`), and the dynamic stream
+  format-conversion audit (`-008`, confirmed correct, no bugs) are done; still open: invalid
+  buffer size/alignment coverage beyond the already-existing offset/count-range tests (`-009`).
 - `P9-AUDIT` — the original "fresh-read audit" deliverable (a formal per-file comparison write-up)
   was never produced as its own artifact; the reading needed to fix the other groups happened ad
   hoc. Optional/lowest priority; was never in the user's explicit implementation order.
@@ -478,31 +491,27 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 Fáze 9's own task list (`plan_audio.md`) is the source of truth; the user's explicit implementation
 order is exhausted through `P9-STOP`, `P9-XACT` is **fully closed (15/15)**, `P9-HARDWARE` is 2/6
-done, `P9-DYNAMIC` is 7/9 done, and `P9-3D` is 4/9 done. The remaining groups have no
+done, `P9-DYNAMIC` is 8/9 done, and `P9-3D` is 4/9 done. The remaining groups have no
 user-specified priority among them — suggested order below is by "smallest
 independently-verifiable slice first":
 
-1. **Audit dynamic stream format conversion** (`P9-DYNAMIC-008`). Goal: confirm mono/stereo and
-   byte(16-bit PCM)/float(32-bit) format handling in `EnsureStream()`/`SubmitBuffer`/
-   `SubmitFloatBufferEXT` matches FNA's `FAudioWaveFormatEx` field derivation exactly. Files:
-   `DynamicSoundEffectInstance.cpp`. Verification: read-only audit, or new tests if a gap is found.
-2. **Add invalid buffer size/alignment tests** (`P9-DYNAMIC-009`). Goal: audit non-block-aligned
+1. **Add invalid buffer size/alignment tests** (`P9-DYNAMIC-009`). Goal: audit non-block-aligned
    byte counts (e.g. an odd byte count for 16-bit stereo, which can't divide evenly into whole
    sample frames) beyond the already-covered offset/count-range validation. Files:
    `DynamicSoundEffectInstanceTests.cpp`.
-3. **Audit Doppler behavior** (`P9-3D-004`/`005`). Goal: confirm `SoundEffect.DopplerScale`/
+2. **Audit Doppler behavior** (`P9-3D-004`/`005`). Goal: confirm `SoundEffect.DopplerScale`/
    `SpeedOfSound` usage against FNA's `dspSettings.DopplerFactor` computation, and decide whether
    real Doppler pitch adjustment is feasible with SDL3_mixer (no native Doppler support -- would
    need to compute a pitch-ratio approximation manually from relative emitter/listener velocity).
    Files: `SoundEffectInstance.cpp`. Verification: read-only audit first.
-4. **Decide missing/corrupt XGS/XSB/XWB constructor behavior** (`P9-HARDWARE-003`). Goal: decide
+3. **Decide missing/corrupt XGS/XSB/XWB constructor behavior** (`P9-HARDWARE-003`). Goal: decide
    whether `AudioEngine`/`SoundBank`/`WaveBank` should keep silently stubbing on a missing/corrupt
    file (current behavior, `CHECKLIST.md` `CP-18`/`XA-9`) or throw -- a genuine open decision, not
    a clear-cut fix like `P9-HARDWARE-002` was, since ~80+ existing tests build on the current
    `SharedEngine()`-style stub-on-missing-file fixtures (see `CHECKLIST.md`'s existing note on
    `CP-18`). If changed, `P9-HARDWARE-004` updates the tests that lock in today's stub behavior.
    Needs the user's input before implementing either way.
-5. **Add no-audio-device test coverage** (`P9-HARDWARE-005`). Goal: a real regression test for
+4. **Add no-audio-device test coverage** (`P9-HARDWARE-005`). Goal: a real regression test for
    `GetMixer()`'s failure path (`P9-HARDWARE-002`) needs a fresh, isolated process with an invalid
    `SDL_AUDIODRIVER` set before anything else calls `GetMixer()` -- this repo's shared `CnaTests`
    binary can't exercise it (the mixer's cache is process-wide and once-ever-initialized). May
@@ -542,20 +551,20 @@ Read NEXT.md first. Fáze 9 (a user-directed, already-scoped hardening pass) has
 groups fully closed (P9-LIFECYCLE, P9-CATEGORY, P9-VALIDATION, P9-DOCS, P9-BUILD, P9-STOP,
 P9-XACT -- P9-XACT's own 15-item list is now fully done), P9-HARDWARE is 2/6 done (the
 NoAudioHardwareException audit + its std::runtime_error-vs-XNA-exception-type fix), P9-DYNAMIC is
-7/9 done (the PendingBufferCount audit found and fixed two real bugs, 6 test-coverage items, and
+8/9 done (the PendingBufferCount audit found and fixed two real bugs, 6 test-coverage items,
 subscriber-removal coverage that uncovered/fixed a cross-cutting System::EventHandler<T> bug in
-../sharp-runtime -- see §3/§4's dependency note), P9-3D is 4/9 done (the Apply3D stereo-source
-audit, confirmed same accepted CP-19 deviation, plus a real distance-attenuation formula bug
-found/fixed/tested), and 1 group is fully open (P9-AUDIT) -- see §4/§8. No known build/test
-blocker.
+../sharp-runtime -- see §3/§4's dependency note, and a format-conversion audit confirming no
+bugs), P9-3D is 4/9 done (the Apply3D stereo-source audit, confirmed same accepted CP-19
+deviation, plus a real distance-attenuation formula bug found/fixed/tested), and 1 group is fully
+open (P9-AUDIT) -- see §4/§8. No known build/test blocker.
 
-1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3242/3244 pass, audio-scoped
-   subset 335/335) -- rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests (or the
+1. Confirm current state matches NEXT.md §2 (build clean, whole-suite 3243/3245 pass, audio-scoped
+   subset 336/336) -- rebuild and rerun SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests (or the
    `tests` CMake preset, §7) to check for drift since this was last updated. If a test involving
    BufferNeeded/EventHandler fails unexpectedly, check whether ../sharp-runtime still has commit
    8342a2c (§4's dependency note) before assuming an audio regression.
-2. Inspect only the files needed for the first §8 task (P9-DYNAMIC-008: dynamic stream format
-   conversion audit) unless the user names something else -- don't refactor unrelated code.
+2. Inspect only the files needed for the first §8 task (P9-DYNAMIC-009: invalid buffer size/
+   alignment tests) unless the user names something else -- don't refactor unrelated code.
    P9-HARDWARE-003 (missing/corrupt file constructor behavior) is a genuine open decision, not a
    clear-cut fix -- ask the user before implementing either way if it comes up.
 3. Make one small, verified improvement: if it's an audit, write the finding into plan_audio.md;
