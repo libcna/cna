@@ -298,6 +298,51 @@ If step 2 or 3 reveals a wrong sign/zero-point, the fix belongs in
 new self-consistency test case should be added for whatever convention turns out correct,
 matching Section 1's own reporting convention.
 
+## 8. `Motion` real Android backend (`plan_devices.md` Phase 8, Tasks DEVICES-0101-0119)
+
+**Code under test:** `Detail::AndroidMotionBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`)
+and `Detail::ConvertRotationVectorToXnaQuaternion()`/`ExtractYawPitchRollFromQuaternion()`
+(`include/Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp`) — confirmed by code
+review, round-trip unit tests of the yaw/pitch/roll extraction (against CNA's own already-
+tested `Quaternion::CreateFromYawPitchRoll()`), and a successful Android NDK cross-compile
+(`llvm-nm` symbol check). **Never actually run** — same reason as Sections 6/7.
+
+**Why this needs real hardware:** `ExtractYawPitchRollFromQuaternion()` itself is verified
+self-consistent (it round-trips through CNA's own tested math), but
+`ConvertRotationVectorToXnaQuaternion()` — the raw Android quaternion → XNA `Quaternion`
+mapping — is currently a direct, unremapped passthrough, not a rigorously-derived change of
+basis between Android's world frame and XNA's. Whether this needs the same kind of axis
+remap `Detail::ConvertAndroidPortraitToXnaLandscape()` applies to
+`Accelerometer`/`Gyroscope` is genuinely unknown until tested on a real device.
+
+**Steps:**
+1. On a real Android device, run a game/demo using `Motion`, holding the device flat and
+   level. Confirm `Motion.CurrentValue.Attitude.Pitch`/`Roll`/`Yaw` all read approximately
+   zero (or whatever the documented "flat" reference should be — confirm and note here).
+2. Tilt/rotate the device through known pitch, roll, and yaw rotations in turn; confirm each
+   of `Attitude.Pitch`/`Roll`/`Yaw` responds to the correct physical rotation, not a
+   different or swapped axis, and that `Attitude.Quaternion`/`RotationMatrix` visually
+   (e.g. via a rendered 3D model in the demo) track the same physical rotation consistently.
+3. Confirm `Motion.CurrentValue.Gravity` reads approximately `(0, ±1, 0)`-ish (magnitude ~1g)
+   at rest, matching whichever axis this implementation's `Gravity` convention assigns to
+   "down," and `DeviceAcceleration` reads approximately zero at rest.
+4. Shake or throw the device; confirm `DeviceAcceleration` spikes while `Gravity` stays
+   roughly constant — confirms the gravity/linear-acceleration split is wired to the correct
+   sensors, not swapped.
+5. Confirm `DeviceRotationRate` responds to physical rotation consistently with the
+   already-verified `Gyroscope` class's own sign convention (Section 2) — `Motion` registers
+   its own, independent `TYPE_GYROSCOPE` listener, so this is worth checking is consistent,
+   not assumed.
+6. If the device's magnetometer is unavailable or disabled, confirm `Motion` falls back to
+   `TYPE_GAME_ROTATION_VECTOR` (yaw will drift slowly over time with no true-north
+   correction — expected, not a bug, per this backend's own documented drift-difference
+   note) rather than failing entirely.
+
+If any step reveals a wrong sign/axis, the fix belongs in `ConvertRotationVectorToXnaQuaternion()`
+(or `AndroidMotionBackend`'s vector handling for `Gravity`/`DeviceAcceleration`/
+`DeviceRotationRate`) — never in downstream game code — and a new round-trip/self-consistency
+test case should be added for whatever convention turns out correct.
+
 ---
 
 ## Reporting results

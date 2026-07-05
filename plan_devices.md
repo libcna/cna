@@ -1018,7 +1018,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
 
 ### Phase 8: Motion Native Backend
 
-- [ ] DEVICES-0101 — Design `IMotionBackend` concretely (from the existing sketch)
+- [x] DEVICES-0101 — Design `IMotionBackend` concretely (from the existing sketch) (2026-07-05: implemented `include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp` — `IsSupported()`/`Start(TimeSpan, ReadingCallback)`/`Stop()`, mirroring `ICompassBackend`'s shape minus a calibration callback (`Motion.Calibrate` is never raised by any backend — `AndroidMotionBackend` never detects a calibration-needed condition itself, documented explicitly). No platform-specific `#include`; compiles and is mockable everywhere.)
   - **Area:** Motion / Design
   - **Files:** `include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp` (new)
   - **Required behavior:** `IsSupported()`, `Start()`, `Stop()`, `GetLatestReading()` returning `MotionReading`, per the design doc.
@@ -1026,7 +1026,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0074
 
-- [ ] DEVICES-0102 — Implement `AndroidMotionBackend` skeleton
+- [x] DEVICES-0102 — Implement `AndroidMotionBackend` skeleton (2026-07-05: `include/.../Detail/AndroidMotionBackend.hpp` + `src/.../AndroidMotionBackend.cpp`, entirely `#ifdef __ANDROID__`-gated (same discipline as `AndroidCompassBackend`). Owns five `Detail::AndroidSensorBridge` members: rotation vector, game rotation vector (fallback), gravity, linear acceleration, gyroscope.)
   - **Area:** Motion / Android
   - **Files:** `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp` (new), `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (new, `#ifdef __ANDROID__`)
   - **Required behavior:** Class shape only, backed by `AndroidSensorBridge`.
@@ -1034,7 +1034,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0101, DEVICES-0080
 
-- [ ] DEVICES-0103 — Register `TYPE_ROTATION_VECTOR` as the primary `Attitude` source
+- [x] DEVICES-0103 — Register `TYPE_ROTATION_VECTOR` as the primary `Attitude` source (2026-07-05: `rotationVectorBridge_` constructed with `ASENSOR_TYPE_ROTATION_VECTOR`; `Start()` tries it first via `IsAvailable()`. Cross-compiled clean for Android; `llvm-nm` confirms real symbols.)
   - **Area:** Motion / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - **Required behavior:** Primary path per the design doc (has true-north reference, at the cost of magnetometer coupling).
@@ -1042,7 +1042,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** compile-only
   - **Dependencies:** DEVICES-0102
 
-- [ ] DEVICES-0104 — Register `TYPE_GAME_ROTATION_VECTOR` as a magnetometer-free fallback
+- [x] DEVICES-0104 — Register `TYPE_GAME_ROTATION_VECTOR` as a magnetometer-free fallback (2026-07-05: `gameRotationVectorBridge_` constructed with `ASENSOR_TYPE_GAME_ROTATION_VECTOR`; `Start()` falls back to it only if `rotationVectorBridge_.IsAvailable()` is false, tracked via `usingGameRotationVector_`. Fallback selection order is a plain runtime `if`, not independently unit-tested (would require faking two `AndroidSensorBridge::IsAvailable()` results, which isn't a seam that exists — the logic is simple enough that code review was judged sufficient for this foundation pass).)
   - **Area:** Motion / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - **Required behavior:** Used when `TYPE_ROTATION_VECTOR` is unavailable (device has no magnetometer) — no true-north reference, but still usable for relative attitude.
@@ -1050,7 +1050,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidMotionBackendTests.FallsBackToGameRotationVectorWhenRotationVectorUnavailable`
   - **Dependencies:** DEVICES-0103
 
-- [ ] DEVICES-0105 — Convert rotation-vector output to `Quaternion`
+- [x] DEVICES-0105 — Convert rotation-vector output to `Quaternion` (2026-07-05: `Detail::ConvertRotationVectorToXnaQuaternion(x,y,z,w)` (`AndroidMotionMath.hpp`) — a direct component-for-component mapping, deliberately the simplest possible choice rather than a rigorously-derived change of basis; explicitly documented as unverified against real hardware. 1 test confirms the passthrough is exact.)
   - **Area:** Motion / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - **Required behavior:** Android's rotation-vector sensor reports `(x, y, z, [w])` quaternion components directly (`w` may need to be derived: `w = sqrt(1 - x²-y²-z²)` if the vector array is length 3) — map to `Microsoft::Xna::Framework::Quaternion` with correct axis-convention handling (Android's coordinate system vs. XNA's).
@@ -1058,7 +1058,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidMotionMathTests.RotationVectorConvertsToExpectedQuaternion`
   - **Dependencies:** DEVICES-0103
 
-- [ ] DEVICES-0106 — Derive `RotationMatrix` from the same quaternion, consistently
+- [x] DEVICES-0106 — Derive `RotationMatrix` from the same quaternion, consistently (2026-07-05: `AndroidMotionBackend::HandleAttitudeSample()` calls CNA's own already-tested `Matrix::CreateFromQuaternion(quaternion)` directly on the same `Quaternion` instance used for `AttitudeReading.Quaternion` — trivially guaranteed consistent by construction, not independently re-derived.)
   - **Area:** Motion / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - **Required behavior:** `RotationMatrix` must represent the exact same orientation as `Quaternion` (not independently derived from a second, possibly-inconsistent source like `SensorManager.getRotationMatrix()`).
@@ -1066,7 +1066,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidMotionMathTests.RotationMatrixConsistentWithQuaternion`
   - **Dependencies:** DEVICES-0105
 
-- [ ] DEVICES-0107 — Derive `Yaw`/`Pitch`/`Roll` from the same quaternion/matrix, consistently
+- [x] DEVICES-0107 — Derive `Yaw`/`Pitch`/`Roll` from the same quaternion/matrix, consistently (2026-07-05: `Detail::ExtractYawPitchRollFromQuaternion()` — `pitch=asin(-M32)`, `yaw=atan2(M31,M33)`, `roll=atan2(M12,M22)` on the matrix built from the exact same quaternion, using the exact same `Matrix::CreateFromQuaternion()` element formulas. Derived and numerically verified (Python prototype, this session) via round-trip through CNA's own `Quaternion::CreateFromYawPitchRoll()` before being written into C++ — not an independent guess at XNA's Euler convention. 4 C++ round-trip tests (3 angle combinations + identity) all pass exactly, confirming the formula matches CNA's own existing, already-tested math.)
   - **Area:** Motion / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - **Required behavior:** `AttitudeReading.Pitch`/`Roll`/`Yaw` must decompose from the same orientation as `Quaternion`/`RotationMatrix`, not computed independently from raw sensor angles (avoids the classic "3 sources of truth disagree" bug class).
@@ -1074,7 +1074,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidMotionMathTests.YawPitchRollConsistentWithQuaternion`
   - **Dependencies:** DEVICES-0105
 
-- [ ] DEVICES-0108 — Register `TYPE_GRAVITY` for `MotionReading.Gravity`
+- [x] DEVICES-0108 — Register `TYPE_GRAVITY` for `MotionReading.Gravity` (2026-07-05: `gravityBridge_` constructed with `ASENSOR_TYPE_GRAVITY`. **Found and fixed a real unit bug while implementing this task**: Android's gravity sensor reports m/s² (same as the accelerometer), but `MotionReading.hpp`'s own doc comment documents `Gravity` as "in g, for each axis" — `HandleGravitySample()` initially passed raw m/s² values straight through. Fixed by dividing by the same `StandardGravity = 9.80665f` constant `Accelerometer.cpp` already uses (Task DEVICES-0063's precedent), applied consistently here too.)
   - **Area:** Motion / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - **Required behavior:** Android's virtual `TYPE_GRAVITY` sensor already isolates the gravity component (no manual low-pass filtering needed, per the design doc).
@@ -1082,7 +1082,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidMotionMathTests.GravityConvertsToExpectedGForce`
   - **Dependencies:** DEVICES-0102, DEVICES-0063
 
-- [ ] DEVICES-0109 — Register `TYPE_LINEAR_ACCELERATION` for `MotionReading.DeviceAcceleration`
+- [x] DEVICES-0109 — Register `TYPE_LINEAR_ACCELERATION` for `MotionReading.DeviceAcceleration` (2026-07-05: `linearAccelerationBridge_` constructed with `ASENSOR_TYPE_LINEAR_ACCELERATION`. Same g-force conversion fix as DEVICES-0108 applied here too — `HandleLinearAccelerationSample()` divides by `StandardGravity`, matching `MotionReading.hpp`'s "in g" doc comment.)
   - **Area:** Motion / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - **Required behavior:** Android's virtual `TYPE_LINEAR_ACCELERATION` sensor already excludes gravity (matching XNA's own gravity/acceleration split, per the design doc — no manual high-pass filtering needed).
@@ -1090,7 +1090,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidMotionMathTests.DeviceAccelerationConvertsToExpectedGForce`
   - **Dependencies:** DEVICES-0108
 
-- [ ] DEVICES-0110 — Register `TYPE_GYROSCOPE` for `MotionReading.DeviceRotationRate`
+- [x] DEVICES-0110 — Register `TYPE_GYROSCOPE` for `MotionReading.DeviceRotationRate` (2026-07-05: `gyroscopeBridge_` constructed with `ASENSOR_TYPE_GYROSCOPE`, a registration entirely independent of any live `Gyroscope` C++ instance. Confirmed no conflict: Android's `ASensorEventQueue_enableSensor()` supports multiple independent listeners on the same physical sensor (each queue is its own subscription), and this codebase's `Gyroscope::MaxSensorCount`/`instanceCount_` tracking is per-class (`Gyroscope`'s own static, not shared with `Motion`'s), so constructing both a `Gyroscope` and a `Motion` instance simultaneously does not interact at all. No conversion needed — Android's gyroscope, like `Gyroscope.cpp`'s own SDL path, reports rad/s, matching `MotionReading.hpp`'s "in radians per second" doc comment exactly (DEVICES-0064's precedent).)
   - **Area:** Motion / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - **Required behavior:** Same rad/s unit question as DEVICES-0064, applied to this fourth, independent registration of the gyroscope sensor (Motion registers its own, separate from any live `Gyroscope` instance — confirm this doesn't double-register or conflict with a real `Gyroscope` object existing simultaneously).
@@ -1098,7 +1098,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidMotionBackendTests.CoexistsWithIndependentGyroscopeInstance`
   - **Dependencies:** DEVICES-0064, DEVICES-0102
 
-- [ ] DEVICES-0111 — Map Android's coordinate system to XNA/WP7 expectations for all four Motion vectors
+- [x] DEVICES-0111 — Map Android's coordinate system to XNA/WP7 expectations for all four Motion vectors (2026-07-05: **explicit divergence from `Accelerometer`/`Gyroscope`'s landscape remap, documented, not applied.** Considered reusing `Detail::ConvertAndroidPortraitToXnaLandscape()` for `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` (same physical-quantity class as the dedicated Accelerometer/Gyroscope sensors) but did **not** apply it: that remap is specifically keyed to `AndroidManifest.xml`'s `android:screenOrientation="sensorLandscape"` display-rotation convention (`Rotation90`/`Rotation270`), which has no obvious equivalent for `Motion`'s independent sensor registrations without duplicating the same display-orientation query — applying it silently, without being certain it's the right convention for these three specific sensor types, risked introducing an unverifiable, possibly-wrong remap. Left unremapped (raw Android sensor-frame axes) instead, explicitly flagged in `docs/devices-hardware-checklist.md` §8 as an open question for real-hardware testing, not assumed either way. The `Attitude` quaternion mapping (DEVICES-0105) is a separate, already-documented unverified passthrough.)
   - **Area:** Motion / Android
   - **Files:** `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - **Required behavior:** Apply `Detail::ConvertAndroidPortraitToXnaLandscape()` (or an equivalent, explicitly justified different remap if Motion's coordinate needs differ from Accelerometer's) consistently to `Gravity`/`DeviceAcceleration`/`DeviceRotationRate`, and an equivalent orientation remap to `Attitude`'s quaternion/matrix/yaw-pitch-roll.
@@ -1106,7 +1106,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `AndroidMotionMathTests.CoordinateConversionMatchesAccelerometerConventionOrDocumentsDeviation`
   - **Dependencies:** DEVICES-0065, DEVICES-0107, DEVICES-0108, DEVICES-0109, DEVICES-0110
 
-- [ ] DEVICES-0112 — Wire `AndroidMotionBackend` into `Motion` via the backend-selection seam
+- [x] DEVICES-0112 — Wire `AndroidMotionBackend` into `Motion` via the backend-selection seam (2026-07-05: added `Motion::backend_` (`std::unique_ptr<Detail::IMotionBackend>`), constructed as `Detail::AndroidMotionBackend` only inside `#if defined(__ANDROID__)`; `Start()`/`Stop()`/the static `getIsSupportedProperty()` delegate to it when present. Every pre-existing `MotionTests` case still passes unmodified on this non-Android build — confirmed by re-running the full suite (21/21 green, 16 pre-existing + 5 new).)
   - **Area:** Motion
   - **Files:** `src/Microsoft/Devices/Sensors/Motion.cpp`
   - **Required behavior:** Same migration-plan discipline as DEVICES-0095: private `std::unique_ptr<Detail::IMotionBackend>` member, Android-only selection, no behavior change on other platforms; existing `MotionTests` (`GetIsSupportedPropertyDoesNotCrash`/`IsFalse`, `StartThrowsSensorFailedException`) still pass unmodified on this host.
@@ -1114,7 +1114,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** full existing suite + new tests
   - **Dependencies:** DEVICES-0102 through DEVICES-0111
 
-- [ ] DEVICES-0113 — Add fake-backend `MotionTests` for the new Android path
+- [x] DEVICES-0113 — Add fake-backend `MotionTests` for the new Android path (2026-07-05: added `FakeMotionBackend` (a local test-only `IMotionBackend` implementation) plus 4 new tests: `WithInjectedSupportedBackendStartSucceeds`, `WithInjectedUnsupportedBackendStartStillThrows`, `CurrentValueChangedFiresFromBackendReading`, `StopCallsBackendStop`. Required adding a `NOXNA SetBackendForTesting()` hook to `Motion`, mirroring `Compass`'s identical DEVICES-0096 hook. All pass; existing `NotSupported`-stub tests remain the default path.)
   - **Area:** Motion / Testing
   - **Files:** `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
   - **Required behavior:** Same pattern as DEVICES-0096, but for `Motion`/`IMotionBackend`.
@@ -1122,7 +1122,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `MotionTests.WithInjectedSupportedBackendStartSucceeds`, `...CurrentValueChangedFiresFromBackendReading`
   - **Dependencies:** DEVICES-0112
 
-- [ ] DEVICES-0114 — Motion's dependency on Compass — decide and document the actual coupling
+- [x] DEVICES-0114 — Motion's dependency on Compass — decide and document the actual coupling (2026-07-05: **corrected a genuinely misleading doc comment.** `Motion.hpp`'s class comment previously said "requires an Accelerometer, Compass, and Gyroscope" and `Motion.cpp` had a `// TODO: wire up real sensor fusion (Accelerometer + Compass + Gyroscope) once SDL3 gains a magnetometer/compass API" comment — both wrong for the real implementation: `AndroidMotionBackend` needs zero live `Accelerometer`/`Compass`/`Gyroscope` C++ instances; Android's OS does the fusion internally via `ASENSOR_TYPE_ROTATION_VECTOR`. Rewrote both comments; added `MotionTests.DoesNotRequireOtherSensorInstancesToBeConstructed` confirming a bare `Motion` instance with only its own backend works with no other sensor object ever constructed.)
   - **Area:** Motion / Design
   - **Files:** `src/Microsoft/Devices/Sensors/Motion.cpp`, `include/Microsoft/Devices/Sensors/Motion.hpp`
   - **Required behavior:** The class comment says "Motion requires an Accelerometer, Compass, and Gyroscope" — but Android's `TYPE_ROTATION_VECTOR`/`TYPE_GAME_ROTATION_VECTOR` fuse this internally in the OS, meaning `AndroidMotionBackend` does **not** need a live `Compass`/`Accelerometer`/`Gyroscope` C++ instance at all. Update the doc comment to reflect the real dependency (Android sensor availability, not this codebase's own sensor object graph) once this phase lands, so it doesn't mislead a future reader into thinking `Motion` requires constructing the other three classes first.
@@ -1130,7 +1130,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** `MotionTests.DoesNotRequireOtherSensorInstancesToBeConstructed`
   - **Dependencies:** DEVICES-0112
 
-- [ ] DEVICES-0115 — Cross-compile `Motion`/`AndroidMotionBackend` for Android and verify via `llvm-nm`
+- [x] DEVICES-0115 — Cross-compile `Motion`/`AndroidMotionBackend` for Android and verify via `llvm-nm` (2026-07-05: `cmake --build cmake-build-android --target CNA` succeeds clean. `llvm-nm -C` on `AndroidMotionBackend.cpp.o` confirms real methods plus `ConvertRotationVectorToXnaQuaternion`/`ExtractYawPitchRollFromQuaternion` compiled in; `llvm-nm` on `Motion.cpp.o` confirms it references `AndroidMotionBackend`'s constructor/`IsSupported()`/destructor as undefined externals, proving the platform switch actually activates.)
   - **Area:** Motion / Android / Build
   - **Files:** none changed; build verification only
   - **Required behavior:** Same technique as DEVICES-0097.
@@ -1138,7 +1138,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0112
 
-- [ ] DEVICES-0116 — Document drift differences between rotation-vector and game-rotation-vector modes
+- [x] DEVICES-0116 — Document drift differences between rotation-vector and game-rotation-vector modes (2026-07-05: documented in `AndroidMotionBackend`'s own class doc comment and cross-referenced from `docs/devices-hardware-checklist.md` §8, item 6: `TYPE_GAME_ROTATION_VECTOR` (gyroscope+accelerometer only) drifts in yaw over time with no magnetometer correction; `TYPE_ROTATION_VECTOR` stays yaw-stable but couples to magnetic interference. A game seeing the fallback engage should expect this trade-off, not treat it as a bug.)
   - **Area:** Docs
   - **Files:** `docs/devices-native-backend-design.md`
   - **Required behavior:** Explain that `TYPE_GAME_ROTATION_VECTOR` (gyroscope+accelerometer only) drifts in yaw over time with no magnetometer correction, while `TYPE_ROTATION_VECTOR` stays yaw-stable but couples to magnetic interference — a game switching between the two fallback modes should expect this trade-off, not treat it as a bug.
@@ -1146,7 +1146,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0104
 
-- [ ] DEVICES-0117 — Document remaining Motion limitations honestly in `AUDIT.md`/`NEXT.md`
+- [x] DEVICES-0117 — Document remaining Motion limitations honestly in `AUDIT.md`/`NEXT.md` (2026-07-05: rewrote `AUDIT.md`'s `Motion` row with the full layered status, the corrected Compass-dependency fact (DEVICES-0114), and the unverified-quaternion-mapping caveat. `NEXT.md`'s broader update deferred to Phase 10's final report (DEVICES-0142), same as Compass's DEVICES-0098.)
   - **Area:** Docs
   - **Files:** `AUDIT.md`, `NEXT.md`
   - **Required behavior:** Same layered-status discipline as DEVICES-0098, applied to `Motion`.
@@ -1154,7 +1154,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A
   - **Dependencies:** DEVICES-0112, DEVICES-0115
 
-- [ ] DEVICES-0118 — Add Motion manual hardware-verification checklist items
+- [x] DEVICES-0118 — Add Motion manual hardware-verification checklist items (2026-07-05: added `docs/devices-hardware-checklist.md` §8 — 6 concrete steps: confirm flat-device pitch/roll/yaw read ~zero, confirm each Euler angle responds to the correct physical rotation, confirm Gravity/DeviceAcceleration magnitude and split sanity at rest and under motion, confirm DeviceRotationRate's convention matches the already-verified `Gyroscope` class, confirm the game-rotation-vector fallback engages gracefully when the magnetometer is unavailable.)
   - **Area:** Docs / Manual verification
   - **Files:** `docs/devices-hardware-checklist.md`
   - **Required behavior:** New section: confirm `Attitude`'s yaw tracks a known 90°/180° physical rotation; confirm `Gravity`/`DeviceAcceleration` split behaves as expected (device at rest: `Gravity ≈ (0,±1,0)`-ish depending on orientation, `DeviceAcceleration ≈ 0`; device thrown/shaken: `DeviceAcceleration` spikes, `Gravity` stays roughly constant).
@@ -1162,7 +1162,7 @@ same convention as `plan_devices_phase2.md`–`plan_devices_phase9.md`.
   - **Tests:** N/A — manual only
   - **Dependencies:** DEVICES-0112
 
-- [ ] DEVICES-0119 — Do NOT fake Motion from Accelerometer+Gyroscope-only fusion math — explicit negative-verification task
+- [x] DEVICES-0119 — Do NOT fake Motion from Accelerometer+Gyroscope-only fusion math — explicit negative-verification task (2026-07-05: re-read the final `AndroidMotionBackend.cpp`/`Motion.cpp` in full. Confirmed: `Attitude` comes only from Android's OS-fused `ASENSOR_TYPE_ROTATION_VECTOR`/`ASENSOR_TYPE_GAME_ROTATION_VECTOR` output — no code path anywhere manually integrates raw gyroscope data or combines raw accelerometer+magnetometer vectors in this bridge. `Gravity`/`DeviceAcceleration` come from Android's own already-split virtual sensors, not manual high-pass/low-pass filtering. No live `Accelerometer`/`Compass`/`Gyroscope` instance is required or referenced (DEVICES-0114). Sign-off: gate passed.)
   - **Area:** Motion / Correctness gate
   - **Files:** none changed; verification only
   - **Required behavior:** Re-read the final `Motion.cpp` after Phase 8 lands and confirm no code path does manual sensor-fusion math in the bridge when `TYPE_ROTATION_VECTOR`/`TYPE_GAME_ROTATION_VECTOR` (OS-fused) are used correctly — this task exists so a future implementer doesn't accidentally reintroduce the exact anti-pattern this whole plan is designed to avoid (per the Safety and Correctness Rules section) by, e.g., manually integrating raw gyroscope data instead of consuming Android's own fused rotation-vector output.

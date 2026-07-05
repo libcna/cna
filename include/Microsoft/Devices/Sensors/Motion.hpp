@@ -2,11 +2,13 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 
 #include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
+#include "Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp"
 #include "Microsoft/Devices/Sensors/MotionReading.hpp"
 #include "Microsoft/Devices/Sensors/SensorBase.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
@@ -16,12 +18,21 @@
 namespace Microsoft::Devices::Sensors
 {
     /**
-     * @brief Provides access to the device's fused motion sensor (accelerometer + compass + gyroscope).
+     * @brief Provides access to the device's fused motion sensor.
      *
-     * @note Motion requires an Accelerometer, Compass, and Gyroscope. SDL3
-     * exposes no magnetometer/compass API on any supported platform, so
-     * getIsSupportedProperty() always returns false, and Start() always fails
-     * with SensorFailedException until compass support becomes available.
+     * @note SDL3 exposes no fused-orientation/motion API on any supported
+     * platform, so this class has no SDL-backed implementation. On
+     * Android, a native backend (Detail::AndroidMotionBackend, Task
+     * DEVICES-0101-0119) provides real Attitude/Gravity/DeviceAcceleration/
+     * DeviceRotationRate data using the NDK's rotation-vector (or
+     * game-rotation-vector fallback), gravity, linear-acceleration, and
+     * gyroscope sensors directly — no SDL involvement, and no dependency
+     * on constructing a live Accelerometer/Compass/Gyroscope C++ instance
+     * (Task DEVICES-0114 — an earlier comment here suggested otherwise;
+     * Android's own sensor fusion happens entirely inside the OS, not by
+     * combining this codebase's own sensor objects). On every other
+     * platform, getIsSupportedProperty() always returns false, and Start()
+     * always fails with SensorFailedException, exactly as before.
      */
     class Motion final : public SensorBase<MotionReading>
     {
@@ -35,6 +46,14 @@ namespace Microsoft::Devices::Sensors
 
         SensorState state_;
         bool started_;
+
+        /**
+         * @brief Native backend, selected at construction time by a
+         * compile-time platform switch. Null on any platform without one —
+         * Start()/Stop() fall back to the permanent NotSupported stub in
+         * that case, unchanged from before this backend existed.
+         */
+        std::unique_ptr<Detail::IMotionBackend> backend_;
 
     public:
         /**
@@ -106,5 +125,20 @@ namespace Microsoft::Devices::Sensors
          * @brief Event raised when the compass component detects that it requires calibration.
          */
         System::EventHandler<CalibrationEventArgs> Calibrate;
+
+        /**
+         * @brief Test-only hook (Task DEVICES-0113): replaces the real,
+         * platform-selected backend with a caller-supplied one (typically a
+         * test fake), so Start()/CurrentValueChanged delegation can be
+         * exercised on any host without needing real Android hardware or
+         * Detail::AndroidMotionBackend directly.
+         *
+         * Must be called before Start(); has no effect on an already-started
+         * instance.
+         *
+         * @param backend Replacement backend; pass nullptr to restore the
+         * platform-default (no-backend/stub) behavior.
+         */
+        NOXNA void SetBackendForTesting(std::unique_ptr<Detail::IMotionBackend> backend);
     };
 } // namespace Microsoft::Devices::Sensors

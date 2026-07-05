@@ -2,6 +2,7 @@
 
 #include "Microsoft/Devices/Sensors/Motion.hpp"
 
+#include "Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Devices::Sensors
@@ -11,10 +12,16 @@ namespace Microsoft::Devices::Sensors
 
     bool Motion::getIsSupportedProperty()
     {
-        // TODO: wire up real sensor fusion (Accelerometer + Compass + Gyroscope)
-        // once SDL3 gains a magnetometer/compass API and Compass::getIsSupportedProperty()
-        // can return true.
+#if defined(__ANDROID__)
+        // Stateless probe, independent of any Motion instance (matching the
+        // real WP7 API's static IsSupported contract) — cheap, does not
+        // hold any resource open.
+        Detail::AndroidMotionBackend probe;
+        return probe.IsSupported();
+#else
+        // SDL3 exposes no fused-orientation/motion API on any supported platform.
         return false;
+#endif
     }
 
     SensorState Motion::getStateProperty() const
@@ -42,7 +49,11 @@ namespace Microsoft::Devices::Sensors
             ++instanceCount_;
         }
 
-        const bool supported = getIsSupportedProperty();
+#if defined(__ANDROID__)
+        backend_ = std::make_unique<Detail::AndroidMotionBackend>();
+#endif
+
+        const bool supported = backend_ ? backend_->IsSupported() : getIsSupportedProperty();
         state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
         setIsSupportedProperty(supported);
     }
@@ -59,6 +70,24 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
 
+        if (backend_ && backend_->IsSupported())
+        {
+            const bool started = backend_->Start(
+                getTimeBetweenUpdatesProperty(),
+                [this](const MotionReading& reading)
+                {
+                    setIsDataValidProperty(true);
+                    setCurrentValueProperty(reading);
+                });
+
+            if (started)
+            {
+                started_ = true;
+                state_ = SensorState::Ready;
+                return;
+            }
+        }
+
         state_ = SensorState::NotSupported;
         throw SensorFailedException("Motion is not supported on this platform.");
     }
@@ -66,6 +95,11 @@ namespace Microsoft::Devices::Sensors
     void Motion::Stop()
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
+
+        if (backend_)
+        {
+            backend_->Stop();
+        }
 
         started_ = false;
         state_ = SensorState::Disabled;
@@ -102,6 +136,12 @@ namespace Microsoft::Devices::Sensors
         }
 
         SensorBase<MotionReading>::Dispose(disposing);
+    }
+
+    void Motion::SetBackendForTesting(std::unique_ptr<Detail::IMotionBackend> backend)
+    {
+        backend_ = std::move(backend);
+        setIsSupportedProperty(backend_ ? backend_->IsSupported() : getIsSupportedProperty());
     }
 
     GetTypeNameCPP(Motion, "Microsoft.Devices.Sensors.Motion")
