@@ -42,10 +42,11 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     bool TouchLocation::TryGetPreviousLocation(TouchLocation& previousLocation) const
     {
-        if (prevState_ == TouchLocationState::Invalid)
-            return false;
+        // Matches FNA exactly: the out-param is written on every path (a C# out-param must be assigned
+        // before the method returns), then the return value reports whether that previous location is
+        // valid. On the false path this yields TouchLocation(id_, Invalid, prevPosition_).
         previousLocation = TouchLocation(id_, prevState_, prevPosition_);
-        return true;
+        return prevState_ != TouchLocationState::Invalid;
     }
 
     bool TouchLocation::Equals(const TouchLocation& other) const

@@ -400,6 +400,23 @@ TEST(TouchLocationTest, FiveArgConstructorTracksPreviousStateAndPosition)
     EXPECT_EQ(previous.getPositionProperty(), Vector2(1.0f, 2.0f));
 }
 
+// DEC-12: matches FNA — TryGetPreviousLocation writes the out-param on the false path too (the Invalid
+// previous location), rather than leaving it untouched.
+TEST(TouchLocationTest, TryGetPreviousLocationFalsePathWritesInvalidPreviousLocationLikeFna)
+{
+    // A 3-arg location has no previous, so prevState defaults to Invalid.
+    const TouchLocation location(7, TouchLocationState::Pressed, Vector2(3.0f, 4.0f));
+
+    // Pre-seed the out-param with a distinct value to prove it gets overwritten (not left untouched).
+    TouchLocation previous(99, TouchLocationState::Moved, Vector2(88.0f, 88.0f));
+    EXPECT_FALSE(location.TryGetPreviousLocation(previous));
+
+    // FNA writes new TouchLocation(Id, prevState, prevPosition) even when returning false.
+    EXPECT_EQ(previous.getIdProperty(), 7);
+    EXPECT_EQ(previous.getStateProperty(), TouchLocationState::Invalid);
+    EXPECT_EQ(previous.getPositionProperty(), Vector2::Zero);
+}
+
 TEST(TouchLocationTest, EqualityOperatorsForEqualAndDifferingInstances)
 {
     const TouchLocation a(1, TouchLocationState::Pressed, Vector2(1.0f, 2.0f));

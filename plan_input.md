@@ -1468,7 +1468,7 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** none.
 
 #### INPUT-TOUCH-009 — `TouchLocation.TryGetPreviousLocation` (both paths)
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch
+- **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-12 — match FNA, writes on false) · **Area:** Touch
 - **Files:** `TouchLocation.cpp`
 - **Problem:** No dedicated test; false-path out-param behavior is a deviation (§18).
 - **Work:** Add true-path (returns prev) and false-path (returns false; document out-param non-write) tests.
@@ -2749,9 +2749,13 @@ Current: compact counter from 1. FNA: casts SDL finger id. Risk: id values diffe
 Decision: accept + document. Tests: id-alloc/reuse. Disposition: **Accept**. → INPUT-TOUCH-013.
 
 **DEC-12 — `TryGetPreviousLocation` false path doesn't write out-param.**
-Current: returns false, leaves out-param untouched. XNA/FNA: verify (likely leaves default). Risk: caller
-reads stale out-param. Decision: match FNA (write default on false?) or document. Tests: false-path.
-Disposition: **Decide**. → INPUT-TOUCH-009.
+Was: CNA early-returned `false` leaving the out-param untouched. FNA: **always writes — verified**
+(`TouchLocation.cs`: `previousLocation = new TouchLocation(Id, prevState, prevPosition); return
+previousLocation.State != Invalid;` — a C# `out` param must be assigned on every path). Disposition:
+**FIXED (2026-07-05 — match FNA).** CNA now assigns `TouchLocation(id_, prevState_, prevPosition_)`
+unconditionally and returns `prevState_ != Invalid`; on the false path the out-param is the Invalid previous
+location (`id_`, `Invalid`, `prevPosition_`). Dedicated false-path test added (the existing 5-arg-ctor test
+already covers the true path). → INPUT-TOUCH-009.
 
 **DEC-13 — `TouchPanel.Update()` copies current→previous before gesture update.**
 Current: copy-then-update. FNA: reversed order (documented inert). Risk: none if inert. Decision: confirm

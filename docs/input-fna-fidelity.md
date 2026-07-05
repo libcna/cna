@@ -143,8 +143,9 @@ from the fake-backend unit tests above.
   is required.
 - `TouchPanel::Update()` copies current→previous **before** the gesture update; FNA does gesture
   update first. The two statements touch disjoint state, so the order is functionally inert.
-- `TryGetPreviousLocation` does not write the out-param on the `false` path (FNA writes an Invalid
-  location). Harmless for the check-bool-first pattern.
+- `TryGetPreviousLocation` now writes the out-param on **every** path (DEC-12, fixed 2026-07-05): it
+  assigns `TouchLocation(Id, prevState, prevPosition)` and returns `prevState != Invalid`, matching FNA
+  exactly (on the `false` path the out-param is the Invalid previous location, not left untouched).
 
 ---
 
