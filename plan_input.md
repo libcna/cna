@@ -552,8 +552,8 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Deps:** none.
 
 #### INPUT-API-030 — Public-API-only compile test (header hygiene)
-- **Priority:** P1 · **Status:** TODO · **Area:** API/Test
-- **Files:** new `tests/.../Input/PublicApiCompileTests.cpp` (or a tiny separate target)
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** API/Test
+- **Files:** `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`
 - **Problem:** No test compiles a program using ONLY public XNA Input headers; all current tests pull in
   `CNA/Internal/**`. Regressions that leak internal/SDL types would go unnoticed.
 - **Work:** Add a translation unit including only public headers, instantiating each public type, that must
@@ -561,6 +561,14 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Acceptance:** Compiles clean; fails if a public header starts requiring internal/SDL types.
 - **Tests:** the new compile TU.
 - **Deps:** INPUT-AUDIT-003.
+- **Result (2026-07-05):** Added `PublicApiInputCompileTests.cpp`: includes only public Input headers
+  (+`PlayerIndex`), links a never-run `UsePublicInputApi()` that constructs/uses every public type, and a
+  preprocessor `#error` guard asserting no public header **except** `Mouse.hpp`/`MouseCursor.hpp` pulls SDL.
+  Guard verified live (temporarily moving an SDL-exposing include above it triggers the `#error`).
+  **Finding (raises DEC-21 severity):** the leak is not confined to the NOXNA `MouseCursor` — `Mouse.hpp`
+  `#include`s `MouseCursor.hpp`, so the **strict-XNA `Mouse` header transitively drags in all of SDL**. The
+  other 24 public Input headers are clean. Runs in the full suite; not matched by the base input-filter
+  tokens (another INPUT-BUILD-003 data point).
 
 ---
 
@@ -590,11 +598,14 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 #### INPUT-API-033 — Guard against internal SDL types in public signatures
 - **Priority:** P1 · **Status:** TODO · **Area:** API/Guardrail
 - **Files:** `include/Microsoft/Xna/Framework/Input/**`
-- **Problem:** `MouseCursor.hpp` is the one known leak; policy must be explicit and enforced elsewhere.
+- **Problem:** `MouseCursor.hpp` is a known leak; policy must be explicit and enforced. Enforcement now
+  exists (INPUT-API-030 `PublicApiInputCompileTests` `#error` guard). Confirmed leak scope =
+  {`MouseCursor.hpp`, `Mouse.hpp` (transitive)}; the other 24 public Input headers are SDL-free.
 - **Work:** Decide MouseCursor's exception (documented, intentional) vs refactor to a pimpl/opaque handle;
-  ensure no other header leaks.
-- **Acceptance:** Only explicitly-approved SDL exposure remains; INPUT-API-030 enforces it.
-- **Tests:** INPUT-API-030.
+  ensure no other header leaks (guard already enforces the "no other header" half).
+- **Acceptance:** Only explicitly-approved SDL exposure remains; INPUT-API-030 enforces it (DONE for the
+  enforcement; the `Mouse`/`MouseCursor` decision itself is DEC-21 / INPUT-MOUSE-018).
+- **Tests:** INPUT-API-030 (`PublicApiInputCompileTests`).
 - **Deps:** INPUT-AUDIT-003.
 
 #### INPUT-API-034 — Prevent accidental public-API drift on enums (values are ABI)
@@ -960,10 +971,14 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Priority:** P1 · **Status:** TODO · **Area:** Mouse/API/Guardrail
 - **Files:** `MouseCursor.hpp`
 - **Problem:** Public header `#include <SDL3/SDL.h>` and exposes `SDL_Cursor*`, `SDL_SystemCursor`.
+  **Now confirmed (INPUT-API-030) to spread transitively: `Mouse.hpp` includes `MouseCursor.hpp`, so the
+  strict-XNA `Mouse` header also drags in SDL** — this is no longer a NOXNA-only concern.
 - **Work:** Decide: (a) accept as documented intentional exception (whole class is NOXNA), or (b) refactor to
-  an opaque handle/pimpl so no public XNA header pulls SDL. Implement chosen path.
-- **Acceptance:** Either documented exception in INPUT-API-033 or SDL removed from the public header.
-- **Tests:** INPUT-API-030.
+  an opaque handle/pimpl so no public XNA header pulls SDL, and forward-declare `MouseCursor` in `Mouse.hpp`.
+  Implement chosen path. (Option (b) preferred now that a strict-XNA header is affected.)
+- **Acceptance:** Either documented exception in INPUT-API-033 or SDL removed from the public headers; the
+  `PublicApiInputCompileTests` guard updated to move `Mouse.hpp`/`MouseCursor.hpp` above the `#error` line.
+- **Tests:** INPUT-API-030 (`PublicApiInputCompileTests`).
 - **Deps:** INPUT-AUDIT-003.
 
 #### INPUT-MOUSE-019 — `FromTexture2D` validation
@@ -2168,8 +2183,9 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 Baseline (this checkout, EasyGL, 2026-07-05): full `CnaTests` **3267 passed / 2 skipped** (was 3248;
 +19 this session — 9 gesture + 10 enum-value tests). Input filter **259 → 273** with the existing tokens,
 **278** with the enum tokens added (INPUT-GESTURE-007/011/012 + INPUT-TEST-001); order-independent under
-shuffle×3. No `DISABLED_` input tests; `GTEST_SKIP` only as headless environment fallback. **No
-public-API-only compile test exists.** Gaps below become concrete backlog items.
+shuffle×3. No `DISABLED_` input tests; `GTEST_SKIP` only as headless environment fallback. A public-API
+compile/header-hygiene guard now exists (`PublicApiInputCompileTests`, INPUT-API-030). Gaps below become
+concrete backlog items.
 
 #### INPUT-TEST-001 — Add missing enum-value test suites
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test
@@ -2215,12 +2231,13 @@ public-API-only compile test exists.** Gaps below become concrete backlog items.
 - **Deps:** §5 matrices.
 
 #### INPUT-TEST-005 — Public-API-only compile test
-- **Priority:** P1 · **Status:** TODO · **Area:** Test/API
-- **Files:** new compile TU
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test/API
+- **Files:** `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`
 - **Work:** Per INPUT-API-030.
 - **Acceptance:** Compiles with public headers only.
 - **Tests:** the TU.
 - **Deps:** INPUT-API-030.
+- **Result (2026-07-05):** Delivered together with INPUT-API-030 (same TU). See that task's result.
 
 #### INPUT-TEST-006 — Synthetic gamepad event integration tests
 - **Priority:** P2 · **Status:** TODO · **Area:** Test/GamePad
@@ -2668,11 +2685,16 @@ Current: live queries; caps use non-mutating property reads (to avoid a rumble-c
 cached at connect. Risk: minor perf / timing. Decision: accept + document. Tests: GUID/caps, no-rumble.
 Disposition: **Accept**. → INPUT-GAMEPAD-012, INPUT-GAMEPAD-016.
 
-**DEC-21 — `MouseCursor` public header leaks SDL types.**
+**DEC-21 — `MouseCursor` (and transitively `Mouse`) public header leaks SDL types.**
 Current: `MouseCursor.hpp` includes `<SDL3/SDL.h>`, exposes `SDL_Cursor*`/`SDL_SystemCursor`; whole class is
-NOXNA (MonoGame-derived, absent from XNA/FNA). Risk: SDL bleeds into public XNA include tree. Decision:
-accept as documented exception OR hide behind opaque handle/pimpl. Tests: public-API compile test.
-Disposition: **Decide (P1)**. → INPUT-MOUSE-018, INPUT-API-033.
+NOXNA (MonoGame-derived, absent from XNA/FNA). **Confirmed 2026-07-05 (INPUT-API-030): the leak also reaches
+the strict-XNA `Mouse` header — `Mouse.hpp` `#include`s `MouseCursor.hpp`**, so any consumer of `Mouse`
+pulls in all of SDL. Risk: SDL bleeds into the public XNA include tree via a core type, not just a NOXNA
+extension (raises severity). A live compile guard now pins the current scope ({`Mouse.hpp`,`MouseCursor.hpp`}
+allowed; all other public Input headers must stay SDL-free). Decision: accept as documented exception OR
+hide SDL behind an opaque handle/pimpl in `MouseCursor` and forward-declare it in `Mouse.hpp`. Tests:
+`PublicApiInputCompileTests`. Disposition: **Decide (P1)** — lean Fix, given a strict-XNA header is affected.
+→ INPUT-MOUSE-018, INPUT-API-033.
 
 **DEC-22 — `ToString` returns type-name for GamePadState/KeyboardState.**
 Current: returns fully-qualified type name (FNA ValueType default), not content. XNA/FNA: same. Risk: none.
