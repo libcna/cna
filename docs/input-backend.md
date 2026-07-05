@@ -242,7 +242,9 @@ cmake --build cmake-build-input-easygl --target CnaTests -j"$(nproc)"
   --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'
 ```
 
-This filter selects the 165 input-related tests out of the full suite. To shake out
+This filter is a subset of the input tests; the **canonical input filter and current authoritative
+counts** (input filter 280, full suite 3269/2 skipped, 2026-07-05 baseline) live in
+`docs/input-build-and-test.md` (§Test counts). To shake out
 order-dependence in the process-wide static input state (`InputManager`, `GestureDetector`, and
 the `MouseCursor` stock-cursor singletons all persist for the process lifetime), add:
 

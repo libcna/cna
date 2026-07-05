@@ -24,6 +24,10 @@ environment/session.
   (EasyGL, Vulkan); **1968/1968** (bgfx, +4 bgfx-specific).
 - Input filter: **217** tests, identical on all three backends.
 
+> **Superseded (2026-07-05):** the counts above are the historical record for **2026-07-04** (pre-Phase-I15).
+> The current authoritative baseline — full suite **3269 / 2 skipped**, canonical input filter **280** — is
+> in `docs/input-build-and-test.md` (§Test counts). This entry is retained as-is for that date, not rewritten.
+
 ### Verified in this environment
 
 | Check | Method | Result |

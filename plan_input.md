@@ -212,14 +212,17 @@ implemented and event-driven.
 - **Deps:** INPUT-BUILD-002.
 
 #### INPUT-BUILD-010 — Record & version the canonical test-count baseline
-- **Priority:** P1 · **Status:** TODO · **Area:** Test/Docs
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test/Docs
 - **Files:** `docs/input-build-and-test.md`, this file, `docs/input-manual-verification-results.md`
-- **Problem:** Four docs cite four different counts; none matches the real 3248/259.
+- **Problem:** Four docs cite four different counts; none matches the real numbers.
 - **Work:** Establish one authoritative counts table (date, backend, full-suite count, input-filter count,
   filter string used) and reference it from every doc that currently guesses.
 - **Acceptance:** Single source of truth; other docs link to it; matches a re-run.
 - **Tests:** full suite + input filter.
 - **Deps:** INPUT-BUILD-002.
+- **Result (2026-07-05):** Added the authoritative **§Test counts** table to `docs/input-build-and-test.md`
+  (full **3269 / 2 skipped**; canonical input filter **280**, base **274**; date + toolchain + the exact
+  filter string). Delivered together with INPUT-DOC-001, which points every other doc at it.
 
 ---
 
@@ -2221,12 +2224,11 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 
 ## 15. Tests plan
 
-Baseline (this checkout, EasyGL, 2026-07-05): full `CnaTests` **3267 passed / 2 skipped** (was 3248;
-+19 this session — 9 gesture + 10 enum-value tests). Input filter **259 → 273** with the existing tokens,
-**278** with the enum tokens added (INPUT-GESTURE-007/011/012 + INPUT-TEST-001); order-independent under
-shuffle×3. No `DISABLED_` input tests; `GTEST_SKIP` only as headless environment fallback. A public-API
-compile/header-hygiene guard now exists (`PublicApiInputCompileTests`, INPUT-API-030). Gaps below become
-concrete backlog items.
+Baseline (this checkout, EasyGL, 2026-07-05): full `CnaTests` **3269 passed / 2 skipped**; canonical input
+filter **280** (base **274**); order-independent under shuffle×3. The single source of truth is
+`docs/input-build-and-test.md` (§Test counts) — cite it, don't restate. No `DISABLED_` input tests;
+`GTEST_SKIP` only as headless environment fallback. A public-API compile/header-hygiene guard now exists
+(`PublicApiInputCompileTests`, INPUT-API-030). Gaps below become concrete backlog items.
 
 #### INPUT-TEST-001 — Add missing enum-value test suites
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test
@@ -2418,13 +2420,20 @@ Each doc task must: remove contradictions, separate verified-fact from intended-
 automated from manual verification, and stamp manual results with exact date/hardware/OS/backend/SDL.
 
 #### INPUT-DOC-001 — Reconcile all test counts to the real baseline
-- **Priority:** P1 · **Status:** TODO · **Area:** Docs
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Docs
 - **Files:** `NEXT.md`, `docs/input-manual-verification-results.md`, `docs/input-backend.md`, `docs/input-build-and-test.md`
-- **Problem:** 2234 vs 1964 vs (real) 3248 full; 257 vs 217 vs 165 vs (real) 259 input.
+- **Problem:** 2234 vs 1964 vs real full; 257 vs 217 vs 165 vs real input.
 - **Work:** Replace all with the single authoritative table (INPUT-BUILD-010); note the filter string used.
 - **Acceptance:** One consistent count across all docs.
 - **Tests:** re-run to confirm.
 - **Deps:** INPUT-BUILD-010.
+- **Result (2026-07-05):** Standardized on a **canonical input filter** (base tokens +
+  `*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*`) and put the authoritative counts table in
+  `docs/input-build-and-test.md`. Updated the stale counts everywhere: `input-backend.md` ("165" → points
+  to the table), `NEXT.md` (§2/§4/§8 259/2234/257 → 3269 full / 280 canonical + pointer; §7 filter made
+  canonical). The dated `input-manual-verification-results.md` 2026-07-04 entry is kept verbatim (historical
+  record) with a "superseded" pointer rather than rewritten. All non-historical count claims now agree with
+  a fresh re-run. (Adding a CTest label so the filter string isn't hand-copied remains INPUT-BUILD-003.)
 
 #### INPUT-DOC-002 — Fix the `MaximumTouchCount` contradiction
 - **Priority:** P1 · **Status:** TODO · **Area:** Docs

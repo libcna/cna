@@ -33,9 +33,11 @@
 - **Input branch build:** clean on **all 4 backends** in this checkout (Debian 13). 3-backend gap CLOSED
   on 2026-07-05 (plan task INPUT-BUILD-002): EasyGL, Vulkan, bgfx, and SDL_RENDERER each build `CnaTests`
   clean and pass the input filter, order-independent under shuffle — input is confirmed backend-agnostic.
-- **Input tests (last run, 2026-07-05):** full `CnaTests` **3248 pass / 2 skipped** (EasyGL; the 2 skips
-  are Devices sensor tests, not input); input filter **259 / 259** on every backend; order-independent
-  under `--gtest_shuffle --gtest_repeat=3`. (Earlier 2234/257 counts were stale — pre-Phase-I15.)
+- **Input tests (last run, 2026-07-05):** full `CnaTests` **3269 pass / 2 skipped** (EasyGL; the 2 skips
+  are Devices sensor tests, not input); canonical input filter **280** (base **274**), identical on all 4
+  backends; order-independent under `--gtest_shuffle --gtest_repeat=3`. **Authoritative counts + the
+  canonical filter string live in `docs/input-build-and-test.md` (§Test counts)** — cite that, don't
+  restate. (Earlier 2234/257/259 numbers were stale.)
 - **Available artifacts:** the `CNA` library; the `CnaTests` GoogleTest binary; examples under
   `examples/` (`demo_input`, `input_smoke`, and many graphics `easygl_*`/`vulkan_*`/`bgfx_*` samples).
   Backend chosen at configure time via `-DCNA_GRAPHICS_BACKEND=`.
@@ -68,7 +70,7 @@
 
 **The input branch has no hard blocker** — it builds and every test passes on **all 4 backends**; no
 failing command or test. The former **`needs verification`** 3-backend gap is now CLOSED (2026-07-05,
-plan task INPUT-BUILD-002: EasyGL/Vulkan/bgfx/SDL_RENDERER all green, input filter 259/259, shuffle-stable).
+plan task INPUT-BUILD-002: EasyGL/Vulkan/bgfx/SDL_RENDERER all green, input filter green, shuffle-stable).
 Remaining open input-track items: (a) a human merge-vs-continue decision; (b) the larger `plan_input.md`
 backlog (265 tasks) — next up are sanitizer run (INPUT-BUILD-006), fresh-clone repro (INPUT-BUILD-001),
 DragComplete tests (INPUT-GESTURE-007), and the open design decisions (DEC-04/09/15/21).
@@ -143,9 +145,9 @@ cmake --build cmake-build-input-easygl --target CnaTests
 # Run everything:
 ./cmake-build-input-easygl/CnaTests
 
-# Input-only filter:
+# Input-only filter (canonical — see docs/input-build-and-test.md §Test counts):
 ./cmake-build-input-easygl/CnaTests \
-  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*'
+  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*'
 
 # Order-independence (must stay green):
 ./cmake-build-input-easygl/CnaTests --gtest_filter='<input filter above>' --gtest_shuffle --gtest_repeat=5
@@ -162,7 +164,7 @@ is a verification gap, not a failure. Graphics bugs (§4) reproduce via the pixe
 ## 8. Next smallest tasks (input track, ordered)
 
 1. ~~**3-backend verification of this branch.**~~ **DONE 2026-07-05 (INPUT-BUILD-002).** Vulkan, bgfx, and
-   SDL_RENDERER all build `CnaTests` clean and pass the input filter 259/259, shuffle-stable → all 4
+   SDL_RENDERER all build `CnaTests` clean and pass the input filter (280 canonical), shuffle-stable → all 4
    backends green; input confirmed backend-agnostic. See `plan_input.md` INPUT-BUILD-002 for the recorded
    result. The authoritative task backlog is now `plan_input.md` (this NEXT list is a short pointer).
 2. **Assert `PacketNumber` does not bump on a within-dead-zone axis wobble (or test the documented gap).**
