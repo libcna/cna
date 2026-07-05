@@ -366,3 +366,80 @@ TEST_F(GestureDetectorTest, DragCompleteDoesNotFireWhenTheGestureIsNotEnabled)
 
     EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }
+
+TEST_F(GestureDetectorTest, SecondFingerDuringADragInterruptsItAndBecomesAPinch)
+{
+    TouchPanel::setEnabledGesturesProperty(
+        GestureType::FreeDrag | GestureType::Pinch | GestureType::PinchComplete);
+
+    Press(40, 0.4f, 0.5f);
+    Move(40, 0.5f, 0.5f, 0.1f, 0.0f); // 100px move: starts a FreeDrag.
+    DrainGestures();                  // discard the FreeDrag sample.
+
+    Press(41, 0.6f, 0.5f);            // second finger interrupts the drag -> PINCHING.
+    Move(40, 0.3f, 0.5f, -0.1f, 0.0f);// the active finger now drives a Pinch, not a FreeDrag.
+
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Pinch);
+    EXPECT_FLOAT_EQ(sample.getPositionProperty().X, 300.0f);
+    EXPECT_FLOAT_EQ(sample.getPosition2Property().X, 600.0f);
+    EXPECT_FLOAT_EQ(sample.getDeltaProperty().X, -100.0f);
+    EXPECT_EQ(sample.getFingerIdEXTProperty(), 40);
+    EXPECT_EQ(sample.getFingerId2EXTProperty(), 41);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+
+    Release(40, 0.3f, 0.5f);
+    Release(41, 0.6f, 0.5f);
+    DrainGestures();
+}
+
+TEST_F(GestureDetectorTest, DragInterruptedByASecondFingerReportsPinchCompleteNotDragComplete)
+{
+    TouchPanel::setEnabledGesturesProperty(
+        GestureType::FreeDrag | GestureType::Pinch | GestureType::PinchComplete |
+        GestureType::DragComplete);
+
+    Press(42, 0.4f, 0.5f);
+    Move(42, 0.5f, 0.5f, 0.1f, 0.0f); // starts a FreeDrag.
+    DrainGestures();
+
+    Press(43, 0.6f, 0.5f);            // second finger interrupts: drag -> pinch.
+
+    Release(42, 0.5f, 0.5f);          // lifting the pinch reports PinchComplete...
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::PinchComplete)
+        << "an interrupted drag becomes a pinch, so releasing must report PinchComplete";
+
+    Release(43, 0.6f, 0.5f);          // ...and never a DragComplete.
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty())
+        << "a drag interrupted by a pinch must not also report DragComplete";
+}
+
+TEST_F(GestureDetectorTest, GestureStateRecoversAfterADragEndsSoAFreshTapStillFires)
+{
+    // A mid-drag cancel reaches the detector as a Release (SdlInputBridge maps FINGER_CANCELED to
+    // Released), so it is indistinguishable from a normal lift and does emit DragComplete. What
+    // matters for clean termination is that no finger/state is left stuck afterwards.
+    TouchPanel::setEnabledGesturesProperty(
+        GestureType::Tap | GestureType::FreeDrag | GestureType::DragComplete);
+
+    Press(44, 0.5f, 0.5f);
+    Move(44, 0.6f, 0.5f, 0.1f, 0.0f); // FreeDrag starts.
+    DrainGestures();
+
+    Release(44, 0.6f, 0.5f);          // ends (or cancels) the drag.
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::DragComplete);
+    DrainGestures();
+
+    // A brand-new, independent finger must produce a clean Tap: this only holds if fingerIds and
+    // activeFingerId were cleared on release (otherwise this press would look like a second finger).
+    Press(45, 0.2f, 0.2f);
+    Release(45, 0.2f, 0.2f);
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample tap = TouchPanel::ReadGesture();
+    EXPECT_EQ(tap.getGestureTypeProperty(), GestureType::Tap);
+    EXPECT_EQ(tap.getFingerIdEXTProperty(), 45);
+}

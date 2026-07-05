@@ -1559,9 +1559,13 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 Verified facts (`GestureDetector.cpp`): states `NONE/HOLDING/HELD/JUST_TAPPED/DRAGGING_{FREE,H,V}/PINCHING`;
 constants `MOVE_THRESHOLD=35`, `MIN_FLICK_VELOCITY=100.0f`; DoubleTap window `≤300ms` AND dist `≤35`;
 Tap `hold<1s`; Hold `≥1s`; Flick `dist>35 && velocity≥100`; velocity EMA `v += (inst-v)*0.45`, inst=`d/(0.001+dt)`.
-Injectable test clock (epoch+1h baseline). DragComplete is implemented in the detector; **it now has 5
-dedicated tests (INPUT-GESTURE-007, done 2026-07-05)** — previously it had ZERO coverage.
-Gesture-interruption-by-second-finger and mid-drag cancellation are still untested (INPUT-GESTURE-011/012).
+Injectable test clock (epoch+1h baseline). DragComplete now has 5 dedicated tests (INPUT-GESTURE-007);
+gesture-interruption-by-second-finger and mid-drag cancellation now have 4 tests (INPUT-GESTURE-011/012,
+done 2026-07-05) — all three areas previously had ZERO coverage. **Observed behavior pinned by the new
+tests:** a second finger mid-drag (with Pinch enabled) converts the drag to a pinch, so its release
+reports `PinchComplete`, not `DragComplete`; and because the bridge maps `FINGER_CANCELED`→`Released`,
+a canceled drag is indistinguishable from a normal lift at the detector and does emit `DragComplete`
+(the detector recovers cleanly — no stuck state).
 
 #### INPUT-GESTURE-001 — Tap
 - **Priority:** P3 · **Status:** TODO · **Area:** Gesture
@@ -1650,22 +1654,31 @@ Gesture-interruption-by-second-finger and mid-drag cancellation are still untest
 - **Tests:** new multi-finger transition test.
 - **Deps:** none.
 
-#### INPUT-GESTURE-011 — Gesture interruption by second finger mid-drag (MISSING)
-- **Priority:** P1 · **Status:** TODO · **Area:** Gesture
+#### INPUT-GESTURE-011 — Gesture interruption by second finger mid-drag (was MISSING)
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Problem:** No test for a drag interrupted by a second finger arriving mid-drag.
 - **Work:** Add tests for drag→pinch interruption and the resulting emitted samples/order.
 - **Acceptance:** Interruption behavior pinned.
 - **Tests:** new interruption tests.
 - **Deps:** none.
+- **Result (2026-07-05):** 3 `GestureDetectorTest` cases — `SecondFingerDuringADragInterruptsItAndBecomesAPinch`
+  (asserts the next sample is a Pinch with both finger ids and the expected position2/delta),
+  `DragInterruptedByASecondFingerReportsPinchCompleteNotDragComplete`, and
+  `GestureStateRecoversAfterADragEndsSoAFreshTapStillFires`. No detector code changed.
 
 #### INPUT-GESTURE-012 — Gesture cancellation (finger cancel mid-gesture)
-- **Priority:** P2 · **Status:** TODO · **Area:** Gesture/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-05) · **Area:** Gesture/Bridge
 - **Files:** `SdlInputBridge.cpp`, `GestureDetector.cpp`
 - **Work:** Verify a `FINGER_CANCELED` mid-gesture terminates cleanly (no stuck HOLDING/DRAGGING).
 - **Acceptance:** Clean termination.
 - **Tests:** new cancel-mid-gesture test.
 - **Deps:** none.
+- **Result (2026-07-05):** `SdlInputBridgeTouchGestureTest.FingerCanceledMidDragRecoversAndAllowsAFreshTap`
+  drives a real `SDL_EVENT_FINGER_CANCELED` mid-FreeDrag through `ProcessEvent`, then proves a fresh
+  independent finger still produces a Tap (state machine not wedged). Documented finding: a canceled drag
+  emits `DragComplete` because the bridge maps cancel→Released (detector can't distinguish) — recovery is
+  still clean. No code changed.
 
 #### INPUT-GESTURE-013 — Time thresholds parameterized
 - **Priority:** P2 · **Status:** TODO · **Area:** Gesture
@@ -2151,9 +2164,10 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 ## 15. Tests plan
 
 Baseline (this checkout, EasyGL, 2026-07-05): full `CnaTests` **3248 passed / 2 skipped**; input filter
-**259 → 264 passed** after INPUT-GESTURE-007 added 5 DragComplete tests; order-independent under shuffle×3.
-No `DISABLED_` input tests; `GTEST_SKIP` only as headless environment fallback. **No public-API-only
-compile test exists.** Gaps below become concrete backlog items.
+**259 → 268 passed** after INPUT-GESTURE-007/011/012 added 9 gesture tests (DragComplete +
+interruption/cancellation); order-independent under shuffle×3. No `DISABLED_` input tests; `GTEST_SKIP`
+only as headless environment fallback. **No public-API-only compile test exists.** Gaps below become
+concrete backlog items.
 
 #### INPUT-TEST-001 — Add missing enum-value test suites
 - **Priority:** P1 · **Status:** TODO · **Area:** Test
@@ -2173,11 +2187,11 @@ compile test exists.** Gaps below become concrete backlog items.
 - **Deps:** INPUT-GESTURE-007.
 
 #### INPUT-TEST-003 — Gesture interruption/cancellation tests
-- **Priority:** P1 · **Status:** TODO · **Area:** Test/Gesture
+- **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test/Gesture
 - **Files:** `tests/.../GestureDetectorTests.cpp`, `SdlInputBridgeTouchGestureTests.cpp`
 - **Work:** Second-finger-mid-drag, cancel-mid-gesture (see §11).
 - **Acceptance:** Interruption/cancel covered.
-- **Tests:** new cases.
+- **Tests:** 3 detector interruption cases + 1 bridge cancel case (see INPUT-GESTURE-011/012 results).
 - **Deps:** INPUT-GESTURE-011, INPUT-GESTURE-012.
 
 #### INPUT-TEST-004 — ToString expectation tests where FNA defines behavior

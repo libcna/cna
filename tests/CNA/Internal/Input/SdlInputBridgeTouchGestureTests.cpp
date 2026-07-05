@@ -176,3 +176,33 @@ TEST_F(SdlInputBridgeTouchGestureTest, FingerIdReusableAfterCancel)
     ASSERT_EQ(reuse.getCountProperty(), 1);
     EXPECT_EQ(reuse[0].getStateProperty(), TouchLocationState::Pressed);
 }
+
+// INPUT-GESTURE-012: a real SDL_EVENT_FINGER_CANCELED arriving mid-drag must not wedge the gesture
+// state machine — the detector must recover so a subsequent independent finger still produces a Tap.
+// (At the detector a cancel is a Release, so the interrupted drag also reports DragComplete; this
+// test is about clean recovery, so those interim gestures are drained.)
+TEST_F(SdlInputBridgeTouchGestureTest, FingerCanceledMidDragRecoversAndAllowsAFreshTap)
+{
+    TouchPanel::setEnabledGesturesProperty(
+        GestureType::Tap | GestureType::FreeDrag | GestureType::DragComplete);
+
+    auto drainGestures = []
+    {
+        while (TouchPanel::getIsGestureAvailableProperty())
+            (void)TouchPanel::ReadGesture();
+    };
+
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 8300, 0.5f, 0.5f));
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_MOTION, 8300, 0.6f, 0.5f, 0.1f, 0.0f));
+    drainGestures(); // discard the FreeDrag from the motion.
+
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_CANCELED, 8300, 0.6f, 0.5f));
+    drainGestures(); // discard whatever the cancel produced (DragComplete).
+
+    // Fresh, independent finger -> a clean Tap, proving the state machine wasn't left dragging.
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 8301, 0.2f, 0.2f));
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_UP, 8301, 0.2f, 0.2f));
+
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::Tap);
+}
