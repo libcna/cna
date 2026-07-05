@@ -871,13 +871,18 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
 
 ### 11a — Pipeline Foundation (first milestone: one male + one female avatar that draws)
 
-- [ ] **Task 11.1** — `tools/avatar_builder/generate_skeleton.py`  
+- [x] **Task 11.1** — `tools/avatar_builder/generate_skeleton.py`  
   Builds a **new, CNA-original canonical skeleton** via `bpy` armature edit-mode bone creation —
   NOT the real Xbox 71-bone hierarchy (Phase 8's `AvatarRenderer::ParentBones` stays untouched and
   unrelated) and NOT Mixamo/Rigify naming. A compact biped is enough for a first milestone: e.g.
   `Hips, Spine, Spine1, Neck, Head, Shoulder.L/R, UpperArm.L/R, LowerArm.L/R, Hand.L/R,
   UpperLeg.L/R, LowerLeg.L/R, Foot.L/R` (~19 bones). Document the exact list and hierarchy in
   `tools/avatar_builder/README.md` as the single source of truth other scripts key off of.
+  **Done:** `generate_skeleton.py` builds `CNAAvatarSkeleton` (19 bones) via `bpy`
+  edit-mode bone creation and exposes `build_skeleton()`/`BONES` for later scripts to
+  reuse; full bone/parent/position table documented in `tools/avatar_builder/README.md`.
+  Verified: `blender --background --python tools/avatar_builder/generate_skeleton.py`
+  runs clean and asserts every bone name/parent against the documented table.
 
 - [ ] **Task 11.2** — `tools/avatar_builder/generate_body.py`  
   Procedural stylized low-poly humanoid mesh (head/torso/arms/legs from primitive-derived shapes,
