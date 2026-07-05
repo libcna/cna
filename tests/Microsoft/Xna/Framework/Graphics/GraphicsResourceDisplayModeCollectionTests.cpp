@@ -97,6 +97,41 @@ TEST(DisplayModeCollectionTest, IndexEqualToCountThrowsOutOfRange)
 }
 
 // -----------------------------------------------------------------------
+// DisplayModeCollection — operator[](SurfaceFormat) (Task 347: FNA's real
+// this[SurfaceFormat] indexer, missing from CNA until now — found during
+// Task 345's GraphicsAdapter audit)
+// -----------------------------------------------------------------------
+
+TEST(DisplayModeCollectionTest, IndexBySurfaceFormatReturnsOnlyMatchingModesInOriginalOrder)
+{
+    std::vector<DisplayMode> modes = {
+        DisplayMode(800,  600,  SurfaceFormat::Color),
+        DisplayMode(1024, 768,  SurfaceFormat::Bgr565),
+        DisplayMode(1280, 720,  SurfaceFormat::Color),
+    };
+    DisplayModeCollection col(std::move(modes));
+
+    std::vector<DisplayMode> colorModes = col[SurfaceFormat::Color];
+    ASSERT_EQ(colorModes.size(), 2u);
+    EXPECT_EQ(colorModes[0].getWidthProperty(), 800);
+    EXPECT_EQ(colorModes[1].getWidthProperty(), 1280);
+}
+
+TEST(DisplayModeCollectionTest, IndexBySurfaceFormatReturnsEmptyWhenNoModeMatches)
+{
+    std::vector<DisplayMode> modes = { DisplayMode(800, 600, SurfaceFormat::Color) };
+    DisplayModeCollection col(std::move(modes));
+
+    EXPECT_TRUE(col[SurfaceFormat::Bgr565].empty());
+}
+
+TEST(DisplayModeCollectionTest, IndexBySurfaceFormatOnEmptyCollectionReturnsEmpty)
+{
+    DisplayModeCollection col;
+    EXPECT_TRUE(col[SurfaceFormat::Color].empty());
+}
+
+// -----------------------------------------------------------------------
 // DisplayModeCollection — range-for iteration
 // -----------------------------------------------------------------------
 

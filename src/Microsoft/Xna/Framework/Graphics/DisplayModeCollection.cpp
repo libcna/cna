@@ -31,6 +31,20 @@ namespace Microsoft::Xna::Framework::Graphics
         return modes_[static_cast<std::size_t>(index)];
     }
 
+    std::vector<DisplayMode> DisplayModeCollection::operator[](SurfaceFormat format) const
+    {
+        std::vector<DisplayMode> result;
+        for (const DisplayMode& mode : modes_)
+        {
+            if (mode.getFormatProperty() == format)
+            {
+                result.push_back(mode);
+            }
+        }
+
+        return result;
+    }
+
     DisplayModeCollection::const_iterator DisplayModeCollection::begin() const
     {
         return modes_.begin();
