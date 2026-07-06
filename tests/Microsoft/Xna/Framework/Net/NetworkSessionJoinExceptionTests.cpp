@@ -3,8 +3,33 @@
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
+#include "System/Runtime/Serialization/SerializationInfo.hpp"
+#include "System/Runtime/Serialization/StreamingContext.hpp"
 
 using namespace Microsoft::Xna::Framework::Net;
+
+namespace {
+    // Task 5.5: the (SerializationInfo&, StreamingContext&) constructor is protected, matching
+    // .NET's ISerializable pattern where only a deserializing subclass ever calls it directly -
+    // a small test-only subclass is the standard way to exercise a protected constructor.
+    struct TestableNetworkSessionJoinException : NetworkSessionJoinException {
+        TestableNetworkSessionJoinException(
+            System::Runtime::Serialization::SerializationInfo& info,
+            System::Runtime::Serialization::StreamingContext& context
+        )
+            : NetworkSessionJoinException(info, context)
+        {
+        }
+    };
+}
+
+TEST(NetworkSessionJoinExceptionTest, SerializationConstructorIsCallableByDerivedTypesAndDefaultInitializes) {
+    System::Runtime::Serialization::SerializationInfo info;
+    System::Runtime::Serialization::StreamingContext context;
+    TestableNetworkSessionJoinException ex(info, context);
+    EXPECT_NE(nullptr, dynamic_cast<Microsoft::Xna::Framework::GamerServices::NetworkException*>(&ex));
+    EXPECT_EQ(NetworkSessionJoinError::SessionNotFound, ex.getJoinErrorProperty());
+}
 
 TEST(NetworkSessionJoinExceptionTest, DefaultCtor) {
     NetworkSessionJoinException ex;

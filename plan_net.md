@@ -851,8 +851,16 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   changed), so no revert-verify applies — the assertions themselves are the direct proof (would
   fail immediately on any future reordering).
 
-- [ ] **Task 5.5** — Add a test for `NetworkSessionJoinException`'s protected serialization
+- [x] **Task 5.5** — Add a test for `NetworkSessionJoinException`'s protected serialization
   constructor (`SerializationInfo&`, `StreamingContext&`), currently uncovered.
+  **Fixed:** added a small test-only `TestableNetworkSessionJoinException` subclass (the standard
+  way to exercise a `protected` constructor — matching .NET's `ISerializable` pattern, where only a
+  deserializing subclass ever calls it directly) and
+  `NetworkSessionJoinExceptionTest.SerializationConstructorIsCallableByDerivedTypesAndDefaultInitializes`,
+  asserting the constructed instance is catchable as `NetworkException` and `JoinError` defaults to
+  `SessionNotFound` (the constructor only forwards to the base `NetworkException(info, context)`
+  and sets nothing else). Full suite: **3267/3269 passing** (2 expected accelerometer/gyroscope
+  skips), no regressions. Pure test-coverage addition, no revert-verify applies.
 
 - [ ] **Task 5.6** — Fix `NetEventArgsTests.cpp` exercising `GamerJoinedEventArgs`/`GamerLeftEventArgs`/
   `HostChangedEventArgs`/`WriteLeaderboardsEventArgs` exclusively with `nullptr` gamer pointers,
