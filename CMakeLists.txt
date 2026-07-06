@@ -2241,6 +2241,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+    # Task 384: DualTextureEffect magenta × yellow = red (mirrors Task 133/135 EasyGL/Vulkan)
+    cna_bgfx_test(cna_test_bgfx_dual_texture
+                  examples/bgfx_dual_texture_test.cpp)
+    add_test(NAME Bgfx_DualTextureEffect_Blend
+             COMMAND cna_test_bgfx_dual_texture)
+    set_tests_properties(Bgfx_DualTextureEffect_Blend PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
